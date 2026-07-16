@@ -4,3 +4,7 @@ bazel-*
 .idea
 *.tools*
 .bazelrc.user
+
+**/Drivers
+**/.mxproject
+**/Makefile
