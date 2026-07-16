@@ -1,0 +1,49 @@
+module(name = "lhre")
+
+bazel_dep(name = "rules_cc", version = "0.2.18")
+bazel_dep(name = "aspect_rules_py", version = "1.11.2")
+bazel_dep(name = "toolchains_arm_gnu", version = "1.1.0")
+bazel_dep(name = "protobuf", version = "36.0-rc1")
+bazel_dep(name = "platforms", version = "1.0.0")
+
+git_override(
+    module_name = "toolchains_arm_gnu",
+    commit = "6915dd1b27f3265bb3270042258eb16a99db42ed",
+    remote = "https://github.com/LonghornRacingElectric/toolchains_arm_gnu.git",
+)
+
+arm_toolchain = use_extension("@toolchains_arm_gnu//:extensions.bzl", "arm_toolchain")
+arm_toolchain.arm_none_eabi(version = "13.2.1")
+use_repo(arm_toolchain, "arm_none_eabi")
+
+register_toolchains("@arm_none_eabi//toolchain:all")
+
+interpreters = use_extension("@aspect_rules_py//py/unstable:extension.bzl", "python_interpreters")
+interpreters.toolchain(
+    is_default = True,
+    python_version = "3.12",
+)
+use_repo(interpreters, "python_interpreters")
+
+register_toolchains("@python_interpreters//:all")
+
+uv = use_extension("@aspect_rules_py//uv/unstable:extension.bzl", "uv")
+uv.declare_hub(
+    hub_name = "pypi",
+)
+uv.project(
+    hub_name = "pypi",
+    lock = "//:uv.lock",
+    pyproject = "//:pyproject.toml",
+)
+use_repo(uv, "pypi")
+
+stm32g4_deps = use_extension("//drivers/stm32/stm32g4:deps.bzl", "stm32g4_deps")
+use_repo(
+    stm32g4_deps,
+    "cmsis_core_stm32g4",
+    "cmsis_device_stm32g4",
+    "cmsis_freertos_stm32g4",
+    "freertos_kernel_stm32g4",
+    "stm32g4xx_hal_driver",
+)

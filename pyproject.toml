@@ -1,0 +1,8 @@
+[project]
+name = "lhre-tools"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "pyserial==3.5",
+    "bazel-runfiles==2.1.0",
+]

@@ -1,0 +1,6 @@
+# bazel-bin, bazel-lhre, bazel-out, bazel-testlogs
+bazel-*
+.venv
+.idea
+*.tools*
+.bazelrc.user

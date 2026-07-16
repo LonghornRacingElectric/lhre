@@ -1,0 +1,65 @@
+"""STM32 H7 driver interface package.
+
+Provides a unified interface to STM32 H7 drivers fetched from GitHub.
+All targets here re-export from external repositories so that projects
+can depend on //drivers/stm32h7:<target> without knowing the external
+repo layout.
+
+Available targets:
+    //drivers/stm32g4:stm32_headers       — HAL + CMSIS device + CMSIS core headers
+    //drivers/stm32g4:hal_srcs            — HAL driver .c sources (exclude templates)
+    //drivers/stm32g4:usb_device_headers  — USB Device middleware headers (Core + CDC)
+    //drivers/stm32g4:usb_device_srcs     — USB Device middleware .c sources
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+# Unified headers target: combines HAL, CMSIS device, and CMSIS core headers
+# so projects only need to depend on a single target for all STM32L4 includes.
+cc_library(
+    name = "headers",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@cmsis_core_stm32g4//:cmsis_core_headers",
+        "@cmsis_device_stm32g4//:cmsis_device_headers",
+        "@stm32g4xx_hal_driver//:hal_headers",
+    ],
+)
+
+# HAL driver source files for compilation
+filegroup(
+    name = "srcs",
+    srcs = ["@stm32g4xx_hal_driver//:hal_srcs"],
+    visibility = ["//visibility:public"],
+)
+
+# OpenOCD configuration
+filegroup(
+    name = "openocd_cfg",
+    srcs = ["stm32g4_openocd.cfg"],
+    visibility = ["//visibility:public"],
+)
+
+# FreeRTOS kernel + port + heap + CMSIS-RTOS2 wrapper source files
+filegroup(
+    name = "freertos_srcs",
+    srcs = [
+        "@freertos_kernel_stm32g4//:freertos_kernel_srcs",
+        "@freertos_kernel_stm32g4//:freertos_port_srcs",
+        "@freertos_kernel_stm32g4//:freertos_heap",
+        "@cmsis_freertos_stm32g4//:cmsis_rtos2_freertos_srcs",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# FreeRTOS kernel + port + CMSIS-RTOS2 API + wrapper headers
+cc_library(
+    name = "freertos_headers",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@cmsis_freertos_stm32g4//:cmsis_rtos2_freertos_headers",
+        "@cmsis_core_stm32g4//:cmsis_rtos2_headers",
+        "@freertos_kernel_stm32g4//:freertos_kernel_headers",
+        "@freertos_kernel_stm32g4//:freertos_port_headers",
+    ],
+)

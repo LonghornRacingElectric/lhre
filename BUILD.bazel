@@ -1,0 +1,16 @@
+# Root package
+
+platform(
+    name = "rbe_linux",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    flags = [
+        "--@aspect_rules_py//uv/private/constraints/platform:platform_libc=glibc",
+    ],
+    exec_properties = {
+        "container-image": "docker://ubuntu:22.04",
+    },
+    visibility = ["//visibility:public"],
+)
