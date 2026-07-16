@@ -13,30 +13,50 @@ def _runfiles_path(f):
         return "_main/" + f.short_path
 
 def _openocd_flash_impl(ctx):
-    launcher = ctx.actions.declare_file(ctx.label.name + "_launcher.sh")
-
-    content = """#!/bin/bash
-exec {tool} {openocd} {elf} {cfg}
+    is_windows = ctx.target_platform_has_constraint(ctx.attr._windows_constraint[platform_common.ConstraintValueInfo])
+    
+    if is_windows:
+        executable = ctx.actions.declare_file(ctx.label.name + ".cmd")
+        content = """@echo off
+set RUNFILES_DIR=%~dp0{target_name}.runfiles
+"%RUNFILES_DIR%\\{tool}" "{openocd}" "{elf}" "{cfg}" %*
 """.format(
-        tool = ctx.executable.flash_tool.short_path,
-        openocd = _runfiles_path(ctx.executable.openocd),
-        elf = _runfiles_path(ctx.file.elf),
-        cfg = _runfiles_path(ctx.file.cfg),
-    )
+            target_name = ctx.label.name,
+            tool = _runfiles_path(ctx.executable.flash_tool).replace("/", "\\"),
+            openocd = _runfiles_path(ctx.executable.openocd),
+            elf = _runfiles_path(ctx.file.elf),
+            cfg = _runfiles_path(ctx.file.cfg),
+        )
+    else:
+        executable = ctx.actions.declare_file(ctx.label.name)
+        content = """#!/bin/bash
+export RUNFILES_DIR="$0.runfiles"
+exec "$0.runfiles/{tool}" "{openocd}" "{elf}" "{cfg}" "$@"
+""".format(
+            tool = _runfiles_path(ctx.executable.flash_tool),
+            openocd = _runfiles_path(ctx.executable.openocd),
+            elf = _runfiles_path(ctx.file.elf),
+            cfg = _runfiles_path(ctx.file.cfg),
+        )
 
     ctx.actions.write(
-        output = launcher,
+        output = executable,
         content = content,
         is_executable = True,
     )
 
-    runfiles = ctx.runfiles(files = [ctx.file.elf, ctx.file.cfg])
+    runfiles = ctx.runfiles(files = [
+        ctx.file.elf,
+        ctx.file.cfg,
+        ctx.executable.flash_tool,
+        ctx.executable.openocd,
+    ])
     runfiles = runfiles.merge(ctx.attr.flash_tool[DefaultInfo].default_runfiles)
     runfiles = runfiles.merge(ctx.attr.openocd[DefaultInfo].default_runfiles)
 
     return [
         DefaultInfo(
-            executable = launcher,
+            executable = executable,
             runfiles = runfiles,
         ),
     ]
@@ -63,33 +83,54 @@ openocd_flash_target = rule(
             allow_single_file = True,
             mandatory = True,
         ),
+        "_windows_constraint": attr.label(
+            default = "@platforms//os:windows",
+        ),
     },
 )
 
 def _dfu_flash_impl(ctx):
-    launcher = ctx.actions.declare_file(ctx.label.name + "_launcher.sh")
-
-    content = """#!/bin/bash
-exec {tool} {dfu_util} {bin_file}
+    is_windows = ctx.target_platform_has_constraint(ctx.attr._windows_constraint[platform_common.ConstraintValueInfo])
+    
+    if is_windows:
+        executable = ctx.actions.declare_file(ctx.label.name + ".cmd")
+        content = """@echo off
+set RUNFILES_DIR=%~dp0{target_name}.runfiles
+"%RUNFILES_DIR%\\{tool}" "{dfu_util}" "{bin_file}" %*
 """.format(
-        tool = ctx.executable.flash_tool.short_path,
-        dfu_util = _runfiles_path(ctx.executable.dfu_util),
-        bin_file = _runfiles_path(ctx.file.bin_file),
-    )
+            target_name = ctx.label.name,
+            tool = _runfiles_path(ctx.executable.flash_tool).replace("/", "\\"),
+            dfu_util = _runfiles_path(ctx.executable.dfu_util),
+            bin_file = _runfiles_path(ctx.file.bin_file),
+        )
+    else:
+        executable = ctx.actions.declare_file(ctx.label.name)
+        content = """#!/bin/bash
+export RUNFILES_DIR="$0.runfiles"
+exec "$0.runfiles/{tool}" "{dfu_util}" "{bin_file}" "$@"
+""".format(
+            tool = _runfiles_path(ctx.executable.flash_tool),
+            dfu_util = _runfiles_path(ctx.executable.dfu_util),
+            bin_file = _runfiles_path(ctx.file.bin_file),
+        )
 
     ctx.actions.write(
-        output = launcher,
+        output = executable,
         content = content,
         is_executable = True,
     )
 
-    runfiles = ctx.runfiles(files = [ctx.file.bin_file])
+    runfiles = ctx.runfiles(files = [
+        ctx.file.bin_file,
+        ctx.executable.flash_tool,
+        ctx.executable.dfu_util,
+    ])
     runfiles = runfiles.merge(ctx.attr.flash_tool[DefaultInfo].default_runfiles)
     runfiles = runfiles.merge(ctx.attr.dfu_util[DefaultInfo].default_runfiles)
 
     return [
         DefaultInfo(
-            executable = launcher,
+            executable = executable,
             runfiles = runfiles,
         ),
     ]
@@ -112,8 +153,13 @@ dfu_flash_target = rule(
             allow_single_file = True,
             mandatory = True,
         ),
+        "_windows_constraint": attr.label(
+            default = "@platforms//os:windows",
+        ),
     },
 )
+
+
 
 def firmware_outputs(name, src, project_name, visibility = None, **kwargs):
     """
@@ -236,6 +282,8 @@ def firmware_project(
         enable_freertos = False,
         enable_dfu = False,
         locations = [],
+        use_longhorn_lib = False,
+        enable_ota = False,
         **kwargs):
     """Creates a firmware project for STM32 microcontrollers.
 
@@ -253,6 +301,8 @@ def firmware_project(
         enable_freertos (bool, optional): Whether or not to use FreeRTOS. Defaults to False.
         enable_dfu (bool, optional): Whether or not to accept strings to go into DFU. Defaults to False.
         locations (list, optional): A list of location identifiers (e.g., ["FR", "FL"]).
+        use_longhorn_lib (bool, optional): Whether to depend on drivers/longhorn-lib. Defaults to False.
+        enable_ota (bool, optional): Whether or not to use OTA flash drivers. Defaults to False.
         **kwargs: extra args to pass to cc_binary.
     """
     if usb_device_name == None:
@@ -271,8 +321,9 @@ def firmware_project(
         final_extra_srcs.append("//drivers/stm32/{}:freertos_srcs".format(family))
         final_extra_deps.append("//drivers/stm32/{}:freertos_headers".format(family))
 
-    final_extra_srcs.append("//drivers/ota:ota_flash_srcs")
-    final_extra_deps.append("//drivers/ota:ota_flash_headers")
+    if enable_ota:
+        final_extra_srcs.append("//drivers/ota:ota_flash_srcs")
+        final_extra_deps.append("//drivers/ota:ota_flash_headers")
 
     if enable_dfu:
         final_defines.append("ENABLE_DFU")
@@ -294,7 +345,12 @@ def firmware_project(
             project_name = "{}_{}".format(name, location)
             location_defines.append("BOARD_{}".format(location))
 
-        ll_version = "//drivers/longhorn-lib:longhorn_lib_{family}".format(family = family) if enable_freertos else "//drivers/longhorn-lib:longhorn_lib_base_{family}".format(family = family)
+        deps_list = final_extra_deps + [
+            "//drivers/stm32/{}:headers".format(family),
+        ]
+        if use_longhorn_lib:
+            ll_version = "//drivers/longhorn-lib:longhorn_lib_{family}".format(family = family) if enable_freertos else "//drivers/longhorn-lib:longhorn_lib_base_{family}".format(family = family)
+            deps_list.append(ll_version)
 
         cc_binary(
             name = "{}_project".format(target_name),
@@ -310,10 +366,7 @@ def firmware_project(
             includes = [
                 "Core/Inc",
             ] + extra_includes,
-            deps = final_extra_deps + [
-                "//drivers/stm32/{}:headers".format(family),
-                ll_version,
-            ],
+            deps = deps_list,
             linkopts = MCU_FLAGS + [
                 "-Wl,-Map={}.map,--cref".format(target_name),
                 "-Wl,--gc-sections",

@@ -2,6 +2,7 @@ module(name = "lhre")
 
 bazel_dep(name = "rules_cc", version = "0.2.18")
 bazel_dep(name = "aspect_rules_py", version = "1.11.2")
+bazel_dep(name = "aspect_bazel_lib", version = "2.19.3")
 bazel_dep(name = "toolchains_arm_gnu", version = "1.1.0")
 bazel_dep(name = "protobuf", version = "36.0-rc1")
 bazel_dep(name = "platforms", version = "1.0.0")
@@ -47,3 +48,10 @@ use_repo(
     "freertos_kernel_stm32g4",
     "stm32g4xx_hal_driver",
 )
+
+dfu = use_extension("//tools/dfu:dfu.bzl", "dfu")
+use_repo(dfu, "dfu")
+
+openocd = use_extension("//tools/openocd:openocd.bzl", "openocd")
+use_repo(openocd, "openocd")
+

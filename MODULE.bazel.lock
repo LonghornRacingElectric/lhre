@@ -332,6 +332,29 @@
         }
       }
     },
+    "//tools/dfu:dfu.bzl%dfu": {
+      "general": {
+        "bzlTransitiveDigest": "QA/uII0CCprGjDLKiqkQaNreASbfEjW557+MGsj7ioM=",
+        "usagesDigest": "8/AOgUbV2jGcQJU5QaH+uoOIo7+UhSERiC3ORPGGVUk=",
+        "recordedInputs": [
+          "REPO_MAPPING:,bazel_tools bazel_tools"
+        ],
+        "generatedRepoSpecs": {
+          "dfu": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
+            "attributes": {
+              "sha256": "6450de30a7dcd8d8c1273f43f0b153f054fd24d85f7f38296b1ad8edbd2ddb25",
+              "strip_prefix": "dfu-util-0.11-binaries",
+              "build_file_content": "\npackage(default_visibility = [\"//visibility:public\"])\n\nfilegroup(\n    name = \"dfu\",\n    srcs = [\"darwin-x86_64/dfu-util\"],\n)\n\n",
+              "urls": [
+                "https://dfu-util.sourceforge.net/releases/dfu-util-0.11-binaries.tar.xz",
+                "https://firebasestorage.googleapis.com/v0/b/bazel-binaries-lhre.firebasestorage.app/o/dfu-util-0.11-binaries.tar.xz?alt=media&token=82a16dfc-30dd-4bc2-a505-7af514d63e22"
+              ]
+            }
+          }
+        }
+      }
+    },
     "@@aspect_rules_py+//py:extensions.bzl%py_tools": {
       "general": {
         "bzlTransitiveDigest": "DkH60b7q7McP48tz7uK0QJ0h6s31nhqx50CWpDr1Dpg=",
