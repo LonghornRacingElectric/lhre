@@ -8,3 +8,4 @@ bazel-*
 **/Drivers
 **/.mxproject
 **/Makefile
+MODULE.bazel.lock
