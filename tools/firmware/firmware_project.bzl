@@ -1,7 +1,40 @@
-"""Macro for creating binary and hex files using objcopy."""
+"""Macro for creating firmware projects, binary/hex outputs, and flash targets."""
 
 load("@aspect_bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+
+# ---------------------------------------------------------------------------
+# MCU flags per family. Add new families here as needed.
+# ---------------------------------------------------------------------------
+FAMILY_FLAGS = {
+    "stm32g4": [
+        "-mcpu=cortex-m4",
+        "-mthumb",
+        "-mfpu=fpv4-sp-d16",
+        "-mfloat-abi=hard",
+    ],
+    "stm32h7": [
+        "-mcpu=cortex-m7",
+        "-mthumb",
+        "-mfpu=fpv5-d16",
+        "-mfloat-abi=hard",
+    ],
+    "stm32f0": [
+        "-mcpu=cortex-m0",
+        "-mthumb",
+        "-mfloat-abi=soft",
+    ],
+    "stm32f4": [
+        "-mcpu=cortex-m4",
+        "-mthumb",
+        "-mfpu=fpv4-sp-d16",
+        "-mfloat-abi=hard",
+    ],
+}
+
+# ---------------------------------------------------------------------------
+# Helpers – runfiles path resolution
+# ---------------------------------------------------------------------------
 
 def _runfiles_path(f):
     if f.owner.workspace_name:
@@ -12,9 +45,13 @@ def _runfiles_path(f):
     else:
         return "_main/" + f.short_path
 
+# ---------------------------------------------------------------------------
+# Flash rules  (OpenOCD + DFU)
+# ---------------------------------------------------------------------------
+
 def _openocd_flash_impl(ctx):
     is_windows = ctx.target_platform_has_constraint(ctx.attr._windows_constraint[platform_common.ConstraintValueInfo])
-    
+
     if is_windows:
         executable = ctx.actions.declare_file(ctx.label.name + ".cmd")
         content = """@echo off
@@ -68,12 +105,12 @@ openocd_flash_target = rule(
         "flash_tool": attr.label(
             default = "//tools/openocd:flash",
             executable = True,
-            cfg = "target",
+            cfg = "exec",
         ),
         "openocd": attr.label(
             default = "@openocd//:openocd",
             executable = True,
-            cfg = "target",
+            cfg = "exec",
         ),
         "elf": attr.label(
             allow_single_file = True,
@@ -91,7 +128,7 @@ openocd_flash_target = rule(
 
 def _dfu_flash_impl(ctx):
     is_windows = ctx.target_platform_has_constraint(ctx.attr._windows_constraint[platform_common.ConstraintValueInfo])
-    
+
     if is_windows:
         executable = ctx.actions.declare_file(ctx.label.name + ".cmd")
         content = """@echo off
@@ -142,12 +179,12 @@ dfu_flash_target = rule(
         "flash_tool": attr.label(
             default = "//tools/dfu:flash",
             executable = True,
-            cfg = "target",
+            cfg = "exec",
         ),
         "dfu_util": attr.label(
             default = "@dfu//:dfu",
             executable = True,
-            cfg = "target",
+            cfg = "exec",
         ),
         "bin_file": attr.label(
             allow_single_file = True,
@@ -159,48 +196,12 @@ dfu_flash_target = rule(
     },
 )
 
-
-
-def firmware_outputs(name, src, project_name, visibility = None, **kwargs):
-    """
-    Runs objcopy to convert a source file into both .bin and .hex files.
-
-    Args:
-      name: The name of the output target.
-      src: The label of the single source file to convert.
-      project_name: The name of the project.
-      visibility: visibility of the target,
-      **kwargs: extra args to pass to genrule.
-    """
-
-    # Define the output filenames based on the rule's name
-    bin_out = "{}.bin".format(project_name)
-    hex_out = "{}.hex".format(project_name)
-    elf_out = "{}.elf".format(project_name)
-
-    command = (
-        "$(execpath @arm_none_eabi//:objcopy) -O binary $< $(location {bin}) && " +
-        "$(execpath @arm_none_eabi//:objcopy) -O ihex $< $(location {hex}) && " +
-        "cp $< $(location {elf})"
-    ).format(bin = bin_out, hex = hex_out, elf = elf_out)
-
-    native.genrule(
-        name = name,
-        srcs = [src],
-        outs = [
-            bin_out,
-            hex_out,
-            elf_out,
-        ],
-        cmd = command,
-        tools = ["@arm_none_eabi//:objcopy"],
-        visibility = visibility,
-        **kwargs
-    )
+# ---------------------------------------------------------------------------
+# Objcopy output helpers
+# ---------------------------------------------------------------------------
 
 def binary_out(name, src, visibility = None, **kwargs):
-    """
-    Runs objcopy to convert a source file (e.g., an ELF) into a raw binary.
+    """Runs objcopy to convert a source file (e.g., an ELF) into a raw binary.
 
     Args:
       name: The name of the output target. The output filename will be `name + ".bin"`.
@@ -219,8 +220,7 @@ def binary_out(name, src, visibility = None, **kwargs):
     )
 
 def hex_out(name, src, visibility = None, **kwargs):
-    """
-    Runs objcopy to convert a source file (e.g., an ELF) into a hex binary.
+    """Runs objcopy to convert a source file (e.g., an ELF) into a hex binary.
 
     Args:
       name: The name of the output target. The output filename will be `name + ".hex"`.
@@ -233,15 +233,13 @@ def hex_out(name, src, visibility = None, **kwargs):
         srcs = [src],
         outs = ["{}.hex".format(name)],
         cmd = "$(execpath @arm_none_eabi//:objcopy) -O ihex $< $@",
-        # cmd_bat = "copy \"$(location @arm_none_eabi//:objcopy)\" objcopy.exe && objcopy.exe -O ihex $< $@",
         tools = ["@arm_none_eabi//:objcopy"],
         visibility = visibility,
         **kwargs
     )
 
 def elf_out(name, src, visibility = None, **kwargs):
-    """
-    Copies input elf to an elf output.
+    """Copies input elf to an elf output.
 
     Args:
       name: The name of the output target. The output filename will be `name + ".elf"`.
@@ -255,21 +253,17 @@ def elf_out(name, src, visibility = None, **kwargs):
         outs = ["{}.elf".format(name)],
         cmd = "cp $< $@",
         cmd_bat = "copy $< $@",
-        tools = ["@arm_none_eabi//:objcopy"],
         visibility = visibility,
         **kwargs
     )
 
-MCU_FLAGS = [
-    "-mcpu=cortex-m4",
-    "-mthumb",
-    "-mfpu=fpv4-sp-d16",
-    "-mfloat-abi=hard",
-    "-fdiagnostics-color",
-]
+# ---------------------------------------------------------------------------
+# Main macro
+# ---------------------------------------------------------------------------
 
 def firmware_project(
         name,
+        srcs,
         linker_script,
         startup_script,
         family,
@@ -284,11 +278,16 @@ def firmware_project(
         locations = [],
         use_longhorn_lib = False,
         enable_ota = False,
+        enable_printf_float = False,
+        driver_headers = None,
+        driver_srcs = None,
+        mcu_flags = None,
         **kwargs):
     """Creates a firmware project for STM32 microcontrollers.
 
     Args:
         name (string): name of the project
+        srcs (list): source and header files to compile (use glob() in your BUILD file)
         linker_script (path): the location of the linker script being used (.ld file)
         startup_script (path): the location of the startup script being used (.s file)
         family (string): the STM32 family, e.g. "stm32g4", etc.
@@ -303,10 +302,26 @@ def firmware_project(
         locations (list, optional): A list of location identifiers (e.g., ["FR", "FL"]).
         use_longhorn_lib (bool, optional): Whether to depend on drivers/longhorn-lib. Defaults to False.
         enable_ota (bool, optional): Whether or not to use OTA flash drivers. Defaults to False.
+        enable_printf_float (bool, optional): Whether to link -u _printf_float (adds ~10KB). Defaults to False.
+        driver_headers (label, optional): Override for the driver headers target. Defaults to //drivers/stm32/{family}:headers.
+        driver_srcs (label, optional): Override for the driver srcs target. Defaults to //drivers/stm32/{family}:srcs.
+        mcu_flags (list, optional): Override MCU compiler/linker flags. Defaults to FAMILY_FLAGS[family].
         **kwargs: extra args to pass to cc_binary.
     """
     if usb_device_name == None:
         usb_device_name = name
+
+    # Resolve defaults from family
+    if driver_headers == None:
+        driver_headers = "//drivers/stm32/{}:headers".format(family)
+    if driver_srcs == None:
+        driver_srcs = "//drivers/stm32/{}:srcs".format(family)
+    if mcu_flags == None:
+        if family not in FAMILY_FLAGS:
+            fail("Unknown MCU family '{}'. Add it to FAMILY_FLAGS or pass mcu_flags explicitly.".format(family))
+        mcu_flags = FAMILY_FLAGS[family]
+
+    common_mcu_flags = mcu_flags + ["-fdiagnostics-color"]
 
     final_extra_srcs = extra_srcs[:]
     final_extra_deps = extra_deps[:]
@@ -335,6 +350,21 @@ def firmware_project(
     else:
         locations_to_build = locations
 
+    # Linker flags that are always present
+    base_linkopts = common_mcu_flags + [
+        "-Wl,-Map={name}.map,--cref",
+        "-Wl,--gc-sections",
+        "-T $(location {linker})",
+        "$(location {startup})",
+        "-specs=nano.specs",
+        "-lnosys",
+        "-lc",
+        "-lm",
+        "-lstdc++",
+    ]
+    if enable_printf_float:
+        base_linkopts.append("-u _printf_float")
+
     for location in locations_to_build:
         target_name = name
         project_name = name
@@ -345,40 +375,25 @@ def firmware_project(
             project_name = "{}_{}".format(name, location)
             location_defines.append("BOARD_{}".format(location))
 
-        deps_list = final_extra_deps + [
-            "//drivers/stm32/{}:headers".format(family),
-        ]
+        deps_list = final_extra_deps + [driver_headers]
         if use_longhorn_lib:
             ll_version = "//drivers/longhorn-lib:longhorn_lib_{family}".format(family = family) if enable_freertos else "//drivers/longhorn-lib:longhorn_lib_base_{family}".format(family = family)
             deps_list.append(ll_version)
 
+        # Format linkopts with target-specific values
+        linkopts = [
+            opt.format(name = target_name, linker = linker_script, startup = startup_script)
+            for opt in base_linkopts
+        ]
+
         cc_binary(
             name = "{}_project".format(target_name),
-            srcs = native.glob([
-                       "Core/Src/**/*.c",
-                       "Core/Inc/**/*.h",
-                       "Core/Src/**/*.cpp",
-                       "Core/Inc/**/*.hpp",
-                   ], allow_empty = True) +
-                   [
-                       "//drivers/stm32/{}:srcs".format(family),
-                   ] + final_extra_srcs,
+            srcs = srcs + [driver_srcs] + final_extra_srcs,
             includes = [
                 "Core/Inc",
             ] + extra_includes,
             deps = deps_list,
-            linkopts = MCU_FLAGS + [
-                "-Wl,-Map={}.map,--cref".format(target_name),
-                "-Wl,--gc-sections",
-                "-T $(location {})".format(linker_script),
-                "$(location {})".format(startup_script),
-                "-specs=nano.specs",
-                "-lnosys",
-                "-lc",
-                "-lm",
-                "-lstdc++",
-                "-u _printf_float",
-            ],
+            linkopts = linkopts,
             defines = final_defines + location_defines + ["USE_HAL_DRIVER"],
             additional_linker_inputs = [
                 linker_script,
@@ -388,7 +403,7 @@ def firmware_project(
                 "@platforms//cpu:arm",
                 "@platforms//os:none",
             ],
-            copts = MCU_FLAGS + [
+            copts = common_mcu_flags + [
                 "-mthumb-interwork",
                 "-ffunction-sections",
                 "-fdata-sections",
