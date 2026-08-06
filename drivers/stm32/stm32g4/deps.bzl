@@ -27,14 +27,14 @@ def _stm32g4_deps_impl(_ctx):
     git_repository(
         name = "freertos_kernel_stm32g4",
         remote = "https://github.com/FreeRTOS/FreeRTOS-Kernel.git",
-        tag = "V11.1.0",
+        commit = "dbf70559b27d39c1fdb68dfb9a32140b6a6777a0",
         build_file = "//drivers/stm32/stm32g4:freertos_kernel.BUILD",
     )
 
     git_repository(
         name = "cmsis_freertos_stm32g4",
         remote = "https://github.com/ARM-software/CMSIS-FreeRTOS.git",
-        tag = "v11.1.0",
+        commit = "0bb666c1ff7430f5827e9469883b827df5b8fb06",
         build_file = "//drivers/stm32/stm32g4:cmsis_freertos.BUILD",
     )
 
