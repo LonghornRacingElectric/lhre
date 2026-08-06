@@ -1,22 +1,25 @@
-build --@aspect_rules_py//uv/private/constraints/venv:venv=lhre-tools
+common --@pypi//venv=lhre-tools
 build --@protobuf//bazel/flags:prefer_prebuilt_protoc=true
 
-build:remote --bes_results_url=https://lhre.buildbuddy.io/invocation/
-build:remote --bes_backend=grpcs://lhre.buildbuddy.io
-build:remote --remote_cache=grpcs://lhre.buildbuddy.io
-build:remote --remote_timeout=10m
-build:remote --remote_executor=grpcs://lhre.buildbuddy.io
-build:remote --extra_execution_platforms=//:rbe_linux
-build:remote --remote_cache_compression
-build:remote --jobs=50
+# These builds are done remotely by default
+# use --config=local or --config=offline to build locally
+build --bes_results_url=https://lhre.buildbuddy.io/invocation/
+build --bes_backend=grpcs://lhre.buildbuddy.io
+build --remote_cache=grpcs://lhre.buildbuddy.io
+build --remote_timeout=10m
+build --remote_executor=grpcs://lhre.buildbuddy.io
+build --extra_execution_platforms=//:rbe_linux
+build --remote_cache_compression
+build --jobs=50
 query:remote --
-
 
 build:local --remote_executor=
 build:local --remote_cache=
-build:local --remote_executor=
+build:local --bes_backend=
+build:local --bes_results_url=
 build:local --extra_execution_platforms=
 
 build:offline --config=local
+build:offline --nofetch
 
 try-import .bazelrc.user
