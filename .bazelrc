@@ -46,6 +46,14 @@ build --incompatible_strict_action_env
 build:windows --action_env=PATH=/usr/local/bin:/usr/bin:/bin
 build:windows --host_action_env=PATH=/usr/local/bin:/usr/bin:/bin
 
+# Windows clients also mis-resolve the absolute Linux include paths that remote
+# gcc reports in .d dependency files (they get glued onto a guessed MSYS root
+# and then rejected as undeclared inclusions). Disable .d-based include
+# discovery for Windows-client builds; declared deps are still enforced, and
+# MSVC uses /showIncludes so it is unaffected.
+build:windows --features=-dependency_file
+build:windows --host_features=-dependency_file
+
 build:offline --config=local
 build:offline --nofetch
 
