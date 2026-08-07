@@ -30,12 +30,21 @@ build:local --bes_backend=
 build:local --bes_results_url=
 build:local --extra_execution_platforms=
 
-# Windows intentionally keeps remote execution enabled: nothing in this build
-# compiles native Windows code (the py_binary launcher.exe is prebuilt), so all
-# C++ host tools (launcher_maker, zipper) and ARM firmware compile on the Linux
-# executors. This avoids requiring MSVC / MinGW on Windows machines entirely.
-# If a windows-target cc_binary is ever added, it will need a local MSVC
-# toolchain and a build:windows override disabling remote execution for it.
+# Use a fixed PATH in action environments instead of inheriting the client's.
+# This keeps remote cache keys stable across machines and gives remote Linux
+# actions a sane PATH regardless of the client OS.
+build --incompatible_strict_action_env
+
+# Windows keeps remote execution enabled: ARM firmware and C++ host tools
+# (launcher_maker, zipper) all compile on the Linux executors. The ONLY local
+# compiles are the tiny py_binary launcher exes, which need MSVC Build Tools
+# (+ Windows SDK) installed. Bazel on a Windows client bakes a Windows-style
+# PATH into action environments (even with strict_action_env), which breaks
+# tools like gcc's `as` lookup inside the Linux executors — so we pin a unix
+# PATH for both target-config and exec-config actions. MSVC actions are
+# unaffected (they use the toolchain's own env, not PATH).
+build:windows --action_env=PATH=/usr/local/bin:/usr/bin:/bin
+build:windows --host_action_env=PATH=/usr/local/bin:/usr/bin:/bin
 
 build:offline --config=local
 build:offline --nofetch
