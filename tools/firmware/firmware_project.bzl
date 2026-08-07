@@ -105,12 +105,12 @@ openocd_flash_target = rule(
         "flash_tool": attr.label(
             default = "//tools/openocd:flash",
             executable = True,
-            cfg = "exec",
+            cfg = "target",
         ),
         "openocd": attr.label(
             default = "@openocd//:openocd",
             executable = True,
-            cfg = "exec",
+            cfg = "target",
         ),
         "elf": attr.label(
             allow_single_file = True,
@@ -179,12 +179,12 @@ dfu_flash_target = rule(
         "flash_tool": attr.label(
             default = "//tools/dfu:flash",
             executable = True,
-            cfg = "exec",
+            cfg = "target",
         ),
         "dfu_util": attr.label(
             default = "@dfu//:dfu",
             executable = True,
-            cfg = "exec",
+            cfg = "target",
         ),
         "bin_file": attr.label(
             allow_single_file = True,

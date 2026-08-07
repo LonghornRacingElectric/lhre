@@ -6,6 +6,7 @@ bazel_dep(name = "aspect_bazel_lib", version = "2.19.3")
 bazel_dep(name = "toolchains_arm_gnu", version = "1.1.0")
 bazel_dep(name = "protobuf", version = "36.0-rc1")
 bazel_dep(name = "platforms", version = "1.0.0")
+bazel_dep(name = "toolchains_buildbuddy", version = "0.0.4")
 
 git_override(
     module_name = "toolchains_arm_gnu",
@@ -19,6 +20,16 @@ use_repo(arm_toolchain, "arm_none_eabi")
 
 register_toolchains("@arm_none_eabi//toolchain:all")
 
+# BuildBuddy RBE toolchain: provides a C++ toolchain that runs on (and targets)
+# the Linux x86_64 remote executors, so host tools (e.g. py_binary's zipper)
+# can be built remotely from any host OS. Its exec constraints are Linux-only,
+# so it is never selected for local Windows/macOS builds.
+buildbuddy = use_extension("@toolchains_buildbuddy//:extensions.bzl", "buildbuddy")
+buildbuddy.platform(buildbuddy_container_image = "UBUNTU22_04_IMAGE")
+use_repo(buildbuddy, "buildbuddy_toolchain")
+
+register_toolchains("@buildbuddy_toolchain//:ubuntu_cc_toolchain")
+
 python = use_extension("@rules_python//python/extensions:python.bzl", "python")
 python.toolchain(
     is_default = True,
@@ -31,6 +42,17 @@ pip.parse(
     hub_name = "lhre_pypi",
     python_version = "3.12",
     requirements_lock = "//:requirements_lock.txt",
+    # Evaluate the lock file for every platform we build on or execute on,
+    # not just the host. Without this the wheel hub only supports the host
+    # platform, which breaks remote execution (Linux exec platform) and
+    # cross-platform flashing tools.
+    target_platforms = [
+        "linux_x86_64",
+        "linux_aarch64",
+        "osx_aarch64",
+        "osx_x86_64",
+        "windows_x86_64",
+    ],
 )
 use_repo(pip, "lhre_pypi")
 

@@ -1,16 +1,9 @@
 # Root package
 
-platform(
-    name = "rbe_linux",
-    constraint_values = [
-        "@platforms//os:linux",
-        "@platforms//cpu:x86_64",
-    ],
-    exec_properties = {
-        "container-image": "docker://ubuntu:22.04",
-    },
-    visibility = ["//visibility:public"],
-)
+# NOTE: remote execution now uses @buildbuddy_toolchain//:platform_linux_x86_64
+# (see .bazelrc), whose container image ships the GCC matching the registered
+# BuildBuddy C++ toolchain. The old //:rbe_linux platform (plain ubuntu:22.04,
+# no compiler) was removed.
 
 platform(
     name = "arm_none_eabi",
