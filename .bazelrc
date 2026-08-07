@@ -30,11 +30,12 @@ build:local --bes_backend=
 build:local --bes_results_url=
 build:local --extra_execution_platforms=
 
-# Windows: no remote execution (MSVC can't resolve against the Linux exec
-# platform) but keep remote cache + BES for team cache sharing and build
-# visibility.
-build:windows --remote_executor=
-build:windows --extra_execution_platforms=
+# Windows intentionally keeps remote execution enabled: nothing in this build
+# compiles native Windows code (the py_binary launcher.exe is prebuilt), so all
+# C++ host tools (launcher_maker, zipper) and ARM firmware compile on the Linux
+# executors. This avoids requiring MSVC / MinGW on Windows machines entirely.
+# If a windows-target cc_binary is ever added, it will need a local MSVC
+# toolchain and a build:windows override disabling remote execution for it.
 
 build:offline --config=local
 build:offline --nofetch
