@@ -2,6 +2,8 @@
 startup --windows_enable_symlinks
 build --enable_runfiles
 
+common --enable_platform_specific_config
+
 build --@protobuf//bazel/flags:prefer_prebuilt_protoc=true
 
 # These builds are done remotely by default
