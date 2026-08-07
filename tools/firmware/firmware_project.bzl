@@ -55,10 +55,10 @@ def _openocd_flash_impl(ctx):
     if is_windows:
         executable = ctx.actions.declare_file(ctx.label.name + ".cmd")
         content = """@echo off
-set RUNFILES_DIR=%~dp0{target_name}.runfiles
+set RUNFILES_DIR=%~dp0{exe_name}.runfiles
 "%RUNFILES_DIR%\\{tool}" "{openocd}" "{elf}" "{cfg}" %*
 """.format(
-            target_name = ctx.label.name,
+            exe_name = executable.basename,
             tool = _runfiles_path(ctx.executable.flash_tool).replace("/", "\\"),
             openocd = _runfiles_path(ctx.executable.openocd),
             elf = _runfiles_path(ctx.file.elf),
@@ -132,10 +132,10 @@ def _dfu_flash_impl(ctx):
     if is_windows:
         executable = ctx.actions.declare_file(ctx.label.name + ".cmd")
         content = """@echo off
-set RUNFILES_DIR=%~dp0{target_name}.runfiles
+set RUNFILES_DIR=%~dp0{exe_name}.runfiles
 "%RUNFILES_DIR%\\{tool}" "{dfu_util}" "{bin_file}" %*
 """.format(
-            target_name = ctx.label.name,
+            exe_name = executable.basename,
             tool = _runfiles_path(ctx.executable.flash_tool).replace("/", "\\"),
             dfu_util = _runfiles_path(ctx.executable.dfu_util),
             bin_file = _runfiles_path(ctx.file.bin_file),
