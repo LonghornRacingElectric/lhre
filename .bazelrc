@@ -1,3 +1,7 @@
+# Windows-specific settings (no-ops on macOS/Linux)
+startup --windows_enable_symlinks
+build --enable_runfiles
+
 build --@protobuf//bazel/flags:prefer_prebuilt_protoc=true
 
 # These builds are done remotely by default
