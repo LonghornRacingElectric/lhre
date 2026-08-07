@@ -35,24 +35,16 @@ build:local --extra_execution_platforms=
 # actions a sane PATH regardless of the client OS.
 build --incompatible_strict_action_env
 
-# Windows keeps remote execution enabled: ARM firmware and C++ host tools
-# (launcher_maker, zipper) all compile on the Linux executors. The ONLY local
-# compiles are the tiny py_binary launcher exes, which need MSVC Build Tools
-# (+ Windows SDK) installed. Bazel on a Windows client bakes a Windows-style
-# PATH into action environments (even with strict_action_env), which breaks
-# tools like gcc's `as` lookup inside the Linux executors — so we pin a unix
-# PATH for both target-config and exec-config actions. MSVC actions are
-# unaffected (they use the toolchain's own env, not PATH).
-build:windows --action_env=PATH=/usr/local/bin:/usr/bin:/bin
-build:windows --host_action_env=PATH=/usr/local/bin:/usr/bin:/bin
-
-# Windows clients also mis-resolve the absolute Linux include paths that remote
-# gcc reports in .d dependency files (they get glued onto a guessed MSYS root
-# and then rejected as undeclared inclusions). Disable .d-based include
-# discovery for Windows-client builds; declared deps are still enforced, and
-# MSVC uses /showIncludes so it is unaffected.
-build:windows --features=-dependency_file
-build:windows --host_features=-dependency_file
+# Windows: remote execution disabled. Bazel cannot reliably drive Linux
+# executors from a Windows client — it bakes Windows-style PATHs into remote
+# action environments and mis-resolves the absolute Linux include paths that
+# gcc reports in .d files (both long-standing upstream limitations, verified
+# in practice). Windows builds run fully locally: the ARM toolchain is
+# hermetic, and the small py_binary launcher tools need MSVC Build Tools with
+# the Windows SDK installed. Remote cache + BES streaming stay enabled, so
+# Windows machines still share cache artifacts with each other.
+build:windows --remote_executor=
+build:windows --extra_execution_platforms=
 
 build:offline --config=local
 build:offline --nofetch
