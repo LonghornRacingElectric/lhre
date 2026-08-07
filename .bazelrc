@@ -8,43 +8,57 @@ common --enable_platform_specific_config
 
 build --@protobuf//bazel/flags:prefer_prebuilt_protoc=true
 
-# These builds are done remotely by default
-# use --config=local or --config=offline to build locally
+# Remote cache + BuildBuddy result streaming: enabled on every platform.
+# use --config=local or --config=offline to build fully locally.
 build --bes_results_url=https://lhre.buildbuddy.io/invocation/
 build --bes_backend=grpcs://lhre.buildbuddy.io
 build --remote_cache=grpcs://lhre.buildbuddy.io
 build --remote_timeout=10m
-build --remote_executor=grpcs://lhre.buildbuddy.io
 build --remote_cache_compression
-build --jobs=50
-
-# Prefer the BuildBuddy Linux x86_64 execution platform for build actions.
-# Its container image ships the GCC that @buildbuddy_toolchain//:ubuntu_cc_toolchain
-# (registered in MODULE.bazel) expects, so C++ host tools resolve and compile
-# remotely regardless of the OS bazel is invoked from.
-build --extra_execution_platforms=@buildbuddy_toolchain//:platform_linux_x86_64
-
-build:local --remote_executor=
-build:local --remote_cache=
-build:local --bes_backend=
-build:local --bes_results_url=
-build:local --extra_execution_platforms=
 
 # Use a fixed PATH in action environments instead of inheriting the client's.
 # This keeps remote cache keys stable across machines and gives remote Linux
 # actions a sane PATH regardless of the client OS.
 build --incompatible_strict_action_env
 
-# Windows: remote execution disabled. Bazel cannot reliably drive Linux
-# executors from a Windows client — it bakes Windows-style PATHs into remote
-# action environments and mis-resolves the absolute Linux include paths that
-# gcc reports in .d files (both long-standing upstream limitations, verified
-# in practice). Windows builds run fully locally: the ARM toolchain is
-# hermetic, and the small py_binary launcher tools need MSVC Build Tools with
-# the Windows SDK installed. Remote cache + BES streaming stay enabled, so
-# Windows machines still share cache artifacts with each other.
-build:windows --remote_executor=
-build:windows --extra_execution_platforms=
+# --- Remote EXECUTION: Linux and macOS clients only --------------------------
+# Ordering gotcha (verified on Bazel 9.2.0): the build:<os> config injected by
+# --enable_platform_specific_config is expanded BEFORE the plain `build` lines
+# in this file, so a plain `build --remote_executor=...` line silently
+# overrides `build:windows --remote_executor=`. "Set globally, clear on
+# Windows" therefore does NOT work; remote-execution flags must only ever be
+# SET here, inside the per-OS configs that should have them.
+#
+# Windows: remote execution stays off. Bazel cannot reliably drive Linux
+# executors from a Windows client — it bakes a Windows-style PATH into remote
+# action environments (gcc on the executor dies with "cannot execute 'as'")
+# and mis-resolves the absolute Linux include paths gcc reports in .d files
+# (long-standing upstream limitations, see bazelbuild/bazel#19587). Windows
+# builds run fully locally: the ARM toolchain is hermetic, and the small
+# launcher tools need MSVC Build Tools with the Windows SDK installed. Remote
+# cache + BES streaming stay enabled above, so Windows machines still share
+# cache artifacts with each other. Windows users who want full remote
+# execution should run bazel from inside WSL2 (clone the repo in WSL), which
+# makes them a Linux client and picks up build:linux automatically.
+#
+# The @buildbuddy_toolchain platform's container image ships the GCC that
+# @buildbuddy_toolchain//:ubuntu_cc_toolchain (registered in MODULE.bazel)
+# expects, so C++ host tools resolve and compile remotely.
+build:linux --remote_executor=grpcs://lhre.buildbuddy.io
+build:linux --extra_execution_platforms=@buildbuddy_toolchain//:platform_linux_x86_64
+build:linux --jobs=50
+build:macos --remote_executor=grpcs://lhre.buildbuddy.io
+build:macos --extra_execution_platforms=@buildbuddy_toolchain//:platform_linux_x86_64
+build:macos --jobs=50
+
+# Explicit --config flags expand after the plain rc lines above, so these
+# overrides really do take effect (unlike the platform-specific configs).
+build:local --remote_executor=
+build:local --remote_cache=
+build:local --bes_backend=
+build:local --bes_results_url=
+build:local --extra_execution_platforms=
+build:local --jobs=auto
 
 build:offline --config=local
 build:offline --nofetch
