@@ -1,7 +1,7 @@
 module(name = "lhre")
 
 bazel_dep(name = "rules_cc", version = "0.2.18")
-bazel_dep(name = "aspect_rules_py", version = "1.11.2")
+bazel_dep(name = "rules_python", version = "2.2.0")
 bazel_dep(name = "aspect_bazel_lib", version = "2.19.3")
 bazel_dep(name = "toolchains_arm_gnu", version = "1.1.0")
 bazel_dep(name = "protobuf", version = "36.0-rc1")
@@ -19,25 +19,20 @@ use_repo(arm_toolchain, "arm_none_eabi")
 
 register_toolchains("@arm_none_eabi//toolchain:all")
 
-interpreters = use_extension("@aspect_rules_py//py/unstable:extension.bzl", "python_interpreters")
-interpreters.toolchain(
+python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+python.toolchain(
     is_default = True,
     python_version = "3.12",
 )
-use_repo(interpreters, "python_interpreters")
+use_repo(python, "python_3_12")
 
-register_toolchains("@python_interpreters//:all")
-
-uv = use_extension("@aspect_rules_py//uv/unstable:extension.bzl", "uv")
-uv.declare_hub(
-    hub_name = "pypi",
+pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
+pip.parse(
+    hub_name = "lhre_pypi",
+    python_version = "3.12",
+    requirements_lock = "//:requirements_lock.txt",
 )
-uv.project(
-    hub_name = "pypi",
-    lock = "//:uv.lock",
-    pyproject = "//:pyproject.toml",
-)
-use_repo(uv, "pypi")
+use_repo(pip, "lhre_pypi")
 
 stm32g4_deps = use_extension("//drivers/stm32/stm32g4:deps.bzl", "stm32g4_deps")
 use_repo(
@@ -54,4 +49,3 @@ use_repo(dfu, "dfu")
 
 openocd = use_extension("//tools/openocd:openocd.bzl", "openocd")
 use_repo(openocd, "openocd")
-

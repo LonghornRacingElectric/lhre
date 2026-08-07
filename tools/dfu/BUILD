@@ -1,6 +1,6 @@
 """DFU Util Toolchain for Flashing"""
 
-load("@aspect_rules_py//py:defs.bzl", "py_binary")
+load("@rules_python//python:defs.bzl", "py_binary")
 
 filegroup(
     name = "dfu_flashing_script",
@@ -12,9 +12,10 @@ py_binary(
     name = "flash",
     srcs = ["flash.py"],
     main = "flash.py",
+    legacy_create_init = 0,
     visibility = ["//visibility:public"],
     deps = [
-        "@pypi//bazel_runfiles",
-        "@pypi//pyserial",
+        "@lhre_pypi//bazel_runfiles",
+        "@lhre_pypi//pyserial",
     ],
 )

@@ -1,4 +1,3 @@
-common --@pypi//venv=lhre-tools
 build --@protobuf//bazel/flags:prefer_prebuilt_protoc=true
 
 # These builds are done remotely by default
