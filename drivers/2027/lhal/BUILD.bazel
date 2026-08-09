@@ -1,0 +1,56 @@
+"""Longhorn HAL (LHAL): platform-independent peripheral interfaces.
+
+Targets:
+    //drivers/2027/lhal:lhal          — interface headers only; what application code
+                           depends on. Builds for any platform.
+    //drivers/2027/lhal:host          — host backend (in-memory fakes) for unit tests,
+                           integration tests, and sims.
+    //drivers/2027/lhal:stm32_headers — STM32 backend headers (adapters over ST HAL
+                           handles). Add to a firmware_project's extra_deps.
+    //drivers/2027/lhal:stm32_srcs    — STM32 backend sources, compiled inside the
+                           firmware binary (same pattern as the ST HAL
+                           sources themselves, so the board's hal_conf.h and
+                           device defines apply). Add to extra_srcs.
+"""
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+cc_library(
+    name = "lhal",
+    hdrs = glob(["include/lhal/*.hpp"]),
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "stm32_headers",
+    hdrs = glob(["include/lhal/stm32/*.hpp"]),
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+    deps = [":lhal"],
+)
+
+filegroup(
+    name = "stm32_srcs",
+    srcs = glob(["stm32/*.cpp"]),
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "host",
+    hdrs = glob(["include/lhal/host/*.hpp"]),
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+    deps = [":lhal"],
+)
+
+cc_test(
+    name = "lhal_host_test",
+    size = "small",
+    srcs = ["test/lhal_host_test.cpp"],
+    deps = [
+        ":host",
+        "@googletest//:gtest_main",
+    ],
+)
