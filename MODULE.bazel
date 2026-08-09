@@ -89,4 +89,9 @@ git_override(
     module_name = "hedron_compile_commands",
     commit = "6eb3ff1de6445355552ef4230be0caf3e1dd27e5",
     remote = "https://github.com/helly25/bazel-compile-commands-extractor.git",
+    # Windows: multiprocessing's spawn start method re-imports the extractor's
+    # entry point in every worker, re-entering main() and killing the process
+    # pool ("BrokenProcessPool"). Guard the entry point with __main__.
+    patches = ["//patches:hedron_windows_spawn_guard.patch"],
+    patch_strip = 1,
 )

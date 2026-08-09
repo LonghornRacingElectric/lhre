@@ -1,0 +1,14 @@
+diff --git a/check_python_version.template.py b/check_python_version.template.py
+index bd2f005..157e65a 100644
+--- a/check_python_version.template.py
++++ b/check_python_version.template.py
+@@ -12,4 +12,8 @@ if sys.version_info < (3,6):
+ 
+ # Only import -> parse once we're sure we have the required python version
+ import {to_run}
+-{to_run}.main()
++
++# Guard against re-entry when multiprocessing's spawn start method (the only
++# option on Windows) re-imports this entry-point module in worker processes.
++if __name__ == '__main__':
++    {to_run}.main()
