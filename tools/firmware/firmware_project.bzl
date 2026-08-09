@@ -334,7 +334,12 @@ def firmware_project(
             project_name = "{}_{}".format(name, location)
             location_defines.append("BOARD_{}".format(location))
 
-        deps_list = final_extra_deps + [driver_headers]
+        # Every firmware binary gets build provenance (git describe/SHA/dirty)
+        # via the stamped header in //tools/firmware:build_info.
+        deps_list = final_extra_deps + [
+            driver_headers,
+            "//tools/firmware:build_info",
+        ]
 
         # Format linkopts with target-specific values
         linkopts = [

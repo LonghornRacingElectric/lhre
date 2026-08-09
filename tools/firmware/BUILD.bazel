@@ -1,1 +1,25 @@
-# Empty BUILD file to designate tools/firmware as a Bazel package.
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_python//python:defs.bzl", "py_binary")
+load(":build_info.bzl", "build_info_header")
+
+py_binary(
+    name = "gen_build_info",
+    srcs = ["gen_build_info.py"],
+    visibility = ["//visibility:private"],
+)
+
+build_info_header(
+    name = "build_info_hpp",
+    out = "lhre/build_info.hpp",
+)
+
+# Build provenance for firmware images: git describe/SHA/dirty, stamped via
+# the workspace status command (.bazelrc). firmware_project links this into
+# every firmware binary automatically — #include "lhre/build_info.hpp" and
+# read lhre::kBuildInfo.
+cc_library(
+    name = "build_info",
+    hdrs = [":build_info_hpp"],
+    includes = ["."],
+    visibility = ["//visibility:public"],
+)
