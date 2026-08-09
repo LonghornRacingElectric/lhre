@@ -11,10 +11,13 @@ def _dfu_util_repo_impl(ctx):
 
     if os_name.startswith("linux"):
         bin_path = "linux-amd64/dfu-util"
+        data = "[]"
     elif os_name.startswith("mac os x"):
         bin_path = "darwin-x86_64/dfu-util"
+        data = "[]"
     elif os_name.startswith("windows"):
         bin_path = "win64/dfu-util.exe"
+        data = '["win64/libusb-1.0.dll"]'
     else:
         fail("Unsupported OS: {}".format(os_name))
 
@@ -24,9 +27,10 @@ package(default_visibility = ["//visibility:public"])
 filegroup(
     name = "dfu",
     srcs = ["{bin_path}"],
+    data = {data},
 )
 
-""".format(bin_path = bin_path)
+""".format(bin_path = bin_path, data = data)
 
     http_archive(
         name = "dfu",
