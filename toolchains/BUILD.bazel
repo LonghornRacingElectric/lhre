@@ -7,10 +7,11 @@
 # platform, so every cc_library in the dependency graph — not just the
 # firmware binary — compiles with the right float ABI.
 #
-# arm_none_eabi_toolchain instantiates a (config, cc_toolchain, toolchain)
-# triple per host OS/arch; MODULE.bazel registers //toolchains:all.
+# arm_none_eabi_toolchain (toolchain.bzl here, not the fork's — see its
+# docstring for why) instantiates a (config, cc_toolchain, toolchain) triple
+# per host OS/arch; MODULE.bazel registers //toolchains:all.
 
-load("@toolchains_arm_gnu//toolchain:toolchain.bzl", "arm_none_eabi_toolchain")
+load("//toolchains:toolchain.bzl", "arm_none_eabi_toolchain")
 
 package(default_visibility = ["//visibility:public"])
 
