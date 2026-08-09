@@ -1,10 +1,10 @@
-name: presubmit
+name: lint-format
 
 on:
   pull_request:
 
 jobs:
-  bazel:
+  lint-format:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,9 +22,5 @@ jobs:
             echo "common --config=local" > .bazelrc.user
           fi
 
-      - name: Build everything
-        run: bazel build //...
-
-      - name: Test everything
-        run: bazel test //...
-
+      - name: Check formatting
+        run: bazel run //tools/format:check

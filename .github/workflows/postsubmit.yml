@@ -1,10 +1,11 @@
-name: presubmit
+name: postsubmit
 
 on:
-  pull_request:
+  push:
+    branches: [main]
 
 jobs:
-  bazel:
+  postsubmit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,3 +29,5 @@ jobs:
       - name: Test everything
         run: bazel test //...
 
+      - name: Check formatting
+        run: bazel run //tools/format:check
