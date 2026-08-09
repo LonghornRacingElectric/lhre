@@ -53,6 +53,15 @@ build:macos --jobs=50
 
 # Explicit --config flags expand after the plain rc lines above, so these
 # overrides really do take effect (unlike the platform-specific configs).
+# Host-targeted tests (unit tests, sims) execute on the Linux remote
+# executors by default, so target Linux there — the binaries must be runnable
+# where the test action executes. The hermetic LLVM toolchain (MODULE.bazel)
+# compiles them either way; --config=local reverts to this machine's platform
+# and runs tests here.
+test --platforms=@buildbuddy_toolchain//:platform_linux_x86_64
+test:local --platforms=
+test:windows --platforms=
+
 build:local --remote_executor=
 build:local --remote_cache=
 build:local --bes_backend=
