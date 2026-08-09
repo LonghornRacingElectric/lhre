@@ -1,0 +1,68 @@
+# Target platforms for STM32 firmware, one per chip family.
+#
+# Each platform carries the CPU-core constraint that selects the matching
+# arm-none-eabi toolchain in //toolchains, where the family's codegen flags
+# (-mcpu/-mfpu/-mfloat-abi) are baked in. Plain cc_library targets therefore
+# compile correctly for both host and MCU with no per-target flag plumbing.
+#
+# Adding a family: pick (or add) the CPU-core constraint + toolchain for its
+# core, add a platform here, and map it in FAMILY_PLATFORMS in
+# //tools/firmware:firmware_project.bzl.
+
+package(default_visibility = ["//visibility:public"])
+
+# CPU core + FPU configuration of the MCU. Distinct from @platforms//cpu
+# because both cortex-m4f and cortex-m7f are armv7e-m with hard float, yet
+# need different -mcpu/-mfpu flags.
+constraint_setting(name = "mcu_core")
+
+constraint_value(
+    name = "cortex_m0",
+    constraint_setting = ":mcu_core",
+)
+
+constraint_value(
+    name = "cortex_m4f",
+    constraint_setting = ":mcu_core",
+)
+
+constraint_value(
+    name = "cortex_m7f",
+    constraint_setting = ":mcu_core",
+)
+
+platform(
+    name = "stm32f0",
+    constraint_values = [
+        "@platforms//cpu:arm",
+        "@platforms//os:none",
+        ":cortex_m0",
+    ],
+)
+
+platform(
+    name = "stm32f4",
+    constraint_values = [
+        "@platforms//cpu:arm",
+        "@platforms//os:none",
+        ":cortex_m4f",
+    ],
+)
+
+platform(
+    name = "stm32g4",
+    constraint_values = [
+        "@platforms//cpu:arm",
+        "@platforms//os:none",
+        ":cortex_m4f",
+    ],
+)
+
+platform(
+    name = "stm32h7",
+    constraint_values = [
+        "@platforms//cpu:arm",
+        "@platforms//os:none",
+        ":cortex_m7f",
+    ],
+)

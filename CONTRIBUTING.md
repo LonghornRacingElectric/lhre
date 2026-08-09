@@ -27,9 +27,10 @@ Copy the layout of [boards/VCU](boards/VCU):
    peripheral"** enabled, targeting a Makefile toolchain. Generated code
    lands in `Core/`.
 2. Hand-written bring-up (`main.cpp`, clock config, LHAL adapter wiring)
-   goes in `Board/`. Application logic goes in `App/` as an
-   `lhal_cc_library` depending only on `//drivers/lhal`, so it runs in host
-   tests and sims too.
+   goes in `Board/`. Application logic goes in `App/` as a plain
+   `cc_library` depending only on `//drivers/lhal`, so it runs in host
+   tests and sims too (the per-family platform in `//platforms` selects a
+   toolchain with the MCU flags baked in when cross-compiling).
 3. Add a `BUILD.bazel` calling `firmware_project` (see
    [boards/VCU/BUILD.bazel](boards/VCU/BUILD.bazel)) plus the linker script
    and startup file for your chip.
