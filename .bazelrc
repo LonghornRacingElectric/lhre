@@ -47,12 +47,23 @@ build --incompatible_strict_action_env
 build:linux --remote_executor=grpcs://lhre.buildbuddy.io
 build:linux --extra_execution_platforms=@buildbuddy_toolchain//:platform_linux_x86_64
 build:linux --jobs=50
+test:linux --platforms=@buildbuddy_toolchain//:platform_linux_x86_64
 build:macos --remote_executor=grpcs://lhre.buildbuddy.io
 build:macos --extra_execution_platforms=@buildbuddy_toolchain//:platform_linux_x86_64
 build:macos --jobs=50
+test:macos --platforms=@buildbuddy_toolchain//:platform_linux_x86_64
 
 # Explicit --config flags expand after the plain rc lines above, so these
 # overrides really do take effect (unlike the platform-specific configs).
+# Host-targeted tests (unit tests, sims) execute on the Linux remote
+# executors by default on Linux and macOS, so target Linux there — the binaries
+# must be runnable where the test action executes. On Windows, tests execute
+# locally, so they target the host platform by default. The hermetic LLVM
+# toolchain (MODULE.bazel) compiles them either way; --config=local reverts
+# to this machine's platform and runs tests here.
+test:local --platforms=
+test:windows --platforms=
+
 build:local --remote_executor=
 build:local --remote_cache=
 build:local --bes_backend=

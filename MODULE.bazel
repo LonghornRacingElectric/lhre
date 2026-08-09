@@ -1,6 +1,7 @@
 module(name = "lhre")
 
 bazel_dep(name = "rules_cc", version = "0.2.18")
+bazel_dep(name = "llvm", version = "0.8.16")
 bazel_dep(name = "rules_python", version = "2.2.0")
 bazel_dep(name = "aspect_bazel_lib", version = "2.19.3")
 bazel_dep(name = "toolchains_arm_gnu", version = "1.1.0")
@@ -8,9 +9,11 @@ bazel_dep(name = "protobuf", version = "36.0-rc1")
 bazel_dep(name = "platforms", version = "1.0.0")
 bazel_dep(name = "toolchains_buildbuddy", version = "0.0.4")
 
+bazel_dep(name = "googletest", version = "1.17.0.bcr.2", dev_dependency = True)
+
 git_override(
     module_name = "toolchains_arm_gnu",
-    commit = "6915dd1b27f3265bb3270042258eb16a99db42ed",
+    commit = "58d49307b702cc66f924b9a6e188d1f61a227479",
     remote = "https://github.com/LonghornRacingElectric/toolchains_arm_gnu.git",
 )
 
@@ -19,6 +22,14 @@ arm_toolchain.arm_none_eabi(version = "13.2.1")
 use_repo(arm_toolchain, "arm_none_eabi")
 
 register_toolchains("@arm_none_eabi//toolchain:all")
+
+# Hermetic LLVM toolchain (hermeticbuild/hermetic-llvm): host-targeted C++
+# (unit tests, sims, host tools) compiles with the same hermetic clang on
+# every machine — no dependency on local Xcode / system GCC / MSVC.
+# Registered before the BuildBuddy toolchain below so it is also preferred
+# for Linux-targeted builds on the remote executors; the firmware toolchain
+# above is unaffected (only it targets os:none).
+register_toolchains("@llvm//toolchain:all")
 
 # BuildBuddy RBE toolchain: provides a C++ toolchain that runs on (and targets)
 # the Linux x86_64 remote executors, so host tools (e.g. py_binary's zipper)
@@ -71,3 +82,16 @@ use_repo(dfu, "dfu")
 
 openocd = use_extension("//tools/openocd:openocd.bzl", "openocd")
 use_repo(openocd, "openocd")
+
+# Bazel Compile Commands Extractor (helly25 fork)
+bazel_dep(name = "hedron_compile_commands", dev_dependency = True)
+git_override(
+    module_name = "hedron_compile_commands",
+    commit = "6eb3ff1de6445355552ef4230be0caf3e1dd27e5",
+    remote = "https://github.com/helly25/bazel-compile-commands-extractor.git",
+    # Windows: multiprocessing's spawn start method re-imports the extractor's
+    # entry point in every worker, re-entering main() and killing the process
+    # pool ("BrokenProcessPool"). Guard the entry point with __main__.
+    patches = ["//patches:hedron_windows_spawn_guard.patch"],
+    patch_strip = 1,
+)
