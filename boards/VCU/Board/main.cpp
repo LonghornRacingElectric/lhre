@@ -93,13 +93,13 @@ void ConfigureDebugUart() {
 
 void PrintBootBanner(lhal::Uart& uart) {
   char line[96];
-  int len = std::snprintf(
-      line, sizeof(line), "\r\nVCU %s (%.12s%s)\r\n",
-      lhre::kBuildInfo.git_describe, lhre::kBuildInfo.git_sha,
-      lhre::kBuildInfo.dirty ? "-dirty" : "");
+  int len =
+      std::snprintf(line, sizeof(line), "\r\nVCU %s (%.12s%s)\r\n",
+                    lhre::kBuildInfo.git_describe, lhre::kBuildInfo.git_sha,
+                    lhre::kBuildInfo.dirty ? "-dirty" : "");
   if (len > 0) {
-    uart.Write(reinterpret_cast<const uint8_t*>(line),
-               static_cast<size_t>(len), /*timeout_ms=*/100);
+    uart.Write(reinterpret_cast<const uint8_t*>(line), static_cast<size_t>(len),
+               /*timeout_ms=*/100);
   }
 }
 
