@@ -42,6 +42,11 @@ firmware_project(
             "Core/Src/**/*.cpp",
         ],
         allow_empty = True,
+        # CubeMX regeneration recreates main.c; our entry point is main.cpp.
+        # Excluding it here makes "Generate Code" safe to run for the
+        # per-peripheral init files (fdcan.c, gpio.c, ...) without producing
+        # a duplicate main().
+        exclude = ["Core/Src/main.c"],
     ) + glob(
         [
             "Core/Inc/**/*.h",
