@@ -1,7 +1,7 @@
 // Host simulation of the VCU: runs the real application logic in real time
 // against LHAL host fakes and prints what an observer on the CAN bus sees.
 //
-//   bazel run --config=local //boards/2027/VCU:vcu_sim
+//   bazel run --config=local //boards/VCU:vcu_sim
 
 #include <cstdio>
 

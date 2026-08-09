@@ -1,6 +1,6 @@
-// VCU firmware entry point — hand-written, not CubeMX-generated. VCU.ioc is
-// still useful for exploring pinouts and clock trees in CubeMX, but the code
-// here is owned by us and CubeMX must not regenerate over it.
+// VCU firmware entry point — hand-written, not CubeMX-generated. Everything
+// under Core/ is CubeMX-owned and safe to regenerate (run post_cubemx.sh
+// afterwards); everything under Board/ is ours and CubeMX never touches it.
 //
 // Structure: peripheral bring-up (clocks, pin mux, handles) stays at the ST
 // HAL level in this file; application logic lives in App/vcu_app.* against

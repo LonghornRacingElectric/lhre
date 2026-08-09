@@ -1,0 +1,10 @@
+# Copy this file to .bazelrc.user (gitignored) for per-machine settings.
+
+# BuildBuddy API key for remote cache/execution — get yours from
+# https://lhre.buildbuddy.io → Settings → API keys.
+common --remote_header=x-buildbuddy-api-key=YOUR_KEY_HERE
+
+# Uncomment to build entirely on this machine (no key needed):
+# common --config=local
+# ...or fully offline:
+# common --config=offline

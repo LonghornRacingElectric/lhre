@@ -1,15 +1,16 @@
-"""STM32 H7 driver interface package.
+"""STM32G4 driver interface package.
 
-Provides a unified interface to STM32 H7 drivers fetched from GitHub.
+Provides a unified interface to STM32G4 drivers fetched from GitHub.
 All targets here re-export from external repositories so that projects
-can depend on //drivers/stm32h7:<target> without knowing the external
-repo layout.
+can depend on //drivers/stm32/stm32g4:<target> without knowing the
+external repo layout.
 
 Available targets:
-    //drivers/stm32g4:stm32_headers       — HAL + CMSIS device + CMSIS core headers
-    //drivers/stm32g4:hal_srcs            — HAL driver .c sources (exclude templates)
-    //drivers/stm32g4:usb_device_headers  — USB Device middleware headers (Core + CDC)
-    //drivers/stm32g4:usb_device_srcs     — USB Device middleware .c sources
+    //drivers/stm32/stm32g4:headers          — HAL + CMSIS device + CMSIS core headers
+    //drivers/stm32/stm32g4:srcs             — HAL driver .c sources (excludes templates)
+    //drivers/stm32/stm32g4:freertos_srcs    — FreeRTOS kernel + port + CMSIS-RTOS2 sources
+    //drivers/stm32/stm32g4:freertos_headers — FreeRTOS + CMSIS-RTOS2 headers
+    //drivers/stm32/stm32g4:openocd_cfg      — OpenOCD config for flashing
 """
 
 load("@rules_cc//cc:defs.bzl", "cc_library")

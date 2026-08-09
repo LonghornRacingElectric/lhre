@@ -267,17 +267,13 @@ def firmware_project(
         linker_script,
         startup_script,
         family,
-        enable_usb = False,
         defines = [],
         extra_srcs = [],
         extra_deps = [],
-        usb_device_name = None,
         extra_includes = [],
         enable_freertos = False,
         enable_dfu = False,
         locations = [],
-        use_longhorn_lib = False,
-        enable_ota = False,
         enable_printf_float = False,
         driver_headers = None,
         driver_srcs = None,
@@ -291,26 +287,19 @@ def firmware_project(
         linker_script (path): the location of the linker script being used (.ld file)
         startup_script (path): the location of the startup script being used (.s file)
         family (string): the STM32 family, e.g. "stm32g4", etc.
-        enable_usb (bool, optional): Whether or not to use USB drivers. Defaults to False.
         defines (list, optional): defines to pass to the compiler. Defaults to [].
         extra_srcs (list, optional): extra sources to compile with. Defaults to [].
         extra_deps (list, optional): extra dependencies to compile with. Defaults to [].
-        usb_device_name (_type_, optional): name you want the USB driver to have. Defaults to None.
         extra_includes (list, optional): extra include paths to compile with. Defaults to [].
         enable_freertos (bool, optional): Whether or not to use FreeRTOS. Defaults to False.
         enable_dfu (bool, optional): Whether or not to accept strings to go into DFU. Defaults to False.
         locations (list, optional): A list of location identifiers (e.g., ["FR", "FL"]).
-        use_longhorn_lib (bool, optional): Whether to depend on drivers/longhorn-lib. Defaults to False.
-        enable_ota (bool, optional): Whether or not to use OTA flash drivers. Defaults to False.
         enable_printf_float (bool, optional): Whether to link -u _printf_float (adds ~10KB). Defaults to False.
         driver_headers (label, optional): Override for the driver headers target. Defaults to //drivers/stm32/{family}:headers.
         driver_srcs (label, optional): Override for the driver srcs target. Defaults to //drivers/stm32/{family}:srcs.
         mcu_flags (list, optional): Override MCU compiler/linker flags. Defaults to FAMILY_FLAGS[family].
         **kwargs: extra args to pass to cc_binary.
     """
-    if usb_device_name == None:
-        usb_device_name = name
-
     # Resolve defaults from family
     if driver_headers == None:
         driver_headers = "//drivers/stm32/{}:headers".format(family)
@@ -327,18 +316,9 @@ def firmware_project(
     final_extra_deps = extra_deps[:]
     final_defines = defines[:]
 
-    if enable_usb:
-        final_extra_srcs.append("//drivers/stm32/{}:usb_device_srcs".format(family))
-        final_extra_deps.append("//drivers/stm32/{}:usb_device_headers".format(family))
-        final_defines.append('USB_DEVICE_NAME_TOKEN="ELC {}"'.format(usb_device_name))
-
     if enable_freertos:
         final_extra_srcs.append("//drivers/stm32/{}:freertos_srcs".format(family))
         final_extra_deps.append("//drivers/stm32/{}:freertos_headers".format(family))
-
-    if enable_ota:
-        final_extra_srcs.append("//drivers/ota:ota_flash_srcs")
-        final_extra_deps.append("//drivers/ota:ota_flash_headers")
 
     if enable_dfu:
         final_defines.append("ENABLE_DFU")
@@ -376,9 +356,6 @@ def firmware_project(
             location_defines.append("BOARD_{}".format(location))
 
         deps_list = final_extra_deps + [driver_headers]
-        if use_longhorn_lib:
-            ll_version = "//drivers/longhorn-lib:longhorn_lib_{family}".format(family = family) if enable_freertos else "//drivers/longhorn-lib:longhorn_lib_base_{family}".format(family = family)
-            deps_list.append(ll_version)
 
         # Format linkopts with target-specific values
         linkopts = [

@@ -1,6 +1,6 @@
 load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
-load("//drivers/2027/lhal:lhal_library.bzl", "lhal_cc_library")
+load("//drivers/lhal:lhal_library.bzl", "lhal_cc_library")
 load("//tools/firmware:firmware_project.bzl", "firmware_project")
 
 # Application logic: LHAL interfaces only, no ST HAL. Compiles for both the
@@ -11,7 +11,7 @@ lhal_cc_library(
     hdrs = ["App/vcu_app.hpp"],
     family = "stm32g4",
     includes = ["App"],
-    deps = ["//drivers/2027/lhal"],
+    deps = ["//drivers/lhal"],
 )
 
 cc_test(
@@ -20,7 +20,7 @@ cc_test(
     srcs = ["App/vcu_app_test.cpp"],
     deps = [
         ":vcu_app",
-        "//drivers/2027/lhal:host",
+        "//drivers/lhal:host",
         "@googletest//:gtest_main",
     ],
 )
@@ -30,7 +30,7 @@ cc_binary(
     srcs = ["App/vcu_sim.cpp"],
     deps = [
         ":vcu_app",
-        "//drivers/2027/lhal:host",
+        "//drivers/lhal:host",
     ],
 )
 
@@ -39,13 +39,15 @@ firmware_project(
     srcs = glob(
         [
             "Core/Src/**/*.c",
-            "Core/Src/**/*.cpp",
+            "Board/**/*.cpp",
+            "Board/**/*.hpp",
         ],
         allow_empty = True,
-        # CubeMX regeneration recreates main.c; our entry point is main.cpp.
-        # Excluding it here makes "Generate Code" safe to run for the
-        # per-peripheral init files (fdcan.c, gpio.c, ...) without producing
-        # a duplicate main().
+        # Core/ is 100% CubeMX-owned and regenerable; hand-written bring-up
+        # lives in Board/. CubeMX regeneration recreates main.c — run
+        # post_cubemx.sh after "Generate Code" to delete it (our entry point
+        # is Board/main.cpp); the exclude keeps the build safe even if the
+        # script wasn't run.
         exclude = ["Core/Src/main.c"],
     ) + glob(
         [
@@ -58,9 +60,9 @@ firmware_project(
     enable_printf_float = True,
     extra_deps = [
         ":vcu_app",
-        "//drivers/2027/lhal:stm32_headers",
+        "//drivers/lhal:stm32_headers",
     ],
-    extra_srcs = ["//drivers/2027/lhal:stm32_srcs"],
+    extra_srcs = ["//drivers/lhal:stm32_srcs"],
     family = "stm32g4",
     linker_script = "STM32G474XX_FLASH.ld",
     startup_script = "startup_stm32g474xx.s",

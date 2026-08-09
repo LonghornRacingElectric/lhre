@@ -1,13 +1,13 @@
 """Longhorn HAL (LHAL): platform-independent peripheral interfaces.
 
 Targets:
-    //drivers/2027/lhal:lhal          — interface headers only; what application code
+    //drivers/lhal:lhal          — interface headers only; what application code
                            depends on. Builds for any platform.
-    //drivers/2027/lhal:host          — host backend (in-memory fakes) for unit tests,
+    //drivers/lhal:host          — host backend (in-memory fakes) for unit tests,
                            integration tests, and sims.
-    //drivers/2027/lhal:stm32_headers — STM32 backend headers (adapters over ST HAL
+    //drivers/lhal:stm32_headers — STM32 backend headers (adapters over ST HAL
                            handles). Add to a firmware_project's extra_deps.
-    //drivers/2027/lhal:stm32_srcs    — STM32 backend sources, compiled inside the
+    //drivers/lhal:stm32_srcs    — STM32 backend sources, compiled inside the
                            firmware binary (same pattern as the ST HAL
                            sources themselves, so the board's hal_conf.h and
                            device defines apply). Add to extra_srcs.

@@ -8,7 +8,7 @@ bazel-*
 # CubeMX-generated HAL copies inside board projects. Deliberately scoped to
 # boards/: a bare "**/Drivers" also matches the top-level drivers/ tree on
 # case-insensitive filesystems (macOS/Windows), silently ignoring new files
-# there (this bit us with drivers/2027/lhal).
+# there (this bit us with drivers/lhal).
 boards/**/Drivers/
 **/.mxproject
 **/Makefile

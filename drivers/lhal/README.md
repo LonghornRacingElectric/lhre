@@ -8,7 +8,7 @@ sims — while keeping ST's HAL underneath on real hardware.
         application code (App/…)
                  │  depends only on
                  ▼
-      //drivers/2027/lhal  (pure virtual interfaces, no ST headers)
+        //drivers/lhal  (pure virtual interfaces, no ST headers)
                  │
     ┌────────────┴─────────────┐
     ▼                          ▼
@@ -33,28 +33,28 @@ pointer + context (they may run in ISR context on target).
 ## Using it in a board
 
 Application logic lives in its own library against LHAL only (see
-`//boards/2027/VCU` for the reference layout):
+`//boards/VCU` for the reference layout):
 
 ```python
-load("//drivers/2027/lhal:lhal_library.bzl", "lhal_cc_library")
+load("//drivers/lhal:lhal_library.bzl", "lhal_cc_library")
 
 lhal_cc_library(          # cc_library that also gets MCU flags when
     name = "vcu_app",     # cross-compiled, so it links into firmware
     family = "stm32g4",
-    deps = ["//drivers/2027/lhal"],
+    deps = ["//drivers/lhal"],
     ...
 )
 
 firmware_project(
     name = "vcu",
-    extra_deps = [":vcu_app", "//drivers/2027/lhal:stm32_headers"],
-    extra_srcs = ["//drivers/2027/lhal:stm32_srcs"],
+    extra_deps = [":vcu_app", "//drivers/lhal:stm32_headers"],
+    extra_srcs = ["//drivers/lhal:stm32_srcs"],
     ...
 )
 
 cc_test(                  # the same app logic, tested on the host
     name = "vcu_app_test",
-    deps = [":vcu_app", "//drivers/2027/lhal:host", "@googletest//:gtest_main"],
+    deps = [":vcu_app", "//drivers/lhal:host", "@googletest//:gtest_main"],
 )
 ```
 
@@ -97,8 +97,8 @@ On the host, the same app runs against `lhal::host::*` fakes: an in-memory
 ## Running tests
 
 ```bash
-bazel test //drivers/2027/lhal:lhal_host_test   # remote (Linux executors)
-bazel test --config=local //drivers/2027/lhal:lhal_host_test   # this machine
+bazel test //drivers/lhal:lhal_host_test   # remote (Linux executors)
+bazel test --config=local //drivers/lhal:lhal_host_test   # this machine
 ```
 
 Host tests target Linux on the default (remote) config — see the `test
