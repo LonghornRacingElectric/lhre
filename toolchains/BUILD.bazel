@@ -1,0 +1,82 @@
+# arm-none-eabi cc_toolchains, one per CPU-core variant we ship firmware on.
+#
+# The upstream @arm_none_eabi toolchains carry no codegen flags; here each
+# variant bakes its -mcpu/-mfpu/-mfloat-abi into both copts and linkopts
+# (linkopts also drive newlib/libgcc multilib selection). Toolchain resolution
+# picks the variant via the //platforms:mcu_core constraint on the target
+# platform, so every cc_library in the dependency graph — not just the
+# firmware binary — compiles with the right float ABI.
+#
+# arm_none_eabi_toolchain instantiates a (config, cc_toolchain, toolchain)
+# triple per host OS/arch; MODULE.bazel registers //toolchains:all.
+
+load("@toolchains_arm_gnu//toolchain:toolchain.bzl", "arm_none_eabi_toolchain")
+
+package(default_visibility = ["//visibility:public"])
+
+# dwp_files placeholder referenced as ":empty" by arm_none_eabi_toolchain.
+filegroup(name = "empty")
+
+arm_none_eabi_toolchain(
+    name = "cortex_m0",
+    copts = [
+        "-mcpu=cortex-m0",
+        "-mthumb",
+        "-mfloat-abi=soft",
+    ],
+    linkopts = [
+        "-mcpu=cortex-m0",
+        "-mthumb",
+        "-mfloat-abi=soft",
+    ],
+    target_compatible_with = [
+        "@platforms//cpu:arm",
+        "@platforms//os:none",
+        "//platforms:cortex_m0",
+    ],
+    version = "13.2.1",
+)
+
+arm_none_eabi_toolchain(
+    name = "cortex_m4f",
+    copts = [
+        "-mcpu=cortex-m4",
+        "-mthumb",
+        "-mfpu=fpv4-sp-d16",
+        "-mfloat-abi=hard",
+    ],
+    linkopts = [
+        "-mcpu=cortex-m4",
+        "-mthumb",
+        "-mfpu=fpv4-sp-d16",
+        "-mfloat-abi=hard",
+    ],
+    target_compatible_with = [
+        "@platforms//cpu:arm",
+        "@platforms//os:none",
+        "//platforms:cortex_m4f",
+    ],
+    version = "13.2.1",
+)
+
+arm_none_eabi_toolchain(
+    name = "cortex_m7f",
+    copts = [
+        "-mcpu=cortex-m7",
+        "-mthumb",
+        "-mfpu=fpv5-d16",
+        "-mfloat-abi=hard",
+    ],
+    linkopts = [
+        "-mcpu=cortex-m7",
+        "-mthumb",
+        "-mfpu=fpv5-d16",
+        "-mfloat-abi=hard",
+    ],
+    target_compatible_with = [
+        "@platforms//cpu:arm",
+        "@platforms//os:none",
+        "//platforms:cortex_m7f",
+    ],
+    version = "13.2.1",
+)

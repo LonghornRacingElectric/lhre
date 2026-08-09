@@ -4,32 +4,16 @@ load("@aspect_bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 
 # ---------------------------------------------------------------------------
-# MCU flags per family. Add new families here as needed.
+# Target platform per family. Each platform's CPU-core constraint selects the
+# //toolchains variant with the family's -mcpu/-mfpu/-mfloat-abi baked in, so
+# no target here needs MCU codegen flags. Add new families in //platforms and
+# map them here.
 # ---------------------------------------------------------------------------
-FAMILY_FLAGS = {
-    "stm32g4": [
-        "-mcpu=cortex-m4",
-        "-mthumb",
-        "-mfpu=fpv4-sp-d16",
-        "-mfloat-abi=hard",
-    ],
-    "stm32h7": [
-        "-mcpu=cortex-m7",
-        "-mthumb",
-        "-mfpu=fpv5-d16",
-        "-mfloat-abi=hard",
-    ],
-    "stm32f0": [
-        "-mcpu=cortex-m0",
-        "-mthumb",
-        "-mfloat-abi=soft",
-    ],
-    "stm32f4": [
-        "-mcpu=cortex-m4",
-        "-mthumb",
-        "-mfpu=fpv4-sp-d16",
-        "-mfloat-abi=hard",
-    ],
+FAMILY_PLATFORMS = {
+    "stm32f0": "//platforms:stm32f0",
+    "stm32f4": "//platforms:stm32f4",
+    "stm32g4": "//platforms:stm32g4",
+    "stm32h7": "//platforms:stm32h7",
 }
 
 # ---------------------------------------------------------------------------
@@ -277,7 +261,6 @@ def firmware_project(
         enable_printf_float = False,
         driver_headers = None,
         driver_srcs = None,
-        mcu_flags = None,
         **kwargs):
     """Creates a firmware project for STM32 microcontrollers.
 
@@ -297,7 +280,6 @@ def firmware_project(
         enable_printf_float (bool, optional): Whether to link -u _printf_float (adds ~10KB). Defaults to False.
         driver_headers (label, optional): Override for the driver headers target. Defaults to //drivers/stm32/{family}:headers.
         driver_srcs (label, optional): Override for the driver srcs target. Defaults to //drivers/stm32/{family}:srcs.
-        mcu_flags (list, optional): Override MCU compiler/linker flags. Defaults to FAMILY_FLAGS[family].
         **kwargs: extra args to pass to cc_binary.
     """
     # Resolve defaults from family
@@ -305,12 +287,8 @@ def firmware_project(
         driver_headers = "//drivers/stm32/{}:headers".format(family)
     if driver_srcs == None:
         driver_srcs = "//drivers/stm32/{}:srcs".format(family)
-    if mcu_flags == None:
-        if family not in FAMILY_FLAGS:
-            fail("Unknown MCU family '{}'. Add it to FAMILY_FLAGS or pass mcu_flags explicitly.".format(family))
-        mcu_flags = FAMILY_FLAGS[family]
-
-    common_mcu_flags = mcu_flags + ["-fdiagnostics-color"]
+    if family not in FAMILY_PLATFORMS:
+        fail("Unknown MCU family '{}'. Add a platform for it in //platforms and map it in FAMILY_PLATFORMS.".format(family))
 
     final_extra_srcs = extra_srcs[:]
     final_extra_deps = extra_deps[:]
@@ -330,8 +308,9 @@ def firmware_project(
     else:
         locations_to_build = locations
 
-    # Linker flags that are always present
-    base_linkopts = common_mcu_flags + [
+    # Linker flags that are always present. MCU codegen/multilib flags come
+    # from the toolchain selected by the family's platform.
+    base_linkopts = [
         "-Wl,-Map={name}.map,--cref",
         "-Wl,--gc-sections",
         "-T $(location {linker})",
@@ -380,7 +359,8 @@ def firmware_project(
                 "@platforms//cpu:arm",
                 "@platforms//os:none",
             ],
-            copts = common_mcu_flags + [
+            copts = [
+                "-fdiagnostics-color",
                 "-mthumb-interwork",
                 "-ffunction-sections",
                 "-fdata-sections",
@@ -403,7 +383,7 @@ def firmware_project(
         platform_transition_filegroup(
             name = target_name,
             srcs = ["{}_project".format(target_name)],
-            target_platform = "//:arm_none_eabi",
+            target_platform = FAMILY_PLATFORMS[family],
             visibility = ["//visibility:public"],
             tags = ["stm32_firmware"],
         )

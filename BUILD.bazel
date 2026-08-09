@@ -2,15 +2,6 @@
 
 load("@hedron_compile_commands//:refresh_compile_commands.bzl", "refresh_compile_commands")
 
-platform(
-    name = "arm_none_eabi",
-    constraint_values = [
-        "@platforms//cpu:arm",
-        "@platforms//os:none",
-    ],
-    visibility = ["//visibility:public"],
-)
-
 # Generates compile_commands.json for clangd/IDEs:
 #   bazel run //:refresh_compile_commands
 #

@@ -1,15 +1,15 @@
 load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
-load("//drivers/lhal:lhal_library.bzl", "lhal_cc_library")
 load("//tools/firmware:firmware_project.bzl", "firmware_project")
 
 # Application logic: LHAL interfaces only, no ST HAL. Compiles for both the
-# MCU (linked into :vcu below) and the host (:vcu_app_test, :vcu_sim).
-lhal_cc_library(
+# MCU (linked into :vcu below) and the host (:vcu_app_test, :vcu_sim); the
+# per-family platform/toolchain supplies MCU flags when cross-compiling.
+cc_library(
     name = "vcu_app",
     srcs = ["App/vcu_app.cpp"],
     hdrs = ["App/vcu_app.hpp"],
-    family = "stm32g4",
     includes = ["App"],
     deps = ["//drivers/lhal"],
 )

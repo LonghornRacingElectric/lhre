@@ -19,9 +19,23 @@ git_override(
 
 arm_toolchain = use_extension("@toolchains_arm_gnu//:extensions.bzl", "arm_toolchain")
 arm_toolchain.arm_none_eabi(version = "13.2.1")
-use_repo(arm_toolchain, "arm_none_eabi")
 
-register_toolchains("@arm_none_eabi//toolchain:all")
+# @arm_none_eabi provides //:objcopy for bin/hex outputs; the host-specific
+# repos hold the actual gcc trees and are referenced by the per-CPU-variant
+# toolchains defined in //toolchains (which bake in each variant's
+# -mcpu/-mfpu/-mfloat-abi — the upstream @arm_none_eabi//toolchain:all
+# toolchains carry no codegen flags, so they are not registered).
+use_repo(
+    arm_toolchain,
+    "arm_none_eabi",
+    "arm_none_eabi_darwin_arm64",
+    "arm_none_eabi_darwin_x86_64",
+    "arm_none_eabi_linux_aarch64",
+    "arm_none_eabi_linux_x86_64",
+    "arm_none_eabi_windows_x86_64",
+)
+
+register_toolchains("//toolchains:all")
 
 # Hermetic LLVM toolchain (hermeticbuild/hermetic-llvm): host-targeted C++
 # (unit tests, sims, host tools) compiles with the same hermetic clang on

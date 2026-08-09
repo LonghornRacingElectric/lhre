@@ -36,13 +36,10 @@ Application logic lives in its own library against LHAL only (see
 `//boards/VCU` for the reference layout):
 
 ```python
-load("//drivers/lhal:lhal_library.bzl", "lhal_cc_library")
-
-lhal_cc_library(          # cc_library that also gets MCU flags when
-    name = "vcu_app",     # cross-compiled, so it links into firmware
-    family = "stm32g4",
-    deps = ["//drivers/lhal"],
-    ...
+cc_library(               # MCU flags come from the per-family
+    name = "vcu_app",     # platform/toolchain (//platforms, //toolchains),
+    deps = ["//drivers/lhal"],  # so a plain cc_library links into firmware
+    ...                         # and host tests alike
 )
 
 firmware_project(
