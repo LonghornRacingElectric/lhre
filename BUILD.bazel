@@ -1,9 +1,6 @@
 # Root package
 
-# NOTE: remote execution now uses @buildbuddy_toolchain//:platform_linux_x86_64
-# (see .bazelrc), whose container image ships the GCC matching the registered
-# BuildBuddy C++ toolchain. The old //:rbe_linux platform (plain ubuntu:22.04,
-# no compiler) was removed.
+load("@hedron_compile_commands//:refresh_compile_commands.bzl", "refresh_compile_commands")
 
 platform(
     name = "arm_none_eabi",
@@ -14,3 +11,17 @@ platform(
     visibility = ["//visibility:public"],
 )
 
+# Generates compile_commands.json for clangd/IDEs:
+#   bazel run //:refresh_compile_commands
+#
+# --config=local is required: on the default (remote-exec) config, compile
+# actions reference the Linux-hosted toolchains (e.g. the linux-x86_64
+# arm-none-eabi-gcc), which the extractor then can't execute on this machine
+# ("Exec format error"). Locally-configured actions use this machine's
+# hermetic toolchains, so header discovery works everywhere.
+refresh_compile_commands(
+    name = "refresh_compile_commands",
+    targets = {
+        "//...": "--config=local",
+    },
+)

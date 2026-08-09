@@ -13,7 +13,7 @@ bazel_dep(name = "googletest", version = "1.17.0.bcr.2", dev_dependency = True)
 
 git_override(
     module_name = "toolchains_arm_gnu",
-    commit = "6915dd1b27f3265bb3270042258eb16a99db42ed",
+    commit = "58d49307b702cc66f924b9a6e188d1f61a227479",
     remote = "https://github.com/LonghornRacingElectric/toolchains_arm_gnu.git",
 )
 
@@ -82,3 +82,11 @@ use_repo(dfu, "dfu")
 
 openocd = use_extension("//tools/openocd:openocd.bzl", "openocd")
 use_repo(openocd, "openocd")
+
+# Bazel Compile Commands Extractor (helly25 fork)
+bazel_dep(name = "hedron_compile_commands", dev_dependency = True)
+git_override(
+    module_name = "hedron_compile_commands",
+    commit = "6eb3ff1de6445355552ef4230be0caf3e1dd27e5",
+    remote = "https://github.com/helly25/bazel-compile-commands-extractor.git",
+)
