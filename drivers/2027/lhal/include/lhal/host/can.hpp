@@ -16,8 +16,7 @@ class CanNetwork {
  public:
   void Attach(Can* node) { nodes_.push_back(node); }
   void Detach(Can* node) {
-    nodes_.erase(std::remove(nodes_.begin(), nodes_.end(), node),
-                 nodes_.end());
+    nodes_.erase(std::remove(nodes_.begin(), nodes_.end(), node), nodes_.end());
   }
 
  private:

@@ -92,8 +92,7 @@ Status Can::Send(const CanFrame& frame) {
   header.TxFrameType = FDCAN_DATA_FRAME;
   header.DataLength = LenToDlc(frame.len);
   header.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
-  header.BitRateSwitch =
-      frame.bitrate_switch ? FDCAN_BRS_ON : FDCAN_BRS_OFF;
+  header.BitRateSwitch = frame.bitrate_switch ? FDCAN_BRS_ON : FDCAN_BRS_OFF;
   header.FDFormat = frame.fd ? FDCAN_FD_CAN : FDCAN_CLASSIC_CAN;
   header.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
   header.MessageMarker = 0;

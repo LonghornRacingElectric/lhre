@@ -16,15 +16,15 @@ class I2c final : public lhal::I2cMaster {
   Status Write(uint16_t address, const uint8_t* data, size_t len,
                uint32_t timeout_ms) override {
     return ToStatus(HAL_I2C_Master_Transmit(
-        hi2c_, static_cast<uint16_t>(address << 1),
-        const_cast<uint8_t*>(data), static_cast<uint16_t>(len), timeout_ms));
+        hi2c_, static_cast<uint16_t>(address << 1), const_cast<uint8_t*>(data),
+        static_cast<uint16_t>(len), timeout_ms));
   }
 
   Status Read(uint16_t address, uint8_t* data, size_t len,
               uint32_t timeout_ms) override {
-    return ToStatus(HAL_I2C_Master_Receive(
-        hi2c_, static_cast<uint16_t>(address << 1), data,
-        static_cast<uint16_t>(len), timeout_ms));
+    return ToStatus(
+        HAL_I2C_Master_Receive(hi2c_, static_cast<uint16_t>(address << 1), data,
+                               static_cast<uint16_t>(len), timeout_ms));
   }
 
   Status WriteRead(uint16_t address, const uint8_t* write_data,

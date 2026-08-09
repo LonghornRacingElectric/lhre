@@ -13,7 +13,8 @@ class Uart {
 
   // Blocking transfers. Return kTimeout if the transfer did not finish in
   // time; a partial transfer may have occurred.
-  virtual Status Write(const uint8_t* data, size_t len, uint32_t timeout_ms) = 0;
+  virtual Status Write(const uint8_t* data, size_t len,
+                       uint32_t timeout_ms) = 0;
   virtual Status Read(uint8_t* data, size_t len, uint32_t timeout_ms) = 0;
 
   // Non-blocking transfers. `data` must stay valid until `done` fires. On

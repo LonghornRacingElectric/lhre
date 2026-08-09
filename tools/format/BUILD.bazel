@@ -1,0 +1,31 @@
+load("@rules_python//python:defs.bzl", "py_binary")
+
+# `bazel run //tools/format` formats every tracked C/C++ file in place;
+# `bazel run //tools/format:check` fails if anything is misformatted (for CI).
+# Both use the clang-format binary from the hermetic @llvm toolchain, so
+# every machine formats with the exact same version and the repo-root
+# .clang-format config.
+
+_ARGS = ["--clang-format=$(rlocationpath @llvm//tools:clang-format)"]
+
+_DATA = ["@llvm//tools:clang-format"]
+
+_DEPS = ["@rules_python//python/runfiles"]
+
+py_binary(
+    name = "format",
+    srcs = ["format.py"],
+    args = _ARGS,
+    data = _DATA,
+    main = "format.py",
+    deps = _DEPS,
+)
+
+py_binary(
+    name = "check",
+    srcs = ["format.py"],
+    args = _ARGS + ["--check"],
+    data = _DATA,
+    main = "format.py",
+    deps = _DEPS,
+)

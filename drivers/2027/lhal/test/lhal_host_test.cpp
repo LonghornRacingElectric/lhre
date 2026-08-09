@@ -122,9 +122,7 @@ TEST(Can, RxCallbackConsumesFrames) {
 
   int callback_count = 0;
   node_b.SetRxCallback(
-      [](void* ctx, const lhal::CanFrame&) {
-        ++*static_cast<int*>(ctx);
-      },
+      [](void* ctx, const lhal::CanFrame&) { ++*static_cast<int*>(ctx); },
       &callback_count);
 
   lhal::CanFrame frame;

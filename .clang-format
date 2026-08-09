@@ -1,0 +1,6 @@
+# LHRe C/C++ style, applied with `bazel run //tools/format` (hermetic
+# clang-format from the @llvm toolchain -- no local install needed).
+BasedOnStyle: Google
+# Only sort includes within blank-line-separated blocks; never merge or
+# regroup blocks, since some headers (CMSIS/HAL) are order-sensitive.
+IncludeBlocks: Preserve

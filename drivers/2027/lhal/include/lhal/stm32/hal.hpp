@@ -13,7 +13,8 @@
 #elif __has_include("stm32f0xx_hal.h")
 #include "stm32f0xx_hal.h"
 #else
-#error "lhal/stm32: no STM32 HAL header on the include path (depend on //drivers/stm32/<family>:headers)"
+#error \
+    "lhal/stm32: no STM32 HAL header on the include path (depend on //drivers/stm32/<family>:headers)"
 #endif
 
 #include "lhal/status.hpp"
