@@ -75,24 +75,6 @@ firmware_project(
             "Board/**/*.hpp",
         ],
         allow_empty = True,
-        # Core/ is 100% CubeMX-owned and regenerable; hand-written bring-up
-        # lives in Board/. The generated main.c IS compiled: with
-        # ProjectManager.NoMain=true (set in VCU.ioc) it contains
-        # SystemClock_Config() and Error_Handler() but no main() — our entry
-        # point is Board/main.cpp, which reaches the generated clock config
-        # via lhal::stm32::InitCore(). If NoMain is ever flipped back, the
-        # duplicate main() shows up as a link error here.
-        #
-        # app_freertos.c is CubeMX's CMSIS-RTOS2 glue (osKernel* + a default
-        # task). We use the raw FreeRTOS API — tasks are created in
-        # Board/main.cpp — so it stays committed (CubeMX regenerates it) but
-        # is never compiled. Everything CubeMX vendors under Middlewares/ is
-        # likewise unused and gitignored: the kernel sources come from
-        # @freertos_kernel via enable_freertos below (one version shared
-        # with host tests), and the cmsis_os.h include in the generated
-        # main.c is satisfied by //drivers/freertos:cmsis_os_stub, which
-        # enable_freertos wires in along with the SysTick glue. See
-        # drivers/freertos/README.md.
         exclude = ["Core/Src/app_freertos.c"],
     ) + glob(
         [
