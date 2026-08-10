@@ -11,7 +11,12 @@ Each module is its own target so boards pull in only what they use:
 - `//drivers/longhorn:console` — `longhorn::Console`, printf-style line
   output over any `lhal::Uart` stream (debug UART or USB VCP via
   `lhal::stm32::UsbCdc`). Not thread-safe on its own; serialize behind a
-  mutex or logger task when printing from multiple RTOS tasks.
+  mutex or use the logger when printing from multiple RTOS tasks.
+- `//drivers/longhorn:logger` — `longhorn::Logger`, thread-safe non-blocking
+  logging: producers enqueue timestamped, level-tagged lines (drop-on-full,
+  counted) and a low-priority FreeRTOS drain task owns the stream. Header
+  only, so the kernel comes from the consumer's build; on the MCU construct
+  it statically and `StartTask()` before `vTaskStartScheduler()`.
 
 ## Using a module on a board
 

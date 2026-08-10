@@ -26,6 +26,29 @@ cc_library(
     deps = ["//drivers/lhal"],
 )
 
+# Header-only: FreeRTOS.h resolves against the consumer's kernel (the
+# board's config + family port in firmware, //drivers/freertos:host in
+# tests), so one target serves every family and the host.
+cc_library(
+    name = "logger",
+    hdrs = ["include/longhorn/logger.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+    deps = ["//drivers/lhal"],
+)
+
+cc_test(
+    name = "logger_test",
+    size = "small",
+    srcs = ["test/logger_test.cpp"],
+    deps = [
+        ":logger",
+        "//drivers/freertos:host",
+        "//drivers/lhal:host",
+        "@googletest//:gtest_main",
+    ],
+)
+
 cc_test(
     name = "console_test",
     size = "small",
