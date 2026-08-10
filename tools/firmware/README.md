@@ -54,7 +54,7 @@ Adding a family = adding it in those two packages, then mapping it in
   `lhal/stm32/usb_cdc.cpp` defines that instead so reception routes into
   `lhal::stm32::UsbCdc` (an `lhal::Uart`). The board owes: USB_Device (CDC)
   enabled in the `.ioc` so `USB_DEVICE/` exists, and a
-  `static lhal::stm32::UsbCdc` constructed before `MX_USB_DEVICE_Init()`.
+  `static lhal::stm32::UsbCdc` constructed before `MX_USB_Device_Init()`.
 - `enable_dfu` defines `ENABLE_DFU` — firmware that listens for the
   `update.` serial command enables probe-less reflashing (see
   [tools/dfu](../dfu/README.md)).

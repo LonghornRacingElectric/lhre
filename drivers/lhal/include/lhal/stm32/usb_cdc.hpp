@@ -18,11 +18,11 @@ namespace lhal::stm32 {
 // Wraps the USBD_HandleTypeDef configured by CubeMX bring-up (usb_device.c,
 // usbd_conf.c, usbd_desc.c — keep those generated files as-is). The matching
 // usb_cdc.cpp defines USBD_Interface_fops_FS, the CDC interface struct that
-// the generated MX_USB_DEVICE_Init registers, so exclude the generated
+// the generated MX_USB_Device_Init registers, so exclude the generated
 // USB_DEVICE/App/usbd_cdc_if.c from the board's sources — its only job was
 // to define that struct.
 //
-// Construct the instance BEFORE calling MX_USB_DEVICE_Init so reception is
+// Construct the instance BEFORE calling MX_USB_Device_Init so reception is
 // routed from the first packet. Single instance only: the CDC interface
 // callbacks carry no device pointer (and MCUs have one USB device
 // peripheral).

@@ -98,9 +98,9 @@ On the host, the same app runs against `lhal::host::*` fakes: an in-memory
   `enable_usb = True` on its `firmware_project` — the macro wires in ST's
   middleware (`//drivers/stm32/usb_device`) and the generated `USB_DEVICE/`
   glue, minus `usbd_cdc_if.c`: LHAL defines its `USBD_Interface_fops_FS`
-  struct instead, so `MX_USB_DEVICE_Init` registers LHAL's callbacks with
+  struct instead, so `MX_USB_Device_Init` registers LHAL's callbacks with
   no edits to generated code. Construct the `UsbCdc` before calling
-  `MX_USB_DEVICE_Init`. The adapter is guarded by
+  `MX_USB_Device_Init`. The adapter is guarded by
   `__has_include("usbd_cdc.h")`, so boards without USB pay nothing.
 - **Escape hatch:** every adapter exposes `handle()`. Peripherals without an
   LHAL abstraction (SPI, timers, ADC, …) just keep using ST HAL directly —

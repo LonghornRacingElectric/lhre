@@ -234,12 +234,14 @@ void UsbCdc::HandleControl(uint8_t cmd, uint8_t* pbuf, uint16_t length) {
 
 }  // namespace lhal::stm32
 
-// The CDC interface struct the CubeMX-generated MX_USB_DEVICE_Init registers
+// The CDC interface struct the CubeMX-generated MX_USB_Device_Init registers
 // (its declaration lives in the generated usbd_cdc_if.h). Defining it here
 // replaces the generated usbd_cdc_if.c wholesale — do not compile that file.
-extern "C" USBD_CDC_ItfTypeDef USBD_Interface_fops_FS = {
+extern "C" {
+USBD_CDC_ItfTypeDef USBD_Interface_fops_FS = {
     lhal::stm32::CdcInit, lhal::stm32::CdcDeInit, lhal::stm32::CdcControl,
     lhal::stm32::CdcReceive, lhal::stm32::CdcTransmitCplt,
 };
+}  // extern "C"
 
 #endif  // __has_include("usbd_cdc.h")

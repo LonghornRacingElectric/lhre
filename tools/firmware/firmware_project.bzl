@@ -318,24 +318,34 @@ def firmware_project(
         # but NOT usbd_cdc_if.c — its only content is the CDC interface
         # struct, which lhal/stm32/usb_cdc.cpp defines instead so reception
         # routes into lhal::stm32::UsbCdc.
-        usb_glue = native.glob(
-            [
-                "USB_DEVICE/**/*.c",
-                "USB_DEVICE/**/*.h",
-            ],
-            exclude = ["USB_DEVICE/App/usbd_cdc_if.c"],
-            allow_empty = True,
-        )
+# CubeMX has generated both spellings of the directory over the
+        # years. Try them one at a time — a single glob with both patterns
+        # would match the same files twice on case-insensitive filesystems
+        # (macOS) and double-compile them.
+        usb_glue = []
+        usb_dir = None
+        for candidate in ["USB_Device", "USB_DEVICE"]:
+            usb_glue = native.glob(
+                [
+                    candidate + "/**/*.c",
+                    candidate + "/**/*.h",
+                ],
+                exclude = [candidate + "/App/usbd_cdc_if.c"],
+                allow_empty = True,
+            )
+            if usb_glue:
+                usb_dir = candidate
+                break
         if not usb_glue:
-            fail(("{}: enable_usb = True but no USB_DEVICE/ directory in this " +
+            fail(("{}: enable_usb = True but no USB_Device/ directory in this " +
                   "package. Enable USB_Device (CDC) in the board's .ioc and " +
                   "regenerate with CubeMX first.").format(name))
         final_extra_srcs.extend(usb_glue)
         final_extra_srcs.append("//drivers/stm32/usb_device:srcs")
         final_extra_deps.append("//drivers/stm32/usb_device:headers")
         usb_includes = [
-            "USB_DEVICE/App",
-            "USB_DEVICE/Target",
+            usb_dir + "/App",
+            usb_dir + "/Target",
         ]
 
     if enable_dfu:
