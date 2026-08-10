@@ -5,6 +5,10 @@ bazel-*
 *.tools*
 .bazelrc.user
 
+# mkdocs output (see mkdocs.yml)
+site/
+.mkdocs-build/
+
 # CubeMX-generated HAL copies inside board projects. Deliberately scoped to
 # boards/: a bare "**/Drivers" also matches the top-level drivers/ tree on
 # case-insensitive filesystems (macOS/Windows), silently ignoring new files

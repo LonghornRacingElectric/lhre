@@ -18,6 +18,27 @@ bazel run //tools/format
 rewrites every tracked C/C++ file with the hermetic clang-format. Generated
 code under `boards/*/Core/` is excluded — never hand-format (or hand-edit) it.
 
+## Documentation
+
+Docs live **next to the code they describe**: drop a `README.md` (or any
+`.md`) in the directory it documents. CI builds the whole tree into a site
+with MkDocs ([mkdocs.yml](https://github.com/LonghornRacingElectric/lhre/blob/main/mkdocs.yml)) and publishes it to GitHub Pages on
+every merge to `main`; `README.md` renders as that directory's index page.
+
+You can also embed docs in source files — a comment block starting with
+`/** md` (until `**/`) or lines starting with `// md` (until `// end md`)
+is extracted as a page next to the file.
+
+Preview locally:
+
+```bash
+uv run --group docs mkdocs serve
+```
+
+PRs that touch docs run `mkdocs build --strict`, so broken links between
+pages fail presubmit. Links to *code* files (BUILD files, configs) don't
+exist on the site — use a full GitHub URL for those.
+
 ## Adding a new board
 
 Copy the layout of [boards/VCU](boards/VCU):
@@ -32,7 +53,7 @@ Copy the layout of [boards/VCU](boards/VCU):
    tests and sims too (the per-family platform in `//platforms` selects a
    toolchain with the MCU flags baked in when cross-compiling).
 3. Add a `BUILD.bazel` calling `firmware_project` (see
-   [boards/VCU/BUILD.bazel](boards/VCU/BUILD.bazel)) plus the linker script
+   [boards/VCU/BUILD.bazel](https://github.com/LonghornRacingElectric/lhre/blob/main/boards/VCU/BUILD.bazel)) plus the linker script
    and startup file for your chip.
 4. Add a `post_cubemx.sh` like the VCU's.
 

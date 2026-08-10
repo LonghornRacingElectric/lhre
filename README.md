@@ -60,7 +60,7 @@ bazel run //boards/VCU:openocd
 ## Remote build setup (BuildBuddy)
 
 Builds stream to and cache on [lhre.buildbuddy.io](https://lhre.buildbuddy.io).
-To authenticate, copy [.bazelrc.user.example](.bazelrc.user.example) to
+To authenticate, copy [.bazelrc.user.example](https://github.com/LonghornRacingElectric/lhre/blob/main/.bazelrc.user.example) to
 `.bazelrc.user` (gitignored) and paste your API key from BuildBuddy →
 Settings → API keys — ask a software lead for an invite to the org.
 

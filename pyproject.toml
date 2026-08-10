@@ -6,3 +6,11 @@ dependencies = [
     "pyserial==3.5",
     "bazel-runfiles==2.1.0",
 ]
+
+# Docs-only deps: not part of the Bazel pip hub (requirements_lock.txt is
+# compiled from [project.dependencies] only), used via `uv run --group docs`.
+[dependency-groups]
+docs = [
+    "mkdocs-material>=9.6",
+    "mkdocs-simple-plugin>=3.2",
+]

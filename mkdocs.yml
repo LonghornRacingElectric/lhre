@@ -1,0 +1,66 @@
+site_name: LHRE Firmware
+site_url: https://longhornracingelectric.github.io/lhre/
+repo_url: https://github.com/LonghornRacingElectric/lhre
+repo_name: LonghornRacingElectric/lhre
+edit_uri: edit/main/
+
+# Docs live next to the code: any *.md in the tree becomes a page at the
+# same path (README.md renders as the directory index). The simple plugin
+# also extracts fenced doc-comment blocks from source files — see
+# https://athackst.github.io/mkdocs-simple-plugin/ ("semiliterate").
+plugins:
+  - search
+  - simple:
+      # Collect pages out of the way of the working tree (hidden paths are
+      # never scanned, so the build can't pick up its own output).
+      build_dir: .mkdocs-build
+      # Overriding `ignore` replaces the plugin defaults, so the defaults
+      # (first five entries) are repeated here before our additions.
+      ignore:
+        - "*.egg-info"
+        - "**/__pycache__/**"
+        - "vendor/**"
+        - "venv/**"
+        - ".**/**"
+        - "bazel-*/**" # convenience symlinks into the output base
+        - "site/**" # mkdocs build output
+        - "external/**" # third-party staging
+        - "patches/**"
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep orange
+      accent: deep orange
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep orange
+      accent: deep orange
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.top
+    - content.action.edit
+    - content.code.copy
+    - search.suggest
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite

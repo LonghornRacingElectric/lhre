@@ -1,0 +1,47 @@
+name: docs
+
+# Builds the MkDocs site (docs live next to the code — see mkdocs.yml) on
+# every PR that touches docs, and publishes it to GitHub Pages on main.
+# Pages must be enabled once in repo settings: Settings → Pages → Source:
+# "GitHub Actions".
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "**.md"
+      - "docs/**"
+      - "mkdocs.yml"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/docs.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v9.0.0
+
+      - name: Build site
+        run: uv run --group docs mkdocs build --strict
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment
