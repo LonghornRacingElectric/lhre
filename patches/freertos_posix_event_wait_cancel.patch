@@ -1,0 +1,32 @@
+--- a/portable/ThirdParty/GCC/Posix/utils/wait_for_event.c	2026-08-10 01:00:05
++++ b/portable/ThirdParty/GCC/Posix/utils/wait_for_event.c	2026-08-10 01:00:05
+@@ -56,9 +56,20 @@
+     free( ev );
+ }
+ 
++/* pthread_cond_wait() is a cancellation point: when vPortCancelThread()
++ * cancels a task suspended here, the mutex is re-acquired before the thread
++ * terminates (POSIX), so without a cleanup handler the thread dies holding
++ * ev->mutex and the canceller deadlocks in event_signal(). Observed with
++ * glibc when vTaskEndScheduler() deletes the idle/timer tasks. */
++static void event_cancel_unlock( void * mutex )
++{
++    pthread_mutex_unlock( ( pthread_mutex_t * ) mutex );
++}
++
+ bool event_wait( struct event * ev )
+ {
+     pthread_mutex_lock( &ev->mutex );
++    pthread_cleanup_push( event_cancel_unlock, &ev->mutex );
+ 
+     while( ev->event_triggered == false )
+     {
+@@ -66,7 +77,7 @@
+     }
+ 
+     ev->event_triggered = false;
+-    pthread_mutex_unlock( &ev->mutex );
++    pthread_cleanup_pop( 1 );
+     return true;
+ }
+ bool event_wait_timed( struct event * ev,

@@ -31,7 +31,7 @@ and downloaded by Bazel. No Xcode, MSVC, or system GCC needed for C++.
 STM32CubeMX is only needed when changing a board's peripheral configuration.
 
 On Windows, builds run locally instead of on remote executors; for full remote
-execution use WSL2 (see the comments in [.bazelrc](.bazelrc)).
+execution use WSL2 (see the comments in [.bazelrc](https://github.com/LonghornRacingElectric/lhre/blob/main/.bazelrc)).
 
 ## First steps
 

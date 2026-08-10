@@ -1,0 +1,68 @@
+"""FreeRTOS kernel: one version for firmware and host.
+
+The kernel is fetched once (see deps.bzl) and compiled two ways:
+
+    //drivers/freertos:host  — the real kernel built for the host with the
+                       POSIX (Linux/macOS) or Windows simulator port, so
+                       task code runs unmodified in tests and sims.
+    //drivers/freertos:hooks — static-allocation memory callbacks; compiled
+                       into every build that compiles the kernel.
+
+Firmware builds don't use a target here directly: the per-family driver
+package (e.g. //drivers/stm32/stm32g4:freertos_srcs) bundles the kernel +
+MCU port sources for compilation inside the firmware binary, where the
+board's CubeMX-generated FreeRTOSConfig.h applies.
+"""
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+filegroup(
+    name = "hooks",
+    srcs = ["hooks.c"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "host",
+    srcs = [
+        "hooks.c",
+        "@freertos_kernel//:freertos_kernel_srcs",
+        "@freertos_kernel//:heap_3",
+    ] + select({
+        "@platforms//os:windows": ["@freertos_kernel//:windows_port_srcs"],
+        "//conditions:default": ["@freertos_kernel//:posix_port_srcs"],
+    }),
+    hdrs = ["host/FreeRTOSConfig.h"],
+    copts = select({
+        "@platforms//os:windows": [],
+        "//conditions:default": ["-pthread"],
+    }),
+    includes = ["host"],
+    linkopts = select({
+        "@platforms//os:windows": ["-lwinmm"],
+        "//conditions:default": ["-pthread"],
+    }),
+    # Host-only: firmware compiles the kernel inside the firmware binary
+    # against the board's own FreeRTOSConfig.h.
+    target_compatible_with = select({
+        "@platforms//os:none": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
+    visibility = ["//visibility:public"],
+    deps = ["@freertos_kernel//:freertos_kernel_headers"] + select({
+        "@platforms//os:windows": ["@freertos_kernel//:windows_port_headers"],
+        "//conditions:default": ["@freertos_kernel//:posix_port_headers"],
+    }),
+)
+
+cc_test(
+    name = "host_smoke_test",
+    size = "small",
+    srcs = ["host_smoke_test.cpp"],
+    deps = [
+        ":host",
+        "@googletest//:gtest_main",
+    ],
+)
+

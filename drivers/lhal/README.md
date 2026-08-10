@@ -30,6 +30,11 @@ sims — while keeping ST's HAL underneath on real hardware.
 All interfaces are heap-free and exception-free; callbacks are function
 pointer + context (they may run in ISR context on target).
 
+LHAL abstracts *peripherals* only. The RTOS is deliberately not abstracted:
+app code uses the raw FreeRTOS API, which is host-testable because the same
+kernel builds for the host too — see
+[drivers/freertos](../freertos/README.md).
+
 ## Using it in a board
 
 Application logic lives in its own library against LHAL only (see

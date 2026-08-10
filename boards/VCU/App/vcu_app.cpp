@@ -4,6 +4,44 @@ namespace vcu {
 
 App::App(const Peripherals& peripherals) : p_(peripherals) {}
 
+void App::StartTasks() {
+  // Heartbeat outranks blink: losing the CAN heartbeat matters, a late LED
+  // toggle doesn't. Both sit above the idle task.
+  xTaskCreateStatic(&App::BlinkTaskEntry, "blink", kTaskStackDepth, this,
+                    tskIDLE_PRIORITY + 1, blink_stack_, &blink_tcb_);
+  xTaskCreateStatic(&App::HeartbeatTaskEntry, "heartbeat", kTaskStackDepth,
+                    this, tskIDLE_PRIORITY + 2, heartbeat_stack_,
+                    &heartbeat_tcb_);
+}
+
+void App::BlinkTaskEntry(void* self) {
+  static_cast<App*>(self)->BlinkTaskLoop();
+}
+
+void App::HeartbeatTaskEntry(void* self) {
+  static_cast<App*>(self)->HeartbeatTaskLoop();
+}
+
+void App::BlinkTaskLoop() {
+  TickType_t last_wake = xTaskGetTickCount();
+  for (;;) {
+    if (p_.status_led != nullptr) {
+      p_.status_led->Toggle();
+    }
+    vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(kBlinkPeriodMs));
+  }
+}
+
+void App::HeartbeatTaskLoop() {
+  TickType_t last_wake = xTaskGetTickCount();
+  for (;;) {
+    if (p_.can != nullptr) {
+      SendHeartbeat();
+    }
+    vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(kHeartbeatPeriodMs));
+  }
+}
+
 void App::Step() {
   const uint32_t now = p_.clock->Millis();
 

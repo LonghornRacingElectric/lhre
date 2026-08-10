@@ -17,7 +17,10 @@ EXTENSIONS = ("*.c", "*.h", "*.cc", "*.cpp", "*.hpp")
 
 # Generated code we don't own; CubeMX rewrites these on regen. Hand-written
 # board code (boards/*/Board/) is formatted like everything else.
-EXCLUDES = ("boards/*/Core/*",)
+EXCLUDES = (
+    "boards/*/Core/*",
+    "boards/*/Middlewares/*",
+)
 
 
 def main():

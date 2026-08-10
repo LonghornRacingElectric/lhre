@@ -8,8 +8,8 @@ external repo layout.
 Available targets:
     //drivers/stm32/stm32g4:headers          — HAL + CMSIS device + CMSIS core headers
     //drivers/stm32/stm32g4:srcs             — HAL driver .c sources (excludes templates)
-    //drivers/stm32/stm32g4:freertos_srcs    — FreeRTOS kernel + port + CMSIS-RTOS2 sources
-    //drivers/stm32/stm32g4:freertos_headers — FreeRTOS + CMSIS-RTOS2 headers
+    //drivers/stm32/stm32g4:freertos_srcs    — FreeRTOS kernel + CM4F port + heap sources
+    //drivers/stm32/stm32g4:freertos_headers — FreeRTOS kernel + CM4F port headers
     //drivers/stm32/stm32g4:openocd_cfg      — OpenOCD config for flashing
 """
 
@@ -41,26 +41,26 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
-# FreeRTOS kernel + port + heap + CMSIS-RTOS2 wrapper source files
+# FreeRTOS kernel + Cortex-M4F port + heap_4 + static-allocation hooks, for
+# compilation inside the firmware binary (raw FreeRTOS API — no CMSIS-RTOS2).
+# The kernel repo is shared with the host build; see drivers/freertos.
 filegroup(
     name = "freertos_srcs",
     srcs = [
-        "@freertos_kernel_stm32g4//:freertos_kernel_srcs",
-        "@freertos_kernel_stm32g4//:freertos_port_srcs",
-        "@freertos_kernel_stm32g4//:freertos_heap",
-        "@cmsis_freertos_stm32g4//:cmsis_rtos2_freertos_srcs",
+        "//drivers/freertos:hooks",
+        "@freertos_kernel//:freertos_heap",
+        "@freertos_kernel//:freertos_kernel_srcs",
+        "@freertos_kernel//:freertos_port_srcs",
     ],
     visibility = ["//visibility:public"],
 )
 
-# FreeRTOS kernel + port + CMSIS-RTOS2 API + wrapper headers
+# FreeRTOS kernel + Cortex-M4F port headers
 cc_library(
     name = "freertos_headers",
     visibility = ["//visibility:public"],
     deps = [
-        "@cmsis_freertos_stm32g4//:cmsis_rtos2_freertos_headers",
-        "@cmsis_core_stm32g4//:cmsis_rtos2_headers",
-        "@freertos_kernel_stm32g4//:freertos_kernel_headers",
-        "@freertos_kernel_stm32g4//:freertos_port_headers",
+        "@freertos_kernel//:freertos_kernel_headers",
+        "@freertos_kernel//:freertos_port_headers",
     ],
 )

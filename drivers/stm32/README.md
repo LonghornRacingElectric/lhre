@@ -1,7 +1,7 @@
 # Vendor HAL packages
 
-ST's HAL, CMSIS, and FreeRTOS, packaged for Bazel — one subpackage per STM32
-family (currently `stm32g4/`). Boards never reference the external repos
+ST's HAL and CMSIS, packaged for Bazel — one subpackage per STM32 family
+(currently `stm32g4/`). Boards never reference the external repos
 directly; each family exposes a stable label surface that
 `firmware_project` wires in by family name:
 
@@ -9,7 +9,7 @@ directly; each family exposes a stable label surface that
 | ---------------------------- | ----------------------------------------------- |
 | `:headers`                   | HAL + CMSIS device + CMSIS core headers.        |
 | `:srcs`                      | HAL driver `.c` sources (templates excluded).   |
-| `:freertos_srcs` / `:freertos_headers` | Kernel + port + heap + CMSIS-RTOS2.   |
+| `:freertos_srcs` / `:freertos_headers` | FreeRTOS kernel + the family's Cortex-M port + `heap_4` + static-allocation hooks. The kernel itself is pinned in [drivers/freertos](../freertos/README.md), shared with host tests. |
 | `:openocd_cfg`               | OpenOCD config for the family's flash/target.   |
 
 The sources come from pinned upstream commits: each family's `deps.bzl` is a
