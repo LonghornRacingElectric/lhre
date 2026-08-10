@@ -25,6 +25,7 @@ sims — while keeping ST's HAL underneath on real hardware.
 | `lhal::Uart`      | blocking + async read/write (DMA/IT on target)      |
 | `lhal::I2cMaster` | write / read / write-then-read (register access)    |
 | `lhal::CanBus`    | send, polled receive, RX callback; classic + CAN FD |
+| `lhal::Pwm`       | duty-cycle control of one PWM output channel        |
 | `lhal::Clock`     | `Millis()` / `DelayMs()` (+ wrap-safe `ElapsedMs`)  |
 
 All interfaces are heap-free and exception-free; callbacks are function
@@ -92,6 +93,15 @@ On the host, the same app runs against `lhal::host::*` fakes: an in-memory
   global `HAL_UART_*Callback` / `HAL_FDCAN_RxFifo0Callback` functions to
   route completion — don't define those elsewhere in a board that links
   `stm32_srcs`.
+- USB virtual COM port: `lhal::stm32::UsbCdc` implements `lhal::Uart` over
+  USB CDC-ACM. Enable USB_Device (CDC) in the board's `.ioc` and set
+  `enable_usb = True` on its `firmware_project` — the macro wires in ST's
+  middleware (`//drivers/stm32/usb_device`) and the generated `USB_DEVICE/`
+  glue, minus `usbd_cdc_if.c`: LHAL defines its `USBD_Interface_fops_FS`
+  struct instead, so `MX_USB_Device_Init` registers LHAL's callbacks with
+  no edits to generated code. Construct the `UsbCdc` before calling
+  `MX_USB_Device_Init`. The adapter is guarded by
+  `__has_include("usbd_cdc.h")`, so boards without USB pay nothing.
 - **Escape hatch:** every adapter exposes `handle()`. Peripherals without an
   LHAL abstraction (SPI, timers, ADC, …) just keep using ST HAL directly —
   the headers are already on the include path.

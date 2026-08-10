@@ -89,6 +89,11 @@ use_repo(
     "stm32g4xx_hal_driver",
 )
 
+# ST USB Device middleware (Core + CDC class), family-independent.
+# See drivers/stm32/usb_device/BUILD.bazel.
+usb_device_deps = use_extension("//drivers/stm32/usb_device:deps.bzl", "usb_device_deps")
+use_repo(usb_device_deps, "stm32_usb_device_library")
+
 # FreeRTOS kernel — one version for firmware (Cortex-M ports) and host
 # tests/sims (POSIX/Windows simulator ports). See drivers/freertos/README.md.
 freertos_deps = use_extension("//drivers/freertos:deps.bzl", "freertos_deps")

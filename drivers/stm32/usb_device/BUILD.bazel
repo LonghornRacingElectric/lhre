@@ -1,0 +1,29 @@
+"""ST USB Device middleware interface package.
+
+Family-independent: the middleware sits on the board's usbd_conf.c glue, so
+one pin serves every STM32 family. Like the HAL, the sources compile inside
+each firmware binary (they include the board's usbd_conf.h):
+
+    :headers — USB Device core + CDC class headers
+    :srcs    — USB Device core + CDC class .c sources
+
+Boards don't reference these directly: set enable_usb = True on the
+firmware_project and the macro wires them in together with the board's
+CubeMX-generated USB_DEVICE/ files (minus usbd_cdc_if.c — LHAL's
+lhal/stm32/usb_cdc.cpp provides the CDC interface, USBD_Interface_fops_FS,
+instead). See drivers/lhal/include/lhal/stm32/usb_cdc.hpp.
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+cc_library(
+    name = "headers",
+    visibility = ["//visibility:public"],
+    deps = ["@stm32_usb_device_library//:usb_device_headers"],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = ["@stm32_usb_device_library//:usb_device_srcs"],
+    visibility = ["//visibility:public"],
+)

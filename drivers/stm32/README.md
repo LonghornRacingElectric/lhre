@@ -1,8 +1,10 @@
 # Vendor HAL packages
 
 ST's HAL and CMSIS, packaged for Bazel — one subpackage per STM32 family
-(currently `stm32g4/`). Boards never reference the external repos
-directly; each family exposes a stable label surface that
+(currently `stm32g4/`), plus the family-independent USB Device middleware
+in [usb_device/](usb_device/README.md) (`:headers` / `:srcs`, same
+compile-inside-the-firmware-binary pattern). Boards never reference the
+external repos directly; each family exposes a stable label surface that
 `firmware_project` wires in by family name:
 
 | Target                       | Contents                                        |

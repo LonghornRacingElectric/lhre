@@ -1,0 +1,72 @@
+"""Longhorn library: shared board services built on LHAL.
+
+Each module is its own cc_library so boards pull in only what they use.
+Everything here depends on //drivers/lhal interfaces only, so the same code
+builds for the MCU (firmware extra_deps) and the host (tests, sims).
+"""
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+cc_library(
+    name = "led",
+    srcs = ["led.cpp"],
+    hdrs = ["include/longhorn/led.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+    deps = ["//drivers/lhal"],
+)
+
+cc_library(
+    name = "console",
+    srcs = ["console.cpp"],
+    hdrs = ["include/longhorn/console.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+    deps = ["//drivers/lhal"],
+)
+
+# Header-only: FreeRTOS.h resolves against the consumer's kernel (the
+# board's config + family port in firmware, //drivers/freertos:host in
+# tests), so one target serves every family and the host.
+cc_library(
+    name = "logger",
+    hdrs = ["include/longhorn/logger.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+    deps = ["//drivers/lhal"],
+)
+
+cc_test(
+    name = "logger_test",
+    size = "small",
+    srcs = ["test/logger_test.cpp"],
+    deps = [
+        ":logger",
+        "//drivers/freertos:host",
+        "//drivers/lhal:host",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "console_test",
+    size = "small",
+    srcs = ["test/console_test.cpp"],
+    deps = [
+        ":console",
+        "//drivers/lhal:host",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "led_test",
+    size = "small",
+    srcs = ["test/led_test.cpp"],
+    deps = [
+        ":led",
+        "//drivers/lhal:host",
+        "@googletest//:gtest_main",
+    ],
+)
