@@ -1,5 +1,7 @@
 # LHRe
 
+[![postsubmit](https://github.com/LonghornRacingElectric/lhre/actions/workflows/postsubmit.yml/badge.svg)](https://github.com/LonghornRacingElectric/lhre/actions/workflows/postsubmit.yml)
+
 Longhorn Racing Electric's monorepo: firmware for every ECU on the car, the
 hardware abstraction layer it's built on, and the tooling to build, test, and
 flash it all with Bazel.
