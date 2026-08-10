@@ -7,6 +7,7 @@
 #include "lhal/host/can.hpp"
 #include "lhal/host/gpio.hpp"
 #include "lhal/host/i2c.hpp"
+#include "lhal/host/pwm.hpp"
 #include "lhal/host/system.hpp"
 #include "lhal/host/uart.hpp"
 
@@ -19,6 +20,17 @@ TEST(Gpio, WriteReadToggle) {
   EXPECT_TRUE(pin.Read());
   pin.Toggle();
   EXPECT_FALSE(pin.Read());
+}
+
+TEST(Pwm, StoresAndClampsDuty) {
+  lhal::host::Pwm pwm;
+  EXPECT_FLOAT_EQ(pwm.duty(), 0.0f);
+  pwm.SetDuty(0.25f);
+  EXPECT_FLOAT_EQ(pwm.duty(), 0.25f);
+  pwm.SetDuty(1.5f);
+  EXPECT_FLOAT_EQ(pwm.duty(), 1.0f);
+  pwm.SetDuty(-0.5f);
+  EXPECT_FLOAT_EQ(pwm.duty(), 0.0f);
 }
 
 TEST(Uart, WriteAccumulatesTx) {

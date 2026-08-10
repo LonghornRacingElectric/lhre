@@ -11,6 +11,7 @@
 #include "lhal/can.hpp"
 #include "lhal/gpio.hpp"
 #include "lhal/i2c.hpp"
+#include "lhal/pwm.hpp"
 #include "lhal/status.hpp"
 #include "lhal/system.hpp"
 #include "lhal/uart.hpp"

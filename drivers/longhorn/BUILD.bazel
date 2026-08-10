@@ -1,0 +1,29 @@
+"""Longhorn library: shared board services built on LHAL.
+
+Each module is its own cc_library so boards pull in only what they use.
+Everything here depends on //drivers/lhal interfaces only, so the same code
+builds for the MCU (firmware extra_deps) and the host (tests, sims).
+"""
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+cc_library(
+    name = "led",
+    srcs = ["led.cpp"],
+    hdrs = ["include/longhorn/led.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+    deps = ["//drivers/lhal"],
+)
+
+cc_test(
+    name = "led_test",
+    size = "small",
+    srcs = ["test/led_test.cpp"],
+    deps = [
+        ":led",
+        "//drivers/lhal:host",
+        "@googletest//:gtest_main",
+    ],
+)
