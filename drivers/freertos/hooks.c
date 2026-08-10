@@ -12,9 +12,9 @@
 
 #if (configSUPPORT_STATIC_ALLOCATION == 1)
 
-void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer,
-                                   StackType_t **ppxIdleTaskStackBuffer,
-                                   configSTACK_DEPTH_TYPE *puxIdleTaskStackSize) {
+void vApplicationGetIdleTaskMemory(
+    StaticTask_t** ppxIdleTaskTCBBuffer, StackType_t** ppxIdleTaskStackBuffer,
+    configSTACK_DEPTH_TYPE* puxIdleTaskStackSize) {
   static StaticTask_t idle_tcb;
   static StackType_t idle_stack[configMINIMAL_STACK_SIZE];
   *ppxIdleTaskTCBBuffer = &idle_tcb;
@@ -23,9 +23,9 @@ void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer,
 }
 
 #if (configUSE_TIMERS == 1)
-void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer,
-                                    StackType_t **ppxTimerTaskStackBuffer,
-                                    configSTACK_DEPTH_TYPE *puxTimerTaskStackSize) {
+void vApplicationGetTimerTaskMemory(
+    StaticTask_t** ppxTimerTaskTCBBuffer, StackType_t** ppxTimerTaskStackBuffer,
+    configSTACK_DEPTH_TYPE* puxTimerTaskStackSize) {
   static StaticTask_t timer_tcb;
   static StackType_t timer_stack[configTIMER_TASK_STACK_DEPTH];
   *ppxTimerTaskTCBBuffer = &timer_tcb;
