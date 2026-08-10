@@ -11,12 +11,39 @@
 
 ## Formatting
 
+clang-formatted code is a **requirement** for every push and PR — presubmit
+runs `bazel run //tools/format:check` and fails on any unformatted file.
+Before pushing, run:
+
 ```bash
 bazel run //tools/format
 ```
 
-rewrites every tracked C/C++ file with the hermetic clang-format. Generated
-code under `boards/*/Core/` is excluded — never hand-format (or hand-edit) it.
+which rewrites every tracked C/C++ file with the hermetic clang-format.
+Generated code under `boards/*/Core/` is excluded — never hand-format (or
+hand-edit) it.
+
+## IDE setup (fixing red squiggles)
+
+C++ code intelligence (clangd, VS Code, CLion) is driven by the checked-out
+`compile_commands.json`. If highlighting is broken — red squiggles, errors
+like "Unknown type name 'uint32_t'", missing headers — regenerate it:
+
+```bash
+bazel run //:refresh_ide
+```
+
+This is the reliable option: it builds `//...` first so every generated
+header the compile commands reference actually exists on disk, then extracts.
+It's slow. When you know the build outputs are already present (you've been
+building locally) there's a fast path that only re-extracts, without building
+intermediate files:
+
+```bash
+bazel run //:refresh_compile_commands
+```
+
+See [tools/ide](tools/ide/README.md) for what each one does and why.
 
 ## Documentation
 
