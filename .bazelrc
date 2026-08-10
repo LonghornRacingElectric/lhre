@@ -8,6 +8,11 @@ common --enable_platform_specific_config
 
 build --@protobuf//bazel/flags:prefer_prebuilt_protoc=true
 
+# Don't auto-generate __init__.py files in py_binary/py_test runfiles (the
+# rules_python default is deprecated and warns on every run). All our Python
+# is standalone scripts, so nothing depends on the implicit packages.
+build --incompatible_default_to_explicit_init_py
+
 # Remote cache + BuildBuddy result streaming: enabled on every platform.
 # use --config=local or --config=offline to build fully locally.
 build --bes_results_url=https://lhre.buildbuddy.io/invocation/
