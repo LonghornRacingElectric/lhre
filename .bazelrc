@@ -89,4 +89,8 @@ build:local --jobs=auto
 build:offline --config=local
 build:offline --nofetch
 
+# Build firmware with the hermetic clang toolchain (//toolchains/llvm)
+# instead of arm-none-eabi-gcc. Host builds are unaffected either way.
+build:llvm-fw --//toolchains:firmware_compiler=llvm
+
 try-import %workspace%/.bazelrc.user

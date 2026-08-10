@@ -11,12 +11,31 @@
 # docstring for why) instantiates a (config, cc_toolchain, toolchain) triple
 # per host OS/arch; MODULE.bazel registers //toolchains:all.
 
+load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
 load("//toolchains:toolchain.bzl", "arm_none_eabi_toolchain")
 
 package(default_visibility = ["//visibility:public"])
 
 # dwp_files placeholder referenced as ":empty" by arm_none_eabi_toolchain.
 filegroup(name = "empty")
+
+# Which compiler builds firmware (os:none targets). The //toolchains/llvm
+# variants carry target_settings on :llvm_firmware, so "llvm" flips every
+# firmware cc_* target to hermetic clang; host builds are unaffected.
+# Convenience alias in .bazelrc: --config=llvm-fw.
+string_flag(
+    name = "firmware_compiler",
+    build_setting_default = "gcc",
+    values = [
+        "gcc",
+        "llvm",
+    ],
+)
+
+config_setting(
+    name = "llvm_firmware",
+    flag_values = {":firmware_compiler": "llvm"},
+)
 
 arm_none_eabi_toolchain(
     name = "cortex_m0",

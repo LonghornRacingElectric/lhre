@@ -313,16 +313,57 @@ def firmware_project(
     base_linkopts = [
         "-Wl,-Map={name}.map,--cref",
         "-Wl,--gc-sections",
-        "-T $(location {linker})",
         "$(location {startup})",
-        "-specs=nano.specs",
-        "-lnosys",
-        "-lc",
-        "-lm",
-        "-lstdc++",
     ]
     if enable_printf_float:
         base_linkopts.append("-u _printf_float")
+
+    # The clang toolchain links against an LLD-adapted copy of the linker
+    # script; the CubeMX-owned script stays pristine so .ioc regeneration
+    # diffs stay clean. Two adaptations:
+    #  - Drop the "(READONLY)" output-section keyword (GNU ld ≥ 2.36 feature,
+    #    still unsupported in LLD 22). It only forces flash-resident sections
+    #    read-only in the ELF segment headers; the script's own comment
+    #    sanctions removal.
+    #  - Mark ._user_heap_stack (NOLOAD): GNU ld emits this contents-less
+    #    reservation as NOBITS, but LLD defaults script-defined sections to
+    #    PROGBITS, which gives it a loadable RAM LMA and blows objcopy's .bin
+    #    output up to the flash→RAM address gap (~384 MB of padding).
+    lld_script = "{}_lld_script".format(name)
+    native.genrule(
+        name = lld_script,
+        srcs = [linker_script],
+        outs = ["{}.lld.ld".format(name)],
+        cmd = "sed -e 's/(READONLY)//g' -e 's/\\._user_heap_stack[[:space:]]*:/._user_heap_stack (NOLOAD) :/' $< > $@",
+        tags = ["stm32_firmware"],
+    )
+    linker_script_linkopts = select({
+        "//toolchains:llvm_firmware": ["-T $(location :{})".format(lld_script)],
+        "//conditions:default": ["-T $(location {})".format(linker_script)],
+    })
+
+    # C/C++ runtime libraries, per firmware compiler. Both branches resolve to
+    # the same newlib-nano/libgcc/libstdc++ archives from the arm_none_eabi
+    # repos: the GCC driver picks them via -specs=nano.specs, while clang has
+    # no specs support so the nano spellings are written out (the -L search
+    # paths come from the //toolchains/llvm toolchain config). Must stay after
+    # the object files, hence cc_binary linkopts rather than the toolchain.
+    libc_linkopts = select({
+        "//toolchains:llvm_firmware": [
+            "-lstdc++_nano",
+            "-lc_nano",
+            "-lnosys",
+            "-lm",
+            "-lgcc",
+        ],
+        "//conditions:default": [
+            "-specs=nano.specs",
+            "-lnosys",
+            "-lc",
+            "-lm",
+            "-lstdc++",
+        ],
+    })
 
     for location in locations_to_build:
         target_name = name
@@ -345,7 +386,7 @@ def firmware_project(
         linkopts = [
             opt.format(name = target_name, linker = linker_script, startup = startup_script)
             for opt in base_linkopts
-        ]
+        ] + linker_script_linkopts + libc_linkopts
 
         cc_binary(
             name = "{}_project".format(target_name),
@@ -358,6 +399,7 @@ def firmware_project(
             defines = final_defines + location_defines + ["USE_HAL_DRIVER"],
             additional_linker_inputs = [
                 linker_script,
+                ":{}".format(lld_script),
                 startup_script,
             ],
             target_compatible_with = [
@@ -366,12 +408,16 @@ def firmware_project(
             ],
             copts = [
                 "-fdiagnostics-color",
-                "-mthumb-interwork",
                 "-ffunction-sections",
                 "-fdata-sections",
                 "-Og",
                 "-g3",
-            ],
+            ] + select({
+                # GCC-only flag; clang rejects it (and ARMv7-M is
+                # Thumb-only, so interworking support is moot there).
+                "//toolchains:llvm_firmware": [],
+                "//conditions:default": ["-mthumb-interwork"],
+            }),
             visibility = ["//visibility:private"],
             features = ["generate_linkmap"],
             tags = ["stm32_firmware"],

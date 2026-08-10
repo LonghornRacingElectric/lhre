@@ -1,0 +1,81 @@
+# LLVM arm-none-eabi cc_toolchains — the same per-CPU-core variants as
+# //toolchains, compiled with hermetic clang instead of arm-none-eabi-gcc.
+# Opt in with --//toolchains:firmware_compiler=llvm (see .bazelrc's
+# --config=llvm-fw); every toolchain here is gated on that flag via
+# target_settings, so GCC remains the default firmware compiler.
+#
+# The codegen flag sets must stay in lockstep with //toolchains:BUILD.bazel —
+# same -mcpu/-mfpu/-mfloat-abi per variant — plus each variant's GNU multilib
+# directory, which the GCC driver derives from those flags internally but
+# clang has to be told (arm-none-eabi-gcc <flags> -print-multi-directory).
+
+load("//toolchains/llvm:toolchain.bzl", "llvm_arm_none_eabi_toolchain")
+
+package(default_visibility = ["//visibility:public"])
+
+# dwp_files placeholder, same as //toolchains:empty.
+filegroup(name = "empty")
+
+llvm_arm_none_eabi_toolchain(
+    name = "cortex_m0",
+    copts = [
+        "-mcpu=cortex-m0",
+        "-mthumb",
+        "-mfloat-abi=soft",
+    ],
+    linkopts = [
+        "-mcpu=cortex-m0",
+        "-mthumb",
+        "-mfloat-abi=soft",
+    ],
+    multilib_dir = "thumb/v6-m/nofp",
+    target_compatible_with = [
+        "@platforms//cpu:arm",
+        "@platforms//os:none",
+        "//platforms:cortex_m0",
+    ],
+)
+
+llvm_arm_none_eabi_toolchain(
+    name = "cortex_m4f",
+    copts = [
+        "-mcpu=cortex-m4",
+        "-mthumb",
+        "-mfpu=fpv4-sp-d16",
+        "-mfloat-abi=hard",
+    ],
+    linkopts = [
+        "-mcpu=cortex-m4",
+        "-mthumb",
+        "-mfpu=fpv4-sp-d16",
+        "-mfloat-abi=hard",
+    ],
+    multilib_dir = "thumb/v7e-m+fp/hard",
+    target_compatible_with = [
+        "@platforms//cpu:arm",
+        "@platforms//os:none",
+        "//platforms:cortex_m4f",
+    ],
+)
+
+llvm_arm_none_eabi_toolchain(
+    name = "cortex_m7f",
+    copts = [
+        "-mcpu=cortex-m7",
+        "-mthumb",
+        "-mfpu=fpv5-d16",
+        "-mfloat-abi=hard",
+    ],
+    linkopts = [
+        "-mcpu=cortex-m7",
+        "-mthumb",
+        "-mfpu=fpv5-d16",
+        "-mfloat-abi=hard",
+    ],
+    multilib_dir = "thumb/v7e-m+dp/hard",
+    target_compatible_with = [
+        "@platforms//cpu:arm",
+        "@platforms//os:none",
+        "//platforms:cortex_m7f",
+    ],
+)

@@ -29,3 +29,12 @@ MODULE.bazel.lock
 /boards/**/Middlewares/**
 !/boards/**/Middlewares/**/
 !/boards/**/Middlewares/**/CMSIS_RTOS_V2/*.h
+/boards/VCU/build
+/.vscode
+.claude/
+
+# CMake stuff
+boards/**/cmake/
+boards/**/*.cmake
+boards/**/CMakeLists.txt
+/boards/VCU/cmake

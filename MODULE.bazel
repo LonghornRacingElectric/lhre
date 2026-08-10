@@ -1,6 +1,7 @@
 module(name = "lhre")
 
 bazel_dep(name = "rules_cc", version = "0.2.18")
+bazel_dep(name = "bazel_skylib", version = "1.9.0")
 bazel_dep(name = "llvm", version = "0.8.16")
 bazel_dep(name = "rules_python", version = "2.2.0")
 bazel_dep(name = "aspect_bazel_lib", version = "2.19.3")
@@ -35,7 +36,29 @@ use_repo(
     "arm_none_eabi_windows_x86_64",
 )
 
+# LLVM firmware toolchains (hermetic clang + newlib/libgcc from the
+# arm_none_eabi repos above). Gated behind --//toolchains:firmware_compiler=llvm
+# via target_settings, so they only match when explicitly requested — but they
+# must be registered BEFORE //toolchains:all or the GCC variants always win.
+register_toolchains("//toolchains/llvm:all")
+
 register_toolchains("//toolchains:all")
+
+# The clang binaries themselves come from the same prebuilt archives the
+# hermetic @llvm module uses for its host toolchains — reusing its module
+# extension means a host that already builds C++ has already downloaded them.
+# The version-embedded repo names track PREBUILT_LLVM_VERSION in @llvm's
+# MODULE.bazel; update them when bumping the llvm bazel_dep.
+llvm_prebuilt = use_extension("@llvm//extensions:llvm_toolchain_minimal.bzl", "llvm_toolchain_minimal")
+llvm_prebuilt.release(llvm_version = "22.1.8")
+use_repo(
+    llvm_prebuilt,
+    llvm_minimal_darwin_arm64 = "llvm-toolchain-minimal-22.1.8-darwin-arm64",
+    llvm_minimal_darwin_x86_64 = "llvm-toolchain-minimal-22.1.8-darwin-amd64",
+    llvm_minimal_linux_aarch64 = "llvm-toolchain-minimal-22.1.8-linux-arm64",
+    llvm_minimal_linux_x86_64 = "llvm-toolchain-minimal-22.1.8-linux-amd64",
+    llvm_minimal_windows_x86_64 = "llvm-toolchain-minimal-22.1.8-windows-amd64",
+)
 
 # Hermetic LLVM toolchain (hermeticbuild/hermetic-llvm): host-targeted C++
 # (unit tests, sims, host tools) compiles with the same hermetic clang on
