@@ -86,6 +86,7 @@ firmware_project(
     defines = ["STM32G474xx"],
     enable_freertos = True,
     enable_printf_float = True,
+    enable_usb = True,
     extra_deps = [
         ":vcu_app",
         "//drivers/lhal:stm32_headers",

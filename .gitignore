@@ -24,3 +24,6 @@ MODULE.bazel.lock
 # host tests) and the cmsis_os.h include in the generated main.c is satisfied
 # by //drivers/freertos:cmsis_os_stub — see drivers/freertos/README.md.
 /boards/**/Middlewares/
+boards/**/CMakeLists.txt
+boards/**/*.cmake
+boards/**/CMakePresets.json
