@@ -1,11 +1,13 @@
 // VCU firmware entry point — hand-written, not CubeMX-generated. Everything
-// under Core/ is CubeMX-owned and safe to regenerate (run post_cubemx.sh
-// afterwards); everything under Board/ is ours and CubeMX never touches it.
+// under Core/ is CubeMX-owned and safe to regenerate; everything under
+// Board/ is ours and CubeMX never touches it.
 //
-// Structure: peripheral bring-up (clocks, pin mux, handles) stays at the ST
-// HAL level in this file; application logic lives in App/vcu_app.* against
-// LHAL interfaces only, so it also runs on the host (see :vcu_app_test and
-// :vcu_sim).
+// Structure: clock config, Error_Handler(), and (once peripherals are added
+// in the .ioc) the MX_*_Init() functions come from the CubeMX-generated
+// Core/ sources — lhal::stm32::InitCore() runs the clock config. Pin mux
+// and handles not yet in the .ioc are configured at the ST HAL level here.
+// Application logic lives in App/vcu_app.* against LHAL interfaces only, so
+// it also runs on the host (see :vcu_app_test and :vcu_sim).
 
 #include "main.h"
 
@@ -13,6 +15,7 @@
 #include <cstring>
 
 #include "lhal/stm32/gpio.hpp"
+#include "lhal/stm32/init.hpp"
 #include "lhal/stm32/system.hpp"
 #include "lhal/stm32/uart.hpp"
 #include "lhre/build_info.hpp"
@@ -25,36 +28,12 @@ namespace {
 GPIO_TypeDef* const kStatusLedPort = GPIOA;
 constexpr uint16_t kStatusLedPin = GPIO_PIN_5;
 
-// Debug UART. TODO(vcu): confirm against the real board pinout — LPUART1 on
+// Debug UART — only compiled once the UART module is enabled, i.e. once the
+// peripheral is added in CubeMX (hal_conf.h is CubeMX-owned and mirrors the
+// .ioc). TODO(vcu): add LPUART1 to VCU.ioc — with per-peripheral file
+// generation on, CubeMX will emit MX_LPUART1_UART_Init() + the hlpuart1
+// handle, and this hand-rolled init can be replaced by those.
 // PA2/PA3 is the ST-LINK virtual COM port on the Nucleo dev board.
-UART_HandleTypeDef g_debug_uart_handle;
-constexpr uint32_t kDebugUartBaud = 115200;
-
-void ConfigureSystemClock() {
-  RCC_OscInitTypeDef osc = {};
-  RCC_ClkInitTypeDef clk = {};
-
-  HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE1);
-
-  osc.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-  osc.HSIState = RCC_HSI_ON;
-  osc.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
-  osc.PLL.PLLState = RCC_PLL_NONE;
-  if (HAL_RCC_OscConfig(&osc) != HAL_OK) {
-    Error_Handler();
-  }
-
-  clk.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK |
-                  RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
-  clk.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
-  clk.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  clk.APB1CLKDivider = RCC_HCLK_DIV1;
-  clk.APB2CLKDivider = RCC_HCLK_DIV1;
-  if (HAL_RCC_ClockConfig(&clk, FLASH_LATENCY_0) != HAL_OK) {
-    Error_Handler();
-  }
-}
-
 void ConfigureGpio() {
   __HAL_RCC_GPIOA_CLK_ENABLE();
 
@@ -65,6 +44,10 @@ void ConfigureGpio() {
   init.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(kStatusLedPort, &init);
 }
+
+#ifdef HAL_UART_MODULE_ENABLED
+UART_HandleTypeDef g_debug_uart_handle;
+constexpr uint32_t kDebugUartBaud = 115200;
 
 void ConfigureDebugUart() {
   __HAL_RCC_GPIOA_CLK_ENABLE();
@@ -102,6 +85,7 @@ void PrintBootBanner(lhal::Uart& uart) {
                /*timeout_ms=*/100);
   }
 }
+#endif  // HAL_UART_MODULE_ENABLED
 
 // Hook for the future "build info" CAN response frame: 7 ASCII bytes of the
 // commit SHA plus a dirty flag. Wire this as the reply payload once the CAN
@@ -115,20 +99,22 @@ void PrintBootBanner(lhal::Uart& uart) {
 }  // namespace
 
 int main() {
-  HAL_Init();
-  ConfigureSystemClock();
+  lhal::stm32::InitCore();  // HAL_Init + CubeMX-generated SystemClock_Config
   ConfigureGpio();
-  ConfigureDebugUart();
 
   lhal::stm32::Clock clock;
   lhal::stm32::Gpio status_led(kStatusLedPort, kStatusLedPin);
-  lhal::stm32::Uart debug_uart(&g_debug_uart_handle);
-
-  PrintBootBanner(debug_uart);
 
   vcu::Peripherals peripherals;
   peripherals.clock = &clock;
   peripherals.status_led = &status_led;
+
+#ifdef HAL_UART_MODULE_ENABLED
+  ConfigureDebugUart();
+  static lhal::stm32::Uart debug_uart(&g_debug_uart_handle);
+  PrintBootBanner(debug_uart);
+  peripherals.debug_uart = &debug_uart;
+#endif
 
   vcu::App app(peripherals);
   while (true) {
@@ -136,16 +122,5 @@ int main() {
   }
 }
 
-extern "C" void Error_Handler(void) {
-  __disable_irq();
-  while (true) {
-  }
-}
-
-#ifdef USE_FULL_ASSERT
-extern "C" void assert_failed(uint8_t* file, uint32_t line) {
-  (void)file;
-  (void)line;
-  Error_Handler();
-}
-#endif
+// Error_Handler() and assert_failed() come from the CubeMX-generated
+// Core/Src/main.c; customize them there inside USER CODE sections.

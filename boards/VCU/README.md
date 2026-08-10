@@ -23,9 +23,12 @@ for the repo.
 - `Board/` — hand-written bring-up: `main.cpp` configures clocks, pins, and
   peripheral handles at the ST HAL level, wraps them in LHAL adapters, and
   hands them to the app. Owned by us; formatted normally.
-- `Core/` — CubeMX-generated from `VCU.ioc`. Regenerate via CubeMX, then run
-  `./post_cubemx.sh` (deletes the generated `main.c`; our entry point is
-  `Board/main.cpp`). Never hand-edit.
+- `Core/` — CubeMX-generated from `VCU.ioc`; "Generate Code" is safe to run
+  any time. `VCU.ioc` sets `ProjectManager.NoMain=true`, so the generated
+  `main.c` has no `main()` — it provides `SystemClock_Config()` and
+  `Error_Handler()`, which the firmware compiles and uses (clock changes
+  made in CubeMX apply automatically; `lhal::stm32::InitCore()` calls the
+  generated clock config). Hand-edit only inside `USER CODE` sections.
 - `STM32G474XX_FLASH.ld` / `startup_stm32g474xx.s` — linker script and
   startup for the G474, passed to `firmware_project`.
 

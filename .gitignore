@@ -1,5 +1,6 @@
 # bazel-bin, bazel-lhre, bazel-out, bazel-testlogs
 bazel-*
+external/
 .venv
 .idea
 *.tools*
