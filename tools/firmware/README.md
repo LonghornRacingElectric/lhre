@@ -35,17 +35,17 @@ Adding a family = adding it in those two packages, then mapping it in
 - `enable_freertos` compiles the FreeRTOS kernel + the family's Cortex-M
   port into the firmware (from `//drivers/stm32/<family>:freertos_srcs`; the
   kernel is pinned once in [drivers/freertos](../../drivers/freertos/README.md)).
-  The board owes three things in return, all covered by enabling FreeRTOS in
-  the `.ioc` plus a little glue (see [boards/VCU](../../boards/VCU/README.md)
-  for the worked example):
+  It also wires in the shared CubeMX glue automatically — the
+  SysTick→`xPortSysTickHandler()` forwarding handler
+  (`//drivers/freertos:cubemx_glue`) and a stub `cmsis_os.h`
+  (`//drivers/freertos:cmsis_os_stub`) that satisfies the include in the
+  CubeMX-generated `main.c`, so boards write neither. The board owes two
+  things in return, both covered by enabling FreeRTOS in the `.ioc` (see
+  [boards/VCU](../../boards/VCU/README.md) for the worked example):
     1. `Core/Inc/FreeRTOSConfig.h` — CubeMX-generated; the kernel sources
        compile against it.
     2. `exclude = ["Core/Src/app_freertos.c"]` in the srcs glob — that file
        is CubeMX's CMSIS-RTOS2 glue and we use the raw FreeRTOS API.
-    3. A `SysTick_Handler` that forwards to `xPortSysTickHandler()` once the
-       scheduler runs (CubeMX moves the HAL timebase to a TIM and stops
-       generating the SysTick/SVC/PendSV handlers; SVC and PendSV map to the
-       kernel port via `#define`s in the generated config).
 - `enable_dfu` defines `ENABLE_DFU` — firmware that listens for the
   `update.` serial command enables probe-less reflashing (see
   [tools/dfu](../dfu/README.md)).

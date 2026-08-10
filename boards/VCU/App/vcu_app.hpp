@@ -31,7 +31,7 @@ struct Peripherals {
 // Both paths call the same underlying logic (SendHeartbeat, LED toggle).
 class App {
  public:
-  static constexpr uint32_t kBlinkPeriodMs = 500;
+  static constexpr uint32_t kBlinkPeriodMs = 100;
   static constexpr uint32_t kHeartbeatPeriodMs = 100;
   static constexpr uint32_t kHeartbeatCanId = 0x100;
 

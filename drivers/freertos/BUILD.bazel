@@ -23,6 +23,25 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
+# SysTick_Handler → xPortSysTickHandler() forwarding for CubeMX boards.
+# Family-agnostic; wired into firmware binaries by
+# firmware_project(enable_freertos = True), never used on the host.
+filegroup(
+    name = "cubemx_glue",
+    srcs = ["cubemx_glue.c"],
+    visibility = ["//visibility:public"],
+)
+
+# Satisfies the `#include "cmsis_os.h"` in CubeMX-generated main.c without
+# boards tracking CubeMX's CMSIS-RTOS2 wrapper headers. Wired in by
+# firmware_project(enable_freertos = True); see cubemx_stub/cmsis_os.h.
+cc_library(
+    name = "cmsis_os_stub",
+    hdrs = ["cubemx_stub/cmsis_os.h"],
+    strip_include_prefix = "cubemx_stub",
+    visibility = ["//visibility:public"],
+)
+
 cc_library(
     name = "host",
     srcs = [

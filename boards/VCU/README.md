@@ -24,8 +24,9 @@ for the repo.
   [drivers/freertos](../../drivers/freertos/README.md) for the pattern.
 - `Board/` — hand-written bring-up: `main.cpp` configures clocks, pins, and
   peripheral handles at the ST HAL level, wraps them in LHAL adapters,
-  hands them to the app, and starts the scheduler; `freertos_glue.cpp`
-  forwards SysTick to the kernel. Owned by us; formatted normally.
+  hands them to the app, and starts the scheduler. Owned by us; formatted
+  normally. (SysTick→kernel forwarding is not here: `enable_freertos`
+  wires in the shared `//drivers/freertos:cubemx_glue`.)
 - `Core/` — CubeMX-generated from `VCU.ioc`; "Generate Code" is safe to run
   any time. `VCU.ioc` sets `ProjectManager.NoMain=true`, so the generated
   `main.c` has no `main()` — it provides `SystemClock_Config()` and
@@ -50,10 +51,10 @@ The app uses the **raw FreeRTOS API** on top of that:
   allocated — one task per periodic activity), and `Board/main.cpp` calls
   `vTaskStartScheduler()`. CubeMX's CMSIS-RTOS2 glue
   (`Core/Src/app_freertos.c` and its `defaultTask`) is deliberately not
-  compiled; the vendored kernel under `Middlewares/` isn't either (the
+  compiled; everything under `Middlewares/` is gitignored and unused (the
   kernel comes from [drivers/freertos](../../drivers/freertos/README.md),
-  shared with the host tests — only the CMSIS-RTOS2 wrapper headers are
-  tracked there, because the generated `main.c` includes `cmsis_os.h`).
+  shared with the host tests, and the `cmsis_os.h` include in the generated
+  `main.c` is satisfied by `//drivers/freertos:cmsis_os_stub`).
 - Everything the tasks touch is `static` in `main()`: the Cortex-M port
   reclaims `main()`'s stack for interrupts when the scheduler starts.
 - Any ISR that calls a `...FromISR` FreeRTOS API must run at NVIC priority
