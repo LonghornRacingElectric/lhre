@@ -2,7 +2,14 @@
 
 load("@hedron_compile_commands//:refresh_compile_commands.bzl", "refresh_compile_commands")
 
-# Generates compile_commands.json for clangd/IDEs:
+# Generates compile_commands.json for clangd/IDEs. Prefer the wrapper:
+#   bazel run //:refresh_ide
+# It first builds //... with --remote_download_all so the generated header
+# trees the compile commands reference (hermetic libc++/__config_site, mingw
+# crt, build_info, ...) actually exist on disk — the extractor alone only
+# aqueries and never materializes them, and on cache hits neither does a
+# plain build (build-without-the-bytes). Bare extraction, when the build
+# outputs are known to be present already:
 #   bazel run //:refresh_compile_commands
 #
 # --config=local is required: on the default (remote-exec) config, compile
@@ -15,4 +22,9 @@ refresh_compile_commands(
     targets = {
         "//...": "--config=local",
     },
+)
+
+alias(
+    name = "refresh_ide",
+    actual = "//tools/ide:refresh",
 )
