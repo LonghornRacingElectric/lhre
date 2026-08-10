@@ -1,0 +1,101 @@
+# Build system: why it's built this way
+
+This page is the decision record for the build system. The *how* lives in the
+per-directory READMEs and the comments in [`MODULE.bazel`](https://github.com/LonghornRacingElectric/lhre/blob/main/MODULE.bazel)
+and [`.bazelrc`](https://github.com/LonghornRacingElectric/lhre/blob/main/.bazelrc);
+this page records the *whys* that would otherwise live only in commit messages
+and the heads of whoever set it up. If you change the build system, add the
+why here (or in a comment next to the change) — the person who understands it
+graduates every year.
+
+## Why Bazel (and not CMake)
+
+CMake is the embedded-industry default, and most vendor code (CubeMX, ST HAL
+examples) assumes it. We chose Bazel anyway, for reasons that follow from
+being a student team:
+
+- **Hermetic toolchains beat setup instructions.** Members join every year,
+  on macOS, Linux, and Windows laptops. With Bazel, ARM GCC, host LLVM,
+  Python, OpenOCD, dfu-util, and clang-format are all pinned in
+  `MODULE.bazel` and downloaded on first build — onboarding is
+  `git clone && bazel test //...`. A CMake setup would replace that with a
+  tools-installation README that drifts, breaks per-OS, and produces
+  "works on my machine" bugs from mismatched compiler versions.
+- **One graph builds host and MCU code together.** The LHAL design (see
+  [drivers/lhal](drivers/lhal/README.md)) means the same libraries compile
+  for the host (unit tests, simulators) and for four STM32 families. Bazel's
+  platforms and transitions make this first-class: `bazel test //...` builds
+  every firmware image *and* runs every host test in one invocation, and
+  [`firmware_project`](tools/firmware/README.md) transitions each board to
+  its family's platform automatically. CMake can only approximate this with
+  separate build directories or ExternalProject superbuilds — cross-compiling
+  and host-testing in one build is its weakest spot, and it's our core
+  workflow.
+- **Remote caching and execution.** Tests run on BuildBuddy's Linux
+  executors and artifacts are shared through the remote cache, so a clean
+  checkout on a slow laptop doesn't rebuild what CI already built. CMake has
+  no equivalent.
+- **One build for everything.** Firmware, host C++, Python tooling
+  (flashing, formatting, codegen) live in one dependency graph with one
+  command surface. No Make-wrapping-CMake-wrapping-scripts layering.
+
+The cost, honestly: every vendor dependency needs a Bazel wrapper (see the
+`*.BUILD` / `deps.bzl` files under [drivers/](drivers/README.md)), IDE
+integration needs a compile-commands extractor instead of coming for free,
+and Bazel expertise is rarer than CMake exposure among incoming members.
+That trade is deliberate — the wrapping is one-time work by a few
+maintainers, while CMake's costs (environment drift, per-machine setup) are
+paid continuously by everyone. This page exists to keep the one-time work
+understandable.
+
+## Where each decision is documented
+
+| Decision | Why it's that way |
+| -------- | ----------------- |
+| MCU codegen flags (`-mcpu`/`-mfpu`/`-mfloat-abi`) baked into per-core toolchains, not targets | [toolchains/README](toolchains/README.md) — every `cc_library` in a firmware graph gets the right float ABI with zero per-target plumbing |
+| One target platform per STM32 family, custom `mcu_core` constraint | [platforms/README](platforms/README.md) — `@platforms//cpu` is too coarse (m4f and m7f are both armv7e-m) |
+| `//toolchains` targets tagged `manual`, macro mirrored locally | [toolchains/README](toolchains/README.md) — untagged, `bazel build //...` downloads every host's ~150 MB GCC archive |
+| Remote execution on Linux/macOS clients but not Windows; rc-file flag ordering | comments in [`.bazelrc`](https://github.com/LonghornRacingElectric/lhre/blob/main/.bazelrc) — Bazel can't reliably drive Linux executors from a Windows client, and `--enable_platform_specific_config` expands *before* plain `build` lines |
+| Hermetic LLVM for host C++, registered before the BuildBuddy toolchain | comments in [`MODULE.bazel`](https://github.com/LonghornRacingElectric/lhre/blob/main/MODULE.bazel) — no dependency on Xcode/system GCC/MSVC, same clang everywhere |
+| Single FreeRTOS kernel version for firmware and host sims | [drivers/freertos/README](drivers/freertos/README.md) |
+| `compile_commands.json` per-machine, regenerated not committed | [CONTRIBUTING](CONTRIBUTING.md) — it embeds machine-specific toolchain paths |
+
+## Whys recorded only here
+
+### The `toolchains_arm_gnu` fork
+
+`MODULE.bazel` pins a [LonghornRacingElectric fork](https://github.com/LonghornRacingElectric/toolchains_arm_gnu)
+of upstream `toolchains_arm_gnu` via `git_override`. The fork carries fixes
+upstream doesn't have (yet):
+
+- **Fixed download URLs** — upstream's ARM toolchain URLs went stale.
+- **Param-file support** — firmware link lines exceed Windows' command-length
+  limit without it.
+- **Flag/path handling fix in `config.bzl`** — upstream glued `-isystem` and
+  its path into a single argument. Real arm-gcc silently tolerates that, but
+  in `compile_commands.json` it made clangd lose all newlib/libstdc++ include
+  paths and error out on firmware files.
+
+Prefer upstreaming fork changes when possible; either way, keep the pinned
+commit in `MODULE.bazel` and this list in sync when you bump it.
+
+### The hedron compile-commands fork and Windows patch
+
+The extractor behind `//:refresh_compile_commands` is the helly25 fork of
+hedron_compile_commands (the original is unmaintained), plus our own
+`patches/hedron_windows_spawn_guard.patch`: its entry point calls `main()` at
+module level, and Windows' `multiprocessing` spawn start method re-imports
+the entry point in every worker, killing the process pool
+(`BrokenProcessPool`). The patch adds an `if __name__ == "__main__":` guard.
+Drop the patch if it gets upstreamed.
+
+### Version pins
+
+- **googletest `1.17.0.bcr.2`** — Bazel 9 requires the BCR *patch* releases;
+  plain `1.17.0` lacks the `load()` statements Bazel 9 needs. When bumping,
+  always take the newest `.bcr.N` for a version.
+- **protobuf `36.0-rc1`** — nothing in the repo defines `.proto` files yet;
+  the pin exists so the *resolved* protobuf (pulled in transitively by other
+  rules) is recent enough for `--@protobuf//bazel/flags:prefer_prebuilt_protoc`
+  in `.bazelrc`, which downloads a prebuilt `protoc` instead of compiling it
+  from source on every fresh machine. Safe to bump to a stable 36.x+.
