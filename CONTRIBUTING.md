@@ -41,7 +41,7 @@ exist on the site — use a full GitHub URL for those.
 
 ## Adding a new board
 
-Copy the layout of [boards/VCU](boards/VCU):
+Copy the layout of [boards/VCU](boards/VCU/README.md):
 
 1. Create the CubeMX project (`<name>.ioc`) at the board root with
    **"Generate peripheral initialization as a pair of .c/.h files per
