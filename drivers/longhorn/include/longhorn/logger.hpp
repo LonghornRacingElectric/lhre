@@ -96,10 +96,9 @@ class Logger {
       return;
     }
     Message msg;
-    int prefix_len =
-        std::snprintf(msg.text, kMessageSize - 2, "[%lu] %s ",
-                      static_cast<unsigned long>(clock_->Millis()),
-                      LevelTag(level));
+    int prefix_len = std::snprintf(msg.text, kMessageSize - 2, "[%lu] %s ",
+                                   static_cast<unsigned long>(clock_->Millis()),
+                                   LevelTag(level));
     if (prefix_len < 0 || prefix_len >= static_cast<int>(kMessageSize - 2)) {
       return;
     }
@@ -108,7 +107,8 @@ class Logger {
     if (body_len < 0) {
       return;
     }
-    size_t len = static_cast<size_t>(prefix_len) + static_cast<size_t>(body_len);
+    size_t len =
+        static_cast<size_t>(prefix_len) + static_cast<size_t>(body_len);
     if (len > kMessageSize - 3) {
       len = kMessageSize - 3;  // vsnprintf reported the untruncated length
     }

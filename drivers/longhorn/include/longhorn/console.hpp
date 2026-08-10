@@ -25,8 +25,7 @@ class Console {
   explicit Console(lhal::Uart* stream, uint32_t write_timeout_ms = 100);
 
   void Println(const char* message);
-  void Printf(const char* format, ...)
-      __attribute__((format(printf, 2, 3)));
+  void Printf(const char* format, ...) __attribute__((format(printf, 2, 3)));
   void VPrintf(const char* format, va_list args);
 
  private:

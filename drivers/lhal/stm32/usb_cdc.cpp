@@ -40,8 +40,7 @@ int8_t CdcReceive(uint8_t* buf, uint32_t* len) {
   return USBD_OK;
 }
 
-int8_t CdcTransmitCplt(uint8_t* /*buf*/, uint32_t* /*len*/,
-                       uint8_t /*epnum*/) {
+int8_t CdcTransmitCplt(uint8_t* /*buf*/, uint32_t* /*len*/, uint8_t /*epnum*/) {
   if (g_cdc != nullptr) {
     g_cdc->HandleTxComplete();
   }
@@ -50,9 +49,7 @@ int8_t CdcTransmitCplt(uint8_t* /*buf*/, uint32_t* /*len*/,
 
 }  // namespace
 
-UsbCdc::UsbCdc(USBD_HandleTypeDef* handle) : handle_(handle) {
-  g_cdc = this;
-}
+UsbCdc::UsbCdc(USBD_HandleTypeDef* handle) : handle_(handle) { g_cdc = this; }
 
 UsbCdc::~UsbCdc() {
   if (g_cdc == this) {
@@ -239,8 +236,9 @@ void UsbCdc::HandleControl(uint8_t cmd, uint8_t* pbuf, uint16_t length) {
 // replaces the generated usbd_cdc_if.c wholesale — do not compile that file.
 extern "C" {
 USBD_CDC_ItfTypeDef USBD_Interface_fops_FS = {
-    lhal::stm32::CdcInit, lhal::stm32::CdcDeInit, lhal::stm32::CdcControl,
-    lhal::stm32::CdcReceive, lhal::stm32::CdcTransmitCplt,
+    lhal::stm32::CdcInit,         lhal::stm32::CdcDeInit,
+    lhal::stm32::CdcControl,      lhal::stm32::CdcReceive,
+    lhal::stm32::CdcTransmitCplt,
 };
 }  // extern "C"
 
