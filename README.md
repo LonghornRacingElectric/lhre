@@ -20,6 +20,10 @@ There are no per-year directories: `main` is always the current car, and past
 seasons live in tags and maintenance branches (see
 [CONTRIBUTING.md](CONTRIBUTING.md#season-policy)).
 
+The reasoning behind the build system — why Bazel, and the whys behind its
+forks, pins, and patches — is recorded in
+[build-system.md](build-system.md).
+
 ## Prerequisites
 
 - [Bazelisk](https://github.com/bazelbuild/bazelisk) (installs the pinned
