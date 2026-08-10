@@ -32,8 +32,20 @@ Adding a family = adding it in those two packages, then mapping it in
 - `locations = ["FR", "FL"]` builds one image per position on the car:
   targets become `:vcu_FR` / `:openocd_FR` / …, each compiled with a
   `BOARD_FR` define so one codebase serves several corners.
-- `enable_freertos` pulls the family's FreeRTOS kernel/port/CMSIS-RTOS2
-  sources and headers from `//drivers/stm32/<family>`.
+- `enable_freertos` compiles the FreeRTOS kernel + the family's Cortex-M
+  port into the firmware (from `//drivers/stm32/<family>:freertos_srcs`; the
+  kernel is pinned once in [drivers/freertos](../../drivers/freertos/README.md)).
+  The board owes three things in return, all covered by enabling FreeRTOS in
+  the `.ioc` plus a little glue (see [boards/VCU](../../boards/VCU/README.md)
+  for the worked example):
+    1. `Core/Inc/FreeRTOSConfig.h` — CubeMX-generated; the kernel sources
+       compile against it.
+    2. `exclude = ["Core/Src/app_freertos.c"]` in the srcs glob — that file
+       is CubeMX's CMSIS-RTOS2 glue and we use the raw FreeRTOS API.
+    3. A `SysTick_Handler` that forwards to `xPortSysTickHandler()` once the
+       scheduler runs (CubeMX moves the HAL timebase to a TIM and stops
+       generating the SysTick/SVC/PendSV handlers; SVC and PendSV map to the
+       kernel port via `#define`s in the generated config).
 - `enable_dfu` defines `ENABLE_DFU` — firmware that listens for the
   `update.` serial command enables probe-less reflashing (see
   [tools/dfu](../dfu/README.md)).

@@ -14,11 +14,13 @@
 #include <cstdio>
 #include <cstring>
 
+#include "FreeRTOS.h"
 #include "lhal/stm32/gpio.hpp"
 #include "lhal/stm32/init.hpp"
 #include "lhal/stm32/system.hpp"
 #include "lhal/stm32/uart.hpp"
 #include "lhre/build_info.hpp"
+#include "task.h"
 #include "vcu_app.hpp"
 
 namespace {
@@ -102,8 +104,10 @@ int main() {
   lhal::stm32::InitCore();  // HAL_Init + CubeMX-generated SystemClock_Config
   ConfigureGpio();
 
-  lhal::stm32::Clock clock;
-  lhal::stm32::Gpio status_led(kStatusLedPort, kStatusLedPin);
+  // Everything the tasks touch must be static: the Cortex-M port reclaims
+  // main()'s stack for interrupts when the scheduler starts.
+  static lhal::stm32::Clock clock;
+  static lhal::stm32::Gpio status_led(kStatusLedPort, kStatusLedPin);
 
   vcu::Peripherals peripherals;
   peripherals.clock = &clock;
@@ -116,10 +120,11 @@ int main() {
   peripherals.debug_uart = &debug_uart;
 #endif
 
-  vcu::App app(peripherals);
-  while (true) {
-    app.Step();
-  }
+  static vcu::App app(peripherals);
+  app.StartTasks();
+  vTaskStartScheduler();
+
+  Error_Handler();  // the scheduler only returns if it failed to start
 }
 
 // Error_Handler() and assert_failed() come from the CubeMX-generated

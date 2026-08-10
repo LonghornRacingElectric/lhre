@@ -86,10 +86,13 @@ use_repo(
     stm32g4_deps,
     "cmsis_core_stm32g4",
     "cmsis_device_stm32g4",
-    "cmsis_freertos_stm32g4",
-    "freertos_kernel_stm32g4",
     "stm32g4xx_hal_driver",
 )
+
+# FreeRTOS kernel — one version for firmware (Cortex-M ports) and host
+# tests/sims (POSIX/Windows simulator ports). See drivers/freertos/README.md.
+freertos_deps = use_extension("//drivers/freertos:deps.bzl", "freertos_deps")
+use_repo(freertos_deps, "freertos_kernel")
 
 dfu = use_extension("//tools/dfu:dfu.bzl", "dfu")
 use_repo(dfu, "dfu")

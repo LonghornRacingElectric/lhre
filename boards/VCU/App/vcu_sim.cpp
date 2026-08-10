@@ -1,52 +1,82 @@
-// Host simulation of the VCU: runs the real application logic in real time
-// against LHAL host fakes and prints what an observer on the CAN bus sees.
+// Host simulation of the VCU: runs the app's real FreeRTOS tasks under the
+// kernel's simulator port (real time), against LHAL host fakes, and prints
+// what an observer on the CAN bus sees.
 //
 //   bazel run --config=local //boards/VCU:vcu_sim
 
 #include <cstdio>
 
+#include "FreeRTOS.h"
 #include "lhal/host/can.hpp"
 #include "lhal/host/gpio.hpp"
 #include "lhal/host/system.hpp"
+#include "task.h"
 #include "vcu_app.hpp"
 
-int main() {
+namespace {
+
+constexpr uint32_t kSimDurationMs = 3000;
+
+struct SimWorld {
   lhal::host::SystemClock clock;
   lhal::host::Gpio led;
   lhal::host::CanNetwork network;
-  lhal::host::Can vcu_can(&network);
-  lhal::host::Can observer(&network);
+  lhal::host::Can vcu_can{&network};
+  lhal::host::Can observer{&network};
+};
 
-  vcu::Peripherals p;
-  p.clock = &clock;
-  p.status_led = &led;
-  p.can = &vcu_can;
-  vcu::App app(p);
+// Watches the LED and the observer CAN node, prints changes, and ends the
+// scheduler (which returns control to main) when the sim time is up.
+void ObserverTaskLoop(void* arg) {
+  SimWorld& world = *static_cast<SimWorld*>(arg);
+  bool last_led = world.led.Read();
 
-  std::printf("VCU sim: running for 3 seconds...\n");
-  bool last_led = led.Read();
-  while (clock.Millis() < 3000) {
-    app.Step();
-
-    if (led.Read() != last_led) {
-      last_led = led.Read();
-      std::printf("[%4u ms] LED %s\n", clock.Millis(), last_led ? "on" : "off");
+  while (world.clock.Millis() < kSimDurationMs) {
+    if (world.led.Read() != last_led) {
+      last_led = world.led.Read();
+      std::printf("[%4u ms] LED %s\n", world.clock.Millis(),
+                  last_led ? "on" : "off");
     }
 
     lhal::CanFrame frame;
-    while (observer.Receive(&frame)) {
+    while (world.observer.Receive(&frame)) {
       uint32_t counter = static_cast<uint32_t>(frame.data[0]) |
                          (static_cast<uint32_t>(frame.data[1]) << 8) |
                          (static_cast<uint32_t>(frame.data[2]) << 16) |
                          (static_cast<uint32_t>(frame.data[3]) << 24);
       if (counter % 10 == 0) {
-        std::printf("[%4u ms] CAN 0x%03X heartbeat #%u\n", clock.Millis(),
+        std::printf("[%4u ms] CAN 0x%03X heartbeat #%u\n", world.clock.Millis(),
                     frame.id, counter);
       }
     }
 
-    clock.DelayMs(1);
+    vTaskDelay(pdMS_TO_TICKS(1));
   }
+  vTaskEndScheduler();
+}
+
+}  // namespace
+
+int main() {
+  static SimWorld world;
+
+  vcu::Peripherals p;
+  p.clock = &world.clock;
+  p.status_led = &world.led;
+  p.can = &world.vcu_can;
+  static vcu::App app(p);
+
+  std::printf("VCU sim: running for %u ms...\n", kSimDurationMs);
+  app.StartTasks();
+
+  static StaticTask_t observer_tcb;
+  static StackType_t observer_stack[configMINIMAL_STACK_SIZE];
+  xTaskCreateStatic(ObserverTaskLoop, "observer", configMINIMAL_STACK_SIZE,
+                    &world, tskIDLE_PRIORITY + 3, observer_stack,
+                    &observer_tcb);
+
+  vTaskStartScheduler();  // returns when the observer task ends the sim
+
   std::printf("VCU sim: done (%u heartbeats sent)\n", app.heartbeats_sent());
   return 0;
 }

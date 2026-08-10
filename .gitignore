@@ -18,3 +18,14 @@ boards/**/Drivers/
 **/.mxproject
 **/Makefile
 MODULE.bazel.lock
+
+# CubeMX-vendored FreeRTOS copies: the build compiles the kernel from
+# @freertos_kernel instead (one version shared with host tests — see
+# drivers/freertos/README.md). Exception: the CMSIS-RTOS2 wrapper *headers*
+# stay tracked, because the CubeMX-generated Core/Src/main.c includes
+# cmsis_os.h (an ST-specific header that exists nowhere upstream). The
+# second pattern un-ignores directories so the header exception can apply;
+# directories themselves are never tracked by git anyway.
+/boards/**/Middlewares/**
+!/boards/**/Middlewares/**/
+!/boards/**/Middlewares/**/CMSIS_RTOS_V2/*.h
