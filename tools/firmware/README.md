@@ -46,6 +46,15 @@ Adding a family = adding it in those two packages, then mapping it in
        compile against it.
     2. `exclude = ["Core/Src/app_freertos.c"]` in the srcs glob — that file
        is CubeMX's CMSIS-RTOS2 glue and we use the raw FreeRTOS API.
+- `enable_usb` wires in USB CDC (virtual COM port): ST's USB Device
+  middleware (`//drivers/stm32/usb_device`, pinned once, family-independent)
+  plus the board's CubeMX-generated `USB_DEVICE/` glue — except
+  `usbd_cdc_if.c`, which is deliberately not compiled: its only content is
+  the CDC callback struct (`USBD_Interface_fops_FS`), and
+  `lhal/stm32/usb_cdc.cpp` defines that instead so reception routes into
+  `lhal::stm32::UsbCdc` (an `lhal::Uart`). The board owes: USB_Device (CDC)
+  enabled in the `.ioc` so `USB_DEVICE/` exists, and a
+  `static lhal::stm32::UsbCdc` constructed before `MX_USB_DEVICE_Init()`.
 - `enable_dfu` defines `ENABLE_DFU` — firmware that listens for the
   `update.` serial command enables probe-less reflashing (see
   [tools/dfu](../dfu/README.md)).

@@ -256,6 +256,7 @@ def firmware_project(
         extra_deps = [],
         extra_includes = [],
         enable_freertos = False,
+        enable_usb = False,
         enable_dfu = False,
         locations = [],
         enable_printf_float = False,
@@ -275,6 +276,11 @@ def firmware_project(
         extra_deps (list, optional): extra dependencies to compile with. Defaults to [].
         extra_includes (list, optional): extra include paths to compile with. Defaults to [].
         enable_freertos (bool, optional): Whether or not to use FreeRTOS. Defaults to False.
+        enable_usb (bool, optional): Wire in USB CDC (virtual COM port): ST's USB Device
+            middleware plus the board's CubeMX-generated USB_DEVICE/ files — except
+            usbd_cdc_if.c, whose job lhal/stm32/usb_cdc.cpp takes over (see
+            lhal::stm32::UsbCdc). Requires USB enabled in the board's .ioc so the
+            USB_DEVICE/ directory exists. Defaults to False.
         enable_dfu (bool, optional): Whether or not to accept strings to go into DFU. Defaults to False.
         locations (list, optional): A list of location identifiers (e.g., ["FR", "FL"]).
         enable_printf_float (bool, optional): Whether to link -u _printf_float (adds ~10KB). Defaults to False.
@@ -304,6 +310,33 @@ def firmware_project(
         # itself is never compiled — boards use the raw FreeRTOS API).
         final_extra_srcs.append("//drivers/freertos:cubemx_glue")
         final_extra_deps.append("//drivers/freertos:cmsis_os_stub")
+
+    usb_includes = []
+    if enable_usb:
+        # CubeMX contract, handled centrally: compile the generated USB_DEVICE
+        # glue (usb_device.c, usbd_conf.c, usbd_desc.c) and ST's middleware,
+        # but NOT usbd_cdc_if.c — its only content is the CDC interface
+        # struct, which lhal/stm32/usb_cdc.cpp defines instead so reception
+        # routes into lhal::stm32::UsbCdc.
+        usb_glue = native.glob(
+            [
+                "USB_DEVICE/**/*.c",
+                "USB_DEVICE/**/*.h",
+            ],
+            exclude = ["USB_DEVICE/App/usbd_cdc_if.c"],
+            allow_empty = True,
+        )
+        if not usb_glue:
+            fail(("{}: enable_usb = True but no USB_DEVICE/ directory in this " +
+                  "package. Enable USB_Device (CDC) in the board's .ioc and " +
+                  "regenerate with CubeMX first.").format(name))
+        final_extra_srcs.extend(usb_glue)
+        final_extra_srcs.append("//drivers/stm32/usb_device:srcs")
+        final_extra_deps.append("//drivers/stm32/usb_device:headers")
+        usb_includes = [
+            "USB_DEVICE/App",
+            "USB_DEVICE/Target",
+        ]
 
     if enable_dfu:
         final_defines.append("ENABLE_DFU")
@@ -359,7 +392,7 @@ def firmware_project(
             srcs = srcs + [driver_srcs] + final_extra_srcs,
             includes = [
                 "Core/Inc",
-            ] + extra_includes,
+            ] + usb_includes + extra_includes,
             deps = deps_list,
             linkopts = linkopts,
             defines = final_defines + location_defines + ["USE_HAL_DRIVER"],

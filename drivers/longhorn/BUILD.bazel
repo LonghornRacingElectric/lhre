@@ -17,6 +17,26 @@ cc_library(
     deps = ["//drivers/lhal"],
 )
 
+cc_library(
+    name = "console",
+    srcs = ["console.cpp"],
+    hdrs = ["include/longhorn/console.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+    deps = ["//drivers/lhal"],
+)
+
+cc_test(
+    name = "console_test",
+    size = "small",
+    srcs = ["test/console_test.cpp"],
+    deps = [
+        ":console",
+        "//drivers/lhal:host",
+        "@googletest//:gtest_main",
+    ],
+)
+
 cc_test(
     name = "led_test",
     size = "small",

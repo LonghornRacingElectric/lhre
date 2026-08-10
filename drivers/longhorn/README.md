@@ -8,6 +8,10 @@ Each module is its own target so boards pull in only what they use:
 
 - `//drivers/longhorn:led` — `longhorn::RgbLed`, the RGB status LED
   (boot-white, `Set`, rainbow animation, `Disable` for error latching).
+- `//drivers/longhorn:console` — `longhorn::Console`, printf-style line
+  output over any `lhal::Uart` stream (debug UART or USB VCP via
+  `lhal::stm32::UsbCdc`). Not thread-safe on its own; serialize behind a
+  mutex or logger task when printing from multiple RTOS tasks.
 
 ## Using a module on a board
 
