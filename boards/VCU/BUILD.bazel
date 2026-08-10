@@ -3,17 +3,6 @@ load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
 load("//tools/firmware:firmware_project.bzl", "firmware_project")
 
-# CMSIS-RTOS2 wrapper headers, vendored by CubeMX (the only tracked files
-# under Middlewares/ — see .gitignore). The generated Core/Src/main.c
-# includes cmsis_os.h even though nothing calls the wrapper; only the
-# headers are compiled against, never the wrapper sources.
-cc_library(
-    name = "cmsis_rtos2_headers",
-    hdrs = glob(["Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/*.h"]),
-    strip_include_prefix = "Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2",
-    deps = ["//drivers/stm32/stm32g4:freertos_headers"],  # cmsis_os.h → FreeRTOS.h
-)
-
 # The board's CubeMX-generated FreeRTOS config, exposed on its own so app
 # code can compile against FreeRTOS headers when cross-compiling (the kernel
 # requires FreeRTOSConfig.h on the include path everywhere FreeRTOS.h is
@@ -97,10 +86,13 @@ firmware_project(
         # app_freertos.c is CubeMX's CMSIS-RTOS2 glue (osKernel* + a default
         # task). We use the raw FreeRTOS API — tasks are created in
         # Board/main.cpp — so it stays committed (CubeMX regenerates it) but
-        # is never compiled. The CubeMX-vendored kernel copy in Middlewares/
-        # is likewise unused (and gitignored): the kernel sources come from
-        # @freertos_kernel via enable_freertos below, one version shared
-        # with host tests. See drivers/freertos/README.md.
+        # is never compiled. Everything CubeMX vendors under Middlewares/ is
+        # likewise unused and gitignored: the kernel sources come from
+        # @freertos_kernel via enable_freertos below (one version shared
+        # with host tests), and the cmsis_os.h include in the generated
+        # main.c is satisfied by //drivers/freertos:cmsis_os_stub, which
+        # enable_freertos wires in along with the SysTick glue. See
+        # drivers/freertos/README.md.
         exclude = ["Core/Src/app_freertos.c"],
     ) + glob(
         [
@@ -113,7 +105,6 @@ firmware_project(
     enable_freertos = True,
     enable_printf_float = True,
     extra_deps = [
-        ":cmsis_rtos2_headers",
         ":vcu_app",
         "//drivers/lhal:stm32_headers",
     ],

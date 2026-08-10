@@ -10,6 +10,8 @@ that, not a mock scheduler, is the RTOS host-testing story.
 | ------------------ | ------------------------------------------------------ |
 | `:host`            | The kernel built for the host: simulator port (by `select()` on the OS), `heap_3` (wraps the host malloc), and `host/FreeRTOSConfig.h`. Host tests/sims get FreeRTOS by depending on this. |
 | `:hooks`           | `hooks.c` — static-allocation memory callbacks (idle/timer task memory). Compiled into every build that compiles the kernel. |
+| `:cubemx_glue`     | `cubemx_glue.c` — `SysTick_Handler` forwarding to `xPortSysTickHandler()`. Family-agnostic; wired into firmware by `enable_freertos`, never built for the host. |
+| `:cmsis_os_stub`   | Empty `cmsis_os.h` satisfying the include in CubeMX-generated `main.c`, so boards don't track CubeMX's CMSIS-RTOS2 wrapper headers. Wired in by `enable_freertos`. |
 | `:host_smoke_test` | Smallest kernel-under-simulator-port check (one task, one delay, clean scheduler end). A broken port/config shows up here first. |
 
 `deps.bzl` pins the kernel (`@freertos_kernel`, FreeRTOS-Kernel V11.1.0) and
@@ -24,18 +26,19 @@ each firmware binary, where that board's CubeMX-generated
 sources-not-a-library pattern as the ST HAL. The per-family package bundles
 kernel + MCU port + `heap_4` + `:hooks` as
 `//drivers/stm32/<family>:freertos_srcs` / `:freertos_headers`, and
-`firmware_project(enable_freertos = True)` wires them in. The full
-per-board contract (CubeMX settings, what to exclude, SysTick glue) is
-documented in [tools/firmware](../../tools/firmware/README.md); the worked
-example is [boards/VCU](../../boards/VCU/README.md).
+`firmware_project(enable_freertos = True)` wires them in — along with
+`:cubemx_glue` (the SysTick forwarding handler) and `:cmsis_os_stub`, so
+the CubeMX integration lives here once instead of being copy-pasted per
+board. The remaining per-board contract (CubeMX settings, what to exclude)
+is documented in [tools/firmware](../../tools/firmware/README.md); the
+worked example is [boards/VCU](../../boards/VCU/README.md).
 
-CubeMX also vendors its own kernel copy under `boards/*/Middlewares/` when
-FreeRTOS is enabled in the `.ioc`. That copy is gitignored and never
-compiled (it's an older kernel and has no simulator ports) — except the
-CMSIS-RTOS2 wrapper *headers*, which stay tracked because the generated
-`Core/Src/main.c` includes `cmsis_os.h` (ST-specific; exists nowhere
-upstream). The wrapper sources are never compiled: we use the raw FreeRTOS
-API, not CMSIS-RTOS2.
+CubeMX also vendors its own kernel copy plus the CMSIS-RTOS2 wrapper under
+`boards/*/Middlewares/` when FreeRTOS is enabled in the `.ioc`. All of it
+is gitignored and never compiled (it's an older kernel and has no simulator
+ports); the generated `Core/Src/main.c` does `#include "cmsis_os.h"`
+(ST-specific; exists nowhere upstream), which `:cmsis_os_stub` satisfies.
+We use the raw FreeRTOS API, not CMSIS-RTOS2.
 
 ## Testing RTOS code on the host
 

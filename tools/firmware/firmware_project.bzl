@@ -298,6 +298,13 @@ def firmware_project(
         final_extra_srcs.append("//drivers/stm32/{}:freertos_srcs".format(family))
         final_extra_deps.append("//drivers/stm32/{}:freertos_headers".format(family))
 
+        # CubeMX contract, handled centrally so boards don't copy-paste it:
+        # the SysTick→kernel forwarding handler, and a stub cmsis_os.h for
+        # the #include in CubeMX-generated main.c (the CMSIS-RTOS2 wrapper
+        # itself is never compiled — boards use the raw FreeRTOS API).
+        final_extra_srcs.append("//drivers/freertos:cubemx_glue")
+        final_extra_deps.append("//drivers/freertos:cmsis_os_stub")
+
     if enable_dfu:
         final_defines.append("ENABLE_DFU")
 
