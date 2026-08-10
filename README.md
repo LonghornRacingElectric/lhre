@@ -8,11 +8,11 @@ flash it all with Bazel.
 
 | Directory  | What lives there |
 | ---------- | ---------------- |
-| `drivers/` | Hardware. [LHAL](drivers/lhal/README.md) (our platform-independent HAL) and vendor HAL packages (`drivers/stm32/`). |
-| `lib/`     | Platform-agnostic C++ that builds on host **and** target (ring buffers, CRC, CAN pack/unpack, …), with colocated tests. |
-| `apps/`    | Host-side software: telemetry, dashboards, gateways. |
-| `boards/`  | Per-ECU firmware projects (`boards/VCU` is the reference layout). |
-| `tools/`   | Build and dev tooling: `firmware_project`, flashing, formatting. |
+| [`drivers/`](drivers/README.md) | Hardware. [LHAL](drivers/lhal/README.md) (our platform-independent HAL) and [vendor HAL packages](drivers/stm32/README.md). |
+| [`lib/`](lib/README.md)     | Platform-agnostic C++ that builds on host **and** target (ring buffers, CRC, CAN pack/unpack, …), with colocated tests. |
+| [`apps/`](apps/README.md)    | Host-side software: telemetry, dashboards, gateways. |
+| [`boards/`](boards/README.md)  | Per-ECU firmware projects ([`boards/VCU`](boards/VCU/README.md) is the reference layout). |
+| [`tools/`](tools/README.md)   | Build and dev tooling: [`firmware_project`](tools/firmware/README.md), flashing, formatting. |
 
 There are no per-year directories: `main` is always the current car, and past
 seasons live in tags and maintenance branches (see

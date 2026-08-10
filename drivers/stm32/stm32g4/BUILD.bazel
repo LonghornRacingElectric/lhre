@@ -16,7 +16,7 @@ Available targets:
 load("@rules_cc//cc:defs.bzl", "cc_library")
 
 # Unified headers target: combines HAL, CMSIS device, and CMSIS core headers
-# so projects only need to depend on a single target for all STM32L4 includes.
+# so projects only need to depend on a single target for all STM32G4 includes.
 cc_library(
     name = "headers",
     visibility = ["//visibility:public"],
