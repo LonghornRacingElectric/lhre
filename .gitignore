@@ -37,4 +37,4 @@ MODULE.bazel.lock
 boards/**/cmake/
 boards/**/*.cmake
 boards/**/CMakeLists.txt
-/boards/VCU/cmake
+boards/**/CMakePresets.json
