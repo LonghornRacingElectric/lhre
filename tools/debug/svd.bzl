@@ -33,8 +33,12 @@ _stm32_svd_repo = repository_rule(
     implementation = _stm32_svd_repo_impl,
 )
 
-def _svd_impl(_ctx):
+def _svd_impl(ctx):
     _stm32_svd_repo(name = "stm32_svd")
+
+    # Fully determined by svd_lock.bzl's pinned commit + sha256s; keep it
+    # out of MODULE.bazel.lock so lock churn can't creep in.
+    return ctx.extension_metadata(reproducible = True)
 
 svd = module_extension(
     implementation = _svd_impl,
