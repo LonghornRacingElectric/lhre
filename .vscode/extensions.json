@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    // On-target debugging (.vscode/launch.json). Cortex-Debug pulls in the
+    // mcu-debug peripheral/RTOS/memory viewers as its extension pack.
+    "marus25.cortex-debug",
+    // C/C++ language server driven by compile_commands.json.
+    "llvm-vs-code-extensions.vscode-clangd",
+    // BUILD.bazel / .bzl syntax and targets.
+    "bazelbuild.vscode-bazel"
+  ]
+}

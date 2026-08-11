@@ -1,0 +1,32 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      // Everything a debug session needs: the firmware ELF (default build
+      // is already -Og -g3) plus the hermetic gdb + OpenOCD staged under
+      // bazel-bin/tools/debug (see tools/debug/README.md).
+      "label": "build-vcu-debug",
+      "detail": "Build VCU firmware and stage the hermetic debug tools",
+      "type": "shell",
+      "command": "bazel",
+      "args": [
+        "build",
+        "//boards/VCU:vcu.elf",
+        "//tools/debug:debug_tools"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "flash-vcu",
+      "detail": "Flash the VCU over ST-Link without starting a debug session",
+      "type": "shell",
+      "command": "bazel",
+      "args": ["run", "//boards/VCU:openocd"],
+      "problemMatcher": []
+    }
+  ]
+}

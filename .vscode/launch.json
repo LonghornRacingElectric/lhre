@@ -1,0 +1,67 @@
+{
+  // On-target debugging via Cortex-Debug. Everything referenced here is
+  // hermetic: `bazel build //tools/debug:debug_tools` stages the host's
+  // arm-none-eabi-gdb and OpenOCD at these bazel-bin paths on every OS —
+  // no CubeIDE/CubeCLT install needed. See tools/debug/README.md.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug VCU (ST-Link)",
+      "type": "cortex-debug",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "executable": "${workspaceFolder}/bazel-bin/boards/VCU/vcu.elf",
+      "device": "STM32G474",
+      "svdFile": "${workspaceFolder}/boards/VCU/STM32G474.svd",
+      "servertype": "openocd",
+      "serverpath": "${workspaceFolder}/bazel-bin/tools/debug/openocd/bin/openocd",
+      "gdbPath": "${workspaceFolder}/bazel-bin/tools/debug/gdb/bin/arm-none-eabi-gdb",
+      "searchDir": [
+        "${workspaceFolder}/bazel-bin/tools/debug/openocd/openocd/scripts"
+      ],
+      "configFiles": [
+        "${workspaceFolder}/drivers/stm32/stm32g4/stm32g4_openocd.cfg"
+      ],
+      "preLaunchTask": "build-vcu-debug",
+      "runToEntryPoint": "main",
+      "liveWatch": {
+        "enabled": true,
+        "samplesPerSecond": 4
+      },
+      "windows": {
+        "gdbPath": "${workspaceFolder}/bazel-bin/tools/debug/gdb/bin/arm-none-eabi-gdb.exe",
+        "serverpath": "${workspaceFolder}/bazel-bin/tools/debug/openocd/bin/openocd.exe"
+      }
+    },
+    {
+      // Attach to a running board without flashing or resetting it. The
+      // build task still runs so the symbols exist — make sure the board
+      // is running the same commit, or line numbers will lie to you.
+      "name": "Attach VCU (ST-Link)",
+      "type": "cortex-debug",
+      "request": "attach",
+      "cwd": "${workspaceFolder}",
+      "executable": "${workspaceFolder}/bazel-bin/boards/VCU/vcu.elf",
+      "device": "STM32G474",
+      "svdFile": "${workspaceFolder}/boards/VCU/STM32G474.svd",
+      "servertype": "openocd",
+      "serverpath": "${workspaceFolder}/bazel-bin/tools/debug/openocd/bin/openocd",
+      "gdbPath": "${workspaceFolder}/bazel-bin/tools/debug/gdb/bin/arm-none-eabi-gdb",
+      "searchDir": [
+        "${workspaceFolder}/bazel-bin/tools/debug/openocd/openocd/scripts"
+      ],
+      "configFiles": [
+        "${workspaceFolder}/drivers/stm32/stm32g4/stm32g4_openocd.cfg"
+      ],
+      "preLaunchTask": "build-vcu-debug",
+      "liveWatch": {
+        "enabled": true,
+        "samplesPerSecond": 4
+      },
+      "windows": {
+        "gdbPath": "${workspaceFolder}/bazel-bin/tools/debug/gdb/bin/arm-none-eabi-gdb.exe",
+        "serverpath": "${workspaceFolder}/bazel-bin/tools/debug/openocd/bin/openocd.exe"
+      }
+    }
+  ]
+}

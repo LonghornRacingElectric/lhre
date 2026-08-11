@@ -39,6 +39,22 @@ filegroup(
     name = "scripts",
     srcs = glob(["openocd/scripts/**/*"]),
 )
+
+# Everything a relocated OpenOCD needs at runtime: the binary (plus bundled
+# DLLs on Windows), the dylibs in libexec/ that the mac/linux binary loads
+# via @loader_path/$ORIGIN rpaths, and the TCL script library. Consumed by
+# //tools/debug to stage a self-contained tree under bazel-bin.
+filegroup(
+    name = "dist",
+    srcs = glob(
+        [
+            "bin/**",
+            "libexec/**",
+            "openocd/scripts/**",
+        ],
+        allow_empty = True,
+    ),
+)
 """.format(bin_path = bin_path)
 
     http_archive(
