@@ -11,13 +11,21 @@ Build and dev tooling. Each package documents itself:
 | [ide/](ide/README.md) | `compile_commands.json` regeneration for clangd/IDEs: `bazel run //:refresh_ide` (or the fast `//:refresh_compile_commands`). |
 
 `new_board.py` (`bazel run //tools:new_board -- boards/<Name>/<Name>.ioc`)
-scaffolds a new board's `BUILD.bazel` from its CubeMX `.ioc` — it reads the
-MCU and enabled middleware and emits the minimal `firmware_project` call,
-so new boards start from the convention instead of a copy of VCU. It also
-sets up the board's VS Code debugging (see [debug/](debug/README.md)):
-pins the device's SVD in `tools/debug/svd_lock.bzl` for Bazel to fetch and
-adds the board's Cortex-Debug launch configs and build/flash tasks to
-`.vscode/`. `--vscode-only` redoes just that part for an existing board.
+scaffolds a whole working board from its CubeMX `.ioc`, so new boards
+start from the convention instead of a copy of VCU:
+
+- the minimal `firmware_project` call in `BUILD.bazel` (MCU and middleware
+  read from the `.ioc`);
+- compiling starter files for everything the macro synthesizes targets
+  from — app library, host test, host sim (`App/`, templates in
+  `new_board_templates.py`) and the firmware entry point (`Board/main.cpp`)
+  — a scaffolded board blinks, host-tests, and simulates before any code
+  is written; existing files are never overwritten, and `--no-test` /
+  `--no-sim` skip those starters for boards that won't maintain them;
+- the board's VS Code debugging (see [debug/](debug/README.md)): the SVD
+  pin in `tools/debug/svd_lock.bzl` plus Cortex-Debug launch configs and
+  build/flash tasks in `.vscode/`. `--vscode-only` redoes just this part
+  for an existing board.
 
 When adding a hermetic tool repo (the openocd/, dfu/, debug/ pattern —
 a module extension that fetches a pinned binary or file set): pin every

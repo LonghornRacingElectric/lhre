@@ -9,11 +9,12 @@ bazel run //tools:new_board -- boards/<Name>/<Name>.ioc
 ```
 
 (The `--` separates Bazel's options from the script's; full recipe in
-[CONTRIBUTING.md](../CONTRIBUTING.md#adding-a-new-board).) Besides the
-`BUILD.bazel`, this also generates the board's VS Code debug setup —
-launch configs, build/flash tasks, and the SVD pin (see
-[tools/debug](../tools/debug/README.md)); `--vscode-only` redoes just
-that part later.
+[CONTRIBUTING.md](../CONTRIBUTING.md#adding-a-new-board).) That one command
+yields a working board: the `BUILD.bazel`, compiling starter files for the
+app library, host test, host sim, and firmware entry point, and the VS Code
+debug setup. The starters blink an LED and pass their test as-is —
+customize from there.
+
 `bazel build //boards:all_firmware` builds every ECU's flashable images —
 each new board's `:release` gets added to that filegroup.
 

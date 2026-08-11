@@ -84,6 +84,14 @@ from the `App/` directory instead of boards restating it:
 `enable_app = False` and hand-writes its app targets — passing the app
 library via `extra_deps` — without giving up the firmware half.
 
+Per-category escape hatches: `enable_tests = False` / `enable_sims = False`
+keep the app library but stop synthesizing the host tests / sims — for a
+board that doesn't maintain them, without having to delete the files (they
+simply stop being compiled). The scaffolder's `--no-test` / `--no-sim`
+flags are the front-door version: they skip writing those starter files in
+the first place (a `*_test.cpp` / `*_sim.cpp` added later still becomes a
+target automatically).
+
 ## App code can't reach the ST HAL — by construction
 
 The repo rule that app code depends on `//drivers/lhal` interfaces only

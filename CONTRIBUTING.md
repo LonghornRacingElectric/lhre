@@ -97,37 +97,61 @@ exist on the site — use a full GitHub URL for those.
 
 ## Adding a new board
 
-Copy the layout of [boards/VCU](boards/VCU/README.md):
+Two steps, then iterate ([boards/VCU](boards/VCU/README.md) is the worked
+example of where you're heading):
 
-1. Create the CubeMX project (`<name>.ioc`) at the board root with
-   **"Generate peripheral initialization as a pair of .c/.h files per
-   peripheral"** enabled, targeting a Makefile toolchain. Generated code
-   lands in `Core/`.
-2. Hand-written bring-up (`main.cpp`, clock config, LHAL adapter wiring)
-   goes in `Board/`. Application logic goes in `App/`, depending only on
-   `//drivers/lhal`, so it runs in host tests and sims too —
-   `firmware_project` turns `App/` files into the app library, tests, and
-   sims by naming convention (see
-   [tools/firmware](tools/firmware/README.md)).
-3. Scaffold the `BUILD.bazel` from the `.ioc`:
+1. Create the CubeMX project (`<name>.ioc`) at the board root
+   (`boards/<Name>/`) with **"Generate peripheral initialization as a pair
+   of .c/.h files per peripheral"** enabled, targeting a Makefile
+   toolchain, and generate code. Generated code lands in `Core/`; keep the
+   chip's `.ld` and `startup_*.s` at the board root under their ST names.
+2. Run the scaffolder (the `--` separates Bazel's options from the
+   script's):
 
    ```bash
    bazel run //tools:new_board -- boards/<Name>/<Name>.ioc
    ```
 
-   (The `--` matters: it separates Bazel's own options from the script's
-   arguments. `--force` overwrites an existing `BUILD.bazel`;
-   `--vscode-only` regenerates just the debug setup for an existing
-   board.) Follow its printed next steps (app library,
-   `//boards:all_firmware`, README). The macro derives the device define
-   and finds the linker script and startup file by ST's naming
-   convention; just keep the chip's `.ld` and `startup_*.s` at the board
-   root under their ST names. The scaffolder also sets up
-   [VS Code debugging](#debugging-on-hardware-vs-code) for the board: it
-   pins the device's SVD in `tools/debug/svd_lock.bzl` (needs network
-   once) and adds the board's launch configs and build/flash tasks to
-   `.vscode/`.
-4. Add a `post_cubemx.sh` like the VCU's.
+That's a working board. The scaffolder reads the MCU and middleware from
+the `.ioc` and creates everything `firmware_project` can't derive:
+
+- **`BUILD.bazel`** — the minimal `firmware_project` call. The macro
+  derives the rest (device define, linker script, startup file, HAL
+  wiring) and synthesizes targets from file names: `App/**/*.cpp` form the
+  `<name>_app` library, each `App/*_test.cpp` becomes a host test, each
+  `App/*_sim.cpp` a host simulator (see
+  [tools/firmware](tools/firmware/README.md)).
+- **Starter `App/` and `Board/` files** that compile, pass their test, and
+  blink an LED as-is: `App/<name>_app.{hpp,cpp}` (application logic,
+  LHAL-only so it runs on the host), `App/<name>_app_test.cpp` (gtest
+  against the LHAL host fakes), `App/<name>_sim.cpp` (host simulation),
+  and `Board/main.cpp` (bring-up and LHAL adapter wiring — fix its
+  status-LED TODO for your pinout). Existing files are never overwritten,
+  so re-running is safe. Don't want the host test or sim? `--no-test` /
+  `--no-sim` skip those starters, and `enable_tests = False` /
+  `enable_sims = False` in the `firmware_project` call turn existing ones
+  off without deleting the files (see
+  [tools/firmware](tools/firmware/README.md)).
+- **VS Code debug setup** — the board's launch configs and build/flash
+  tasks in `.vscode/`, and the device's SVD pin in
+  `tools/debug/svd_lock.bzl` (this one step needs the network once).
+
+Prove it works before writing any code:
+
+```bash
+bazel test //boards/<Name>:<name>_app_test
+```
+
+```bash
+bazel run --config=local //boards/<Name>:<name>_sim
+```
+
+and with the board on an ST-Link, `bazel run //boards/<Name>:openocd`
+flashes the blinker. From there, follow the scaffolder's printed next
+steps: grow the app in `App/` (new `*_test.cpp` / `*_sim.cpp` files become
+targets automatically), wire real peripherals in `Board/main.cpp`, add
+`:release` to `//boards:all_firmware`, add a `post_cubemx.sh` like VCU's,
+and write the board README.
 
 ## Regenerating CubeMX code safely
 
