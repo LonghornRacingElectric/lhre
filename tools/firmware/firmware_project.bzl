@@ -349,7 +349,6 @@ def _firmware_binary_impl(
         ],
         copts = [
             "-fdiagnostics-color",
-            "-mthumb-interwork",
             "-ffunction-sections",
             "-fdata-sections",
         ],
