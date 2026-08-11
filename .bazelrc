@@ -36,6 +36,12 @@ build:windows --workspace_status_command=tools/workspace_status.bat
 # actions a sane PATH regardless of the client OS.
 build --incompatible_strict_action_env
 
+# Never strip at link time. Bazel's default (--strip=sometimes) adds -Wl,-S
+# in fastbuild, which silently discards the DWARF that //toolchains bakes in
+# with -g3 — the firmware .elf must keep it for VS Code debugging (see
+# tools/debug), and objcopy already strips it from the .bin/.hex images.
+build --strip=never
+
 # --- Remote EXECUTION: Linux and macOS clients only --------------------------
 # Ordering gotcha (verified on Bazel 9.2.0): the build:<os> config injected by
 # --enable_platform_specific_config is expanded BEFORE the plain `build` lines

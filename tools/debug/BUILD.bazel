@@ -1,0 +1,75 @@
+"""VS Code debug tooling staged at stable workspace-relative paths.
+
+Cortex-Debug (.vscode/launch.json) needs fixed paths to a gdb client and a
+gdb server, but the hermetic toolchains Bazel fetches live in the output
+base, whose location differs on every machine. These targets copy the
+host's arm-none-eabi-gdb and the full OpenOCD tree into
+bazel-bin/tools/debug/, which is the same workspace-relative path
+everywhere — so launch.json can be checked in and just work on any OS.
+
+See README.md in this package for the debugging workflow.
+"""
+
+load("@aspect_bazel_lib//lib:copy_to_directory.bzl", "copy_to_directory")
+
+package(default_visibility = ["//visibility:public"])
+
+# The host's arm-none-eabi-gdb (plus objdump, which Cortex-Debug expects
+# beside it for global/static symbol listing), staged at
+#   bazel-bin/tools/debug/gdb/bin/arm-none-eabi-gdb[.exe]
+# Selected via the per-host config_settings the @arm_none_eabi meta repo
+# already defines. The binaries only link system libraries, so they run
+# standalone outside their toolchain tree.
+copy_to_directory(
+    name = "gdb",
+    srcs = select({
+        "@arm_none_eabi//:darwin_arm64": [
+            "@arm_none_eabi_darwin_arm64//:gdb",
+            "@arm_none_eabi_darwin_arm64//:objdump",
+        ],
+        "@arm_none_eabi//:darwin_x86_64": [
+            "@arm_none_eabi_darwin_x86_64//:gdb",
+            "@arm_none_eabi_darwin_x86_64//:objdump",
+        ],
+        "@arm_none_eabi//:linux_aarch64": [
+            "@arm_none_eabi_linux_aarch64//:gdb",
+            "@arm_none_eabi_linux_aarch64//:objdump",
+        ],
+        "@arm_none_eabi//:linux_x86_64": [
+            "@arm_none_eabi_linux_x86_64//:gdb",
+            "@arm_none_eabi_linux_x86_64//:objdump",
+        ],
+        "@arm_none_eabi//:windows_x86_64": [
+            "@arm_none_eabi_windows_x86_64//:gdb",
+            "@arm_none_eabi_windows_x86_64//:objdump",
+        ],
+    }),
+    include_external_repositories = ["*arm_none_eabi*"],
+)
+
+# Self-contained OpenOCD (binary + bundled runtime libs + TCL scripts) at
+#   bazel-bin/tools/debug/openocd/bin/openocd[.exe]
+#   bazel-bin/tools/debug/openocd/openocd/scripts/   (-s search dir)
+copy_to_directory(
+    name = "openocd",
+    srcs = ["@openocd//:dist"],
+    include_external_repositories = ["*openocd*"],
+)
+
+# Every locked device's SVD (see svd.bzl / svd_lock.bzl) at
+#   bazel-bin/tools/debug/svd/<DEVICE>.svd
+copy_to_directory(
+    name = "svd",
+    srcs = ["@stm32_svd//:svds"],
+    include_external_repositories = ["*svd*"],
+)
+
+# Convenience: everything the launch configs need besides the firmware ELF.
+filegroup(
+    name = "debug_tools",
+    srcs = [
+        ":gdb",
+        ":openocd",
+        ":svd",
+    ],
+)

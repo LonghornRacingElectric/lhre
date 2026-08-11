@@ -17,10 +17,13 @@ board's CubeMX-generated FreeRTOSConfig.h applies.
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
 
+# Bundled into each family's :freertos_srcs (the host build compiles hooks.c
+# directly as a file). Not for boards: firmware gets the hooks via
+# firmware_project(enable_freertos = True).
 filegroup(
     name = "hooks",
     srcs = ["hooks.c"],
-    visibility = ["//visibility:public"],
+    visibility = ["//drivers/stm32:__subpackages__"],
 )
 
 # SysTick_Handler → xPortSysTickHandler() forwarding for CubeMX boards.
@@ -29,7 +32,7 @@ filegroup(
 filegroup(
     name = "cubemx_glue",
     srcs = ["cubemx_glue.c"],
-    visibility = ["//visibility:public"],
+    visibility = ["//tools/firmware:__pkg__"],
 )
 
 # Satisfies the `#include "cmsis_os.h"` in CubeMX-generated main.c without
@@ -39,7 +42,7 @@ cc_library(
     name = "cmsis_os_stub",
     hdrs = ["cubemx_stub/cmsis_os.h"],
     strip_include_prefix = "cubemx_stub",
-    visibility = ["//visibility:public"],
+    visibility = ["//tools/firmware:__pkg__"],
 )
 
 cc_library(

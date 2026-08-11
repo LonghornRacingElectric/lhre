@@ -1,1 +1,9 @@
-# Tools package
+load("@rules_python//python:defs.bzl", "py_binary")
+
+# Scaffold a new board's BUILD.bazel from its CubeMX .ioc:
+#   bazel run //tools:new_board -- boards/<Name>/<Name>.ioc
+py_binary(
+    name = "new_board",
+    srcs = ["new_board.py"],
+    visibility = ["//visibility:private"],
+)

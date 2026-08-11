@@ -1,8 +1,8 @@
 """STM32G4 driver interface package.
 
 Provides a unified interface to STM32G4 drivers fetched from GitHub.
-All targets here re-export from external repositories so that projects
-can depend on //drivers/stm32/stm32g4:<target> without knowing the
+All targets here re-export from external repositories so that the
+firmware_project macro can wire them in without boards knowing the
 external repo layout.
 
 Available targets:
@@ -11,15 +11,28 @@ Available targets:
     //drivers/stm32/stm32g4:freertos_srcs    — FreeRTOS kernel + CM4F port + heap sources
     //drivers/stm32/stm32g4:freertos_headers — FreeRTOS kernel + CM4F port headers
     //drivers/stm32/stm32g4:openocd_cfg      — OpenOCD config for flashing
+
+The ST HAL targets are deliberately NOT public: application code depends on
+//drivers/lhal interfaces only (that's what keeps it host-testable), so the
+HAL is visible solely to the LHAL backend and to the firmware_project macro,
+which wires it into firmware binaries. A direct HAL dep from app or board
+code is a visibility error by design, not an oversight.
 """
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
 
+# Who may see ST HAL code. firmware_project's symbolic macro checks its
+# wiring against //tools/firmware, so boards never need visibility here.
+HAL_CONSUMERS = [
+    "//drivers/lhal:__subpackages__",
+    "//tools/firmware:__pkg__",
+]
+
 # Unified headers target: combines HAL, CMSIS device, and CMSIS core headers
-# so projects only need to depend on a single target for all STM32G4 includes.
+# so consumers only need to depend on a single target for all STM32G4 includes.
 cc_library(
     name = "headers",
-    visibility = ["//visibility:public"],
+    visibility = HAL_CONSUMERS,
     deps = [
         "@cmsis_core_stm32g4//:cmsis_core_headers",
         "@cmsis_device_stm32g4//:cmsis_device_headers",
@@ -31,7 +44,7 @@ cc_library(
 filegroup(
     name = "srcs",
     srcs = ["@stm32g4xx_hal_driver//:hal_srcs"],
-    visibility = ["//visibility:public"],
+    visibility = HAL_CONSUMERS,
 )
 
 # OpenOCD configuration
@@ -44,6 +57,8 @@ filegroup(
 # FreeRTOS kernel + Cortex-M4F port + heap_4 + static-allocation hooks, for
 # compilation inside the firmware binary (raw FreeRTOS API — no CMSIS-RTOS2).
 # The kernel repo is shared with the host build; see drivers/freertos.
+# Wired in by firmware_project(enable_freertos = True) only — no board lists
+# kernel sources itself.
 filegroup(
     name = "freertos_srcs",
     srcs = [
@@ -52,10 +67,13 @@ filegroup(
         "@freertos_kernel//:freertos_kernel_srcs",
         "@freertos_kernel//:freertos_port_srcs",
     ],
-    visibility = ["//visibility:public"],
+    visibility = ["//tools/firmware:__pkg__"],
 )
 
-# FreeRTOS kernel + Cortex-M4F port headers
+# FreeRTOS kernel + Cortex-M4F port headers. Public, unlike the HAL: the raw
+# FreeRTOS API is sanctioned for app code, which needs these headers when
+# cross-compiling (paired with the board's FreeRTOSConfig.h — see the
+# vcu_app select in boards/VCU/BUILD.bazel).
 cc_library(
     name = "freertos_headers",
     visibility = ["//visibility:public"],

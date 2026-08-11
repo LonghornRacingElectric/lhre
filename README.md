@@ -22,7 +22,7 @@ seasons live in tags and maintenance branches (see
 
 The reasoning behind the build system — why Bazel, and the whys behind its
 forks, pins, and patches — is recorded in
-[build-system.md](build-system.md).
+[docs/build-system.md](docs/build-system.md).
 
 ## Prerequisites
 

@@ -105,6 +105,11 @@ use_repo(dfu, "dfu")
 openocd = use_extension("//tools/openocd:openocd.bzl", "openocd")
 use_repo(openocd, "openocd")
 
+# SVD peripheral definitions for VS Code debugging, pinned per device in
+# tools/debug/svd_lock.bzl (managed by tools/new_board.py).
+svd = use_extension("//tools/debug:svd.bzl", "svd")
+use_repo(svd, "stm32_svd")
+
 # Bazel Compile Commands Extractor (helly25 fork)
 bazel_dep(name = "hedron_compile_commands", dev_dependency = True)
 git_override(

@@ -1,0 +1,10 @@
+# Every ECU's flashable images behind one label, so CI and humans don't need
+# to know the board list: `bazel build //boards:all_firmware`. Add each new
+# board's :release here (tools/new_board.py reminds you).
+filegroup(
+    name = "all_firmware",
+    srcs = [
+        "//boards/VCU:release",
+    ],
+    visibility = ["//visibility:public"],
+)

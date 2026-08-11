@@ -38,28 +38,15 @@ kernel builds for the host too — see
 
 ## Using it in a board
 
-Application logic lives in its own library against LHAL only (see
-`//boards/VCU` for the reference layout):
-
-```python
-cc_library(               # MCU flags come from the per-family
-    name = "vcu_app",     # platform/toolchain (//platforms, //toolchains),
-    deps = ["//drivers/lhal"],  # so a plain cc_library links into firmware
-    ...                         # and host tests alike
-)
-
-firmware_project(
-    name = "vcu",
-    extra_deps = [":vcu_app", "//drivers/lhal:stm32_headers"],
-    extra_srcs = ["//drivers/lhal:stm32_srcs"],
-    ...
-)
-
-cc_test(                  # the same app logic, tested on the host
-    name = "vcu_app_test",
-    deps = [":vcu_app", "//drivers/lhal:host", "@googletest//:gtest_main"],
-)
-```
+Application logic lives in `App/` against LHAL only, and the board's
+`firmware_project` call synthesizes the targets from the file names (see
+[tools/firmware](../../tools/firmware/README.md) and `//boards/VCU` for the
+reference layout): `App/vcu_app.cpp` becomes the `:vcu_app` library — a
+plain `cc_library` on `//drivers/lhal`, so it links into firmware and host
+tests alike (MCU flags come from the per-family platform/toolchain) — and
+each `App/*_test.cpp` becomes a host `cc_test` against `:vcu_app` +
+`//drivers/lhal:host`. The STM32 LHAL backend is wired into the firmware
+binary by the macro itself.
 
 The board's `main.cpp` is hand-written (no CubeMX `main.c`): bring-up stays
 at the ST HAL level (clocks, pin mux, peripheral handles + MSP), then wraps
@@ -84,8 +71,10 @@ On the host, the same app runs against `lhal::host::*` fakes: an in-memory
   clocks, and DMA channel wiring stay board code.
 - Built as sources inside the firmware binary (`stm32_srcs`), exactly like
   the ST HAL sources — so the board's `*_hal_conf.h` and device define
-  apply. Each adapter is guarded by its `HAL_*_MODULE_ENABLED`, so boards
-  that don't enable a module pay nothing.
+  apply. `firmware_project` wires the backend into every firmware binary;
+  boards don't reference `stm32_srcs`/`stm32_headers` themselves. Each
+  adapter is guarded by its `HAL_*_MODULE_ENABLED`, so boards that don't
+  enable a module pay nothing.
 - The family header is auto-detected (`__has_include`), so the same backend
   serves stm32g4/h7/f4/f0 boards.
 - UART async uses DMA when the handle has a DMA channel linked

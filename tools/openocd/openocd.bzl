@@ -30,14 +30,37 @@ def _openocd_repo_impl(ctx):
     build_file_content = """
 package(default_visibility = ["//visibility:public"])
 
+# data = :dist puts the binary's runtime companions into the runfiles of
+# anything that executes it (same fix as @dfu's libusb DLL): the DLLs
+# beside bin/openocd.exe on Windows, the libexec/ dylibs on mac/linux, and
+# the TCL script library. Required wherever runfiles are real copies
+# instead of symlinks (Windows without Developer Mode) — the binary can't
+# resolve any of them through its own path then.
 filegroup(
     name = "openocd",
     srcs = ["{bin_path}"],
+    data = [":dist"],
 )
 
 filegroup(
     name = "scripts",
     srcs = glob(["openocd/scripts/**/*"]),
+)
+
+# Everything a relocated OpenOCD needs at runtime: the binary (plus bundled
+# DLLs on Windows), the dylibs in libexec/ that the mac/linux binary loads
+# via @loader_path/$ORIGIN rpaths, and the TCL script library. Consumed by
+# //tools/debug to stage a self-contained tree under bazel-bin.
+filegroup(
+    name = "dist",
+    srcs = glob(
+        [
+            "bin/**",
+            "libexec/**",
+            "openocd/scripts/**",
+        ],
+        allow_empty = True,
+    ),
 )
 """.format(bin_path = bin_path)
 

@@ -16,14 +16,17 @@ instead). See drivers/lhal/include/lhal/stm32/usb_cdc.hpp.
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
 
+# Visible to the firmware_project macro only — boards get the middleware via
+# enable_usb = True, and app code talks to lhal::stm32::UsbCdc, never to the
+# middleware directly.
 cc_library(
     name = "headers",
-    visibility = ["//visibility:public"],
+    visibility = ["//tools/firmware:__pkg__"],
     deps = ["@stm32_usb_device_library//:usb_device_headers"],
 )
 
 filegroup(
     name = "srcs",
     srcs = ["@stm32_usb_device_library//:usb_device_srcs"],
-    visibility = ["//visibility:public"],
+    visibility = ["//tools/firmware:__pkg__"],
 )

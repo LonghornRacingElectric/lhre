@@ -14,6 +14,10 @@ plugins:
       # Collect pages out of the way of the working tree (hidden paths are
       # never scanned, so the build can't pick up its own output).
       build_dir: .mkdocs-build
+      # Keep docs/ pages at docs/ on the site instead of hoisting them to
+      # the root, so relative links in and to docs/*.md resolve the same on
+      # GitHub and on the published site.
+      merge_docs_dir: false
       # Overriding `ignore` replaces the plugin defaults, so the defaults
       # (first five entries) are repeated here before our additions.
       ignore:
