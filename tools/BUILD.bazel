@@ -4,6 +4,9 @@ load("@rules_python//python:defs.bzl", "py_binary")
 #   bazel run //tools:new_board -- boards/<Name>/<Name>.ioc
 py_binary(
     name = "new_board",
-    srcs = ["new_board.py"],
+    srcs = [
+        "new_board.py",
+        "new_board_templates.py",
+    ],
     visibility = ["//visibility:private"],
 )

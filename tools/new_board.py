@@ -9,6 +9,13 @@ Everything a BUILD file needs to state is derivable from the .ioc: the MCU
 is derived from it by firmware_project) and which middleware CubeMX has
 enabled. This script reads exactly that and emits the minimal call.
 
+firmware_project synthesizes the rest of the board's targets from file
+names (App/**/*.cpp → the app library, App/*_test.cpp → host tests,
+App/*_sim.cpp → host sims, Board/ → firmware entry point), so the script
+also writes compiling starter files for each of those (see
+new_board_templates.py) — a new board blinks, host-tests, and simulates
+out of the box. Existing files are never overwritten.
+
 The same fact also derives the board's on-target debug setup (see
 tools/debug/README.md): the script stages the device's SVD file next to the
 board and adds the board's Cortex-Debug launch configs and build/flash
@@ -25,6 +32,11 @@ import re
 import sys
 import urllib.error
 import urllib.request
+
+# Under `bazel run` the runfiles root (not this file's directory) is on
+# sys.path, so the sibling templates module needs the explicit path.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import new_board_templates  # noqa: E402
 
 
 def ioc_values(path):
@@ -268,6 +280,31 @@ def setup_vscode(repo_root, board, name, mcu):
     print(f"vscode: updated .vscode/tasks.json (build-{name}-debug, flash-{name})")
 
 
+def scaffold_sources(board_dir, board, name, freertos, with_test, with_sim):
+    """Writes the starter App/ and Board/ files; never overwrites."""
+    skipped = set()
+    if not with_test:
+        skipped.add(f"App/{name}_app_test.cpp")
+    if not with_sim:
+        skipped.add(f"App/{name}_sim.cpp")
+
+    created = []
+    for rel, content in new_board_templates.render(name, board, freertos).items():
+        dest = os.path.join(board_dir, rel)
+        if rel in skipped or os.path.exists(dest):
+            continue
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        with open(dest, "w", encoding="utf-8", newline="\n") as f:
+            f.write(content)
+        created.append(rel)
+    if created:
+        print("starter files written (they compile, host-test, and blink as-is):")
+        for rel in created:
+            print(f"  - boards/{board}/{rel}")
+    else:
+        print("starter files: all already present, none written")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("ioc", help="path to the board's .ioc file (in boards/<Name>/)")
@@ -276,6 +313,18 @@ def main():
         "--vscode-only",
         action="store_true",
         help="skip BUILD.bazel; only (re)generate the VS Code debug setup",
+    )
+    parser.add_argument(
+        "--no-test",
+        action="store_true",
+        help="don't write the App/<name>_app_test.cpp starter (a test file "
+        "added later still becomes a target automatically)",
+    )
+    parser.add_argument(
+        "--no-sim",
+        action="store_true",
+        help="don't write the App/<name>_sim.cpp starter (a sim file added "
+        "later still becomes a target automatically)",
     )
     args = parser.parse_args()
 
@@ -324,14 +373,37 @@ def main():
             )
 
         print(f"wrote {os.path.relpath(build_path, workdir)}  (mcu={mcu}, freertos={freertos}, usb={usb})")
+        scaffold_sources(
+            board_dir, board, name, freertos,
+            with_test = not args.no_test, with_sim = not args.no_sim,
+        )
 
     setup_vscode(repo_root, board, name, mcu)
 
     if not args.vscode_only:
+        print()
+        if not (args.no_test and args.no_sim):
+            print("try it now (host, no hardware needed):")
+            if not args.no_test:
+                print(f"  bazel test //boards/{board}:{name}_app_test")
+            if not args.no_sim:
+                print(f"  bazel run --config=local //boards/{board}:{name}_sim")
+        if os.path.isdir(os.path.join(board_dir, "Core")):
+            print("and the firmware image / on-target debug (ST-Link attached):")
+            print(f"  bazel build //boards/{board}:{name}")
+            print(f'  VS Code → Run and Debug → "Debug {board} (ST-Link)"')
+        else:
+            print(f"note: boards/{board}/Core/ not found — generate code from the .ioc in")
+            print("  CubeMX first (see CONTRIBUTING.md#adding-a-new-board); the firmware")
+            print("  image needs it, the host tests and sims above do not")
+        print()
         print("next steps:")
-        print(f"  - write App/{name}_app.cpp/.hpp, App/{name}_app_test.cpp, and Board/main.cpp")
-        print(f"    (boards/VCU is the reference; App/ file names become targets)")
+        print(f"  - flesh out the starter files: App/{name}_app.* is the application")
+        print(f"    (LHAL-only; new App/*.cpp files join the library, new App/*_test.cpp /")
+        print(f"    App/*_sim.cpp files become their own test/sim targets automatically),")
+        print(f"    Board/main.cpp is bring-up + wiring (fix the status-LED TODO)")
         print(f"  - add //boards/{board}:release to //boards:all_firmware")
+        print(f"  - add a post_cubemx.sh like VCU's")
         print(f"  - write boards/{board}/README.md (see AGENTS.md — docs are part of the change)")
 
 
