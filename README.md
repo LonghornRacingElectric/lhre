@@ -20,8 +20,10 @@ There are no per-year directories: `main` is always the current car, and past
 seasons live in tags and maintenance branches (see
 [CONTRIBUTING.md](CONTRIBUTING.md#season-policy)).
 
-The reasoning behind the build system — why Bazel, and the whys behind its
-forks, pins, and patches — is recorded in
+The decisions that shape the repo — monorepo, Bazel, LHAL, docs conventions
+— are recorded as ADRs in [docs/architecture](docs/architecture/README.md).
+The build system gets its own long-form record — why Bazel, and the whys
+behind its forks, pins, and patches — in
 [docs/build-system.md](docs/build-system.md).
 
 ## Prerequisites
@@ -37,31 +39,26 @@ STM32CubeMX is only needed when changing a board's peripheral configuration.
 On Windows, builds run locally instead of on remote executors; for full remote
 execution use WSL2 (see the comments in [.bazelrc](https://github.com/LonghornRacingElectric/lhre/blob/main/.bazelrc)).
 
-## First steps
+## The commands
 
-Build the VCU firmware:
+Everything goes through Bazel, and the surface is small enough to memorize.
+Shown for the VCU; swap `VCU`/`vcu` for any board — the targets are uniform
+because [`firmware_project`](tools/firmware/README.md) generates them.
 
-```bash
-bazel build //boards/VCU:vcu
-```
+| To…                        | Run |
+| -------------------------- | --- |
+| Build one board's firmware | `bazel build //boards/VCU:vcu` |
+| Build + test everything    | `bazel test //...` |
+| Run a board's simulator    | `bazel run --config=local //boards/VCU:vcu_sim` |
+| Flash over ST-Link         | `bazel run //boards/VCU:openocd` |
+| Flash over USB (DFU)       | `bazel run //boards/VCU:dfu` |
+| Format all C/C++           | `bazel run //tools/format` |
+| Fix IDE red squiggles      | `bazel run //:refresh_ide` |
 
-Run all tests (on the BuildBuddy Linux executors by default):
-
-```bash
-bazel test //...
-```
-
-Run the VCU simulator on your machine:
-
-```bash
-bazel run --config=local //boards/VCU:vcu_sim
-```
-
-Flash a board over ST-Link:
-
-```bash
-bazel run //boards/VCU:openocd
-```
+`bazel test //...` runs on the BuildBuddy Linux executors by default (see
+below); add `--config=local` to any command to stay entirely on your
+machine. Green `bazel test //...` on a fresh clone means you're set up —
+there is nothing else to install.
 
 Debug on hardware: open the repo in VS Code, install the recommended
 Cortex-Debug extension, plug in the ST-Link, and hit F5 — breakpoints,

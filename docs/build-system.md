@@ -6,7 +6,8 @@ and [`.bazelrc`](https://github.com/LonghornRacingElectric/lhre/blob/main/.bazel
 this page records the *whys* that would otherwise live only in commit messages
 and the heads of whoever set it up. If you change the build system, add the
 why here (or in a comment next to the change) — the person who understands it
-graduates every year.
+graduates every year. The decision to use Bazel at all is summarized as
+[ADR-002](architecture/002-bazel.md); this page is its long-form record.
 
 ## Why Bazel (and not CMake)
 

@@ -22,6 +22,11 @@ afterthought:
   the style reference.
 - **If you find undocumented or wrongly documented code, fix the docs** as
   part of whatever you're doing there.
+- **If a change makes a repo-wide structural decision** (layout, build
+  system, new abstraction layer or convention), record it as an ADR in
+  [docs/architecture/](docs/architecture/README.md) — format and
+  when-to-write-one rules are in that README. ADRs are immutable: a changed
+  decision gets a new ADR superseding the old one, not an edit.
 - Verify docs before finishing: `uv run --group docs mkdocs build --strict`
   must pass. Broken links between `.md` files fail the build.
 - Linking rules: between markdown files use relative links
