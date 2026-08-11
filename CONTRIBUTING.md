@@ -95,6 +95,11 @@ PRs that touch docs run `mkdocs build --strict`, so broken links between
 pages fail presubmit. Links to *code* files (BUILD files, configs) don't
 exist on the site — use a full GitHub URL for those.
 
+Decisions that bind the whole repo — layout, build system, a new
+abstraction or convention — get an Architecture Decision Record in
+[docs/architecture](docs/architecture/README.md); that page has the format
+and the when-to-write-one rules.
+
 ## Adding a new board
 
 Two steps, then iterate ([boards/VCU](boards/VCU/README.md) is the worked
