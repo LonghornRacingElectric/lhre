@@ -15,6 +15,12 @@ git_override(
     module_name = "toolchains_arm_gnu",
     commit = "58d49307b702cc66f924b9a6e188d1f61a227479",
     remote = "https://github.com/LonghornRacingElectric/toolchains_arm_gnu.git",
+    # Everything the extension fetches is sha256-pinned, so mark it
+    # reproducible to keep it out of MODULE.bazel.lock — recorded entries
+    # churned across OSes. Upstreamable to the fork; drop the patch once
+    # the fork carries it.
+    patches = ["//patches:toolchains_arm_gnu_reproducible.patch"],
+    patch_strip = 1,
 )
 
 arm_toolchain = use_extension("@toolchains_arm_gnu//:extensions.bzl", "arm_toolchain")
