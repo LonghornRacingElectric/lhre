@@ -2,7 +2,7 @@
 
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 
-def _stm32g4_deps_impl(_ctx):
+def _stm32g4_deps_impl(ctx):
     git_repository(
         name = "stm32g4xx_hal_driver",
         remote = "https://github.com/STMicroelectronics/stm32g4xx-hal-driver.git",
@@ -23,6 +23,9 @@ def _stm32g4_deps_impl(_ctx):
         commit = "2b7495b8535bdcb306dac29b9ded4cfb679d7e5c",
         build_file = "//drivers/stm32/stm32g4:cmsis_core.BUILD",
     )
+
+    # Commit-pinned, so keep it out of MODULE.bazel.lock (lock churn).
+    return ctx.extension_metadata(reproducible = True)
 
 stm32g4_deps = module_extension(
     implementation = _stm32g4_deps_impl,

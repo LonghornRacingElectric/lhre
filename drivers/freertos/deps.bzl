@@ -8,7 +8,7 @@ one kernel version everywhere.
 
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 
-def _freertos_deps_impl(_ctx):
+def _freertos_deps_impl(ctx):
     git_repository(
         name = "freertos_kernel",
         remote = "https://github.com/FreeRTOS/FreeRTOS-Kernel.git",
@@ -22,6 +22,9 @@ def _freertos_deps_impl(_ctx):
         patches = ["//patches:freertos_posix_event_wait_cancel.patch"],
         patch_args = ["-p1"],
     )
+
+    # Commit-pinned, so keep it out of MODULE.bazel.lock (lock churn).
+    return ctx.extension_metadata(reproducible = True)
 
 freertos_deps = module_extension(
     implementation = _freertos_deps_impl,

@@ -40,6 +40,11 @@ filegroup(
         urls = [url, url2],
     )
 
+    # Everything is sha256-pinned, so the lockfile gains nothing by
+    # recording this extension — and because the result depends on ctx.os,
+    # recording it would make every OS rewrite MODULE.bazel.lock.
+    return ctx.extension_metadata(reproducible = True)
+
 dfu = module_extension(
     implementation = _dfu_util_repo_impl,
 )
