@@ -19,6 +19,14 @@ pins the device's SVD in `tools/debug/svd_lock.bzl` for Bazel to fetch and
 adds the board's Cortex-Debug launch configs and build/flash tasks to
 `.vscode/`. `--vscode-only` redoes just that part for an existing board.
 
+When adding a hermetic tool repo (the openocd/, dfu/, debug/ pattern —
+a module extension that fetches a pinned binary or file set): pin every
+download (sha256 or git commit) and end the extension implementation with
+`return ctx.extension_metadata(reproducible = True)`. Otherwise Bazel
+records the extension in `MODULE.bazel.lock`, and OS-dependent results make
+every platform rewrite the lock on every build — see "Module extensions
+stay out of the lockfile" in [docs/build-system.md](../docs/build-system.md).
+
 `workspace_status.sh` / `workspace_status.bat` are the Bazel workspace-status
 scripts (wired up in `.bazelrc`). They emit the `STABLE_GIT_*` keys that
 [firmware/](firmware/README.md) stamps into every firmware binary — when
