@@ -1,10 +1,10 @@
+// Board build/flash tasks are managed by tools/new_board.py, which
+// regenerates them by label — see tools/debug/README.md. Hand-written
+// entries with other labels are left alone (comments are not).
 {
   "version": "2.0.0",
   "tasks": [
     {
-      // Everything a debug session needs: the firmware ELF (default build
-      // is already -Og -g3) plus the hermetic gdb + OpenOCD staged under
-      // bazel-bin/tools/debug (see tools/debug/README.md).
       "label": "build-vcu-debug",
       "detail": "Build VCU firmware and stage the hermetic debug tools",
       "type": "shell",
@@ -14,18 +14,20 @@
         "//boards/VCU:vcu.elf",
         "//tools/debug:debug_tools"
       ],
-      "group": {
-        "kind": "build",
-        "isDefault": true
-      },
-      "problemMatcher": ["$gcc"]
+      "group": "build",
+      "problemMatcher": [
+        "$gcc"
+      ]
     },
     {
       "label": "flash-vcu",
       "detail": "Flash the VCU over ST-Link without starting a debug session",
       "type": "shell",
       "command": "bazel",
-      "args": ["run", "//boards/VCU:openocd"],
+      "args": [
+        "run",
+        "//boards/VCU:openocd"
+      ],
       "problemMatcher": []
     }
   ]

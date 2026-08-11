@@ -380,6 +380,19 @@
         }
       }
     },
+    "//tools/debug:svd.bzl%svd": {
+      "general": {
+        "bzlTransitiveDigest": "7M5SnineNwpw9dus7//6NpPMkqbj89xwoWzG9gKWYAs=",
+        "usagesDigest": "rMCSO8LmSRf13+x/TVyRRlL71HARKXeP9cgik9OI948=",
+        "recordedInputs": [],
+        "generatedRepoSpecs": {
+          "stm32_svd": {
+            "repoRuleId": "@@//tools/debug:svd.bzl%_stm32_svd_repo",
+            "attributes": {}
+          }
+        }
+      }
+    },
     "//tools/dfu:dfu.bzl%dfu": {
       "general": {
         "bzlTransitiveDigest": "Qq5ejYxlzHPiR0gRg0Jb1PTzc/GK1yKEgDP8IkJMRLs=",

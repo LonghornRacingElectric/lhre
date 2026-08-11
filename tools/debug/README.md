@@ -40,6 +40,7 @@ stable workspace-relative paths —
 bazel-bin/tools/debug/gdb/bin/arm-none-eabi-gdb[.exe]
 bazel-bin/tools/debug/openocd/bin/openocd[.exe]
 bazel-bin/tools/debug/openocd/openocd/scripts/     (TCL script library)
+bazel-bin/tools/debug/svd/<DEVICE>.svd             (peripheral viewer)
 ```
 
 — and the checked-in `launch.json` points there (with a `windows:`
@@ -56,15 +57,28 @@ The pieces the launch config wires together:
   are unaffected.
 - **OpenOCD config**: the same `drivers/stm32/stm32g4/stm32g4_openocd.cfg`
   the flash target uses (ST-Link interface + STM32G4 target).
-- **SVD**: `boards/VCU/STM32G474.svd` (Apache-2.0, from ST's CMSIS-SVD
-  pack) drives the peripheral-register viewer.
+- **SVD**: drives the peripheral-register viewer. SVDs are not checked in;
+  `svd_lock.bzl` pins each device's file in ST's Apache-2.0 CMSIS-SVD pack
+  (the [modm-io mirror]) by commit and sha256, and Bazel downloads and
+  stages them like any other fetched dependency (`svd.bzl`).
+
+[modm-io mirror]: https://github.com/modm-io/cmsis-svd-stm32
 
 ## Adding a board
 
-Per board: stage its `STM32xxxx.svd` next to its `BUILD.bazel`, then copy
-the two configurations in `.vscode/launch.json`, changing `executable`,
-`svdFile`, `device`, and the family's OpenOCD `configFiles` entry. Per
-family, `drivers/stm32/<family>/` needs an OpenOCD cfg (see the G4 one).
+`bazel run //tools:new_board -- boards/<Name>/<Name>.ioc` does it all: it
+derives the device from the `.ioc`, pins the device's SVD in
+`svd_lock.bzl` (probing upstream for ST's occasional wildcard-digit names,
+e.g. STM32F051 → `STM32F0x1.svd` — this one step needs the network), and
+adds the board's Debug/Attach launch configs and build/flash tasks to
+`.vscode/`. For a board that already has a `BUILD.bazel`, pass
+`--vscode-only` to (re)generate just the debug setup.
+
+The `.vscode` entries are managed by name/label — re-running the script
+replaces the managed entries and leaves hand-written ones alone (file
+comments other than the generated header are not preserved). Per family,
+`drivers/stm32/<family>/` needs a `<family>_openocd.cfg` (see the G4 one);
+the script warns if it is missing.
 
 ## Troubleshooting
 

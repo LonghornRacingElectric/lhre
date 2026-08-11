@@ -56,11 +56,20 @@ copy_to_directory(
     include_external_repositories = ["*openocd*"],
 )
 
+# Every locked device's SVD (see svd.bzl / svd_lock.bzl) at
+#   bazel-bin/tools/debug/svd/<DEVICE>.svd
+copy_to_directory(
+    name = "svd",
+    srcs = ["@stm32_svd//:svds"],
+    include_external_repositories = ["*svd*"],
+)
+
 # Convenience: everything the launch configs need besides the firmware ELF.
 filegroup(
     name = "debug_tools",
     srcs = [
         ":gdb",
         ":openocd",
+        ":svd",
     ],
 )
