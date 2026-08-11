@@ -60,6 +60,10 @@ below); add `--config=local` to any command to stay entirely on your
 machine. Green `bazel test //...` on a fresh clone means you're set up —
 there is nothing else to install.
 
+When the convention doesn't cover you — a file the build won't pick up, a
+new dependency, vendoring a library, a test target that isn't found — see
+the [cookbook](docs/cookbook.md).
+
 Debug on hardware: open the repo in VS Code, install the recommended
 Cortex-Debug extension, plug in the ST-Link, and hit F5 — breakpoints,
 FreeRTOS thread views, and peripheral registers, with nothing else to

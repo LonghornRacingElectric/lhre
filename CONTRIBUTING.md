@@ -1,5 +1,8 @@
 # Contributing
 
+Stuck on something the happy path doesn't cover (dependencies, vendoring,
+missing targets)? Check the [cookbook](docs/cookbook.md) first.
+
 ## Workflow
 
 - Branch from `main`: `<your-name>/<short-description>` (e.g.
