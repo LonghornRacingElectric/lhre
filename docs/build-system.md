@@ -22,11 +22,11 @@ being a student team:
   tools-installation README that drifts, breaks per-OS, and produces
   "works on my machine" bugs from mismatched compiler versions.
 - **One graph builds host and MCU code together.** The LHAL design (see
-  [drivers/lhal](drivers/lhal/README.md)) means the same libraries compile
+  [drivers/lhal](../drivers/lhal/README.md)) means the same libraries compile
   for the host (unit tests, simulators) and for four STM32 families. Bazel's
   platforms and transitions make this first-class: `bazel test //...` builds
   every firmware image *and* runs every host test in one invocation, and
-  [`firmware_project`](tools/firmware/README.md) transitions each board to
+  [`firmware_project`](../tools/firmware/README.md) transitions each board to
   its family's platform automatically. CMake can only approximate this with
   separate build directories or ExternalProject superbuilds — cross-compiling
   and host-testing in one build is its weakest spot, and it's our core
@@ -40,7 +40,7 @@ being a student team:
   command surface. No Make-wrapping-CMake-wrapping-scripts layering.
 
 The cost, honestly: every vendor dependency needs a Bazel wrapper (see the
-`*.BUILD` / `deps.bzl` files under [drivers/](drivers/README.md)), IDE
+`*.BUILD` / `deps.bzl` files under [drivers/](../drivers/README.md)), IDE
 integration needs a compile-commands extractor instead of coming for free,
 and Bazel expertise is rarer than CMake exposure among incoming members.
 That trade is deliberate — the wrapping is one-time work by a few
@@ -52,13 +52,16 @@ understandable.
 
 | Decision | Why it's that way |
 | -------- | ----------------- |
-| MCU codegen flags (`-mcpu`/`-mfpu`/`-mfloat-abi`) baked into per-core toolchains, not targets | [toolchains/README](toolchains/README.md) — every `cc_library` in a firmware graph gets the right float ABI with zero per-target plumbing |
-| One target platform per STM32 family, custom `mcu_core` constraint | [platforms/README](platforms/README.md) — `@platforms//cpu` is too coarse (m4f and m7f are both armv7e-m) |
-| `//toolchains` targets tagged `manual`, macro mirrored locally | [toolchains/README](toolchains/README.md) — untagged, `bazel build //...` downloads every host's ~150 MB GCC archive |
+| MCU codegen flags (`-mcpu`/`-mfpu`/`-mfloat-abi`) baked into per-core toolchains, not targets | [toolchains/README](../toolchains/README.md) — every `cc_library` in a firmware graph gets the right float ABI with zero per-target plumbing |
+| One target platform per STM32 family, custom `mcu_core` constraint | [platforms/README](../platforms/README.md) — `@platforms//cpu` is too coarse (m4f and m7f are both armv7e-m) |
+| `//toolchains` targets tagged `manual`, macro mirrored locally | [toolchains/README](../toolchains/README.md) — untagged, `bazel build //...` downloads every host's ~150 MB GCC archive |
 | Remote execution on Linux/macOS clients but not Windows; rc-file flag ordering | comments in [`.bazelrc`](https://github.com/LonghornRacingElectric/lhre/blob/main/.bazelrc) — Bazel can't reliably drive Linux executors from a Windows client, and `--enable_platform_specific_config` expands *before* plain `build` lines |
 | Hermetic LLVM for host C++, registered before the BuildBuddy toolchain | comments in [`MODULE.bazel`](https://github.com/LonghornRacingElectric/lhre/blob/main/MODULE.bazel) — no dependency on Xcode/system GCC/MSVC, same clang everywhere |
-| Single FreeRTOS kernel version for firmware and host sims | [drivers/freertos/README](drivers/freertos/README.md) |
-| `compile_commands.json` per-machine, regenerated not committed | [CONTRIBUTING](CONTRIBUTING.md) — it embeds machine-specific toolchain paths |
+| Single FreeRTOS kernel version for firmware and host sims | [drivers/freertos/README](../drivers/freertos/README.md) |
+| Optimization level (`-Og`/`-Os`) keyed on `--compilation_mode` in the toolchain, not in target copts | [toolchains/README](../toolchains/README.md) — a hardcoded target-level `-O` silently overrides `-c opt` |
+| `firmware_project` split into a legacy wrapper + symbolic macro; ST HAL packages non-public | [tools/firmware/README](../tools/firmware/README.md) — makes "app code never touches ST HAL" a build error instead of a review comment |
+| Boards derive family/define/linker/startup from one `mcu` fact; BUILD files scaffolded by `tools/new_board.py` | [tools/firmware/README](../tools/firmware/README.md) — four part-coupled facts that compile fine when mismatched |
+| `compile_commands.json` per-machine, regenerated not committed | [CONTRIBUTING](../CONTRIBUTING.md) — it embeds machine-specific toolchain paths |
 
 ## Whys recorded only here
 
@@ -91,6 +94,10 @@ Drop the patch if it gets upstreamed.
 
 ### Version pins
 
+- **`MODULE.bazel.lock` is committed** — it pins registry resolution, so a
+  green CI run means everyone resolves the same dependency versions. Bazel
+  updates it automatically when `MODULE.bazel` changes; commit the two
+  together.
 - **googletest `1.17.0.bcr.2`** — Bazel 9 requires the BCR *patch* releases;
   plain `1.17.0` lacks the `load()` statements Bazel 9 needs. When bumping,
   always take the newest `.bcr.N` for a version.

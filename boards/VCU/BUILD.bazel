@@ -1,98 +1,14 @@
-load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
-load("@rules_cc//cc:cc_library.bzl", "cc_library")
-load("@rules_cc//cc:cc_test.bzl", "cc_test")
 load("//tools/firmware:firmware_project.bzl", "firmware_project")
 
-# The board's CubeMX-generated FreeRTOS config, exposed on its own so app
-# code can compile against FreeRTOS headers when cross-compiling (the kernel
-# requires FreeRTOSConfig.h on the include path everywhere FreeRTOS.h is
-# included, not just where the kernel sources are compiled).
-cc_library(
-    name = "vcu_freertos_config",
-    hdrs = ["Core/Inc/FreeRTOSConfig.h"],
-    strip_include_prefix = "Core/Inc",
-)
-
-# Application logic: LHAL interfaces + raw FreeRTOS API, no ST HAL. Compiles
-# for both the MCU (linked into :vcu below) and the host (:vcu_app_test,
-# :vcu_rtos_test, :vcu_sim). FreeRTOS comes from the same kernel checkout on
-# both sides — Cortex-M port + board config when cross-compiling, simulator
-# port + host config otherwise — so task code runs unmodified on the host.
-cc_library(
-    name = "vcu_app",
-    srcs = ["App/vcu_app.cpp"],
-    hdrs = ["App/vcu_app.hpp"],
-    includes = ["App"],
-    deps = ["//drivers/lhal"] + select({
-        "@platforms//os:none": [
-            ":vcu_freertos_config",
-            "//drivers/stm32/stm32g4:freertos_headers",
-        ],
-        "//conditions:default": ["//drivers/freertos:host"],
-    }),
-)
-
-cc_test(
-    name = "vcu_app_test",
-    size = "small",
-    srcs = ["App/vcu_app_test.cpp"],
-    deps = [
-        ":vcu_app",
-        "//drivers/lhal:host",
-        "@googletest//:gtest_main",
-    ],
-)
-
-# Runs the app's real FreeRTOS tasks under the simulator port's scheduler.
-# Complements :vcu_app_test (deterministic, TestClock-driven): this one
-# checks the task wiring itself, with generous timing bounds.
-cc_test(
-    name = "vcu_rtos_test",
-    size = "small",
-    srcs = ["App/vcu_rtos_test.cpp"],
-    deps = [
-        ":vcu_app",
-        "//drivers/lhal:host",
-        "@googletest//:gtest_main",
-    ],
-)
-
-cc_binary(
-    name = "vcu_sim",
-    srcs = ["App/vcu_sim.cpp"],
-    deps = [
-        ":vcu_app",
-        "//drivers/lhal:host",
-    ],
-)
-
+# The whole board: firmware image, flash targets, and — synthesized from the
+# App/ file names — the app library (:vcu_app), its host tests
+# (:vcu_app_test, :vcu_rtos_test), and the interactive sim (:vcu_sim).
+# Everything else is derived from `mcu` or the CubeMX layout; see
+# tools/firmware/README.md. State only what this board adds.
 firmware_project(
     name = "vcu",
-    srcs = glob(
-        [
-            "Core/Src/**/*.c",
-            "Board/**/*.cpp",
-            "Board/**/*.hpp",
-        ],
-        allow_empty = True,
-        exclude = ["Core/Src/app_freertos.c"],
-    ) + glob(
-        [
-            "Core/Inc/**/*.h",
-            "Core/Inc/**/*.hpp",
-        ],
-        allow_empty = True,
-    ),
-    defines = ["STM32G474xx"],
     enable_freertos = True,
     enable_printf_float = True,
     enable_usb = True,
-    extra_deps = [
-        ":vcu_app",
-        "//drivers/lhal:stm32_headers",
-    ],
-    extra_srcs = ["//drivers/lhal:stm32_srcs"],
-    family = "stm32g4",
-    linker_script = "STM32G474XX_FLASH.ld",
-    startup_script = "startup_stm32g474xx.s",
+    mcu = "stm32g474xx",
 )

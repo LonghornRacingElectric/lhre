@@ -18,13 +18,35 @@ package(default_visibility = ["//visibility:public"])
 # dwp_files placeholder referenced as ":empty" by arm_none_eabi_toolchain.
 filegroup(name = "empty")
 
+config_setting(
+    name = "opt_mode",
+    values = {"compilation_mode": "opt"},
+)
+
+# Optimization/debug level follows --compilation_mode (-c). Baked into the
+# toolchain, not into firmware_project copts, so `-c opt` really produces
+# optimized firmware — a hardcoded target-level -Og would silently override
+# it. -Os matches CubeMX's own Release configuration; -g3 stays in every
+# mode because DWARF lives only in the ELF (objcopy strips it from the
+# .bin/.hex images) and keeps the .map/gdb workflow useful on opt builds.
+MODE_COPTS = select({
+    ":opt_mode": [
+        "-Os",
+        "-g3",
+    ],
+    "//conditions:default": [
+        "-Og",
+        "-g3",
+    ],
+})
+
 arm_none_eabi_toolchain(
     name = "cortex_m0",
     copts = [
         "-mcpu=cortex-m0",
         "-mthumb",
         "-mfloat-abi=soft",
-    ],
+    ] + MODE_COPTS,
     linkopts = [
         "-mcpu=cortex-m0",
         "-mthumb",
@@ -45,7 +67,7 @@ arm_none_eabi_toolchain(
         "-mthumb",
         "-mfpu=fpv4-sp-d16",
         "-mfloat-abi=hard",
-    ],
+    ] + MODE_COPTS,
     linkopts = [
         "-mcpu=cortex-m4",
         "-mthumb",
@@ -67,7 +89,7 @@ arm_none_eabi_toolchain(
         "-mthumb",
         "-mfpu=fpv5-d16",
         "-mfloat-abi=hard",
-    ],
+    ] + MODE_COPTS,
     linkopts = [
         "-mcpu=cortex-m7",
         "-mthumb",

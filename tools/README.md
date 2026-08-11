@@ -10,6 +10,11 @@ Build and dev tooling. Each package documents itself:
 | [format/](format/README.md) | clang-format for the whole repo: `bazel run //tools/format` (or `:check`). |
 | [ide/](ide/README.md) | `compile_commands.json` regeneration for clangd/IDEs: `bazel run //:refresh_ide` (or the fast `//:refresh_compile_commands`). |
 
+`new_board.py` (`bazel run //tools:new_board -- boards/<Name>/<Name>.ioc`)
+scaffolds a new board's `BUILD.bazel` from its CubeMX `.ioc` — it reads the
+MCU and enabled middleware and emits the minimal `firmware_project` call,
+so new boards start from the convention instead of a copy of VCU.
+
 `workspace_status.sh` / `workspace_status.bat` are the Bazel workspace-status
 scripts (wired up in `.bazelrc`). They emit the `STABLE_GIT_*` keys that
 [firmware/](firmware/README.md) stamps into every firmware binary — when

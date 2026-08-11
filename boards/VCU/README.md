@@ -17,10 +17,11 @@ for the repo.
 
 ## Layout
 
-- `App/` — application logic (`vcu::App`), a plain `cc_library` depending
-  on `//drivers/lhal` plus the raw FreeRTOS API. The same code links into
-  the firmware, the host tests, and the sim; see the
-  [LHAL README](../../drivers/lhal/README.md) and
+- `App/` — application logic (`vcu::App`) against `//drivers/lhal` plus the
+  raw FreeRTOS API. The same code links into the firmware, the host tests,
+  and the sim; `firmware_project` synthesizes those targets from the file
+  names (`vcu_app.cpp` → `:vcu_app`, `*_test.cpp` → tests, `*_sim.cpp` →
+  sims). See the [LHAL README](../../drivers/lhal/README.md) and
   [drivers/freertos](../../drivers/freertos/README.md) for the pattern.
 - `Board/` — hand-written bring-up: `main.cpp` configures clocks, pins, and
   peripheral handles at the ST HAL level, wraps them in LHAL adapters,
@@ -34,7 +35,8 @@ for the repo.
   made in CubeMX apply automatically; `lhal::stm32::InitCore()` calls the
   generated clock config). Hand-edit only inside `USER CODE` sections.
 - `STM32G474XX_FLASH.ld` / `startup_stm32g474xx.s` — linker script and
-  startup for the G474, passed to `firmware_project`.
+  startup for the G474. Named by ST's convention, so `firmware_project`
+  finds them from `mcu = "stm32g474xx"` without being told.
 
 The `BUILD.bazel` here is the canonical example of a `firmware_project`
 call — what it generates and every option is documented in

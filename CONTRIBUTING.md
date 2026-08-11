@@ -75,13 +75,17 @@ Copy the layout of [boards/VCU](boards/VCU/README.md):
    peripheral"** enabled, targeting a Makefile toolchain. Generated code
    lands in `Core/`.
 2. Hand-written bring-up (`main.cpp`, clock config, LHAL adapter wiring)
-   goes in `Board/`. Application logic goes in `App/` as a plain
-   `cc_library` depending only on `//drivers/lhal`, so it runs in host
-   tests and sims too (the per-family platform in `//platforms` selects a
-   toolchain with the MCU flags baked in when cross-compiling).
-3. Add a `BUILD.bazel` calling `firmware_project` (see
-   [boards/VCU/BUILD.bazel](https://github.com/LonghornRacingElectric/lhre/blob/main/boards/VCU/BUILD.bazel)) plus the linker script
-   and startup file for your chip.
+   goes in `Board/`. Application logic goes in `App/`, depending only on
+   `//drivers/lhal`, so it runs in host tests and sims too —
+   `firmware_project` turns `App/` files into the app library, tests, and
+   sims by naming convention (see
+   [tools/firmware](tools/firmware/README.md)).
+3. Scaffold the `BUILD.bazel` from the `.ioc` —
+   `bazel run //tools:new_board -- boards/<Name>/<Name>.ioc` — and follow
+   its printed next steps (app library, `//boards:all_firmware`, README).
+   The macro derives the device define and finds the linker script and
+   startup file by ST's naming convention; just keep the chip's `.ld` and
+   `startup_*.s` at the board root under their ST names.
 4. Add a `post_cubemx.sh` like the VCU's.
 
 ## Regenerating CubeMX code safely

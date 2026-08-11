@@ -1,8 +1,16 @@
 # Boards
 
 One directory per ECU on the car. [VCU/](VCU/README.md) is the reference
-layout — copy it when bringing up a new board (full recipe in
-[CONTRIBUTING.md](../CONTRIBUTING.md#adding-a-new-board)).
+layout. Bring up a new board with the scaffolder — don't copy VCU's
+`BUILD.bazel` by hand, it exists so boards can't drift apart:
+
+```bash
+bazel run //tools:new_board -- boards/<Name>/<Name>.ioc
+```
+
+(full recipe in [CONTRIBUTING.md](../CONTRIBUTING.md#adding-a-new-board)).
+`bazel build //boards:all_firmware` builds every ECU's flashable images —
+each new board's `:release` gets added to that filegroup.
 
 Every board follows the same ownership split, which is what makes CubeMX
 regeneration safe (see

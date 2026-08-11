@@ -17,6 +17,12 @@ point of this package. Baking `-mcpu`/`-mfpu`/`-mfloat-abi` into the
 zero per-target flag plumbing. The flags sit in both copts and linkopts:
 linkopts also drive newlib/libgcc multilib selection.
 
+Optimization/debug level lives here too, keyed on `--compilation_mode`:
+`-Og -g3` by default, `-Os -g3` under `-c opt` (CubeMX's Release level; see
+`MODE_COPTS` in `BUILD.bazel`). In the toolchain rather than in
+`firmware_project` copts because a target-level `-O` flag would override
+`-c opt` and quietly make release builds impossible.
+
 `toolchain.bzl` is a local mirror of the fork's `arm_none_eabi_toolchain`
 macro with one change: the generated `cc_toolchain`/config targets are tagged
 `manual`. Without that, `bazel build //...` matches the toolchains for all

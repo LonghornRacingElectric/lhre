@@ -17,7 +17,6 @@ site/
 boards/**/Drivers/
 **/.mxproject
 **/Makefile
-MODULE.bazel.lock
 
 # CubeMX-vendored middleware (FreeRTOS kernel + CMSIS-RTOS2 wrapper): never
 # compiled. The kernel comes from @freertos_kernel (one version shared with

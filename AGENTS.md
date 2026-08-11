@@ -8,7 +8,8 @@ should too.
 
 Docs live **next to the code** — every package directory with non-trivial
 code has a `README.md`, and CI publishes the whole tree as a site (MkDocs,
-see `mkdocs.yml`). Treat docs as a required output of your work, not an
+see `mkdocs.yml`). Repo-wide pages with no single home directory (e.g.
+`build-system.md`) live in `docs/`. Treat docs as a required output of your work, not an
 afterthought:
 
 - **If you change behavior, update the adjacent `README.md` in the same
@@ -50,7 +51,15 @@ Firmware for a board: `bazel build //boards/VCU:vcu`. Flashing targets
   anything in it; changes go through the board's `.ioc` + regeneration
   (see [CONTRIBUTING.md](CONTRIBUTING.md#regenerating-cubemx-code-safely)).
 - Application code depends on `//drivers/lhal` interfaces only — never on
-  ST HAL directly. That's what keeps it host-testable.
+  ST HAL directly. That's what keeps it host-testable. Enforced by
+  visibility: a direct dep on `//drivers/stm32/...` is a build error, and
+  the fix is an LHAL interface, not a visibility grant.
+- New board = `bazel run //tools:new_board -- boards/<Name>/<Name>.ioc`,
+  not a copy of VCU's `BUILD.bazel`. Board BUILD files state only what the
+  `firmware_project` macro can't derive from `mcu` and the CubeMX layout.
+- If you edit `MODULE.bazel`, build once and commit the resulting
+  `MODULE.bazel.lock` change with it — the lockfile is what makes CI green
+  mean "reproducible everywhere".
 - Comments explain *why*, not *what*. Match the surrounding density.
 - `main` is always the current car; no per-year directories
   (see [CONTRIBUTING.md](CONTRIBUTING.md#season-policy)).
