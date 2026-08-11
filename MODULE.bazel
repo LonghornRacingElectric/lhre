@@ -13,7 +13,7 @@ bazel_dep(name = "googletest", version = "1.17.0.bcr.2", dev_dependency = True)
 
 git_override(
     module_name = "toolchains_arm_gnu",
-    commit = "58d49307b702cc66f924b9a6e188d1f61a227479",
+    commit = "c217763672309e1115e4c4331404573c685492e4",
     remote = "https://github.com/LonghornRacingElectric/toolchains_arm_gnu.git",
 )
 

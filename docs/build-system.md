@@ -78,6 +78,9 @@ upstream doesn't have (yet):
   its path into a single argument. Real arm-gcc silently tolerates that, but
   in `compile_commands.json` it made clangd lose all newlib/libstdc++ include
   paths and error out on firmware files.
+- **`arm_toolchain` extension marked reproducible** — keeps it out of
+  `MODULE.bazel.lock`; see "Module extensions stay out of the lockfile"
+  below.
 
 Prefer upstreaming fork changes when possible; either way, keep the pinned
 commit in `MODULE.bazel` and this list in sync when you bump it.
@@ -91,6 +94,30 @@ module level, and Windows' `multiprocessing` spawn start method re-imports
 the entry point in every worker, killing the process pool
 (`BrokenProcessPool`). The patch adds an `if __name__ == "__main__":` guard.
 Drop the patch if it gets upstreamed.
+
+### Module extensions stay out of the lockfile
+
+Every module extension in this repo returns
+`ctx.extension_metadata(reproducible = True)`, and any new one must too.
+Without it, Bazel records the extension's result in `MODULE.bazel.lock` —
+and for extensions whose result depends on the host (`ctx.os`, like the
+OpenOCD and dfu-util repos), each OS records a *different* result, so every
+Windows/macOS/Linux build rewrote the lock in a permanent tug-of-war. Even
+OS-independent extensions were observed to churn (the `toolchains_arm_gnu`
+fork's `bzlTransitiveDigest` differed on Windows).
+
+`reproducible = True` tells Bazel the extension needs no lock entry because
+re-running it always yields an equivalent result. That claim is only honest
+when everything the extension fetches is pinned — sha256 for archives, a
+commit for `git_repository` — which is also this repo's rule anyway
+(see Version pins below). So: **new module extension → pin every fetch,
+then `return ctx.extension_metadata(reproducible = True)`** from the
+implementation. Any of `tools/openocd/openocd.bzl`, `tools/dfu/dfu.bzl`,
+`tools/debug/svd.bzl`, or the `drivers/*/deps.bzl` files is the worked
+example. If a third-party extension ever churns the lock, patch it the
+same way (`single_version_override(patches = ...)` for registry modules,
+`patches` on the `git_override`, or commit it to our fork as was done for
+`toolchains_arm_gnu`).
 
 ### Version pins
 

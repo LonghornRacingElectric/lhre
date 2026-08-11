@@ -8,7 +8,12 @@ layout. Bring up a new board with the scaffolder — don't copy VCU's
 bazel run //tools:new_board -- boards/<Name>/<Name>.ioc
 ```
 
-(full recipe in [CONTRIBUTING.md](../CONTRIBUTING.md#adding-a-new-board)).
+(The `--` separates Bazel's options from the script's; full recipe in
+[CONTRIBUTING.md](../CONTRIBUTING.md#adding-a-new-board).) Besides the
+`BUILD.bazel`, this also generates the board's VS Code debug setup —
+launch configs, build/flash tasks, and the SVD pin (see
+[tools/debug](../tools/debug/README.md)); `--vscode-only` redoes just
+that part later.
 `bazel build //boards:all_firmware` builds every ECU's flashable images —
 each new board's `:release` gets added to that filegroup.
 

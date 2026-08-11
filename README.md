@@ -14,7 +14,7 @@ flash it all with Bazel.
 | [`lib/`](lib/README.md)     | Platform-agnostic C++ that builds on host **and** target (ring buffers, CRC, CAN pack/unpack, …), with colocated tests. |
 | [`apps/`](apps/README.md)    | Host-side software: telemetry, dashboards, gateways. |
 | [`boards/`](boards/README.md)  | Per-ECU firmware projects ([`boards/VCU`](boards/VCU/README.md) is the reference layout). |
-| [`tools/`](tools/README.md)   | Build and dev tooling: [`firmware_project`](tools/firmware/README.md), flashing, formatting. |
+| [`tools/`](tools/README.md)   | Build and dev tooling: [`firmware_project`](tools/firmware/README.md), flashing, [VS Code debugging](tools/debug/README.md), formatting. |
 
 There are no per-year directories: `main` is always the current car, and past
 seasons live in tags and maintenance branches (see
@@ -62,6 +62,12 @@ Flash a board over ST-Link:
 ```bash
 bazel run //boards/VCU:openocd
 ```
+
+Debug on hardware: open the repo in VS Code, install the recommended
+Cortex-Debug extension, plug in the ST-Link, and hit F5 — breakpoints,
+FreeRTOS thread views, and peripheral registers, with nothing else to
+install on any OS (see
+[CONTRIBUTING.md](CONTRIBUTING.md#debugging-on-hardware-vs-code)).
 
 ## Remote build setup (BuildBuddy)
 

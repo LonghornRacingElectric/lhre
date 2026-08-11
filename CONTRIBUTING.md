@@ -45,6 +45,35 @@ bazel run //:refresh_compile_commands
 
 See [tools/ide](tools/ide/README.md) for what each one does and why.
 
+## Debugging on hardware (VS Code)
+
+Breakpoints, stepping, live variable watch, FreeRTOS thread views, and the
+peripheral-register viewer — over an ST-Link, from VS Code, on any OS:
+
+1. Open the repo in VS Code and install the recommended **Cortex-Debug**
+   extension when prompted (it pulls in the RTOS/peripheral/memory viewers).
+2. Plug in the board over ST-Link.
+3. Run and Debug panel → **Debug \<board\> (ST-Link)** → F5.
+
+That builds the firmware, flashes it, resets the MCU, and stops at
+`main()`. The **Attach** variant inspects a board that's already running,
+without reflashing or resetting it.
+
+There is nothing else to install: the gdb client, the OpenOCD gdb server,
+and the SVD register definitions are all fetched hermetically by Bazel and
+staged under `bazel-bin/` before every launch. How that works — and
+troubleshooting (Linux udev rules, dangling paths) — is in
+[tools/debug](tools/debug/README.md). The launch configs and tasks in
+`.vscode/` are generated per board by the `new_board` scaffolder (see
+[Adding a new board](#adding-a-new-board)); don't hand-edit the generated
+entries — rerun the scaffolder with `--vscode-only` instead.
+
+To flash without starting a debug session:
+
+```bash
+bazel run //boards/VCU:openocd
+```
+
 ## Documentation
 
 Docs live **next to the code they describe**: drop a `README.md` (or any
@@ -80,12 +109,24 @@ Copy the layout of [boards/VCU](boards/VCU/README.md):
    `firmware_project` turns `App/` files into the app library, tests, and
    sims by naming convention (see
    [tools/firmware](tools/firmware/README.md)).
-3. Scaffold the `BUILD.bazel` from the `.ioc` —
-   `bazel run //tools:new_board -- boards/<Name>/<Name>.ioc` — and follow
-   its printed next steps (app library, `//boards:all_firmware`, README).
-   The macro derives the device define and finds the linker script and
-   startup file by ST's naming convention; just keep the chip's `.ld` and
-   `startup_*.s` at the board root under their ST names.
+3. Scaffold the `BUILD.bazel` from the `.ioc`:
+
+   ```bash
+   bazel run //tools:new_board -- boards/<Name>/<Name>.ioc
+   ```
+
+   (The `--` matters: it separates Bazel's own options from the script's
+   arguments. `--force` overwrites an existing `BUILD.bazel`;
+   `--vscode-only` regenerates just the debug setup for an existing
+   board.) Follow its printed next steps (app library,
+   `//boards:all_firmware`, README). The macro derives the device define
+   and finds the linker script and startup file by ST's naming
+   convention; just keep the chip's `.ld` and `startup_*.s` at the board
+   root under their ST names. The scaffolder also sets up
+   [VS Code debugging](#debugging-on-hardware-vs-code) for the board: it
+   pins the device's SVD in `tools/debug/svd_lock.bzl` (needs network
+   once) and adds the board's launch configs and build/flash tasks to
+   `.vscode/`.
 4. Add a `post_cubemx.sh` like the VCU's.
 
 ## Regenerating CubeMX code safely
