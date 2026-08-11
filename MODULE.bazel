@@ -13,14 +13,8 @@ bazel_dep(name = "googletest", version = "1.17.0.bcr.2", dev_dependency = True)
 
 git_override(
     module_name = "toolchains_arm_gnu",
-    commit = "58d49307b702cc66f924b9a6e188d1f61a227479",
+    commit = "c217763672309e1115e4c4331404573c685492e4",
     remote = "https://github.com/LonghornRacingElectric/toolchains_arm_gnu.git",
-    # Everything the extension fetches is sha256-pinned, so mark it
-    # reproducible to keep it out of MODULE.bazel.lock — recorded entries
-    # churned across OSes. Upstreamable to the fork; drop the patch once
-    # the fork carries it.
-    patches = ["//patches:toolchains_arm_gnu_reproducible.patch"],
-    patch_strip = 1,
 )
 
 arm_toolchain = use_extension("@toolchains_arm_gnu//:extensions.bzl", "arm_toolchain")
