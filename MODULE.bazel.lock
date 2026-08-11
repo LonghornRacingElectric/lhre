@@ -418,7 +418,7 @@
     },
     "//tools/openocd:openocd.bzl%openocd": {
       "general": {
-        "bzlTransitiveDigest": "Ngevga1gQD0X1u2inTTlL2dK54MG+FTURA8U4M+AUVo=",
+        "bzlTransitiveDigest": "yUUP7beJFwldqfm9J0n04uGhKPHZMh3UKWexXnyXdZs=",
         "usagesDigest": "LrvwAZs4c8tgguf3cCMxMc4du0y50TzUFmgsBJeGYGU=",
         "recordedInputs": [
           "REPO_MAPPING:,bazel_tools bazel_tools"
@@ -429,7 +429,7 @@
             "attributes": {
               "sha256": "4f458dea82af3529d4dc71544abfd8c8c96ebe6c521868f87c6697b0866c9e99",
               "strip_prefix": "xpack-openocd-0.12.0-6",
-              "build_file_content": "\npackage(default_visibility = [\"//visibility:public\"])\n\nfilegroup(\n    name = \"openocd\",\n    srcs = [\"bin/openocd\"],\n)\n\nfilegroup(\n    name = \"scripts\",\n    srcs = glob([\"openocd/scripts/**/*\"]),\n)\n\n# Everything a relocated OpenOCD needs at runtime: the binary (plus bundled\n# DLLs on Windows), the dylibs in libexec/ that the mac/linux binary loads\n# via @loader_path/$ORIGIN rpaths, and the TCL script library. Consumed by\n# //tools/debug to stage a self-contained tree under bazel-bin.\nfilegroup(\n    name = \"dist\",\n    srcs = glob(\n        [\n            \"bin/**\",\n            \"libexec/**\",\n            \"openocd/scripts/**\",\n        ],\n        allow_empty = True,\n    ),\n)\n",
+              "build_file_content": "\npackage(default_visibility = [\"//visibility:public\"])\n\n# data = :dist puts the binary's runtime companions into the runfiles of\n# anything that executes it (same fix as @dfu's libusb DLL): the DLLs\n# beside bin/openocd.exe on Windows, the libexec/ dylibs on mac/linux, and\n# the TCL script library. Required wherever runfiles are real copies\n# instead of symlinks (Windows without Developer Mode) — the binary can't\n# resolve any of them through its own path then.\nfilegroup(\n    name = \"openocd\",\n    srcs = [\"bin/openocd\"],\n    data = [\":dist\"],\n)\n\nfilegroup(\n    name = \"scripts\",\n    srcs = glob([\"openocd/scripts/**/*\"]),\n)\n\n# Everything a relocated OpenOCD needs at runtime: the binary (plus bundled\n# DLLs on Windows), the dylibs in libexec/ that the mac/linux binary loads\n# via @loader_path/$ORIGIN rpaths, and the TCL script library. Consumed by\n# //tools/debug to stage a self-contained tree under bazel-bin.\nfilegroup(\n    name = \"dist\",\n    srcs = glob(\n        [\n            \"bin/**\",\n            \"libexec/**\",\n            \"openocd/scripts/**\",\n        ],\n        allow_empty = True,\n    ),\n)\n",
               "urls": [
                 "https://github.com/xpack-dev-tools/openocd-xpack/releases/download/v0.12.0-6/xpack-openocd-0.12.0-6-darwin-arm64.tar.gz"
               ]

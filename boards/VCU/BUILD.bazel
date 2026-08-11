@@ -1,14 +1,12 @@
 load("//tools/firmware:firmware_project.bzl", "firmware_project")
 
-# The whole board: firmware image, flash targets, and — synthesized from the
-# App/ file names — the app library (:vcu_app), its host tests
-# (:vcu_app_test, :vcu_rtos_test), and the interactive sim (:vcu_sim).
-# Everything else is derived from `mcu` or the CubeMX layout; see
+# The whole board: firmware image, flash targets, and — synthesized
+# from the App/ file names — the app library, host tests, and sims.
+# Everything else is derived from mcu or the CubeMX layout; see
 # tools/firmware/README.md. State only what this board adds.
 firmware_project(
     name = "vcu",
     enable_freertos = True,
-    enable_printf_float = True,
     enable_usb = True,
     mcu = "stm32g474xx",
 )

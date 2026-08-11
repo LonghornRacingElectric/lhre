@@ -30,9 +30,16 @@ def _openocd_repo_impl(ctx):
     build_file_content = """
 package(default_visibility = ["//visibility:public"])
 
+# data = :dist puts the binary's runtime companions into the runfiles of
+# anything that executes it (same fix as @dfu's libusb DLL): the DLLs
+# beside bin/openocd.exe on Windows, the libexec/ dylibs on mac/linux, and
+# the TCL script library. Required wherever runfiles are real copies
+# instead of symlinks (Windows without Developer Mode) — the binary can't
+# resolve any of them through its own path then.
 filegroup(
     name = "openocd",
     srcs = ["{bin_path}"],
+    data = [":dist"],
 )
 
 filegroup(
