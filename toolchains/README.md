@@ -1,5 +1,10 @@
 # ARM toolchains
 
+(Also here, unrelated to ARM: [proto/](proto/) registers the Python proto
+toolchain that pairs the prebuilt `protoc` with the pip protobuf runtime —
+the reason protobuf is never compiled from source; see
+[docs/build-system.md](../docs/build-system.md).)
+
 arm-none-eabi GCC 13.2.1 `cc_toolchain`s, one variant per CPU core we ship
 firmware on, with the core's codegen flags baked in:
 

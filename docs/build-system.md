@@ -129,8 +129,35 @@ same way (`single_version_override(patches = ...)` for registry modules,
 - **googletest `1.17.0.bcr.2`** — Bazel 9 requires the BCR *patch* releases;
   plain `1.17.0` lacks the `load()` statements Bazel 9 needs. When bumping,
   always take the newest `.bcr.N` for a version.
-- **protobuf `36.0-rc1`** — nothing in the repo defines `.proto` files yet;
-  the pin exists so the *resolved* protobuf (pulled in transitively by other
-  rules) is recent enough for `--@protobuf//bazel/flags:prefer_prebuilt_protoc`
-  in `.bazelrc`, which downloads a prebuilt `protoc` instead of compiling it
-  from source on every fresh machine. Safe to bump to a stable 36.x+.
+- **protobuf `35.1`** — compiles the CAN spec meta-schema
+  (`lib/spec/proto/can_spec.proto`). Pinned to the newest *stable* BCR
+  release: `36.0-rc1`'s prebuilt `protoc` fails checksum verification
+  (upstream re-uploaded the RC artifact) and `36.0-rc2` gates prebuilts
+  behind a `-dev` guard. When bumping, bump the pip `protobuf` runtime in
+  `pyproject.toml` in lockstep (protobuf `N.M` ↔ pip `7.N.M`, see below)
+  and regenerate both lockfiles.
+
+### Protobuf without compiling protobuf
+
+Anything touching the CAN spec pipeline (`lib/spec`, `lib/codegen`, and
+therefore every board that links the generated CAN library) needs `protoc`
+and a Python protobuf runtime. Left to its defaults, protobuf builds both
+from source — protoc plus a large slice of abseil, ~1000 C++ actions on
+every fresh machine or cold cache. Three pieces in this repo make that
+never happen:
+
+1. `--incompatible_enable_proto_toolchain_resolution` (`.bazelrc`) turns on
+   proto *toolchain resolution*. protobuf registers prebuilt `protoc`
+   binaries for every host platform (gated on its
+   `prefer_prebuilt_protoc` flag, default true), but without resolution
+   enabled Bazel uses the legacy wiring and compiles from source anyway.
+2. `//toolchains/proto` registers a Python `proto_lang_toolchain` whose
+   runtime is the **pip** `protobuf` wheel instead of
+   `@protobuf//python:protobuf_python` — the latter's build runs
+   `protoc_minimal`, which is always compiled from source, even with
+   prebuilts enabled. Root-module toolchain registrations beat protobuf's
+   own, so the pip runtime wins. The wheel version must satisfy the
+   version check protoc emits into generated code (runtime ≥ gencode).
+3. Tripwire flags in `.bazelrc` poison the compile line of any file from a
+   protobuf external repo, so a regression is a loud build error, not a
+   silent 1000-action slowdown.

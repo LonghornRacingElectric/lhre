@@ -37,6 +37,13 @@ use_repo(
 
 register_toolchains("//toolchains:all")
 
+# Python proto toolchain using the pip protobuf runtime instead of
+# @protobuf//python — the piece that keeps protobuf C++ (protoc_minimal +
+# abseil) out of the build. Works with the prebuilt-protoc toolchain that
+# protobuf itself registers; both need proto toolchain resolution, enabled
+# in .bazelrc. See toolchains/proto/BUILD.bazel.
+register_toolchains("//toolchains/proto:all")
+
 # Hermetic LLVM toolchain (hermeticbuild/hermetic-llvm): host-targeted C++
 # (unit tests, sims, host tools) compiles with the same hermetic clang on
 # every machine — no dependency on local Xcode / system GCC / MSVC.

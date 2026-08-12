@@ -6,7 +6,17 @@ build --enable_runfiles
 # host OS, so nobody has to pass --config flags by hand.
 common --enable_platform_specific_config
 
+# Protobuf without compiling protobuf: proto toolchain resolution picks the
+# prebuilt protoc binaries protobuf registers (gated on prefer_prebuilt_protoc,
+# default true) and the pip-runtime Python toolchain from //toolchains/proto.
+# Without the resolution flag Bazel falls back to legacy wiring, which builds
+# protoc + abseil from source. The per_file_copt tripwires make any regression
+# a loud build error instead of a silent 500-action slowdown.
+common --incompatible_enable_proto_toolchain_resolution
 build --@protobuf//bazel/flags:prefer_prebuilt_protoc=true
+common --per_file_copt=external/.*protobuf.*@--PROTOBUF_WAS_NOT_SUPPOSED_TO_BE_BUILT
+common --host_per_file_copt=external/.*protobuf.*@--PROTOBUF_WAS_NOT_SUPPOSED_TO_BE_BUILT
+build --@protobuf//bazel/toolchains:prefer_prebuilt_protoc
 
 # Don't auto-generate __init__.py files in py_binary/py_test runfiles (the
 # rules_python default is deprecated and warns on every run). All our Python
