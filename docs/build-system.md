@@ -133,42 +133,27 @@ same way (`single_version_override(patches = ...)` for registry modules,
   (`lib/spec/proto/can_spec.proto`). Pinned to the newest *stable* BCR
   release: `36.0-rc1`'s prebuilt `protoc` fails checksum verification
   (upstream re-uploaded the RC artifact) and `36.0-rc2` gates prebuilts
-  behind a `-dev` guard. When bumping, bump the pip `protobuf` runtime in
-  `pyproject.toml` in lockstep (protobuf `N.M` ↔ pip `7.N.M`, see below)
-  and regenerate both lockfiles.
+  behind a `-dev` guard. Safe to bump once a stable 36.x lands.
 
-### Protobuf without compiling protobuf
+### Protoc: prebuilt where possible, source fallback accepted
 
 Anything touching the CAN spec pipeline (`lib/spec`, `lib/codegen`, and
 therefore every board that links the generated CAN library) needs `protoc`
-and a Python protobuf runtime. Left to its defaults, protobuf builds both
-from source — protoc plus a large slice of abseil, ~1000 C++ actions on
-every fresh machine or cold cache. Three pieces in this repo make that
-never happen:
+and the Python protobuf runtime.
 
-1. `--incompatible_enable_proto_toolchain_resolution` (`.bazelrc`) turns on
-   proto *toolchain resolution*. protobuf registers prebuilt `protoc`
-   binaries for every host platform (gated on its
-   `prefer_prebuilt_protoc` flag, default true), but without resolution
-   enabled Bazel uses the legacy wiring and compiles from source anyway.
-2. `//toolchains/proto` registers a Python `proto_lang_toolchain` whose
-   runtime is the **pip** `protobuf` wheel instead of
-   `@protobuf//python:protobuf_python` — the latter's build runs
-   `protoc_minimal`, which is always compiled from source, even with
-   prebuilts enabled. Root-module toolchain registrations beat protobuf's
-   own, so the pip runtime wins. The wheel version must satisfy the
-   version check protoc emits into generated code (runtime ≥ gencode).
-3. Tripwire flags in `.bazelrc` poison the compile line of any file from a
-   protobuf external repo, so a regression is a loud build error, not a
-   silent 1000-action slowdown.
+`--incompatible_enable_proto_toolchain_resolution` (`.bazelrc`) turns on
+proto *toolchain resolution*, which lets the prebuilt `protoc` binaries
+protobuf registers for every host platform take effect (gated on its
+`prefer_prebuilt_protoc` flag, default true). Without the resolution flag
+Bazel uses the legacy wiring and compiles the full protoc + a large slice
+of abseil from source (~800 C++ actions) — so keep that flag.
 
-One Windows wrinkle from piece 2: importing the pip runtime straight out
-of a runfiles tree produces paths like
-`…\gen_can_lib.exe.runfiles\rules_python++pip+lhre_pypi_312_protobuf_…\site-packages\google\protobuf\internal\python_edition_defaults.py`
-— past the 260-char `MAX_PATH` on stock Windows, which surfaces as an
-`ImportError` for whichever module has the longest filename. `.bazelrc`
-therefore sets `build:windows --build_python_zip`: Python binaries
-self-extract to a short `%TEMP%` path (Bazel's own Windows default, which
-our `--enable_runfiles` would otherwise override). Enabling the
-`LongPathsEnabled` registry policy also works, but a plain checkout must
-build without registry edits.
+What still compiles from source: the Python runtime
+(`@protobuf//python:protobuf_python`) runs a `protoc_minimal` built from
+source for its edition-defaults step, prebuilts or not. That's a deliberate
+trade: eliminating it means maintaining a custom `proto_lang_toolchain`
+pinned to the pip protobuf wheel in version-lockstep with the bazel_dep
+(tried, then removed as not worth the upkeep — see git history). The
+fallback build is a few hundred actions, hits the shared remote cache
+after the first build per platform/config, and touches nothing outside
+the exec configuration.

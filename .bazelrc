@@ -2,31 +2,19 @@
 startup --windows_enable_symlinks
 build --enable_runfiles
 
-# Python binaries run as self-extracting zips on Windows (Bazel's default
-# there, which --enable_runfiles above would otherwise override). Importing
-# straight from the runfiles tree breaks MAX_PATH: runfiles root + the pip
-# repo dir + site-packages/google/protobuf/internal/<module>.py exceeds 260
-# chars, so the CAN spec generator dies with ImportError on the pip protobuf
-# runtime's longest module. The zip extracts to a short %TEMP% path instead;
-# machines with the LongPathsEnabled registry policy would also work, but
-# the build must not require registry edits (see docs/build-system.md).
-build:windows --build_python_zip
-
 # Automatically apply build:windows / build:macos / build:linux based on the
 # host OS, so nobody has to pass --config flags by hand.
 common --enable_platform_specific_config
 
-# Protobuf without compiling protobuf: proto toolchain resolution picks the
-# prebuilt protoc binaries protobuf registers (gated on prefer_prebuilt_protoc,
-# default true) and the pip-runtime Python toolchain from //toolchains/proto.
-# Without the resolution flag Bazel falls back to legacy wiring, which builds
-# protoc + abseil from source. The per_file_copt tripwires make any regression
-# a loud build error instead of a silent 500-action slowdown.
+# Proto toolchain resolution lets the prebuilt-protoc toolchains protobuf
+# registers take effect (gated on prefer_prebuilt_protoc, default true) —
+# without the resolution flag Bazel uses the legacy wiring and compiles the
+# full protoc + abseil from source (~800 actions). The Python proto runtime
+# (@protobuf//python) still builds a minimal protoc from source for its
+# edition-defaults step; accepted as a one-time, remote-cached cost
+# (see docs/build-system.md).
 common --incompatible_enable_proto_toolchain_resolution
 build --@protobuf//bazel/flags:prefer_prebuilt_protoc=true
-common --per_file_copt=external/.*protobuf.*@--PROTOBUF_WAS_NOT_SUPPOSED_TO_BE_BUILT
-common --host_per_file_copt=external/.*protobuf.*@--PROTOBUF_WAS_NOT_SUPPOSED_TO_BE_BUILT
-build --@protobuf//bazel/toolchains:prefer_prebuilt_protoc
 
 # Don't auto-generate __init__.py files in py_binary/py_test runfiles (the
 # rules_python default is deprecated and warns on every run). All our Python
