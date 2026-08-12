@@ -1,0 +1,45 @@
+load("@rules_python//python:defs.bzl", "py_binary")
+
+package(default_visibility = ["//apps/BEVO:__subpackages__"])
+
+exports_files(["can_packets.proto"])
+
+py_binary(
+    name = "gen_can_json",
+    srcs = [
+        "generate_can_json.py",
+    ],
+    main = "generate_can_json.py",
+)
+
+# The runtime CAN decode map, generated from the CSV source of truth.
+# Never check the output in — everything downstream (daemon runfiles, the
+# prost build script, the Pi bundle) consumes this target.
+genrule(
+    name = "can_json",
+    srcs = [
+        "can_bitfields.csv",
+        "can_packets.csv",
+    ],
+    outs = ["can.json"],
+    cmd = "$(execpath :gen_can_json) $(location can_packets.csv) $(location can_bitfields.csv) $@",
+    tools = [":gen_can_json"],
+)
+
+# `bazel run` target that regenerates can_packets.proto IN THE SOURCE TREE.
+# The proto is deliberately a checked-in, tool-updated source, not a build
+# output: protobuf field numbers are an append-only wire contract, and the
+# generator seeds them from the existing proto (and writes `#N` annotations
+# back into the CSVs) so they never change. Same regenerate-don't-hand-edit
+# model as CubeMX .ioc files. Run after editing the CSVs:
+#
+#   bazel run //apps/BEVO/schema:update_can_proto
+py_binary(
+    name = "update_can_proto",
+    srcs = [
+        "generate_can_json.py",
+        "generate_can_proto.py",
+        "update_can_proto.py",
+    ],
+    main = "update_can_proto.py",
+)

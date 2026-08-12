@@ -134,3 +134,10 @@ same way (`single_version_override(patches = ...)` for registry modules,
   rules) is recent enough for `--@protobuf//bazel/flags:prefer_prebuilt_protoc`
   in `.bazelrc`, which downloads a prebuilt `protoc` instead of compiling it
   from source on every fresh machine. Safe to bump to a stable 36.x+.
+  Caveat: that flag's machinery turned out to be broken in 36.0-rc1 (stale
+  artifact hashes in its integrity file) and disabled in 36.0-rc2, so tools
+  that need protoc directly (prost codegen in `apps/BEVO`) use
+  `//tools/protoc` — our own correctly-pinned prebuilt, kept in version
+  lockstep with this bazel_dep. When bumping protobuf, bump
+  `tools/protoc/protoc.bzl` in the same change (and retire it if a stable
+  36.x fixes the upstream pins).
