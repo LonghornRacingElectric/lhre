@@ -2,6 +2,16 @@
 startup --windows_enable_symlinks
 build --enable_runfiles
 
+# Python binaries run as self-extracting zips on Windows (Bazel's default
+# there, which --enable_runfiles above would otherwise override). Importing
+# straight from the runfiles tree breaks MAX_PATH: runfiles root + the pip
+# repo dir + site-packages/google/protobuf/internal/<module>.py exceeds 260
+# chars, so the CAN spec generator dies with ImportError on the pip protobuf
+# runtime's longest module. The zip extracts to a short %TEMP% path instead;
+# machines with the LongPathsEnabled registry policy would also work, but
+# the build must not require registry edits (see docs/build-system.md).
+build:windows --build_python_zip
+
 # Automatically apply build:windows / build:macos / build:linux based on the
 # host OS, so nobody has to pass --config flags by hand.
 common --enable_platform_specific_config

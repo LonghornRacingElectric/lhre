@@ -161,3 +161,14 @@ never happen:
 3. Tripwire flags in `.bazelrc` poison the compile line of any file from a
    protobuf external repo, so a regression is a loud build error, not a
    silent 1000-action slowdown.
+
+One Windows wrinkle from piece 2: importing the pip runtime straight out
+of a runfiles tree produces paths like
+`…\gen_can_lib.exe.runfiles\rules_python++pip+lhre_pypi_312_protobuf_…\site-packages\google\protobuf\internal\python_edition_defaults.py`
+— past the 260-char `MAX_PATH` on stock Windows, which surfaces as an
+`ImportError` for whichever module has the longest filename. `.bazelrc`
+therefore sets `build:windows --build_python_zip`: Python binaries
+self-extract to a short `%TEMP%` path (Bazel's own Windows default, which
+our `--enable_runfiles` would otherwise override). Enabling the
+`LongPathsEnabled` registry policy also works, but a plain checkout must
+build without registry edits.
