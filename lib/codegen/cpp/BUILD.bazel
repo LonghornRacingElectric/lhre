@@ -1,0 +1,44 @@
+"""Generated CAN pack/unpack library for firmware.
+
+//gen/cpp:can_lib — cc_library over the generated lhre_can.hpp/.cpp.
+Include with `#include "lhre_can.hpp"`. Builds for firmware and host;
+Pack/Unpack are integer-only, float accessors are separate inlines.
+"""
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("@rules_python//python:defs.bzl", "py_binary")
+load(":can_lib.bzl", "can_lib_sources")
+
+py_binary(
+    name = "gen_can_lib",
+    srcs = ["gen_can_lib.py"],
+    visibility = ["//visibility:private"],
+    deps = ["//lib/spec:ir"],
+)
+
+can_lib_sources(
+    name = "can_lib_srcs",
+    header = "lhre_can.hpp",
+    source = "lhre_can.cpp",
+    spec = "//lib/spec:files",
+)
+
+cc_library(
+    name = "can_lib",
+    srcs = ["lhre_can.cpp"],
+    hdrs = ["lhre_can.hpp"],
+    includes = ["."],
+    visibility = ["//visibility:public"],
+    deps = ["//drivers/lhal:lhal"],
+)
+
+cc_test(
+    name = "can_lib_test",
+    size = "small",
+    srcs = ["test/can_lib_test.cpp"],
+    deps = [
+        ":can_lib",
+        "@googletest//:gtest_main",
+    ],
+)

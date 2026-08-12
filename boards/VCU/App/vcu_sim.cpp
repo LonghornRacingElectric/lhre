@@ -10,6 +10,7 @@
 #include "lhal/host/can.hpp"
 #include "lhal/host/gpio.hpp"
 #include "lhal/host/system.hpp"
+#include "lhre_can.hpp"
 #include "task.h"
 #include "vcu_app.hpp"
 
@@ -30,6 +31,7 @@ struct SimWorld {
 void ObserverTaskLoop(void* arg) {
   SimWorld& world = *static_cast<SimWorld*>(arg);
   bool last_led = world.led.Read();
+  uint32_t statuses_seen = 0;
 
   while (world.clock.Millis() < kSimDurationMs) {
     if (world.led.Read() != last_led) {
@@ -40,13 +42,15 @@ void ObserverTaskLoop(void* arg) {
 
     lhal::CanFrame frame;
     while (world.observer.Receive(&frame)) {
-      uint32_t counter = static_cast<uint32_t>(frame.data[0]) |
-                         (static_cast<uint32_t>(frame.data[1]) << 8) |
-                         (static_cast<uint32_t>(frame.data[2]) << 16) |
-                         (static_cast<uint32_t>(frame.data[3]) << 24);
-      if (counter % 10 == 0) {
-        std::printf("[%4u ms] CAN 0x%03X heartbeat #%u\n", world.clock.Millis(),
-                    frame.id, counter);
+      if (!lhre::can::VcuStatus::Matches(frame.id)) {
+        continue;
+      }
+      auto status = lhre::can::VcuStatus::FromFrame(frame);
+      ++statuses_seen;
+      if (statuses_seen % 10 == 1) {
+        std::printf("[%4u ms] CAN 0x%03X VcuStatus state=%s\n",
+                    world.clock.Millis(), frame.id,
+                    lhre::can::ToString(status.state));
       }
     }
 
@@ -77,6 +81,6 @@ int main() {
 
   vTaskStartScheduler();  // returns when the observer task ends the sim
 
-  std::printf("VCU sim: done (%u heartbeats sent)\n", app.heartbeats_sent());
+  std::printf("VCU sim: done (%u statuses sent)\n", app.statuses_sent());
   return 0;
 }

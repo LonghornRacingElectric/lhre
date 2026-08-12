@@ -12,6 +12,8 @@ three years after everyone who made the decision graduated.
 | [002](002-bazel.md) | Bazel with hermetic toolchains, not CMake | Accepted |
 | [003](003-lhal.md) | App code depends on LHAL interfaces, never ST HAL | Accepted |
 | [004](004-docs-next-to-code.md) | Docs live next to code, published as one site | Accepted |
+| 005–007 | Reserved by the in-flight `bevo-migration` branch (telemetry in monorepo, Pi deploys, CAN schema) | Pending merge |
+| [008](008-can-spec-pipeline.md) | One CAN spec in textproto; all derived artifacts generated | Accepted |
 
 ## ADRs vs. READMEs
 

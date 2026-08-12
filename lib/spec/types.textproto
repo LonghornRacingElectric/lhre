@@ -1,0 +1,57 @@
+# proto-file: lib/spec/proto/can_spec.proto
+# proto-message: lhre.canspec.SpecFile
+
+enum_type {
+  name: "VcuState"
+  description: "Top-level VCU state machine state."
+  value {
+    name: "INIT"
+    description: "Power-on self test"
+  }
+  value {
+    name: "IDLE"
+    number: 1
+    description: "HV off, waiting for RTD"
+  }
+  value {
+    name: "DRIVE"
+    number: 2
+    description: "Ready to drive"
+  }
+  value {
+    name: "FAULT"
+    number: 3
+    description: "Latched fault, HV opening"
+  }
+}
+bitfield_type {
+  name: "VcuFaults"
+  description: "Latched VCU fault flags. Bit i of the wire value is entry i."
+  bit {
+    name: "overtemp"
+    description: "Motor or inverter over temperature limit"
+    telemetry {
+      group: "Faults"
+      field: "vcu_fault_overtemp"
+      id: 1
+    }
+  }
+  bit {
+    name: "overcurrent"
+    description: "DC bus current above limit"
+    telemetry {
+      group: "Faults"
+      field: "vcu_fault_overcurrent"
+      id: 2
+    }
+  }
+  bit {
+    name: "sensor_loss"
+    description: "APPS/BSE plausibility or sensor loss"
+    telemetry {
+      group: "Faults"
+      field: "vcu_fault_sensor_loss"
+      id: 3
+    }
+  }
+}

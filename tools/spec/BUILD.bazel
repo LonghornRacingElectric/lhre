@@ -1,0 +1,10 @@
+load("@rules_python//python:defs.bzl", "py_binary")
+
+# Canonical formatter for lib/spec/*.textproto:
+#   bazel run //tools/spec:fmt
+py_binary(
+    name = "fmt",
+    srcs = ["fmt.py"],
+    visibility = ["//visibility:private"],
+    deps = ["//lib/spec:ir"],
+)

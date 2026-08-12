@@ -1,0 +1,91 @@
+# proto-file: lib/spec/proto/can_spec.proto
+# proto-message: lhre.canspec.SpecFile
+
+message {
+  name: "HVC_PACK_STATUS"
+  can_id: 1024
+  from_board: "HVC"
+  to_boards: "*"
+  bus: "Critical"
+  dlc: 8
+  frequency_hz: 50.0
+  description: "Seed example: accumulator pack electrical and thermal state."
+  signal {
+    name: "pack_voltage"
+    encoding {
+      bit_length: 16
+      scale: 0.1
+      max: 600.0
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    telemetry {
+      group: "Battery"
+      field: "pack_voltage"
+      id: 1
+    }
+    description: "Total pack voltage"
+  }
+  signal {
+    name: "pack_current"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "A"
+      }
+    }
+    telemetry {
+      group: "Battery"
+      field: "pack_current"
+      id: 2
+    }
+    description: "Pack current, positive = discharge"
+  }
+  signal {
+    name: "soc"
+    encoding {
+      start_bit: 32
+      bit_length: 8
+      scale: 0.5
+    }
+    logical {
+      physical {
+        unit: "%"
+      }
+    }
+    telemetry {
+      group: "Battery"
+      field: "pack_soc"
+      id: 3
+      rate_tier: SLOW
+    }
+    description: "State of charge"
+  }
+  signal {
+    name: "coolant_temp"
+    encoding {
+      start_bit: 40
+      bit_length: 8
+      sign: SIGNED
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    telemetry {
+      group: "Thermal"
+      field: "coolant_temp"
+      id: 2
+    }
+    description: "Coolant temperature at pack outlet"
+  }
+}

@@ -1,0 +1,168 @@
+// Meta-schema for the CAN spec (spec/*.textproto). This file is code:
+// changing it changes what every spec file means, so review it like code.
+//
+// The generated Python classes for this schema ARE the pipeline's IR —
+// there is no separate dataclass layer. Structural typing is enforced by
+// the textproto parser; semantic rules live in spec/validator.py.
+
+syntax = "proto3";
+
+package lhre.canspec;
+
+// Root message for every spec file. Each file populates only the sections
+// that belong there (see spec/README.md for the file layout): messages/*
+// use `message`, buses.textproto uses `bus`, types.textproto uses
+// `enum_type`/`bitfield_type`, groups.textproto uses `groups`. The loader
+// parses every file with this one root and merges.
+message SpecFile {
+  repeated CanMessage message = 1;
+  repeated Bus bus = 2;
+  repeated EnumType enum_type = 3;
+  repeated BitfieldType bitfield_type = 4;
+  GroupRegistry groups = 5;
+}
+
+message CanMessage {
+  string name = 1;               // UPPER_SNAKE, unique across all spec files
+  uint32 can_id = 2;             // base ID
+  uint32 quantity = 3;           // number of consecutive IDs (default 1);
+                                 // occupies [can_id, can_id + quantity)
+  string from_board = 4;         // exactly one source
+  repeated string to_boards = 5; // "*" allowed
+  string bus = 6;                // must reference buses.textproto
+  uint32 dlc = 7;                // classic: 0..8; FD: valid DLC values only
+  double frequency_hz = 8;       // 0 = aperiodic/event-driven
+  string description = 9;
+  RateTier default_rate_tier = 10;  // per-message tier default
+  repeated Signal signal = 11;
+}
+
+message Signal {
+  string name = 1;       // lower_snake, unique within message
+  Encoding encoding = 2; // required
+  Logical logical = 3;   // required
+  Telemetry telemetry = 4;  // omit => firmware-only, never leaves the bus
+  string description = 5;
+}
+
+// Wire layer: how the signal sits in the frame. Fully determines the C
+// pack/unpack code and the DBC output.
+message Encoding {
+  uint32 start_bit = 1;      // LITTLE_ENDIAN: bit position of the LSB
+                             // (bit N = byte N/8, bit N%8);
+                             // BIG_ENDIAN: bit position of the MSB,
+                             // DBC/Motorola numbering
+  uint32 bit_length = 2;
+  ByteOrder byte_order = 3;  // LITTLE_ENDIAN default
+  Sign sign = 4;             // UNSIGNED default
+  double scale = 5;          // 0 in file means "unset" -> treated as 1.0
+  double offset = 6;         // physical = raw * scale + offset
+  double min = 7;            // physical bounds, optional (both or neither)
+  double max = 8;
+  uint32 mux_value = 9;      // only meaningful if the signal is muxed; a
+                             // muxed signal decodes only when the message's
+                             // mux selector equals this value
+  bool muxed = 10;           // distinguishes mux_value 0 from "not muxed"
+}
+
+enum ByteOrder {
+  LITTLE_ENDIAN = 0;
+  BIG_ENDIAN = 1;
+}
+
+enum Sign {
+  UNSIGNED = 0;
+  SIGNED = 1;  // two's complement
+}
+
+// Meaning layer: what the signal is. Determines the physical type of the
+// snapshot field and the enum definitions in generated code.
+message Logical {
+  oneof kind {
+    PhysicalUnit physical = 1;
+    string enum_type = 2;    // must reference types.textproto
+    bool boolean = 3;
+    BitfieldRef bitfield = 4;
+  }
+  // Marks this signal as the message's mux selector. Selector signals must
+  // be unsigned integers (physical with scale 1 / offset 0, or enum).
+  bool mux_selector = 5;
+}
+
+message PhysicalUnit {
+  string unit = 1;  // e.g. "degC", "rpm", "V"; empty = dimensionless
+}
+
+// A named bitfield from types.textproto. Expands to one bool signal per
+// bit for telemetry; on the wire it occupies the enclosing Encoding.
+message BitfieldRef {
+  string bitfield_type = 1;
+}
+
+// Transport layer: where the signal lands off-vehicle. Optional; a signal
+// without it exists only on the bus (e.g. firmware-update packets).
+message Telemetry {
+  string group = 1;      // must reference groups.textproto
+  string field = 2;      // snapshot proto field name; globally unique
+  uint32 id = 3;         // proto field number within group; ledger rules
+                         // are in spec/validator.py
+  RateTier rate_tier = 4;  // TIER_UNSPECIFIED => inherit message default,
+                           // else derive from frequency_hz
+  uint32 array_index = 5;  // for repeated fields; presence via has-bit
+  bool repeated = 6;
+}
+
+enum RateTier {
+  TIER_UNSPECIFIED = 0;
+  FAST = 1;
+  MEDIUM = 2;
+  SLOW = 3;
+}
+
+message Bus {
+  string name = 1;         // referenced by CanMessage.bus
+  uint32 bitrate_bps = 2;  // arbitration-phase bitrate
+  bool fd = 3;             // frames on this bus may use FD DLCs (> 8 bytes)
+  string description = 4;
+}
+
+message EnumType {
+  string name = 1;  // UpperCamel; referenced by Logical.enum_type
+  string description = 2;
+  repeated EnumValue value = 3;
+}
+
+message EnumValue {
+  string name = 1;    // UPPER_SNAKE, unique within the enum
+  uint32 number = 2;  // raw wire value, unique within the enum
+  string description = 3;
+}
+
+// A named ordered list of single-bit flags. Replaces the lhre-2026
+// can_bitfields.csv. Bit i of the wire value is entry i of `bit`.
+message BitfieldType {
+  string name = 1;  // UpperCamel; referenced by BitfieldRef.bitfield_type
+  string description = 2;
+  repeated BitfieldBit bit = 3;
+}
+
+message BitfieldBit {
+  string name = 1;  // lower_snake, unique within the bitfield
+  string description = 2;
+  Telemetry telemetry = 3;  // each bit maps to its own bool snapshot field
+}
+
+// The append-only ID ledger, one entry per telemetry group. The partition
+// invariant (validator rule 1) makes the ledger stateless-checkable:
+// live_ids ∪ reserved_ids must equal exactly {1, …, next_free_id − 1}.
+message GroupRegistry {
+  repeated Group group = 1;
+}
+
+message Group {
+  string name = 1;                // e.g. "Thermal" -> snapshot submessage
+  uint32 next_free_id = 2;        // high-water mark, only ever increases
+  repeated uint32 reserved_ids = 3;     // tombstones of removed fields
+  repeated string reserved_names = 4;   // never reuse a dead field's name
+  string description = 5;
+}

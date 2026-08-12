@@ -6,6 +6,8 @@ load("//tools/firmware:firmware_project.bzl", "firmware_project")
 # tools/firmware/README.md. State only what this board adds.
 firmware_project(
     name = "vcu",
+    # Generated CAN message bindings from the spec (lib/spec).
+    app_deps = ["//lib/codegen/cpp:can_lib"],
     enable_freertos = True,
     enable_usb = True,
     mcu = "stm32g474xx",

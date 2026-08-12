@@ -1,0 +1,183 @@
+# proto-file: lib/spec/proto/can_spec.proto
+# proto-message: lhre.canspec.SpecFile
+
+message {
+  name: "VCU_BOOTLOADER_DATA"
+  can_id: 16
+  quantity: 4
+  from_board: "VCU"
+  to_boards: "*"
+  bus: "Critical"
+  dlc: 8
+  description: "Seed example: firmware-update payload frames, IDs 0x010-0x013. Bus-only, never telemetered."
+  signal {
+    name: "word0"
+    encoding {
+      bit_length: 32
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Payload bytes 0-3"
+  }
+  signal {
+    name: "word1"
+    encoding {
+      start_bit: 32
+      bit_length: 32
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Payload bytes 4-7"
+  }
+}
+message {
+  name: "VCU_STATUS"
+  can_id: 768
+  from_board: "VCU"
+  to_boards: "*"
+  bus: "Critical"
+  dlc: 8
+  frequency_hz: 100.0
+  description: "Seed example: VCU state, faults, and driver command."
+  signal {
+    name: "state"
+    encoding {
+      bit_length: 8
+    }
+    logical {
+      enum_type: "VcuState"
+    }
+    telemetry {
+      group: "Vehicle"
+      field: "vcu_state"
+      id: 3
+    }
+    description: "VCU state machine state"
+  }
+  signal {
+    name: "faults"
+    encoding {
+      start_bit: 8
+      bit_length: 8
+    }
+    logical {
+      bitfield {
+        bitfield_type: "VcuFaults"
+      }
+    }
+    description: "Latched fault flags"
+  }
+  signal {
+    name: "torque_request"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+      min: -300.0
+      max: 300.0
+    }
+    logical {
+      physical {
+        unit: "Nm"
+      }
+    }
+    telemetry {
+      group: "Vehicle"
+      field: "torque_request"
+      id: 1
+    }
+    description: "Commanded motor torque"
+  }
+  signal {
+    name: "speed"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "kph"
+      }
+    }
+    telemetry {
+      group: "Vehicle"
+      field: "vehicle_speed"
+      id: 2
+    }
+    description: "Vehicle speed from wheel odometry"
+  }
+  signal {
+    name: "steering_angle"
+    encoding {
+      start_bit: 55
+      bit_length: 16
+      byte_order: BIG_ENDIAN
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "deg"
+      }
+    }
+    description: "Steering wheel angle, big-endian sensor value passed through"
+  }
+}
+message {
+  name: "VCU_DEBUG"
+  can_id: 784
+  from_board: "VCU"
+  to_boards: "*"
+  bus: "Critical"
+  dlc: 8
+  frequency_hz: 10.0
+  description: "Seed example: multiplexed debug channel. Bus-only."
+  signal {
+    name: "channel"
+    encoding {
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+      mux_selector: true
+    }
+    description: "Mux selector: which debug value this frame carries"
+  }
+  signal {
+    name: "loop_time"
+    encoding {
+      start_bit: 8
+      bit_length: 32
+      muxed: true
+    }
+    logical {
+      physical {
+        unit: "us"
+      }
+    }
+    description: "Control loop execution time (channel 0)"
+  }
+  signal {
+    name: "cpu_load"
+    encoding {
+      start_bit: 8
+      bit_length: 16
+      scale: 0.01
+      mux_value: 1
+      muxed: true
+    }
+    logical {
+      physical {
+        unit: "%"
+      }
+    }
+    description: "RTOS CPU load (channel 1)"
+  }
+}
