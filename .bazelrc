@@ -2,6 +2,18 @@
 startup --windows_enable_symlinks
 build --enable_runfiles
 
+# protobuf's tools (protoc_minimal, internal_defaults_escape) import POSIX-
+# style io helpers (setmode, open, access, ...) from protobuf's own io_win32
+# shim via using-declarations, written against MSVC headers where the
+# unprefixed CRT names don't exist. Our hermetic clang targets MinGW, whose
+# <io.h> declares those legacy names by default — the using-declarations
+# collide and the compile fails. NO_OLDNAMES hides MinGW's aliases so the
+# shim is the only declaration in scope, which is what the code intends.
+# Scoped to protobuf sources; the host_ variant covers the exec-config
+# tool builds, where these files actually compile.
+build:windows --per_file_copt=external/.*protobuf.*@-DNO_OLDNAMES
+build:windows --host_per_file_copt=external/.*protobuf.*@-DNO_OLDNAMES
+
 # Automatically apply build:windows / build:macos / build:linux based on the
 # host OS, so nobody has to pass --config flags by hand.
 common --enable_platform_specific_config

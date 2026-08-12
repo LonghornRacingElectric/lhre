@@ -157,3 +157,13 @@ pinned to the pip protobuf wheel in version-lockstep with the bazel_dep
 fallback build is a few hundred actions, hits the shared remote cache
 after the first build per platform/config, and touches nothing outside
 the exec configuration.
+
+That fallback needs one accommodation on Windows: protobuf's tool sources
+pull POSIX-style io helpers (`setmode`, `open`, `access`, …) from its
+`io_win32` shim with using-declarations that assume MSVC headers, where
+the unprefixed CRT names don't exist. The hermetic clang targets MinGW,
+whose `<io.h>` declares those legacy aliases by default, so the
+using-declarations collide. `.bazelrc` compiles protobuf sources with
+`-DNO_OLDNAMES` on Windows (`per_file_copt`, target and exec config),
+which hides MinGW's aliases and leaves protobuf's shim as the only
+declaration — the situation the code was written for.
