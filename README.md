@@ -38,6 +38,11 @@ STM32CubeMX is only needed when changing a board's peripheral configuration.
 
 On Windows, builds run locally instead of on remote executors; for full remote
 execution use WSL2 (see the comments in [.bazelrc](https://github.com/LonghornRacingElectric/lhre/blob/main/.bazelrc)).
+Windows also needs the `startup --output_user_root=C:/_bzl` line uncommented
+in `.bazelrc.user` (copied from
+[.bazelrc.user.example](https://github.com/LonghornRacingElectric/lhre/blob/main/.bazelrc.user.example)) —
+without it, Python codegen tools blow Windows' 260-char path limit and die
+with an `ImportError` in the protobuf runtime.
 
 ## The commands
 

@@ -2,14 +2,19 @@
 startup --windows_enable_symlinks
 build --enable_runfiles
 
-# Python binaries run as self-extracting zips on Windows (Bazel's default
-# there, which --enable_runfiles above would otherwise override). Importing
-# the pip protobuf runtime straight from a runfiles tree exceeds the
-# 260-char MAX_PATH (runfiles root + 71-char pip repo dir + the package's
-# longest module path) and dies with ImportError; the zip extracts to a
-# short %TEMP% path instead. Registry LongPathsEnabled would also work,
-# but a plain checkout must build without registry edits.
-build:windows --build_python_zip
+# Windows MAX_PATH: importing the pip protobuf runtime straight from its
+# runfiles repo dir exceeds the 260-char limit (default output user root +
+# 71-char pip repo dir + the package's longest module path = 264) and dies
+# with ImportError. rules_python 2.x removed the old escape hatch
+# (--build_python_zip is ignored on Windows), and its replacement
+# (--venvs_site_packages) doesn't yet link pip packages into the venv for
+# tools run as build actions. Until one of those is fixed, Windows machines
+# must shorten the path prefix instead: uncomment
+#   startup --output_user_root=C:/_bzl
+# in .bazelrc.user (from .bazelrc.user.example; imported at the bottom of
+# this file). It can't live here because startup options don't support
+# per-OS configs, and a Windows path would break macOS/Linux at server
+# launch. Registry LongPathsEnabled would also work, but needs admin rights.
 
 # Automatically apply build:windows / build:macos / build:linux based on the
 # host OS, so nobody has to pass --config flags by hand.

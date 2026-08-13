@@ -8,3 +8,9 @@ common --remote_header=x-buildbuddy-api-key=YOUR_KEY_HERE
 # common --config=local
 # ...or fully offline:
 # common --config=offline
+
+# Windows only — REQUIRED: keep Bazel's output tree short so Python codegen
+# tools that import the pip protobuf runtime stay under the 260-char
+# MAX_PATH. See the "Windows MAX_PATH" comment in .bazelrc for the story.
+# startup --output_user_root=C:/_bzl
+
