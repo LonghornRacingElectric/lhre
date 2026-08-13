@@ -6,7 +6,10 @@ canonical serializer the build uses (no parallel logic) and exposes them
 over three JSON endpoints; all editing intelligence lives in the page.
 
     GET  /api/spec      -> {files: {path: SpecFile-as-JSON}, digest}
-    POST /api/validate  -> {errors: [...], warnings: [...]}
+    POST /api/validate  -> {errors: [...], warnings: [...], types: {...}}
+                           types maps "MESSAGE.signal" to the derived
+                           snapshot-proto type, computed by lib/spec/wire
+                           so the page never reimplements the rule.
     POST /api/save      -> validates, then writes canonical textproto.
                            Refuses if the on-disk files changed since the
                            client loaded them (digest mismatch) or if
@@ -29,7 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from google.protobuf import json_format
 from runfiles import Runfiles
 
-from lib.spec import canonical, loader, validator
+from lib.spec.ir import canonical, loader, validator, wire
 from lib.spec.proto import can_spec_pb2
 
 SPEC_DIR = "lib/spec"
@@ -87,6 +90,16 @@ def validate_files(protos):
     return validator.validate(loader.Spec(protos))
 
 
+def derived_types(protos):
+    """Snapshot-proto type per signal, for display in the editor. Comes
+    from lib/spec/wire so the page shows exactly what the generators
+    will emit."""
+    try:
+        return wire.signal_types(loader.Spec(protos))
+    except Exception:
+        return {}  # malformed mid-edit; the validator reports why
+
+
 def save_files(root, files_json, expected_digest):
     """Validates and writes the spec. Returns (written_paths, response).
     Raises ValueError with a user-facing message on any refusal."""
@@ -139,8 +152,10 @@ class _Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             if self.path == "/api/validate":
-                errors, warnings = validate_files(parse_payload(self._body()["files"]))
-                self._reply(200, {"errors": errors, "warnings": warnings})
+                protos = parse_payload(self._body()["files"])
+                errors, warnings = validate_files(protos)
+                self._reply(200, {"errors": errors, "warnings": warnings,
+                                  "types": derived_types(protos)})
             elif self.path == "/api/save":
                 body = self._body()
                 try:

@@ -85,22 +85,31 @@ def resolve_tier(message, telemetry):
 def telemetry_bindings(spec):
     """Every telemetry binding in the spec, bitfields expanded.
 
-    Yields (filename, message, signal, bit_or_None, Telemetry). Bitfield
-    signals carry no binding themselves; each telemetry-bound bit of the
-    referenced type binds one bool field.
+    Yields (filename, message, signal, bit_or_None, Telemetry). Element 3
+    always has a `.name`; for a bitfield type no signal references yet it
+    is the bitfield itself, and `message` is empty.
+
+    Bitfield bits are walked from the type registry rather than from the
+    signals that use them, so a bit's id counts as live the moment it is
+    written. Otherwise defining a type before wiring it up would look
+    like a ledger hole.
     """
-    bitfields = {b.name: b for _, b in spec.bitfield_types()}
+    users = {}
     for filename, message in spec.messages():
         for signal in message.signal:
             if signal.logical.WhichOneof("kind") == "bitfield":
-                bitfield = bitfields.get(signal.logical.bitfield.bitfield_type)
-                if bitfield is None:
-                    continue  # reported by referential integrity
-                for bit in bitfield.bit:
-                    if bit.HasField("telemetry"):
-                        yield filename, message, signal, bit, bit.telemetry
+                users.setdefault(signal.logical.bitfield.bitfield_type,
+                                 (filename, message, signal))
             elif signal.HasField("telemetry"):
                 yield filename, message, signal, None, signal.telemetry
+
+    for filename, bitfield in spec.bitfield_types():
+        # At most one signal may use a telemetry-carrying bitfield (see
+        # _check_bitfield_references), so this cannot double-count.
+        where = users.get(bitfield.name, (filename, can_spec_pb2.CanMessage(), bitfield))
+        for bit in bitfield.bit:
+            if bit.HasField("telemetry"):
+                yield where[0], where[1], where[2], bit, bit.telemetry
 
 
 def classic_frame_bits(dlc):
@@ -303,7 +312,8 @@ def _check_ledgers(spec, report):
 
     for filename, message, signal, bit, telemetry in telemetry_bindings(spec):
         suffix = f".{bit.name}" if bit is not None else ""
-        where = f"{filename}: {message.name}.{signal.name}{suffix}"
+        prefix = f"{message.name}." if message.name else ""
+        where = f"{filename}: {prefix}{signal.name}{suffix}"
         if telemetry.group not in groups:
             report.error(where, 5, f"unknown telemetry group '{telemetry.group}'")
             continue

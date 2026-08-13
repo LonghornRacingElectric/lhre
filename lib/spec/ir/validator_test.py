@@ -4,7 +4,7 @@ actually fires (and that valid constructs don't)."""
 
 import unittest
 
-from lib.spec import canonical, loader, validator
+from lib.spec.ir import canonical, loader, validator
 from lib.spec.proto import can_spec_pb2
 
 REGISTRY = """
@@ -264,6 +264,18 @@ message {
         # Same slot twice is a collision.
         errors, _ = _validate(REGISTRY, message.replace("array_index: 1", ""))
         self.assert_error(errors, "array_index 0 already bound")
+
+    def test_unreferenced_bitfield_bit_still_holds_its_id(self):
+        # Defining a bitfield before wiring it to a signal is normal. Its
+        # bit ids are allocated, so they must count as live.
+        registry = REGISTRY.replace("next_free_id: 2", "next_free_id: 3") + """
+bitfield_type {
+  name: "Flags"
+  bit { name: "a" telemetry { group: "Vehicle" field: "flag_a" id: 2 } }
+}
+"""
+        errors, _ = _validate(registry, MESSAGE)
+        self.assertEqual(errors, [])
 
     def test_canonical_roundtrip_stable(self):
         spec_file = loader.parse_file(REGISTRY + MESSAGE)

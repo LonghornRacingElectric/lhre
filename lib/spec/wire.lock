@@ -1,0 +1,31 @@
+# Generated wire contract — DO NOT EDIT.
+# Update with: bazel run //tools/spec:lock
+#
+# One line per telemetry field: <group>.<field> <id> <proto type>, plus
+# each group's tombstones. This is what the gateway publishes and the
+# telemetry server decodes: changing any existing line breaks deployed
+# consumers and archived data, which is why it is committed and reviewed
+# rather than silently regenerated. Types are derived from the spec's
+# encodings (lib/spec/wire.py) — note that editing a signal's `scale` can
+# change its type here without changing its id.
+
+[Battery] next_free_id=5
+Battery.pack_voltage 1 float
+Battery.pack_current 2 float
+Battery.pack_soc 3 float
+Battery.cell_temps 4 repeated IndexedFloat[16]
+
+[Faults] next_free_id=4
+Faults.vcu_fault_overtemp 1 bool
+Faults.vcu_fault_overcurrent 2 bool
+Faults.vcu_fault_sensor_loss 3 bool
+
+[Thermal] next_free_id=3
+Thermal.coolant_temp 2 int32
+Thermal RESERVED_ID 1
+Thermal RESERVED_NAME old_coolant_temp
+
+[Vehicle] next_free_id=4
+Vehicle.torque_request 1 float
+Vehicle.vehicle_speed 2 float
+Vehicle.vcu_state 3 VcuState

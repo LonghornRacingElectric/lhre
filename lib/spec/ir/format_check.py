@@ -5,7 +5,7 @@ import sys
 
 from runfiles import Runfiles
 
-from lib.spec import canonical, loader
+from lib.spec.ir import canonical, loader
 
 
 def main(argv):
