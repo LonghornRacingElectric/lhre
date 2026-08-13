@@ -21,6 +21,7 @@ jobs:
           else
             echo "common --config=local" > .bazelrc.user
           fi
+          echo "common --config=ci" >> .bazelrc.user
 
       - name: Check formatting
         run: bazel run //tools/format:check

@@ -22,6 +22,7 @@ jobs:
           else
             echo "common --config=local" > .bazelrc.user
           fi
+          echo "common --config=ci" >> .bazelrc.user
 
       - name: Build everything
         run: bazel build //...
@@ -54,6 +55,7 @@ jobs:
           else
             echo "common --config=local" >> .bazelrc.user
           fi
+          echo "common --config=ci" >> .bazelrc.user
 
       - name: Build everything
         run: bazel build //...

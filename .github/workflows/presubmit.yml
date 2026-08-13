@@ -21,6 +21,7 @@ jobs:
           else
             echo "common --config=local" > .bazelrc.user
           fi
+          echo "common --config=ci" >> .bazelrc.user
 
       - name: Build everything
         run: bazel build //...
@@ -50,10 +51,18 @@ jobs:
           else
             echo "common --config=local" >> .bazelrc.user
           fi
+          echo "common --config=ci" >> .bazelrc.user
+
+      - name: Cache Bazel
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/bazel
+          key: ${{ runner.os }}-bazel-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-bazel-
 
       - name: Build everything
         run: bazel build //...
 
       - name: Test everything
         run: bazel test //...
-

@@ -133,4 +133,11 @@ build:local --jobs=auto
 build:offline --config=local
 build:offline --nofetch
 
+# CI runners die the moment the job's last step exits, which would truncate
+# the async cache/BES uploads configured above and silently under-populate
+# the shared cache. CI jobs add `common --config=ci` to .bazelrc.user to
+# flip uploads back to blocking; humans keep the async tail.
+build:ci --bes_upload_mode=wait_for_upload_complete
+build:ci --noremote_cache_async
+
 try-import %workspace%/.bazelrc.user
