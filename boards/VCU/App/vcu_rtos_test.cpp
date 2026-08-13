@@ -17,7 +17,7 @@
 #include "lhal/host/can.hpp"
 #include "lhal/host/gpio.hpp"
 #include "lhal/host/system.hpp"
-#include "lhre_can.hpp"
+#include "lhre_can_vcu.hpp"
 #include "task.h"
 #include "vcu_app.hpp"
 
@@ -64,9 +64,9 @@ TEST(VcuRtos, StatusTaskRunsUnderScheduler) {
   lhal::CanFrame frame;
   uint32_t received = 0;
   while (dash.Receive(&frame)) {
-    ASSERT_TRUE(lhre::can::VcuStatus::Matches(frame.id));
-    ASSERT_EQ(frame.len, lhre::can::VcuStatus::kDlc);
-    EXPECT_EQ(lhre::can::VcuStatus::FromFrame(frame).state,
+    ASSERT_TRUE(lhre::can::vcu::VcuStatus::Matches(frame.id));
+    ASSERT_EQ(frame.len, lhre::can::vcu::VcuStatus::kDlc);
+    EXPECT_EQ(lhre::can::vcu::VcuStatus::FromFrame(frame).state,
               lhre::can::VcuState::kIdle);
     ++received;
   }

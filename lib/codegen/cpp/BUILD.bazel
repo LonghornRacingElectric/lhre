@@ -1,14 +1,23 @@
-"""Generated CAN pack/unpack library for firmware.
+"""Generated CAN pack/unpack libraries for firmware.
 
-//gen/cpp:can_lib — cc_library over the generated lhre_can.hpp/.cpp.
-Include with `#include "lhre_can.hpp"`. Builds for firmware and host;
-Pack/Unpack are integer-only, float accessors are separate inlines.
+One cc_library per source board — //lib/codegen/cpp:can_<board>, holding
+lhre_can_<board>.hpp with everything in namespace lhre::can::<board> —
+plus :can_types (shared enums + message metadata) and the :can_lib
+umbrella that pulls in the whole bus. Boards should depend on the
+per-board libraries for exactly the message sets they send or listen to.
 """
 
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
 load("@rules_python//python:defs.bzl", "py_binary")
 load(":can_lib.bzl", "can_lib_sources")
+
+# Must match the lib/spec/messages/*.textproto file stems; the generator
+# errors with instructions when a board file is added or removed.
+CAN_BOARDS = [
+    "hvc",
+    "vcu",
+]
 
 py_binary(
     name = "gen_can_lib",
@@ -19,18 +28,41 @@ py_binary(
 
 can_lib_sources(
     name = "can_lib_srcs",
-    header = "lhre_can.hpp",
-    source = "lhre_can.cpp",
+    boards = CAN_BOARDS,
     spec = "//lib/spec:files",
 )
 
 cc_library(
+    name = "can_types",
+    srcs = ["lhre_can_types.cpp"],
+    hdrs = ["lhre_can_types.hpp"],
+    includes = ["."],
+    visibility = ["//visibility:public"],
+)
+
+[
+    cc_library(
+        name = "can_" + board,
+        srcs = ["lhre_can_{}.cpp".format(board)],
+        hdrs = ["lhre_can_{}.hpp".format(board)],
+        includes = ["."],
+        visibility = ["//visibility:public"],
+        deps = [
+            ":can_types",
+            "//drivers/lhal:lhal",
+        ],
+    )
+    for board in CAN_BOARDS
+]
+
+# Everything on the bus at once — tests, sims, and the future gateway.
+# Firmware should prefer the per-board targets above.
+cc_library(
     name = "can_lib",
-    srcs = ["lhre_can.cpp"],
     hdrs = ["lhre_can.hpp"],
     includes = ["."],
     visibility = ["//visibility:public"],
-    deps = ["//drivers/lhal:lhal"],
+    deps = [":can_types"] + [":can_" + board for board in CAN_BOARDS],
 )
 
 cc_test(

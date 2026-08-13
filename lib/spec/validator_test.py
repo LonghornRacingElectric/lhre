@@ -219,6 +219,52 @@ bitfield_type {
         errors, _ = _validate(registry, message)
         self.assert_error(errors, "bind telemetry on their bits")
 
+    # Rule 5: one file per source board.
+    def test_from_board_must_match_messages_file(self):
+        parsed = {
+            "registry.textproto": loader.parse_file(REGISTRY),
+            "lib/spec/messages/hvc.textproto": loader.parse_file(MESSAGE),  # from VCU
+        }
+        errors, _ = validator.validate(loader.Spec(parsed))
+        self.assert_error(errors, "does not match its file")
+        parsed["lib/spec/messages/vcu.textproto"] = parsed.pop("lib/spec/messages/hvc.textproto")
+        errors, _ = validator.validate(loader.Spec(parsed))
+        self.assertEqual(errors, [])
+
+    def test_from_board_required(self):
+        errors, _ = _validate(REGISTRY, MESSAGE.replace('from_board: "VCU"\n  ', ""))
+        self.assert_error(errors, "from_board is required")
+
+    # Indexed arrays: repeated bindings + quantity express e.g. cell temps.
+    def test_repeated_array_block(self):
+        message = """
+message {
+  name: "CELLS"
+  can_id: 0x200
+  quantity: 4
+  from_board: "HVC"
+  bus: "Critical"
+  dlc: 4
+  signal {
+    name: "slot0"
+    encoding { bit_length: 16 }
+    logical { physical { unit: "V" } }
+    telemetry { group: "Vehicle" field: "cells" id: 1 repeated: true }
+  }
+  signal {
+    name: "slot1"
+    encoding { start_bit: 16 bit_length: 16 }
+    logical { physical { unit: "V" } }
+    telemetry { group: "Vehicle" field: "cells" id: 1 repeated: true array_index: 1 }
+  }
+}
+"""
+        errors, _ = _validate(REGISTRY, message)
+        self.assertEqual(errors, [])
+        # Same slot twice is a collision.
+        errors, _ = _validate(REGISTRY, message.replace("array_index: 1", ""))
+        self.assert_error(errors, "array_index 0 already bound")
+
     def test_canonical_roundtrip_stable(self):
         spec_file = loader.parse_file(REGISTRY + MESSAGE)
         once = canonical.canonicalize(spec_file)

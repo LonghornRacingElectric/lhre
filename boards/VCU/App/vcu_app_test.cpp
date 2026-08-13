@@ -5,14 +5,15 @@
 #include "lhal/host/can.hpp"
 #include "lhal/host/gpio.hpp"
 #include "lhal/host/system.hpp"
-#include "lhre_can.hpp"
+#include "lhre_can_hvc.hpp"
+#include "lhre_can_vcu.hpp"
 #include "vcu_app.hpp"
 
 namespace {
 
-using lhre::can::HvcPackStatus;
 using lhre::can::VcuState;
-using lhre::can::VcuStatus;
+using lhre::can::hvc::HvcPackStatus;
+using lhre::can::vcu::VcuStatus;
 
 TEST(VcuApp, BlinksAndBroadcastsStatus) {
   lhal::host::TestClock clock;

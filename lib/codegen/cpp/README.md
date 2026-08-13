@@ -1,21 +1,33 @@
-# Generated CAN library (firmware)
+# Generated CAN libraries (firmware)
 
-`//lib/codegen/cpp:can_lib` — C++ pack/unpack for every message in the spec,
-regenerated on every build from `//spec:files`. Builds for MCU targets
-and the host alike; add it to a `firmware_project`'s `extra_deps` (or
-any cc_target's `deps`) and `#include "lhre_can.hpp"`.
+C++ pack/unpack generated from `//lib/spec:files` on every build — one
+library per source board, mirroring the one-file-per-board spec layout:
+
+| Target | Contents |
+| ------ | -------- |
+| `:can_<board>` (e.g. `:can_vcu`, `:can_hvc`) | That board's messages, in `namespace lhre::can::<board>` (`lhre_can_<board>.hpp`) |
+| `:can_types` | Shared enums + `ToString` + the `kMessageMeta` table (`lhre_can_types.hpp`) |
+| `:can_lib` | Umbrella: the whole bus (`lhre_can.hpp`) — for tests, sims, the future gateway |
+
+Firmware should depend on the per-board targets for exactly what it
+sends and listens to (see `boards/VCU/BUILD.bazel`: `app_deps` lists
+`:can_vcu` + `:can_hvc`), not the umbrella. The board list is
+`CAN_BOARDS` in this package's BUILD file; the generator errors with
+instructions when `lib/spec/messages/` gains or loses a board file.
 
 Only the spec's wire and logical layers reach this code. Telemetry
 attributes are invisible to firmware by design.
 
 ## API shape
 
-Everything lives in `namespace lhre::can`: one `enum class` per spec
-enum (with a `ToString` for console logging) and one struct per message
-(see the generated `lhre_can.hpp` under `bazel-bin/lib/codegen/cpp/` for the
+One `enum class` per spec enum in `lhre::can` (with `ToString` for
+console logging) and one struct per message in the sender's namespace
+(see the generated headers under `bazel-bin/lib/codegen/cpp/` for the
 real thing):
 
 ```cpp
+namespace lhre::can::vcu {
+
 struct VcuStatus {
   static constexpr uint32_t kFrameId = 0x300;
   static constexpr uint8_t kQuantity = 1;  // consecutive IDs from kFrameId
@@ -37,13 +49,18 @@ struct VcuStatus {
   lhal::CanFrame ToFrame() const;  // ToFrame(index) when kQuantity > 1
   static VcuStatus FromFrame(const lhal::CanFrame& frame);
 };
+
+}  // namespace lhre::can::vcu
 ```
 
 Typical use against [LHAL](../../../drivers/lhal/README.md):
 
 ```cpp
+using lhre::can::hvc::HvcPackStatus;
+using lhre::can::vcu::VcuStatus;
+
 VcuStatus status;
-status.state = VcuState::kDrive;
+status.state = lhre::can::VcuState::kDrive;
 status.set_torque_request(-123.4f);
 bus.Send(status.ToFrame());
 
@@ -52,6 +69,11 @@ if (bus.Receive(&frame) && HvcPackStatus::Matches(frame.id)) {
   auto pack = HvcPackStatus::FromFrame(frame);
 }
 ```
+
+Indexed array blocks (`quantity` > 1 with repeated telemetry slots, e.g.
+`HVC_CELL_TEMPS`) are plain structs here too: fill the per-frame slots,
+`ToFrame(i)` for each frame in the block; element index math lives with
+the spec (see [lib/spec](../../spec/README.md)) and the gateway.
 
 `kMessageMeta[]` / `kMessageCount` give a frame-ID-sorted constexpr
 table of (id, dlc, quantity, frequency) for building RTOS TX/RX task

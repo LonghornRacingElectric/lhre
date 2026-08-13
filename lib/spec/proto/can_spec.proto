@@ -26,8 +26,14 @@ message CanMessage {
   string name = 1;               // UPPER_SNAKE, unique across all spec files
   uint32 can_id = 2;             // base ID
   uint32 quantity = 3;           // number of consecutive IDs (default 1);
-                                 // occupies [can_id, can_id + quantity)
-  string from_board = 4;         // exactly one source
+                                 // occupies [can_id, can_id + quantity).
+                                 // Every frame in the block shares this
+                                 // layout; combined with repeated telemetry
+                                 // bindings this expresses indexed arrays
+                                 // (cell temps/voltages) — see Telemetry.
+  string from_board = 4;         // exactly one source; must match the
+                                 // messages/<from_board>.textproto file the
+                                 // message lives in (validator rule 5)
   repeated string to_boards = 5; // "*" allowed
   string bus = 6;                // must reference buses.textproto
   uint32 dlc = 7;                // classic: 0..8; FD: valid DLC values only
@@ -108,7 +114,14 @@ message Telemetry {
                          // are in spec/validator.py
   RateTier rate_tier = 4;  // TIER_UNSPECIFIED => inherit message default,
                            // else derive from frequency_hz
-  uint32 array_index = 5;  // for repeated fields; presence via has-bit
+  // Indexed arrays: several signals in one message may bind the same
+  // repeated field with distinct array_index values ("slots"). When the
+  // message has quantity > 1, every frame in the ID block carries the
+  // same slots, and the element a signal lands in is
+  //   (frame_id - can_id) * slots_per_frame + array_index
+  // where slots_per_frame = number of bindings of that field in the
+  // message. A 4-slot message with quantity 4 is a 16-element array.
+  uint32 array_index = 5;  // slot within one frame; presence via has-bit
   bool repeated = 6;
 }
 

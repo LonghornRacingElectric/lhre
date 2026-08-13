@@ -1,21 +1,31 @@
 """Generates the firmware CAN library (C++) from the spec.
 
-Consumes only the wire and logical layers (design doc §4). Emitted API,
-per message: a struct in lhre::can with constexpr frame constants, raw
+Consumes only the wire and logical layers (design doc §4). One output
+pair per source board: messages/<board>.textproto becomes
+lhre_can_<board>.{hpp,cpp} with everything inside namespace
+lhre::can::<board>, so a board's firmware depends on exactly the message
+sets it sends or listens to instead of the whole bus. Shared enums and
+the message metadata table live in lhre_can_types.{hpp,cpp}; lhre_can.hpp
+is the include-everything umbrella.
+
+Emitted API, per message: a struct with constexpr frame constants, raw
 integer fields, integer-only Pack/Unpack (no FPU), inline float
 accessors for scaled signals, and lhal::CanFrame conversions. Telemetry
 attributes are ignored here — they never reach firmware.
 
-Usage: gen_can_lib.py --header out.hpp --source out.cpp spec1.textproto ...
+Usage: gen_can_lib.py --out-dir DIR --boards vcu,hvc spec1.textproto ...
 """
 
 import argparse
 import hashlib
+import pathlib
 import re
 import sys
 
 from lib.spec import loader, validator
 from lib.spec.proto import can_spec_pb2
+
+_MESSAGES_FILE = re.compile(r"(?:^|/)messages/([a-z][a-z0-9_]*)\.textproto$")
 
 
 def _die(msg):
@@ -46,9 +56,21 @@ class Generator:
         self.spec = spec
         self.enums = {e.name: e for _, e in spec.enum_types()}
         self.bitfields = {b.name: b for _, b in spec.bitfield_types()}
-        self.messages = sorted((m for _, m in spec.messages()), key=lambda m: m.can_id)
+        # board stem -> its messages, sorted by CAN ID; boards sorted.
+        self.boards = {}
+        for filename, message in spec.messages():
+            match = _MESSAGES_FILE.search(filename)
+            if not match:
+                _die(f"{filename}: messages must live in messages/<board>.textproto")
+            self.boards.setdefault(match.group(1), []).append(message)
+        self.boards = {b: sorted(msgs, key=lambda m: m.can_id)
+                       for b, msgs in sorted(self.boards.items())}
 
-    # ---- naming ----------------------------------------------------------
+    def all_messages(self):
+        return sorted((m for msgs in self.boards.values() for m in msgs),
+                      key=lambda m: m.can_id)
+
+    # ---- shared pieces ---------------------------------------------------
 
     def struct_name(self, message):
         return camel(message.name)
@@ -78,7 +100,64 @@ class Generator:
             else:
                 yield signal.name, raw_ctype(signal.encoding), signal, None
 
-    # ---- header ----------------------------------------------------------
+    # ---- types header/source (shared enums + metadata) -------------------
+
+    def types_header(self, provenance):
+        h = [provenance]
+        h.append("""#pragma once
+
+#include <cstdint>
+
+namespace lhre::can {
+""")
+        for name in sorted(self.enums):
+            enum_type = self.enums[name]
+            h.append(f"// {enum_type.description}" if enum_type.description else f"// {name}")
+            width = max((v.number for v in enum_type.value), default=0)
+            underlying = next(w for w in (8, 16, 32) if width < (1 << w))
+            h.append(f"enum class {name} : uint{underlying}_t {{")
+            for value in enum_type.value:
+                comment = f"  // {value.description}" if value.description else ""
+                h.append(f"  k{camel(value.name)} = {value.number},{comment}")
+            h.append("};")
+            h.append(f"// Wire name of the value, \"?\" if out of range.")
+            h.append(f"const char* ToString({name} value);")
+            h.append("")
+        h.append("""// Per-message metadata for RTOS CAN task tables, sorted by frame ID.
+struct MessageMeta {
+  uint32_t frame_id;
+  uint8_t dlc;
+  uint8_t quantity;   // consecutive frame IDs from frame_id
+  float frequency_hz; // 0 = aperiodic
+};
+""")
+        h.append("inline constexpr MessageMeta kMessageMeta[] = {")
+        for message in self.all_messages():
+            quantity = validator.effective_quantity(message)
+            h.append(f"    {{0x{message.can_id:03X}, {message.dlc}, {quantity}, "
+                     f"{message.frequency_hz}f}},  // {message.name}")
+        h.append("};")
+        h.append("inline constexpr uint32_t kMessageCount = sizeof(kMessageMeta) / sizeof(kMessageMeta[0]);")
+        h.append("")
+        h.append("}  // namespace lhre::can")
+        return "\n".join(h) + "\n"
+
+    def types_source(self, provenance, header_name):
+        s = [provenance, f'#include "{header_name}"\n', "namespace lhre::can {", ""]
+        for name in sorted(self.enums):
+            enum_type = self.enums[name]
+            s.append(f"const char* ToString({name} value) {{")
+            s.append("  switch (value) {")
+            for value in enum_type.value:
+                s.append(f'    case {name}::k{camel(value.name)}: return "{value.name}";')
+            s.append("  }")
+            s.append('  return "?";')
+            s.append("}")
+            s.append("")
+        s.append("}  // namespace lhre::can")
+        return "\n".join(s) + "\n"
+
+    # ---- per-board header ------------------------------------------------
 
     def field_comment(self, signal, bit_index):
         if bit_index is not None:
@@ -98,20 +177,6 @@ class Generator:
         if enc.muxed:
             parts.append(f"valid when selector == {enc.mux_value}")
         return f"  // {'; '.join(parts)}" if parts else ""
-
-    def enum_decl(self, enum_type):
-        out = [f"// {enum_type.description}" if enum_type.description else f"// {enum_type.name}"]
-        width = max((v.number for v in enum_type.value), default=0)
-        underlying = next(w for w in (8, 16, 32) if width < (1 << w))
-        out.append(f"enum class {enum_type.name} : uint{underlying}_t {{")
-        for value in enum_type.value:
-            comment = f"  // {value.description}" if value.description else ""
-            out.append(f"  k{camel(value.name)} = {value.number},{comment}")
-        out.append("};")
-        out.append(f"// Wire name of the value (\"{enum_type.value[0].name}\"...), \"?\" if out of range.")
-        out.append(f"const char* ToString({enum_type.name} value);")
-        out.append("")
-        return out
 
     def accessors(self, message, signal):
         """Inline float accessors for a scaled physical signal. Kept
@@ -186,47 +251,26 @@ class Generator:
         out.append("")
         return out
 
-    def header(self, provenance):
+    def board_header(self, provenance, board, types_header_name):
         h = [provenance]
-        h.append("""#pragma once
+        h.append(f"""#pragma once
 
 #include <cstdint>
 
 #include "lhal/can.hpp"
+#include "{types_header_name}"
 
-namespace lhre::can {
+// Messages originating from the {board.upper()} board.
+namespace lhre::can::{board} {{
 """)
-        for enum_name in sorted(self.enums):
-            h.extend(self.enum_decl(self.enums[enum_name]))
-        for message in self.messages:
+        for message in self.boards[board]:
             h.extend(self.message_decl(message))
-        h.append("""// Per-message metadata for RTOS CAN task tables, sorted by frame ID.
-struct MessageMeta {
-  uint32_t frame_id;
-  uint8_t dlc;
-  uint8_t quantity;   // consecutive frame IDs from frame_id
-  float frequency_hz; // 0 = aperiodic
-};
-""")
-        h.append("inline constexpr MessageMeta kMessageMeta[] = {")
-        for message in self.messages:
-            n = self.struct_name(message)
-            h.append(f"    {{{n}::kFrameId, {n}::kDlc, {n}::kQuantity, {n}::kFrequencyHz}},")
-        h.append("};")
-        h.append("inline constexpr uint32_t kMessageCount = sizeof(kMessageMeta) / sizeof(kMessageMeta[0]);")
-        h.append("")
-        h.append("}  // namespace lhre::can")
+        h.append(f"}}  // namespace lhre::can::{board}")
         return "\n".join(h) + "\n"
 
-    # ---- source ----------------------------------------------------------
+    # ---- per-board source ------------------------------------------------
 
-    def source(self, provenance, header_name):
-        s = [provenance]
-        s.append(f'#include "{header_name}"\n')
-        s.append("""#include <cstring>
-
-namespace lhre::can {
-namespace {
+    _HELPERS = """namespace {
 
 // Bit insertion/extraction over a byte buffer. start_bit addresses are
 // linear little-endian (bit n = byte n/8, bit n%8); big-endian signals
@@ -276,28 +320,20 @@ int64_t SignExtend(uint64_t value, uint32_t bit_length) {
 }
 
 }  // namespace
-""")
-        for enum_name in sorted(self.enums):
-            s.extend(self.tostring_fn(self.enums[enum_name]))
-            s.append("")
-        for message in self.messages:
+"""
+
+    def board_source(self, provenance, board, header_name):
+        s = [provenance, f'#include "{header_name}"\n', "#include <cstring>",
+             "", f"namespace lhre::can::{board} {{", "", self._HELPERS]
+        for message in self.boards[board]:
             s.extend(self.pack_fn(message))
             s.append("")
             s.extend(self.unpack_fn(message))
             s.append("")
             s.extend(self.frame_fns(message))
             s.append("")
-        s.append("}  // namespace lhre::can")
+        s.append(f"}}  // namespace lhre::can::{board}")
         return "\n".join(s) + "\n"
-
-    def tostring_fn(self, enum_type):
-        out = [f"const char* ToString({enum_type.name} value) {{", "  switch (value) {"]
-        for value in enum_type.value:
-            out.append(f'    case {enum_type.name}::k{camel(value.name)}: return "{value.name}";')
-        out.append("  }")
-        out.append('  return "?";')
-        out.append("}")
-        return out
 
     def _mux_guard(self, message, signal, body_lines, this):
         if not signal.encoding.muxed:
@@ -307,7 +343,6 @@ int64_t SignExtend(uint64_t value, uint32_t bit_length) {
         return [guard] + ["  " + line for line in body_lines] + ["  }"]
 
     def _field_expr(self, signal):
-        """Struct member holding the signal's raw value, in pack casts."""
         kind = signal.logical.WhichOneof("kind")
         if kind == "physical" and is_scaled(signal.encoding):
             return f"{signal.name}_raw"
@@ -397,8 +432,8 @@ def provenance(paths, contents):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--header", required=True)
-    parser.add_argument("--source", required=True)
+    parser.add_argument("--out-dir", required=True)
+    parser.add_argument("--boards", required=True, help="comma-separated board stems")
     parser.add_argument("spec_files", nargs="+")
     args = parser.parse_args()
 
@@ -412,12 +447,28 @@ def main():
         _die("spec is invalid:\n" + "\n".join(errors))
 
     gen = Generator(spec)
+    expected = sorted(args.boards.split(","))
+    if expected != list(gen.boards):
+        _die(f"BUILD lists boards {expected} but the spec has message files for "
+             f"{list(gen.boards)} — update CAN_BOARDS in lib/codegen/cpp/BUILD.bazel")
+
     stamp = provenance(args.spec_files, contents)
-    header_name = args.header.rsplit("/", 1)[-1]
-    with open(args.header, "w", encoding="utf-8") as f:
-        f.write(gen.header(stamp))
-    with open(args.source, "w", encoding="utf-8") as f:
-        f.write(gen.source(stamp, header_name))
+    out = pathlib.Path(args.out_dir)
+    out.joinpath("lhre_can_types.hpp").write_text(gen.types_header(stamp), encoding="utf-8")
+    out.joinpath("lhre_can_types.cpp").write_text(
+        gen.types_source(stamp, "lhre_can_types.hpp"), encoding="utf-8")
+    umbrella = [stamp, "#pragma once", ""]
+    umbrella.append("// Everything on the bus. Prefer depending on the per-board libraries")
+    umbrella.append("// (//lib/codegen/cpp:can_<board>) so firmware pulls in only what it uses.")
+    umbrella.append('#include "lhre_can_types.hpp"  // IWYU pragma: export')
+    for board in gen.boards:
+        gen_header = f"lhre_can_{board}.hpp"
+        umbrella.append(f'#include "{gen_header}"  // IWYU pragma: export')
+        out.joinpath(gen_header).write_text(
+            gen.board_header(stamp, board, "lhre_can_types.hpp"), encoding="utf-8")
+        out.joinpath(f"lhre_can_{board}.cpp").write_text(
+            gen.board_source(stamp, board, gen_header), encoding="utf-8")
+    out.joinpath("lhre_can.hpp").write_text("\n".join(umbrella) + "\n", encoding="utf-8")
     return 0
 
 

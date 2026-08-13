@@ -89,3 +89,100 @@ message {
     description: "Coolant temperature at pack outlet"
   }
 }
+message {
+  name: "HVC_CELL_TEMPS"
+  can_id: 1040
+  quantity: 4
+  from_board: "HVC"
+  to_boards: "*"
+  bus: "Critical"
+  dlc: 8
+  frequency_hz: 5.0
+  description: "Seed example: indexed array block. 4 temps per frame over 4 consecutive IDs = cells 0-15; cell = (frame_id - 0x410) * 4 + slot."
+  signal {
+    name: "cell_temp_slot0"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    telemetry {
+      group: "Battery"
+      field: "cell_temps"
+      id: 4
+      repeated: true
+    }
+    description: "Cell temperature, slot 0 of this frame"
+  }
+  signal {
+    name: "cell_temp_slot1"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    telemetry {
+      group: "Battery"
+      field: "cell_temps"
+      id: 4
+      array_index: 1
+      repeated: true
+    }
+    description: "Cell temperature, slot 1 of this frame"
+  }
+  signal {
+    name: "cell_temp_slot2"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    telemetry {
+      group: "Battery"
+      field: "cell_temps"
+      id: 4
+      array_index: 2
+      repeated: true
+    }
+    description: "Cell temperature, slot 2 of this frame"
+  }
+  signal {
+    name: "cell_temp_slot3"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    telemetry {
+      group: "Battery"
+      field: "cell_temps"
+      id: 4
+      array_index: 3
+      repeated: true
+    }
+    description: "Cell temperature, slot 3 of this frame"
+  }
+}
