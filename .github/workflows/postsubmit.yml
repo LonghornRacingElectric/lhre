@@ -57,8 +57,26 @@ jobs:
           fi
           echo "common --config=ci" >> .bazelrc.user
 
+      # This is the run that writes the cache everyone else restores:
+      # GitHub scopes PR-created caches to their own branch, but caches
+      # created on main are visible to every PR. Key/eviction rationale in
+      # presubmit.yml.
+      - name: Cache Bazel
+        uses: actions/cache@v5
+        with:
+          path: "C:/_bzl"
+          key: ${{ runner.os }}-bazel-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'requirements_lock.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-bazel-
+
       - name: Build everything
         run: bazel build //...
 
       - name: Test everything
         run: bazel test //...
+
+      # The post-job cache save tars C:/_bzl; the Bazel server must not be
+      # holding locks/open files in it when that happens.
+      - name: Shut down Bazel
+        if: always()
+        run: bazel shutdown

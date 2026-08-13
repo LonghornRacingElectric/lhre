@@ -53,11 +53,17 @@ jobs:
           fi
           echo "common --config=ci" >> .bazelrc.user
 
+      # Keyed on the files that pin external deps, NOT the commit: an
+      # exact hit skips the multi-GB re-upload at job end (GitHub caps the
+      # whole repo at 10 GB, LRU-evicted). Stale bazel-out contents from
+      # older commits are safe — Bazel's action cache invalidates
+      # correctly — and action results come from BuildBuddy anyway; this
+      # cache exists to skip re-downloading and re-extracting toolchains.
       - name: Cache Bazel
         uses: actions/cache@v5
         with:
-          path: ~/.cache/bazel
-          key: ${{ runner.os }}-bazel-${{ github.sha }}
+          path: "C:/_bzl"
+          key: ${{ runner.os }}-bazel-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'requirements_lock.txt') }}
           restore-keys: |
             ${{ runner.os }}-bazel-
 
@@ -66,3 +72,9 @@ jobs:
 
       - name: Test everything
         run: bazel test //...
+
+      # The post-job cache save tars C:/_bzl; the Bazel server must not be
+      # holding locks/open files in it when that happens.
+      - name: Shut down Bazel
+        if: always()
+        run: bazel shutdown
