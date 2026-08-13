@@ -9,7 +9,7 @@ build --enable_runfiles
 # idle JVM holds a few hundred MB; run `bazel shutdown` to reclaim it.
 startup --max_idle_secs=43200
 
-# Windows MAX_PATH: importing the pip protobuf runtime straight from its
+# Windows max path limit: importing the pip protobuf runtime straight from its
 # runfiles repo dir exceeds the 260-char limit (default output user root +
 # 71-char pip repo dir + the package's longest module path = 264) and dies
 # with ImportError. rules_python 2.x removed the old escape hatch
