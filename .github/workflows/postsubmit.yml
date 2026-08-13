@@ -31,3 +31,32 @@ jobs:
 
       - name: Check formatting
         run: bazel run //tools/format:check
+
+  # Windows builds run fully locally (see .bazelrc: Bazel can't drive the
+  # Linux remote executors from a Windows client) but still share the
+  # remote cache. The short --output_user_root keeps Python codegen tools
+  # under Windows' 260-char MAX_PATH — same setup the .bazelrc.user.example
+  # asks of Windows dev machines. Formatting is checked once, on Linux.
+  postsubmit-windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure Bazel
+        shell: bash
+        env:
+          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
+        run: |
+          echo "startup --output_user_root=C:/_bzl" > .bazelrc.user
+          if [ -n "$BUILDBUDDY_API_KEY" ]; then
+            echo "common --remote_header=x-buildbuddy-api-key=$BUILDBUDDY_API_KEY" >> .bazelrc.user
+          else
+            echo "common --config=local" >> .bazelrc.user
+          fi
+
+      - name: Build everything
+        run: bazel build //...
+
+      - name: Test everything
+        run: bazel test //...
