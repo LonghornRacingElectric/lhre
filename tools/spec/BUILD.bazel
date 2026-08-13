@@ -1,4 +1,4 @@
-load("@rules_python//python:defs.bzl", "py_binary")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
 
 # Canonical formatter for lib/spec/*.textproto:
 #   bazel run //tools/spec:fmt
@@ -7,4 +7,30 @@ py_binary(
     srcs = ["fmt.py"],
     visibility = ["//visibility:private"],
     deps = ["//lib/spec:ir"],
+)
+
+# Local editing UI for the spec:
+#   bazel run //tools/spec:editor
+py_library(
+    name = "editor_lib",
+    srcs = ["editor.py"],
+    data = ["editor_index.html"],
+    deps = [
+        "//lib/spec:ir",
+        "@lhre_pypi//bazel_runfiles",
+    ],
+)
+
+py_binary(
+    name = "editor",
+    srcs = ["editor.py"],
+    visibility = ["//visibility:private"],
+    deps = [":editor_lib"],
+)
+
+py_test(
+    name = "editor_test",
+    size = "small",
+    srcs = ["editor_test.py"],
+    deps = [":editor_lib"],
 )
