@@ -34,3 +34,12 @@ py_test(
     srcs = ["editor_test.py"],
     deps = [":editor_lib"],
 )
+
+# Regenerate the committed wire contract (lib/spec/wire.lock):
+#   bazel run //tools/spec:lock
+py_binary(
+    name = "lock",
+    srcs = ["lock.py"],
+    visibility = ["//visibility:private"],
+    deps = ["//lib/spec:ir"],
+)

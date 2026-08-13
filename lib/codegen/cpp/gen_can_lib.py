@@ -22,7 +22,7 @@ import pathlib
 import re
 import sys
 
-from lib.spec import loader, validator
+from lib.spec.ir import loader, validator
 from lib.spec.proto import can_spec_pb2
 
 _MESSAGES_FILE = re.compile(r"(?:^|/)messages/([a-z][a-z0-9_]*)\.textproto$")

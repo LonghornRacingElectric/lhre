@@ -138,65 +138,69 @@ same way (`single_version_override(patches = ...)` for registry modules,
 
 ### Protobuf without compiling protobuf
 
-Anything touching the CAN spec pipeline (`lib/spec`, `lib/codegen`, and
-therefore every board that links the generated CAN library) needs `protoc`
-and a Python protobuf runtime *at build time* — the firmware itself never
-links protobuf; the generated CAN library is dependency-free C++.
+The CAN spec pipeline (`lib/spec`, `lib/codegen`, and every board linking
+the generated CAN library) needs `protoc` and a Python protobuf runtime at
+build time. Firmware never links protobuf; the generated CAN library is
+dependency-free C++.
 
-Left to its defaults, protobuf compiles both from source: the full protoc
-plus a large slice of abseil (~800 C++ actions), and separately the Python
-runtime's `protoc_minimal`. Beyond the cost, the source build **does not
-compile on Windows**: protobuf's io shims
+Left to its defaults protobuf compiles both from source: the full protoc
+plus much of abseil (~800 C++ actions), and separately the Python
+runtime's `protoc_minimal`. That source build also fails outright on
+Windows, because protobuf's io shims
 (`using google::protobuf::io::win32::setmode` and friends) assume MSVC
-headers, and our hermetic clang targets MinGW, whose `<io.h>` declares
-those legacy names itself. An "accept the source fallback, it's cached"
-configuration was tried and abandoned after a string of MinGW-only
-failures. Three pieces make source builds never happen instead:
+headers while our hermetic clang targets MinGW, whose `<io.h>` declares
+those legacy names itself. Accepting the cached source fallback was tried
+and abandoned after repeated MinGW-only failures. Three pieces keep
+source builds from happening at all:
 
-1. `--incompatible_enable_proto_toolchain_resolution` (`.bazelrc`) turns on
-   proto *toolchain resolution*, letting the prebuilt `protoc` binaries
-   protobuf registers take effect (gated on its `prefer_prebuilt_protoc`
-   flag, default true). Without it Bazel uses the legacy wiring and
-   compiles from source anyway.
+1. `--incompatible_enable_proto_toolchain_resolution` (`.bazelrc`) turns
+   on proto toolchain resolution, which lets the prebuilt `protoc`
+   binaries protobuf registers take effect (gated on its
+   `prefer_prebuilt_protoc` flag, default true). Without it Bazel uses
+   the legacy wiring and compiles from source anyway.
 2. `//toolchains/proto` registers a Python `proto_lang_toolchain` whose
-   runtime is the **pip** `protobuf` wheel instead of
-   `@protobuf//python:protobuf_python` — the latter is what drags in the
+   runtime is the pip `protobuf` wheel. The default
+   `@protobuf//python:protobuf_python` is what drags in the
    `protoc_minimal` source build, prebuilts or not. Root-module toolchain
    registrations beat protobuf's own, so the pip runtime wins. The wheel
    must satisfy the version check protoc stamps into generated code
-   (runtime ≥ gencode): protobuf `N.M` in `MODULE.bazel` ↔ pip `7.N.M` in
-   `pyproject.toml`, bumped together.
-3. Tripwire flags in `.bazelrc` poison the compile line of any file from a
-   protobuf external repo, so a regression is a loud, immediate error on
-   every platform rather than a Windows-only surprise.
+   (runtime >= gencode): protobuf `N.M` in `MODULE.bazel` pairs with pip
+   `7.N.M` in `pyproject.toml`. Bump them together.
+3. Tripwire flags in `.bazelrc` poison the compile line of any file from
+   a protobuf external repo, so a regression fails loudly on every
+   platform instead of surprising a Windows user later.
 
 The pip wheel is also why Windows machines shorten `--output_user_root`
-(see the table above): its runfiles paths are what cross the 260-char
+(see the table above). Its runfiles paths are what cross the 260-char
 `MAX_PATH`.
 
-### Build latency: what's normal, what isn't
+### Build latency
 
-Measured on the repo at ~70 targets (macOS M-series; Windows is roughly
-3–4× on the same phase due to filesystem cost and Defender):
+Measured at ~70 targets on macOS. Windows runs the same phases roughly
+3x slower from filesystem cost and Defender.
 
-- **Warm server, no changes: ~1 s.** This is the steady-state floor for
-  iterating. If a no-op build is much slower than this, something is wrong.
-- **Cold server (first build of the day, after `bazel shutdown`, or after
-  the idle timeout): ~12 s on macOS, tens of seconds on Windows.** The
-  on-disk action cache survives restarts — nothing recompiles — but the
-  in-memory *analysis* cache doesn't, and re-analyzing the graph is this
-  cost. `.bazelrc` raises the idle timeout to 12 h so the server survives
-  a work day.
-- **Switching between the default config and `--config=local` (or any
-  flag change) re-analyzes too** — that's inherent to Bazel. Pick the
-  config for the session, not per command.
+- **Warm server, no changes: ~1 s.** The steady-state floor. A no-op
+  build much slower than this means something is wrong.
+- **Cold server: ~12 s on macOS, tens of seconds on Windows.** Happens on
+  the first build of the day, after `bazel shutdown`, or after the idle
+  timeout. Nothing recompiles, since the on-disk action cache survives
+  restarts. The cost is re-analyzing the graph, because the analysis
+  cache lives only in server memory. `.bazelrc` sets the idle timeout to
+  12 h so the server survives a work day.
+- **Any flag change re-analyzes**, including switching to
+  `--config=local`. Pick a config for the session.
 
-Things that keep the tail short: `--bes_upload_mode=fully_async` and
-`--remote_cache_async` in `.bazelrc` stop the build from blocking on
-BuildBuddy uploads at exit (Windows executes everything locally, so it
-otherwise waits while artifacts upload). Things you can do locally:
-exclude the repo and the Bazel output root (`bazel info output_base`)
-from Windows Defender real-time scanning — it's the single biggest
-Windows build-speed lever — and build the target you're working on
-(`bazel test //lib/spec/...`) rather than `//...`, which builds every
-board image and test in the tree.
+Windows also reports about 3x the action count of macOS (~4.7k vs ~1.5k
+for `//...`). That is the hermetic LLVM toolchain building its C/C++
+runtime per OS. On Windows it compiles the whole mingw-w64 CRT plus
+libc++ and libunwind from source, and mingw puts nearly every libc
+function in its own file. On macOS it only builds compiler-rt against
+Apple's system ABI. These actions re-run only on an LLVM toolchain bump,
+and the remote cache means one machine pays per platform.
+
+`--bes_upload_mode=fully_async` and `--remote_cache_async` keep builds
+from blocking on BuildBuddy uploads at exit, which matters most on
+Windows where everything executes locally. Locally you can exclude the
+repo and `bazel info output_base` from Defender real-time scanning, the
+biggest Windows speed lever, and build the target you are working on
+instead of `//...`.

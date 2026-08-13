@@ -9,7 +9,7 @@ import os
 import pathlib
 import sys
 
-from lib.spec import canonical, loader
+from lib.spec.ir import canonical, loader
 
 
 def main():

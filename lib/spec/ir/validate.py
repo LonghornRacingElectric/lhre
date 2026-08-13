@@ -5,7 +5,7 @@ import sys
 
 from runfiles import Runfiles
 
-from lib.spec import loader, validator
+from lib.spec.ir import loader, validator
 
 
 def main(argv):
