@@ -18,7 +18,7 @@ TEST(CanLib, VcuStatusPackMatchesHandComputedBytes) {
   msg.faults_sensor_loss = true;   // bit 10 -> byte 1 = 0x05
   msg.torque_request_raw = -1234;  // 0xFB2E little-endian
   msg.speed_raw = 0x1234;
-  msg.steering_angle_raw = -100;   // 0xFF9C big-endian at bit 55
+  msg.steering_angle_raw = -100;  // 0xFF9C big-endian at bit 55
 
   uint8_t data[VcuStatus::kDlc];
   msg.Pack(data);
