@@ -136,35 +136,67 @@ same way (`single_version_override(patches = ...)` for registry modules,
   (upstream re-uploaded the RC artifact) and `36.0-rc2` gates prebuilts
   behind a `-dev` guard. Safe to bump once a stable 36.x lands.
 
-### Protoc: prebuilt where possible, source fallback accepted
+### Protobuf without compiling protobuf
 
 Anything touching the CAN spec pipeline (`lib/spec`, `lib/codegen`, and
 therefore every board that links the generated CAN library) needs `protoc`
-and the Python protobuf runtime.
+and a Python protobuf runtime *at build time* — the firmware itself never
+links protobuf; the generated CAN library is dependency-free C++.
 
-`--incompatible_enable_proto_toolchain_resolution` (`.bazelrc`) turns on
-proto *toolchain resolution*, which lets the prebuilt `protoc` binaries
-protobuf registers for every host platform take effect (gated on its
-`prefer_prebuilt_protoc` flag, default true). Without the resolution flag
-Bazel uses the legacy wiring and compiles the full protoc + a large slice
-of abseil from source (~800 C++ actions) — so keep that flag.
+Left to its defaults, protobuf compiles both from source: the full protoc
+plus a large slice of abseil (~800 C++ actions), and separately the Python
+runtime's `protoc_minimal`. Beyond the cost, the source build **does not
+compile on Windows**: protobuf's io shims
+(`using google::protobuf::io::win32::setmode` and friends) assume MSVC
+headers, and our hermetic clang targets MinGW, whose `<io.h>` declares
+those legacy names itself. An "accept the source fallback, it's cached"
+configuration was tried and abandoned after a string of MinGW-only
+failures. Three pieces make source builds never happen instead:
 
-What still compiles from source: the Python runtime
-(`@protobuf//python:protobuf_python`) runs a `protoc_minimal` built from
-source for its edition-defaults step, prebuilts or not. That's a deliberate
-trade: eliminating it means maintaining a custom `proto_lang_toolchain`
-pinned to the pip protobuf wheel in version-lockstep with the bazel_dep
-(tried, then removed as not worth the upkeep — see git history). The
-fallback build is a few hundred actions, hits the shared remote cache
-after the first build per platform/config, and touches nothing outside
-the exec configuration.
+1. `--incompatible_enable_proto_toolchain_resolution` (`.bazelrc`) turns on
+   proto *toolchain resolution*, letting the prebuilt `protoc` binaries
+   protobuf registers take effect (gated on its `prefer_prebuilt_protoc`
+   flag, default true). Without it Bazel uses the legacy wiring and
+   compiles from source anyway.
+2. `//toolchains/proto` registers a Python `proto_lang_toolchain` whose
+   runtime is the **pip** `protobuf` wheel instead of
+   `@protobuf//python:protobuf_python` — the latter is what drags in the
+   `protoc_minimal` source build, prebuilts or not. Root-module toolchain
+   registrations beat protobuf's own, so the pip runtime wins. The wheel
+   must satisfy the version check protoc stamps into generated code
+   (runtime ≥ gencode): protobuf `N.M` in `MODULE.bazel` ↔ pip `7.N.M` in
+   `pyproject.toml`, bumped together.
+3. Tripwire flags in `.bazelrc` poison the compile line of any file from a
+   protobuf external repo, so a regression is a loud, immediate error on
+   every platform rather than a Windows-only surprise.
 
-That fallback needs one accommodation on Windows: protobuf's tool sources
-pull POSIX-style io helpers (`setmode`, `open`, `access`, …) from its
-`io_win32` shim with using-declarations that assume MSVC headers, where
-the unprefixed CRT names don't exist. The hermetic clang targets MinGW,
-whose `<io.h>` declares those legacy aliases by default, so the
-using-declarations collide. `.bazelrc` compiles protobuf sources with
-`-DNO_OLDNAMES` on Windows (`per_file_copt`, target and exec config),
-which hides MinGW's aliases and leaves protobuf's shim as the only
-declaration — the situation the code was written for.
+The pip wheel is also why Windows machines shorten `--output_user_root`
+(see the table above): its runfiles paths are what cross the 260-char
+`MAX_PATH`.
+
+### Build latency: what's normal, what isn't
+
+Measured on the repo at ~70 targets (macOS M-series; Windows is roughly
+3–4× on the same phase due to filesystem cost and Defender):
+
+- **Warm server, no changes: ~1 s.** This is the steady-state floor for
+  iterating. If a no-op build is much slower than this, something is wrong.
+- **Cold server (first build of the day, after `bazel shutdown`, or after
+  the idle timeout): ~12 s on macOS, tens of seconds on Windows.** The
+  on-disk action cache survives restarts — nothing recompiles — but the
+  in-memory *analysis* cache doesn't, and re-analyzing the graph is this
+  cost. `.bazelrc` raises the idle timeout to 12 h so the server survives
+  a work day.
+- **Switching between the default config and `--config=local` (or any
+  flag change) re-analyzes too** — that's inherent to Bazel. Pick the
+  config for the session, not per command.
+
+Things that keep the tail short: `--bes_upload_mode=fully_async` and
+`--remote_cache_async` in `.bazelrc` stop the build from blocking on
+BuildBuddy uploads at exit (Windows executes everything locally, so it
+otherwise waits while artifacts upload). Things you can do locally:
+exclude the repo and the Bazel output root (`bazel info output_base`)
+from Windows Defender real-time scanning — it's the single biggest
+Windows build-speed lever — and build the target you're working on
+(`bazel test //lib/spec/...`) rather than `//...`, which builds every
+board image and test in the tree.

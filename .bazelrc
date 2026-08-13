@@ -2,6 +2,13 @@
 startup --windows_enable_symlinks
 build --enable_runfiles
 
+# Keep the server (and its in-memory analysis cache) alive for a full work
+# day instead of the 3-hour default. Re-analysis after a server exit is the
+# bulk of the "nothing changed but the build took a minute" cost — the
+# on-disk action cache survives restarts, the analysis cache does not. The
+# idle JVM holds a few hundred MB; run `bazel shutdown` to reclaim it.
+startup --max_idle_secs=43200
+
 # Windows MAX_PATH: importing the pip protobuf runtime straight from its
 # runfiles repo dir exceeds the 260-char limit (default output user root +
 # 71-char pip repo dir + the package's longest module path = 264) and dies
@@ -45,6 +52,12 @@ build --bes_backend=grpcs://lhre.buildbuddy.io
 build --remote_cache=grpcs://lhre.buildbuddy.io
 build --remote_timeout=10m
 build --remote_cache_compression
+# Don't make the build's exit wait on network tails: stream BES events and
+# upload locally-executed results to the remote cache in the background.
+# Matters most on Windows, which executes everything locally and would
+# otherwise block at the end of every build while artifacts upload.
+build --bes_upload_mode=fully_async
+build --remote_cache_async
 
 # Build provenance stamping: the workspace status script emits STABLE_GIT_*
 # keys into bazel-out/stable-status.txt; //tools/firmware:build_info turns
