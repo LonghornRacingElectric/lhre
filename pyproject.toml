@@ -5,6 +5,13 @@ requires-python = ">=3.12"
 dependencies = [
     "pyserial==3.5",
     "bazel-runfiles==2.1.0",
+    # Python proto runtime for the CAN spec tooling (lib/spec) — the
+    # firmware itself never links protobuf. Must stay in lockstep with the
+    # protobuf bazel_dep in MODULE.bazel: generated code requires
+    # runtime >= gencode, so protobuf N.M there needs 7.N.M here. Using the
+    # pip runtime (instead of @protobuf//python) is what keeps protobuf C++
+    # out of the build — see //toolchains/proto.
+    "protobuf==7.35.1",
 ]
 
 # Docs-only deps: not part of the Bazel pip hub (requirements_lock.txt is

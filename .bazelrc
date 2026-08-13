@@ -2,11 +2,43 @@
 startup --windows_enable_symlinks
 build --enable_runfiles
 
+# Keep the server (and its in-memory analysis cache) alive for a full work
+# day instead of the 3-hour default. Re-analysis after a server exit is the
+# bulk of the "nothing changed but the build took a minute" cost — the
+# on-disk action cache survives restarts, the analysis cache does not. The
+# idle JVM holds a few hundred MB; run `bazel shutdown` to reclaim it.
+startup --max_idle_secs=43200
+
+# Windows max path limit: importing the pip protobuf runtime straight from its
+# runfiles repo dir exceeds the 260-char limit (default output user root +
+# 71-char pip repo dir + the package's longest module path = 264) and dies
+# with ImportError. rules_python 2.x removed the old escape hatch
+# (--build_python_zip is ignored on Windows), and its replacement
+# (--venvs_site_packages) doesn't yet link pip packages into the venv for
+# tools run as build actions. Until one of those is fixed, Windows machines
+# must shorten the path prefix instead: uncomment
+#   startup --output_user_root=C:/_bzl
+# in .bazelrc.user (from .bazelrc.user.example; imported at the bottom of
+# this file). It can't live here because startup options don't support
+# per-OS configs, and a Windows path would break macOS/Linux at server
+# launch. Registry LongPathsEnabled would also work, but needs admin rights.
+
 # Automatically apply build:windows / build:macos / build:linux based on the
 # host OS, so nobody has to pass --config flags by hand.
 common --enable_platform_specific_config
 
+# Protobuf without compiling protobuf: proto toolchain resolution picks the
+# prebuilt protoc binaries protobuf registers (gated on prefer_prebuilt_protoc,
+# default true) and the pip-runtime Python toolchain from //toolchains/proto.
+# Without the resolution flag Bazel falls back to legacy wiring, which builds
+# protoc + abseil from source — and on Windows that doesn't even compile
+# (protobuf's io shims assume MSVC headers; our hermetic clang targets
+# MinGW). The per_file_copt tripwires make any regression a loud build
+# error instead of a platform-dependent surprise.
+common --incompatible_enable_proto_toolchain_resolution
 build --@protobuf//bazel/flags:prefer_prebuilt_protoc=true
+common --per_file_copt=external/.*protobuf.*@--PROTOBUF_WAS_NOT_SUPPOSED_TO_BE_BUILT
+common --host_per_file_copt=external/.*protobuf.*@--PROTOBUF_WAS_NOT_SUPPOSED_TO_BE_BUILT
 
 # Don't auto-generate __init__.py files in py_binary/py_test runfiles (the
 # rules_python default is deprecated and warns on every run). All our Python
@@ -20,6 +52,12 @@ build --bes_backend=grpcs://lhre.buildbuddy.io
 build --remote_cache=grpcs://lhre.buildbuddy.io
 build --remote_timeout=10m
 build --remote_cache_compression
+# Don't make the build's exit wait on network tails: stream BES events and
+# upload locally-executed results to the remote cache in the background.
+# Matters most on Windows, which executes everything locally and would
+# otherwise block at the end of every build while artifacts upload.
+build --bes_upload_mode=fully_async
+build --remote_cache_async
 
 # Build provenance stamping: the workspace status script emits STABLE_GIT_*
 # keys into bazel-out/stable-status.txt; //tools/firmware:build_info turns
@@ -94,5 +132,9 @@ build:local --jobs=auto
 
 build:offline --config=local
 build:offline --nofetch
+
+# Guarantee Populating cache when on CI
+common:ci --bes_upload_mode=wait_for_upload_complete
+common:ci --noremote_cache_async
 
 try-import %workspace%/.bazelrc.user

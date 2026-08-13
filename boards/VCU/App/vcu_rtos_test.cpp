@@ -17,13 +17,14 @@
 #include "lhal/host/can.hpp"
 #include "lhal/host/gpio.hpp"
 #include "lhal/host/system.hpp"
+#include "lhre_can.hpp"
 #include "task.h"
 #include "vcu_app.hpp"
 
 namespace {
 
-// Long enough for a handful of 100 ms heartbeats, short enough to keep the
-// test snappy.
+// Long enough for a handful of 100 ms status broadcasts, short enough to keep
+// the test snappy.
 constexpr uint32_t kRunMs = 350;
 
 void StopTaskEntry(void* /*unused*/) {
@@ -31,7 +32,7 @@ void StopTaskEntry(void* /*unused*/) {
   vTaskEndScheduler();
 }
 
-TEST(VcuRtos, HeartbeatTaskRunsUnderScheduler) {
+TEST(VcuRtos, StatusTaskRunsUnderScheduler) {
   lhal::host::SystemClock clock;
   lhal::host::Gpio led;
   lhal::host::CanNetwork network;
@@ -54,20 +55,22 @@ TEST(VcuRtos, HeartbeatTaskRunsUnderScheduler) {
 
   vTaskStartScheduler();  // returns when StopTaskEntry ends the scheduler
 
-  // 350 ms at a 100 ms period, first beat immediate: expect ~4; ≥2 allows
-  // heavy scheduler-start jitter.
-  EXPECT_GE(app.heartbeats_sent(), 2u);
+  // 350 ms at a 100 ms period, first broadcast immediate: expect ~4; ≥2
+  // allows heavy scheduler-start jitter.
+  EXPECT_GE(app.statuses_sent(), 2u);
 
-  // The observer saw exactly what was sent, with a counting payload.
+  // The observer saw exactly what was sent, decodable with the generated
+  // bindings.
   lhal::CanFrame frame;
   uint32_t received = 0;
   while (dash.Receive(&frame)) {
-    EXPECT_EQ(frame.id, vcu::App::kHeartbeatCanId);
-    ASSERT_EQ(frame.len, 4u);
-    EXPECT_EQ(frame.data[0], static_cast<uint8_t>(received));
+    ASSERT_TRUE(lhre::can::VcuStatus::Matches(frame.id));
+    ASSERT_EQ(frame.len, lhre::can::VcuStatus::kDlc);
+    EXPECT_EQ(lhre::can::VcuStatus::FromFrame(frame).state,
+              lhre::can::VcuState::kIdle);
     ++received;
   }
-  EXPECT_EQ(received, app.heartbeats_sent());
+  EXPECT_EQ(received, app.statuses_sent());
 }
 
 }  // namespace

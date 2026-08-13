@@ -1,0 +1,27 @@
+# proto-file: lib/spec/proto/can_spec.proto
+# proto-message: lhre.canspec.SpecFile
+
+groups {
+  group {
+    name: "Battery"
+    next_free_id: 4
+    description: "Accumulator pack state."
+  }
+  group {
+    name: "Faults"
+    next_free_id: 4
+    description: "Latched fault flags, one bool per fault."
+  }
+  group {
+    name: "Thermal"
+    next_free_id: 3
+    reserved_ids: 1
+    reserved_names: "old_coolant_temp"
+    description: "Temperatures across the car."
+  }
+  group {
+    name: "Vehicle"
+    next_free_id: 4
+    description: "Driver inputs and vehicle dynamics."
+  }
+}

@@ -1,0 +1,8 @@
+# proto-file: lib/spec/proto/can_spec.proto
+# proto-message: lhre.canspec.SpecFile
+
+bus {
+  name: "Critical"
+  bitrate_bps: 1000000
+  description: "Primary vehicle bus: VCU, inverter, HVC, dash."
+}

@@ -2,24 +2,27 @@
 
 namespace vcu {
 
+using lhre::can::HvcPackStatus;
+using lhre::can::VcuState;
+using lhre::can::VcuStatus;
+
 App::App(const Peripherals& peripherals) : p_(peripherals) {}
 
 void App::StartTasks() {
-  // Heartbeat outranks blink: losing the CAN heartbeat matters, a late LED
-  // toggle doesn't. Both sit above the idle task.
+  // Status outranks blink: losing the CAN status broadcast matters, a late
+  // LED toggle doesn't. Both sit above the idle task.
   xTaskCreateStatic(&App::BlinkTaskEntry, "blink", kTaskStackDepth, this,
                     tskIDLE_PRIORITY + 1, blink_stack_, &blink_tcb_);
-  xTaskCreateStatic(&App::HeartbeatTaskEntry, "heartbeat", kTaskStackDepth,
-                    this, tskIDLE_PRIORITY + 2, heartbeat_stack_,
-                    &heartbeat_tcb_);
+  xTaskCreateStatic(&App::StatusTaskEntry, "status", kTaskStackDepth, this,
+                    tskIDLE_PRIORITY + 2, status_stack_, &status_tcb_);
 }
 
 void App::BlinkTaskEntry(void* self) {
   static_cast<App*>(self)->BlinkTaskLoop();
 }
 
-void App::HeartbeatTaskEntry(void* self) {
-  static_cast<App*>(self)->HeartbeatTaskLoop();
+void App::StatusTaskEntry(void* self) {
+  static_cast<App*>(self)->StatusTaskLoop();
 }
 
 void App::BlinkTaskLoop() {
@@ -32,13 +35,14 @@ void App::BlinkTaskLoop() {
   }
 }
 
-void App::HeartbeatTaskLoop() {
+void App::StatusTaskLoop() {
   TickType_t last_wake = xTaskGetTickCount();
   for (;;) {
     if (p_.can != nullptr) {
-      SendHeartbeat();
+      ProcessCanRx();
+      SendStatus();
     }
-    vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(kHeartbeatPeriodMs));
+    vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(kStatusPeriodMs));
   }
 }
 
@@ -46,11 +50,15 @@ void App::Step() {
   const uint32_t now = p_.clock->Millis();
 
   // First iteration: backdate the timers so everything fires immediately
-  // (heartbeats start at boot, not one period after).
+  // (status broadcasts start at boot, not one period after).
   if (!started_) {
     started_ = true;
     last_blink_ms_ = now - kBlinkPeriodMs;
-    last_heartbeat_ms_ = now - kHeartbeatPeriodMs;
+    last_status_ms_ = now - kStatusPeriodMs;
+  }
+
+  if (p_.can != nullptr) {
+    ProcessCanRx();
   }
 
   if (p_.status_led != nullptr &&
@@ -60,22 +68,35 @@ void App::Step() {
   }
 
   if (p_.can != nullptr &&
-      lhal::ElapsedMs(now, last_heartbeat_ms_, kHeartbeatPeriodMs)) {
-    last_heartbeat_ms_ = now;
-    SendHeartbeat();
+      lhal::ElapsedMs(now, last_status_ms_, kStatusPeriodMs)) {
+    last_status_ms_ = now;
+    SendStatus();
   }
 }
 
-void App::SendHeartbeat() {
+void App::ProcessCanRx() {
   lhal::CanFrame frame;
-  frame.id = kHeartbeatCanId;
-  frame.len = 4;
-  frame.data[0] = static_cast<uint8_t>(heartbeats_sent_ >> 0);
-  frame.data[1] = static_cast<uint8_t>(heartbeats_sent_ >> 8);
-  frame.data[2] = static_cast<uint8_t>(heartbeats_sent_ >> 16);
-  frame.data[3] = static_cast<uint8_t>(heartbeats_sent_ >> 24);
-  if (lhal::IsOk(p_.can->Send(frame))) {
-    ++heartbeats_sent_;
+  while (p_.can->Receive(&frame)) {
+    if (HvcPackStatus::Matches(frame.id) && frame.len >= HvcPackStatus::kDlc) {
+      pack_status_ = HvcPackStatus::FromFrame(frame);
+      pack_status_seen_ = true;
+      if (pack_status_.coolant_temp >= kCoolantOvertempDegC) {
+        overtemp_latched_ = true;  // faults latch until reset
+      }
+    }
+    // Other IDs: nothing subscribed yet; drop them.
+  }
+  state_ = overtemp_latched_ ? VcuState::kFault : VcuState::kIdle;
+}
+
+void App::SendStatus() {
+  VcuStatus status;
+  status.state = state_;
+  status.faults_overtemp = overtemp_latched_;
+  status.set_torque_request(0.0f);  // no pedal input wired up yet
+  status.speed_raw = 0;
+  if (lhal::IsOk(p_.can->Send(status.ToFrame()))) {
+    ++statuses_sent_;
   }
 }
 

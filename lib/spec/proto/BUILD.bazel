@@ -1,0 +1,16 @@
+load("@protobuf//bazel:proto_library.bzl", "proto_library")
+load("@protobuf//bazel:py_proto_library.bzl", "py_proto_library")
+
+proto_library(
+    name = "can_spec_proto",
+    srcs = ["can_spec.proto"],
+    visibility = ["//visibility:public"],
+)
+
+# Generated Python classes double as the pipeline IR — the loader,
+# validator, and every generator import these directly.
+py_proto_library(
+    name = "can_spec_py_proto",
+    visibility = ["//visibility:public"],
+    deps = [":can_spec_proto"],
+)

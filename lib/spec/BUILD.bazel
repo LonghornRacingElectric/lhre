@@ -1,0 +1,61 @@
+"""The CAN spec: single source of truth for every message on the bus.
+
+Targets:
+    //lib/spec:files         — all spec .textproto files (input to every generator)
+    //lib/spec:ir            — loader + validator + canonical serializer (Python)
+    //lib/spec:validate      — py_test enforcing the §5 invariants; blocks merges
+    //lib/spec:format_check  — py_test: files match canonical serialization
+"""
+
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
+
+filegroup(
+    name = "files",
+    srcs = glob([
+        "*.textproto",
+        "messages/*.textproto",
+    ]),
+    visibility = ["//visibility:public"],
+)
+
+py_library(
+    name = "ir",
+    srcs = [
+        "canonical.py",
+        "loader.py",
+        "validator.py",
+    ],
+    visibility = ["//visibility:public"],
+    deps = ["//lib/spec/proto:can_spec_py_proto"],
+)
+
+py_test(
+    name = "validate",
+    size = "small",
+    srcs = ["validate.py"],
+    args = ["$(rlocationpaths :files)"],
+    data = [":files"],
+    deps = [
+        ":ir",
+        "@lhre_pypi//bazel_runfiles",
+    ],
+)
+
+py_test(
+    name = "format_check",
+    size = "small",
+    srcs = ["format_check.py"],
+    args = ["$(rlocationpaths :files)"],
+    data = [":files"],
+    deps = [
+        ":ir",
+        "@lhre_pypi//bazel_runfiles",
+    ],
+)
+
+py_test(
+    name = "validator_test",
+    size = "small",
+    srcs = ["validator_test.py"],
+    deps = [":ir"],
+)

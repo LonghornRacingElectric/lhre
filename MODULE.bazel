@@ -1,12 +1,12 @@
 module(name = "lhre")
 
-bazel_dep(name = "rules_cc", version = "0.2.18")
+bazel_dep(name = "rules_cc", version = "0.2.22")
 bazel_dep(name = "llvm", version = "0.8.16")
 bazel_dep(name = "rules_python", version = "2.2.0")
 bazel_dep(name = "aspect_bazel_lib", version = "2.19.3")
 bazel_dep(name = "toolchains_arm_gnu", version = "1.1.0")
-bazel_dep(name = "protobuf", version = "36.0-rc1")
-bazel_dep(name = "platforms", version = "1.0.0")
+bazel_dep(name = "protobuf", version = "35.1")
+bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "toolchains_buildbuddy", version = "0.0.4")
 
 bazel_dep(name = "googletest", version = "1.17.0.bcr.2", dev_dependency = True)
@@ -36,6 +36,15 @@ use_repo(
 )
 
 register_toolchains("//toolchains:all")
+
+# Python proto toolchain using the pip protobuf runtime instead of
+# @protobuf//python. This is what keeps protobuf C++ out of the build
+# entirely: the default runtime compiles protoc_minimal + abseil from
+# source, which does not even compile on Windows (our hermetic clang
+# targets MinGW; protobuf's io shims assume MSVC headers). Works with the
+# prebuilt-protoc toolchain protobuf registers; both need proto toolchain
+# resolution, enabled in .bazelrc. See toolchains/proto/BUILD.bazel.
+register_toolchains("//toolchains/proto:all")
 
 # Hermetic LLVM toolchain (hermeticbuild/hermetic-llvm): host-targeted C++
 # (unit tests, sims, host tools) compiles with the same hermetic clang on

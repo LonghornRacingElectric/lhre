@@ -57,6 +57,7 @@ understandable.
 | One target platform per STM32 family, custom `mcu_core` constraint | [platforms/README](../platforms/README.md) — `@platforms//cpu` is too coarse (m4f and m7f are both armv7e-m) |
 | `//toolchains` targets tagged `manual`, macro mirrored locally | [toolchains/README](../toolchains/README.md) — untagged, `bazel build //...` downloads every host's ~150 MB GCC archive |
 | Remote execution on Linux/macOS clients but not Windows; rc-file flag ordering | comments in [`.bazelrc`](https://github.com/LonghornRacingElectric/lhre/blob/main/.bazelrc) — Bazel can't reliably drive Linux executors from a Windows client, and `--enable_platform_specific_config` expands *before* plain `build` lines |
+| Windows machines uncomment a short `--output_user_root` in `.bazelrc.user` | comments in [`.bazelrc`](https://github.com/LonghornRacingElectric/lhre/blob/main/.bazelrc) — importing the pip protobuf runtime from runfiles exceeds the 260-char `MAX_PATH`, rules_python 2.x ignores `--build_python_zip` (the old escape hatch) on Windows, and startup options can't be set per-OS in an rc file |
 | Hermetic LLVM for host C++, registered before the BuildBuddy toolchain | comments in [`MODULE.bazel`](https://github.com/LonghornRacingElectric/lhre/blob/main/MODULE.bazel) — no dependency on Xcode/system GCC/MSVC, same clang everywhere |
 | Single FreeRTOS kernel version for firmware and host sims | [drivers/freertos/README](../drivers/freertos/README.md) |
 | Optimization level (`-Og`/`-Os`) keyed on `--compilation_mode` in the toolchain, not in target copts | [toolchains/README](../toolchains/README.md) — a hardcoded target-level `-O` silently overrides `-c opt` |
@@ -129,8 +130,73 @@ same way (`single_version_override(patches = ...)` for registry modules,
 - **googletest `1.17.0.bcr.2`** — Bazel 9 requires the BCR *patch* releases;
   plain `1.17.0` lacks the `load()` statements Bazel 9 needs. When bumping,
   always take the newest `.bcr.N` for a version.
-- **protobuf `36.0-rc1`** — nothing in the repo defines `.proto` files yet;
-  the pin exists so the *resolved* protobuf (pulled in transitively by other
-  rules) is recent enough for `--@protobuf//bazel/flags:prefer_prebuilt_protoc`
-  in `.bazelrc`, which downloads a prebuilt `protoc` instead of compiling it
-  from source on every fresh machine. Safe to bump to a stable 36.x+.
+- **protobuf `35.1`** — compiles the CAN spec meta-schema
+  (`lib/spec/proto/can_spec.proto`). Pinned to the newest *stable* BCR
+  release: `36.0-rc1`'s prebuilt `protoc` fails checksum verification
+  (upstream re-uploaded the RC artifact) and `36.0-rc2` gates prebuilts
+  behind a `-dev` guard. Safe to bump once a stable 36.x lands.
+
+### Protobuf without compiling protobuf
+
+Anything touching the CAN spec pipeline (`lib/spec`, `lib/codegen`, and
+therefore every board that links the generated CAN library) needs `protoc`
+and a Python protobuf runtime *at build time* — the firmware itself never
+links protobuf; the generated CAN library is dependency-free C++.
+
+Left to its defaults, protobuf compiles both from source: the full protoc
+plus a large slice of abseil (~800 C++ actions), and separately the Python
+runtime's `protoc_minimal`. Beyond the cost, the source build **does not
+compile on Windows**: protobuf's io shims
+(`using google::protobuf::io::win32::setmode` and friends) assume MSVC
+headers, and our hermetic clang targets MinGW, whose `<io.h>` declares
+those legacy names itself. An "accept the source fallback, it's cached"
+configuration was tried and abandoned after a string of MinGW-only
+failures. Three pieces make source builds never happen instead:
+
+1. `--incompatible_enable_proto_toolchain_resolution` (`.bazelrc`) turns on
+   proto *toolchain resolution*, letting the prebuilt `protoc` binaries
+   protobuf registers take effect (gated on its `prefer_prebuilt_protoc`
+   flag, default true). Without it Bazel uses the legacy wiring and
+   compiles from source anyway.
+2. `//toolchains/proto` registers a Python `proto_lang_toolchain` whose
+   runtime is the **pip** `protobuf` wheel instead of
+   `@protobuf//python:protobuf_python` — the latter is what drags in the
+   `protoc_minimal` source build, prebuilts or not. Root-module toolchain
+   registrations beat protobuf's own, so the pip runtime wins. The wheel
+   must satisfy the version check protoc stamps into generated code
+   (runtime ≥ gencode): protobuf `N.M` in `MODULE.bazel` ↔ pip `7.N.M` in
+   `pyproject.toml`, bumped together.
+3. Tripwire flags in `.bazelrc` poison the compile line of any file from a
+   protobuf external repo, so a regression is a loud, immediate error on
+   every platform rather than a Windows-only surprise.
+
+The pip wheel is also why Windows machines shorten `--output_user_root`
+(see the table above): its runfiles paths are what cross the 260-char
+`MAX_PATH`.
+
+### Build latency: what's normal, what isn't
+
+Measured on the repo at ~70 targets (macOS M-series; Windows is roughly
+3–4× on the same phase due to filesystem cost and Defender):
+
+- **Warm server, no changes: ~1 s.** This is the steady-state floor for
+  iterating. If a no-op build is much slower than this, something is wrong.
+- **Cold server (first build of the day, after `bazel shutdown`, or after
+  the idle timeout): ~12 s on macOS, tens of seconds on Windows.** The
+  on-disk action cache survives restarts — nothing recompiles — but the
+  in-memory *analysis* cache doesn't, and re-analyzing the graph is this
+  cost. `.bazelrc` raises the idle timeout to 12 h so the server survives
+  a work day.
+- **Switching between the default config and `--config=local` (or any
+  flag change) re-analyzes too** — that's inherent to Bazel. Pick the
+  config for the session, not per command.
+
+Things that keep the tail short: `--bes_upload_mode=fully_async` and
+`--remote_cache_async` in `.bazelrc` stop the build from blocking on
+BuildBuddy uploads at exit (Windows executes everything locally, so it
+otherwise waits while artifacts upload). Things you can do locally:
+exclude the repo and the Bazel output root (`bazel info output_base`)
+from Windows Defender real-time scanning — it's the single biggest
+Windows build-speed lever — and build the target you're working on
+(`bazel test //lib/spec/...`) rather than `//...`, which builds every
+board image and test in the tree.

@@ -77,6 +77,12 @@ don't run them.
 - If you edit `MODULE.bazel`, build once and commit the resulting
   `MODULE.bazel.lock` change with it — the lockfile is what makes CI green
   mean "reproducible everywhere".
+- The CAN spec (`lib/spec/*.textproto`) is format-enforced: after editing,
+  run `bazel run //tools/spec:fmt` and keep `bazel test //lib/spec:...`
+  green. Telemetry ids are append-only per group — removed fields get
+  tombstoned in `lib/spec/groups.textproto`, never recycled (see
+  [lib/spec/README.md](lib/spec/README.md)). Generated CAN code
+  (`//lib/codegen/cpp:can_lib`) is never edited or checked in.
 - Comments explain *why*, not *what*. Match the surrounding density.
 - `main` is always the current car; no per-year directories
   (see [CONTRIBUTING.md](CONTRIBUTING.md#season-policy)).
