@@ -2,9 +2,9 @@
 
 namespace vcu {
 
-using lhre::can::HvcPackStatus;
 using lhre::can::VcuState;
-using lhre::can::VcuStatus;
+using lhre::can::hvc::HvcPackStatus;
+using lhre::can::vcu::VcuStatus;
 
 App::App(const Peripherals& peripherals) : p_(peripherals) {}
 

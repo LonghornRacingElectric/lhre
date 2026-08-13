@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<!-- CAN spec editor frontend. Served by editor.py; talks to /api/*.
+     All editing logic lives here; the backend only loads, validates
+     (with the real //lib/spec validator), and writes canonical files. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CAN spec editor</title>
+<style>
+  :root {
+    --bg: #16181d; --panel: #1e2128; --panel2: #262a33; --line: #363c49;
+    --text: #d7dae2; --dim: #8b93a5; --accent: #e8722c; --ok: #4caf7d;
+    --warn: #d8b13c; --err: #e05252;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 13px/1.45 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 8px 14px;
+           background: var(--panel); border-bottom: 1px solid var(--line);
+           position: sticky; top: 0; z-index: 5; }
+  header h1 { font-size: 15px; margin: 0; color: var(--accent); }
+  header .spacer { flex: 1; }
+  .chip { padding: 2px 10px; border-radius: 10px; font-size: 12px; }
+  .chip.ok { background: #1d3a2c; color: var(--ok); }
+  .chip.err { background: #40201f; color: var(--err); }
+  .chip.warn { background: #3c3418; color: var(--warn); }
+  .chip.busy { background: #2a2f3a; color: var(--dim); }
+  button { background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+           border-radius: 5px; padding: 4px 12px; cursor: pointer; font-size: 13px; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #16181d; font-weight: 600; }
+  button.danger { color: var(--err); }
+  button:disabled { opacity: .45; cursor: default; }
+  #layout { display: grid; grid-template-columns: 240px 1fr 320px; height: calc(100vh - 42px); }
+  #nav, #issues { overflow-y: auto; background: var(--panel); }
+  #nav { border-right: 1px solid var(--line); padding: 10px; }
+  #issues { border-left: 1px solid var(--line); padding: 10px; }
+  #main { overflow-y: auto; padding: 14px 18px; }
+  .navfile { color: var(--dim); font-size: 11px; margin: 10px 0 3px; text-transform: none; }
+  .navmsg { padding: 3px 8px; border-radius: 4px; cursor: pointer; display: flex; gap: 8px; }
+  .navmsg:hover { background: var(--panel2); }
+  .navmsg.sel { background: var(--panel2); outline: 1px solid var(--accent); }
+  .navmsg .id { color: var(--dim); font-family: ui-monospace, monospace; }
+  h2 { font-size: 14px; margin: 18px 0 8px; color: var(--accent); }
+  h2:first-child { margin-top: 0; }
+  label { display: block; font-size: 11px; color: var(--dim); margin-bottom: 2px; }
+  input, select, textarea { background: var(--bg); color: var(--text); border: 1px solid var(--line);
+    border-radius: 4px; padding: 4px 7px; font-size: 13px; width: 100%; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  .row { display: flex; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 90px; }
+  .row > div.wide { flex: 3; min-width: 220px; }
+  table.signals { border-collapse: collapse; width: 100%; margin: 6px 0; }
+  table.signals th { text-align: left; color: var(--dim); font-weight: 500; font-size: 11px;
+                     border-bottom: 1px solid var(--line); padding: 3px 8px; }
+  table.signals td { padding: 3px 8px; border-bottom: 1px solid #262a33; cursor: pointer; }
+  table.signals tr.sel td { background: var(--panel2); }
+  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+  #grid { border-collapse: collapse; font-family: ui-monospace, monospace; font-size: 11px; margin: 8px 0; }
+  #grid td, #grid th { border: 1px solid var(--line); width: 34px; height: 24px;
+                       text-align: center; padding: 0; }
+  #grid th { color: var(--dim); font-weight: 400; background: var(--panel); }
+  #grid td.conflict { background: repeating-linear-gradient(45deg, #6d2020, #6d2020 4px, #402020 4px, #402020 8px) !important; }
+  #grid td.hl { outline: 2px solid #fff; outline-offset: -2px; }
+  .formbox { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px; margin-top: 8px; }
+  .preview { font-family: ui-monospace, monospace; color: var(--warn); font-size: 12px; margin-top: 4px; }
+  .issue { padding: 5px 8px; border-radius: 4px; margin-bottom: 5px; font-size: 12px;
+           font-family: ui-monospace, monospace; white-space: pre-wrap; word-break: break-word; }
+  .issue.err { background: #33201f; color: #eba1a1; }
+  .issue.warn { background: #322c15; color: #e5cd7e; }
+  .muted { color: var(--dim); }
+  .ledger { font-family: ui-monospace, monospace; font-size: 12px; margin-bottom: 8px; }
+  .ledger b { color: var(--text); font-weight: 600; }
+  dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line);
+           border-radius: 8px; min-width: 380px; }
+  dialog::backdrop { background: #000a; }
+  .checkline { display: flex; align-items: center; gap: 6px; margin: 6px 0; }
+  .checkline input { width: auto; }
+  .checkline label { margin: 0; font-size: 13px; color: var(--text); }
+</style>
+</head>
+<body>
+<header>
+  <h1>CAN spec editor</h1>
+  <span id="status" class="chip busy">loading…</span>
+  <span class="spacer"></span>
+  <span id="dirty" class="muted"></span>
+  <button id="reload">Reload</button>
+  <button id="save" class="primary">Save</button>
+</header>
+<div id="layout">
+  <div id="nav"></div>
+  <div id="main"><p class="muted">Loading spec…</p></div>
+  <div id="issues"></div>
+</div>
+
+<dialog id="addMsgDialog">
+  <h2 style="margin-top:0">New message</h2>
+  <div class="row"><div class="wide"><label>Name (UPPER_SNAKE)</label><input id="nm_name"></div></div>
+  <div class="row">
+    <div><label>CAN ID (hex)</label><input id="nm_id" placeholder="0x123"></div>
+    <div class="wide"><label>File</label><select id="nm_file"></select></div>
+  </div>
+  <div class="row" id="nm_newfile_row" style="display:none">
+    <div class="wide"><label>New file path</label><input id="nm_newfile" placeholder="lib/spec/messages/board.textproto"></div>
+  </div>
+  <div class="row" style="justify-content:flex-end">
+    <button id="nm_cancel">Cancel</button>
+    <button id="nm_ok" class="primary">Add</button>
+  </div>
+</dialog>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const PALETTE = ["#4e79a7","#f28e2b","#59a14f","#e15759","#b07aa1",
+                 "#76b7b2","#edc948","#ff9da7","#9c755f","#bab0ac"];
+const TIERS = ["TIER_UNSPECIFIED","FAST","MEDIUM","SLOW"];
+
+let spec = null;          // {files: {...}, digest}
+let sel = null;           // {file, mi} selected message
+let selSig = -1;          // selected signal index within message
+let validateTimer = null;
+
+// ---- model helpers ---------------------------------------------------------
+
+function filesOf() { return spec.files; }
+function allOf(field) {  // concat a repeated section across files
+  const out = [];
+  for (const [file, f] of Object.entries(filesOf()))
+    for (const item of (f[field] || [])) out.push({file, item});
+  return out;
+}
+function messageFiles() {
+  return Object.keys(filesOf()).filter(p => p.includes("/messages/")).sort();
+}
+function groupsEntry() {
+  for (const f of Object.values(filesOf()))
+    if (f.groups && f.groups.group) return f.groups;
+  return null;
+}
+function selMsg() {
+  if (!sel) return null;
+  return (filesOf()[sel.file]?.message || [])[sel.mi] || null;
+}
+function markDirty() {
+  spec.dirty = true;
+  $("#dirty").textContent = "unsaved changes";
+  scheduleValidate();
+}
+
+// Bit occupancy — mirrors lib/spec/validator.py occupied_bits(); display
+// only, the validator remains the authority on overlap errors.
+function occupiedBits(enc) {
+  const start = enc.start_bit ?? 0, len = enc.bit_length ?? 0;
+  const bits = [];
+  if ((enc.byte_order || "LITTLE_ENDIAN") === "LITTLE_ENDIAN") {
+    for (let i = 0; i < len; i++) bits.push(start + i);
+  } else {
+    let byte = Math.floor(start / 8), bit = start % 8;
+    for (let i = 0; i < len; i++) {
+      bits.push(byte * 8 + bit);
+      if (bit === 0) { byte++; bit = 7; } else bit--;
+    }
+  }
+  return bits;
+}
+function logicalKind(sig) {
+  const l = sig.logical || {};
+  if ("enum_type" in l) return "enum_type";
+  if ("boolean" in l) return "boolean";
+  if (l.bitfield) return "bitfield";
+  return "physical";
+}
+function rawRange(enc) {
+  const n = enc.bit_length ?? 0;
+  if (enc.sign === "SIGNED") return [-(2 ** (n - 1)), 2 ** (n - 1) - 1];
+  return [0, 2 ** n - 1];
+}
+
+// ---- ledger operations -----------------------------------------------------
+
+function findGroup(name) {
+  const g = groupsEntry();
+  return (g?.group || []).find(x => x.name === name) || null;
+}
+// Hand out the next id in a group and bump its high-water mark.
+function allocId(groupName) {
+  const g = findGroup(groupName);
+  if (!g) return 1;
+  const id = g.next_free_id || 1;
+  g.next_free_id = id + 1;
+  return id;
+}
+// Release a binding: newest unsaved id shrinks the high-water mark back,
+// anything else gets tombstoned (append-only ledger).
+function releaseBinding(tel) {
+  const g = findGroup(tel.group);
+  if (!g || !tel.id) return;
+  g.reserved_ids = g.reserved_ids || [];
+  g.reserved_names = g.reserved_names || [];
+  if (tel.id === (g.next_free_id || 1) - 1 && !g.reserved_ids.includes(tel.id)) {
+    g.next_free_id -= 1;
+  } else {
+    if (!g.reserved_ids.includes(tel.id)) g.reserved_ids.push(tel.id);
+    if (tel.field && !g.reserved_names.includes(tel.field)) g.reserved_names.push(tel.field);
+    g.reserved_ids.sort((a, b) => a - b);
+    g.reserved_names.sort();
+  }
+}
+// Bindings a signal owns: its own telemetry, or — for the last reference
+// to a bitfield type — the telemetry on that type's bits.
+function releaseSignalBindings(msg, sig) {
+  if (sig.telemetry && sig.telemetry.group) releaseBinding(sig.telemetry);
+  if (logicalKind(sig) === "bitfield") {
+    const typeName = sig.logical.bitfield.bitfield_type;
+    const stillUsed = allOf("message").some(({item}) =>
+      (item.signal || []).some(s => s !== sig && s.logical?.bitfield?.bitfield_type === typeName));
+    if (!stillUsed) {
+      const bf = allOf("bitfield_type").find(b => b.item.name === typeName);
+      for (const bit of (bf?.item.bit || []))
+        if (bit.telemetry && bit.telemetry.group) releaseBinding(bit.telemetry);
+    }
+  }
+}
+
+// ---- rendering -------------------------------------------------------------
+
+function render() {
+  renderNav();
+  renderMain();
+}
+
+function renderNav() {
+  const nav = $("#nav");
+  let html = `<button id="addMsg" style="width:100%">+ message</button>`;
+  for (const file of Object.keys(filesOf()).sort()) {
+    const msgs = filesOf()[file].message || [];
+    if (!msgs.length && !file.includes("/messages/")) continue;
+    html += `<div class="navfile">${esc(file.replace("lib/spec/", ""))}</div>`;
+    msgs.forEach((m, mi) => {
+      const isSel = sel && sel.file === file && sel.mi === mi;
+      html += `<div class="navmsg ${isSel ? "sel" : ""}" data-file="${esc(file)}" data-mi="${mi}">
+        <span class="id">0x${(m.can_id ?? 0).toString(16).toUpperCase().padStart(3, "0")}</span>
+        <span>${esc(m.name)}</span></div>`;
+    });
+  }
+  const groups = groupsEntry();
+  if (groups) {
+    html += `<div class="navfile">telemetry groups (auto-managed)</div>`;
+    for (const g of groups.group)
+      html += `<div class="ledger" style="padding:0 8px"><b>${esc(g.name)}</b>
+        next ${g.next_free_id ?? 1}${(g.reserved_ids || []).length ? `, tombstones [${g.reserved_ids}]` : ""}</div>`;
+  }
+  nav.innerHTML = html;
+  $("#addMsg").onclick = openAddMessage;
+  nav.querySelectorAll(".navmsg").forEach(el => el.onclick = () => {
+    sel = {file: el.dataset.file, mi: +el.dataset.mi};
+    selSig = -1;
+    render();
+  });
+}
+
+function renderMain() {
+  const main = $("#main");
+  const msg = selMsg();
+  if (!msg) { main.innerHTML = `<p class="muted">Select a message on the left, or add one.</p>`; return; }
+  const buses = allOf("bus").map(b => b.item.name);
+  main.innerHTML = `
+    <h2>${esc(msg.name)} <span class="muted" style="font-weight:400">— ${esc(sel.file)}</span></h2>
+    <div class="row">
+      <div class="wide"><label>Name</label><input data-f="name" value="${esc(msg.name)}"></div>
+      <div><label>CAN ID (hex)</label><input data-f="can_id" value="0x${(msg.can_id ?? 0).toString(16).toUpperCase()}"></div>
+      <div><label>Quantity</label><input data-f="quantity" type="number" min="1" value="${msg.quantity || 1}"></div>
+      <div><label>DLC</label><input data-f="dlc" type="number" min="0" max="8" value="${msg.dlc ?? 8}"></div>
+      <div><label>Frequency (Hz)</label><input data-f="frequency_hz" type="number" step="any" value="${msg.frequency_hz ?? 0}"></div>
+    </div>
+    <div class="row">
+      <div><label>Bus</label><select data-f="bus">${buses.map(b =>
+        `<option ${b === msg.bus ? "selected" : ""}>${esc(b)}</option>`).join("")}</select></div>
+      <div><label>From board</label><input data-f="from_board" value="${esc(msg.from_board)}"></div>
+      <div><label>To boards (comma)</label><input data-f="to_boards" value="${esc((msg.to_boards || []).join(","))}"></div>
+      <div><label>Default tier</label><select data-f="default_rate_tier">${TIERS.map(t =>
+        `<option ${t === (msg.default_rate_tier || "TIER_UNSPECIFIED") ? "selected" : ""}>${t}</option>`).join("")}</select></div>
+    </div>
+    <div class="row"><div class="wide"><label>Description</label>
+      <input data-f="description" value="${esc(msg.description)}"></div></div>
+    <div class="row" style="justify-content:flex-end">
+      <button id="delMsg" class="danger">Delete message</button>
+    </div>
+    <h2>Frame layout</h2>
+    ${renderGrid(msg)}
+    <h2>Signals</h2>
+    ${renderSignalTable(msg)}
+    <button id="addSig">+ signal</button>
+    ${selSig >= 0 ? renderSignalForm(msg, msg.signal[selSig]) : ""}
+  `;
+  bindMessageForm(msg);
+}
+
+function renderGrid(msg) {
+  const dlc = msg.dlc ?? 8;
+  const cells = {};  // linear bit -> [signal indexes]
+  (msg.signal || []).forEach((sig, si) => {
+    if (!sig.encoding) return;
+    for (const b of occupiedBits(sig.encoding)) (cells[b] = cells[b] || []).push(si);
+  });
+  let html = `<table id="grid"><tr><th></th>`;
+  for (let b = 7; b >= 0; b--) html += `<th>${b}</th>`;
+  html += `</tr>`;
+  for (let byte = 0; byte < dlc; byte++) {
+    html += `<tr><th>B${byte}</th>`;
+    for (let bit = 7; bit >= 0; bit--) {
+      const lin = byte * 8 + bit;
+      const owners = cells[lin] || [];
+      let cls = "", style = "", title = owners.map(si => msg.signal[si].name).join(" + ");
+      if (owners.length === 1) {
+        style = `background:${PALETTE[owners[0] % PALETTE.length]}44;`;
+        if (owners[0] === selSig) cls = "hl";
+      } else if (owners.length > 1) {
+        // Different mux values may legally share bits; anything else clashes.
+        const clash = owners.some((a, i) => owners.slice(i + 1).some(b => {
+          const ea = msg.signal[a].encoding, eb = msg.signal[b].encoding;
+          return !(ea.muxed && eb.muxed && (ea.mux_value ?? 0) !== (eb.mux_value ?? 0));
+        }));
+        cls = clash ? "conflict" : "";
+        if (!clash) style = `background:${PALETTE[owners[0] % PALETTE.length]}33;`;
+        if (owners.includes(selSig)) cls += " hl";
+      }
+      html += `<td class="${cls}" style="${style}" title="${esc(title)}"></td>`;
+    }
+    html += `</tr>`;
+  }
+  return html + `</table>`;
+}
+
+function renderSignalTable(msg) {
+  const rows = (msg.signal || []).map((sig, si) => {
+    const enc = sig.encoding || {}, kind = logicalKind(sig);
+    const tel = sig.telemetry && sig.telemetry.group
+      ? `${esc(sig.telemetry.group)}.${esc(sig.telemetry.field)} #${sig.telemetry.id}` : "—";
+    const kindTxt = kind === "physical" ? `phys${sig.logical?.physical?.unit ? " [" + esc(sig.logical.physical.unit) + "]" : ""}`
+      : kind === "enum_type" ? `enum ${esc(sig.logical.enum_type)}`
+      : kind === "boolean" ? "bool" : `bitfield ${esc(sig.logical.bitfield.bitfield_type)}`;
+    const mux = sig.logical?.mux_selector ? " ⚡sel" : enc.muxed ? ` ⑂${enc.mux_value ?? 0}` : "";
+    return `<tr class="${si === selSig ? "sel" : ""}" data-si="${si}">
+      <td><span class="swatch" style="background:${PALETTE[si % PALETTE.length]}"></span>${esc(sig.name)}${mux}</td>
+      <td>${enc.start_bit ?? 0}+${enc.bit_length ?? 0}${enc.byte_order === "BIG_ENDIAN" ? " BE" : ""}${enc.sign === "SIGNED" ? " ±" : ""}</td>
+      <td>${kindTxt}</td>
+      <td>${enc.scale && enc.scale !== 1 ? "×" + enc.scale : ""}${enc.offset ? " +" + enc.offset : ""}</td>
+      <td>${tel}</td></tr>`;
+  }).join("");
+  return `<table class="signals"><tr><th>name</th><th>bits</th><th>kind</th><th>scale</th><th>telemetry</th></tr>${rows}</table>`;
+}
+
+function physPreview(enc) {
+  const [lo, hi] = rawRange(enc);
+  const scale = enc.scale || 1, off = enc.offset || 0;
+  const nice = (x) => Number(x.toPrecision(10));  // hide float noise
+  const a = nice(lo * scale + off), b = nice(hi * scale + off);
+  return `raw [${lo}, ${hi}] → phys [${Math.min(a, b)}, ${Math.max(a, b)}], resolution ${scale}`;
+}
+
+function renderSignalForm(msg, sig) {
+  const enc = sig.encoding || (sig.encoding = {});
+  const kind = logicalKind(sig);
+  const enums = allOf("enum_type").map(e => e.item.name);
+  const bitfields = allOf("bitfield_type").map(b => b.item.name);
+  const groups = (groupsEntry()?.group || []).map(g => g.name);
+  const hasTel = !!(sig.telemetry && sig.telemetry.group);
+  const tel = sig.telemetry || {};
+  return `<div class="formbox">
+    <div class="row">
+      <div class="wide"><label>Signal name (lower_snake)</label><input data-s="name" value="${esc(sig.name)}"></div>
+      <div style="align-self:flex-end"><button id="delSig" class="danger">Delete signal</button></div>
+    </div>
+    <div class="row">
+      <div><label>Start bit</label><input data-s="enc.start_bit" type="number" min="0" value="${enc.start_bit ?? 0}"></div>
+      <div><label>Bit length</label><input data-s="enc.bit_length" type="number" min="1" value="${enc.bit_length ?? 1}"></div>
+      <div><label>Byte order</label><select data-s="enc.byte_order">
+        <option ${enc.byte_order !== "BIG_ENDIAN" ? "selected" : ""}>LITTLE_ENDIAN</option>
+        <option ${enc.byte_order === "BIG_ENDIAN" ? "selected" : ""}>BIG_ENDIAN</option></select></div>
+      <div><label>Sign</label><select data-s="enc.sign">
+        <option ${enc.sign !== "SIGNED" ? "selected" : ""}>UNSIGNED</option>
+        <option ${enc.sign === "SIGNED" ? "selected" : ""}>SIGNED</option></select></div>
+    </div>
+    <div class="row">
+      <div><label>Scale (0 = 1.0)</label><input data-s="enc.scale" type="number" step="any" value="${enc.scale ?? 0}"></div>
+      <div><label>Offset</label><input data-s="enc.offset" type="number" step="any" value="${enc.offset ?? 0}"></div>
+      <div><label>Min (phys)</label><input data-s="enc.min" type="number" step="any" value="${enc.min ?? 0}"></div>
+      <div><label>Max (phys)</label><input data-s="enc.max" type="number" step="any" value="${enc.max ?? 0}"></div>
+    </div>
+    <div class="preview" id="physPreview">${physPreview(enc)}</div>
+    <div class="checkline"><input type="checkbox" id="muxed" ${enc.muxed ? "checked" : ""}>
+      <label for="muxed">muxed, selector value =</label>
+      <input data-s="enc.mux_value" type="number" min="0" style="width:80px" value="${enc.mux_value ?? 0}" ${enc.muxed ? "" : "disabled"}>
+      <span style="width:24px"></span>
+      <input type="checkbox" id="muxsel" ${sig.logical?.mux_selector ? "checked" : ""}>
+      <label for="muxsel">this signal is the mux selector</label>
+    </div>
+    <div class="row">
+      <div><label>Kind</label><select id="kind">
+        ${["physical","enum_type","boolean","bitfield"].map(k =>
+          `<option value="${k}" ${k === kind ? "selected" : ""}>${k}</option>`).join("")}</select></div>
+      <div id="kindExtra">${
+        kind === "physical" ? `<label>Unit</label><input data-s="unit" value="${esc(sig.logical?.physical?.unit)}">`
+        : kind === "enum_type" ? `<label>Enum</label><select data-s="enumref">${enums.map(e =>
+            `<option ${e === sig.logical.enum_type ? "selected" : ""}>${esc(e)}</option>`).join("")}</select>`
+        : kind === "bitfield" ? `<label>Bitfield</label><select data-s="bitfieldref">${bitfields.map(b =>
+            `<option ${b === sig.logical.bitfield.bitfield_type ? "selected" : ""}>${esc(b)}</option>`).join("")}</select>`
+        : `<label>&nbsp;</label><span class="muted">bit_length must be 1</span>`}</div>
+      <div class="wide"><label>Description</label><input data-s="description" value="${esc(sig.description)}"></div>
+    </div>
+    <h2 style="font-size:13px">Telemetry</h2>
+    ${kind === "bitfield"
+      ? `<p class="muted">Bitfield bits bind telemetry in types.textproto, not here.</p>`
+      : `<div class="checkline"><input type="checkbox" id="telOn" ${hasTel ? "checked" : ""}>
+           <label for="telOn">published off-vehicle</label></div>
+         ${hasTel ? `<div class="row">
+           <div><label>Group</label><select data-s="tel.group">${groups.map(g =>
+             `<option ${g === tel.group ? "selected" : ""}>${esc(g)}</option>`).join("")}</select></div>
+           <div><label>Field name</label><input data-s="tel.field" value="${esc(tel.field)}"></div>
+           <div><label>Proto id <span class="muted">(ledger)</span></label><input value="${tel.id ?? ""}" disabled></div>
+           <div><label>Tier</label><select data-s="tel.rate_tier">${TIERS.map(t =>
+             `<option ${t === (tel.rate_tier || "TIER_UNSPECIFIED") ? "selected" : ""}>${t === "TIER_UNSPECIFIED" ? "inherit" : t}</option>`).join("")}</select></div>
+         </div>` : ""}`}
+  </div>`;
+}
+
+// ---- event wiring ----------------------------------------------------------
+
+function bindMessageForm(msg) {
+  $("#main").querySelectorAll("[data-f]").forEach(el => el.onchange = () => {
+    const f = el.dataset.f;
+    if (f === "can_id") msg.can_id = parseInt(el.value, 16) || 0;
+    else if (f === "quantity" || f === "dlc") msg[f] = +el.value || 0;
+    else if (f === "frequency_hz") msg[f] = +el.value || 0;
+    else if (f === "to_boards") msg.to_boards = el.value.split(",").map(s => s.trim()).filter(Boolean);
+    else msg[f] = el.value;
+    markDirty(); render();
+  });
+  $("#delMsg").onclick = () => {
+    if (!confirm(`Delete ${msg.name}? Telemetry ids will be tombstoned.`)) return;
+    for (const sig of (msg.signal || [])) releaseSignalBindings(msg, sig);
+    filesOf()[sel.file].message.splice(sel.mi, 1);
+    sel = null; selSig = -1; markDirty(); render();
+  };
+  $("#addSig").onclick = () => {
+    msg.signal = msg.signal || [];
+    // Default the new signal to the first free bit after existing ones.
+    const used = msg.signal.flatMap(s => s.encoding ? occupiedBits(s.encoding) : []);
+    const start = used.length ? Math.max(...used) + 1 : 0;
+    msg.signal.push({name: "new_signal", encoding: {start_bit: start, bit_length: 8},
+                     logical: {physical: {unit: ""}}});
+    selSig = msg.signal.length - 1; markDirty(); render();
+  };
+  $("#main").querySelectorAll("table.signals tr[data-si]").forEach(el =>
+    el.onclick = () => { selSig = +el.dataset.si; render(); });
+  if (selSig >= 0) bindSignalForm(msg, msg.signal[selSig]);
+}
+
+function bindSignalForm(msg, sig) {
+  const box = $("#main .formbox");
+  box.querySelectorAll("[data-s]").forEach(el => {
+    el.onchange = () => {
+      const k = el.dataset.s;
+      const enc = sig.encoding;
+      if (k.startsWith("enc.")) {
+        const f = k.slice(4);
+        enc[f] = (el.tagName === "SELECT") ? el.value : +el.value || 0;
+      } else if (k === "unit") sig.logical.physical.unit = el.value;
+      else if (k === "enumref") sig.logical = {enum_type: el.value, mux_selector: sig.logical.mux_selector};
+      else if (k === "bitfieldref") sig.logical = {bitfield: {bitfield_type: el.value}};
+      else if (k === "tel.group") {
+        // Moving groups means a new id from the new group's ledger; the
+        // old id goes back to (or gets tombstoned in) the old one.
+        releaseBinding(sig.telemetry);
+        sig.telemetry.group = el.value;
+        sig.telemetry.id = allocId(el.value);
+      }
+      else if (k.startsWith("tel.")) sig.telemetry[k.slice(4)] = el.value;
+      else sig[k] = el.value;
+      markDirty(); render();
+    };
+    if (el.dataset.s.startsWith("enc.") && el.tagName === "INPUT")
+      el.oninput = () => {  // live physical-range preview without a re-render
+        const f = el.dataset.s.slice(4);
+        const trial = {...sig.encoding, [f]: +el.value || 0};
+        $("#physPreview").textContent = physPreview(trial);
+      };
+  });
+  $("#kind").onchange = () => {
+    const k = $("#kind").value;
+    if (logicalKind(sig) === "bitfield" || k === "bitfield") releaseSignalBindings(msg, sig);
+    const keepSel = sig.logical?.mux_selector || false;
+    if (k === "physical") sig.logical = {physical: {unit: ""}, mux_selector: keepSel};
+    else if (k === "enum_type") sig.logical = {enum_type: allOf("enum_type")[0]?.item.name || "", mux_selector: keepSel};
+    else if (k === "boolean") { sig.logical = {boolean: false, mux_selector: false}; sig.encoding.bit_length = 1; }
+    else { sig.logical = {bitfield: {bitfield_type: allOf("bitfield_type")[0]?.item.name || ""}};
+           if (sig.telemetry?.group) { releaseBinding(sig.telemetry); delete sig.telemetry; } }
+    markDirty(); render();
+  };
+  $("#muxed").onchange = () => { sig.encoding.muxed = $("#muxed").checked; markDirty(); render(); };
+  $("#muxsel").onchange = () => { sig.logical.mux_selector = $("#muxsel").checked; markDirty(); render(); };
+  $("#delSig").onclick = () => {
+    releaseSignalBindings(msg, sig);
+    msg.signal.splice(selSig, 1);
+    selSig = -1; markDirty(); render();
+  };
+  const telOn = $("#telOn");
+  if (telOn) telOn.onchange = () => {
+    if (telOn.checked) {
+      const group = (groupsEntry()?.group || [])[0]?.name || "";
+      sig.telemetry = {group, field: sig.name, id: allocId(group)};
+    } else { releaseBinding(sig.telemetry); delete sig.telemetry; }
+    markDirty(); render();
+  };
+}
+
+// ---- add-message dialog ----------------------------------------------------
+
+function openAddMessage() {
+  const dlg = $("#addMsgDialog");
+  const fileSel = $("#nm_file");
+  fileSel.innerHTML = messageFiles().map(f => `<option>${esc(f)}</option>`).join("")
+    + `<option value="__new__">new file…</option>`;
+  fileSel.onchange = () => $("#nm_newfile_row").style.display =
+    fileSel.value === "__new__" ? "" : "none";
+  $("#nm_cancel").onclick = () => dlg.close();
+  $("#nm_ok").onclick = () => {
+    const name = $("#nm_name").value.trim();
+    const canId = parseInt($("#nm_id").value, 16);
+    let file = fileSel.value;
+    if (file === "__new__") file = $("#nm_newfile").value.trim();
+    if (!name || isNaN(canId) || !file) return alert("name, hex CAN ID, and file are required");
+    if (!filesOf()[file]) filesOf()[file] = {};
+    filesOf()[file].message = filesOf()[file].message || [];
+    filesOf()[file].message.push({name, can_id: canId, from_board: "", to_boards: ["*"],
+      bus: allOf("bus")[0]?.item.name || "", dlc: 8, frequency_hz: 0, signal: []});
+    sel = {file, mi: filesOf()[file].message.length - 1};
+    selSig = -1; dlg.close(); markDirty(); render();
+  };
+  dlg.showModal();
+}
+
+// ---- server interaction ----------------------------------------------------
+
+function setStatus(cls, text) {
+  const el = $("#status");
+  el.className = `chip ${cls}`;
+  el.textContent = text;
+}
+
+function scheduleValidate() {
+  clearTimeout(validateTimer);
+  validateTimer = setTimeout(runValidate, 400);
+}
+
+async function runValidate() {
+  setStatus("busy", "validating…");
+  const res = await fetch("/api/validate", {method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({files: spec.files})});
+  const body = await res.json();
+  const issues = $("#issues");
+  if (body.error) { setStatus("err", "error"); issues.innerHTML =
+    `<div class="issue err">${esc(body.error)}</div>`; return; }
+  issues.innerHTML =
+    body.errors.map(e => `<div class="issue err">${esc(e)}</div>`).join("") +
+    body.warnings.map(w => `<div class="issue warn">${esc(w)}</div>`).join("") ||
+    `<p class="muted">No issues.</p>`;
+  if (body.errors.length) setStatus("err", `${body.errors.length} error(s)`);
+  else if (body.warnings.length) setStatus("warn", `${body.warnings.length} warning(s)`);
+  else setStatus("ok", "valid");
+  $("#save").disabled = body.errors.length > 0;
+}
+
+async function load() {
+  setStatus("busy", "loading…");
+  const res = await fetch("/api/spec");
+  spec = await res.json();
+  spec.dirty = false;
+  $("#dirty").textContent = "";
+  if (sel && !selMsg()) sel = null;
+  render();
+  runValidate();
+}
+
+async function save() {
+  setStatus("busy", "saving…");
+  const res = await fetch("/api/save", {method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({files: spec.files, digest: spec.digest})});
+  const body = await res.json();
+  if (!res.ok) { setStatus("err", "save failed"); alert(body.error); return; }
+  await load();  // resync to canonical form + new digest
+  setStatus("ok", body.written.length ? `saved ${body.written.length} file(s)` : "no changes");
+}
+
+$("#save").onclick = save;
+$("#reload").onclick = () => {
+  if (!spec?.dirty || confirm("Discard unsaved changes?")) load();
+};
+window.onbeforeunload = () => spec?.dirty ? "unsaved changes" : null;
+load();
+</script>
+</body>
+</html>

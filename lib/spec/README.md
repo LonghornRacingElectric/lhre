@@ -16,7 +16,7 @@ derived from the spec is hand-maintained; that's the point (see
 | `buses.textproto` | Bus definitions (name, bitrate). |
 | `types.textproto` | Shared enums and named bitfields. |
 | `groups.textproto` | Telemetry group registry and append-only ID ledgers. |
-| `messages/<board>.textproto` | All messages originating from one board — split per source board to keep merge conflicts rare. |
+| `messages/<board>.textproto` | All messages originating from one board. Enforced: every message's `from_board` must match its file (validator rule 5), which is what lets codegen emit one namespace + library per board. |
 
 Every file parses as one `lhre.canspec.SpecFile`; each populates only the
 sections that belong there. The current messages are **seed examples**
@@ -61,6 +61,31 @@ bazel run  //tools/spec:fmt      # rewrite spec files canonically
 (loader + validator + canonical serializer) is the only Python that
 understands the format. The loader is deliberately tiny and isolated so a
 future syntax swap stays an afternoon, not a rewrite.
+
+## Indexed arrays (cell temps, cell voltages)
+
+The lhre-2026 pattern — one layout repeated over a reserved ID range,
+indexed by frame ID on the receive side — is expressed by composing two
+existing attributes:
+
+- `quantity: N` on the message reserves `[can_id, can_id + N)`; every
+  frame in the block carries the same signal layout.
+- Each per-frame slot binds the same repeated telemetry field:
+  `telemetry { field: "cell_temps" id: K repeated: true array_index: <slot> }`.
+
+The element a signal lands in is
+`(frame_id − can_id) × slots_per_frame + array_index` — so 4 slots ×
+`quantity: 4` is a 16-element array, one ledger id total. See
+`HVC_CELL_TEMPS` in `messages/hvc.textproto` for the worked example; the
+gateway generator implements the index math when it lands.
+
+## Mux (supported, but off by convention)
+
+The schema and generators support multiplexed messages (`mux_selector`,
+`muxed`/`mux_value` — see `VCU_DEBUG`). Team convention is to prefer
+more messages at lower frequency over muxing, since mux complicates
+every downstream consumer; reach for it only when IDs are genuinely
+scarce.
 
 ## Layering rules that bite
 

@@ -11,6 +11,13 @@
 namespace lhre::can {
 namespace {
 
+// Messages are generated into one namespace per source board.
+using hvc::HvcCellTemps;
+using hvc::HvcPackStatus;
+using vcu::VcuBootloaderData;
+using vcu::VcuDebug;
+using vcu::VcuStatus;
+
 TEST(CanLib, VcuStatusPackMatchesHandComputedBytes) {
   VcuStatus msg;
   msg.state = VcuState::kDrive;    // byte 0 = 0x02
@@ -125,7 +132,7 @@ TEST(CanLib, EnumToString) {
 }
 
 TEST(CanLib, QuantityBlockAndMetadata) {
-  ASSERT_EQ(kMessageCount, 4u);
+  ASSERT_EQ(kMessageCount, 5u);
   // Sorted by frame ID; bootloader block occupies 0x010-0x013.
   EXPECT_EQ(kMessageMeta[0].frame_id, VcuBootloaderData::kFrameId);
   EXPECT_EQ(kMessageMeta[0].quantity, 4);
@@ -140,6 +147,27 @@ TEST(CanLib, QuantityBlockAndMetadata) {
   VcuBootloaderData boot;
   lhal::CanFrame frame = boot.ToFrame(3);
   EXPECT_EQ(frame.id, 0x013u);
+}
+
+// Indexed array block: 4 temp slots per frame over 4 consecutive IDs;
+// cell = (frame_id - kFrameId) * 4 + slot.
+TEST(CanLib, CellTempArrayBlock) {
+  HvcCellTemps msg;
+  msg.set_cell_temp_slot0(21.5f);
+  msg.cell_temp_slot1_raw = -113;  // -11.3 degC
+  msg.set_cell_temp_slot2(0.0f);
+  msg.set_cell_temp_slot3(45.9f);
+
+  lhal::CanFrame frame = msg.ToFrame(2);  // frame for cells 8-11
+  EXPECT_EQ(frame.id, HvcCellTemps::kFrameId + 2);
+  ASSERT_TRUE(HvcCellTemps::Matches(frame.id));
+  EXPECT_FALSE(HvcCellTemps::Matches(HvcCellTemps::kFrameId + 4));
+
+  HvcCellTemps out = HvcCellTemps::FromFrame(frame);
+  EXPECT_NEAR(out.cell_temp_slot0(), 21.5f, 1e-3f);
+  EXPECT_EQ(out.cell_temp_slot1_raw, -113);
+  EXPECT_EQ(out.cell_temp_slot2_raw, 0);
+  EXPECT_NEAR(out.cell_temp_slot3(), 45.9f, 1e-3f);
 }
 
 }  // namespace

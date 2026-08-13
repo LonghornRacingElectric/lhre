@@ -32,6 +32,7 @@ FD_DLCS = (12, 16, 20, 24, 32, 48, 64)
 
 _UPPER_SNAKE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 _LOWER_SNAKE = re.compile(r"^[a-z][a-z0-9_]*$")
+_MESSAGES_FILE = re.compile(r"(?:^|/)messages/([a-z][a-z0-9_]*)\.textproto$")
 
 
 def effective_scale(encoding):
@@ -142,6 +143,16 @@ def _check_registries(spec, report):
         if message.name in seen:
             report.error(where, 5, f"duplicate message name (also in {seen[message.name]})")
         seen[message.name] = filename
+        if not message.from_board:
+            report.error(where, 5, "from_board is required")
+        # One file per source board: messages/<board>.textproto may only
+        # hold messages that board sends. Codegen leans on this to emit
+        # one namespace/library per board.
+        stem = _MESSAGES_FILE.search(filename)
+        if stem and message.from_board and message.from_board.lower() != stem.group(1):
+            report.error(where, 5,
+                         f"from_board '{message.from_board}' does not match its file "
+                         f"(messages/{stem.group(1)}.textproto holds {stem.group(1).upper()}'s messages)")
 
     for filename, enum_type in spec.enum_types():
         seen_names, seen_numbers = {}, {}

@@ -4,7 +4,8 @@
 
 #include "FreeRTOS.h"
 #include "lhal/lhal.hpp"
-#include "lhre_can.hpp"
+#include "lhre_can_hvc.hpp"
+#include "lhre_can_vcu.hpp"
 #include "task.h"
 
 namespace vcu {
@@ -25,7 +26,7 @@ struct Peripherals {
 // kernel's simulator port; see drivers/freertos).
 //
 // CAN messages come from the generated spec library (lib/codegen/cpp):
-// the status task broadcasts lhre::can::VcuStatus, and every received
+// the status task broadcasts lhre::can::vcu::VcuStatus, and every received
 // frame is decoded through the generated Matches()/FromFrame() pairs —
 // no hand-packed frames, no magic IDs.
 //
@@ -58,7 +59,9 @@ class App {
   // Last accumulator state received from the HVC; meaningful only once
   // pack_status_seen() is true.
   bool pack_status_seen() const { return pack_status_seen_; }
-  const lhre::can::HvcPackStatus& pack_status() const { return pack_status_; }
+  const lhre::can::hvc::HvcPackStatus& pack_status() const {
+    return pack_status_;
+  }
   lhre::can::VcuState state() const { return state_; }
 
  private:
@@ -85,7 +88,7 @@ class App {
   uint32_t statuses_sent_ = 0;
 
   lhre::can::VcuState state_ = lhre::can::VcuState::kIdle;
-  lhre::can::HvcPackStatus pack_status_;
+  lhre::can::hvc::HvcPackStatus pack_status_;
   bool pack_status_seen_ = false;
   bool overtemp_latched_ = false;
 

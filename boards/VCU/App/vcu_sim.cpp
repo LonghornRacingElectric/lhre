@@ -10,7 +10,7 @@
 #include "lhal/host/can.hpp"
 #include "lhal/host/gpio.hpp"
 #include "lhal/host/system.hpp"
-#include "lhre_can.hpp"
+#include "lhre_can_vcu.hpp"
 #include "task.h"
 #include "vcu_app.hpp"
 
@@ -42,10 +42,10 @@ void ObserverTaskLoop(void* arg) {
 
     lhal::CanFrame frame;
     while (world.observer.Receive(&frame)) {
-      if (!lhre::can::VcuStatus::Matches(frame.id)) {
+      if (!lhre::can::vcu::VcuStatus::Matches(frame.id)) {
         continue;
       }
-      auto status = lhre::can::VcuStatus::FromFrame(frame);
+      auto status = lhre::can::vcu::VcuStatus::FromFrame(frame);
       ++statuses_seen;
       if (statuses_seen % 10 == 1) {
         std::printf("[%4u ms] CAN 0x%03X VcuStatus state=%s\n",

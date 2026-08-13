@@ -4,7 +4,7 @@
 groups {
   group {
     name: "Battery"
-    next_free_id: 4
+    next_free_id: 5
     description: "Accumulator pack state."
   }
   group {
