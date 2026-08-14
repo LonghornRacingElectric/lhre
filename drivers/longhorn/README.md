@@ -12,6 +12,13 @@ Each module is its own target so boards pull in only what they use:
   output over any `lhal::Uart` stream (debug UART or USB VCP via
   `lhal::stm32::UsbCdc`). Not thread-safe on its own; serialize behind a
   mutex or use the logger when printing from multiple RTOS tasks.
+- `//drivers/longhorn:shell` — `longhorn::Shell`, a line-oriented debug
+  shell on top of `Console`: type `/help`, `/version` (build provenance,
+  the same banner boards print at boot), `/uptime`, plus whatever the
+  board registers with `AddCommand`. Poll it from one loop or task;
+  its `console()` is the board's log stream, so logs and replies
+  interleave whole. [tools/monitor](../../tools/monitor/README.md) is the
+  laptop-side counterpart, and parses `/version` to catch stale firmware.
 - `//drivers/longhorn:logger` — `longhorn::Logger`, thread-safe non-blocking
   logging: producers enqueue timestamped, level-tagged lines (drop-on-full,
   counted) and a low-priority FreeRTOS drain task owns the stream. Header

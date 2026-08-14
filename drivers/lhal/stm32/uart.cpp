@@ -45,8 +45,20 @@ Status Uart::Write(const uint8_t* data, size_t len, uint32_t timeout_ms) {
 }
 
 Status Uart::Read(uint8_t* data, size_t len, uint32_t timeout_ms) {
-  return ToStatus(
-      HAL_UART_Receive(huart_, data, static_cast<uint16_t>(len), timeout_ms));
+  HAL_StatusTypeDef s =
+      HAL_UART_Receive(huart_, data, static_cast<uint16_t>(len), timeout_ms);
+  // A polled read (timeout 0) can never reach the HAL's own overrun
+  // handling: UART_WaitOnFlagUntilTimeout returns HAL_TIMEOUT before its
+  // ORE check. The receiver then stays halted with ORE latched until the
+  // flag is cleared, so an RX burst would otherwise kill reception until
+  // reboot (verified on a G474 LPUART). Clear sticky reception errors on
+  // any non-OK read so the next one recovers; the overrun-dropped bytes
+  // are gone either way.
+  if (s != HAL_OK) {
+    __HAL_UART_CLEAR_FLAG(huart_, UART_CLEAR_OREF | UART_CLEAR_FEF |
+                                      UART_CLEAR_NEF | UART_CLEAR_PEF);
+  }
+  return ToStatus(s);
 }
 
 Status Uart::WriteAsync(const uint8_t* data, size_t len,
