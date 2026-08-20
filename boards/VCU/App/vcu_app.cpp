@@ -69,7 +69,6 @@ void App::BlinkTaskLoop() {
   for (;;) {
     if (p_.status_led != nullptr) {
       p_.status_led->Toggle();
-      logger_.Info("Ticked!");
     }
     vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(kBlinkPeriodMs));
   }
