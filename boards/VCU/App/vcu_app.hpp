@@ -6,6 +6,7 @@
 #include "lhal/lhal.hpp"
 #include "lhre_can_hvc.hpp"
 #include "lhre_can_vcu.hpp"
+#include "longhorn/shell.hpp"
 #include "task.h"
 
 namespace vcu {
@@ -41,6 +42,10 @@ class App {
  public:
   static constexpr uint32_t kBlinkPeriodMs = 100;
   static constexpr uint32_t kStatusPeriodMs = 100;
+  // Shell RX poll period. The UART buffers only a handful of bytes between
+  // polls (RX FIFO + RDR), so this must stay well under the time a burst
+  // takes to overflow them; tools/monitor paces its probe to match.
+  static constexpr uint32_t kShellPollMs = 2;
   // Latch an overtemp fault when the HVC reports coolant at or above this.
   static constexpr int8_t kCoolantOvertempDegC = 60;
 
@@ -74,14 +79,24 @@ class App {
 
   static void BlinkTaskEntry(void* self);
   static void StatusTaskEntry(void* self);
+  static void ShellTaskEntry(void* self);
   [[noreturn]] void BlinkTaskLoop();
   [[noreturn]] void StatusTaskLoop();
+  [[noreturn]] void ShellTaskLoop();
+
+  // /state command payload: mode, faults, CAN view. Split out so tests can
+  // exercise it through the shell like the monitor would.
+  void PrintState(longhorn::Console& out);
 
   // Drains the CAN RX queue into the app's view of the world.
   void ProcessCanRx();
   void SendStatus();
 
   Peripherals p_;
+  // Debug shell over debug_uart: /help /version /uptime plus /state below.
+  // Polled by its own low-priority task (or Step() when scheduler-less);
+  // its console() is the app's log stream.
+  longhorn::Shell shell_;
   bool started_ = false;
   uint32_t last_blink_ms_ = 0;
   uint32_t last_status_ms_ = 0;
@@ -96,6 +111,8 @@ class App {
   StackType_t blink_stack_[kTaskStackDepth];
   StaticTask_t status_tcb_;
   StackType_t status_stack_[kTaskStackDepth];
+  StaticTask_t shell_tcb_;
+  StackType_t shell_stack_[kTaskStackDepth];
 };
 
 }  // namespace vcu

@@ -42,6 +42,19 @@ The `BUILD.bazel` here is the canonical example of a `firmware_project`
 call — what it generates and every option is documented in
 [tools/firmware](../../tools/firmware/README.md).
 
+## Debug console
+
+A [longhorn shell](../../drivers/longhorn/README.md) runs on LPUART1
+(PA2/PA3, the ST-LINK VCP pins on the Nucleo dev board), polled by its own
+low-priority task. `bazel run //tools/monitor` connects, checks the flashed
+sha against your checkout, and gives you `/help`, `/version`, `/uptime`,
+and the VCU's `/state` (state machine, latched faults, last pack status).
+
+The UART HAL module is currently enabled by a define in `BUILD.bazel`
+because LPUART1 isn't in `VCU.ioc`; adding it there (and regenerating)
+retires the define and the hand-rolled init in `Board/main.cpp` — see the
+TODO there.
+
 ## FreeRTOS
 
 FreeRTOS is enabled in `VCU.ioc` (CMSIS_V2 interface — the only kind CubeMX

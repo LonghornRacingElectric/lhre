@@ -20,6 +20,7 @@ import select
 import subprocess
 import sys
 import termios
+import time
 import tty
 
 BAUD_CONSTANTS = {
@@ -114,19 +115,62 @@ def read_for(fd, seconds):
     return buf
 
 
+def write_paced(fd, data, gap_s=0.005):
+    """Writes one byte per gap. RTOS boards poll their shell every few ms
+    with only a few bytes of UART buffering, so a full-speed burst would
+    overrun; human typing is naturally paced, but this probe isn't."""
+    for i in range(len(data)):
+        os.write(fd, data[i : i + 1])
+        time.sleep(gap_s)
+
+
+# ANSI color escape codes for high-visibility terminal banners
+CLR_RESET = "\033[0m"
+CLR_BOLD = "\033[1m"
+CLR_RED = "\033[1;31m"
+CLR_GREEN = "\033[1;32m"
+CLR_YELLOW = "\033[1;33m"
+CLR_CYAN = "\033[1;36m"
+
+
+def print_banner_box(title, color, lines):
+    """Prints a prominent, formatted banner box with ANSI colors."""
+    use_color = sys.stdout.isatty()
+    c_hdr = color if use_color else ""
+    c_bold = CLR_BOLD if use_color else ""
+    c_rst = CLR_RESET if use_color else ""
+    width = 72
+    border = "=" * width
+    print(f"\n{c_hdr}{border}{c_rst}")
+    print(f"{c_hdr}{c_bold}  {title}{c_rst}")
+    print(f"{c_hdr}{'-' * width}{c_rst}")
+    for line in lines:
+        print(f"  {line}")
+    print(f"{c_hdr}{border}{c_rst}\n")
+
+
 def check_version(fd, root):
     """Sends /version and compares the firmware sha against the checkout.
 
     Best-effort: prints its verdict and returns True when firmware
     provably matches the checkout, False otherwise.
     """
-    os.write(fd, b"\r/version\r")
+    write_paced(fd, b"\r/version\r")
     reply = read_for(fd, 1.0)
     match = BANNER_RE.search(reply)
     if match is None:
-        print(
-            "monitor: no /version response; firmware without the shell, "
-            "wrong baud, or a port hog?"
+        print_banner_box(
+            "✗ ERROR: NO /version RESPONSE FROM BOARD",
+            CLR_RED,
+            [
+                "Could not communicate with the debug shell on the board.",
+                "",
+                "Troubleshooting checklist:",
+                "  • Check that the board is plugged in and powered",
+                "  • Verify baud rate (expected 115200)",
+                "  • Ensure no other serial monitor (e.g. screen, minicom) is open",
+                "  • Verify firmware includes longhorn::Shell",
+            ],
         )
         return False
 
@@ -134,15 +178,31 @@ def check_version(fd, root):
     line_start = reply.rfind(b"\n", 0, match.start()) + 1
     line_end = reply.find(b"\r", match.end())
     banner = reply[line_start : line_end if line_end != -1 else None]
-    print(f"monitor: board reports: {banner.decode(errors='replace').strip()}")
+    banner_text = banner.decode(errors="replace").strip()
 
     fw_sha = match.group(1).decode()
     fw_dirty = match.group(2) is not None
     if fw_sha == "unknown":
-        print("monitor: firmware build was unstamped; cannot compare")
+        print_banner_box(
+            "⚠ WARNING: UNSTAMPED FIRMWARE BUILD",
+            CLR_YELLOW,
+            [
+                f"Board Banner:  {banner_text}",
+                "Firmware was built without git stamping (SHA is unknown).",
+                "Cannot compare against workspace HEAD.",
+            ],
+        )
         return False
     if root is None:
-        print("monitor: not in a git checkout; cannot compare")
+        print_banner_box(
+            "⚠ WARNING: NOT IN A GIT CHECKOUT",
+            CLR_YELLOW,
+            [
+                f"Board Banner:  {banner_text}",
+                f"Board SHA:     {fw_sha}",
+                "Not inside a git repository; cannot verify firmware against HEAD.",
+            ],
+        )
         return False
 
     head = subprocess.run(
@@ -158,21 +218,51 @@ def check_version(fd, root):
     )
 
     if not head.startswith(fw_sha):
-        print(
-            f"monitor: FIRMWARE OUT OF DATE: board has {fw_sha}, checkout "
-            f"is at {head[:12]}. Reflash (e.g. --flash //boards/...:openocd)."
+        print_banner_box(
+            "✗ FIRMWARE OUT OF DATE!",
+            CLR_RED,
+            [
+                f"Board Banner:  {banner_text}",
+                f"Board SHA:     {fw_sha}{' (-dirty)' if fw_dirty else ''}",
+                f"Workspace SHA: {head[:12]}{' (dirty)' if ws_dirty else ''}",
+                "",
+                "Action Required:",
+                "  The board is running old firmware. Reflash before testing:",
+                "  • Bazel CLI:  bazel run //tools/monitor -- --flash //boards/<Board>:openocd",
+                "  • VS Code:    Terminal → Run Task → flash-and-monitor-<name>",
+            ],
         )
         return False
     if fw_dirty or ws_dirty:
-        # Same commit, but uncommitted changes on either side make byte
-        # identity unknowable from the sha alone.
-        print(
-            f"monitor: sha matches HEAD ({fw_sha}) but "
-            f"{'firmware' if fw_dirty else 'checkout'} has uncommitted "
-            "changes; exact match not verifiable"
+        reasons = []
+        if fw_dirty:
+            reasons.append("firmware was built with uncommitted changes (-dirty)")
+        if ws_dirty:
+            reasons.append("local workspace has uncommitted changes")
+        print_banner_box(
+            "⚠ WARNING: UNCOMMITTED CHANGES (MATCH UNVERIFIABLE)",
+            CLR_YELLOW,
+            [
+                f"Board Banner:  {banner_text}",
+                f"Board SHA:     {fw_sha}{' (-dirty)' if fw_dirty else ''}",
+                f"Workspace SHA: {head[:12]}{' (dirty)' if ws_dirty else ''}",
+                f"Reason:        {'; '.join(reasons)}",
+                "",
+                "Note: Commit hash matches HEAD, but exact byte identity cannot",
+                "be guaranteed due to dirty working tree state.",
+            ],
         )
         return False
-    print(f"monitor: firmware matches checkout ({fw_sha})")
+    print_banner_box(
+        "✓ FIRMWARE UP TO DATE (MATCHES CHECKOUT)",
+        CLR_GREEN,
+        [
+            f"Board Banner:  {banner_text}",
+            f"Board SHA:     {fw_sha}",
+            f"Workspace SHA: {head[:12]} (clean)",
+            "Status:        Firmware matches current HEAD exactly. Ready to go!",
+        ],
+    )
     return True
 
 

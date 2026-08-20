@@ -70,9 +70,11 @@ The pieces the launch config wires together:
 derives the device from the `.ioc`, pins the device's SVD in
 `svd_lock.bzl` (probing upstream for ST's occasional wildcard-digit names,
 e.g. STM32F051 → `STM32F0x1.svd` — this one step needs the network), and
-adds the board's Debug/Attach launch configs and build/flash tasks to
-`.vscode/`. For a board that already has a `BUILD.bazel`, pass
-`--vscode-only` to (re)generate just the debug setup.
+adds the board's Debug/Attach launch configs and build/flash/monitor tasks to
+`.vscode/` (including `flash-<name>` for ST-Link, `flash-<name>-dfu` for DFU,
+and `flash-and-monitor-<name>` which prompts for the flashing method before
+connecting to the serial monitor). For a board that already has a `BUILD.bazel`,
+pass `--vscode-only` to (re)generate just the debug setup.
 
 The `.vscode` entries are managed by name/label — re-running the script
 replaces the managed entries and leaves hand-written ones alone (file

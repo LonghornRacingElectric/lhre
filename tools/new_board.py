@@ -218,6 +218,27 @@ def debug_launch_configs(board, name, device, family):
     return [config("launch"), config("attach")]
 
 
+def debug_inputs(board, name):
+    return [
+        {
+            "id": f"flashMethod-{name}",
+            "type": "pickString",
+            "description": f"Select flash method for {board}",
+            "options": [
+                {
+                    "label": "ST-Link (OpenOCD)",
+                    "value": "openocd",
+                },
+                {
+                    "label": "DFU (USB)",
+                    "value": "dfu",
+                },
+            ],
+            "default": "openocd",
+        }
+    ]
+
+
 def debug_tasks(board, name):
     return [
         {
@@ -235,6 +256,36 @@ def debug_tasks(board, name):
             "type": "shell",
             "command": "bazel",
             "args": ["run", f"//boards/{board}:openocd"],
+            "problemMatcher": [],
+        },
+        {
+            "label": f"flash-{name}-dfu",
+            "detail": f"Flash the {board} over USB DFU",
+            "type": "shell",
+            "command": "bazel",
+            "args": ["run", f"//boards/{board}:dfu"],
+            "problemMatcher": [],
+        },
+        {
+            "label": f"monitor-{name}",
+            "detail": f"Open serial monitor for {board}",
+            "type": "shell",
+            "command": "bazel",
+            "args": ["run", "//tools/monitor"],
+            "problemMatcher": [],
+        },
+        {
+            "label": f"flash-and-monitor-{name}",
+            "detail": f"Flash the {board} (prompts for ST-Link vs DFU) and open serial monitor",
+            "type": "shell",
+            "command": "bazel",
+            "args": [
+                "run",
+                "//tools/monitor",
+                "--",
+                "--flash",
+                f"//boards/{board}:${{input:flashMethod-{name}}}",
+            ],
             "problemMatcher": [],
         },
     ]
@@ -268,6 +319,7 @@ def setup_vscode(repo_root, board, name, mcu):
     tasks_path = os.path.join(repo_root, ".vscode", "tasks.json")
     tasks = load_jsonc(tasks_path) or {"version": "2.0.0", "tasks": []}
     upsert(tasks.setdefault("tasks", []), "label", debug_tasks(board, name))
+    upsert(tasks.setdefault("inputs", []), "id", debug_inputs(board, name))
     write_vscode_json(
         tasks_path,
         [
@@ -277,7 +329,10 @@ def setup_vscode(repo_root, board, name, mcu):
         ],
         tasks,
     )
-    print(f"vscode: updated .vscode/tasks.json (build-{name}-debug, flash-{name})")
+    print(
+        f"vscode: updated .vscode/tasks.json (build-{name}-debug, flash-{name}, "
+        f"flash-{name}-dfu, monitor-{name}, flash-and-monitor-{name})"
+    )
 
 
 def scaffold_sources(board_dir, board, name, freertos, with_test, with_sim):
@@ -389,9 +444,11 @@ def main():
             if not args.no_sim:
                 print(f"  bazel run --config=local //boards/{board}:{name}_sim")
         if os.path.isdir(os.path.join(board_dir, "Core")):
-            print("and the firmware image / on-target debug (ST-Link attached):")
+            print("and the firmware image / on-target debug / flashing:")
             print(f"  bazel build //boards/{board}:{name}")
             print(f'  VS Code → Run and Debug → "Debug {board} (ST-Link)"')
+            print(f'  VS Code → Terminal → Run Task → "flash-and-monitor-{name}" (asks ST-Link vs DFU)')
+            print(f"  or CLI: bazel run //tools/monitor -- --flash //boards/{board}:openocd")
         else:
             print(f"note: boards/{board}/Core/ not found — generate code from the .ioc in")
             print("  CubeMX first (see CONTRIBUTING.md#adding-a-new-board); the firmware")

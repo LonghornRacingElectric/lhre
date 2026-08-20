@@ -6,15 +6,44 @@ using lhre::can::VcuState;
 using lhre::can::hvc::HvcPackStatus;
 using lhre::can::vcu::VcuStatus;
 
-App::App(const Peripherals& peripherals) : p_(peripherals) {}
+namespace {
+
+const char* StateName(VcuState state) {
+  switch (state) {
+    case VcuState::kInit:
+      return "init";
+    case VcuState::kIdle:
+      return "idle";
+    case VcuState::kDrive:
+      return "drive";
+    case VcuState::kFault:
+      return "fault";
+  }
+  return "?";
+}
+
+}  // namespace
+
+App::App(const Peripherals& peripherals)
+    : p_(peripherals), shell_(p_.debug_uart, p_.clock, "VCU") {
+  shell_.AddCommand({"state", "VCU state, faults, CAN counters",
+                     [](void* context, longhorn::Console& out, const char*) {
+                       static_cast<App*>(context)->PrintState(out);
+                     },
+                     this});
+  shell_.PrintBanner();
+}
 
 void App::StartTasks() {
   // Status outranks blink: losing the CAN status broadcast matters, a late
-  // LED toggle doesn't. Both sit above the idle task.
+  // LED toggle doesn't. The shell ties blink: a slow console response is
+  // as harmless as a late toggle. All sit above the idle task.
   xTaskCreateStatic(&App::BlinkTaskEntry, "blink", kTaskStackDepth, this,
                     tskIDLE_PRIORITY + 1, blink_stack_, &blink_tcb_);
   xTaskCreateStatic(&App::StatusTaskEntry, "status", kTaskStackDepth, this,
                     tskIDLE_PRIORITY + 2, status_stack_, &status_tcb_);
+  xTaskCreateStatic(&App::ShellTaskEntry, "shell", kTaskStackDepth, this,
+                    tskIDLE_PRIORITY + 1, shell_stack_, &shell_tcb_);
 }
 
 void App::BlinkTaskEntry(void* self) {
@@ -23,6 +52,10 @@ void App::BlinkTaskEntry(void* self) {
 
 void App::StatusTaskEntry(void* self) {
   static_cast<App*>(self)->StatusTaskLoop();
+}
+
+void App::ShellTaskEntry(void* self) {
+  static_cast<App*>(self)->ShellTaskLoop();
 }
 
 void App::BlinkTaskLoop() {
@@ -46,7 +79,27 @@ void App::StatusTaskLoop() {
   }
 }
 
+void App::ShellTaskLoop() {
+  for (;;) {
+    shell_.Poll();
+    vTaskDelay(pdMS_TO_TICKS(kShellPollMs));
+  }
+}
+
+void App::PrintState(longhorn::Console& out) {
+  out.Printf("state=%s overtemp_latched=%d statuses_sent=%lu",
+             StateName(state_), overtemp_latched_ ? 1 : 0,
+             static_cast<unsigned long>(statuses_sent_));
+  if (pack_status_seen_) {
+    out.Printf("pack: coolant %d degC", pack_status_.coolant_temp);
+  } else {
+    out.Println("pack: no HvcPackStatus seen yet");
+  }
+}
+
 void App::Step() {
+  shell_.Poll();
+
   const uint32_t now = p_.clock->Millis();
 
   // First iteration: backdate the timers so everything fires immediately
