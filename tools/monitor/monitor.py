@@ -8,31 +8,39 @@ interactive console (Ctrl-] quits). Optionally flashes first:
     bazel run //tools/monitor -- --flash //boards/VCU:openocd   # flash, then connect
     bazel run //tools/monitor -- --check                        # version check only
 
-Stdlib only (termios), so `python3 tools/monitor/monitor.py` also works.
-POSIX only: on Windows use PuTTY against the same COM port.
+Stdlib only, so `python3 tools/monitor/monitor.py` also works. Cross-platform:
+termios on POSIX, Win32 via ctypes on Windows (use Windows Terminal; legacy
+conhost renders the UI poorly).
 """
 
 import argparse
 import glob
 import os
+import queue
 import re
-import select
 import shutil
-import signal
 import subprocess
 import sys
-import termios
+import threading
 import time
-import tty
 
-BAUD_CONSTANTS = {
-    9600: termios.B9600,
-    19200: termios.B19200,
-    38400: termios.B38400,
-    57600: termios.B57600,
-    115200: termios.B115200,
-    230400: termios.B230400,
-}
+if os.name == "nt":
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+else:
+    import select
+    import termios
+    import tty
+
+    BAUD_CONSTANTS = {
+        9600: termios.B9600,
+        19200: termios.B19200,
+        38400: termios.B38400,
+        57600: termios.B57600,
+        115200: termios.B115200,
+        230400: termios.B230400,
+    }
 
 # The shell's banner: "<board> <describe> (<sha12>[-dirty])". The sha is
 # "unknown" on unstamped builds, so [0-9a-f] alone would miss it.
@@ -44,6 +52,228 @@ PORT_PATTERNS = (
     "/dev/cu.usbmodem*",  # macOS (cu, not tty: tty blocks on carrier detect)
     "/dev/ttyACM*",  # Linux
 )
+
+
+# --- Serial port backends ---------------------------------------------------
+#
+# One class per OS with the same three methods. read() blocks until the first
+# byte or the timeout: bytes when data arrived, None on timeout, b"" when the
+# port is gone (board unplugged).
+
+
+class PosixSerial:
+    def __init__(self, path, baud):
+        if baud not in BAUD_CONSTANTS:
+            sys.exit(
+                "error: unsupported baud %d (supported: %s)"
+                % (baud, ", ".join(str(b) for b in sorted(BAUD_CONSTANTS)))
+            )
+        try:
+            self.fd = os.open(path, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
+        except OSError as e:
+            hint = ""
+            if e.errno == 16:  # EBUSY: usually a forgotten screen session
+                hint = " (something else has it open; `screen -ls`?)"
+            sys.exit(f"error: cannot open {path}: {e.strerror}{hint}")
+
+        attrs = termios.tcgetattr(self.fd)
+        attrs[0] = attrs[1] = attrs[3] = 0  # raw: no iflag/oflag/lflag processing
+        attrs[2] = termios.CS8 | termios.CREAD | termios.CLOCAL  # 8N1
+        attrs[4] = attrs[5] = BAUD_CONSTANTS[baud]
+        attrs[6][termios.VMIN] = 0
+        attrs[6][termios.VTIME] = 0
+        termios.tcsetattr(self.fd, termios.TCSANOW, attrs)
+
+    def read(self, max_bytes, timeout_s):
+        readable, _, _ = select.select([self.fd], [], [], timeout_s)
+        if not readable:
+            return None
+        try:
+            return os.read(self.fd, max_bytes)  # b"" = EOF, port gone
+        except OSError:
+            return b""
+
+    def write(self, data):
+        os.write(self.fd, data)
+
+    def close(self):
+        os.close(self.fd)
+
+
+if os.name == "nt":
+
+    # Fixed-width field types (not wintypes.DWORD, which is only 32-bit on
+    # Windows) so the layout is provably 28/20 bytes, the Win32 ABI sizes.
+    class _Dcb(ctypes.Structure):
+        _fields_ = [
+            ("DCBlength", ctypes.c_uint32),
+            ("BaudRate", ctypes.c_uint32),
+            ("fFlags", ctypes.c_uint32),  # the DCB bitfield, as one DWORD
+            ("wReserved", ctypes.c_uint16),
+            ("XonLim", ctypes.c_uint16),
+            ("XoffLim", ctypes.c_uint16),
+            ("ByteSize", ctypes.c_ubyte),
+            ("Parity", ctypes.c_ubyte),
+            ("StopBits", ctypes.c_ubyte),
+            ("XonChar", ctypes.c_char),
+            ("XoffChar", ctypes.c_char),
+            ("ErrorChar", ctypes.c_char),
+            ("EofChar", ctypes.c_char),
+            ("EvtChar", ctypes.c_char),
+            ("wReserved1", ctypes.c_uint16),
+        ]
+
+    class _CommTimeouts(ctypes.Structure):
+        _fields_ = [
+            ("ReadIntervalTimeout", ctypes.c_uint32),
+            ("ReadTotalTimeoutMultiplier", ctypes.c_uint32),
+            ("ReadTotalTimeoutConstant", ctypes.c_uint32),
+            ("WriteTotalTimeoutMultiplier", ctypes.c_uint32),
+            ("WriteTotalTimeoutConstant", ctypes.c_uint32),
+        ]
+
+    # Explicit prototypes: ctypes' default int return type truncates 64-bit
+    # HANDLEs, which would break the INVALID_HANDLE_VALUE check.
+    _k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    _k32.CreateFileW.restype = wintypes.HANDLE
+    _k32.CreateFileW.argtypes = (
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    )
+    for _fn, _args in (
+        ("GetCommState", (wintypes.HANDLE, ctypes.c_void_p)),
+        ("SetCommState", (wintypes.HANDLE, ctypes.c_void_p)),
+        ("SetCommTimeouts", (wintypes.HANDLE, ctypes.c_void_p)),
+        ("SetupComm", (wintypes.HANDLE, wintypes.DWORD, wintypes.DWORD)),
+        (
+            "ReadFile",
+            (
+                wintypes.HANDLE,
+                ctypes.c_void_p,
+                wintypes.DWORD,
+                ctypes.c_void_p,
+                ctypes.c_void_p,
+            ),
+        ),
+        (
+            "WriteFile",
+            (
+                wintypes.HANDLE,
+                ctypes.c_void_p,
+                wintypes.DWORD,
+                ctypes.c_void_p,
+                ctypes.c_void_p,
+            ),
+        ),
+        ("CloseHandle", (wintypes.HANDLE,)),
+        ("GetConsoleMode", (wintypes.HANDLE, ctypes.c_void_p)),
+        ("SetConsoleMode", (wintypes.HANDLE, wintypes.DWORD)),
+    ):
+        _proto = getattr(_k32, _fn)
+        _proto.restype = wintypes.BOOL
+        _proto.argtypes = _args
+
+    _INVALID_HANDLE = wintypes.HANDLE(-1).value
+    _MAXDWORD = 0xFFFFFFFF
+
+    class WindowsSerial:
+        def __init__(self, name, baud):
+            # The \\.\ prefix is required for COM10 and up; harmless below.
+            path = name if name.startswith("\\\\") else "\\\\.\\" + name
+            self.handle = _k32.CreateFileW(
+                path,
+                0x80000000 | 0x40000000,  # GENERIC_READ | GENERIC_WRITE
+                0,
+                None,
+                3,  # OPEN_EXISTING
+                0,
+                None,
+            )
+            if self.handle in (None, _INVALID_HANDLE):
+                err = ctypes.get_last_error()
+                hint = ""
+                if err == 5:  # ERROR_ACCESS_DENIED: usually another terminal
+                    hint = " (something else has it open; PuTTY/Arduino IDE?)"
+                sys.exit(f"error: cannot open {name} (Win32 error {err}){hint}")
+
+            dcb = _Dcb()
+            dcb.DCBlength = ctypes.sizeof(_Dcb)
+            if not _k32.GetCommState(self.handle, ctypes.byref(dcb)):
+                sys.exit(f"error: {name} is not a serial port")
+            dcb.BaudRate = baud
+            dcb.ByteSize = 8
+            dcb.Parity = 0  # NOPARITY
+            dcb.StopBits = 0  # ONESTOPBIT
+            # fBinary | fDtrControl=ENABLE | fRtsControl=ENABLE, everything
+            # else (parity checks, flow control, XON/XOFF) off — matches the
+            # raw termios setup in PosixSerial.
+            dcb.fFlags = 0x0001 | 0x0010 | 0x1000
+            if not _k32.SetCommState(self.handle, ctypes.byref(dcb)):
+                sys.exit(f"error: cannot configure {name} at {baud} baud")
+            _k32.SetupComm(self.handle, 4096, 4096)
+            self._timeout_ms = None
+
+        def _set_read_timeout(self, timeout_ms):
+            if timeout_ms == self._timeout_ms:
+                return
+            # Interval and multiplier both MAXDWORD + a total constant means:
+            # block until the first byte or the constant expires, then return
+            # whatever is buffered — the same shape as select() + read().
+            t = _CommTimeouts()
+            t.ReadIntervalTimeout = _MAXDWORD
+            t.ReadTotalTimeoutMultiplier = _MAXDWORD
+            t.ReadTotalTimeoutConstant = max(1, timeout_ms)
+            t.WriteTotalTimeoutMultiplier = 0
+            t.WriteTotalTimeoutConstant = 1000
+            _k32.SetCommTimeouts(self.handle, ctypes.byref(t))
+            self._timeout_ms = timeout_ms
+
+        def read(self, max_bytes, timeout_s):
+            self._set_read_timeout(int(timeout_s * 1000))
+            buf = ctypes.create_string_buffer(max_bytes)
+            n = wintypes.DWORD()
+            ok = _k32.ReadFile(
+                self.handle, buf, max_bytes, ctypes.byref(n), None
+            )
+            if not ok:
+                return b""  # port gone (board unplugged)
+            if n.value == 0:
+                return None
+            return buf.raw[: n.value]
+
+        def write(self, data):
+            n = wintypes.DWORD()
+            if not _k32.WriteFile(
+                self.handle, data, len(data), ctypes.byref(n), None
+            ):
+                raise OSError("serial write failed")
+
+        def close(self):
+            _k32.CloseHandle(self.handle)
+
+    def enable_vt():
+        """Turns on ANSI escape processing (Windows Terminal has it on
+        already; legacy conhost needs the nudge)."""
+        _k32.GetStdHandle.restype = wintypes.HANDLE
+        _k32.GetStdHandle.argtypes = (wintypes.DWORD,)
+        for std_handle in (-11, -12):  # stdout, stderr
+            h = _k32.GetStdHandle(wintypes.DWORD(std_handle).value)
+            mode = wintypes.DWORD()
+            if _k32.GetConsoleMode(h, ctypes.byref(mode)):
+                _k32.SetConsoleMode(
+                    h, mode.value | 0x0004
+                )  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+
+
+def open_port(path, baud):
+    if os.name == "nt":
+        return WindowsSerial(path, baud)
+    return PosixSerial(path, baud)
 
 
 def workspace_root():
@@ -58,17 +288,39 @@ def workspace_root():
 
 
 def find_port():
-    candidates = [p for pattern in PORT_PATTERNS for p in glob.glob(pattern)]
+    if os.name == "nt":
+        # Every present COM port registers itself here; no pyserial needed.
+        import winreg
+
+        candidates = []
+        try:
+            key = winreg.OpenKey(
+                winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DEVICEMAP\SERIALCOMM"
+            )
+            i = 0
+            while True:
+                try:
+                    _, port, _ = winreg.EnumValue(key, i)
+                    candidates.append(port)
+                    i += 1
+                except OSError:
+                    break
+        except OSError:
+            pass
+        looked_for = "the SERIALCOMM registry (COMx)"
+    else:
+        candidates = [p for pattern in PORT_PATTERNS for p in glob.glob(pattern)]
+        looked_for = ", ".join(PORT_PATTERNS)
+
     if not candidates:
         sys.exit(
             "error: no serial port found (looked for %s); is the board "
-            "plugged in? Use --port to point at one explicitly."
-            % ", ".join(PORT_PATTERNS)
+            "plugged in? Use --port to point at one explicitly." % looked_for
         )
     if len(candidates) > 1:
         sys.exit(
             "error: multiple serial ports found, pick one with --port:\n  "
-            + "\n  ".join(candidates)
+            + "\n  ".join(sorted(candidates))
         )
     return candidates[0]
 
@@ -82,47 +334,25 @@ def flash(label, root):
         sys.exit(f"error: flash failed (exit {result.returncode})")
 
 
-def open_port(path, baud):
-    if baud not in BAUD_CONSTANTS:
-        sys.exit(
-            "error: unsupported baud %d (supported: %s)"
-            % (baud, ", ".join(str(b) for b in sorted(BAUD_CONSTANTS)))
-        )
-    try:
-        fd = os.open(path, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
-    except OSError as e:
-        hint = ""
-        if e.errno == 16:  # EBUSY: usually a forgotten screen session
-            hint = " (something else has it open; `screen -ls`?)"
-        sys.exit(f"error: cannot open {path}: {e.strerror}{hint}")
-
-    attrs = termios.tcgetattr(fd)
-    attrs[0] = attrs[1] = attrs[3] = 0  # raw: no iflag/oflag/lflag processing
-    attrs[2] = termios.CS8 | termios.CREAD | termios.CLOCAL  # 8N1
-    attrs[4] = attrs[5] = BAUD_CONSTANTS[baud]
-    attrs[6][termios.VMIN] = 0
-    attrs[6][termios.VTIME] = 0
-    termios.tcsetattr(fd, termios.TCSANOW, attrs)
-    return fd
-
-
-def read_for(fd, seconds):
-    """Collects whatever arrives on fd within the window."""
+def read_for(port, seconds):
+    """Collects whatever arrives on the port within the window."""
     buf = b""
-    deadline = os.times().elapsed + seconds
-    while (remaining := deadline - os.times().elapsed) > 0:
-        readable, _, _ = select.select([fd], [], [], remaining)
-        if readable:
-            buf += os.read(fd, 4096)
+    deadline = time.monotonic() + seconds
+    while (remaining := deadline - time.monotonic()) > 0:
+        data = port.read(4096, remaining)
+        if data:
+            buf += data
+        elif data == b"":  # port gone
+            break
     return buf
 
 
-def write_paced(fd, data, gap_s=0.005):
+def write_paced(port, data, gap_s=0.005):
     """Writes one byte per gap. RTOS boards poll their shell every few ms
     with only a few bytes of UART buffering, so a full-speed burst would
     overrun; human typing is naturally paced, but this probe isn't."""
     for i in range(len(data)):
-        os.write(fd, data[i : i + 1])
+        port.write(data[i : i + 1])
         time.sleep(gap_s)
 
 
@@ -151,14 +381,14 @@ def print_banner_box(title, color, lines):
     print(f"{c_hdr}{border}{c_rst}\n")
 
 
-def check_version(fd, root):
+def check_version(port, root):
     """Sends /version and compares the firmware sha against the checkout.
 
     Best-effort: prints its verdict and returns True when firmware
     provably matches the checkout, False otherwise.
     """
-    write_paced(fd, b"\r/version\r")
-    reply = read_for(fd, 1.0)
+    write_paced(port, b"\r/version\r")
+    reply = read_for(port, 1.0)
     match = BANNER_RE.search(reply)
     if match is None:
         print_banner_box(
@@ -323,60 +553,124 @@ def write_scroll_area(text, rows, input_text):
 TIMESTAMP_LOG_RE = re.compile(r"^\[\d+\]")
 
 
-def interact(fd):
-    stdin = sys.stdin.fileno()
-    is_tty = os.isatty(stdin) and sys.stdout.isatty()
-    saved = termios.tcgetattr(stdin) if is_tty else None
+# --- Event sources ----------------------------------------------------------
+#
+# Windows select() only understands sockets, so instead of multiplexing the
+# port and stdin, two daemon threads feed one queue of ("serial", bytes) /
+# ("key", bytes) events and the UI loop consumes it. A b"" payload means the
+# source closed.
+
+
+def serial_reader(port, events):
+    while True:
+        try:
+            data = port.read(4096, 0.05)
+        except OSError:
+            events.put(("serial", b""))
+            return
+        if data is None:
+            continue
+        events.put(("serial", data))
+        if not data:
+            return
+
+
+def posix_key_reader(events):
+    fd = sys.stdin.fileno()
+    while True:
+        try:
+            data = os.read(fd, 4096)
+        except OSError:
+            data = b""
+        events.put(("key", data))
+        if not data:
+            return
+
+
+def windows_key_reader(events):
+    while True:
+        ch = msvcrt.getch()
+        if ch in (b"\x00", b"\xe0"):  # arrows/function keys: two-byte pairs
+            msvcrt.getch()
+            continue
+        events.put(("key", ch))
+
+
+def start_event_threads(port, interactive):
+    events = queue.Queue()
+    threading.Thread(
+        target=serial_reader, args=(port, events), daemon=True
+    ).start()
+    if os.name == "nt" and interactive:
+        key_target = windows_key_reader
+    else:
+        key_target = posix_key_reader  # piped stdin works the same on both
+    threading.Thread(target=key_target, args=(events,), daemon=True).start()
+    return events
+
+
+def interact(port):
+    is_tty = os.isatty(sys.stdin.fileno()) and sys.stdout.isatty()
 
     if not is_tty:
-        # Fallback for piped stdin/stdout
-        print("monitor: connected (piped mode). Ctrl-] quits.")
-        watch_stdin = True
+        # Fallback for piped stdin/stdout: raw byte forwarding, no UI.
+        print("monitor: connected (piped mode).")
+        sys.stdout.flush()  # the loop below writes to the binary layer
+        events = start_event_threads(port, interactive=False)
+        stdin_open = True
         try:
             while True:
-                sources = [fd, stdin] if watch_stdin else [fd]
-                readable, _, _ = select.select(sources, [], [])
-                if fd in readable:
-                    data = os.read(fd, 4096)
+                kind, data = events.get()
+                if kind == "serial":
                     if not data:
                         return
-                    os.write(sys.stdout.fileno(), data)
-                if stdin in readable:
-                    data = os.read(stdin, 4096)
-                    if not data:
-                        watch_stdin = False
+                    sys.stdout.buffer.write(data)
+                    sys.stdout.buffer.flush()
+                elif stdin_open:
+                    if not data:  # piped stdin ran out; keep showing output
+                        stdin_open = False
                         continue
-                    os.write(fd, data)
+                    port.write(data)
         except (KeyboardInterrupt, OSError):
             return
 
     # Interactive TTY mode: split pane with scrolling logs and bottom text box
-    tty.setraw(stdin)
+    if os.name == "nt":
+        enable_vt()
+        saved = None
+    else:
+        stdin = sys.stdin.fileno()
+        saved = termios.tcgetattr(stdin)
+        tty.setraw(stdin)
     cols, rows = shutil.get_terminal_size((80, 24))
     init_terminal_ui(rows, cols)
 
+    events = start_event_threads(port, interactive=True)
     paused = False
     paused_buffer = bytearray()
     rx_buffer = bytearray()
     input_chars = []
 
-    def on_resize(signum, frame):
-        nonlocal rows, cols
-        cols, rows = shutil.get_terminal_size((80, 24))
-        init_terminal_ui(rows, cols)
-        draw_status_bar(rows, cols, paused, len(paused_buffer))
-        draw_prompt(rows, "".join(input_chars))
-        sys.stdout.flush()
-
-    signal.signal(signal.SIGWINCH, on_resize)
-
     try:
         while True:
-            # Use short timeout so accumulated rx_buffer lines are flushed cleanly
-            readable, _, _ = select.select([fd, stdin], [], [], 0.02)
+            # The timeout doubles as the idle tick: flush partial lines and
+            # notice terminal resizes (there is no SIGWINCH on Windows).
+            try:
+                kind, data = events.get(timeout=0.02)
+            except queue.Empty:
+                kind, data = None, None
+            idle = kind is None
 
-            if fd in readable:
-                data = os.read(fd, 4096)
+            if idle:
+                new_cols, new_rows = shutil.get_terminal_size((80, 24))
+                if (new_cols, new_rows) != (cols, rows):
+                    cols, rows = new_cols, new_rows
+                    init_terminal_ui(rows, cols)
+                    draw_status_bar(rows, cols, paused, len(paused_buffer))
+                    draw_prompt(rows, "".join(input_chars))
+                    sys.stdout.flush()
+
+            if kind == "serial":
                 if not data:
                     write_scroll_area(
                         "\r\nmonitor: port closed (board unplugged?)\r\n",
@@ -387,11 +681,11 @@ def interact(fd):
                 rx_buffer.extend(data)
 
             # Flush buffered serial data on newlines or idle
-            if rx_buffer and (b"\n" in rx_buffer or not readable):
+            if rx_buffer and (b"\n" in rx_buffer or idle):
                 if paused:
                     # When paused, buffer timestamped logs and let command responses through
                     text = rx_buffer.decode("utf-8", errors="replace")
-                    if not readable or text.endswith("\n"):
+                    if idle or text.endswith("\n"):
                         rx_buffer.clear()
                     else:
                         last_nl = text.rfind("\n")
@@ -428,8 +722,8 @@ def interact(fd):
                     rx_buffer.clear()
                     write_scroll_area(text, rows, "".join(input_chars))
 
-            if stdin in readable:
-                raw_in = os.read(stdin, 4096)
+            if kind == "key":
+                raw_in = data
                 if not raw_in:
                     return
 
@@ -475,9 +769,9 @@ def interact(fd):
                         sys.stdout.flush()
 
                         if cmd:
-                            write_paced(fd, (cmd + "\r").encode())
+                            write_paced(port, (cmd + "\r").encode())
                         else:
-                            os.write(fd, b"\r")
+                            port.write(b"\r")
                         i += 1
                         continue
 
@@ -502,11 +796,10 @@ def interact(fd):
     except OSError:
         pass
     finally:
-        if is_tty:
-            reset_terminal_ui(rows)
-            if saved is not None:
-                termios.tcsetattr(stdin, termios.TCSADRAIN, saved)
-            print("monitor: bye")
+        reset_terminal_ui(rows)
+        if saved is not None:
+            termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, saved)
+        print("monitor: bye")
 
 
 def main():
@@ -527,16 +820,16 @@ def main():
     if args.flash:
         flash(args.flash, root)
 
-    port = args.port or find_port()
-    fd = open_port(port, args.baud)
-    print(f"monitor: {port} @ {args.baud}")
+    port_name = args.port or find_port()
+    port = open_port(port_name, args.baud)
+    print(f"monitor: {port_name} @ {args.baud}")
     try:
-        up_to_date = check_version(fd, root)
+        up_to_date = check_version(port, root)
         if args.check:
             sys.exit(0 if up_to_date else 1)
-        interact(fd)
+        interact(port)
     finally:
-        os.close(fd)
+        port.close()
 
 
 if __name__ == "__main__":

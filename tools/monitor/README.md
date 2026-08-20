@@ -29,7 +29,8 @@ Then it opens a split-pane interactive console:
 - **Exit (`Ctrl-]` or `Ctrl-C`)**: Restores terminal settings and exits.
 
 Flags: `--port` when auto-detection finds zero or several candidates
-(`/dev/cu.usbmodem*`, `/dev/ttyACM*`), `--baud` (default 115200, matching
+(`/dev/cu.usbmodem*` and `/dev/ttyACM*` on macOS/Linux, the SERIALCOMM
+registry's `COMx` ports on Windows), `--baud` (default 115200, matching
 the boards' debug UARTs).
 
 Gotchas:
@@ -40,5 +41,6 @@ Gotchas:
   bytes of UART buffering, so pasting a long line can drop characters
   (the `/version` probe paces itself for this reason).
 - On macOS use the printed `cu.*` device, never `tty.*` (blocks on open).
-- Stdlib only, POSIX only. On Windows use PuTTY on the same COM port; the
-  version check just won't happen.
+- Stdlib only, no pyserial: termios on POSIX, Win32 via ctypes on Windows.
+- On Windows use Windows Terminal; legacy conhost renders the split-pane
+  UI poorly even with VT processing enabled.
