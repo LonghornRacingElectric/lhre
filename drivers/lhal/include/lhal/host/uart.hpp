@@ -49,6 +49,9 @@ class Uart final : public lhal::Uart {
   }
 
   // Test helpers -----------------------------------------------------------
+  bool connected() const override { return connected_; }
+  void set_connected(bool connected) { connected_ = connected; }
+
   void InjectRx(const uint8_t* data, size_t len) {
     rx_.insert(rx_.end(), data, data + len);
   }
@@ -60,6 +63,7 @@ class Uart final : public lhal::Uart {
   }
 
  private:
+  bool connected_ = true;
   std::vector<uint8_t> tx_;
   std::deque<uint8_t> rx_;
 };

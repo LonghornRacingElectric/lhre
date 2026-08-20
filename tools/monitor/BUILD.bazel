@@ -1,0 +1,10 @@
+load("@rules_python//python:defs.bzl", "py_binary")
+
+# Local-only: talks to a serial port on this machine, like the flash targets.
+py_binary(
+    name = "monitor",
+    srcs = ["monitor.py"],
+    main = "monitor.py",
+    tags = ["local"],
+    visibility = ["//visibility:public"],
+)

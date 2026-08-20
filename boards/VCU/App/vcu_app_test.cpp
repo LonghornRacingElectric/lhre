@@ -2,9 +2,12 @@
 
 #include <gtest/gtest.h>
 
+#include <string>
+
 #include "lhal/host/can.hpp"
 #include "lhal/host/gpio.hpp"
 #include "lhal/host/system.hpp"
+#include "lhal/host/uart.hpp"
 #include "lhre_can_hvc.hpp"
 #include "lhre_can_vcu.hpp"
 #include "vcu_app.hpp"
@@ -124,6 +127,58 @@ TEST(VcuApp, RunsWithoutOptionalPeripherals) {
     clock.Advance(10);
   }
   EXPECT_EQ(app.statuses_sent(), 0u);
+}
+
+TEST(VcuApp, ShellReportsStateOverDebugUart) {
+  lhal::host::TestClock clock;
+  lhal::host::CanNetwork network;
+  lhal::host::Can vcu_can(&network);
+  lhal::host::Can hvc(&network);
+  lhal::host::Uart uart;
+
+  vcu::Peripherals p;
+  p.clock = &clock;
+  p.can = &vcu_can;
+  p.debug_uart = &uart;
+  vcu::App app(p);
+  uart.TakeTx();  // discard the boot banner (contents vary with git state)
+
+  // Latch an overtemp fault, then query /state like tools/monitor would.
+  HvcPackStatus pack;
+  pack.coolant_temp = vcu::App::kCoolantOvertempDegC;
+  hvc.Send(pack.ToFrame());
+  app.Step();
+
+  const std::string cmd = "/state\r";
+  uart.InjectRx(reinterpret_cast<const uint8_t*>(cmd.data()), cmd.size());
+  app.Step();
+
+  const auto tx = uart.TakeTx();
+  const std::string out(tx.begin(), tx.end());
+  EXPECT_NE(out.find("state=fault"), std::string::npos) << out;
+  EXPECT_NE(out.find("overtemp_latched=1"), std::string::npos) << out;
+  EXPECT_NE(out.find("coolant 60 degC"), std::string::npos) << out;
+}
+
+TEST(VcuApp, LoggerOutputsTimestampedLogsOverDebugUart) {
+  lhal::host::TestClock clock;
+  lhal::host::Uart uart;
+
+  vcu::Peripherals p;
+  p.clock = &clock;
+  p.debug_uart = &uart;
+  vcu::App app(p);
+  uart.TakeTx();  // discard the boot banner
+
+  clock.Advance(123);
+  app.logger().Info("test info log");
+  app.Step();
+
+  const auto tx = uart.TakeTx();
+  const std::string out(tx.begin(), tx.end());
+  EXPECT_NE(out.find("[123]"), std::string::npos) << out;
+  EXPECT_NE(out.find("[INFO]"), std::string::npos) << out;
+  EXPECT_NE(out.find("test info log"), std::string::npos) << out;
 }
 
 }  // namespace

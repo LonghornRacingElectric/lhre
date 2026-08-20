@@ -13,11 +13,16 @@ namespace longhorn {
 // Every call sends one line with "\r\n" appended; messages longer than the
 // internal buffer are truncated.
 //
-// A null stream makes every call a silent no-op, so boards without a console
-// attached can keep the calls in place.
+// A null stream or a disconnected stream (USB port not opened by host) makes
+// every call a silent, zero-overhead no-op, so boards can keep output calls
+// in place without stalling or wasting cycles.
+//
+// Lines are sent raw and un-prefixed, ideal for command-line shells (/version,
+// /state, /help) and human/machine-readable text. For timestamped,
+// level-tagged, thread-safe logging from RTOS tasks, use longhorn::Logger.
 //
 // Not thread-safe: the format buffer is shared across calls. Serialize calls
-// behind a mutex (or a logger task) when printing from multiple RTOS tasks.
+// behind a mutex (or use Logger) when printing from multiple RTOS tasks.
 class Console {
  public:
   static constexpr size_t kBufferSize = 256;
@@ -27,6 +32,9 @@ class Console {
   void Println(const char* message);
   void Printf(const char* format, ...) __attribute__((format(printf, 2, 3)));
   void VPrintf(const char* format, va_list args);
+
+  // True when the transport is connected and receiving data.
+  bool connected() const { return stream_ != nullptr && stream_->connected(); }
 
  private:
   void Send(size_t len);
