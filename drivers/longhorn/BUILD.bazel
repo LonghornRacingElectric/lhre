@@ -26,12 +26,12 @@ cc_library(
     deps = ["//drivers/lhal"],
 )
 
-# The build_info dep is generated provenance, not a platform header, so the
+# Header-only: FreeRTOS.h resolves against the consumer's kernel. The
+# build_info dep is generated provenance, not a platform header, so the
 # module still builds unchanged for MCU and host; it is what lets /version
 # report the flashed sha (and tools/monitor compare it to the checkout).
 cc_library(
     name = "shell",
-    srcs = ["shell.cpp"],
     hdrs = ["include/longhorn/shell.hpp"],
     includes = ["include"],
     visibility = ["//visibility:public"],
@@ -71,6 +71,7 @@ cc_test(
     srcs = ["test/shell_test.cpp"],
     deps = [
         ":shell",
+        "//drivers/freertos:host",
         "//drivers/lhal:host",
         "@googletest//:gtest_main",
     ],

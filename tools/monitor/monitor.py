@@ -17,6 +17,8 @@ import glob
 import os
 import re
 import select
+import shutil
+import signal
 import subprocess
 import sys
 import termios
@@ -266,40 +268,245 @@ def check_version(fd, root):
     return True
 
 
+def init_terminal_ui(rows, cols):
+    """Sets up split-pane terminal: scrolling area for logs, status bar, and input prompt."""
+    # Advance past the version banner cleanly
+    sys.stdout.write("\r\n")
+    sys.stdout.write(f"\033[1;{rows - 2}r")  # Set scrolling region to rows 1..rows-2
+    sys.stdout.write(f"\033[{rows - 2};1H")  # Position cursor in scroll region
+    sys.stdout.write("\0337")  # Save initial scroll cursor position
+    draw_status_bar(rows, cols, paused=False)
+    draw_prompt(rows, "")
+    sys.stdout.flush()
+
+
+def reset_terminal_ui(rows):
+    """Restores full-screen scrolling and resets cursor position."""
+    sys.stdout.write("\033[r")  # Reset scrolling region to full screen
+    sys.stdout.write(f"\033[{rows};1H\r\n")  # Move to bottom
+    sys.stdout.flush()
+
+
+def draw_status_bar(rows, cols, paused, buffered_bytes=0):
+    """Draws the fixed divider / status bar on line rows-1."""
+    status_row = rows - 1
+    sys.stdout.write(f"\033[{status_row};1H\033[2K")
+    if paused:
+        tag = f" ⏸ PAUSED ({buffered_bytes} B held) | Ctrl-P/Ctrl-D: Resume | Enter: Send cmd "
+        color = "\033[1;33;40m"  # Bold yellow
+    else:
+        tag = " ⏺ LIVE STREAM | Ctrl-P/Ctrl-D: Pause Stream | Ctrl-]: Quit "
+        color = "\033[1;36;40m"  # Bold cyan
+
+    pad = max(0, cols - len(tag))
+    left = pad // 2
+    right = pad - left
+    bar = f"{color}{'─' * left}{tag}{'─' * right}\033[0m"
+    sys.stdout.write(bar[: cols + 20])
+
+
+def draw_prompt(rows, text):
+    """Draws the fixed bottom input line on line rows."""
+    sys.stdout.write(f"\033[{rows};1H\033[2K\033[1;32m>\033[0m {text}")
+
+
+def write_scroll_area(text, rows, input_text):
+    """Writes text inside the upper scrolling pane without corrupting the prompt."""
+    sys.stdout.write("\0338")  # Restore cursor to scroll region
+    normalized = text.replace("\r\n", "\n").replace("\n", "\r\n")
+    sys.stdout.write(normalized)
+    sys.stdout.write("\0337")  # Save updated scroll cursor position
+    draw_prompt(rows, input_text)
+    sys.stdout.flush()
+
+
+TIMESTAMP_LOG_RE = re.compile(r"^\[\d+\]")
+
+
 def interact(fd):
-    print("monitor: connected. Ctrl-] quits. Try /help.")
     stdin = sys.stdin.fileno()
-    is_tty = os.isatty(stdin)
+    is_tty = os.isatty(stdin) and sys.stdout.isatty()
     saved = termios.tcgetattr(stdin) if is_tty else None
-    if is_tty:
-        tty.setraw(stdin)
-    watch_stdin = True
+
+    if not is_tty:
+        # Fallback for piped stdin/stdout
+        print("monitor: connected (piped mode). Ctrl-] quits.")
+        watch_stdin = True
+        try:
+            while True:
+                sources = [fd, stdin] if watch_stdin else [fd]
+                readable, _, _ = select.select(sources, [], [])
+                if fd in readable:
+                    data = os.read(fd, 4096)
+                    if not data:
+                        return
+                    os.write(sys.stdout.fileno(), data)
+                if stdin in readable:
+                    data = os.read(stdin, 4096)
+                    if not data:
+                        watch_stdin = False
+                        continue
+                    os.write(fd, data)
+        except (KeyboardInterrupt, OSError):
+            return
+
+    # Interactive TTY mode: split pane with scrolling logs and bottom text box
+    tty.setraw(stdin)
+    cols, rows = shutil.get_terminal_size((80, 24))
+    init_terminal_ui(rows, cols)
+
+    paused = False
+    paused_buffer = bytearray()
+    rx_buffer = bytearray()
+    input_chars = []
+
+    def on_resize(signum, frame):
+        nonlocal rows, cols
+        cols, rows = shutil.get_terminal_size((80, 24))
+        init_terminal_ui(rows, cols)
+        draw_status_bar(rows, cols, paused, len(paused_buffer))
+        draw_prompt(rows, "".join(input_chars))
+        sys.stdout.flush()
+
+    signal.signal(signal.SIGWINCH, on_resize)
+
     try:
         while True:
-            sources = [fd, stdin] if watch_stdin else [fd]
-            readable, _, _ = select.select(sources, [], [])
+            # Use short timeout so accumulated rx_buffer lines are flushed cleanly
+            readable, _, _ = select.select([fd, stdin], [], [], 0.02)
+
             if fd in readable:
                 data = os.read(fd, 4096)
                 if not data:
-                    print("\r\nmonitor: port closed (board unplugged?)")
+                    write_scroll_area(
+                        "\r\nmonitor: port closed (board unplugged?)\r\n",
+                        rows,
+                        "".join(input_chars),
+                    )
                     return
-                os.write(sys.stdout.fileno(), data)
+                rx_buffer.extend(data)
+
+            # Flush buffered serial data on newlines or idle
+            if rx_buffer and (b"\n" in rx_buffer or not readable):
+                if paused:
+                    # When paused, buffer timestamped logs and let command responses through
+                    text = rx_buffer.decode("utf-8", errors="replace")
+                    if not readable or text.endswith("\n"):
+                        rx_buffer.clear()
+                    else:
+                        last_nl = text.rfind("\n")
+                        if last_nl != -1:
+                            rx_buffer = bytearray(
+                                text[last_nl + 1 :].encode("utf-8")
+                            )
+                            text = text[: last_nl + 1]
+                        else:
+                            text = ""
+
+                    if text:
+                        to_display = []
+                        for raw_line in text.splitlines(keepends=True):
+                            stripped = raw_line.strip()
+                            if TIMESTAMP_LOG_RE.match(stripped):
+                                if len(paused_buffer) < 262144:
+                                    paused_buffer.extend(
+                                        raw_line.encode("utf-8")
+                                    )
+                            else:
+                                to_display.append(raw_line)
+
+                        if to_display:
+                            write_scroll_area(
+                                "".join(to_display), rows, "".join(input_chars)
+                            )
+
+                        draw_status_bar(rows, cols, paused, len(paused_buffer))
+                        draw_prompt(rows, "".join(input_chars))
+                        sys.stdout.flush()
+                else:
+                    text = rx_buffer.decode("utf-8", errors="replace")
+                    rx_buffer.clear()
+                    write_scroll_area(text, rows, "".join(input_chars))
+
             if stdin in readable:
-                data = os.read(stdin, 4096)
-                if not data:  # piped stdin ran out; keep showing output
-                    watch_stdin = False
-                    continue
-                if is_tty and QUIT_BYTE in data:
-                    print("\r\nmonitor: bye")
+                raw_in = os.read(stdin, 4096)
+                if not raw_in:
                     return
-                os.write(fd, data)
+
+                i = 0
+                while i < len(raw_in):
+                    b = raw_in[i]
+
+                    # Ctrl-] (0x1D) or Ctrl-C (0x03): Quit
+                    if b in (QUIT_BYTE, 0x03):
+                        return
+
+                    # Ctrl-P (0x10) or Ctrl-D (0x04): Pause / Resume toggle
+                    if b in (0x10, 0x04):
+                        paused = not paused
+                        if not paused and paused_buffer:
+                            flushed = paused_buffer.decode(
+                                "utf-8", errors="replace"
+                            )
+                            paused_buffer.clear()
+                            write_scroll_area(
+                                flushed, rows, "".join(input_chars)
+                            )
+                        draw_status_bar(rows, cols, paused, len(paused_buffer))
+                        draw_prompt(rows, "".join(input_chars))
+                        sys.stdout.flush()
+                        i += 1
+                        continue
+
+                    # Backspace / DEL
+                    if b in (0x08, 0x7F):
+                        if input_chars:
+                            input_chars.pop()
+                            draw_prompt(rows, "".join(input_chars))
+                            sys.stdout.flush()
+                        i += 1
+                        continue
+
+                    # Enter / Return
+                    if b in (0x0D, 0x0A):
+                        cmd = "".join(input_chars).strip()
+                        input_chars.clear()
+                        draw_prompt(rows, "")
+                        sys.stdout.flush()
+
+                        if cmd:
+                            write_paced(fd, (cmd + "\r").encode())
+                        else:
+                            os.write(fd, b"\r")
+                        i += 1
+                        continue
+
+                    # Handle arrow keys / escape sequences
+                    if b == 0x1B:
+                        if i + 2 < len(raw_in) and raw_in[i + 1] == ord("["):
+                            i += 3
+                            continue
+                        i += 1
+                        continue
+
+                    # Printable ASCII
+                    if 0x20 <= b <= 0x7E:
+                        input_chars.append(chr(b))
+                        draw_prompt(rows, "".join(input_chars))
+                        sys.stdout.flush()
+
+                    i += 1
+
     except KeyboardInterrupt:
-        print("\r\nmonitor: bye")
+        pass
     except OSError:
-        print("\r\nmonitor: port error (board unplugged?)")
+        pass
     finally:
-        if saved is not None:
-            termios.tcsetattr(stdin, termios.TCSADRAIN, saved)
+        if is_tty:
+            reset_terminal_ui(rows)
+            if saved is not None:
+                termios.tcsetattr(stdin, termios.TCSADRAIN, saved)
+            print("monitor: bye")
 
 
 def main():

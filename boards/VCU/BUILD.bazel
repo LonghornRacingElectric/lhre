@@ -11,6 +11,7 @@ firmware_project(
     app_deps = [
         # Debug shell over the PA2/PA3 UART (the ST-LINK VCP pins);
         # tools/monitor is the laptop side.
+        "//drivers/longhorn:logger",
         "//drivers/longhorn:shell",
         "//lib/codegen/cpp:can_hvc",
         "//lib/codegen/cpp:can_vcu",

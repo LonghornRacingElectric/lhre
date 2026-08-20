@@ -1,4 +1,6 @@
 #include "vcu_app.hpp"
+#include "longhorn/console.hpp"
+#include "longhorn/logger.hpp"
 
 namespace vcu {
 
@@ -25,7 +27,10 @@ const char* StateName(VcuState state) {
 }  // namespace
 
 App::App(const Peripherals& peripherals)
-    : p_(peripherals), shell_(p_.debug_uart, p_.clock, "VCU") {
+    : p_(peripherals),
+      uart_mutex_(xSemaphoreCreateMutexStatic(&uart_mutex_control_)),
+      shell_(p_.debug_uart, p_.clock, "VCU", uart_mutex_),
+      logger_(p_.debug_uart, p_.clock, uart_mutex_) {
   shell_.AddCommand({"state", "VCU state, faults, CAN counters",
                      [](void* context, longhorn::Console& out, const char*) {
                        static_cast<App*>(context)->PrintState(out);
@@ -38,6 +43,7 @@ void App::StartTasks() {
   // Status outranks blink: losing the CAN status broadcast matters, a late
   // LED toggle doesn't. The shell ties blink: a slow console response is
   // as harmless as a late toggle. All sit above the idle task.
+  logger_.StartTask(tskIDLE_PRIORITY + 1);
   xTaskCreateStatic(&App::BlinkTaskEntry, "blink", kTaskStackDepth, this,
                     tskIDLE_PRIORITY + 1, blink_stack_, &blink_tcb_);
   xTaskCreateStatic(&App::StatusTaskEntry, "status", kTaskStackDepth, this,
@@ -63,6 +69,7 @@ void App::BlinkTaskLoop() {
   for (;;) {
     if (p_.status_led != nullptr) {
       p_.status_led->Toggle();
+      logger_.Info("Ticked!");
     }
     vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(kBlinkPeriodMs));
   }
@@ -99,6 +106,7 @@ void App::PrintState(longhorn::Console& out) {
 
 void App::Step() {
   shell_.Poll();
+  logger_.DrainOne(0);
 
   const uint32_t now = p_.clock->Millis();
 
@@ -118,6 +126,8 @@ void App::Step() {
       lhal::ElapsedMs(now, last_blink_ms_, kBlinkPeriodMs)) {
     last_blink_ms_ = now;
     p_.status_led->Toggle();
+    logger_.Info("Ticked!");
+    logger_.DrainOne(0);
   }
 
   if (p_.can != nullptr &&
@@ -134,6 +144,11 @@ void App::ProcessCanRx() {
       pack_status_ = HvcPackStatus::FromFrame(frame);
       pack_status_seen_ = true;
       if (pack_status_.coolant_temp >= kCoolantOvertempDegC) {
+        if (!overtemp_latched_) {
+          logger_.Error("Coolant overtemp! %d degC >= %d degC",
+                        pack_status_.coolant_temp, kCoolantOvertempDegC);
+          logger_.DrainOne(0);
+        }
         overtemp_latched_ = true;  // faults latch until reset
       }
     }

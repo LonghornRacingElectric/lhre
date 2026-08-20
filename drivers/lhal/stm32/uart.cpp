@@ -40,8 +40,16 @@ Uart::~Uart() {
 }
 
 Status Uart::Write(const uint8_t* data, size_t len, uint32_t timeout_ms) {
-  return ToStatus(HAL_UART_Transmit(huart_, const_cast<uint8_t*>(data),
-                                    static_cast<uint16_t>(len), timeout_ms));
+  uint32_t start = HAL_GetTick();
+  HAL_StatusTypeDef s;
+  do {
+    s = HAL_UART_Transmit(huart_, const_cast<uint8_t*>(data),
+                          static_cast<uint16_t>(len), timeout_ms);
+    if (s != HAL_BUSY) {
+      break;
+    }
+  } while ((HAL_GetTick() - start) < timeout_ms);
+  return ToStatus(s);
 }
 
 Status Uart::Read(uint8_t* data, size_t len, uint32_t timeout_ms) {

@@ -4,10 +4,13 @@
 
 #include <gtest/gtest.h>
 
+#include "FreeRTOS.h"
 #include "lhal/host/system.hpp"
 #include "lhal/host/uart.hpp"
 #include "lhre/build_info.hpp"
 #include "longhorn/shell.hpp"
+#include "semphr.h"
+#include "task.h"
 
 namespace {
 
@@ -146,6 +149,62 @@ TEST(Shell, NullStreamIsNoop) {
   longhorn::Shell shell(nullptr, &clock, "TestBoard");
   shell.Poll();  // must not crash
   shell.PrintBanner();
+}
+
+TEST(Shell, DisconnectedStreamSkipsPrints) {
+  ShellFixture f;
+  f.uart.set_connected(false);
+  f.shell.console().Println("dropped");
+  EXPECT_TRUE(TakeTxString(f.uart).empty());
+}
+
+// --- Scheduler run: keep last, one per process (see logger_test.cpp). ---
+
+longhorn::Shell* g_rtos_shell = nullptr;
+bool g_rtos_poll_returned = false;
+
+void PollEntry(void*) {
+  g_rtos_shell->Poll();
+  g_rtos_poll_returned = true;
+  vTaskEndScheduler();
+}
+
+// If Poll() deadlocks, end the scheduler anyway so the test fails with
+// output instead of hanging until the bazel timeout.
+void WatchdogEntry(void*) {
+  vTaskDelay(pdMS_TO_TICKS(500));
+  vTaskEndScheduler();
+}
+
+// Regression test: /version used to re-take the (non-recursive) UART mutex
+// that DispatchLine already holds, deadlocking the shell task on target.
+// Only reproducible with the scheduler running — locking is skipped
+// before vTaskStartScheduler().
+TEST(ShellRtos, VersionUnderSchedulerWithMutexDoesNotDeadlock) {
+  static lhal::host::Uart uart;
+  static lhal::host::TestClock clock;
+  static StaticSemaphore_t mutex_control;
+  SemaphoreHandle_t mutex = xSemaphoreCreateMutexStatic(&mutex_control);
+  static longhorn::Shell shell(&uart, &clock, "TestBoard", mutex);
+  g_rtos_shell = &shell;
+
+  const std::string line = "/version\r";
+  uart.InjectRx(reinterpret_cast<const uint8_t*>(line.data()), line.size());
+
+  static StaticTask_t poll_tcb;
+  static StackType_t poll_stack[configMINIMAL_STACK_SIZE];
+  xTaskCreateStatic(PollEntry, "poll", configMINIMAL_STACK_SIZE, nullptr,
+                    tskIDLE_PRIORITY + 1, poll_stack, &poll_tcb);
+  static StaticTask_t watchdog_tcb;
+  static StackType_t watchdog_stack[configMINIMAL_STACK_SIZE];
+  xTaskCreateStatic(WatchdogEntry, "watchdog", configMINIMAL_STACK_SIZE,
+                    nullptr, configMAX_PRIORITIES - 1, watchdog_stack,
+                    &watchdog_tcb);
+
+  vTaskStartScheduler();
+
+  EXPECT_TRUE(g_rtos_poll_returned) << "shell task deadlocked in /version";
+  EXPECT_TRUE(Contains(TakeTxString(uart), "TestBoard"));
 }
 
 }  // namespace

@@ -160,4 +160,25 @@ TEST(VcuApp, ShellReportsStateOverDebugUart) {
   EXPECT_NE(out.find("coolant 60 degC"), std::string::npos) << out;
 }
 
+TEST(VcuApp, LoggerOutputsTimestampedLogsOverDebugUart) {
+  lhal::host::TestClock clock;
+  lhal::host::Uart uart;
+
+  vcu::Peripherals p;
+  p.clock = &clock;
+  p.debug_uart = &uart;
+  vcu::App app(p);
+  uart.TakeTx();  // discard the boot banner
+
+  clock.Advance(123);
+  app.logger().Info("test info log");
+  app.Step();
+
+  const auto tx = uart.TakeTx();
+  const std::string out(tx.begin(), tx.end());
+  EXPECT_NE(out.find("[123]"), std::string::npos) << out;
+  EXPECT_NE(out.find("[INFO]"), std::string::npos) << out;
+  EXPECT_NE(out.find("test info log"), std::string::npos) << out;
+}
+
 }  // namespace

@@ -22,8 +22,11 @@ against `git rev-parse HEAD`:
 - same commit but dirty (either side): says an exact match can't be proven
 - match and clean: confirms and moves on
 
-Then it's a raw console: what you type goes to the board (the shell echoes
-and supports backspace), `/help` lists commands, `Ctrl-]` quits.
+Then it opens a split-pane interactive console:
+
+- **Fixed Bottom Text Box (`>`)**: What you type stays anchored at the bottom of the screen while incoming logs stream past in the upper scrolling region without overwriting or disrupting your typing.
+- **Stream Pause / Freeze (`Ctrl-P` or `Ctrl-D`)**: Freezes the incoming log stream and buffers background messages so you can type and send slash commands (`/state`, `/help`, `/uptime`, etc.) without responses getting drowned out by high-frequency periodic logs. Command replies display immediately. Pressing `Ctrl-P` / `Ctrl-D` again resumes the live stream and flushes held logs.
+- **Exit (`Ctrl-]` or `Ctrl-C`)**: Restores terminal settings and exits.
 
 Flags: `--port` when auto-detection finds zero or several candidates
 (`/dev/cu.usbmodem*`, `/dev/ttyACM*`), `--baud` (default 115200, matching

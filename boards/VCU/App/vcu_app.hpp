@@ -6,6 +6,7 @@
 #include "lhal/lhal.hpp"
 #include "lhre_can_hvc.hpp"
 #include "lhre_can_vcu.hpp"
+#include "longhorn/logger.hpp"
 #include "longhorn/shell.hpp"
 #include "task.h"
 
@@ -67,6 +68,7 @@ class App {
   const lhre::can::hvc::HvcPackStatus& pack_status() const {
     return pack_status_;
   }
+  longhorn::Logger& logger() { return logger_; }
   lhre::can::VcuState state() const { return state_; }
 
  private:
@@ -93,10 +95,14 @@ class App {
   void SendStatus();
 
   Peripherals p_;
+  StaticSemaphore_t uart_mutex_control_;
+  SemaphoreHandle_t uart_mutex_ = nullptr;
   // Debug shell over debug_uart: /help /version /uptime plus /state below.
-  // Polled by its own low-priority task (or Step() when scheduler-less);
-  // its console() is the app's log stream.
+  // Polled by its own low-priority task (or Step() when scheduler-less).
   longhorn::Shell shell_;
+  // Non-blocking, thread-safe logger over debug_uart. Stamped with [<ms>]
+  // [LEVEL] and drained by a low-priority task (or Step() when scheduler-less).
+  longhorn::Logger logger_;
   bool started_ = false;
   uint32_t last_blink_ms_ = 0;
   uint32_t last_status_ms_ = 0;
