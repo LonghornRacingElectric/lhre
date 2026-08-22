@@ -1,141 +1,445 @@
-/* Modern styling and custom theme adjustments for LHRE Firmware Documentation */
+/* ==========================================================================
+   LHRE Firmware Documentation - Mintlify Modern Theme
+   Clean, minimalist developer documentation aesthetic
+   ========================================================================== */
 
 :root {
-  /* UT Austin Burnt Orange & Modern Electric Palette */
-  --lhre-burnt-orange: #bf5700;
-  --lhre-orange-light: #ea6d14;
-  --lhre-orange-glow: rgba(191, 87, 0, 0.15);
-  --lhre-dark-bg: #0f141c;
-  --lhre-dark-card: #161d27;
-  --lhre-border-radius: 8px;
+  /* Brand Accents */
+  --lhre-primary: #bf5700;
+  --lhre-primary-light: #ea6d14;
+  --lhre-primary-glow: rgba(234, 109, 20, 0.15);
+  --lhre-accent: #ff7828;
 
-  /* Overriding Material for MkDocs variables */
-  --md-primary-fg-color: #bf5700;
-  --md-primary-fg-color--light: #d66c1e;
-  --md-primary-fg-color--dark: #9e4600;
-  --md-accent-fg-color: #f07b22;
+  /* Typography */
+  --md-text-font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --md-code-font: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Light Theme Overrides */
+  --md-primary-fg-color: #ffffff;
+  --md-primary-fg-color--light: #ffffff;
+  --md-primary-fg-color--dark: #f8fafc;
+  --md-primary-bg-color: #0f172a;
+  --md-primary-bg-color--light: #1e293b;
+  --md-accent-fg-color: #ea6d14;
+
+  --md-default-bg-color: #ffffff;
+  --md-default-fg-color: #0f172a;
+  --md-default-fg-color--light: #334155;
+  --md-default-fg-color--lighter: #64748b;
+  --md-default-fg-color--lightest: #e2e8f0;
+
+  --md-code-bg-color: #f8fafc;
+  --md-code-fg-color: #0f172a;
+
+  --md-typeset-a-color: #bf5700;
+
+  --card-border: #e2e8f0;
+  --card-bg: #ffffff;
+  --card-hover-border: #ea6d14;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
 }
 
+/* Dark Mode (Default Slate/Onyx) */
 [data-md-color-scheme="slate"] {
-  --md-default-bg-color: #0f141c;
+  --md-primary-fg-color: #090d16;
+  --md-primary-fg-color--light: #090d16;
+  --md-primary-fg-color--dark: #090d16;
+  --md-primary-bg-color: #090d16;
+  --md-accent-fg-color: #ff8c37;
+
+  --md-default-bg-color: #090d16;
   --md-default-fg-color: #e2e8f0;
   --md-default-fg-color--light: #cbd5e1;
   --md-default-fg-color--lighter: #94a3b8;
   --md-default-fg-color--lightest: rgba(255, 255, 255, 0.08);
 
-  --md-code-bg-color: #161e2b;
+  --md-code-bg-color: #0f141f;
   --md-code-fg-color: #f1f5f9;
 
   --md-typeset-a-color: #ff8c37;
+
+  --card-border: rgba(255, 255, 255, 0.08);
+  --card-bg: #0d121c;
+  --card-hover-border: #ea6d14;
 }
 
-/* Modern Header & Glassmorphism */
+/* ==========================================================================
+   Header & Navigation Bar (Glassmorphic, Mintlify-style)
+   ========================================================================== */
+
 .md-header {
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
-  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+  background-color: rgba(255, 255, 255, 0.85) !important;
+  color: var(--md-default-fg-color) !important;
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border-bottom: 1px solid var(--md-default-fg-color--lightest) !important;
+  box-shadow: none !important;
+  transition: background-color 0.25s ease, border-color 0.25s ease;
 }
 
+[data-md-color-scheme="slate"] .md-header {
+  background-color: rgba(9, 13, 22, 0.85) !important;
+  color: #e2e8f0 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.md-header__title {
+  color: var(--md-default-fg-color) !important;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.md-header__button {
+  color: var(--md-default-fg-color--lighter) !important;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.md-header__button:hover {
+  color: var(--lhre-primary-light) !important;
+}
+
+/* Navigation Tabs */
 .md-tabs {
+  background-color: transparent !important;
   border-bottom: 1px solid var(--md-default-fg-color--lightest);
 }
 
-/* Typography & Content Polish */
+[data-md-color-scheme="slate"] .md-tabs {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.md-tabs__link {
+  color: var(--md-default-fg-color--lighter) !important;
+  font-weight: 500;
+  font-size: 0.82rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
+  opacity: 0.85;
+}
+
+.md-tabs__link:hover {
+  color: var(--md-default-fg-color) !important;
+  background-color: var(--md-default-fg-color--lightest);
+  opacity: 1;
+}
+
+.md-tabs__item--active .md-tabs__link {
+  color: var(--lhre-primary-light) !important;
+  font-weight: 600;
+  opacity: 1;
+}
+
+/* ==========================================================================
+   Search Input (Mintlify Pill Style)
+   ========================================================================== */
+
+.md-search__inner {
+  padding: 2px;
+}
+
+.md-search__form {
+  background-color: var(--md-default-fg-color--lightest) !important;
+  border: 1px solid transparent !important;
+  border-radius: var(--radius-md) !important;
+  transition: all 0.2s ease;
+}
+
+[data-md-color-scheme="slate"] .md-search__form {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.md-search__form:hover,
+.md-search__form:focus-within {
+  background-color: var(--md-default-bg-color) !important;
+  border-color: var(--lhre-primary-light) !important;
+  box-shadow: 0 0 0 3px var(--lhre-primary-glow) !important;
+}
+
+.md-search__input {
+  color: var(--md-default-fg-color) !important;
+  font-size: 0.8rem;
+  padding-left: 2.2rem;
+}
+
+.md-search__input::placeholder {
+  color: var(--md-default-fg-color--lighter) !important;
+}
+
+.md-search__icon {
+  color: var(--md-default-fg-color--lighter) !important;
+}
+
+/* ==========================================================================
+   Sidebar & Navigation Links
+   ========================================================================== */
+
+.md-sidebar--primary .md-nav__title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: var(--md-default-fg-color--lighter);
+  margin-bottom: 0.5rem;
+}
+
+.md-nav__link {
+  font-size: 0.84rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: var(--radius-sm);
+  color: var(--md-default-fg-color--light) !important;
+  transition: all 0.15s ease;
+}
+
+.md-nav__link:hover {
+  color: var(--md-default-fg-color) !important;
+  background-color: var(--md-default-fg-color--lightest);
+}
+
+.md-nav__item--active > .md-nav__link {
+  color: var(--lhre-accent) !important;
+  font-weight: 600;
+  background-color: rgba(234, 109, 20, 0.08);
+}
+
+/* Table of Contents (Right Sidebar) */
+.md-sidebar--secondary .md-nav__link {
+  font-size: 0.8rem;
+  border-left: 2px solid transparent;
+  border-radius: 0;
+  padding-left: 0.75rem;
+}
+
+.md-sidebar--secondary .md-nav__link--active {
+  color: var(--lhre-accent) !important;
+  border-left-color: var(--lhre-accent);
+  background: transparent !important;
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   Typography & Headers
+   ========================================================================== */
+
+.md-typeset {
+  font-size: 0.92rem;
+  line-height: 1.68;
+}
+
 .md-typeset h1 {
   font-weight: 700;
-  letter-spacing: -0.025em;
+  font-size: 2.1rem;
+  letter-spacing: -0.03em;
+  margin-bottom: 1rem;
+  color: var(--md-default-fg-color);
 }
 
 .md-typeset h2 {
   font-weight: 600;
+  font-size: 1.35rem;
   letter-spacing: -0.02em;
-  margin-top: 1.8em;
+  margin-top: 2.2rem;
+  margin-bottom: 0.8rem;
+  padding-bottom: 0.4rem;
   border-bottom: 1px solid var(--md-default-fg-color--lightest);
-  padding-bottom: 0.3em;
+  color: var(--md-default-fg-color);
 }
 
 .md-typeset h3 {
   font-weight: 600;
+  font-size: 1.08rem;
   letter-spacing: -0.01em;
+  margin-top: 1.8rem;
+  margin-bottom: 0.5rem;
+  color: var(--md-default-fg-color);
 }
 
-/* Modern Card Grids */
+/* ==========================================================================
+   Modern Cards Grid (Mintlify Style)
+   ========================================================================== */
+
+.grid.cards > ul,
+.grid.cards > ol {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  list-style: none;
+  padding: 0;
+  margin: 1.2rem 0;
+}
+
 .grid.cards > ul > li,
 .grid.cards > ol > li {
-  border: 1px solid var(--md-default-fg-color--lightest);
-  border-radius: var(--lhre-border-radius);
-  background-color: var(--md-default-bg-color);
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  border: 1px solid var(--card-border) !important;
+  border-radius: var(--radius-lg) !important;
+  background-color: var(--card-bg) !important;
+  padding: 1.1rem 1.25rem !important;
+  margin: 0 !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
 }
 
 .grid.cards > ul > li:hover,
 .grid.cards > ol > li:hover {
+  border-color: var(--card-hover-border) !important;
   transform: translateY(-2px);
-  border-color: var(--md-primary-fg-color);
-  box-shadow: 0 4px 20px -2px var(--lhre-orange-glow);
+  box-shadow: 0 8px 24px -4px var(--lhre-primary-glow) !important;
 }
 
-/* Data Tables Styling (CAN Matrix & Tables) */
+/* ==========================================================================
+   Data Tables & CAN Matrix (Clean Bordered Mintlify Table)
+   ========================================================================== */
+
 .md-typeset table:not([class]) {
-  border: 1px solid var(--md-default-fg-color--lightest);
-  border-radius: var(--lhre-border-radius);
-  overflow: hidden;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
-  font-size: 0.85rem;
-  border-collapse: separate;
-  border-spacing: 0;
-  margin-bottom: 1.5em;
-  width: 100%;
+  border: 1px solid var(--card-border) !important;
+  border-radius: var(--radius-md) !important;
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  overflow: hidden !important;
+  width: 100% !important;
+  margin: 1.5rem 0 !important;
+  font-size: 0.83rem !important;
+  background-color: var(--card-bg);
 }
 
 .md-typeset table:not([class]) th {
-  background-color: rgba(191, 87, 0, 0.08);
-  color: var(--md-default-fg-color);
-  font-weight: 600;
-  text-transform: uppercase;
-  font-size: 0.72rem;
-  letter-spacing: 0.05em;
-  padding: 0.75rem 0.9rem;
-  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+  background-color: rgba(234, 109, 20, 0.06) !important;
+  color: var(--md-default-fg-color) !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  font-size: 0.7rem !important;
+  letter-spacing: 0.06em !important;
+  padding: 0.75rem 0.9rem !important;
+  border-bottom: 1px solid var(--card-border) !important;
+  border-right: none !important;
 }
 
 [data-md-color-scheme="slate"] .md-typeset table:not([class]) th {
-  background-color: rgba(255, 255, 255, 0.04);
+  background-color: rgba(255, 255, 255, 0.03) !important;
 }
 
 .md-typeset table:not([class]) td {
-  padding: 0.65rem 0.9rem;
-  border-bottom: 1px solid var(--md-default-fg-color--lightest);
-  vertical-align: middle;
+  padding: 0.65rem 0.9rem !important;
+  border-bottom: 1px solid var(--card-border) !important;
+  border-right: none !important;
+  vertical-align: middle !important;
+  color: var(--md-default-fg-color-light);
 }
 
 .md-typeset table:not([class]) tr:last-child td {
-  border-bottom: none;
+  border-bottom: none !important;
+}
+
+.md-typeset table:not([class]) tbody tr {
+  transition: background-color 0.15s ease;
 }
 
 .md-typeset table:not([class]) tbody tr:hover {
-  background-color: rgba(191, 87, 0, 0.04);
+  background-color: rgba(234, 109, 20, 0.04) !important;
 }
 
 [data-md-color-scheme="slate"] .md-typeset table:not([class]) tbody tr:hover {
-  background-color: rgba(255, 255, 255, 0.025);
+  background-color: rgba(255, 255, 255, 0.02) !important;
 }
 
-/* Code and Badge Elements */
+/* Monospace Badges for CAN IDs, Ports, and Registers */
 .md-typeset code {
-  border-radius: 4px;
-  padding: 0.15em 0.35em;
-  font-size: 0.85em;
+  background-color: var(--md-code-bg-color) !important;
+  border: 1px solid var(--card-border) !important;
+  border-radius: var(--radius-sm) !important;
+  padding: 0.15em 0.4em !important;
+  font-size: 0.82em !important;
+  color: var(--lhre-primary-light);
 }
 
-/* Admonitions */
+[data-md-color-scheme="slate"] .md-typeset code {
+  color: #f8971f;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+}
+
+/* ==========================================================================
+   Code Blocks & Syntax Containers
+   ========================================================================== */
+
+.md-typeset .highlight {
+  border: 1px solid var(--card-border) !important;
+  border-radius: var(--radius-md) !important;
+  overflow: hidden !important;
+  background-color: var(--md-code-bg-color) !important;
+  box-shadow: none !important;
+  margin: 1.2rem 0 !important;
+}
+
+.md-typeset .highlight pre {
+  padding: 0.9rem 1.1rem !important;
+  font-size: 0.82rem !important;
+  line-height: 1.6 !important;
+}
+
+.md-typeset .highlight code {
+  background-color: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  color: inherit !important;
+}
+
+/* Copy Button */
+.md-clipboard {
+  color: var(--md-default-fg-color--lighter) !important;
+  transition: color 0.2s ease;
+}
+
+.md-clipboard:hover {
+  color: var(--lhre-accent) !important;
+}
+
+/* ==========================================================================
+   Admonitions (Callouts / Notes)
+   ========================================================================== */
+
 .md-typeset .admonition {
-  border-radius: var(--lhre-border-radius);
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+  border-radius: var(--radius-md) !important;
+  border: 1px solid var(--card-border) !important;
+  border-left: 4px solid var(--lhre-primary-light) !important;
+  box-shadow: none !important;
+  background-color: var(--card-bg) !important;
+  font-size: 0.86rem !important;
+  margin: 1.2rem 0 !important;
 }
 
-/* Clean Scrollbars */
+.md-typeset .admonition__title {
+  font-weight: 600 !important;
+  font-size: 0.85rem !important;
+  letter-spacing: -0.01em !important;
+}
+
+/* ==========================================================================
+   Details / Expandables (CSV Block)
+   ========================================================================== */
+
+details {
+  border: 1px solid var(--card-border) !important;
+  border-radius: var(--radius-md) !important;
+  background-color: var(--card-bg) !important;
+  padding: 0.6rem 1rem !important;
+  margin: 1rem 0 !important;
+}
+
+details summary {
+  font-weight: 600;
+  font-size: 0.86rem;
+  cursor: pointer;
+  color: var(--md-default-fg-color);
+}
+
+/* ==========================================================================
+   Clean Scrollbars & Footer
+   ========================================================================== */
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -146,10 +450,19 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--md-default-fg-color--lighter);
-  border-radius: 3px;
+  background: var(--md-default-fg-color--lightest);
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--md-primary-fg-color);
+  background: var(--lhre-primary-light);
+}
+
+.md-footer {
+  background-color: var(--md-default-bg-color) !important;
+  border-top: 1px solid var(--md-default-fg-color--lightest) !important;
+}
+
+[data-md-color-scheme="slate"] .md-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
 }
