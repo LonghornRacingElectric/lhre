@@ -67,14 +67,12 @@ theme:
         name: Switch to light mode
   icon:
     repo: fontawesome/brands/github
-    logo: material/car-electric
+    logo: material/lightning-bolt
   features:
     - navigation.indexes
     - navigation.instant
     - navigation.instant.progress
     - navigation.tracking
-    - navigation.tabs
-    - navigation.tabs.sticky
     - navigation.sections
     - navigation.path
     - navigation.top
