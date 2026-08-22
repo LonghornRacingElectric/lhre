@@ -1,605 +1,713 @@
 /* ==========================================================================
-   LHRE Firmware - Authentic Mintlify Design Theme
-   Modern, sleek, minimalist developer documentation UI
+   LHRE Firmware — Mintlify Design System
+   Complete visual overhaul of Material for MkDocs
    ========================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
-
+/* -------------------------------------------------------------------
+   Tokens
+   ------------------------------------------------------------------- */
 :root {
-  /* Mintlify Typography */
-  --md-text-font: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --md-code-font: 'JetBrains Mono', ui-monospace, Menlo, Monaco, Consolas, monospace;
-
-  /* Primary Brand: LHRE Burnt Orange */
-  --brand-primary: #ea580c;
-  --brand-primary-hover: #f97316;
-  --brand-glow: rgba(234, 88, 12, 0.15);
-  --brand-glow-strong: rgba(234, 88, 12, 0.25);
-
-  /* Light Theme Palette (Clean White & Slate) */
-  --bg-app: #ffffff;
-  --bg-surface: #f8fafc;
-  --bg-surface-hover: #f1f5f9;
-  --bg-sidebar: #fafafa;
-  --bg-code: #0f172a;
-  
-  --border-subtle: #e2e8f0;
-  --border-muted: #cbd5e1;
-  --border-focus: #ea580c;
-
-  --text-main: #0f172a;
-  --text-muted: #475569;
-  --text-subtle: #64748b;
-  --text-faint: #94a3b8;
-
-  --md-default-bg-color: var(--bg-app);
-  --md-default-fg-color: var(--text-main);
-  --md-default-fg-color--light: var(--text-muted);
-  --md-default-fg-color--lighter: var(--text-subtle);
-  --md-default-fg-color--lightest: var(--border-subtle);
-
-  --md-typeset-a-color: var(--brand-primary);
-  --md-accent-fg-color: var(--brand-primary);
-  --md-primary-fg-color: var(--bg-app);
-
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
+  --mint-bg:              #ffffff;
+  --mint-bg-secondary:    #f8fafc;
+  --mint-bg-hover:        #f1f5f9;
+  --mint-border:          #e2e8f0;
+  --mint-border-muted:    #f1f5f9;
+  --mint-text:            #0f172a;
+  --mint-text-secondary:  #475569;
+  --mint-text-tertiary:   #94a3b8;
+  --mint-brand:           #bf5700;
+  --mint-brand-hover:     #ea6d14;
+  --mint-brand-bg:        rgba(191, 87, 0, 0.08);
+  --mint-code-bg:         #0f172a;
+  --mint-radius:          8px;
+  --mint-radius-lg:       12px;
+  --mint-radius-pill:     9999px;
+  --mint-header-h:        56px;
+  --mint-sidebar-w:       260px;
+  --mint-content-max:     820px;
+  --mint-font:            "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --mint-mono:            "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
-/* ==========================================================================
-   Dark Theme Palette (Mintlify Deep Onyx / Obsidian)
-   ========================================================================== */
 [data-md-color-scheme="slate"] {
-  --bg-app: #0b0f17;
-  --bg-surface: #111722;
-  --bg-surface-hover: #172030;
-  --bg-sidebar: #0b0f17;
-  --bg-code: #070a10;
-
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-muted: rgba(255, 255, 255, 0.14);
-  --border-focus: #f97316;
-
-  --text-main: #f8fafc;
-  --text-muted: #cbd5e1;
-  --text-subtle: #94a3b8;
-  --text-faint: #64748b;
-
-  --md-default-bg-color: var(--bg-app);
-  --md-default-fg-color: var(--text-main);
-  --md-default-fg-color--light: var(--text-muted);
-  --md-default-fg-color--lighter: var(--text-subtle);
-  --md-default-fg-color--lightest: var(--border-subtle);
-
-  --md-typeset-a-color: #ff8c37;
-  --md-accent-fg-color: #ff8c37;
-  --md-primary-fg-color: var(--bg-app);
-  --md-code-bg-color: var(--bg-code);
-  --md-code-fg-color: #f1f5f9;
+  --mint-bg:              #0a0a0a;
+  --mint-bg-secondary:    #141414;
+  --mint-bg-hover:        #1a1a1a;
+  --mint-border:          #262626;
+  --mint-border-muted:    #1a1a1a;
+  --mint-text:            #fafafa;
+  --mint-text-secondary:  #a1a1aa;
+  --mint-text-tertiary:   #52525b;
+  --mint-brand:           #f97316;
+  --mint-brand-hover:     #fb923c;
+  --mint-brand-bg:        rgba(249, 115, 22, 0.1);
+  --mint-code-bg:         #0c0c0c;
 }
 
-/* Global resets & typography */
+/* -------------------------------------------------------------------
+   Reset Material Design Variables
+   ------------------------------------------------------------------- */
+[data-md-color-scheme="default"] {
+  --md-default-bg-color:            var(--mint-bg);
+  --md-default-fg-color:            var(--mint-text);
+  --md-default-fg-color--light:     var(--mint-text-secondary);
+  --md-default-fg-color--lighter:   var(--mint-text-tertiary);
+  --md-default-fg-color--lightest:  var(--mint-border);
+  --md-primary-fg-color:            var(--mint-bg);
+  --md-primary-bg-color:            var(--mint-text);
+  --md-accent-fg-color:             var(--mint-brand);
+  --md-typeset-a-color:             var(--mint-brand);
+  --md-code-bg-color:               var(--mint-bg-secondary);
+}
+
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color:            var(--mint-bg);
+  --md-default-fg-color:            var(--mint-text);
+  --md-default-fg-color--light:     var(--mint-text-secondary);
+  --md-default-fg-color--lighter:   var(--mint-text-tertiary);
+  --md-default-fg-color--lightest:  var(--mint-border);
+  --md-primary-fg-color:            var(--mint-bg);
+  --md-primary-bg-color:            var(--mint-text);
+  --md-accent-fg-color:             var(--mint-brand);
+  --md-typeset-a-color:             var(--mint-brand);
+  --md-code-bg-color:               var(--mint-bg-secondary);
+}
+
+/* Global */
 body {
-  background-color: var(--bg-app) !important;
-  color: var(--text-main) !important;
-  font-family: var(--md-text-font) !important;
+  background: var(--mint-bg) !important;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ==========================================================================
-   1. Mintlify Header Bar (Ultra-sleek, Glassmorphism, Single Topbar)
-   ========================================================================== */
+/* ===================================================================
+   1. HEADER — Mintlify glassmorphic topbar
+   =================================================================== */
 
 .md-header {
   position: sticky !important;
-  top: 0;
-  height: 60px !important;
-  background-color: rgba(255, 255, 255, 0.8) !important;
-  backdrop-filter: blur(16px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
-  border-bottom: 1px solid var(--border-subtle) !important;
-  box-shadow: none !important;
+  top: 0 !important;
   z-index: 100 !important;
+  height: var(--mint-header-h) !important;
+  background: rgba(255,255,255,0.82) !important;
+  backdrop-filter: blur(12px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(180%) !important;
+  border-bottom: 1px solid var(--mint-border) !important;
+  box-shadow: none !important;
+  color: var(--mint-text) !important;
 }
 
 [data-md-color-scheme="slate"] .md-header {
-  background-color: rgba(11, 15, 23, 0.8) !important;
-  border-bottom: 1px solid var(--border-subtle) !important;
+  background: rgba(10,10,10,0.82) !important;
 }
 
-.md-header__inner {
-  height: 100% !important;
+/* Kill Material's built-in shadow class */
+.md-header--shadow,
+.md-header--shadow[data-md-state="shadow"] {
+  box-shadow: none !important;
+}
+
+.md-header .md-header__inner,
+.mintlify-header__inner {
   display: flex !important;
   align-items: center !important;
-  max-width: 1400px !important;
-  padding: 0 1.5rem !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  padding: 0 1.25rem !important;
+  gap: 0.5rem !important;
 }
 
+/* Logo */
+.md-header .md-logo,
+.mintlify-logo {
+  padding: 0 !important;
+  margin-right: 0 !important;
+}
+
+.md-header .md-logo svg,
+.md-header .md-logo img {
+  width: 22px !important;
+  height: 22px !important;
+  fill: var(--mint-brand) !important;
+}
+
+/* Site title in header */
 .md-header__title {
-  font-size: 0.95rem !important;
+  flex-shrink: 0 !important;
+}
+
+.md-header__title .md-header__ellipsis,
+.md-header__title .md-header__topic,
+.mintlify-title {
+  font-size: 0.9rem !important;
   font-weight: 700 !important;
   letter-spacing: -0.02em !important;
-  color: var(--text-main) !important;
-  margin-left: 0.5rem !important;
+  color: var(--mint-text) !important;
 }
 
-.md-logo {
-  padding: 0 !important;
-  margin-right: 0.5rem !important;
+/* Hide the secondary topic (page title on scroll) */
+.md-header__topic + .md-header__topic {
+  display: none !important;
 }
 
-.md-logo svg {
-  fill: var(--brand-primary) !important;
-  width: 24px !important;
-  height: 24px !important;
+/* ===================================================================
+   1b. SEARCH PILL — Centered Mintlify search trigger
+   =================================================================== */
+
+.mintlify-search-area {
+  flex: 1 1 auto !important;
+  display: flex !important;
+  justify-content: center !important;
+  position: relative !important;
 }
 
-/* Top Navigation Tabs - Streamlined Mintlify style */
-.md-tabs {
-  background-color: transparent !important;
-  border-bottom: 1px solid var(--border-subtle) !important;
-}
-
-.md-tabs__list {
-  max-width: 1400px !important;
-  margin: 0 auto !important;
-  padding: 0 1.5rem !important;
-}
-
-.md-tabs__link {
-  font-size: 0.84rem !important;
-  font-weight: 500 !important;
-  color: var(--text-subtle) !important;
-  padding: 0.6rem 0.9rem !important;
-  border-radius: var(--radius-sm) !important;
-  transition: all 0.15s ease !important;
-  opacity: 1 !important;
-}
-
-.md-tabs__link:hover {
-  color: var(--text-main) !important;
-  background-color: var(--bg-surface-hover) !important;
-}
-
-.md-tabs__item--active .md-tabs__link {
-  color: var(--brand-primary) !important;
-  font-weight: 600 !important;
-  background-color: var(--brand-glow) !important;
-}
-
-/* Search Box - Mintlify Search Pill with Ctrl+K look */
-.md-search__inner {
-  padding: 0 !important;
-}
-
-.md-search__form {
-  background-color: var(--bg-surface) !important;
-  border: 1px solid var(--border-subtle) !important;
-  border-radius: 9999px !important;
-  height: 36px !important;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+.mintlify-search-pill {
   display: flex !important;
   align-items: center !important;
+  gap: 0.5rem !important;
+  padding: 0.38rem 0.9rem !important;
+  background: var(--mint-bg-secondary) !important;
+  border: 1px solid var(--mint-border) !important;
+  border-radius: var(--mint-radius-pill) !important;
+  cursor: pointer !important;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s !important;
+  min-width: 220px !important;
+  color: var(--mint-text-tertiary) !important;
+  font-size: 0.82rem !important;
+  user-select: none !important;
 }
 
-.md-search__form:hover,
-.md-search__form:focus-within {
-  background-color: var(--bg-app) !important;
-  border-color: var(--brand-primary) !important;
-  box-shadow: 0 0 0 3px var(--brand-glow) !important;
+.mintlify-search-pill:hover {
+  border-color: var(--mint-brand) !important;
+  background: var(--mint-bg) !important;
+  box-shadow: 0 0 0 3px rgba(191, 87, 0, 0.12) !important;
+}
+
+[data-md-color-scheme="slate"] .mintlify-search-pill:hover {
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.12) !important;
+}
+
+.mintlify-search-pill svg {
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+
+.mintlify-search-pill__text {
+  flex: 1 1 auto;
+}
+
+.mintlify-search-pill__kbd {
+  display: flex;
+  gap: 2px;
+}
+
+.mintlify-search-pill__kbd kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  font-family: var(--mint-mono);
+  font-size: 0.68rem;
+  line-height: 1.4;
+  color: var(--mint-text-tertiary);
+  background: var(--mint-bg);
+  border: 1px solid var(--mint-border);
+  border-radius: 4px;
+  box-shadow: none;
+}
+
+/* Hide Material's default search magnifying-glass icon button */
+.md-header .md-search__icon[for="__search"],
+.md-header > nav > label[for="__search"] {
+  display: none !important;
+}
+
+/* Material's search modal remains functional; just make it match */
+.md-search__form {
+  border-radius: var(--mint-radius) !important;
+  background: var(--mint-bg) !important;
+  border: 1px solid var(--mint-border) !important;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.12) !important;
+}
+
+[data-md-color-scheme="slate"] .md-search__form {
+  box-shadow: 0 16px 48px rgba(0,0,0,0.4) !important;
 }
 
 .md-search__input {
-  font-size: 0.82rem !important;
-  color: var(--text-main) !important;
-  padding-left: 2.2rem !important;
-  height: 34px !important;
+  font-family: var(--mint-font) !important;
+  font-size: 0.88rem !important;
+  color: var(--mint-text) !important;
 }
 
 .md-search__input::placeholder {
-  color: var(--text-faint) !important;
-  font-weight: 400 !important;
+  color: var(--mint-text-tertiary) !important;
 }
 
-.md-search__icon {
-  color: var(--text-subtle) !important;
-  width: 18px !important;
-  height: 18px !important;
+/* ===================================================================
+   1c. HEADER RIGHT — palette toggle & repo source
+   =================================================================== */
+
+.mintlify-header__right {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.25rem !important;
+  flex-shrink: 0 !important;
 }
 
-/* Header Action Icons (Dark toggle, GitHub link) */
-.md-header__option .md-icon,
-.md-header__source .md-icon {
-  color: var(--text-subtle) !important;
-  transition: color 0.15s ease, transform 0.15s ease !important;
+/* Palette toggle */
+.md-header__option {
+  display: flex !important;
+  align-items: center !important;
 }
 
-.md-header__option:hover .md-icon,
-.md-header__source:hover .md-icon {
-  color: var(--brand-primary) !important;
-  transform: scale(1.08);
+.md-header__option .md-header__button {
+  color: var(--mint-text-tertiary) !important;
+  width: 32px !important;
+  height: 32px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: var(--mint-radius) !important;
+  transition: background 0.15s, color 0.15s !important;
 }
 
-/* ==========================================================================
-   2. Mintlify Left Sidebar (Grouped, Minimalist, Pill Indicators)
-   ========================================================================== */
+.md-header__option .md-header__button:hover {
+  background: var(--mint-bg-hover) !important;
+  color: var(--mint-text) !important;
+}
+
+/* Repo source in header */
+.md-header__source {
+  margin-left: 0.25rem !important;
+}
+
+.md-source {
+  color: var(--mint-text-secondary) !important;
+  font-size: 0.8rem !important;
+}
+
+.md-source__icon svg {
+  fill: var(--mint-text-tertiary) !important;
+}
+
+.md-source__repository {
+  color: var(--mint-text-secondary) !important;
+  font-weight: 500 !important;
+}
+
+/* ===================================================================
+   2. NAVIGATION TABS (below header)
+   =================================================================== */
+
+.md-tabs {
+  background: transparent !important;
+  border-bottom: 1px solid var(--mint-border) !important;
+  box-shadow: none !important;
+}
+
+.md-tabs__list {
+  padding: 0 1.25rem !important;
+}
+
+.md-tabs__link {
+  font-size: 0.82rem !important;
+  font-weight: 500 !important;
+  color: var(--mint-text-secondary) !important;
+  opacity: 1 !important;
+  padding: 0.5rem 0.75rem !important;
+  margin: 0 !important;
+  border-radius: var(--mint-radius) !important;
+  transition: color 0.15s, background 0.15s !important;
+}
+
+.md-tabs__link:hover {
+  color: var(--mint-text) !important;
+  background: var(--mint-bg-hover) !important;
+}
+
+.md-tabs__item--active .md-tabs__link {
+  color: var(--mint-brand) !important;
+  font-weight: 600 !important;
+  background: transparent !important;
+}
+
+/* ===================================================================
+   3. LEFT SIDEBAR — Mintlify grouped navigation
+   =================================================================== */
 
 .md-sidebar--primary {
-  width: 270px !important;
-  padding-top: 1rem !important;
+  width: var(--mint-sidebar-w) !important;
+  background: var(--mint-bg) !important;
+  border-right: 1px solid var(--mint-border) !important;
 }
 
-.md-sidebar--primary .md-sidebar__scrollwrap {
-  margin: 0 !important;
+.md-sidebar--primary .md-sidebar__inner {
+  padding: 0.75rem 0.75rem !important;
 }
 
-/* Section Group Titles */
+/* Section titles (top-level groups like "Drivers", "Boards") */
+.md-nav--primary > .md-nav__list > .md-nav__item > .md-nav__link,
+.md-nav--primary > .md-nav__list > .md-nav__item--nested > .md-nav__link,
 .md-nav__title {
   font-size: 0.72rem !important;
   font-weight: 700 !important;
   text-transform: uppercase !important;
-  letter-spacing: 0.08em !important;
-  color: var(--text-faint) !important;
-  padding: 0.75rem 0.75rem 0.25rem 0.75rem !important;
-  margin-top: 0.5rem !important;
+  letter-spacing: 0.06em !important;
+  color: var(--mint-text-tertiary) !important;
+  padding: 0.6rem 0.5rem 0.25rem 0.5rem !important;
 }
 
-/* Sidebar Links */
+/* Fix: don't uppercase actual page links */
+.md-nav--primary .md-nav .md-nav__link {
+  text-transform: none !important;
+  letter-spacing: normal !important;
+}
+
+/* Regular nav links */
 .md-nav__link {
+  font-family: var(--mint-font) !important;
   font-size: 0.84rem !important;
   font-weight: 400 !important;
-  color: var(--text-subtle) !important;
-  padding: 0.35rem 0.75rem !important;
-  border-radius: var(--radius-sm) !important;
+  color: var(--mint-text-secondary) !important;
+  padding: 0.3rem 0.5rem !important;
+  border-radius: 6px !important;
   margin: 1px 0 !important;
-  transition: all 0.12s ease !important;
-  display: flex !important;
-  align-items: center !important;
+  transition: color 0.12s, background 0.12s !important;
 }
 
 .md-nav__link:hover {
-  color: var(--text-main) !important;
-  background-color: var(--bg-surface-hover) !important;
+  color: var(--mint-text) !important;
+  background: var(--mint-bg-hover) !important;
 }
 
-/* Active Sidebar Link: Mintlify Pill */
+/* Active link: Mintlify brand-tinted pill */
 .md-nav__item--active > .md-nav__link {
-  color: var(--brand-primary) !important;
+  color: var(--mint-brand) !important;
   font-weight: 600 !important;
-  background-color: var(--brand-glow) !important;
+  background: var(--mint-brand-bg) !important;
 }
 
-[data-md-color-scheme="slate"] .md-nav__item--active > .md-nav__link {
-  color: #ff8c37 !important;
-  background-color: rgba(234, 88, 12, 0.12) !important;
-}
-
-/* ==========================================================================
-   3. Main Content & Reading Layout
-   ========================================================================== */
-
-.md-main__inner {
-  max-width: 1400px !important;
-  margin: 0 auto !important;
-  padding: 2rem 1.5rem !important;
-}
-
-.md-content {
-  max-width: 820px !important;
-  margin: 0 auto !important;
-}
-
-.md-typeset {
-  font-size: 0.95rem !important;
-  line-height: 1.75 !important;
-  color: var(--text-muted) !important;
-}
-
-/* Headings with tight letter-spacing */
-.md-typeset h1 {
-  font-size: 2.25rem !important;
-  font-weight: 800 !important;
-  letter-spacing: -0.035em !important;
-  color: var(--text-main) !important;
-  line-height: 1.2 !important;
-  margin-bottom: 1.2rem !important;
-}
-
-.md-typeset h2 {
-  font-size: 1.45rem !important;
-  font-weight: 700 !important;
-  letter-spacing: -0.025em !important;
-  color: var(--text-main) !important;
-  margin-top: 2.5rem !important;
-  margin-bottom: 0.8rem !important;
-  padding-bottom: 0.4rem !important;
-  border-bottom: 1px solid var(--border-subtle) !important;
-}
-
-.md-typeset h3 {
-  font-size: 1.15rem !important;
-  font-weight: 600 !important;
-  letter-spacing: -0.015em !important;
-  color: var(--text-main) !important;
-  margin-top: 1.8rem !important;
-  margin-bottom: 0.6rem !important;
-}
-
-/* Paragraphs & lead text */
-.md-typeset p {
-  margin-bottom: 1.1rem !important;
-}
-
-.md-typeset strong {
-  color: var(--text-main) !important;
-  font-weight: 600 !important;
-}
-
-/* ==========================================================================
-   4. Right Sidebar: Table of Contents ("ON THIS PAGE")
-   ========================================================================== */
+/* ===================================================================
+   4. RIGHT SIDEBAR — Table of Contents
+   =================================================================== */
 
 .md-sidebar--secondary {
-  width: 240px !important;
-  padding-top: 1rem !important;
+  width: 220px !important;
+  border-left: none !important;
 }
 
 .md-sidebar--secondary .md-nav__title {
-  font-size: 0.72rem !important;
+  font-size: 0.7rem !important;
   font-weight: 700 !important;
   text-transform: uppercase !important;
-  letter-spacing: 0.08em !important;
-  color: var(--text-faint) !important;
-  margin-bottom: 0.5rem !important;
-  padding: 0 0 0.5rem 0.5rem !important;
+  letter-spacing: 0.06em !important;
+  color: var(--mint-text-tertiary) !important;
+  padding-bottom: 0.5rem !important;
 }
 
 .md-sidebar--secondary .md-nav__list {
-  border-left: 1px solid var(--border-subtle) !important;
-  padding-left: 0.75rem !important;
+  border-left: 1px solid var(--mint-border) !important;
 }
 
 .md-sidebar--secondary .md-nav__link {
-  font-size: 0.8rem !important;
-  color: var(--text-faint) !important;
-  padding: 0.25rem 0.25rem !important;
+  font-size: 0.78rem !important;
+  color: var(--mint-text-tertiary) !important;
+  padding: 0.2rem 0 0.2rem 0.75rem !important;
   border-radius: 0 !important;
   background: transparent !important;
-  transition: color 0.15s ease !important;
+  margin: 0 !important;
+  border-left: 2px solid transparent !important;
+  margin-left: -1px !important;
+  transition: color 0.12s, border-color 0.12s !important;
 }
 
 .md-sidebar--secondary .md-nav__link:hover {
-  color: var(--text-main) !important;
+  color: var(--mint-text) !important;
+  background: transparent !important;
 }
 
 .md-sidebar--secondary .md-nav__link--active {
-  color: var(--brand-primary) !important;
+  color: var(--mint-brand) !important;
   font-weight: 600 !important;
+  border-left-color: var(--mint-brand) !important;
+  background: transparent !important;
 }
 
-[data-md-color-scheme="slate"] .md-sidebar--secondary .md-nav__link--active {
-  color: #ff8c37 !important;
+/* ===================================================================
+   5. CONTENT — Typography
+   =================================================================== */
+
+.md-typeset {
+  font-family: var(--mint-font) !important;
+  font-size: 0.92rem !important;
+  line-height: 1.72 !important;
+  color: var(--mint-text-secondary) !important;
 }
 
-/* ==========================================================================
-   5. Mintlify Cards & Stat Grid
-   ========================================================================== */
-
-.grid.cards > ul,
-.grid.cards > ol {
-  display: grid !important;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)) !important;
-  gap: 1rem !important;
-  padding: 0 !important;
-  margin: 1.5rem 0 !important;
-  list-style: none !important;
+.md-typeset h1 {
+  font-family: var(--mint-font) !important;
+  font-size: 2.1rem !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.035em !important;
+  color: var(--mint-text) !important;
+  line-height: 1.15 !important;
+  margin: 0 0 1rem !important;
+  border-bottom: none !important;
 }
 
-.grid.cards > ul > li,
-.grid.cards > ol > li {
-  background-color: var(--bg-surface) !important;
-  border: 1px solid var(--border-subtle) !important;
-  border-radius: var(--radius-lg) !important;
-  padding: 1.25rem 1.25rem !important;
-  margin: 0 !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
-  display: flex !important;
-  flex-direction: column !important;
-  justify-content: center !important;
+.md-typeset h2 {
+  font-family: var(--mint-font) !important;
+  font-size: 1.4rem !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.025em !important;
+  color: var(--mint-text) !important;
+  margin: 2.4rem 0 0.8rem !important;
+  padding-bottom: 0.4rem !important;
+  border-bottom: 1px solid var(--mint-border) !important;
 }
 
-.grid.cards > ul > li:hover,
-.grid.cards > ol > li:hover {
-  border-color: var(--brand-primary) !important;
-  background-color: var(--bg-surface-hover) !important;
-  transform: translateY(-2px) !important;
-  box-shadow: 0 8px 24px -4px var(--brand-glow) !important;
+.md-typeset h3 {
+  font-family: var(--mint-font) !important;
+  font-size: 1.12rem !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.015em !important;
+  color: var(--mint-text) !important;
+  margin: 1.6rem 0 0.5rem !important;
 }
 
-/* ==========================================================================
-   6. Modern Data Tables & CAN Matrix
-   ========================================================================== */
+.md-typeset h4, .md-typeset h5, .md-typeset h6 {
+  font-family: var(--mint-font) !important;
+  font-weight: 600 !important;
+  color: var(--mint-text) !important;
+}
+
+.md-typeset strong { color: var(--mint-text) !important; }
+
+.md-typeset a {
+  color: var(--mint-brand) !important;
+  text-decoration: none !important;
+}
+.md-typeset a:hover {
+  text-decoration: underline !important;
+}
+
+/* ===================================================================
+   6. TABLES — Clean bordered Mintlify data tables
+   =================================================================== */
 
 .md-typeset table:not([class]) {
-  border: 1px solid var(--border-subtle) !important;
-  border-radius: var(--radius-md) !important;
+  border: 1px solid var(--mint-border) !important;
+  border-radius: var(--mint-radius-lg) !important;
   border-collapse: separate !important;
   border-spacing: 0 !important;
   overflow: hidden !important;
   width: 100% !important;
-  margin: 1.8rem 0 !important;
-  font-size: 0.82rem !important;
-  background-color: var(--bg-surface) !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02) !important;
+  margin: 1.5rem 0 !important;
+  font-size: 0.84rem !important;
+  background: var(--mint-bg) !important;
+  box-shadow: none !important;
 }
 
 .md-typeset table:not([class]) th {
-  background-color: rgba(234, 88, 12, 0.05) !important;
-  color: var(--text-main) !important;
+  background: var(--mint-bg-secondary) !important;
+  color: var(--mint-text) !important;
   font-weight: 600 !important;
+  font-size: 0.72rem !important;
   text-transform: uppercase !important;
-  font-size: 0.68rem !important;
-  letter-spacing: 0.07em !important;
-  padding: 0.75rem 0.9rem !important;
-  border-bottom: 1px solid var(--border-subtle) !important;
+  letter-spacing: 0.05em !important;
+  padding: 0.7rem 1rem !important;
+  border-bottom: 1px solid var(--mint-border) !important;
   border-right: none !important;
-}
-
-[data-md-color-scheme="slate"] .md-typeset table:not([class]) th {
-  background-color: rgba(255, 255, 255, 0.03) !important;
 }
 
 .md-typeset table:not([class]) td {
-  padding: 0.7rem 0.9rem !important;
-  border-bottom: 1px solid var(--border-subtle) !important;
+  padding: 0.65rem 1rem !important;
+  border-bottom: 1px solid var(--mint-border-muted) !important;
   border-right: none !important;
+  color: var(--mint-text-secondary) !important;
   vertical-align: middle !important;
-  color: var(--text-muted) !important;
 }
 
 .md-typeset table:not([class]) tr:last-child td {
   border-bottom: none !important;
 }
 
-.md-typeset table:not([class]) tbody tr {
-  transition: background-color 0.12s ease !important;
-}
-
 .md-typeset table:not([class]) tbody tr:hover {
-  background-color: var(--bg-surface-hover) !important;
+  background: var(--mint-bg-hover) !important;
 }
 
-/* Monospaced Badges for CAN IDs, Pins, Signals */
+/* ===================================================================
+   7. INLINE CODE — Subtle bordered badges
+   =================================================================== */
+
 .md-typeset code {
-  font-family: var(--md-code-font) !important;
-  background-color: var(--bg-surface) !important;
-  border: 1px solid var(--border-subtle) !important;
-  border-radius: var(--radius-sm) !important;
-  padding: 0.15em 0.4em !important;
+  font-family: var(--mint-mono) !important;
   font-size: 0.82em !important;
   font-weight: 500 !important;
-  color: var(--brand-primary) !important;
+  background: var(--mint-bg-secondary) !important;
+  border: 1px solid var(--mint-border) !important;
+  border-radius: 5px !important;
+  padding: 0.12em 0.35em !important;
+  color: var(--mint-brand) !important;
 }
 
-[data-md-color-scheme="slate"] .md-typeset code {
-  background-color: rgba(255, 255, 255, 0.04) !important;
-  border-color: rgba(255, 255, 255, 0.08) !important;
-  color: #ff9843 !important;
-}
+/* ===================================================================
+   8. CODE BLOCKS — Fenced code with subtle border
+   =================================================================== */
 
-/* ==========================================================================
-   7. Mintlify Code Blocks (Rounded, Header, Copy Button)
-   ========================================================================== */
-
-.md-typeset .highlight {
-  border: 1px solid var(--border-subtle) !important;
-  border-radius: var(--radius-md) !important;
+.md-typeset .highlight,
+.md-typeset .highlighttable {
+  border: 1px solid var(--mint-border) !important;
+  border-radius: var(--mint-radius-lg) !important;
   overflow: hidden !important;
-  background-color: var(--bg-code) !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
-  margin: 1.4rem 0 !important;
+  margin: 1.2rem 0 !important;
+  box-shadow: none !important;
 }
 
-.md-typeset .highlight pre {
-  padding: 1rem 1.25rem !important;
-  font-family: var(--md-code-font) !important;
+.md-typeset .highlight pre,
+.md-typeset .highlighttable pre {
+  background: var(--mint-code-bg) !important;
+  font-family: var(--mint-mono) !important;
   font-size: 0.82rem !important;
-  line-height: 1.65 !important;
+  line-height: 1.6 !important;
+  padding: 0.9rem 1.1rem !important;
+  margin: 0 !important;
 }
 
-.md-typeset .highlight code {
-  background-color: transparent !important;
+/* Code inside blocks should inherit, no badge styling */
+.md-typeset .highlight code,
+.md-typeset pre code {
+  background: transparent !important;
   border: none !important;
   padding: 0 !important;
   color: inherit !important;
+  font-size: inherit !important;
+  border-radius: 0 !important;
 }
 
-/* Code Copy Button */
 .md-clipboard {
-  color: var(--text-faint) !important;
-  transition: all 0.15s ease !important;
+  color: var(--mint-text-tertiary) !important;
 }
-
 .md-clipboard:hover {
-  color: var(--brand-primary) !important;
+  color: var(--mint-brand) !important;
 }
 
-/* ==========================================================================
-   8. Mintlify Callouts & Admonitions
-   ========================================================================== */
+/* ===================================================================
+   9. ADMONITIONS / CALLOUTS
+   =================================================================== */
 
-.md-typeset .admonition {
-  border-radius: var(--radius-md) !important;
-  border: 1px solid var(--border-subtle) !important;
-  border-left: 3px solid var(--brand-primary) !important;
-  background-color: var(--bg-surface) !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03) !important;
-  margin: 1.4rem 0 !important;
-  padding: 0.9rem 1.2rem !important;
+.md-typeset .admonition,
+.md-typeset details {
+  border: 1px solid var(--mint-border) !important;
+  border-left: 3px solid var(--mint-brand) !important;
+  border-radius: var(--mint-radius) !important;
+  background: var(--mint-bg) !important;
+  box-shadow: none !important;
+  font-size: 0.88rem !important;
+  overflow: hidden !important;
 }
 
-.md-typeset .admonition__title {
+.md-typeset .admonition-title,
+.md-typeset details summary {
   font-weight: 600 !important;
   font-size: 0.86rem !important;
-  color: var(--text-main) !important;
-  margin-bottom: 0.4rem !important;
+  background: var(--mint-bg-secondary) !important;
+  border-bottom: 1px solid var(--mint-border) !important;
 }
 
-/* Note Type */
-.md-typeset .admonition.note {
-  border-left-color: #3b82f6 !important;
-}
-.md-typeset .admonition.note .admonition__title {
-  color: #3b82f6 !important;
+/* Type colors for left border */
+.md-typeset .admonition.note,
+.md-typeset .admonition.info { border-left-color: #3b82f6 !important; }
+.md-typeset .admonition.tip,
+.md-typeset .admonition.success { border-left-color: #10b981 !important; }
+.md-typeset .admonition.warning { border-left-color: #f59e0b !important; }
+.md-typeset .admonition.danger,
+.md-typeset .admonition.bug { border-left-color: #ef4444 !important; }
+
+/* ===================================================================
+   10. CARDS — Grid cards with subtle border and hover glow
+   =================================================================== */
+
+.grid.cards > ul,
+.grid.cards > ol {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)) !important;
+  gap: 0.8rem !important;
+  list-style: none !important;
+  padding: 0 !important;
+  margin: 1.5rem 0 !important;
 }
 
-/* Tip Type */
-.md-typeset .admonition.tip {
-  border-left-color: #10b981 !important;
-}
-.md-typeset .admonition.tip .admonition__title {
-  color: #10b981 !important;
-}
-
-/* Warning Type */
-.md-typeset .admonition.warning {
-  border-left-color: #f59e0b !important;
-}
-.md-typeset .admonition.warning .admonition__title {
-  color: #f59e0b !important;
+.grid.cards > ul > li,
+.grid.cards > ol > li {
+  background: var(--mint-bg) !important;
+  border: 1px solid var(--mint-border) !important;
+  border-radius: var(--mint-radius-lg) !important;
+  padding: 1.1rem 1.2rem !important;
+  margin: 0 !important;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04) !important;
 }
 
-/* ==========================================================================
-   9. Expandable Details (Raw CSV Export)
-   ========================================================================== */
-
-details {
-  border: 1px solid var(--border-subtle) !important;
-  border-radius: var(--radius-md) !important;
-  background-color: var(--bg-surface) !important;
-  padding: 0.75rem 1.1rem !important;
-  margin: 1.2rem 0 !important;
+.grid.cards > ul > li:hover,
+.grid.cards > ol > li:hover {
+  border-color: var(--mint-brand) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 24px rgba(191,87,0,0.1) !important;
 }
 
-details summary {
-  font-weight: 600 !important;
-  font-size: 0.86rem !important;
-  color: var(--text-main) !important;
-  cursor: pointer !important;
+/* ===================================================================
+   11. BREADCRUMB / PATH
+   =================================================================== */
+
+.md-path {
+  font-size: 0.78rem !important;
+  color: var(--mint-text-tertiary) !important;
 }
 
-/* ==========================================================================
-   10. Footer
-   ========================================================================== */
+.md-path__link {
+  color: var(--mint-text-tertiary) !important;
+}
+
+.md-path__link:hover {
+  color: var(--mint-brand) !important;
+}
+
+/* ===================================================================
+   12. FOOTER
+   =================================================================== */
 
 .md-footer {
-  background-color: var(--bg-app) !important;
-  border-top: 1px solid var(--border-subtle) !important;
+  background: var(--mint-bg) !important;
+  border-top: 1px solid var(--mint-border) !important;
+  box-shadow: none !important;
 }
 
 .md-footer-meta {
-  background-color: var(--bg-app) !important;
+  background: var(--mint-bg) !important;
+}
+
+.md-footer-nav__link {
+  color: var(--mint-text-secondary) !important;
+}
+
+.md-footer-nav__link:hover {
+  color: var(--mint-brand) !important;
+}
+
+/* ===================================================================
+   13. SCROLLBARS
+   =================================================================== */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--mint-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--mint-text-tertiary);
 }

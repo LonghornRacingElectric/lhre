@@ -1,0 +1,68 @@
+{#-
+  Custom header override — Mintlify-style single-row glassmorphic topbar.
+  Replaces Material's default header partial.
+-#}
+{% set class = "md-header" %}
+{% if "navigation.tabs.sticky" in features %}
+  {% set class = class ~ " md-header--shadow md-header--lifted" %}
+{% elif "navigation.tabs" not in features %}
+  {% set class = class ~ " md-header--shadow" %}
+{% endif %}
+<header class="{{ class }} mintlify-header" data-md-component="header">
+  <nav class="md-header__inner mintlify-header__inner" aria-label="{{ lang.t('header') }}">
+    <!-- Logo + Site Name -->
+    <a href="{{ config.extra.homepage | d(nav.homepage.url, true) | url }}"
+       title="{{ config.site_name | e }}"
+       class="md-header__button md-logo mintlify-logo"
+       aria-label="{{ config.site_name }}"
+       data-md-component="logo">
+      {% include "partials/logo.html" %}
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      {% set icon = config.theme.icon.menu or "material/menu" %}
+      {% include ".icons/" ~ icon ~ ".svg" %}
+    </label>
+    <div class="md-header__title mintlify-title" data-md-component="header-title">
+      <span class="md-ellipsis">{{ config.site_name }}</span>
+    </div>
+
+    <!-- Centered Search Pill -->
+    <div class="mintlify-search-area">
+      {% if "material/search" in config.plugins %}
+        {% set search = config.plugins["material/search"] | attr("config") %}
+        {% if search.enabled %}
+          <label class="mintlify-search-pill" for="__search">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <span class="mintlify-search-pill__text">Search...</span>
+            <span class="mintlify-search-pill__kbd">
+              <kbd>Ctrl</kbd><kbd>K</kbd>
+            </span>
+          </label>
+          {% include "partials/search.html" %}
+        {% endif %}
+      {% endif %}
+    </div>
+
+    <!-- Right side: palette toggle + repo -->
+    <div class="mintlify-header__right">
+      {% if config.theme.palette %}
+        {% if not config.theme.palette is mapping %}
+          {% include "partials/palette.html" %}
+        {% endif %}
+      {% endif %}
+      {% if not config.theme.palette is mapping %}
+        {% include "partials/javascripts/palette.html" %}
+      {% endif %}
+      {% if config.repo_url %}
+        <div class="md-header__source">
+          {% include "partials/source.html" %}
+        </div>
+      {% endif %}
+    </div>
+  </nav>
+  {% if "navigation.tabs.sticky" in features %}
+    {% if "navigation.tabs" in features %}
+      {% include "partials/tabs.html" %}
+    {% endif %}
+  {% endif %}
+</header>

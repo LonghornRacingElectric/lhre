@@ -47,6 +47,7 @@ plugins:
 
 theme:
   name: material
+  custom_dir: overrides
   font:
     text: Inter
     code: JetBrains Mono
