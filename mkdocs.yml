@@ -47,33 +47,34 @@ plugins:
 
 theme:
   name: material
-  custom_dir: overrides
   font:
     text: Inter
     code: JetBrains Mono
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: white
+      primary: deep orange
       accent: deep orange
       toggle:
         icon: material/weather-night
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: black
+      primary: deep orange
       accent: deep orange
       toggle:
         icon: material/weather-sunny
         name: Switch to light mode
   icon:
     repo: fontawesome/brands/github
-    logo: material/lightning-bolt
+    logo: material/car-electric
   features:
     - navigation.indexes
     - navigation.instant
     - navigation.instant.progress
     - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
     - navigation.sections
     - navigation.path
     - navigation.top
