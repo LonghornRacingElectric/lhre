@@ -43,3 +43,15 @@ py_binary(
     visibility = ["//visibility:private"],
     deps = ["//lib/spec:ir"],
 )
+
+# Generate CAN Matrix documentation and CSV table:
+#   bazel run //tools/spec:gen_docs
+py_binary(
+    name = "gen_docs",
+    srcs = ["doc_hook.py"],
+    main = "doc_hook.py",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//lib/spec:ir",
+    ],
+)

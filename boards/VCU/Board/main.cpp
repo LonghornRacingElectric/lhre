@@ -11,7 +11,6 @@
 
 #include "main.h"
 
-#include <cstdio>
 #include <cstring>
 
 #include "FreeRTOS.h"
@@ -30,12 +29,13 @@ namespace {
 GPIO_TypeDef* const kStatusLedPort = GPIOA;
 constexpr uint16_t kStatusLedPin = GPIO_PIN_5;
 
-// Debug UART — only compiled once the UART module is enabled, i.e. once the
-// peripheral is added in CubeMX (hal_conf.h is CubeMX-owned and mirrors the
-// .ioc). TODO(vcu): add LPUART1 to VCU.ioc — with per-peripheral file
-// generation on, CubeMX will emit MX_LPUART1_UART_Init() + the hlpuart1
-// handle, and this hand-rolled init can be replaced by those.
-// PA2/PA3 is the ST-LINK virtual COM port on the Nucleo dev board.
+// Debug UART on PA2/PA3, the ST-LINK virtual COM port pins on the Nucleo
+// dev board (tools/monitor's counterpart). HAL_UART_MODULE_ENABLED comes
+// from this board's BUILD.bazel for now: LPUART1 isn't in VCU.ioc yet, so
+// the CubeMX-owned hal_conf.h can't supply it. TODO(vcu): add LPUART1 to
+// VCU.ioc — regeneration then emits MX_LPUART1_UART_Init() + the hlpuart1
+// handle and flips hal_conf.h, replacing this hand-rolled init and the
+// BUILD define.
 void ConfigureGpio() {
   __HAL_RCC_GPIOA_CLK_ENABLE();
 
@@ -74,18 +74,9 @@ void ConfigureDebugUart() {
   if (HAL_UART_Init(&g_debug_uart_handle) != HAL_OK) {
     Error_Handler();
   }
-}
-
-void PrintBootBanner(lhal::Uart& uart) {
-  char line[96];
-  int len =
-      std::snprintf(line, sizeof(line), "\r\nVCU %s (%.12s%s)\r\n",
-                    lhre::kBuildInfo.git_describe, lhre::kBuildInfo.git_sha,
-                    lhre::kBuildInfo.dirty ? "-dirty" : "");
-  if (len > 0) {
-    uart.Write(reinterpret_cast<const uint8_t*>(line), static_cast<size_t>(len),
-               /*timeout_ms=*/100);
-  }
+  // 8-deep RX FIFO: headroom for input bursts between shell polls (the
+  // shell task wakes every App::kShellPollMs, not per byte).
+  HAL_UARTEx_EnableFifoMode(&g_debug_uart_handle);
 }
 #endif  // HAL_UART_MODULE_ENABLED
 
@@ -116,8 +107,7 @@ int main() {
 #ifdef HAL_UART_MODULE_ENABLED
   ConfigureDebugUart();
   static lhal::stm32::Uart debug_uart(&g_debug_uart_handle);
-  PrintBootBanner(debug_uart);
-  peripherals.debug_uart = &debug_uart;
+  peripherals.debug_uart = &debug_uart;  // App's shell prints the banner
 #endif
 
   static vcu::App app(peripherals);

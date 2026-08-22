@@ -9,7 +9,7 @@ Console::Console(lhal::Uart* stream, uint32_t write_timeout_ms)
     : stream_(stream), write_timeout_ms_(write_timeout_ms) {}
 
 void Console::Println(const char* message) {
-  if (stream_ == nullptr) {
+  if (!connected()) {
     return;
   }
   size_t len = std::strlen(message);
@@ -21,7 +21,7 @@ void Console::Println(const char* message) {
 }
 
 void Console::VPrintf(const char* format, va_list args) {
-  if (stream_ == nullptr) {
+  if (!connected()) {
     return;
   }
   // Leave two bytes for the CRLF; vsnprintf's count includes its NUL.

@@ -24,6 +24,10 @@ class Uart {
                             CompletionCallback done, void* context) = 0;
   virtual Status ReadAsync(uint8_t* data, size_t len, CompletionCallback done,
                            void* context) = 0;
+
+  // True while a receiver is listening on the stream. Always true for raw
+  // UART; on USB CDC it reflects enumeration and host port-open (DTR asserted).
+  virtual bool connected() const { return true; }
 };
 
 }  // namespace lhal

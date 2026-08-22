@@ -97,6 +97,20 @@ TEST(Logger, NullStreamIsNoOp) {
   EXPECT_EQ(logger.dropped(), 0u);
 }
 
+TEST(Logger, DisconnectedStreamIsNoOp) {
+  lhal::host::Uart uart;
+  lhal::host::TestClock clock;
+  longhorn::Logger logger(&uart, &clock);
+
+  uart.set_connected(false);
+  EXPECT_FALSE(logger.connected());
+
+  logger.Info("dropped without queuing");
+  EXPECT_FALSE(logger.DrainOne(0));
+  EXPECT_EQ(logger.dropped(), 0u);
+  EXPECT_TRUE(uart.TakeTx().empty());
+}
+
 // --- Scheduler run: keep last, one per process. ---
 
 void ProducerEntry(void* arg) {

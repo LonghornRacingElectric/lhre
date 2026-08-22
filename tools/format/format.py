@@ -20,6 +20,8 @@ EXTENSIONS = ("*.c", "*.h", "*.cc", "*.cpp", "*.hpp")
 EXCLUDES = (
     "boards/*/Core/*",
     "boards/*/Middlewares/*",
+    "boards/*/USB_DEVICE/*",
+    "boards/*/USB_Device/*",
 )
 
 

@@ -4,10 +4,13 @@
 bazel run //tools/spec:editor   # web UI for editing the spec
 bazel run //tools/spec:fmt      # rewrite lib/spec/*.textproto canonically
 bazel run //tools/spec:lock     # regenerate lib/spec/wire.lock
+bazel run //tools/spec:gen_docs # regenerate docs/can-matrix.md
 ```
 
 `fmt` and `lock` are enforced by `//lib/spec:format_check` and
-`//lib/spec:wire_lock_test`, so CI tells you when to run them.
+`//lib/spec:wire_lock_test`, so CI tells you when to run them. The CAN Matrix
+page is automatically generated as an MkDocs pre-build hook or via `gen_docs`.
+
 
 ## Editor
 

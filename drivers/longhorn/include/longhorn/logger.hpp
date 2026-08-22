@@ -10,6 +10,7 @@
 #include "lhal/system.hpp"
 #include "lhal/uart.hpp"
 #include "queue.h"
+#include "semphr.h"
 #include "task.h"
 
 namespace longhorn {
@@ -40,8 +41,11 @@ class Logger {
   static constexpr size_t kQueueLength = 8;
 
   Logger(lhal::Uart* stream, lhal::Clock* clock,
-         uint32_t write_timeout_ms = 100)
-      : stream_(stream), clock_(clock), write_timeout_ms_(write_timeout_ms) {
+         SemaphoreHandle_t mutex = nullptr, uint32_t write_timeout_ms = 100)
+      : stream_(stream),
+        clock_(clock),
+        mutex_(mutex),
+        write_timeout_ms_(write_timeout_ms) {
     queue_ = xQueueCreateStatic(kQueueLength, sizeof(Message), queue_storage_,
                                 &queue_control_);
   }
@@ -92,13 +96,14 @@ class Logger {
   }
 
   void VLog(Level level, const char* format, va_list args) {
-    if (stream_ == nullptr || queue_ == nullptr) {
+    if (stream_ == nullptr || !stream_->connected() || queue_ == nullptr) {
       return;
     }
     Message msg;
-    int prefix_len = std::snprintf(msg.text, kMessageSize - 2, "[%lu] %s ",
-                                   static_cast<unsigned long>(clock_->Millis()),
-                                   LevelTag(level));
+    int prefix_len = std::snprintf(
+        msg.text, kMessageSize - 2, "[%lu] %s ",
+        clock_ != nullptr ? static_cast<unsigned long>(clock_->Millis()) : 0ul,
+        LevelTag(level));
     if (prefix_len < 0 || prefix_len >= static_cast<int>(kMessageSize - 2)) {
       return;
     }
@@ -136,10 +141,23 @@ class Logger {
     if (xQueueReceive(queue_, &msg, max_wait) != pdTRUE) {
       return false;
     }
-    stream_->Write(reinterpret_cast<const uint8_t*>(msg.text),
-                   std::strlen(msg.text), write_timeout_ms_);
+    if (stream_ != nullptr && stream_->connected()) {
+      const bool lock = (mutex_ != nullptr &&
+                         xTaskGetSchedulerState() == taskSCHEDULER_RUNNING);
+      if (lock) {
+        xSemaphoreTake(mutex_, portMAX_DELAY);
+      }
+      stream_->Write(reinterpret_cast<const uint8_t*>(msg.text),
+                     std::strlen(msg.text), write_timeout_ms_);
+      if (lock) {
+        xSemaphoreGive(mutex_);
+      }
+    }
     return true;
   }
+
+  // True when the transport is connected and receiving data.
+  bool connected() const { return stream_ != nullptr && stream_->connected(); }
 
   // Lines discarded because the queue was full. Approximate under
   // concurrent producers.
@@ -175,6 +193,7 @@ class Logger {
 
   lhal::Uart* stream_;
   lhal::Clock* clock_;
+  SemaphoreHandle_t mutex_;
   uint32_t write_timeout_ms_;
 
   QueueHandle_t queue_ = nullptr;

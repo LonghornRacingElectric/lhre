@@ -94,6 +94,18 @@ Two things to know before starting:
   function pointer + context because they may run in ISR context on
   target.
 
+## Logging vs Shell vs Console: how to print in firmware
+
+Three services live in [drivers/longhorn](../drivers/longhorn/README.md) for UART/USB communication:
+
+| Use Case | API | Format |
+| :--- | :--- | :--- |
+| **Diagnostic App / Task Logs** (timing, state transitions, faults) | `longhorn::Logger`<br>`logger.Info(...)`<br>`logger.Error(...)` | `[100] [INFO] Boot complete`<br>*(timestamped, ANSI colored, non-blocking queue)* |
+| **Interactive Slash Commands** (`/state`, `/version`, `/help`) | `longhorn::Shell`<br>`out.Printf(...)`<br>`out.Println(...)` | `state=idle overtemp=0`<br>*(raw, un-prefixed for machine parsing / monitor)* |
+| **Raw Line Streaming** (superloops, simple test fixtures) | `longhorn::Console`<br>`console.Printf(...)` | `raw message\r\n`<br>*(un-prefixed line writer)* |
+
+**Skipping output when disconnected**: `Logger` and `Console` check `stream->connected()` and drop output before formatting (`vsnprintf`) when it is false. Only USB CDC can actually detect this (enumeration plus host port open); a raw UART always reports connected, so its output is always formatted and sent.
+
 ## "My test target isn't found"
 
 In order of likelihood:

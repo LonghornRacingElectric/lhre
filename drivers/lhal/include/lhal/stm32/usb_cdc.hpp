@@ -49,7 +49,7 @@ class UsbCdc final : public lhal::Uart {
 
   // True while the device is enumerated and the host has the port open
   // (DTR asserted) — useful to skip logging when no terminal is attached.
-  bool connected() const;
+  bool connected() const override;
 
   // Escape hatch for anything LHAL doesn't cover.
   USBD_HandleTypeDef* handle() { return handle_; }

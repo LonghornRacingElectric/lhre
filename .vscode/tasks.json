@@ -29,6 +29,60 @@
         "//boards/VCU:openocd"
       ],
       "problemMatcher": []
+    },
+    {
+      "label": "flash-vcu-dfu",
+      "detail": "Flash the VCU over USB DFU",
+      "type": "shell",
+      "command": "bazel",
+      "args": [
+        "run",
+        "//boards/VCU:dfu"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "monitor-vcu",
+      "detail": "Open serial monitor for VCU",
+      "type": "shell",
+      "command": "bazel",
+      "args": [
+        "run",
+        "//tools/monitor"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "flash-and-monitor-vcu",
+      "detail": "Flash the VCU (prompts for ST-Link vs DFU) and open serial monitor",
+      "type": "shell",
+      "command": "bazel",
+      "args": [
+        "run",
+        "//tools/monitor",
+        "--",
+        "--flash",
+        "//boards/VCU:${input:flashMethod-vcu}"
+      ],
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "flashMethod-vcu",
+      "type": "pickString",
+      "description": "Select flash method for VCU",
+      "options": [
+        {
+          "label": "ST-Link (OpenOCD)",
+          "value": "openocd"
+        },
+        {
+          "label": "DFU (USB)",
+          "value": "dfu"
+        }
+      ],
+      "default": "openocd"
     }
   ]
 }

@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include "lhal/host/system.hpp"
 #include "lhal/host/uart.hpp"
 #include "longhorn/console.hpp"
 
@@ -65,6 +66,25 @@ TEST(Console, ConsecutiveCallsEachGetOwnLine) {
   console.Println("one");
   console.Printf("two %c", '!');
   EXPECT_EQ(TakeTxString(uart), "one\r\ntwo !\r\n");
+}
+
+TEST(Console, DisconnectedStreamSkipsWrites) {
+  lhal::host::Uart uart;
+  longhorn::Console console(&uart);
+
+  uart.set_connected(false);
+  EXPECT_FALSE(console.connected());
+
+  console.Println("dropped");
+  console.Printf("dropped %d", 123);
+
+  EXPECT_TRUE(uart.TakeTx().empty());
+
+  // Reconnecting resumes output
+  uart.set_connected(true);
+  EXPECT_TRUE(console.connected());
+  console.Println("connected again");
+  EXPECT_EQ(TakeTxString(uart), "connected again\r\n");
 }
 
 }  // namespace
