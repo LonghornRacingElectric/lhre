@@ -50,7 +50,12 @@ bazel test //lib/spec/...       # validate, format, wire lock, unit tests
 bazel run //tools/spec:editor   # web UI
 bazel run //tools/spec:fmt      # canonical formatting
 bazel run //tools/spec:lock     # regenerate wire.lock
+bazel run //tools/spec:gen_docs # regenerate docs/can-matrix.md
 ```
+
+The full message matrix and signal directory is published at
+[docs/can-matrix.md](../../docs/can-matrix.md) (and auto-generated during doc builds).
+
 
 `//lib/spec:files` is the filegroup generators consume. `//lib/spec:ir`
 is the Python in `ir/`: loader, validator, canonical serializer, and wire

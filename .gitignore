@@ -5,6 +5,8 @@ external/
 .idea
 *.tools*
 .bazelrc.user
+**/__pycache__/
+*.pyc
 
 # mkdocs output (see mkdocs.yml)
 site/
