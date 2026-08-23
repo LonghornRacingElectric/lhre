@@ -4,6 +4,53 @@ repo_url: https://github.com/LonghornRacingElectric/lhre
 repo_name: LonghornRacingElectric/lhre
 edit_uri: edit/main/
 
+nav:
+  - Overview: README.md
+  - CAN Matrix: docs/can-matrix.md
+  - Architecture:
+      - Overview: docs/architecture/README.md
+      - ADR-001 Monorepo: docs/architecture/001-monorepo.md
+      - ADR-002 Bazel: docs/architecture/002-bazel.md
+      - ADR-003 LHAL: docs/architecture/003-lhal.md
+      - ADR-004 Docs Next to Code: docs/architecture/004-docs-next-to-code.md
+      - ADR-008 CAN Spec Pipeline: docs/architecture/008-can-spec-pipeline.md
+      - Build System: docs/build-system.md
+      - Cookbook: docs/cookbook.md
+  - Boards:
+      - Overview: boards/README.md
+      - VCU (Reference): boards/VCU/README.md
+  - Drivers:
+      - Overview: drivers/README.md
+      - LHAL: drivers/lhal/README.md
+      - FreeRTOS: drivers/freertos/README.md
+      - Longhorn Lib: drivers/longhorn/README.md
+      - STM32 Vendor HAL: drivers/stm32/README.md
+      - USB Device: drivers/stm32/usb_device/README.md
+  - Libraries:
+      - Overview: lib/README.md
+      - CAN Spec: lib/spec/README.md
+      - Codegen: lib/codegen/README.md
+      - C++ Codegen: lib/codegen/cpp/README.md
+  - Tools & Debugging:
+      - Overview: tools/README.md
+      - VS Code & Hardware Debug: tools/debug/README.md
+      - Firmware Project Macro: tools/firmware/README.md
+      - Code Formatting: tools/format/README.md
+      - OpenOCD: tools/openocd/README.md
+      - DFU Util: tools/dfu/README.md
+      - CAN Spec Tools: tools/spec/README.md
+      - IDE Setup: tools/ide/README.md
+      - Serial Monitor: tools/monitor/README.md
+  - Other:
+      - Apps: apps/README.md
+      - Platforms: platforms/README.md
+      - Toolchains: toolchains/README.md
+      - Contributing: CONTRIBUTING.md
+      - Agent Instructions: AGENTS.md
+      - Claude Guide: CLAUDE.md
+
+
+
 # Pre-build hook generates the CAN message matrix and signal directory
 hooks:
   - tools/spec/doc_hook.py
