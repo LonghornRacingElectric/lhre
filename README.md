@@ -6,6 +6,43 @@ Longhorn Racing Electric's monorepo: firmware for every ECU on the car, the
 hardware abstraction layer it's built on, and the tooling to build, test, and
 flash it all with Bazel.
 
+<div class="grid cards" markdown>
+
+-   :material-swap-horizontal:{ .lg .middle } **CAN Matrix & Signals**
+
+    ---
+
+    Full CAN ID allocation, message timings, signal bit layouts, and telemetry bindings generated from spec.
+
+    [:octicons-arrow-right-24: Open CAN Matrix](docs/can-matrix.md){ .md-button .md-button--primary }
+
+-   :material-chip:{ .lg .middle } **Boards & Firmware**
+
+    ---
+
+    Per-ECU firmware layout, the VCU reference board, pinouts, and the new-board scaffolder.
+
+    [:octicons-arrow-right-24: Explore Boards](boards/README.md){ .md-button }
+
+-   :material-layers-outline:{ .lg .middle } **LHAL & Drivers**
+
+    ---
+
+    Platform-independent hardware abstraction layer enabling 100% host-testable embedded code.
+
+    [:octicons-arrow-right-24: Read LHAL Guide](drivers/lhal/README.md){ .md-button }
+
+-   :material-bug-outline:{ .lg .middle } **Hardware Debugging**
+
+    ---
+
+    Zero-setup VS Code debugging with ST-Link, hermetic gdb, OpenOCD, and SVD peripheral viewer.
+
+    [:octicons-arrow-right-24: Debugging Guide](tools/debug/README.md){ .md-button }
+
+</div>
+
+
 ## Layout
 
 | Directory  | What lives there |
