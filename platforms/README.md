@@ -22,3 +22,13 @@ board to its family's platform automatically (see
 3. Map the family in `FAMILY_PLATFORMS`
    (`//tools/firmware:firmware_project.bzl`) and package its HAL in
    [//drivers/stm32](../drivers/stm32/README.md).
+
+## Not a firmware platform: `host_no_remote_exec`
+
+`//platforms:host_no_remote_exec` is the auto-detected host platform plus a
+`no-remote-exec` property. `.bazelrc` sets it as `--host_platform` wherever
+remote execution is on, so actions that resolve to the *host* exec platform
+(e.g. rules_rust building host-targeted crates and their bootstrap tools)
+run locally instead of being shipped to the Linux executors, where host
+(macOS/Windows) binaries can't run. C++ never needs this — hermetic LLVM
+resolves to the Linux exec platform and cross-compiles.

@@ -7,6 +7,8 @@ bazel_dep(name = "aspect_bazel_lib", version = "2.19.3")
 bazel_dep(name = "toolchains_arm_gnu", version = "1.1.0")
 bazel_dep(name = "protobuf", version = "35.1")
 bazel_dep(name = "platforms", version = "1.1.0")
+bazel_dep(name = "rules_rust", version = "0.73.0")
+bazel_dep(name = "rules_shell", version = "0.6.1")
 bazel_dep(name = "toolchains_buildbuddy", version = "0.0.4")
 
 bazel_dep(name = "googletest", version = "1.17.0.bcr.2", dev_dependency = True)
@@ -131,3 +133,46 @@ git_override(
     patches = ["//patches:hedron_windows_spawn_guard.patch"],
     patch_strip = 1,
 )
+
+# Prebuilt protoc binaries. Building @protobuf//:protoc from source drags in
+# all of abseil (~800 C++ actions), and protobuf's own prebuilt-protoc
+# machinery is broken in every BCR version available today — see
+# tools/protoc/protoc.bzl. //tools/protoc is the per-exec-platform alias.
+protoc_prebuilt = use_extension("//tools/protoc:protoc.bzl", "protoc")
+use_repo(
+    protoc_prebuilt,
+    "protoc_linux_aarch_64",
+    "protoc_linux_x86_64",
+    "protoc_osx_aarch_64",
+    "protoc_osx_x86_64",
+    "protoc_win64",
+)
+
+# Hermetic Rust toolchain for the host-side telemetry daemons (apps/BEVO).
+# The extra Linux target triples cover the remote test executors (x86_64,
+# glibc) and the on-car Raspberry Pi (aarch64, musl → fully static binaries,
+# so deploys can't hit glibc version skew on the Pi — see //platforms:pi).
+# Std libs for unused triples never fetch.
+rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
+rust.toolchain(
+    edition = "2021",
+    extra_target_triples = [
+        "x86_64-unknown-linux-gnu",
+        "aarch64-unknown-linux-musl",
+    ],
+    versions = ["1.85.0"],
+)
+use_repo(rust, "rust_toolchains")
+
+register_toolchains("@rust_toolchains//:all")
+
+# Third-party crates, resolved from apps/BEVO's Cargo manifest + committed
+# Cargo.lock (single source of truth shared with cargo/rust-analyzer). After
+# editing Cargo.toml: CARGO_BAZEL_REPIN=1 bazel build //apps/BEVO/... repins.
+crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
+crate.from_cargo(
+    name = "crates",
+    cargo_lockfile = "//apps/BEVO:Cargo.lock",
+    manifests = ["//apps/BEVO:Cargo.toml"],
+)
+use_repo(crate, "crates")

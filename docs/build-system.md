@@ -158,6 +158,13 @@ source builds from happening at all:
    binaries protobuf registers take effect (gated on its
    `prefer_prebuilt_protoc` flag, default true). Without it Bazel uses
    the legacy wiring and compiles from source anyway.
+   Caveat: that flag's machinery turned out to be broken in 36.0-rc1 (stale
+   artifact hashes in its integrity file) and disabled in 36.0-rc2, so tools
+   that need protoc directly (prost codegen in `apps/BEVO`) use
+   `//tools/protoc` — our own correctly-pinned prebuilt, kept in version
+   lockstep with this bazel_dep. When bumping protobuf, bump
+   `tools/protoc/protoc.bzl` in the same change (and retire it if a stable
+   36.x fixes the upstream pins).
 2. `//toolchains/proto` registers a Python `proto_lang_toolchain` whose
    runtime is the pip `protobuf` wheel. The default
    `@protobuf//python:protobuf_python` is what drags in the
