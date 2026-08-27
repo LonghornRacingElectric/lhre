@@ -14,6 +14,7 @@ nav:
       - ADR-003 LHAL: docs/architecture/003-lhal.md
       - ADR-004 Docs Next to Code: docs/architecture/004-docs-next-to-code.md
       - ADR-008 CAN Spec Pipeline: docs/architecture/008-can-spec-pipeline.md
+      - ADR-009 Autonomy Outside Bazel: docs/architecture/009-autonomy-outside-bazel.md
       - Build System: docs/build-system.md
       - Cookbook: docs/cookbook.md
   - Boards:
