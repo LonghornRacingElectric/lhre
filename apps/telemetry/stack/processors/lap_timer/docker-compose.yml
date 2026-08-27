@@ -1,0 +1,23 @@
+services:
+  db_processor:
+    build:
+      context: ../../..
+      dockerfile: ./stack/processors/lap_timer/Dockerfile
+    image: lap_timer
+    container_name: lap_timer_processor
+    restart: unless-stopped
+    env_file:
+      - path: ../../../.env
+        required: true
+    environment:
+      PYTHONUNBUFFERED: 1
+      IN_DOCKER: 1
+      LOCALHOST_IP: 'host.docker.internal'
+    volumes:
+      - ../../../net_configs.json:/app/net_configs.json
+    networks:
+      - telemetry_network
+
+networks:
+  telemetry_network:
+    external: true

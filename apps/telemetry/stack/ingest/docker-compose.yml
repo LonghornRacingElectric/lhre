@@ -1,0 +1,99 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto
+    container_name: mosquitto
+    restart: unless-stopped
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+    networks:
+      - telemetry_network
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+      - "8080:8080"
+
+  ingest:
+    build:
+      context: ../..
+      dockerfile: ./stack/ingest/Dockerfile
+    image: telemetry_backend
+    container_name: ingest
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+      - db
+    env_file:
+      - path: ../../.env
+        required: true
+    environment:
+      PYTHONUNBUFFERED: 1   # Allows output in Docker Compose console
+      IN_DOCKER: 1          # Custom env variable used for IP resolution
+      SERVER_TARGET: 'LOCAL'
+      DB_CONN_TYPE: 6
+      LOGLEVEL: 'DEBUG'
+      LOG_BASE_DIR: /app/logs
+    volumes:
+      - ../../.env:/.env
+      - ../../net_configs.json:/app/net_configs.json
+      - ../../logs:/app/logs
+    networks:
+      - telemetry_network
+
+  db:
+    image: postgres:17
+    container_name: db
+    restart: unless-stopped
+    shm_size: 2gb
+    env_file:
+      - path: ../../.env
+        required: true
+    volumes:
+      - telemetry_db:/var/lib/postgresql/data
+      - ./nightwatch_db_init.sql:/app/nightwatch_db_init.sql
+      - ./angelique_db_init.sql:/app/angelique_db_init.sql
+      - ./orion_db_init.sql:/app/orion_db_init.sql
+      - ./init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh
+    networks:
+      - telemetry_network
+    ports:
+      - "5432:5432"
+    tmpfs:
+      - /tmp
+      - /run/postgresql
+
+  grafana:
+    image: grafana/grafana-oss:11.3.0
+    container_name: grafana
+    restart: unless-stopped
+    env_file:
+      - path: ../../.env
+        required: true
+    environment:
+      GF_DASHBOARDS_MIN_REFRESH_INTERVAL: '250ms'     # Sets min refresh rate of grafana dashboard
+      GF_SERVER_ROOT_URL: 'https://lhrelectric.org/grafana/'  # Adjust if using a different host or port
+      GF_SERVER_SERVE_FROM_SUB_PATH: 'true'
+      GF_SERVER_PROTOCOL: 'http'
+      GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: 'lhre-kafka-datasource'
+    volumes:
+      - grafana_storage:/var/lib/grafana
+      - ./grafana-provisioning:/etc/grafana/provisioning/datasources:ro
+      - ./grafana-dashboard-provisioning:/etc/grafana/provisioning/dashboards:ro
+      - ../../analysis/database/dashboards:/var/lib/grafana/dashboards:ro
+      - ./grafana-kafka-datasource/dist:/var/lib/grafana/plugins/lhre-kafka-datasource:ro
+    networks:
+      - telemetry_network
+    ports:
+      - "3000:3000"
+
+volumes:
+  grafana_storage:
+    external: true
+  telemetry_db:
+    external: true
+  # named volume used when bind-mount is not desired
+  logs:
+    driver: local
+
+networks:
+  telemetry_network:
+    external: true

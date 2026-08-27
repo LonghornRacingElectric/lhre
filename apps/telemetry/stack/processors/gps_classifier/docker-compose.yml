@@ -1,0 +1,22 @@
+services:
+  db_processor:
+    build:
+      context: ../../..
+      dockerfile: ./stack/processors/gps_classifier/Dockerfile
+    image: gps_classifier
+    container_name: gps_classifier_processor
+    restart: unless-stopped
+    env_file:
+      - path: ../../../.env
+        required: true
+    environment:
+      PYTHONUNBUFFERED: 1
+      IN_DOCKER: 1
+    volumes:
+      - ../../../net_configs.json:/app/net_configs.json
+    networks:
+      - telemetry_network
+
+networks:
+  telemetry_network:
+    external: true
