@@ -9,7 +9,7 @@ py_library(
     name = "analysis_lib",
     srcs = glob(["**/*.py"]),
     # This allows imports relative to the workspace root
-    imports = ["."],
+    imports = [".", "..", "../.."],
     visibility = ["//visibility:public"],
 )
 
@@ -20,9 +20,9 @@ compile_pip_requirements(
     name = "telemetry_requirements",
     src = "requirements.txt",
     generate_hashes = False,
-    python_version = "3.11",
+    python_version = "3.12",
     requirements_darwin = "requirements_lock_darwin.txt",
     requirements_txt = "requirements_lock.txt",
     requirements_windows = "requirements_lock_windows.txt",
-    tags = ["requirements"],
+    tags = ["manual", "requirements"],
 )

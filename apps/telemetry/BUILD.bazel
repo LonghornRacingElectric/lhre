@@ -16,7 +16,7 @@
 load("@rules_python//python:defs.bzl", "py_library")
 load("@rules_oci//oci:defs.bzl", "oci_push")
 
-package(default_visibility = ["//telemetry:__subpackages__"])
+package(default_visibility = ["//apps/telemetry:__subpackages__"])
 
 # Export the network configuration file for all telemetry services
 exports_files([
@@ -36,6 +36,7 @@ filegroup(
 # Shared Python library containing common utilities used across telemetry
 py_library(
     name = "telemetry_common",
+    imports = [".", ".."],
     srcs = ["__init__.py"],
     visibility = ["//visibility:public"],
 )
@@ -57,10 +58,10 @@ filegroup(
 filegroup(
     name = "telemetry_images",
     srcs = [
-        "//telemetry/stack/ingest:ingest_image",
-        "//telemetry/stack/processors/gps_classifier:gps_classifier_image",
-        "//telemetry/stack/processors/kafka_base:kafka_base_image",
-        "//telemetry/stack/processors/lap_timer:lap_timer_image",
+        "//apps/telemetry/stack/ingest:ingest_image",
+        "//apps/telemetry/stack/processors/gps_classifier:gps_classifier_image",
+        "//apps/telemetry/stack/processors/kafka_base:kafka_base_image",
+        "//apps/telemetry/stack/processors/lap_timer:lap_timer_image",
     ],
     visibility = ["//visibility:public"],
 )
@@ -69,10 +70,10 @@ filegroup(
 filegroup(
     name = "telemetry_tarballs",
     srcs = [
-        "//telemetry/stack/ingest:ingest_tarball",
-        "//telemetry/stack/processors/gps_classifier:gps_classifier_tarball",
-        "//telemetry/stack/processors/kafka_base:kafka_base_tarball",
-        "//telemetry/stack/processors/lap_timer:lap_timer_tarball",
+        "//apps/telemetry/stack/ingest:ingest_tarball",
+        "//apps/telemetry/stack/processors/gps_classifier:gps_classifier_tarball",
+        "//apps/telemetry/stack/processors/kafka_base:kafka_base_tarball",
+        "//apps/telemetry/stack/processors/lap_timer:lap_timer_tarball",
     ],
     visibility = ["//visibility:public"],
 )
@@ -88,10 +89,10 @@ filegroup(
     srcs = [
         ":telemetry_images",
         ":config_files",
-        "//telemetry/analysis:analysis_lib",
-        "//telemetry/stack:stack_lib",
-        "//telemetry/stack/ingest:db_init_scripts",
-        "//telemetry/stack/kafka:kafka_configs",
+        "//apps/telemetry/analysis:analysis_lib",
+        "//apps/telemetry/stack:stack_lib",
+        "//apps/telemetry/stack/ingest:db_init_scripts",
+        "//apps/telemetry/stack/kafka:kafka_configs",
     ],
     visibility = ["//visibility:public"],
 )
@@ -104,8 +105,8 @@ filegroup(
 test_suite(
     name = "unit_tests",
     tests = [
-        "//telemetry/analysis/tests:analysis_tests",
-        "//telemetry/stack/tests:protobuf_test",
+        "//apps/telemetry/analysis/tests:analysis_tests",
+        "//apps/telemetry/stack/tests:protobuf_test",
     ],
     visibility = ["//visibility:public"],
 )
@@ -113,14 +114,14 @@ test_suite(
 # Integration tests (requires Docker containers to be running)
 test_suite(
     name = "integration_tests",
-    tags = ["integration"],
+    tags = ["manual", "integration"],
     tests = [
-        "//telemetry/stack/tests:bevo_db_integration_test",
-        "//telemetry/stack/tests:data_flow_test",
-        "//telemetry/stack/tests:db_connectivity_test",
-        "//telemetry/stack/tests:kafka_bridge_seed_test",
-        "//telemetry/stack/tests:kafka_connectivity_test",
-        "//telemetry/stack/tests:mqtt_connectivity_test",
+        "//apps/telemetry/stack/tests:bevo_db_integration_test",
+        "//apps/telemetry/stack/tests:data_flow_test",
+        "//apps/telemetry/stack/tests:db_connectivity_test",
+        "//apps/telemetry/stack/tests:kafka_bridge_seed_test",
+        "//apps/telemetry/stack/tests:kafka_connectivity_test",
+        "//apps/telemetry/stack/tests:mqtt_connectivity_test",
     ],
     visibility = ["//visibility:public"],
 )
@@ -130,7 +131,7 @@ test_suite(
     name = "full_integration_tests",
     tags = ["integration", "docker", "manual"],
     tests = [
-        "//telemetry/stack/tests:stack_integration_test",
+        "//apps/telemetry/stack/tests:stack_integration_test",
     ],
     visibility = ["//visibility:public"],
 )
@@ -153,11 +154,11 @@ test_suite(
 filegroup(
     name = "compose_files",
     srcs = [
-        "//telemetry/stack/ingest:docker-compose.yml",
-        "//telemetry/stack/kafka:docker-compose.yml",
-        "//telemetry/stack/processors/gps_classifier:docker-compose.yml",
-        "//telemetry/stack/processors/kafka_base:docker-compose.yml",
-        "//telemetry/stack/processors/lap_timer:docker-compose.yml",
+        "//apps/telemetry/stack/ingest:docker-compose.yml",
+        "//apps/telemetry/stack/kafka:docker-compose.yml",
+        "//apps/telemetry/stack/processors/gps_classifier:docker-compose.yml",
+        "//apps/telemetry/stack/processors/kafka_base:docker-compose.yml",
+        "//apps/telemetry/stack/processors/lap_timer:docker-compose.yml",
     ],
     visibility = ["//visibility:public"],
 )
@@ -169,11 +170,12 @@ filegroup(
 # Complete telemetry Python library (all modules)
 py_library(
     name = "telemetry_lib",
+    imports = [".", ".."],
     visibility = ["//visibility:public"],
     deps = [
         ":telemetry_common",
-        "//telemetry/analysis:analysis_lib",
-        "//telemetry/stack:stack_lib",
+        "//apps/telemetry/analysis:analysis_lib",
+        "//apps/telemetry/stack:stack_lib",
     ],
     target_compatible_with = ["@platforms//os:linux"],
 )

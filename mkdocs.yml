@@ -13,8 +13,12 @@ nav:
       - ADR-002 Bazel: docs/architecture/002-bazel.md
       - ADR-003 LHAL: docs/architecture/003-lhal.md
       - ADR-004 Docs Next to Code: docs/architecture/004-docs-next-to-code.md
+      - ADR-005 Telemetry in Monorepo: docs/architecture/005-telemetry-in-monorepo.md
+      - ADR-006 Pi Binary Deploys: docs/architecture/006-pi-binary-deploys.md
+      - ADR-007 CAN Schema in Repo: docs/architecture/007-can-schema-in-repo.md
       - ADR-008 CAN Spec Pipeline: docs/architecture/008-can-spec-pipeline.md
       - ADR-009 Autonomy Outside Bazel: docs/architecture/009-autonomy-outside-bazel.md
+      - ADR-010 Telemetry Stack in Bazel: docs/architecture/010-telemetry-stack-in-bazel.md
       - Build System: docs/build-system.md
       - Cookbook: docs/cookbook.md
   - Boards:

@@ -9,6 +9,8 @@ bazel_dep(name = "protobuf", version = "35.1")
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "rules_rust", version = "0.73.0")
 bazel_dep(name = "rules_shell", version = "0.6.1")
+bazel_dep(name = "rules_oci", version = "2.3.0")
+bazel_dep(name = "rules_pkg", version = "1.3.0")
 bazel_dep(name = "toolchains_buildbuddy", version = "0.0.4")
 
 bazel_dep(name = "googletest", version = "1.17.0.bcr.2", dev_dependency = True)
@@ -91,6 +93,24 @@ pip.parse(
     ],
 )
 use_repo(pip, "lhre_pypi")
+
+# apps/telemetry: one hub for the analysis/viewer side (per-OS locks, the
+# webtool is developed on laptops) and one for the server stack (Linux only,
+# it ships as container images). The locks were compiled on 3.11 and are
+# served under 3.12 as-is: every pin has 3.12 wheels or is pure Python.
+pip.parse(
+    hub_name = "telemetry_reqs",
+    python_version = "3.12",
+    requirements_darwin = "//apps/telemetry/analysis:requirements_lock_darwin.txt",
+    requirements_lock = "//apps/telemetry/analysis:requirements_lock.txt",
+    requirements_windows = "//apps/telemetry/analysis:requirements_lock_windows.txt",
+)
+pip.parse(
+    hub_name = "telemetry_stack_reqs",
+    python_version = "3.12",
+    requirements_lock = "//apps/telemetry/stack/ingest:requirements_lock.txt",
+)
+use_repo(pip, "telemetry_reqs", "telemetry_stack_reqs")
 
 stm32g4_deps = use_extension("//drivers/stm32/stm32g4:deps.bzl", "stm32g4_deps")
 use_repo(
@@ -176,3 +196,17 @@ crate.from_cargo(
     manifests = ["//apps/BEVO:Cargo.toml"],
 )
 use_repo(crate, "crates")
+
+# Base image for the telemetry server stack's container images
+# (apps/telemetry, Linux only). Pinned by digest: python:3.11.4-slim.
+oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
+oci.pull(
+    name = "python311",
+    digest = "sha256:17d62d681d9ecef20aae6c6605e9cf83b0ba3dc247013e2f43e1b5a045ad4901",
+    image = "docker.io/library/python",
+    platforms = [
+        "linux/amd64",
+        "linux/arm64",
+    ],
+)
+use_repo(oci, "python311", "python311_linux_amd64", "python311_linux_arm64")

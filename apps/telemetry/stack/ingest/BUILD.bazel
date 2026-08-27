@@ -8,7 +8,7 @@ load("@rules_oci//oci:defs.bzl", "oci_image", "oci_push", "oci_load")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
 
-package(default_visibility = ["//telemetry:__subpackages__"])
+package(default_visibility = ["//apps/telemetry:__subpackages__"])
 
 # ---------------------------------------------------------------------------
 # Protobuf generation (Longhorn CAN -> Python pb2)
@@ -19,14 +19,15 @@ package(default_visibility = ["//telemetry:__subpackages__"])
 # - bazel-bin/telemetry/stack/ingest/protobuf/can_packets_pb2.py
 #
 # Input chain:
-# - drivers/longhorn-lib/config/can_packets.csv -> //drivers/longhorn-lib:can_proto
+# - drivers/longhorn-lib/config/can_packets.csv -> //apps/BEVO/schema:can_packets.proto
 #   -> this genrule
 # ---------------------------------------------------------------------------
 
 genrule(
     name = "can_packets_pb2",
+    target_compatible_with = ["@platforms//os:linux"],
     srcs = [
-        "//drivers/longhorn-lib:can_proto",
+        "//apps/BEVO/schema:can_packets.proto",
     ],
     outs = [
         "protobuf/can_packets_pb2.py",
@@ -37,15 +38,15 @@ set -euo pipefail
 mkdir -p "$(RULEDIR)/protobuf"
 
 # Protoc writes <basename>_pb2.py based on the input filename.
-cp "$(location //drivers/longhorn-lib:can_proto)" "$(RULEDIR)/can_packets.proto"
+cp "$(location //apps/BEVO/schema:can_packets.proto)" "$(RULEDIR)/can_packets.proto"
 
-$(location @protobuf//:protoc) \\
+$(location //tools/protoc) \\
   --proto_path="$(RULEDIR)" \\
   --python_out="$(RULEDIR)/protobuf" \\
   "$(RULEDIR)/can_packets.proto"
 """,
     tools = [
-        "@protobuf//:protoc",
+        "//tools/protoc",
     ],
 )
 
@@ -54,9 +55,9 @@ compile_pip_requirements(
     name = "stack_requirements",
     src = "requirements.txt",
     requirements_txt = "requirements_lock.txt",
-    python_version = "3.11",
+    python_version = "3.12",
     generate_hashes = False,
-    tags = ["requirements"],
+    tags = ["manual", "requirements"],
 )
 
 # Export configuration files for Docker compose and testing
@@ -103,6 +104,8 @@ filegroup(
 # Python library for the MQTT handler
 py_library(
     name = "ingest_lib",
+    target_compatible_with = ["@platforms//os:linux"],
+    imports = ["../..", "../../.."],
     srcs = [
         "__init__.py",
         "mqtt_handler.py",
@@ -110,11 +113,11 @@ py_library(
     data = [
         ":car_configs",
         ":protobuf_files",
-        "//telemetry:config_files",
+        "//apps/telemetry:config_files",
     ],
     visibility = ["//visibility:public"],
     deps = [
-        "//telemetry/analysis:analysis_lib",
+        "//apps/telemetry/analysis:analysis_lib",
         requirement("kafka-python"),
         requirement("numpy"),
         requirement("paho-mqtt"),
@@ -129,6 +132,8 @@ py_library(
 # Python binary for the ingest service
 py_binary(
     name = "ingest_binary",
+    target_compatible_with = ["@platforms//os:linux"],
+    imports = ["../..", "../../.."],
     srcs = ["mqtt_handler.py"],
     main = "mqtt_handler.py",
     visibility = ["//visibility:public"],
@@ -141,6 +146,8 @@ py_binary(
 # Use: bazel run //telemetry/stack/ingest:update_can_packets_pb2
 py_binary(
     name = "update_can_packets_pb2",
+    target_compatible_with = ["@platforms//os:linux"],
+    imports = ["../..", "../../.."],
     srcs = [
         "update_can_packets_pb2.py",
     ],
@@ -167,7 +174,7 @@ pkg_tar(
 pkg_tar(
     name = "analysis_deps_tar",
     srcs = [
-        "//telemetry/analysis:analysis_lib",
+        "//apps/telemetry/analysis:analysis_lib",
     ],
     package_dir = "/app/analysis",
 )
@@ -176,7 +183,7 @@ pkg_tar(
 pkg_tar(
     name = "config_tar",
     srcs = [
-        "//telemetry:config_files",
+        "//apps/telemetry:config_files",
     ],
     package_dir = "/app",
 )

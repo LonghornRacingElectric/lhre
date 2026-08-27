@@ -4,11 +4,12 @@
 
 load("@rules_python//python:defs.bzl", "py_library")
 
-package(default_visibility = ["//telemetry/stack:__subpackages__"])
+package(default_visibility = ["//apps/telemetry/stack:__subpackages__"])
 
 # Shared Python library for stack services
 py_library(
     name = "stack_common",
+    imports = ["..", "../.."],
     srcs = ["__init__.py"],
     visibility = ["//visibility:public"],
     target_compatible_with = ["@platforms//os:linux"],
@@ -24,10 +25,10 @@ exports_files([
 filegroup(
     name = "stack_images",
     srcs = [
-        "//telemetry/stack/ingest:ingest_image",
-        "//telemetry/stack/processors/gps_classifier:gps_classifier_image",
-        "//telemetry/stack/processors/kafka_base:kafka_base_image",
-        "//telemetry/stack/processors/lap_timer:lap_timer_image",
+        "//apps/telemetry/stack/ingest:ingest_image",
+        "//apps/telemetry/stack/processors/gps_classifier:gps_classifier_image",
+        "//apps/telemetry/stack/processors/kafka_base:kafka_base_image",
+        "//apps/telemetry/stack/processors/lap_timer:lap_timer_image",
     ],
     visibility = ["//visibility:public"],
 )
@@ -35,12 +36,13 @@ filegroup(
 # Aggregate target for all stack Python libraries
 py_library(
     name = "stack_lib",
+    imports = ["..", "../.."],
     visibility = ["//visibility:public"],
     deps = [
-        "//telemetry/stack/ingest:ingest_lib",
-        "//telemetry/stack/processors/gps_classifier:gps_classifier_lib",
-        "//telemetry/stack/processors/kafka_base:kafka_base_lib",
-        "//telemetry/stack/processors/lap_timer:lap_timer_lib",
+        "//apps/telemetry/stack/ingest:ingest_lib",
+        "//apps/telemetry/stack/processors/gps_classifier:gps_classifier_lib",
+        "//apps/telemetry/stack/processors/kafka_base:kafka_base_lib",
+        "//apps/telemetry/stack/processors/lap_timer:lap_timer_lib",
     ],
     target_compatible_with = ["@platforms//os:linux"],
 )

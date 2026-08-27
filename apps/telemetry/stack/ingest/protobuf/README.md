@@ -6,7 +6,7 @@ There are two common workflows for the generated CAN schema bindings:
 
 Compiles the Longhorn-generated CAN schema into a Python `_pb2.py` module as a normal Bazel output:
 
-- `bazel build //telemetry/stack/ingest:can_packets_pb2`
+- `bazel build //apps/telemetry/stack/ingest:can_packets_pb2`
 
 Output path:
 
@@ -18,7 +18,7 @@ This target depends on `//drivers/longhorn-lib:can_proto`, so changing `drivers/
 
 Materializes the generated module into this source folder:
 
-- `bazel run //telemetry/stack/ingest:update_can_packets_pb2`
+- `bazel run //apps/telemetry/stack/ingest:update_can_packets_pb2`
 
 Output path:
 

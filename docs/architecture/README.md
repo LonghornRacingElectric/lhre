@@ -18,6 +18,7 @@ three years after everyone who made the decision graduated.
 | 005–007 | Reserved by the in-flight `bevo-migration` branch (telemetry in monorepo, Pi deploys, CAN schema) | Pending merge |
 | [008](008-can-spec-pipeline.md) | One CAN spec in textproto; all derived artifacts generated | Accepted |
 | [009](009-autonomy-outside-bazel.md) | Autonomy (ROS 2) builds with colcon, outside Bazel | Accepted |
+| [010](010-telemetry-stack-in-bazel.md) | Telemetry server stack builds in Bazel, its tests run beside Docker | Accepted |
 
 ## ADRs vs. READMEs
 

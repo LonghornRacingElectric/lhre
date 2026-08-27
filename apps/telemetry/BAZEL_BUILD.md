@@ -13,27 +13,27 @@ The telemetry system consists of the following components on the `telemetry_netw
 - **Grafana**: Visualization dashboard
 
 ### Custom Services (Built with Bazel)
-- **Ingest Service** (`//telemetry/stack/ingest`): 
+- **Ingest Service** (`//apps/telemetry/stack/ingest`): 
   - Subscribes to MQTT topics
   - Decodes protobuf/pickle/base64 payloads
   - Writes to PostgreSQL
   - Forwards to Kafka `sensor_data` topic
 
-- **GPS Classifier** (`//telemetry/stack/processors/gps_classifier`):
+- **GPS Classifier** (`//apps/telemetry/stack/processors/gps_classifier`):
   - Consumes from MQTT
   - Classifies driving patterns (turns, acceleration)
   - Writes classifications to PostgreSQL
 
-- **Lap Timer** (`//telemetry/stack/processors/lap_timer`):
+- **Lap Timer** (`//apps/telemetry/stack/processors/lap_timer`):
   - Tracks lap times using GPS gate detection
   - Writes lap data to PostgreSQL
 
-- **Kafka Base** (`//telemetry/stack/processors/kafka_base`):
+- **Kafka Base** (`//apps/telemetry/stack/processors/kafka_base`):
   - Base Kafka consumer template
   - Demonstrates Kafka → processing flow
 
 ### Non-Docker Components
-- **Analysis Library** (`//telemetry/analysis`):
+- **Analysis Library** (`//apps/telemetry/analysis`):
   - Database utilities (`sql_utils/`)
   - Data visualization tools
   - Testing utilities (`paho_testing.py`)
@@ -42,21 +42,21 @@ The telemetry system consists of the following components on the `telemetry_netw
 
 ### Build All Docker Images
 ```bash
-bazel build //telemetry:telemetry_images
+bazel build //apps/telemetry:telemetry_images
 ```
 
 ### Build and Load Images to Local Docker
 ```bash
 # Build tarball and load to Docker
-bazel run //telemetry/stack/ingest:ingest_tarball
-bazel run //telemetry/stack/processors/gps_classifier:gps_classifier_tarball
-bazel run //telemetry/stack/processors/lap_timer:lap_timer_tarball
-bazel run //telemetry/stack/processors/kafka_base:kafka_base_tarball
+bazel run //apps/telemetry/stack/ingest:ingest_tarball
+bazel run //apps/telemetry/stack/processors/gps_classifier:gps_classifier_tarball
+bazel run //apps/telemetry/stack/processors/lap_timer:lap_timer_tarball
+bazel run //apps/telemetry/stack/processors/kafka_base:kafka_base_tarball
 ```
 
 ### Run Unit Tests (No Docker Required)
 ```bash
-bazel test //telemetry:unit_tests
+bazel test //apps/telemetry:unit_tests
 ```
 
 ### Run Integration Tests (Requires Docker Containers Running)
@@ -66,12 +66,12 @@ cd telemetry/stack/ingest && docker-compose up -d
 cd telemetry/stack/kafka && docker-compose up -d
 
 # Then run integration tests
-bazel test //telemetry:integration_tests --test_tag_filters=integration
+bazel test //apps/telemetry:integration_tests --test_tag_filters=integration
 ```
 
 ### Run Full Integration Test with Docker Lifecycle
 ```bash
-bazel test //telemetry:full_integration_tests --test_tag_filters=manual
+bazel test //apps/telemetry:full_integration_tests --test_tag_filters=manual
 ```
 
 ## Target Reference
@@ -80,30 +80,30 @@ bazel test //telemetry:full_integration_tests --test_tag_filters=manual
 
 | Target | Description |
 |--------|-------------|
-| `//telemetry:telemetry_images` | All Docker images |
-| `//telemetry:telemetry_tarballs` | All Docker tarballs for local loading |
-| `//telemetry:telemetry_all` | Everything (Docker + non-Docker) |
-| `//telemetry:telemetry_lib` | All Python libraries |
-| `//telemetry:config_files` | Configuration files |
-| `//telemetry:compose_files` | All docker-compose files |
+| `//apps/telemetry:telemetry_images` | All Docker images |
+| `//apps/telemetry:telemetry_tarballs` | All Docker tarballs for local loading |
+| `//apps/telemetry:telemetry_all` | Everything (Docker + non-Docker) |
+| `//apps/telemetry:telemetry_lib` | All Python libraries |
+| `//apps/telemetry:config_files` | Configuration files |
+| `//apps/telemetry:compose_files` | All docker-compose files |
 
 ### Individual Service Targets
 
 | Service | Image Target | Tarball Target | Push Target |
 |---------|--------------|----------------|-------------|
-| Ingest | `//telemetry/stack/ingest:ingest_image` | `:ingest_tarball` | `:ingest_push` |
-| GPS Classifier | `//telemetry/stack/processors/gps_classifier:gps_classifier_image` | `:gps_classifier_tarball` | `:gps_classifier_push` |
-| Lap Timer | `//telemetry/stack/processors/lap_timer:lap_timer_image` | `:lap_timer_tarball` | `:lap_timer_push` |
-| Kafka Base | `//telemetry/stack/processors/kafka_base:kafka_base_image` | `:kafka_base_tarball` | `:kafka_base_push` |
+| Ingest | `//apps/telemetry/stack/ingest:ingest_image` | `:ingest_tarball` | `:ingest_push` |
+| GPS Classifier | `//apps/telemetry/stack/processors/gps_classifier:gps_classifier_image` | `:gps_classifier_tarball` | `:gps_classifier_push` |
+| Lap Timer | `//apps/telemetry/stack/processors/lap_timer:lap_timer_image` | `:lap_timer_tarball` | `:lap_timer_push` |
+| Kafka Base | `//apps/telemetry/stack/processors/kafka_base:kafka_base_image` | `:kafka_base_tarball` | `:kafka_base_push` |
 
 ### Test Targets
 
 | Target | Description | Docker Required |
 |--------|-------------|-----------------|
-| `//telemetry:unit_tests` | Unit tests (protobuf, analysis) | No |
-| `//telemetry:integration_tests` | Connectivity & data flow tests | Yes |
-| `//telemetry:full_integration_tests` | Full stack with Docker lifecycle | Yes (managed) |
-| `//telemetry:telemetry_tests` | All tests | Yes |
+| `//apps/telemetry:unit_tests` | Unit tests (protobuf, analysis) | No |
+| `//apps/telemetry:integration_tests` | Connectivity & data flow tests | Yes |
+| `//apps/telemetry:full_integration_tests` | Full stack with Docker lifecycle | Yes (managed) |
+| `//apps/telemetry:telemetry_tests` | All tests | Yes |
 
 ## Data Flow Testing
 
@@ -176,14 +176,14 @@ For CI/CD pipelines:
 
 ```bash
 # Build all images
-bazel build //telemetry:telemetry_images
+bazel build //apps/telemetry:telemetry_images
 
 # Run unit tests (fast, no Docker)
-bazel test //telemetry:unit_tests
+bazel test //apps/telemetry:unit_tests
 
 # Push images to registry
-bazel run //telemetry/stack/ingest:ingest_push
-bazel run //telemetry/stack/processors/gps_classifier:gps_classifier_push
+bazel run //apps/telemetry/stack/ingest:ingest_push
+bazel run //apps/telemetry/stack/processors/gps_classifier:gps_classifier_push
 # etc.
 ```
 
@@ -204,3 +204,13 @@ Check logs:
 docker logs ingest
 docker logs kafka
 ```
+
+## In the lhre monorepo
+
+This tree moved from `lhre-2026/telemtry` in August 2026 (ADR-005). What changed:
+
+- Labels are `//apps/telemetry/...`. The pip hubs are `@telemetry_reqs` (analysis, per-OS locks) and `@telemetry_stack_reqs` (server stack); both serve the committed locks (compiled on 3.11) under the repo's 3.12 interpreter; re-lock on 3.12 when convenient.
+- `protoc` for the generated `can_packets_pb2.py` comes from `//tools/protoc`, and the proto itself from `//apps/BEVO/schema`.
+- Container images (`oci_image`) and the server-stack libraries are Linux only; `bazel build //...` on Windows skips them.
+- Every test that needs Kafka, Postgres or MQTT is tagged `manual` and `local`, so presubmit's `bazel test //...` does not run it. They run through `.github/workflows/telemetry.yml` on every PR touching this tree (Docker Compose on the runner, credentials from repo secrets) or locally with `bazel test //apps/telemetry:integration_tests` after `stack/server_devtool.sh`. The `unit_tests` suite runs in presubmit.
+- `compile_pip_requirements` targets are `manual` too; run `bazel run //apps/telemetry/analysis:telemetry_requirements.update` (and the stack equivalents) after editing a `requirements.txt`.

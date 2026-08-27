@@ -4,9 +4,10 @@ load("@rules_python//python:defs.bzl", "py_test")
 
 py_test(
     name = "analysis_tests",
+    imports = ["../..", "../../.."],
     srcs = ["sample_analysis_test.py"],
     deps = [
-        "//telemetry/analysis:analysis_lib",
+        "//apps/telemetry/analysis:analysis_lib",
     ],
     main = "sample_analysis_test.py",
     tags = ["manual"],

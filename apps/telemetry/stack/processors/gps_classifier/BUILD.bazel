@@ -8,16 +8,16 @@ load("@rules_oci//oci:defs.bzl", "oci_image", "oci_push", "oci_load")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@telemetry_reqs//:requirements.bzl", "requirement")
 
-package(default_visibility = ["//telemetry:__subpackages__"])
+package(default_visibility = ["//apps/telemetry:__subpackages__"])
 
 # Compile pip requirements
 compile_pip_requirements(
     name = "gps_classifier_requirements",
     src = "requirements.txt",
     requirements_txt = "requirements_lock.txt",
-    python_version = "3.11",
+    python_version = "3.12",
     generate_hashes = False,
-    tags = ["requirements"],
+    tags = ["manual", "requirements"],
 )
 
 # Export configuration files
@@ -30,6 +30,7 @@ exports_files([
 # Python library for the GPS classifier
 py_library(
     name = "gps_classifier_lib",
+    imports = ["../../..", "../../../.."],
     srcs = [
         "__init__.py",
         "gps_classifier.py",
@@ -37,8 +38,8 @@ py_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
-        "//telemetry/analysis:analysis_lib",
-        "//telemetry/stack/ingest:ingest_lib",
+        "//apps/telemetry/analysis:analysis_lib",
+        "//apps/telemetry/stack/ingest:ingest_lib",
         requirement("kafka-python"),
         requirement("matplotlib"),
         requirement("numpy"),
@@ -56,6 +57,7 @@ py_library(
 # Python binary for the GPS classifier
 py_binary(
     name = "gps_classifier_binary",
+    imports = ["../../..", "../../../.."],
     srcs = ["main.py"],
     main = "main.py",
     visibility = ["//visibility:public"],
@@ -81,8 +83,8 @@ pkg_tar(
 pkg_tar(
     name = "ingest_deps_tar",
     srcs = [
-        "//telemetry/stack/ingest:ingest_lib",
-        "//telemetry/stack/ingest:protobuf_files",
+        "//apps/telemetry/stack/ingest:ingest_lib",
+        "//apps/telemetry/stack/ingest:protobuf_files",
     ],
     package_dir = "/app/stack/ingest",
 )
@@ -91,7 +93,7 @@ pkg_tar(
 pkg_tar(
     name = "analysis_deps_tar",
     srcs = [
-        "//telemetry/analysis:analysis_lib",
+        "//apps/telemetry/analysis:analysis_lib",
     ],
     package_dir = "/app/analysis",
 )
@@ -100,7 +102,7 @@ pkg_tar(
 pkg_tar(
     name = "config_tar",
     srcs = [
-        "//telemetry:config_files",
+        "//apps/telemetry:config_files",
     ],
     package_dir = "/app",
 )

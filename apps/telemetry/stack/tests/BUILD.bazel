@@ -6,16 +6,17 @@ load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
 load("@telemetry_reqs//:requirements.bzl", "requirement")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
-package(default_visibility = ["//telemetry:__subpackages__"])
+package(default_visibility = ["//apps/telemetry:__subpackages__"])
 
 # Common test utilities library
 py_library(
     name = "test_utils",
+    imports = ["../..", "../../.."],
     srcs = ["test_utils.py"],
     visibility = ["//visibility:public"],
     deps = [
-        "//telemetry/analysis:analysis_lib",
-        "//telemetry/stack/ingest:ingest_lib",
+        "//apps/telemetry/analysis:analysis_lib",
+        "//apps/telemetry/stack/ingest:ingest_lib",
         requirement("kafka-python"),
         requirement("numpy"),
         requirement("paho-mqtt"),
@@ -32,6 +33,7 @@ py_library(
 # Stack test client - tests container communication
 py_binary(
     name = "stack_test_client",
+    imports = ["../..", "../../.."],
     srcs = ["test_stack_client.py"],
     main = "test_stack_client.py",
     deps = [
@@ -60,92 +62,99 @@ py_binary(
 # MQTT connectivity test
 py_test(
     name = "mqtt_connectivity_test",
+    imports = ["../..", "../../.."],
     srcs = ["test_mqtt_connectivity.py"],
     main = "test_mqtt_connectivity.py",
-    data = ["//telemetry:env_files"],
+    data = ["//apps/telemetry:env_files"],
     deps = [
         ":test_utils",
         requirement("paho-mqtt"),
         requirement("python-dotenv"),
     ],
-    tags = ["integration", "docker", "local"],
+    tags = ["manual", "integration", "docker", "local"],
     target_compatible_with = ["@platforms//os:linux"],
 )
 
 # Kafka connectivity test
 py_test(
     name = "kafka_connectivity_test",
+    imports = ["../..", "../../.."],
     srcs = ["test_kafka_connectivity.py"],
     main = "test_kafka_connectivity.py",
-    data = ["//telemetry:env_files"],
+    data = ["//apps/telemetry:env_files"],
     deps = [
         ":test_utils",
         requirement("kafka-python"),
         requirement("python-dotenv"),
     ],
-    tags = ["integration", "docker", "local"],
+    tags = ["manual", "integration", "docker", "local"],
     target_compatible_with = ["@platforms//os:linux"],
 )
 
 # Kafka bridge seed test
 py_test(
     name = "kafka_bridge_seed_test",
+    imports = ["../..", "../../.."],
     srcs = ["test_kafka_bridge_seed.py"],
     main = "test_kafka_bridge_seed.py",
-    data = ["//telemetry:env_files"],
+    data = ["//apps/telemetry:env_files"],
     deps = [
         ":test_utils",
         requirement("kafka-python"),
         requirement("python-dotenv"),
     ],
-    tags = ["integration", "docker", "local"],
+    tags = ["manual", "integration", "docker", "local"],
     target_compatible_with = ["@platforms//os:linux"],
 )
 
 # Database connectivity test
 py_test(
     name = "db_connectivity_test",
+    imports = ["../..", "../../.."],
     srcs = ["test_db_connectivity.py"],
     main = "test_db_connectivity.py",
-    data = ["//telemetry:env_files"],
+    data = ["//apps/telemetry:env_files"],
     deps = [
         ":test_utils",
-        "//telemetry/analysis:analysis_lib",
+        "//apps/telemetry/analysis:analysis_lib",
         requirement("psycopg2-binary"),
         requirement("SQLAlchemy"),
         requirement("python-dotenv"),
     ],
-    tags = ["integration", "docker", "local"],
+    tags = ["manual", "integration", "docker", "local"],
     target_compatible_with = ["@platforms//os:linux"],
 )
 
 # BEVO handshake + database model query integration test
 py_test(
     name = "bevo_db_integration_test",
+    target_compatible_with = ["@platforms//os:linux"],
+    imports = ["../..", "../../.."],
     srcs = ["test_bevo_db_integration.py"],
     main = "test_bevo_db_integration.py",
-    data = ["//telemetry:env_files"],
+    data = ["//apps/telemetry:env_files"],
     deps = [
         ":test_utils",
-        "//telemetry/analysis:analysis_lib",
+        "//apps/telemetry/analysis:analysis_lib",
         requirement("paho-mqtt"),
         requirement("psycopg2-binary"),
         requirement("python-dotenv"),
         requirement("SQLAlchemy"),
     ],
-    tags = ["integration", "docker", "local"],
+    tags = ["manual", "integration", "docker", "local"],
 )
 
 # End-to-end data flow test (MQTT -> Ingest -> Kafka -> DB)
 py_test(
     name = "data_flow_test",
+    imports = ["../..", "../../.."],
     srcs = ["test_data_flow.py"],
     main = "test_data_flow.py",
-    data = ["//telemetry:env_files"],
+    data = ["//apps/telemetry:env_files"],
     deps = [
         ":test_utils",
-        "//telemetry/analysis:analysis_lib",
-        "//telemetry/stack/ingest:ingest_lib",
+        "//apps/telemetry/analysis:analysis_lib",
+        "//apps/telemetry/stack/ingest:ingest_lib",
         requirement("kafka-python"),
         requirement("paho-mqtt"),
         requirement("protobuf"),
@@ -153,20 +162,21 @@ py_test(
         requirement("python-dotenv"),
         requirement("SQLAlchemy"),
     ],
-    tags = ["integration", "docker", "e2e", "local"],
+    tags = ["manual", "integration", "docker", "e2e", "local"],
     target_compatible_with = ["@platforms//os:linux"],
 )
 
 # Protobuf serialization test (tests paho_testing.py patterns)
 py_test(
     name = "protobuf_test",
+    imports = ["../..", "../../.."],
     srcs = ["test_protobuf.py"],
     main = "test_protobuf.py",
-    data = ["//telemetry:env_files"],
+    data = ["//apps/telemetry:env_files"],
     deps = [
         ":test_utils",
-        "//telemetry/analysis:analysis_lib",
-        "//telemetry/stack/ingest:ingest_lib",
+        "//apps/telemetry/analysis:analysis_lib",
+        "//apps/telemetry/stack/ingest:ingest_lib",
         requirement("numpy"),
         requirement("protobuf"),
         requirement("python-dotenv"),
@@ -187,13 +197,13 @@ sh_test(
     srcs = ["run_integration_test.sh"],
     data = [
         ":stack_test_client",
-        "//telemetry/stack/ingest:docker-compose.yml",
-        "//telemetry/stack/kafka:docker-compose.yml",
-        "//telemetry/stack/kafka:kafka_bridge_context",
-        "//telemetry/stack/processors/gps_classifier:docker-compose.yml",
-        "//telemetry/stack/processors/kafka_base:docker-compose.yml",
-        "//telemetry/stack/processors/lap_timer:docker-compose.yml",
-        "//telemetry:config_files",
+        "//apps/telemetry/stack/ingest:docker-compose.yml",
+        "//apps/telemetry/stack/kafka:docker-compose.yml",
+        "//apps/telemetry/stack/kafka:kafka_bridge_context",
+        "//apps/telemetry/stack/processors/gps_classifier:docker-compose.yml",
+        "//apps/telemetry/stack/processors/kafka_base:docker-compose.yml",
+        "//apps/telemetry/stack/processors/lap_timer:docker-compose.yml",
+        "//apps/telemetry:config_files",
     ],
     tags = ["integration", "docker", "manual", "local"],
     target_compatible_with = ["@platforms//os:linux"],
@@ -202,7 +212,7 @@ sh_test(
 # Test suite for all integration tests (requires Docker to be running)
 test_suite(
     name = "integration_tests",
-    tags = ["integration", "local"],
+    tags = ["manual", "integration", "local"],
     tests = [
         ":bevo_db_integration_test",
         ":data_flow_test",
