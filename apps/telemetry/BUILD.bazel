@@ -139,6 +139,7 @@ test_suite(
 # All telemetry tests (unit + integration)
 test_suite(
     name = "telemetry_tests",
+    tags = ["manual"],  # aggregates the integration suite; presubmit runs :unit_tests via //...
     tests = [
         ":integration_tests",
         ":unit_tests",
