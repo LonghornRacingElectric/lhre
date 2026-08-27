@@ -4,7 +4,7 @@ kafka-python==2.2.15
 numpy==2.0.1
 paho-mqtt==1.6.1
 pandas==2.2.2
-protobuf==6.33.0
+protobuf==7.35.1
 psycopg2-binary==2.9.9
 python-dateutil==2.9.0.post0
 python-dotenv==1.1.1

@@ -18,7 +18,7 @@ paho-mqtt==1.6.1
     # via -r telemetry/stack/ingest/requirements.txt
 pandas==2.2.2
     # via -r telemetry/stack/ingest/requirements.txt
-protobuf==6.33.0
+protobuf==7.35.1
     # via -r telemetry/stack/ingest/requirements.txt
 psycopg2-binary==2.9.9
     # via -r telemetry/stack/ingest/requirements.txt

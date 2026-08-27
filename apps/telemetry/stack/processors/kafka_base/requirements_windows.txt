@@ -31,7 +31,7 @@ pandas==2.2.2
     # via -r telemetry/stack/processors/kafka_base/requirements.txt
 pillow==12.1.0
     # via matplotlib
-protobuf==6.33.0
+protobuf==7.35.1
     # via -r telemetry/stack/processors/kafka_base/requirements.txt
 psycopg==3.2.12
     # via -r telemetry/stack/processors/kafka_base/requirements.txt

@@ -29,7 +29,7 @@ pandas==2.2.2
     # via -r telemetry/stack/processors/lap_timer/requirements.txt
 pillow==12.1.0
     # via matplotlib
-protobuf==6.33.0
+protobuf==7.35.1
     # via -r telemetry/stack/processors/lap_timer/requirements.txt
 psycopg2-binary==2.9.9
     # via -r telemetry/stack/processors/lap_timer/requirements.txt
