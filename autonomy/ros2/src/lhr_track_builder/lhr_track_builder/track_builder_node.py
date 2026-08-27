@@ -11,8 +11,7 @@ import numpy as np
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
-from scipy.spatial import Delaunay
-from scipy.spatial.qhull import QhullError
+from scipy.spatial import Delaunay, QhullError
 from std_msgs.msg import ColorRGBA, Header
 from visualization_msgs.msg import Marker, MarkerArray
 
