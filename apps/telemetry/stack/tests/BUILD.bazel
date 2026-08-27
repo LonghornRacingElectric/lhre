@@ -237,6 +237,7 @@ test_suite(
 # All telemetry stack tests
 test_suite(
     name = "all_tests",
+    tags = ["manual"],  # includes the Docker-backed suite; see //apps/telemetry:unit_tests for presubmit
     tests = [
         ":integration_tests",
         ":unit_tests",
