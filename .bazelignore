@@ -6,3 +6,7 @@ bazel-lhre
 site
 .mkdocs-build
 autonomy
+# Imported with history on telem-port; leaves the graph as the Bazel
+# integration lands (apps/BEVO needs rules_rust, apps/telemetry rules_oci).
+apps/BEVO
+apps/telemetry
