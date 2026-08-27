@@ -5,6 +5,15 @@ load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
 package(default_visibility = ["//apps/BEVO:__subpackages__"])
 
+# rules_rust on Windows wants the MSVC target triple while our hermetic clang
+# targets MinGW, so nothing Rust-shaped builds there: the Windows presubmit
+# skips these targets and everything that depends on them. Build BEVO on
+# Linux or macOS, or let the Linux CI job do it.
+NOT_WINDOWS = select({
+    "@platforms//os:windows": ["@platforms//:incompatible"],
+    "//conditions:default": [],
+})
+
 exports_files([
     "Cargo.toml",
     "Cargo.lock",
@@ -34,6 +43,7 @@ cargo_build_script(
         "//apps/BEVO/schema:can_packets.proto",
     ],
     edition = "2021",
+    target_compatible_with = NOT_WINDOWS,
     tools = ["//tools/protoc"],
     deps = [
         "@crates//:prost",
@@ -50,6 +60,7 @@ rust_library(
         "lib.rs",
     ],
     edition = "2021",
+    target_compatible_with = NOT_WINDOWS,
     deps = [
         ":sensor_proto_build",
         "@crates//:prost",
@@ -72,6 +83,7 @@ platform_transition_filegroup(
         "//apps/BEVO/loggerd",
         "//apps/BEVO/publishd",
     ],
+    target_compatible_with = NOT_WINDOWS,
     target_platform = "//platforms:pi",
 )
 
@@ -106,18 +118,12 @@ genrule(
         tar czf $@ -C $$STAGE .
         rm -rf $$STAGE
     """,
-    target_compatible_with = select({
-        "@platforms//os:windows": ["@platforms//:incompatible"],
-        "//conditions:default": [],
-    }),
+    target_compatible_with = NOT_WINDOWS,
 )
 
 sh_binary(
     name = "deploy",
     srcs = ["deploy_pi.sh"],
     data = [":pi_bundle"],
-    target_compatible_with = select({
-        "@platforms//os:windows": ["@platforms//:incompatible"],
-        "//conditions:default": [],
-    }),
+    target_compatible_with = NOT_WINDOWS,
 )

@@ -38,6 +38,10 @@ iteration. After changing dependencies in `Cargo.toml`, repin with
 `CARGO_BAZEL_REPIN=1 bazel build //apps/BEVO/...` and commit both lockfiles
 (`Cargo.lock` and `MODULE.bazel.lock`).
 
+On Windows every Rust target here is skipped (rules_rust expects the MSVC
+triple, our hermetic clang is MinGW); `bazel build //...` still passes,
+it just builds nothing from BEVO. Use Linux, macOS, or the Linux CI job.
+
 ## Deploying to the Pi
 
 The repo never goes on the Pi — deploys ship binaries:
