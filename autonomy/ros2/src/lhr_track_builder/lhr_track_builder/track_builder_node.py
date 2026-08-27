@@ -4,17 +4,15 @@
 import math
 from typing import List, Tuple
 
+from builtin_interfaces.msg import Time
+from geometry_msgs.msg import Point, PoseStamped
+from nav_msgs.msg import Odometry, Path
 import numpy as np
-from scipy.spatial import Delaunay
-from scipy.spatial.qhull import QhullError
-
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
-
-from builtin_interfaces.msg import Time
-from geometry_msgs.msg import PoseStamped, Point
-from nav_msgs.msg import Odometry, Path
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from scipy.spatial import Delaunay
+from scipy.spatial.qhull import QhullError
 from std_msgs.msg import ColorRGBA, Header
 from visualization_msgs.msg import Marker, MarkerArray
 
@@ -144,7 +142,8 @@ class TrackBuilder(Node):
     # Centerline computation
     # ------------------------------------------------------------------
     def _compute_midpoints(self) -> List[Tuple[float, float]]:
-        """Pair cones and return midpoints.
+        """
+        Pair cones and return midpoints.
 
         Strategy 'index': match left ID ``i`` with right ID ``10000 + i``.
         Strategy 'nearest': pair each left cone with its nearest right cone.
@@ -170,7 +169,8 @@ class TrackBuilder(Node):
         return midpoints
 
     def _pair_nearest(self) -> List[Tuple[float, float]]:
-        """Pair each left cone with the nearest unpaired right cone.
+        """
+        Pair each left cone with the nearest unpaired right cone.
 
         After pairing, midpoints are chained into path-sequential order
         using a greedy nearest-neighbor walk starting from the point
@@ -214,7 +214,8 @@ class TrackBuilder(Node):
         return midpoints
 
     def _pair_boundary(self) -> List[Tuple[float, float]]:
-        """Pair cones across track boundaries using Delaunay triangulation.
+        """
+        Pair cones across track boundaries using Delaunay triangulation.
 
         Finds natural geometric neighbors via Delaunay, then filters
         edges to those approximately track-width apart.  Each surviving
@@ -267,15 +268,16 @@ class TrackBuilder(Node):
     def _chain_path_from_vehicle(
         self, points: List[Tuple[float, float]],
     ) -> List[Tuple[float, float]]:
-        """Chain midpoints starting from the nearest to the vehicle,
-        oriented in the vehicle's heading direction."""
+        """
+        Chain midpoints starting from the nearest to the vehicle.
 
+        The chain is oriented in the vehicle's heading direction.
+        """
         # Find the midpoint closest to the vehicle
         vx, vy = self._veh_x, self._veh_y
         start_idx = min(
             range(len(points)),
-            key=lambda i: (points[i][0] - vx) ** 2
-                          + (points[i][1] - vy) ** 2)
+            key=lambda i: (points[i][0] - vx) ** 2 + (points[i][1] - vy) ** 2)
 
         ordered = self._chain_path(points, start_idx)
 
@@ -308,8 +310,7 @@ class TrackBuilder(Node):
             lx, ly = ordered[-1]
             best_j = min(
                 remaining,
-                key=lambda j: (points[j][0] - lx) ** 2
-                              + (points[j][1] - ly) ** 2)
+                key=lambda j: (points[j][0] - lx) ** 2 + (points[j][1] - ly) ** 2)
             ordered.append(points[best_j])
             remaining.remove(best_j)
 

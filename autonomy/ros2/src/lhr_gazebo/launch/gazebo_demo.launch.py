@@ -1,4 +1,5 @@
-"""Launch the FSAE autonomy stack with Gazebo Harmonic physics simulation.
+"""
+Launch the FSAE autonomy stack with Gazebo Harmonic physics simulation.
 
 Replaces lhr_sim_kinematic with Gazebo for physics and odometry.
 Perception is selectable: 'sim' (trackgen + sensor_sim) or 'lidar' (LiDAR).
@@ -23,16 +24,13 @@ from launch.actions import (
     OpaqueFunction,
     SetEnvironmentVariable,
 )
-from launch.conditions import IfCondition, UnlessCondition
-from launch.substitutions import (
-    LaunchConfiguration,
-    PythonExpression,
-)
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
 def _find_world(context: LaunchContext):
-    """Resolve the world SDF path from track_style and seed.
+    """
+    Resolve the world SDF path from track_style and seed.
 
     Search order:
       1. Explicit ``world`` argument (if the user overrode it)
@@ -76,9 +74,12 @@ def _find_world(context: LaunchContext):
 
 
 def _launch_setup(context: LaunchContext):
-    """Build all launch actions — called via OpaqueFunction so we can
-    resolve the world path from track_style + seed at launch time."""
+    """
+    Build all launch actions.
 
+    Called via OpaqueFunction so we can resolve the world path from
+    track_style + seed at launch time.
+    """
     world_path = _find_world(context)
     if not world_path:
         raise RuntimeError(

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Adapter: AckermannDriveStamped -> individual joint commands for Gazebo.
+"""
+Adapter: AckermannDriveStamped -> individual joint commands for Gazebo.
 
 Publishes:
   - 2x Float64 for steering joint positions (Ackermann-corrected angles)
@@ -8,9 +9,9 @@ Publishes:
 
 import math
 
+from ackermann_msgs.msg import AckermannDriveStamped
 import rclpy
 from rclpy.node import Node
-from ackermann_msgs.msg import AckermannDriveStamped
 from std_msgs.msg import Float64
 
 
@@ -73,7 +74,8 @@ class JointCmdAdapter(Node):
     # ------------------------------------------------------------------
     @classmethod
     def _ackermann_angles(cls, steer_center: float):
-        """Return (left_angle, right_angle) using Ackermann geometry.
+        """
+        Return (left_angle, right_angle) using Ackermann geometry.
 
         Positive steer = turn left.  When turning left the left wheel is
         the inner wheel (turns more) and the right is outer (turns less).
@@ -93,7 +95,8 @@ class JointCmdAdapter(Node):
     # ------------------------------------------------------------------
     @classmethod
     def _wheel_velocities(cls, speed: float, steer_center: float):
-        """Return (fl, fr, rl, rr) angular velocities in rad/s.
+        """
+        Return (fl, fr, rl, rr) angular velocities in rad/s.
 
         Accounts for different turn radii at each wheel.
         """

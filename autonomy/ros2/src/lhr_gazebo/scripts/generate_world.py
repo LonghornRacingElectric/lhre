@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Generate a Gazebo world SDF from the same track generator used by lhr_trackgen.
+"""
+Generate a Gazebo world SDF from the same track generator used by lhr_trackgen.
 
 Usage:
     python3 generate_world.py --seed 1 --output worlds/autocross_seed1.sdf
@@ -81,7 +82,6 @@ def generate_world_sdf(
     model_dir: str = '',
 ) -> str:
     """Build a complete Gazebo world SDF string."""
-
     # Auto-compute spawn from track geometry if not explicitly set
     if vehicle_x is None or vehicle_y is None or vehicle_yaw is None:
         sx, sy, syaw = _compute_spawn(left_cones, right_cones)

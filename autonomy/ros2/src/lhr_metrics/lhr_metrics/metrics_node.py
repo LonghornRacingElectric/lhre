@@ -7,10 +7,9 @@ import os
 import time
 from typing import List, Tuple
 
+from nav_msgs.msg import Odometry, Path
 import rclpy
 from rclpy.node import Node
-
-from nav_msgs.msg import Odometry, Path
 from std_msgs.msg import Bool
 
 
@@ -201,7 +200,7 @@ class MetricsNode(Node):
         self.get_logger().info(f'CSV row appended to {self._csv_path}')
 
     def on_shutdown(self):
-        """Called on Ctrl+C — always dump a summary."""
+        """Dump a summary on shutdown (Ctrl+C)."""
         if self._samples > 0:
             self._print_summary()
             self._write_csv()

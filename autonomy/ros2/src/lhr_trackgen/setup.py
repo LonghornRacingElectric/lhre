@@ -24,7 +24,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-		'publish_cones = lhr_trackgen.publish_cones:main',
+            'publish_cones = lhr_trackgen.publish_cones:main',
         ],
     },
 )

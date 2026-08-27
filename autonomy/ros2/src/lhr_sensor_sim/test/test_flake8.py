@@ -1,8 +1,3 @@
-# Copyright 2025 TODO
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-
 from ament_flake8.main import main_with_errors
 import pytest
 
