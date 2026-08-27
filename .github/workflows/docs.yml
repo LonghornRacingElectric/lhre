@@ -35,6 +35,14 @@ jobs:
   deploy:
     if: github.event_name == 'push'
     needs: build
+    # Pages accepts one deployment at a time. Without this, a second
+    # push to main while a deploy is still running fails with "in
+    # progress deployment" instead of waiting (three merges in ten
+    # minutes did exactly that on 2026-08-27). Never cancel a running
+    # deploy; a newer pending one replaces an older pending one.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     permissions:
       pages: write
