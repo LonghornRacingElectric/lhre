@@ -17,6 +17,8 @@
   <exec_depend>ackermann_msgs</exec_depend>
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>ros2launch</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
   <exec_depend>lhr_track_builder</exec_depend>
   <exec_depend>lhr_control</exec_depend>
   <exec_depend>lhr_metrics</exec_depend>
