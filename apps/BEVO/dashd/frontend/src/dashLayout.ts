@@ -1,5 +1,5 @@
 // SHARED with the website editor — source of truth:
-// telemtry/analysis/database/viewer_tool/src/lib/dash/dashLayout.ts
+// telemetry/analysis/database/viewer_tool/src/lib/dash/dashLayout.ts
 // Shared schema for a website-authored dash LAP-CARD layout.
 //
 // The strategist designs the driver's lap-card screen in the website editor;

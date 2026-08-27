@@ -1,4 +1,4 @@
-import prisma from '../src/lib/prisma/telemtry';
+import prisma from '../src/lib/prisma/telemetry';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 

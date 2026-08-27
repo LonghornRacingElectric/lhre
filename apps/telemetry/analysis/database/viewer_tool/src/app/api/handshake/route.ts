@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import prismaTelemtry from "@/lib/prisma/telemtry";
+import prismaTelemetry from "@/lib/prisma/telemetry";
 import {
   findLatestPacketId,
   normalizeCar,
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     let car = normalizeCar(searchParams.get("car"));
 
     if (!car) {
-      const latestDay = await prismaTelemtry.drive_day.findFirst({
+      const latestDay = await prismaTelemetry.drive_day.findFirst({
         orderBy: { day_id: "desc" },
         select: {
           car_id: true,

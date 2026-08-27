@@ -1,4 +1,4 @@
-module github.com/LonghornRacingElectric/lhre-2026/telemtry/stack/kafka
+module github.com/LonghornRacingElectric/lhre-2026/telemetry/stack/kafka
 
 go 1.21
 

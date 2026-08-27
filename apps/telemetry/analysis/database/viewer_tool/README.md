@@ -52,12 +52,12 @@ Generate Prisma clients:
 
 ```bash
 npm run prisma-auth-generate
-npm run prisma-telemtry-generate
+npm run prisma-telemetry-generate
 npm run prisma-orion-generate
 npm run prisma-angelique-generate
 ```
 
-> Note: `prisma/orion.prisma` still includes optional-list fields (`Float[]?`) that Prisma 6.x rejects. `prisma/telemtry.prisma` has been aligned for Prisma 6.x generation.
+> Note: `prisma/orion.prisma` still includes optional-list fields (`Float[]?`) that Prisma 6.x rejects. `prisma/telemetry.prisma` has been aligned for Prisma 6.x generation.
 
 Generate protobuf TS stubs (optional helper scripts):
 

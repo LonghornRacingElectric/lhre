@@ -25,7 +25,7 @@ its data shown on the driver's dashboard in real time.
 ### Endurance pacing signals
 
 `targetPower` and `lapTrigger` are published by the **Dash** tab on the
-trackside-live page (`telemtry/analysis/database/viewer_tool`) over the broker's
+trackside-live page (`telemetry/analysis/database/viewer_tool`) over the broker's
 websockets listener (port `8080`). They drive on-dash endurance pacing — the
 dash integrates CAN power locally and compares it to the budget, so only these
 two control values come off-car:

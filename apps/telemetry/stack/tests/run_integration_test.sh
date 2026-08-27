@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# telemtry/stack/tests/run_integration_test.sh
+# telemetry/stack/tests/run_integration_test.sh
 #
 # Integration test runner for the telemetry stack.
 # This script manages the Docker container lifecycle and runs integration tests.
 #
 # Usage:
-#   bazel test //telemtry/stack/tests:stack_integration_test
+#   bazel test //telemetry/stack/tests:stack_integration_test
 #   # or directly:
 #   ./run_integration_test.sh
 
@@ -14,14 +14,14 @@ set -e
 
 # --- Configuration ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TELEMTRY_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
+TELEMETRY_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
-# Docker compose file paths (relative to telemtry directory)
-INGEST_COMPOSE="$TELEMTRY_DIR/stack/ingest/docker-compose.yml"
-KAFKA_COMPOSE="$TELEMTRY_DIR/stack/kafka/docker-compose.yml"
-GPS_COMPOSE="$TELEMTRY_DIR/stack/processors/gps_classifier/docker-compose.yml"
-LAP_TIMER_COMPOSE="$TELEMTRY_DIR/stack/processors/lap_timer/docker-compose.yml"
-KAFKA_BASE_COMPOSE="$TELEMTRY_DIR/stack/processors/kafka_base/docker-compose.yml"
+# Docker compose file paths (relative to telemetry directory)
+INGEST_COMPOSE="$TELEMETRY_DIR/stack/ingest/docker-compose.yml"
+KAFKA_COMPOSE="$TELEMETRY_DIR/stack/kafka/docker-compose.yml"
+GPS_COMPOSE="$TELEMETRY_DIR/stack/processors/gps_classifier/docker-compose.yml"
+LAP_TIMER_COMPOSE="$TELEMETRY_DIR/stack/processors/lap_timer/docker-compose.yml"
+KAFKA_BASE_COMPOSE="$TELEMETRY_DIR/stack/processors/kafka_base/docker-compose.yml"
 
 # Test client
 TEST_CLIENT="$SCRIPT_DIR/stack_test_client"

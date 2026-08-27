@@ -7,7 +7,7 @@ Validates:
 2. Presence and movement of key live-viewer widget topics.
 3. Payload table coverage against protobuf schema (sensor_data decode path).
 
-Run with telemtry/.venv active while stack + viewer are running.
+Run with telemetry/.venv active while stack + viewer are running.
 """
 
 from __future__ import annotations

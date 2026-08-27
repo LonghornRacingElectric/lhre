@@ -20,7 +20,7 @@ Use this folder as the baseline for new Kafka processors that consume `sensor_da
 
 ## Quick start for a new processor
 
-1. Copy this directory to `telemtry/stack/processors/<your_processor>`.
+1. Copy this directory to `telemetry/stack/processors/<your_processor>`.
 2. Rename image/container names in `docker-compose.yml`.
 3. Update `main.py`:
    - input/output topic names
@@ -29,7 +29,7 @@ Use this folder as the baseline for new Kafka processors that consume `sensor_da
 4. Build and run:
 
 ```bash
-cd telemtry/stack/processors/<your_processor>
+cd telemetry/stack/processors/<your_processor>
 docker compose up -d --build
 docker logs -f <your_container_name>
 ```

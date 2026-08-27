@@ -62,21 +62,21 @@ Run Orion and Angelique simultaneously through telemetry processors and the view
 
 ## Reference files touched by the rollout
 - Processors:
-  - `telemtry/stack/processors/gg_plot/main.py`
-  - `telemtry/stack/processors/kafka_base/main.py`
-  - `telemtry/stack/processors/track_mapper/main.py`
+  - `telemetry/stack/processors/gg_plot/main.py`
+  - `telemetry/stack/processors/kafka_base/main.py`
+  - `telemetry/stack/processors/track_mapper/main.py`
 - Viewer backend:
-  - `telemtry/analysis/database/viewer_tool/src/lib/kafka/kafkaConsumer.ts`
-  - `telemtry/analysis/database/viewer_tool/src/app/api/kafka-stream/route.ts`
-  - `telemtry/analysis/database/viewer_tool/kafka.routes.json`
-  - `telemtry/analysis/database/viewer_tool/src/hooks/useKafkaStream.ts`
+  - `telemetry/analysis/database/viewer_tool/src/lib/kafka/kafkaConsumer.ts`
+  - `telemetry/analysis/database/viewer_tool/src/app/api/kafka-stream/route.ts`
+  - `telemetry/analysis/database/viewer_tool/kafka.routes.json`
+  - `telemetry/analysis/database/viewer_tool/src/hooks/useKafkaStream.ts`
 - Viewer UI/state:
-  - `telemtry/analysis/database/viewer_tool/src/lib/car.ts`
-  - `telemtry/analysis/database/viewer_tool/src/lib/carSelection.tsx`
-  - `telemtry/analysis/database/viewer_tool/src/components/LiveViewerBanner.tsx`
-  - `telemtry/analysis/database/viewer_tool/src/components/{GGPlot,Map,CarVisualization,DriverInputVisualizer,TrackMapper}.tsx`
-  - `telemtry/analysis/database/viewer_tool/src/components/Providers.tsx`
+  - `telemetry/analysis/database/viewer_tool/src/lib/car.ts`
+  - `telemetry/analysis/database/viewer_tool/src/lib/carSelection.tsx`
+  - `telemetry/analysis/database/viewer_tool/src/components/LiveViewerBanner.tsx`
+  - `telemetry/analysis/database/viewer_tool/src/components/{GGPlot,Map,CarVisualization,DriverInputVisualizer,TrackMapper}.tsx`
+  - `telemetry/analysis/database/viewer_tool/src/components/Providers.tsx`
 - API/prisma:
-  - `telemtry/analysis/database/viewer_tool/src/lib/prisma/{telemtry,carPrisma}.ts`
-  - `telemtry/analysis/database/viewer_tool/src/app/api/{handshake,end-event,set-event-status}/route.ts`
-  - `telemtry/analysis/database/viewer_tool/src/app/api/replay/{stream,summary}/route.ts`
+  - `telemetry/analysis/database/viewer_tool/src/lib/prisma/{telemetry,carPrisma}.ts`
+  - `telemetry/analysis/database/viewer_tool/src/app/api/{handshake,end-event,set-event-status}/route.ts`
+  - `telemetry/analysis/database/viewer_tool/src/app/api/replay/{stream,summary}/route.ts`

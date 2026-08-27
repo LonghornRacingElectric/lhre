@@ -18,7 +18,7 @@ pm2 start npm --name viewer_tool -- run start -- -p 3001
 ### Starting the webtool
 - Make sure that the `.env` file is fully complete
 - Move to the Next.js root `cd analysis/database/viewer_tool`
-- To load the database schemas for prisma, run: `npm run prisma-auth-generate` (loading auth database), `npm run prisma-angelique-generate` (loading angelique database) and `npm run prisma-telemtry-generate` (loading nightwatch database)
+- To load the database schemas for prisma, run: `npm run prisma-auth-generate` (loading auth database), `npm run prisma-angelique-generate` (loading angelique database) and `npm run prisma-telemetry-generate` (loading nightwatch database)
 - To launch the website in dev mode manually, run `npm run dev -- --hostname 0.0.0.0 --port 3001`
 - To launch the website for deployment, run `npm run build`
 
@@ -49,7 +49,7 @@ pm2 start npm --name viewer_tool -- run start -- -p 3001
     2. For MacOS users, follow setup here: https://docs.docker.com/desktop/setup/install/mac-install/#install-and-run-docker-desktop-on-mac
 2. Download Python
     1. For specific version of python, the docker stack uses Python 3.11.4. For simplicity and to avoid potential weird behavior across Docker and non-containerized development, we recommend downloading Python 3.11.x. Find Python downloads here: https://www.python.org/downloads/
-3. Git clone the Telemetry Repo: https://github.com/LonghornRacingElectric/telemtry
+3. Git clone the Telemetry Repo: https://github.com/LonghornRacingElectric/telemetry
     1. This is the telemetry repo. Please checkout out a new branch. Don’t work on main branch.
     2. Move to monorepo coming soon
 4. Download required Python modules

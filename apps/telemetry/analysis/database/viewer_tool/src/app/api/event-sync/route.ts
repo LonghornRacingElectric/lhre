@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { EventEmitter } from "events";
 import { AppState, DriveDayState } from "@/lib/types";
-import prisma from "@/lib/prisma/telemtry";
+import prisma from "@/lib/prisma/telemetry";
 
 const emitter = new EventEmitter();
 emitter.setMaxListeners(100);

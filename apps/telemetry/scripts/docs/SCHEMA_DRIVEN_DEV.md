@@ -46,7 +46,7 @@ graph TD
 1.  **Refactor Static Files:** 
     *   Extract static SQL to `stack/ingest/common_schema.sql` (Master for static).
     *   Delete manual `common.prisma`.
-2.  **Generator Script:** Create `telemtry/scripts/generate_schema.py`.
+2.  **Generator Script:** Create `telemetry/scripts/generate_schema.py`.
     *   **Part A (Proto -> X):** 
         *   Parse `.proto`.
         *   Generate SQL, Prisma, ORM, Type Stubs for sensors.

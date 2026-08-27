@@ -1,8 +1,8 @@
-# telemtry/stack/kafka/BUILD.bazel
+# telemetry/stack/kafka/BUILD.bazel
 # BUILD file for Kafka broker configuration
 # Note: Kafka uses a pre-built image, this file exports compose files and configs
 
-package(default_visibility = ["//telemtry:__subpackages__"])
+package(default_visibility = ["//telemetry:__subpackages__"])
 
 # Export the docker-compose file for Kafka and bridge build context
 exports_files([

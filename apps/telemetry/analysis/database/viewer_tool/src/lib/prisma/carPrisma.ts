@@ -1,5 +1,5 @@
 import prismaAngelique from "@/lib/prisma/angelique";
-import prismaTelemtry from "@/lib/prisma/telemtry";
+import prismaTelemetry from "@/lib/prisma/telemetry";
 
 export type SupportedCar = "angelique" | "orion";
 export type PacketScalar = bigint | number;
@@ -20,7 +20,7 @@ export function normalizeCar(value: string | null | undefined): SupportedCar | n
 
 export function getCarPrisma(car: SupportedCar | null | undefined) {
   if (car === "angelique") return prismaAngelique;
-  return prismaTelemtry;
+  return prismaTelemetry;
 }
 
 export async function findLatestPacketId(
@@ -34,7 +34,7 @@ export async function findLatestPacketId(
     return latest?.packet_id ?? null;
   }
 
-  const latest = await prismaTelemtry.packet.findFirst({
+  const latest = await prismaTelemetry.packet.findFirst({
     orderBy: { packet_id: "desc" },
     select: { packet_id: true },
   });
@@ -53,7 +53,7 @@ export async function findPacketTimeById(
     return packet?.time ?? null;
   }
 
-  const packet = await prismaTelemtry.packet.findUnique({
+  const packet = await prismaTelemetry.packet.findUnique({
     where: { packet_id: packetId },
     select: { time: true },
   });
@@ -84,7 +84,7 @@ export async function findReplayPacketAtOrAfter(
     };
   }
 
-  const packet = await prismaTelemtry.packet.findFirst({
+  const packet = await prismaTelemetry.packet.findFirst({
     where: {
       packet_id: { gte: packetStart, lte: packetEnd },
       time: { gte: atTimeMs },
@@ -117,7 +117,7 @@ export async function findNextPacketIdInRange(
     return nextPacket?.packet_id ?? null;
   }
 
-  const nextPacket = await prismaTelemtry.packet.findFirst({
+  const nextPacket = await prismaTelemetry.packet.findFirst({
     where: {
       packet_id: { gt: packetId, lte: packetEnd },
     },
@@ -131,7 +131,7 @@ export async function resolveCarFromCarId(
   carId: number | null | undefined,
 ): Promise<SupportedCar | null> {
   if (carId == null) return null;
-  const lut = await prismaTelemtry.lut_car.findUnique({
+  const lut = await prismaTelemetry.lut_car.findUnique({
     where: { car_id: carId },
     select: { car_name: true },
   });
@@ -141,7 +141,7 @@ export async function resolveCarFromCarId(
 export async function resolveCarFromEvent(
   eventId: number,
 ): Promise<SupportedCar | null> {
-  const driveDay = await prismaTelemtry.drive_day.findUnique({
+  const driveDay = await prismaTelemetry.drive_day.findUnique({
     where: { day_id: eventId },
     select: {
       car_id: true,

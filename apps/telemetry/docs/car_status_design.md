@@ -45,7 +45,7 @@ All fields below exist today. Names are the **decoded protobuf field names**
 (snake_case in CAN CSV; the viewer decodes to camelCase). Sources:
 `drivers/longhorn-lib/config/can_packets.csv`,
 `drivers/longhorn-lib/protobuf/can_packets.proto` (Orion),
-`telemtry/stack/ingest/protobuf/angelique.proto` (Angelique).
+`telemetry/stack/ingest/protobuf/angelique.proto` (Angelique).
 
 | Purpose | Field | Proto table | CAN id | Notes |
 |---|---|---|---|---|
@@ -154,7 +154,7 @@ captured for *every* session automatically — which is the whole point of "find
 data later". It also means Grafana, the viewer, and future tools all read the
 **same** classification instead of each re-deriving it.
 
-### 4.1 The processor (`telemtry/stack/processors/car_status/`)
+### 4.1 The processor (`telemetry/stack/processors/car_status/`)
 - Copy the `kafka_base` skeleton (`main.py` poll-loop + `Dockerfile` +
   `docker-compose.yml` + `requirements*.txt` + `BUILD.bazel`).
 - **Consumes:** `sensor_data` (env `KAFKA_INPUT_TOPIC`, default `sensor_data`).
@@ -170,7 +170,7 @@ data later". It also means Grafana, the viewer, and future tools all read the
   **closes** (see §4.2). Self-contained: keyed only by car + time/packet range,
   **no drive-day association**.
 - **Registration:** add `car_status|processors/car_status` to `STACK_COMPONENTS`
-  and to `ALL_ORDER` in `telemtry/stack/server_devtool.sh`; enable with
+  and to `ALL_ORDER` in `telemetry/stack/server_devtool.sh`; enable with
   `./server_devtool.sh enable car_status`. (Optional → not in CORE so it never
   blocks the core stack.)
 

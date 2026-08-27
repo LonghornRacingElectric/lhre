@@ -1,4 +1,4 @@
-# telemtry/stack/processors/kafka_base/BUILD.bazel
+# telemetry/stack/processors/kafka_base/BUILD.bazel
 # BUILD file for the Kafka base consumer processor
 # This is the base template for Kafka consumers that process sensor data
 
@@ -6,9 +6,9 @@ load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 load("@rules_python//python:pip.bzl", "compile_pip_requirements")
 load("@rules_oci//oci:defs.bzl", "oci_image", "oci_push", "oci_load")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
-load("@telemtry_reqs//:requirements.bzl", "requirement")
+load("@telemetry_reqs//:requirements.bzl", "requirement")
 
-package(default_visibility = ["//telemtry:__subpackages__"])
+package(default_visibility = ["//telemetry:__subpackages__"])
 
 # Compile pip requirements
 compile_pip_requirements(
@@ -36,7 +36,7 @@ py_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
-        "//telemtry/stack/ingest:ingest_lib",
+        "//telemetry/stack/ingest:ingest_lib",
         requirement("kafka-python"),
         requirement("paho-mqtt"),
     ],
@@ -67,8 +67,8 @@ pkg_tar(
 pkg_tar(
     name = "ingest_deps_tar",
     srcs = [
-        "//telemtry/stack/ingest:ingest_lib",
-        "//telemtry/stack/ingest:protobuf_files",
+        "//telemetry/stack/ingest:ingest_lib",
+        "//telemetry/stack/ingest:protobuf_files",
     ],
     package_dir = "/app/stack/ingest",
 )
@@ -77,7 +77,7 @@ pkg_tar(
 pkg_tar(
     name = "analysis_deps_tar",
     srcs = [
-        "//telemtry/analysis:analysis_lib",
+        "//telemetry/analysis:analysis_lib",
     ],
     package_dir = "/app/analysis",
 )
@@ -86,7 +86,7 @@ pkg_tar(
 pkg_tar(
     name = "config_tar",
     srcs = [
-        "//telemtry:config_files",
+        "//telemetry:config_files",
     ],
     package_dir = "/app",
 )

@@ -1,5 +1,5 @@
 // SHARED renderer — source of truth:
-// telemtry/analysis/database/viewer_tool/src/components/dashlayout/LapCardRenderer.tsx
+// telemetry/analysis/database/viewer_tool/src/components/dashlayout/LapCardRenderer.tsx
 
 // Renders a LapCardLayout at the dash's native 800x480 onto a scaled stage.
 // Theme-aware: pass theme='dark'|'light' and colors/surfaces follow it (the car

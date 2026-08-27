@@ -1,5 +1,5 @@
 """
-telemtry/stack/tests/test_mqtt_connectivity.py
+telemetry/stack/tests/test_mqtt_connectivity.py
 
 Tests MQTT broker connectivity for the telemetry system.
 Requires the MQTT broker (mosquitto) container to be running.
@@ -10,7 +10,7 @@ import os
 import sys
 import time
 
-from telemtry.stack.tests.test_utils import (
+from telemetry.stack.tests.test_utils import (
     TelemetryConfig,
     check_mqtt_connection,
     wait_for_service,

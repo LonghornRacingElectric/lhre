@@ -5,17 +5,17 @@
 set -e
 
 SCRIPT_ROOT="$(cd "$(dirname "$0")" && pwd)"
-TELEMTRY_ROOT="$(cd "$SCRIPT_ROOT/.." && pwd)"
-REPO_ROOT="$(cd "$TELEMTRY_ROOT/.." && pwd)"
+TELEMETRY_ROOT="$(cd "$SCRIPT_ROOT/.." && pwd)"
+REPO_ROOT="$(cd "$TELEMETRY_ROOT/.." && pwd)"
 
 CAR_NAME="${1:-Orion}"
 CAR_LOWER="$(echo "$CAR_NAME" | tr '[:upper:]' '[:lower:]')"
 
-SCRIPT_DIR="$TELEMTRY_ROOT/scripts"
-INGEST_DIR="$TELEMTRY_ROOT/stack/ingest"
-PRISMA_DIR="$TELEMTRY_ROOT/analysis/database/viewer_tool/prisma"
-VIEWER_PROTO_DIR="$TELEMTRY_ROOT/analysis/database/viewer_tool/protobuf"
-MODELS_FILE="$TELEMTRY_ROOT/analysis/sql_utils/models.py"
+SCRIPT_DIR="$TELEMETRY_ROOT/scripts"
+INGEST_DIR="$TELEMETRY_ROOT/stack/ingest"
+PRISMA_DIR="$TELEMETRY_ROOT/analysis/database/viewer_tool/prisma"
+VIEWER_PROTO_DIR="$TELEMETRY_ROOT/analysis/database/viewer_tool/protobuf"
+MODELS_FILE="$TELEMETRY_ROOT/analysis/sql_utils/models.py"
 
 COMMON_SQL="$INGEST_DIR/common_schema.sql"
 COMMON_PRISMA="$SCRIPT_DIR/common.prisma"
@@ -86,7 +86,7 @@ if [ "$CAR_NAME" = "Orion" ]; then
   echo "Synced viewer runtime proto: $VIEWER_ORION_PROTO_OUT"
   
   # Update sensor.proto with Orion schema from can_packets.proto
-  SENSOR_PROTO="$TELEMTRY_ROOT/stack/kafka/proto/sensor/sensor.proto"
+  SENSOR_PROTO="$TELEMETRY_ROOT/stack/kafka/proto/sensor/sensor.proto"
   if [ -f "$SENSOR_PROTO" ]; then
     python3 "$SCRIPT_DIR/update_sensor_proto.py" "$SENSOR_PROTO" "$PROTO_FILE"
     echo "Updated Orion schema in: $SENSOR_PROTO"

@@ -1,5 +1,5 @@
 """
-telemtry/stack/tests/test_utils.py
+telemetry/stack/tests/test_utils.py
 
 Common test utilities for telemetry integration tests.
 Provides helper functions for connecting to MQTT, Kafka, and PostgreSQL services.
@@ -7,7 +7,7 @@ Provides helper functions for connecting to MQTT, Kafka, and PostgreSQL services
 Environment Loading Strategy:
 -----------------------------
 1. First check if required environment variables are already set (e.g., from CI secrets).
-2. If env vars are missing, attempt to load from telemtry/.env file (for local development).
+2. If env vars are missing, attempt to load from telemetry/.env file (for local development).
 3. This allows CI to work with secrets (no .env file needed) while local dev uses .env file.
 
 For GitHub CI:
@@ -71,7 +71,7 @@ def _load_env_file() -> bool:
     # In Bazel runfiles, the structure is: <workspace>/<package>/<file>
     possible_env_paths = [
         # Bazel runfiles paths
-        Path.cwd() / "telemtry" / ".env",
+        Path.cwd() / "telemetry" / ".env",
         Path.cwd() / ".env",
     ]
     
@@ -84,7 +84,7 @@ def _load_env_file() -> bool:
     try:
         from rules_python.python.runfiles import runfiles
         r = runfiles.Create()
-        env_file = r.Rlocation("_main/telemtry/.env")
+        env_file = r.Rlocation("_main/telemetry/.env")
         if env_file and Path(env_file).exists():
             load_dotenv(env_file)
             return True
@@ -277,13 +277,13 @@ class TestDataGenerator:
         
         try:
             if car == "Angelique":
-                from telemtry.stack.ingest.protobuf.angelique_pb2 import AngeliqueSensorData
+                from telemetry.stack.ingest.protobuf.angelique_pb2 import AngeliqueSensorData
                 data = AngeliqueSensorData()
             elif car == "Orion":
-                from telemtry.stack.ingest.protobuf.can_packets_pb2 import OrionSensorData
+                from telemetry.stack.ingest.protobuf.can_packets_pb2 import OrionSensorData
                 data = OrionSensorData()
             else:
-                from telemtry.stack.ingest.protobuf.template_pb2 import SensorData
+                from telemetry.stack.ingest.protobuf.template_pb2 import SensorData
                 data = SensorData()
             
             data.packet_id = packet_id

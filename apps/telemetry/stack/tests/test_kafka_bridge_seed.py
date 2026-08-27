@@ -9,7 +9,7 @@ import json
 import time
 import unittest
 
-from telemtry.stack.tests.test_utils import (
+from telemetry.stack.tests.test_utils import (
     TelemetryConfig,
     KafkaTestClient,
     check_kafka_connection,

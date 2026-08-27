@@ -1,4 +1,4 @@
-# telemtry/analysis/tests/BUILD.bazel
+# telemetry/analysis/tests/BUILD.bazel
 
 load("@rules_python//python:defs.bzl", "py_test")
 
@@ -6,7 +6,7 @@ py_test(
     name = "analysis_tests",
     srcs = ["sample_analysis_test.py"],
     deps = [
-        "//telemtry/analysis:analysis_lib",
+        "//telemetry/analysis:analysis_lib",
     ],
     main = "sample_analysis_test.py",
     tags = ["manual"],

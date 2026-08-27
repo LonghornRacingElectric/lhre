@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-telemtry/stack/tests/test_stack_client.py
+telemetry/stack/tests/test_stack_client.py
 
 Main entry point for the stack integration test client.
 This script runs comprehensive tests against the telemetry Docker stack.
@@ -8,7 +8,7 @@ This script runs comprehensive tests against the telemetry Docker stack.
 Usage:
     python test_stack_client.py
     # or via Bazel:
-    bazel run //telemtry/stack/tests:stack_test_client
+    bazel run //telemetry/stack/tests:stack_test_client
 """
 
 import sys

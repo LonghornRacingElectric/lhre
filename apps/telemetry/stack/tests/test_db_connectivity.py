@@ -1,5 +1,5 @@
 """
-telemtry/stack/tests/test_db_connectivity.py
+telemetry/stack/tests/test_db_connectivity.py
 
 Tests PostgreSQL database connectivity for the telemetry system.
 Requires the PostgreSQL (db) container to be running.
@@ -9,7 +9,7 @@ import unittest
 import os
 import sys
 
-from telemtry.stack.tests.test_utils import (
+from telemetry.stack.tests.test_utils import (
     TelemetryConfig,
     check_db_connection,
     wait_for_service,

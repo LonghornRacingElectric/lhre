@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import prismaTelemtry from "@/lib/prisma/telemtry";
+import prismaTelemetry from "@/lib/prisma/telemetry";
 import {
   findNextPacketIdInRange,
   findReplayPacketAtOrAfter,
@@ -34,7 +34,7 @@ async function buildReplayState(
   preferredCar: SupportedCar | null,
 ) {
   // eventId maps to day_id since drive_day is the single session record.
-  const ev = await prismaTelemtry.drive_day.findUnique({
+  const ev = await prismaTelemetry.drive_day.findUnique({
     where: { day_id: eventId },
     select: {
       packet_start: true,

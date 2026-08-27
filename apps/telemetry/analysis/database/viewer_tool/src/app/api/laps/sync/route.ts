@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma/telemtry";
+import prisma from "@/lib/prisma/telemetry";
 
 interface LapIn { start_time?: unknown; end_time?: unknown; notes?: unknown }
 

@@ -1,5 +1,5 @@
 """
-telemtry/stack/tests/test_data_flow.py
+telemetry/stack/tests/test_data_flow.py
 
 End-to-end data flow tests for the telemetry system.
 Tests the complete data pipeline: MQTT -> Ingest -> Kafka -> Database
@@ -14,7 +14,7 @@ import sys
 import time
 import json
 
-from telemtry.stack.tests.test_utils import (
+from telemetry.stack.tests.test_utils import (
     TelemetryConfig,
     wait_for_service,
     check_mqtt_connection,

@@ -1,5 +1,5 @@
 """
-telemtry/stack/tests/test_bevo_db_integration.py
+telemetry/stack/tests/test_bevo_db_integration.py
 
 Docker-dependent integration tests for:
 - BEVO-Angelique welcome packet over MQTT
@@ -14,10 +14,10 @@ from pathlib import Path
 from paho.mqtt import client as mqtt_client
 from sqlalchemy import text
 
-from telemtry.analysis.sql_utils.db_session import get_db
-from telemtry.analysis.sql_utils.models import AngeliquePacket, OrionPacket, Packet
-from telemtry.stack.ingest.protobuf import can_packets_pb2
-from telemtry.stack.tests.test_utils import TelemetryConfig
+from telemetry.analysis.sql_utils.db_session import get_db
+from telemetry.analysis.sql_utils.models import AngeliquePacket, OrionPacket, Packet
+from telemetry.stack.ingest.protobuf import can_packets_pb2
+from telemetry.stack.tests.test_utils import TelemetryConfig
 
 
 class TestBevoAndDatabaseIntegration(unittest.TestCase):

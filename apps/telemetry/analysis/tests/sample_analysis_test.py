@@ -1,4 +1,4 @@
-# telemtry/analysis/tests/sample_analysis_test.py
+# telemetry/analysis/tests/sample_analysis_test.py
 
 import unittest
 
@@ -18,7 +18,7 @@ class SampleAnalysisTest(unittest.TestCase):
         """
         Ensure analysis modules can be imported without side effects.
         """
-        from telemtry import analysis
+        from telemetry import analysis
 
         self.assertIsNotNone(analysis)
 

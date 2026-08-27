@@ -63,10 +63,10 @@ In the viewer, click any file in a job's file list to open the annotation modal.
 
 1. **Provision the SSH key** (one time, on the server):
    ```bash
-   ssh-keygen -t ed25519 -f telemtry/stack/logsync/keys/id_logsync -N ""
-   ssh-copy-id -i telemtry/stack/logsync/keys/id_logsync.pub lhre@100.64.195.68
+   ssh-keygen -t ed25519 -f telemetry/stack/logsync/keys/id_logsync -N ""
+   ssh-copy-id -i telemetry/stack/logsync/keys/id_logsync.pub lhre@100.64.195.68
    # verify:
-   ssh -i telemtry/stack/logsync/keys/id_logsync lhre@100.64.195.68 'echo ok'
+   ssh -i telemetry/stack/logsync/keys/id_logsync lhre@100.64.195.68 'echo ok'
    ```
    The key dir is git-ignored. The Pi must be reachable on the server's
    Tailscale (`tailscale status` should list `raspberrypi`).
@@ -76,7 +76,7 @@ In the viewer, click any file in a job's file list to open the annotation modal.
 3. **Bring it up via the dev tool** (db from the ingest stack must already be
    running so `localhost:5432` resolves). logsync is a registered component, so:
    ```bash
-   cd telemtry/stack
+   cd telemetry/stack
    ./server_devtool.sh enable logsync      # or `apps` for viewer + logsync
    curl localhost:8090/health
    ./server_devtool.sh status              # logsync shows in the health table

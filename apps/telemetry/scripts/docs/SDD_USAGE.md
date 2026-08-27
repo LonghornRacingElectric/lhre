@@ -37,7 +37,7 @@ While Protobuf provides the wire format, the generated `dataclasses.py` provides
 
 ### Location
 The dataclasses are generated into car-specific folders:
-`telemtry/scripts/gen_{car}/dataclasses.py`
+`telemetry/scripts/gen_{car}/dataclasses.py`
 
 ### Key Components
 - **`{Car}SensorData`**: The root container for a full telemetry packet.
@@ -141,7 +141,7 @@ def on_message(payload_bytes):
 
 ## 3. Modifying Infrastructure
 To add lookup tables (LUTs), metadata fields (like new event settings), or SQL functions:
-1.  Modify `telemtry/stack/ingest/common_schema.sql`.
+1.  Modify `telemetry/stack/ingest/common_schema.sql`.
 2.  Run `bash scripts/sync_schema.sh`.
 3.  The changes will propagate to the Prisma schema used by the Viewer Tool.
 
@@ -180,12 +180,12 @@ python3 scripts/generate_schema.py patch-models \
 ---
 
 ## 5. Key Files
-- `telemtry/scripts/generate_schema.py`: The transformation engine.
-- `telemtry/scripts/sync_schema.sh`: Convenience script for local developers.
+- `telemetry/scripts/generate_schema.py`: The transformation engine.
+- `telemetry/scripts/sync_schema.sh`: Convenience script for local developers.
 - `drivers/longhorn-lib/protobuf/can_packets.proto`: Orion source-of-truth protobuf.
-- `telemtry/stack/ingest/common_schema.sql`: Source of truth for static infrastructure.
-- `telemtry/analysis/sql_utils/models.py`: SQLAlchemy models (Shared + Car-specific).
-- `telemtry/scripts/gen_angelique/dataclasses.py`: Generated Python type stubs.
+- `telemetry/stack/ingest/common_schema.sql`: Source of truth for static infrastructure.
+- `telemetry/analysis/sql_utils/models.py`: SQLAlchemy models (Shared + Car-specific).
+- `telemetry/scripts/gen_angelique/dataclasses.py`: Generated Python type stubs.
 
 ---
 
@@ -194,8 +194,8 @@ python3 scripts/generate_schema.py patch-models \
 When validating live-viewer widgets, publish test packets from protobuf schema (not ORM reflection):
 
 ```bash
-source telemtry/.venv/bin/activate
-python telemtry/analysis/database/paho_testing.py --car Orion --profile viewer --schema-source proto
+source telemetry/.venv/bin/activate
+python telemetry/analysis/database/paho_testing.py --car Orion --profile viewer --schema-source proto
 ```
 
 `paho_testing.py` now supports `--schema-source`:
@@ -205,8 +205,8 @@ python telemtry/analysis/database/paho_testing.py --car Orion --profile viewer -
 For end-to-end validation (MQTT -> Kafka -> viewer topics), use:
 
 ```bash
-source telemtry/.venv/bin/activate
-python telemtry/analysis/database/validate_live_viewer.py --car Both --rows 20 --delay 0.03
+source telemetry/.venv/bin/activate
+python telemetry/analysis/database/validate_live_viewer.py --car Both --rows 20 --delay 0.03
 ```
 
 This checks:
@@ -216,7 +216,7 @@ This checks:
 - Optional ORM drift reporting against protobuf schema (`--strict-orm-sync` to fail on drift).
 
 Processor-backed topics are separate from the core ingest path:
-- `gg-plot` requires `telemtry/stack/processors/gg_plot`.
-- `track-mapper`/lap timing require `telemtry/stack/processors/track_mapper` and `telemtry/stack/processors/lap_timer`.
+- `gg-plot` requires `telemetry/stack/processors/gg_plot`.
+- `track-mapper`/lap timing require `telemetry/stack/processors/track_mapper` and `telemetry/stack/processors/lap_timer`.
 
 `server_devtool.sh` option `3` only starts Kafka + ingest, so `gg-plot` and `track-mapper` will stay empty unless those processors are started.

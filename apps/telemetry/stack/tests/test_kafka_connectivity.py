@@ -1,5 +1,5 @@
 """
-telemtry/stack/tests/test_kafka_connectivity.py
+telemetry/stack/tests/test_kafka_connectivity.py
 
 Tests Kafka broker connectivity for the telemetry system.
 Requires the Kafka container to be running.
@@ -10,7 +10,7 @@ import os
 import sys
 import time
 
-from telemtry.stack.tests.test_utils import (
+from telemetry.stack.tests.test_utils import (
     TelemetryConfig,
     check_kafka_connection,
     wait_for_service,

@@ -1,10 +1,10 @@
-# telemtry/stack/BUILD.bazel
+# telemetry/stack/BUILD.bazel
 # BUILD file for the telemetry stack services
 # Contains shared resources for all stack services
 
 load("@rules_python//python:defs.bzl", "py_library")
 
-package(default_visibility = ["//telemtry/stack:__subpackages__"])
+package(default_visibility = ["//telemetry/stack:__subpackages__"])
 
 # Shared Python library for stack services
 py_library(
@@ -24,10 +24,10 @@ exports_files([
 filegroup(
     name = "stack_images",
     srcs = [
-        "//telemtry/stack/ingest:ingest_image",
-        "//telemtry/stack/processors/gps_classifier:gps_classifier_image",
-        "//telemtry/stack/processors/kafka_base:kafka_base_image",
-        "//telemtry/stack/processors/lap_timer:lap_timer_image",
+        "//telemetry/stack/ingest:ingest_image",
+        "//telemetry/stack/processors/gps_classifier:gps_classifier_image",
+        "//telemetry/stack/processors/kafka_base:kafka_base_image",
+        "//telemetry/stack/processors/lap_timer:lap_timer_image",
     ],
     visibility = ["//visibility:public"],
 )
@@ -37,10 +37,10 @@ py_library(
     name = "stack_lib",
     visibility = ["//visibility:public"],
     deps = [
-        "//telemtry/stack/ingest:ingest_lib",
-        "//telemtry/stack/processors/gps_classifier:gps_classifier_lib",
-        "//telemtry/stack/processors/kafka_base:kafka_base_lib",
-        "//telemtry/stack/processors/lap_timer:lap_timer_lib",
+        "//telemetry/stack/ingest:ingest_lib",
+        "//telemetry/stack/processors/gps_classifier:gps_classifier_lib",
+        "//telemetry/stack/processors/kafka_base:kafka_base_lib",
+        "//telemetry/stack/processors/lap_timer:lap_timer_lib",
     ],
     target_compatible_with = ["@platforms//os:linux"],
 )

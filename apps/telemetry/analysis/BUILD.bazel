@@ -1,4 +1,4 @@
-# telemtry/analysis/BUILD.bazel
+# telemetry/analysis/BUILD.bazel
 
 load("@rules_python//python:defs.bzl", "py_library")
 load("@rules_python//python:pip.bzl", "compile_pip_requirements")

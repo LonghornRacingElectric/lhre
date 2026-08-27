@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma/telemtry";
+import prisma from "@/lib/prisma/telemetry";
 
 function toInt(v: unknown): number | undefined {
   if (v === undefined || v === null || v === "") return undefined;

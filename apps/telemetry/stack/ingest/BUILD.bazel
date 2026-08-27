@@ -1,4 +1,4 @@
-# telemtry/stack/ingest/BUILD.bazel
+# telemetry/stack/ingest/BUILD.bazel
 # BUILD file for the MQTT ingest service
 # This service receives MQTT messages, stores them in PostgreSQL, and forwards to Kafka
 
@@ -6,9 +6,9 @@ load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 load("@rules_python//python:pip.bzl", "compile_pip_requirements")
 load("@rules_oci//oci:defs.bzl", "oci_image", "oci_push", "oci_load")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
-load("@telemtry_stack_reqs//:requirements.bzl", "requirement")
+load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
 
-package(default_visibility = ["//telemtry:__subpackages__"])
+package(default_visibility = ["//telemetry:__subpackages__"])
 
 # ---------------------------------------------------------------------------
 # Protobuf generation (Longhorn CAN -> Python pb2)
@@ -16,7 +16,7 @@ package(default_visibility = ["//telemtry:__subpackages__"])
 # Generates a Python `_pb2.py` module from the generated CAN schema.
 #
 # Build output path:
-# - bazel-bin/telemtry/stack/ingest/protobuf/can_packets_pb2.py
+# - bazel-bin/telemetry/stack/ingest/protobuf/can_packets_pb2.py
 #
 # Input chain:
 # - drivers/longhorn-lib/config/can_packets.csv -> //drivers/longhorn-lib:can_proto
@@ -110,11 +110,11 @@ py_library(
     data = [
         ":car_configs",
         ":protobuf_files",
-        "//telemtry:config_files",
+        "//telemetry:config_files",
     ],
     visibility = ["//visibility:public"],
     deps = [
-        "//telemtry/analysis:analysis_lib",
+        "//telemetry/analysis:analysis_lib",
         requirement("kafka-python"),
         requirement("numpy"),
         requirement("paho-mqtt"),
@@ -137,8 +137,8 @@ py_binary(
     ],
 )
 
-# Writes telemtry/stack/ingest/protobuf/can_packets_pb2.py into the workspace.
-# Use: bazel run //telemtry/stack/ingest:update_can_packets_pb2
+# Writes telemetry/stack/ingest/protobuf/can_packets_pb2.py into the workspace.
+# Use: bazel run //telemetry/stack/ingest:update_can_packets_pb2
 py_binary(
     name = "update_can_packets_pb2",
     srcs = [
@@ -167,7 +167,7 @@ pkg_tar(
 pkg_tar(
     name = "analysis_deps_tar",
     srcs = [
-        "//telemtry/analysis:analysis_lib",
+        "//telemetry/analysis:analysis_lib",
     ],
     package_dir = "/app/analysis",
 )
@@ -176,7 +176,7 @@ pkg_tar(
 pkg_tar(
     name = "config_tar",
     srcs = [
-        "//telemtry:config_files",
+        "//telemetry:config_files",
     ],
     package_dir = "/app",
 )

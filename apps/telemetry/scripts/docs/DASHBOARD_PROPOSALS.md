@@ -4,7 +4,7 @@ This document tracks proposed Grafana dashboards for drive-day use. Each entry l
 (`real-time/` or `retrospect/`), the signals it draws from, and the rationale.
 
 For provisioning conventions see the existing dashboards under
-`telemtry/analysis/database/dashboards/orion/`.
+`telemetry/analysis/database/dashboards/orion/`.
 
 ---
 
@@ -230,5 +230,5 @@ visible.
 - For computed signals using `LAG()` or `d/dt`, wrap in a CTE for readability.
 - Time column must be returned as `"time"` with `time AS "time"` alias for Grafana time-series panels.
 - Dashboard `uid` values must be globally unique; use a descriptive slug.
-- All new dashboards go in `telemtry/analysis/database/dashboards/orion/real-time/` or `retrospect/`
+- All new dashboards go in `telemetry/analysis/database/dashboards/orion/real-time/` or `retrospect/`
   and are auto-provisioned by the Grafana container at startup.

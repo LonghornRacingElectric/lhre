@@ -1,7 +1,7 @@
 """Unit tests for the pure car-status classifier.
 
 Run directly (no Docker, no Kafka, no DB):
-    python -m unittest telemtry.stack.processors.car_status.test_classifier
+    python -m unittest telemetry.stack.processors.car_status.test_classifier
 or from this directory:
     python -m unittest test_classifier
 """

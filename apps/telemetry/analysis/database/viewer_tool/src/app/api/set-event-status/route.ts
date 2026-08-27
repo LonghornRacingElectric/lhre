@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import prismaTelemtry from '@/lib/prisma/telemtry';
+import prismaTelemetry from '@/lib/prisma/telemetry';
 import {
   findLatestPacketId,
   normalizeCar,
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     }
 
     const now = start_time ?? Date.now();
-    const dayMeta = await prismaTelemtry.drive_day.findUnique({
+    const dayMeta = await prismaTelemetry.drive_day.findUnique({
       where: { day_id: dayId },
       select: {
         car_id: true,
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
       (await resolveCarFromCarId(dayMeta.car_id));
 
     if (nextStatus === 1) {
-      await prismaTelemtry.drive_day.update({
+      await prismaTelemetry.drive_day.update({
         where: { day_id: dayId },
         data: {
           start_time: BigInt(now),
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
       const fallbackPacketEnd = toBigInt(body.packet_end) ?? BigInt(0);
       const packet_end = lastPacketId ?? fallbackPacketEnd;
 
-      await prismaTelemtry.drive_day.update({
+      await prismaTelemetry.drive_day.update({
         where: { day_id: dayId },
         data: {
           end_time: BigInt(now),
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
         },
       });
     } else {
-      await prismaTelemtry.drive_day.update({
+      await prismaTelemetry.drive_day.update({
         where: { day_id: dayId },
         data: { status: nextStatus },
       });

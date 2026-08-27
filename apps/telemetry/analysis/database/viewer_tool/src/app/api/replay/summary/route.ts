@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import prismaTelemtry from "@/lib/prisma/telemtry";
+import prismaTelemetry from "@/lib/prisma/telemetry";
 import {
   findPacketTimeById,
   normalizeCar,
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
     }
 
     // eventId maps to day_id since drive_day is now the single session record
-    const ev = await prismaTelemtry.drive_day.findUnique({
+    const ev = await prismaTelemetry.drive_day.findUnique({
       where: { day_id: eventId },
       include: {
         car:       { select: { car_name: true } },
@@ -93,7 +93,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const classifiers = await prismaTelemtry.classifier.findMany({
+    const classifiers = await prismaTelemetry.classifier.findMany({
       where: {
         AND: [
           { day_id: BigInt(eventId) },

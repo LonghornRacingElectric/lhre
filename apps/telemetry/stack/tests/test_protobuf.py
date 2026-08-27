@@ -1,5 +1,5 @@
 """
-telemtry/stack/tests/test_protobuf.py
+telemetry/stack/tests/test_protobuf.py
 
 Unit tests for protobuf serialization/deserialization.
 These tests do not require Docker containers to be running.
@@ -143,7 +143,7 @@ class TestDataTesterPatterns(unittest.TestCase):
     
     def test_random_data_generation(self):
         """Test random data generation for various types."""
-        from telemtry.stack.tests.test_utils import TestDataGenerator
+        from telemetry.stack.tests.test_utils import TestDataGenerator
         
         generator = TestDataGenerator(seed=42)
         
@@ -157,7 +157,7 @@ class TestDataTesterPatterns(unittest.TestCase):
     
     def test_protobuf_message_generation(self):
         """Test protobuf message generation."""
-        from telemtry.stack.tests.test_utils import TestDataGenerator
+        from telemetry.stack.tests.test_utils import TestDataGenerator
         
         generator = TestDataGenerator(seed=42)
         
@@ -172,7 +172,7 @@ class TestDataTesterPatterns(unittest.TestCase):
     
     def test_deterministic_with_seed(self):
         """Test that data generation is deterministic with same seed."""
-        from telemtry.stack.tests.test_utils import TestDataGenerator
+        from telemetry.stack.tests.test_utils import TestDataGenerator
         
         gen1 = TestDataGenerator(seed=123)
         gen2 = TestDataGenerator(seed=123)

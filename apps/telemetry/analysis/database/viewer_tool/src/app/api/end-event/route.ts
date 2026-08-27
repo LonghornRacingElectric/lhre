@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import prismaTelemtry from '@/lib/prisma/telemtry';
+import prismaTelemetry from '@/lib/prisma/telemetry';
 import {
   findLatestPacketId,
   normalizeCar,
@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
     const now = Date.now();
 
     // Find the latest active drive day (status 2)
-    const activeDay = await prismaTelemtry.drive_day.findFirst({
+    const activeDay = await prismaTelemetry.drive_day.findFirst({
       where: { status: 2 },
       orderBy: { day_id: 'desc' },
       select: {
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     const lastPacketId = await findLatestPacketId(car);
     const packet_end = lastPacketId ?? BigInt(1);
 
-    await prismaTelemtry.drive_day.update({
+    await prismaTelemetry.drive_day.update({
       where: { day_id: activeDay.day_id },
       data: {
         end_time: BigInt(now),

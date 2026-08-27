@@ -7,7 +7,7 @@ import type { DashMessage, MessageTrigger } from './dashMessages';
 // Browser-side publisher for the on-car dash's pacing signals. The dash
 // (BEVO/dashd) subscribes to `lhre/dash/#` on the same broker the telemetry
 // stack uses; that broker exposes a websockets listener on :8080
-// (telemtry/stack/ingest/mosquitto.conf), so we can publish straight from the
+// (telemetry/stack/ingest/mosquitto.conf), so we can publish straight from the
 // strategist's browser with no extra backend. Contract: BEVO/dashd/MQTT_CONTRACT.md.
 
 const TOPIC_PREFIX = 'lhre/dash/';
