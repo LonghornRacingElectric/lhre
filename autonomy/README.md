@@ -21,7 +21,7 @@ The code is organized so each lane owns whole packages. Lane ownership is tracke
 | Perception | `lhr_perception` (+ `lhr_sensor_sim` as its sim stand-in) | Autocross reliability: cone duplication during swerves. See [known issues](docs/plans/gazebo-integration.md) |
 | State estimation | None yet, this lane starts from scratch | Build the EKF package. The car currently runs on ground-truth odometry from sim |
 | Planning & control | `lhr_track_builder`, `lhr_control`, `lhr_mission_manager` | Centerline ordering on tight corners. Unimplemented missions (acceleration, skidpad) |
-| Sim & test infra | `lhr_gazebo`, `lhr_sim_kinematic`, `lhr_trackgen`, `lhr_metrics`, `lhr_demo`, `scripts/` | Functional tests (none exist yet), CI |
+| Sim & test infra | `lhr_gazebo`, `lhr_sim_kinematic`, `lhr_trackgen`, `lhr_metrics`, `lhr_demo`, `scripts/` | Functional tests (none exist yet). CI only builds and lints today |
 
 ## Status (August 2026)
 
