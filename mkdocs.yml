@@ -46,6 +46,7 @@ nav:
       - CAN Spec Tools: tools/spec/README.md
       - IDE Setup: tools/ide/README.md
       - Serial Monitor: tools/monitor/README.md
+      - Prebuilt protoc: tools/protoc/README.md
   - Autonomy:
       - Overview: autonomy/README.md
       - Getting Started: autonomy/ros2/GETTING-STARTED.md
@@ -62,8 +63,35 @@ nav:
           - Vehicle Systems: autonomy/docs/rules/fsae-vehicle-systems.md
           - Competition Checklist: autonomy/docs/rules/fsae-competition-checklist.md
       - Agent Instructions: autonomy/AGENTS.md
+  - Apps:
+      - Overview: apps/README.md
+      - BEVO:
+          - Overview: apps/BEVO/README.md
+          - cand: apps/BEVO/cand/README.md
+          - dashd: apps/BEVO/dashd/README.md
+          - Dash MQTT Contract: apps/BEVO/dashd/MQTT_CONTRACT.md
+          - Dash Deploy: apps/BEVO/dashd/deploy/README.md
+          - debugd: apps/BEVO/debugd/README.md
+          - loggerd: apps/BEVO/loggerd/README.md
+          - publishd: apps/BEVO/publishd/README.md
+          - CAN Schema: apps/BEVO/schema/README.md
+          - Nonhermetic Runbook: apps/BEVO/nonhermetic/README.md
+      - Telemetry:
+          - Overview: apps/telemetry/README.md
+          - Bazel Build Guide: apps/telemetry/BAZEL_BUILD.md
+          - Viewer Tool: apps/telemetry/analysis/database/viewer_tool/README.md
+          - Multi-Car Viewer Plan: apps/telemetry/VIEWER_MULTI_CAR_PLAN.md
+          - Field Pipeline: apps/telemetry/TELEMETRY_FIELD_PIPELINE.md
+          - Car Status: apps/telemetry/docs/car_status_design.md
+          - Grafana Dashboards: apps/telemetry/GRAFANA.md
+          - Dashboard Proposals: apps/telemetry/scripts/docs/DASHBOARD_PROPOSALS.md
+          - Schema Driven Development: apps/telemetry/scripts/docs/SCHEMA_DRIVEN_DEV.md
+          - SDD Usage: apps/telemetry/scripts/docs/SDD_USAGE.md
+          - Orion Kafka Bridge: apps/telemetry/scripts/docs/ORION_BRIDGE_IMPLEMENTATION.md
+          - Ingest Protobuf: apps/telemetry/stack/ingest/protobuf/README.md
+          - Kafka Processor Template: apps/telemetry/stack/processors/kafka_base/README.md
+          - logsync: apps/telemetry/stack/logsync/README.md
   - Other:
-      - Apps: apps/README.md
       - Platforms: platforms/README.md
       - Toolchains: toolchains/README.md
       - Contributing: CONTRIBUTING.md
@@ -116,6 +144,7 @@ plugins:
         - "autonomy/ros2/build/**" # colcon outputs on dev machines
         - "autonomy/ros2/install/**"
         - "autonomy/ros2/log/**"
+        - "apps/telemetry/stack/ingest/grafana-kafka-datasource/**" # vendored plugin
 
 theme:
   name: material
