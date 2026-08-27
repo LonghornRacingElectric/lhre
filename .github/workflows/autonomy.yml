@@ -32,10 +32,16 @@ jobs:
       # Dependencies come from each package.xml, so declaring one there is
       # enough. ros_gz is skipped: it pulls in all of Gazebo Harmonic and
       # nothing in CI launches a simulator (the demos need a display).
+      # `rosdep update` pulls half a dozen YAML files from GitHub and fails
+      # the whole command on one reset connection, hence the retries.
       - name: Install dependencies
         run: |
           apt-get update
-          rosdep update --rosdistro jazzy
+          for attempt in 1 2 3; do
+            rosdep update --rosdistro jazzy && break
+            echo "rosdep update failed (attempt $attempt), retrying"
+            sleep 10
+          done
           rosdep install --from-paths src --ignore-src -y \
             --skip-keys "ros_gz_sim ros_gz_bridge ros_gz_interfaces"
 
@@ -47,10 +53,11 @@ jobs:
       # ament lint (flake8, pep257) per package today; functional tests are
       # open work for the Sim & Test Infra lane. Rules: ros2/README.md.
       - name: Test
+        id: test
         run: |
           source /opt/ros/jazzy/setup.bash
           colcon test --return-code-on-test-failure --event-handlers console_cohesion+
 
       - name: Report test results
-        if: always()
+        if: ${{ !cancelled() && steps.test.outcome != 'skipped' }}
         run: colcon test-result --verbose
