@@ -131,7 +131,7 @@ colcon test-result --verbose    # prints the failures
 
 Only the ament linters run today (`ament_flake8` and `ament_pep257`, one
 `test/` dir per package); functional tests are open work for the Sim & test
-infra lane. The copyright check is skipped in every package.
+infra lane.
 
 CI runs the same build and test
 ([`.github/workflows/autonomy.yml`](https://github.com/LonghornRacingElectric/lhre/blob/main/.github/workflows/autonomy.yml))

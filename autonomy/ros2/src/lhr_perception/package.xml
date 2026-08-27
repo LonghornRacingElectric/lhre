@@ -5,7 +5,7 @@
   <version>0.0.0</version>
   <description>LiDAR-based cone perception for FSAE driverless.</description>
   <maintainer email="gray@todo.todo">gray</maintainer>
-  <license>TODO: License declaration</license>
+  <license>MIT</license>
 
   <exec_depend>rclpy</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
@@ -17,7 +17,6 @@
   <exec_depend>python3-numpy</exec_depend>
   <exec_depend>python3-scipy</exec_depend>
 
-  <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>
   <test_depend>python3-pytest</test_depend>

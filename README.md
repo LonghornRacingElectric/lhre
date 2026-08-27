@@ -121,3 +121,7 @@ To authenticate, copy [.bazelrc.user.example](https://github.com/LonghornRacingE
 Settings → API keys — ask a software lead for an invite to the org.
 
 No key, or no internet? `--config=local` builds entirely on your machine.
+
+## License
+
+MIT, see [LICENSE](https://github.com/LonghornRacingElectric/lhre/blob/main/LICENSE).
