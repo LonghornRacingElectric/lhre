@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""FSAE driverless mission state machine manager.
+"""
+FSAE driverless mission state machine manager.
 
 States (per FSAE Driverless Supplement 2026, DO.1.1):
     OFF       – system idle
@@ -11,10 +12,9 @@ States (per FSAE Driverless Supplement 2026, DO.1.1):
 
 import math
 
+from nav_msgs.msg import Odometry, Path
 import rclpy
 from rclpy.node import Node
-
-from nav_msgs.msg import Odometry, Path
 from std_msgs.msg import Bool, Float32, String
 
 # ---------------------------------------------------------------------------

@@ -7,10 +7,8 @@ from typing import List, Tuple
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
-
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from visualization_msgs.msg import Marker, MarkerArray
-from geometry_msgs.msg import Point
 
 # ---------------------------------------------------------------------------
 # Track generators
@@ -77,7 +75,8 @@ def generate_oval_track(
     aspect: float = 0.6,
     **_kw,
 ) -> Tuple[ConeList, ConeList]:
-    """Generate a smooth oval (elliptical) track.
+    """
+    Generate a smooth oval (elliptical) track.
 
     The oval has semi-major axis *radius_m* and semi-minor axis
     *radius_m * aspect*.  Cones are placed at uniform arc-length
@@ -180,7 +179,7 @@ def _catmull_rom_closed(
     waypoints: List[Tuple[float, float]],
     pts_per_seg: int = 20,
 ) -> List[Tuple[float, float]]:
-    """Closed Catmull-Rom spline through waypoints."""
+    """Build a closed Catmull-Rom spline through waypoints."""
     n = len(waypoints)
     curve: List[Tuple[float, float]] = []
     for i in range(n):
@@ -233,7 +232,6 @@ def _offset_cones(
     rng: random.Random,
 ) -> Tuple[ConeList, ConeList]:
     """Offset centerline to produce left/right cone lists."""
-    n = len(center)
     # Resample to cone spacing first
     cone_pts = _resample_uniform(center, cone_spacing)
     nc = len(cone_pts)
@@ -255,9 +253,9 @@ def _offset_cones(
         jitter = rng.uniform(-0.05, 0.05)
 
         left.append((x1 + (half_width + jitter) * nx,
-                      y1 + (half_width + jitter) * ny))
+                     y1 + (half_width + jitter) * ny))
         right.append((x1 - (half_width + jitter) * nx,
-                       y1 - (half_width + jitter) * ny))
+                      y1 - (half_width + jitter) * ny))
 
     return left, right
 
@@ -271,7 +269,8 @@ def generate_autocross_track(
     cone_spacing_m: float = 2.0,
     **_kw,
 ) -> Tuple[ConeList, ConeList]:
-    """Generate a randomised autocross track with S-curves and chicanes.
+    """
+    Generate a randomised autocross track with S-curves and chicanes.
 
     1. Sample waypoints around a circle with radial + angular jitter.
     2. Sort by angle to form a closed loop.
@@ -329,28 +328,28 @@ class ConePublisher(Node):
     """Publish left/right cone markers on /lhr/track/cones."""
 
     def __init__(self):
-        super().__init__("cone_publisher")
+        super().__init__('cone_publisher')
 
         # --- Parameters ---
-        self.declare_parameter("seed", 1)
-        self.declare_parameter("frame_id", "map")
-        self.declare_parameter("publish_hz", 5.0)
-        self.declare_parameter("track_style", "autocross")
-        self.declare_parameter("num_waypoints", 10)
-        self.declare_parameter("radius_m", 25.0)
-        self.declare_parameter("jitter_m", 10.0)
-        self.declare_parameter("width_m", 3.5)
-        self.declare_parameter("cone_spacing_m", 2.0)
+        self.declare_parameter('seed', 1)
+        self.declare_parameter('frame_id', 'map')
+        self.declare_parameter('publish_hz', 5.0)
+        self.declare_parameter('track_style', 'autocross')
+        self.declare_parameter('num_waypoints', 10)
+        self.declare_parameter('radius_m', 25.0)
+        self.declare_parameter('jitter_m', 10.0)
+        self.declare_parameter('width_m', 3.5)
+        self.declare_parameter('cone_spacing_m', 2.0)
 
-        self.seed = int(self.get_parameter("seed").value)
-        self.frame_id = str(self.get_parameter("frame_id").value)
-        hz = float(self.get_parameter("publish_hz").value)
-        style = str(self.get_parameter("track_style").value)
-        num_wp = int(self.get_parameter("num_waypoints").value)
-        radius = float(self.get_parameter("radius_m").value)
-        jitter = float(self.get_parameter("jitter_m").value)
-        width = float(self.get_parameter("width_m").value)
-        spacing = float(self.get_parameter("cone_spacing_m").value)
+        self.seed = int(self.get_parameter('seed').value)
+        self.frame_id = str(self.get_parameter('frame_id').value)
+        hz = float(self.get_parameter('publish_hz').value)
+        style = str(self.get_parameter('track_style').value)
+        num_wp = int(self.get_parameter('num_waypoints').value)
+        radius = float(self.get_parameter('radius_m').value)
+        jitter = float(self.get_parameter('jitter_m').value)
+        width = float(self.get_parameter('width_m').value)
+        spacing = float(self.get_parameter('cone_spacing_m').value)
 
         # --- Generate track ---
         gen = GENERATORS.get(style)
@@ -374,14 +373,14 @@ class ConePublisher(Node):
         qos.durability = DurabilityPolicy.TRANSIENT_LOCAL
 
         self.pub = self.create_publisher(
-            MarkerArray, "/lhr/track/cones", qos)
+            MarkerArray, '/lhr/track/cones', qos)
 
         period = 1.0 / max(hz, 0.1)
         self.timer = self.create_timer(period, self.on_timer)
 
         self.get_logger().info(
-            f"Publishing {len(self.left)} left + {len(self.right)} right "
-            f"cones (style={style}, seed={self.seed})")
+            f'Publishing {len(self.left)} left + {len(self.right)} right '
+            f'cones (style={style}, seed={self.seed})')
 
     def make_cone_marker(
         self, mid: int, ns: str,
@@ -417,13 +416,13 @@ class ConePublisher(Node):
 
         for i, (x, y) in enumerate(self.left):
             arr.markers.append(
-                self.make_cone_marker(i, "left_cones", x, y,
+                self.make_cone_marker(i, 'left_cones', x, y,
                                       0.0, 0.2, 1.0))
 
         base = 10000
         for i, (x, y) in enumerate(self.right):
             arr.markers.append(
-                self.make_cone_marker(base + i, "right_cones", x, y,
+                self.make_cone_marker(base + i, 'right_cones', x, y,
                                       1.0, 1.0, 0.0))
 
         self.pub.publish(arr)
@@ -441,5 +440,5 @@ def main():
     rclpy.shutdown()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

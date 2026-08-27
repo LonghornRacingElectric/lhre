@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""LiDAR-based cone detector for FSAE driverless.
+"""
+LiDAR-based cone detector for FSAE driverless.
 
 Subscribes to a PointCloud2 topic from Gazebo's gpu_lidar sensor,
 clusters the pointcloud to find cone-sized objects, and publishes
@@ -18,19 +19,16 @@ handles centerline construction from unclassified cones.
 
 import math
 
+from nav_msgs.msg import Odometry
 import numpy as np
-from scipy.spatial import cKDTree
-
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
-
-from nav_msgs.msg import Odometry
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from scipy.spatial import cKDTree
 from sensor_msgs.msg import PointCloud2
+from sensor_msgs_py import point_cloud2
 from std_msgs.msg import ColorRGBA
 from visualization_msgs.msg import Marker, MarkerArray
-
-from sensor_msgs_py import point_cloud2
 
 
 def _quat_to_yaw(q) -> float:
@@ -252,7 +250,8 @@ class LidarConeDetector(Node):
     # ------------------------------------------------------------------
     def _try_merge(self, mx: float, my: float,
                    cone_map: list[list[float]]) -> bool:
-        """Try to merge into the nearest existing cone in *cone_map*.
+        """
+        Try to merge into the nearest existing cone in *cone_map*.
 
         Returns True if merged (position updated via running average).
         Returns False if no existing cone is within dedup radius.

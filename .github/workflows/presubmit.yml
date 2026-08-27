@@ -4,7 +4,35 @@ on:
   pull_request:
 
 jobs:
+  # autonomy/ is outside Bazel (ADR-009), so a PR that only touches it has
+  # nothing for the Bazel jobs to check. They are gated on this job rather
+  # than on a `paths-ignore` filter because `bazel` is a required check: a
+  # required check that never reports leaves the PR stuck at "Expected",
+  # while a job skipped by `if:` reports success. Fails closed: if this job
+  # errors, the Bazel jobs run.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      bazel: ${{ steps.check.outputs.bazel }}
+    steps:
+      - name: Look for changes outside autonomy/
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          files=$(gh api --paginate \
+            "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+            --jq '.[].filename')
+          if grep -qv '^autonomy/' <<< "$files"; then
+            echo "bazel=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "bazel=false" >> "$GITHUB_OUTPUT"
+            echo "Only autonomy/ changed; skipping the Bazel jobs."
+          fi
+
   bazel:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.bazel != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,6 +63,8 @@ jobs:
   # under Windows' 260-char MAX_PATH — same setup the .bazelrc.user.example
   # asks of Windows dev machines.
   bazel-windows:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.bazel != 'false' }}
     runs-on: windows-latest
     timeout-minutes: 60
     steps:

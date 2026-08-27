@@ -1,0 +1,63 @@
+name: autonomy
+
+# autonomy/ is a ROS 2 workspace built with colcon, outside Bazel
+# (docs/architecture/009-autonomy-outside-bazel.md), so presubmit's
+# `bazel test //...` never sees it. This job runs on the official Jazzy
+# image (Ubuntu 24.04) rather than apt-installing ROS on the runner.
+# Not a required check on main: a path-filtered required check would
+# block every PR that does not touch autonomy/.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "autonomy/**"
+      - ".github/workflows/autonomy.yml"
+  pull_request:
+    paths:
+      - "autonomy/**"
+      - ".github/workflows/autonomy.yml"
+
+jobs:
+  colcon:
+    runs-on: ubuntu-latest
+    container: ros:jazzy-ros-base
+    defaults:
+      run:
+        shell: bash
+        working-directory: autonomy/ros2
+    steps:
+      - uses: actions/checkout@v4
+
+      # Dependencies come from each package.xml, so declaring one there is
+      # enough. ros_gz is skipped: it pulls in all of Gazebo Harmonic and
+      # nothing in CI launches a simulator (the demos need a display).
+      # `rosdep update` pulls half a dozen YAML files from GitHub and fails
+      # the whole command on one reset connection, hence the retries.
+      - name: Install dependencies
+        run: |
+          apt-get update
+          for attempt in 1 2 3; do
+            rosdep update --rosdistro jazzy && break
+            echo "rosdep update failed (attempt $attempt), retrying"
+            sleep 10
+          done
+          rosdep install --from-paths src --ignore-src -y \
+            --skip-keys "ros_gz_sim ros_gz_bridge ros_gz_interfaces"
+
+      - name: Build
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          colcon build
+
+      # ament lint (flake8, pep257) per package today; functional tests are
+      # open work for the Sim & Test Infra lane. Rules: ros2/README.md.
+      - name: Test
+        id: test
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          colcon test --return-code-on-test-failure --event-handlers console_cohesion+
+
+      - name: Report test results
+        if: ${{ !cancelled() && steps.test.outcome != 'skipped' }}
+        run: colcon test-result --verbose

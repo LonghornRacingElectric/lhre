@@ -122,6 +122,38 @@ Launch arguments can be passed through `run_demo.sh`:
 ros2 topic pub --once /lhr/mission/go std_msgs/msg/Bool "{data: true}"
 ```
 
+## Tests and CI
+
+```bash
+colcon test                     # from ros2/, after a build
+colcon test-result --verbose    # prints the failures
+```
+
+Only the ament linters run today (`ament_flake8` and `ament_pep257`, one
+`test/` dir per package); functional tests are open work for the Sim & test
+infra lane. The copyright check is skipped in every package.
+
+CI runs the same build and test
+([`.github/workflows/autonomy.yml`](https://github.com/LonghornRacingElectric/lhre/blob/main/.github/workflows/autonomy.yml))
+on the `ros:jazzy-ros-base` image for every PR that touches `autonomy/`.
+Dependencies are installed from each package's `package.xml` with `rosdep`,
+so declare new ones there. Gazebo (`ros_gz_*`) is skipped in CI since
+nothing there launches a simulator.
+
+The ament linters are stricter than plain flake8. What trips people up:
+
+- Single quotes for strings (`Q000`).
+- Google import order (`I100`, `I101`): within a group, `import x` and
+  `from x import y` lines interleave alphabetically by module name, and
+  names inside a `from` import are sorted. ROS packages, numpy and scipy
+  are all one third-party group.
+- Multi-line docstrings put the summary on the line after the opening
+  quotes (`D213`, the ROS 2 house style). Single-line docstrings stay on
+  one line.
+- Summary lines end with a period and start with an imperative verb
+  (`D400`, `D401`); no blank line after a function docstring (`D202`).
+  Max line length 99.
+
 ## Scripts reference
 
 All scripts live in `scripts/` and should be run from the `autonomy/ros2` directory.

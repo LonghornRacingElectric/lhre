@@ -4,12 +4,11 @@
 import math
 from typing import List, Optional, Tuple
 
-import rclpy
-from rclpy.node import Node
-
 from ackermann_msgs.msg import AckermannDrive, AckermannDriveStamped
 from geometry_msgs.msg import Point
 from nav_msgs.msg import Odometry, Path
+import rclpy
+from rclpy.node import Node
 from std_msgs.msg import ColorRGBA, Float32, Header, String
 from visualization_msgs.msg import Marker
 
@@ -221,7 +220,8 @@ class PurePursuit(Node):
     # Lookahead (returns index + point)
     # ------------------------------------------------------------------
     def _find_lookahead(self) -> Optional[Tuple[int, float, float]]:
-        """Find the first path point >= lookahead_dist away.
+        """
+        Find the first path point >= lookahead_dist away.
 
         Returns (index, x, y) or None.  Treats path as closed loop.
         """
@@ -248,7 +248,8 @@ class PurePursuit(Node):
     # Curvature estimation
     # ------------------------------------------------------------------
     def _estimate_curvature(self, idx: int) -> float:
-        """Estimate curvature at path[idx] using circumcircle of 3 points.
+        """
+        Estimate curvature at path[idx] using circumcircle of 3 points.
 
         Uses points at idx-w, idx, idx+w (wrapped for closed loop).
         """

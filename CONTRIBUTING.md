@@ -11,6 +11,11 @@ missing targets)? Check the [cookbook](docs/cookbook.md) first.
   No direct pushes to `main`.
 - Presubmit runs `bazel test //...` (builds all firmware, runs host tests)
   and `bazel run //tools/format:check`. Run both locally before pushing.
+- `autonomy/` is outside Bazel
+  ([ADR-009](docs/architecture/009-autonomy-outside-bazel.md)); its own
+  path-filtered workflow builds and lints it with colcon, and PRs that
+  touch only `autonomy/` skip the Bazel jobs (they report as skipped,
+  which satisfies the required check).
 
 ## Formatting
 
