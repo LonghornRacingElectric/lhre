@@ -16,7 +16,8 @@ here. Do not add `BUILD.bazel` files.
   the Sim & Test Infra lane).
 - CI: `.github/workflows/autonomy.yml` at the repo root runs the same
   build and `colcon test` on every PR that touches `autonomy/`. Not a
-  required check. The lint rules it enforces are listed in
+  required check. PRs that touch only `autonomy/` skip the Bazel jobs in
+  presubmit. The lint rules it enforces are listed in
   [ros2/README.md](ros2/README.md#tests-and-ci); run them locally before
   pushing if you can.
 - The demo scripts (`run_demo.sh`, `run_gazebo_demo.sh`, `rviz_demo.sh`)
