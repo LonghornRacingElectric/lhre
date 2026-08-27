@@ -40,6 +40,9 @@ here. Do not add `BUILD.bazel` files.
   adjacent README in the same change. [`ros2/README.md`](ros2/README.md) is
   the reference (packages, topics, parameters, state machine).
   [`docs/plans/`](docs/plans/README.md) are working docs for contributors
-  and agents, not onboarding material.
+  and agents, not onboarding material. These pages are on the published
+  site with the rest of the repo: a new page needs a `nav` entry in the
+  root `mkdocs.yml`, and `uv run --group docs mkdocs build --strict` from
+  the repo root must pass (it fails on broken links).
 - The live plan, timeline, and hardware decisions are in Notion (VMS /
   Autonomous). If a doc here disagrees with Notion, Notion wins.

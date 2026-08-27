@@ -42,6 +42,22 @@ nav:
       - CAN Spec Tools: tools/spec/README.md
       - IDE Setup: tools/ide/README.md
       - Serial Monitor: tools/monitor/README.md
+  - Autonomy:
+      - Overview: autonomy/README.md
+      - Getting Started: autonomy/ros2/GETTING-STARTED.md
+      - ROS 2 Workspace: autonomy/ros2/README.md
+      - Docker (macOS): autonomy/ros2/docker/README.md
+      - Plans:
+          - Overview: autonomy/docs/plans/README.md
+          - Retrofit Roadmap 2026-27: autonomy/docs/plans/retrofit-roadmap-2026-27.md
+          - Gazebo Integration: autonomy/docs/plans/gazebo-integration.md
+          - Gazebo Change Notes: autonomy/docs/plans/gazebo-change-notes.md
+          - Camera Fusion: autonomy/docs/plans/camera-fusion.md
+      - FSAE Rules:
+          - Track and Events: autonomy/docs/rules/fsae-track-and-events.md
+          - Vehicle Systems: autonomy/docs/rules/fsae-vehicle-systems.md
+          - Competition Checklist: autonomy/docs/rules/fsae-competition-checklist.md
+      - Agent Instructions: autonomy/AGENTS.md
   - Other:
       - Apps: apps/README.md
       - Platforms: platforms/README.md
@@ -71,6 +87,7 @@ plugins:
       # GitHub and on the published site.
       merge_docs_dir: false
       folders:
+        - autonomy
         - apps
         - boards
         - docs
@@ -92,6 +109,9 @@ plugins:
         - "site/**" # mkdocs build output
         - "external/**" # third-party staging
         - "patches/**"
+        - "autonomy/ros2/build/**" # colcon outputs on dev machines
+        - "autonomy/ros2/install/**"
+        - "autonomy/ros2/log/**"
 
 theme:
   name: material
