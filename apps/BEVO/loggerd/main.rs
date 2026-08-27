@@ -20,7 +20,7 @@ use sensor_proto::proto::orion::{
 use sensor_proto::config::PacketConfig;
 
 const SOCKET_PATH: &str = "/tmp/BEVO_cand.sock";
-const DEFAULT_LOG_DIR: &str = "BEVO/loggerd/logs";
+const DEFAULT_LOG_DIR: &str = "apps/BEVO/loggerd/logs";
 const LOGGER_ENABLED: bool = true;
 const LOGGER_QUEUE_CAPACITY: usize = 4096;
 const LOGGER_FLUSH_EVERY_ROWS: usize = 100;
@@ -94,7 +94,7 @@ fn can_json_path() -> PathBuf {
         return PathBuf::from(path);
     }
     let mut path = workspace_root();
-    path.push("BEVO/nonhermetic/assets/can.json");
+    path.push("apps/BEVO/schema/can.json");
     path
 }
 
@@ -367,8 +367,16 @@ fn csv_escape(value: &str) -> String {
 }
 
 fn default_log_file_path() -> Result<String> {
-    let mut log_dir_path = workspace_root();
-    log_dir_path.push(DEFAULT_LOG_DIR);
+    // LOGGERD_LOG_DIR lets binary-bundle deployments (no repo checkout on the
+    // Pi) log somewhere real; without it, resolve relative to the workspace.
+    let mut log_dir_path = match std::env::var("LOGGERD_LOG_DIR") {
+        Ok(dir) => PathBuf::from(dir),
+        Err(_) => {
+            let mut path = workspace_root();
+            path.push(DEFAULT_LOG_DIR);
+            path
+        }
+    };
     std::fs::create_dir_all(&log_dir_path)?;
 
     let timestamp_ms = SystemTime::now()
@@ -469,13 +477,17 @@ fn main() -> Result<()> {
 mod tests {
     use super::*;
 
-    // Point the schema loader at this crate's checked-in can.json so the tests
-    // exercise the real artifact-driven path (not just the fallback).
+    // Point the schema loader at the generated can.json so the tests exercise
+    // the real artifact-driven path (not just the fallback). Bazel sets
+    // LOGGERD_CAN_JSON_PATH via the rust_test env attr; under Cargo the build
+    // script has generated can.json into OUT_DIR.
     fn headers() -> Vec<String> {
-        std::env::set_var(
-            "LOGGERD_CAN_JSON_PATH",
-            concat!(env!("CARGO_MANIFEST_DIR"), "/nonhermetic/assets/can.json"),
-        );
+        if std::env::var("LOGGERD_CAN_JSON_PATH").is_err() {
+            let path = option_env!("OUT_DIR")
+                .map(|dir| format!("{dir}/can.json"))
+                .unwrap_or_else(|| "apps/BEVO/schema/can.json".to_string());
+            std::env::set_var("LOGGERD_CAN_JSON_PATH", path);
+        }
         canonical_csv_headers()
     }
 

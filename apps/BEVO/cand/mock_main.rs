@@ -17,7 +17,7 @@ const MOCK_PORT_0: &str = "127.0.0.1:5005";
 const MOCK_PORT_1: &str = "127.0.0.1:5006";
 const SOCKET_PATH: &str = "/tmp/BEVO_cand.sock";
 const PUBLISHD_SOCKET_PATH: &str = "/tmp/BEVO_cand_publishd.sock";
-const DEFAULT_CAN_JSON_PATH: &str = "BEVO/nonhermetic/assets/can.json";
+const DEFAULT_CAN_JSON_PATH: &str = "apps/BEVO/schema/can.json";
 const DEFAULT_PUBLISH_HZ: u64 = 100;
 
 #[derive(Debug)]

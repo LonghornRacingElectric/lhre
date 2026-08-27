@@ -1,3 +1,2 @@
 lgpio
 pyserial
-protobuf==6.29.0

@@ -3,7 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_binary")
 package(default_visibility = ["//apps/BEVO:__subpackages__"])
 
 rust_binary(
-    name = "dashd",
+    name = "debugd",
     srcs = ["main.rs"],
     edition = "2021",
     # Unix-socket IPC — no Windows.
@@ -15,9 +15,5 @@ rust_binary(
         "//apps/BEVO:sensor_proto",
         "@crates//:anyhow",
         "@crates//:prost",
-        "@crates//:rumqttc",
-        "@crates//:serde",
-        "@crates//:serde_json",
-        "@crates//:tungstenite",
     ],
 )

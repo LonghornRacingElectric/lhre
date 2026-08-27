@@ -4,14 +4,14 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 SERVICE_SRC="$SCRIPT_DIR/bevo_dash_serve.service"
 SERVICE_DST="/etc/systemd/system/bevo_dash_serve.service"
 DESKTOP_SRC="$SCRIPT_DIR/dash-kiosk.desktop"
 DESKTOP_DST="$HOME/.config/autostart/dash-kiosk.desktop"
 LABWC_AUTOSTART_SRC="$SCRIPT_DIR/labwc-autostart"
 LABWC_AUTOSTART_DST="/etc/xdg/labwc/autostart"
-TELEMETRY_SRC="$REPO_ROOT/BEVO/nonhermetic/bevo_telemetry.service"
+TELEMETRY_SRC="$REPO_ROOT/apps/BEVO/nonhermetic/bevo_telemetry.service"
 TELEMETRY_DST="/etc/systemd/system/bevo_telemetry.service"
 
 echo "[1/9] Marking helper scripts executable"

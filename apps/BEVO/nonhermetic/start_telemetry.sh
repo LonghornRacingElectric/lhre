@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_ROOT="$(cd "$(dirname "$0")" && pwd)"
 BEVO_ROOT="$(cd "$SCRIPT_ROOT/.." && pwd)"
-REPO_ROOT="$(cd "$BEVO_ROOT/.." && pwd)"
+REPO_ROOT="$(cd "$BEVO_ROOT/../.." && pwd)"
 
 PYTHON_BIN="${BEVO_PYTHON_BIN:-}"
 if [[ -z "$PYTHON_BIN" ]]; then

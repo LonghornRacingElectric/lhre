@@ -1,14 +1,19 @@
-# load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_rust//rust:defs.bzl", "rust_binary")
 
-# rust_binary(
-# 	name = "publishd",
-# 	srcs = ["main.rs"],
-# 	visibility = ["//visibility:public"],
-# 	deps = [
-# 		"//BEVO:sensor_proto",
-# 		"@crate_index//:anyhow",
-# 		"@crate_index//:rumqttc",
-# 		"@crate_index//:prost",
-# 		"@crate_index//:serde_json",
-# 	],
-# )
+package(default_visibility = ["//apps/BEVO:__subpackages__"])
+
+rust_binary(
+    name = "publishd",
+    srcs = ["main.rs"],
+    edition = "2021",
+    # Unix-socket IPC — no Windows.
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
+    deps = [
+        "@crates//:anyhow",
+        "@crates//:rumqttc",
+        "@crates//:serde_json",
+    ],
+)

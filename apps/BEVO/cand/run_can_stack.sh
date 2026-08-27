@@ -2,11 +2,11 @@
 set -euo pipefail
 
 RUNFILES_ROOT="${RUNFILES_DIR:-$0.runfiles}"
-CAND_BIN="$RUNFILES_ROOT/_main/BEVO/cand/cand"
-DASHD_BIN="$RUNFILES_ROOT/_main/BEVO/dashd/dashd"
-PUBLISHD_BIN="$RUNFILES_ROOT/_main/BEVO/publishd/publishd"
-LOGGERD_BIN="$RUNFILES_ROOT/_main/BEVO/loggerd/loggerd"
-CAN_JSON_PATH="$RUNFILES_ROOT/_main/drivers/longhorn-lib/can.json"
+CAND_BIN="$RUNFILES_ROOT/_main/apps/BEVO/cand/cand"
+DASHD_BIN="$RUNFILES_ROOT/_main/apps/BEVO/dashd/dashd"
+PUBLISHD_BIN="$RUNFILES_ROOT/_main/apps/BEVO/publishd/publishd"
+LOGGERD_BIN="$RUNFILES_ROOT/_main/apps/BEVO/loggerd/loggerd"
+CAN_JSON_PATH="$RUNFILES_ROOT/_main/apps/BEVO/schema/can.json"
 
 STARTUP_SEMAPHORE_PATH="/tmp/BEVO_publishd_ready"
 IPC_SOCKET_PATH="/tmp/BEVO_cand.sock"

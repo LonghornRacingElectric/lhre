@@ -25,14 +25,12 @@ const MOCK_ADDR_1: &str = "127.0.0.1:5006";
 const SOCKET_PATH: &str = "/tmp/BEVO_cand.sock";
 const PUBLISHD_SOCKET_PATH: &str = "/tmp/BEVO_cand_publishd.sock";
 const STARTUP_SEMAPHORE_PATH: &str = "/tmp/BEVO_publishd_ready";
-//const OTA_SEMAPHORE_PATH: &str = "/tmp/BEVO_ota_request"; 
 const CAN_INTERFACE_0: &str = "can0";
 const CAN_INTERFACE_1: &str = "can1";
 const DEFAULT_PUBLISH_HZ: u64 = 100;
 const DEFAULT_NMEA_LISTEN_ADDR: &str = "0.0.0.0:2000";
-//const OTA_DOWNLOAD_START_ADDRESS: &str = "0x00000000";
 
-const DEFAULT_CAN_JSON_PATH: &str = "BEVO/nonhermetic/assets/can.json";
+const DEFAULT_CAN_JSON_PATH: &str = "apps/BEVO/schema/can.json";
 const TRACKED_BOARD_SOURCES: [&str; 8] = ["CSM", "DUI", "HVC", "Inverter", "PDU", "TSM", "USM", "VCU"];
 
 #[derive(Debug)]
@@ -50,7 +48,6 @@ struct ExternalDynamicsData {
 
 #[cfg(target_os = "linux")]
 fn main() -> Result<()> {
-    //let _ = std::fs::remove_file(OTA_SEMAPHORE_PATH);
     let use_mock = matches!(
         std::env::var("CAND_USE_MOCK")
             .ok()
@@ -257,56 +254,6 @@ fn read_publishd_start_packet_id() -> Option<u64> {
     let packet_id = contents.trim().parse::<u64>().ok()?;
     Some(packet_id.max(1))
 }
-
-// check for OTA sempahore file and read current id and link
-
-// fn check_for_ota() -> Option<(u32, String)> {
-//     if Path::new(OTA_SEMAPHORE_PATH).exists() {
-//         if let Ok(contents) = std::fs::read_to_string(OTA_SEMAPHORE_PATH) {
-//             let trimmed = contents.trim();
-//             let mut parts = trimmed.splitn(2, ':');
-//             if let (Some(device_id_raw), Some(data_link_raw)) = (parts.next(), parts.next()) {
-//                 if let Ok(device_id) = device_id_raw.parse::<u32>() {
-//                     let data_link = data_link_raw.trim().to_string();
-//                     if !data_link.is_empty() {
-//                         return Some((device_id, data_link));
-//                     }
-//                 }
-//             }
-//         }
-//     }
-//     None
-// }
-
-// fn remove_ota_semaphore() {
-//     if let Err(error) = std::fs::remove_file(OTA_SEMAPHORE_PATH) {
-//         if error.kind() != std::io::ErrorKind::NotFound {
-//             eprintln!("[CAND] failed to remove OTA semaphore: {:?}", error);
-//         }
-//     }
-// }
-
-// fn resolve_bevo_root() -> Result<PathBuf> {
-//     if let Ok(root) = std::env::var("BEVO_ROOT") {
-//         let path = PathBuf::from(root);
-//         if path.join("cand/bootload.py").exists() && path.join("requirements.txt").exists() {
-//             return Ok(path);
-//         }
-//     }
-
-//     let cwd = std::env::current_dir()?;
-//     let direct_bootload = cwd.join("cand/bootload.py");
-//     let nested_bootload = cwd.join("BEVO/cand/bootload.py");
-
-//     if direct_bootload.exists() && cwd.join("requirements.txt").exists() {
-//         return Ok(cwd);
-//     }
-//     if nested_bootload.exists() && cwd.join("BEVO/requirements.txt").exists() {
-//         return Ok(cwd.join("BEVO"));
-//     }
-
-//     anyhow::bail!("unable to resolve BEVO root; set BEVO_ROOT env var")
-// }
 
 // continuously reads CAN frames from the specified socketCAN interface and
 // sends them to the processing thread over a channel.
@@ -562,76 +509,6 @@ fn apply_board_last_seen(data: &mut OrionSensorData, board_last_seen: &HashMap<S
     board_status.vcu_last_seen_s = board_last_seen_value(board_last_seen, "VCU");
 }
 
-// fn ota_processing_loop(device_id: u32, data_link: String) -> Result<std::path::PathBuf> {
-//     // create a temporary file path that includes the device id so multiple
-//     // OTA downloads don't collide
-//     let mut tmp = std::env::temp_dir();
-//     tmp.push(format!("bevo_ota_{}.bin", device_id));
-
-//     let curl_status = Command::new("curl")
-//         .arg("-fL")
-//         .arg("--retry")
-//         .arg("3")
-//         .arg("--connect-timeout")
-//         .arg("10")
-//         .arg("--max-time")
-//         .arg("120")
-//         .arg("--output")
-//         .arg(&tmp)
-//         .arg(&data_link)
-//         .status()?;
-//     if !curl_status.success() {
-//         anyhow::bail!("curl download failed with status {}", curl_status);
-//     }
-
-//     let bevo_root = resolve_bevo_root()?;
-
-//     // ensure Python virtualenv exists in BEVO root
-//     let venv_dir = bevo_root.join("venv");
-//     let python_exe = if cfg!(windows) {
-//         venv_dir.join("Scripts/python.exe")
-//     } else {
-//         venv_dir.join("bin/python3")
-//     };
-
-//     if !python_exe.exists() {
-//         println!("[CAND] creating python venv at {}", venv_dir.display());
-//         let status = Command::new("python3")
-//             .arg("-m")
-//             .arg("venv")
-//             .arg(&venv_dir)
-//             .status()?;
-//         if !status.success() {
-//             anyhow::bail!("failed to create venv, exit status {}", status);
-//         }
-
-//         let status = Command::new(&python_exe)
-//             .arg("-m")
-//             .arg("pip")
-//             .arg("install")
-//             .arg("-r")
-//             .arg(bevo_root.join("requirements.txt"))
-//             .status()?;
-//         if !status.success() {
-//             anyhow::bail!("failed to install python requirements, exit status {}", status);
-//         }
-//     }
-
-//     // call bootload script with firmware path, flash start address, and device id
-//     let boot_script = bevo_root.join("cand/bootload.py");
-//     let status = Command::new(&python_exe)
-//         .arg(&boot_script)
-//         .arg(&tmp)
-//         .arg(OTA_DOWNLOAD_START_ADDRESS)
-//         .arg(device_id.to_string())
-//         .status()?;
-//     if !status.success() {
-//         anyhow::bail!("bootload.py failed with status {}", status);
-//     }
-
-//     Ok(tmp)
-// }
-
 // takes raw CAN data + the JSON config for that CAN ID, updates the proto struct in-place with the new values
 
 fn repeated_field_span(config: &PacketConfig) -> usize {
@@ -759,30 +636,10 @@ fn ipc_server_loop(
     loop {
         // add packet id and time fields 
 
-        // check OTA smeaphore and divert to downloading release and sending firmware update packets
-
-        // if let Some((device_id, link)) = check_for_ota() {
-        //     println!(
-        //         "[CAND] OTA request detected for device {} -> {}",
-        //         device_id, link
-        //     );
-        //     match ota_processing_loop(device_id, link.clone()) {
-        //         Ok(path) => {
-        //             println!("[CAND] OTA completed using {}", path.display());
-        //             remove_ota_semaphore();
-        //         }
-        //         Err(e) => eprintln!("[CAND] failed to download OTA image: {:?}", e),
-        //     }
-        //     // after handling, sleep briefly before next iteration
-        //     thread::sleep(Duration::from_secs(1));
-        //     continue;
-        // }
-
         let elapsed_since_tick = last_status_tick.elapsed().as_secs_f32();
         last_status_tick = Instant::now();
         let board_status_snapshot = tick_board_last_seen(&board_last_seen, elapsed_since_tick);
         let external_snapshot = external_dynamics.lock().unwrap().clone();
-
 
         let cycle_start = Instant::now();
         let mut buffer = Vec::new();

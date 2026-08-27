@@ -3,7 +3,10 @@ pub mod proto {
 }
 
 pub mod config;
-pub mod generated_mapping;
+
+pub mod generated_mapping {
+    include!(concat!(env!("OUT_DIR"), "/generated_mapping.rs"));
+}
 
 pub fn set_vec_index(v: &mut Vec<f32>, i: usize, val: f32) {
     if v.len() <= i { v.resize(i + 1, 0.0); }

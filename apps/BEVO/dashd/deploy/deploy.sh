@@ -17,7 +17,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DASHD_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 BEVO_ROOT="$(cd "$DASHD_DIR/.." && pwd)"
-REPO_ROOT="$(cd "$BEVO_ROOT/.." && pwd)"
+REPO_ROOT="$(cd "$BEVO_ROOT/../.." && pwd)"
 FRONTEND_DIR="$DASHD_DIR/frontend"
 
 echo "[1/4] git pull"
