@@ -70,4 +70,6 @@ and on Windows, with no services and no secrets.
   pick it up.
 - The secrets `POSTGRES_USER`, `POSTGRES_PASSWORD`, `ELECTRIC_PWD`,
   `GRAFANA_PWD` and `ANALYSIS_PWD` must exist in this repo before the
-  workflow tests anything; until then it only builds the images.
+  workflow tests anything; until then it only builds the images. The init
+  scripts create databases, not roles, so `POSTGRES_USER` is `electric` and
+  `ELECTRIC_PWD` equals `POSTGRES_PASSWORD`.
