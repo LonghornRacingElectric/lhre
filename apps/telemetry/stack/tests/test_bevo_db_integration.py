@@ -172,7 +172,10 @@ class TestBevoAndDatabaseIntegration(unittest.TestCase):
             if disconnect_before_poll:
                 teardown()
 
-            deadline = time.time() + 15
+            # 45 s, not 15: the first packet through MQTT -> ingest -> Kafka ->
+            # processor -> Postgres on a cold CI runner waits on the consumer
+            # group join, which alone can take 10 s+. Seen flaky at 15 s in CI.
+            deadline = time.time() + 45
             while time.time() < deadline:
                 with get_db("Orion") as session:
                     after_count = session.query(OrionPacket).count()
