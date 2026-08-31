@@ -23,6 +23,11 @@ files live here — the distinction matters:
   `OUT_DIR` by [apps/BEVO/build.rs](https://github.com/LonghornRacingElectric/lhre/blob/main/apps/BEVO/build.rs),
   which consumes the proto and `can.json`.
 
+Server-side telemetry reaches these artifacts through
+`//apps/telemetry:current_schema_bundle`. Keep that alias boundary intact: it
+allows a future schema/version resolver to change the selected bundle without
+coupling every service to this package's generator layout.
+
 ## Changing the schema
 
 1. Edit the CSVs.

@@ -1,4 +1,4 @@
-load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
 load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
 load("//apps/telemetry:container.bzl", "telemetry_service_image")
 
@@ -7,50 +7,54 @@ package(default_visibility = ["//apps/telemetry:__subpackages__"])
 exports_files(["docker-compose.yml"])
 
 py_library(
-    name = "lap_timer_lib",
+    name = "car_status_lib",
     srcs = [
         "__init__.py",
-        "lap_timer.py",
+        "classifier.py",
+        "db_writer.py",
     ],
-    imports = ["../../..", "../../../.."],
+    imports = ["."],
     deps = [
-        "//apps/telemetry/analysis:analysis_lib",
         "//apps/telemetry/stack/ingest:ingest_lib",
-        requirement("kafka-python"),
-        requirement("requests"),
+        requirement("psycopg2-binary"),
     ],
     visibility = ["//visibility:public"],
 )
 
 py_binary(
-    name = "lap_timer_binary",
+    name = "car_status_binary",
     srcs = ["main.py"],
     imports = [".", "../../..", "../../../.."],
     main = "main.py",
-    deps = [":lap_timer_lib"],
+    deps = [
+        ":car_status_lib",
+        requirement("kafka-python"),
+        requirement("protobuf"),
+    ],
     visibility = ["//visibility:public"],
 )
 
+py_test(
+    name = "classifier_test",
+    srcs = ["test_classifier.py"],
+    deps = [":car_status_lib"],
+    main = "test_classifier.py",
+)
+
 telemetry_service_image(
-    name = "lap_timer",
+    name = "car_status",
     base = "@python312_linux_amd64",
-    binary = ":lap_timer_binary",
+    binary = ":car_status_binary",
     env = {
         "PYTHONPATH": "/app",
         "PYTHONUNBUFFERED": "1",
     },
     repo_tags = [
-        "lhre/telemetry-lap-timer:dev",
-        "lap_timer:latest",
+        "lhre/telemetry-car-status:dev",
+        "car_status_processor:latest",
     ],
-    repository = "ghcr.io/longhornracingelectric/telemetry-lap-timer",
+    repository = "ghcr.io/longhornracingelectric/telemetry-car-status",
     tars = ["//apps/telemetry:runtime_config_tar"],
     visibility = ["//visibility:public"],
-    workdir = "/app/stack/processors/lap_timer",
-)
-
-alias(
-    name = "lap_timer_tarball",
-    actual = ":lap_timer_load",
-    visibility = ["//visibility:public"],
+    workdir = "/app/stack/processors/car_status",
 )

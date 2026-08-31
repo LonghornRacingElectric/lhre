@@ -1,12 +1,6 @@
 services:
   db_processor:
-    build:
-      # Build context set to the repository root so COPY can reference files under `stack/`.
-      context: ../../..
-      # Dockerfile path is relative to the build context. Point it to the actual Dockerfile
-      # location under the repo root.
-      dockerfile: stack/processors/track_mapper/Dockerfile
-    image: track-mapper
+    image: ${TELEMETRY_TRACK_MAPPER_IMAGE:-lhre/telemetry-track-mapper:dev}
     container_name: kafka_processor_track_mapper
     restart: unless-stopped
     environment:

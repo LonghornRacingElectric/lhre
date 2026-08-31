@@ -67,25 +67,6 @@ pkg_tar(
     strip_prefix = ".",
 )
 
-# Package ingest dependencies
-pkg_tar(
-    name = "ingest_deps_tar",
-    srcs = [
-        "//apps/telemetry/stack/ingest:ingest_lib",
-        "//apps/telemetry/stack/ingest:protobuf_files",
-    ],
-    package_dir = "/app/stack/ingest",
-)
-
-# Package analysis dependencies
-pkg_tar(
-    name = "analysis_deps_tar",
-    srcs = [
-        "//apps/telemetry/analysis:analysis_lib",
-    ],
-    package_dir = "/app/analysis",
-)
-
 # Package configuration files
 pkg_tar(
     name = "config_tar",
@@ -98,7 +79,7 @@ pkg_tar(
 # OCI image for the Kafka base consumer
 oci_image(
     name = "kafka_base_image",
-    base = "@python311_linux_amd64",
+    base = "@python312_linux_amd64",
     tars = [
         ":kafka_base_app_tar",
         ":config_tar",

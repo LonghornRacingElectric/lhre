@@ -3,7 +3,7 @@ module(name = "lhre")
 bazel_dep(name = "rules_cc", version = "0.2.22")
 bazel_dep(name = "llvm", version = "0.8.16")
 bazel_dep(name = "rules_python", version = "2.2.0")
-bazel_dep(name = "aspect_bazel_lib", version = "2.19.3")
+bazel_dep(name = "aspect_bazel_lib", version = "2.21.1")
 bazel_dep(name = "toolchains_arm_gnu", version = "1.1.0")
 bazel_dep(name = "protobuf", version = "35.1")
 bazel_dep(name = "platforms", version = "1.1.0")
@@ -11,6 +11,8 @@ bazel_dep(name = "rules_rust", version = "0.73.0")
 bazel_dep(name = "rules_shell", version = "0.6.1")
 bazel_dep(name = "rules_oci", version = "2.3.0")
 bazel_dep(name = "rules_pkg", version = "1.3.0")
+bazel_dep(name = "rules_go", version = "0.62.0")
+bazel_dep(name = "gazelle", version = "0.51.3")
 bazel_dep(name = "toolchains_buildbuddy", version = "0.0.4")
 
 bazel_dep(name = "googletest", version = "1.17.0.bcr.2", dev_dependency = True)
@@ -108,9 +110,32 @@ pip.parse(
 pip.parse(
     hub_name = "telemetry_stack_reqs",
     python_version = "3.12",
-    requirements_lock = "//apps/telemetry/stack/ingest:requirements_lock.txt",
+    requirements_lock = "//apps/telemetry/stack:requirements_lock.txt",
+    # Stack binaries remain runnable on developer hosts, while OCI packaging
+    # transitions their closure to Linux x86_64. Declare both sides so native
+    # wheels resolve correctly in either configuration.
+    target_platforms = [
+        "linux_x86_64",
+        "osx_aarch64",
+        "osx_x86_64",
+        "windows_x86_64",
+    ],
 )
 use_repo(pip, "telemetry_reqs", "telemetry_stack_reqs")
+
+# The Kafka bridge remains a Go module for editor and non-Bazel tooling, while
+# Bazel owns its hermetic Linux binary and OCI image.
+go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
+go_sdk.download(version = "1.24.13")
+
+go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
+go_deps.from_file(go_mod = "//apps/telemetry/stack/kafka:go.mod")
+use_repo(
+    go_deps,
+    "com_github_ibm_sarama",
+    "org_golang_google_grpc",
+    "org_golang_google_protobuf",
+)
 
 stm32g4_deps = use_extension("//drivers/stm32/stm32g4:deps.bzl", "stm32g4_deps")
 use_repo(
@@ -146,12 +171,12 @@ bazel_dep(name = "hedron_compile_commands", dev_dependency = True)
 git_override(
     module_name = "hedron_compile_commands",
     commit = "6eb3ff1de6445355552ef4230be0caf3e1dd27e5",
-    remote = "https://github.com/helly25/bazel-compile-commands-extractor.git",
+    patch_strip = 1,
     # Windows: multiprocessing's spawn start method re-imports the extractor's
     # entry point in every worker, re-entering main() and killing the process
     # pool ("BrokenProcessPool"). Guard the entry point with __main__.
     patches = ["//patches:hedron_windows_spawn_guard.patch"],
-    patch_strip = 1,
+    remote = "https://github.com/helly25/bazel-compile-commands-extractor.git",
 )
 
 # Prebuilt protoc binaries. Building @protobuf//:protoc from source drags in
@@ -197,16 +222,50 @@ crate.from_cargo(
 )
 use_repo(crate, "crates")
 
-# Base image for the telemetry server stack's container images
-# (apps/telemetry, Linux only). Pinned by digest: python:3.11.4-slim.
+# Pinned Linux/AMD64 images used by the telemetry stack. Bazel resolves these
+# manifests during the build; Compose only consumes the tags loaded locally by
+# the corresponding `*_load` targets.
 oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
 oci.pull(
-    name = "python311",
-    digest = "sha256:17d62d681d9ecef20aae6c6605e9cf83b0ba3dc247013e2f43e1b5a045ad4901",
+    name = "python312",
+    digest = "sha256:47ae396f09c1303b8653019811a8498470603d7ffefc29cb07c88f1f8cb3d19f",
     image = "docker.io/library/python",
-    platforms = [
-        "linux/amd64",
-        "linux/arm64",
-    ],
+    platforms = ["linux/amd64"],
 )
-use_repo(oci, "python311", "python311_linux_amd64", "python311_linux_arm64")
+oci.pull(
+    name = "telemetry_mosquitto",
+    digest = "sha256:d12c8f80dfc65b768bb9acecc7ef182b976f71fb681640b66358e5e0cf94e9e9",
+    image = "docker.io/library/eclipse-mosquitto",
+    platforms = ["linux/amd64"],
+)
+oci.pull(
+    name = "telemetry_postgres",
+    digest = "sha256:67f41722b7a8cbdb868a44a4995c846eddfdc2973bccb291ce937dce88ad5675",
+    image = "docker.io/library/postgres",
+    platforms = ["linux/amd64"],
+)
+oci.pull(
+    name = "telemetry_kafka",
+    digest = "sha256:bff074a5d0051dbc0bbbcd25b045bb1fe84833ec0d3c7c965d1797dd289ec88f",
+    image = "docker.io/apache/kafka",
+    platforms = ["linux/amd64"],
+)
+oci.pull(
+    name = "telemetry_grafana",
+    digest = "sha256:a0f881232a6fb71a0554a47d0fe2203b6888fe77f4cefb7ea62bed7eb54e13c3",
+    image = "docker.io/grafana/grafana-oss",
+    platforms = ["linux/amd64"],
+)
+use_repo(
+    oci,
+    "python312",
+    "python312_linux_amd64",
+    "telemetry_grafana",
+    "telemetry_grafana_linux_amd64",
+    "telemetry_kafka",
+    "telemetry_kafka_linux_amd64",
+    "telemetry_mosquitto",
+    "telemetry_mosquitto_linux_amd64",
+    "telemetry_postgres",
+    "telemetry_postgres_linux_amd64",
+)

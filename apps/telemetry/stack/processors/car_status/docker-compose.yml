@@ -1,10 +1,6 @@
 services:
   car_status:
-    build:
-      # Build context = repo root so COPY can reach files under stack/ + analysis/.
-      context: ../../..
-      dockerfile: stack/processors/car_status/Dockerfile
-    image: car_status_processor
+    image: ${TELEMETRY_CAR_STATUS_IMAGE:-lhre/telemetry-car-status:dev}
     container_name: car_status_processor
     restart: unless-stopped
     env_file:

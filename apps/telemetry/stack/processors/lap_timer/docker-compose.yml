@@ -1,9 +1,6 @@
 services:
   db_processor:
-    build:
-      context: ../../..
-      dockerfile: ./stack/processors/lap_timer/Dockerfile
-    image: lap_timer
+    image: ${TELEMETRY_LAP_TIMER_IMAGE:-lhre/telemetry-lap-timer:dev}
     container_name: lap_timer_processor
     restart: unless-stopped
     env_file:
@@ -17,6 +14,8 @@ services:
       - ../../../net_configs.json:/app/net_configs.json
     networks:
       - telemetry_network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 networks:
   telemetry_network:

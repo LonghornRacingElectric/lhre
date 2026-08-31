@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/IBM/sarama"
-	pb "github.com/LonghornRacingElectric/lhre-2026/telemetry/stack/kafka/proto/bridge"
-	sensor "github.com/LonghornRacingElectric/lhre-2026/telemetry/stack/kafka/proto/sensor"
+	pb "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/proto/bridge"
+	sensor "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/proto/sensor"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 )

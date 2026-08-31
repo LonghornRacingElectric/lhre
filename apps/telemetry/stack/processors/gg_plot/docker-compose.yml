@@ -1,12 +1,6 @@
 services:
   db_processor:
-    build:
-      # Build context set to the repository root so COPY can reference files under `stack/`.
-      context: ../../..
-      # Dockerfile path is relative to the build context. Point it to the actual Dockerfile
-      # location under the repo root.
-      dockerfile: stack/processors/gg_plot/Dockerfile
-    image: gg-plot
+    image: ${TELEMETRY_GG_PLOT_IMAGE:-lhre/telemetry-gg-plot:dev}
     container_name: kafka_processor_gg_plot
     restart: unless-stopped
     environment:

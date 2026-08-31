@@ -1,9 +1,6 @@
 services:
   field_enricher:
-    build:
-      context: ../../..
-      dockerfile: ./stack/processors/field_enricher/Dockerfile
-    image: field_enricher
+    image: ${TELEMETRY_FIELD_ENRICHER_IMAGE:-lhre/telemetry-field-enricher:dev}
     container_name: field_enricher_processor
     restart: unless-stopped
     environment:

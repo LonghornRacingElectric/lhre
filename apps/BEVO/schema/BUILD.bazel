@@ -2,7 +2,13 @@ load("@rules_python//python:defs.bzl", "py_binary")
 
 package(default_visibility = ["//apps/BEVO:__subpackages__"])
 
-exports_files(["can_packets.proto"])
+exports_files(
+    ["can_packets.proto"],
+    visibility = [
+        "//apps/BEVO:__subpackages__",
+        "//apps/telemetry:__subpackages__",
+    ],
+)
 
 py_binary(
     name = "gen_can_json",
@@ -24,6 +30,10 @@ genrule(
     outs = ["can.json"],
     cmd = "$(execpath :gen_can_json) $(location can_packets.csv) $(location can_bitfields.csv) $@",
     tools = [":gen_can_json"],
+    visibility = [
+        "//apps/BEVO:__subpackages__",
+        "//apps/telemetry:__subpackages__",
+    ],
 )
 
 # `bazel run` target that regenerates can_packets.proto IN THE SOURCE TREE.

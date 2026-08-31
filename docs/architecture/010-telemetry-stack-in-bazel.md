@@ -1,6 +1,6 @@
 # ADR-010: Telemetry server stack builds in Bazel, its tests run beside Docker
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-011](011-bazel-owned-telemetry-images.md)
 - **Date:** 2026-08
 
 ## Context

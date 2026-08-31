@@ -3,10 +3,9 @@
 # This service receives MQTT messages, stores them in PostgreSQL, and forwards to Kafka
 
 load("@rules_python//python:defs.bzl", "py_binary", "py_library")
-load("@rules_python//python:pip.bzl", "compile_pip_requirements")
-load("@rules_oci//oci:defs.bzl", "oci_image", "oci_push", "oci_load")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
+load("//apps/telemetry:container.bzl", "telemetry_service_image")
 
 package(default_visibility = ["//apps/telemetry:__subpackages__"])
 
@@ -19,15 +18,13 @@ package(default_visibility = ["//apps/telemetry:__subpackages__"])
 # - bazel-bin/telemetry/stack/ingest/protobuf/can_packets_pb2.py
 #
 # Input chain:
-# - drivers/longhorn-lib/config/can_packets.csv -> //apps/BEVO/schema:can_packets.proto
-#   -> this genrule
+# - the selected //apps/telemetry:current_schema_proto -> this genrule
 # ---------------------------------------------------------------------------
 
 genrule(
     name = "can_packets_pb2",
-    target_compatible_with = ["@platforms//os:linux"],
     srcs = [
-        "//apps/BEVO/schema:can_packets.proto",
+        "//apps/telemetry:current_schema_proto",
     ],
     outs = [
         "protobuf/can_packets_pb2.py",
@@ -38,7 +35,7 @@ set -euo pipefail
 mkdir -p "$(RULEDIR)/protobuf"
 
 # Protoc writes <basename>_pb2.py based on the input filename.
-cp "$(location //apps/BEVO/schema:can_packets.proto)" "$(RULEDIR)/can_packets.proto"
+cp "$(location //apps/telemetry:current_schema_proto)" "$(RULEDIR)/can_packets.proto"
 
 $(location //tools/protoc) \\
   --proto_path="$(RULEDIR)" \\
@@ -48,16 +45,6 @@ $(location //tools/protoc) \\
     tools = [
         "//tools/protoc",
     ],
-)
-
-# Compile pip requirements for stack services
-compile_pip_requirements(
-    name = "stack_requirements",
-    src = "requirements.txt",
-    requirements_txt = "requirements_lock.txt",
-    python_version = "3.12",
-    generate_hashes = False,
-    tags = ["manual", "requirements"],
 )
 
 # Export configuration files for Docker compose and testing
@@ -104,16 +91,17 @@ filegroup(
 # Python library for the MQTT handler
 py_library(
     name = "ingest_lib",
-    target_compatible_with = ["@platforms//os:linux"],
     imports = ["../..", "../../.."],
     srcs = [
         "__init__.py",
         "mqtt_handler.py",
+        "partition_manager.py",
     ],
     data = [
         ":car_configs",
         ":protobuf_files",
         "//apps/telemetry:config_files",
+        "//apps/telemetry:current_schema_bundle",
     ],
     visibility = ["//visibility:public"],
     deps = [
@@ -132,7 +120,6 @@ py_library(
 # Python binary for the ingest service
 py_binary(
     name = "ingest_binary",
-    target_compatible_with = ["@platforms//os:linux"],
     imports = ["../..", "../../.."],
     srcs = ["mqtt_handler.py"],
     main = "mqtt_handler.py",
@@ -157,64 +144,40 @@ py_binary(
     visibility = ["//visibility:public"],
 )
 
-# Package the ingest application files into a tar
+# Files opened by path rather than through Bazel runfiles. Python sources and
+# third-party wheels travel with :ingest_binary's complete runfiles closure.
 pkg_tar(
-    name = "ingest_app_tar",
-    srcs = [
-        "__init__.py",
-        "mqtt_handler.py",
-    ] + glob(["protobuf/**"]) + glob(["car_configs/**"]) + [
-        ":can_packets_pb2",
-    ],
+    name = "ingest_runtime_config_tar",
+    srcs = glob(["car_configs/**"]),
     package_dir = "/app/stack/ingest",
     strip_prefix = ".",
 )
 
-# Package analysis dependencies for the container
-pkg_tar(
-    name = "analysis_deps_tar",
-    srcs = [
-        "//apps/telemetry/analysis:analysis_lib",
-    ],
-    package_dir = "/app/analysis",
-)
-
-# Package configuration files
-pkg_tar(
-    name = "config_tar",
-    srcs = [
-        "//apps/telemetry:config_files",
-    ],
-    package_dir = "/app",
-)
-
-# OCI image for the ingest service
-oci_image(
-    name = "ingest_image",
-    base = "@python311_linux_amd64",
-    tars = [
-        ":ingest_app_tar",
-        ":config_tar",
-    ],
-    entrypoint = ["python", "/app/stack/ingest/mqtt_handler.py"],
+telemetry_service_image(
+    name = "ingest",
+    binary = ":ingest_binary",
+    base = "@python312_linux_amd64",
     env = {
         "PYTHONPATH": "/app",
         "PYTHONUNBUFFERED": "1",
     },
-    visibility = ["//visibility:public"],
-    target_compatible_with = ["@platforms//os:linux"],
-)
-
-# Tarball for local Docker loading (use oci_load instead of oci_tarball)
-oci_load(
-    name = "ingest_tarball",
-    image = ":ingest_image",
-    repo_tags = ["telemetry_backend:latest"],
-)
-
-# Push target for container registry
-oci_push(
-    name = "ingest_push",
-    image = ":ingest_image",
+    repo_tags = [
+        "lhre/telemetry-ingest:dev",
+        "telemetry_backend:latest",
+    ],
     repository = "ghcr.io/longhornracingelectric/telemetry-ingest",
+    tars = [
+        ":ingest_runtime_config_tar",
+        "//apps/telemetry:runtime_config_tar",
+    ],
+    visibility = ["//visibility:public"],
+    workdir = "/app/stack/ingest",
+)
+
+# Compatibility for the imported telemetry target name. New callers use
+# :ingest_load, which describes the side effect accurately.
+alias(
+    name = "ingest_tarball",
+    actual = ":ingest_load",
+    visibility = ["//visibility:public"],
 )

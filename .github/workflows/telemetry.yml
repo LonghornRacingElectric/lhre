@@ -39,8 +39,11 @@ jobs:
           fi
           echo "common --config=ci" >> .bazelrc.user
 
-      - name: Build images and tarballs
-        run: bazel build //apps/telemetry:telemetry_images //apps/telemetry:telemetry_tarballs
+      - name: Build all telemetry images
+        run: bazel build //apps/telemetry:all_images
+
+      - name: Load and smoke-test core images
+        run: bazel test //apps/telemetry:core_smoke_tests --test_output=errors
 
       - name: Start services
         if: env.HAVE_SECRETS == 'true'
@@ -62,8 +65,8 @@ jobs:
             echo "GRAFANA_PWD=$GRAFANA_PWD"
             echo "ANALYSIS_PWD=$ANALYSIS_PWD"
           } > apps/telemetry/.env
-          (cd apps/telemetry/stack/kafka && docker compose up -d --build --wait)
-          (cd apps/telemetry/stack/ingest && docker compose up -d --build --wait)
+          (cd apps/telemetry/stack/kafka && docker compose up -d --no-build --wait)
+          (cd apps/telemetry/stack/ingest && docker compose up -d --no-build --wait)
           sleep 10
           docker ps
 

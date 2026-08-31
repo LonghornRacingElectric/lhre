@@ -3,8 +3,18 @@
 # Contains shared resources for all stack services
 
 load("@rules_python//python:defs.bzl", "py_library")
+load("@rules_python//python:pip.bzl", "compile_pip_requirements")
 
 package(default_visibility = ["//apps/telemetry/stack:__subpackages__"])
+
+compile_pip_requirements(
+    name = "requirements",
+    src = "requirements.txt",
+    generate_hashes = False,
+    python_version = "3.12",
+    requirements_txt = "requirements_lock.txt",
+    tags = ["manual", "requirements"],
+)
 
 # Shared Python library for stack services
 py_library(
@@ -17,6 +27,8 @@ py_library(
 
 # Export shell scripts for development
 exports_files([
+    "requirements.txt",
+    "requirements_lock.txt",
     "server_devtool.sh",
     "win_server_devtools.ps1",
 ])
@@ -24,12 +36,7 @@ exports_files([
 # Aggregate target for all stack Docker images
 filegroup(
     name = "stack_images",
-    srcs = [
-        "//apps/telemetry/stack/ingest:ingest_image",
-        "//apps/telemetry/stack/processors/gps_classifier:gps_classifier_image",
-        "//apps/telemetry/stack/processors/kafka_base:kafka_base_image",
-        "//apps/telemetry/stack/processors/lap_timer:lap_timer_image",
-    ],
+    srcs = ["//apps/telemetry:all_images"],
     visibility = ["//visibility:public"],
 )
 

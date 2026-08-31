@@ -1,6 +1,6 @@
 services:
   mosquitto:
-    image: eclipse-mosquitto
+    image: ${TELEMETRY_MQTT_IMAGE:-lhre/telemetry-mqtt:2.0.18}
     container_name: mosquitto
     restart: unless-stopped
     volumes:
@@ -13,10 +13,7 @@ services:
       - "8080:8080"
 
   ingest:
-    build:
-      context: ../..
-      dockerfile: ./stack/ingest/Dockerfile
-    image: telemetry_backend
+    image: ${TELEMETRY_INGEST_IMAGE:-lhre/telemetry-ingest:dev}
     container_name: ingest
     restart: unless-stopped
     depends_on:
@@ -40,7 +37,7 @@ services:
       - telemetry_network
 
   db:
-    image: postgres:17
+    image: ${TELEMETRY_POSTGRES_IMAGE:-lhre/telemetry-postgres:17.11}
     container_name: db
     restart: unless-stopped
     shm_size: 2gb
@@ -62,7 +59,7 @@ services:
       - /run/postgresql
 
   grafana:
-    image: grafana/grafana-oss:11.3.0
+    image: ${TELEMETRY_GRAFANA_IMAGE:-lhre/telemetry-grafana:11.3.0}
     container_name: grafana
     restart: unless-stopped
     env_file:

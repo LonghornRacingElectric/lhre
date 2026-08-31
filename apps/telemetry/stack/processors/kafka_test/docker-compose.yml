@@ -1,9 +1,6 @@
 services:
   db_processor:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: kafka_test
+    image: ${TELEMETRY_KAFKA_TEST_IMAGE:-lhre/telemetry-kafka-test:dev}
     container_name: kafka_test_processor
     restart: unless-stopped
     environment:

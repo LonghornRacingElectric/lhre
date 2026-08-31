@@ -56,21 +56,21 @@ EXTERNAL_VOLUMES="telemetry_db grafana_storage kafka_data"
 # telemetry_db is bind-mounted onto the SSD so Postgres data lives on /mnt, not the root disk.
 TELEMETRY_DB_DIR="${TELEMETRY_DB_DIR:-/mnt/server_ssd/app_data/telemetry_db}"
 
-# component registry:  name | directory (relative to SCRIPT_DIR) | type | pm2-app
+# component registry: name | directory | type | pm2-app | Bazel load targets
 # type defaults to "docker" (compose-managed). "pm2" components are Node apps
 # managed via pm2 (4th field = pm2 process name).
 # (gg_plot is optional; kafka_base is a base image and grafana-kafka-datasource
 #  is a plugin build helper — neither is a runtime service, so both are omitted.)
 STACK_COMPONENTS="
-kafka|kafka
-ingest|ingest
-field_enricher|processors/field_enricher
-gps_classifier|processors/gps_classifier
-lap_timer|processors/lap_timer
-track_mapper|processors/track_mapper
-kafka_test|processors/kafka_test
-gg_plot|processors/gg_plot
-car_status|processors/car_status
+kafka|kafka|docker||//apps/telemetry:kafka_load,//apps/telemetry/stack/kafka:kafka_bridge_load
+ingest|ingest|docker||//apps/telemetry:mqtt_load,//apps/telemetry:postgres_load,//apps/telemetry:grafana_load,//apps/telemetry/stack/ingest:ingest_load
+field_enricher|processors/field_enricher|docker||//apps/telemetry/stack/processors/field_enricher:field_enricher_load
+gps_classifier|processors/gps_classifier|docker||//apps/telemetry/stack/processors/gps_classifier:gps_classifier_load
+lap_timer|processors/lap_timer|docker||//apps/telemetry/stack/processors/lap_timer:lap_timer_load
+track_mapper|processors/track_mapper|docker||//apps/telemetry/stack/processors/track_mapper:track_mapper_load
+kafka_test|processors/kafka_test|docker||//apps/telemetry/stack/processors/kafka_test:kafka_test_load
+gg_plot|processors/gg_plot|docker||//apps/telemetry/stack/processors/gg_plot:gg_plot_load
+car_status|processors/car_status|docker||//apps/telemetry/stack/processors/car_status:car_status_load
 logsync|logsync|docker
 viewer|../analysis/database/viewer_tool|pm2|viewer_tool
 "
@@ -146,6 +146,20 @@ comp_field() {  # comp_field <name> <fieldnum>  -> Nth '|'-separated field
 comp_reldir()  { local d; d="$(comp_field "$1" 2)" || return 1; printf '%s/%s' "$SCRIPT_DIR" "$d"; }
 comp_type()    { local t; t="$(comp_field "$1" 3)" || return 1; printf '%s' "${t:-docker}"; }
 comp_pm2name() { comp_field "$1" 4; }
+comp_bazel_targets() { comp_field "$1" 5; }
+
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+
+bazel_load_component() {
+    local name="$1" targets target
+    targets="$(comp_bazel_targets "$name")" || return 1
+    [[ -n "$targets" ]] || return 1
+    command -v bazel >/dev/null 2>&1 || { err "bazel is required to rebuild $name"; return 1; }
+    targets="${targets//,/ }"
+    for target in $targets; do
+        ( cd "$REPO_ROOT" && bazel run --config=local "$target" ) || return 1
+    done
+}
 
 # ensure node/pm2 are reachable (pm2 components); source nvm if needed
 ensure_node() {
@@ -315,11 +329,17 @@ up_component() {  # up_component <name> <build:1|0>
     [[ "$name" == "kafka" ]] && ensure_kafka_dirs
     if [[ "$build" == "1" ]]; then
         preflight_disk
-        info "Building + starting $name ..."
-        compose_in "$dir" up --build -d
+        if [[ -n "$(comp_bazel_targets "$name" 2>/dev/null)" ]]; then
+            info "Building + loading $name with Bazel ..."
+            bazel_load_component "$name" || return 1
+            compose_in "$dir" up --no-build -d
+        else
+            info "Building + starting $name with its legacy Compose build ..."
+            compose_in "$dir" up --build -d
+        fi
     else
         info "Starting $name ..."
-        compose_in "$dir" up -d
+        compose_in "$dir" up --no-build -d
     fi
 }
 down_component() {
