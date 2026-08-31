@@ -1,0 +1,399 @@
+# Shared configuration and aggregate targets for the telemetry stack. See
+# BAZEL_BUILD.md for the build/load/runtime contract.
+
+load("@rules_python//python:defs.bzl", "py_library")
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load(":container.bzl", "telemetry_upstream_image")
+
+package(default_visibility = ["//apps/telemetry:__subpackages__"])
+
+# Export the network configuration file for all telemetry services
+exports_files([
+    "net_configs.json",
+    ".env.example",
+    "container_smoke_test.sh",
+    "core_up.sh",
+    "load_images.sh",
+])
+
+# Environment configuration files for tests
+# Uses glob() so .env is optional - CI uses env vars from secrets instead
+# Local development uses .env file (copy from .env.example)
+filegroup(
+    name = "env_files",
+    srcs = glob([".env"], allow_empty = True),
+    visibility = ["//visibility:public"],
+)
+
+# Shared Python library containing common utilities used across telemetry
+py_library(
+    name = "telemetry_common",
+    imports = [".", ".."],
+    srcs = ["__init__.py"],
+    visibility = ["//visibility:public"],
+)
+
+# Filegroup for all telemetry configuration files
+filegroup(
+    name = "config_files",
+    srcs = [
+        "net_configs.json",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pkg_tar(
+    name = "runtime_config_tar",
+    srcs = [":config_files"],
+    package_dir = "/app",
+    visibility = ["//visibility:public"],
+)
+
+# Stable consumer-facing seam for the currently deployed telemetry schema.
+# A future registry can change this selection without making every service
+# depend directly on BEVO's generator layout.
+alias(
+    name = "current_schema_proto",
+    actual = "//apps/BEVO/schema:can_packets.proto",
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "current_schema_bundle",
+    srcs = [
+        ":current_schema_proto",
+        "//apps/BEVO/schema:can_json",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+telemetry_upstream_image(
+    name = "mqtt",
+    executable = "/usr/sbin/mosquitto",
+    image = "@telemetry_mosquitto_linux_amd64",
+    repo_tags = ["lhre/telemetry-mqtt:2.0.18"],
+    visibility = ["//visibility:public"],
+)
+
+telemetry_upstream_image(
+    name = "postgres",
+    executable = "/usr/lib/postgresql/17/bin/postgres",
+    image = "@telemetry_postgres_linux_amd64",
+    repo_tags = ["lhre/telemetry-postgres:17.11"],
+    visibility = ["//visibility:public"],
+)
+
+telemetry_upstream_image(
+    name = "kafka",
+    executable = "/opt/kafka/bin/kafka-server-start.sh",
+    image = "@telemetry_kafka_linux_amd64",
+    repo_tags = ["lhre/telemetry-kafka:4.1.0"],
+    visibility = ["//visibility:public"],
+)
+
+telemetry_upstream_image(
+    name = "grafana",
+    executable = "/usr/share/grafana/bin/grafana",
+    image = "@telemetry_grafana_linux_amd64",
+    repo_tags = ["lhre/telemetry-grafana:11.3.0"],
+    visibility = ["//visibility:public"],
+)
+
+# ============================================================================
+# Docker Image Targets
+# ============================================================================
+
+# Images needed for the always-on ingestion path.
+filegroup(
+    name = "core_images",
+    srcs = [
+        ":grafana_image",
+        ":kafka_image",
+        ":mqtt_image",
+        ":postgres_image",
+        "//apps/telemetry/stack/ingest:ingest_image",
+        "//apps/telemetry/stack/kafka:kafka_bridge_image",
+        "//apps/telemetry/stack/processors/field_enricher:field_enricher_image",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# Processors are opt-in because they derive data and are not required to accept
+# or persist raw telemetry.
+filegroup(
+    name = "optional_images",
+    srcs = [
+        "//apps/telemetry/stack/processors/car_status:car_status_image",
+        "//apps/telemetry/stack/processors/gg_plot:gg_plot_image",
+        "//apps/telemetry/stack/processors/gps_classifier:gps_classifier_image",
+        "//apps/telemetry/stack/processors/kafka_test:kafka_test_image",
+        "//apps/telemetry/stack/processors/lap_timer:lap_timer_image",
+        "//apps/telemetry/stack/processors/track_mapper:track_mapper_image",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "all_images",
+    srcs = [
+        ":core_images",
+        ":optional_images",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+sh_binary(
+    name = "load_core_images",
+    srcs = ["load_images.sh"],
+    args = [
+        "$(rootpath :grafana_load)",
+        "$(rootpath :kafka_load)",
+        "$(rootpath :mqtt_load)",
+        "$(rootpath :postgres_load)",
+        "$(rootpath //apps/telemetry/stack/ingest:ingest_load)",
+        "$(rootpath //apps/telemetry/stack/kafka:kafka_bridge_load)",
+        "$(rootpath //apps/telemetry/stack/processors/field_enricher:field_enricher_load)",
+    ],
+    data = [
+        ":grafana_load",
+        ":kafka_load",
+        ":mqtt_load",
+        ":postgres_load",
+        "//apps/telemetry/stack/ingest:ingest_load",
+        "//apps/telemetry/stack/kafka:kafka_bridge_load",
+        "//apps/telemetry/stack/processors/field_enricher:field_enricher_load",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+sh_binary(
+    name = "load_optional_images",
+    srcs = ["load_images.sh"],
+    args = [
+        "$(rootpath //apps/telemetry/stack/processors/car_status:car_status_load)",
+        "$(rootpath //apps/telemetry/stack/processors/gg_plot:gg_plot_load)",
+        "$(rootpath //apps/telemetry/stack/processors/gps_classifier:gps_classifier_load)",
+        "$(rootpath //apps/telemetry/stack/processors/kafka_test:kafka_test_load)",
+        "$(rootpath //apps/telemetry/stack/processors/lap_timer:lap_timer_load)",
+        "$(rootpath //apps/telemetry/stack/processors/track_mapper:track_mapper_load)",
+    ],
+    data = [
+        "//apps/telemetry/stack/processors/car_status:car_status_load",
+        "//apps/telemetry/stack/processors/gg_plot:gg_plot_load",
+        "//apps/telemetry/stack/processors/gps_classifier:gps_classifier_load",
+        "//apps/telemetry/stack/processors/kafka_test:kafka_test_load",
+        "//apps/telemetry/stack/processors/lap_timer:lap_timer_load",
+        "//apps/telemetry/stack/processors/track_mapper:track_mapper_load",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+sh_binary(
+    name = "load_all_images",
+    srcs = ["load_images.sh"],
+    args = [
+        "$(rootpath :grafana_load)",
+        "$(rootpath :kafka_load)",
+        "$(rootpath :mqtt_load)",
+        "$(rootpath :postgres_load)",
+        "$(rootpath //apps/telemetry/stack/ingest:ingest_load)",
+        "$(rootpath //apps/telemetry/stack/kafka:kafka_bridge_load)",
+        "$(rootpath //apps/telemetry/stack/processors/field_enricher:field_enricher_load)",
+        "$(rootpath //apps/telemetry/stack/processors/car_status:car_status_load)",
+        "$(rootpath //apps/telemetry/stack/processors/gg_plot:gg_plot_load)",
+        "$(rootpath //apps/telemetry/stack/processors/gps_classifier:gps_classifier_load)",
+        "$(rootpath //apps/telemetry/stack/processors/kafka_test:kafka_test_load)",
+        "$(rootpath //apps/telemetry/stack/processors/lap_timer:lap_timer_load)",
+        "$(rootpath //apps/telemetry/stack/processors/track_mapper:track_mapper_load)",
+    ],
+    data = [
+        ":grafana_load",
+        ":kafka_load",
+        ":mqtt_load",
+        ":postgres_load",
+        "//apps/telemetry/stack/ingest:ingest_load",
+        "//apps/telemetry/stack/kafka:kafka_bridge_load",
+        "//apps/telemetry/stack/processors/car_status:car_status_load",
+        "//apps/telemetry/stack/processors/field_enricher:field_enricher_load",
+        "//apps/telemetry/stack/processors/gg_plot:gg_plot_load",
+        "//apps/telemetry/stack/processors/gps_classifier:gps_classifier_load",
+        "//apps/telemetry/stack/processors/kafka_test:kafka_test_load",
+        "//apps/telemetry/stack/processors/lap_timer:lap_timer_load",
+        "//apps/telemetry/stack/processors/track_mapper:track_mapper_load",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+sh_binary(
+    name = "core_up",
+    srcs = ["core_up.sh"],
+    args = [
+        "$(rootpath :grafana_load)",
+        "$(rootpath :kafka_load)",
+        "$(rootpath :mqtt_load)",
+        "$(rootpath :postgres_load)",
+        "$(rootpath //apps/telemetry/stack/ingest:ingest_load)",
+        "$(rootpath //apps/telemetry/stack/kafka:kafka_bridge_load)",
+        "$(rootpath //apps/telemetry/stack/processors/field_enricher:field_enricher_load)",
+    ],
+    data = [
+        ":grafana_load",
+        ":kafka_load",
+        ":mqtt_load",
+        ":postgres_load",
+        "//apps/telemetry/stack/ingest:ingest_load",
+        "//apps/telemetry/stack/kafka:kafka_bridge_load",
+        "//apps/telemetry/stack/processors/field_enricher:field_enricher_load",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+test_suite(
+    name = "core_smoke_tests",
+    tags = ["docker", "manual"],
+    tests = [
+        ":grafana_smoke_test",
+        ":kafka_smoke_test",
+        ":mqtt_smoke_test",
+        ":postgres_smoke_test",
+        "//apps/telemetry/stack/ingest:ingest_smoke_test",
+        "//apps/telemetry/stack/kafka:kafka_bridge_smoke_test",
+        "//apps/telemetry/stack/processors/field_enricher:field_enricher_smoke_test",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+test_suite(
+    name = "optional_smoke_tests",
+    tags = ["docker", "manual"],
+    tests = [
+        "//apps/telemetry/stack/processors/car_status:car_status_smoke_test",
+        "//apps/telemetry/stack/processors/gg_plot:gg_plot_smoke_test",
+        "//apps/telemetry/stack/processors/gps_classifier:gps_classifier_smoke_test",
+        "//apps/telemetry/stack/processors/kafka_test:kafka_test_smoke_test",
+        "//apps/telemetry/stack/processors/lap_timer:lap_timer_smoke_test",
+        "//apps/telemetry/stack/processors/track_mapper:track_mapper_smoke_test",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# Imported target names retained for one migration cycle.
+alias(
+    name = "telemetry_images",
+    actual = ":all_images",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "telemetry_tarballs",
+    actual = ":load_all_images",
+    visibility = ["//visibility:public"],
+)
+
+# ============================================================================
+# Comprehensive Build Targets
+# ============================================================================
+
+# Aggregate target for building the entire telemetry system
+# This includes both Docker containers and non-Docker components
+filegroup(
+    name = "telemetry_all",
+    srcs = [
+        ":telemetry_images",
+        ":config_files",
+        "//apps/telemetry/analysis:analysis_lib",
+        "//apps/telemetry/stack:stack_lib",
+        "//apps/telemetry/stack/ingest:db_init_scripts",
+        "//apps/telemetry/stack/kafka:kafka_configs",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# ============================================================================
+# Test Targets
+# ============================================================================
+
+# Unit tests only (no Docker required)
+test_suite(
+    name = "unit_tests",
+    tests = [
+        "//apps/telemetry/analysis/tests:analysis_tests",
+        "//apps/telemetry/stack/tests:protobuf_test",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# Integration tests (requires Docker containers to be running)
+test_suite(
+    name = "integration_tests",
+    tags = ["manual", "integration"],
+    tests = [
+        "//apps/telemetry/stack/tests:bevo_db_integration_test",
+        "//apps/telemetry/stack/tests:data_flow_test",
+        "//apps/telemetry/stack/tests:db_connectivity_test",
+        "//apps/telemetry/stack/tests:kafka_bridge_seed_test",
+        "//apps/telemetry/stack/tests:kafka_connectivity_test",
+        "//apps/telemetry/stack/tests:mqtt_connectivity_test",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# Full integration test with Docker lifecycle management
+test_suite(
+    name = "full_integration_tests",
+    tags = ["integration", "docker", "manual"],
+    tests = [
+        "//apps/telemetry/stack/tests:stack_integration_test",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# All telemetry tests (unit + integration)
+test_suite(
+    name = "telemetry_tests",
+    tags = ["manual"],  # aggregates the integration suite; presubmit runs :unit_tests via //...
+    tests = [
+        ":integration_tests",
+        ":unit_tests",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# ============================================================================
+# Docker Compose File References
+# ============================================================================
+
+# Filegroup containing all docker-compose files for the telemetry stack
+filegroup(
+    name = "compose_files",
+    srcs = [
+        "//apps/telemetry/stack/ingest:docker-compose.yml",
+        "//apps/telemetry/stack/kafka:docker-compose.yml",
+        "//apps/telemetry/stack/processors/car_status:docker-compose.yml",
+        "//apps/telemetry/stack/processors/field_enricher:docker-compose.yml",
+        "//apps/telemetry/stack/processors/gg_plot:docker-compose.yml",
+        "//apps/telemetry/stack/processors/gps_classifier:docker-compose.yml",
+        "//apps/telemetry/stack/processors/kafka_test:docker-compose.yml",
+        "//apps/telemetry/stack/processors/lap_timer:docker-compose.yml",
+        "//apps/telemetry/stack/processors/track_mapper:docker-compose.yml",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# ============================================================================
+# Python Library Targets
+# ============================================================================
+
+# Complete telemetry Python library (all modules)
+py_library(
+    name = "telemetry_lib",
+    imports = [".", ".."],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":telemetry_common",
+        "//apps/telemetry/analysis:analysis_lib",
+        "//apps/telemetry/stack:stack_lib",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+)

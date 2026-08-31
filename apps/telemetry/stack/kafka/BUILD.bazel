@@ -1,0 +1,67 @@
+load("@protobuf//bazel:proto_library.bzl", "proto_library")
+load("@rules_go//go:def.bzl", "go_binary")
+load("@rules_go//proto:def.bzl", "go_grpc_library", "go_proto_library")
+load("//apps/telemetry:container.bzl", "telemetry_service_image")
+
+package(default_visibility = ["//apps/telemetry:__subpackages__"])
+
+exports_files([
+    "docker-compose.yml",
+    "go.mod",
+    "go.sum",
+])
+
+proto_library(
+    name = "bridge_proto",
+    srcs = ["proto/bridge.proto"],
+)
+
+go_grpc_library(
+    name = "bridge_go_proto",
+    importpath = "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/proto/bridge",
+    protos = [":bridge_proto"],
+)
+
+proto_library(
+    name = "sensor_proto",
+    srcs = ["proto/sensor/sensor.proto"],
+)
+
+go_proto_library(
+    name = "sensor_go_proto",
+    importpath = "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/proto/sensor",
+    proto = ":sensor_proto",
+)
+
+go_binary(
+    name = "kafka_bridge_binary",
+    srcs = ["cmd/bridge/main.go"],
+    importpath = "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/cmd/bridge",
+    pure = "on",
+    deps = [
+        ":bridge_go_proto",
+        ":sensor_go_proto",
+        "@com_github_ibm_sarama//:sarama",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_protobuf//proto",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+telemetry_service_image(
+    name = "kafka_bridge",
+    base = "@python312_linux_amd64",
+    binary = ":kafka_bridge_binary",
+    repo_tags = [
+        "lhre/telemetry-kafka-bridge:dev",
+        "kafka-bridge:latest",
+    ],
+    repository = "ghcr.io/longhornracingelectric/telemetry-kafka-bridge",
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "kafka_configs",
+    srcs = ["docker-compose.yml"],
+    visibility = ["//visibility:public"],
+)

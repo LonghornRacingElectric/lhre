@@ -1,0 +1,28 @@
+load("@rules_python//python:defs.bzl", "py_binary")
+load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
+load("//apps/telemetry:container.bzl", "telemetry_service_image")
+
+package(default_visibility = ["//apps/telemetry:__subpackages__"])
+
+exports_files(["docker-compose.yml"])
+
+py_binary(
+    name = "kafka_test_binary",
+    srcs = ["main.py"],
+    main = "main.py",
+    deps = [requirement("kafka-python")],
+    visibility = ["//visibility:public"],
+)
+
+telemetry_service_image(
+    name = "kafka_test",
+    base = "@python312_linux_amd64",
+    binary = ":kafka_test_binary",
+    env = {"PYTHONUNBUFFERED": "1"},
+    repo_tags = [
+        "lhre/telemetry-kafka-test:dev",
+        "kafka_test:latest",
+    ],
+    repository = "ghcr.io/longhornracingelectric/telemetry-kafka-test",
+    visibility = ["//visibility:public"],
+)

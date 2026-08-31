@@ -1,0 +1,38 @@
+load("@rules_python//python:defs.bzl", "py_binary")
+load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
+load("//apps/telemetry:container.bzl", "telemetry_service_image")
+
+package(default_visibility = ["//apps/telemetry:__subpackages__"])
+
+exports_files(["docker-compose.yml"])
+
+py_binary(
+    name = "gg_plot_binary",
+    srcs = ["main.py"],
+    imports = ["../../..", "../../../.."],
+    main = "main.py",
+    deps = [
+        "//apps/telemetry/stack/ingest:ingest_lib",
+        requirement("kafka-python"),
+        requirement("protobuf"),
+    ],
+    visibility = ["//visibility:public"],
+)
+
+telemetry_service_image(
+    name = "gg_plot",
+    base = "@python312_linux_amd64",
+    binary = ":gg_plot_binary",
+    env = {
+        "PYTHONPATH": "/app",
+        "PYTHONUNBUFFERED": "1",
+    },
+    repo_tags = [
+        "lhre/telemetry-gg-plot:dev",
+        "gg-plot:latest",
+    ],
+    repository = "ghcr.io/longhornracingelectric/telemetry-gg-plot",
+    tars = ["//apps/telemetry:runtime_config_tar"],
+    visibility = ["//visibility:public"],
+    workdir = "/app/stack/processors/gg_plot",
+)

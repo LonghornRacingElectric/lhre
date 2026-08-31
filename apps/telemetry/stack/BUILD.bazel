@@ -1,0 +1,55 @@
+# telemetry/stack/BUILD.bazel
+# BUILD file for the telemetry stack services
+# Contains shared resources for all stack services
+
+load("@rules_python//python:defs.bzl", "py_library")
+load("@rules_python//python:pip.bzl", "compile_pip_requirements")
+
+package(default_visibility = ["//apps/telemetry/stack:__subpackages__"])
+
+compile_pip_requirements(
+    name = "requirements",
+    src = "requirements.txt",
+    generate_hashes = False,
+    python_version = "3.12",
+    requirements_txt = "requirements_lock.txt",
+    tags = ["manual", "requirements"],
+)
+
+# Shared Python library for stack services
+py_library(
+    name = "stack_common",
+    imports = ["..", "../.."],
+    srcs = ["__init__.py"],
+    visibility = ["//visibility:public"],
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+# Export shell scripts for development
+exports_files([
+    "requirements.txt",
+    "requirements_lock.txt",
+    "server_devtool.sh",
+    "win_server_devtools.ps1",
+])
+
+# Aggregate target for all stack Docker images
+filegroup(
+    name = "stack_images",
+    srcs = ["//apps/telemetry:all_images"],
+    visibility = ["//visibility:public"],
+)
+
+# Aggregate target for all stack Python libraries
+py_library(
+    name = "stack_lib",
+    imports = ["..", "../.."],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//apps/telemetry/stack/ingest:ingest_lib",
+        "//apps/telemetry/stack/processors/gps_classifier:gps_classifier_lib",
+        "//apps/telemetry/stack/processors/kafka_base:kafka_base_lib",
+        "//apps/telemetry/stack/processors/lap_timer:lap_timer_lib",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+)

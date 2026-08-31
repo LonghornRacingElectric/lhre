@@ -1,0 +1,93 @@
+name: telemetry
+
+# The telemetry server stack's integration tests need Kafka, Postgres and
+# MQTT running next to them, which presubmit's remote executors cannot
+# provide, so they are tagged `manual` + `local` and run here, on the
+# runner, against Docker Compose. Everything else about apps/telemetry
+# (build, unit tests) is covered by presubmit's `bazel test //...`.
+#
+# The services need credentials: POSTGRES_USER, POSTGRES_PASSWORD,
+# ELECTRIC_PWD, GRAFANA_PWD, ANALYSIS_PWD as repo secrets (same names as
+# the old repo). The init scripts create databases, not roles, so the app
+# connects as the Postgres superuser: POSTGRES_USER must be "electric" and
+# ELECTRIC_PWD must equal POSTGRES_PASSWORD. Until the secrets exist the
+# integration step is skipped and the job only builds the images.
+
+on:
+  pull_request:
+    paths:
+      - "apps/telemetry/**"
+      - ".github/workflows/telemetry.yml"
+  workflow_dispatch:
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    env:
+      HAVE_SECRETS: ${{ secrets.POSTGRES_USER != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure BuildBuddy
+        env:
+          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
+        run: |
+          if [ -n "$BUILDBUDDY_API_KEY" ]; then
+            echo "common --remote_header=x-buildbuddy-api-key=$BUILDBUDDY_API_KEY" > .bazelrc.user
+          else
+            echo "common --config=local" > .bazelrc.user
+          fi
+          echo "common --config=ci" >> .bazelrc.user
+
+      - name: Build all telemetry images
+        run: bazel build //apps/telemetry:all_images
+
+      - name: Load and smoke-test core images
+        run: bazel test //apps/telemetry:core_smoke_tests --test_output=errors
+
+      - name: Start services
+        if: env.HAVE_SECRETS == 'true'
+        env:
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          ELECTRIC_PWD: ${{ secrets.ELECTRIC_PWD }}
+          GRAFANA_PWD: ${{ secrets.GRAFANA_PWD }}
+          ANALYSIS_PWD: ${{ secrets.ANALYSIS_PWD }}
+        run: |
+          docker network create telemetry_network || true
+          docker volume create grafana_storage || true
+          docker volume create telemetry_db || true
+          docker volume create kafka_data || true
+          {
+            echo "POSTGRES_USER=$POSTGRES_USER"
+            echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD"
+            echo "ELECTRIC_PWD=$ELECTRIC_PWD"
+            echo "GRAFANA_PWD=$GRAFANA_PWD"
+            echo "ANALYSIS_PWD=$ANALYSIS_PWD"
+          } > apps/telemetry/.env
+          (cd apps/telemetry/stack/kafka && docker compose up -d --no-build --wait)
+          (cd apps/telemetry/stack/ingest && docker compose up -d --no-build --wait)
+          sleep 10
+          docker ps
+
+      # `local`-tagged tests run on this runner, not on the remote executors.
+      - name: Integration tests
+        if: env.HAVE_SECRETS == 'true'
+        env:
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          ELECTRIC_PWD: ${{ secrets.ELECTRIC_PWD }}
+          GRAFANA_PWD: ${{ secrets.GRAFANA_PWD }}
+          ANALYSIS_PWD: ${{ secrets.ANALYSIS_PWD }}
+        run: |
+          bazel test //apps/telemetry:integration_tests --test_output=errors \
+            --test_env=POSTGRES_USER --test_env=POSTGRES_PASSWORD \
+            --test_env=ELECTRIC_PWD --test_env=GRAFANA_PWD --test_env=ANALYSIS_PWD
+
+      - name: Stop services
+        if: always() && env.HAVE_SECRETS == 'true'
+        run: |
+          (cd apps/telemetry/stack/ingest && docker compose down -v --remove-orphans) || true
+          (cd apps/telemetry/stack/kafka && docker compose down -v --remove-orphans) || true
+          docker network rm telemetry_network || true
+          rm -f apps/telemetry/.env

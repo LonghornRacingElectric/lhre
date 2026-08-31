@@ -1,0 +1,183 @@
+# telemetry/stack/ingest/BUILD.bazel
+# BUILD file for the MQTT ingest service
+# This service receives MQTT messages, stores them in PostgreSQL, and forwards to Kafka
+
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
+load("//apps/telemetry:container.bzl", "telemetry_service_image")
+
+package(default_visibility = ["//apps/telemetry:__subpackages__"])
+
+# ---------------------------------------------------------------------------
+# Protobuf generation (Longhorn CAN -> Python pb2)
+#
+# Generates a Python `_pb2.py` module from the generated CAN schema.
+#
+# Build output path:
+# - bazel-bin/telemetry/stack/ingest/protobuf/can_packets_pb2.py
+#
+# Input chain:
+# - the selected //apps/telemetry:current_schema_proto -> this genrule
+# ---------------------------------------------------------------------------
+
+genrule(
+    name = "can_packets_pb2",
+    srcs = [
+        "//apps/telemetry:current_schema_proto",
+    ],
+    outs = [
+        "protobuf/can_packets_pb2.py",
+    ],
+    cmd = """\
+set -euo pipefail
+
+mkdir -p "$(RULEDIR)/protobuf"
+
+# Protoc writes <basename>_pb2.py based on the input filename.
+cp "$(location //apps/telemetry:current_schema_proto)" "$(RULEDIR)/can_packets.proto"
+
+$(location //tools/protoc) \\
+  --proto_path="$(RULEDIR)" \\
+  --python_out="$(RULEDIR)/protobuf" \\
+  "$(RULEDIR)/can_packets.proto"
+""",
+    tools = [
+        "//tools/protoc",
+    ],
+)
+
+# Export configuration files for Docker compose and testing
+exports_files([
+    "docker-compose.yml",
+    "mosquitto.conf",
+    "requirements.txt",
+    "requirements_lock.txt",
+    "init-databases.sh",
+    "nightwatch_db_init.sql",
+    "angelique_db_init.sql",
+    "orion_db_init.sql",
+    "common_schema.sql",
+])
+
+# Filegroup for SQL initialization scripts
+filegroup(
+    name = "db_init_scripts",
+    srcs = [
+        "angelique_db_init.sql",
+        "init-databases.sh",
+        "nightwatch_db_init.sql",
+        "orion_db_init.sql",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# Filegroup for protobuf files
+filegroup(
+    name = "protobuf_files",
+    srcs = glob(["protobuf/**"]) + [
+        ":can_packets_pb2",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# Filegroup for car configuration files
+filegroup(
+    name = "car_configs",
+    srcs = glob(["car_configs/**"]),
+    visibility = ["//visibility:public"],
+)
+
+# Python library for the MQTT handler
+py_library(
+    name = "ingest_lib",
+    imports = ["../..", "../../.."],
+    srcs = [
+        "__init__.py",
+        "mqtt_handler.py",
+        "partition_manager.py",
+    ],
+    data = [
+        ":car_configs",
+        ":protobuf_files",
+        "//apps/telemetry:config_files",
+        "//apps/telemetry:current_schema_bundle",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//apps/telemetry/analysis:analysis_lib",
+        requirement("kafka-python"),
+        requirement("numpy"),
+        requirement("paho-mqtt"),
+        requirement("pandas"),
+        requirement("protobuf"),
+        requirement("psycopg2-binary"),
+        requirement("python-dotenv"),
+        requirement("SQLAlchemy"),
+    ],
+)
+
+# Python binary for the ingest service
+py_binary(
+    name = "ingest_binary",
+    imports = ["../..", "../../.."],
+    srcs = ["mqtt_handler.py"],
+    main = "mqtt_handler.py",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":ingest_lib",
+    ],
+)
+
+# Writes telemetry/stack/ingest/protobuf/can_packets_pb2.py into the workspace.
+# Use: bazel run //telemetry/stack/ingest:update_can_packets_pb2
+py_binary(
+    name = "update_can_packets_pb2",
+    target_compatible_with = ["@platforms//os:linux"],
+    imports = ["../..", "../../.."],
+    srcs = [
+        "update_can_packets_pb2.py",
+    ],
+    data = [
+        ":can_packets_pb2",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# Files opened by path rather than through Bazel runfiles. Python sources and
+# third-party wheels travel with :ingest_binary's complete runfiles closure.
+pkg_tar(
+    name = "ingest_runtime_config_tar",
+    srcs = glob(["car_configs/**"]),
+    package_dir = "/app/stack/ingest",
+    strip_prefix = ".",
+)
+
+telemetry_service_image(
+    name = "ingest",
+    binary = ":ingest_binary",
+    base = "@python312_linux_amd64",
+    env = {
+        "PYTHONPATH": "/app",
+        "PYTHONUNBUFFERED": "1",
+    },
+    repo_tags = [
+        "lhre/telemetry-ingest:dev",
+        "telemetry_backend:latest",
+    ],
+    repository = "ghcr.io/longhornracingelectric/telemetry-ingest",
+    tars = [
+        ":ingest_runtime_config_tar",
+        "//apps/telemetry:runtime_config_tar",
+    ],
+    visibility = ["//visibility:public"],
+    workdir = "/app/stack/ingest",
+)
+
+# Compatibility for the imported telemetry target name. New callers use
+# :ingest_load, which describes the side effect accurately.
+alias(
+    name = "ingest_tarball",
+    actual = ":ingest_load",
+    visibility = ["//visibility:public"],
+)

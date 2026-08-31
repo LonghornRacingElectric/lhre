@@ -158,6 +158,11 @@ source builds from happening at all:
    binaries protobuf registers take effect (gated on its
    `prefer_prebuilt_protoc` flag, default true). Without it Bazel uses
    the legacy wiring and compiles from source anyway.
+   Tools that need `protoc` as an executable path rather than through
+   toolchain resolution (the prost codegen build script in `apps/BEVO`)
+   use `//tools/protoc`, our own prebuilt pinned to the same version as
+   the protobuf `bazel_dep`. Bump `tools/protoc/protoc.bzl` in the same
+   change as the module version.
 2. `//toolchains/proto` registers a Python `proto_lang_toolchain` whose
    runtime is the pip `protobuf` wheel. The default
    `@protobuf//python:protobuf_python` is what drags in the

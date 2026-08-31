@@ -1,0 +1,60 @@
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
+load("//apps/telemetry:container.bzl", "telemetry_service_image")
+
+package(default_visibility = ["//apps/telemetry:__subpackages__"])
+
+exports_files(["docker-compose.yml"])
+
+py_library(
+    name = "gps_classifier_lib",
+    srcs = [
+        "__init__.py",
+        "gps_classifier.py",
+    ],
+    imports = ["../../..", "../../../.."],
+    deps = [
+        "//apps/telemetry/analysis:analysis_lib",
+        "//apps/telemetry/stack/ingest:ingest_lib",
+        requirement("matplotlib"),
+        requirement("numpy"),
+        requirement("paho-mqtt"),
+        requirement("pandas"),
+        requirement("requests"),
+        requirement("SQLAlchemy"),
+    ],
+    visibility = ["//visibility:public"],
+)
+
+py_binary(
+    name = "gps_classifier_binary",
+    srcs = ["main.py"],
+    imports = [".", "../../..", "../../../.."],
+    main = "main.py",
+    deps = [":gps_classifier_lib"],
+    visibility = ["//visibility:public"],
+)
+
+telemetry_service_image(
+    name = "gps_classifier",
+    base = "@python312_linux_amd64",
+    binary = ":gps_classifier_binary",
+    env = {
+        "PYTHONPATH": "/app",
+        "PYTHONUNBUFFERED": "1",
+    },
+    repo_tags = [
+        "lhre/telemetry-gps-classifier:dev",
+        "gps_classifier:latest",
+    ],
+    repository = "ghcr.io/longhornracingelectric/telemetry-gps-classifier",
+    tars = ["//apps/telemetry:runtime_config_tar"],
+    visibility = ["//visibility:public"],
+    workdir = "/app/stack/processors/gps_classifier",
+)
+
+alias(
+    name = "gps_classifier_tarball",
+    actual = ":gps_classifier_load",
+    visibility = ["//visibility:public"],
+)

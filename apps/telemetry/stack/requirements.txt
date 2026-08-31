@@ -1,0 +1,13 @@
+grpcio==1.76.0
+greenlet==3.2.4
+kafka-python==2.2.15
+matplotlib==3.9.0
+numpy==2.0.1
+paho-mqtt==1.6.1
+pandas==2.2.2
+protobuf==7.35.1
+psycopg2-binary==2.9.9
+python-dotenv==1.1.1
+PyYAML==6.0.3
+requests==2.31.0
+SQLAlchemy==2.0.0

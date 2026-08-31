@@ -66,3 +66,41 @@ platform(
         ":cortex_m7f",
     ],
 )
+
+# The auto-detected host platform, plus a hard "never execute remotely"
+# property. Used as --host_platform on Linux/macOS (.bazelrc): the remote
+# executors are Linux x86_64, so any action whose exec platform resolves to
+# the *host* (e.g. rules_rust building host-targeted crates and their
+# bootstrap tools on a Mac) must run on this machine — without this, Bazel
+# happily ships Mach-O tool binaries to the Linux executors, which fail with
+# cryptic "Syntax error" messages from the executor's shell.
+platform(
+    name = "host_no_remote_exec",
+    exec_properties = {"no-remote-exec": "1"},
+    parents = ["@platforms//host"],
+)
+
+# The on-car telemetry computer (Raspberry Pi 4/5, 64-bit). Rust resolves
+# this to the aarch64-unknown-linux-musl toolchain (the only aarch64-linux
+# triple configured in MODULE.bazel), producing fully static binaries that
+# run on any Pi OS image regardless of its glibc. See apps/BEVO/README.md
+# for the deploy flow.
+platform(
+    name = "pi",
+    constraint_values = [
+        "@platforms//cpu:arm64",
+        "@platforms//os:linux",
+    ],
+)
+
+# Container target platform. Image rules transition their application binaries
+# here explicitly, so a macOS or Windows developer can build the same Linux
+# artifact as CI without changing the target platform for the rest of the
+# command line.
+platform(
+    name = "linux_amd64",
+    constraint_values = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+    ],
+)

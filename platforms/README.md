@@ -14,6 +14,10 @@ Nobody passes `--platforms` by hand: `firmware_project` transitions each
 board to its family's platform automatically (see
 [tools/firmware](../tools/firmware/README.md)).
 
+`//platforms:linux_amd64` serves the same role for container payloads. Telemetry
+image rules transition their binary to it, so macOS and Windows callers produce
+the deployment closure without changing the platform of the whole command.
+
 ## Adding a family
 
 1. If it's a new CPU core, add the `constraint_value` here and a toolchain
@@ -22,3 +26,13 @@ board to its family's platform automatically (see
 3. Map the family in `FAMILY_PLATFORMS`
    (`//tools/firmware:firmware_project.bzl`) and package its HAL in
    [//drivers/stm32](../drivers/stm32/README.md).
+
+## Not a firmware platform: `host_no_remote_exec`
+
+`//platforms:host_no_remote_exec` is the auto-detected host platform plus a
+`no-remote-exec` property. `.bazelrc` sets it as `--host_platform` wherever
+remote execution is on, so actions that resolve to the *host* exec platform
+(e.g. rules_rust building host-targeted crates and their bootstrap tools)
+run locally instead of being shipped to the Linux executors, where host
+(macOS/Windows) binaries can't run. C++ never needs this — hermetic LLVM
+resolves to the Linux exec platform and cross-compiles.
