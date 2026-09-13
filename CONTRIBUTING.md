@@ -3,6 +3,13 @@
 Stuck on something the happy path doesn't cover (dependencies, vendoring,
 missing targets)? Check the [cookbook](docs/cookbook.md) first.
 
+Working in `autonomy/`? That tree is a ROS 2 workspace with its own setup
+and rules — start at [autonomy/ros2/GETTING-STARTED.md](autonomy/ros2/GETTING-STARTED.md)
+and [autonomy/AGENTS.md](autonomy/AGENTS.md). The formatting, IDE, and
+debugging sections below apply to the Bazel/firmware tree only; the
+[Workflow](#workflow) and [Documentation](#documentation) sections apply
+everywhere.
+
 ## Workflow
 
 - Branch from `main`: `<your-name>/<short-description>` (e.g.
