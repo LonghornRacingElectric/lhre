@@ -25,58 +25,67 @@ Colcon workspace for LHR driverless / autonomy nodes. This file is the **referen
 
 ### Kinematic sim (run_demo.sh)
 
+```mermaid
+flowchart LR
+    trackgen["publish_cones"] -- "/lhr/track/cones<br>(ground truth)" --> sensor["sensor_sim"]
+    sensor -- "/lhr/sensor/cones_detected<br>(FOV-filtered, accumulated)" --> builder["track_builder"]
+    builder -- "/lhr/track/centerline" --> pursuit["pure_pursuit"]
+    builder -- "/lhr/track/centerline" --> mission["mission_manager"]
+    builder -- "/lhr/track/centerline" --> metrics["metrics_node"]
+    mission -- "/lhr/mission/status<br>(gates control)" --> pursuit
+    pursuit -- "/lhr/vehicle/cmd" --> sim["sim_kinematic"]
+    sim -- "/lhr/vehicle/odom" --> sensor
+    sim -- "/lhr/vehicle/odom" --> pursuit
+    sim -- "/lhr/vehicle/odom" --> mission
+    sim -- "/lhr/vehicle/odom" --> metrics
+    metrics -- "/lhr/metrics/lap_complete" --> mission
 ```
-trackgen ──→ /lhr/track/cones ──→ sensor_sim ──→ /lhr/sensor/cones_detected ──→ track_builder ──→ centerline
-                (ground truth,        │                (FOV-filtered,                                    │
-                 visible in RViz)      │                 accumulated)                                     ▼
-                                       ├──→ /lhr/sensor/cones_viz    (bright/dim visualization)     pure_pursuit ◄── mission_manager
-                                       └──→ /lhr/sensor/fov_viz      (FOV frustum)                      │          (/lhr/mission/status
-                                                                                                         │           gates control)
-                                       sim_kinematic ◄── /lhr/vehicle/cmd ◄──────────────────────────────┘
-                                            │
-                                            ├──→ /lhr/vehicle/odom ──→ mission_manager
-                                            │                               │
-                                            │                               ├──→ /lhr/mission/status
-                                            │                               └──→ /lhr/debug/mission_state
-                                            │
-                                            └──→ metrics_node ──→ /lhr/metrics/lap_complete ──→ mission_manager
-```
+
+`sensor_sim` needs odometry to place the FOV; `mission_manager` watches the
+centerline to leave `OFF`. Viz-only topics (`/lhr/sensor/cones_viz`,
+`/lhr/sensor/fov_viz`, `/lhr/track/centerline_markers`, `/lhr/control/lookahead`)
+and `/lhr/debug/*` are omitted — full list under [Topics](#topics).
 
 ### Gazebo sim (run_gazebo_demo.sh)
 
 **Sim perception (default, `perception:=sim`):**
-```
-                   ┌──────────────────── GAZEBO ────────────────────┐
-                   │  Vehicle (fsae_vehicle) with:                  │
-                   │   • JointPositionController (steering joints)  │
-                   │   • JointController (wheel velocities)         │
-                   │   • OdometryPublisher (ground-truth pose)      │
-                   │   • IMU sensor, GPU LiDAR sensor               │
-                   └─────────────┬───────────────────┬──────────────┘
-                                 │                   │
-                    ros_gz_bridge│(6x Float64 + odom)│
-                                 │                   │
-  trackgen ──→ sensor_sim ──→ track_builder ──→ pure_pursuit ──→ joint_cmd_adapter
-                                                     │               │
-                                                     │          6x joint commands
-                                                     │          (2 steering pos +
-                                                     │           4 wheel vel)
-                                                     │
-                                          /lhr/vehicle/odom ◄── Gazebo OdometryPublisher
+```mermaid
+flowchart LR
+    trackgen["publish_cones"] -- "/lhr/track/cones" --> sensor["sensor_sim"]
+    sensor -- "/lhr/sensor/cones_detected" --> builder["track_builder"]
+    builder -- "/lhr/track/centerline" --> pursuit["pure_pursuit"]
+    pursuit -- "/lhr/vehicle/cmd" --> adapter["joint_cmd_adapter"]
+    adapter -- "2× steering cmd_pos<br>4× wheel cmd_vel" --> bridge["ros_gz_bridge"]
+    subgraph gz["Gazebo — fsae_vehicle"]
+        joints["JointPositionController (steering)<br>JointController (wheels)"]
+        odo["OdometryPublisher<br>(ground-truth pose)"]
+    end
+    bridge --> joints
+    odo --> bridge
+    bridge -- "/lhr/vehicle/odom" --> sensor
+    bridge -- "/lhr/vehicle/odom" --> pursuit
 ```
 
+`mission_manager` and `metrics_node` subscribe exactly as in the kinematic
+diagram (omitted here). The IMU is bridged to `/lhr/imu/data` but nothing
+consumes it yet — it is there for future state estimation.
+
 **LiDAR perception (`perception:=lidar`):**
-```
-                   ┌──────────────────── GAZEBO ────────────────────┐
-                   │  Vehicle with GPU LiDAR sensor                 │
-                   └──────┬──────────────────┬──────────────────────┘
-                          │                  │
-             ros_gz_bridge│(PointCloud2+odom)│
-                          │                  │
-  lidar_cone_detector ──→ track_builder ──→ pure_pursuit ──→ joint_cmd_adapter
-  (pointcloud clustering,  (boundary pairing via
-   unclassified cones,      Delaunay triangulation)
-   persistent mapping)
+```mermaid
+flowchart LR
+    subgraph gz["Gazebo — fsae_vehicle"]
+        lidar["GPU LiDAR sensor"]
+        odo["OdometryPublisher"]
+    end
+    lidar --> bridge["ros_gz_bridge"]
+    odo --> bridge
+    bridge -- "/lhr/lidar/points" --> detector["lidar_cone_detector"]
+    bridge -- "/lhr/vehicle/odom" --> detector
+    bridge -- "/lhr/vehicle/odom" --> pursuit
+    detector -- "/lhr/sensor/cones_detected<br>(unclassified, persistent map)" --> builder["track_builder<br>(boundary pairing, Delaunay)"]
+    builder -- "/lhr/track/centerline" --> pursuit["pure_pursuit"]
+    pursuit -- "/lhr/vehicle/cmd" --> adapter["joint_cmd_adapter"]
+    adapter -- "6× joint commands" --> bridge
 ```
 
 The upper stack (track_builder, control, mission_manager, metrics) is identical in both modes. The `perception` launch argument selects between the sim pipeline and LiDAR-based detection.
@@ -243,22 +252,43 @@ The `joint_cmd_adapter` ROS2 node converts `AckermannDriveStamped` commands into
 - **Wheel velocities** account for differential turn radii at each wheel
 - All commands are bridged to Gazebo via `ros_gz_bridge` as `Float64` ↔ `gz.msgs.Double`
 
+```mermaid
+flowchart LR
+    pursuit["pure_pursuit"] -- "/lhr/vehicle/cmd<br>(AckermannDriveStamped)" --> adapter["joint_cmd_adapter<br>(Ackermann geometry)"]
+    adapter -- "2× steering cmd_pos" --> bridge["ros_gz_bridge<br>(Float64 ↔ gz.msgs.Double)"]
+    adapter -- "4× wheel cmd_vel" --> bridge
+    bridge --> steer["2× JointPositionController"]
+    bridge --> wheels["4× JointController"]
+```
+
 Odometry comes from Gazebo's `OdometryPublisher` system plugin, which reports the vehicle's world-frame pose directly (not wheel encoder integration).
 
 ### Architecture comparison
 
+```mermaid
+flowchart TB
+    subgraph upper["Upper stack — identical in every mode"]
+        direction LR
+        builder["track_builder"] --> pursuit["pure_pursuit"]
+        mission["mission_manager"] --> pursuit
+    end
+    iface(["/lhr/sensor/cones_detected + /lhr/vehicle/odom in · /lhr/vehicle/cmd out"])
+    upper === iface
+    m1["Kinematic:<br>publish_cones<br>sensor_sim<br>sim_kinematic"]
+    m2["Gazebo · sim perception:<br>publish_cones<br>sensor_sim<br>Gazebo physics + joint_cmd_adapter"]
+    m3["Gazebo · LiDAR perception:<br>GPU LiDAR<br>lidar_cone_detector<br>Gazebo physics + joint_cmd_adapter"]
+    iface --- m1
+    iface --- m2
+    iface --- m3
 ```
-LIGHTWEIGHT SIM              GAZEBO (perception:=sim)         GAZEBO (perception:=lidar)
-───────────────              ────────────────────────         ─────────────────────────
-lhr_trackgen (cones)     →   lhr_trackgen (reused)        →   Gazebo GPU LiDAR sensor
-lhr_sensor_sim (FOV)     →   lhr_sensor_sim (reused)      →   lhr_perception (pointcloud)
-lhr_sim_kinematic        →   Gazebo physics               →   Gazebo physics
 
-lhr_track_builder        →   SAME (index pairing)         →   SAME (boundary pairing)
-lhr_control              →   SAME                         →   SAME
-lhr_mission_manager      →   SAME                         →   SAME
-lhr_metrics              →   SAME                         →   SAME
-```
+| Component | Kinematic | Gazebo (`perception:=sim`) | Gazebo (`perception:=lidar`) |
+|-----------|-----------|----------------------------|------------------------------|
+| Cone source | `publish_cones` | `publish_cones` (reused) | Gazebo GPU LiDAR |
+| Perception | `sensor_sim` (FOV filter) | `sensor_sim` (reused) | `lidar_cone_detector` (pointcloud clustering) |
+| Physics / vehicle | `sim_kinematic` | Gazebo | Gazebo |
+| `track_builder` pairing | index | index | boundary (Delaunay) |
+| Actuation | `/lhr/vehicle/cmd` directly | `joint_cmd_adapter` → 6 joints | `joint_cmd_adapter` → 6 joints |
 
 All paths produce identical ROS 2 topic interfaces — the upper stack doesn't know the difference.
 
@@ -313,9 +343,13 @@ The bridge config (`config/ros_gz_bridge.yaml`) maps 11 topics:
 
 ## TF tree
 
+```mermaid
+flowchart LR
+    map["map<br>(world/track frame)"] --> base["base_link<br>(vehicle, rear-axle center)"]
 ```
-map → base_link   (broadcast by lhr_sim_kinematic or Gazebo OdometryPublisher)
-```
+
+One transform. Broadcast by `sim_kinematic` in the kinematic sim; in Gazebo by
+the `OdometryPublisher` plugin, bridged from `/model/fsae_vehicle/tf` to `/tf`.
 
 ## Parameters
 
@@ -390,10 +424,15 @@ Implements the FSAE driverless state machine (DO.1.1). Controls when the vehicle
 
 #### State machine
 
-```
-OFF ──→ READY ──→ DRIVING ──→ FINISHED
-                     │
-                     └──→ EMERGENCY ──→ OFF (on reset)
+```mermaid
+stateDiagram-v2
+    [*] --> OFF
+    OFF --> READY: centerline path available
+    READY --> DRIVING: go signal, or auto_go timeout
+    DRIVING --> FINISHED: mission complete + vehicle stopped
+    DRIVING --> EMERGENCY: emergency signal
+    EMERGENCY --> OFF: reset signal
+    FINISHED --> [*]
 ```
 
 | Transition | Trigger |
@@ -434,6 +473,12 @@ Steering uses pure pursuit with **curvature-adaptive lookahead**. On straights t
 ```
 ld = clamp(ld_max - gain * |curvature|, ld_min, ld_max)
 ```
+
+![Pure pursuit geometry: lookahead circle, goal point, and the resulting steering angle](docs/pure-pursuit.svg)
+
+The goal point is where the centerline crosses the lookahead circle. Its
+lateral offset in the car frame sets the steering:
+`kappa = 2 * y_local / ld^2`, `steer = atan(kappa * L)`, clamped to `max_steer`.
 
 Speed is planned from path curvature:
 `v = clamp(sqrt(a_lat_max / |kappa|), v_min, v_max)` with acceleration limiting.

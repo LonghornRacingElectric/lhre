@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-40 0 500 360" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13">
+  <!-- Colors chosen to stay legible on both light and dark backgrounds -->
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8a8a8a"/>
+    </marker>
+  </defs>
+
+  <!-- lookahead circle, radius ld, centered on the rear axle -->
+  <circle cx="120" cy="190" r="140" fill="none" stroke="#8a8a8a" stroke-dasharray="6 5" stroke-width="1.3"/>
+  <text x="-14" y="322" fill="#8a8a8a">lookahead circle (radius ld)</text>
+
+  <!-- centerline path -->
+  <path d="M 40 210 C 130 200, 210 165, 241 120 S 290 60, 310 35" fill="none" stroke="#4c8ef7" stroke-width="2.5"/>
+  <text x="14" y="232" fill="#4c8ef7">centerline</text>
+
+  <!-- heading ray -->
+  <line x1="120" y1="190" x2="280" y2="190" stroke="#8a8a8a" stroke-width="1.3" marker-end="url(#arr)"/>
+  <text x="286" y="194" fill="#8a8a8a">heading (x_local)</text>
+
+  <!-- chord to goal point -->
+  <line x1="120" y1="190" x2="241" y2="120" stroke="#e8710a" stroke-width="1.6" stroke-dasharray="7 4"/>
+  <text x="168" y="146" fill="#e8710a">ld</text>
+
+  <!-- angle alpha arc -->
+  <path d="M 165 190 A 45 45 0 0 0 159 167.5" fill="none" stroke="#8a8a8a" stroke-width="1.2"/>
+  <text x="172" y="182" fill="#8a8a8a" font-style="italic">&#945;</text>
+
+  <!-- y_local drop from goal point -->
+  <line x1="241" y1="120" x2="241" y2="190" stroke="#e8710a" stroke-width="1.2" stroke-dasharray="3 4"/>
+  <text x="247" y="160" fill="#e8710a">y_local</text>
+
+  <!-- goal point -->
+  <circle cx="241" cy="120" r="4.5" fill="#e8710a"/>
+  <text x="252" y="114" fill="#e8710a">goal point</text>
+
+  <!-- car: body, axle ticks, wheels; rear axle at the origin of the car frame -->
+  <rect x="100" y="178" width="105" height="24" rx="7" fill="#8a8a8a" fill-opacity="0.15" stroke="#8a8a8a" stroke-width="1.3"/>
+  <line x1="120" y1="174" x2="120" y2="206" stroke="#8a8a8a" stroke-width="1"/>
+  <line x1="190" y1="174" x2="190" y2="206" stroke="#8a8a8a" stroke-width="1"/>
+  <rect x="112" y="170" width="16" height="6" rx="2" fill="#8a8a8a"/>
+  <rect x="112" y="204" width="16" height="6" rx="2" fill="#8a8a8a"/>
+  <rect x="182" y="170" width="16" height="6" rx="2" fill="#8a8a8a" transform="rotate(-15 190 173)"/>
+  <rect x="182" y="204" width="16" height="6" rx="2" fill="#8a8a8a" transform="rotate(-15 190 207)"/>
+  <circle cx="120" cy="190" r="3" fill="#8a8a8a"/>
+
+  <!-- wheelbase bracket -->
+  <path d="M 120 224 L 120 230 L 190 230 L 190 224" fill="none" stroke="#8a8a8a" stroke-width="1"/>
+  <text x="141" y="245" fill="#8a8a8a">L (wheelbase)</text>
+
+  <!-- formulas -->
+  <text x="-20" y="348" fill="#8a8a8a">&#954; = 2 &#183; y_local / ld&#178; &#160;&#160;&#160; &#948; = atan(&#954; &#183; L), &#160;|&#948;| &#8804; max_steer</text>
+</svg>
