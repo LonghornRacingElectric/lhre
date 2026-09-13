@@ -74,15 +74,14 @@ class TestMQTTConnectivity(unittest.TestCase):
             self.assertTrue(True)
     
     def test_mqtt_multiple_topics(self):
-        """Test subscription to multiple topics (simulating telemetry data topics)."""
+        """Test multiple topics without injecting invalid production payloads."""
         with MQTTTestClient(self.config) as client:
-            # Subscribe to telemetry-like topics
             topics = [
-                "nightwatch/packet",
-                "nightwatch/dynamics",
-                "orion/data",
-                "angelique/data",
-                "config/flask",
+                "test/telemetry/multiple/nightwatch-packet",
+                "test/telemetry/multiple/nightwatch-dynamics",
+                "test/telemetry/multiple/orion-data",
+                "test/telemetry/multiple/angelique-data",
+                "test/telemetry/multiple/config-flask",
             ]
             
             for topic in topics:
@@ -96,10 +95,11 @@ class TestMQTTConnectivity(unittest.TestCase):
             
             time.sleep(2)
             
-            # Verify messages were received
-            self.assertGreater(
-                len(client.received_messages), 0,
-                "Should receive messages from subscribed topics"
+            received_topics = {message["topic"] for message in client.received_messages}
+            self.assertEqual(
+                received_topics,
+                set(topics),
+                "Should receive a message from every subscribed topic",
             )
 
 

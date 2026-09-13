@@ -9,6 +9,8 @@ import unittest
 import os
 import sys
 
+from sqlalchemy import text
+
 from telemetry.stack.tests.test_utils import (
     TelemetryConfig,
     check_db_connection,
@@ -60,81 +62,50 @@ class TestDatabaseConnectivity(unittest.TestCase):
     
     def test_nightwatch_database_exists(self):
         """Test that the Nightwatch database exists (used by telemetry)."""
-        try:
-            import psycopg2
-            
-            # Try to connect to the Nightwatch database
-            conn = psycopg2.connect(
-                host=self.config.db_host,
-                port=self.config.db_port,
-                user=os.getenv("POSTGRES_USER", "postgres"),
-                password=os.getenv("POSTGRES_PASSWORD", "postgres"),
-                database="telemetry",
-            )
-            
-            conn.close()
-            self.assertTrue(True, "Nightwatch database exists")
-            
-        except psycopg2.OperationalError as e:
-            if "does not exist" in str(e):
-                self.skipTest("Nightwatch database not yet created")
-            raise
+        import psycopg2
+
+        conn = psycopg2.connect(
+            host=self.config.db_host,
+            port=self.config.db_port,
+            user=os.getenv("POSTGRES_USER", "postgres"),
+            password=os.getenv("POSTGRES_PASSWORD", "postgres"),
+            database="telemetry",
+        )
+        conn.close()
     
     def test_angelique_database_exists(self):
         """Test that the Angelique database exists (used by telemetry)."""
-        try:
-            import psycopg2
-            
-            # Try to connect to the Angelique database
-            conn = psycopg2.connect(
-                host=self.config.db_host,
-                port=self.config.db_port,
-                user=os.getenv("POSTGRES_USER", "postgres"),
-                password=os.getenv("POSTGRES_PASSWORD", "postgres"),
-                database="angelique",
-            )
-            
-            conn.close()
-            self.assertTrue(True, "Angelique database exists")
-            
-        except psycopg2.OperationalError as e:
-            if "does not exist" in str(e):
-                self.skipTest("Angelique database not yet created")
-            raise
+        import psycopg2
+
+        conn = psycopg2.connect(
+            host=self.config.db_host,
+            port=self.config.db_port,
+            user=os.getenv("POSTGRES_USER", "postgres"),
+            password=os.getenv("POSTGRES_PASSWORD", "postgres"),
+            database="angelique",
+        )
+        conn.close()
 
     def test_orion_database_exists(self):
         """Test that the Orion database exists (used by telemetry)."""
-        try:
-            import psycopg2
+        import psycopg2
 
-            conn = psycopg2.connect(
-                host=self.config.db_host,
-                port=self.config.db_port,
-                user=os.getenv("POSTGRES_USER", "postgres"),
-                password=os.getenv("POSTGRES_PASSWORD", "postgres"),
-                database="orion",
-            )
-
-            conn.close()
-            self.assertTrue(True, "Orion database exists")
-
-        except psycopg2.OperationalError as e:
-            if "does not exist" in str(e):
-                self.skipTest("Orion database not yet created")
-            raise
+        conn = psycopg2.connect(
+            host=self.config.db_host,
+            port=self.config.db_port,
+            user=os.getenv("POSTGRES_USER", "postgres"),
+            password=os.getenv("POSTGRES_PASSWORD", "postgres"),
+            database="orion",
+        )
+        conn.close()
     
     def test_sqlalchemy_connection(self):
         """Test SQLAlchemy connection to the database."""
-        try:
-            from analysis.sql_utils.db_session import get_db
-            
-            with get_db("Nightwatch") as session:
-                # Execute a simple query
-                result = session.execute("SELECT 1")
-                self.assertIsNotNone(result, "SQLAlchemy session should work")
-                
-        except Exception as e:
-            self.skipTest(f"SQLAlchemy test skipped: {e}")
+        from analysis.sql_utils.db_session import get_db
+
+        with get_db("Nightwatch") as session:
+            result = session.execute(text("SELECT 1"))
+            self.assertEqual(result.scalar(), 1)
 
 
 if __name__ == "__main__":

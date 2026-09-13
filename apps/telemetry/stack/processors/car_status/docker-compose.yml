@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     env_file:
       # Provides DB passwords (ELECTRIC_PWD, ...) for segment persistence.
-      - path: ../../../.env
+      - path: ../../../../../.env
         required: true
     environment:
       PYTHONUNBUFFERED: 1

@@ -81,8 +81,8 @@ In the viewer, click any file in a job's file list to open the annotation modal.
    curl localhost:8090/health
    ./server_devtool.sh status              # logsync shows in the health table
    ```
-   The dev tool points staging at the SSD automatically (`LOGSYNC_DATA_DIR`,
-   defaulting to `/mnt/server_ssd/logsync` when present).
+   With `TELEMETRY_STORAGE_ROOT=/mnt/server_ssd`, the dev tool points staging
+   at `/mnt/server_ssd/logsync`; local runs default to `./data`.
 
 4. **Point the viewer at it.** The viewer reads `LOGSYNC_URL` (default
    `http://localhost:8090`, set in its `ecosystem.config.js`). The viewer
@@ -90,7 +90,7 @@ In the viewer, click any file in a job's file list to open the annotation modal.
    it with `./server_devtool.sh build viewer`.
 
 ### Tuning (env)
-See `.env.example`. Key knobs: `LOGSYNC_SPEED_THRESHOLD_MPS`,
+See the repository-root `.env.example`. Key knobs: `LOGSYNC_SPEED_THRESHOLD_MPS`,
 `LOGSYNC_MOTION_STALENESS_MS`, `LOGSYNC_DEFAULT_BWLIMIT_KBPS`,
 `BEVO_SSH_TARGET`, `BEVO_LOG_DIR`.
 

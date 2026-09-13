@@ -53,8 +53,19 @@ DASHBOARD_SOURCE_DIR="$SCRIPT_DIR/../analysis/database/dashboards"
 
 NETWORK="telemetry_network"        # external in every compose file → we own it
 EXTERNAL_VOLUMES="telemetry_db grafana_storage kafka_data"
-# telemetry_db is bind-mounted onto the SSD so Postgres data lives on /mnt, not the root disk.
-TELEMETRY_DB_DIR="${TELEMETRY_DB_DIR:-/mnt/server_ssd/app_data/telemetry_db}"
+
+# Docker-managed named volumes are the portable default. The production server
+# opts into SSD-backed bind volumes by exporting TELEMETRY_STORAGE_ROOT; the
+# per-service variables remain available when the disks use different roots.
+TELEMETRY_STORAGE_ROOT="${TELEMETRY_STORAGE_ROOT:-}"
+TELEMETRY_DB_DIR="${TELEMETRY_DB_DIR:-}"
+KAFKA_DATA_DIR="${KAFKA_DATA_DIR:-}"
+LOGSYNC_DATA_DIR="${LOGSYNC_DATA_DIR:-}"
+if [[ -n "$TELEMETRY_STORAGE_ROOT" ]]; then
+    TELEMETRY_DB_DIR="${TELEMETRY_DB_DIR:-$TELEMETRY_STORAGE_ROOT/app_data/telemetry_db}"
+    KAFKA_DATA_DIR="${KAFKA_DATA_DIR:-$TELEMETRY_STORAGE_ROOT/kafka-data}"
+    LOGSYNC_DATA_DIR="${LOGSYNC_DATA_DIR:-$TELEMETRY_STORAGE_ROOT/logsync}"
+fi
 
 # component registry: name | directory | type | pm2-app | Bazel load targets
 # type defaults to "docker" (compose-managed). "pm2" components are Node apps
@@ -81,10 +92,8 @@ CORE_ORDER="kafka ingest field_enricher"
 APP_ORDER="logsync viewer"
 ALL_ORDER="kafka ingest field_enricher gps_classifier lap_timer track_mapper kafka_test gg_plot car_status logsync viewer"
 
-# logsync stages multi-GB CSVs; keep them off the small root disk.
-LOGSYNC_DATA_DIR="${LOGSYNC_DATA_DIR:-}"
-# kafka's KRaft log dir — keep it off root (it grows fast) and on the NVMe.
-KAFKA_DATA_DIR="${KAFKA_DATA_DIR:-}"
+# With no storage override, Docker owns the database/Kafka volumes and logsync
+# uses its local data directory.
 
 # ----------------------------------------------------------------------------- colors
 if [[ -t 1 ]]; then
@@ -170,21 +179,16 @@ ensure_node() {
     err "node/npm/pm2 not found on PATH (needed for pm2-managed components like the viewer)."
     return 1
 }
-# logsync data dir: default to the SSD on the deploy box, else compose's ./data
+# logsync data defaults to its local Compose directory.
 ensure_logsync_dirs() {
     if [[ -z "${LOGSYNC_DATA_DIR:-}" ]]; then
-        if [[ -d /mnt/server_ssd ]]; then
-            LOGSYNC_DATA_DIR=/mnt/server_ssd/logsync     # deploy box: stage on the SSD
-        else
-            LOGSYNC_DATA_DIR="$SCRIPT_DIR/logsync/data"   # local dev: user-owned, matches compose ./data
-        fi
+        LOGSYNC_DATA_DIR="$SCRIPT_DIR/logsync/data"
     fi
     # Pre-create as the current user so docker doesn't make them root-owned.
     export LOGSYNC_DATA_DIR
     mkdir -p "$LOGSYNC_DATA_DIR/staging" "$LOGSYNC_DATA_DIR/state" 2>/dev/null || true
 }
-# Ensure the external kafka_data volume exists before bringing kafka up (it's
-# NVMe-backed on the deploy box — see create_external_volume).
+# Ensure the external kafka_data volume exists before bringing Kafka up.
 ensure_kafka_dirs() {
     dk volume inspect kafka_data >/dev/null 2>&1 || create_external_volume kafka_data
 }
@@ -252,24 +256,22 @@ ensure_network() {
     info "Creating missing external network: $NETWORK"
     dk network create "$NETWORK" >/dev/null
 }
-# telemetry_db must be SSD-backed (bind mount); other external volumes are plain.
+# Bind a volume only when its directory was explicitly configured. Otherwise
+# use a normal Docker-managed volume, which is portable to laptops and CI.
 create_external_volume() {
     local v="$1"
-    if [[ "$v" == "telemetry_db" ]]; then
+    if [[ "$v" == "telemetry_db" && -n "$TELEMETRY_DB_DIR" ]]; then
         $SUDO mkdir -p "$TELEMETRY_DB_DIR"
         dk volume create --driver local \
             --opt type=none --opt o=bind --opt device="$TELEMETRY_DB_DIR" "$v" >/dev/null
-    elif [[ "$v" == "kafka_data" && -d /mnt/server_ssd ]]; then
-        # NVMe-backed on the deploy box (KRaft logs off the small root disk).
-        # The dir is owned by the current user (uid 1000 = kafka's appuser).
-        KAFKA_DATA_DIR="${KAFKA_DATA_DIR:-/mnt/server_ssd/kafka-data}"
+    elif [[ "$v" == "kafka_data" && -n "$KAFKA_DATA_DIR" ]]; then
         if ! mkdir -p "$KAFKA_DATA_DIR" 2>/dev/null; then
             warn "could not create $KAFKA_DATA_DIR — make it writable by uid 1000, or kafka will fail to start"
         fi
         dk volume create --driver local \
             --opt type=none --opt o=bind --opt device="$KAFKA_DATA_DIR" "$v" >/dev/null
     else
-        # plain volume — kafka_data inherits the image's appuser ownership here
+        # A plain kafka_data volume inherits the image's appuser ownership.
         dk volume create "$v" >/dev/null
     fi
 }
@@ -494,7 +496,7 @@ confirm() {
 reset_volume() {
     local v="$1"
     dk volume rm "$v" >/dev/null 2>&1 || true
-    if [[ "$v" == "telemetry_db" ]]; then
+    if [[ "$v" == "telemetry_db" && -n "$TELEMETRY_DB_DIR" ]]; then
         # Bind-mounted on the SSD: `docker volume rm` leaves the data dir, so wipe it explicitly.
         $SUDO rm -rf "$TELEMETRY_DB_DIR"
     fi

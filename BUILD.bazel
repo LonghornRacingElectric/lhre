@@ -2,6 +2,8 @@
 
 load("@hedron_compile_commands//:refresh_compile_commands.bzl", "refresh_compile_commands")
 
+exports_files([".env.example"])
+
 # Generates compile_commands.json for clangd/IDEs. Prefer the wrapper:
 #   bazel run //:refresh_ide
 # It first builds //... with --remote_download_all so the generated header

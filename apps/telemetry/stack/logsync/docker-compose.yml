@@ -16,7 +16,7 @@ services:
     network_mode: host
     env_file:
       # ELECTRIC_PWD (DB password) lives in the shared stack .env.
-      - path: ../../.env
+      - path: ../../../../.env
         required: false
     environment:
       LOGSYNC_HOST: 0.0.0.0

@@ -106,6 +106,7 @@ py_library(
     visibility = ["//visibility:public"],
     deps = [
         "//apps/telemetry/analysis:analysis_lib",
+        requirement("grpcio"),
         requirement("kafka-python"),
         requirement("numpy"),
         requirement("paho-mqtt"),

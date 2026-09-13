@@ -2,6 +2,11 @@
 
 load("@rules_python//python:defs.bzl", "py_test")
 
+_NOT_WINDOWS = select({
+    "@platforms//os:windows": ["@platforms//:incompatible"],
+    "//conditions:default": [],
+})
+
 py_test(
     name = "analysis_tests",
     imports = ["../..", "../../.."],
@@ -11,5 +16,5 @@ py_test(
     ],
     main = "sample_analysis_test.py",
     tags = ["manual"],
-    target_compatible_with = ["@platforms//os:linux"],
+    target_compatible_with = _NOT_WINDOWS,
 )

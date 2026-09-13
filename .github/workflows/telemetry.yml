@@ -64,7 +64,7 @@ jobs:
             echo "ELECTRIC_PWD=$ELECTRIC_PWD"
             echo "GRAFANA_PWD=$GRAFANA_PWD"
             echo "ANALYSIS_PWD=$ANALYSIS_PWD"
-          } > apps/telemetry/.env
+          } > .env
           (cd apps/telemetry/stack/kafka && docker compose up -d --no-build --wait)
           (cd apps/telemetry/stack/ingest && docker compose up -d --no-build --wait)
           sleep 10
@@ -90,4 +90,4 @@ jobs:
           (cd apps/telemetry/stack/ingest && docker compose down -v --remove-orphans) || true
           (cd apps/telemetry/stack/kafka && docker compose down -v --remove-orphans) || true
           docker network rm telemetry_network || true
-          rm -f apps/telemetry/.env
+          rm -f .env

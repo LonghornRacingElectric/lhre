@@ -21,9 +21,26 @@ and then `docker compose up --no-build`. Logsync and the PM2 viewer retain their
 existing non-Bazel workflows. The Linux devtool is authoritative for the new
 image path; the Windows script has not yet been ported to the Bazel loader.
 
+Docker-managed volumes are the default, which works on Linux, macOS, and CI.
+The production server opts into bind-backed storage explicitly:
+
+```bash
+export TELEMETRY_STORAGE_ROOT=/mnt/server_ssd
+./server_devtool.sh up
+```
+
+This preserves the deploy box's existing `app_data/telemetry_db`, `kafka-data`,
+and `logsync` paths below that root. Set `TELEMETRY_DB_DIR`, `KAFKA_DATA_DIR`,
+or `LOGSYNC_DATA_DIR` to override an individual location. Storage settings
+affect creation of a missing volume; the devtool never replaces an existing
+Docker volume implicitly.
+
 All Python services use the shared `requirements.txt` and committed
 `requirements_lock.txt`. Do not add a new per-service lock. Add a runtime pin
 to the shared input and run `bazel run //apps/telemetry/stack:requirements.update`.
 
 Integration tests under `tests/` assume the core is already running. They are
-manual/local targets because they require Docker and credentials.
+manual/local targets because they require Docker and credentials. The data-flow
+test generates an Orion protobuf packet through the Paho test generator and
+requires that exact packet in raw Kafka, decoded Grafana Kafka, and Postgres;
+successful publishing alone is not considered a pass.

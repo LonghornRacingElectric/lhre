@@ -16,6 +16,7 @@ import (
 	pb "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/proto/bridge"
 	sensor "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/proto/sensor"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -941,7 +942,10 @@ func main() {
 		log.Fatalf("Failed to listen: %v", err)
 	}
 
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+		MinTime:             10 * time.Second,
+		PermitWithoutStream: true,
+	}))
 	pb.RegisterBridgeServiceServer(grpcServer, &bridgeServer{})
 
 	// Graceful shutdown

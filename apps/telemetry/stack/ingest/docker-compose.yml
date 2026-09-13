@@ -20,7 +20,7 @@ services:
       - mosquitto
       - db
     env_file:
-      - path: ../../.env
+      - path: ../../../../.env
         required: true
     environment:
       PYTHONUNBUFFERED: 1   # Allows output in Docker Compose console
@@ -30,7 +30,7 @@ services:
       LOGLEVEL: 'DEBUG'
       LOG_BASE_DIR: /app/logs
     volumes:
-      - ../../.env:/.env
+      - ../../../../.env:/.env
       - ../../net_configs.json:/app/net_configs.json
       - ../../logs:/app/logs
     networks:
@@ -42,7 +42,7 @@ services:
     restart: unless-stopped
     shm_size: 2gb
     env_file:
-      - path: ../../.env
+      - path: ../../../../.env
         required: true
     volumes:
       - telemetry_db:/var/lib/postgresql/data
@@ -63,7 +63,7 @@ services:
     container_name: grafana
     restart: unless-stopped
     env_file:
-      - path: ../../.env
+      - path: ../../../../.env
         required: true
     environment:
       GF_DASHBOARDS_MIN_REFRESH_INTERVAL: '250ms'     # Sets min refresh rate of grafana dashboard

@@ -7,7 +7,7 @@ Provides helper functions for connecting to MQTT, Kafka, and PostgreSQL services
 Environment Loading Strategy:
 -----------------------------
 1. First check if required environment variables are already set (e.g., from CI secrets).
-2. If env vars are missing, attempt to load from telemetry/.env file (for local development).
+2. If env vars are missing, attempt to load the repository-root .env file.
 3. This allows CI to work with secrets (no .env file needed) while local dev uses .env file.
 
 For GitHub CI:
@@ -16,7 +16,7 @@ For GitHub CI:
 - Secrets remain private
 
 For Local Development:
-- Copy .env.example to .env and fill in values
+- Copy the repository-root .env.example to .env
 - The .env file is gitignored and never committed
 """
 
@@ -67,11 +67,10 @@ def _load_env_file() -> bool:
     except ImportError:
         return False
     
-    # Try multiple potential locations for the .env file
-    # In Bazel runfiles, the structure is: <workspace>/<package>/<file>
+    # Direct Python invocations from the repository root can load .env. Bazel
+    # tests receive an explicit allowlist via --test_env instead of putting
+    # credentials in runfiles.
     possible_env_paths = [
-        # Bazel runfiles paths
-        Path.cwd() / "telemetry" / ".env",
         Path.cwd() / ".env",
     ]
     
@@ -79,17 +78,6 @@ def _load_env_file() -> bool:
         if env_path.exists():
             load_dotenv(env_path)
             return True
-    
-    # Try to find via runfiles
-    try:
-        from rules_python.python.runfiles import runfiles
-        r = runfiles.Create()
-        env_file = r.Rlocation("_main/telemetry/.env")
-        if env_file and Path(env_file).exists():
-            load_dotenv(env_file)
-            return True
-    except ImportError:
-        pass
     
     return False
 
@@ -446,7 +434,12 @@ class KafkaTestClient:
         )
         return self.producer
     
-    def create_consumer(self, topic: str, group_id: str = "test-group"):
+    def create_consumer(
+        self,
+        topic: str,
+        group_id: str = "test-group",
+        auto_offset_reset: str = "earliest",
+    ):
         """Create a Kafka consumer."""
         from kafka import KafkaConsumer
         
@@ -454,7 +447,7 @@ class KafkaTestClient:
             topic,
             bootstrap_servers=self.bootstrap_servers,
             group_id=group_id,
-            auto_offset_reset='earliest',
+            auto_offset_reset=auto_offset_reset,
             consumer_timeout_ms=10000,
         )
         return self.consumer

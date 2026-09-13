@@ -4,7 +4,7 @@ services:
     container_name: lap_timer_processor
     restart: unless-stopped
     env_file:
-      - path: ../../../.env
+      - path: ../../../../../.env
         required: true
     environment:
       PYTHONUNBUFFERED: 1

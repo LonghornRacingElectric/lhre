@@ -5,6 +5,7 @@ external/
 .idea
 *.tools*
 .bazelrc.user
+/.env
 **/__pycache__/
 *.pyc
 

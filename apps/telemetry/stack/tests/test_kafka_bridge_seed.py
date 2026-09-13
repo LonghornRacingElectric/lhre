@@ -8,6 +8,7 @@ asserts that the seed message is present.
 import json
 import time
 import unittest
+import uuid
 
 from telemetry.stack.tests.test_utils import (
     TelemetryConfig,
@@ -31,35 +32,41 @@ class TestKafkaBridgeSeed(unittest.TestCase):
         )
 
     def test_grafana_topics_seeded(self):
-        client = KafkaTestClient(self.config)
         cars = ["angelique", "orion", "nightwatch"]
+        suffix = uuid.uuid4().hex
 
         for car in cars:
+            client = KafkaTestClient(self.config)
             topic = f"grafana_data_{car}"
-            consumer = client.create_consumer(topic, group_id=f"bridge-seed-test-{car}")
+            consumer = client.create_consumer(
+                topic,
+                group_id=f"bridge-seed-test-{car}-{suffix}",
+                auto_offset_reset="earliest",
+            )
 
-            seed_found = False
-            start = time.time()
-            while time.time() - start < 15:
-                batch = consumer.poll(timeout_ms=1000)
-                for _, records in batch.items():
-                    for record in records:
-                        try:
-                            payload = json.loads(record.value.decode("utf-8"))
-                        except Exception:
-                            continue
+            try:
+                seed_found = False
+                start = time.time()
+                while time.time() - start < 15:
+                    batch = consumer.poll(timeout_ms=1000)
+                    for _, records in batch.items():
+                        for record in records:
+                            try:
+                                payload = json.loads(record.value.decode("utf-8"))
+                            except Exception:
+                                continue
 
-                        if payload.get("packet_id") == 0 and payload.get("car_type") == car:
-                            seed_found = True
+                            if payload.get("packet_id") == 0 and payload.get("car_type") == car:
+                                seed_found = True
+                                break
+                        if seed_found:
                             break
                     if seed_found:
                         break
-                if seed_found:
-                    break
 
-            self.assertTrue(seed_found, f"Kafka bridge should seed {topic} at startup")
-
-        client.close()
+                self.assertTrue(seed_found, f"Kafka bridge should seed {topic} at startup")
+            finally:
+                client.close()
 
 
 if __name__ == "__main__":

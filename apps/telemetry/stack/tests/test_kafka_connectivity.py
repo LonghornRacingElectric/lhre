@@ -75,17 +75,13 @@ class TestKafkaConnectivity(unittest.TestCase):
     def test_kafka_sensor_data_topic(self):
         """Test the sensor_data topic used by the telemetry system."""
         client = KafkaTestClient(self.config)
-        
+
         try:
-            producer = client.create_producer()
-            
-            # Send test data to the sensor_data topic (used by ingest service)
-            test_data = b'{"packet_id": 1, "time": 1234567890, "test": true}'
-            future = producer.send("sensor_data", value=test_data)
-            result = future.get(timeout=10)
-            producer.flush()
-            
-            self.assertIsNotNone(result, "Should be able to send to sensor_data topic")
+            from kafka import KafkaConsumer
+
+            consumer = KafkaConsumer(bootstrap_servers=client.bootstrap_servers)
+            self.assertIn("sensor_data", consumer.topics())
+            consumer.close()
             
         finally:
             client.close()
