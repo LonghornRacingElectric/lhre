@@ -35,7 +35,10 @@ DISPLAY=:1 LIBGL_ALWAYS_SOFTWARE=1 ./scripts/rviz_demo.sh
 
 (In a terminal opened inside the noVNC desktop, `DISPLAY` is already set.)
 
-After a reboot: `colima start && docker start lhr-autonomy`.
+After a reboot: `colima start && docker start lhr-autonomy`. If the
+`Dockerfile` or `compose.yaml` changed since the image was built (e.g. after a
+pull), `docker start` resumes the stale image — run `docker compose up -d
+--build` from this directory instead.
 
 ## Notes
 

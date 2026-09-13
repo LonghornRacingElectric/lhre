@@ -70,3 +70,5 @@ If you see that, your setup is correct.
    ```
 2. **Read the [reference README](README.md)**: packages, data flow, topics, parameters.
 3. **Pick a lane**: see the [lane map](../README.md) and talk to the autonomy lead.
+   Lane ownership, the live plan, and hardware decisions live in Notion
+   (VMS / Autonomous) — if you don't have access yet, ask the lead for an invite.
