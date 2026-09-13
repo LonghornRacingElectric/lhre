@@ -35,7 +35,7 @@ jobs:
     if: ${{ !cancelled() && needs.changes.outputs.bazel != 'false' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # With a BuildBuddy key, builds use the remote cache + executors and
       # stream results. Fork PRs don't get secrets, so they fall back to a
@@ -68,7 +68,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Configure Bazel
         shell: bash
@@ -90,7 +90,7 @@ jobs:
       # correctly — and action results come from BuildBuddy anyway; this
       # cache exists to skip re-downloading and re-extracting toolchains.
       - name: Cache Bazel
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: "C:/_bzl"
           key: ${{ runner.os }}-bazel-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'requirements_lock.txt') }}

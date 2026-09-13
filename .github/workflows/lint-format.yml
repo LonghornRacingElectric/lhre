@@ -7,7 +7,7 @@ jobs:
   lint-format:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # With a BuildBuddy key, builds use the remote cache + executors and
       # stream results. Fork PRs don't get secrets, so they fall back to a
