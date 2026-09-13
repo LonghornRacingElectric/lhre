@@ -23,6 +23,40 @@ The code is organized so each lane owns whole packages. Lane ownership is tracke
 | Planning & control | `lhr_track_builder`, `lhr_control`, `lhr_mission_manager` | Centerline ordering on tight corners. Unimplemented missions (acceleration, skidpad) |
 | Sim & test infra | `lhr_gazebo`, `lhr_sim_kinematic`, `lhr_trackgen`, `lhr_metrics`, `lhr_demo`, `scripts/` | Functional tests (none exist yet). CI only builds and lints today |
 
+## How the pieces fit
+
+Where the stack sits in the monorepo — everything else in `lhre` is the
+Bazel/firmware world ([ADR-009](../docs/architecture/009-autonomy-outside-bazel.md)):
+
+```mermaid
+flowchart LR
+    sim["Gazebo / kinematic sim"] --> stack
+    subgraph autonomy["autonomy/ — ROS 2, colcon"]
+        stack["driverless stack<br>perception → planning → control"]
+    end
+    subgraph firmware["rest of lhre — Bazel"]
+        vcu["VCU firmware + CAN spec"]
+    end
+    stack -. "future: CAN bridge (retrofit phases 2–3)<br>steering/brake commands · vehicle state" .-> vcu
+```
+
+Today the stack drives only simulators; nothing real is connected yet. The CAN
+bridge to the VCU is planned in the
+[retrofit roadmap](docs/plans/retrofit-roadmap-2026-27.md).
+
+The road from sim to the retrofit car swaps the layer *under* the same upper
+stack at every step (see the
+[architecture comparison](ros2/README.md#architecture-comparison)):
+
+```mermaid
+flowchart LR
+    k["Kinematic sim<br>sim_kinematic physics<br>sensor_sim cones<br>ground-truth odometry"]
+    g["Gazebo<br>real physics + GPU LiDAR<br>lidar_cone_detector<br>ground-truth odometry"]
+    car["Retrofit car (2026–27)<br>DBW actuators over CAN<br>real LiDAR + camera<br>EKF state estimation"]
+    k -- "working today" --> g
+    g -. "roadmap" .-> car
+```
+
 ## Status (August 2026)
 
 - Full sim pipeline completes laps, both kinematic and Gazebo physics
