@@ -37,6 +37,21 @@ The core is Kafka/bridge, ingest with Mosquitto/PostgreSQL/Grafana, and the
 field enricher. Optional processors are GPS classifier, lap timer, track
 mapper, Kafka test, GG plot, and car status.
 
+## Logsync
+
+On-demand log retrieval from the BEVO Pi. It's a registered `server_devtool.sh`
+component (Docker, `network_mode: host` — needs both the Pi's Tailscale IP and
+the `db` container's `localhost:5432`):
+
+```bash
+cd apps/telemetry/stack
+./server_devtool.sh enable logsync
+curl localhost:8090/health
+```
+
+The viewer proxies it at `/log-sync`. See `stack/logsync/README.md` for deploy
+and tuning details.
+
 ## Viewer
 
 The viewer remains an npm/PM2 application rather than a Bazel image:
