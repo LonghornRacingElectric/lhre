@@ -103,12 +103,20 @@ build --strip=never
 # The @buildbuddy_toolchain platform's container image ships the GCC that
 # @buildbuddy_toolchain//:ubuntu_cc_toolchain (registered in MODULE.bazel)
 # expects, so C++ host tools resolve and compile remotely.
+# --host_platform=//platforms:host_no_remote_exec is the host platform with
+# "no-remote-exec" stamped on: actions whose exec platform resolves to the
+# host (rules_rust compiling host-targeted crates and their bootstrap tools)
+# must run on this machine — the executors are Linux and can't run host
+# binaries. C++ is unaffected (hermetic LLVM resolves to the Linux exec
+# platform and cross-compiles). Only set where remote execution is on.
 build:linux --remote_executor=grpcs://lhre.buildbuddy.io
 build:linux --extra_execution_platforms=@buildbuddy_toolchain//:platform_linux_x86_64
+build:linux --host_platform=//platforms:host_no_remote_exec
 build:linux --jobs=50
 test:linux --platforms=@buildbuddy_toolchain//:platform_linux_x86_64
 build:macos --remote_executor=grpcs://lhre.buildbuddy.io
 build:macos --extra_execution_platforms=@buildbuddy_toolchain//:platform_linux_x86_64
+build:macos --host_platform=//platforms:host_no_remote_exec
 build:macos --jobs=50
 test:macos --platforms=@buildbuddy_toolchain//:platform_linux_x86_64
 

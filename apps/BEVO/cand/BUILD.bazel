@@ -1,0 +1,80 @@
+load("@rules_python//python:defs.bzl", "py_binary")
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+
+package(default_visibility = ["//apps/BEVO:__subpackages__"])
+
+# The daemons use Unix domain sockets for IPC, so nothing here runs on Windows.
+NOT_WINDOWS = select({
+    "@platforms//os:windows": ["@platforms//:incompatible"],
+    "//conditions:default": [],
+})
+
+# Real CAN reader on Linux (socketcan); compiles to a stub main elsewhere —
+# the socketcan crate itself is cfg-gated in main.rs and dep-gated here.
+rust_binary(
+    name = "cand",
+    srcs = ["main.rs"],
+    data = ["//apps/BEVO:can_json"],
+    edition = "2021",
+    target_compatible_with = NOT_WINDOWS,
+    deps = [
+        "//apps/BEVO:sensor_proto",
+        "@crates//:anyhow",
+        "@crates//:prost",
+        "@crates//:serde_json",
+    ] + select({
+        "@platforms//os:linux": ["@crates//:socketcan"],
+        "//conditions:default": [],
+    }),
+)
+
+# Full cand replacement with no CAN hardware dependency — the mock feed for
+# macOS development.
+rust_binary(
+    name = "mock_main",
+    srcs = ["mock_main.rs"],
+    data = ["//apps/BEVO:can_json"],
+    edition = "2021",
+    target_compatible_with = NOT_WINDOWS,
+    deps = [
+        "//apps/BEVO:sensor_proto",
+        "@crates//:anyhow",
+        "@crates//:prost",
+        "@crates//:serde_json",
+    ],
+)
+
+# Pure-stdlib mock CAN traffic generator; feeds cand's CAND_USE_MOCK=1 UDP
+# reader (ports 5005/5006).
+py_binary(
+    name = "mock_can",
+    srcs = ["mock_can.py"],
+)
+
+sh_binary(
+    name = "run_can_stack",
+    srcs = ["run_can_stack.sh"],
+    data = [
+        ":cand",
+        "//apps/BEVO:can_json",
+        "//apps/BEVO/dashd",
+        "//apps/BEVO/loggerd",
+        "//apps/BEVO/publishd",
+    ],
+    # Real SocketCAN interfaces only exist on Linux.
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+sh_binary(
+    name = "run_mock_can_stack",
+    srcs = ["run_mock_can_stack.sh"],
+    data = [
+        ":cand",
+        ":mock_can",
+        "//apps/BEVO:can_json",
+        "//apps/BEVO/dashd",
+        "//apps/BEVO/loggerd",
+    ],
+    target_compatible_with = NOT_WINDOWS,
+)

@@ -1,0 +1,20 @@
+services:
+  db_processor:
+    image: ${TELEMETRY_GG_PLOT_IMAGE:-lhre/telemetry-gg-plot:dev}
+    container_name: kafka_processor_gg_plot
+    restart: unless-stopped
+    environment:
+      PYTHONUNBUFFERED: 1
+      IN_DOCKER: 1
+      LOGLEVEL: INFO
+    volumes:
+      - ../../../analysis/sql_utils/DB_description.pkl:/DB_description.pkl
+      - ../../../analysis/database/viewer_tool/static/images:/kafka_processor_base/static/images
+      - ../../../net_configs.json:/net_configs.json
+      - ../../ingest/protobuf:/kafka_processor_base/protobuf
+    networks:
+      - telemetry_network
+
+networks:
+  telemetry_network:
+    external: true

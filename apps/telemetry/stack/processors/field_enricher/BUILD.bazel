@@ -1,0 +1,41 @@
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+load("@rules_python//python:defs.bzl", "py_binary")
+load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
+load("//apps/telemetry:container.bzl", "telemetry_service_image")
+
+package(default_visibility = ["//apps/telemetry:__subpackages__"])
+
+exports_files(["docker-compose.yml"])
+
+py_binary(
+    name = "field_enricher_binary",
+    srcs = ["main.py"],
+    main = "main.py",
+    deps = [
+        requirement("kafka-python"),
+        requirement("PyYAML"),
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pkg_tar(
+    name = "field_enricher_config_tar",
+    srcs = glob(["config/*.yaml"]),
+    package_dir = "/app/stack/processors/field_enricher",
+    strip_prefix = ".",
+)
+
+telemetry_service_image(
+    name = "field_enricher",
+    base = "@python312_linux_amd64",
+    binary = ":field_enricher_binary",
+    env = {"PYTHONUNBUFFERED": "1"},
+    repo_tags = [
+        "lhre/telemetry-field-enricher:dev",
+        "field_enricher:latest",
+    ],
+    repository = "ghcr.io/longhornracingelectric/telemetry-field-enricher",
+    tars = [":field_enricher_config_tar"],
+    visibility = ["//visibility:public"],
+    workdir = "/app/stack/processors/field_enricher",
+)

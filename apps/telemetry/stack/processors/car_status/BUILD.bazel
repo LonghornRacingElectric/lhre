@@ -1,0 +1,60 @@
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
+load("//apps/telemetry:container.bzl", "telemetry_service_image")
+
+package(default_visibility = ["//apps/telemetry:__subpackages__"])
+
+exports_files(["docker-compose.yml"])
+
+py_library(
+    name = "car_status_lib",
+    srcs = [
+        "__init__.py",
+        "classifier.py",
+        "db_writer.py",
+    ],
+    imports = ["."],
+    deps = [
+        "//apps/telemetry/stack/ingest:ingest_lib",
+        requirement("psycopg2-binary"),
+    ],
+    visibility = ["//visibility:public"],
+)
+
+py_binary(
+    name = "car_status_binary",
+    srcs = ["main.py"],
+    imports = [".", "../../..", "../../../.."],
+    main = "main.py",
+    deps = [
+        ":car_status_lib",
+        requirement("kafka-python"),
+        requirement("protobuf"),
+    ],
+    visibility = ["//visibility:public"],
+)
+
+py_test(
+    name = "classifier_test",
+    srcs = ["test_classifier.py"],
+    deps = [":car_status_lib"],
+    main = "test_classifier.py",
+)
+
+telemetry_service_image(
+    name = "car_status",
+    base = "@python312_linux_amd64",
+    binary = ":car_status_binary",
+    env = {
+        "PYTHONPATH": "/app",
+        "PYTHONUNBUFFERED": "1",
+    },
+    repo_tags = [
+        "lhre/telemetry-car-status:dev",
+        "car_status_processor:latest",
+    ],
+    repository = "ghcr.io/longhornracingelectric/telemetry-car-status",
+    tars = ["//apps/telemetry:runtime_config_tar"],
+    visibility = ["//visibility:public"],
+    workdir = "/app/stack/processors/car_status",
+)

@@ -1,0 +1,56 @@
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
+load("//apps/telemetry:container.bzl", "telemetry_service_image")
+
+package(default_visibility = ["//apps/telemetry:__subpackages__"])
+
+exports_files(["docker-compose.yml"])
+
+py_library(
+    name = "lap_timer_lib",
+    srcs = [
+        "__init__.py",
+        "lap_timer.py",
+    ],
+    imports = ["../../..", "../../../.."],
+    deps = [
+        "//apps/telemetry/analysis:analysis_lib",
+        "//apps/telemetry/stack/ingest:ingest_lib",
+        requirement("kafka-python"),
+        requirement("requests"),
+    ],
+    visibility = ["//visibility:public"],
+)
+
+py_binary(
+    name = "lap_timer_binary",
+    srcs = ["main.py"],
+    imports = [".", "../../..", "../../../.."],
+    main = "main.py",
+    deps = [":lap_timer_lib"],
+    visibility = ["//visibility:public"],
+)
+
+telemetry_service_image(
+    name = "lap_timer",
+    base = "@python312_linux_amd64",
+    binary = ":lap_timer_binary",
+    env = {
+        "PYTHONPATH": "/app",
+        "PYTHONUNBUFFERED": "1",
+    },
+    repo_tags = [
+        "lhre/telemetry-lap-timer:dev",
+        "lap_timer:latest",
+    ],
+    repository = "ghcr.io/longhornracingelectric/telemetry-lap-timer",
+    tars = ["//apps/telemetry:runtime_config_tar"],
+    visibility = ["//visibility:public"],
+    workdir = "/app/stack/processors/lap_timer",
+)
+
+alias(
+    name = "lap_timer_tarball",
+    actual = ":lap_timer_load",
+    visibility = ["//visibility:public"],
+)

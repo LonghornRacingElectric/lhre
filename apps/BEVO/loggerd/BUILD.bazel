@@ -1,0 +1,32 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+
+package(default_visibility = ["//apps/BEVO:__subpackages__"])
+
+NOT_WINDOWS = select({
+    "@platforms//os:windows": ["@platforms//:incompatible"],
+    "//conditions:default": [],
+})
+
+rust_binary(
+    name = "loggerd",
+    srcs = ["main.rs"],
+    data = ["//apps/BEVO:can_json"],
+    edition = "2021",
+    target_compatible_with = NOT_WINDOWS,
+    deps = [
+        "//apps/BEVO:sensor_proto",
+        "@crates//:anyhow",
+        "@crates//:prost",
+        "@crates//:serde_json",
+    ],
+)
+
+rust_test(
+    name = "loggerd_test",
+    crate = ":loggerd",
+    data = ["//apps/BEVO:can_json"],
+    # Runfiles path of the generated can.json; under Cargo the tests fall
+    # back to the build script's OUT_DIR copy instead.
+    env = {"LOGGERD_CAN_JSON_PATH": "apps/BEVO/schema/can.json"},
+    target_compatible_with = NOT_WINDOWS,
+)

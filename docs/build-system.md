@@ -158,6 +158,11 @@ source builds from happening at all:
    binaries protobuf registers take effect (gated on its
    `prefer_prebuilt_protoc` flag, default true). Without it Bazel uses
    the legacy wiring and compiles from source anyway.
+   Tools that need `protoc` as an executable path rather than through
+   toolchain resolution (the prost codegen build script in `apps/BEVO`)
+   use `//tools/protoc`, our own prebuilt pinned to the same version as
+   the protobuf `bazel_dep`. Bump `tools/protoc/protoc.bzl` in the same
+   change as the module version.
 2. `//toolchains/proto` registers a Python `proto_lang_toolchain` whose
    runtime is the pip `protobuf` wheel. The default
    `@protobuf//python:protobuf_python` is what drags in the
@@ -197,6 +202,12 @@ libc++ and libunwind from source, and mingw puts nearly every libc
 function in its own file. On macOS it only builds compiler-rt against
 Apple's system ABI. These actions re-run only on an LLVM toolchain bump,
 and the remote cache means one machine pays per platform.
+
+The Windows presubmit excludes `//apps/telemetry/...` from its recursive build
+and test patterns. Telemetry produces Linux OCI images, and `rules_oci` image
+analysis relies on POSIX helpers that cannot be analyzed by the native Windows
+Bazel client. The Linux presubmit and dedicated telemetry workflow retain full
+build and test coverage for that subtree.
 
 `--bes_upload_mode=fully_async` and `--remote_cache_async` keep builds
 from blocking on BuildBuddy uploads at exit, which matters most on

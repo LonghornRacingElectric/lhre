@@ -1,0 +1,443 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../.prisma/orion-client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("TELEMETRY_DATABASE_URL")
+}
+
+model drive_day {
+  day_id Int @id @default(autoincrement())
+  date DateTime
+  track_name String?
+  weather String?
+  wind_speed Float?
+  power_limit Int?
+  air_temperature Float?
+  relative_humidity Float?
+  track_temperature Float?
+  status Int?
+  creation_time BigInt?
+  start_time BigInt?
+  end_time BigInt?
+  packet_start BigInt?
+  packet_end BigInt?
+  car_id Int?
+  driver_id Int?
+  location_id Int?
+  event_type Int?
+  car_weight Int?
+  tow_angle Float?
+  camber_front Float?
+  camber_rear Float?
+  toe_front Float?
+  toe_rear Float?
+  ride_height_front Float?
+  ride_height_rear Float?
+  ride_height Float?
+  ackerman_adjustment Float?
+  shock_dampening Int?
+  torque_limit Int?
+  frw_pressure Float?
+  flw_pressure Float?
+  brw_pressure Float?
+  blw_pressure Float?
+  frw_hot_pressure Float?
+  flw_hot_pressure Float?
+  brw_hot_pressure Float?
+  blw_hot_pressure Float?
+  fr_wear_depth Float?
+  fl_wear_depth Float?
+  rr_wear_depth Float?
+  rl_wear_depth Float?
+  fr_durometer Float?
+  fl_durometer Float?
+  rr_durometer Float?
+  rl_durometer Float?
+  fr_lsc Int?
+  fr_lsr Int?
+  fr_hsc Int?
+  fr_hsr Int?
+  fl_lsc Int?
+  fl_lsr Int?
+  fl_hsc Int?
+  fl_hsr Int?
+  rr_lsc Int?
+  rr_lsr Int?
+  rr_hsc Int?
+  rr_hsr Int?
+  rl_lsc Int?
+  rl_lsr Int?
+  rl_hsc Int?
+  rl_hsr Int?
+  front_wing_on Boolean?
+  rear_wing_on Boolean?
+  front_wing_pitch Float?
+  rear_wing_pitch Float?
+  regen_on Boolean?
+  undertray_on Boolean?
+  front_roll_spring_rate Float?
+  front_heave_spring_rate Float?
+  rear_roll_spring_rate Float?
+  rear_heave_spring_rate Float?
+  front_corner_spring_rate Float?
+  rear_corner_spring_rate Float?
+  front_arb_setting String?
+  rear_arb_setting String?
+}
+
+model lut_driver {
+  driver_id Int @id
+  driver_name String
+  driver_weight Int?
+}
+
+model lut_location {
+  location_id Int @id
+  area String
+  track String
+
+  tracks track[]
+}
+
+model lut_car {
+  car_id Int @id
+  car_name String
+}
+
+model lut_event_type {
+  type_id Int @id
+  event_type String
+}
+
+model track_mapping {
+  track_mapping_id Int @id @default(autoincrement())
+  name String
+  created_at BigInt
+  start_gate_lat1 String
+  start_gate_lon1 String
+  start_gate_lat2 String
+  start_gate_lon2 String
+  points Json?
+  sectors Json?
+}
+
+model classifier {
+  day_id BigInt
+  type String
+  start_time BigInt
+  end_time BigInt?
+  notes String?
+
+  @@id([event_id, type, start_time])
+}
+
+model partitions {
+  partition_name String @id
+  start_time BigInt
+  end_time BigInt
+}
+
+model car_status_segment {
+  segment_id BigInt @id @default(autoincrement())
+  car String
+  state String
+  start_time BigInt
+  end_time BigInt?
+  start_packet BigInt?
+  end_packet BigInt?
+  hv_soc_avg Float?
+  lv_v_avg Float?
+  active_faults String?
+}
+
+model track {
+  track_id Int @id @default(autoincrement())
+  name String @unique
+  location_id Int?
+  created_at DateTime @default(now())
+
+  location     lut_location?  @relation(fields: [location_id], references: [location_id])
+  sector_gates sector_gate[]
+
+  @@index([location_id])
+}
+
+model sector_gate {
+  gate_id Int @id @default(autoincrement())
+  track_id Int
+  gate_index Int
+  lat1 Float
+  lon1 Float
+  lat2 Float
+  lon2 Float
+
+  track track @relation(fields: [track_id], references: [track_id])
+
+  @@unique([track_id, gate_index])
+  @@index([track_id])
+}
+
+model track_point {
+  point_id BigInt @id @default(autoincrement())
+  day_id Int
+  latitude Float
+  longitude Float
+  timestamp_ms BigInt
+
+  event event @relation(fields: [event_id], references: [event_id])
+
+  @@index([event_id])
+}
+
+model packet {
+  packet_id BigInt @id
+  time      BigInt
+
+  dynamics dynamics?
+  controls controls?
+  pack pack?
+  diagnostics_high diagnostics_high?
+  diagnostics_low diagnostics_low?
+  thermal thermal?
+  board_status board_status?
+}
+
+model dynamics {
+  packet_id BigInt @id
+  gps                  Float[]
+  gps_imu              Float[]
+  gps_speed            Float?
+  bl_unsprung_accel    Float[]
+  br_unsprung_accel    Float[]
+  fl_unsprung_accel    Float[]
+  fr_unsprung_accel    Float[]
+  accel_pedal_travel   Float?
+  bl_wheel_speed       Float?
+  br_wheel_speed       Float?
+  fl_wheel_speed       Float?
+  fr_wheel_speed       Float?
+  steer_col_angle      Float?
+  bl_gyro              Float[]
+  bl_sprung_accel      Float[]
+  br_gyro              Float[]
+  br_sprung_accel      Float[]
+  fl_gyro              Float[]
+  fl_sprung_accel      Float[]
+  fr_gyro              Float[]
+  fr_sprung_accel      Float[]
+  bl_ride_height       Float?
+  bl_strain_gauge_v    Float?
+  bl_sus_pot_v         Float?
+  br_ride_height       Float?
+  br_strain_gauge_v    Float?
+  br_sus_pot_v         Float?
+  fl_ride_height       Float?
+  fl_strain_gauge_v    Float?
+  fl_sus_pot_v         Float?
+  fr_ride_height       Float?
+  fr_strain_gauge_v    Float?
+  fr_sus_pot_v         Float?
+  ride_height          Float?
+  wheel_speed          Float?
+
+  packet packet @relation(fields: [packet_id], references: [packet_id])
+}
+
+model controls {
+  packet_id BigInt @id
+  motor_speed          Float?
+  torque_feedback      Float?
+  apps1_travel         Float?
+  apps1_v              Float?
+  apps2_travel         Float?
+  apps2_v              Float?
+  bpps1_travel         Float?
+  bpps1_v              Float?
+  bpps2_travel         Float?
+  bpps2_v              Float?
+  brake_bias           Float?
+  brake_light_pct      Float?
+  brake_pressure_f     Float?
+  brake_pressure_rall  Float?
+  brake_pressure_rbll  Float?
+  bse1_v               Float?
+  bse2_v               Float?
+  bse3_v               Float?
+  lights_current       Float?
+  rpm_request          Float?
+  torque_command       Float?
+  torque_limit         Float?
+  torque_request       Float?
+  commanded_torque     Float?
+  motor_angle          Float?
+  direction            Boolean?
+  enable               Boolean?
+  line_lock_enabled    Boolean?
+  torque_shudder       Float?
+  bse3                 Float?
+  event_mode           Float?
+  net_energy           Float?
+  regen_energy         Float?
+  torque_lookup        Float?
+  torque_derated       Float?
+  torque_power_limited Float?
+  torque_traction_controlled Float?
+
+  packet packet @relation(fields: [packet_id], references: [packet_id])
+}
+
+model pack {
+  packet_id BigInt @id
+  bus_voltage          Float?
+  lv_boards_current    Float?
+  soc_estimate         Float?
+  cells_v              Float[]
+  dc_bus_v             Float?
+  delta_resolver_angle Float?
+  inverter_freq        Float?
+  neutral_output_v     Float?
+  time_since_on        Float?
+  vab_vq_v             Float?
+  vbc_vd_v             Float?
+  cells_temps          Float[]
+  dc_bus_current       Float?
+  hv_c                 Float?
+  hv_pack_v            Float?
+  hv_soc               Float?
+  lv_batt_c            Float?
+  lv_batt_t            Float?
+  lv_batt_v            Float?
+  phase_a_current      Float?
+  phase_b_current      Float?
+  phase_c_current      Float?
+
+  packet packet @relation(fields: [packet_id], references: [packet_id])
+}
+
+model diagnostics_high {
+  packet_id BigInt @id
+  prndl_state          Float?
+  shutdown_current     Float?
+  hvc_state_machine    Float?
+  post_faults          Float?
+  run_faults           Float?
+  apps1_disconnect     Boolean?
+  apps1_out_range      Boolean?
+  apps2_disconnect     Boolean?
+  apps2_out_range      Boolean?
+  apps_implause        Boolean?
+  apps_mismatch        Boolean?
+  batt_fans_fuse       Boolean?
+  batt_pump_fuse       Boolean?
+  boards_fuse          Boolean?
+  bpps1_disconnect     Boolean?
+  bpps1_out_range      Boolean?
+  bpps2_disconnect     Boolean?
+  bpps2_out_range      Boolean?
+  bpps_mismatch        Boolean?
+  brake_light_fuse     Boolean?
+  bse1_disconnect      Boolean?
+  bse1_out_range       Boolean?
+  bse2_disconnect      Boolean?
+  bse2_out_range       Boolean?
+  ll_fuse              Boolean?
+  motor_pump_fuse      Boolean?
+  r2d_buzzer           Boolean?
+  rtd_fuse             Boolean?
+  shtdn_fuse           Boolean?
+  shutdown_bspd_status Boolean?
+  shutdown_emeter_status Boolean?
+  spare_fuse           Boolean?
+  stomp_fault          Boolean?
+  tssi_green_fuse      Boolean?
+  tssi_red_fuse        Boolean?
+  neg_hv_contactor     Boolean?
+  pos_hv_contactor     Boolean?
+  precharge_contactor  Boolean?
+
+  packet packet @relation(fields: [packet_id], references: [packet_id])
+}
+
+model diagnostics_low {
+  packet_id BigInt @id
+  precharge_r_temp     Float?
+  bmb_comm_error       Boolean?
+  imd_gnd_isolation_error Boolean?
+  r2d_authorized       Boolean?
+  r2d_status           Boolean?
+  shutdown_leg1        Boolean?
+  shutdown_leg2        Boolean?
+  shutdown_leg3        Boolean?
+  shutdown_leg4        Boolean?
+  temp_imd_1           Boolean?
+  temp_imd_2           Boolean?
+  temp_shutdown_1      Boolean?
+  temp_shutdown_2      Boolean?
+  charger_current      Float?
+  charger_voltage      Float?
+  charger_enabled      Boolean?
+  imd_led              Boolean?
+
+  packet packet @relation(fields: [packet_id], references: [packet_id])
+}
+
+model thermal {
+  packet_id BigInt @id
+  batt_cooling_current Float?
+  motor_cooling_current Float?
+  ambient_temp         Float?
+  motor_temp           Float?
+  batt_loop_batt_temp  Float?
+  batt_loop_rad_fan_speed Float?
+  batt_loop_rad_temp   Float?
+  battery_fan_rpm      Float?
+  bus_bar_temp1        Float?
+  bus_bar_temp2        Float?
+  bus_bar_temp3        Float?
+  cell_bottom_temp     Float?
+  cell_top_temp        Float?
+  coolant_flow_lpm     Float?
+  coolant_temp         Float?
+  discharge_r_temp     Float?
+  fan_rpm              Float?
+  gate_driver_temp     Float?
+  inverter_hotspot_temp Float?
+  inverter_temp        Float?
+  max_cell_voltage     Float?
+  min_cell_voltage     Float?
+  module_a_temp        Float?
+  module_b_temp        Float?
+  module_c_temp        Float?
+  motor_loop_inverter_temp Float?
+  motor_loop_motor_temp Float?
+  motor_loop_rad_temp  Float?
+  temp_ams_1           Boolean?
+  temp_ams_2           Boolean?
+  temp_command_1       Boolean?
+  temp_command_2       Boolean?
+  temp_output_1        Boolean?
+  temp_output_2        Boolean?
+  max_charge_current   Float?
+  max_charge_voltage   Float?
+  bms_led              Boolean?
+  charger_enable       Boolean?
+
+  packet packet @relation(fields: [packet_id], references: [packet_id])
+}
+
+model board_status {
+  packet_id BigInt @id
+  csm_last_seen_s      Float?
+  dui_last_seen_s      Float?
+  hvc_last_seen_s      Float?
+  inverter_last_seen_s Float?
+  pdu_last_seen_s      Float?
+  tsm_last_seen_s      Float?
+  usm_last_seen_s      Float?
+  vcu_last_seen_s      Float?
+
+  packet packet @relation(fields: [packet_id], references: [packet_id])
+}
