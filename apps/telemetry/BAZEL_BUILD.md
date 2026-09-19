@@ -87,6 +87,8 @@ to the host. Repo-owned images bundle the executable's complete Bazel runfiles,
 including native Linux Python wheels. The base image, Go toolchain, Python
 runtime, and upstream infrastructure manifests are pinned in `MODULE.bazel`.
 
+All `//apps/telemetry/...` targets are incompatible with native Windows.
+
 Pinned upstream infrastructure exposes `_image`, `_load`, and `_smoke_test`.
 It has no `_binary` or `_push` because this repo neither builds nor publishes
 that software.

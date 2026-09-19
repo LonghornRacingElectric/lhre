@@ -97,16 +97,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-bazel-
 
-      # Telemetry produces Linux OCI images. rules_oci's image analysis invokes
-      # POSIX helpers and is not supported by the native Windows Bazel client;
-      # the Linux job above and telemetry workflow cover this subtree.
-      - name: Build everything except Linux-only telemetry
-        shell: bash
-        run: bazel build -- //... -//apps/telemetry/...
+      - name: Build everything
+        run: bazel build //...
 
-      - name: Test everything except Linux-only telemetry
-        shell: bash
-        run: bazel test -- //... -//apps/telemetry/...
+      - name: Test everything
+        run: bazel test //...
 
       # The post-job cache save tars C:/_bzl; the Bazel server must not be
       # holding locks/open files in it when that happens.

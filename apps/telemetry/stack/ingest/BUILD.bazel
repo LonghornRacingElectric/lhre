@@ -5,6 +5,7 @@
 load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
+load("//apps/telemetry:compatibility.bzl", "NOT_WINDOWS")
 load("//apps/telemetry:container.bzl", "telemetry_service_image")
 
 package(default_visibility = ["//apps/telemetry:__subpackages__"])
@@ -45,6 +46,7 @@ $(location //tools/protoc) \\
     tools = [
         "//tools/protoc",
     ],
+    target_compatible_with = NOT_WINDOWS,
 )
 
 # Export configuration files for Docker compose and testing
@@ -69,6 +71,7 @@ filegroup(
         "nightwatch_db_init.sql",
         "orion_db_init.sql",
     ],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -78,6 +81,7 @@ filegroup(
     srcs = glob(["protobuf/**"]) + [
         ":can_packets_pb2",
     ],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -85,6 +89,7 @@ filegroup(
 filegroup(
     name = "car_configs",
     srcs = glob(["car_configs/**"]),
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -116,6 +121,7 @@ py_library(
         requirement("python-dotenv"),
         requirement("SQLAlchemy"),
     ],
+    target_compatible_with = NOT_WINDOWS,
 )
 
 # Python binary for the ingest service
@@ -128,6 +134,7 @@ py_binary(
     deps = [
         ":ingest_lib",
     ],
+    target_compatible_with = NOT_WINDOWS,
 )
 
 # Writes telemetry/stack/ingest/protobuf/can_packets_pb2.py into the workspace.
@@ -152,6 +159,7 @@ pkg_tar(
     srcs = glob(["car_configs/**"]),
     package_dir = "/app/stack/ingest",
     strip_prefix = ".",
+    target_compatible_with = NOT_WINDOWS,
 )
 
 telemetry_service_image(
@@ -180,5 +188,6 @@ telemetry_service_image(
 alias(
     name = "ingest_tarball",
     actual = ":ingest_load",
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )

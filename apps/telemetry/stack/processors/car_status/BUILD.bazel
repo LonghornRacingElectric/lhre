@@ -1,5 +1,6 @@
 load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
 load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
+load("//apps/telemetry:compatibility.bzl", "NOT_WINDOWS")
 load("//apps/telemetry:container.bzl", "telemetry_service_image")
 
 package(default_visibility = ["//apps/telemetry:__subpackages__"])
@@ -18,6 +19,7 @@ py_library(
         "//apps/telemetry/stack/ingest:ingest_lib",
         requirement("psycopg2-binary"),
     ],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -31,6 +33,7 @@ py_binary(
         requirement("kafka-python"),
         requirement("protobuf"),
     ],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -39,6 +42,7 @@ py_test(
     srcs = ["test_classifier.py"],
     deps = [":car_status_lib"],
     main = "test_classifier.py",
+    target_compatible_with = NOT_WINDOWS,
 )
 
 telemetry_service_image(

@@ -5,13 +5,9 @@
 load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
 load("@telemetry_reqs//:requirements.bzl", "requirement")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//apps/telemetry:compatibility.bzl", "NOT_WINDOWS")
 
 package(default_visibility = ["//apps/telemetry:__subpackages__"])
-
-_NOT_WINDOWS = select({
-    "@platforms//os:windows": ["@platforms//:incompatible"],
-    "//conditions:default": [],
-})
 
 # Common test utilities library
 py_library(
@@ -32,7 +28,7 @@ py_library(
         requirement("requests"),
         requirement("SQLAlchemy"),
     ],
-    target_compatible_with = _NOT_WINDOWS,
+    target_compatible_with = NOT_WINDOWS,
 )
 
 # Stack test client - tests container communication
@@ -61,7 +57,7 @@ py_binary(
         requirement("python-dotenv"),
         requirement("kafka-python"),
     ],
-    target_compatible_with = _NOT_WINDOWS,
+    target_compatible_with = NOT_WINDOWS,
 )
 
 # MQTT connectivity test
@@ -76,7 +72,7 @@ py_test(
         requirement("python-dotenv"),
     ],
     tags = ["manual", "integration", "docker", "local"],
-    target_compatible_with = _NOT_WINDOWS,
+    target_compatible_with = NOT_WINDOWS,
 )
 
 # Kafka connectivity test
@@ -91,7 +87,7 @@ py_test(
         requirement("python-dotenv"),
     ],
     tags = ["manual", "integration", "docker", "local"],
-    target_compatible_with = _NOT_WINDOWS,
+    target_compatible_with = NOT_WINDOWS,
 )
 
 # Kafka bridge seed test
@@ -106,7 +102,7 @@ py_test(
         requirement("python-dotenv"),
     ],
     tags = ["manual", "integration", "docker", "local"],
-    target_compatible_with = _NOT_WINDOWS,
+    target_compatible_with = NOT_WINDOWS,
 )
 
 # Database connectivity test
@@ -123,13 +119,13 @@ py_test(
         requirement("python-dotenv"),
     ],
     tags = ["manual", "integration", "docker", "local"],
-    target_compatible_with = _NOT_WINDOWS,
+    target_compatible_with = NOT_WINDOWS,
 )
 
 # BEVO handshake + database model query integration test
 py_test(
     name = "bevo_db_integration_test",
-    target_compatible_with = _NOT_WINDOWS,
+    target_compatible_with = NOT_WINDOWS,
     imports = ["../..", "../../.."],
     srcs = ["test_bevo_db_integration.py"],
     main = "test_bevo_db_integration.py",
@@ -163,7 +159,7 @@ py_test(
         requirement("tqdm"),
     ],
     tags = ["manual", "integration", "docker", "e2e", "local"],
-    target_compatible_with = _NOT_WINDOWS,
+    target_compatible_with = NOT_WINDOWS,
 )
 
 # Protobuf serialization test (tests paho_testing.py patterns)
@@ -181,7 +177,7 @@ py_test(
         requirement("python-dotenv"),
     ],
     tags = ["unit"],
-    target_compatible_with = _NOT_WINDOWS,
+    target_compatible_with = NOT_WINDOWS,
 )
 
 # Export shell scripts and docker-compose files
@@ -205,7 +201,7 @@ sh_test(
         "//apps/telemetry:config_files",
     ],
     tags = ["integration", "docker", "manual", "local"],
-    target_compatible_with = _NOT_WINDOWS,
+    target_compatible_with = NOT_WINDOWS,
 )
 
 # Test suite for all integration tests (requires Docker to be running)
@@ -220,7 +216,7 @@ test_suite(
         ":kafka_connectivity_test",
         ":mqtt_connectivity_test",
     ],
-    target_compatible_with = _NOT_WINDOWS,
+    target_compatible_with = NOT_WINDOWS,
 )
 
 # Test suite for unit tests (no Docker required)
@@ -230,7 +226,7 @@ test_suite(
     tests = [
         ":protobuf_test",
     ],
-    target_compatible_with = _NOT_WINDOWS,
+    target_compatible_with = NOT_WINDOWS,
 )
 
 # All telemetry stack tests
@@ -241,4 +237,5 @@ test_suite(
         ":integration_tests",
         ":unit_tests",
     ],
+    target_compatible_with = NOT_WINDOWS,
 )

@@ -1,5 +1,6 @@
 load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
+load("//apps/telemetry:compatibility.bzl", "NOT_WINDOWS")
 load("//apps/telemetry:container.bzl", "telemetry_service_image")
 
 package(default_visibility = ["//apps/telemetry:__subpackages__"])
@@ -23,6 +24,7 @@ py_library(
         requirement("requests"),
         requirement("SQLAlchemy"),
     ],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -32,6 +34,7 @@ py_binary(
     imports = [".", "../../..", "../../../.."],
     main = "main.py",
     deps = [":gps_classifier_lib"],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -56,5 +59,6 @@ telemetry_service_image(
 alias(
     name = "gps_classifier_tarball",
     actual = ":gps_classifier_load",
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )

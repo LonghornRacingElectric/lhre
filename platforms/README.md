@@ -15,8 +15,10 @@ board to its family's platform automatically (see
 [tools/firmware](../tools/firmware/README.md)).
 
 `//platforms:linux_amd64` serves the same role for container payloads. Telemetry
-image rules transition their binary to it, so macOS and Windows callers produce
-the deployment closure without changing the platform of the whole command.
+image rules transition their binary to it, so macOS callers produce the
+deployment closure without changing the platform of the whole command. Native
+Windows marks the OCI lifecycle targets incompatible because `rules_oci`
+analysis requires POSIX helpers; use WSL2 for container builds there.
 
 ## Adding a family
 

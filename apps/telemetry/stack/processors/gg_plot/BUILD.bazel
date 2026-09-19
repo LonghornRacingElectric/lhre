@@ -1,5 +1,6 @@
 load("@rules_python//python:defs.bzl", "py_binary")
 load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
+load("//apps/telemetry:compatibility.bzl", "NOT_WINDOWS")
 load("//apps/telemetry:container.bzl", "telemetry_service_image")
 
 package(default_visibility = ["//apps/telemetry:__subpackages__"])
@@ -16,6 +17,7 @@ py_binary(
         requirement("kafka-python"),
         requirement("protobuf"),
     ],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 

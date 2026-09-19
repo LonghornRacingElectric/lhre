@@ -94,9 +94,8 @@ platform(
 )
 
 # Container target platform. Image rules transition their application binaries
-# here explicitly, so a macOS or Windows developer can build the same Linux
-# artifact as CI without changing the target platform for the rest of the
-# command line.
+# here explicitly, so a macOS developer can build the same Linux artifact as CI
+# without changing the target platform for the rest of the command line.
 platform(
     name = "linux_amd64",
     constraint_values = [

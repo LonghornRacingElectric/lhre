@@ -4,16 +4,19 @@
 
 load("@rules_python//python:defs.bzl", "py_library")
 load("@rules_python//python:pip.bzl", "compile_pip_requirements")
+load("//apps/telemetry:compatibility.bzl", "NOT_WINDOWS")
 
 package(default_visibility = ["//apps/telemetry/stack:__subpackages__"])
 
 compile_pip_requirements(
     name = "requirements",
+    data = ["//apps/telemetry:windows_incompatible"],
     src = "requirements.txt",
     generate_hashes = False,
     python_version = "3.12",
     requirements_txt = "requirements_lock.txt",
     tags = ["manual", "requirements"],
+    target_compatible_with = NOT_WINDOWS,
 )
 
 # Shared Python library for stack services
@@ -37,6 +40,7 @@ exports_files([
 filegroup(
     name = "stack_images",
     srcs = ["//apps/telemetry:all_images"],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 

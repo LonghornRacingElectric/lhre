@@ -9,6 +9,10 @@ Use this folder as the baseline for new Kafka processors that consume `sensor_da
 - Direct protobuf decode (no dependency on ingest runtime modules)
 - Docker + docker-compose scaffolding
 
+The Bazel OCI packaging targets work on Linux and macOS and are intentionally
+incompatible with native Windows Bazel. Use WSL2 when developing this image on
+Windows.
+
 ## Best practices for new processors
 
 1. Decode protobuf directly from `stack.ingest.protobuf.*_pb2` in your processor.
