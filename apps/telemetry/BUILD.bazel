@@ -4,7 +4,8 @@
 load("@rules_python//python:defs.bzl", "py_library")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
-load(":container.bzl", "NOT_WINDOWS", "telemetry_upstream_image")
+load(":compatibility.bzl", "NOT_WINDOWS")
+load(":container.bzl", "telemetry_upstream_image")
 
 package(default_visibility = ["//apps/telemetry:__subpackages__"])
 
@@ -16,9 +17,18 @@ exports_files([
     "load_images.sh",
 ])
 
+# compile_pip_requirements does not forward target compatibility to its
+# generated lock-file filegroup. Depending on this empty target propagates the
+# telemetry platform policy to that generated target as well.
+filegroup(
+    name = "windows_incompatible",
+    target_compatible_with = NOT_WINDOWS,
+)
+
 alias(
     name = "env_example",
     actual = "//:.env.example",
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -27,6 +37,7 @@ py_library(
     name = "telemetry_common",
     imports = [".", ".."],
     srcs = ["__init__.py"],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -36,6 +47,7 @@ filegroup(
     srcs = [
         "net_configs.json",
     ],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -43,6 +55,7 @@ pkg_tar(
     name = "runtime_config_tar",
     srcs = [":config_files"],
     package_dir = "/app",
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -52,6 +65,7 @@ pkg_tar(
 alias(
     name = "current_schema_proto",
     actual = "//apps/BEVO/schema:can_packets.proto",
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -61,6 +75,7 @@ filegroup(
         ":current_schema_proto",
         "//apps/BEVO/schema:can_json",
     ],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -329,6 +344,7 @@ test_suite(
         "//apps/telemetry/analysis/tests:analysis_tests",
         "//apps/telemetry/stack/tests:protobuf_test",
     ],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -344,6 +360,7 @@ test_suite(
         "//apps/telemetry/stack/tests:kafka_connectivity_test",
         "//apps/telemetry/stack/tests:mqtt_connectivity_test",
     ],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -354,6 +371,7 @@ test_suite(
     tests = [
         "//apps/telemetry/stack/tests:stack_integration_test",
     ],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -365,6 +383,7 @@ test_suite(
         ":integration_tests",
         ":unit_tests",
     ],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -386,6 +405,7 @@ filegroup(
         "//apps/telemetry/stack/processors/lap_timer:docker-compose.yml",
         "//apps/telemetry/stack/processors/track_mapper:docker-compose.yml",
     ],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 

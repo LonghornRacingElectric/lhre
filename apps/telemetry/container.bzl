@@ -4,14 +4,7 @@ load("@aspect_bazel_lib//lib:transitions.bzl", "platform_transition_binary")
 load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load", "oci_push")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
-
-# Container payloads are Linux artifacts, but rules_oci can build them from a
-# macOS host. Native Windows analysis is unsupported by rules_oci, so keep the
-# complete image lifecycle out of recursive Windows builds.
-NOT_WINDOWS = select({
-    "@platforms//os:windows": ["@platforms//:incompatible"],
-    "//conditions:default": [],
-})
+load(":compatibility.bzl", "NOT_WINDOWS")
 
 def telemetry_service_image(
         name,

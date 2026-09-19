@@ -87,11 +87,7 @@ to the host. Repo-owned images bundle the executable's complete Bazel runfiles,
 including native Linux Python wheels. The base image, Go toolchain, Python
 runtime, and upstream infrastructure manifests are pinned in `MODULE.bazel`.
 
-The image lifecycle targets are intentionally incompatible with native Windows
-Bazel because `rules_oci` relies on POSIX analysis helpers there. Consequently,
-`bazel build //...` and `bazel test //...` skip those targets on Windows without
-special CI target patterns. Windows developers use WSL2 for image build, load,
-push, and smoke-test commands. This restriction does not apply to macOS.
+All `//apps/telemetry/...` targets are incompatible with native Windows.
 
 Pinned upstream infrastructure exposes `_image`, `_load`, and `_smoke_test`.
 It has no `_binary` or `_push` because this repo neither builds nor publishes

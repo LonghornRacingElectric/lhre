@@ -1,6 +1,7 @@
 load("@protobuf//bazel:proto_library.bzl", "proto_library")
 load("@rules_go//go:def.bzl", "go_binary")
 load("@rules_go//proto:def.bzl", "go_grpc_library", "go_proto_library")
+load("//apps/telemetry:compatibility.bzl", "NOT_WINDOWS")
 load("//apps/telemetry:container.bzl", "telemetry_service_image")
 
 package(default_visibility = ["//apps/telemetry:__subpackages__"])
@@ -14,23 +15,27 @@ exports_files([
 proto_library(
     name = "bridge_proto",
     srcs = ["proto/bridge.proto"],
+    target_compatible_with = NOT_WINDOWS,
 )
 
 go_grpc_library(
     name = "bridge_go_proto",
     importpath = "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/proto/bridge",
     protos = [":bridge_proto"],
+    target_compatible_with = NOT_WINDOWS,
 )
 
 proto_library(
     name = "sensor_proto",
     srcs = ["proto/sensor/sensor.proto"],
+    target_compatible_with = NOT_WINDOWS,
 )
 
 go_proto_library(
     name = "sensor_go_proto",
     importpath = "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/proto/sensor",
     proto = ":sensor_proto",
+    target_compatible_with = NOT_WINDOWS,
 )
 
 go_binary(
@@ -38,6 +43,7 @@ go_binary(
     srcs = ["cmd/bridge/main.go"],
     importpath = "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/cmd/bridge",
     pure = "on",
+    target_compatible_with = NOT_WINDOWS,
     deps = [
         ":bridge_go_proto",
         ":sensor_go_proto",
@@ -64,5 +70,6 @@ telemetry_service_image(
 filegroup(
     name = "kafka_configs",
     srcs = ["docker-compose.yml"],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )

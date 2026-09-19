@@ -203,12 +203,7 @@ function in its own file. On macOS it only builds compiler-rt against
 Apple's system ABI. These actions re-run only on an LLVM toolchain bump,
 and the remote cache means one machine pays per platform.
 
-Telemetry's OCI image lifecycle targets declare themselves incompatible with
-native Windows. `rules_oci` image analysis relies on POSIX helpers there, so
-recursive Windows builds skip those targets before their implementations are
-analyzed. The targets remain compatible with macOS, where their application
-binaries transition to Linux/AMD64, and with Linux CI. Windows developers use
-WSL2 when they need to build or run the images.
+All `//apps/telemetry/...` targets are incompatible with native Windows.
 
 `--bes_upload_mode=fully_async` and `--remote_cache_async` keep builds
 from blocking on BuildBuddy uploads at exit, which matters most on

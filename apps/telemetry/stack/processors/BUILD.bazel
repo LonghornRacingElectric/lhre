@@ -2,11 +2,14 @@
 # BUILD file for processor services
 # Contains aggregate targets for all Kafka consumer processors
 
+load("//apps/telemetry:compatibility.bzl", "NOT_WINDOWS")
+
 package(default_visibility = ["//apps/telemetry:__subpackages__"])
 
 # Aggregate target for all processor Docker images
 filegroup(
     name = "processor_images",
     srcs = ["//apps/telemetry:optional_images"],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )

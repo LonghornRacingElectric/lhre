@@ -1,11 +1,7 @@
 # telemetry/analysis/tests/BUILD.bazel
 
 load("@rules_python//python:defs.bzl", "py_test")
-
-_NOT_WINDOWS = select({
-    "@platforms//os:windows": ["@platforms//:incompatible"],
-    "//conditions:default": [],
-})
+load("//apps/telemetry:compatibility.bzl", "NOT_WINDOWS")
 
 py_test(
     name = "analysis_tests",
@@ -16,5 +12,5 @@ py_test(
     ],
     main = "sample_analysis_test.py",
     tags = ["manual"],
-    target_compatible_with = _NOT_WINDOWS,
+    target_compatible_with = NOT_WINDOWS,
 )
