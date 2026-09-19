@@ -7,6 +7,7 @@ load("@rules_python//python:pip.bzl", "compile_pip_requirements")
 load("@rules_oci//oci:defs.bzl", "oci_image", "oci_push", "oci_load")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@telemetry_reqs//:requirements.bzl", "requirement")
+load("//apps/telemetry:container.bzl", "NOT_WINDOWS")
 
 package(default_visibility = ["//apps/telemetry:__subpackages__"])
 
@@ -65,6 +66,7 @@ pkg_tar(
     ],
     package_dir = "/app/stack/processors/kafka_base",
     strip_prefix = ".",
+    target_compatible_with = NOT_WINDOWS,
 )
 
 # Package configuration files
@@ -74,6 +76,7 @@ pkg_tar(
         "//apps/telemetry:config_files",
     ],
     package_dir = "/app",
+    target_compatible_with = NOT_WINDOWS,
 )
 
 # OCI image for the Kafka base consumer
@@ -90,7 +93,7 @@ oci_image(
         "PYTHONUNBUFFERED": "1",
     },
     visibility = ["//visibility:public"],
-    target_compatible_with = ["@platforms//os:linux"],
+    target_compatible_with = NOT_WINDOWS,
 )
 
 # Tarball for local Docker loading (use oci_load instead of oci_tarball)
@@ -98,6 +101,7 @@ oci_load(
     name = "kafka_base_tarball",
     image = ":kafka_base_image",
     repo_tags = ["kafka_consumer:latest"],
+    target_compatible_with = NOT_WINDOWS,
 )
 
 # Push target for container registry
@@ -105,4 +109,5 @@ oci_push(
     name = "kafka_base_push",
     image = ":kafka_base_image",
     repository = "ghcr.io/longhornracingelectric/telemetry-kafka-base",
+    target_compatible_with = NOT_WINDOWS,
 )

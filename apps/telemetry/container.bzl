@@ -5,6 +5,13 @@ load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load", "oci_push")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
+# Container payloads are Linux artifacts, but rules_oci can build them from a
+# macOS host. Native Windows analysis is unsupported by rules_oci, so keep the
+# complete image lifecycle out of recursive Windows builds.
+NOT_WINDOWS = select({
+    "@platforms//os:windows": ["@platforms//:incompatible"],
+    "//conditions:default": [],
+})
 
 def telemetry_service_image(
         name,
@@ -33,6 +40,7 @@ def telemetry_service_image(
         basename = name,
         binary = binary,
         target_platform = "//platforms:linux_amd64",
+        target_compatible_with = NOT_WINDOWS,
         visibility = ["//visibility:private"],
     )
 
@@ -41,6 +49,7 @@ def telemetry_service_image(
         srcs = [":" + linux_binary],
         include_runfiles = True,
         package_dir = "/",
+        target_compatible_with = NOT_WINDOWS,
         visibility = ["//visibility:private"],
     )
 
@@ -54,6 +63,7 @@ def telemetry_service_image(
         entrypoint = ["/" + name],
         env = env,
         tars = [":" + app_tar] + tars,
+        target_compatible_with = NOT_WINDOWS,
         workdir = workdir,
         visibility = visibility,
     )
@@ -62,6 +72,7 @@ def telemetry_service_image(
         name = name + "_load",
         image = ":" + image,
         repo_tags = repo_tags,
+        target_compatible_with = NOT_WINDOWS,
         visibility = visibility,
     )
 
@@ -69,6 +80,7 @@ def telemetry_service_image(
         name = name + "_push",
         image = ":" + image,
         repository = repository,
+        target_compatible_with = NOT_WINDOWS,
         visibility = visibility,
     )
 
@@ -79,7 +91,6 @@ def telemetry_service_image(
         executable = "/" + name,
         visibility = visibility,
     )
-
 
 def telemetry_upstream_image(
         name,
@@ -92,6 +103,7 @@ def telemetry_upstream_image(
     native.alias(
         name = name + "_image",
         actual = image,
+        target_compatible_with = NOT_WINDOWS,
         visibility = visibility,
     )
 
@@ -99,6 +111,7 @@ def telemetry_upstream_image(
         name = name + "_load",
         image = image,
         repo_tags = repo_tags,
+        target_compatible_with = NOT_WINDOWS,
         visibility = visibility,
     )
 
@@ -109,7 +122,6 @@ def telemetry_upstream_image(
         executable = executable,
         visibility = visibility,
     )
-
 
 def _container_smoke_test(name, loader, repo_tag, executable, visibility):
     # Docker-backed validation is deliberately manual: ordinary `bazel test
@@ -126,5 +138,6 @@ def _container_smoke_test(name, loader, repo_tag, executable, visibility):
         data = [loader],
         size = "large",
         tags = ["docker", "local", "manual"],
+        target_compatible_with = NOT_WINDOWS,
         visibility = visibility,
     )

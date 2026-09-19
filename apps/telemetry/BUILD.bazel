@@ -4,7 +4,7 @@
 load("@rules_python//python:defs.bzl", "py_library")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
-load(":container.bzl", "telemetry_upstream_image")
+load(":container.bzl", "NOT_WINDOWS", "telemetry_upstream_image")
 
 package(default_visibility = ["//apps/telemetry:__subpackages__"])
 
@@ -112,6 +112,7 @@ filegroup(
         "//apps/telemetry/stack/kafka:kafka_bridge_image",
         "//apps/telemetry/stack/processors/field_enricher:field_enricher_image",
     ],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -127,6 +128,7 @@ filegroup(
         "//apps/telemetry/stack/processors/lap_timer:lap_timer_image",
         "//apps/telemetry/stack/processors/track_mapper:track_mapper_image",
     ],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -136,6 +138,7 @@ filegroup(
         ":core_images",
         ":optional_images",
     ],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -160,6 +163,7 @@ sh_binary(
         "//apps/telemetry/stack/kafka:kafka_bridge_load",
         "//apps/telemetry/stack/processors/field_enricher:field_enricher_load",
     ],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -182,6 +186,7 @@ sh_binary(
         "//apps/telemetry/stack/processors/lap_timer:lap_timer_load",
         "//apps/telemetry/stack/processors/track_mapper:track_mapper_load",
     ],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -218,6 +223,7 @@ sh_binary(
         "//apps/telemetry/stack/processors/lap_timer:lap_timer_load",
         "//apps/telemetry/stack/processors/track_mapper:track_mapper_load",
     ],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -242,6 +248,7 @@ sh_binary(
         "//apps/telemetry/stack/kafka:kafka_bridge_load",
         "//apps/telemetry/stack/processors/field_enricher:field_enricher_load",
     ],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -257,6 +264,7 @@ test_suite(
         "//apps/telemetry/stack/kafka:kafka_bridge_smoke_test",
         "//apps/telemetry/stack/processors/field_enricher:field_enricher_smoke_test",
     ],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -271,6 +279,7 @@ test_suite(
         "//apps/telemetry/stack/processors/lap_timer:lap_timer_smoke_test",
         "//apps/telemetry/stack/processors/track_mapper:track_mapper_smoke_test",
     ],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -278,12 +287,14 @@ test_suite(
 alias(
     name = "telemetry_images",
     actual = ":all_images",
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
 alias(
     name = "telemetry_tarballs",
     actual = ":load_all_images",
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -303,6 +314,7 @@ filegroup(
         "//apps/telemetry/stack/ingest:db_init_scripts",
         "//apps/telemetry/stack/kafka:kafka_configs",
     ],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
