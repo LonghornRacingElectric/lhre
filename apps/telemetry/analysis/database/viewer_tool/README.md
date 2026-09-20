@@ -45,12 +45,26 @@ NEXT_PUBLIC_VIEWER_MULTI_CAR=true
 The viewer, the Prisma seed scripts, and the docker compose stack all read one
 `.env` at the repository root (`cp .env.example .env`).
 
-Install deps (the `postinstall` hook also generates the `auth`, `telemetry`,
-and `angelique` Prisma clients into `.prisma/`):
+Install deps. The `postinstall` hook generates the `auth`, `telemetry`, and
+`angelique` Prisma clients into `.prisma/` and runs `prisma db push` on the auth
+SQLite file (`AUTH_DATABASE_URL`) so it matches `prisma/auth.prisma` — there are
+no migrations, and the committed `prisma/dev.db` predates `User.isAdmin`:
 
 ```bash
 npm install
 ```
+
+To create a login during install, set `VIEWER_USERNAME` and `VIEWER_PASSWORD`
+(and `VIEWER_ADMIN=1` for an admin) in the root `.env`; the user is upserted, so
+reinstalling resets the password. Or create one any time:
+
+```bash
+npm run prisma-auth-seed -- <username> <password> [admin]
+```
+
+If the auth setup step fails, rerun it with `npm run prisma-auth-setup`. Note
+that `prisma/dev.db` is tracked in git, so the push modifies it in your working
+tree; don't commit it with your own users in it.
 
 > Note: `prisma/orion.prisma` still includes optional-list fields (`Float[]?`) that Prisma 6.x rejects, and nothing imports its client, so `prisma-orion-generate` is not part of `postinstall`.
 
