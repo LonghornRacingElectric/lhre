@@ -19,6 +19,7 @@ handles centerline construction from unclassified cones.
 
 import math
 
+from lhr_vehicle import load_vehicle
 from nav_msgs.msg import Odometry
 import numpy as np
 import rclpy
@@ -40,14 +41,18 @@ def _quat_to_yaw(q) -> float:
 
 class LidarConeDetector(Node):
 
-    # LiDAR mount offset relative to rear axle (vehicle base_link frame).
-    # Chassis link is at (0.8, 0, 0.35), sensor pose within chassis is
-    # (1.0, 0, 0.2), so total offset from rear axle: (1.8, 0, 0.55).
-    SENSOR_X_OFFSET = 1.8
-    SENSOR_Y_OFFSET = 0.0
-
     def __init__(self):
         super().__init__('lidar_cone_detector')
+
+        # LiDAR mount in base_link (rear-axle center), and the box around
+        # the car's own body to drop from every scan, in the sensor frame.
+        veh = load_vehicle()
+        self._sensor_x_offset, self._sensor_y_offset, _ = veh.lidar_position_m
+        body_front_x = veh.chassis_center_x_m + veh.body_length_m / 2.0
+        self._car_x_min = -(self._sensor_x_offset + veh.wheel_radius_m + 0.3)
+        self._car_x_max = body_front_x - self._sensor_x_offset + 0.25
+        self._car_half_width = (veh.half_track_m + veh.wheel_width_m / 2.0
+                                + 0.12)
 
         # --- Parameters ---
         self.declare_parameter('max_range', 20.0)
@@ -144,12 +149,11 @@ class LidarConeDetector(Node):
             return
 
         # Step 3: Vehicle exclusion zone (filter out the car's own body)
-        # In sensor frame, the car body extends roughly:
-        #   x: -2.1 to +0.1  (sensor is near front of 2.2m chassis)
-        #   y: -0.7 to +0.7  (wheels at ±0.6, plus margin)
         car_mask = ~(
-            (points[:, 0] > -2.3) & (points[:, 0] < 0.3) &
-            (points[:, 1] > -0.8) & (points[:, 1] < 0.8)
+            (points[:, 0] > self._car_x_min) &
+            (points[:, 0] < self._car_x_max) &
+            (points[:, 1] > -self._car_half_width) &
+            (points[:, 1] < self._car_half_width)
         )
         points = points[car_mask]
         if len(points) == 0:
@@ -235,8 +239,8 @@ class LidarConeDetector(Node):
     def _sensor_to_map(self, sx: float, sy: float) -> tuple[float, float]:
         """Transform a point from sensor frame to map frame."""
         # Sensor → vehicle base_link
-        vx = sx + self.SENSOR_X_OFFSET
-        vy = sy + self.SENSOR_Y_OFFSET
+        vx = sx + self._sensor_x_offset
+        vy = sy + self._sensor_y_offset
 
         # Vehicle → map
         cos_y = math.cos(self._veh_yaw)

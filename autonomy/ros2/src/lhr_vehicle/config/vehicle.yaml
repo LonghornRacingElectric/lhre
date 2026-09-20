@@ -1,0 +1,48 @@
+# Orion (2025-26 EV) physical parameters — the single source of truth for the
+# autonomy stack. Nodes read their vehicle defaults from here, and the Gazebo
+# model (lhr_gazebo/models/fsae_vehicle/model.sdf) is generated from it.
+#
+# Frame: base_link is the rear-axle center at ground level, x forward, y left,
+# z up (matches the kinematic sim, the Gazebo model, and the perception
+# transforms).
+#
+# Provenance tags:
+#   BobSim   — derived from VMOD's BobDyn/BobSim vehicle.yml for Orion
+#              (schema boblib.vehicle.v1), via dyn_py's parameter helpers
+#   ASSUMED  — sim placeholder; measure on the car and replace
+schema: lhr.vehicle.v1
+vehicle:
+  name: orion
+
+geometry:
+  wheelbase_m: 1.5494       # BobSim
+  track_m: 1.2122           # BobSim (front and rear are equal on Orion)
+  wheel_radius_m: 0.2045    # BobSim
+  wheel_width_m: 0.15       # ASSUMED (Gazebo collision cylinder)
+  body_length_m: 2.2        # ASSUMED (Gazebo collision box)
+  body_width_m: 1.0         # ASSUMED (Gazebo collision box)
+  body_height_m: 0.25       # ASSUMED (Gazebo collision box)
+  chassis_z_m: 0.35         # ASSUMED (Gazebo chassis link height above ground)
+
+mass:
+  chassis_kg: 160.6         # BobSim sprung mass, no driver
+  wheel_kg: 8.5             # BobSim unsprung mass per corner, rounded
+
+steering:
+  # Road-wheel lock angle. Before this file existed the controller, the
+  # kinematic sim and the Gazebo joints each carried a different value
+  # (0.55 / 0.45 / 0.7 rad); the controller's value is kept as the one the
+  # laps were tuned against.
+  max_angle_rad: 0.55       # ASSUMED until measured on the rack
+  max_rate_rad_s: 10.0      # ASSUMED; the Kraken X60 column rate is TBD
+
+limits:
+  max_speed_mps: 15.0       # ASSUMED (kinematic sim command clamp)
+
+sensors:
+  # Positions in base_link. The VLP-16 sits on a mast ahead of the driver
+  # cell; the IMU is at the chassis link origin.
+  lidar:
+    position_m: [1.8, 0.0, 0.55]     # ASSUMED (Gazebo mount)
+  imu:
+    position_m: [0.7747, 0.0, 0.35]  # ASSUMED (= chassis link origin)

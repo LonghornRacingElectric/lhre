@@ -10,6 +10,7 @@ Publishes:
 import math
 
 from ackermann_msgs.msg import AckermannDriveStamped
+from lhr_vehicle import load_vehicle
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float64
@@ -17,13 +18,14 @@ from std_msgs.msg import Float64
 
 class JointCmdAdapter(Node):
 
-    WHEELBASE = 1.6       # m
-    TRACK_WIDTH = 1.2     # m (kingpin-to-kingpin)
-    WHEEL_RADIUS = 0.2    # m
-    MAX_STEER = 0.69      # rad (slightly inside 0.7 joint limit)
-
     def __init__(self):
         super().__init__('joint_cmd_adapter')
+
+        veh = load_vehicle()
+        self._wheelbase = veh.wheelbase_m
+        self._track = veh.track_m
+        self._wheel_radius = veh.wheel_radius_m
+        self._max_steer = veh.max_steer_rad
 
         self._sub = self.create_subscription(
             AckermannDriveStamped, '/lhr/vehicle/cmd', self._cmd_cb, 10)
@@ -50,13 +52,15 @@ class JointCmdAdapter(Node):
             Float64,
             '/model/fsae_vehicle/joint/rear_right_wheel_joint/cmd_vel', 10)
 
-        self.get_logger().info('JointCmdAdapter ready')
+        self.get_logger().info(
+            f'JointCmdAdapter ready  (L={self._wheelbase}, '
+            f'track={self._track}, max_steer={self._max_steer})')
 
     # ------------------------------------------------------------------
     def _cmd_cb(self, msg: AckermannDriveStamped):
         speed = msg.drive.speed
-        steer = max(-self.MAX_STEER, min(self.MAX_STEER,
-                                         msg.drive.steering_angle))
+        steer = max(-self._max_steer, min(self._max_steer,
+                                          msg.drive.steering_angle))
 
         left_angle, right_angle = self._ackermann_angles(steer)
         fl_vel, fr_vel, rl_vel, rr_vel = self._wheel_velocities(speed, steer)
@@ -72,8 +76,7 @@ class JointCmdAdapter(Node):
         self._pub_vel_rr.publish(Float64(data=rr_vel))
 
     # ------------------------------------------------------------------
-    @classmethod
-    def _ackermann_angles(cls, steer_center: float):
+    def _ackermann_angles(self, steer_center: float):
         """
         Return (left_angle, right_angle) using Ackermann geometry.
 
@@ -83,9 +86,10 @@ class JointCmdAdapter(Node):
         if abs(steer_center) < 1e-6:
             return 0.0, 0.0
 
-        R = cls.WHEELBASE / math.tan(abs(steer_center))
-        inner = math.atan(cls.WHEELBASE / (R - cls.TRACK_WIDTH / 2.0))
-        outer = math.atan(cls.WHEELBASE / (R + cls.TRACK_WIDTH / 2.0))
+        L, half_track = self._wheelbase, self._track / 2.0
+        R = L / math.tan(abs(steer_center))
+        inner = math.atan(L / (R - half_track))
+        outer = math.atan(L / (R + half_track))
 
         if steer_center > 0:          # turning left
             return inner, outer
@@ -93,32 +97,30 @@ class JointCmdAdapter(Node):
             return -outer, -inner
 
     # ------------------------------------------------------------------
-    @classmethod
-    def _wheel_velocities(cls, speed: float, steer_center: float):
+    def _wheel_velocities(self, speed: float, steer_center: float):
         """
         Return (fl, fr, rl, rr) angular velocities in rad/s.
 
         Accounts for different turn radii at each wheel.
         """
-        omega_base = speed / cls.WHEEL_RADIUS
+        L, half_track, r = self._wheelbase, self._track / 2.0, self._wheel_radius
+        omega_base = speed / r
 
         if abs(steer_center) < 1e-6:
             return omega_base, omega_base, omega_base, omega_base
 
-        R = cls.WHEELBASE / math.tan(abs(steer_center))
+        R = L / math.tan(abs(steer_center))
         omega_yaw = speed / R          # yaw rate of the vehicle
 
         # Rear wheels
-        rl_omega = omega_yaw * (R - cls.TRACK_WIDTH / 2.0) / cls.WHEEL_RADIUS
-        rr_omega = omega_yaw * (R + cls.TRACK_WIDTH / 2.0) / cls.WHEEL_RADIUS
+        rl_omega = omega_yaw * (R - half_track) / r
+        rr_omega = omega_yaw * (R + half_track) / r
 
         # Front wheels (further from ICR due to wheelbase offset)
-        R_fl = math.sqrt(cls.WHEELBASE**2 +
-                         (R - cls.TRACK_WIDTH / 2.0)**2)
-        R_fr = math.sqrt(cls.WHEELBASE**2 +
-                         (R + cls.TRACK_WIDTH / 2.0)**2)
-        fl_omega = omega_yaw * R_fl / cls.WHEEL_RADIUS
-        fr_omega = omega_yaw * R_fr / cls.WHEEL_RADIUS
+        R_fl = math.sqrt(L**2 + (R - half_track)**2)
+        R_fr = math.sqrt(L**2 + (R + half_track)**2)
+        fl_omega = omega_yaw * R_fl / r
+        fr_omega = omega_yaw * R_fr / r
 
         if steer_center < 0:           # turning right, swap inner/outer
             rl_omega, rr_omega = rr_omega, rl_omega

@@ -126,9 +126,7 @@ Future Phase 3 adds a camera branch feeding into `lhr_perception` for color clas
 File: `lhr_gazebo/models/fsae_vehicle/model.sdf`
 
 - Ackermann steering geometry (front two wheels steer, rear two driven)
-- Wheelbase 1.6 m, track width 1.2 m, wheel radius 0.2 m
-- 232 kg total (200 kg chassis + 4x 8 kg wheels)
-- Steering limits ±0.7 rad, 10 rad/s velocity limit
+- Geometry, masses and steering limits come from `lhr_vehicle/config/vehicle.yaml` (Orion: wheelbase 1.549 m, track 1.212 m, wheel radius 0.2045 m); `model.sdf` is generated from it
 - Direct joint control (JointPositionController + JointController) — NOT AckermannSteering
 - Sensors: IMU (100 Hz), GPU LiDAR (360x16 channels, 0.5–25 m, 10 Hz)
 

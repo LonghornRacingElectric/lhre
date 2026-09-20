@@ -6,6 +6,7 @@ from typing import List, Optional, Tuple
 
 from ackermann_msgs.msg import AckermannDrive, AckermannDriveStamped
 from geometry_msgs.msg import Point
+from lhr_vehicle import load_vehicle
 from nav_msgs.msg import Odometry, Path
 import rclpy
 from rclpy.node import Node
@@ -26,12 +27,13 @@ class PurePursuit(Node):
     def __init__(self):
         super().__init__('pure_pursuit')
 
-        # --- Steering params ---
+        # --- Steering params (vehicle defaults come from lhr_vehicle) ---
+        veh = load_vehicle()
         self.declare_parameter('lookahead_dist', 4.0)
         self.declare_parameter('lookahead_min', 2.0)
         self.declare_parameter('lookahead_curvature_gain', 3.0)
-        self.declare_parameter('max_steer', 0.55)
-        self.declare_parameter('wheelbase', 1.6)
+        self.declare_parameter('max_steer', veh.max_steer_rad)
+        self.declare_parameter('wheelbase', veh.wheelbase_m)
         self.declare_parameter('control_hz', 20.0)
 
         # --- Speed planning params ---
