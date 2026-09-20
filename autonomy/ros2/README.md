@@ -182,6 +182,7 @@ All scripts live in `scripts/` and should be run from the `autonomy/ros2` direct
 | `run_plotjuggler.sh` | Opens PlotJuggler for plotting debug signals (curvature, speed, steering). |
 | `generate_gazebo_world.sh` | Generates a Gazebo world SDF from the track generator. Accepts `--seed`, `--style`, `--num-waypoints`, etc. |
 | `run_gazebo_demo.sh` | Launches the Gazebo-based stack (physics sim + adapters + upper stack). Accepts same args as `run_demo.sh`. |
+| `src/lhr_gazebo/scripts/generate_vehicle_model.py` | Regenerates the Gazebo vehicle `model.sdf` from `lhr_vehicle/config/vehicle.yaml`. Run after editing the YAML; commit both. |
 
 The individual `run_*.sh` scripts are useful for debugging a single node. For normal use, prefer the two-terminal workflow (`run_demo.sh` + `rviz_demo.sh`).
 
@@ -515,12 +516,7 @@ Debug topics: `/lhr/debug/curvature` and `/lhr/debug/v_cmd` (both `std_msgs/Floa
 
 Converts `AckermannDriveStamped` into 6 individual Gazebo joint commands with proper Ackermann differential steering geometry.
 
-| Constant | Value | Description |
-|----------|-------|-------------|
-| `WHEELBASE` | `1.6` | Wheelbase (m) |
-| `TRACK_WIDTH` | `1.2` | Kingpin-to-kingpin distance (m) |
-| `WHEEL_RADIUS` | `0.2` | Wheel radius (m) |
-| `MAX_STEER` | `0.69` | Steering clamp, slightly inside ±0.7 joint limit (rad) |
+Wheelbase, track width, wheel radius and the steering clamp come from `lhr_vehicle` (`vehicle.yaml`) at startup — the same values the generated `model.sdf` uses, so the adapter and the model cannot disagree.
 
 **Ackermann geometry:** When turning left, the left (inner) wheel steers at a sharper angle than the right (outer) wheel. The adapter computes both angles from the bicycle-model center angle using:
 ```
