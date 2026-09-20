@@ -42,7 +42,9 @@ flowchart LR
 
 Today the stack drives only simulators; nothing real is connected yet. The CAN
 bridge to the VCU is planned in the
-[retrofit roadmap](docs/plans/retrofit-roadmap-2026-27.md).
+[retrofit roadmap](docs/plans/retrofit-roadmap-2026-27.md); the full target
+picture — sensors, nodes, CAN, safety loop — is in
+[on-car-architecture.md](docs/plans/on-car-architecture.md).
 
 The road from sim to the retrofit car swaps the layer *under* the same upper
 stack at every step (see the

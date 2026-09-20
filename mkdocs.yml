@@ -59,6 +59,7 @@ nav:
           - Gazebo Integration: autonomy/docs/plans/gazebo-integration.md
           - Gazebo Change Notes: autonomy/docs/plans/gazebo-change-notes.md
           - Camera Fusion: autonomy/docs/plans/camera-fusion.md
+          - On-Car Architecture: autonomy/docs/plans/on-car-architecture.md
       - FSAE Rules:
           - Track and Events: autonomy/docs/rules/fsae-track-and-events.md
           - Vehicle Systems: autonomy/docs/rules/fsae-vehicle-systems.md
