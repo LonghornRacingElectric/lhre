@@ -203,7 +203,13 @@ function in its own file. On macOS it only builds compiler-rt against
 Apple's system ABI. These actions re-run only on an LLVM toolchain bump,
 and the remote cache means one machine pays per platform.
 
-All `//apps/telemetry/...` targets are incompatible with native Windows.
+Telemetry produces Linux OCI images, and `rules_oci` image analysis relies on POSIX
+helpers that cannot be analyzed by the native Windows Bazel client. The container and
+server ingestion targets declare `target_compatible_with = NOT_WINDOWS` to ensure native
+Windows builds automatically skip them during recursive builds and tests (`//...`), while
+cross-platform targets like schema definitions and protobuf codegen (`can_packets_pb2`)
+remain buildable on Windows. The Linux CI jobs and dedicated telemetry workflow retain full
+build and test coverage for the entire telemetry subtree.
 
 `--bes_upload_mode=fully_async` and `--remote_cache_async` keep builds
 from blocking on BuildBuddy uploads at exit, which matters most on

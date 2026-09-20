@@ -6,3 +6,5 @@ bazel-lhre
 site
 .mkdocs-build
 autonomy
+external
+C

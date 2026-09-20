@@ -194,7 +194,6 @@ sh_test(
         ":stack_test_client",
         "//apps/telemetry/stack/ingest:docker-compose.yml",
         "//apps/telemetry/stack/kafka:docker-compose.yml",
-        "//apps/telemetry/stack/kafka:kafka_bridge_context",
         "//apps/telemetry/stack/processors/gps_classifier:docker-compose.yml",
         "//apps/telemetry/stack/processors/kafka_base:docker-compose.yml",
         "//apps/telemetry/stack/processors/lap_timer:docker-compose.yml",
