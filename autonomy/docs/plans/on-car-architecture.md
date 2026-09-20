@@ -16,7 +16,7 @@ flowchart LR
     subgraph sensors["Sensors — mast and chassis"]
         lidar["Velodyne VLP-16<br>Ethernet, 10 Hz"]
         cam["Stereolabs ZED 2i<br>USB3"]
-        gnss["ArduSimple F9P heading kit<br>dual-antenna RTK, 5–8 Hz"]
+        gnss["LocusLock unit pair<br>RTK GNSS + moving-base heading"]
         imu["IMU"]
     end
 
@@ -24,7 +24,7 @@ flowchart LR
         subgraph drivers["Drivers"]
             dlidar["velodyne_driver"]
             dcam["zed-ros2-wrapper"]
-            dgnss["ublox_gps"]
+            dgnss["LocusLock ROS 2 driver"]:::planned
             dcan["ros2_socketcan"]
         end
         subgraph perception["Perception"]
@@ -91,7 +91,7 @@ interface swaps (see the
 |-----------|------------|-------|
 | Gazebo GPU LiDAR / `sensor_sim` cones | VLP-16 through `velodyne_driver`, same `lidar_cone_detector` | Perception |
 | No camera; unclassified cones | ZED 2i → `cone_color_classifier` → `cone_fusion`; color-aware Delaunay | Perception |
-| Ground-truth `OdometryPublisher` | `lhr_state_estimation` EKF on IMU + RTK GNSS + wheel speeds + steer angle | State estimation |
+| Ground-truth `OdometryPublisher` | `lhr_state_estimation` EKF on IMU + LocusLock RTK position/heading + wheel speeds + steer angle | State estimation |
 | `pure_pursuit` publishes a speed; Gazebo sets wheel velocity directly | Longitudinal controller turns speed into throttle and brake (with software brake bias) | Planning & control |
 | `joint_cmd_adapter` → Gazebo joints | `vehicle_interface` → CAN: column angle to the steering motor, actuator position to the brake, torque request to the VCU; feedback back in | Sim & test infra + ELC |
 | `auto_go` timer | Physical go from the RES; `safety_node` heartbeat that the VCU watchdogs | Lead + ELC |
@@ -114,6 +114,8 @@ replaces it.
   is commanded through the line valves.
 - Whether the RES is the sponsored GF2000i or the DIY heartbeat link
   (decision by ~November per the hardware page).
+- The LocusLock integration: ROS 2 driver, output rate, and whether the
+  pair gives heading directly (moving-base) or the EKF derives it.
 
 Related: [retrofit roadmap](retrofit-roadmap-2026-27.md) (dates),
 [camera fusion](camera-fusion.md) (perception detail),
