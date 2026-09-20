@@ -4,8 +4,8 @@ const { spawn } = require("child_process");
 import path from 'path';
 import dotenv from 'dotenv';
 
-// Load .env from one level up
-dotenv.config({ path: path.resolve(__dirname, '../../../../.env') });
+// Load the repo-root .env (shared with the docker compose stack)
+dotenv.config({ path: path.resolve(__dirname, '../../../../../../.env') });
 
 const {
   POSTGRES_USER,

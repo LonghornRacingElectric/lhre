@@ -2,7 +2,7 @@ import prisma from '../src/lib/prisma/telemetry';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
-dotenv.config({ path: path.resolve(__dirname, '../../../../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../../../../../.env') });
 
 const {
   POSTGRES_USER,
