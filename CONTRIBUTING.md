@@ -16,6 +16,8 @@ everywhere.
   `dhairya/vcu-can-heartbeat`).
 - Open a PR; every change needs a review and a green presubmit before merge.
   No direct pushes to `main`.
+- Reviews are routed by `.github/CODEOWNERS`: a PR touching `autonomy/`
+  automatically requests the `@LonghornRacingElectric/autonomous` team.
 - Presubmit runs `bazel test //...` (builds all firmware, runs host tests)
   and `bazel run //tools/format:check`. Run both locally before pushing.
 - `autonomy/` is outside Bazel
