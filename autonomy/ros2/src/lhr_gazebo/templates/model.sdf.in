@@ -3,13 +3,14 @@
   <model name="fsae_vehicle">
     <!--
       GENERATED FILE — do not edit model.sdf by hand.
-      Source: lhr_vehicle/config/vehicle.yaml rendered through this template
-      (model.sdf.in) by lhr_gazebo/scripts/generate_vehicle_model.py.
+      Source: lhr_vehicle/config/vehicle.yaml rendered through
+      lhr_gazebo/templates/model.sdf.in by lhr_gazebo/scripts/generate_vehicle_model.py.
 
       Wheelbase: ${wheelbase} m   Track: ${track} m   Wheel radius: ${wheel_radius} m
       Mass: ${chassis_mass} kg chassis + 4x ${wheel_mass} kg wheels
       Reference point: rear axle center at ground level.
       Chassis link is ${chassis_x} m forward (half wheelbase), ${chassis_z} m up.
+      Steering joints: ±${joint_steer_limit} rad = the inner wheel at ${max_steer} rad center lock.
     -->
 
     <!-- ===== CHASSIS ===== -->
@@ -45,9 +46,9 @@
         </geometry>
       </collision>
 
-      <!-- IMU sensor -->
+      <!-- IMU sensor, at the chassis link origin -->
       <sensor name="imu_sensor" type="imu">
-        <pose>${imu_dx} ${imu_dy} ${imu_dz} 0 0 0</pose>
+        <pose>0 0 0 0 0 0</pose>
         <always_on>true</always_on>
         <update_rate>100</update_rate>
         <visualize>false</visualize>
@@ -108,21 +109,21 @@
       <axis>
         <xyz>0 0 1</xyz>
         <limit>
-          <lower>-${max_steer}</lower>
-          <upper>${max_steer}</upper>
+          <lower>-${joint_steer_limit}</lower>
+          <upper>${joint_steer_limit}</upper>
           <effort>1e6</effort>
           <velocity>${max_steer_rate}</velocity>
         </limit>
       </axis>
     </joint>
 
-    <!-- FRONT LEFT WHEEL -->
+    <!-- FRONT LEFT WHEEL (links are rolled -90° about x: the spin axis is link-local z) -->
     <link name="front_left_wheel">
       <pose>${wheelbase} ${half_track} ${wheel_radius} -1.5708 0 0</pose>
       <inertial>
         <mass>${wheel_mass}</mass>
         <inertia>
-          <ixx>${wheel_i_perp}</ixx><iyy>${wheel_i_spin}</iyy><izz>${wheel_i_perp}</izz>
+          <ixx>${wheel_i_perp}</ixx><iyy>${wheel_i_perp}</iyy><izz>${wheel_i_spin}</izz>
           <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
         </inertia>
       </inertial>
@@ -178,8 +179,8 @@
       <axis>
         <xyz>0 0 1</xyz>
         <limit>
-          <lower>-${max_steer}</lower>
-          <upper>${max_steer}</upper>
+          <lower>-${joint_steer_limit}</lower>
+          <upper>${joint_steer_limit}</upper>
           <effort>1e6</effort>
           <velocity>${max_steer_rate}</velocity>
         </limit>
@@ -192,7 +193,7 @@
       <inertial>
         <mass>${wheel_mass}</mass>
         <inertia>
-          <ixx>${wheel_i_perp}</ixx><iyy>${wheel_i_spin}</iyy><izz>${wheel_i_perp}</izz>
+          <ixx>${wheel_i_perp}</ixx><iyy>${wheel_i_perp}</iyy><izz>${wheel_i_spin}</izz>
           <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
         </inertia>
       </inertial>
@@ -236,7 +237,7 @@
       <inertial>
         <mass>${wheel_mass}</mass>
         <inertia>
-          <ixx>${wheel_i_perp}</ixx><iyy>${wheel_i_spin}</iyy><izz>${wheel_i_perp}</izz>
+          <ixx>${wheel_i_perp}</ixx><iyy>${wheel_i_perp}</iyy><izz>${wheel_i_spin}</izz>
           <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
         </inertia>
       </inertial>
@@ -280,7 +281,7 @@
       <inertial>
         <mass>${wheel_mass}</mass>
         <inertia>
-          <ixx>${wheel_i_perp}</ixx><iyy>${wheel_i_spin}</iyy><izz>${wheel_i_perp}</izz>
+          <ixx>${wheel_i_perp}</ixx><iyy>${wheel_i_perp}</iyy><izz>${wheel_i_spin}</izz>
           <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
         </inertia>
       </inertial>
@@ -325,8 +326,11 @@
       <joint_name>front_left_steering_joint</joint_name>
       <topic>/model/fsae_vehicle/joint/front_left_steering_joint/cmd_pos</topic>
       <use_velocity_commands>true</use_velocity_commands>
-      <cmd_max>${max_steer_rate}</cmd_max>
-      <cmd_min>-${max_steer_rate}</cmd_min>
+      <!-- velocity the controller may command to reach the target; a sim
+           tuning knob kept high for near-instant response, distinct from the
+           joint's physical rate limit above -->
+      <cmd_max>10.0</cmd_max>
+      <cmd_min>-10.0</cmd_min>
     </plugin>
 
     <plugin
@@ -335,8 +339,11 @@
       <joint_name>front_right_steering_joint</joint_name>
       <topic>/model/fsae_vehicle/joint/front_right_steering_joint/cmd_pos</topic>
       <use_velocity_commands>true</use_velocity_commands>
-      <cmd_max>${max_steer_rate}</cmd_max>
-      <cmd_min>-${max_steer_rate}</cmd_min>
+      <!-- velocity the controller may command to reach the target; a sim
+           tuning knob kept high for near-instant response, distinct from the
+           joint's physical rate limit above -->
+      <cmd_max>10.0</cmd_max>
+      <cmd_min>-10.0</cmd_min>
     </plugin>
 
     <!-- ===== DRIVE: direct velocity control ===== -->

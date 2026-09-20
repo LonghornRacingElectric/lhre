@@ -224,7 +224,7 @@ The `track_style` argument selects the track generator (`oval`, `autocross`, or 
 
 ### Vehicle model
 
-The FSAE vehicle (`models/fsae_vehicle/model.sdf`) uses STL meshes (`meshes/carBody.stl`, `meshes/carTire.stl`) for visuals with simplified collision geometry. **`model.sdf` is generated** — `scripts/generate_vehicle_model.py` renders `model.sdf.in` from [`lhr_vehicle/config/vehicle.yaml`](src/lhr_vehicle/README.md), so the numbers below are Orion's and shared with the controller, the kinematic sim and perception:
+The FSAE vehicle (`models/fsae_vehicle/model.sdf`) uses STL meshes (`meshes/carBody.stl`, `meshes/carTire.stl`) for visuals with simplified collision geometry. **`model.sdf` is generated** — `scripts/generate_vehicle_model.py` renders `templates/model.sdf.in` from [`lhr_vehicle/config/vehicle.yaml`](src/lhr_vehicle/README.md), so the numbers below are Orion's and shared with the controller, the kinematic sim and perception:
 
 | Parameter | Value | Source |
 |-----------|-------|--------|
@@ -236,7 +236,7 @@ The FSAE vehicle (`models/fsae_vehicle/model.sdf`) uses STL meshes (`meshes/carB
 | Steering limit | ±0.55 rad (~31.5 deg) | assumed until measured |
 | Reference point | Rear axle center at ground level | — |
 
-Edit `vehicle.yaml`, rerun the generator, and commit both files together.
+Edit `vehicle.yaml`, rerun the generator, and commit both files together; `generate_vehicle_model.py --check` (and `lhr_gazebo`'s tests) fail when they disagree.
 
 ### Joint control architecture
 

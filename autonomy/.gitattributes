@@ -10,3 +10,5 @@
 CMakeLists.txt text eol=lf
 Makefile text eol=lf
 Dockerfile text eol=lf
+*.sdf text eol=lf
+*.sdf.in text eol=lf

@@ -1,7 +1,7 @@
 # lhr_vehicle
 
 One file, `config/vehicle.yaml`, holds Orion's physical parameters —
-wheelbase, track, wheel radius, masses, steering limits, sensor mounts —
+wheelbase, track, wheel radius, masses, steering limits, the LiDAR mount —
 and every consumer reads it from there:
 
 - `lhr_control` (pure pursuit) and `lhr_sim_kinematic` take their
@@ -14,7 +14,8 @@ and every consumer reads it from there:
   self-exclusion box.
 - The Gazebo model `lhr_gazebo/models/fsae_vehicle/model.sdf` is
   **generated** from it (see below); wheel poses, joint limits, masses and
-  sensor poses all derive from the same numbers.
+  sensor poses all derive from the same numbers. The steering joints get
+  the Ackermann *inner* angle at full lock, since that is what they see.
 
 Why: before this package the wheelbase and the steering limit were repeated
 in four places with four different steering values (0.45, 0.55, 0.69 and
@@ -42,8 +43,9 @@ veh.wheelbase_m, veh.track_m, veh.max_steer_rad, veh.lidar_position_m
 ```
 
 `load_vehicle()` finds the installed copy through the ament index, or the
-source-tree copy when run outside a built workspace (e.g. the model
-generator).
+source-tree copy when imported straight from the checkout. The model
+generator always passes the source-tree path explicitly so an installed
+copy can never be stale relative to the YAML being edited.
 
 ## Regenerating the Gazebo model
 
@@ -56,4 +58,6 @@ python3 src/lhr_gazebo/scripts/generate_vehicle_model.py
 ```
 
 Commit the regenerated `model.sdf` alongside the YAML change — it is
-checked in, like the generated world files.
+checked in, like the generated world files. `generate_vehicle_model.py
+--check` reports whether the two agree, and `lhr_gazebo`'s tests fail when
+they don't, so CI catches a forgotten regenerate.

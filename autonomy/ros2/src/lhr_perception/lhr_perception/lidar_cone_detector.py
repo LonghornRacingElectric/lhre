@@ -32,6 +32,10 @@ from std_msgs.msg import ColorRGBA
 from visualization_msgs.msg import Marker, MarkerArray
 
 
+# Height above the ground plane below which returns are treated as ground.
+GROUND_CLEARANCE_M = 0.15
+
+
 def _quat_to_yaw(q) -> float:
     """Extract yaw from a quaternion (assumes near-zero roll/pitch)."""
     siny = 2.0 * (q.w * q.z + q.x * q.y)
@@ -47,7 +51,7 @@ class LidarConeDetector(Node):
         # LiDAR mount in base_link (rear-axle center), and the box around
         # the car's own body to drop from every scan, in the sensor frame.
         veh = load_vehicle()
-        self._sensor_x_offset, self._sensor_y_offset, _ = veh.lidar_position_m
+        self._sensor_x_offset, self._sensor_y_offset, sensor_z = veh.lidar_position_m
         body_front_x = veh.chassis_center_x_m + veh.body_length_m / 2.0
         self._car_x_min = -(self._sensor_x_offset + veh.wheel_radius_m + 0.3)
         self._car_x_max = body_front_x - self._sensor_x_offset + 0.25
@@ -57,7 +61,10 @@ class LidarConeDetector(Node):
         # --- Parameters ---
         self.declare_parameter('max_range', 20.0)
         self.declare_parameter('min_range', 0.9)
-        self.declare_parameter('ground_z_min', -0.40)
+        # Ground returns sit at z = -mount height in the sensor frame; keep
+        # the band just above them so lowering the mast in vehicle.yaml
+        # cannot let the ground plane through as phantom cones.
+        self.declare_parameter('ground_z_min', -(sensor_z - GROUND_CLEARANCE_M))
         self.declare_parameter('ground_z_max', 0.5)
         self.declare_parameter('cluster_radius', 0.35)
         self.declare_parameter('min_cluster_points', 1)

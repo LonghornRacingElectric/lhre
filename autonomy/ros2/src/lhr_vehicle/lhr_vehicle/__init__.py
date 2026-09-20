@@ -38,7 +38,6 @@ class Vehicle:
     max_steer_rate_rad_s: float
     max_speed_mps: float
     lidar_position_m: Vec3
-    imu_position_m: Vec3
 
     @property
     def chassis_center_x_m(self) -> float:
@@ -50,17 +49,39 @@ class Vehicle:
         return self.track_m / 2.0
 
 
+def _source_tree_config() -> Path:
+    return Path(__file__).resolve().parents[1] / 'config' / CONFIG_NAME
+
+
 def config_path() -> Path:
-    """Installed config if the package is built, else the source tree copy."""
+    """
+    Locate vehicle.yaml.
+
+    The installed copy when the package is built; the source-tree copy when
+    this module is imported straight from the checkout (the model generator
+    does that). Anything else is an error worth seeing, not a guess.
+    """
     try:
-        from ament_index_python.packages import get_package_share_directory
-        installed = Path(get_package_share_directory('lhr_vehicle'))
-        candidate = installed / 'config' / CONFIG_NAME
+        from ament_index_python.packages import (
+            PackageNotFoundError, get_package_share_directory)
+    except ImportError:
+        installed = None
+    else:
+        try:
+            installed = Path(get_package_share_directory('lhr_vehicle'))
+        except PackageNotFoundError:
+            installed = None
+
+    candidates = []
+    if installed is not None:
+        candidates.append(installed / 'config' / CONFIG_NAME)
+    candidates.append(_source_tree_config())
+    for candidate in candidates:
         if candidate.exists():
             return candidate
-    except Exception:  # no ament index outside a ROS environment
-        pass
-    return Path(__file__).resolve().parents[1] / 'config' / CONFIG_NAME
+    raise FileNotFoundError(
+        f'{CONFIG_NAME} not found; looked in: '
+        + ', '.join(str(c) for c in candidates))
 
 
 def _vec3(values) -> Vec3:
@@ -74,6 +95,8 @@ def load_vehicle(path: Optional[Path] = None) -> Vehicle:
     with open(source, encoding='utf-8') as f:
         raw = yaml.safe_load(f)
 
+    if not isinstance(raw, dict):
+        raise ValueError(f'{source}: expected a mapping at the top level')
     if raw.get('schema') != SCHEMA:
         raise ValueError(
             f'{source}: expected schema {SCHEMA!r}, got {raw.get("schema")!r}')
@@ -100,5 +123,4 @@ def load_vehicle(path: Optional[Path] = None) -> Vehicle:
         max_steer_rate_rad_s=float(steering['max_rate_rad_s']),
         max_speed_mps=float(limits['max_speed_mps']),
         lidar_position_m=_vec3(sensors['lidar']['position_m']),
-        imu_position_m=_vec3(sensors['imu']['position_m']),
     )

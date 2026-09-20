@@ -39,7 +39,8 @@ here. Do not add `BUILD.bazel` files.
   read them through `lhr_vehicle.load_vehicle()`. Never hardcode them.
   `lhr_gazebo/models/fsae_vehicle/model.sdf` is generated from that file
   by `lhr_gazebo/scripts/generate_vehicle_model.py` — edit the YAML or
-  `model.sdf.in`, rerun the generator, and commit both.
+  `lhr_gazebo/templates/model.sdf.in`, rerun the generator, and commit
+  both. `lhr_gazebo`'s tests fail if the committed `model.sdf` is stale.
 - Packages map to software lanes (table in [README.md](README.md)). Keep a
   change inside the owning lane's packages where possible.
 - Docs next to code, same as the root rule: change behavior, change the

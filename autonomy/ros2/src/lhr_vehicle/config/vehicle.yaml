@@ -34,15 +34,17 @@ steering:
   # (0.55 / 0.45 / 0.7 rad); the controller's value is kept as the one the
   # laps were tuned against.
   max_angle_rad: 0.55       # ASSUMED until measured on the rack
-  max_rate_rad_s: 10.0      # ASSUMED; the Kraken X60 column rate is TBD
+  # Physical rate limit of the road wheels (the Gazebo joint velocity
+  # limit). The Kraken X60 column rate is TBD; this is not the position
+  # controller's command clamp, which stays a sim knob in the template.
+  max_rate_rad_s: 10.0      # ASSUMED
 
 limits:
   max_speed_mps: 15.0       # ASSUMED (kinematic sim command clamp)
 
 sensors:
   # Positions in base_link. The VLP-16 sits on a mast ahead of the driver
-  # cell; the IMU is at the chassis link origin.
+  # cell. The IMU is at the chassis link origin (half the wheelbase forward,
+  # chassis_z_m up) and is derived from that, not listed here.
   lidar:
     position_m: [1.8, 0.0, 0.55]     # ASSUMED (Gazebo mount)
-  imu:
-    position_m: [0.7747, 0.0, 0.35]  # ASSUMED (= chassis link origin)
