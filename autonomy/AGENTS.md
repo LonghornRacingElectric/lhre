@@ -20,6 +20,9 @@ here. Do not add `BUILD.bazel` files.
   presubmit. The lint rules it enforces are listed in
   [ros2/README.md](ros2/README.md#tests-and-ci); run them locally before
   pushing if you can.
+- PRs touching `autonomy/` need an approving review from a member of the
+  `autonomous` GitHub team (`.github/CODEOWNERS` requests them; the `main`
+  ruleset requires the code-owner approval).
 - The demo scripts (`run_demo.sh`, `run_gazebo_demo.sh`, `rviz_demo.sh`)
   need a display and a ROS install. Do not run them in CI or from a
   headless agent.
