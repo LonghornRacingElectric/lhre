@@ -58,16 +58,17 @@ The viewer remains an npm/PM2 application rather than a Bazel image:
 
 ```bash
 cd analysis/database/viewer_tool
-npm ci
-npm run prisma-auth-generate
-npm run prisma-angelique-generate
-npm run prisma-telemetry-generate
+npm ci   # postinstall generates the Prisma clients and syncs the auth database
 npm run dev -- --hostname 0.0.0.0 --port 3001
 ```
 
-For deployment, run `npm run build` and use the checked-in
-`ecosystem.config.js` with PM2. Seed a new auth user with
-`npm run prisma-auth-seed -- <username> <password>`.
+The viewer reads the repository-root `.env`. To have `npm ci` create a login,
+set `VIEWER_USERNAME` and `VIEWER_PASSWORD` (and `VIEWER_ADMIN=1` for an admin)
+there first; otherwise seed one with
+`npm run prisma-auth-seed -- <username> <password> [admin]`.
+
+For deployment, run `./server_devtool.sh build viewer` from `stack/` (or
+`npm run build` and the checked-in `ecosystem.config.js` with PM2).
 
 ## Tests
 
