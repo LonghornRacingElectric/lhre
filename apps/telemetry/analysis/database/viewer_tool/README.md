@@ -42,22 +42,17 @@ NEXT_PUBLIC_VIEWER_MULTI_CAR=true
 
 ## Local setup
 
-Install deps:
+The viewer, the Prisma seed scripts, and the docker compose stack all read one
+`.env` at the repository root (`cp .env.example .env`).
+
+Install deps (the `postinstall` hook also generates the `auth`, `telemetry`,
+and `angelique` Prisma clients into `.prisma/`):
 
 ```bash
 npm install
 ```
 
-Generate Prisma clients:
-
-```bash
-npm run prisma-auth-generate
-npm run prisma-telemetry-generate
-npm run prisma-orion-generate
-npm run prisma-angelique-generate
-```
-
-> Note: `prisma/orion.prisma` still includes optional-list fields (`Float[]?`) that Prisma 6.x rejects. `prisma/telemetry.prisma` has been aligned for Prisma 6.x generation.
+> Note: `prisma/orion.prisma` still includes optional-list fields (`Float[]?`) that Prisma 6.x rejects, and nothing imports its client, so `prisma-orion-generate` is not part of `postinstall`.
 
 Generate protobuf TS stubs (optional helper scripts):
 

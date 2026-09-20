@@ -7,6 +7,7 @@
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "next lint",
+    "postinstall": "npm run prisma-auth-generate && npm run prisma-telemetry-generate && npm run prisma-angelique-generate",
     "prisma-auth-generate": "npx prisma generate --schema=prisma/auth.prisma",
     "prisma-telemetry-generate": "npx prisma generate --schema=prisma/telemetry.prisma",
     "prisma-orion-generate": "npx prisma generate --schema=prisma/orion.prisma",
