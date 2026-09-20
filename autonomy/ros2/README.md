@@ -20,6 +20,7 @@ Colcon workspace for LHR driverless / autonomy nodes. This file is the **referen
 | `lhr_gazebo` | Gazebo Harmonic physics simulation — vehicle with direct joint control, ground-truth odometry, LiDAR sensor, RViz integration |
 | `lhr_perception` | LiDAR-based cone detection — pointcloud clustering, persistent mapping (unclassified cones, no left/right split). Functional on oval track; path quality needs tuning on complex tracks. |
 | `lhr_demo` | Launch file that starts the full kinematic stack in one command |
+| `lhr_vehicle` | Orion's physical parameters (`config/vehicle.yaml`) and their loader — the single source for wheelbase, track, steering limits, masses and sensor mounts. See [its README](src/lhr_vehicle/README.md) |
 
 ## Data flow
 
@@ -181,6 +182,7 @@ All scripts live in `scripts/` and should be run from the `autonomy/ros2` direct
 | `run_plotjuggler.sh` | Opens PlotJuggler for plotting debug signals (curvature, speed, steering). |
 | `generate_gazebo_world.sh` | Generates a Gazebo world SDF from the track generator. Accepts `--seed`, `--style`, `--num-waypoints`, etc. |
 | `run_gazebo_demo.sh` | Launches the Gazebo-based stack (physics sim + adapters + upper stack). Accepts same args as `run_demo.sh`. |
+| `src/lhr_gazebo/scripts/generate_vehicle_model.py` | Regenerates the Gazebo vehicle `model.sdf` from `lhr_vehicle/config/vehicle.yaml`. Run after editing the YAML; commit both. |
 
 The individual `run_*.sh` scripts are useful for debugging a single node. For normal use, prefer the two-terminal workflow (`run_demo.sh` + `rviz_demo.sh`).
 
@@ -222,17 +224,19 @@ The `track_style` argument selects the track generator (`oval`, `autocross`, or 
 
 ### Vehicle model
 
-The FSAE vehicle (`models/fsae_vehicle/model.sdf`) uses STL meshes (`meshes/carBody.stl`, `meshes/carTire.stl`) for visuals with simplified collision geometry:
+The FSAE vehicle (`models/fsae_vehicle/model.sdf`) uses STL meshes (`meshes/carBody.stl`, `meshes/carTire.stl`) for visuals with simplified collision geometry. **`model.sdf` is generated** — `scripts/generate_vehicle_model.py` renders `templates/model.sdf.in` from [`lhr_vehicle/config/vehicle.yaml`](src/lhr_vehicle/README.md), so the numbers below are Orion's and shared with the controller, the kinematic sim and perception:
 
-| Parameter | Value |
-|-----------|-------|
-| Wheelbase | 1.6 m |
-| Track width | 1.2 m |
-| Wheel radius | 0.2 m |
-| Chassis mass | 200 kg |
-| Wheel mass | 8 kg each |
-| Steering limits | ±0.7 rad (~40 deg) |
-| Reference point | Rear axle center at ground level |
+| Parameter | Value | Source |
+|-----------|-------|--------|
+| Wheelbase | 1.5494 m | BobSim |
+| Track width | 1.2122 m | BobSim |
+| Wheel radius | 0.2045 m | BobSim |
+| Chassis mass | 160.6 kg (no driver) | BobSim |
+| Wheel mass | 8.5 kg each | BobSim |
+| Steering limit | ±0.55 rad (~31.5 deg) | assumed until measured |
+| Reference point | Rear axle center at ground level | — |
+
+Edit `vehicle.yaml`, rerun the generator, and commit both files together; `generate_vehicle_model.py --check` (and `lhr_gazebo`'s tests) fail when they disagree.
 
 ### Joint control architecture
 
@@ -401,10 +405,10 @@ Cone pairing strategies:
 
 | Param | Default | Description |
 |-------|---------|-------------|
-| `wheelbase` | `1.6` | Wheelbase in meters |
+| `wheelbase` | from `vehicle.yaml` | Wheelbase in meters (default: `lhr_vehicle`) |
 | `update_hz` | `50.0` | Simulation step rate (Hz) |
-| `max_steer` | `0.45` | Max steering angle (rad) |
-| `max_speed` | `15.0` | Max speed (m/s) |
+| `max_steer` | from `vehicle.yaml` | Max steering angle (rad) (default: `lhr_vehicle`) |
+| `max_speed` | from `vehicle.yaml` | Max speed (m/s) (default: `lhr_vehicle`) |
 | `frame_id` | `"map"` | Parent TF frame |
 | `child_frame_id` | `"base_link"` | Child TF frame |
 | `init_x` | `0.0` | Initial X position (m) |
@@ -488,8 +492,8 @@ Speed is planned from path curvature:
 | `lookahead_dist` | `4.0` | Max lookahead distance on straights (m) |
 | `lookahead_min` | `2.0` | Min lookahead distance on tight curves (m) |
 | `lookahead_curvature_gain` | `3.0` | How aggressively lookahead shortens with curvature |
-| `max_steer` | `0.55` | Max steering angle (rad) |
-| `wheelbase` | `1.6` | Wheelbase for steering calc (m) |
+| `max_steer` | from `vehicle.yaml` | Max steering angle (rad) (default: `lhr_vehicle`) |
+| `wheelbase` | from `vehicle.yaml` | Wheelbase for steering calc (m) (default: `lhr_vehicle`) |
 | `control_hz` | `20.0` | Control loop rate (Hz) |
 | `a_lat_max` | `6.0` | Max lateral acceleration for speed law (m/s^2) |
 | `v_min` | `2.0` | Minimum commanded speed (m/s) |
@@ -512,12 +516,7 @@ Debug topics: `/lhr/debug/curvature` and `/lhr/debug/v_cmd` (both `std_msgs/Floa
 
 Converts `AckermannDriveStamped` into 6 individual Gazebo joint commands with proper Ackermann differential steering geometry.
 
-| Constant | Value | Description |
-|----------|-------|-------------|
-| `WHEELBASE` | `1.6` | Wheelbase (m) |
-| `TRACK_WIDTH` | `1.2` | Kingpin-to-kingpin distance (m) |
-| `WHEEL_RADIUS` | `0.2` | Wheel radius (m) |
-| `MAX_STEER` | `0.69` | Steering clamp, slightly inside ±0.7 joint limit (rad) |
+Wheelbase, track width, wheel radius and the steering clamp come from `lhr_vehicle` (`vehicle.yaml`) at startup — the same values the generated `model.sdf` uses, so the adapter and the model cannot disagree.
 
 **Ackermann geometry:** When turning left, the left (inner) wheel steers at a sharper angle than the right (outer) wheel. The adapter computes both angles from the bicycle-model center angle using:
 ```

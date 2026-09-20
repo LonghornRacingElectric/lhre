@@ -8,6 +8,7 @@
   <license>MIT</license>
 
   <exec_depend>rclpy</exec_depend>
+  <exec_depend>lhr_vehicle</exec_depend>
   <exec_depend>ros_gz_bridge</exec_depend>
   <exec_depend>ros_gz_sim</exec_depend>
   <exec_depend>ros_gz_interfaces</exec_depend>

@@ -5,6 +5,7 @@ import math
 
 from ackermann_msgs.msg import AckermannDriveStamped
 from geometry_msgs.msg import Quaternion, TransformStamped, Vector3
+from lhr_vehicle import load_vehicle
 from nav_msgs.msg import Odometry
 import rclpy
 from rclpy.node import Node
@@ -25,11 +26,12 @@ class SimKinematic(Node):
     def __init__(self):
         super().__init__('sim_kinematic')
 
-        # --- Parameters ---
-        self.declare_parameter('wheelbase', 1.6)
+        # --- Parameters (vehicle defaults come from lhr_vehicle) ---
+        veh = load_vehicle()
+        self.declare_parameter('wheelbase', veh.wheelbase_m)
         self.declare_parameter('update_hz', 50.0)
-        self.declare_parameter('max_steer', 0.45)
-        self.declare_parameter('max_speed', 15.0)
+        self.declare_parameter('max_steer', veh.max_steer_rad)
+        self.declare_parameter('max_speed', veh.max_speed_mps)
         self.declare_parameter('frame_id', 'map')
         self.declare_parameter('child_frame_id', 'base_link')
         self.declare_parameter('init_x', 0.0)
