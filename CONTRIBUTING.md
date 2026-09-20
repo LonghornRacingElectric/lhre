@@ -14,8 +14,17 @@ everywhere.
 
 - Branch from `main`: `<your-name>/<short-description>` (e.g.
   `dhairya/vcu-can-heartbeat`).
-- Open a PR; every change needs a review and a green presubmit before merge.
-  No direct pushes to `main`.
+- Open a PR; the `main` ruleset requires one approving review from someone
+  other than the author and a green presubmit before merge. No direct
+  pushes to `main`.
+- Reviews are routed by `.github/CODEOWNERS`: a PR touching `autonomy/`
+  automatically requests the `@LonghornRacingElectric/autonomous` team,
+  and the approving review must come from one of its members (code-owner
+  review is required). Paths without an owner can be approved by anyone
+  with write access.
+- Repository admins can bypass these rules (the ruleset lists the admin
+  role as a bypass actor); every bypass is logged and shown on the PR, so
+  use it for stalled reviews, not as the normal path.
 - Presubmit runs `bazel test //...` (builds all firmware, runs host tests)
   and `bazel run //tools/format:check`. Run both locally before pushing.
 - `autonomy/` is outside Bazel
