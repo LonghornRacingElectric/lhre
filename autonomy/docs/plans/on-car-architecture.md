@@ -117,4 +117,4 @@ replaces it.
 
 Related: [retrofit roadmap](retrofit-roadmap-2026-27.md) (dates),
 [camera fusion](camera-fusion.md) (perception detail),
-`lhr_vehicle/config/vehicle.yaml` (vehicle numbers; lands with PR #47).
+[`lhr_vehicle`](../../ros2/src/lhr_vehicle/README.md) (vehicle numbers).
