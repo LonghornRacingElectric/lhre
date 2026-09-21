@@ -8,6 +8,11 @@ import sys
 
 
 def main() -> int:
+    """Generate the Python protobuf module requested on the command line.
+
+    Print usage and return 1 when fewer than four paths are provided; after
+    invoking protoc, return its exit status.
+    """
     if len(sys.argv) < 5:
         print(
             "Usage: generate_can_packets_pb2.py <protoc_path> <proto_src> <rule_dir> <out_file>",
