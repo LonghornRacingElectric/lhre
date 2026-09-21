@@ -10,6 +10,7 @@ Solid boxes exist today (ours, or off-the-shelf drivers). Dashed boxes are
 not written yet.
 
 ```mermaid
+%%{init: {'flowchart': {'nodeSpacing': 18, 'rankSpacing': 28, 'padding': 6, 'curve': 'basis'}}}%%
 flowchart LR
     classDef planned stroke-dasharray: 6 4
 
@@ -21,12 +22,10 @@ flowchart LR
     end
 
     subgraph jetson["Jetson Orin NX 16 GB — ROS 2 Jazzy"]
-        subgraph drivers["Drivers"]
-            dlidar["velodyne_driver"]
-            dcam["zed-ros2-wrapper"]
-            dgnss["LocusLock ROS 2 driver"]:::planned
-            dcan["ros2_socketcan"]
-        end
+        dlidar["velodyne_driver"]
+        dcam["zed-ros2-wrapper"]
+        dgnss["LocusLock ROS 2 driver"]:::planned
+        dcan["ros2_socketcan"]
         subgraph perception["Perception"]
             det["lidar_cone_detector"]
             cls["cone_color_classifier"]:::planned
