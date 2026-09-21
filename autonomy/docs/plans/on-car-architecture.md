@@ -6,13 +6,17 @@ have one picture to build toward. Hardware is the 8/2 decided order and the
 node names follow the Software Architecture page in Notion — if this page
 and Notion disagree, Notion wins.
 
-Solid boxes exist today (ours, or off-the-shelf drivers). Dashed boxes are
-not written yet.
+Orange boxes are hardware. White boxes with a solid border exist today
+(ours, or off-the-shelf drivers); dashed orange borders are not written yet.
 
 ```mermaid
-%%{init: {'flowchart': {'nodeSpacing': 18, 'rankSpacing': 28, 'padding': 6, 'curve': 'basis'}}}%%
 flowchart LR
-    classDef planned stroke-dasharray: 6 4
+    %% LHR palette: burnt orange #bf5700 for hardware, charcoal for software,
+    %% dashed light orange for what is not written yet. Fills work on the
+    %% site's light and dark schemes.
+    classDef hw fill:#bf5700,stroke:#9e4600,color:#ffffff
+    classDef sw fill:#ffffff,stroke:#333f48,color:#0f141c
+    classDef planned fill:#ffffff,stroke:#ea6d14,stroke-width:2px,stroke-dasharray:6 4,color:#0f141c
 
     subgraph sensors["Sensors — mast and chassis"]
         lidar["Velodyne VLP-16<br>Ethernet, 10 Hz"]
@@ -22,10 +26,12 @@ flowchart LR
     end
 
     subgraph jetson["Jetson Orin NX 16 GB — ROS 2 Jazzy"]
-        dlidar["velodyne_driver"]
-        dcam["zed-ros2-wrapper"]
-        dgnss["LocusLock ROS 2 driver"]:::planned
-        dcan["ros2_socketcan"]
+        subgraph drivers["Drivers"]
+            dlidar["velodyne_driver"]
+            dcam["zed-ros2-wrapper"]
+            dgnss["LocusLock ROS 2 driver"]:::planned
+            dcan["ros2_socketcan"]
+        end
         subgraph perception["Perception"]
             det["lidar_cone_detector"]
             cls["cone_color_classifier"]:::planned
@@ -77,6 +83,16 @@ flowchart LR
     dcan <--> vcu
     res --> relay --> spring
     relay -- "torque enable" --> vcu
+
+    class lidar,cam,gnss,imu,steer,brake,vcu,res,relay,spring hw
+    class dlidar,dcam,dcan,det,tb,pp,mm sw
+    style sensors fill:#bf570014,stroke:#bf5700
+    style jetson fill:#bf57000d,stroke:#bf5700
+    style drivers fill:#bf57000d,stroke:#d66c1e
+    style perception fill:#bf57000d,stroke:#d66c1e
+    style pnc fill:#bf57000d,stroke:#d66c1e
+    style can fill:#bf570014,stroke:#bf5700
+    style loop fill:#bf570014,stroke:#9e4600,stroke-width:2px
 ```
 
 ## What changes between sim and car
