@@ -65,7 +65,6 @@ pkg_tar(
 alias(
     name = "current_schema_proto",
     actual = "//apps/BEVO/schema:can_packets.proto",
-    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -75,7 +74,6 @@ filegroup(
         ":current_schema_proto",
         "//apps/BEVO/schema:can_json",
     ],
-    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 

@@ -22,6 +22,12 @@ package(default_visibility = ["//apps/telemetry:__subpackages__"])
 # - the selected //apps/telemetry:current_schema_proto -> this genrule
 # ---------------------------------------------------------------------------
 
+py_binary(
+    name = "gen_can_packets_pb2",
+    srcs = ["generate_can_packets_pb2.py"],
+    main = "generate_can_packets_pb2.py",
+)
+
 genrule(
     name = "can_packets_pb2",
     srcs = [
@@ -30,23 +36,11 @@ genrule(
     outs = [
         "protobuf/can_packets_pb2.py",
     ],
-    cmd = """\
-set -euo pipefail
-
-mkdir -p "$(RULEDIR)/protobuf"
-
-# Protoc writes <basename>_pb2.py based on the input filename.
-cp "$(location //apps/telemetry:current_schema_proto)" "$(RULEDIR)/can_packets.proto"
-
-$(location //tools/protoc) \\
-  --proto_path="$(RULEDIR)" \\
-  --python_out="$(RULEDIR)/protobuf" \\
-  "$(RULEDIR)/can_packets.proto"
-""",
+    cmd = "$(execpath :gen_can_packets_pb2) $(location //tools/protoc) $(location //apps/telemetry:current_schema_proto) $(RULEDIR) $@",
     tools = [
+        ":gen_can_packets_pb2",
         "//tools/protoc",
     ],
-    target_compatible_with = NOT_WINDOWS,
 )
 
 # Export configuration files for Docker compose and testing

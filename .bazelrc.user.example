@@ -13,4 +13,8 @@ common --remote_header=x-buildbuddy-api-key=YOUR_KEY_HERE
 # tools that import the pip protobuf runtime stay under the 260-char
 # MAX_PATH. See the "Windows MAX_PATH" comment in .bazelrc for the story.
 # startup --output_user_root=C:/_bzl
+#
+# Windows only — Bazel requires Git Bash / MSYS2 bash (NOT WSL bash).
+# If WindowsApps or WSL bash is detected first on PATH, point Bazel to Git Bash:
+# build --shell_executable="C:/Program Files/Git/bin/bash.exe"
 

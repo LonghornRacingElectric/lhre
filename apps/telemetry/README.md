@@ -94,8 +94,9 @@ bazel test --config=local //apps/telemetry:integration_tests \
 ```
 
 Bazel receives only the listed variables; the ignored root `.env` is never an
-action input or container-image layer. The integration targets run on Linux
-and macOS and are intentionally incompatible with Windows.
+action input or container-image layer. The container images, server ingestion,
+and integration targets run on Linux and macOS and are intentionally
+incompatible with native Windows.
 
 Docker-backed targets are manual/local and are exercised by the telemetry CI
 workflow. Normal repo presubmit remains service-free.
