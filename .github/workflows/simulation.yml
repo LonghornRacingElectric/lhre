@@ -1,0 +1,40 @@
+name: simulation
+
+# simulation/ runs BobSim in Docker, outside Bazel
+# (docs/architecture/012-simulation-outside-bazel.md), so presubmit's
+# `bazel test //...` never sees it. Not a required check on main: a
+# path-filtered required check would block every PR that does not touch it.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "simulation/**"
+      - "vehicle/**"
+      - ".gitmodules"
+      - ".github/workflows/simulation.yml"
+  pull_request:
+    paths:
+      - "simulation/**"
+      - "vehicle/**"
+      - ".gitmodules"
+      - ".github/workflows/simulation.yml"
+  workflow_dispatch:
+
+jobs:
+  simulation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: simulation
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Build the image
+        run: make build
+
+      - name: Check that BobSim loads the vehicle
+        run: make test
