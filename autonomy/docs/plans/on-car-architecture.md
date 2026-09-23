@@ -97,10 +97,10 @@ interface swaps (see the
 |-----------|------------|-------|
 | Gazebo GPU LiDAR (VLP-16 model) / `sensor_sim` cones | Livox Mid-360 through `livox_ros_driver2`, same `lidar_cone_detector`. The Gazebo sensor stays a VLP-16 until someone models the Mid-360's rosette in `gpu_lidar` | Perception (car), Sim & test infra (model) |
 | No camera; unclassified cones | ZED 2i → `cone_color_classifier` → `cone_fusion`; color-aware Delaunay | Perception |
-| Ground-truth `OdometryPublisher` | `lhr_state_estimation` EKF on the Mid-360 IMU (ZED IMU as backup) + LocusLock RTK position/heading + wheel speeds + steer angle | State estimation |
+| Ground-truth `OdometryPublisher` | `lhr_state_estimation` EKF on the Mid-360 IMU (ZED IMU as backup) + LocusLock RTK position + wheel speeds + steer angle. Moving-base heading only if the second LocusLock unit works; otherwise the EKF derives heading from GNSS velocity and the IMU | State estimation |
 | `pure_pursuit` publishes a speed; Gazebo sets wheel velocity directly | Longitudinal controller turns speed into throttle and brake (with software brake bias) | Planning & control |
-| `joint_cmd_adapter` → Gazebo joints | `vehicle_interface` → CAN: column angle to the steering motor, actuator position to the brake, torque request to the VCU; feedback back in | Sim & test infra + ELC |
-| `auto_go` timer | Go over the remote heartbeat link; `safety_node` heartbeat that the VCU watchdogs | Lead + ELC |
+| `joint_cmd_adapter` → Gazebo joints | `vehicle_interface` → CAN: column angle to the steering motor, a brake command whose semantics wait on the DYN redesign, torque request to the VCU; feedback back in | Sim & test infra + ELC |
+| `auto_go` timer | An explicit go command from the pit device over the same link as the heartbeat. Heartbeat presence is liveness only and never grants go. `safety_node` heartbeat that the VCU watchdogs | Lead + ELC |
 | RViz and PlotJuggler on the dev box | BEVO relays autonomy status frames from CAN over 5G to the existing telemetry stack; point clouds stay in rosbag on the Jetson; RViz only over Ethernet with the car parked. There is no WiFi on the car | Telemetry + Sim & test infra |
 | `map → base_link` only | `map → odom → base_link` plus sensor frames with measured extrinsics | State estimation |
 | `use_sim_time` | PPS from GNSS into the LiDAR, PTP/chrony on the Jetson | Sim & test infra |
@@ -115,11 +115,22 @@ hardware:
   stop; that GPIO sits in the normally-energized relay chain. The Pi's
   software can keep the chain alive and can never hold it open: a crashed
   daemon, a frozen kernel, a dead modem, or a lost cell all read as "brakes
-  on". The timeout comes from measured link-gap statistics, not a guess;
-  BEVO already streams, so log heartbeat gaps at the test site first.
+  on". Only authenticated, fresh heartbeats count: each carries a sequence
+  number and a MAC under a key shared with the pit device, and the validator
+  on BEVO drops anything unsigned, stale, or replayed before it can touch the
+  GPIO, so a replayed packet cannot hold the chain closed. The timeout comes
+  from measured link-gap statistics, not a guess; BEVO already streams, so
+  log heartbeat gaps at the test site first.
 - **Jetson.** `safety_node` publishes a heartbeat on CAN and the VCU
   watchdogs it, dropping torque enable when it stops. `safety_node` maps
   stack-side faults onto the same chain; it never replaces it.
+
+Three signals, in priority order. The relay chain is hardware and wins over
+everything. The remote heartbeat is liveness: its absence stops the car, its
+presence permits nothing. Go is an explicit command from the pit device;
+`mission_manager` moves READY → DRIVING only with go received and both
+heartbeats alive, and the `mode` that `safety_node` sends to
+`vehicle_interface` is that enable state, so a lost heartbeat clears it.
 
 Power loss or a de-energized chain removes torque enable and lets the spring
 apply the brakes.
@@ -139,8 +150,9 @@ apply the brakes.
 - Steering command semantics: column angle versus road-wheel angle, and the
   measured rack ratio. `vehicle.yaml` is the home for the numbers.
 - The remote e-stop is the 5G heartbeat unless the GF2000i sponsorship
-  lands. The BEVO board needs the hardware timer and the GPIO into the relay
-  chain (Telemetry + ELC), and the timeout needs measured link data.
+  lands. Telemetry owns the heartbeat validator, the key handling, and the
+  sequence state on BEVO; ELC owns the hardware timer and the GPIO into the
+  relay chain; the timeout needs measured link data.
 - The LocusLock integration: ROS 2 driver, output rate, whether the pair
   gives heading directly (moving-base) or the EKF derives it, and whether
   the second unit works at all after ELC looks at it.
