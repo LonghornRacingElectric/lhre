@@ -29,7 +29,7 @@ Measured on a Windows laptop with Docker Desktop, BobSim `7ff5191`:
 | `make test` | under 10 s |
 | `make records` | under 10 s |
 | `make bobsim T=standard-build` | 2 min 20 s to 2 min 35 s |
-| `make bobsim T=envelope-ggv` | more than 50 min, one core |
+| `make bobsim T=envelope-ggv` | 1 h 55 min, one core |
 
 Start long targets in the background. Do not run them in CI.
 

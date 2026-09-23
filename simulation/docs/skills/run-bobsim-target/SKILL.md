@@ -28,7 +28,7 @@ description: Run a BobSim make target (standard evaluation, envelope, lap sim, s
    make bobsim T=<target>
    ```
 
-   Some targets take more than 50 minutes. Run them in the background.
+   Some targets take up to two hours. Run them in the background.
 5. Find the outputs. BobSim writes them inside `bobsim/`, for example
    `bobsim/_3_StandardSim/generated_results/`. Copy what you need to
    `out/`. Do not commit them.
