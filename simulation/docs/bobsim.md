@@ -25,10 +25,11 @@ Measured on a Windows laptop with Docker Desktop, BobSim `7ff5191`:
 
 | Command | Time |
 | ------- | ---- |
-| `make init` (image cached) | about 1 min |
+| `make init` on a fresh clone (image cached) | 1 min 35 s |
 | `make test` | under 10 s |
-| `make bobsim T=standard-build` | 2 min 35 s |
-| `make bobsim T=envelope-ggv` | more than 15 min |
+| `make records` | under 10 s |
+| `make bobsim T=standard-build` | 2 min 20 s to 2 min 35 s |
+| `make bobsim T=envelope-ggv` | more than 50 min, one core |
 
 Start long targets in the background. Do not run them in CI.
 
@@ -41,6 +42,10 @@ Start long targets in the background. Do not run them in CI.
 - The Modelica tier compiles BobLib's `.mo` records. Run `make records`
   first. It writes our vehicle into those records inside the submodule.
   Do not commit those files. `make records-undo` puts them back.
+- At `7ff5191`, BobLib's checked-in records do not match BobSim's generator
+  output, even for BobSim's own `vehicle.yml`. Most of the difference is
+  formatting. So BobSim's `sync-vehicle` reports "stale" before you change
+  anything. This is not a problem with our vehicle.
 
 ## The pin
 
