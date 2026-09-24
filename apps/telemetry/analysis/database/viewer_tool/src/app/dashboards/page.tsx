@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 
 export default function DashboardsPage() {
   useEffect(() => {
-    window.location.href = 'https://lhrelectric.org/grafana';
+    window.location.href = 'https://telemetry.lhre.org/grafana';
   }, []);
 
   return (
