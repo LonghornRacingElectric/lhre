@@ -3,3 +3,4 @@
 /autonomy/  @LonghornRacingElectric/autonomous
 /simulation/ @raorjun @ABatraCS
 /vehicle/    @raorjun @ABatraCS
+/apps/telemetry/ @LonghornRacingElectric/telemetry
