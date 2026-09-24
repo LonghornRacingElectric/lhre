@@ -230,7 +230,7 @@ The diff shows two things:
 - In the CSV, your cell gained a `#N` suffix. That is its field number,
   written back so it stays fixed.
 - In the proto, `message DiagnosticsHigh` gained `bool practice_fault = N;`.
-  N is `39` at the time of writing. It will be higher if fields have been
+  N is `40` at the time of writing. It will be higher if fields have been
   added since.
 
 Skipping this step is a common real mistake. The CSV and proto disagree, and

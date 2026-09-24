@@ -58,8 +58,8 @@ loosely, so most mistakes lose a signal instead of failing:
   any other type breaks `//apps/BEVO:sensor_proto` with a Rust `E0308`.
 - **Only `unused` cells are free.** A blank cell after a `uint16`/`uint32` is
   that signal's continuation byte. If you put a signal there, the generator
-  quietly shifts every later signal in the row (`0x1A2` relies on this
-  shift). The DLC is not checked against the signals either.
+  quietly shifts every later signal in the row. The DLC is not checked
+  against the signals either.
 - **Reusing an existing proto name merges into that field.** That's
   intentional when several packets carry the same quantity (`motor_temp`), and
   silent otherwise. If the type differs, the updater refuses: a field's
@@ -72,8 +72,7 @@ loosely, so most mistakes lose a signal instead of failing:
 - **Never type `#N` yourself.** The updater assigns ids. A hand-typed one
   that collides stops the run with `Duplicate proto id`.
 - **In `can_bitfields.csv` the separator is `;` too.** A bit cell without it
-  is dropped silently. `vcu_shutdown_faults` bit 2 (`...: shutdown_msd_status`)
-  is dropped this way today.
+  is dropped silently.
 
 These files came from `drivers/longhorn-lib` in
 [lhre-2026](https://github.com/LonghornRacingElectric/lhre-2026); this copy
