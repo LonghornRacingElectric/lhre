@@ -5,7 +5,7 @@ vehicle:
 architecture:
   front: bellcrank_stabar
   rear: bellcrank_stabar
-paths:  # resolved from the BobSim root, simulation/bobsim
+paths:
   boblib: _0_Utils/external/BobLib/BobLib
   tire_templates: ../../vehicle/tires
 sprung_mass:

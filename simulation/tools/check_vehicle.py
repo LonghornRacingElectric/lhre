@@ -1,5 +1,3 @@
-"""Fail if BobSim cannot load //vehicle:vehicle.yml."""
-
 import os
 import sys
 from pathlib import Path

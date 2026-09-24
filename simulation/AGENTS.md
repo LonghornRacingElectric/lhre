@@ -47,6 +47,19 @@ a Bazel package tree
   Move shared code into BobSim.
 - Files are LF. On Windows, check new files before you commit.
 
+## Comments
+
+- Do not add a comment unless the code cannot work without the reader
+  knowing it. This applies to every file: Python, Makefiles, compose files,
+  CI workflows, `BUILD.bazel`, `.gitignore`, YAML and `mkdocs.yml`.
+- Do not add header comments or docstrings that say what a file or function
+  does. The name and the README say that.
+- Put the reason for a decision in the README, the docs or the PR
+  description, not in a comment.
+- If a comment is necessary, keep it to one line.
+- If you change code under an existing comment, keep the comment true. Do
+  not delete other people's comments without a reason.
+
 ## Writing
 
 Write docs, comments and study results in Simplified Technical English:

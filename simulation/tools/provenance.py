@@ -1,5 +1,3 @@
-"""Write out/<study>/provenance.json before a study runs."""
-
 import datetime
 import hashlib
 import json

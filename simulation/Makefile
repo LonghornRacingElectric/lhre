@@ -4,8 +4,6 @@ COMPOSE ?= docker compose
 RUN := $(COMPOSE) run --rm -T
 BOBSIM_SHA = $(shell git -C bobsim rev-parse HEAD)
 
-# The container reads these files, so Windows checkouts must stay LF. BobLib
-# paths also pass the 260-character Windows limit.
 GIT_LF := git -c core.autocrlf=false -c core.longpaths=true
 
 .PHONY: help init build shell test records records-undo bobsim study bump-bobsim clean
@@ -38,7 +36,6 @@ shell:
 test:
 	$(RUN) sim python tools/check_vehicle.py
 
-# The files BobSim's modelica_generator writes for our vehicle. Do not commit them.
 BOBLIB := bobsim/_0_Utils/external/BobLib
 VEHICLE_NAME = $(shell sed -n 's/^  name: *//p' ../vehicle/vehicle.yml | head -n 1)
 RECORD_FILES = \

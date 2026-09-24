@@ -161,8 +161,8 @@ plugins:
         - "autonomy/ros2/build/**" # colcon outputs on dev machines
         - "autonomy/ros2/install/**"
         - "autonomy/ros2/log/**"
-        - "simulation/bobsim/**" # BobSim submodule, documented upstream
-        - "simulation/out/**" # study outputs
+        - "simulation/bobsim/**"
+        - "simulation/out/**"
         - "apps/telemetry/stack/ingest/grafana-kafka-datasource/**" # vendored plugin
 
 theme:

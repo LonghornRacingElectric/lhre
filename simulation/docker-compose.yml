@@ -1,5 +1,3 @@
-# The image is BobSim's own. The repo root is mounted so studies can read
-# //vehicle and git can resolve the submodule.
 services:
   sim:
     build:
