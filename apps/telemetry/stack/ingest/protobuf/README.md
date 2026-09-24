@@ -1,27 +1,34 @@
 This folder contains protobuf schemas and generated Python modules used by the telemetry ingest service.
 
-There are two common workflows for the generated CAN schema bindings:
+`can_packets_pb2.py` is Orion's schema compiled for Python. Its source is
+`apps/BEVO/schema/can_packets.proto`, reached through the
+`//apps/telemetry:current_schema_proto` alias. That proto is itself generated
+from the CAN CSVs by `//apps/BEVO/schema:update_can_proto`; see the
+[schema README](../../../../BEVO/schema/README.md). Never edit either file by
+hand.
+
+There are two ways to get the bindings. Both use `--config=local`, since the
+default config needs a BuildBuddy API key.
 
 ## 1) Bazel build output (recommended for builds)
 
-Compiles the Longhorn-generated CAN schema into a Python `_pb2.py` module as a normal Bazel output:
+```bash
+bazel build --config=local //apps/telemetry/stack/ingest:can_packets_pb2
+```
 
-- `bazel build //apps/telemetry/stack/ingest:can_packets_pb2`
+Writes `bazel-bin/apps/telemetry/stack/ingest/protobuf/can_packets_pb2.py`.
+It rebuilds whenever `can_packets.proto` changes.
 
-Output path:
+## 2) Workspace writer (for local dev and non-Bazel runs)
 
-- `bazel-bin/telemetry/stack/ingest/protobuf/can_packets_pb2.py`
+```bash
+bazel run --config=local //apps/telemetry/stack/ingest:update_can_packets_pb2
+```
 
-This target depends on `//drivers/longhorn-lib:can_proto`, so changing `drivers/longhorn-lib/config/can_packets.csv` triggers regeneration.
+Copies the build output over `can_packets_pb2.py` in this folder. The
+checked-in copy is only as fresh as the last time someone ran this, so run it
+after `can_packets.proto` changes if anything imports
+`stack.ingest.protobuf.can_packets_pb2` outside Bazel.
 
-## 2) Workspace writer (useful for local dev / non-Bazel runs)
-
-Materializes the generated module into this source folder:
-
-- `bazel run //apps/telemetry/stack/ingest:update_can_packets_pb2`
-
-Output path:
-
-- `telemetry/stack/ingest/protobuf/can_packets_pb2.py`
-
-Note: Bazel provides the `protoc` compiler via the `protobuf` module dependency declared in `MODULE.bazel`.
+Bazel provides `protoc` through the `protobuf` module in `MODULE.bazel`, so
+you don't install it yourself.
