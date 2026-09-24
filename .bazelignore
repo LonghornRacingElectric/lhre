@@ -6,5 +6,6 @@ bazel-lhre
 site
 .mkdocs-build
 autonomy
+simulation
 external
 C

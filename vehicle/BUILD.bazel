@@ -1,0 +1,10 @@
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "vehicle.yml",
+])
+
+filegroup(
+    name = "tires",
+    srcs = glob(["tires/*.tir"]),
+)

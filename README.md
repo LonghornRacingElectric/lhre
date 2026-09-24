@@ -55,6 +55,8 @@ flash it all with Bazel.
 | [`boards/`](boards/README.md)  | Per-ECU firmware projects ([`boards/VCU`](boards/VCU/README.md) is the reference layout). |
 | [`tools/`](tools/README.md)   | Build and dev tooling: [`firmware_project`](tools/firmware/README.md), flashing, [VS Code debugging](tools/debug/README.md), formatting. |
 | [`autonomy/`](https://github.com/LonghornRacingElectric/lhre/tree/main/autonomy) | The driverless stack: ROS 2 Jazzy + Gazebo, built with colcon rather than Bazel ([ADR-009](docs/architecture/009-autonomy-outside-bazel.md)). |
+| [`simulation/`](simulation/README.md) | Vehicle dynamics studies on [BobSim](https://github.com/BobDyn/BobSim), run with Make and Docker rather than Bazel ([ADR-012](docs/architecture/012-simulation-outside-bazel.md)). |
+| [`vehicle/`](vehicle/README.md) | The current car's parameters (`vehicle.yml`, tire models). One source for simulation and any Bazel target. |
 
 There are no per-year directories: `main` is always the current car, and past
 seasons live in tags and maintenance branches (see

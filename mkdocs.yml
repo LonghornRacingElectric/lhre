@@ -19,6 +19,7 @@ nav:
       - ADR-008 CAN Spec Pipeline: docs/architecture/008-can-spec-pipeline.md
       - ADR-009 Autonomy Outside Bazel: docs/architecture/009-autonomy-outside-bazel.md
       - ADR-010 Telemetry Stack in Bazel: docs/architecture/010-telemetry-stack-in-bazel.md
+      - ADR-012 Simulation Outside Bazel: docs/architecture/012-simulation-outside-bazel.md
       - Build System: docs/build-system.md
       - Cookbook: docs/cookbook.md
   - Boards:
@@ -65,6 +66,18 @@ nav:
           - Vehicle Systems: autonomy/docs/rules/fsae-vehicle-systems.md
           - Competition Checklist: autonomy/docs/rules/fsae-competition-checklist.md
       - Agent Instructions: autonomy/AGENTS.md
+  - Simulation:
+      - Overview: simulation/README.md
+      - Vehicle: vehicle/README.md
+      - Docs: simulation/docs/README.md
+      - Studies: simulation/docs/studies.md
+      - BobSim: simulation/docs/bobsim.md
+      - Skills:
+          - Add a Study: simulation/docs/skills/add-study/SKILL.md
+          - Run a BobSim Target: simulation/docs/skills/run-bobsim-target/SKILL.md
+          - Edit the Vehicle: simulation/docs/skills/edit-vehicle/SKILL.md
+          - Bump BobSim: simulation/docs/skills/bump-bobsim/SKILL.md
+      - Agent Instructions: simulation/AGENTS.md
   - Apps:
       - Overview: apps/README.md
       - BEVO:
@@ -128,8 +141,10 @@ plugins:
         - drivers
         - lib
         - platforms
+        - simulation
         - toolchains
         - tools
+        - vehicle
         - "*.md"
       # Overriding `ignore` replaces the plugin defaults, so the defaults
       # (first five entries) are repeated here before our additions.
@@ -146,6 +161,8 @@ plugins:
         - "autonomy/ros2/build/**" # colcon outputs on dev machines
         - "autonomy/ros2/install/**"
         - "autonomy/ros2/log/**"
+        - "simulation/bobsim/**"
+        - "simulation/out/**"
         - "apps/telemetry/stack/ingest/grafana-kafka-datasource/**" # vendored plugin
 
 theme:

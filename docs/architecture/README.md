@@ -20,6 +20,7 @@ three years after everyone who made the decision graduated.
 | [009](009-autonomy-outside-bazel.md) | Autonomy (ROS 2) builds with colcon, outside Bazel | Accepted |
 | [010](010-telemetry-stack-in-bazel.md) | Telemetry server stack builds in Bazel, its tests run beside Docker | Superseded by ADR-011 |
 | [011](011-bazel-owned-telemetry-images.md) | Bazel owns every telemetry stack image; Compose only runs loaded tags | Accepted |
+| [012](012-simulation-outside-bazel.md) | Simulation runs BobSim in Docker, outside Bazel | Accepted |
 
 ## ADRs vs. READMEs
 

@@ -1,0 +1,15 @@
+services:
+  sim:
+    build:
+      context: bobsim
+      dockerfile: Dockerfile
+      network: host
+    image: lhre-simulation:local
+    volumes:
+      - ..:/lhre
+    working_dir: /lhre/simulation
+    network_mode: none
+    environment:
+      PYTHONPATH: /lhre/simulation/bobsim
+      BOBSIM_VEHICLE: /lhre/vehicle/vehicle.yml
+      MPLCONFIGDIR: /tmp/matplotlib
