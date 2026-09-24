@@ -35,9 +35,9 @@ make test    # check that BobSim loads //vehicle
 | `make shell` | Open a shell in the container |
 | `make test` | Check that BobSim loads `vehicle/vehicle.yml` and its tires |
 | `make records` | Write `vehicle/vehicle.yml` into BobLib's Modelica records |
-| `make records-undo` | Put BobLib's records back |
+| `make records-undo` | Put back only the files `make records` wrote |
 | `make bobsim T=<target>` | Run a BobSim make target. `T=help` lists them. |
-| `make study S=<name>` | Run `studies/<name>/run.py`. Write outputs to `out/<name>/`. |
+| `make study S=<name>` | Run `studies/<name>/run.py`. If it succeeds, write outputs to `out/<name>/`. |
 | `make bump-bobsim REF=<ref>` | Move the BobSim pin to a commit, tag or branch |
 | `make clean` | Delete `out/` |
 

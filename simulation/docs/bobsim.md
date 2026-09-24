@@ -41,7 +41,7 @@ Start long targets in the background. Do not run them in CI.
   `simulation/bobsim/vehicle.yml` until BobSim reads the variable.
 - The Modelica tier compiles BobLib's `.mo` records. Run `make records`
   first. It writes our vehicle into those records inside the submodule.
-  Do not commit those files. `make records-undo` puts them back.
+  Do not commit those files. `make records-undo` puts back only those files.
 - At `7ff5191`, BobLib's checked-in records do not match BobSim's generator
   output, even for BobSim's own `vehicle.yml`. Most of the difference is
   formatting. So BobSim's `sync-vehicle` reports "stale" before you change

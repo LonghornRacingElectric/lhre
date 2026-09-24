@@ -20,7 +20,7 @@ The script gets these environment variables:
 | Variable | Value |
 | -------- | ----- |
 | `BOBSIM_VEHICLE` | `/lhre/vehicle/vehicle.yml` |
-| `OUT_DIR` | `out/<name>`. It exists before `run.py` starts. |
+| `OUT_DIR` | `out/.staging/<name>`. It exists before `run.py` starts. |
 | `STUDY` | `<name>` |
 | `BOBSIM_SHA` | The pinned BobSim commit |
 
@@ -48,7 +48,10 @@ Use these sections:
 
 ## Provenance
 
-`make study` writes `out/<name>/provenance.json` before `run.py` starts:
+`make study` writes `provenance.json` to `OUT_DIR` before `run.py` starts.
+If `run.py` succeeds, `make study` moves `OUT_DIR` to `out/<name>/`. If it
+fails, `out/<name>/` keeps the last good result, and the failed run stays in
+`out/.staging/<name>/`.
 
 ```json
 {
