@@ -21,7 +21,8 @@ display telemetry:
 | field_enricher | configured derived fields | this repo |
 
 The optional set contains `gps_classifier`, `lap_timer`, `track_mapper`,
-`kafka_test`, `gg_plot`, and `car_status`. They consume or derive telemetry;
+`kafka_test`, `gg_plot`, `car_status`, `board_health`, and
+`events_faults`. They consume or derive telemetry;
 none is required to preserve the raw stream. `kafka_base` remains a developer
 template and is deliberately not a runnable stack image.
 

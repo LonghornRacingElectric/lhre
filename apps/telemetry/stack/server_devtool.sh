@@ -39,7 +39,7 @@
 #   help               this text
 #
 # Core      : kafka ingest field_enricher
-# Optional  : gps_classifier lap_timer track_mapper kafka_test gg_plot
+# Optional  : gps_classifier lap_timer track_mapper kafka_test gg_plot car_status board_health events_faults
 # Apps      : viewer (pm2)  logsync (docker)
 
 set -uo pipefail
@@ -82,6 +82,8 @@ track_mapper|processors/track_mapper|docker||//apps/telemetry/stack/processors/t
 kafka_test|processors/kafka_test|docker||//apps/telemetry/stack/processors/kafka_test:kafka_test_load
 gg_plot|processors/gg_plot|docker||//apps/telemetry/stack/processors/gg_plot:gg_plot_load
 car_status|processors/car_status|docker||//apps/telemetry/stack/processors/car_status:car_status_load
+board_health|processors/board_health|docker||//apps/telemetry/stack/processors/board_health:board_health_load
+events_faults|processors/events_faults|docker||//apps/telemetry/stack/processors/events_faults:events_faults_load
 logsync|logsync|docker
 viewer|../analysis/database/viewer_tool|pm2|viewer_tool
 "
@@ -90,7 +92,7 @@ viewer|../analysis/database/viewer_tool|pm2|viewer_tool
 CORE_ORDER="kafka ingest field_enricher"
 # user-facing apps (pulled logs worker + the Next.js viewer)
 APP_ORDER="logsync viewer"
-ALL_ORDER="kafka ingest field_enricher gps_classifier lap_timer track_mapper kafka_test gg_plot car_status logsync viewer"
+ALL_ORDER="kafka ingest field_enricher gps_classifier lap_timer track_mapper kafka_test gg_plot car_status board_health events_faults logsync viewer"
 
 # With no storage override, Docker owns the database/Kafka volumes and logsync
 # uses its local data directory.
