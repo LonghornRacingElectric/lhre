@@ -44,7 +44,8 @@ a Bazel package tree
 - Do not commit `out/`. Commit the study `README.md`, `run.py` and at most
   two small figures.
 - Keep each study in its own folder. Do not import one study from another.
-  Move shared code into BobSim.
+  Put code that more than one study needs in `tools/`. Treat BobSim as a
+  black box: do not change it for a study.
 - Files are LF. On Windows, check new files before you commit.
 
 ## Comments

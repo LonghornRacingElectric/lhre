@@ -37,7 +37,7 @@ make test    # check that BobSim loads //vehicle
 | `make records` | Write `vehicle/vehicle.yml` into BobLib's Modelica records |
 | `make records-undo` | Put back only the files `make records` wrote |
 | `make bobsim T=<target>` | Run a BobSim make target. `T=help` lists them. |
-| `make study S=<name>` | Run `studies/<name>/run.py`. If it succeeds, write outputs to `out/<name>/`. |
+| `make study S=<name>` | Run `studies/<name>/run.py`. If it succeeds, write outputs to `out/<name>/`. `STUDY_WORKERS=n` limits the CPUs for parallel cases. |
 | `make bump-bobsim REF=<ref>` | Move the BobSim pin to a commit, tag or branch |
 | `make clean` | Delete `out/` |
 
@@ -49,7 +49,7 @@ simulation/
   docker-compose.yml  # the image is built from bobsim/Dockerfile
   bobsim/             # submodule, pinned SHA
   studies/<name>/     # README.md + run.py
-  tools/              # make test and study provenance
+  tools/              # make test, study provenance and shared study helpers
   docs/               # detail and agent skills
   out/                # gitignored outputs
 ```
@@ -59,7 +59,8 @@ simulation/
 - It mounts the repo root at `/lhre`. The working directory is
   `/lhre/simulation`.
 - `BOBSIM_VEHICLE=/lhre/vehicle/vehicle.yml` and
-  `PYTHONPATH=/lhre/simulation/bobsim`.
+  `PYTHONPATH=/lhre/simulation/bobsim:/lhre/simulation`. Studies import
+  BobSim modules and `tools.<module>`.
 - It has no network (`network_mode: none`). Only the image build uses the
   network.
 
