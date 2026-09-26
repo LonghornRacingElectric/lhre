@@ -94,6 +94,10 @@ longitudinal, toe and mass cases run at 3.5 and 4.5 m.
 
 - **Limiting axle.** The script adds 1% grip to one axle and reads the
   change in max lateral g.
+- **First-principles optimum.** A closed-form optimum from each solved
+  limit state, to compare with the solver.
+- **Lap estimate.** Corners from BobSim's minimum-curvature line on the
+  Michigan 2019 endurance track.
 - **Time.** The time for a 180° turn at radius R: arc time plus exit
   carry-over `Δv / a_x`, with a rear traction limit of `a_x` = 1.17 g.
 
@@ -213,6 +217,36 @@ toe, in 10% steps. Negative toe-out is toe-in.
 change the gains by less than 0.4 points. +75% stays best in every
 variant.
 
+**First-principles check.** The optimum follows from two terms:
+
+- The two front wheels' path angles differ by Δθ. Rear slip moves the turn
+  center forward and makes Δθ smaller than the no-slip value `L·t/R²`.
+- For a front-limited car, max lateral g is
+  `Σ F_i · (L·cos δ_i ± (t/2)·sin δ_i) / b`. The yaw lever of the steered
+  inner wheel adds to lateral g, and the lever of the outer wheel
+  subtracts. Each front tire is best at the slip angle that maximizes its
+  weighted force.
+
+The best toe difference is `Δθ + α_in − α_out`, with each α from that
+weighted maximum. The script computes it from the solved limit state and
+converts it to Ackermann %.
+
+| R | Δθ | Rear slip | Predicted optimum | Solver optimum (10% steps) |
+| - | -- | --------- | ----------------- | -------------------------- |
+| 3.5 m | 7.1° | 3.5° | 76% | 80%, with 70% within 0.04% |
+| 4.5 m | 4.3° | 3.5° | 70% | 70% |
+| 6 m | 2.3° | 3.5° | 63% | flat from +50% to +75% |
+| 8 m | 1.2° | 3.5° | 56% | flat |
+
+- The optimum is below 100% because rear slip reduces the path-angle
+  difference, and because the yaw lever favors less outer slip.
+- Using each tire's own peak slip angle instead of the weighted maximum
+  gives 64% at 3.5 m. That is the simple rule, and it is about 12 points
+  low.
+- The same conversion predicts about 8 Ackermann points per degree of
+  toe at 3.5 m and 13 at 4.5 m. The solver's 10-point grid gives 10 and
+  20.
+
 **Screening result.** Pro-Ackermann in the +50% to +80% band at hairpin
 steer (20° to 30° roadwheel), measured with 0° static toe.
 
@@ -242,17 +276,28 @@ This has three costs:
 
 - Acceleration: no effect.
 - Skidpad (R = 9.125 m): between the 8 m and 15 m results, so no effect.
-- Autocross and endurance: multiply the time per tight corner by the number
-  of corners under about 6 m on the course. That takes one baseline lap,
-  not a lap-sim sweep.
+- Endurance, Michigan 2019: BobSim's minimum-curvature line depends only
+  on the track, not on the car. It is 1989 m long, with 42 corners under
+  15 m, 8 under 6 m, and a tightest radius of 4.5 m.
+  - For each corner, the script adds the arc time at its minimum radius and
+    the speed carried onto the next straight and into the braking zone.
+  - The low value uses the 1.17 g traction limit on exit and the 1.45 g
+    front-lock braking limit on entry. The high value uses 0.4 g and 0.5 g,
+    the combined levels near the corner limit.
+  - Time saved per lap compared with Front v19: +50%: 0.36 to 0.74 s. +75%:
+    0.37 to 0.76 s. +100%: 0.29 to 0.60 s.
+  - This is an estimate. The arc term puts each whole corner at its minimum
+    radius, which over-counts. It leaves out the LSD, which adds gain.
+- Autocross: use the same method on the autocross course.
 
 **Confidence.** The limits are in the scope and the inputs, not in the
 math.
 
 - **Math.** Solves converge to a residual under 1e-7. The gain falls about
-  as 1/R⁴, as mismatch² predicts. An independent implementation matches
-  the braking, throttle and toe results to 0.001 g. The Orion geometry
-  matches independent numbers.
+  as 1/R⁴, as mismatch² predicts. The closed-form optimum lands on the
+  solver's optimum at 3.5 m and 4.5 m. An independent implementation
+  matches the braking, throttle and toe results to 0.001 g. The Orion
+  geometry matches independent numbers.
 - **Scope.** The model is quasi-steady. It cannot show power-on rotation
   or trail-brake rotation beyond the steady state. It has no camber or
   steer camber, no compliance steer, no aligning moment and no yaw
@@ -299,6 +344,6 @@ Front v19 steering hardpoints on the Orion vehicle.
   "study": "front-ackermann",
   "bobsim_sha": "4da577af1b04d86c53706eb6e80fb0064f71cee6",
   "vehicle_sha256": "3ab02bbf3e573aad0330bc37ce40fd254090d33dabd3760462c51da74e30afe8",
-  "utc": "2026-09-26T17:01:53+00:00"
+  "utc": "2026-09-26T17:38:20+00:00"
 }
 ```

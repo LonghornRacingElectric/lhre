@@ -15,7 +15,10 @@ import yaml
 from scipy.optimize import brentq, least_squares, minimize_scalar
 
 from _0_Utils.kin_py.kinematics import CornerKinematics
-from _0_Utils.vehicle_io import load_yaml, parse_tir, tire_templates_root
+from _0_Utils.lap_sim.qss import GGVMap, _GGVSlice
+from _0_Utils.lap_sim.racing_line import optimize_racing_line
+from _0_Utils.lap_sim.track import TrackCorridor
+from _0_Utils.vehicle_io import load_yaml, parse_tir, repo_root, tire_templates_root
 from _2_EnvelopeSim.vehicle_yaml import project_vehicle_yaml
 from _5_App.tire_eval import _mf52_fx_pure, _mf52_fy_pure
 from tools.parallel import map_cases
@@ -55,6 +58,10 @@ MASS_CASES = (
     ("CG +20 mm", "cg_height", 0.020), ("CG -20 mm", "cg_height", -0.020),
     ("front +3 pts", "front_static_frac", 0.03), ("front -3 pts", "front_static_frac", -0.03),
 )
+LAP_CONFIG = "_3_StandardSim/LapTimeEval/lap_time_eval_config.yml"
+CORNER_RADIUS_MAX_M = 15.0
+EXIT_ACCEL_LOW_G = 0.4
+ENTRY_DECEL_LOW_G = 0.5
 GGV_FIELDS = ("mass", "wheelbase", "cg_height", "track_front", "track_rear", "front_static_frac", "lltd", "max_drive_force")
 
 FRONT_V19_M = {
@@ -443,6 +450,7 @@ def build_cases(ggv, tir, curves, outer_max, biases, orion, diff_cfg, rear_radiu
                 "kind": "mass", "car": car, "curves": braking_curves, "outer_max": outer_max, "radius": radius,
                 "lon": None, "probe": False, "labels": {"variant": name, "radius_m": radius},
             })
+    cases.append({"kind": "track"})
     for target in TIE_O_TARGETS_PCT:
         cases.append({"kind": "tie_o", "vehicle": orion, "target": target, "track": ggv.track_front, "wheelbase": ggv.wheelbase})
     return cases
@@ -451,7 +459,7 @@ def build_cases(ggv, tir, curves, outer_max, biases, orion, diff_cfg, rear_radiu
 def cost(case):
     if case["kind"] in ("braking", "drive") and case["car"].combined != "ellipse":
         return 0
-    return {"main": 1, "tie_o": 2, "braking": 3, "drive": 3, "regen": 3, "toe": 4, "mass": 4}[case["kind"]]
+    return {"track": 0, "main": 1, "tie_o": 2, "braking": 3, "drive": 3, "regen": 3, "toe": 4, "mass": 4}[case["kind"]]
 
 
 def solve_case(case):
@@ -459,6 +467,8 @@ def solve_case(case):
         return solve_main_case(case)
     if case["kind"] in ("braking", "drive", "toe", "regen", "mass"):
         return solve_braking_case(case)
+    if case["kind"] == "track":
+        return minimum_curvature_line()
     return tie_o_shift(case["vehicle"], case["target"], case["track"], case["wheelbase"])
 
 
@@ -535,6 +545,103 @@ def solve_braking_case(case):
             row["limiting_axle"] = limiting_axle(front, rear)
         rows.append(row)
     return rows
+
+
+def minimum_curvature_line():
+    config = load_yaml(repo_root() / LAP_CONFIG)["track"]
+    corridor = TrackCorridor.from_csv(repo_root() / config["boundary_csv"])
+    ay = np.linspace(0.0, 15.0, 16)
+    ax = np.sqrt(np.maximum(15.0**2 - ay**2, 0.0))
+    ggv = GGVMap(tuple(_GGVSlice(speed, ay, ax, -ax) for speed in (5.0, 40.0)))
+    result = optimize_racing_line(
+        corridor, ggv, mode="minimum_curvature", vehicle_width_m=config["vehicle_width_m"],
+        safety_margin_m=config["safety_margin_m"], sample_step_m=config["sample_step_m"],
+    )
+    return {
+        "track": config["boundary_csv"], "curvature": result.line.curvature_per_m,
+        "segment": result.line.segment_length_m, "length_m": float(result.line.track_length_m),
+    }
+
+
+def track_corners(line):
+    tight = np.abs(line["curvature"]) > 1.0 / CORNER_RADIUS_MAX_M
+    shift = int(np.argmin(tight))
+    kappa, seg, tight = (np.roll(a, -shift) for a in (np.abs(line["curvature"]), line["segment"], tight))
+    corners, i = [], 0
+    while i < len(tight):
+        if not tight[i]:
+            i += 1
+            continue
+        j = i
+        while j < len(tight) and tight[j]:
+            j += 1
+        corners.append((float(np.sum(kappa[i:j] * seg[i:j])), float(1.0 / kappa[i:j].max())))
+        i = j
+    return corners
+
+
+def braking_limit_g(car, bias):
+    fz = car.mass * G * car.front_frac / 2
+    mu = car.peak(car.fx_max_n[-1], 0, fz) / fz
+    return mu * car.front_frac / (bias - mu * car.cg_height / car.wheelbase)
+
+
+def lap_gain_s(corners, rows, exit_g, entry_g):
+    nominal = [r for r in rows if is_nominal(r)]
+
+    def ay_at(curve, radius):
+        values = [next(r["ay_max_g"] for r in nominal if r["radius_m"] == rr and r["curve"] == curve) for rr in RADII_M]
+        return float(np.interp(radius, RADII_M, values))
+
+    gains = {}
+    for curve in ("+50%", "+75%", "+100%"):
+        bounds = []
+        for exit_a, entry_a in zip(exit_g, entry_g):
+            total = 0.0
+            for theta, radius in corners:
+                r = max(radius, RADII_M[0])
+                v0, v1 = math.sqrt(ay_at("Front v19", r) * G * r), math.sqrt(ay_at(curve, r) * G * r)
+                total += theta * r * (1.0 / v1 - 1.0 / v0) - (v1 - v0) / (exit_a * G) - (v1 - v0) / (entry_a * G)
+            bounds.append(round(total, 3))
+        gains[curve] = bounds
+    return gains
+
+
+def optimum_check(car, rows):
+    out = {}
+    for radius in RADII_M[:4]:
+        row = next(r for r in rows if is_nominal(r) and r["radius_m"] == radius and r["curve"] == "+75%")
+        beta, speed = math.radians(row["beta_deg"]), row["speed_mps"]
+        yaw = speed / radius
+        path = [math.atan2(speed * math.sin(beta) + yaw * x, speed * math.cos(beta) - yaw * y) for x, y in car.corners[:2]]
+        loads = (row["fz_fl_n"], row["fz_fr_n"])
+        peaks = [car.peak(car.alpha_peak, i, fz) for i, fz in enumerate(loads)]
+        weighted = []
+        for i, (theta, fz) in enumerate(zip(path, loads)):
+            lever = car.corners[i][1]
+            res = minimize_scalar(
+                lambda a: -(car.wheelbase * math.cos(theta + a) + lever * math.sin(theta + a)) * lateral_n(car.tires[i], fz, a, 1.0),
+                bounds=(0.0, 0.3), method="bounded", options={"xatol": 1e-7},
+            )
+            weighted.append(res.x)
+
+        def optimum(alphas):
+            inner, outer = path[0] + alphas[0], path[1] + alphas[1]
+            return float(ackermann_pct(inner, outer, car.track_front, car.wheelbase)), inner, outer
+
+        simple = optimum(peaks)[0]
+        vehicle, inner, outer = optimum(weighted)
+        per_toe = float(ackermann_pct(inner + math.radians(1.0), outer, car.track_front, car.wheelbase)) - vehicle
+        out[f"{radius:g}m"] = {
+            "path_angle_difference_deg": round(math.degrees(path[0] - path[1]), 2),
+            "rear_slip_deg": round(0.5 * (row["alpha_rl_deg"] + row["alpha_rr_deg"]), 2),
+            "peak_slip_inner_outer_deg": [round(math.degrees(a), 2) for a in peaks],
+            "yaw_weighted_slip_inner_outer_deg": [round(math.degrees(a), 2) for a in weighted],
+            "peak_slip_optimum_pct": round(simple, 1),
+            "yaw_weighted_optimum_pct": round(vehicle, 1),
+            "points_per_deg_toe_out": round(per_toe, 1),
+        }
+    return out
 
 
 def limiting_axle(front_gain, rear_gain):
@@ -729,6 +836,11 @@ def main():
     drive = [row for case, result in zip(cases, results) if case["kind"] == "drive" for row in result]
     toe = [row for case, result in zip(cases, results) if case["kind"] == "toe" for row in result]
     regen = [row for case, result in zip(cases, results) if case["kind"] == "regen" for row in result]
+    line = next(result for case, result in zip(cases, results) if case["kind"] == "track")
+    corners = track_corners(line)
+    nominal_car = Car(ggv, ({**tir, "LMUY": MU_SCALE, "LMUX": MU_SCALE, "LKY": LKY_CASES[NOMINAL[0]]},) * 4, ggv.lltd + NOMINAL[2])
+    exit_g = next(r["exit_accel_g"] for r in rows if is_nominal(r))
+    entry_g = braking_limit_g(nominal_car, float(v19["brake"]["front_bias"]))
     mass = [row for case, result in zip(cases, results) if case["kind"] == "mass" for row in result]
     for name, table in (("drive.csv", drive), ("toe.csv", toe), ("regen.csv", regen), ("mass_cg.csv", mass)):
         with (out / name).open("w", newline="") as handle:
@@ -813,6 +925,17 @@ def main():
         "toe": toe_summary(toe),
         "regen_through_diff": variant_summary(regen, ("front_share", "brake_g", "radius_m")),
         "mass_cg": variant_summary(mass, ("variant", "radius_m")),
+        "first_principles_optimum": optimum_check(nominal_car, rows),
+        "track_minimum_curvature_line": {
+            "track": line["track"], "length_m": round(line["length_m"], 1),
+            "corners_under_15m": len(corners),
+            "corners_under_6m": sum(1 for _, r in corners if r < 6.0),
+            "corners_under_4_5m": sum(1 for _, r in corners if r < 4.5),
+            "corners": [{"turn_deg": round(math.degrees(t), 1), "min_radius_m": round(r, 2)} for t, r in corners],
+            "exit_accel_g": [round(exit_g, 3), EXIT_ACCEL_LOW_G],
+            "entry_decel_g": [round(entry_g, 3), ENTRY_DECEL_LOW_G],
+            "gain_per_lap_s_range": lap_gain_s(corners, rows, (exit_g, EXIT_ACCEL_LOW_G), (entry_g, ENTRY_DECEL_LOW_G)),
+        },
     }
     (out / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(json.dumps({k: summary[k] for k in ("ackermann_pct_at_rack", "front_v19_geometry", "lock_at_3p5m_limit", "best_constant_curve_per_case")}, indent=2))
