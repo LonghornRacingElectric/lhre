@@ -120,7 +120,7 @@ Ackermann % uses the cotangent convention:
   caster, the outer front wheel gains positive camber when steered. This
   study does not model camber.
 
-![Grip and drag against Ackermann](grip_vs_ackermann.png)
+![Apex grip and trail-braking grip against Ackermann](grip_vs_ackermann.png)
 
 **Apex grip.** The table gives the change in max lateral g compared with
 Front v19. Each cell shows the nominal value, then the range over the
@@ -227,10 +227,39 @@ math.
 - **What holds in every case:** pro-Ackermann beats Front v19 in tight
   corners, open corners do not care, and +100% loses under braking.
 
+## Check before design freeze
+
+These assumptions may be wrong for the 2027 car. The first three change
+the toe difference between the front wheels, which is the mechanism this
+study measures.
+
+1. **Front v19 hardpoints.** The SHK and the tracker disagree, and the
+   SHK gives −4.85° caster. Confirm the ball joints, the tie rod outer
+   point and the rack pickup against CAD.
+2. **Static toe.** The study uses 0°. Front toe-out adds to the toe
+   difference at every steer angle. About 0.5° of total toe-out acts like
+   +7% Ackermann at hairpin steer. Set the Ackermann target with the
+   static toe.
+3. **Compliance steer.** Toe change under load is not modeled and not
+   measured. It adds directly to the toe difference.
+4. **Rack travel.** Front v19 needs 42 mm of rack to hold R = 3.5 m at the
+   limit. If the rack stops sooner, lock sets the limit.
+5. **Brake bias.** The 84% is hydraulic. Rear regen under braking lowers
+   the effective front share and moves the braking result toward the 70%
+   case.
+6. **LLTD, mass, CG and tire.** These are Orion carryovers. LLTD is
+   BobSim's nominal roll stiffness, not a measured value. Rerun the study
+   when the 2027 values are known.
+
 ## Provenance
 
 Front v19 steering hardpoints on the Orion vehicle.
 
 ```json
-PROVENANCE
+{
+  "study": "front-ackermann",
+  "bobsim_sha": "4da577af1b04d86c53706eb6e80fb0064f71cee6",
+  "vehicle_sha256": "3ab02bbf3e573aad0330bc37ce40fd254090d33dabd3760462c51da74e30afe8",
+  "utc": "2026-09-26T16:23:28+00:00"
+}
 ```
