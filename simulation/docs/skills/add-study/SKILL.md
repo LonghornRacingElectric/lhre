@@ -22,7 +22,10 @@ description: Answer one vehicle dynamics question about the current car with a n
    - Write every output to `os.environ["OUT_DIR"]`.
    - To change a parameter, load the vehicle, change the value, and write
      the changed copy to `OUT_DIR`. Do not edit `vehicle/vehicle.yml`.
-   - Import BobSim. Do not copy its code.
+   - Import BobSim. Do not copy its code. Do not change BobSim.
+   - If the study solves many independent cases, run them with
+     `tools.parallel.map_cases`. See
+     [studies.md](../../studies.md#parallel-cases).
 3. Write `README.md` with four sections: Question, Method, Result,
    Provenance. See [studies.md](../../studies.md#readmemd).
 4. Run the study from `simulation/`:

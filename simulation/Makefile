@@ -3,6 +3,7 @@
 COMPOSE ?= docker compose
 RUN := $(COMPOSE) run --rm -T
 BOBSIM_SHA = $(shell git -C bobsim rev-parse HEAD)
+STUDY_WORKERS ?=
 
 GIT_LF := git -c core.autocrlf=false -c core.longpaths=true
 
@@ -16,7 +17,7 @@ help:
 	@echo "make records               Write //vehicle into BobLib's Modelica records"
 	@echo "make records-undo          Put back only the files make records wrote"
 	@echo "make bobsim T=<target>     Run a BobSim make target"
-	@echo "make study S=<name>        Run studies/<name>/run.py"
+	@echo "make study S=<name>        Run studies/<name>/run.py (STUDY_WORKERS=n limits CPUs)"
 	@echo "make bump-bobsim REF=<ref> Move the BobSim pin"
 	@echo "make clean                 Delete out/"
 
@@ -61,7 +62,7 @@ bobsim:
 study:
 	@test -n "$(S)" || { echo "Set S=<study name>."; exit 1; }
 	@test -f studies/$(S)/run.py || { echo "studies/$(S)/run.py does not exist."; exit 1; }
-	$(RUN) -e STUDY=$(S) -e OUT_DIR=out/.staging/$(S) -e BOBSIM_SHA=$(BOBSIM_SHA) sim \
+	$(RUN) -e STUDY=$(S) -e OUT_DIR=out/.staging/$(S) -e BOBSIM_SHA=$(BOBSIM_SHA) -e STUDY_WORKERS=$(STUDY_WORKERS) sim \
 		sh -c 'rm -rf out/.staging/$(S) && python tools/provenance.py && python studies/$(S)/run.py \
 			&& rm -rf out/$(S) && mv out/.staging/$(S) out/$(S)'
 
