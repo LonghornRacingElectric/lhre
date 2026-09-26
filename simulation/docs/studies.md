@@ -23,6 +23,7 @@ The script gets these environment variables:
 | `OUT_DIR` | `out/.staging/<name>`. It exists before `run.py` starts. |
 | `STUDY` | `<name>` |
 | `BOBSIM_SHA` | The pinned BobSim commit |
+| `STUDY_WORKERS` | CPU limit for parallel cases. Empty means all CPUs. |
 
 Rules:
 
@@ -32,8 +33,38 @@ Rules:
   or in a copy under `OUT_DIR`, and pass that to BobSim.
 - Import BobSim modules. For example:
   `from _2_EnvelopeSim.vehicle_loader import load_active_envelope_inputs`.
-- Keep the script short. If you write a helper that other studies need, add
-  it to BobSim.
+- Keep the script short. If you write a helper that other studies need, put
+  it in `tools/` and import it as `tools.<module>`. Treat BobSim as a black
+  box: do not change it for a study.
+
+## Parallel cases
+
+A study that solves many independent cases can run them in parallel.
+`tools/parallel.py` gives `map_cases(fn, cases)`:
+
+```python
+from tools.parallel import map_cases
+
+def solve(case):
+    ...
+    return rows
+
+if __name__ == "__main__":
+    results = map_cases(solve, cases)
+```
+
+- `map_cases` runs `fn` on each case in a separate process. It returns the
+  results in the same order as `cases`, so the output does not change with
+  the CPU count.
+- `fn` must be a top-level function. Each case and each result must pickle.
+  A lambda does not pickle. Use a small class with `__call__` instead.
+- Put everything a case needs into the case. Do not rely on globals that
+  `main()` sets.
+- Write files only in the parent process. Workers return data.
+- `make study S=<name> STUDY_WORKERS=1` runs the cases one at a time. Use it
+  to debug.
+- The container gets the CPUs that Docker Desktop allows. Change that in
+  Docker Desktop under Settings, Resources.
 
 ## README.md
 
