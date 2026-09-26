@@ -2,14 +2,16 @@
 
 ## Question
 
-How much Ackermann should the 2027 Front v19 steering have? How much does
-it change the car at the apex, under trail braking and under throttle?
+Can the 2027 Front v19 steering reach the tightest hairpin, and how much
+Ackermann should it have? How does that change at the apex, under trail
+braking and under throttle?
 
-**This is a screening study.** The steering geometry is 2027 Front v19.
-Mass, CG, LLTD, tire, brake bias, diff and alignment are Orion carryovers,
-and the study varies each one. It gives the direction and the
-sensitivities. It does not give a 2027 target until the inputs in
-[Check before design freeze](#check-before-design-freeze) are known.
+**This is a screening study.** The steering geometry is Front v19. Mass,
+CG, weight split, rack travel, diff direction and "balanced car" are team
+estimates for 2027 (2026-09-26). The tire, brake bias, rear geometry,
+static toe and compliance are still Orion carryovers or unknown, and the
+study varies them. It gives the direction and the sensitivities. See
+[Check before design freeze](#check-before-design-freeze).
 
 ## Method
 
@@ -31,7 +33,12 @@ four wheels:
 - The script solves force balance and yaw balance for body slip and steer.
   A bisection on lateral g finds the limit.
 - It keeps only stable states: each axle's lateral force must still rise
-  with slip. This removes a drift state with 16° to 22° of rear slip.
+  with slip.
+
+**Balanced car.** The nominal LLTD is the one that gives the most lateral
+g at R = 15 m, where both axles saturate together. Ackermann has almost no
+effect at 15 m, so LLTD alone sets the balance there. The result is 33.9%
+front. The study also runs ±10 points.
 
 **Longitudinal cases.** A constant tangential acceleration is added. The
 total longitudinal force is a third unknown, so the solve also balances
@@ -40,66 +47,52 @@ the x axis. Each front wheel's force acts through its steer angle.
 - **Trail braking.** Brake force is split by the front bias and is equal
   left and right on each axle (equal hydraulic pressure).
 - **Regen through the diff.** The rear share of braking goes through the
-  diff instead of equal hydraulic force, with the diff's coast lock.
-- **Throttle.** Drive force goes to the rear through the diff. The LSD
-  uses the BobLib `Differential1D` law: the left/right torque difference is
+  diff, with its coast lock.
+- **Throttle.** Drive force goes to the rear through the diff. The LSD uses
+  the BobLib `Differential1D` law: the left/right torque difference is
   `0.85 · (2 · T_preload + λ · |T|)`, and it goes to the slower inner
-  wheel. An open-diff case sets it to zero.
-- A wheel that needs more longitudinal force than it can give is locked
-  or spinning. That state does not count. A limit set by wheelspin says
-  nothing about Ackermann, so the study flags it.
-- Two combined-slip tire models bracket the result. The friction ellipse
-  reduces lateral force by `√(1 − (Fx/Fx_max)²)`. The normalized-slip model
-  builds combined slip from the pure MF52 curves, so a large slip angle
-  also cuts longitudinal capacity. Neither uses the fit's combined-slip
-  coefficients, which have no documented source.
+  wheel.
+- Three diffs: open, the Orion tune (20 Nm, 0.35 drive, 0.15 coast) and
+  the planned Drexler direction (5 Nm, 0.60 drive, 0.35 coast). The planned
+  values are illustrative: minimal preload and a 30°/45° ramp pair, where
+  a lower ramp angle gives more lock.
+- A wheel that needs more longitudinal force than it can give is locked or
+  spinning. That state does not count. Limits set by wheelspin are flagged.
+- Two combined-slip tire models bracket the result: the friction ellipse
+  and a normalized-slip model built from the pure MF52 curves.
 
-**Geometry.** The Front v19 front-left hardpoints come from
-`2027_FrontV19.shk`, `FRONT SUSPENSION` block (SHA-256 `361e76f3…e467ae02`).
-Positive x points forward, and the origin is on the front axle centerline.
-The rear SHK puts its wheel center at x = −1549.4 mm, which confirms the
-frame. BobSim `kin_py` solves inner and outer roadwheel angle against rack
-travel. `run.py` holds these points as constants and writes the changed
-vehicle copy to `out/front-ackermann/vehicle_front_v19.yml`.
+**Steering lock and linkage.** BobSim `kin_py` solves inner and outer
+roadwheel angle against rack travel from the Front v19 hardpoints
+(`2027_FrontV19.shk`, `FRONT SUSPENSION` block, SHA-256 `361e76f3…e467ae02`).
+The script also solves new tie rod outer points and rack pickups that
+reach the hairpin steer at 90% of rack travel, with a target Ackermann and
+zero bump steer.
 
-**Carryover inputs.** These come from `vehicle/vehicle.yml` (Orion):
+**Inputs.**
 
-| Input | Value | Varied in the study |
-| ----- | ----- | ------------------- |
-| Mass with driver | 261.1 kg | ±10 kg |
-| CG height | 0.280 m | ±20 mm |
-| Front static weight | 48.3% | ±3 points |
-| LLTD, front | 52.0%, BobSim nominal roll stiffness | 32%, 52%, 62% |
-| Brake bias, front | 84% | 84%, 70%; regen through the diff |
-| Diff | clutch LSD, 20 Nm preload, 35% drive lock, 15% coast lock | LSD, open |
-| Tire | `16x7p5_10_12psi`, LMUY = LMUX = 0.623 | LKY 1, 0.623; two combined-slip models |
-| Static toe | 0° | 1.0° in to 1.0° out |
-| Camber | 0° | not varied |
+| Input | Value | Source | Varied |
+| ----- | ----- | ------ | ------ |
+| Mass with driver | 263.1 kg (430 + 150 lb) | team 2027 estimate | ±10 kg |
+| CG height | 0.279 m (11 in) | team 2027 estimate | ±20 mm |
+| Front static weight | 46% | team 2027 estimate | ±3 points |
+| LLTD, front | 33.9% | balanced at 15 m | ±10 points |
+| Rack travel | 31.75 mm (1.25 in) each way | team | – |
+| Static camber | 0° in the model | team default is −1° | −1° |
+| Static toe | 0° | team default | 1.0° in to 1.0° out |
+| Diff | see above | team direction | three diffs |
+| Brake bias, front | 84% | Orion carryover | 70%; regen |
+| Tire | `16x7p5_10_12psi`, LMUY = LMUX = 0.623 | Orion carryover | LKY 1, 0.623 |
+| Rear geometry, wheelbase, tracks | 1.549 m, 1.245 / 1.212 m | Front v19, Orion rear | – |
 
-**Sweep.** The script compares the Front v19 curve with constant Ackermann
-from −50% to +100% in 25% steps, and in 10% steps for the toe cases. The
-apex sweep runs at R = 3.5, 4.5, 6, 8 and 15 m (CG path radius). A 9 m
-outside-diameter hairpin puts the CG path near 3.5 to 4 m. The
-longitudinal, toe and mass cases run at 3.5 and 4.5 m.
+Static camber stays 0° in the model because the tire fit has no camber
+thrust (PHY3 = PVY3 = PVY4 = 0). The −1° case changes the gains by less
+than 0.3 points.
 
-| R | Front v19 roadwheel angle at the limit |
-| - | -------------------------------------- |
-| 3.5 m | 30° |
-| 4.5 m | 22.5° |
-| 6 m | 17° |
-| 8 m | 13° |
-| 15 m | 8° |
-
-**Outputs.**
-
-- **Limiting axle.** The script adds 1% grip to one axle and reads the
-  change in max lateral g.
-- **First-principles optimum.** A closed-form optimum from each solved
-  limit state, to compare with the solver.
-- **Lap estimate.** Corners from BobSim's minimum-curvature line on the
-  Michigan 2019 endurance track.
-- **Time.** The time for a 180° turn at radius R: arc time plus exit
-  carry-over `Δv / a_x`, with a rear traction limit of `a_x` = 1.17 g.
+**Sweep.** The Front v19 curve is compared with constant Ackermann from
+−50% to +100% in 25% steps, and in 10% steps for the toe cases. The apex
+runs at R = 3.5, 4.5, 6, 8 and 15 m (CG path radius). A 9 m
+outside-diameter hairpin puts the tightest legal CG path near 3.5 to
+3.7 m.
 
 Ackermann % uses the cotangent convention:
 `100 · (cot δ_outer − cot δ_inner) · L / t`.
@@ -108,242 +101,228 @@ Ackermann % uses the cotangent convention:
 
 ![Steering geometry](ackermann_curves.png)
 
-**Geometry.**
+**Steering lock (read this first).**
 
-- Front v19 is parallel steer. Its Ackermann is +1.4%, +1.2% and +0.7% at
-  10, 20 and 30 mm of rack. Orion is −26%, −29% and −35%.
-- Front v19 needs 30° at both wheels to hold R = 3.5 m at the limit. That
-  is 42 mm of rack travel, or 171° of handwheel at Orion's 88.9 mm/rev.
-- The SHK gives Front v19 −4.85° caster. The upper ball joint is 12.8 mm
-  ahead of the lower one.
+- Front v19 is parallel steer (+1%). At 31.75 mm of rack it steers 22.0°.
+- At the grip limit the car needs 28.9° of mean steer at R = 3.5 m and
+  20.7° at 4.5 m. Its tightest CG radius at the limit is 4.3 m.
+- At walking speed the rear axle center turns on 3.83 m and the outer
+  front wheel center on 4.13 m, against a 4.5 m outside boundary.
+- So with 1.25 in of rack, Front v19 cannot hold a minimum hairpin at the
+  grip limit. It must slow below the limit in every tight hairpin. This
+  costs more than any Ackermann choice.
+- The cause is the long steering arm: the tie rod outer point is 82 mm
+  from the kingpin axis. Holding R = 3.5 m with this arm needs 40.8 mm of
+  rack.
+
+**Linkage options.** Each option reaches its own hairpin steer demand at
+90% of rack travel (28.6 mm), which leaves 10% for driver corrections. The
+rack pickup moves to keep bump steer at zero (tie rod aligned with the
+wishbones' instant center).
+
+| Option | Tie rod outer move | To wheel center plane | Arm to kingpin | Rack pickup move | Toggle margin at inner lock |
+| ------ | ------------------ | --------------------- | -------------- | ---------------- | --------------------------- |
+| Front v19 | – | 51 mm | 82 mm | – | 67° |
+| 0% | 24 mm rearward, 6 mm outboard | 46 mm | 57 mm | 5 mm outboard | 58° |
+| +50% | 15 mm rearward, 28 mm outboard | 24 mm | 70 mm | 9 mm outboard, 1 mm down | 41° |
+| +70% | 11 mm rearward, 40 mm outboard | 12 mm | 79 mm | 11 mm outboard, 2 mm down | 35° |
+
+- Pro-Ackermann needs less mean steer, because the outer wheel steers
+  less: 25.2° for +50% against 28.9° for parallel.
+- With a front rack, Ackermann moves the tie rod point outboard, toward
+  the wheel. +70% is likely not buildable. +50% needs a CAD check.
+- At full lock, bump toe grows to about ±0.6° to ±0.8° over ±25 mm on
+  every option (Front v19: ±0.3° to ±0.45°).
+- The other levers are more rack travel and moving the rack behind the
+  axle. This study did not map them.
 
 ![Apex grip and trail-braking grip against Ackermann](grip_vs_ackermann.png)
 
 **Apex.** Change in max lateral g compared with Front v19. Each cell shows
 the nominal value, then the range over 12 cases (two tire stiffness
-scales, both slip signs, three LLTDs).
+scales, both slip signs, three LLTDs). This assumes the steering can reach
+the angle.
 
 | R | +50% | +75% | +100% | Time per 180° turn, +75% |
 | - | ---- | ---- | ----- | ------------------------ |
-| 3.5 m | +9.8% (+5.6 to +11.4) | +11.3% (+6.4 to +13.5) | +10.3% (+6.1 to +13.1) | −121 ms (−69 to −145) |
-| 4.5 m | +3.9% (+1.7 to +4.9) | +4.2% (+1.9 to +5.6) | +3.7% (+1.5 to +5.5) | −52 ms (−23 to −69) |
-| 6 m | +1.0% (−0.5 to +1.5) | +1.0% (−0.7 to +1.7) | +0.8% (−0.9 to +1.7) | −14 ms (+10 to −25) |
-| 8 m | +0.2% (−0.2 to +0.5) | +0.2% (−0.3 to +0.6) | +0.1% (−0.4 to +0.6) | −3 ms (+6 to −10) |
-| 15 m | 0.0% (0.0 to +0.1) | 0.0% (−0.1 to +0.2) | 0.0% (−0.1 to +0.2) | 0 ms (+1 to −4) |
+| 3.5 m | +8.5% (+3.3 to +10.4) | +10.1% (+2.7 to +12.7) | +10.0% (+1.7 to +12.6) | −106 ms (−29 to −134) |
+| 4.5 m | +3.1% (−0.6 to +4.6) | +3.4% (−1.1 to +5.4) | +2.9% (−1.7 to +5.4) | −42 ms (+14 to −66) |
+| 6 m | +0.5% (−0.4 to +1.4) | +0.2% (−0.7 to +1.7) | 0.0% (−0.9 to +1.7) | −3 ms (+10 to −24) |
+| 8 m | −0.2% (−0.3 to +0.5) | −0.3% (−0.4 to +0.6) | −0.4% (−0.5 to +0.6) | +5 ms (+6 to −10) |
+| 15 m | −0.1% (−0.1 to +0.1) | −0.1% (−0.1 to +0.2) | −0.2% (−0.2 to +0.2) | +3 ms (+3 to −4) |
 
-- With 10% steps, the apex optimum is +80% at 3.5 m and +70% at 4.5 m.
-- At 8 m and 15 m every setting from 0% to +100% is within 0.6%. Open
-  corners do not choose the Ackermann.
-- Negative Ackermann loses grip. At 3.5 m, −50% gives −11.8% to −14.3%.
+- Front v19 is front-limited at 3.5 m and 4.5 m. More Ackermann moves the
+  car to rear-limited. At 4.5 m, +75% and +100% are already rear-limited.
+- Once the rear limits, more Ackermann stops paying. In open corners the
+  balanced car is rear-limited, and pro-Ackermann costs 0.1% to 0.4%.
 
-**Balance.**
+**First-principles check.** The front axle wants the toe difference
+`Δθ + α_in − α_out`. Δθ is the difference between the two front wheels'
+path angles, which rear slip makes smaller than the no-slip `L·t/R²`. Each
+α is the slip angle that maximizes that tire's force weighted by its yaw
+lever, `L·cos δ ± (t/2)·sin δ`. For a front-limited car this gives the
+optimum:
 
-- At LLTD 52% and 62%, every case at 3.5 m and 4.5 m is front-limited.
-  1% more front grip gives +0.7% to +0.9% max lateral g. 1% more rear
-  grip gives nothing.
-- At LLTD 32%, Front v19 is still front-limited at 3.5 m. +75% then makes
-  the car rear-limited there, with +8.9%.
-- LLTD sets the balance in open corners. Ackermann sets it in tight
-  corners, where the front loses grip to toe mismatch, not to load
-  transfer.
+| R | Front-limited optimum | Solver optimum (10% steps) |
+| - | --------------------- | -------------------------- |
+| 3.5 m | 87% | 90% |
+| 4.5 m | 86% | 70%, rear-limited |
 
-**Trail braking at 84% bias.** Change in max lateral g compared with
-Front v19 at the same braking. Each cell shows the normalized-slip result,
-then the ellipse result. Every case is front-limited.
+At 3.5 m the car is front-limited and the two agree. At 4.5 m the rear
+limits first, so the car takes less Ackermann than the front wants.
 
-| R, braking | +50% | +75% | +100% |
-| ---------- | ---- | ---- | ----- |
-| 3.5 m, 0.3 g | +7.3 / +7.2% | +8.0 / +8.0% | +6.2 / +6.5% |
-| 3.5 m, 0.5 g | +8.3 / +7.6% | +8.2 / +8.0% | +4.1 / +5.4% |
-| 4.5 m, 0.3 g | +3.0 / +3.0% | +3.1 / +3.7% | +2.2 / +2.5% |
-| 4.5 m, 0.5 g | +2.9 / +3.0% | +1.9 / +2.7% | −0.6 / +1.4% |
+**Trail braking at 84% bias.** Change compared with Front v19 at the same
+braking, normalized-slip / ellipse tire.
 
-- Braking moves the best setting down. At 0.5 g, +50% and +75% are within
-  0.4% at 3.5 m, and +50% is best at 4.5 m. +100% falls behind, because
-  the light inner front runs a large slip angle and a large brake force at
-  the same time.
-- The inner front uses at most 71% of its braking capacity at the limit.
-  Lock does not set the limit at 0.5 g or less.
-- At 70% hydraulic bias many cases become rear-limited, and more Ackermann
-  does not help there. That is a brake-bias trade, not a steering result.
+| R, braking | +25% | +50% | +75% | +100% |
+| ---------- | ---- | ---- | ---- | ----- |
+| 3.5 m, 0.3 g | −0.2 / −0.2% | −0.7 / −0.7% | −1.7 / −1.7% | −3.0 / −3.0% |
+| 3.5 m, 0.5 g | +5.0 / +4.7% | +4.6 / +4.2% | +3.6 / +3.2% | +2.3 / +2.0% |
+| 4.5 m, 0.3 g | −0.5 / −0.5% | −1.1 / −1.1% | −1.8 / −1.7% | −2.5 / −2.4% |
+| 4.5 m, 0.5 g | −0.5 / −0.5% | −1.1 / −1.1% | −1.9 / −1.8% | −2.6 / −2.5% |
 
-**Regen through the diff.** The diff's coast lock brakes the outer rear
-harder than the inner rear. That is an understeer moment. It lowers the
-Front v19 limit at 3.5 m and 0.5 g from 1.095 to 1.048 g. Every case stays
-front-limited, also at 70% effective front share. At 0.5 g, +75% is best
-at 3.5 m (+8.2%) and +50% is best at 4.5 m (+3.2%). +100% is worst of the
-three in every case.
+- In the balanced car, braking puts load on the front and takes it off
+  the rear, so the rear limits. More Ackermann then costs grip.
+- The only braking case that gains is 3.5 m at 0.5 g, and there +25% to
+  +50% is best.
 
-**Throttle.** Change in max lateral g compared with Front v19 at the same
-drive, ellipse tire. Points where a rear wheel spins are left out.
+**Throttle.** Change compared with Front v19 at the same drive, ellipse
+tire. "Spin" means a rear wheel sets the limit.
 
-| R, drive | Open diff, +50 / +75 / +100% | LSD, +50 / +75 / +100% |
-| -------- | ---------------------------- | ---------------------- |
-| 3.5 m, 0 g | +9.7 / +11.2 / +10.2% | +11.8 / +13.6 / +12.4% |
-| 3.5 m, 0.2 g | +10.7 / +12.5 / +11.5% | wheelspin |
-| 4.5 m, 0 g | +3.8 / +4.1 / +3.6% | +4.9 / +5.3 / +4.6% |
-| 4.5 m, 0.2 g | +4.4 / +4.8 / +4.3% | +5.8 / +6.4 / +5.6% |
+| R, drive | Open diff | Orion LSD | Planned LSD |
+| -------- | --------- | --------- | ----------- |
+| 3.5 m, 0 g | +6.9 / +7.0 / +6.4% | +9.7 / +11.3 / +11.3% | +10.0 / +11.6 / +11.6% |
+| 4.5 m, 0 g | +0.3 / 0.0 / −0.3% | +3.6 / +4.1 / +4.0% | +3.6 / +4.0 / +3.9% |
+| 4.5 m, 0.2 g | +1.0 / +1.2 / +1.1% | spin | spin |
 
-- +75% is best in every case without wheelspin.
-- The LSD makes Ackermann worth more. Its locking torque goes to the slower
-  inner rear wheel, which is an understeer moment. The car becomes more
-  front-limited, and the front toe mismatch costs more.
-- At 0.4 g drive with the LSD, the inner rear spins in every case.
-- This model cannot show power-on rotation. The stable-branch rule and
-  the wheelspin rule keep the rear below saturation, and rear slip stays at
-  2° to 4°. Rotation moves the turn center forward. As a hand estimate,
-  each extra 2.5° of rear slip lowers the Ackermann need by about 6 points
-  at 3.5 m.
+Each cell is +50% / +75% / +100%.
 
-**Static toe.** Best Ackermann and its gain compared with Front v19 at 0°
-toe, in 10% steps. Negative toe-out is toe-in.
+- The LSD's locking torque goes to the slower inner rear, which is an
+  understeer moment. The car becomes front-limited, and Ackermann is worth
+  more. The planned high drive lock makes this stronger than the Orion
+  tune.
+- At 0.2 g with an LSD, and for Front v19 at 3.5 m with an open diff, a
+  rear wheel spins. Those points say nothing about Ackermann.
+
+**Regen through the diff.**
+
+- At 4.5 m the car is mostly rear-limited, and pro-Ackermann costs up to
+  2.6%. Only the Orion diff at 0.5 g and 84% gains there, by 0.3% to 1.8%.
+- At 3.5 m and 0.5 g, +50% gains 1.8% to 9.3% and +75% gains 0.8% to
+  10.9%, depending on the diff and the front share.
+- With the planned diff's higher coast lock (0.35), +50% is best at 3.5 m
+  and 0.5 g, and pro-Ackermann costs grip at 0.3 g.
+
+**Static toe.** Best Ackermann in 10% steps. The best gain is the same at
+every toe, so toe replaces Ackermann and does not add grip.
 
 | Total toe-out | 3.5 m best | 4.5 m best |
 | ------------- | ---------- | ---------- |
-| −1.0° (toe-in) | +90% (+11.3%) | +90% (+4.2%) |
-| −0.5° | +80% (+11.3%) | +80% (+4.2%) |
-| 0° | +80% (+11.3%) | +70% (+4.2%) |
-| +0.5° | +70% (+11.3%) | +60% (+4.2%) |
-| +1.0° | +70% (+11.2%) | +50% (+4.2%) |
+| −1.0° (toe-in) | +100% | +100% |
+| −0.5° | +90% | +90% |
+| 0° | +90% | +70% |
+| +0.5° | +80% | +60% |
+| +1.0° | +70% | +50% |
 
-- Toe replaces Ackermann. It does not add grip: the best gain is the same
-  at every toe.
-- 1° of toe-out replaces about 10 Ackermann points at 3.5 m and about 20
-  at 4.5 m. Toe-in needs the same amount more.
-- Toe-out has costs that are not in this model: straight-line scrub, tire
-  heat and darting.
+1° of toe-out replaces about 10 Ackermann points at 3.5 m and about 20 at
+4.5 m. Toe-out also costs straight-line scrub, tire heat and darting,
+which are not in this model.
 
-**Mass and CG.** Mass ±10 kg, CG height ±20 mm and front weight ±3 points
-change the gains by less than 0.4 points. +75% stays best in every
-variant.
+**Mass, CG and camber.** Mass ±10 kg, CG ±20 mm, front weight ±3 points
+and −1° camber change the gains by less than 0.4 points. +75% stays best
+at 3.5 m. At 4.5 m, +50% or +75% is best.
 
-**First-principles check.** The optimum follows from two terms:
+**Michigan 2019 endurance.** BobSim's minimum-curvature line depends only
+on the track. It is 1989 m long, with 42 corners under 15 m, 8 under 6 m,
+and a tightest radius of 4.5 m. For each corner the script adds arc time
+at its minimum radius, plus the speed carried onto the next straight and
+into the braking zone. The low value uses a 1.21 g exit and a 1.40 g
+entry. The high value uses 0.4 g and 0.5 g.
 
-- The two front wheels' path angles differ by Δθ. Rear slip moves the turn
-  center forward and makes Δθ smaller than the no-slip value `L·t/R²`.
-- For a front-limited car, max lateral g is
-  `Σ F_i · (L·cos δ_i ± (t/2)·sin δ_i) / b`. The yaw lever of the steered
-  inner wheel adds to lateral g, and the lever of the outer wheel
-  subtracts. Each front tire is best at the slip angle that maximizes its
-  weighted force.
+| Linkage | Time saved per lap vs Front v19 |
+| ------- | ------------------------------- |
+| +50% | 0.16 to 0.30 s |
+| +75% | 0.13 to 0.21 s |
+| +100% | 0.07 s |
 
-The best toe difference is `Δθ + α_in − α_out`, with each α from that
-weighted maximum. The script computes it from the solved limit state and
-converts it to Ackermann %.
+This is an estimate. It uses the apex results only, and it assumes the
+steering can reach every corner.
 
-| R | Δθ | Rear slip | Predicted optimum | Solver optimum (10% steps) |
-| - | -- | --------- | ----------------- | -------------------------- |
-| 3.5 m | 7.1° | 3.5° | 76% | 80%, with 70% within 0.04% |
-| 4.5 m | 4.3° | 3.5° | 70% | 70% |
-| 6 m | 2.3° | 3.5° | 63% | flat from +50% to +75% |
-| 8 m | 1.2° | 3.5° | 56% | flat |
+**Screening result.**
 
-- The optimum is below 100% because rear slip reduces the path-angle
-  difference, and because the yaw lever favors less outer slip.
-- Using each tire's own peak slip angle instead of the weighted maximum
-  gives 64% at 3.5 m. That is the simple rule, and it is about 12 points
-  low.
-- The same conversion predicts about 8 Ackermann points per degree of
-  toe at 3.5 m and 13 at 4.5 m. The solver's 10-point grid gives 10 and
-  20.
-
-**Screening result.** Pro-Ackermann in the +50% to +80% band at hairpin
-steer (20° to 30° roadwheel), measured with 0° static toe.
-
-- The apex, throttle and regen cases favor +75% to +80%.
-- Hydraulic trail braking at 4.5 m favors +50%.
-- +100% is worst of the band under braking.
-- Front v19's parallel steer gives up 6% to 14% of lateral g at 3.5 m.
-- Choose inside the band by packaging, and set the target together with
-  the static toe.
+1. **Fix the steering lock first.** With 1.25 in of rack, Front v19 cannot
+   hold a minimum hairpin at the limit. Get more rack travel, or a
+   shorter steering arm (tie rod point about 57 to 70 mm from the kingpin
+   axis).
+2. **Aim for about +50% Ackermann at hairpin steer, measured with 0°
+   static toe.** It gives the most time per lap on Michigan and loses the
+   least under trail braking. The apex alone favors +75% to +90% at 3.5 m.
+   Avoid +100%.
+3. **Set Ackermann and static toe together.** If packaging allows less
+   than +50%, 1° of toe-out makes up about 10 to 20 points, at a
+   straight-line cost.
+4. **The diff tune moves the answer.** A high drive lock makes more
+   Ackermann worth more on exit. A high coast lock makes it worth less
+   under regen.
 
 **Drag.** At 80% of the limit and R = 3.5 m, the drive force to hold speed
-is 258 to 306 N for Front v19, 125 to 198 N for +50% and 84 to 173 N for
-+75%. At 8 m, Front v19 and +50% are within 6 N.
-
-**How to get more Ackermann.** Moving the tie rod outer point 32 mm
-outboard gives +50% (48.6%, 50.0% and 52.6% at 10, 20 and 30 mm of rack).
-This has three costs:
-
-- It puts the point 19 mm inboard of the wheel center plane. Check the
-  packaging in CAD.
-- It adds bump steer: −0.18° and +0.21° of toe at −25 mm and +25 mm of
-  jounce. The rack pickup must move to remove it.
-- The rack position and the rack length are the other levers. This study
-  did not map them.
+is 262 N for Front v19, 148 N for +50% and 112 N for +75%. Less front slip
+mismatch means less tire drag. At 8 m the difference is under 6 N.
 
 **Across events.**
 
 - Acceleration: no effect.
-- Skidpad (R = 9.125 m): between the 8 m and 15 m results, so no effect.
-- Endurance, Michigan 2019: BobSim's minimum-curvature line depends only
-  on the track, not on the car. It is 1989 m long, with 42 corners under
-  15 m, 8 under 6 m, and a tightest radius of 4.5 m.
-  - For each corner, the script adds the arc time at its minimum radius and
-    the speed carried onto the next straight and into the braking zone.
-  - The low value uses the 1.17 g traction limit on exit and the 1.45 g
-    front-lock braking limit on entry. The high value uses 0.4 g and 0.5 g,
-    the combined levels near the corner limit.
-  - Time saved per lap compared with Front v19: +50%: 0.36 to 0.74 s. +75%:
-    0.37 to 0.76 s. +100%: 0.29 to 0.60 s.
-  - This is an estimate. The arc term puts each whole corner at its minimum
-    radius, which over-counts. It leaves out the LSD, which adds gain.
-- Autocross: use the same method on the autocross course.
+- Skidpad (R = 9.125 m): between the 8 m and 15 m results, so within 0.6%.
+- Autocross: use the Michigan method on the autocross course.
 
 **Confidence.** The limits are in the scope and the inputs, not in the
 math.
 
-- **Math.** Solves converge to a residual under 1e-7. The gain falls about
-  as 1/R⁴, as mismatch² predicts. The closed-form optimum lands on the
-  solver's optimum at 3.5 m and 4.5 m. An independent implementation
-  matches the braking, throttle and toe results to 0.001 g. The Orion
-  geometry matches independent numbers.
-- **Scope.** The model is quasi-steady. It cannot show power-on rotation
-  or trail-brake rotation beyond the steady state. It has no camber or
-  steer camber, no compliance steer, no aligning moment and no yaw
-  acceleration. Rotation lowers the Ackermann need, so treat the apex gain
-  as an upper bound. The 180° times assume the whole turn is at radius R.
+- **Math.** Solves converge to a residual under 1e-7. The closed-form
+  front optimum matches the solver where the front limits. An independent
+  implementation matches the braking, throttle and toe results to
+  0.001 g.
+- **Scope.** The model is quasi-steady. It cannot show power-on or
+  trail-brake rotation beyond the steady state. It has no steer camber,
+  compliance steer, aligning moment or yaw acceleration. The lap estimate
+  puts each corner at its minimum radius.
 - **Inputs.** The tire is a raw TTC fit with an unvalidated 0.623 grip
-  scale. The gain changes by up to 2× across the tire cases. The other
-  carryovers are listed above.
-- **What holds in every case:** pro-Ackermann beats Front v19 in tight
-  corners, open corners do not care, +100% is worst of the band under
-  braking, and toe trades one-for-one with Ackermann.
+  scale. The gain changes by up to 5× across the cases. The
+  balanced-car LLTD and the planned diff values are assumptions.
+- **What holds in every case:** Front v19 with 1.25 in of rack cannot hold
+  a minimum hairpin at the limit, +100% is never the best choice, open
+  corners gain nothing, and toe trades one-for-one with Ackermann.
 
 ## Check before design freeze
 
-These inputs are not confirmed for 2027. Items 1 to 3 change the toe
-difference between the front wheels, which is the mechanism this study
-measures.
-
 1. **Geometry source.** The Front v19 SHK and the hardpoint tracker
-   disagree. Decide which is the source of truth. Check the −4.85° caster.
-2. **Static toe and camber.** No 2027 setting exists. Set the Ackermann
-   target together with the static toe.
-3. **Compliance steer.** Toe change under load is not modeled and not
-   measured.
-4. **Rack travel and clearance.** Front v19 needs 42 mm of rack for
-   R = 3.5 m at the limit. The rack stops and the swept tire and body
-   clearance are not measured. This study does not show that Front v19
-   clears the hairpin.
+   disagree. Decide which is the source of truth, and check the −4.85°
+   caster.
+2. **Steering lock.** Pick more rack travel or a shorter steering arm.
+   Check tire, wheel and body clearance at full lock, and the toggle margin
+   of the inner wheel.
+3. **Static toe and compliance.** Set the static toe together with the
+   Ackermann. Measure toe change under load.
+4. **Tie rod and rack packaging.** Check the chosen tie rod outer point
+   against the wheel and brake in CAD, and move the rack pickup to keep
+   bump steer at zero.
 5. **Brake bias and regen.** Get the 2027 hydraulic bias and the regen
    torque commanded under braking.
-6. **Diff.** The diff-off-the-back architecture is decided. The clutch LSD
-   and its tune are not. The throttle and regen results depend on them.
-7. **Springs, bars, LLTD, mass and CG.** None are confirmed for 2027. Do
-   not use the LLTD calculated from the tracker geometry for the SHK car.
+6. **Diff tune.** Get the Drexler ramp angles, plate count and preload.
+7. **Tire.** Validate the grip scale on track.
 
 Rerun the study when these are known.
 
 ## Provenance
 
-Front v19 steering hardpoints on the Orion vehicle.
+Front v19 steering hardpoints, team 2027 mass and CG, balanced LLTD, Orion
+rear and tire.
 
 ```json
 {
   "study": "front-ackermann",
   "bobsim_sha": "4da577af1b04d86c53706eb6e80fb0064f71cee6",
   "vehicle_sha256": "3ab02bbf3e573aad0330bc37ce40fd254090d33dabd3760462c51da74e30afe8",
-  "utc": "2026-09-26T17:38:20+00:00"
+  "utc": "2026-09-26T18:27:56+00:00"
 }
 ```
