@@ -136,6 +136,7 @@ plugins:
       ignore:
         - "*.egg-info"
         - "**/__pycache__/**"
+        - "**/node_modules/**" # npm install output; every README's relative anchors are broken here
         - "vendor/**"
         - "venv/**"
         - ".**/**"

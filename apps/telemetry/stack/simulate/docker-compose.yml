@@ -1,0 +1,20 @@
+services:
+  simulate:
+    image: ${TELEMETRY_SIMULATE_IMAGE:-lhre/telemetry-simulate:dev}
+    container_name: simulate_processor
+    restart: unless-stopped
+    environment:
+      PYTHONUNBUFFERED: 1
+      IN_DOCKER: 1
+      LOGLEVEL: INFO
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_OUTPUT_TOPIC: sensor_data
+      SIM_RATE_HZ: 5
+      SIM_DROPOUT_P: 0.05
+      SIM_FAULT_TOGGLE_P: 0.01
+    networks:
+      - telemetry_network
+
+networks:
+  telemetry_network:
+    external: true
