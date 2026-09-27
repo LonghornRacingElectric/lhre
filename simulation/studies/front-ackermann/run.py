@@ -38,7 +38,7 @@ REPORT_RACK_MM = (10.0, 20.0, 30.0)
 TIE_O_TARGETS_PCT = (0, 50, 100)
 BUMP_MM = 25.0
 BRAKE_G = (0.0, 0.3, 0.5)
-BRAKE_BIAS_EXTRA = 0.70
+BRAKE_BIAS_NOMINAL = 0.65
 BRAKE_RADII_M = (3.5, 4.5)
 BRAKE_CASES = (
     ("ellipse", "lky_1", 0.0), ("ellipse", "lky_1", 0.10),
@@ -52,7 +52,7 @@ DRIVE_MODELS = ("ellipse", "slip_norm")
 TOE_OUT_DEG = (-1.0, -0.5, 0.0, 0.5, 1.0)
 TOE_RADII_M = (3.5, 4.5)
 TOE_ACKERMANN_PCT = tuple(range(0, 101, 10))
-REGEN_BIAS = (0.84, 0.70)
+REGEN_BIAS = (0.65, 0.55)
 MASS_CASES = (
     ("mass +10 kg", "mass", 10.0), ("mass -10 kg", "mass", -10.0),
     ("CG +20 mm", "cg_height", 0.020), ("CG -20 mm", "cg_height", -0.020),
@@ -60,7 +60,7 @@ MASS_CASES = (
     ("camber -1 deg", "camber", None),
 )
 LB_TO_KG = 0.45359237
-TEAM_2027 = {"mass": (430.0 + 150.0) * LB_TO_KG, "cg_height": 11.0 * 0.0254, "front_static_frac": 0.46}
+TEAM_2027 = {"mass": (430.0 + 150.0) * LB_TO_KG, "cg_height": 11.0 * 0.0254, "front_static_frac": 0.45}
 STATIC_CAMBER_DEG = 0.0
 TEAM_CAMBER_DEG = -1.0
 RACK_TRAVEL_MM = 31.75
@@ -736,10 +736,34 @@ def steering_fix(vehicle, target_deg, target_pct, track, wheelbase):
     }
 
 
+def axle_lock_g(car, bias, axle):
+    share = bias if axle == 0 else 1.0 - bias
+
+    def holds(decel_g):
+        shift = decel_g * car.cg_height / car.wheelbase
+        fz = car.mass * G * (car.front_frac + shift if axle == 0 else 1.0 - car.front_frac - shift) / 2
+        return fz > 0.0 and share * car.mass * G * decel_g / 2 <= car.peak(car.fx_max_n[-1], 2 * axle, fz)
+
+    low, high = 0.0, 4.0
+    if holds(high):
+        return math.inf
+    for _ in range(50):
+        mid = 0.5 * (low + high)
+        low, high = (mid, high) if holds(mid) else (low, mid)
+    return low
+
+
 def braking_limit_g(car, bias):
-    fz = car.mass * G * car.front_frac / 2
-    mu = car.peak(car.fx_max_n[-1], 0, fz) / fz
-    return mu * car.front_frac / (bias - mu * car.cg_height / car.wheelbase)
+    front, rear = axle_lock_g(car, bias, 0), axle_lock_g(car, bias, 1)
+    ideal = minimize_scalar(
+        lambda b: -min(axle_lock_g(car, b, 0), axle_lock_g(car, b, 1)), bounds=(0.4, 0.9), method="bounded",
+        options={"xatol": 1e-4},
+    )
+    return {
+        "front_lock_g": round(front, 3), "rear_lock_g": round(rear, 3), "limit_g": round(min(front, rear), 3),
+        "locks_first": "front" if front < rear else "rear",
+        "ideal_front_bias": round(float(ideal.x), 3), "ideal_limit_g": round(-float(ideal.fun), 3),
+    }
 
 
 def lap_gain_s(corners, rows, exit_g, entry_g):
@@ -993,7 +1017,7 @@ def main():
         "planned": PLANNED_DIFF + (dl["diff_kineticFrictionRatio"],),
     }
     cases = build_cases(
-        ggv, tir, curves, outer_max, (float(v19["brake"]["front_bias"]), BRAKE_BIAS_EXTRA), orion,
+        ggv, tir, curves, outer_max, (BRAKE_BIAS_NOMINAL, float(v19["brake"]["front_bias"])), orion,
         diffs, float(v19["rear"]["wheel"]["radius_m"]), steer_targets,
     )
     order = sorted(range(len(cases)), key=lambda i: (cost(cases[i]), i))
@@ -1011,7 +1035,8 @@ def main():
     fix = [result for case, result in zip(cases, results) if case["kind"] == "fix"]
     corners = track_corners(line)
     exit_g = next(r["exit_accel_g"] for r in rows if is_nominal(r))
-    entry_g = braking_limit_g(nominal_car, float(v19["brake"]["front_bias"]))
+    braking_limit = {f"{b:.2f}": braking_limit_g(nominal_car, b) for b in (BRAKE_BIAS_NOMINAL, float(v19["brake"]["front_bias"]))}
+    entry_g = braking_limit[f"{BRAKE_BIAS_NOMINAL:.2f}"]["limit_g"]
     mass = [row for case, result in zip(cases, results) if case["kind"] == "mass" for row in result]
     for name, table in (("drive.csv", drive), ("toe.csv", toe), ("regen.csv", regen), ("mass_cg.csv", mass)):
         with (out / name).open("w", newline="") as handle:
@@ -1039,7 +1064,7 @@ def main():
     tables = {"Orion": orion_table, "Front v19": v19_table}
     geometry = {"Orion": (orion_ggv.track_front, orion_ggv.wheelbase), "Front v19": (ggv.track_front, ggv.wheelbase)}
     plot_curves(out / "ackermann_curves.png", tables, geometry, steer_band)
-    plot_grip(out / "grip_vs_ackermann.png", rows, v19_pct, braking, float(v19["brake"]["front_bias"]))
+    plot_grip(out / "grip_vs_ackermann.png", rows, v19_pct, braking, BRAKE_BIAS_NOMINAL)
 
     tight = nominal_v19[RADII_M[0]]
     lock_rack_mm = float(np.interp(math.radians(tight["inner_deg"]), v19_table[:, 1], v19_table[:, 0]))
@@ -1100,6 +1125,8 @@ def main():
             "front_static_frac": TEAM_2027["front_static_frac"], "static_camber_deg_team": TEAM_CAMBER_DEG,
             "static_camber_deg_model": STATIC_CAMBER_DEG,
             "rack_travel_mm": RACK_TRAVEL_MM, "planned_diff_preload_drive_coast": PLANNED_DIFF,
+            "brake_bias_front_nominal": BRAKE_BIAS_NOMINAL,
+            "straight_braking_limit": braking_limit,
         },
         "balance": balance,
         "lock_at_rack_travel": lock_check(v19_table, rows, ggv.wheelbase),

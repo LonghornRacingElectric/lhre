@@ -8,9 +8,10 @@ braking and under throttle?
 
 **This is a screening study.** The steering geometry is Front v19. Mass,
 CG, weight split, rack travel, diff direction and "balanced car" are team
-estimates for 2027 (2026-09-26). The tire, brake bias, rear geometry,
-static toe and compliance are still Orion carryovers or unknown, and the
-study varies them. It gives the direction and the sensitivities. See
+estimates for 2027 (2026-09-26). The brake bias is a first-principles
+estimate. The tire, rear geometry, static toe and compliance are still
+Orion carryovers or unknown, and the study varies them. It gives the
+direction and the sensitivities. See
 [Check before design freeze](#check-before-design-freeze).
 
 ## Method
@@ -37,7 +38,7 @@ four wheels:
 
 **Balanced car.** The nominal LLTD is the one that gives the most lateral
 g at R = 15 m, where both axles saturate together. Ackermann has almost no
-effect at 15 m, so LLTD alone sets the balance there. The result is 33.9%
+effect at 15 m, so LLTD alone sets the balance there. The result is 34.1%
 front. The study also runs ±10 points.
 
 **Longitudinal cases.** A constant tangential acceleration is added. The
@@ -74,13 +75,13 @@ zero bump steer.
 | ----- | ----- | ------ | ------ |
 | Mass with driver | 263.1 kg (430 + 150 lb) | team 2027 estimate | ±10 kg |
 | CG height | 0.279 m (11 in) | team 2027 estimate | ±20 mm |
-| Front static weight | 46% | team 2027 estimate | ±3 points |
-| LLTD, front | 33.9% | balanced at 15 m | ±10 points |
+| Front static weight | 45% | team 2027 estimate | ±3 points |
+| LLTD, front | 34.1% | balanced at 15 m | ±10 points |
 | Rack travel | 31.75 mm (1.25 in) each way | team | – |
 | Static camber | 0° in the model | team default is −1° | −1° |
 | Static toe | 0° | team default | 1.0° in to 1.0° out |
 | Diff | see above | team direction | three diffs |
-| Brake bias, front | 84% | Orion carryover | 70%; regen |
+| Brake bias, front | 65% | first principles, see below | 84%; regen |
 | Tire | `16x7p5_10_12psi`, LMUY = LMUX = 0.623 | Orion carryover | LKY 1, 0.623 |
 | Rear geometry, wheelbase, tracks | 1.549 m, 1.245 / 1.212 m | Front v19, Orion rear | – |
 
@@ -112,7 +113,7 @@ Ackermann % uses the cotangent convention:
   grip limit. It must slow below the limit in every tight hairpin. This
   costs more than any Ackermann choice.
 - The cause is the long steering arm: the tie rod outer point is 82 mm
-  from the kingpin axis. Holding R = 3.5 m with this arm needs 40.8 mm of
+  from the kingpin axis. Holding R = 3.5 m with this arm needs 40.9 mm of
   rack.
 
 **Linkage options.** Each option reaches its own hairpin steer demand at
@@ -125,7 +126,7 @@ wishbones' instant center).
 | Front v19 | – | 51 mm | 82 mm | – | 67° |
 | 0% | 24 mm rearward, 6 mm outboard | 46 mm | 57 mm | 5 mm outboard | 58° |
 | +50% | 15 mm rearward, 28 mm outboard | 24 mm | 70 mm | 9 mm outboard, 1 mm down | 41° |
-| +70% | 11 mm rearward, 40 mm outboard | 12 mm | 79 mm | 11 mm outboard, 2 mm down | 35° |
+| +70% | 11 mm rearward, 40 mm outboard | 12 mm | 78 mm | 11 mm outboard, 2 mm down | 35° |
 
 - Pro-Ackermann needs less mean steer, because the outer wheel steers
   less: 25.2° for +50% against 28.9° for parallel.
@@ -145,16 +146,16 @@ the angle.
 
 | R | +50% | +75% | +100% | Time per 180° turn, +75% |
 | - | ---- | ---- | ----- | ------------------------ |
-| 3.5 m | +8.5% (+3.3 to +10.4) | +10.1% (+2.7 to +12.7) | +10.0% (+1.7 to +12.6) | −106 ms (−29 to −134) |
-| 4.5 m | +3.1% (−0.6 to +4.6) | +3.4% (−1.1 to +5.4) | +2.9% (−1.7 to +5.4) | −42 ms (+14 to −66) |
-| 6 m | +0.5% (−0.4 to +1.4) | +0.2% (−0.7 to +1.7) | 0.0% (−0.9 to +1.7) | −3 ms (+10 to −24) |
-| 8 m | −0.2% (−0.3 to +0.5) | −0.3% (−0.4 to +0.6) | −0.4% (−0.5 to +0.6) | +5 ms (+6 to −10) |
-| 15 m | −0.1% (−0.1 to +0.1) | −0.1% (−0.1 to +0.2) | −0.2% (−0.2 to +0.2) | +3 ms (+3 to −4) |
+| 3.5 m | +8.6% (+3.6 to +10.4) | +10.2% (+3.0 to +12.7) | +10.1% (+2.1 to +12.7) | −107 ms (−32 to −134) |
+| 4.5 m | +3.1% (−0.6 to +4.6) | +3.5% (−1.1 to +5.4) | +3.4% (−1.6 to +5.4) | −42 ms (+13 to −66) |
+| 6 m | +0.5% (−0.4 to +1.4) | +0.3% (−0.6 to +1.7) | +0.2% (−0.9 to +1.7) | −5 ms (+9 to −24) |
+| 8 m | −0.2% (−0.3 to +0.5) | −0.3% (−0.4 to +0.6) | −0.3% (−0.4 to +0.6) | +4 ms (+6 to −10) |
+| 15 m | 0.0% (0.0 to +0.1) | −0.2% (−0.2 to +0.2) | −0.2% (−0.2 to +0.2) | +4 ms (+4 to −3) |
 
-- Front v19 is front-limited at 3.5 m and 4.5 m. More Ackermann moves the
-  car to rear-limited. At 4.5 m, +75% and +100% are already rear-limited.
+- Front v19 is front-limited up to 6 m. More Ackermann moves the car to
+  rear-limited. At 4.5 m, +75% and +100% are already rear-limited.
 - Once the rear limits, more Ackermann stops paying. In open corners the
-  balanced car is rear-limited, and pro-Ackermann costs 0.1% to 0.4%.
+  balanced car is rear-limited, and pro-Ackermann costs up to 0.3%.
 
 **First-principles check.** The front axle wants the toe difference
 `Δθ + α_in − α_out`. Δθ is the difference between the two front wheels'
@@ -166,34 +167,53 @@ optimum:
 | R | Front-limited optimum | Solver optimum (10% steps) |
 | - | --------------------- | -------------------------- |
 | 3.5 m | 87% | 90% |
-| 4.5 m | 86% | 70%, rear-limited |
+| 4.5 m | 86% | 80%, rear-limited |
 
 At 3.5 m the car is front-limited and the two agree. At 4.5 m the rear
 limits first, so the car takes less Ackermann than the front wants.
 
-**Trail braking at 84% bias.** Change compared with Front v19 at the same
+**Brake bias.** `vehicle.yml` has 84% front. No test or calculation backs
+it. It came from a BobSim GGV default. Ideal bias puts the same fraction
+of each axle's grip into braking. With a load-independent μ that is the
+front load share at the limit, `W_f/W + (h/L)·a_x`. With the load-sensitive
+tire, the straight-line limit is highest at 68% front (1.54 g).
+
+| Front bias | Locks first | Straight-line limit |
+| ---------- | ----------- | ------------------- |
+| 65% | rear | 1.46 g |
+| 84% | front | 1.18 g |
+
+The study uses 65% as nominal and keeps 84% as a sensitivity. At 65% the
+rear locks first in a straight line. Many cars run a few points forward of
+ideal so the front locks first. That is a stability choice, not a grip
+choice.
+
+**Trail braking at 65% bias.** Change compared with Front v19 at the same
 braking, normalized-slip / ellipse tire.
 
 | R, braking | +25% | +50% | +75% | +100% |
 | ---------- | ---- | ---- | ---- | ----- |
-| 3.5 m, 0.3 g | −0.2 / −0.2% | −0.7 / −0.7% | −1.7 / −1.7% | −3.0 / −3.0% |
-| 3.5 m, 0.5 g | +5.0 / +4.7% | +4.6 / +4.2% | +3.6 / +3.2% | +2.3 / +2.0% |
-| 4.5 m, 0.3 g | −0.5 / −0.5% | −1.1 / −1.1% | −1.8 / −1.7% | −2.5 / −2.4% |
-| 4.5 m, 0.5 g | −0.5 / −0.5% | −1.1 / −1.1% | −1.9 / −1.8% | −2.6 / −2.5% |
+| 3.5 m, 0.3 g | −0.3 / −0.3% | −1.0 / −0.9% | −2.0 / −2.0% | −3.5 / −3.4% |
+| 3.5 m, 0.5 g | −0.7 / −0.5% | −1.6 / −1.3% | −3.0 / −2.6% | −4.5 / −4.1% |
+| 4.5 m, 0.3 g | −0.5 / −0.5% | −1.2 / −1.2% | −1.9 / −1.9% | −2.6 / −2.6% |
+| 4.5 m, 0.5 g | −0.7 / −0.7% | −1.5 / −1.4% | −2.4 / −2.3% | −3.3 / −3.1% |
 
-- In the balanced car, braking puts load on the front and takes it off
-  the rear, so the rear limits. More Ackermann then costs grip.
-- The only braking case that gains is 3.5 m at 0.5 g, and there +25% to
-  +50% is best.
+- Braking puts load on the front and takes it off the rear. The rear still
+  carries 35% of the brake force, so the rear limits in every trail-braking
+  case. More Ackermann then costs grip, and 0% is best.
+- At 84% bias, the front brakes harder. Front v19 is then front-limited at
+  3.5 m and 0.5 g, and +25% to +50% gain 5.7% to 6.6%. Every other 84% case
+  loses, as at 65%.
 
 **Throttle.** Change compared with Front v19 at the same drive, ellipse
 tire. "Spin" means a rear wheel sets the limit.
 
 | R, drive | Open diff | Orion LSD | Planned LSD |
 | -------- | --------- | --------- | ----------- |
-| 3.5 m, 0 g | +6.9 / +7.0 / +6.4% | +9.7 / +11.3 / +11.3% | +10.0 / +11.6 / +11.6% |
-| 4.5 m, 0 g | +0.3 / 0.0 / −0.3% | +3.6 / +4.1 / +4.0% | +3.6 / +4.0 / +3.9% |
-| 4.5 m, 0.2 g | +1.0 / +1.2 / +1.1% | spin | spin |
+| 3.5 m, 0 g | +7.5 / +7.6 / +7.0% | +10.3 / +12.2 / +12.0% | +10.4 / +12.3 / +12.2% |
+| 4.5 m, 0 g | +0.4 / +0.2 / −0.1% | +4.1 / +4.6 / +4.4% | +4.0 / +4.5 / +4.3% |
+| 3.5 m, 0.2 g | +9.0 / +9.8 / +9.8% | spin | spin |
+| 4.5 m, 0.2 g | +1.3 / +1.4 / +1.3% | spin | spin |
 
 Each cell is +50% / +75% / +100%.
 
@@ -201,17 +221,19 @@ Each cell is +50% / +75% / +100%.
   understeer moment. The car becomes front-limited, and Ackermann is worth
   more. The planned high drive lock makes this stronger than the Orion
   tune.
-- At 0.2 g with an LSD, and for Front v19 at 3.5 m with an open diff, a
-  rear wheel spins. Those points say nothing about Ackermann.
+- At 0.2 g with an LSD, and at 0.4 g with any diff, a rear wheel spins.
+  Those points say nothing about Ackermann.
 
-**Regen through the diff.**
+**Regen through the diff.** The front share of braking is 65% (the
+nominal bias) or 55% (more regen on the rear, the BobLib
+`BasicVCUBrakes` default).
 
-- At 4.5 m the car is mostly rear-limited, and pro-Ackermann costs up to
-  2.6%. Only the Orion diff at 0.5 g and 84% gains there, by 0.3% to 1.8%.
-- At 3.5 m and 0.5 g, +50% gains 1.8% to 9.3% and +75% gains 0.8% to
-  10.9%, depending on the diff and the front share.
-- With the planned diff's higher coast lock (0.35), +50% is best at 3.5 m
-  and 0.5 g, and pro-Ackermann costs grip at 0.3 g.
+- Orion diff (0.15 coast lock): at 3.5 m, Front v19 is front-limited, and
+  +25% gains 4.0% to 5.7%. The exception is 55% front at 0.5 g, where
+  pro-Ackermann costs up to 3.5%. At 4.5 m the car is rear-limited, and
+  pro-Ackermann costs 0.4% to 2.9%.
+- Planned diff (0.35 coast lock): pro-Ackermann costs 0.1% to 3.6% in
+  every case, and 0% is best.
 
 **Static toe.** Best Ackermann in 10% steps. The best gain is the same at
 every toe, so toe replaces Ackermann and does not add grip.
@@ -220,30 +242,31 @@ every toe, so toe replaces Ackermann and does not add grip.
 | ------------- | ---------- | ---------- |
 | −1.0° (toe-in) | +100% | +100% |
 | −0.5° | +90% | +90% |
-| 0° | +90% | +70% |
-| +0.5° | +80% | +60% |
-| +1.0° | +70% | +50% |
+| 0° | +90% | +80% |
+| +0.5° | +80% | +70% |
+| +1.0° | +70% | +60% |
 
 1° of toe-out replaces about 10 Ackermann points at 3.5 m and about 20 at
 4.5 m. Toe-out also costs straight-line scrub, tire heat and darting,
 which are not in this model.
 
 **Mass, CG and camber.** Mass ±10 kg, CG ±20 mm, front weight ±3 points
-and −1° camber change the gains by less than 0.4 points. +75% stays best
-at 3.5 m. At 4.5 m, +50% or +75% is best.
+and −1° camber change the gains by less than 0.5 points. +75% stays best
+at 3.5 m and 4.5 m.
 
 **Michigan 2019 endurance.** BobSim's minimum-curvature line depends only
 on the track. It is 1989 m long, with 42 corners under 15 m, 8 under 6 m,
 and a tightest radius of 4.5 m. For each corner the script adds arc time
 at its minimum radius, plus the speed carried onto the next straight and
-into the braking zone. The low value uses a 1.21 g exit and a 1.40 g
-entry. The high value uses 0.4 g and 0.5 g.
+into the braking zone. The low value uses a 1.22 g exit and a 1.46 g
+entry, the straight-line limit at 65% bias. The high value uses 0.4 g and
+0.5 g.
 
 | Linkage | Time saved per lap vs Front v19 |
 | ------- | ------------------------------- |
-| +50% | 0.16 to 0.30 s |
-| +75% | 0.13 to 0.21 s |
-| +100% | 0.07 s |
+| +50% | 0.18 to 0.35 s |
+| +75% | 0.15 to 0.25 s |
+| +100% | 0.10 to 0.15 s |
 
 This is an estimate. It uses the apex results only, and it assumes the
 steering can reach every corner.
@@ -255,9 +278,10 @@ steering can reach every corner.
    shorter steering arm (tie rod point about 57 to 70 mm from the kingpin
    axis).
 2. **Aim for about +50% Ackermann at hairpin steer, measured with 0°
-   static toe.** It gives the most time per lap on Michigan and loses the
-   least under trail braking. The apex alone favors +75% to +90% at 3.5 m.
-   Avoid +100%.
+   static toe.** It gives the most time per lap on Michigan. The apex alone
+   favors +75% to +90% at 3.5 m, but every pro-Ackermann setting loses
+   grip under trail braking, and the loss grows with Ackermann. Avoid
+   +100%.
 3. **Set Ackermann and static toe together.** If packaging allows less
    than +50%, 1° of toe-out makes up about 10 to 20 points, at a
    straight-line cost.
@@ -266,13 +290,13 @@ steering can reach every corner.
    under regen.
 
 **Drag.** At 80% of the limit and R = 3.5 m, the drive force to hold speed
-is 262 N for Front v19, 148 N for +50% and 112 N for +75%. Less front slip
+is 259 N for Front v19, 147 N for +50% and 111 N for +75%. Less front slip
 mismatch means less tire drag. At 8 m the difference is under 6 N.
 
 **Across events.**
 
 - Acceleration: no effect.
-- Skidpad (R = 9.125 m): between the 8 m and 15 m results, so within 0.6%.
+- Skidpad (R = 9.125 m): between the 8 m and 15 m results, so within 0.7%.
 - Autocross: use the Michigan method on the autocross course.
 
 **Confidence.** The limits are in the scope and the inputs, not in the
@@ -287,8 +311,9 @@ math.
   compliance steer, aligning moment or yaw acceleration. The lap estimate
   puts each corner at its minimum radius.
 - **Inputs.** The tire is a raw TTC fit with an unvalidated 0.623 grip
-  scale. The gain changes by up to 5× across the cases. The
-  balanced-car LLTD and the planned diff values are assumptions.
+  scale. The +75% gain at 3.5 m goes from 3.0% to 12.7% across the cases.
+  The balanced-car LLTD, the 65% brake bias and the planned diff values
+  are assumptions.
 - **What holds in every case:** Front v19 with 1.25 in of rack cannot hold
   a minimum hairpin at the limit, +100% is never the best choice, open
   corners gain nothing, and toe trades one-for-one with Ackermann.
@@ -306,8 +331,8 @@ math.
 4. **Tie rod and rack packaging.** Check the chosen tie rod outer point
    against the wheel and brake in CAD, and move the rack pickup to keep
    bump steer at zero.
-5. **Brake bias and regen.** Get the 2027 hydraulic bias and the regen
-   torque commanded under braking.
+5. **Brake bias and regen.** Get the 2027 hydraulic bias (the study
+   assumes 65%) and the regen torque commanded under braking.
 6. **Diff tune.** Get the Drexler ramp angles, plate count and preload.
 7. **Tire.** Validate the grip scale on track.
 
@@ -323,6 +348,6 @@ rear and tire.
   "study": "front-ackermann",
   "bobsim_sha": "4da577af1b04d86c53706eb6e80fb0064f71cee6",
   "vehicle_sha256": "3ab02bbf3e573aad0330bc37ce40fd254090d33dabd3760462c51da74e30afe8",
-  "utc": "2026-09-26T18:27:56+00:00"
+  "utc": "2026-09-26T23:12:54+00:00"
 }
 ```
