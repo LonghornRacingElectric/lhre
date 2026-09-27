@@ -1,18 +1,17 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>lhr_sensor_sim</name>
+  <name>lhr_state_estimation</name>
   <version>0.0.0</version>
-  <description>FOV-limited sensor simulation for FSAE driverless.</description>
-  <maintainer email="gray@todo.todo">gray</maintainer>
+  <description>EKF vehicle state estimation from IMU and wheel speeds.</description>
+  <maintainer email="ya7897@eid.utexas.edu">koa</maintainer>
   <license>MIT</license>
 
   <exec_depend>rclpy</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
-  <exec_depend>geometry_msgs</exec_depend>
-  <exec_depend>visualization_msgs</exec_depend>
-  <exec_depend>std_msgs</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
   <exec_depend>lhr_vehicle</exec_depend>
   <exec_depend>python3-numpy</exec_depend>
 

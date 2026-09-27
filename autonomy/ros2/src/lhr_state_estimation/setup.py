@@ -1,6 +1,6 @@
 from setuptools import setup
 
-package_name = 'lhr_sensor_sim'
+package_name = 'lhr_state_estimation'
 
 setup(
     name=package_name,
@@ -13,15 +13,14 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='gray',
-    maintainer_email='gray@todo.todo',
-    description='FOV-limited sensor simulation for FSAE driverless.',
-    license='TODO: License declaration',
+    maintainer='koa',
+    maintainer_email='ya7897@eid.utexas.edu',
+    description='EKF vehicle state estimation from IMU and wheel speeds.',
+    license='MIT',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'sensor_sim = lhr_sensor_sim.sensor_sim_node:main',
-            'inertial_sim = lhr_sensor_sim.inertial_sim_node:main',
+            'ekf_node = lhr_state_estimation.ekf_node:main',
         ],
     },
 )

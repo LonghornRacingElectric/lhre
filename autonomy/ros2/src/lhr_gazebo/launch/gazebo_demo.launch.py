@@ -91,6 +91,8 @@ def _launch_setup(context: LaunchContext):
     config_dir = os.path.join(pkg_share, 'config')
 
     perception = context.launch_configurations.get('perception', 'sim')
+    use_ekf = context.launch_configurations.get(
+        'estimator', 'truth').lower() == 'ekf'
 
     _gz_env = {
         'GZ_SIM_RESOURCE_PATH': models_dir,
@@ -110,6 +112,15 @@ def _launch_setup(context: LaunchContext):
     )
 
     # ----- ros_gz_bridge -----
+    # Under 'ekf' the ground truth Gazebo publishes steps aside so the
+    # estimator owns /lhr/vehicle/odom and the map -> base_link transform.
+    bridge_remaps = []
+    if use_ekf:
+        bridge_remaps = [
+            ('/lhr/vehicle/odom', '/lhr/vehicle/odom_truth'),
+            ('/tf', '/tf_truth'),
+        ]
+
     bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
@@ -117,8 +128,40 @@ def _launch_setup(context: LaunchContext):
         parameters=[{
             'config_file': os.path.join(config_dir, 'ros_gz_bridge.yaml'),
         }],
+        remappings=bridge_remaps,
         output='screen',
     )
+
+    # ----- State estimation -----
+    estimation_nodes = []
+    if use_ekf:
+        # Gazebo already bridges a physics IMU, so only the wheel speeds
+        # are synthesized here.
+        estimation_nodes.append(Node(
+            package='lhr_sensor_sim',
+            executable='inertial_sim',
+            name='inertial_sim',
+            parameters=[{
+                'publish_imu': False,
+                'gyro_bias': LaunchConfiguration('gyro_bias'),
+                'wheel_scale_error': LaunchConfiguration(
+                    'wheel_scale_error'),
+                'use_sim_time': True,
+            }],
+            output='screen',
+        ))
+        estimation_nodes.append(Node(
+            package='lhr_state_estimation',
+            executable='ekf_node',
+            name='ekf_node',
+            parameters=[{
+                # The world file picks the spawn pose, so seed from the
+                # first truth sample rather than from a launch argument.
+                'init_pose_topic': '/lhr/vehicle/odom_truth',
+                'use_sim_time': True,
+            }],
+            output='screen',
+        ))
 
     # ----- Joint command adapter -----
     cmd_adapter = Node(
@@ -228,7 +271,10 @@ def _launch_setup(context: LaunchContext):
             package='lhr_metrics',
             executable='metrics_node',
             name='metrics_node',
-            parameters=[{'use_sim_time': True}],
+            parameters=[{
+                'truth_odom_topic': '/lhr/vehicle/odom_truth',
+                'use_sim_time': True,
+            }],
             output='screen',
         ))
 
@@ -263,6 +309,7 @@ def _launch_setup(context: LaunchContext):
         gz_sim,
         bridge,
         cmd_adapter,
+        *estimation_nodes,
         *perception_nodes,
         centerline,
         mission_mgr,
@@ -287,6 +334,15 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'track_style', default_value='autocross',
             description='Track style: "autocross", "oval", or "simple"'),
+        DeclareLaunchArgument(
+            'estimator', default_value='truth',
+            description='Odometry source: "truth" (Gazebo) or "ekf"'),
+        DeclareLaunchArgument(
+            'gyro_bias', default_value='0.0',
+            description='Simulated gyro bias (rad/s); drives heading drift'),
+        DeclareLaunchArgument(
+            'wheel_scale_error', default_value='1.0',
+            description='Simulated rolling-radius error (1.0 = exact)'),
         DeclareLaunchArgument('seed', default_value='1'),
         DeclareLaunchArgument('num_waypoints', default_value='10'),
         # Sensor sim
