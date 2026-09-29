@@ -74,8 +74,30 @@ Use these sections:
 2. **Method.** Tier, evaluation, the parameters you changed and their range.
 3. **Result.** Numbers with units, and one or two figures. Say how sure you
    are and why.
-4. **Provenance.** Copy `out/<name>/provenance.json`: the BobSim SHA, the
-   vehicle hash and the date.
+4. **Provenance.** The BobSim SHA, the vehicle hash and the date, from
+   `out/<name>/provenance.json`.
+
+### Numbers from the run
+
+`make study` fills the README from the run, so the numbers do not go stale.
+Put a marker around each value. The markers are HTML comments, so the
+published page shows only the value.
+
+| Marker | Fills in |
+| ------ | -------- |
+| `<!-- out:provenance.json -->` … `<!-- /out -->` | The file in a code block. |
+| `<!-- out:table.md -->` … `<!-- /out -->` | A Markdown file from `OUT_DIR`, as is. |
+| `<!-- out:summary.json#a/b/c\|+.1f -->` … `<!-- /out -->` | One value from a JSON file. `/` separates keys. The text after `\|` is a Python format spec. |
+
+- Put a block marker on its own line. Put a value marker inside a
+  sentence.
+- `run.py` writes the tables as `.md` files to `OUT_DIR`.
+- `make study` also copies each figure that the README links, such as
+  `![Result](result.png)`, from `out/<name>/` to the study folder.
+- A marker that names a missing file or key stops `make study`. Fix the
+  marker or `run.py`.
+- Words stay yours. Read the new numbers after each run, and change the
+  text if the result changed.
 
 ## Provenance
 

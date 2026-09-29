@@ -36,8 +36,10 @@ description: Answer one vehicle dynamics question about the current car with a n
 
 5. Read the outputs in `out/<name>/`. Check that the numbers make physical
    sense: signs, units and order of magnitude.
-6. Put the result in `README.md`. Copy `out/<name>/provenance.json` into
-   the Provenance section.
+6. Put the result in `README.md`. Use `out:` markers for numbers, tables,
+   figures and provenance, so the next run updates them. See
+   [studies.md](../../studies.md#numbers-from-the-run). Check that the text
+   still matches the new numbers.
 7. Commit `README.md`, `run.py` and at most two small figures. Do not
    commit `out/`.
 
