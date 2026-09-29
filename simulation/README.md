@@ -49,7 +49,7 @@ simulation/
   docker-compose.yml  # the image is built from bobsim/Dockerfile
   bobsim/             # submodule, pinned SHA
   studies/<name>/     # README.md + run.py
-  tools/              # make test, study provenance and shared study helpers
+  tools/              # make test, study provenance, README fill and shared study helpers
   docs/               # detail and agent skills
   out/                # gitignored outputs
 ```

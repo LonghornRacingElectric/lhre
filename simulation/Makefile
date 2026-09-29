@@ -64,7 +64,7 @@ study:
 	@test -f studies/$(S)/run.py || { echo "studies/$(S)/run.py does not exist."; exit 1; }
 	$(RUN) -e STUDY=$(S) -e OUT_DIR=out/.staging/$(S) -e BOBSIM_SHA=$(BOBSIM_SHA) -e STUDY_WORKERS=$(STUDY_WORKERS) sim \
 		sh -c 'rm -rf out/.staging/$(S) && python tools/provenance.py && python studies/$(S)/run.py \
-			&& rm -rf out/$(S) && mv out/.staging/$(S) out/$(S)'
+			&& rm -rf out/$(S) && mv out/.staging/$(S) out/$(S) && python tools/readme.py studies/$(S)/README.md out/$(S)'
 
 bump-bobsim:
 	@test -n "$(REF)" || { echo "Set REF=<BobSim commit, tag or branch>."; exit 1; }
