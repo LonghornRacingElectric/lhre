@@ -2,11 +2,11 @@
 
 ## Question
 
-Can the 2027 Front v19 steering reach the tightest hairpin, and how much
+Can the 2027 Front v20 steering reach the tightest hairpin, and how much
 Ackermann should it have? How does that change at the apex, under trail
 braking and under throttle?
 
-**This is a screening study.** The steering geometry is Front v19. Mass,
+**This is a screening study.** The steering geometry is Front v20. Mass,
 CG, weight split, rack travel, diff direction and "balanced car" are team
 estimates for 2027 (2026-09-26). The brake bias is a first-principles
 estimate. The tire, rear geometry, static toe and compliance are still
@@ -59,12 +59,24 @@ the x axis. Each front wheel's force acts through its steer angle.
   a lower ramp angle gives more lock.
 - A wheel that needs more longitudinal force than it can give is locked or
   spinning. That state does not count. Limits set by wheelspin are flagged.
-- Two combined-slip tire models bracket the result: the friction ellipse
-  and a normalized-slip model built from the pure MF52 curves.
+- Under braking, two combined-slip tire models bracket the result: the
+  friction ellipse and a normalized-slip model built from the pure MF52
+  curves. The throttle, regen, toe and mass cases use the friction ellipse.
 
 **Steering lock and linkage.** BobSim `kin_py` solves inner and outer
-roadwheel angle against rack travel from the Front v19 hardpoints
-(`2027_FrontV19.shk`, `FRONT SUSPENSION` block, SHA-256 `361e76f3…e467ae02`).
+roadwheel angle against rack travel from the Front v20 hardpoints. The
+source is the team hardpoint sheet ("Solidworks HDPT Input", column "new
+front v20", 2026-09-24). `run.py` holds the points in inches and writes
+the assembled vehicle to `out/front-ackermann/vehicle_front_v20.yml`.
+
+- The sheet gives x without a sign. The signs follow Front v19
+  (`2027_FrontV19.shk`), which has the same x magnitudes.
+- The sheet has no wheel center. The study keeps the v19 wheel center.
+- Compared with v19, v20 raises the lower inboard pickups by 24.2 mm and
+  the upper inboard pickups by 39.6 mm. It moves the rack pickup 22.8 mm
+  forward and 33.1 mm up. The outboard points and the tie rod outer point
+  do not change.
+
 The script also solves new tie rod outer points and rack pickups that
 reach the hairpin steer at 90% of rack travel, with a target Ackermann and
 zero bump steer.
@@ -83,13 +95,13 @@ zero bump steer.
 | Diff | see above | team direction | three diffs |
 | Brake bias, front | 65% | first principles, see below | 84%; regen |
 | Tire | `16x7p5_10_12psi`, LMUY = LMUX = 0.623 | Orion carryover | LKY 1, 0.623 |
-| Rear geometry, wheelbase, tracks | 1.549 m, 1.245 / 1.212 m | Front v19, Orion rear | – |
+| Rear geometry, wheelbase, tracks | 1.549 m, 1.245 / 1.212 m | Front v20, Orion rear | – |
 
 Static camber stays 0° in the model because the tire fit has no camber
 thrust (PHY3 = PVY3 = PVY4 = 0). The −1° case changes the gains by less
 than 0.3 points.
 
-**Sweep.** The Front v19 curve is compared with constant Ackermann from
+**Sweep.** The Front v20 curve is compared with constant Ackermann from
 −50% to +100% in 25% steps, and in 10% steps for the toe cases. The apex
 runs at R = 3.5, 4.5, 6, 8 and 15 m (CG path radius). A 9 m
 outside-diameter hairpin puts the tightest legal CG path near 3.5 to
@@ -104,12 +116,12 @@ Ackermann % uses the cotangent convention:
 
 **Steering lock (read this first).**
 
-- Front v19 is parallel steer (+1%). At 31.75 mm of rack it steers 22.0°.
+- Front v20 is parallel steer (+1%). At 31.75 mm of rack it steers 22.0°.
 - At the grip limit the car needs 28.9° of mean steer at R = 3.5 m and
   20.7° at 4.5 m. Its tightest CG radius at the limit is 4.3 m.
 - At walking speed the rear axle center turns on 3.83 m and the outer
   front wheel center on 4.13 m, against a 4.5 m outside boundary.
-- So with 1.25 in of rack, Front v19 cannot hold a minimum hairpin at the
+- So with 1.25 in of rack, Front v20 cannot hold a minimum hairpin at the
   grip limit. It must slow below the limit in every tight hairpin. This
   costs more than any Ackermann choice.
 - The cause is the long steering arm: the tie rod outer point is 82 mm
@@ -123,7 +135,7 @@ wishbones' instant center).
 
 | Option | Tie rod outer move | To wheel center plane | Arm to kingpin | Rack pickup move | Toggle margin at inner lock |
 | ------ | ------------------ | --------------------- | -------------- | ---------------- | --------------------------- |
-| Front v19 | – | 51 mm | 82 mm | – | 67° |
+| Front v20 | – | 51 mm | 82 mm | – | 67° |
 | 0% | 24 mm rearward, 6 mm outboard | 46 mm | 57 mm | 5 mm outboard | 58° |
 | +50% | 15 mm rearward, 28 mm outboard | 24 mm | 70 mm | 9 mm outboard, 1 mm down | 41° |
 | +70% | 11 mm rearward, 40 mm outboard | 12 mm | 78 mm | 11 mm outboard, 2 mm down | 35° |
@@ -133,13 +145,13 @@ wishbones' instant center).
 - With a front rack, Ackermann moves the tie rod point outboard, toward
   the wheel. +70% is likely not buildable. +50% needs a CAD check.
 - At full lock, bump toe grows to about ±0.6° to ±0.8° over ±25 mm on
-  every option (Front v19: ±0.3° to ±0.45°).
+  every option (Front v20: ±0.3° to ±0.45°).
 - The other levers are more rack travel and moving the rack behind the
   axle. This study did not map them.
 
 ![Apex grip and trail-braking grip against Ackermann](grip_vs_ackermann.png)
 
-**Apex.** Change in max lateral g compared with Front v19. Each cell shows
+**Apex.** Change in max lateral g compared with Front v20. Each cell shows
 the nominal value, then the range over 12 cases (two tire stiffness
 scales, both slip signs, three LLTDs). This assumes the steering can reach
 the angle.
@@ -152,7 +164,7 @@ the angle.
 | 8 m | −0.2% (−0.3 to +0.5) | −0.3% (−0.4 to +0.6) | −0.3% (−0.4 to +0.6) | +4 ms (+6 to −10) |
 | 15 m | 0.0% (0.0 to +0.1) | −0.2% (−0.2 to +0.2) | −0.2% (−0.2 to +0.2) | +4 ms (+4 to −3) |
 
-- Front v19 is front-limited up to 6 m. More Ackermann moves the car to
+- Front v20 is front-limited up to 6 m. More Ackermann moves the car to
   rear-limited. At 4.5 m, +75% and +100% are already rear-limited.
 - Once the rear limits, more Ackermann stops paying. In open corners the
   balanced car is rear-limited, and pro-Ackermann costs up to 0.3%.
@@ -188,7 +200,7 @@ rear locks first in a straight line. Many cars run a few points forward of
 ideal so the front locks first. That is a stability choice, not a grip
 choice.
 
-**Trail braking at 65% bias.** Change compared with Front v19 at the same
+**Trail braking at 65% bias.** Change compared with Front v20 at the same
 braking, normalized-slip / ellipse tire.
 
 | R, braking | +25% | +50% | +75% | +100% |
@@ -201,11 +213,11 @@ braking, normalized-slip / ellipse tire.
 - Braking puts load on the front and takes it off the rear. The rear still
   carries 35% of the brake force, so the rear limits in every trail-braking
   case. More Ackermann then costs grip, and 0% is best.
-- At 84% bias, the front brakes harder. Front v19 is then front-limited at
+- At 84% bias, the front brakes harder. Front v20 is then front-limited at
   3.5 m and 0.5 g, and +25% to +50% gain 5.7% to 6.6%. Every other 84% case
   loses, as at 65%.
 
-**Throttle.** Change compared with Front v19 at the same drive, ellipse
+**Throttle.** Change compared with Front v20 at the same drive, ellipse
 tire. "Spin" means a rear wheel sets the limit.
 
 | R, drive | Open diff | Orion LSD | Planned LSD |
@@ -221,14 +233,15 @@ Each cell is +50% / +75% / +100%.
   understeer moment. The car becomes front-limited, and Ackermann is worth
   more. The planned high drive lock makes this stronger than the Orion
   tune.
-- At 0.2 g with an LSD, and at 0.4 g with any diff, a rear wheel spins.
-  Those points say nothing about Ackermann.
+- At 0.2 g with an LSD, a rear wheel spins. Those points say nothing
+  about Ackermann. At 0.4 g, a rear wheel spins with every diff, so the
+  study does not run 0.4 g.
 
 **Regen through the diff.** The front share of braking is 65% (the
 nominal bias) or 55% (more regen on the rear, the BobLib
 `BasicVCUBrakes` default).
 
-- Orion diff (0.15 coast lock): at 3.5 m, Front v19 is front-limited, and
+- Orion diff (0.15 coast lock): at 3.5 m, Front v20 is front-limited, and
   +25% gains 4.0% to 5.7%. The exception is 55% front at 0.5 g, where
   pro-Ackermann costs up to 3.5%. At 4.5 m the car is rear-limited, and
   pro-Ackermann costs 0.4% to 2.9%.
@@ -262,7 +275,7 @@ into the braking zone. The low value uses a 1.22 g exit and a 1.46 g
 entry, the straight-line limit at 65% bias. The high value uses 0.4 g and
 0.5 g.
 
-| Linkage | Time saved per lap vs Front v19 |
+| Linkage | Time saved per lap vs Front v20 |
 | ------- | ------------------------------- |
 | +50% | 0.18 to 0.35 s |
 | +75% | 0.15 to 0.25 s |
@@ -273,7 +286,7 @@ steering can reach every corner.
 
 **Screening result.**
 
-1. **Fix the steering lock first.** With 1.25 in of rack, Front v19 cannot
+1. **Fix the steering lock first.** With 1.25 in of rack, Front v20 cannot
    hold a minimum hairpin at the limit. Get more rack travel, or a
    shorter steering arm (tie rod point about 57 to 70 mm from the kingpin
    axis).
@@ -290,7 +303,7 @@ steering can reach every corner.
    under regen.
 
 **Drag.** At 80% of the limit and R = 3.5 m, the drive force to hold speed
-is 259 N for Front v19, 147 N for +50% and 111 N for +75%. Less front slip
+is 259 N for Front v20, 147 N for +50% and 111 N for +75%. Less front slip
 mismatch means less tire drag. At 8 m the difference is under 6 N.
 
 **Across events.**
@@ -314,15 +327,14 @@ math.
   scale. The +75% gain at 3.5 m goes from 3.0% to 12.7% across the cases.
   The balanced-car LLTD, the 65% brake bias and the planned diff values
   are assumptions.
-- **What holds in every case:** Front v19 with 1.25 in of rack cannot hold
+- **What holds in every case:** Front v20 with 1.25 in of rack cannot hold
   a minimum hairpin at the limit, +100% is never the best choice, open
   corners gain nothing, and toe trades one-for-one with Ackermann.
 
 ## Check before design freeze
 
-1. **Geometry source.** The Front v19 SHK and the hardpoint tracker
-   disagree. Decide which is the source of truth, and check the −4.85°
-   caster.
+1. **Geometry.** Confirm the x signs and the wheel center for v20, and
+   check the −4.85° caster.
 2. **Steering lock.** Pick more rack travel or a shorter steering arm.
    Check tire, wheel and body clearance at full lock, and the toggle margin
    of the inner wheel.
@@ -340,7 +352,7 @@ Rerun the study when these are known.
 
 ## Provenance
 
-Front v19 steering hardpoints, team 2027 mass and CG, balanced LLTD, Orion
+Front v20 steering hardpoints, team 2027 mass and CG, balanced LLTD, Orion
 rear and tire.
 
 ```json
