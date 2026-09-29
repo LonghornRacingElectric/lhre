@@ -878,6 +878,158 @@ def toe_summary(rows):
     return out
 
 
+def signed(x, unit="%", digits=1):
+    x = round(x, digits) + 0.0
+    return (f"{x:+.{digits}f}" if x else f"{0:.{digits}f}").replace("-", "−") + unit
+
+
+def span(lo, hi, unit="", digits=1):
+    return f"{signed(lo, '', digits)} to {signed(hi, unit, digits)}"
+
+
+def table(header, rows):
+    return "\n".join(["| " + " | ".join(header) + " |", "| " + " | ".join("-" * len(h) for h in header) + " |"]
+                     + ["| " + " | ".join(str(c) for c in row) + " |" for row in rows]) + "\n"
+
+
+def linkage_row(name, fix, arm_mm, plane_mm, lock):
+    if fix is None:
+        move = rack = "–"
+    else:
+        dx, dy = fix["tie_o_shift_mm"]["x_forward"], fix["tie_o_shift_mm"]["y_outboard"]
+        move = f"{abs(dx):.0f} mm {'rearward' if dx < 0 else 'forward'}, {abs(dy):.0f} mm {'outboard' if dy > 0 else 'inboard'}"
+        ry, rz = fix["rack_pickup_shift_mm"]["y_outboard"], fix["rack_pickup_shift_mm"]["z_up"]
+        rack = f"{abs(ry):.0f} mm {'outboard' if ry > 0 else 'inboard'}" + (f", {abs(rz):.0f} mm {'up' if rz > 0 else 'down'}" if abs(rz) >= 0.5 else "")
+        if not fix["solved"]:
+            return [name, move, "not solved", "–", rack, "–", "–"]
+    toe = lock["bump_toe_change_deg"]
+    return [
+        name, move, f"{plane_mm:.0f} mm", f"{arm_mm:.0f} mm", rack, f"{lock['toggle_margin_deg']:.0f}°",
+        f"{signed(toe['-25mm'], '°')} / {signed(toe['+25mm'], '°')}",
+    ]
+
+
+def write_readme_parts(out, s, rows):
+    nominal, spread, fix = s["nominal"], s["ay_change_pct_range_all_cases"], s["steering_fix"]
+    parts = {}
+    apex = []
+    for radius in RADII_M:
+        key = f"{radius:g}m"
+        turn = [1000.0 * r["turn_180_delta_s"] for r in rows if r["radius_m"] == radius and r["curve"] == "+75%" and math.isfinite(r.get("turn_180_delta_s", math.nan))]
+        apex.append([f"{radius:g} m"] + [f"{signed(nominal[key][c]['ay_change_pct'])} ({span(*spread[key][c])})" for c in ("+50%", "+75%", "+100%")]
+                    + [f"{signed(nominal[key]['+75%']['turn_180_delta_ms'], ' ms', 0)} ({span(min(turn), max(turn), '', 0)})"])
+    parts["apex"] = table(["R", "+50%", "+75%", "+100%", "Time per 180° turn, +75%"], apex)
+
+    plane = 1000.0 * (FRONT_V20_M["wheel_center_m"][1] - FRONT_V20_M["tie_o_m"][1])
+    link = [linkage_row(BASELINE, None, fix[0]["arm_offset_from_kingpin_mm"]["front_v20"], plane, fix[0]["front_v20_inner_wheel_at_travel"])]
+    for f in fix:
+        link.append(linkage_row(f"{f['target_ackermann_pct']:+.0f}%".replace("+0%", "0%"), f, f["arm_offset_from_kingpin_mm"]["fix"],
+                                f["tie_o_inboard_of_wheel_center_plane_mm"], f.get("inner_wheel_at_travel")))
+    parts["linkage"] = table(["Option", "Tie rod outer move", "To wheel center plane", "Arm to kingpin", "Rack pickup move",
+                              "Toggle margin at inner lock", "Bump toe at inner lock, ±25 mm"], link)
+
+    optimum = s["first_principles_optimum"]
+    parts["optimum"] = table(["R", "Front-limited optimum", "Solver optimum (10% steps)", "+75% limited by"], [
+        [f"{r:g} m", f"{optimum[f'{r:g}m']['yaw_weighted_optimum_pct']:.0f}%", s["toe"][f"toe-out 0 deg, {r:g} m"]["best_curve"],
+         nominal[f"{r:g}m"]["+75%"]["limiting_axle"]] for r in TOE_RADII_M
+    ])
+
+    limits = s["team_2027_inputs"]["straight_braking_limit"]
+    parts["bias"] = table(["Front bias", "Locks first", "Straight-line limit"], [
+        [f"{100 * float(b):.0f}%", v["locks_first"], f"{v['limit_g']:.2f} g"] for b, v in limits.items()
+    ])
+
+    brake = s["braking"]["nominal"]
+    parts["braking"] = table(["R, braking", "+25%", "+50%", "+75%", "+100%"], [
+        [f"{r:g} m, {g:g} g"] + [
+            f"{signed(brake[f'slip_norm, bias {BRAKE_BIAS_NOMINAL:.2f}, {g:g} g, {r:g} m'][c]['ay_change_pct'], '')} / "
+            f"{signed(brake[f'ellipse, bias {BRAKE_BIAS_NOMINAL:.2f}, {g:g} g, {r:g} m'][c]['ay_change_pct'])}"
+            for c in ("+25%", "+50%", "+75%", "+100%")
+        ] for r in BRAKE_RADII_M for g in BRAKE_G
+    ])
+
+    def drive_cell(entry):
+        if any(v.get("wheelspin_limited") for v in entry.values()):
+            return "spin"
+        return " / ".join(signed(entry[c]["ay_change_pct"], "") for c in ("+50%", "+75%", "+100%")) + "%"
+
+    parts["throttle"] = table(["R, drive", "Open diff", "Orion LSD", "Planned LSD"], [
+        [f"{r:g} m, {g:g} g"] + [drive_cell(s["drive"][f"{d}, {g:g} g, {r:g} m"]) for d in ("open", "orion", "planned")]
+        for g in DRIVE_G for r in DRIVE_RADII_M
+    ])
+
+    regen = s["regen_through_diff"]
+    parts["regen"] = table(["Diff, front share, braking", "3.5 m", "4.5 m"], [
+        [f"{d}, {100 * share:.0f}%, {g:g} g"] + [
+            f"{signed(e['change_vs_v20_pct']['+50%'])}, best {e['best_curve']}, {e['limiting_axle'][BASELINE]}-limited"
+            for e in (regen[f"diff {d}, front_share {share}, brake_g {g}, radius_m {r}"] for r in BRAKE_RADII_M)
+        ] for d in ("orion", "planned") for share in REGEN_BIAS for g in BRAKE_G
+    ])
+
+    parts["toe"] = table(["Total toe-out", "3.5 m best", "4.5 m best"], [
+        [signed(t, "°") + (" (toe-in)" if t < 0 and t == min(TOE_OUT_DEG) else "")]
+        + [s["toe"][f"toe-out {t:g} deg, {r:g} m"]["best_curve"] for r in TOE_RADII_M] for t in TOE_OUT_DEG
+    ])
+
+    gains = s["track_minimum_curvature_line"]["gain_per_lap_s_range"]
+    parts["lap"] = table([f"Linkage", f"Time saved per lap vs {BASELINE}"], [
+        [c, "not solved" if v is None else f"{-v[0]:.2f} to {-v[1]:.2f} s"] for c, v in gains.items()
+    ])
+
+    for name, text in parts.items():
+        (out / f"{name}.md").write_text(text, encoding="utf-8")
+
+    lock = s["lock_at_rack_travel"]
+    ack = s["ackermann_pct_at_rack"][BASELINE]
+    front_limited = [r for r in RADII_M if nominal[f"{r:g}m"][BASELINE]["limiting_axle"] == "front"]
+    pro = ("+25%", "+50%", "+75%", "+100%")
+    open_cost = max(-nominal[f"{r:g}m"][c]["ay_change_pct"] for r in RADII_M if r >= 8.0 for c in pro)
+    sensitivity = [brake[f"{m}, bias {float(b):.2f}, 0.5 g, 3.5 m"][c]["ay_change_pct"]
+                   for m in ("ellipse", "slip_norm") for b in limits if float(b) != BRAKE_BIAS_NOMINAL for c in ("+25%", "+50%")]
+    model_gap = max(abs(brake[k][c]["ay_change_pct"] - brake[k.replace("slip_norm", "ellipse", 1)][c]["ay_change_pct"])
+                    for k in brake if k.startswith("slip_norm") for c in pro)
+    mass_gap = max(abs(v["change_vs_v20_pct"][c] - nominal[k.rsplit("radius_m ", 1)[1].rstrip("0").rstrip(".") + "m"][c]["ay_change_pct"])
+                   for k, v in s["mass_cg"].items() for c in pro[1:])
+    drag = {c: nominal["3.5m"][c]["drive_n_at_80pct"] for c in (BASELINE, "+50%", "+75%")}
+    track = s["track_minimum_curvature_line"]
+    ideal = limits[f"{BRAKE_BIAS_NOMINAL:.2f}"]
+    values = {
+        "lltd_front_pct": 100.0 * s["vehicle"]["lltd_front"],
+        "v20_ackermann_pct": f"{signed(max(ack.values()))} to {signed(min(ack.values()))}",
+        "steer_at_travel_deg": lock["mean_steer_at_travel_deg"],
+        "steer_needed_3p5_deg": lock["mean_steer_needed_at_limit_deg"]["3.5m"],
+        "steer_needed_4p5_deg": lock["mean_steer_needed_at_limit_deg"]["4.5m"],
+        "tightest_radius_m": lock["tightest_cg_radius_at_limit_m"],
+        "rear_axle_walking_m": lock["rear_axle_radius_walking_m"],
+        "outer_wheel_walking_m": lock["outer_front_wheel_center_radius_walking_m"],
+        "rack_needed_mm": lock["rack_needed_for_3p5m_at_limit_mm"],
+        "arm_offset_mm": fix[0]["arm_offset_from_kingpin_mm"]["front_v20"],
+        "fix_rack_mm": fix[0]["target_rack_mm"],
+        "steer_0_deg": fix[0]["target_mean_steer_deg"],
+        "steer_50_deg": fix[1]["target_mean_steer_deg"],
+        "front_limited_to_m": f"{max(front_limited):g} m" if front_limited else "none",
+        "open_corner_cost_pct": max(open_cost, 0.0),
+        "ideal_bias_pct": 100.0 * ideal["ideal_front_bias"],
+        "ideal_limit_g": ideal["ideal_limit_g"],
+        "bias_sensitivity_gain": span(min(sensitivity), max(sensitivity), "%"),
+        "brake_model_gap_pts": model_gap,
+        "points_per_deg_toe_3p5": s["first_principles_optimum"]["3.5m"]["points_per_deg_toe_out"],
+        "points_per_deg_toe_4p5": s["first_principles_optimum"]["4.5m"]["points_per_deg_toe_out"],
+        "mass_gap_pts": mass_gap,
+        "track_length_m": track["length_m"],
+        "corners_under_15m": track["corners_under_15m"],
+        "corners_under_6m": track["corners_under_6m"],
+        "tightest_corner_m": min(c["min_radius_m"] for c in track["corners"]),
+        "exit_g": track["exit_accel_g"][0],
+        "entry_g": track["entry_decel_g"][0],
+        "drag_v20_n": drag[BASELINE], "drag_50_n": drag["+50%"], "drag_75_n": drag["+75%"],
+        "drag_8m_gap_n": max(nominal["8m"][c]["drive_n_at_80pct"] for c in drag) - min(nominal["8m"][c]["drive_n_at_80pct"] for c in drag),
+        "skidpad_pct": max(max(abs(v) for v in spread["8m"][c]) for c in pro),
+        "gain_75_3p5": span(*spread["3.5m"]["+75%"], "%"),
+    }
+    (out / "readme.json").write_text(json.dumps(finite(values), indent=2), encoding="utf-8")
+
+
 def finite(value):
     if isinstance(value, dict):
         return {k: finite(v) for k, v in value.items()}
@@ -1056,8 +1208,8 @@ def main():
     nominal_v20 = {r["radius_m"]: r for r in v20_rows if is_nominal(r)}
     v20_pct = {radius: r["ackermann_pct_at_limit"] for radius, r in nominal_v20.items()}
     steer_band = (
-        min(0.5 * (r["inner_deg"] + r["outer_deg"]) for r in nominal_v20.values()),
-        max(0.5 * (r["inner_deg"] + r["outer_deg"]) for r in nominal_v20.values()),
+        min(0.5 * (r["inner_deg"] + r["outer_deg"]) for r in nominal_v20.values() if r["radius_m"] <= 8.0),
+        max(0.5 * (r["inner_deg"] + r["outer_deg"]) for r in nominal_v20.values() if r["radius_m"] <= 8.0),
     )
     tables = {"Orion": orion_table, BASELINE: v20_table}
     geometry = {"Orion": (orion_ggv.track_front, orion_ggv.wheelbase), BASELINE: (ggv.track_front, ggv.wheelbase)}
@@ -1142,6 +1294,7 @@ def main():
         },
     }
     (out / "summary.json").write_text(json.dumps(finite(summary), indent=2, allow_nan=False), encoding="utf-8")
+    write_readme_parts(out, json.loads(json.dumps(finite(summary))), rows)
     print(json.dumps({k: summary[k] for k in ("ackermann_pct_at_rack", "front_v20_geometry", "lock_at_3p5m_limit", "best_constant_curve_per_case")}, indent=2))
 
 
