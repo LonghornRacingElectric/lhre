@@ -30,7 +30,7 @@ bazel run --config=local //apps/BEVO/cand:run_can_stack        # real CAN (Linux
 
 Host binaries run via `bazel run --config=local` (the default config
 cross-compiles for the remote Linux executors — fine for `build`/`test`,
-wrong for `run`; see [build-system.md](https://github.com/LonghornRacingElectric/lhre/blob/main/build-system.md)).
+wrong for `run`; see [build-system.md](../../docs/build-system.md)).
 
 `Cargo.toml`/`Cargo.lock` are still real: they drive Bazel's crate resolution
 (crate_universe) *and* keep `cargo`/rust-analyzer working for quick local
@@ -78,7 +78,8 @@ git clone --filter=blob:none --sparse https://github.com/LonghornRacingElectric/
 and generates everything else at build time — `can.json`, the prost
 bindings, and the signal-dispatch code all come out of Bazel (or `build.rs`
 under Cargo); **no generated file is checked in**. To change the schema:
-edit the CSVs, `bazel run //apps/BEVO/schema:update_can_proto`, commit both.
+edit the CSVs, `bazel run --config=local //apps/BEVO/schema:update_can_proto`,
+commit both.
 
 ## Not built by Bazel (on purpose)
 

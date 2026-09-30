@@ -1,7 +1,24 @@
 #!/usr/bin/env python3
 import importlib.util
 import os
+import re
 import sys
+
+_FIELD_RE = re.compile(r"^\s*((?:repeated\s+)?\w+)\s+(\w+)\s*=\s*\d+\s*;")
+
+
+def _field_types(proto_text: str) -> dict:
+    """{(message, field): type} for a generated proto (flat messages only)."""
+    out, msg = {}, None
+    for line in proto_text.splitlines():
+        m = re.match(r"\s*message\s+(\w+)", line)
+        if m:
+            msg = m.group(1)
+            continue
+        f = _FIELD_RE.match(line)
+        if f and msg:
+            out[(msg, f.group(2))] = f.group(1)
+    return out
 
 
 def _load_generate_can_proto_module():
@@ -41,7 +58,32 @@ def main() -> int:
     existing_ids = gen.parse_existing_proto_ids(out_path)
 
     partitions = gen.parse_can_model_to_partitions(packets)
-    proto_text, id_map = gen.generate_proto_text(partitions, "Orion", existing_ids)
+    try:
+        proto_text, id_map = gen.generate_proto_text(partitions, "Orion", existing_ids)
+    except ValueError as e:  # e.g. a hand-typed `#N` that collides; a traceback buries it
+        print(f"Error: {e}. Nothing was written.", file=sys.stderr)
+        return 1
+
+    # A field's number is permanent, so its type is too: data already recorded under
+    # that number would decode as garbage. Reusing an existing name with a new type
+    # (e.g. `stomp_fault (float)`) is the usual way to hit this.
+    old_types = {}
+    if os.path.exists(out_path):
+        with open(out_path, encoding="utf-8") as f:
+            old_types = _field_types(f.read())
+    changed = [
+        f"{m}.{name}: {old_types[(m, name)]} -> {t}"
+        for (m, name), t in _field_types(proto_text).items()
+        if old_types.get((m, name), t) != t
+    ]
+    if changed:
+        print(
+            "Error: this would change the type of existing proto field(s):\n  "
+            + "\n  ".join(changed)
+            + "\nUse a new signal name instead. Nothing was written.",
+            file=sys.stderr,
+        )
+        return 1
 
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(proto_text)
