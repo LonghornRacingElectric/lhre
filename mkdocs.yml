@@ -72,6 +72,7 @@ nav:
       - Docs: simulation/docs/README.md
       - Studies: simulation/docs/studies.md
       - Oval Tracks: simulation/docs/oval.md
+      - Anti-Geometry Study: simulation/studies/anti-geometry/README.md
       - BobSim: simulation/docs/bobsim.md
       - Skills:
           - Add a Study: simulation/docs/skills/add-study/SKILL.md
