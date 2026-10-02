@@ -13,7 +13,7 @@ help:
 	@echo "make init                  Get submodules and build the image"
 	@echo "make build                 Rebuild the image"
 	@echo "make shell                 Open a shell in the container"
-	@echo "make test                  Check that BobSim loads //vehicle"
+	@echo "make test                  Check that BobSim loads //vehicle and test tools/"
 	@echo "make records               Write //vehicle into BobLib's Modelica records"
 	@echo "make records-undo          Put back only the files make records wrote"
 	@echo "make bobsim T=<target>     Run a BobSim make target"
@@ -35,7 +35,7 @@ shell:
 	$(COMPOSE) run --rm sim bash
 
 test:
-	$(RUN) sim python tools/check_vehicle.py
+	$(RUN) sim sh -c 'python tools/check_vehicle.py && python -m pytest -q -p no:cacheprovider tools'
 
 BOBLIB := bobsim/_0_Utils/external/BobLib
 VEHICLE_NAME = $(shell sed -n 's/^  name: *//p' ../vehicle/vehicle.yml | head -n 1)

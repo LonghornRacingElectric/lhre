@@ -36,6 +36,8 @@ Rules:
 - Keep the script short. If you write a helper that other studies need, put
   it in `tools/` and import it as `tools.<module>`. Treat BobSim as a black
   box: do not change it for a study.
+- Test a `tools/` helper in `tools/test_<module>.py`. `make test` runs these
+  tests with pytest.
 
 ## Parallel cases
 

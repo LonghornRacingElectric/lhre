@@ -23,7 +23,7 @@ You need `make` and Docker on every OS. Every target runs in the container.
 ```bash
 cd simulation
 make init    # get BobSim and BobLib, build the image
-make test    # check that BobSim loads //vehicle
+make test    # check that BobSim loads //vehicle and test tools/
 ```
 
 ## Targets
@@ -33,7 +33,7 @@ make test    # check that BobSim loads //vehicle
 | `make init` | Get the submodules and build the image |
 | `make build` | Rebuild the image, for example after a BobSim bump |
 | `make shell` | Open a shell in the container |
-| `make test` | Check that BobSim loads `vehicle/vehicle.yml` and its tires |
+| `make test` | Check that BobSim loads `vehicle/vehicle.yml` and its tires. Run the `tools/test_*.py` tests. |
 | `make records` | Write `vehicle/vehicle.yml` into BobLib's Modelica records |
 | `make records-undo` | Put back only the files `make records` wrote |
 | `make bobsim T=<target>` | Run a BobSim make target. `T=help` lists them. |

@@ -7,6 +7,7 @@ Detail for people and coding agents who work in `simulation/`. Start with
 
 - [Studies](studies.md): what a study is and how to write one.
 - [BobSim](bobsim.md): the tiers, how long they take, and the pin.
+- [Oval tracks](oval.md): the asymmetric oval track in `tools/oval.py`.
 
 ## Skills
 
