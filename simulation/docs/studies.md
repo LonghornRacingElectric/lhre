@@ -37,6 +37,23 @@ Rules:
   it in `tools/` and import it as `tools.<module>`. Treat BobSim as a black
   box: do not change it for a study.
 
+## Variants
+
+A variant runs the same study with changed inputs, for example a higher
+tire grip scale. `run.py` reads the inputs from its command line.
+
+```bash
+make study S=front-ackermann ARGS="--mu 0.75" V=mu075
+```
+
+- `ARGS` goes to `run.py`. `V` names the variant and is required with
+  `ARGS`.
+- The outputs go to `out/<name>--<V>/`. The README does not change.
+- To compare, put the variant next to the main run: the same tables and
+  values, for example `readme.json`, are in both folders.
+- If a variant changes the answer, say so in the README, and keep the
+  README run at the nominal inputs.
+
 ## Parallel cases
 
 A study that solves many independent cases can run them in parallel.
@@ -69,6 +86,19 @@ if __name__ == "__main__":
 ## README.md
 
 Use these sections:
+
+Write for a team member who did not run the study. Keep it short and
+simple:
+
+- Use Simplified Technical English: short sentences, active voice, one
+  idea per sentence. See [AGENTS.md](../AGENTS.md#writing).
+- Start the Result with the answer in three to five bullets. Put the
+  detail after it.
+- Give each number its unit, and say how sure you are.
+- Keep each section to what a reader needs to act. Put the full method in
+  `run.py`, not in prose. Aim for a README that a reader can finish in
+  five minutes.
+- Do not repeat a number in prose that a table already shows.
 
 1. **Question.** One or two sentences.
 2. **Method.** Tier, evaluation, the parameters you changed and their range.
