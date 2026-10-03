@@ -27,7 +27,8 @@ from tools.parallel import map_cases
 G = 9.80665
 MU_SCALE = 0.623
 RADII_M = (3.5, 4.5, 6.0, 8.0, 15.0)
-ACKERMANN_PCT = (-50, -25, 0, 25, 50, 75, 100)
+PACKAGING_LIMIT_PCT = 42
+ACKERMANN_PCT = (-50, -25, 0, 25, PACKAGING_LIMIT_PCT, 50, 75, 100)
 LKY_CASES = {"lky_1": 1.0, "lky_scaled": MU_SCALE}
 SLIP_SIDES = {"pos": 1.0, "neg": -1.0}
 LLTD_OFFSETS = (-0.10, 0.0, 0.10)
@@ -64,7 +65,7 @@ STATIC_CAMBER_DEG = 0.0
 TEAM_CAMBER_DEG = -1.0
 RACK_TRAVEL_MM = 31.75
 BALANCE_RADIUS_M = 15.0
-STEER_FIX_TARGETS_PCT = (0.0, 50.0, 70.0)
+STEER_FIX_TARGETS_PCT = (0.0, float(PACKAGING_LIMIT_PCT), 50.0, 70.0)
 STEER_RESERVE = 0.9
 PLANNED_DIFF = (5.0, 0.60, 0.35)
 LAP_CONFIG = "_3_StandardSim/LapTimeEval/lap_time_eval_config.yml"
@@ -913,13 +914,14 @@ def linkage_row(name, fix, arm_mm, plane_mm, lock):
 def write_readme_parts(out, s, rows):
     nominal, spread, fix = s["nominal"], s["ay_change_pct_range_all_cases"], s["steering_fix"]
     parts = {}
+    pack = f"+{PACKAGING_LIMIT_PCT}%"
+    shown = (pack, "+50%", "+75%", "+100%")
     apex = []
     for radius in RADII_M:
         key = f"{radius:g}m"
-        turn = [1000.0 * r["turn_180_delta_s"] for r in rows if r["radius_m"] == radius and r["curve"] == "+75%" and math.isfinite(r.get("turn_180_delta_s", math.nan))]
-        apex.append([f"{radius:g} m"] + [f"{signed(nominal[key][c]['ay_change_pct'])} ({span(*spread[key][c])})" for c in ("+50%", "+75%", "+100%")]
-                    + [f"{signed(nominal[key]['+75%']['turn_180_delta_ms'], ' ms', 0)} ({span(min(turn), max(turn), '', 0)})"])
-    parts["apex"] = table(["R", "+50%", "+75%", "+100%", "Time per 180° turn, +75%"], apex)
+        apex.append([f"{radius:g} m"] + [f"{signed(nominal[key][c]['ay_change_pct'])} ({span(*spread[key][c])})" for c in shown]
+                    + [signed(nominal[key][pack]["turn_180_delta_ms"], " ms", 0)])
+    parts["apex"] = table(["R", *shown, f"Time per 180° turn, {pack}"], apex)
 
     plane = 1000.0 * (FRONT_V20_M["wheel_center_m"][1] - FRONT_V20_M["tie_o_m"][1])
     link = [linkage_row(BASELINE, None, fix[0]["arm_offset_from_kingpin_mm"]["front_v20"], plane, fix[0]["front_v20_inner_wheel_at_travel"])]
@@ -941,11 +943,11 @@ def write_readme_parts(out, s, rows):
     ])
 
     brake = s["braking"]["nominal"]
-    parts["braking"] = table(["R, braking", "+25%", "+50%", "+75%", "+100%"], [
+    parts["braking"] = table(["R, braking", "+25%", pack, "+75%", "+100%"], [
         [f"{r:g} m, {g:g} g"] + [
             f"{signed(brake[f'slip_norm, bias {BRAKE_BIAS_NOMINAL:.2f}, {g:g} g, {r:g} m'][c]['ay_change_pct'], '')} / "
             f"{signed(brake[f'ellipse, bias {BRAKE_BIAS_NOMINAL:.2f}, {g:g} g, {r:g} m'][c]['ay_change_pct'])}"
-            for c in ("+25%", "+50%", "+75%", "+100%")
+            for c in ("+25%", pack, "+75%", "+100%")
         ] for r in BRAKE_RADII_M for g in BRAKE_G
     ])
 
@@ -980,6 +982,8 @@ def write_readme_parts(out, s, rows):
     for name, text in parts.items():
         (out / f"{name}.md").write_text(text, encoding="utf-8")
 
+    pack_brake = [brake[f"{m}, bias {BRAKE_BIAS_NOMINAL:.2f}, {g:g} g, {r:g} m"][pack]["ay_change_pct"]
+                  for m in ("ellipse", "slip_norm") for g in BRAKE_G for r in BRAKE_RADII_M]
     lock = s["lock_at_rack_travel"]
     ack = s["ackermann_pct_at_rack"][BASELINE]
     front_limited = [r for r in RADII_M if nominal[f"{r:g}m"][BASELINE]["limiting_axle"] == "front"]
@@ -1027,6 +1031,15 @@ def write_readme_parts(out, s, rows):
         "drag_8m_gap_n": max(nominal["8m"][c]["drive_n_at_80pct"] for c in drag) - min(nominal["8m"][c]["drive_n_at_80pct"] for c in drag),
         "skidpad_pct": max(max(abs(v) for v in spread["8m"][c]) for c in pro),
         "gain_75_3p5": span(*spread["3.5m"]["+75%"], "%"),
+        "pack_pct": PACKAGING_LIMIT_PCT,
+        "pack_apex_3p5": nominal["3.5m"][pack]["ay_change_pct"],
+        "pack_apex_4p5": nominal["4.5m"][pack]["ay_change_pct"],
+        "pack_share_of_best_3p5": 100.0 * nominal["3.5m"][pack]["ay_change_pct"] / max(nominal["3.5m"][c]["ay_change_pct"] for c in pro),
+        "pack_lap_s": "not solved" if gains.get(pack) is None else f"{-gains[pack][0]:.2f} to {-gains[pack][1]:.2f} s",
+        "best_lap_s": max((-v[0], c) for c, v in gains.items() if v)[1],
+        "pack_brake": span(min(pack_brake), max(pack_brake), "%"),
+        "pack_plane_mm": next(f["tie_o_inboard_of_wheel_center_plane_mm"] for f in fix if f["target_ackermann_pct"] == PACKAGING_LIMIT_PCT),
+        "pack_steer_deg": next(f["target_mean_steer_deg"] for f in fix if f["target_ackermann_pct"] == PACKAGING_LIMIT_PCT),
     }
     (out / "readme.json").write_text(json.dumps(finite(values), indent=2), encoding="utf-8")
 
