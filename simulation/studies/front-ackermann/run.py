@@ -1,3 +1,4 @@
+import argparse
 import copy
 import csv
 import json
@@ -758,7 +759,7 @@ def lap_gain_s(corners, rows, exit_g, entry_g):
         return float(np.interp(radius, RADII_M, values))
 
     gains = {}
-    for curve in ("+50%", "+75%", "+100%"):
+    for curve in (f"{p:+d}%" for p in ACKERMANN_PCT if p > 0):
         if not all(math.isfinite(r["ay_max_g"]) for r in nominal if r["curve"] in (BASELINE, curve)):
             gains[curve] = None
             continue
@@ -1006,7 +1007,7 @@ def write_readme_parts(out, s, rows):
         "arm_offset_mm": fix[0]["arm_offset_from_kingpin_mm"]["front_v20"],
         "fix_rack_mm": fix[0]["target_rack_mm"],
         "steer_0_deg": fix[0]["target_mean_steer_deg"],
-        "steer_50_deg": fix[1]["target_mean_steer_deg"],
+        "steer_50_deg": next(f["target_mean_steer_deg"] for f in fix if f["target_ackermann_pct"] == 50.0),
         "front_limited_to_m": f"{max(front_limited):g} m" if front_limited else "none",
         "open_corner_cost_pct": max(open_cost, 0.0),
         "ideal_bias_pct": 100.0 * ideal["ideal_front_bias"],
@@ -1127,7 +1128,22 @@ def style(ax):
     ax.tick_params(colors=MUTED, labelsize=8)
 
 
+def apply_args(argv=None):
+    global MU_SCALE, LKY_CASES, ACKERMANN_PCT, STEER_FIX_TARGETS_PCT, BRAKE_BIAS_NOMINAL, REGEN_BIAS
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mu", type=float, default=MU_SCALE, help="tire grip scale, LMUY = LMUX")
+    parser.add_argument("--ackermann", type=int, nargs="*", default=[], help="extra Ackermann %% to sweep and solve a linkage for")
+    parser.add_argument("--bias", type=float, default=BRAKE_BIAS_NOMINAL, help="nominal front brake bias, 0 to 1")
+    args = parser.parse_args(argv)
+    MU_SCALE, BRAKE_BIAS_NOMINAL = args.mu, args.bias
+    LKY_CASES = {**LKY_CASES, "lky_scaled": MU_SCALE}
+    REGEN_BIAS = (BRAKE_BIAS_NOMINAL,) + REGEN_BIAS[1:]
+    ACKERMANN_PCT = tuple(sorted(set(ACKERMANN_PCT) | set(args.ackermann)))
+    STEER_FIX_TARGETS_PCT = tuple(sorted(set(STEER_FIX_TARGETS_PCT) | {float(p) for p in args.ackermann if p >= 0}))
+
+
 def main():
+    apply_args()
     out = Path(os.environ["OUT_DIR"])
     orion = load_yaml(Path(os.environ["BOBSIM_VEHICLE"]))
     v20 = with_front_v20(orion)
