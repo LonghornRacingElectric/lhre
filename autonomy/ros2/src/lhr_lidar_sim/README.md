@@ -154,6 +154,10 @@ map -> base_link -> lidar     (1.80, 0.00, 0.55), pitch as parameterised
 | `dropout_rate` | `0.0` | Returns lost outright |
 | `elevation_profile` | `rosette` | Or `uniform`. See above |
 
+Passed through the launch file these are type-coerced, so
+`mount_pitch_rad:=0` works as well as `0.0`. See
+[lhr_demo](../lhr_demo/README.md) for why that is not automatic.
+
 The mount **position** comes from
 [`lhr_vehicle`](../lhr_vehicle/README.md), because vehicle numbers live
 in one file. The mount **orientation** does not, because it is the

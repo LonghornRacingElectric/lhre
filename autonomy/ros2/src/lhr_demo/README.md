@@ -70,15 +70,32 @@ Each bag also carries `run_id`, `git_sha`, `scenario` and `seed` as
 rosbag2 `custom_data`, readable in `metadata.yaml`, so a bag found on
 disk months later still says what produced it.
 
-### A trap worth knowing
+### Parameter types, and why they are declared
 
-`run_id` defaults to `%Y%m%dT%H%M%S`, with a `T` and not an underscore,
-because launch passes parameters through a YAML file and YAML reads
-`20261004_120000` as the integer `20261004120000`: underscores are digit
-separators. That silently renamed the run and left the bag directory and
-the metrics row disagreeing, which defeats the correlation above. The
-metrics node now also accepts a numerically-typed `run_id` and coerces
-it, so a hand-passed id cannot crash a run over a cosmetic field.
+Launch hands parameters to a node through a YAML file, so a value
+arrives as whatever YAML decides it is rather than what the node
+expects. Two ways that bit:
+
+- `v_max:=10` becomes the integer 10, a node declaring a double rejects
+  it, and the run dies on an `InvalidParameterTypeException` for want of
+  a decimal point. Every float argument had this: `timeout_sec:=60`,
+  `lookahead_dist:=4`, `mount_pitch_rad:=0`.
+- `run_id:=20261004_120000` becomes the integer `20261004120000`,
+  because YAML treats underscores as digit separators. That silently
+  renamed the run and left the bag directory and the metrics row
+  disagreeing, defeating the correlation above.
+
+Every parameter taken from a launch argument is therefore wrapped in
+`ParameterValue(..., value_type=...)` through the `_f`, `_i`, `_s` and
+`_b` helpers, which makes launch do the conversion. Round numbers work,
+and a numeric-looking string stays a string. **A new parameter added to
+a node needs the matching helper**, or it reintroduces this.
+
+`run_id` still defaults to `%Y%m%dT%H%M%S` with a `T` rather than an
+underscore, which is now belt as well as braces. The metrics node also
+accepts a numerically-typed `run_id` and coerces it, so running that
+node directly, outside this launch file, cannot crash over a cosmetic
+field either.
 
 ## Viewing
 

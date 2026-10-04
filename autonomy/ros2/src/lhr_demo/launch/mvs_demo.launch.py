@@ -12,6 +12,7 @@ from launch.event_handlers import OnProcessExit
 from launch.events import Shutdown
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 # Recorded when `record:=true`. An explicit list rather than --all: the
@@ -70,6 +71,39 @@ def _git_sha() -> str:
     except (OSError, subprocess.CalledProcessError):
         dirty = False
     return f'{sha}-dirty' if dirty else sha
+
+
+def _typed(name: str, kind):
+    """
+    Return a launch argument as a parameter of a definite type.
+
+    Launch hands parameters to a node through a YAML file, so a value
+    arrives as whatever YAML decides it is. `v_max:=10` becomes the
+    integer 10, a node declaring a double rejects it, and the run dies
+    on a traceback for want of a decimal point. Declaring the type here
+    makes launch do the conversion, so round numbers work.
+    """
+    return ParameterValue(LaunchConfiguration(name), value_type=kind)
+
+
+def _f(name: str):
+    """Return a launch argument as a float parameter."""
+    return _typed(name, float)
+
+
+def _i(name: str):
+    """Return a launch argument as an int parameter."""
+    return _typed(name, int)
+
+
+def _s(name: str):
+    """Return a launch argument as a string parameter."""
+    return _typed(name, str)
+
+
+def _b(name: str):
+    """Return a launch argument as a bool parameter."""
+    return _typed(name, bool)
 
 
 def generate_launch_description():
@@ -188,10 +222,10 @@ def generate_launch_description():
         executable='publish_cones',
         name='publish_cones',
         parameters=[{
-            'use_sim_time': LaunchConfiguration('use_sim_time'),
-            'seed': LaunchConfiguration('seed'),
-            'track_style': LaunchConfiguration('track_style'),
-            'num_waypoints': LaunchConfiguration('num_waypoints'),
+            'use_sim_time': _b('use_sim_time'),
+            'seed': _i('seed'),
+            'track_style': _s('track_style'),
+            'num_waypoints': _i('num_waypoints'),
         }],
         output='screen',
     )
@@ -201,13 +235,12 @@ def generate_launch_description():
         executable='sensor_sim',
         name='sensor_sim',
         parameters=[{
-            'use_sim_time': LaunchConfiguration('use_sim_time'),
-            'fov_deg': LaunchConfiguration('fov_deg'),
-            'max_range_m': LaunchConfiguration('max_range_m'),
-            'noise_std_m': LaunchConfiguration('noise_std_m'),
-            'false_negative_rate': LaunchConfiguration(
-                'false_negative_rate'),
-            'seed': LaunchConfiguration('seed'),
+            'use_sim_time': _b('use_sim_time'),
+            'fov_deg': _f('fov_deg'),
+            'max_range_m': _f('max_range_m'),
+            'noise_std_m': _f('noise_std_m'),
+            'false_negative_rate': _f('false_negative_rate'),
+            'seed': _i('seed'),
         }],
         output='screen',
     )
@@ -217,7 +250,7 @@ def generate_launch_description():
         executable='track_builder',
         name='track_builder',
         parameters=[{
-            'use_sim_time': LaunchConfiguration('use_sim_time'),
+            'use_sim_time': _b('use_sim_time'),
         }],
         output='screen',
     )
@@ -227,10 +260,10 @@ def generate_launch_description():
         executable='sim_node',
         name='sim_kinematic',
         parameters=[{
-            'publish_clock': LaunchConfiguration('use_sim_time'),
-            'init_x': LaunchConfiguration('init_x'),
-            'init_y': LaunchConfiguration('init_y'),
-            'init_yaw': LaunchConfiguration('init_yaw'),
+            'publish_clock': _b('use_sim_time'),
+            'init_x': _f('init_x'),
+            'init_y': _f('init_y'),
+            'init_yaw': _f('init_yaw'),
         }],
         output='screen',
     )
@@ -240,13 +273,13 @@ def generate_launch_description():
         executable='pursuit_node',
         name='pure_pursuit',
         parameters=[{
-            'use_sim_time': LaunchConfiguration('use_sim_time'),
-            'lookahead_dist': LaunchConfiguration('lookahead_dist'),
-            'a_lat_max': LaunchConfiguration('a_lat_max'),
-            'v_min': LaunchConfiguration('v_min'),
-            'v_max': LaunchConfiguration('v_max'),
-            'max_accel': LaunchConfiguration('max_accel'),
-            'max_decel': LaunchConfiguration('max_decel'),
+            'use_sim_time': _b('use_sim_time'),
+            'lookahead_dist': _f('lookahead_dist'),
+            'a_lat_max': _f('a_lat_max'),
+            'v_min': _f('v_min'),
+            'v_max': _f('v_max'),
+            'max_accel': _f('max_accel'),
+            'max_decel': _f('max_decel'),
         }],
         output='screen',
     )
@@ -256,27 +289,26 @@ def generate_launch_description():
         executable='metrics_node',
         name='metrics_node',
         parameters=[{
-            'use_sim_time': LaunchConfiguration('use_sim_time'),
-            'timeout_sec': LaunchConfiguration('timeout_sec'),
-            'output_csv': LaunchConfiguration('output_csv'),
-            'run_id': LaunchConfiguration('run_id'),
-            'scenario': LaunchConfiguration('scenario'),
+            'use_sim_time': _b('use_sim_time'),
+            'timeout_sec': _f('timeout_sec'),
+            'output_csv': _s('output_csv'),
+            'run_id': _s('run_id'),
+            'scenario': _s('scenario'),
             'git_sha': _git_sha(),
-            'seed': LaunchConfiguration('seed'),
-            'track_style': LaunchConfiguration('track_style'),
-            'num_waypoints': LaunchConfiguration('num_waypoints'),
-            'mission': LaunchConfiguration('mission'),
-            'fov_deg': LaunchConfiguration('fov_deg'),
-            'max_range_m': LaunchConfiguration('max_range_m'),
-            'noise_std_m': LaunchConfiguration('noise_std_m'),
-            'false_negative_rate': LaunchConfiguration(
-                'false_negative_rate'),
-            'lookahead_dist': LaunchConfiguration('lookahead_dist'),
-            'a_lat_max': LaunchConfiguration('a_lat_max'),
-            'v_min': LaunchConfiguration('v_min'),
-            'v_max': LaunchConfiguration('v_max'),
-            'max_accel': LaunchConfiguration('max_accel'),
-            'max_decel': LaunchConfiguration('max_decel'),
+            'seed': _i('seed'),
+            'track_style': _s('track_style'),
+            'num_waypoints': _i('num_waypoints'),
+            'mission': _s('mission'),
+            'fov_deg': _f('fov_deg'),
+            'max_range_m': _f('max_range_m'),
+            'noise_std_m': _f('noise_std_m'),
+            'false_negative_rate': _f('false_negative_rate'),
+            'lookahead_dist': _f('lookahead_dist'),
+            'a_lat_max': _f('a_lat_max'),
+            'v_min': _f('v_min'),
+            'v_max': _f('v_max'),
+            'max_accel': _f('max_accel'),
+            'max_decel': _f('max_decel'),
         }],
         output='screen',
         condition=IfCondition(LaunchConfiguration('enable_metrics')),
@@ -287,10 +319,10 @@ def generate_launch_description():
         executable='mission_manager',
         name='mission_manager',
         parameters=[{
-            'use_sim_time': LaunchConfiguration('use_sim_time'),
-            'mission': LaunchConfiguration('mission'),
-            'auto_go': LaunchConfiguration('auto_go'),
-            'ready_hold_sec': LaunchConfiguration('ready_hold_sec'),
+            'use_sim_time': _b('use_sim_time'),
+            'mission': _s('mission'),
+            'auto_go': _b('auto_go'),
+            'ready_hold_sec': _f('ready_hold_sec'),
         }],
         output='screen',
     )
@@ -300,11 +332,10 @@ def generate_launch_description():
         executable='lidar_sim',
         name='lidar_sim',
         parameters=[{
-            'use_sim_time': LaunchConfiguration('use_sim_time'),
-            'seed': LaunchConfiguration('seed'),
-            'mount_pitch_rad': LaunchConfiguration('mount_pitch_rad'),
-            'elevation_profile': LaunchConfiguration(
-                'elevation_profile'),
+            'use_sim_time': _b('use_sim_time'),
+            'seed': _i('seed'),
+            'mount_pitch_rad': _f('mount_pitch_rad'),
+            'elevation_profile': _s('elevation_profile'),
         }],
         output='screen',
         condition=IfCondition(LaunchConfiguration('lidar')),
@@ -349,8 +380,8 @@ def generate_launch_description():
         executable='foxglove_bridge',
         name='foxglove_bridge',
         parameters=[{
-            'use_sim_time': LaunchConfiguration('use_sim_time'),
-            'port': LaunchConfiguration('foxglove_port'),
+            'use_sim_time': _b('use_sim_time'),
+            'port': _i('foxglove_port'),
         }],
         output='screen',
         condition=IfCondition(LaunchConfiguration('foxglove')),
