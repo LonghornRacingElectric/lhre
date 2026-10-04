@@ -135,8 +135,8 @@ The cone as the sensor sees it, 10 s of points:
 
 - Unit: Mid-360 S/N 47MCN860030034, firmware 13.18.2.40, loader 13.17.99.20.
 - Date: 2026-10-04, 14:24 to 17:29 CDT. Timestamped log: [log.md](log.md).
-- Raw data (2.8 GB: per-run MCAP and `.npz`, health logs, every figure):
-  shared team storage, location to be added. A copy is on the test laptop at
-  `~/lhr-test-data/2026-10-04-mid360-acceptance/`. ROS 2 bags of every run,
-  made with `ros2_bag.py`, go in the same storage under `ros2/`.
+- Raw data (3.5 GB: per-run MCAP and `.npz` in `raw/`, ROS 2 bags of every
+  run in `ros2/`, health logs, every figure): SharePoint,
+  [LHR Electric > Design > _VMS_ > Autonomous > Test Data](https://utexas.sharepoint.com/sites/ENGR-LonghornRacing/LHR%20Electric/Design/_VMS_/Autonomous/Test%20Data)
+  `> 2026-10-04-mid360-acceptance`.
 - Earlier bench run (2026-09-27): LiDAR Test Plan page in the Notion wiki.

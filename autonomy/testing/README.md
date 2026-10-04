@@ -21,10 +21,12 @@ testing/
 ## Rules
 
 - **Raw data is never committed.** Recordings run 50 to 100 MB per minute.
-  Keep each campaign's raw folder (`raw/`, recordings, health logs) in the
-  shared team storage and name the location in the campaign README. While
-  testing, the tools write to `~/lhr-test-data/<campaign>/` on the test
-  laptop, and `~/lhr-test-data/current` points at the active campaign.
+  Upload each campaign's whole data folder (recordings, ROS 2 bags, health
+  logs, every figure) to SharePoint under
+  [LHR Electric > Design > _VMS_ > Autonomous > Test Data](https://utexas.sharepoint.com/sites/ENGR-LonghornRacing/LHR%20Electric/Design/_VMS_/Autonomous/Test%20Data),
+  in a folder named like the campaign folder here. While testing, the tools
+  write to `~/lhr-test-data/<campaign>/` on the test laptop, and
+  `~/lhr-test-data/current` points at the active campaign.
 - **Commit the figures you will present, not every figure.** The tools write
   two figures per run; pick the ones that carry the result. The rest stay
   with the raw data.
