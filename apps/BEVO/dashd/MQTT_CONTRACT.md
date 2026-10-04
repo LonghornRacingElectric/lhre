@@ -6,7 +6,7 @@ its data shown on the driver's dashboard in real time.
 
 ## Broker
 
-- Host: `18.191.225.118` (AWS, same broker as publishd)
+- Host: `100.88.194.126` (telemetry server's Tailscale IP, same broker as publishd)
 - Port: `1883`
 - No authentication required
 
@@ -105,14 +105,14 @@ value, so publishing faster than 30 Hz is wasteful.
 
 ```bash
 # Publish a lap delta from any machine with mosquitto-clients:
-mosquitto_pub -h 18.191.225.118 -t "lhre/dash/lapDelta" -m "-0.45"
+mosquitto_pub -h 100.88.194.126 -t "lhre/dash/lapDelta" -m "-0.45"
 
 # Publish all three:
-mosquitto_pub -h 18.191.225.118 -t "lhre/dash/lapDelta" -m "-0.45"
-mosquitto_pub -h 18.191.225.118 -t "lhre/dash/energyDelta" -m "3.2"
-mosquitto_pub -h 18.191.225.118 -t "lhre/dash/lapsRemaining" -m "15.3"
+mosquitto_pub -h 100.88.194.126 -t "lhre/dash/lapDelta" -m "-0.45"
+mosquitto_pub -h 100.88.194.126 -t "lhre/dash/energyDelta" -m "3.2"
+mosquitto_pub -h 100.88.194.126 -t "lhre/dash/lapsRemaining" -m "15.3"
 
 # Endurance pacing: set a 32 kW budget, then trigger a lap card:
-mosquitto_pub -h 18.191.225.118 -t "lhre/dash/targetPower" -m "32"
-mosquitto_pub -h 18.191.225.118 -t "lhre/dash/lapTrigger" -m "1"
+mosquitto_pub -h 100.88.194.126 -t "lhre/dash/targetPower" -m "32"
+mosquitto_pub -h 100.88.194.126 -t "lhre/dash/lapTrigger" -m "1"
 ```
