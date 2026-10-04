@@ -19,9 +19,15 @@ proto, gateway tables, and DBC later. See
 | `wire.lock` | Generated, committed. See below. |
 | `ir/` | The Python that reads, validates, and serializes the spec. |
 
-Every file parses as one `lhre.canspec.SpecFile`. Current messages are
-seed examples, pending migration of the real set from the lhre-2026 CSVs
-(staged at `apps/BEVO/schema/` on the `bevo-migration` branch).
+Every file parses as one `lhre.canspec.SpecFile`. The VCU's message set
+(what it sends and listens to: inverter, HVC, PDU, DUI, Pi mode command,
+bench test frames) is migrated from the lhre-2026 CSV with the same IDs,
+buses, and layouts; the rest of the car still lives only in the legacy CSV
+at `apps/BEVO/schema/`, which BEVO decodes today. The migrated messages
+carry no `telemetry` bindings yet, so BEVO keeps decoding them from the CSV
+until the telemetry side moves over. `VCU_STATUS`, `VCU_DEBUG`,
+`VCU_BOOTLOADER_DATA`, and the `HVC_PACK_STATUS`/`HVC_CELL_TEMPS` pair are
+the original seed examples.
 
 Spec files carry no comments. Textproto comments do not survive the
 canonical serializer, so prose goes in `description` fields, which the

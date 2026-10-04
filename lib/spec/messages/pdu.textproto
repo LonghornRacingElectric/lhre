@@ -1,0 +1,26 @@
+# proto-file: lib/spec/proto/can_spec.proto
+# proto-message: lhre.canspec.SpecFile
+
+message {
+  name: "PDU_BSE3"
+  can_id: 456
+  from_board: "PDU"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 2
+  frequency_hz: 100.0
+  description: "Rear brake pressure downstream of the line lock (BSE3)."
+  signal {
+    name: "brake_pressure"
+    encoding {
+      bit_length: 16
+      scale: 0.05
+    }
+    logical {
+      physical {
+        unit: "psi"
+      }
+    }
+    description: "BSE3 pressure"
+  }
+}
