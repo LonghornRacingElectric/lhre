@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit settings for this repo. Anything not set here falls back to the
+# org dashboard. CodeRabbit reads this file from each PR's own branch.
+reviews:
+  # Keep CodeRabbit out of the PR description. Authors write it, and the
+  # generated "Summary by CodeRabbit" block kept getting appended under
+  # their text.
+  high_level_summary: false
