@@ -27,7 +27,11 @@ description: Answer one vehicle dynamics question about the current car with a n
      `tools.parallel.map_cases`. See
      [studies.md](../../studies.md#parallel-cases).
 3. Write `README.md` with four sections: Question, Method, Result,
-   Provenance. See [studies.md](../../studies.md#readmemd).
+   Provenance. See [studies.md](../../studies.md#readmemd). Keep it short
+   and in simple technical English. Start the Result with the answer.
+   Give the inputs that people will want to change a command-line
+   argument, so a variant needs no code change. See
+   [studies.md](../../studies.md#variants).
 4. Run the study from `simulation/`:
 
    ```bash
