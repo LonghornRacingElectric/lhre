@@ -15,6 +15,7 @@
   <exec_depend>lhr_metrics</exec_depend>
   <exec_depend>lhr_mission_manager</exec_depend>
   <exec_depend>lhr_sensor_sim</exec_depend>
+  <exec_depend>lhr_lidar_sim</exec_depend>
 
   <!-- record:=true writes MCAP; foxglove:=true serves the live graph -->
   <exec_depend>ros2bag</exec_depend>

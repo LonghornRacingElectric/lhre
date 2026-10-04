@@ -154,6 +154,22 @@ def generate_launch_description():
     foxglove_port_arg = DeclareLaunchArgument(
         'foxglove_port', default_value='8765')
 
+    # Synthetic Mid-360. Off by default: the cheat-mode sensor sim is
+    # what the gate's numbers were measured against, and swapping the
+    # perception front end silently would make those numbers lie.
+    lidar_arg = DeclareLaunchArgument(
+        'lidar', default_value='false',
+        description='Publish a synthetic Livox Mid-360 cloud on '
+                    '/lhr/lidar/points alongside the stack')
+    lidar_pitch_arg = DeclareLaunchArgument(
+        'mount_pitch_rad', default_value='0.0',
+        description='Mid-360 mount pitch, positive is nose down. The '
+                    'mount study has not settled this yet')
+    lidar_profile_arg = DeclareLaunchArgument(
+        'elevation_profile', default_value='rosette',
+        description="Beam density model: 'rosette' or 'uniform'. Run a "
+                    'study both ways to see if it depends on the guess')
+
     # Mission manager
     mission_arg = DeclareLaunchArgument(
         'mission', default_value='autocross',
@@ -279,6 +295,21 @@ def generate_launch_description():
         output='screen',
     )
 
+    lidar_sim = Node(
+        package='lhr_lidar_sim',
+        executable='lidar_sim',
+        name='lidar_sim',
+        parameters=[{
+            'use_sim_time': LaunchConfiguration('use_sim_time'),
+            'seed': LaunchConfiguration('seed'),
+            'mount_pitch_rad': LaunchConfiguration('mount_pitch_rad'),
+            'elevation_profile': LaunchConfiguration(
+                'elevation_profile'),
+        }],
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('lidar')),
+    )
+
     def recorder(sim_time: bool) -> ExecuteProcess:
         """
         Build the bag recorder for one clock mode.
@@ -363,6 +394,9 @@ def generate_launch_description():
         bag_dir_arg,
         foxglove_arg,
         foxglove_port_arg,
+        lidar_arg,
+        lidar_pitch_arg,
+        lidar_profile_arg,
         cones,
         sensor_sim,
         centerline,
@@ -370,6 +404,7 @@ def generate_launch_description():
         mission_mgr,
         control,
         metrics,
+        lidar_sim,
         recorder(sim_time=True),
         recorder(sim_time=False),
         foxglove_bridge,
