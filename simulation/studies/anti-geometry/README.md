@@ -116,7 +116,7 @@ inside each event.
 | Link share | Link force per g ÷ axle Fz per g. This is the anti % that the car achieves on track. |
 | Fz delay at onset | Time from the 50 % crossing of ax to the 50 % crossing of the axle Fz, from the level 0.5 s before the event to the level 0.3–0.6 s after it. The mean over the lap's events. |
 | Fz overshoot at onset | Peak axle Fz above its 0.3–0.6 s level, as % of the change. |
-| Map downforce | Evaluate the CFD map at each sample's front and rear ride height. Report the std and range over the lap, in % of the static value. This is one-way: the sim's own downforce does not change with ride height. |
+| Map downforce | Evaluate the aero map (Orion's, see [Confidence](#confidence)) at each sample's front and rear ride height. Report the std and range over the lap, in % of the static value. This is one-way: the sim's own downforce does not change with ride height. |
 | Roll gradient, front LLTD, heave | Mean over the `sweeper` steady-corner windows. |
 | Turn-in yaw delay and roll overshoot | The same 50 % method at the `sweeper` corner entries, from steer to yaw rate and to roll. |
 
@@ -383,9 +383,10 @@ The full grids:
 
 **Inputs.**
 
-- Aero balance: the vehicle file puts the center of pressure 1622 mm behind the front axle, which is −5 % front
-  balance at 76.2/76.2 mm. This is not plausible. The aero team must confirm the `my_table_nm` sign and
-  reference. Until then, use the downforce numbers as a ranking only.
+- Aero map: `vehicle.yml` uses the map of Orion, last year's car, with a scaled center of pressure. It is a
+  placeholder until the aero team gives a map for this car. It puts the center of pressure 1622 mm behind the
+  front axle, which is −5 % front balance at 76.2/76.2 mm. Thus use the map downforce numbers as a ranking
+  only. The ride-height fits take out aero with the v² term.
 - Static ride height: `vehicle.yml` has none, so dyn_py uses 76.2 mm front and rear.
 - Wheel rates, damping and anti-roll bar rates come from the four-post metrics file (hash below). They are the
   same for every car.
