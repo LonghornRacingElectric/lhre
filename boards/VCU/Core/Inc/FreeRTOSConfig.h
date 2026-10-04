@@ -165,6 +165,11 @@ standard names. */
 
 /* USER CODE BEGIN Defines */
 /* Section where parameter definitions can be added (for instance, to override default ones in FreeRTOS.h) */
+/* Stack-overflow and malloc-failed hooks: not exposed by this CubeMX FREERTOS
+ * page, so set here. The hooks live in Board/rtos_hooks.cpp and put the
+ * outputs in their safe state before halting (the IWDG then resets). */
+#define configCHECK_FOR_STACK_OVERFLOW 2
+#define configUSE_MALLOC_FAILED_HOOK 1
 /* USER CODE END Defines */
 
 #endif /* FREERTOS_CONFIG_H */

@@ -57,7 +57,15 @@
 void SystemClock_Config(void);
 void MX_FREERTOS_Init(void);
 /* USER CODE BEGIN PFP */
-
+/* VCU.ioc currently has ProjectManager.NoMain=false, so CubeMX emits a main()
+ * that collides with the hand-written one in Board/main.cpp and calls the
+ * CMSIS-RTOS2 glue this build deliberately leaves out. Rename it out of the
+ * way; nothing calls it and --gc-sections drops it. Delete this block once the
+ * .ioc is back to NoMain=true (see boards/VCU/README.md). */
+#define main vcu_cubemx_generated_main_unused
+#define MX_FREERTOS_Init() ((void)0)
+#define osKernelInitialize() ((void)0)
+#define osKernelStart() ((void)0)
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
