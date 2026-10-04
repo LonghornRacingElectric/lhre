@@ -51,6 +51,7 @@
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void vcu_board_force_safe_outputs(void); /* Board/board_safe_state.cpp */
 
 /* USER CODE END 0 */
 
@@ -93,6 +94,7 @@ void HardFault_Handler(void)
   while (1)
   {
     /* USER CODE BEGIN W1_HardFault_IRQn 0 */
+    vcu_board_force_safe_outputs();
     /* USER CODE END W1_HardFault_IRQn 0 */
   }
 }
@@ -108,6 +110,7 @@ void MemManage_Handler(void)
   while (1)
   {
     /* USER CODE BEGIN W1_MemoryManagement_IRQn 0 */
+    vcu_board_force_safe_outputs();
     /* USER CODE END W1_MemoryManagement_IRQn 0 */
   }
 }
@@ -123,6 +126,7 @@ void BusFault_Handler(void)
   while (1)
   {
     /* USER CODE BEGIN W1_BusFault_IRQn 0 */
+    vcu_board_force_safe_outputs();
     /* USER CODE END W1_BusFault_IRQn 0 */
   }
 }
@@ -138,6 +142,7 @@ void UsageFault_Handler(void)
   while (1)
   {
     /* USER CODE BEGIN W1_UsageFault_IRQn 0 */
+    vcu_board_force_safe_outputs();
     /* USER CODE END W1_UsageFault_IRQn 0 */
   }
 }

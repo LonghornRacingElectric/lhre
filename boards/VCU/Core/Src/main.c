@@ -66,6 +66,7 @@ void MX_FREERTOS_Init(void);
 #define MX_FREERTOS_Init() ((void)0)
 #define osKernelInitialize() ((void)0)
 #define osKernelStart() ((void)0)
+void vcu_board_force_safe_outputs(void); /* Board/board_safe_state.cpp */
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -214,6 +215,8 @@ void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
+  /* Outputs safe, then halt; the IWDG (if started) resets the MCU. */
+  vcu_board_force_safe_outputs();
   __disable_irq();
   while (1)
   {

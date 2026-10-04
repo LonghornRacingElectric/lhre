@@ -9,18 +9,26 @@ firmware_project(
     # Generated CAN bindings, per source board: what the VCU sends plus
     # what it listens to — not the whole bus.
     app_deps = [
-        # Debug shell over the PA2/PA3 UART (the ST-LINK VCP pins);
+        # Debug shells over the STDC14 VCP (USART3) and USB CDC;
         # tools/monitor is the laptop side.
         "//drivers/longhorn:logger",
         "//drivers/longhorn:shell",
+        "//lib/codegen/cpp:can_bench",
+        "//lib/codegen/cpp:can_dui",
         "//lib/codegen/cpp:can_hvc",
+        "//lib/codegen/cpp:can_inverter",
+        "//lib/codegen/cpp:can_pdu",
+        "//lib/codegen/cpp:can_pi",
         "//lib/codegen/cpp:can_vcu",
     ],
-    # LPUART1 isn't in VCU.ioc yet, so the CubeMX-owned hal_conf.h can't
-    # enable the UART HAL module; supply the define here until it is (see
-    # the debug-UART TODO in Board/main.cpp).
+    # USART3 (the STDC14 VCP on PC10/PC11) isn't in VCU.ioc yet, so the
+    # CubeMX-owned hal_conf.h can't enable the UART HAL module; supply the
+    # define here until it is (see the debug-UART note in Board/main.cpp).
     defines = ["HAL_UART_MODULE_ENABLED"],
     enable_freertos = True,
     enable_usb = True,
     mcu = "stm32g474xx",
+    # :vcu_test is the bring-up test image (vcu::TestApp): no vehicle logic,
+    # no inverter frames. See README.md.
+    variants = {"test": ["VCU_TEST_IMAGE"]},
 )

@@ -11,3 +11,8 @@ void ForceSafeOutputs() {
 }
 
 }  // namespace vcu_board
+
+// C entry for the CubeMX fault handlers and Error_Handler (USER CODE).
+extern "C" void vcu_board_force_safe_outputs(void) {
+  vcu_board::ForceSafeOutputs();
+}
