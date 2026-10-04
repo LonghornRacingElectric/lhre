@@ -43,6 +43,7 @@ class TrackBuilder(Node):
     """Subscribe to cone markers, compute midpoints, publish centerline."""
 
     def __init__(self):
+        """Configure pairing, chaining, and the ROS subscriptions and publishers."""
         super().__init__('track_builder')
 
         # --- Parameters ---
@@ -54,6 +55,11 @@ class TrackBuilder(Node):
         self.declare_parameter('track_width', 3.5)
         self.declare_parameter('track_width_tolerance', 1.0)
         self.declare_parameter('chaining_alg', 'greedy')
+        self.declare_parameter('min_step_m', 0.3)
+        self.declare_parameter('max_step_m', 4.0)
+        self.declare_parameter('max_turn_deg', 70.0)
+        self.declare_parameter('distance_weight', 1.0)
+        self.declare_parameter('heading_weight', 1.0)
 
         self._frame_id = self.get_parameter(
             'frame_id').get_parameter_value().string_value
@@ -71,6 +77,25 @@ class TrackBuilder(Node):
             'track_width_tolerance').get_parameter_value().double_value
         self._chaining_alg = self.get_parameter(
             'chaining_alg').get_parameter_value().string_value
+        self._min_step_m = self.get_parameter('min_step_m').value
+        self._max_step_m = self.get_parameter('max_step_m').value
+        max_turn_deg = self.get_parameter('max_turn_deg').value
+        self._distance_weight = self.get_parameter('distance_weight').value
+        self._heading_weight = self.get_parameter('heading_weight').value
+        if not all(math.isfinite(value) for value in (
+            self._min_step_m, self._max_step_m, max_turn_deg,
+            self._distance_weight, self._heading_weight,
+        )):
+            raise ValueError('Chaining parameters must be finite')
+        if not 0.0 <= self._min_step_m < self._max_step_m:
+            raise ValueError('Require 0 <= min_step_m < max_step_m')
+        if not 0.0 < max_turn_deg <= 180.0:
+            raise ValueError('Require 0 < max_turn_deg <= 180')
+        if (self._distance_weight < 0.0 or self._heading_weight < 0.0
+                or max(self._distance_weight, self._heading_weight) == 0.0):
+            raise ValueError(
+                'Chaining weights must be nonnegative with at least one positive')
+        self._max_turn_rad = math.radians(max_turn_deg)
 
         # --- Stored cone positions grouped by known color ---
         self._left_cones: dict = {}
@@ -218,10 +243,13 @@ class TrackBuilder(Node):
                 break
 
         # Chain midpoints into path order starting from the vehicle
-        if len(midpoints) > 2 and self._have_odom:
-            midpoints = self._chain_path_from_vehicle(midpoints)
-        elif len(midpoints) > 2:
-            midpoints = self._chain_path_without_vehicle(midpoints)
+        if len(midpoints) > 2 or (
+            midpoints and self._chaining_alg == 'constrained_greedy'
+        ):
+            if self._have_odom:
+                midpoints = self._chain_path_from_vehicle(midpoints)
+            else:
+                midpoints = self._chain_path_without_vehicle(midpoints)
 
         return midpoints
 
@@ -280,10 +308,13 @@ class TrackBuilder(Node):
         ]
         midpoints = midpoints[:self._max_points]
 
-        if len(midpoints) > 2 and self._have_odom:
-            midpoints = self._chain_path_from_vehicle(midpoints)
-        elif len(midpoints) > 2:
-            midpoints = self._chain_path_without_vehicle(midpoints)
+        if len(midpoints) > 2 or (
+            midpoints and self._chaining_alg == 'constrained_greedy'
+        ):
+            if self._have_odom:
+                midpoints = self._chain_path_from_vehicle(midpoints)
+            else:
+                midpoints = self._chain_path_without_vehicle(midpoints)
 
         return midpoints
 
@@ -301,6 +332,10 @@ class TrackBuilder(Node):
             key=lambda i: (points[i][0] - vx) ** 2 + (points[i][1] - vy) ** 2)
 
         ordered = chaining_algorithm(points, start_idx)
+
+        # Constrained greedy chooses its direction before extending the path.
+        if self._chaining_alg == 'constrained_greedy':
+            return ordered
 
         if len(ordered) >= 2:
             dx = ordered[1][0] - ordered[0][0]
@@ -361,14 +396,76 @@ class TrackBuilder(Node):
 
         return ordered
 
-    @staticmethod
     def _constrained_greedy(
-        points: List[PathPoint], start: int,
+        self, points: List[PathPoint], start: int,
     ) -> List[PathPoint]:
-        """Order points using constrained greedy chaining."""
-        raise NotImplementedError(
-            'constrained greedy chaining is not implemented',
-        )
+        """Choose low-cost steps inside a sector following the path heading."""
+        if not points:
+            return []
+        ordered = [points[start]]
+        remaining = set(range(len(points)))
+        remaining.discard(start)
+        heading = self._veh_yaw
+
+        if not self._have_odom:
+            # A separated neighbor supplies a tangent when yaw is unavailable.
+            neighbors = [
+                j for j in remaining
+                if math.dist(points[start], points[j]) > 0.0
+                and math.dist(points[start], points[j]) >= self._min_step_m
+            ]
+            if not neighbors:
+                return ordered
+            nearest = min(
+                neighbors,
+                key=lambda j: (math.dist(points[start], points[j]), j),
+            )
+            heading = math.atan2(
+                points[nearest][1] - points[start][1],
+                points[nearest][0] - points[start][0],
+            )
+
+        while remaining:
+            x, y = ordered[-1]
+            best_idx = None
+            best_score = float('inf')
+            best_heading = heading
+            redundant = set()
+            for j in remaining:
+                dx, dy = points[j][0] - x, points[j][1] - y
+                distance = math.hypot(dx, dy)
+                if distance == 0.0 or distance < self._min_step_m:
+                    # Suppress close duplicates so they cannot rejoin later.
+                    redundant.add(j)
+                    continue
+                if distance > self._max_step_m:
+                    continue
+                candidate_heading = math.atan2(dy, dx)
+                heading_error = math.atan2(
+                    math.sin(candidate_heading - heading),
+                    math.cos(candidate_heading - heading),
+                )
+                if abs(heading_error) > self._max_turn_rad:
+                    continue
+                score = (
+                    self._distance_weight * distance / self._max_step_m
+                    + self._heading_weight
+                    * (heading_error / self._max_turn_rad) ** 2
+                )
+                if (best_idx is None or score < best_score
+                        or (score == best_score and j < best_idx)):
+                    best_idx = j
+                    best_score = score
+                    best_heading = candidate_heading
+
+            remaining.difference_update(redundant)
+            if best_idx is None:
+                break
+            ordered.append(points[best_idx])
+            remaining.remove(best_idx)
+            heading = best_heading
+
+        return ordered
 
     @staticmethod
     def _fixed_width_beam_search(
