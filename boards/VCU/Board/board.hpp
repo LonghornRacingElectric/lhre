@@ -22,7 +22,7 @@ extern volatile uint16_t g_adc1_buffer[vcu::kAdc1Channels];
 extern volatile uint16_t g_adc2_buffer[vcu::kAdc2Channels];
 
 // Reconfigures the CubeMX ADCs into timer-triggered, 16x oversampled scans
-// with circular DMA (adds the shutdown taps and VREFINT), and readies the
+// with circular DMA (adds the shutdown-tap and VREFINT ranks), and readies the
 // DAC for timer-paced DMA. Call after the MX_*_Init functions, before
 // starting the LHAL adapters.
 void ConfigureAnalog();
@@ -31,8 +31,7 @@ void ConfigureAnalog();
 void StartAdcTrigger();
 
 // FDCAN details the .ioc doesn't express: the Critical bus (FDCAN2) gets
-// automatic retransmission and its IRQ lines; both get a global filter
-// accepting standard frames into RX FIFO0.
+// automatic retransmission and its IRQ lines.
 void ConfigureCan();
 
 // The STDC14 virtual COM port (USART3 on PC10/PC11, AF7).

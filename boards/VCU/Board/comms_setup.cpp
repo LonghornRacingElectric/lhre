@@ -1,5 +1,5 @@
-// FDCAN and debug UART details VCU.ioc doesn't express yet (IOC changes
-// needed #6 and #8 in the board README).
+// FDCAN and debug UART details VCU.ioc doesn't express yet (see "IOC gaps"
+// in the board README).
 
 #include "board.hpp"
 #include "fdcan.h"
@@ -12,22 +12,11 @@ namespace {
 
 constexpr uint32_t kDebugUartBaud = 115200;
 
-void ConfigureFilters(FDCAN_HandleTypeDef* hfdcan) {
-  // Classic standard IDs into RX FIFO0; the app filters in software (the
-  // .ioc configures no filter elements). Extended and remote frames aren't
-  // used on either bus.
-  if (HAL_FDCAN_ConfigGlobalFilter(hfdcan, FDCAN_ACCEPT_IN_RX_FIFO0,
-                                   FDCAN_REJECT, FDCAN_REJECT_REMOTE,
-                                   FDCAN_REJECT_REMOTE) != HAL_OK) {
-    Error_Handler();
-  }
-}
-
 }  // namespace
 
 void ConfigureCan() {
-  ConfigureFilters(&hfdcan1);
-  ConfigureFilters(&hfdcan2);
+  // No filter elements and the reset-default global filter (every frame
+  // into RX FIFO0), as on the 2026 VCU; the app filters in software.
   // The .ioc leaves FDCAN2 (Critical) with automatic retransmission off,
   // unlike FDCAN1; the 2026 Critical bus retransmitted. The controller is
   // still in configuration mode until HAL_FDCAN_Start, so DAR is writable.

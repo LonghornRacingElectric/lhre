@@ -158,35 +158,35 @@ echoes `BENCH_ECHO_REQUEST_CRITICAL`/`_DATA` back on the same bus.
 
 ## IOC gaps
 
-The regenerated `VCU.ioc` needs these changes. `Board/` works around each
-one at runtime, and each workaround can go once CubeMX generates the
-equivalent:
+Optional `.ioc` cleanups. Everything here already works: `Board/` (or a
+`USER CODE` block) sets it up at runtime, and each workaround can go once
+CubeMX generates the equivalent. Items 7 and 8 are cosmetic (`main.cpp`
+drives the lamps high right after `MX_GPIO_Init`, and `tools/dfu` also
+matches the port by VID:PID).
 
 1. `ProjectManager.NoMain=true`. Today `Core/Src/main.c` renames its own
    `main()` away in `USER CODE BEGIN PFP`.
-2. PA3 → ADC1_IN4 and PC5 → ADC2_IN11. Today both are GPIO inputs, which
-   `analog_setup.cpp` reconfigures as analog.
-3. ADC1/ADC2 configuration:
+2. ADC1/ADC2 configuration:
    - TIM6 TRGO trigger;
    - DMA continuous requests;
    - 16× oversampling;
    - ADC1 ranks for IN4 and VREFINT, and ADC2 rank IN11 with DMA on
      DMA1_Ch2;
    - drop the unused AWD3.
-4. DAC1 CH1 triggered by TIM7 TRGO, with DMA on DMA1_Ch3. TIM6/TIM7 as
+3. DAC1 CH1 triggered by TIM7 TRGO, with DMA on DMA1_Ch3. TIM6/TIM7 as
    basic timers with TRGO on update.
-5. FDCAN2 (Critical):
+4. FDCAN2 (Critical):
    - automatic retransmission on;
    - FDCAN2_IT0/IT1 at priority 5.
-6. IWDG. Today the LHAL adapter drives it at register level.
-7. USART3 on PC10/PC11 for the STDC14 VCP. Today `comms_setup.cpp` sets it
+5. IWDG. Today the LHAL adapter drives it at register level.
+6. USART3 on PC10/PC11 for the STDC14 VCP. Today `comms_setup.cpp` sets it
    up, and `BUILD.bazel` defines `HAL_UART_MODULE_ENABLED`.
-8. GPIO user labels, and initial level high on PE12/PE13 (BMS/IMD lamps
+7. GPIO user labels, and initial level high on PE12/PE13 (BMS/IMD lamps
    on).
-9. Restore the USB strings `LHRe` / `VCU` (`tools/dfu` matches the port by
+8. Restore the USB strings `LHRe` / `VCU` (`tools/dfu` matches the port by
    "lhre" or VID:PID).
-10. FreeRTOS stack-overflow and malloc-failed hooks. Today they are set in
-    the `FreeRTOSConfig.h` USER CODE.
+9. FreeRTOS stack-overflow and malloc-failed hooks. Today they are set in
+   the `FreeRTOSConfig.h` USER CODE.
 
 The clock tree is unchanged from the 2026 VCU: 16 MHz HSE → 96 MHz SYSCLK,
 FDCAN on PCLK1, ADC on HCLK/2 = 48 MHz, USB on PLLQ.

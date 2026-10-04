@@ -1,7 +1,8 @@
-// ADC/DAC bring-up beyond what VCU.ioc generates (IOC changes needed #2-#5
-// in the board README): the shutdown taps on PA3/PC5 as analog inputs,
-// VREFINT, a 1 kHz TIM6 trigger with 16x hardware oversampling, circular
-// DMA on both ADCs, and a TIM7-paced DMA channel for the DAC.
+// ADC/DAC bring-up beyond what VCU.ioc generates (see "IOC gaps" in the
+// board README): scan ranks for the shutdown taps (PA3/PC5, muxed as
+// analog by CubeMX) and VREFINT, a 1 kHz TIM6 trigger with 16x hardware
+// oversampling, circular DMA on both ADCs, and a TIM7-paced DMA channel for
+// the DAC.
 
 #include "adc.h"
 #include "board.hpp"
@@ -95,16 +96,6 @@ void CircularDma(DMA_HandleTypeDef* hdma, DMA_Channel_TypeDef* channel,
 }  // namespace
 
 void ConfigureAnalog() {
-  // PA3 (Shutdown_out_S, ADC1_IN4) and PC5 (Shutdown_in_S, ADC2_IN11) are
-  // GPIO inputs in the .ioc; they are analog taps on the board.
-  GPIO_InitTypeDef pin = {};
-  pin.Mode = GPIO_MODE_ANALOG;
-  pin.Pull = GPIO_NOPULL;
-  pin.Pin = GPIO_PIN_3;
-  HAL_GPIO_Init(GPIOA, &pin);
-  pin.Pin = GPIO_PIN_5;
-  HAL_GPIO_Init(GPIOC, &pin);
-
   // ADC1: APPS1, APPS2, BSE1, BSE2 (ranks 1-4 from CubeMX, 24.5 cycles:
   // op-amp follower sources), then the shutdown tap (12 k source with
   // 100 nF at the pin) and VREFINT (needs >= 4 us sampling).
