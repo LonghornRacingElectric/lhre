@@ -1,10 +1,11 @@
 """Sanity checks on the checked-in vehicle.yaml and its loader."""
 
+import hashlib
 import math
 from pathlib import Path
 
 import lhr_vehicle
-from lhr_vehicle import config_path, load_vehicle
+from lhr_vehicle import config_path, load_vehicle, vehicle_sha256
 import pytest
 
 
@@ -54,3 +55,17 @@ def test_lidar_sits_on_the_car():
     assert -0.5 < lx < veh.wheelbase_m + 1.0
     assert abs(ly) < veh.half_track_m
     assert 0.0 < lz < 1.5
+
+
+def test_vehicle_sha256_matches_the_file_on_disk():
+    expected = hashlib.sha256(config_path().read_bytes()).hexdigest()
+    assert vehicle_sha256() == expected
+    assert len(vehicle_sha256()) == 64
+
+
+def test_vehicle_sha256_changes_with_the_content(tmp_path):
+    a = tmp_path / 'a.yaml'
+    b = tmp_path / 'b.yaml'
+    a.write_text('wheelbase_m: 1.5494\n', encoding='utf-8')
+    b.write_text('wheelbase_m: 1.5495\n', encoding='utf-8')
+    assert vehicle_sha256(a) != vehicle_sha256(b)

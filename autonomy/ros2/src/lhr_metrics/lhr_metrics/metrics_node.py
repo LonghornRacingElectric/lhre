@@ -4,19 +4,56 @@
 import csv
 import math
 import os
+import sys
 import time
 from typing import List, Tuple
 
+from lhr_vehicle import vehicle_sha256
 from nav_msgs.msg import Odometry, Path
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Bool
+from std_msgs.msg import Bool, String
 
 
-CSV_HEADER = [
-    'run_id', 'duration_s', 'samples', 'mean_cte', 'max_cte',
+# The launch arguments that change a run's outcome, recorded beside the
+# outcomes. A row listing only results cannot be compared with another
+# row, because nothing in it says what differed between the two runs.
+# A new launch argument that affects the result belongs here too, or
+# the row quietly stops explaining itself.
+RUN_PARAMS = (
+    ('scenario', 'mvs_demo'),
+    ('git_sha', 'unknown'),
+    ('seed', 0),
+    ('track_style', ''),
+    ('num_waypoints', 0),
+    ('mission', ''),
+    ('fov_deg', 0.0),
+    ('max_range_m', 0.0),
+    ('noise_std_m', 0.0),
+    ('false_negative_rate', 0.0),
+    ('lookahead_dist', 0.0),
+    ('a_lat_max', 0.0),
+    ('v_min', 0.0),
+    ('v_max', 0.0),
+    ('max_accel', 0.0),
+    ('max_decel', 0.0),
+)
+
+OUTCOMES = (
+    'outcome', 'duration_s', 'samples', 'mean_cte', 'max_cte',
     'off_track_count', 'mean_speed', 'max_speed', 'lap_completed',
-]
+)
+
+# Why the run ended. Only 'lap' and 'mission_finished' are a pass; the
+# others exit non-zero so a headless run cannot look successful by
+# having quietly produced nothing.
+CLEAN_OUTCOMES = ('lap', 'mission_finished')
+
+CSV_HEADER = (
+    ['run_id', 'vehicle_sha256']
+    + [name for name, _ in RUN_PARAMS]
+    + list(OUTCOMES)
+)
 
 
 class MetricsNode(Node):
@@ -32,6 +69,7 @@ class MetricsNode(Node):
         self.declare_parameter('min_lap_time', 5.0)
         self.declare_parameter('output_csv', 'data/metrics.csv')
         self.declare_parameter('run_id', '')
+        self.declare_parameter('timeout_sec', 120.0)
 
         self._off_track_thresh = self.get_parameter(
             'off_track_threshold').get_parameter_value().double_value
@@ -47,6 +85,19 @@ class MetricsNode(Node):
             'run_id').get_parameter_value().string_value
         self._run_id = run_id if run_id else time.strftime('%Y%m%d_%H%M%S')
 
+        # --- Provenance and independent variables ---
+        self._run_params = {}
+        for name, default in RUN_PARAMS:
+            self.declare_parameter(name, default)
+            self._run_params[name] = str(self.get_parameter(name).value)
+
+        try:
+            self._vehicle_sha = vehicle_sha256()
+        except (FileNotFoundError, OSError) as exc:
+            # Losing provenance is worth a warning, not a dead run.
+            self._vehicle_sha = 'unknown'
+            self.get_logger().warn(f'vehicle_sha256 unavailable: {exc}')
+
         # --- Centerline cache ---
         self._path: List[Tuple[float, float]] = []
 
@@ -56,10 +107,21 @@ class MetricsNode(Node):
         self._cte_max = 0.0
         self._off_track_count = 0
         self._start_time: float = 0.0
+        self._last_time: float = 0.0
+        self._warned_unstamped = False
 
         # --- Speed stats ---
         self._speed_sum = 0.0
         self._speed_max = 0.0
+
+        # Wall time on purpose: this is the watchdog that stops a
+        # headless run hanging when the sim dies and sim time freezes.
+        self.timeout_sec = self.get_parameter(
+            'timeout_sec').get_parameter_value().double_value
+
+        # --- Run lifecycle ---
+        self.finished = False
+        self._outcome = 'interrupted'
 
         # --- Lap detection state ---
         self._lap_completed = False
@@ -76,6 +138,8 @@ class MetricsNode(Node):
             Path, '/lhr/track/centerline', self._path_cb, 10)
         self.create_subscription(
             Odometry, '/lhr/vehicle/odom', self._odom_cb, 10)
+        self.create_subscription(
+            String, '/lhr/mission/status', self._status_cb, 10)
 
         self.get_logger().info(
             f'Metrics v0 ready  (run_id={self._run_id}, '
@@ -84,6 +148,14 @@ class MetricsNode(Node):
     # ------------------------------------------------------------------
     # Callbacks
     # ------------------------------------------------------------------
+    def _status_cb(self, msg: String):
+        # FINISHED is terminal in the mission manager, so it ends the
+        # run even on a mission with no lap, such as acceleration.
+        if msg.data == 'FINISHED':
+            self.finish('mission_finished')
+        elif msg.data == 'EMERGENCY':
+            self.finish('emergency')
+
     def _path_cb(self, msg: Path):
         self._path = [
             (ps.pose.position.x, ps.pose.position.y)
@@ -97,10 +169,11 @@ class MetricsNode(Node):
         px = msg.pose.pose.position.x
         py = msg.pose.pose.position.y
 
-        now = time.monotonic()
+        now = self._stamp_sec(msg.header.stamp)
         if self._samples == 0:
             self._start_time = now
             self._lap_start_time = now
+        self._last_time = now
 
         # --- CTE ---
         cte = self._nearest_distance(px, py)
@@ -122,6 +195,27 @@ class MetricsNode(Node):
         # --- Lap detection ---
         if not self._lap_completed and len(self._path) > 1:
             self._update_lap_detection(px, py, now)
+
+    # ------------------------------------------------------------------
+    # Clock
+    # ------------------------------------------------------------------
+    def _stamp_sec(self, stamp) -> float:
+        """
+        Seconds from a message stamp, so timing follows the run's clock.
+
+        Wall time made a run's duration depend on host load, so two
+        identical runs never produced the same row. Odom arrives stamped
+        from the kinematic sim and from the Gazebo bridge; an unstamped
+        message warns once rather than silently reporting zero.
+        """
+        if stamp.sec == 0 and stamp.nanosec == 0:
+            if not self._warned_unstamped:
+                self._warned_unstamped = True
+                self.get_logger().warn(
+                    'odom has no header stamp; falling back to the node '
+                    'clock, so durations are not reproducible')
+            return self.get_clock().now().nanoseconds * 1e-9
+        return stamp.sec + stamp.nanosec * 1e-9
 
     # ------------------------------------------------------------------
     # Geometry
@@ -155,18 +249,20 @@ class MetricsNode(Node):
                 self._lap_completed = True
                 self._lap_pub.publish(Bool(data=True))
                 self.get_logger().info('Lap completed!')
-                self._print_summary()
-                self._write_csv()
+                self.finish('lap')
 
     # ------------------------------------------------------------------
     # Reporting
     # ------------------------------------------------------------------
     def _build_row(self) -> dict:
-        duration = time.monotonic() - self._start_time if self._samples else 0.0
+        duration = (
+            self._last_time - self._start_time if self._samples else 0.0)
         mean_cte = (self._cte_sum / self._samples) if self._samples else 0.0
         mean_speed = (self._speed_sum / self._samples) if self._samples else 0.0
-        return {
+        row = {
             'run_id': self._run_id,
+            'vehicle_sha256': self._vehicle_sha,
+            'outcome': self._outcome,
             'duration_s': f'{duration:.2f}',
             'samples': str(self._samples),
             'mean_cte': f'{mean_cte:.4f}',
@@ -176,6 +272,8 @@ class MetricsNode(Node):
             'max_speed': f'{self._speed_max:.2f}',
             'lap_completed': str(self._lap_completed).lower(),
         }
+        row.update(self._run_params)
+        return row
 
     def _print_summary(self):
         row = self._build_row()
@@ -183,10 +281,30 @@ class MetricsNode(Node):
         for k, v in row.items():
             self.get_logger().info(f'  {k}: {v}')
 
+    @staticmethod
+    def _stale_header(path: str) -> bool:
+        """Report whether an existing CSV's columns differ from ours."""
+        try:
+            with open(path, newline='') as f:
+                return next(csv.reader(f), []) != list(CSV_HEADER)
+        except OSError:
+            return False
+
     def _write_csv(self):
         csv_dir = os.path.dirname(self._csv_path)
         if csv_dir:
             os.makedirs(csv_dir, exist_ok=True)
+
+        # A file written before a column existed cannot hold the new row.
+        # Set it aside rather than dropping the extra fields, which is
+        # how a metrics file quietly starts lying about what it holds.
+        if (os.path.exists(self._csv_path)
+                and self._stale_header(self._csv_path)):
+            retired = self._csv_path + '.old'
+            os.replace(self._csv_path, retired)
+            self.get_logger().warn(
+                f'{self._csv_path} had an older column set; '
+                f'moved it to {retired}')
 
         write_header = not os.path.exists(self._csv_path)
         row = self._build_row()
@@ -199,21 +317,50 @@ class MetricsNode(Node):
 
         self.get_logger().info(f'CSV row appended to {self._csv_path}')
 
-    def on_shutdown(self):
-        """Dump a summary on shutdown (Ctrl+C)."""
+    def finish(self, outcome: str):
+        """
+        End the run, recording why.
+
+        Every ending goes through here so a row is always written.
+        Before this, only Ctrl+C wrote one, so a headless run produced
+        nothing and still exited zero.
+        """
+        if self.finished:
+            return
+        self._outcome = outcome
+        self.finished = True
+        self.get_logger().info(f'Run ended: {outcome}')
+
+    def finalize(self) -> int:
+        """
+        Write the row and return the process exit code.
+
+        Non-zero on anything but a clean finish, so a gate can read the
+        exit code alone and a hung or crashed run cannot pass.
+        """
         if self._samples > 0:
             self._print_summary()
             self._write_csv()
+        else:
+            self.get_logger().error('No odom samples; nothing to write')
+            return 1
+        return 0 if self._outcome in CLEAN_OUTCOMES else 1
 
 
 def main():
     """Entry point."""
     rclpy.init()
     node = MetricsNode()
+    deadline = (time.monotonic() + node.timeout_sec
+                if node.timeout_sec > 0.0 else None)
     try:
-        rclpy.spin(node)
+        while rclpy.ok() and not node.finished:
+            rclpy.spin_once(node, timeout_sec=0.1)
+            if deadline is not None and time.monotonic() > deadline:
+                node.finish('timeout')
     except KeyboardInterrupt:
-        pass
-    node.on_shutdown()
+        node.finish('interrupted')
+    code = node.finalize()
     node.destroy_node()
     rclpy.shutdown()
+    sys.exit(code)

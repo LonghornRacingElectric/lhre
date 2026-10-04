@@ -1,10 +1,48 @@
 """Launch the full MVS autonomy demo stack."""
 
+from pathlib import Path
+import subprocess
+
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import (
+    DeclareLaunchArgument, EmitEvent, RegisterEventHandler)
 from launch.conditions import IfCondition
+from launch.event_handlers import OnProcessExit
+from launch.events import Shutdown
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+
+
+def _git_sha() -> str:
+    """
+    Short commit id of the tree this launch file came from, or 'unknown'.
+
+    Recorded on every metrics row so an old result can be traced back to
+    the code that produced it. Resolved from this file's own path rather
+    than the working directory, because a run started from elsewhere
+    would otherwise record 'unknown' or, worse, an unrelated
+    repository's commit. build.sh passes --symlink-install, so the
+    installed copy resolves back into the checkout.
+
+    A '-dirty' suffix marks uncommitted changes anywhere in the repo,
+    since a clean-looking id on a modified tree is worse than no id.
+    """
+    here = str(Path(__file__).resolve().parent)
+
+    def git(*args: str) -> str:
+        return subprocess.check_output(
+            ('git', '-C', here) + args,
+            stderr=subprocess.DEVNULL, text=True).strip()
+
+    try:
+        sha = git('rev-parse', '--short', 'HEAD')
+    except (OSError, subprocess.CalledProcessError):
+        return 'unknown'
+    try:
+        dirty = bool(git('status', '--porcelain'))
+    except (OSError, subprocess.CalledProcessError):
+        dirty = False
+    return f'{sha}-dirty' if dirty else sha
 
 
 def generate_launch_description():
@@ -15,6 +53,23 @@ def generate_launch_description():
     metrics_arg = DeclareLaunchArgument(
         'enable_metrics', default_value='true',
         description='Launch metrics node alongside the stack')
+    sim_time_arg = DeclareLaunchArgument(
+        'use_sim_time', default_value='true',
+        description='Drive every node off the simulator clock. Off '
+                    'means wall time, and averaged metrics wander')
+    timeout_arg = DeclareLaunchArgument(
+        'timeout_sec', default_value='120.0',
+        description='Wall-clock watchdog. Ends the run non-zero rather '
+                    'than hanging when the sim stops')
+    csv_arg = DeclareLaunchArgument(
+        'output_csv', default_value='data/metrics.csv',
+        description='Where the metrics row goes, relative to the '
+                    'working directory. A runner points this at its '
+                    'own output directory')
+    scenario_arg = DeclareLaunchArgument(
+        'scenario', default_value='mvs_demo',
+        description='Name recorded on the metrics row, so runs from '
+                    'different presets can be told apart')
     track_style_arg = DeclareLaunchArgument(
         'track_style', default_value='autocross',
         description='Track generator: autocross | simple')
@@ -31,6 +86,13 @@ def generate_launch_description():
     # Sensor sim
     fov_arg = DeclareLaunchArgument('fov_deg', default_value='200.0')
     range_arg = DeclareLaunchArgument('max_range_m', default_value='20.0')
+    noise_arg = DeclareLaunchArgument(
+        'noise_std_m', default_value='0.0',
+        description='Cone position noise, metres std dev. Seeded, so a '
+                    'given seed repeats')
+    fn_arg = DeclareLaunchArgument(
+        'false_negative_rate', default_value='0.0',
+        description='Chance a visible cone is missed, 0.0 to 1.0')
 
     # Initial pose
     init_x_arg = DeclareLaunchArgument('init_x', default_value='25.0')
@@ -55,6 +117,7 @@ def generate_launch_description():
         executable='publish_cones',
         name='publish_cones',
         parameters=[{
+            'use_sim_time': LaunchConfiguration('use_sim_time'),
             'seed': LaunchConfiguration('seed'),
             'track_style': LaunchConfiguration('track_style'),
             'num_waypoints': LaunchConfiguration('num_waypoints'),
@@ -67,8 +130,13 @@ def generate_launch_description():
         executable='sensor_sim',
         name='sensor_sim',
         parameters=[{
+            'use_sim_time': LaunchConfiguration('use_sim_time'),
             'fov_deg': LaunchConfiguration('fov_deg'),
             'max_range_m': LaunchConfiguration('max_range_m'),
+            'noise_std_m': LaunchConfiguration('noise_std_m'),
+            'false_negative_rate': LaunchConfiguration(
+                'false_negative_rate'),
+            'seed': LaunchConfiguration('seed'),
         }],
         output='screen',
     )
@@ -77,6 +145,9 @@ def generate_launch_description():
         package='lhr_track_builder',
         executable='track_builder',
         name='track_builder',
+        parameters=[{
+            'use_sim_time': LaunchConfiguration('use_sim_time'),
+        }],
         output='screen',
     )
 
@@ -85,6 +156,7 @@ def generate_launch_description():
         executable='sim_node',
         name='sim_kinematic',
         parameters=[{
+            'publish_clock': LaunchConfiguration('use_sim_time'),
             'init_x': LaunchConfiguration('init_x'),
             'init_y': LaunchConfiguration('init_y'),
             'init_yaw': LaunchConfiguration('init_yaw'),
@@ -97,6 +169,7 @@ def generate_launch_description():
         executable='pursuit_node',
         name='pure_pursuit',
         parameters=[{
+            'use_sim_time': LaunchConfiguration('use_sim_time'),
             'lookahead_dist': LaunchConfiguration('lookahead_dist'),
             'a_lat_max': LaunchConfiguration('a_lat_max'),
             'v_min': LaunchConfiguration('v_min'),
@@ -111,6 +184,28 @@ def generate_launch_description():
         package='lhr_metrics',
         executable='metrics_node',
         name='metrics_node',
+        parameters=[{
+            'use_sim_time': LaunchConfiguration('use_sim_time'),
+            'timeout_sec': LaunchConfiguration('timeout_sec'),
+            'output_csv': LaunchConfiguration('output_csv'),
+            'scenario': LaunchConfiguration('scenario'),
+            'git_sha': _git_sha(),
+            'seed': LaunchConfiguration('seed'),
+            'track_style': LaunchConfiguration('track_style'),
+            'num_waypoints': LaunchConfiguration('num_waypoints'),
+            'mission': LaunchConfiguration('mission'),
+            'fov_deg': LaunchConfiguration('fov_deg'),
+            'max_range_m': LaunchConfiguration('max_range_m'),
+            'noise_std_m': LaunchConfiguration('noise_std_m'),
+            'false_negative_rate': LaunchConfiguration(
+                'false_negative_rate'),
+            'lookahead_dist': LaunchConfiguration('lookahead_dist'),
+            'a_lat_max': LaunchConfiguration('a_lat_max'),
+            'v_min': LaunchConfiguration('v_min'),
+            'v_max': LaunchConfiguration('v_max'),
+            'max_accel': LaunchConfiguration('max_accel'),
+            'max_decel': LaunchConfiguration('max_decel'),
+        }],
         output='screen',
         condition=IfCondition(LaunchConfiguration('enable_metrics')),
     )
@@ -120,6 +215,7 @@ def generate_launch_description():
         executable='mission_manager',
         name='mission_manager',
         parameters=[{
+            'use_sim_time': LaunchConfiguration('use_sim_time'),
             'mission': LaunchConfiguration('mission'),
             'auto_go': LaunchConfiguration('auto_go'),
             'ready_hold_sec': LaunchConfiguration('ready_hold_sec'),
@@ -127,10 +223,22 @@ def generate_launch_description():
         output='screen',
     )
 
+    # A headless run has to end by itself. Metrics decides when the run
+    # is over, so its exit tears the launch down and its exit code
+    # becomes the run's verdict.
+    stop_when_metrics_exits = RegisterEventHandler(
+        OnProcessExit(
+            target_action=metrics,
+            on_exit=[EmitEvent(event=Shutdown())]))
+
     return LaunchDescription([
         seed_arg,
         lookahead_arg,
         metrics_arg,
+        sim_time_arg,
+        timeout_arg,
+        csv_arg,
+        scenario_arg,
         track_style_arg,
         num_wp_arg,
         a_lat_arg,
@@ -140,6 +248,8 @@ def generate_launch_description():
         max_decel_arg,
         fov_arg,
         range_arg,
+        noise_arg,
+        fn_arg,
         init_x_arg,
         init_y_arg,
         init_yaw_arg,
@@ -153,4 +263,5 @@ def generate_launch_description():
         mission_mgr,
         control,
         metrics,
+        stop_when_metrics_exits,
     ])

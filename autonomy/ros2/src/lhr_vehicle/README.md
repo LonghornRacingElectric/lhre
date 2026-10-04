@@ -1,7 +1,7 @@
 # lhr_vehicle
 
-One file, `config/vehicle.yaml`, holds Orion's physical parameters —
-wheelbase, track, wheel radius, masses, steering limits, the LiDAR mount —
+One file, `config/vehicle.yaml`, holds Orion's physical parameters
+(wheelbase, track, wheel radius, masses, steering limits, the LiDAR mount)
 and every consumer reads it from there:
 
 - `lhr_control` (pure pursuit) and `lhr_sim_kinematic` take their
@@ -25,6 +25,23 @@ in four places with four different steering values (0.45, 0.55, 0.69 and
 
 `base_link` is the rear-axle center at ground level, x forward, y left,
 z up. Sensor positions are given in that frame.
+
+## Fingerprinting the file
+
+`vehicle_sha256()` hashes the file's bytes. Anything derived from these
+numbers stamps it, so a stored result says which car description produced
+it. A commit id does not cover that, because the file is often edited
+without being committed.
+
+```python
+from lhr_vehicle import vehicle_sha256
+
+vehicle_sha256()   # 'd364f17c...', 64 hex characters
+```
+
+Same formula as `simulation/tools/provenance.py`, so a sim run and a
+BobDyn study are comparable on that one field. `lhr_metrics` writes it on
+every row.
 
 ## Provenance
 
@@ -57,7 +74,7 @@ python3 src/lhr_gazebo/scripts/generate_vehicle_model.py
 ./scripts/build.sh
 ```
 
-Commit the regenerated `model.sdf` alongside the YAML change — it is
+Commit the regenerated `model.sdf` alongside the YAML change: it is
 checked in, like the generated world files. `generate_vehicle_model.py
 --check` reports whether the two agree, and `lhr_gazebo`'s tests fail when
 they don't, so CI catches a forgotten regenerate.

@@ -54,6 +54,9 @@ nav:
       - ROS 2 Workspace: autonomy/ros2/README.md
       - Docker (macOS): autonomy/ros2/docker/README.md
       - Vehicle Parameters: autonomy/ros2/src/lhr_vehicle/README.md
+      - Sensor Simulation: autonomy/ros2/src/lhr_sensor_sim/README.md
+      - Metrics: autonomy/ros2/src/lhr_metrics/README.md
+      - Kinematic Sim: autonomy/ros2/src/lhr_sim_kinematic/README.md
       - Plans:
           - Overview: autonomy/docs/plans/README.md
           - Retrofit Roadmap 2026-27: autonomy/docs/plans/retrofit-roadmap-2026-27.md
@@ -121,7 +124,7 @@ hooks:
 
 # Docs live next to the code: any *.md in the tree becomes a page at the
 # same path (README.md renders as the directory index). The simple plugin
-# also extracts fenced doc-comment blocks from source files — see
+# also extracts fenced doc-comment blocks from source files, see
 # https://athackst.github.io/mkdocs-simple-plugin/ ("semiliterate").
 plugins:
   - search

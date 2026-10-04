@@ -9,6 +9,8 @@ from lhr_vehicle import load_vehicle
 from nav_msgs.msg import Odometry
 import rclpy
 from rclpy.node import Node
+from rclpy.time import Time
+from rosgraph_msgs.msg import Clock
 from tf2_ros import TransformBroadcaster
 
 
@@ -37,6 +39,7 @@ class SimKinematic(Node):
         self.declare_parameter('init_x', 0.0)
         self.declare_parameter('init_y', 0.0)
         self.declare_parameter('init_yaw', 0.0)
+        self.declare_parameter('publish_clock', False)
 
         self._L = self.get_parameter(
             'wheelbase').get_parameter_value().double_value
@@ -66,6 +69,21 @@ class SimKinematic(Node):
             AckermannDriveStamped, '/lhr/vehicle/cmd',
             self._cmd_cb, 10)
 
+        # --- Clock ---
+        # This node is the plant, so it is also the clock. Its step is a
+        # fixed dt already, so publishing that as /clock makes every
+        # other node advance in exact increments instead of drifting
+        # with host load. It must keep its own wall-clock timer and
+        # use_sim_time false: a clock source waiting on its own clock
+        # never ticks.
+        self._publish_clock = bool(
+            self.get_parameter('publish_clock').value)
+        # Start away from zero; a zero stamp reads as 'unset' downstream.
+        self._sim_ns = 1_000_000_000
+        self._clock_pub = (
+            self.create_publisher(Clock, '/clock', 10)
+            if self._publish_clock else None)
+
         # --- Odom publisher ---
         self._odom_pub = self.create_publisher(
             Odometry, '/lhr/vehicle/odom', 10)
@@ -75,9 +93,11 @@ class SimKinematic(Node):
 
         # --- Timer ---
         self._dt = 1.0 / update_hz
+        self._step_ns = int(round(self._dt * 1e9))
         self.create_timer(self._dt, self._step)
         self.get_logger().info(
-            f'SimKinematic ready  (L={self._L}, hz={update_hz})')
+            f'SimKinematic ready  (L={self._L}, hz={update_hz}, '
+            f'clock={"sim" if self._publish_clock else "wall"})')
 
     # ------------------------------------------------------------------
     def _cmd_cb(self, msg: AckermannDriveStamped):
@@ -96,7 +116,12 @@ class SimKinematic(Node):
         self._y += self._v * math.sin(self._yaw) * dt
         self._yaw += (self._v / self._L) * math.tan(self._steer) * dt
 
-        now = self.get_clock().now().to_msg()
+        if self._publish_clock:
+            self._sim_ns += self._step_ns
+            now = Time(nanoseconds=self._sim_ns).to_msg()
+            self._clock_pub.publish(Clock(clock=now))
+        else:
+            now = self.get_clock().now().to_msg()
 
         # --- Odometry ---
         odom = Odometry()

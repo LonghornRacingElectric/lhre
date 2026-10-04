@@ -33,6 +33,7 @@ class SensorSim(Node):
         self.declare_parameter('detection_hz', 10.0)
         self.declare_parameter('noise_std_m', 0.0)
         self.declare_parameter('false_negative_rate', 0.0)
+        self.declare_parameter('seed', 1)
 
         self._fov_rad = math.radians(
             self.get_parameter('fov_deg').get_parameter_value().double_value)
@@ -46,6 +47,14 @@ class SensorSim(Node):
             'noise_std_m').get_parameter_value().double_value
         self._fn_rate = self.get_parameter(
             'false_negative_rate').get_parameter_value().double_value
+        seed = int(self.get_parameter('seed').value)
+
+        # A node-local stream, not the process-global `random`: anything
+        # else drawing from the global one interleaves with these draws
+        # and no run repeats. Identical output also needs identical
+        # message timing, which the kinematic stack can promise and
+        # Gazebo cannot.
+        self._rng = random.Random(seed)
 
         # --- State ---
         self._all_cones: list = []          # latest ground-truth MarkerArray
@@ -81,7 +90,8 @@ class SensorSim(Node):
         self.get_logger().info(
             f'SensorSim ready  (fov={math.degrees(self._fov_rad):.0f}deg, '
             f'range=[{self._min_range}, {self._max_range}]m, '
-            f'hz={detection_hz})')
+            f'hz={detection_hz}, seed={seed}, '
+            f'noise={self._noise_std}m, fn={self._fn_rate})')
 
     # ------------------------------------------------------------------
     def _cones_cb(self, msg: MarkerArray):
@@ -122,7 +132,7 @@ class SensorSim(Node):
                 continue
 
             # false negative
-            if self._fn_rate > 0.0 and random.random() < self._fn_rate:
+            if self._fn_rate > 0.0 and self._rng.random() < self._fn_rate:
                 continue
 
             # store (with optional noise)
@@ -138,8 +148,8 @@ class SensorSim(Node):
             m.pose.orientation.w = 1.0
 
             if self._noise_std > 0.0:
-                m.pose.position.x += random.gauss(0, self._noise_std)
-                m.pose.position.y += random.gauss(0, self._noise_std)
+                m.pose.position.x += self._rng.gauss(0, self._noise_std)
+                m.pose.position.y += self._rng.gauss(0, self._noise_std)
 
             self._accumulated[key] = m
 
