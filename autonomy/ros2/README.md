@@ -322,6 +322,35 @@ The bridge config (`config/ros_gz_bridge.yaml`) maps 11 topics:
 | ROS → GZ | 2x steering `cmd_pos` | (same) | Float64/Double |
 | ROS → GZ | 4x wheel `cmd_vel` | (same) | Float64/Double |
 
+## Recording and viewing runs
+
+A run can record itself to MCAP, and a recorded run opens in Foxglove
+with no ROS install involved.
+
+```bash
+ros2 launch lhr_demo mvs_demo.launch.py record:=true    # writes data/bags/<run_id>
+ros2 launch lhr_demo mvs_demo.launch.py foxglove:=true  # live, ws://localhost:8765
+```
+
+MCAP is the default rosbag2 storage in Jazzy, so recording needs nothing
+installed. The live bridge needs `ros-jazzy-foxglove-bridge`, declared in
+`lhr_demo`'s `package.xml` so `rosdep install` provides it.
+
+The bag lands under the same `run_id` the metrics row carries, so a row
+reporting a bad number names the recording that explains it, and the bag
+itself carries `run_id`, `git_sha`, `scenario` and `seed` as rosbag2
+`custom_data`. Recording is off by default: a lap is roughly 6 MiB and
+the gate runs many seeds.
+
+Load [`foxglove/lhr_sim.json`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/ros2/foxglove/lhr_sim.json)
+as the layout so everyone is looking at the same panels. It is
+hand-written and **not yet verified against the Foxglove app**; if a
+panel comes up empty, fix it in the app and re-export over the file.
+
+Which topics get recorded, why the list is explicit rather than `--all`,
+and the YAML trap in `run_id` are all in
+[lhr_demo/README.md](src/lhr_demo/README.md).
+
 ## Simulation clock
 
 Both stacks run on simulated time. Gazebo publishes `/clock` through the

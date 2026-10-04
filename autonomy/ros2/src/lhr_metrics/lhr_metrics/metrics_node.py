@@ -11,6 +11,7 @@ from typing import List, Tuple
 from lhr_metrics.track_error import TrackErrorAccumulator
 from lhr_vehicle import vehicle_sha256
 from nav_msgs.msg import Odometry, Path
+from rcl_interfaces.msg import ParameterDescriptor
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Bool, String
@@ -70,7 +71,13 @@ class MetricsNode(Node):
         self.declare_parameter('start_hysteresis', 1.0)
         self.declare_parameter('min_lap_time', 5.0)
         self.declare_parameter('output_csv', 'data/metrics.csv')
-        self.declare_parameter('run_id', '')
+        # Dynamically typed, not pinned to string: a run id that looks
+        # like a number arrives as one. Launch hands parameters over in
+        # a YAML file, where 20261004_120000 is the integer
+        # 20261004120000, and a typed declaration turns that into a
+        # crash over what is only an identifier.
+        self.declare_parameter(
+            'run_id', '', ParameterDescriptor(dynamic_typing=True))
         self.declare_parameter('timeout_sec', 120.0)
 
         self._off_track_thresh = self.get_parameter(
@@ -83,9 +90,10 @@ class MetricsNode(Node):
             'min_lap_time').get_parameter_value().double_value
         self._csv_path = self.get_parameter(
             'output_csv').get_parameter_value().string_value
-        run_id = self.get_parameter(
-            'run_id').get_parameter_value().string_value
-        self._run_id = run_id if run_id else time.strftime('%Y%m%d_%H%M%S')
+        run_id = self.get_parameter('run_id').value
+        self._run_id = (
+            str(run_id) if run_id not in (None, '')
+            else time.strftime('%Y%m%dT%H%M%S'))
 
         # --- Provenance and independent variables ---
         self._run_params = {}

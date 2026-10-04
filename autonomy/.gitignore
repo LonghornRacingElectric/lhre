@@ -7,7 +7,7 @@ ros2/log/
 **/__pycache__/
 **/*.pyc
 
-ros2/data/*.csv*
+ros2/data/
 
 .vscode/
 .DS_Store

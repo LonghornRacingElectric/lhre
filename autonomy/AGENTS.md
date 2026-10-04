@@ -35,8 +35,9 @@ here. Do not add `BUILD.bazel` files.
 - Everything is LF. `autonomy/.gitattributes` enforces it for tracked
   files; on Windows run `sed -i 's/\r$//' <file>` on anything new before
   committing.
-- `ros2/build`, `ros2/install`, `ros2/log`, and `ros2/data/*.csv*` are
-  gitignored build/run outputs. Never commit them.
+- `ros2/build`, `ros2/install`, `ros2/log` and `ros2/data` are gitignored
+  build/run outputs. Never commit them. `ros2/data` holds metrics CSVs
+  and recorded MCAP bags, which get large fast.
 - Vehicle numbers (wheelbase, track, steering limit, masses, sensor
   mounts) live only in `ros2/src/lhr_vehicle/config/vehicle.yaml`; nodes
   read them through `lhr_vehicle.load_vehicle()`. Never hardcode them.

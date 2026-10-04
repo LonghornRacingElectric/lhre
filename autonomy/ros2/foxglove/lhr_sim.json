@@ -1,0 +1,75 @@
+{
+  "configById": {
+    "3D!lhrsim3d": {
+      "followMode": "follow-pose",
+      "followTf": "base_link",
+      "scene": {
+        "transforms": {
+          "axisScale": 0.5
+        }
+      },
+      "cameraState": {
+        "distance": 45,
+        "perspective": true,
+        "phi": 55,
+        "thetaOffset": 0,
+        "target": [0, 0, 0],
+        "targetOffset": [0, 0, 0],
+        "fovy": 45,
+        "near": 0.5,
+        "far": 5000
+      },
+      "topics": {
+        "/lhr/track/cones": { "visible": true },
+        "/lhr/sensor/cones_detected": { "visible": true },
+        "/lhr/track/centerline": { "visible": true },
+        "/lhr/lidar/points": { "visible": true, "colorField": "z", "colorMode": "colormap", "colorMap": "turbo" }
+      },
+      "layers": {},
+      "publish": {}
+    },
+    "Plot!lhrsimspeed": {
+      "paths": [
+        { "value": "/lhr/vehicle/cmd.drive.speed", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/lhr/vehicle/odom.twist.twist.linear.x", "enabled": true, "timestampMethod": "receiveTime" }
+      ],
+      "showLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 240
+    },
+    "Plot!lhrsimsteer": {
+      "paths": [
+        { "value": "/lhr/vehicle/cmd.drive.steering_angle", "enabled": true, "timestampMethod": "receiveTime" }
+      ],
+      "showLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 240
+    },
+    "RawMessages!lhrsimmission": {
+      "topicPath": "/lhr/mission/status"
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "first": "3D!lhrsim3d",
+    "second": {
+      "first": "Plot!lhrsimspeed",
+      "second": {
+        "first": "Plot!lhrsimsteer",
+        "second": "RawMessages!lhrsimmission",
+        "direction": "column",
+        "splitPercentage": 65
+      },
+      "direction": "column",
+      "splitPercentage": 40
+    },
+    "direction": "row",
+    "splitPercentage": 62
+  }
+}

@@ -2,15 +2,42 @@
 
 from pathlib import Path
 import subprocess
+import time
 
 from launch import LaunchDescription
 from launch.actions import (
-    DeclareLaunchArgument, EmitEvent, RegisterEventHandler)
+    DeclareLaunchArgument, EmitEvent, ExecuteProcess, RegisterEventHandler)
 from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
 from launch.events import Shutdown
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
+
+
+# Recorded when `record:=true`. An explicit list rather than --all: the
+# viz topics republish every cone marker at rate and would dominate the
+# bag, and this list doubles as a statement of what the seam between
+# lanes actually is. A topic nothing publishes in a given mode costs
+# nothing, so `/lhr/lidar/points` stays in for the Gazebo and on-car
+# paths that do publish it.
+RECORDED_TOPICS = (
+    # Without /clock a sim-time bag has no timeline a viewer can read.
+    '/clock',
+    '/tf',
+    '/tf_static',
+    # The perception contract: points in, detected cones out, with the
+    # ground truth alongside so a bag can be scored and not just watched.
+    '/lhr/lidar/points',
+    '/lhr/sensor/cones_detected',
+    '/lhr/track/cones',
+    # What the rest of the stack did with them.
+    '/lhr/track/centerline',
+    '/lhr/vehicle/odom',
+    '/lhr/vehicle/cmd',
+    '/lhr/mission/status',
+    '/lhr/metrics/lap_complete',
+    '/lhr/imu/data',
+)
 
 
 def _git_sha() -> str:
@@ -98,6 +125,34 @@ def generate_launch_description():
     init_x_arg = DeclareLaunchArgument('init_x', default_value='25.0')
     init_y_arg = DeclareLaunchArgument('init_y', default_value='0.0')
     init_yaw_arg = DeclareLaunchArgument('init_yaw', default_value='1.5708')
+
+    # Recording and viewing
+    # The default run id is shared by the metrics row and the bag
+    # directory, so a row that reports a bad number names the recording
+    # that explains it.
+    # 'T' and not '_' between date and time on purpose: launch passes
+    # parameters through a YAML file, and YAML reads 20261004_120000 as
+    # the integer 20261004120000 because underscores are digit
+    # separators. That silently renamed the run and left the bag
+    # directory and the metrics row disagreeing.
+    run_id_arg = DeclareLaunchArgument(
+        'run_id', default_value=time.strftime('%Y%m%dT%H%M%S'),
+        description='Identifier shared by the metrics row and the bag '
+                    'directory, so the two can be matched up later')
+    record_arg = DeclareLaunchArgument(
+        'record', default_value='false',
+        description='Record an MCAP bag of the contract topics. Off by '
+                    'default so repeated gate runs do not fill the disk')
+    bag_dir_arg = DeclareLaunchArgument(
+        'bag_dir', default_value='data/bags',
+        description='Parent directory for bags, relative to the working '
+                    'directory')
+    foxglove_arg = DeclareLaunchArgument(
+        'foxglove', default_value='false',
+        description='Serve the live graph to Foxglove over websocket. '
+                    'Needs ros-jazzy-foxglove-bridge installed')
+    foxglove_port_arg = DeclareLaunchArgument(
+        'foxglove_port', default_value='8765')
 
     # Mission manager
     mission_arg = DeclareLaunchArgument(
@@ -188,6 +243,7 @@ def generate_launch_description():
             'use_sim_time': LaunchConfiguration('use_sim_time'),
             'timeout_sec': LaunchConfiguration('timeout_sec'),
             'output_csv': LaunchConfiguration('output_csv'),
+            'run_id': LaunchConfiguration('run_id'),
             'scenario': LaunchConfiguration('scenario'),
             'git_sha': _git_sha(),
             'seed': LaunchConfiguration('seed'),
@@ -223,6 +279,52 @@ def generate_launch_description():
         output='screen',
     )
 
+    def recorder(sim_time: bool) -> ExecuteProcess:
+        """
+        Build the bag recorder for one clock mode.
+
+        Two actions rather than one, because --use-sim-time is a bare
+        flag: it cannot be switched by a substitution, and passing it
+        when nothing publishes /clock leaves the recorder waiting for a
+        clock that never ticks.
+        """
+        cmd = [
+            'ros2', 'bag', 'record',
+            '--output', [LaunchConfiguration('bag_dir'), '/',
+                         LaunchConfiguration('run_id')],
+            '--storage', 'mcap',
+            # The bag carries the same provenance as the metrics row, so
+            # a recording found later still says what produced it.
+            '--custom-data',
+            ['run_id=', LaunchConfiguration('run_id')],
+            f'git_sha={_git_sha()}',
+            ['scenario=', LaunchConfiguration('scenario')],
+            ['seed=', LaunchConfiguration('seed')],
+        ]
+        if sim_time:
+            cmd.append('--use-sim-time')
+        cmd += ['--topics', *RECORDED_TOPICS]
+        return ExecuteProcess(
+            cmd=cmd,
+            output='screen',
+            condition=IfCondition(PythonExpression([
+                "'", LaunchConfiguration('record'), "' == 'true' and '",
+                LaunchConfiguration('use_sim_time'),
+                "' == ", repr('true' if sim_time else 'false')])),
+        )
+
+    foxglove_bridge = Node(
+        package='foxglove_bridge',
+        executable='foxglove_bridge',
+        name='foxglove_bridge',
+        parameters=[{
+            'use_sim_time': LaunchConfiguration('use_sim_time'),
+            'port': LaunchConfiguration('foxglove_port'),
+        }],
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('foxglove')),
+    )
+
     # A headless run has to end by itself. Metrics decides when the run
     # is over, so its exit tears the launch down and its exit code
     # becomes the run's verdict.
@@ -256,6 +358,11 @@ def generate_launch_description():
         mission_arg,
         auto_go_arg,
         ready_hold_arg,
+        run_id_arg,
+        record_arg,
+        bag_dir_arg,
+        foxglove_arg,
+        foxglove_port_arg,
         cones,
         sensor_sim,
         centerline,
@@ -263,5 +370,8 @@ def generate_launch_description():
         mission_mgr,
         control,
         metrics,
+        recorder(sim_time=True),
+        recorder(sim_time=False),
+        foxglove_bridge,
         stop_when_metrics_exits,
     ])
