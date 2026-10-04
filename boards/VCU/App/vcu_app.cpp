@@ -277,10 +277,12 @@ void App::ControlTick(uint32_t now) {
   float rpm = 0.0f;
   live_.motor_speed_valid = rx_.MotorRpm(now, &rpm);
   live_.motor_rpm = rpm;
-  const float dc_v = rx_.inverter_voltage.Fresh(now)
+  // Last value held when stale, as in lhre-2026 (0x0A6 is only 10 Hz); a
+  // dead inverter already forces DRIVE -> FAULT through InverterFresh().
+  const float dc_v = rx_.inverter_voltage.seen()
                          ? rx_.inverter_voltage.msg.dc_bus_voltage()
                          : 0.0f;
-  const float dc_a = rx_.inverter_current.Fresh(now)
+  const float dc_a = rx_.inverter_current.seen()
                          ? rx_.inverter_current.msg.dc_bus_current()
                          : 0.0f;
   BatteryInputs bin;

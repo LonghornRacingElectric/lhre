@@ -8,7 +8,7 @@ namespace lhal {
 
 // A hardware watchdog that resets the MCU unless refreshed within its
 // timeout. On STM32 the independent watchdog (IWDG) cannot be stopped once
-// started, so Start() is one-way.
+// started (until the next reset), so Start() is one-way.
 class Watchdog {
  public:
   virtual ~Watchdog() = default;

@@ -14,8 +14,9 @@
 namespace lhal::stm32 {
 
 // Independent watchdog, clocked from the LSI. Once started it cannot be
-// stopped; it keeps running through a reset, so the next boot must refresh
-// it within the timeout.
+// stopped short of a reset. (With the IWDG_SW option byte cleared it starts
+// by itself at reset; the default software mode leaves it off until
+// Start().)
 class Iwdg final : public lhal::Watchdog {
  public:
   Status Start(uint32_t timeout_ms) override {
