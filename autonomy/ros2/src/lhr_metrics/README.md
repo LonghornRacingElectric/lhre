@@ -1,12 +1,13 @@
 # lhr_metrics
 
 Measures a run: cross-track error against the published centerline,
-off-track samples, speed stats, and lap completion. Writes one CSV row per
-run to `data/metrics.csv` (never committed, see `autonomy/AGENTS.md`).
+distance spent off track, speed stats, and lap completion. Writes one CSV
+row per run to `data/metrics.csv` (never committed, see
+`autonomy/AGENTS.md`).
 
 ## What a row holds
 
-26 columns in four groups, because a row of results alone cannot be
+29 columns in six groups, because a row of results alone cannot be
 compared with another row: nothing in it says what differed between the
 two runs that produced them.
 
@@ -17,7 +18,7 @@ two runs that produced them.
 | Scenario | `seed`, `track_style`, `num_waypoints`, `mission` |
 | Sensor | `fov_deg`, `max_range_m`, `noise_std_m`, `false_negative_rate` |
 | Control | `lookahead_dist`, `a_lat_max`, `v_min`, `v_max`, `max_accel`, `max_decel` |
-| Outcomes | `duration_s`, `samples`, `mean_cte`, `max_cte`, `off_track_count`, `mean_speed`, `max_speed`, `lap_completed` |
+| Outcomes | `outcome`, `duration_s`, `samples`, `path_length_m`, `mean_cte`, `max_cte`, `off_track_count`, `off_track_dist_m`, `mean_speed`, `max_speed`, `lap_completed` |
 
 `git_sha` comes from the launch file and carries a `-dirty` suffix when the
 tree has uncommitted changes, since a clean-looking id on a modified tree
@@ -32,6 +33,39 @@ that tuple too**, or rows quietly stop explaining themselves.
 A `data/metrics.csv` written under an older column set is moved aside to
 `data/metrics.csv.old` with a warning rather than having its extra fields
 dropped, which is how a metrics file starts lying about what it holds.
+
+## Error is weighted by distance, not by sample
+
+`mean_cte` is the integral of cross-track error over arc length divided
+by `path_length_m`, and `off_track_dist_m` is the metres driven beyond
+`off_track_threshold`. Neither depends on how often odom fired.
+
+Averaging per sample instead makes the number a property of the speed
+profile. Odom arrives at a fixed rate, so a slow corner yields far more
+samples per metre than a fast straight, and the mean drifts toward
+wherever the car was slowest. It also overstates excursions badly,
+because the car is usually slowest exactly where it is off line.
+
+The size of that effect on this stack, same run, same seed:
+
+| Measure | Reading |
+| --- | --- |
+| Off-track samples | 291 of 772, so 38% |
+| Off-track distance | 1.66 m of 83.74 m, so 2.0% |
+
+The car is off the racing line for a moment, oscillating slowly, not for
+a third of the lap. `off_track_count` is kept in the row because it is
+free, but `off_track_dist_m` is the one to read.
+
+`path_length_m` is also a cheap cross-check on the arc length itself:
+divided by `duration_s` it must agree with `mean_speed`.
+
+The accumulation lives in
+[`track_error.py`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/ros2/src/lhr_metrics/lhr_metrics/track_error.py),
+deliberately free of ROS imports so it is unit tested directly. The test
+that matters drives one path at two sampling densities and asserts the
+weighted mean does not move, where the per-sample mean reports 1.0
+against 1.79.
 
 ## Clock
 
@@ -91,10 +125,17 @@ through the script.
 
 - **No assertions.** The row records what happened; nothing yet decides
   whether it passed. That arrives with scenario files.
-- **Repeat runs are close, not identical.** One seed repeated lands within
-  about 0.5% on averaged metrics and exactly on `max_cte`. Each node is its
-  own process with its own executor, so callback interleaving is still the
-  OS scheduler's call. Gate on a tolerance band rather than equality.
-- **`mean_cte` is sample-weighted**, so slow sections count more than fast
-  ones. Weighting by distance travelled would be both more meaningful and
-  more stable.
+- **Repeat runs are close, not identical.** Each node is its own process
+  with its own executor, so callback interleaving is the OS scheduler's
+  call. Gate on a tolerance band, never on equality.
+  `scripts/check_stability.sh` measures the band and enforces it.
+- **`max_cte` cannot be held to a tight band.** It is an extreme-value
+  statistic, so its observed spread only grows as runs are added: 8 runs
+  at one seed hold `mean_cte` to 1.03% and `path_length_m` to 0.14%,
+  while `max_cte` moves 2.46%. The bands in `check_stability.sh` differ
+  per metric for that reason. Whether `max_cte` is *acceptable* is an
+  absolute ceiling and belongs in the per-run gate instead.
+- **Seed choice still dominates `max_cte`.** Across seeds 1 and 3 the
+  weighted `mean_cte` agrees to 2.9% (0.604 against 0.622), but `max_cte`
+  differs by 53% (1.88 against 2.89). A single-seed gate on `max_cte`
+  measures the seed.

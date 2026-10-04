@@ -42,7 +42,8 @@ if not rows:
 row = rows[-1]
 summary = '  '.join(
     f'{k}={row[k]}' for k in
-    ('outcome', 'duration_s', 'max_cte', 'off_track_count', 'git_sha')
+    ('outcome', 'duration_s', 'path_length_m', 'mean_cte', 'max_cte',
+     'off_track_dist_m', 'git_sha')
     if k in row)
 print(summary)
 

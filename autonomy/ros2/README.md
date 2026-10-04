@@ -181,6 +181,7 @@ All scripts live in `scripts/` and should be run from the `autonomy/ros2` direct
 | `run_metrics.sh` | Runs only the metrics node (`lhr_metrics`). Prints summary on Ctrl+C and appends to `data/metrics.csv`. |
 | `run_plotjuggler.sh` | Opens PlotJuggler for plotting debug signals (curvature, speed, steering). |
 | `run_headless.sh` | Runs the kinematic stack with no display and exits non-zero unless the run finished cleanly. The entry point for any gate. |
+| `check_stability.sh` | Repeats one run `RUNS` times at one `SEED` and fails if the gated metrics drift outside their per-metric bands. Answers whether the gate is trustworthy before you trust a result from it. |
 | `generate_gazebo_world.sh` | Generates a Gazebo world SDF from the track generator. Accepts `--seed`, `--style`, `--num-waypoints`, etc. |
 | `run_gazebo_demo.sh` | Launches the Gazebo-based stack (physics sim + adapters + upper stack). Accepts same args as `run_demo.sh`. |
 | `src/lhr_gazebo/scripts/generate_vehicle_model.py` | Regenerates the Gazebo vehicle `model.sdf` from `lhr_vehicle/config/vehicle.yaml`. Run after editing the YAML; commit both. |
@@ -601,7 +602,7 @@ metrics exit code does not reach the shell. Use
 `outcome` from the row and exits on that. Anything wiring this into CI
 must go through that script, not `ros2 launch` directly.
 
-The CSV is 26 columns in four groups, because a row of results alone
+The CSV is 29 columns in six groups, because a row of results alone
 cannot be compared with another row:
 
 ```
@@ -609,9 +610,34 @@ run_id, vehicle_sha256, scenario, git_sha,
 seed, track_style, num_waypoints, mission,
 fov_deg, max_range_m, noise_std_m, false_negative_rate,
 lookahead_dist, a_lat_max, v_min, v_max, max_accel, max_decel,
-outcome, duration_s, samples, mean_cte, max_cte, off_track_count,
-mean_speed, max_speed, lap_completed
+outcome, duration_s, samples, path_length_m, mean_cte, max_cte,
+off_track_count, off_track_dist_m, mean_speed, max_speed, lap_completed
 ```
+
+`mean_cte` and `off_track_dist_m` are weighted by distance travelled, not
+by sample count, so they do not move with the odom publish rate. The
+difference is not cosmetic: on one seed 38% of *samples* sit beyond the
+off-track threshold while only 2.0% of the *distance* does, because the
+car is slowest exactly where it is off line and so reports many samples
+while barely moving.
+
+### Is the gate trustworthy?
+
+Repeat runs are close but never identical: each node is its own process
+with its own executor, so callback interleaving is the scheduler's call.
+Gate on a band, never on equality. Measured over 8 runs at one seed:
+
+| Metric | Spread | Band |
+|--------|--------|------|
+| `mean_cte` | 1.03% | 2% |
+| `path_length_m` | 0.14% | 1% |
+| `max_cte` | 2.46% | 5% |
+
+`max_cte` gets the loose band because it is an extreme-value statistic:
+adding runs can only widen its observed spread, so a tight band on it is
+a promise that breaks later. Whether `max_cte` is *acceptable* is a
+separate, absolute question that belongs in the per-run gate.
+`./scripts/check_stability.sh` enforces the table above.
 
 See [lhr_metrics/README.md](src/lhr_metrics/README.md) for what the
 provenance fields mean and how to add a column. CSV data accumulates in

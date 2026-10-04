@@ -8,6 +8,7 @@ import sys
 import time
 from typing import List, Tuple
 
+from lhr_metrics.track_error import TrackErrorAccumulator
 from lhr_vehicle import vehicle_sha256
 from nav_msgs.msg import Odometry, Path
 import rclpy
@@ -40,8 +41,9 @@ RUN_PARAMS = (
 )
 
 OUTCOMES = (
-    'outcome', 'duration_s', 'samples', 'mean_cte', 'max_cte',
-    'off_track_count', 'mean_speed', 'max_speed', 'lap_completed',
+    'outcome', 'duration_s', 'samples', 'path_length_m', 'mean_cte',
+    'max_cte', 'off_track_count', 'off_track_dist_m', 'mean_speed',
+    'max_speed', 'lap_completed',
 )
 
 # Why the run ended. Only 'lap' and 'mission_finished' are a pass; the
@@ -102,10 +104,10 @@ class MetricsNode(Node):
         self._path: List[Tuple[float, float]] = []
 
         # --- CTE stats ---
-        self._samples = 0
-        self._cte_sum = 0.0
-        self._cte_max = 0.0
-        self._off_track_count = 0
+        # Weighted by arc length, not by sample count. See
+        # lhr_metrics/track_error.py for why that distinction decides
+        # whether two runs of the same seed are comparable.
+        self._cte = TrackErrorAccumulator(self._off_track_thresh)
         self._start_time: float = 0.0
         self._last_time: float = 0.0
         self._warned_unstamped = False
@@ -170,19 +172,13 @@ class MetricsNode(Node):
         py = msg.pose.pose.position.y
 
         now = self._stamp_sec(msg.header.stamp)
-        if self._samples == 0:
+        if self._cte.samples == 0:
             self._start_time = now
             self._lap_start_time = now
         self._last_time = now
 
         # --- CTE ---
-        cte = self._nearest_distance(px, py)
-        self._samples += 1
-        self._cte_sum += cte
-        if cte > self._cte_max:
-            self._cte_max = cte
-        if cte > self._off_track_thresh:
-            self._off_track_count += 1
+        self._cte.add(px, py, self._nearest_distance(px, py))
 
         # --- Speed ---
         vx = msg.twist.twist.linear.x
@@ -255,19 +251,21 @@ class MetricsNode(Node):
     # Reporting
     # ------------------------------------------------------------------
     def _build_row(self) -> dict:
+        samples = self._cte.samples
         duration = (
-            self._last_time - self._start_time if self._samples else 0.0)
-        mean_cte = (self._cte_sum / self._samples) if self._samples else 0.0
-        mean_speed = (self._speed_sum / self._samples) if self._samples else 0.0
+            self._last_time - self._start_time if samples else 0.0)
+        mean_speed = (self._speed_sum / samples) if samples else 0.0
         row = {
             'run_id': self._run_id,
             'vehicle_sha256': self._vehicle_sha,
             'outcome': self._outcome,
             'duration_s': f'{duration:.2f}',
-            'samples': str(self._samples),
-            'mean_cte': f'{mean_cte:.4f}',
-            'max_cte': f'{self._cte_max:.4f}',
-            'off_track_count': str(self._off_track_count),
+            'samples': str(samples),
+            'path_length_m': f'{self._cte.path_length:.2f}',
+            'mean_cte': f'{self._cte.mean_cte:.4f}',
+            'max_cte': f'{self._cte.max_cte:.4f}',
+            'off_track_count': str(self._cte.off_track_samples),
+            'off_track_dist_m': f'{self._cte.off_track_distance:.2f}',
             'mean_speed': f'{mean_speed:.2f}',
             'max_speed': f'{self._speed_max:.2f}',
             'lap_completed': str(self._lap_completed).lower(),
@@ -338,7 +336,7 @@ class MetricsNode(Node):
         Non-zero on anything but a clean finish, so a gate can read the
         exit code alone and a hung or crashed run cannot pass.
         """
-        if self._samples > 0:
+        if self._cte.samples > 0:
             self._print_summary()
             self._write_csv()
         else:
