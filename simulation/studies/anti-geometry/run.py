@@ -257,10 +257,14 @@ def runs(mask):
     return list(zip(edges[::2], edges[1::2]))
 
 
+def straight_mask(trace, line):
+    return np.abs(np.interp(trace["station_m"], line.station_m, line.curvature_per_m)) < STRAIGHT_CURVATURE_PER_M
+
+
 def event_windows(trace, qss):
     line = qss.line
     target_ax = np.interp(trace["station_m"], line.station_m, qss.longitudinal_acceleration_mps2)
-    straight = np.abs(np.interp(trace["station_m"], line.station_m, line.curvature_per_m)) < STRAIGHT_CURVATURE_PER_M
+    straight = straight_mask(trace, line)
     events = {
         "brake": straight & (target_ax < -0.5 * BRAKE_G * G),
         "drive": straight & (target_ax > 0.25 * G),
@@ -506,22 +510,131 @@ def write_tables(summary, out_dir):
     )
 
 
-def plot_braking(traces, laps, out_dir):
-    figure, axes = plt.subplots(4, 1, sharex=True, figsize=(6, 8))
-    for dive in ANTI_LEVELS:
-        name = anti_name(dive, 0.0)
-        trace = traces[(name, ANTI_TRACK)]
-        start = event_windows(trace, laps[ANTI_TRACK])["brake"]["spans"][0][0]
+def plot_onset(traces, laps, out_dir, file_name, track, kind, cars, channels, title):
+    figure, axes = plt.subplots(len(channels), 1, sharex=True, figsize=(6, 2 * len(channels)))
+    for name, legend in cars:
+        trace = traces[(name, track)]
+        start = event_windows(trace, laps[track])[kind]["spans"][0][0]
         time_s = trace["time_s"] - trace["time_s"][start]
         window = (time_s >= -0.2) & (time_s <= 1.0)
-        for axis, (channel, label) in zip(axes, (("ax_g", "ax (g)"), ("fz_front_n", "front axle Fz (N)"), ("pitch_deg", "pitch (deg)"), ("ride_front_mm", "front ride height (mm)"))):
-            axis.plot(time_s[window], trace[channel][window], label=f"anti-dive {round(100 * dive)} %")
+        for axis, (channel, label) in zip(axes, channels):
+            axis.plot(time_s[window], trace[channel][window], label=legend)
             axis.set_ylabel(label)
     axes[0].legend(fontsize=8)
-    axes[0].set_title(f"{ANTI_TRACK}, first brake event, anti-squat 0 %")
-    axes[-1].set_xlabel("time from brake event start (s)")
+    axes[0].set_title(title)
+    axes[-1].set_xlabel(f"time from {kind} event start (s)")
     figure.tight_layout()
-    figure.savefig(out_dir / "braking.png", dpi=110)
+    figure.savefig(out_dir / file_name, dpi=110)
+    plt.close(figure)
+
+
+def plot_onsets(traces, laps, summary, out_dir):
+    cars = summary["cars"]
+    rc_names = sorted((name for name in cars if name.startswith("rc") or name == REFERENCE), key=lambda name: cars[name]["geometry"]["rc_front_mm"])
+    plot_onset(
+        traces, laps, out_dir, "braking.png", ANTI_TRACK, "brake",
+        [(anti_name(dive, 0.0), f"anti-dive {round(100 * dive)} %") for dive in ANTI_LEVELS],
+        (("ax_g", "ax (g)"), ("fz_front_n", "front axle Fz (N)"), ("pitch_deg", "pitch (deg)"), ("ride_front_mm", "front ride height (mm)")),
+        f"{ANTI_TRACK}, first brake event, anti-squat 0 %",
+    )
+    plot_onset(
+        traces, laps, out_dir, "drive.png", ANTI_TRACK, "drive",
+        [(anti_name(0.0, squat), f"anti-squat {round(100 * squat)} %") for squat in ANTI_LEVELS],
+        (("ax_g", "ax (g)"), ("fz_rear_n", "rear axle Fz (N)"), ("pitch_deg", "pitch (deg)"), ("ride_rear_mm", "rear ride height (mm)")),
+        f"{ANTI_TRACK}, first drive event, anti-dive 0 %",
+    )
+    plot_onset(
+        traces, laps, out_dir, "turn_in.png", STEADY_TRACK, "corner",
+        [(name, "RC {rc_front_mm:.0f} / {rc_rear_mm:.0f} mm".format(**cars[name]["geometry"])) for name in rc_names],
+        (("steer_deg", "steer (deg)"), ("yaw_rate_deg_s", "yaw rate (deg/s)"), ("roll_deg", "roll (deg)"), ("heave_mm", "heave (mm)"), ("fz_fr_n", "outer front Fz (N)")),
+        f"{STEADY_TRACK}, first corner entry, anti 0 / 0",
+    )
+
+
+LAP_PANELS = (
+    ("speed (m/s)", (("speed_mps", "speed"),)),
+    ("acceleration (g)", (("ax_g", "ax"), ("ay_g", "ay"))),
+    ("angle (deg)", (("pitch_deg", "pitch"), ("roll_deg", "roll"))),
+    ("ride height (mm)", (("ride_front_mm", "front"), ("ride_rear_mm", "rear"))),
+    ("Fz (N)", tuple((f"fz_{corner}_n", corner) for corner in CORNERS)),
+    ("map downforce (%)", (("map_downforce_pct", "change from static"),)),
+)
+MAP_CHANNELS = (
+    ("speed_mps", "speed (m/s)"),
+    ("ax_g", "ax (g)"),
+    ("ride_front_mm", "front ride height (mm)"),
+    ("ride_rear_mm", "rear ride height (mm)"),
+    ("map_downforce_pct", "map downforce (%)"),
+)
+
+
+def plot_laps(traces, laps, out_dir):
+    for track, lap in laps.items():
+        trace = traces[("baseline", track)]
+        steps = np.mod(np.diff(trace["station_m"]), lap.line.track_length_m)
+        station = trace["station_m"][0] + np.concatenate(([0.0], np.cumsum(steps)))
+        corners = runs(~straight_mask(trace, lap.line))
+        figure, axes = plt.subplots(len(LAP_PANELS), 1, sharex=True, figsize=(9, 2 * len(LAP_PANELS)))
+        for axis, (label, channels) in zip(axes, LAP_PANELS):
+            for start, stop in corners:
+                axis.axvspan(station[start], station[stop - 1], color="0.9")
+            for channel, legend in channels:
+                axis.plot(station, trace[channel], label=legend)
+            axis.set_ylabel(label)
+            axis.grid(alpha=0.3)
+        axes[0].plot(lap.line.station_m, lap.speed_mps, "--", color="0.4", label="driver target")
+        for axis in axes:
+            axis.legend(fontsize=7, loc="upper right")
+        axes[0].set_title(f"{track}, baseline car, one lap; grey = corner")
+        axes[-1].set_xlabel("station (m)")
+        figure.tight_layout()
+        figure.savefig(out_dir / f"lap_{track}.png", dpi=110)
+        plt.close(figure)
+
+
+def plot_track_maps(traces, laps, out_dir):
+    figure, axes = plt.subplots(len(laps), len(MAP_CHANNELS), figsize=(3.6 * len(MAP_CHANNELS), 3.2 * len(laps)), squeeze=False)
+    for row, (track, lap) in zip(axes, laps.items()):
+        trace = traces[("baseline", track)]
+        line, period = lap.line, lap.line.track_length_m
+        x_m = np.interp(trace["station_m"], line.station_m, line.x_m, period=period)
+        y_m = np.interp(trace["station_m"], line.station_m, line.y_m, period=period)
+        for axis, (channel, label) in zip(row, MAP_CHANNELS):
+            points = axis.scatter(x_m, y_m, c=trace[channel], s=3, cmap="viridis")
+            axis.plot(x_m[0], y_m[0], "k>", markersize=6)
+            figure.colorbar(points, ax=axis, label=label, shrink=0.8)
+            axis.set_aspect("equal")
+            axis.set_title(f"{track}: {label}", fontsize=9)
+            axis.tick_params(labelsize=7)
+    figure.suptitle("Baseline car, one lap; x and y in m; arrow = start")
+    figure.tight_layout()
+    figure.savefig(out_dir / "track_maps.png", dpi=110)
+    plt.close(figure)
+
+
+def plot_grids(summary, out_dir):
+    cars = summary["cars"]
+    columns = 4
+    rows = -(-len(GRID_METRICS) // columns)
+    ticks = range(len(ANTI_LEVELS)), [f"{round(100 * level)}" for level in ANTI_LEVELS]
+    figure, axes = plt.subplots(rows, columns, figsize=(4 * columns, 3.4 * rows))
+    for axis, (title, key, spec) in zip(axes.flat, GRID_METRICS):
+        values = np.array([[cars[anti_name(dive, squat)]["tracks"][ANTI_TRACK][key] for squat in ANTI_LEVELS] for dive in ANTI_LEVELS])
+        image = axis.imshow(values, origin="lower", cmap="viridis")
+        for (row, column), value in np.ndenumerate(values):
+            axis.text(column, row, format(value, spec), ha="center", va="center", fontsize=8, color="k" if image.norm(value) > 0.6 else "w")
+        axis.set_xticks(*ticks)
+        axis.set_yticks(*ticks)
+        axis.set_xlabel("anti-squat (%)")
+        axis.set_ylabel("anti-dive (%)")
+        axis.set_title(title, fontsize=9)
+        figure.colorbar(image, ax=axis, shrink=0.8)
+    for axis in axes.flat[len(GRID_METRICS):]:
+        axis.set_visible(False)
+    figure.suptitle(f"{ANTI_TRACK}, 16 anti cars")
+    figure.tight_layout()
+    figure.savefig(out_dir / "anti_grid.png", dpi=110)
+    plt.close(figure)
 
 
 def plot_trends(summary, out_dir):
@@ -620,8 +733,11 @@ def main():
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
 
     write_tables(summary, out_dir)
-    plot_braking(traces, laps, out_dir)
+    plot_onsets(traces, laps, summary, out_dir)
     plot_trends(summary, out_dir)
+    plot_laps(traces, laps, out_dir)
+    plot_track_maps(traces, laps, out_dir)
+    plot_grids(summary, out_dir)
 
     for name, passed, detail in results:
         print(f"{'PASS' if passed else 'FAIL'} {name}: {detail}")

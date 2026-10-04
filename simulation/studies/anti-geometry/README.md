@@ -123,6 +123,16 @@ inside each event.
 `out/anti-geometry/traces/<car>_<track>.csv` has every channel against time and station for each car. Plot two
 of them on the same station axis to compare two cars.
 
+`run.py` also writes these figures to `out/anti-geometry/`. This README does not show them.
+
+| Figure | Content |
+| ------ | ------- |
+| `lap_<track>.png` | The baseline car over one lap: speed and driver target, ax and ay, pitch and roll, ride heights, wheel Fz and map downforce against station. Grey bands are corners. |
+| `track_maps.png` | Each track, colored by speed, ax, front and rear ride height and map downforce of the baseline car. |
+| `drive.png` | The first `hairpin` drive event at anti-dive 0 %, anti-squat 0 to 60 %: ax, rear axle Fz, pitch and rear ride height against time. |
+| `turn_in.png` | The first `sweeper` corner entry for the four RC levels at anti 0/0: steer, yaw rate, roll, heave and outer front Fz against time. |
+| `anti_grid.png` | Heat maps of the anti-grid metrics over anti-dive and anti-squat on `hairpin`. Each panel has its own color scale. |
+
 ### Checks
 
 `run.py` stops with an error if a check fails.
@@ -401,7 +411,7 @@ The full grids:
   "study": "anti-geometry",
   "bobsim_sha": "4da577af1b04d86c53706eb6e80fb0064f71cee6",
   "vehicle_sha256": "3ab02bbf3e573aad0330bc37ce40fd254090d33dabd3760462c51da74e30afe8",
-  "utc": "2026-10-02T03:46:00+00:00"
+  "utc": "2026-10-04T15:34:58+00:00"
 }
 ```
 
