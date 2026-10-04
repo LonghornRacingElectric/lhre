@@ -100,10 +100,15 @@ so everyone is looking at the same panels. A layout kept only in a
 personal Foxglove install means two people debugging the same bag see
 different things.
 
-**The layout is not yet verified against the Foxglove app.** It is
-hand-written JSON in the documented export shape. If Foxglove rejects it
-or a panel comes up empty, fix it in the app and re-export over the file
-rather than working around it.
+Its structure is checked against a real Foxglove export, and
+`./scripts/check_layout.sh <bag>` verifies that every topic and frame it
+names exists in a recording. How the app *renders* it is still
+unconfirmed, because that cannot be tested from here. If a panel is
+empty after `check_layout.sh` passes, fix the layout in the app and
+re-export over the file.
+
+Note that `lidar:=true` is what publishes the `base_link -> lidar`
+transform. Without it a recorded cloud has no frame to sit in.
 
 ## Ending a run
 

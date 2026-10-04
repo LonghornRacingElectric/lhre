@@ -3,6 +3,7 @@
 
 import math
 
+from geometry_msgs.msg import TransformStamped
 from lhr_lidar_sim.mid360 import Mid360Config
 from lhr_lidar_sim.sensor import Mid360Sensor, MountPose
 from lhr_vehicle import load_vehicle
@@ -14,9 +15,24 @@ from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import PointCloud2
 from sensor_msgs_py import point_cloud2
 from std_msgs.msg import Header
+from tf2_ros import StaticTransformBroadcaster
 from visualization_msgs.msg import MarkerArray
 
 LIDAR_FRAME = 'lidar'
+BASE_FRAME = 'base_link'
+
+
+def yaw_pitch_roll_to_quat(roll: float, pitch: float, yaw: float):
+    """Return (x, y, z, w) for a ROS yaw-pitch-roll rotation."""
+    cr, sr = math.cos(roll * 0.5), math.sin(roll * 0.5)
+    cp, sp = math.cos(pitch * 0.5), math.sin(pitch * 0.5)
+    cy, sy = math.cos(yaw * 0.5), math.sin(yaw * 0.5)
+    return (
+        sr * cp * cy - cr * sp * sy,
+        cr * sp * cy + sr * cp * sy,
+        cr * cp * sy - sr * sp * cy,
+        cr * cp * cy + sr * sp * sy,
+    )
 
 
 def quat_to_yaw(q) -> float:
@@ -88,6 +104,15 @@ class LidarSimNode(Node):
         self._cloud_pub = self.create_publisher(
             PointCloud2, '/lhr/lidar/points', 10)
 
+        # Without this the cloud is unviewable. It is stamped in the
+        # 'lidar' frame, and the kinematic stack's whole tf tree is one
+        # transform, map -> base_link, so nothing could place it: not
+        # Foxglove, not RViz, not any tf2 consumer. Published here
+        # rather than from a URDF because this node already owns the
+        # mount pose, and a second copy of it would drift.
+        self._static_tf = StaticTransformBroadcaster(self)
+        self._static_tf.sendTransform(self._mount_transform(mount))
+
         self.create_timer(1.0 / frame_rate, self._tick)
 
         self.get_logger().info(
@@ -95,6 +120,25 @@ class LidarSimNode(Node):
             f'{frame_rate:.0f} Hz, pitch '
             f'{math.degrees(mount.pitch_rad):.1f} deg, '
             f'profile {config.elevation_profile}')
+
+    def _mount_transform(self, mount: MountPose) -> TransformStamped:
+        """Build the fixed base_link to lidar transform."""
+        tf = TransformStamped()
+        # tf2 treats a static transform as valid at any time, so the
+        # stamp does not gate lookups; it is set for completeness.
+        tf.header.stamp = self.get_clock().now().to_msg()
+        tf.header.frame_id = BASE_FRAME
+        tf.child_frame_id = LIDAR_FRAME
+        tf.transform.translation.x = mount.x_m
+        tf.transform.translation.y = mount.y_m
+        tf.transform.translation.z = mount.z_m
+        qx, qy, qz, qw = yaw_pitch_roll_to_quat(
+            mount.roll_rad, mount.pitch_rad, mount.yaw_rad)
+        tf.transform.rotation.x = qx
+        tf.transform.rotation.y = qy
+        tf.transform.rotation.z = qz
+        tf.transform.rotation.w = qw
+        return tf
 
     def _cones_cb(self, msg: MarkerArray):
         self._cones = np.array(

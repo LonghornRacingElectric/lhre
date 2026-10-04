@@ -182,6 +182,7 @@ All scripts live in `scripts/` and should be run from the `autonomy/ros2` direct
 | `run_plotjuggler.sh` | Opens PlotJuggler for plotting debug signals (curvature, speed, steering). |
 | `run_headless.sh` | Runs the kinematic stack with no display and exits non-zero unless the run finished cleanly. The entry point for any gate. |
 | `check_stability.sh` | Repeats one run `RUNS` times at one `SEED` and fails if the gated metrics drift outside their per-metric bands. Answers whether the gate is trustworthy before you trust a result from it. |
+| `check_layout.sh` | Checks the committed Foxglove layout against a recorded bag and fails if it names a topic or frame the bag lacks. A renamed topic otherwise shows up as empty panels, which reads as a broken sim. |
 | `generate_gazebo_world.sh` | Generates a Gazebo world SDF from the track generator. Accepts `--seed`, `--style`, `--num-waypoints`, etc. |
 | `run_gazebo_demo.sh` | Launches the Gazebo-based stack (physics sim + adapters + upper stack). Accepts same args as `run_demo.sh`. |
 | `src/lhr_gazebo/scripts/generate_vehicle_model.py` | Regenerates the Gazebo vehicle `model.sdf` from `lhr_vehicle/config/vehicle.yaml`. Run after editing the YAML; commit both. |
@@ -343,9 +344,16 @@ itself carries `run_id`, `git_sha`, `scenario` and `seed` as rosbag2
 the gate runs many seeds.
 
 Load [`foxglove/lhr_sim.json`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/ros2/foxglove/lhr_sim.json)
-as the layout so everyone is looking at the same panels. It is
-hand-written and **not yet verified against the Foxglove app**; if a
-panel comes up empty, fix it in the app and re-export over the file.
+as the layout so everyone is looking at the same panels: a 3D view of
+the track and cloud, command against actual speed, steering, and
+mission state.
+
+Its structure is checked against a real Foxglove export, and
+`./scripts/check_layout.sh <bag>` confirms every topic and frame it
+names is present. What is still unconfirmed is how the app *renders*
+it, since that cannot be tested from here. If a panel comes up empty
+after `check_layout.sh` passes, the layout is at fault rather than the
+data: fix it in the app and re-export over the file.
 
 Which topics get recorded, why the list is explicit rather than `--all`,
 and the YAML trap in `run_id` are all in
@@ -401,10 +409,18 @@ reproducible exactly. Gate on a tolerance band, not on equality.
 ```mermaid
 flowchart LR
     map["map<br>(world/track frame)"] --> base["base_link<br>(vehicle, rear-axle center)"]
+    base --> lidar["lidar<br>(Mid-360 mount, lidar:=true only)"]
 ```
 
-One transform. Broadcast by `sim_kinematic` in the kinematic sim; in Gazebo by
-the `OdometryPublisher` plugin, bridged from `/model/fsae_vehicle/tf` to `/tf`.
+`map -> base_link` is broadcast by `sim_kinematic` in the kinematic sim; in
+Gazebo by the `OdometryPublisher` plugin, bridged from
+`/model/fsae_vehicle/tf` to `/tf`.
+
+`base_link -> lidar` is static, published by `lhr_lidar_sim` from its own
+mount pose and only when `lidar:=true`. It has to exist: a `PointCloud2`
+stamped in the `lidar` frame cannot be placed by Foxglove, RViz or any
+tf2 consumer without it, and the cloud silently fails to draw rather
+than erroring.
 
 ## Parameters
 

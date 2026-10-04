@@ -1,20 +1,25 @@
 {
   "configById": {
     "3D!lhrsim3d": {
+      "foxglovePanelTitle": "Track and cloud",
       "followMode": "follow-pose",
       "followTf": "base_link",
       "scene": {
-        "transforms": {
-          "axisScale": 0.5
-        }
+        "backgroundColor": "#15151a"
+      },
+      "transforms": {
+        "frame:map": { "visible": true },
+        "frame:base_link": { "visible": true },
+        "frame:lidar": { "visible": true }
       },
       "cameraState": {
-        "distance": 45,
         "perspective": true,
+        "distance": 45,
         "phi": 55,
         "thetaOffset": 0,
         "target": [0, 0, 0],
         "targetOffset": [0, 0, 0],
+        "targetOrientation": [0, 0, 0, 1],
         "fovy": 45,
         "near": 0.5,
         "far": 5000
@@ -23,31 +28,56 @@
         "/lhr/track/cones": { "visible": true },
         "/lhr/sensor/cones_detected": { "visible": true },
         "/lhr/track/centerline": { "visible": true },
-        "/lhr/lidar/points": { "visible": true, "colorField": "z", "colorMode": "colormap", "colorMap": "turbo" }
+        "/lhr/lidar/points": {
+          "visible": true,
+          "colorMode": "colormap",
+          "colorField": "z",
+          "colorMap": "turbo"
+        }
       },
       "layers": {},
       "publish": {}
     },
     "Plot!lhrsimspeed": {
+      "foxglovePanelTitle": "Speed: command vs actual",
       "paths": [
-        { "value": "/lhr/vehicle/cmd.drive.speed", "enabled": true, "timestampMethod": "receiveTime" },
-        { "value": "/lhr/vehicle/odom.twist.twist.linear.x", "enabled": true, "timestampMethod": "receiveTime" }
+        {
+          "value": "/lhr/vehicle/cmd.drive.speed",
+          "label": "cmd",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/lhr/vehicle/odom.twist.twist.linear.x",
+          "label": "actual",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
       ],
       "showLegend": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
       "isSynced": true,
-      "xAxisVal": "timestamp",
-      "sidebarDimension": 240
+      "xAxisVal": "timestamp"
     },
     "Plot!lhrsimsteer": {
+      "foxglovePanelTitle": "Steering command",
       "paths": [
-        { "value": "/lhr/vehicle/cmd.drive.steering_angle", "enabled": true, "timestampMethod": "receiveTime" }
+        {
+          "value": "/lhr/vehicle/cmd.drive.steering_angle",
+          "label": "steer",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
       ],
       "showLegend": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
       "isSynced": true,
-      "xAxisVal": "timestamp",
-      "sidebarDimension": 240
+      "xAxisVal": "timestamp"
     },
     "RawMessages!lhrsimmission": {
+      "foxglovePanelTitle": "Mission state",
       "topicPath": "/lhr/mission/status"
     }
   },

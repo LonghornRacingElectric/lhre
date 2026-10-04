@@ -121,6 +121,24 @@ print(points_on_cone(sensor, 0.0, distance_m=10.0, frames=10))
 One frame against a 24-cone field takes about 5 ms, against a 100 ms
 budget at 10 Hz.
 
+## Frames
+
+The node publishes a static `base_link -> lidar` transform from its own
+mount pose, and that is not optional bookkeeping. Clouds are stamped in
+the `lidar` frame, and the kinematic stack's entire tf tree is one
+transform, `map -> base_link`. Without this one, nothing can place the
+cloud: Foxglove, RViz and every tf2 consumer simply draw nothing, with
+no error to explain why.
+
+It is published here rather than from a URDF because this node already
+owns the mount pose, and a second copy would drift from it. A side
+benefit is that the mount pitch becomes visible in the viewer, which is
+the thing the mount study is arguing about.
+
+```
+map -> base_link -> lidar     (1.80, 0.00, 0.55), pitch as parameterised
+```
+
 ## Parameters
 
 | Parameter | Default | Notes |
