@@ -531,6 +531,11 @@ mod tests {
     }
 
     #[test]
+    fn allow_balance_column_present() {
+        assert!(headers().contains(&"controls.allow_balance".to_string()));
+    }
+
+    #[test]
     fn natural_cmp_is_numeric_not_lexical() {
         use std::cmp::Ordering;
         assert_eq!(natural_cmp("x[2]", "x[10]"), Ordering::Less);
