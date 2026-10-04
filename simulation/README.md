@@ -38,6 +38,7 @@ make test    # check that BobSim loads //vehicle and test tools/
 | `make records-undo` | Put back only the files `make records` wrote |
 | `make bobsim T=<target>` | Run a BobSim make target. `T=help` lists them. |
 | `make study S=<name>` | Run `studies/<name>/run.py`. If it succeeds, write outputs to `out/<name>/`. `STUDY_WORKERS=n` limits the CPUs for parallel cases. `ARGS=... V=<name>` runs a variant to `out/<name>--<V>/`. |
+| `make sweep SIM=<sim> CARS=<dir>` | Run a BobSim standard sim (`four-post`, `steady-state`, `ramp-steer`, `transient`) on each vehicle YAML in `<dir>`. Write the metrics to `<dir>/../<sim>/`. Reuse builds and results that did not change. See [bobsim.md](docs/bobsim.md#sweep). |
 | `make bump-bobsim REF=<ref>` | Move the BobSim pin to a commit, tag or branch |
 | `make clean` | Delete `out/` |
 

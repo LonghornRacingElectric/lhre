@@ -10,7 +10,7 @@ STUDY_OUT = $(S)$(if $(V),--$(V))
 
 GIT_LF := git -c core.autocrlf=false -c core.longpaths=true
 
-.PHONY: help init build shell test records records-undo bobsim study bump-bobsim clean
+.PHONY: help init build shell test records records-undo bobsim study sweep bump-bobsim clean
 
 help:
 	@echo "make init                  Get submodules and build the image"
@@ -21,6 +21,7 @@ help:
 	@echo "make records-undo          Put back only the files make records wrote"
 	@echo "make bobsim T=<target>     Run a BobSim make target"
 	@echo "make study S=<name>        Run studies/<name>/run.py (STUDY_WORKERS=n limits CPUs)"
+	@echo "make sweep SIM=<sim> CARS=<dir>  Run a BobSim standard sim on each vehicle YAML in <dir>"
 	@echo "make bump-bobsim REF=<ref> Move the BobSim pin"
 	@echo "make clean                 Delete out/"
 
@@ -70,6 +71,18 @@ study:
 		sh -c 'rm -rf out/.staging/$(STUDY_OUT) && python tools/provenance.py && python studies/$(S)/run.py $(ARGS) \
 			&& rm -rf out/$(STUDY_OUT) && mv out/.staging/$(STUDY_OUT) out/$(STUDY_OUT) \
 			$(if $(V),,&& python tools/readme.py studies/$(S)/README.md out/$(S))'
+
+SWEEP_STAGING := out/.staging/sweep
+
+sweep:
+	@test -n "$(SIM)" || { echo "Set SIM=four-post, steady-state, ramp-steer or transient."; exit 1; }
+	@test -n "$(CARS)" || { echo "Set CARS=<folder of vehicle YAML files under out/>."; exit 1; }
+	rm -rf $(SWEEP_STAGING)
+	mkdir -p $(SWEEP_STAGING)/bobsim/_0_Utils/external/BobLib
+	$(GIT_LF) -C bobsim archive HEAD | tar -x -C $(SWEEP_STAGING)/bobsim
+	$(GIT_LF) -C $(BOBLIB) archive HEAD | tar -x -C $(SWEEP_STAGING)/bobsim/_0_Utils/external/BobLib
+	$(RUN) -e BOBSIM_SHA=$(BOBSIM_SHA) -e STUDY_WORKERS=$(or $(STUDY_WORKERS),8) sim python tools/sweep.py $(SIM) $(SWEEP_STAGING)/bobsim $(CARS)
+	rm -rf $(SWEEP_STAGING)
 
 bump-bobsim:
 	@test -n "$(REF)" || { echo "Set REF=<BobSim commit, tag or branch>."; exit 1; }
