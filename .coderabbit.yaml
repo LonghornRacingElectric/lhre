@@ -2,7 +2,11 @@
 # CodeRabbit settings for this repo. Anything not set here falls back to the
 # org dashboard. CodeRabbit reads this file from each PR's own branch.
 reviews:
-  # Keep CodeRabbit out of the PR description. Authors write it, and the
-  # generated "Summary by CodeRabbit" block kept getting appended under
-  # their text.
-  high_level_summary: false
+  # The autonomy team opts out of CodeRabbit. Its PR titles start with
+  # "Autonomous:", which skips the review, and autonomy/ files are left out
+  # of every other team's reviews too.
+  path_filters:
+    - "!autonomy/**"
+  auto_review:
+    ignore_title_keywords:
+      - "Autonomous:"
