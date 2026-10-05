@@ -185,10 +185,13 @@ temperature levels off near 66 °C in the garage and climbs to 72 °C outdoors.
 
 - Unit: Mid-360 S/N 47MCN860030034, firmware 13.18.2.40, loader 13.17.99.20.
 - Date: 2026-10-04, 14:24 to 17:29 CDT. Timestamped log: [log.md](log.md).
+- Crew: Gray Marshall ran the test. Tanush Chauhan placed and measured the
+  cones and talked through every run. Sol Mahajan stopped by to help.
 - Raw data on SharePoint,
   [LHR Electric > Design > _VMS_ > Autonomous > Test Data > 2026-10-04-mid360-acceptance](https://utexas.sharepoint.com/sites/ENGR-LonghornRacing/LHR%20Electric/Design/_VMS_/Autonomous/Test%20Data/2026-10-04-mid360-acceptance)
   (3.7 GB): per-run MCAP and `.npz` in `raw/` (health logs in `raw/health/`,
   bad runs in `raw/discarded/`), ROS 2 bags of every run in `ros2/`, every
   figure in `figures/`, setup photos in `Pictures/`, plus `runs.csv`,
   `notes.md` and the session settings.
-- Earlier bench run (2026-09-27): LiDAR Test Plan page in the Notion wiki.
+- Earlier bench run (2026-09-27, Tanush Chauhan): LiDAR Test Plan page in
+  the Notion wiki.
