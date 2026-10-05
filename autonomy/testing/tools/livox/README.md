@@ -22,7 +22,13 @@ share `live.log`, `rec.txt` and `bags/` here (all gitignored).
 - A campaign folder `~/lhr-test-data/<campaign>/` with a `session.json`
   (sensor height, cone, location, lighting, run prefix), and the
   `~/lhr-test-data/current` link pointing at it. The
-  [testing README](../../README.md) has the layout.
+  [testing README](../../README.md) has the layout. When the campaign is
+  done, upload the whole folder to
+  [SharePoint, _VMS_ > Autonomous > Test Data](https://utexas.sharepoint.com/sites/ENGR-LonghornRacing/LHR%20Electric/Design/_VMS_/Autonomous/Test%20Data).
+- Earlier recordings to test against without a sensor: the
+  [2026-10-04 campaign's data](https://utexas.sharepoint.com/sites/ENGR-LonghornRacing/LHR%20Electric/Design/_VMS_/Autonomous/Test%20Data/2026-10-04-mid360-acceptance).
+  The `.npz` files feed every analysis script here, and `ros2/` has the same
+  runs as ROS 2 bags.
 
 ## Scripts
 

@@ -37,6 +37,10 @@ here. Do not add `BUILD.bazel` files.
   committing.
 - `ros2/build`, `ros2/install`, `ros2/log`, and `ros2/data/metrics.csv` are
   gitignored build/run outputs. Never commit them.
+- Hardware test recordings (MCAP, `.npz`, ROS 2 bags) never go in git. They
+  live on SharePoint under _VMS_ > Autonomous > Test Data; only the writeup,
+  results table, chosen figures and scripts go in `testing/`
+  ([testing/README.md](testing/README.md)).
 - Vehicle numbers (wheelbase, track, steering limit, masses, sensor
   mounts) live only in `ros2/src/lhr_vehicle/config/vehicle.yaml`; nodes
   read them through `lhr_vehicle.load_vehicle()`. Never hardcode them.

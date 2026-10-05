@@ -534,15 +534,22 @@ Processes LiDAR pointcloud to detect cones. Pipeline: ground removal → range f
 | Param | Default | Description |
 |-------|---------|-------------|
 | `max_range` | `20.0` | Max detection range (m) |
-| `min_range` | `0.8` | Min detection range — avoids vehicle self-hits (m) |
-| `ground_z_min` | `-0.40` | Ground removal lower threshold in sensor frame (m) |
+| `min_range` | `0.9` | Min detection range — avoids vehicle self-hits (m) |
+| `ground_z_min` | `-(mount height - 0.15)` | Ground removal lower threshold in sensor frame (m), from the LiDAR mount height in `vehicle.yaml`: drops everything within 15 cm of the ground |
 | `ground_z_max` | `0.5` | Ground removal upper threshold in sensor frame (m) |
-| `cluster_radius` | `0.5` | Euclidean clustering radius (m) |
+| `cluster_radius` | `0.35` | Euclidean clustering radius (m) |
 | `min_cluster_points` | `1` | Minimum points for a valid cluster |
 | `max_cluster_extent` | `0.5` | Maximum cluster bounding box extent (m) |
 | `max_cluster_points` | `50` | Maximum points in a valid cone cluster |
 | `dedup_radius` | `1.5` | Spatial dedup radius — new detections within this distance of existing ones are ignored (m) |
 | `publish_hz` | `10.0` | Output publish rate (Hz) |
+
+These defaults were tuned on the simulated VLP-16. On the real Mid-360
+([2026-10-04 acceptance test](../testing/2026-10-04-mid360-acceptance/README.md)),
+31 to 71% of the hits on a small cone fall within 15 cm of the ground, where
+`ground_z_min` drops them, and a 1-point cluster is not a credible cone. Retune
+both against that test's ROS 2 bags, which replay into this node unchanged:
+[SharePoint, Test Data > 2026-10-04-mid360-acceptance > ros2](https://utexas.sharepoint.com/sites/ENGR-LonghornRacing/LHR%20Electric/Design/_VMS_/Autonomous/Test%20Data/2026-10-04-mid360-acceptance/ros2).
 
 All detected cones are published under a single "cones" namespace with IDs 0..N-1 (orange color). There is no left/right classification — the track builder's boundary pairing strategy (Delaunay triangulation) handles cone pairing by finding pairs that are approximately track-width apart.
 

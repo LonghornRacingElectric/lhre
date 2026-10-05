@@ -7,6 +7,10 @@ Is it good enough to be the car's LiDAR, and how far does it see a cone at
 the height it would sit on the car? The checks and pass lines come from the
 LiDAR Test Plan in the Notion wiki.
 
+**Data:** raw recordings, ROS 2 bags of every run, setup photos and every
+figure are on SharePoint:
+[Test Data > 2026-10-04-mid360-acceptance](https://utexas.sharepoint.com/sites/ENGR-LonghornRacing/LHR%20Electric/Design/_VMS_/Autonomous/Test%20Data/2026-10-04-mid360-acceptance).
+
 ## Result
 
 **Car sensor, provisional.** The optics, the scan, and the data link are
@@ -14,9 +18,9 @@ healthy. The 60 minute endurance run and the connector wiggle test were not
 run, so the verdict is not final.
 
 - **No sign of drop damage.** 200,000 points/s for about 3 hours of
-  streaming, with packets lost only during host-side outages (below). Walls and ceiling are flat to
-  0.5 to 0.7 cm, a room corner measures 89.7°, and the point cloud agrees
-  with IMU gravity to 0.3°.
+  streaming, with packets lost only during host-side outages (below). Walls
+  and ceiling are flat to 0.5 to 0.7 cm, a room corner measures 89.7°, and
+  the point cloud agrees with IMU gravity to 0.3°.
 - **Pass line, small cone at 10 m (at least 50 points in 5 s):** 103 in the
   garage, a pass. Outdoors under full overcast, 46, 49 and 51 in three runs
   (average 49, a marginal fail), and 65 as the light faded.
@@ -28,15 +32,15 @@ run, so the verdict is not final.
   10 to 12 m with stacking.** At 7.7 m the cone is in 99% of 0.1 s frames.
   At 10.3 m it is in about 60%, at 15.3 m in 34%, at 17.9 m in 14%.
 - **The near field is blind at this mount.** With the sensor 0.58 m up and
-  level, a cone is fully in view only from about 3.9 m. The small cone is
-  not visible at all at 1.4 m.
+  tipped 0.9° toward the cones, a small cone is fully in view only from
+  about 3.9 m (4.4 m if level). It is not visible at all at 1.4 m.
 - **Pitch matters.** The same 5 m cone got 433 points in 10 s with the
   sensor tipped 2.5° up on the cone side and 935 when level. The tilt put the
   bottom of the cone out of view.
 - **Gyro bias fails the plan's 1 °/s limit and moves with temperature:**
-  X axis -1.2 °/s at 46 °C, -2.8 °/s at 57 °C, -4.3 °/s at 66 °C. Stable at
-  a fixed temperature, so the EKF can estimate it, but not as a one-time
-  calibration.
+  X axis -1.2 °/s at 46 °C, -2.8 °/s at 57 °C, -4.3 °/s at 66 to 68 °C.
+  Stable at a fixed temperature, so the EKF can estimate it, but not as a
+  one-time calibration.
 
 ![Points on the cone per frame against range](figures/summary_points_vs_range.png)
 
@@ -53,6 +57,11 @@ run, so the verdict is not final.
 - Cones disappear under the field of view as the car reaches them, so the
   track builder keeps cones it saw earlier.
 - State estimation estimates the gyro bias online.
+- `lidar_cone_detector` keeps its simulated-LiDAR settings: it drops
+  everything within 15 cm of the ground, which held 31 to 71% of the hits on
+  a small cone here, and it accepts 1-point clusters. Retune both on this
+  test's ROS 2 bags (see
+  [ros2/README.md](../../ros2/README.md#lhr_perception-lidar_cone_detector)).
 
 ### Results by range
 
@@ -176,8 +185,10 @@ temperature levels off near 66 °C in the garage and climbs to 72 °C outdoors.
 
 - Unit: Mid-360 S/N 47MCN860030034, firmware 13.18.2.40, loader 13.17.99.20.
 - Date: 2026-10-04, 14:24 to 17:29 CDT. Timestamped log: [log.md](log.md).
-- Raw data (3.5 GB: per-run MCAP and `.npz` in `raw/`, ROS 2 bags of every
-  run in `ros2/`, health logs, every figure): SharePoint,
-  [LHR Electric > Design > _VMS_ > Autonomous > Test Data](https://utexas.sharepoint.com/sites/ENGR-LonghornRacing/LHR%20Electric/Design/_VMS_/Autonomous/Test%20Data)
-  `> 2026-10-04-mid360-acceptance`.
+- Raw data on SharePoint,
+  [LHR Electric > Design > _VMS_ > Autonomous > Test Data > 2026-10-04-mid360-acceptance](https://utexas.sharepoint.com/sites/ENGR-LonghornRacing/LHR%20Electric/Design/_VMS_/Autonomous/Test%20Data/2026-10-04-mid360-acceptance)
+  (3.7 GB): per-run MCAP and `.npz` in `raw/` (health logs in `raw/health/`,
+  bad runs in `raw/discarded/`), ROS 2 bags of every run in `ros2/`, every
+  figure in `figures/`, setup photos in `Pictures/`, plus `runs.csv`,
+  `notes.md` and the session settings.
 - Earlier bench run (2026-09-27): LiDAR Test Plan page in the Notion wiki.

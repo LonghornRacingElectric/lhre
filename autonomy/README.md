@@ -11,7 +11,7 @@ FSAE driverless stack for Longhorn Racing Electric. The goal: retrofit Orion (th
 | `ros2/` | The ROS 2 stack. [Setup guide](ros2/GETTING-STARTED.md), [full reference](ros2/README.md) |
 | `docs/plans/` | Working docs: plans, change logs, roadmap. Context for contributors and AI agents, not onboarding material |
 | `docs/rules/` | FSAE 2026 rules breakdowns relevant to driverless |
-| `testing/` | [Hardware test results](testing/README.md) and the tools that recorded them. Raw data lives in team storage, not git |
+| `testing/` | [Hardware test results](testing/README.md) and the tools that recorded them. Raw data lives in [SharePoint, _VMS_ > Autonomous > Test Data](https://utexas.sharepoint.com/sites/ENGR-LonghornRacing/LHR%20Electric/Design/_VMS_/Autonomous/Test%20Data), not git |
 
 ## Software lanes
 

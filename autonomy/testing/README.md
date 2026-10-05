@@ -15,9 +15,9 @@ testing/
   tools/<sensor>/  # the scripts that recorded and analyzed the data
 ```
 
-| Campaign | Question | Status |
-| -------- | -------- | ------ |
-| [2026-10-04 Mid-360 acceptance](2026-10-04-mid360-acceptance/README.md) | Is the donated, dropped Livox Mid-360 good enough for the car, and how far does it see a cone? | Car sensor, provisional: endurance and connector checks not run |
+| Campaign | Question | Status | Data |
+| -------- | -------- | ------ | ---- |
+| [2026-10-04 Mid-360 acceptance](2026-10-04-mid360-acceptance/README.md) | Is the donated, dropped Livox Mid-360 good enough for the car, and how far does it see a cone? | Car sensor, provisional: endurance and connector checks not run | [SharePoint](https://utexas.sharepoint.com/sites/ENGR-LonghornRacing/LHR%20Electric/Design/_VMS_/Autonomous/Test%20Data/2026-10-04-mid360-acceptance) |
 
 ## Rules
 
@@ -25,9 +25,15 @@ testing/
   Upload each campaign's whole data folder (recordings, ROS 2 bags, health
   logs, every figure) to SharePoint under
   [LHR Electric > Design > _VMS_ > Autonomous > Test Data](https://utexas.sharepoint.com/sites/ENGR-LonghornRacing/LHR%20Electric/Design/_VMS_/Autonomous/Test%20Data),
-  in a folder named like the campaign folder here. While testing, the tools
-  write to `~/lhr-test-data/<campaign>/` on the test laptop, and
+  in a folder named like the campaign folder here, and link it from the
+  campaign README and the table above. While testing, the tools write to
+  `~/lhr-test-data/<campaign>/` on the test laptop, and
   `~/lhr-test-data/current` points at the active campaign.
+- **Check the upload.** A browser folder upload can put the contents
+  straight into the target instead of inside a new folder, and can skip
+  nested subfolders. Compare the file count and total size with the laptop
+  before deleting anything. Upload a campaign once, when it is done:
+  SharePoint keeps every replaced version.
 - **Commit the figures you will present, not every figure.** The tools write
   two figures per run; pick the ones that carry the result. The rest stay
   with the raw data.
