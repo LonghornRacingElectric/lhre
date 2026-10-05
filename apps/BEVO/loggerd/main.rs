@@ -181,6 +181,8 @@ fn repeated_field_lengths() -> HashMap<String, usize> {
     lengths
 }
 
+/// Build stable CSV columns from the full proto schema and CAN array lengths,
+/// keeping time and packet ID first and sorting indexed fields numerically.
 fn canonical_csv_headers() -> Vec<String> {
     // Build a fully-populated OrionSensorData template (all sub-messages present
     // as Some(default)) so flatten_json_value enumerates every reachable scalar
@@ -507,9 +509,9 @@ mod tests {
         assert_eq!(headers[1], "packet_id");
     }
 
+    /// Verify all 140 cell-voltage columns (35 frames of four) appear in numeric order.
     #[test]
     fn cells_v_sized_from_schema_and_ordered_numerically() {
-        // 35 frames x 4 cells/frame = 140 (Orion: 140 cells, exact fit).
         let cells = indexed(&headers(), "pack.cells_v[");
         assert_eq!(cells, (0..140).collect::<Vec<_>>());
     }
@@ -530,6 +532,7 @@ mod tests {
         }
     }
 
+    /// Verify the CSV header includes the balance command so it can be logged.
     #[test]
     fn allow_balance_column_present() {
         assert!(headers().contains(&"controls.allow_balance".to_string()));

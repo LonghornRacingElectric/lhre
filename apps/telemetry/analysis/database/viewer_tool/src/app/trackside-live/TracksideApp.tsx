@@ -440,6 +440,7 @@ function normalizeCarPreset(value: unknown): CarPreset | null {
   };
 }
 
+/** Render the trackside telemetry dashboard and manage live and saved sessions. */
 function App() {
   const [activeTab, setActiveTab] = useState<AppTab>("live");
   // First-load onboarding tour. Opens automatically until the user finishes/skips
