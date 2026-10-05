@@ -7,22 +7,26 @@ For high-level architectural details and motivation, see [SCHEMA_DRIVEN_DEV.md](
 ## 1. The Workflow (The "LHR Way")
 
 When adding a sensor or modifying the car configuration:
-1.  **Define:** Modify the `.proto` file in `stack/ingest/protobuf/`.
+1.  **Define:** For Orion, edit the CAN CSVs in `apps/BEVO/schema/` and run
+    `bazel run --config=local //apps/BEVO/schema:update_can_proto` (see the
+    [schema README](../../../BEVO/schema/README.md)); never edit
+    `can_packets.proto` by hand. For Angelique, edit
+    `stack/ingest/protobuf/angelique.proto`.
 2.  **Generate:** Run the sync script to update the source tree.
 3.  **Implement:** Use the generated Dataclasses and SQLAlchemy models in your processors or frontend.
 
 ### Automatic Synchronization
-The fastest way to update your local environment is to use the sync script:
+The fastest way to update your local environment is to use the sync script, run from `apps/telemetry/`:
 ```bash
-bash scripts/sync_schema.sh
+bash scripts/sync_schema.sh            # Orion; pass Angelique for the other car
 ```
-This script runs the generator for the requested car (`Orion` by default) and automatically updates:
+This script runs the generator for the requested car (`Orion` by default; the name is case-sensitive) and automatically updates:
 - `stack/ingest/{car}_db_init.sql` (Database)
 - `analysis/database/viewer_tool/prisma/{car}.prisma` (Frontend)
 - `analysis/sql_utils/models.py` (ORM)
 
 When run for `Orion` (the default), it also syncs:
-- `analysis/database/viewer_tool/protobuf/orion.proto` from `drivers/longhorn-lib/protobuf/can_packets.proto`.
+- `analysis/database/viewer_tool/protobuf/orion.proto` from `apps/BEVO/schema/can_packets.proto`.
 
 ---
 
@@ -37,7 +41,7 @@ While Protobuf provides the wire format, the generated `dataclasses.py` provides
 
 ### Location
 The dataclasses are generated into car-specific folders:
-`telemetry/scripts/gen_{car}/dataclasses.py`
+`apps/telemetry/scripts/gen_{car}/dataclasses.py`
 
 ### Key Components
 - **`{Car}SensorData`**: The root container for a full telemetry packet.
@@ -141,7 +145,7 @@ def on_message(payload_bytes):
 
 ## 3. Modifying Infrastructure
 To add lookup tables (LUTs), metadata fields (like new event settings), or SQL functions:
-1.  Modify `telemetry/stack/ingest/common_schema.sql`.
+1.  Modify `apps/telemetry/stack/ingest/common_schema.sql`.
 2.  Run `bash scripts/sync_schema.sh`.
 3.  The changes will propagate to the Prisma schema used by the Viewer Tool.
 
@@ -180,12 +184,12 @@ python3 scripts/generate_schema.py patch-models \
 ---
 
 ## 5. Key Files
-- `telemetry/scripts/generate_schema.py`: The transformation engine.
-- `telemetry/scripts/sync_schema.sh`: Convenience script for local developers.
-- `drivers/longhorn-lib/protobuf/can_packets.proto`: Orion source-of-truth protobuf.
-- `telemetry/stack/ingest/common_schema.sql`: Source of truth for static infrastructure.
-- `telemetry/analysis/sql_utils/models.py`: SQLAlchemy models (Shared + Car-specific).
-- `telemetry/scripts/gen_angelique/dataclasses.py`: Generated Python type stubs.
+- `apps/telemetry/scripts/generate_schema.py`: The transformation engine.
+- `apps/telemetry/scripts/sync_schema.sh`: Convenience script for local developers.
+- `apps/BEVO/schema/can_packets.proto`: Orion protobuf, generated from the CAN CSVs next to it.
+- `apps/telemetry/stack/ingest/common_schema.sql`: Source of truth for static infrastructure.
+- `apps/telemetry/analysis/sql_utils/models.py`: SQLAlchemy models (Shared + Car-specific).
+- `apps/telemetry/scripts/gen_{car}/dataclasses.py`: Generated Python type stubs.
 
 ---
 
@@ -216,7 +220,7 @@ This checks:
 - Optional ORM drift reporting against protobuf schema (`--strict-orm-sync` to fail on drift).
 
 Processor-backed topics are separate from the core ingest path:
-- `gg-plot` requires `telemetry/stack/processors/gg_plot`.
-- `track-mapper`/lap timing require `telemetry/stack/processors/track_mapper` and `telemetry/stack/processors/lap_timer`.
+- `gg-plot` requires `apps/telemetry/stack/processors/gg_plot`.
+- `track-mapper`/lap timing require `apps/telemetry/stack/processors/track_mapper` and `apps/telemetry/stack/processors/lap_timer`.
 
 `server_devtool.sh` option `3` only starts Kafka + ingest, so `gg-plot` and `track-mapper` will stay empty unless those processors are started.
