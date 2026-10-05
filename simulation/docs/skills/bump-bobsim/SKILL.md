@@ -40,6 +40,10 @@ description: Move the simulation/bobsim submodule to a newer BobSim commit and f
    make test
    ```
 
+   Then run `make fmu`. It takes about 6 minutes. `tools/fmu/records.py`
+   calls BobSim's record generator, and `make test` does not cover it. If
+   the build stops, fix `tools/fmu` in the same PR.
+
 4. Run each study that imports a module that changed. Fix the study in the
    same PR.
 5. If `simulation/bobsim/vehicle.yml` gained new keys, add them to
