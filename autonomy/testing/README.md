@@ -11,6 +11,7 @@ testing/
     results.csv    # one row per run: settings and measured numbers
     log.md         # timestamped log kept during the test
     figures/       # the figures the README and slides use
+    *.py           # the scripts that made those figures from the raw data
   tools/<sensor>/  # the scripts that recorded and analyzed the data
 ```
 

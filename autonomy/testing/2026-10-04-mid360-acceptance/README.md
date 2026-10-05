@@ -88,10 +88,51 @@ The cone as the sensor sees it, 10 s of points:
 | --------------------- | ------------------------------ |
 | ![Top-down view of the garage](figures/cone_05m_level_overview.png) | ![Top-down view outdoors](figures/small_out_15p16m_level_overview.png) |
 
+### More from the data
+
+Made by [learnings.py](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/testing/2026-10-04-mid360-acceptance/learnings.py)
+from the raw recordings.
+
+**Gyro bias follows temperature.** X axis -1.2 °/s at 46 °C to -4.3 °/s at
+68 °C, easing back above 70 °C. Y and Z stay near 0 and +1 °/s. Log the core
+temperature with every IMU number, and estimate the bias online.
+
+![Gyro bias against core temperature](figures/gyro_bias_vs_temp.png)
+
+**More light, fewer hits at range.** Small-cone body hits under overcast fall
+23, 35, 49 and 57% below the garage at 6.5, 7.7, 9.0 and 10.3 m. At dusk
+the large cone loses 12 to 27% over the same ranges, and the same 10.3 m spot lost 44% instead of 57% six
+minutes later as the light faded. Direct sun is not tested and will be worse.
+
+![Cone-body hits outdoors against the garage](figures/daylight_penalty.png)
+
+**Mount height sets the blind zone.** The bottom of the field of view sits
+7.6° below the sensor (spec: 7°). Level at 0.58 m, the whole small cone is in
+view from 4.4 m and its top from 1.9 m. Each 10 cm of height adds about
+0.75 m of blind zone. Pitching 3° down brings the whole cone in from 3.1 m.
+The measured points sit on the curves for the pitch they were taken at.
+
+![Near-field blind zone against mount height and pitch](figures/mount_height.png)
+
+**How long to look.** Time to see a small cone in 95% of windows, with at
+least 3 points: 0.1 to 0.2 s out to 7.7 m in both places, then 0.4 s (garage)
+and 0.7 s (overcast) at 10.3 m, 1.8 s at 15.3 m, 3.6 s at 17.9 m. At the
+40 km/h cap the car covers 5.6 m in 0.5 s. The repo's `lidar_cone_detector`
+accepts 1-point clusters, a setting from the clean simulated LiDAR that real
+data will not support.
+
+![Stacking time needed against range](figures/frames_to_detect.png)
+
+**The session.** 200,000 points/s whenever the link was up. Every gap was
+host-side: nine 5 s USB adapter dropouts and three power events. The core
+temperature levels off near 66 °C in the garage and climbs to 72 °C outdoors.
+
+![Throughput and core temperature across the session](figures/session_timeline.png)
+
 ### Not run yet
 
 - 60 minute endurance, then tap, flex and shake the connector while
-  streaming. The longest clean stretch was about 13 minutes.
+  streaming. The longest clean stretch was 32 minutes (15:52 to 16:25).
 - IMU axis rolls and the visual inspection (window, pins, bearing noise).
 - Range bias against a tape. The tape was read 10 to 18 cm short of the
   sensor at every position, a constant offset in how it was laid, so
@@ -100,8 +141,8 @@ The cone as the sensor sees it, 10 s of points:
 
 ### Faults that were not the sensor
 
-- The Mac's USB Ethernet adapter re-enumerated five times, each a 5 to 6 s
-  gap. It never landed inside a recording.
+- The Mac's USB Ethernet adapter re-enumerated nine times, each a 5 s gap.
+  It never landed inside a recording.
 - The bench supply cut its output once outdoors (0 V, 0 A). Restarting it
   restored the sensor.
 - The Mac went to sleep on battery and stopped the streamer. Run it under
