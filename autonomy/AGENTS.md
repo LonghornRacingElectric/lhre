@@ -23,6 +23,9 @@ here. Do not add `BUILD.bazel` files.
 - PRs touching `autonomy/` need an approving review from a member of the
   `autonomous` GitHub team (`.github/CODEOWNERS` requests them; the `main`
   ruleset requires the code-owner approval).
+- Title every autonomy PR `Autonomous: <summary>`. The prefix tells other
+  teams which PRs are ours, and it is what makes CodeRabbit skip the PR
+  (`.coderabbit.yaml` at the repo root; it also ignores `autonomy/` files).
 - The demo scripts (`run_demo.sh`, `run_gazebo_demo.sh`, `rviz_demo.sh`)
   need a display and a ROS install. Do not run them in CI or from a
   headless agent.
