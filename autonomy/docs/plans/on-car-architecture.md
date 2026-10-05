@@ -15,7 +15,7 @@ flowchart LR
     classDef planned stroke-dasharray: 6 4
 
     subgraph sensors["Sensors — mast and chassis"]
-        lidar["Livox Mid-360 (donated, under test)<br>Ethernet, 10 Hz, 200 Hz IMU built in"]
+        lidar["Livox Mid-360 (donated, passed acceptance 10/4, provisional)<br>Ethernet, 10 Hz, 200 Hz IMU built in"]
         cam["Stereolabs ZED 2i<br>USB3"]
         gnss["LocusLock unit pair<br>RTK GNSS + moving-base heading<br>(second unit unverified)"]
     end
@@ -139,9 +139,14 @@ line valve, so the spring-preloaded pedal applies the front brakes.
 - The CAN message set between the Jetson and the VCU (commands, feedback,
   heartbeat) and the autonomy status frames BEVO relays — to be written as
   an ADR with ELC before the bench rig.
-- Whether the donated Mid-360 passes its acceptance test (LiDAR Test Plan
-  in the Notion wiki). If not, a used VLP-16 through `velodyne_driver`, which
-  is what the sim already models.
+- The donated Mid-360 passed its acceptance checks provisionally on
+  2026-10-04 ([results](../../testing/2026-10-04-mid360-acceptance/README.md)).
+  Still open: the 60 minute endurance run and the connector check. If either
+  fails, a used VLP-16 through `velodyne_driver`, which is what the sim
+  already models. The test also set two things this picture depends on: the
+  LiDAR mount height and pitch decide the near-field blind zone, and
+  perception has to stack about 0.5 to 0.7 s of frames to see a small cone
+  at 10 m in daylight.
 - Brakes, decided with DYN on 9/27: regen is the service brake, and the
   emergency brake is a spring preloading the pedal plus a front line valve
   that opens on power loss. Still open: the spring rate and where it reacts

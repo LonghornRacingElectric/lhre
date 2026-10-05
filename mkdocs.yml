@@ -61,6 +61,10 @@ nav:
           - Gazebo Change Notes: autonomy/docs/plans/gazebo-change-notes.md
           - Camera Fusion: autonomy/docs/plans/camera-fusion.md
           - On-Car Architecture: autonomy/docs/plans/on-car-architecture.md
+      - Testing:
+          - Overview: autonomy/testing/README.md
+          - Mid-360 Acceptance 2026-10-04: autonomy/testing/2026-10-04-mid360-acceptance/README.md
+          - Livox Test Tools: autonomy/testing/tools/livox/README.md
       - FSAE Rules:
           - Track and Events: autonomy/docs/rules/fsae-track-and-events.md
           - Vehicle Systems: autonomy/docs/rules/fsae-vehicle-systems.md
