@@ -139,6 +139,20 @@ the thing the mount study is arguing about.
 map -> base_link -> lidar     (1.80, 0.00, 0.55), pitch as parameterised
 ```
 
+### In the `lidar` frame, `z` is not height
+
+On a pitched mount the sensor frame is tilted, so a point's `z` field is
+not its height above the ground. At `mount_pitch_rad:=0.25` a flat
+parking lot spans `z` from -4.7 m to +8.4 m in the cloud's own
+coordinates, while in `base_link` the same points sit flat within a
+couple of centimetres.
+
+This matters because viewers colour by the raw field. The Foxglove
+layout uses `colorField: "z"`, which reads as height at the default zero
+pitch and as a rainbow smeared across flat ground once the mount is
+tilted. The cloud is correct either way, the colour is just no longer
+height. To check flatness, transform into `base_link` first.
+
 ## Parameters
 
 | Parameter | Default | Notes |

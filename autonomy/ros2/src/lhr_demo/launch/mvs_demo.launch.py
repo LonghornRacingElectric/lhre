@@ -40,6 +40,21 @@ RECORDED_TOPICS = (
     '/lhr/imu/data',
 )
 
+# Launch arguments left out of a bag's provenance: they decide where
+# output lands and who is watching, not what the car did. Everything
+# else is recorded, because an argument that shapes a run and goes
+# unrecorded makes the bag unreproducible, and the one that did it was
+# the Mid-360 mount pitch, which changes every point in the cloud.
+UNRECORDED_ARGS = frozenset({
+    'bag_dir',
+    'enable_metrics',
+    'foxglove',
+    'foxglove_port',
+    'output_csv',
+    'record',
+    'run_id',  # recorded by hand, ahead of the rest
+})
+
 
 def _git_sha() -> str:
     """
@@ -216,6 +231,44 @@ def generate_launch_description():
         'ready_hold_sec', default_value='5.0',
         description='Seconds to hold in READY before auto-go')
 
+    # Declared and recorded off the same list on purpose. Keeping two
+    # lists meant a new argument reached the nodes but never reached the
+    # bag, so the recording claimed to describe a run it could not.
+    launch_args = [
+        seed_arg,
+        lookahead_arg,
+        metrics_arg,
+        sim_time_arg,
+        timeout_arg,
+        csv_arg,
+        scenario_arg,
+        track_style_arg,
+        num_wp_arg,
+        a_lat_arg,
+        v_min_arg,
+        v_max_arg,
+        max_accel_arg,
+        max_decel_arg,
+        fov_arg,
+        range_arg,
+        noise_arg,
+        fn_arg,
+        init_x_arg,
+        init_y_arg,
+        init_yaw_arg,
+        mission_arg,
+        auto_go_arg,
+        ready_hold_arg,
+        run_id_arg,
+        record_arg,
+        bag_dir_arg,
+        foxglove_arg,
+        foxglove_port_arg,
+        lidar_arg,
+        lidar_pitch_arg,
+        lidar_profile_arg,
+    ]
+
     # ----- Nodes -----
     cones = Node(
         package='lhr_trackgen',
@@ -355,13 +408,16 @@ def generate_launch_description():
             '--output', [LaunchConfiguration('bag_dir'), '/',
                          LaunchConfiguration('run_id')],
             '--storage', 'mcap',
-            # The bag carries the same provenance as the metrics row, so
-            # a recording found later still says what produced it.
+            # The bag carries the same provenance as the metrics row and
+            # every argument the run resolved, so a recording found later
+            # says what produced it without anyone reading it back out of
+            # the data.
             '--custom-data',
             ['run_id=', LaunchConfiguration('run_id')],
             f'git_sha={_git_sha()}',
-            ['scenario=', LaunchConfiguration('scenario')],
-            ['seed=', LaunchConfiguration('seed')],
+            *[[f'{arg.name}=', LaunchConfiguration(arg.name)]
+              for arg in launch_args
+              if arg.name not in UNRECORDED_ARGS],
         ]
         if sim_time:
             cmd.append('--use-sim-time')
@@ -396,38 +452,7 @@ def generate_launch_description():
             on_exit=[EmitEvent(event=Shutdown())]))
 
     return LaunchDescription([
-        seed_arg,
-        lookahead_arg,
-        metrics_arg,
-        sim_time_arg,
-        timeout_arg,
-        csv_arg,
-        scenario_arg,
-        track_style_arg,
-        num_wp_arg,
-        a_lat_arg,
-        v_min_arg,
-        v_max_arg,
-        max_accel_arg,
-        max_decel_arg,
-        fov_arg,
-        range_arg,
-        noise_arg,
-        fn_arg,
-        init_x_arg,
-        init_y_arg,
-        init_yaw_arg,
-        mission_arg,
-        auto_go_arg,
-        ready_hold_arg,
-        run_id_arg,
-        record_arg,
-        bag_dir_arg,
-        foxglove_arg,
-        foxglove_port_arg,
-        lidar_arg,
-        lidar_pitch_arg,
-        lidar_profile_arg,
+        *launch_args,
         cones,
         sensor_sim,
         centerline,

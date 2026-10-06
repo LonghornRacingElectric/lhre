@@ -66,9 +66,33 @@ The recorder is spelled twice, once per clock mode, because
 passing it when nothing publishes `/clock` leaves the recorder waiting on
 a clock that never ticks.
 
-Each bag also carries `run_id`, `git_sha`, `scenario` and `seed` as
-rosbag2 `custom_data`, readable in `metadata.yaml`, so a bag found on
-disk months later still says what produced it.
+Each bag also carries its whole argument list as rosbag2 `custom_data`,
+readable in `metadata.yaml`, so a bag found on disk months later says
+what produced it:
+
+```yaml
+custom_data:
+  git_sha: 4eb6318
+  run_id: provcheck
+  mount_pitch_rad: 0.25
+  v_max: 10
+  seed: 3
+  ...
+```
+
+The arguments are declared and recorded off one list, `launch_args`,
+filtered by `UNRECORDED_ARGS`. That is deliberate. An earlier version
+named four keys by hand, and a bag recorded with a 14.3 degree Mid-360
+mount pitch was indistinguishable from one at the default: the pitch
+changes every point in the cloud, and recovering it meant solving the
+geometry backwards from the points. Deriving the list means a newly
+added argument is recorded without anyone remembering to add it.
+
+`UNRECORDED_ARGS` holds the ones that cannot change what the car did:
+where output lands (`output_csv`, `bag_dir`), what is watching
+(`foxglove`, `foxglove_port`, `enable_metrics`, `record`), and `run_id`,
+which is written ahead of the rest. **An argument belongs there only if
+it cannot change a result.** When in doubt, record it.
 
 ### Parameter types, and why they are declared
 
