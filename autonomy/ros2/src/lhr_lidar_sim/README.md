@@ -121,11 +121,38 @@ print(points_on_cone(sensor, 0.0, distance_m=10.0, frames=10))
 One frame against a 24-cone field takes about 5 ms, against a 100 ms
 budget at 10 Hz.
 
+## Moving the sensor without restarting
+
+All six mount degrees of freedom accept a new value while the node runs,
+so the mount study is a slider and a look rather than a rebuild per
+guess:
+
+```bash
+ros2 param set /lidar_sim mount_pitch_rad 0.25
+ros2 param set /lidar_sim mount_z_m 1.20
+```
+
+The next frame is cast from the new pose and the `lidar` frame moves
+with it. In Foxglove the parameter panel in
+[`foxglove/lhr_sim.json`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/ros2/foxglove/lhr_sim.json)
+does the same thing with a text box, against a live stack
+(`foxglove:=true`), which is the point: no bag, no relaunch.
+
+Position defaults come from `vehicle.yaml` so that file stays the source
+of truth. A measured answer gets written back there, not left in a
+launch argument. Non-numeric and non-finite values are refused, and
+because a parameter callback runs before the value is stored, a refused
+one leaves the node on the pose it already had.
+
+Changes are recorded: the transform rides `/tf`, which every bag
+records, so a recording shows where the sensor was for every frame in
+it even if someone moved it mid-run.
+
 ## Frames
 
-The node publishes a static `base_link -> lidar` transform from its own
-mount pose, and that is not optional bookkeeping. Clouds are stamped in
-the `lidar` frame, and the kinematic stack's entire tf tree is one
+The node publishes the `base_link -> lidar` transform from its own mount
+pose, and that is not optional bookkeeping. Clouds are stamped in the
+`lidar` frame, and the kinematic stack's entire tf tree is one
 transform, `map -> base_link`. Without this one, nothing can place the
 cloud: Foxglove, RViz and every tf2 consumer simply draw nothing, with
 no error to explain why.
@@ -134,6 +161,24 @@ It is published here rather than from a URDF because this node already
 owns the mount pose, and a second copy would drift from it. A side
 benefit is that the mount pitch becomes visible in the viewer, which is
 the thing the mount study is arguing about.
+
+It goes on `/tf`, not `/tf_static`, even though the mount holds still
+for the length of any one run. `StaticTransformBroadcaster` adds a child
+frame the first time it sees one and **silently ignores every send
+afterwards**, republishing the first pose it was given:
+
+```python
+for t_in in transform:
+    if t_in.child_frame_id not in self._child_frame_ids:
+        self._child_frame_ids.add(t_in.child_frame_id)
+        self.net_message.transforms.append(t_in)
+self.pub_tf.publish(self.net_message)
+```
+
+With the mount on a slider that is a trap, and a quiet one: the node
+logs that the mount moved, the cast uses the new pose, and the frame
+every viewer draws stays where it started. A transform that can change
+is not static.
 
 ```
 map -> base_link -> lidar     (1.80, 0.00, 0.55), pitch as parameterised
@@ -157,7 +202,12 @@ height. To check flatness, transform into `base_link` first.
 
 | Parameter | Default | Notes |
 | --- | --- | --- |
-| `mount_pitch_rad` | `0.0` | Positive is nose down. Unsettled, see above |
+| `mount_x_m` | `vehicle.yaml` | Mount position in `base_link`. Live |
+| `mount_y_m` | `vehicle.yaml` | Live |
+| `mount_z_m` | `vehicle.yaml` | Live |
+| `mount_roll_rad` | `0.0` | Live |
+| `mount_pitch_rad` | `0.0` | Positive is nose down. Unsettled, see above. Live |
+| `mount_yaw_rad` | `0.0` | Live |
 | `mount_roll_rad` | `0.0` | |
 | `mount_yaw_rad` | `0.0` | |
 | `seed` | `1` | Node-local stream, so a seed repeats |

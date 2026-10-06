@@ -8,26 +8,57 @@
         "backgroundColor": "#15151a"
       },
       "transforms": {
-        "frame:map": { "visible": true },
-        "frame:base_link": { "visible": true },
-        "frame:lidar": { "visible": true }
+        "frame:map": {
+          "visible": true
+        },
+        "frame:base_link": {
+          "visible": true
+        },
+        "frame:lidar": {
+          "visible": true
+        }
       },
       "cameraState": {
         "perspective": true,
         "distance": 45,
         "phi": 55,
         "thetaOffset": 0,
-        "target": [0, 0, 0],
-        "targetOffset": [0, 0, 0],
-        "targetOrientation": [0, 0, 0, 1],
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOffset": [
+          0,
+          0,
+          0
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
         "fovy": 45,
         "near": 0.5,
         "far": 5000
       },
       "topics": {
-        "/lhr/track/cones": { "visible": true },
-        "/lhr/sensor/cones_detected": { "visible": true },
-        "/lhr/track/centerline": { "visible": true },
+        "/lhr/vehicle/body": {
+          "visible": true
+        },
+        "/lhr/lidar/sensor": {
+          "visible": true
+        },
+        "/lhr/track/cones": {
+          "visible": true
+        },
+        "/lhr/sensor/cones_detected": {
+          "visible": true
+        },
+        "/lhr/track/centerline": {
+          "visible": true
+        },
         "/lhr/lidar/points": {
           "visible": true,
           "colorMode": "colormap",
@@ -79,6 +110,9 @@
     "RawMessages!lhrsimmission": {
       "foxglovePanelTitle": "Mission state",
       "topicPath": "/lhr/mission/status"
+    },
+    "Parameters!lhrsimmount": {
+      "foxglovePanelTitle": "Lidar mount"
     }
   },
   "globalVariables": {},
@@ -92,7 +126,12 @@
       "first": "Plot!lhrsimspeed",
       "second": {
         "first": "Plot!lhrsimsteer",
-        "second": "RawMessages!lhrsimmission",
+        "second": {
+          "first": "RawMessages!lhrsimmission",
+          "second": "Parameters!lhrsimmount",
+          "direction": "column",
+          "splitPercentage": 35
+        },
         "direction": "column",
         "splitPercentage": 65
       },

@@ -18,9 +18,15 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
+    entry_points={
+        'console_scripts': [
+            'vehicle_viz = lhr_vehicle.vehicle_viz_node:main',
+        ],
+    },
     maintainer='gray',
     maintainer_email='gray@todo.todo',
-    description="Orion's physical parameters (vehicle.yaml) and their loader.",
+    description="Orion's physical parameters (vehicle.yaml), their loader, "
+                'and a marker view of them.',
     license='MIT',
     tests_require=['pytest'],
 )

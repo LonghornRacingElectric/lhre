@@ -9,17 +9,36 @@ from lhr_lidar_sim.sensor import Mid360Sensor, MountPose
 from lhr_vehicle import load_vehicle
 from nav_msgs.msg import Odometry
 import numpy as np
+from rcl_interfaces.msg import SetParametersResult
 import rclpy
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import PointCloud2
 from sensor_msgs_py import point_cloud2
 from std_msgs.msg import Header
-from tf2_ros import StaticTransformBroadcaster
-from visualization_msgs.msg import MarkerArray
+from tf2_ros import TransformBroadcaster
+from visualization_msgs.msg import Marker, MarkerArray
 
 LIDAR_FRAME = 'lidar'
 BASE_FRAME = 'base_link'
+SENSOR_TOPIC = '/lhr/lidar/sensor'
+
+# The six numbers the mount study is trying to settle. Grouped because
+# every one of them is live: see _on_set_parameters.
+MOUNT_PARAMS = (
+    'mount_x_m',
+    'mount_y_m',
+    'mount_z_m',
+    'mount_roll_rad',
+    'mount_pitch_rad',
+    'mount_yaw_rad',
+)
+
+# A Mid-360 is a 65 mm puck, 60 mm tall. Drawn only so the sensor is
+# visible on the car when a lever moves it.
+SENSOR_DIAMETER_M = 0.065
+SENSOR_HEIGHT_M = 0.060
 
 
 def yaw_pitch_roll_to_quat(roll: float, pitch: float, yaw: float):
@@ -56,6 +75,16 @@ class LidarSimNode(Node):
         # lhr_vehicle's Vec3 is a plain (x, y, z) tuple, not an object.
         mount_x, mount_y, mount_z = vehicle.lidar_position_m
 
+        # Position defaults come from vehicle.yaml so that file stays
+        # the source of truth, but all six are parameters and all six
+        # are settable while the node runs. The study is someone
+        # dragging a slider and watching the cloud change, and a mount
+        # pose that needs a rebuild per guess is why it has not happened.
+        # The measured answer gets written back to vehicle.yaml, not
+        # left in a launch argument.
+        self.declare_parameter('mount_x_m', mount_x)
+        self.declare_parameter('mount_y_m', mount_y)
+        self.declare_parameter('mount_z_m', mount_z)
         self.declare_parameter('mount_roll_rad', 0.0)
         self.declare_parameter('mount_pitch_rad', 0.0)
         self.declare_parameter('mount_yaw_rad', 0.0)
@@ -79,12 +108,7 @@ class LidarSimNode(Node):
             dropout_rate=float(param('dropout_rate')),
             elevation_profile=str(param('elevation_profile')),
         )
-        mount = MountPose(
-            x_m=mount_x, y_m=mount_y, z_m=mount_z,
-            roll_rad=float(param('mount_roll_rad')),
-            pitch_rad=float(param('mount_pitch_rad')),
-            yaw_rad=float(param('mount_yaw_rad')),
-        )
+        mount = self._mount_from_params()
         self._sensor = Mid360Sensor(
             config=config, mount=mount, seed=int(param('seed')))
 
@@ -103,6 +127,8 @@ class LidarSimNode(Node):
             Odometry, '/lhr/vehicle/odom', self._odom_cb, 10)
         self._cloud_pub = self.create_publisher(
             PointCloud2, '/lhr/lidar/points', 10)
+        self._sensor_pub = self.create_publisher(
+            MarkerArray, SENSOR_TOPIC, latch_qos)
 
         # Without this the cloud is unviewable. It is stamped in the
         # 'lidar' frame, and the kinematic stack's whole tf tree is one
@@ -110,8 +136,19 @@ class LidarSimNode(Node):
         # Foxglove, not RViz, not any tf2 consumer. Published here
         # rather than from a URDF because this node already owns the
         # mount pose, and a second copy of it would drift.
-        self._static_tf = StaticTransformBroadcaster(self)
-        self._static_tf.sendTransform(self._mount_transform(mount))
+        #
+        # Deliberately *not* a StaticTransformBroadcaster, even though
+        # the mount holds still on any one run. That class appends a
+        # child frame the first time it sees one and silently ignores
+        # every send afterwards, republishing the original, so a mount
+        # the levers can move would log that it moved and never move.
+        # A transform that can change is not static.
+        self._tf = TransformBroadcaster(self)
+        self._sensor_pub.publish(self._sensor_marker())
+
+        # Registered last: the callback touches the sensor, so it must
+        # not be reachable before it exists.
+        self.add_on_set_parameters_callback(self._on_set_parameters)
 
         self.create_timer(1.0 / frame_rate, self._tick)
 
@@ -121,12 +158,88 @@ class LidarSimNode(Node):
             f'{math.degrees(mount.pitch_rad):.1f} deg, '
             f'profile {config.elevation_profile}')
 
-    def _mount_transform(self, mount: MountPose) -> TransformStamped:
-        """Build the fixed base_link to lidar transform."""
+    def _mount_from_params(self, overrides=None) -> MountPose:
+        """Build the mount pose from the parameters, plus any overrides."""
+        values = {name: float(self.get_parameter(name).value)
+                  for name in MOUNT_PARAMS}
+        values.update(overrides or {})
+        return MountPose(
+            x_m=values['mount_x_m'],
+            y_m=values['mount_y_m'],
+            z_m=values['mount_z_m'],
+            roll_rad=values['mount_roll_rad'],
+            pitch_rad=values['mount_pitch_rad'],
+            yaw_rad=values['mount_yaw_rad'],
+        )
+
+    def _on_set_parameters(self, params) -> SetParametersResult:
+        """
+        Move the sensor on the car without restarting anything.
+
+        This is the mount study's control surface: Foxglove's parameter
+        panel writes here, and the next frame is cast from the new pose.
+        Rejecting a bad value matters more than usual, because the
+        callback runs *before* the parameters are stored, so refusing
+        one leaves the node on the pose it already had rather than
+        halfway into a new one.
+        """
+        overrides = {}
+        for param in params:
+            if param.name not in MOUNT_PARAMS:
+                continue
+            if param.type_ not in (Parameter.Type.DOUBLE,
+                                   Parameter.Type.INTEGER):
+                return SetParametersResult(
+                    successful=False,
+                    reason=f'{param.name} must be a number')
+            value = float(param.value)
+            if not math.isfinite(value):
+                return SetParametersResult(
+                    successful=False,
+                    reason=f'{param.name} must be finite')
+            overrides[param.name] = value
+
+        if not overrides:
+            return SetParametersResult(successful=True)
+
+        mount = self._mount_from_params(overrides)
+        self._sensor.mount = mount
+        # The next tick broadcasts the new pose, so the frame and the
+        # cloud it carries move together and never disagree.
+        self.get_logger().info(
+            f'mount moved to ({mount.x_m:.2f}, {mount.y_m:.2f}, '
+            f'{mount.z_m:.2f}) m, pitch '
+            f'{math.degrees(mount.pitch_rad):.1f} deg')
+        return SetParametersResult(successful=True)
+
+    def _sensor_marker(self) -> MarkerArray:
+        """Draw the sensor puck at the origin of its own frame."""
+        m = Marker()
+        # In the lidar frame, so a lever that moves the mount moves this
+        # with it and no second copy of the pose has to be kept.
+        m.header.frame_id = LIDAR_FRAME
+        m.ns = 'lidar'
+        m.id = 0
+        m.type = Marker.CYLINDER
+        m.action = Marker.ADD
+        m.pose.orientation.w = 1.0
+        m.frame_locked = True
+        m.scale.x = SENSOR_DIAMETER_M
+        m.scale.y = SENSOR_DIAMETER_M
+        m.scale.z = SENSOR_HEIGHT_M
+        m.color.r, m.color.g, m.color.b, m.color.a = (0.9, 0.9, 0.95, 1.0)
+        out = MarkerArray()
+        out.markers.append(m)
+        return out
+
+    def _mount_transform(self, stamp) -> TransformStamped:
+        """Build the base_link to lidar transform at the current mount."""
+        mount = self._sensor.mount
         tf = TransformStamped()
-        # tf2 treats a static transform as valid at any time, so the
-        # stamp does not gate lookups; it is set for completeness.
-        tf.header.stamp = self.get_clock().now().to_msg()
+        # Shares the cloud's stamp, so a consumer looking the transform
+        # up at the time of a scan gets the pose that scan was cast
+        # from rather than an interpolation around it.
+        tf.header.stamp = stamp
         tf.header.frame_id = BASE_FRAME
         tf.child_frame_id = LIDAR_FRAME
         tf.transform.translation.x = mount.x_m
@@ -152,20 +265,26 @@ class LidarSimNode(Node):
         self._have_odom = True
 
     def _tick(self):
+        now = self.get_clock().now()
+        stamp = now.to_msg()
+        # Broadcast before the odom check, so the frame exists from the
+        # first tick and a viewer opened early is not left with a cloud
+        # it cannot place.
+        self._tf.sendTransform(self._mount_transform(stamp))
+
         if not self._have_odom:
             return
 
         # Scan time comes from the ROS clock so the pattern advances
         # with sim time, which is what keeps the non-repetition
         # reproducible under a seeded run.
-        now = self.get_clock().now()
         t = now.nanoseconds * 1e-9
 
         x, y, yaw = self._veh
         points = self._sensor.frame(t, x, y, yaw, self._cones)
 
         header = Header()
-        header.stamp = now.to_msg()
+        header.stamp = stamp
         header.frame_id = LIDAR_FRAME
         self._cloud_pub.publish(
             point_cloud2.create_cloud_xyz32(header, points))

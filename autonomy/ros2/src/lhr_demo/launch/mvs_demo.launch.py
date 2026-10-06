@@ -31,6 +31,11 @@ RECORDED_TOPICS = (
     '/lhr/lidar/points',
     '/lhr/sensor/cones_detected',
     '/lhr/track/cones',
+    # What the car looks like and where its sensor sits, so a bag
+    # opens as a car on a track rather than a cloud in a void. Both are
+    # latched and published once, so they cost a bag almost nothing.
+    '/lhr/vehicle/body',
+    '/lhr/lidar/sensor',
     # What the rest of the stack did with them.
     '/lhr/track/centerline',
     '/lhr/vehicle/odom',
@@ -270,6 +275,14 @@ def generate_launch_description():
     ]
 
     # ----- Nodes -----
+    vehicle_viz = Node(
+        package='lhr_vehicle',
+        executable='vehicle_viz',
+        name='vehicle_viz',
+        parameters=[{'use_sim_time': _b('use_sim_time')}],
+        output='screen',
+    )
+
     cones = Node(
         package='lhr_trackgen',
         executable='publish_cones',
@@ -453,6 +466,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         *launch_args,
+        vehicle_viz,
         cones,
         sensor_sim,
         centerline,

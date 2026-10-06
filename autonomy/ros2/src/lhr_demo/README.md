@@ -129,11 +129,23 @@ ros2 launch lhr_demo mvs_demo.launch.py foxglove:=true   # live
 
 Then open Foxglove and connect to `ws://localhost:8765`. Needs
 `ros-jazzy-foxglove-bridge`, which `package.xml` declares, so a normal
-`rosdep install` provides it.
+`rosdep install` provides it. Running the stack in the macOS Docker
+image, the bridge is not on localhost: OrbStack routes container IPs to
+the host, so connect to that container's address instead
+(`docker inspect <name> --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'`),
+with no port publishing needed.
 
 For a recorded run, open the bag directly in Foxglove instead; no bridge
 and no ROS install involved, which is also what makes MCAP the right
 format for the sensor work that happens outside ROS.
+
+**Live and recorded are for different jobs, and mixing them up is the
+usual reason this feels heavy.** Designing something, like deciding
+where the lidar goes, wants the live bridge: the parameter panel moves
+the mount and the next frame shows the result, with no bag written at
+all. Bags are for the other job, comparing one run against another,
+which is the only reason the gate needs them. `record` is off by
+default for exactly this reason.
 
 Either way, load the shared layout from
 [`foxglove/lhr_sim.json`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/ros2/foxglove/lhr_sim.json)
@@ -149,7 +161,9 @@ empty after `check_layout.sh` passes, fix the layout in the app and
 re-export over the file.
 
 Note that `lidar:=true` is what publishes the `base_link -> lidar`
-transform. Without it a recorded cloud has no frame to sit in.
+transform. Without it a recorded cloud has no frame to sit in. The car
+itself comes from `vehicle_viz`, which always runs, so a bag shows a
+chassis and four wheels whether or not the lidar was on.
 
 ## Ending a run
 
