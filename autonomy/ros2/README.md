@@ -112,6 +112,9 @@ flowchart LR
 ```
 
 The upper stack (track_builder, control, mission_manager, metrics) is identical in both modes. The `perception` launch argument selects between the sim pipeline and LiDAR-based detection.
+For LiDAR mapping without inferred sides, set `lidar_classify_sides:=false`.
+The detector publishes all mapped cones as unclassified orange markers, and
+the track builder switches to `boundary` pairing.
 
 To bypass the sensor sim and use all cones directly (god-mode), override the cone topic:
 ```bash
@@ -243,6 +246,7 @@ Launch arguments work the same way:
 ./scripts/run_gazebo_demo.sh gui:=false          # headless Gazebo (no Gazebo GUI)
 ./scripts/run_gazebo_demo.sh rviz:=false         # disable RViz
 ./scripts/run_gazebo_demo.sh perception:=lidar   # LiDAR-based cone detection
+./scripts/run_gazebo_demo.sh perception:=lidar lidar_classify_sides:=false  # keep LiDAR mapping, skip side inference
 ./scripts/run_gazebo_demo.sh track_style:=oval   # oval track (also: autocross, simple)
 ./scripts/run_gazebo_demo.sh track_style:=oval perception:=lidar  # LiDAR on oval (best LiDAR experience)
 ./scripts/run_gazebo_demo.sh estimator:=ekf      # EKF odometry instead of Gazebo ground truth
@@ -321,7 +325,7 @@ flowchart TB
 | Cone source | `publish_cones` | `publish_cones` (reused) | Gazebo GPU LiDAR |
 | Perception | `sensor_sim` (FOV filter) | `sensor_sim` (reused) | `lidar_cone_detector` (pointcloud clustering) |
 | Physics / vehicle | `sim_kinematic` | Gazebo | Gazebo |
-| `track_builder` pairing | index | index | classified (one-to-one assignment) |
+| `track_builder` pairing | index | index | classified by default; boundary when `lidar_classify_sides:=false` |
 | Actuation | `/lhr/vehicle/cmd` directly | `joint_cmd_adapter` → 6 joints | `joint_cmd_adapter` → 6 joints |
 
 All paths produce identical ROS 2 topic interfaces — the upper stack doesn't know the difference.
@@ -607,6 +611,7 @@ Processes LiDAR pointcloud to detect cones. Pipeline: ground removal → range f
 | `dedup_radius` | `1.5` | Spatial dedup radius — new detections within this distance of existing ones are ignored (m) |
 | `publish_hz` | `10.0` | Output publish rate (Hz) |
 | `pose_history_sec` | `2.0` | Odometry history retained for pointcloud timestamp synchronization (s) |
+| `classify_sides` | `true` | Infer track sides; false publishes all cones in the unclassified `cones` namespace |
 | `side_vote_max_range` | `7.0` | Maximum range used for side evidence (m) |
 | `side_vote_max_forward` | `3.0` | Forward classification corridor (m) |
 | `side_vote_max_lateral` | `5.0` | Lateral classification corridor (m) |

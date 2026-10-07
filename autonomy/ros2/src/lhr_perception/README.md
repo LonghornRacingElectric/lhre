@@ -36,6 +36,11 @@ namespace until there is evidence, then moves to `left_cones` or
 `right_cones`. Namespace changes include a marker deletion so RViz does not
 leave a stale orange copy behind.
 
+Set `classify_sides:=false` on the node to skip side voting and publish every
+mapped cone in the orange `cones` namespace. Timestamp interpolation,
+clustering, one-to-one scan association, and position averaging remain active.
+The setting is read at startup; restart the node to change it.
+
 ## Parameters
 
 | Parameter | Default | Purpose |
@@ -49,6 +54,7 @@ leave a stale orange copy behind.
 | `dedup_radius` | `1.5` | Maximum cone association distance in metres |
 | `publish_hz` | `10.0` | Pointcloud processing rate |
 | `pose_history_sec` | `2.0` | Odometry retained for timestamp interpolation |
+| `classify_sides` | `true` | Infer left/right track sides; false publishes unclassified cones |
 | `side_vote_max_range` | `7.0` | Furthest cone used for side evidence |
 | `side_vote_max_forward` | `3.0` | Forward extent of the classification corridor |
 | `side_vote_max_lateral` | `5.0` | Lateral extent of the classification corridor |

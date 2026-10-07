@@ -91,6 +91,8 @@ def _launch_setup(context: LaunchContext):
     config_dir = os.path.join(pkg_share, 'config')
 
     perception = context.launch_configurations.get('perception', 'sim')
+    classify_sides = context.launch_configurations.get(
+        'lidar_classify_sides', 'true').lower() == 'true'
     use_ekf = context.launch_configurations.get(
         'estimator', 'truth').lower() == 'ekf'
 
@@ -213,6 +215,7 @@ def _launch_setup(context: LaunchContext):
                 'cluster_radius': 0.5,
                 'min_cluster_points': 1,
                 'dedup_radius': 1.5,
+                'classify_sides': classify_sides,
             }],
             output='screen',
         ))
@@ -225,7 +228,8 @@ def _launch_setup(context: LaunchContext):
             name='track_builder',
             parameters=[{
                 'use_sim_time': True,
-                'pairing_strategy': 'classified',
+                'pairing_strategy': (
+                    'classified' if classify_sides else 'boundary'),
                 'track_width': 3.5,
                 'track_width_tolerance': 1.0,
             }],
@@ -331,6 +335,9 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'perception', default_value='sim',
             description='Perception mode: "sim" or "lidar"'),
+        DeclareLaunchArgument(
+            'lidar_classify_sides', default_value='true',
+            description='Infer LiDAR cone sides (false publishes unlabeled cones)'),
         DeclareLaunchArgument(
             'track_style', default_value='autocross',
             description='Track style: "autocross", "oval", or "simple"'),

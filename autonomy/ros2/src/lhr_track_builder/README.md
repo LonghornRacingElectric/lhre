@@ -13,8 +13,9 @@ management, and metrics.
   unmatched. This is the current LiDAR launch setting. It depends on correct
   side labels; the geometry-only classifier can mislabel a sparse boundary.
 - `boundary` uses width-filtered Delaunay edges when no side information is
-  available. It can create several candidates from one cone and is retained as
-  a fallback.
+  available. The Gazebo launch selects it when
+  `perception:=lidar lidar_classify_sides:=false`. It can create several
+  candidates from one cone.
 
 The selected midpoints are ordered from the vehicle pose with a nearest-point
 walk. Partial maps can still need a path-continuity planner. One-to-one

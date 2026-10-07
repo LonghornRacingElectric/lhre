@@ -9,7 +9,8 @@ a persistent MarkerArray with geometry-inferred track sides.
 Output contract (consumed by lhr_track_builder):
   - Topic: /lhr/sensor/cones_detected (MarkerArray)
   - QoS: RELIABLE + TRANSIENT_LOCAL, depth 1
-  - Namespace: "left_cones", "right_cones", or "cones" while unknown
+  - Namespace: "left_cones", "right_cones", or "cones" while unknown or
+    when side classification is disabled
   - Markers: SPHERE type, scale 0.35, frame_id "map"
 
 LiDAR does not observe cone colour. Side classification accumulates the
@@ -26,6 +27,7 @@ from lhr_perception.cone_side_classifier import (
     LEFT,
     RIGHT,
     StableSideLabels,
+    UNKNOWN,
     vehicle_relative_side_vote,
 )
 from lhr_perception.pose_history import Pose2D, PoseHistory, sensor_point_to_map
@@ -83,6 +85,7 @@ class LidarConeDetector(Node):
         self.declare_parameter('dedup_radius', 1.5)
         self.declare_parameter('publish_hz', 10.0)
         self.declare_parameter('pose_history_sec', 2.0)
+        self.declare_parameter('classify_sides', True)
         self.declare_parameter('side_vote_max_range', 7.0)
         self.declare_parameter('side_vote_max_forward', 3.0)
         self.declare_parameter('side_vote_max_lateral', 5.0)
@@ -102,6 +105,7 @@ class LidarConeDetector(Node):
         self._max_cluster_extent = self.get_parameter('max_cluster_extent').value
         self._max_cluster_pts = self.get_parameter('max_cluster_points').value
         self._dedup_radius = self.get_parameter('dedup_radius').value
+        self._classify_sides = self.get_parameter('classify_sides').value
         self._side_vote_max_range = self.get_parameter(
             'side_vote_max_range').value
         self._side_vote_max_forward = self.get_parameter(
@@ -324,6 +328,10 @@ class LidarConeDetector(Node):
 
     def _update_side_classification(self, pose: Pose2D):
         """Accumulate local side evidence and enforce boundary continuity."""
+        if not self._classify_sides:
+            self._cone_sides = [UNKNOWN] * len(self._cone_map)
+            return
+
         while len(self._side_votes) < len(self._cone_map):
             self._side_votes.append(0.0)
 
