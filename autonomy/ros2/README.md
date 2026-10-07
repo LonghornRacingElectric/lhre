@@ -12,13 +12,13 @@ Colcon workspace for LHR driverless / autonomy nodes. This file is the **referen
 |---------|-------------|
 | `lhr_trackgen` | Publishes a synthetic cone track (`/lhr/track/cones`) and cone IDs (left: 0..N-1, right: 10000..10000+N-1) |
 | `lhr_sensor_sim` | FOV-limited sensor simulation — filters cones by vehicle pose, accumulates detections. `inertial_sim` does the same job for the IMU and wheel speeds |
-| `lhr_track_builder` | Subscribes to cones, pairs left/right by ID, publishes centerline path (`/lhr/track/centerline`) |
+| `lhr_track_builder` | Builds the centerline from indexed simulation cones or one-to-one classified LiDAR cone pairs |
 | `lhr_sim_kinematic` | Kinematic bicycle-model vehicle simulator (lightweight, no Gazebo needed) |
 | `lhr_control` | Pure pursuit path-following controller with curvature-adaptive lookahead and speed planning |
 | `lhr_mission_manager` | FSAE driverless state machine (Off → Ready → Driving → Finished → Emergency) |
 | `lhr_metrics` | Cross-track error, off-track count, and lap detection (CSV output) |
 | `lhr_gazebo` | Gazebo Harmonic physics simulation — vehicle with direct joint control, ground-truth odometry, LiDAR sensor, RViz integration |
-| `lhr_perception` | LiDAR-based cone detection — pointcloud clustering, persistent mapping (unclassified cones, no left/right split). Functional on oval track; path quality needs tuning on complex tracks. |
+| `lhr_perception` | LiDAR pointcloud clustering, timestamp-aligned persistent mapping, and geometry-based track-side inference |
 | `lhr_state_estimation` | EKF fusing IMU and wheel speeds into `/lhr/vehicle/odom` + `map → base_link`, replacing ground-truth odometry. See [its README](src/lhr_state_estimation/README.md) |
 | `lhr_demo` | Launch file that starts the full kinematic stack in one command |
 | `lhr_vehicle` | Orion's physical parameters (`config/vehicle.yaml`) and their loader — the single source for wheelbase, track, steering limits, masses and sensor mounts. See [its README](src/lhr_vehicle/README.md) |
@@ -105,7 +105,7 @@ flowchart LR
     bridge -- "/lhr/lidar/points" --> detector["lidar_cone_detector"]
     bridge -- "/lhr/vehicle/odom" --> detector
     bridge -- "/lhr/vehicle/odom" --> pursuit
-    detector -- "/lhr/sensor/cones_detected<br>(unclassified, persistent map)" --> builder["track_builder<br>(boundary pairing, Delaunay)"]
+    detector -- "/lhr/sensor/cones_detected<br>(inferred left/right, persistent map)" --> builder["track_builder<br>(one-to-one classified pairing)"]
     builder -- "/lhr/track/centerline" --> pursuit["pure_pursuit"]
     pursuit -- "/lhr/vehicle/cmd" --> adapter["joint_cmd_adapter"]
     adapter -- "6× joint commands" --> bridge
@@ -320,7 +320,7 @@ flowchart TB
 | Cone source | `publish_cones` | `publish_cones` (reused) | Gazebo GPU LiDAR |
 | Perception | `sensor_sim` (FOV filter) | `sensor_sim` (reused) | `lidar_cone_detector` (pointcloud clustering) |
 | Physics / vehicle | `sim_kinematic` | Gazebo | Gazebo |
-| `track_builder` pairing | index | index | boundary (Delaunay) |
+| `track_builder` pairing | index | index | classified (one-to-one assignment) |
 | Actuation | `/lhr/vehicle/cmd` directly | `joint_cmd_adapter` → 6 joints | `joint_cmd_adapter` → 6 joints |
 
 All paths produce identical ROS 2 topic interfaces — the upper stack doesn't know the difference.
@@ -452,15 +452,16 @@ and the measured drift figures are in
 | `frame_id` | `"map"` | TF frame |
 | `publish_hz` | `5.0` | Publishing rate (Hz) |
 | `max_points` | `200` | Cap on centerline points |
-| `pairing_strategy` | `"index"` | Pairing strategy: `index` (ID-based, for sim), `nearest` (nearest-neighbor), or `boundary` (Delaunay triangulation, for LiDAR) |
-| `track_width` | `3.5` | Expected track width for boundary pairing (m) |
-| `track_width_tolerance` | `1.0` | Tolerance around track width for boundary pairing (m) |
+| `pairing_strategy` | `"index"` | Pairing strategy: `index`, `nearest`, `classified`, or `boundary` |
+| `track_width` | `3.5` | Expected track width for width-gated pairing (m) |
+| `track_width_tolerance` | `1.0` | Tolerance around track width (m) |
 | `cone_topic` | `"/lhr/sensor/cones_detected"` | Topic to subscribe for cone data |
 
 Cone pairing strategies:
 - **index** (default): Pairs left cone ID `i` with right cone ID `i + 10000`. Works with sim perception where cone IDs follow the trackgen convention.
 - **nearest**: Pairs each left cone with its nearest unpaired right cone.
-- **boundary**: Uses Delaunay triangulation to pair cones that are approximately `track_width` (3.5 m +/- `track_width_tolerance`) apart. Used for LiDAR perception where cones are unclassified (no left/right split).
+- **classified**: Computes a minimum-cost one-to-one assignment between inferred left and right cones, then rejects pairs outside the track-width band. Used by LiDAR perception.
+- **boundary**: Uses Delaunay triangulation to pair unclassified cones that are approximately `track_width` apart. Retained as a fallback for sources without side information.
 
 ### lhr_sim_kinematic (sim_node)
 
@@ -590,7 +591,7 @@ outer = atan(wheelbase / (R + track_width/2))
 
 ### lhr_perception (lidar_cone_detector)
 
-Processes LiDAR pointcloud to detect cones. Pipeline: ground removal → range filter → Euclidean clustering → cone validation → sensor-to-map transform → spatial dedup.
+Processes LiDAR pointcloud to detect cones. Pipeline: ground removal → range filter → Euclidean clustering → cone validation → timestamp-aligned sensor-to-map transform → spatial dedup → track-side inference. The detector buffers odometry and interpolates the vehicle pose at each pointcloud timestamp; it waits for the following odometry sample instead of projecting a sharp-turn scan with a pose from another instant. Detections are associated to their nearest existing cone, with each cone used at most once per scan, before positions are updated by a running average. Side votes come from a short local corridor and are shared only across geometrically continuous boundary fragments. Later labels require consistent proposals from vehicle poses separated by one metre and remain locked after acceptance.
 
 | Param | Default | Description |
 |-------|---------|-------------|
@@ -604,8 +605,18 @@ Processes LiDAR pointcloud to detect cones. Pipeline: ground removal → range f
 | `max_cluster_points` | `50` | Maximum points in a valid cone cluster |
 | `dedup_radius` | `1.5` | Spatial dedup radius — new detections within this distance of existing ones are ignored (m) |
 | `publish_hz` | `10.0` | Output publish rate (Hz) |
+| `pose_history_sec` | `2.0` | Odometry history retained for pointcloud timestamp synchronization (s) |
+| `side_vote_max_range` | `7.0` | Maximum range used for side evidence (m) |
+| `side_vote_max_forward` | `3.0` | Forward classification corridor (m) |
+| `side_vote_max_lateral` | `5.0` | Lateral classification corridor (m) |
+| `side_vote_deadband` | `0.5` | Lateral no-vote band around the vehicle axis (m) |
+| `side_update_distance` | `1.0` | Travel between independent side updates (m) |
+| `side_confirmations` | `2` | Consistent traveled viewpoints before a later label locks |
+| `boundary_link_distance` | `3.0` | Direct same-boundary link distance (m) |
+| `boundary_gap_distance` | `3.3` | Maximum aligned boundary gap (m) |
+| `boundary_gap_angle_deg` | `40.0` | Maximum direction error across a boundary gap (degrees) |
 
-All detected cones are published under a single "cones" namespace with IDs 0..N-1 (orange color). There is no left/right classification — the track builder's boundary pairing strategy (Delaunay triangulation) handles cone pairing by finding pairs that are approximately track-width apart.
+Cones with inferred sides use `left_cones` (blue) and `right_cones` (yellow). A cone stays in `cones` (orange) while evidence is unavailable. These are geometric track-side labels; LiDAR does not measure cone colour.
 
 ### lhr_metrics (metrics_node)
 

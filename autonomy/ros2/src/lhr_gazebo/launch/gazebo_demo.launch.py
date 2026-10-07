@@ -225,7 +225,7 @@ def _launch_setup(context: LaunchContext):
             name='track_builder',
             parameters=[{
                 'use_sim_time': True,
-                'pairing_strategy': 'boundary',
+                'pairing_strategy': 'classified',
                 'track_width': 3.5,
                 'track_width_tolerance': 1.0,
             }],
