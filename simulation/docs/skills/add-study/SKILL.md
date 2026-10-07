@@ -22,9 +22,16 @@ description: Answer one vehicle dynamics question about the current car with a n
    - Write every output to `os.environ["OUT_DIR"]`.
    - To change a parameter, load the vehicle, change the value, and write
      the changed copy to `OUT_DIR`. Do not edit `vehicle/vehicle.yml`.
-   - Import BobSim. Do not copy its code.
+   - Import BobSim. Do not copy its code. Do not change BobSim.
+   - If the study solves many independent cases, run them with
+     `tools.parallel.map_cases`. See
+     [studies.md](../../studies.md#parallel-cases).
 3. Write `README.md` with four sections: Question, Method, Result,
-   Provenance. See [studies.md](../../studies.md#readmemd).
+   Provenance. See [studies.md](../../studies.md#readmemd). Keep it short
+   and in simple technical English. Start the Result with the answer.
+   Give the inputs that people will want to change a command-line
+   argument, so a variant needs no code change. See
+   [studies.md](../../studies.md#variants).
 4. Run the study from `simulation/`:
 
    ```bash
@@ -33,8 +40,10 @@ description: Answer one vehicle dynamics question about the current car with a n
 
 5. Read the outputs in `out/<name>/`. Check that the numbers make physical
    sense: signs, units and order of magnitude.
-6. Put the result in `README.md`. Copy `out/<name>/provenance.json` into
-   the Provenance section.
+6. Put the result in `README.md`. Use `out:` markers for numbers, tables,
+   figures and provenance, so the next run updates them. See
+   [studies.md](../../studies.md#numbers-from-the-run). Check that the text
+   still matches the new numbers.
 7. Commit `README.md`, `run.py` and at most two small figures. Do not
    commit `out/`.
 

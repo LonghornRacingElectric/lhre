@@ -10,16 +10,16 @@ management, and metrics.
 - `nearest` greedily pairs classified cones and is retained for experiments.
 - `classified` computes a minimum-cost one-to-one assignment between inferred
   left and right cones. Pairs outside the configured track-width band remain
-  unmatched. This is the LiDAR default because one cone cannot create several
-  center points.
+  unmatched. This is the current LiDAR launch setting. It depends on correct
+  side labels; the geometry-only classifier can mislabel a sparse boundary.
 - `boundary` uses width-filtered Delaunay edges when no side information is
   available. It can create several candidates from one cone and is retained as
   a fallback.
 
 The selected midpoints are ordered from the vehicle pose with a nearest-point
-walk. Partial maps can still need a path-continuity planner; side inference and
-one-to-one pairing remove the duplicate branches that previously made this
-ordering ambiguous.
+walk. Partial maps can still need a path-continuity planner. One-to-one
+pairing removes duplicate midpoint candidates when the side labels are
+correct, but wrong labels can create gaps or an incorrect path.
 
 ## Parameters
 

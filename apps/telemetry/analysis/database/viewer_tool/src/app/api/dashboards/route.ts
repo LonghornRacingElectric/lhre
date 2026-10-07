@@ -11,11 +11,11 @@ export async function GET(req: NextRequest) {
     if (config.CLIENT_TARGET === 'LOCAL') {
       return NextResponse.redirect('http://localhost:3000');
     } else {
-      return NextResponse.redirect('https://lhrelectric.org/grafana');
+      return NextResponse.redirect('https://telemetry.lhre.org/grafana');
     }
   } catch (error) {
     console.error('Error reading net_configs.json:', error);
     // Default redirect if config is not found
-    return NextResponse.redirect('https://lhrelectric.org/grafana');
+    return NextResponse.redirect('https://telemetry.lhre.org/grafana');
   }
 }

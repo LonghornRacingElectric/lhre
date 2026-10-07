@@ -167,9 +167,10 @@ colcon test                     # from ros2/, after a build
 colcon test-result --verbose    # prints the failures
 ```
 
-Only the ament linters run today (`ament_flake8` and `ament_pep257`, one
-`test/` dir per package); functional tests are open work for the Sim & test
-infra lane.
+The package test suites include ament lint, state-estimation and perception
+unit tests, and generated-track regressions for the LiDAR centerline. These
+regressions use idealized cone visibility; they do not establish that the
+vehicle completes a live Gazebo autocross lap.
 
 CI runs the same build and test
 ([`.github/workflows/autonomy.yml`](https://github.com/LonghornRacingElectric/lhre/blob/main/.github/workflows/autonomy.yml))
@@ -596,10 +597,10 @@ Processes LiDAR pointcloud to detect cones. Pipeline: ground removal → range f
 | Param | Default | Description |
 |-------|---------|-------------|
 | `max_range` | `20.0` | Max detection range (m) |
-| `min_range` | `0.8` | Min detection range — avoids vehicle self-hits (m) |
-| `ground_z_min` | `-0.40` | Ground removal lower threshold in sensor frame (m) |
+| `min_range` | `0.9` | Min detection range — avoids vehicle self-hits (m) |
+| `ground_z_min` | `-(mount height - 0.15)` | Ground removal lower threshold in sensor frame (m), from the LiDAR mount height in `vehicle.yaml`: drops everything within 15 cm of the ground |
 | `ground_z_max` | `0.5` | Ground removal upper threshold in sensor frame (m) |
-| `cluster_radius` | `0.5` | Euclidean clustering radius (m) |
+| `cluster_radius` | `0.35` | Euclidean clustering radius (m) |
 | `min_cluster_points` | `1` | Minimum points for a valid cluster |
 | `max_cluster_extent` | `0.5` | Maximum cluster bounding box extent (m) |
 | `max_cluster_points` | `50` | Maximum points in a valid cone cluster |
@@ -616,7 +617,21 @@ Processes LiDAR pointcloud to detect cones. Pipeline: ground removal → range f
 | `boundary_gap_distance` | `3.3` | Maximum aligned boundary gap (m) |
 | `boundary_gap_angle_deg` | `40.0` | Maximum direction error across a boundary gap (degrees) |
 
-Cones with inferred sides use `left_cones` (blue) and `right_cones` (yellow). A cone stays in `cones` (orange) while evidence is unavailable. These are geometric track-side labels; LiDAR does not measure cone colour.
+These defaults were tuned on the simulated VLP-16. On the real Mid-360
+([2026-10-04 acceptance test](../testing/2026-10-04-mid360-acceptance/README.md)),
+31 to 71% of the hits on a small cone fall within 15 cm of the ground, where
+`ground_z_min` drops them, and a 1-point cluster is not a credible cone. Retune
+both against that test's ROS 2 bags, which replay into this node unchanged:
+[SharePoint, Test Data > 2026-10-04-mid360-acceptance > ros2](https://utexas.sharepoint.com/sites/ENGR-LonghornRacing/LHR%20Electric/Design/_VMS_/Autonomous/Test%20Data/2026-10-04-mid360-acceptance/ros2).
+
+The current LiDAR mode infers track sides from geometry. It publishes
+`left_cones` (blue) and `right_cones` (yellow), with `cones` (orange) for
+unknown sides. LiDAR does not measure cone colour. The side classifier is
+experimental: in a live Gazebo autocross run, sparse initial detections caused
+an entire right-boundary fragment to be locked as left, and the car left the
+course. The timestamp-aligned cone map remained accurate in that run. See
+[the perception package](src/lhr_perception/README.md) for the pipeline and
+its limits.
 
 ### lhr_metrics (metrics_node)
 

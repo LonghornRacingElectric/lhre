@@ -1,0 +1,7 @@
+# Recording outputs the tools write next to themselves. Raw data never goes in git.
+bags/
+rec.txt
+live.log
+endurance_*.csv
+*.npz
+*.mcap

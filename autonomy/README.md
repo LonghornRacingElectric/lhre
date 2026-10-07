@@ -11,6 +11,7 @@ FSAE driverless stack for Longhorn Racing Electric. The goal: retrofit Orion (th
 | `ros2/` | The ROS 2 stack. [Setup guide](ros2/GETTING-STARTED.md), [full reference](ros2/README.md) |
 | `docs/plans/` | Working docs: plans, change logs, roadmap. Context for contributors and AI agents, not onboarding material |
 | `docs/rules/` | FSAE 2026 rules breakdowns relevant to driverless |
+| `testing/` | [Hardware test results](testing/README.md) and the tools that recorded them. Raw data lives in [SharePoint, _VMS_ > Autonomous > Test Data](https://utexas.sharepoint.com/sites/ENGR-LonghornRacing/LHR%20Electric/Design/_VMS_/Autonomous/Test%20Data), not git |
 
 ## Software lanes
 
@@ -18,10 +19,10 @@ The code is organized so each lane owns whole packages. Lane ownership is tracke
 
 | Lane | Packages | Starter work |
 |------|----------|--------------|
-| Perception | `lhr_perception` (+ `lhr_sensor_sim` as its sim stand-in) | Autocross reliability: cone duplication during swerves. See [known issues](docs/plans/gazebo-integration.md) |
+| Perception | `lhr_perception` (+ `lhr_sensor_sim` as its sim stand-in) | Autocross reliability: sparse LiDAR returns can cause incorrect track-side labels. See [known issues](docs/plans/gazebo-integration.md) |
 | State estimation | `lhr_state_estimation` (+ `lhr_sensor_sim`'s `inertial_sim` as its sensor stand-in) | GNSS: no sim model exists yet, and position drift is unbounded without it. Slip handling, IMU lever arm |
 | Planning & control | `lhr_track_builder`, `lhr_control`, `lhr_mission_manager` | Centerline ordering on tight corners. Unimplemented missions (acceleration, skidpad) |
-| Sim & test infra | `lhr_gazebo`, `lhr_sim_kinematic`, `lhr_trackgen`, `lhr_metrics`, `lhr_demo`, `lhr_vehicle`, `scripts/` | Functional tests (none exist yet). CI only builds and lints today |
+| Sim & test infra | `lhr_gazebo`, `lhr_sim_kinematic`, `lhr_trackgen`, `lhr_metrics`, `lhr_demo`, `lhr_vehicle`, `scripts/` | Extend the generated-track tests to model real sensor visibility and vehicle feedback |
 
 ## How the pieces fit
 
@@ -59,12 +60,14 @@ flowchart LR
     g -. "roadmap" .-> car
 ```
 
-## Status (August 2026)
+## Status (October 2026)
 
 - Full sim pipeline completes laps, both kinematic and Gazebo physics
 - Laps also complete on estimated state (`estimator:=ekf`), with no
   ground truth in the control loop — dead reckoned, so position drift is
   unbounded until GNSS
-- LiDAR perception works on the oval track, unreliable on autocross
+- Timestamp-aligned LiDAR mapping avoided duplicates in the tested autocross
+  run; geometry-only side inference still mislabels sparse cone fragments and
+  the car leaves the course
 - Camera work not started
 - Retrofit hardware being ordered (details in Notion)

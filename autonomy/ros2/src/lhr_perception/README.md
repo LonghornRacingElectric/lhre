@@ -1,9 +1,9 @@
 # lhr_perception
 
-LiDAR cone detection for the Gazebo and on-car autonomy pipeline. The node
-turns `/lhr/lidar/points` into a persistent cone map on
-`/lhr/sensor/cones_detected`, with geometry-inferred left and right track
-boundaries for `lhr_track_builder`.
+LiDAR cone detection for the Gazebo autonomy pipeline. The node turns
+`/lhr/lidar/points` into a persistent cone map on
+`/lhr/sensor/cones_detected`. It also publishes experimental geometry-inferred
+track sides for `lhr_track_builder`.
 
 ## Pipeline
 
@@ -27,8 +27,8 @@ short local corridor beside the car. Short Delaunay edges share those votes
 along a boundary. A slightly longer gap is joined only when it follows the
 boundary's local direction. The starting straight seeds the initial labels;
 later labels require consistent proposals from poses separated by one metre
-and are immutable once accepted. Repeated scans from one tight-corner viewpoint
-therefore cannot merge or relabel the two track sides.
+and are immutable once accepted. A wrong initial proposal can therefore remain
+locked even after better observations arrive.
 
 LiDAR still does not observe cone colour. These labels describe the inferred
 track side, not a measured blue or yellow cone. A cone stays in the `cones`
@@ -63,6 +63,11 @@ The Gazebo launch overrides several clustering defaults for its simulated
 VLP-16. Keep the launch values and these defaults separate: the defaults are
 the node contract, while the launch file is sensor-specific tuning.
 
+The [Mid-360 acceptance results](../../../testing/2026-10-04-mid360-acceptance/README.md)
+show sparse cone returns in daylight and a blind zone close to the sensor.
+The current per-scan clustering has not been retuned or validated on that
+sensor's recordings; the real sensor will need frame stacking with odometry.
+
 ## Verification
 
 Unit tests cover pose interpolation through angle wrap, simulation clock
@@ -70,7 +75,11 @@ resets, sharp-turn reprojection, nearest-cone selection, one-to-one scan
 association, side voting, label locking, and rejection of cross-track links.
 The Gazebo package also replays selected generated autocross tracks as
 progressively discovered maps through side inference and one-to-one centerline
-pairing with injected pose error.
+pairing with injected pose error. That replay assumes all cones in range are
+visible. Live Gazebo scans are sparser: an initial partial map incorrectly
+locked several right-side cones as left and the vehicle left the course. Treat
+the side-classification tests as algorithm checks, not evidence of autocross
+driving reliability.
 
 ```bash
 cd autonomy/ros2

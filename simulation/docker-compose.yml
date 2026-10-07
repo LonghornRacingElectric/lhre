@@ -10,6 +10,6 @@ services:
     working_dir: /lhre/simulation
     network_mode: none
     environment:
-      PYTHONPATH: /lhre/simulation/bobsim
+      PYTHONPATH: /lhre/simulation/bobsim:/lhre/simulation
       BOBSIM_VEHICLE: /lhre/vehicle/vehicle.yml
       MPLCONFIGDIR: /tmp/matplotlib

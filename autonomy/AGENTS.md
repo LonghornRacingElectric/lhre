@@ -12,8 +12,7 @@ here. Do not add `BUILD.bazel` files.
   ([GETTING-STARTED](ros2/GETTING-STARTED.md)). macOS uses the Docker image
   ([ros2/docker](ros2/docker/README.md)). No WSL.
 - Build: `cd ros2 && ./scripts/build.sh` (colcon). Test: `colcon test`
-  from `ros2/` (ament lint only today; functional tests are open work for
-  the Sim & Test Infra lane).
+  from `ros2/` (ament lint plus unit and generated-track regression tests).
 - CI: `.github/workflows/autonomy.yml` at the repo root runs the same
   build and `colcon test` on every PR that touches `autonomy/`. Not a
   required check. PRs that touch only `autonomy/` skip the Bazel jobs in
@@ -23,6 +22,9 @@ here. Do not add `BUILD.bazel` files.
 - PRs touching `autonomy/` need an approving review from a member of the
   `autonomous` GitHub team (`.github/CODEOWNERS` requests them; the `main`
   ruleset requires the code-owner approval).
+- Title every autonomy PR `Autonomous: <summary>`. The prefix tells other
+  teams which PRs are ours, and it is what makes CodeRabbit skip the PR
+  (`.coderabbit.yaml` at the repo root; it also ignores `autonomy/` files).
 - The demo scripts (`run_demo.sh`, `run_gazebo_demo.sh`, `rviz_demo.sh`)
   need a display and a ROS install. Do not run them in CI or from a
   headless agent.
@@ -37,6 +39,10 @@ here. Do not add `BUILD.bazel` files.
   committing.
 - `ros2/build`, `ros2/install`, `ros2/log`, and `ros2/data/metrics.csv` are
   gitignored build/run outputs. Never commit them.
+- Hardware test recordings (MCAP, `.npz`, ROS 2 bags) never go in git. They
+  live on SharePoint under _VMS_ > Autonomous > Test Data; only the writeup,
+  results table, chosen figures and scripts go in `testing/`
+  ([testing/README.md](testing/README.md)).
 - Vehicle numbers (wheelbase, track, steering limit, masses, sensor
   mounts) live only in `ros2/src/lhr_vehicle/config/vehicle.yaml`; nodes
   read them through `lhr_vehicle.load_vehicle()`. Never hardcode them.

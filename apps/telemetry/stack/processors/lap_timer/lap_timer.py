@@ -4,7 +4,6 @@ import logging
 from time import sleep
 import time
 import threading
-import requests
 from kafka import KafkaConsumer
 import json
 
@@ -80,11 +79,6 @@ class LapTimerProcessor:
         table_desc = self.table_specs[Classifier.__tablename__]
         QueryBuilder.insert(self.session, 'classifier', Classifier, db_obj, table_desc, commit=True)
 
-        try:
-            # requests.post("http://host.docker.internal:5000/webtool/new_lap", data={"time": time})  #! DIDN'T WORK ON PROD
-            requests.post("https://lhrelectric.org/webtool/new_lap", data={"time": time})
-        except requests.exceptions.ConnectionError:
-            logging.error("Could not connect to Flask server")
         logging.info(f"Successfully recorded time {time}")    
     
     def _upload_gates_to_db(self, gates: tuple[tuple[float, float], tuple[float, float]]):

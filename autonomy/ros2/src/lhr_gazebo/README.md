@@ -17,6 +17,12 @@ vehicle-relative observations and boundary continuity, then uses one-to-one
 classified pairing. Use `estimator:=truth` to check perception without EKF
 drift, then repeat with `estimator:=ekf`.
 
+The geometry-based side classifier is experimental. In a live autocross run,
+the cone map had no duplicate cones, but sparse early detections caused a
+right-side boundary fragment to be labelled left and the car departed the
+course. The generated-track regression does not reproduce the LiDAR's
+occlusion and sparse returns.
+
 The launch starts graphical Gazebo and RViz by default. Use `gui:=false` or
 `rviz:=false` for a headless run. See the workspace
 [README](../../README.md) for all launch arguments and topic diagrams.

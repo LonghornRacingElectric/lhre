@@ -7,7 +7,7 @@ Replace the kinematic vehicle simulator (`lhr_sim_kinematic`) with a full Gazebo
 ## Current Status
 
 **Phase 1 (Gazebo physics):** Complete.
-**Phase 2 (LiDAR perception):** Side inference and one-to-one pairing are implemented and covered by generated autocross regressions. Full visual lap validation remains.
+**Phase 2 (LiDAR perception):** Timestamp-aligned mapping and one-to-one pairing are implemented. Generated-track regressions pass, but a live Gazebo autocross run left the course after the geometry-only classifier locked incorrect side labels.
 **Phase 3 (Camera fusion + tuning):** Not started. See [camera-fusion.md](camera-fusion.md) for detailed plan.
 
 ## What Works Today
@@ -23,13 +23,15 @@ Replace the kinematic vehicle simulator (`lhr_sim_kinematic`) with a full Gazebo
 
 1. **Residual cone-map drift** — timestamp-aligned transforms and one-to-one scan association remove the known sharp-turn duplication mechanism. EKF drift can still move the persistent map and needs visual and on-car validation.
 
-2. **Partial-map path ordering** — classified one-to-one pairing removes midpoint branches. The remaining greedy ordering needs runtime validation while only part of a track has been observed.
+2. **Sparse-map side labels** — the live LiDAR scan contained fewer cones than the generated-track tests assumed. The initial Delaunay graph connected a right-boundary fragment to the left, and immutable labels preserved the mistake. One-to-one pairing cannot correct a wrong side label.
 
-3. **No measured cone colour** — LiDAR now infers the track side from vehicle-relative observations and boundary continuity. A camera is still needed to measure blue/yellow colour and independently validate the inference.
+3. **Path continuity** — greedy midpoint ordering can still make gaps or run out of path on a partial map. The controller needs a defined response when no safe continuation is available.
 
-4. **Backwards path wrapping** — the chain starts from the vehicle and goes forward, then wraps backwards through midpoints behind the vehicle. Cosmetic only (pure pursuit ignores the backwards portion) but messy in RViz.
+4. **No measured cone colour** — LiDAR infers the track side from vehicle-relative observations and boundary continuity. A camera is still needed to measure blue/yellow colour and independently validate the inference.
 
-5. **Cone collisions disabled** — cones are ghost objects. The car drives through them instead of being penalized.
+5. **Backwards path wrapping** — the chain starts from the vehicle and goes forward, then wraps backwards through midpoints behind the vehicle. Cosmetic only (pure pursuit ignores the backwards portion) but messy in RViz.
+
+6. **Cone collisions disabled** — cones are ghost objects. The car drives through them instead of being penalized.
 
 ---
 
@@ -52,7 +54,7 @@ The detector now interpolates odometry at the pointcloud timestamp and performs 
 
 **File:** `lhr_track_builder/track_builder_node.py`
 
-Geometry-inferred sides and minimum-cost one-to-one pairing remove duplicated midpoint candidates. The remaining greedy ordering should be evaluated on partial maps. Options if runtime validation still shows discontinuities:
+When side labels are correct, minimum-cost one-to-one pairing removes duplicated midpoint candidates. Live validation has already shown wrong labels and an unsafe partial path. Rework side inference with reversible labels or measured colour, then evaluate ordering on partial maps. Possible continuity constraints include:
 - Add a maximum step distance to the chain (skip midpoints that are too far from the last chained point)
 - Use angular continuity — prefer the next point that continues roughly in the same direction
 - Only chain midpoints within a forward arc of the vehicle (ignore midpoints behind)
@@ -81,13 +83,14 @@ Add a forward-facing camera to the chassis link (near the LiDAR mount). Bridge t
 - Classify as blue (left) or yellow (right)
 - Publish classified MarkerArray with `left_cones`/`right_cones` namespaces
 
-This restores proper left/right classification, allowing the track builder to use simpler and more reliable pairing strategies (index or nearest-neighbor) instead of Delaunay.
+Measured colours would give the existing one-to-one pairing strategy more
+reliable left/right inputs than geometry alone.
 
 #### 3.3 — Update track builder for fused perception
 
 **File:** `lhr_track_builder/track_builder_node.py`
 
-With camera-classified cones, add a `'fused'` pairing strategy (or reuse `'nearest'`) that pairs left/right cones with confidence. Fall back to `'boundary'` for unclassified cones.
+With camera-classified cones, use the existing one-to-one `'classified'` pairing strategy with measured sides and confidence. Fall back to `'boundary'` for unclassified cones.
 
 ### Phase 4 — Fidelity Tuning
 
@@ -98,7 +101,7 @@ Goal: make the simulation match the real car closely enough for control paramete
 - Add sensor noise models (LiDAR range noise, camera exposure variation)
 - Test at competition speeds (up to 15 m/s)
 - Validate against real car telemetry data
-- Add IMU-based state estimation (replace ground-truth odometry)
+- Add GNSS correction and validate the existing IMU/wheel-speed EKF against car data
 
 ---
 
