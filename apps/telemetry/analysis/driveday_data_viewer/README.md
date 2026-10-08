@@ -6,8 +6,7 @@ every lap, corner and braking-zone breakdowns, battery cell temperatures,
 the energy plan, cone and note logging.
 
 Nothing leaves your machine. The export is parsed in the browser and kept in
-IndexedDB. Why it is a local npm project and not a Bazel target:
-[ADR-013](/013-driveday-viewer-outside-bazel.md).
+IndexedDB.
 
 ## Run it
 
