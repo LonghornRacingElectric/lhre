@@ -44,7 +44,21 @@ Foxglove runs on the **Mac**, not in the container, so it needs neither noVNC
 nor software OpenGL. That makes it the cheapest way to look at a run here, and
 the only viewer that renders at native speed.
 
+Once per Mac, import `foxglove/lhr_sim.json` into Foxglove and save the
+layout. It sets **Scene → Mesh up-axis → Z-up** for Orion's CAD. Copy the
+`layoutId` from the layout's share link and create `foxglove.local.env`
+beside `foxglove.sh`:
+
+```bash
+FOXGLOVE_LAYOUT_ID=your_saved_layout_id
+```
+
+This file is gitignored because the ID belongs to your Foxglove account.
+An exported `FOXGLOVE_LAYOUT_ID` overrides it for a single run. The launcher
+requires a saved layout so it cannot silently restore an older Y-up scene.
+
 From the Mac, one command. It starts the container if it is stopped, builds,
+opens Foxglove with that saved layout and the localhost connection,
 and launches with the bridge on, running until Ctrl-C rather than ending at
 the first completed lap (it defaults to `enable_metrics:=false`, see
 [lhr_demo](../src/lhr_demo/README.md#running-until-you-stop-it)). Extra
@@ -56,13 +70,13 @@ cd autonomy/ros2/docker
 ./foxglove.sh v_max:=12.0 seed:=7
 ```
 
-Then in Foxglove: **Open connection**, **Foxglove WebSocket**,
-`ws://localhost:8765`. Port 8765 is published by `compose.yaml`, so this is
-plain localhost with no container address to look up. Load the shared layout
-from `foxglove/lhr_sim.json` (**Layouts**, **Import from file**) so everyone
-is looking at the same panels.
+Foxglove opens automatically at `ws://localhost:8765`; it retries while the
+bridge starts. Port 8765 is published by `compose.yaml`, so there is no
+container address to look up or mesh orientation to change each run. After
+updating the repository layout, import and save it again (update the local
+ID if the import creates a new layout).
 
-By hand, which is all the script does:
+To run the ROS stack by hand (without opening Foxglove automatically):
 
 ```bash
 docker exec -it -u ubuntu lhr-autonomy bash

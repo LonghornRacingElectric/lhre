@@ -95,6 +95,11 @@ and its origin is the front axle, so the marker's whole transform is a
 translation of one wheelbase along x, read from this file rather than
 hardcoded.
 
+In Foxglove, set **3D panel → Scene → Mesh up-axis → Z-up** (already
+set in the committed `lhr_sim` layout). STL has no up-axis metadata;
+loading this Z-up CAD as Y-up rolls the car onto its side. Existing
+layouts need that setting changed or the updated layout imported.
+
 ```bash
 ros2 run lhr_vehicle vehicle_viz --ros-args -p use_mesh:=false
 ```

@@ -13,6 +13,24 @@ set -e
 CONTAINER=lhr-autonomy
 HERE=$(cd "$(dirname "$0")" && pwd)
 
+# Layout IDs belong to a Foxglove account, so keep them local to each Mac.
+# An exported override takes precedence over the saved default.
+layout_override=${FOXGLOVE_LAYOUT_ID:-}
+if [ -f "$HERE/foxglove.local.env" ]; then
+    source "$HERE/foxglove.local.env"
+fi
+FOXGLOVE_LAYOUT_ID=${layout_override:-${FOXGLOVE_LAYOUT_ID:-}}
+
+if [ -z "$FOXGLOVE_LAYOUT_ID" ]; then
+    echo "Set FOXGLOVE_LAYOUT_ID in $HERE/foxglove.local.env first." >&2
+    echo "Import ../foxglove/lhr_sim.json in Foxglove, save it, and copy its layoutId." >&2
+    exit 1
+fi
+if [[ ! "$FOXGLOVE_LAYOUT_ID" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    echo "FOXGLOVE_LAYOUT_ID must be the ID, not a full URL." >&2
+    exit 1
+fi
+
 rebuild() {
     echo "  cd $HERE && docker compose up -d --build" >&2
     exit 1
@@ -58,18 +76,22 @@ if [[ "$*" != *enable_metrics:=* ]]; then
     set -- enable_metrics:=false "$@"
 fi
 
-cat <<'EOF'
-Foxglove: Open connection -> Foxglove WebSocket -> ws://localhost:8765
-Layout:   Layouts -> Import from file -> autonomy/ros2/foxglove/lhr_sim.json
-Runs until Ctrl-C. The car is on /lhr/vehicle/body.
-
-EOF
-
 # build.sh is what installs the car mesh into share/, which is what makes its
 # package:// URI resolve, so it runs every time rather than being left to
 # whoever remembers.
-exec docker exec -it -u ubuntu "$CONTAINER" bash -lc "
+docker exec -it -u ubuntu "$CONTAINER" bash -lc '
     set -e
     cd ~/autonomy/ros2
-    ./scripts/build.sh
-    ./scripts/run_demo.sh foxglove:=true lidar:=true $*"
+    ./scripts/build.sh'
+
+# Foxglove retries the connection while the ROS launch brings up the bridge.
+# Selecting the saved Z-up layout avoids restoring an older Y-up scene.
+open -a Foxglove "foxglove://open?ds=foxglove-websocket&ds.url=ws%3A%2F%2Flocalhost%3A8765&layoutId=$FOXGLOVE_LAYOUT_ID"
+echo "Foxglove opened with the saved layout. Runs until Ctrl-C."
+
+# Pass launch arguments as positional parameters, so quoting survives the
+# host/container boundary rather than turning argument text into shell code.
+exec docker exec -it -u ubuntu "$CONTAINER" bash -lc '
+    set -e
+    cd ~/autonomy/ros2
+    exec ./scripts/run_demo.sh foxglove:=true lidar:=true "$@"' bash "$@"

@@ -11,3 +11,4 @@ ros2/data/
 
 .vscode/
 .DS_Store
+ros2/docker/foxglove.local.env

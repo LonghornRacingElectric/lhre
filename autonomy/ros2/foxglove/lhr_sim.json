@@ -5,7 +5,8 @@
       "followMode": "follow-pose",
       "followTf": "base_link",
       "scene": {
-        "backgroundColor": "#15151a"
+        "backgroundColor": "#15151a",
+        "meshUpAxis": "z_up"
       },
       "transforms": {
         "frame:map": {

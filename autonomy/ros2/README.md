@@ -348,12 +348,15 @@ as the layout so everyone is looking at the same panels: a 3D view of
 the track and cloud, command against actual speed, steering, and
 mission state.
 
+The layout sets **Scene → Mesh up-axis → Z-up** to match Orion's CAD.
+For an existing layout, change that setting manually or import the updated
+file; Y-up rolls the STL car onto its side.
+
 Its structure is checked against a real Foxglove export, and
 `./scripts/check_layout.sh <bag>` confirms every topic and frame it
-names is present. What is still unconfirmed is how the app *renders*
-it, since that cannot be tested from here. If a panel comes up empty
-after `check_layout.sh` passes, the layout is at fault rather than the
-data: fix it in the app and re-export over the file.
+names is present. That check validates topic and frame names, not mesh
+orientation or rendering; verify those in the app. After changing the
+mesh up-axis, reload the Foxglove tab if the latched car marker disappears.
 
 Which topics get recorded, why the list is explicit rather than `--all`,
 and the YAML trap in `run_id` are all in
