@@ -5,9 +5,13 @@ services:
     container_name: lhr-autonomy
     ports:
       - "6080:80" # noVNC desktop -> http://localhost:6080
+      # Published so the host's Foxglove connects to ws://localhost:8765.
+      # Container IPs are reachable from the host under OrbStack but not under
+      # Colima, and publishing the port works the same under both.
+      - "8765:8765" # foxglove_bridge -> ws://localhost:8765
     volumes:
       # Mount the whole autonomy/ tree; build artifacts (ros2/build, ros2/install,
-      # ros2/log) land on the host but are Linux-only — don't use them natively.
+      # ros2/log) land on the host but are Linux-only, so don't use them natively.
       - ../..:/home/ubuntu/autonomy
     shm_size: "2gb" # RViz/Gazebo rendering needs more than the 64MB default
     restart: unless-stopped
