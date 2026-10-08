@@ -15,6 +15,10 @@ setup(
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'config'),
             glob('config/*.yaml')),
+        # Installed into share/ because that is where a package:// URI
+        # resolves, which is how the viewer fetches the car.
+        (os.path.join('share', package_name, 'meshes'),
+            glob('meshes/*.stl')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

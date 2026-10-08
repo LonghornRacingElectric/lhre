@@ -17,6 +17,20 @@ TOPIC = '/lhr/vehicle/body'
 # which already owns the blue-to-red end of the range.
 BODY_RGBA = (0.75, 0.34, 0.0, 0.9)
 WHEEL_RGBA = (0.12, 0.12, 0.14, 1.0)
+# The mesh is opaque where the box is not, and the difference matters. The
+# box is a stand-in, so seeing the wheels and the track through it is worth
+# more than seeing its surface. The mesh is the actual car, 84k triangles
+# deep, so any alpha below 1 draws every frame tube, wishbone and bulkhead
+# through the bodywork at once and the car reads as a wireframe.
+MESH_RGBA = BODY_RGBA[:3] + (1.0,)
+
+# Orion's own CAD, recovered from the full-car SOLIDWORKS part. See
+# meshes/README.md for provenance and what it is not good for.
+MESH_URI = 'package://lhr_vehicle/meshes/orion.stl'
+# The mesh is already in metres, so it needs no scaling, and its origin
+# is the front axle at ground rather than base_link's rear axle. One
+# translation along x, by the wheelbase, is the whole transform.
+MESH_SCALE = 1.0
 
 
 def _wheel_orientation() -> tuple:
@@ -35,6 +49,12 @@ class VehicleVizNode(Node):
 
         vehicle = load_vehicle()
 
+        # The mesh is the real car but it has to be fetched, and only a
+        # live foxglove_bridge serves assets. Replaying a bag has no
+        # asset server, so the primitives stay reachable rather than
+        # being deleted: use_mesh:=false is the car you can always see.
+        use_mesh = self.declare_parameter('use_mesh', True).value
+
         # Latched. The car's shape never changes, so publishing it on a
         # timer would be a marker array per tick in every bag for no
         # information. Transient-local instead means a viewer that
@@ -45,12 +65,15 @@ class VehicleVizNode(Node):
             durability=DurabilityPolicy.TRANSIENT_LOCAL,
         )
         self._pub = self.create_publisher(MarkerArray, TOPIC, qos)
-        self._pub.publish(self._markers(vehicle))
+        self._pub.publish(
+            self._mesh_markers(vehicle) if use_mesh
+            else self._markers(vehicle))
 
         self.get_logger().info(
             f'{vehicle.name}: {vehicle.wheelbase_m:.3f} m wheelbase, '
             f'{vehicle.track_m:.3f} m track, '
-            f'{vehicle.wheel_radius_m:.3f} m wheel radius')
+            f'{vehicle.wheel_radius_m:.3f} m wheel radius, '
+            f'{"CAD mesh" if use_mesh else "primitives"}')
 
     def _marker(self, marker_id: int, kind: int, rgba: tuple) -> Marker:
         """Start a marker with the fields every one of ours shares."""
@@ -70,6 +93,26 @@ class VehicleVizNode(Node):
         m.frame_locked = True
         m.color.r, m.color.g, m.color.b, m.color.a = rgba
         return m
+
+    def _mesh_markers(self, vehicle) -> MarkerArray:
+        """Build the single CAD mesh marker."""
+        out = MarkerArray()
+
+        car = self._marker(0, Marker.MESH_RESOURCE, MESH_RGBA)
+        car.mesh_resource = MESH_URI
+        # The STL carries no materials, so the marker's own colour is
+        # what shows. Asking for embedded ones would render it black.
+        car.mesh_use_embedded_materials = False
+        # CAD origin is the front axle at ground, base_link is the rear
+        # axle, so the mesh moves forward by exactly one wheelbase. No
+        # rotation and no sign flip: the CAD axes already match REP-105.
+        car.pose.position.x = vehicle.wheelbase_m
+        car.scale.x = MESH_SCALE
+        car.scale.y = MESH_SCALE
+        car.scale.z = MESH_SCALE
+        out.markers.append(car)
+
+        return out
 
     def _markers(self, vehicle) -> MarkerArray:
         """Build the chassis box and the four wheels."""

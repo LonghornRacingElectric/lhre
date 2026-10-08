@@ -81,8 +81,7 @@ they don't, so CI catches a forgotten regenerate.
 
 ## Seeing the car
 
-`vehicle_viz` draws the numbers in this file as a marker array on
-`/lhr/vehicle/body`, in `base_link`: a chassis box and four wheels. It
+`vehicle_viz` publishes the car on `/lhr/vehicle/body`, in `base_link`. It
 exists because a 3D viewer otherwise shows a grid, a line and a cloud,
 with nothing to say where the car is or which way it points.
 
@@ -90,16 +89,37 @@ with nothing to say where the car is or which way it points.
 ros2 run lhr_vehicle vehicle_viz
 ```
 
-The demo launch starts it, and `mvs_demo.launch.py` records the topic,
-so a bag opens as a car on a track. The markers are latched and
-published once rather than on a timer: the car's shape does not change,
-and a marker array per tick would bloat every bag for no information.
+By default it draws Orion's actual CAD, as a `MESH_RESOURCE` marker
+pointing at [`meshes/orion.stl`](meshes/README.md). The mesh is in metres
+and its origin is the front axle, so the marker's whole transform is a
+translation of one wheelbase along x, read from this file rather than
+hardcoded.
 
-What is drawn is only as good as its provenance, and the two halves
-differ. The wheels and axles are real: wheelbase, track and wheel radius
-all come from BobDyn (see [Provenance](#provenance)). The chassis box is
-not. `body_length_m`, `body_width_m` and `body_height_m` are `ASSUMED`
-placeholders, so the hull is a sketch at roughly the right size and the
-wheels underneath it are measured. A CAD export from the chassis team
-would replace the box with a `MESH_RESOURCE` marker and make the whole
-thing real.
+```bash
+ros2 run lhr_vehicle vehicle_viz --ros-args -p use_mesh:=false
+```
+
+`use_mesh:=false` falls back to the older primitives, a chassis box and
+four cylinders. That fallback is kept deliberately: a mesh marker names an
+asset the viewer has to **fetch**, which works against a live
+`foxglove_bridge` but not when replaying a bag, because a bag has no asset
+server. If a recorded run has to open as a visible car, record it with
+`use_mesh:=false`.
+
+Serving the mesh needs no bridge configuration. `foxglove_bridge`'s
+`asset_uri_allowlist` already defaults to a pattern that allows
+`package://<pkg>/<path>/<name>.stl`.
+
+The demo launch starts the node, and `mvs_demo.launch.py` records the
+topic. The markers are latched and published once rather than on a timer:
+the car's shape does not change, and a marker array per tick would bloat
+every bag for no information.
+
+The primitives are still worth understanding, because `use_mesh:=false`
+draws them and their two halves differ in provenance. The wheels and axles
+are real: wheelbase, track and wheel radius all come from BobDyn (see
+[Provenance](#provenance)). The chassis box is not, since
+`body_length_m`, `body_width_m` and `body_height_m` are `ASSUMED`
+placeholders. That gap is exactly what the mesh closes, and
+[`meshes/README.md`](meshes/README.md) records where it came from and the
+one body in it that is reconstructed rather than extracted.

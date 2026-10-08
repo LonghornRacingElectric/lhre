@@ -54,6 +54,7 @@ nav:
       - ROS 2 Workspace: autonomy/ros2/README.md
       - Docker (macOS): autonomy/ros2/docker/README.md
       - Vehicle Parameters: autonomy/ros2/src/lhr_vehicle/README.md
+      - Vehicle Mesh: autonomy/ros2/src/lhr_vehicle/meshes/README.md
       - Sensor Simulation: autonomy/ros2/src/lhr_sensor_sim/README.md
       - Metrics: autonomy/ros2/src/lhr_metrics/README.md
       - Kinematic Sim: autonomy/ros2/src/lhr_sim_kinematic/README.md

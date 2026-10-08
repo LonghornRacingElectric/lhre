@@ -81,8 +81,13 @@ the numbers worth planning against:
   returns per frame, of which 41 land on cones and the rest on the
   ground. A detector has to find a handful of points among thousands.
 - **Ground reach is short.** Only the bottom 7 degrees of the field of
-  view can see the ground at all, so a level mount at 0.55 m reaches
-  about 4.5 m of ground before its beams pass over the horizon.
+  view can see the ground at all, so a level mount at 0.62 m reaches
+  about 5.1 m of ground before its beams pass over the horizon. Raising
+  the mount makes this worse, not better: the blind radius is
+  `z / tan(7 deg)`, so every millimetre of height pushes the nearest
+  visible ground further away. 0.62 m is where it sits because that is
+  the lowest it can go and still clear Orion's nose (see
+  [lhr_vehicle](../lhr_vehicle/meshes/README.md)).
 
 The first of those was cross-checked against a hand calculation: a cone
 at 10 m subtends 1.31 by 1.86 degrees, which over 20 frames predicts
@@ -181,7 +186,7 @@ every viewer draws stays where it started. A transform that can change
 is not static.
 
 ```
-map -> base_link -> lidar     (1.80, 0.00, 0.55), pitch as parameterised
+map -> base_link -> lidar     (1.80, 0.00, 0.62), pitch as parameterised
 ```
 
 ### In the `lidar` frame, `z` is not height
