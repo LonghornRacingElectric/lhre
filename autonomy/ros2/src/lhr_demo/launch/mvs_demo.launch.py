@@ -208,6 +208,15 @@ def generate_launch_description():
     foxglove_port_arg = DeclareLaunchArgument(
         'foxglove_port', default_value='8765')
 
+    # A mesh marker names an asset the viewer has to fetch, which the
+    # live bridge serves and a bag cannot. Recorded in provenance
+    # because it decides what the bag's /lhr/vehicle/body actually is.
+    vehicle_mesh_arg = DeclareLaunchArgument(
+        'vehicle_mesh', default_value='true',
+        description="Draw Orion's CAD mesh. false falls back to the box "
+                    'and cylinders, which need no asset server and so '
+                    'still render when replaying a bag')
+
     # Synthetic Mid-360. Off by default: the cheat-mode sensor sim is
     # what the gate's numbers were measured against, and swapping the
     # perception front end silently would make those numbers lie.
@@ -269,6 +278,7 @@ def generate_launch_description():
         bag_dir_arg,
         foxglove_arg,
         foxglove_port_arg,
+        vehicle_mesh_arg,
         lidar_arg,
         lidar_pitch_arg,
         lidar_profile_arg,
@@ -279,7 +289,10 @@ def generate_launch_description():
         package='lhr_vehicle',
         executable='vehicle_viz',
         name='vehicle_viz',
-        parameters=[{'use_sim_time': _b('use_sim_time')}],
+        parameters=[{
+            'use_sim_time': _b('use_sim_time'),
+            'use_mesh': _b('vehicle_mesh'),
+        }],
         output='screen',
     )
 

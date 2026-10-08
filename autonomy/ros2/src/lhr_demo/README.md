@@ -33,6 +33,7 @@ Beyond the node parameters listed in
 | `bag_dir` | `data/bags` | Parent directory for bags |
 | `foxglove` | `false` | Serve the live graph over websocket |
 | `foxglove_port` | `8765` | Bridge port |
+| `vehicle_mesh` | `true` | Draw the CAD car; `false` draws primitives a bag can render |
 | `scenario` | `mvs_demo` | Name recorded on the row |
 
 `use_sim_time` reaches `sim_kinematic` as `publish_clock` instead, because
@@ -129,11 +130,13 @@ ros2 launch lhr_demo mvs_demo.launch.py foxglove:=true   # live
 
 Then open Foxglove and connect to `ws://localhost:8765`. Needs
 `ros-jazzy-foxglove-bridge`, which `package.xml` declares, so a normal
-`rosdep install` provides it. Running the stack in the macOS Docker
-image, the bridge is not on localhost: OrbStack routes container IPs to
-the host, so connect to that container's address instead
-(`docker inspect <name> --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'`),
-with no port publishing needed.
+`rosdep install` provides it; the macOS Docker image names it explicitly
+because nothing in that image runs `rosdep`.
+
+`ws://localhost:8765` is also the right address from the macOS image,
+because `compose.yaml` publishes the port. Reaching the container's own
+IP instead happens to work under OrbStack and does not under Colima,
+which is why the port is published rather than documented around.
 
 For a recorded run, open the bag directly in Foxglove instead; no bridge
 and no ROS install involved, which is also what makes MCAP the right
@@ -146,6 +149,26 @@ the mount and the next frame shows the result, with no bag written at
 all. Bags are for the other job, comparing one run against another,
 which is the only reason the gate needs them. `record` is off by
 default for exactly this reason.
+
+### Running until you stop it
+
+A normal run ends itself, which is the right thing for a gate and wrong
+for sitting in front of a viewer: a completed lap calls `finish('lap')`
+in `lhr_metrics`, the process exits, and its exit emits `Shutdown`. About
+17 s in, the viewer's connection drops.
+
+`enable_metrics:=false` removes that. Nothing then publishes
+`/lhr/metrics/lap_complete`, so `mission_manager` never leaves `DRIVING`,
+the car keeps lapping, and no process exit tears the launch down. It runs
+until Ctrl-C. `timeout_sec:=0.0` disables only the wall-clock deadline
+and leaves lap completion in place, so it is not enough on its own.
+
+```bash
+ros2 launch lhr_demo mvs_demo.launch.py foxglove:=true enable_metrics:=false
+```
+
+The cost is that no metrics row is written, so an indefinite run tells
+you nothing comparable. That is the trade: watch the car, or score it.
 
 Either way, load the shared layout from
 [`foxglove/lhr_sim.json`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/ros2/foxglove/lhr_sim.json)
@@ -162,8 +185,19 @@ re-export over the file.
 
 Note that `lidar:=true` is what publishes the `base_link -> lidar`
 transform. Without it a recorded cloud has no frame to sit in. The car
-itself comes from `vehicle_viz`, which always runs, so a bag shows a
-chassis and four wheels whether or not the lidar was on.
+itself comes from `vehicle_viz`, which always runs, whether or not the
+lidar was on.
+
+What the car looks like depends on `vehicle_mesh`, and it matters more
+for a bag than for a live run. The default, `true`, draws Orion's CAD as
+a `MESH_RESOURCE` marker, which names an asset the viewer **fetches**:
+4.2 MB once per session, which a live `foxglove_bridge` serves and a bag
+cannot, because a bag has no asset server. So a recorded run opens with
+the car missing. Record with
+`vehicle_mesh:=false` when the bag itself has to show a car, and you get
+the box and four cylinders instead. The argument is in the bag's
+provenance either way, so an empty-looking recording can be explained
+from the bag rather than from memory.
 
 ## Ending a run
 
