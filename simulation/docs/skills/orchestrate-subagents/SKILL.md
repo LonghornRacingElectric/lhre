@@ -19,24 +19,25 @@ the team to the person and the task. There is no fixed team.
    do serial work that subagents can do at the same time.
 3. **Size the team to the usage.**
 
-   | Usage left | Team |
-   | ---------- | ---- |
-   | Low | No subagents, or one for a read-only search or review. Do the rest yourself. |
-   | Medium | Two or three subagents on parts that do not depend on each other. |
-   | High | One subagent for each independent part, plus an independent reviewer. |
+    | Usage left | Team |
+    | ---------- | ---- |
+    | Low | No subagents, or one for a read-only search or review. Do the rest yourself. |
+    | Medium | Two or three subagents on parts that do not depend on each other. |
+    | High | One subagent for each independent part, plus an independent reviewer. |
 
-   When usage is low, tell the person the plan and the expected cost before
-   you start. When it is high, start.
+    When usage is low, tell the person the plan and the expected cost before
+    you start. When it is high, start.
+
 4. **Choose roles for this task.** Do not copy a team from an earlier task.
    Pick only the roles the work needs. Common roles:
-   - first-principles reviewer: checks the physics and the model against
-     hand calculations, read-only;
-   - simplifier: finds code, cases and text to cut without changing the
-     result, read-only;
-   - writer: writes one README, note, or doc;
-   - infra or skill author: changes tools or docs on its own branch;
-   - skeptic: argues the other side of the result and lists what was not
-     modeled.
+    - first-principles reviewer: checks the physics and the model against
+      hand calculations, read-only;
+    - simplifier: finds code, cases and text to cut without changing the
+      result, read-only;
+    - writer: writes one README, note, or doc;
+    - infra or skill author: changes tools or docs on its own branch;
+    - skeptic: argues the other side of the result and lists what was not
+      modeled.
 5. **Parallelize the work, not the sim.** A study run uses all the CPUs
    that Docker has. Run one sim at a time, from the coordinator. A subagent
    runs Docker only when the brief says so.
@@ -44,12 +45,12 @@ the team to the person and the task. There is no fixed team.
    its files. Work for a separate PR goes on its own branch and worktree.
 7. **Write a complete brief.** A subagent sees none of the conversation.
    Each brief states:
-   - the decision the work informs;
-   - the files to read and the files it may change;
-   - the skills to load (for example `study-design`,
-     `vehicle-dynamics-first-principles`, `bobsim-boundary`);
-   - the rules: writing style, no attribution, BobSim is a black box;
-   - the output: format, length limit, and what "done" means.
+    - the decision the work informs;
+    - the files to read and the files it may change;
+    - the skills to load (for example `study-design`,
+      `vehicle-dynamics-first-principles`, `bobsim-boundary`);
+    - the rules: writing style, no attribution, BobSim is a black box;
+    - the output: format, length limit, and what "done" means.
 8. **Check what comes back.** A subagent report is a claim, not evidence.
    Check each finding against the files or the run output before you act
    on it or report it. Agreement between agents is not validation.
