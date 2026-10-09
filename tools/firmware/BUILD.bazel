@@ -1,6 +1,7 @@
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
-load("@rules_python//python:defs.bzl", "py_binary")
+load("@rules_python//python:defs.bzl", "py_binary", "py_test")
 load(":build_info.bzl", "build_info_header")
+load(":firmware_project.bzl", "dfu_flash_target", "openocd_flash_target")
 
 py_binary(
     name = "gen_build_info",
@@ -22,4 +23,48 @@ cc_library(
     hdrs = [":build_info_hpp"],
     includes = ["."],
     visibility = ["//visibility:public"],
+)
+
+# ---- Flash launcher test ---------------------------------------------------
+# The flash rules can't run for real without a board, so the test
+# instantiates them with a probe standing in for the flash script and for the
+# flashing tool. Any file will do as the firmware image and OpenOCD config.
+
+py_binary(
+    name = "flash_probe",
+    testonly = True,
+    srcs = ["flash_probe.py"],
+    deps = ["@lhre_pypi//bazel_runfiles"],
+)
+
+openocd_flash_target(
+    name = "flash_probe_openocd",
+    testonly = True,
+    cfg = "README.md",
+    elf = "README.md",
+    flash_tool = ":flash_probe",
+    openocd = ":flash_probe",
+)
+
+dfu_flash_target(
+    name = "flash_probe_dfu",
+    testonly = True,
+    bin_file = "README.md",
+    dfu_util = ":flash_probe",
+    flash_tool = ":flash_probe",
+)
+
+py_test(
+    name = "flash_launcher_test",
+    size = "small",
+    srcs = ["flash_launcher_test.py"],
+    data = [
+        ":flash_probe_dfu",
+        ":flash_probe_openocd",
+    ],
+    env = {
+        "DFU_LAUNCHER": "$(rlocationpath :flash_probe_dfu)",
+        "OPENOCD_LAUNCHER": "$(rlocationpath :flash_probe_openocd)",
+    },
+    deps = ["@lhre_pypi//bazel_runfiles"],
 )

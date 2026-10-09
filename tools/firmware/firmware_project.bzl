@@ -1,6 +1,8 @@
 """Macro for creating firmware projects, binary/hex outputs, and flash targets."""
 
+load("@aspect_bazel_lib//lib:run_binary.bzl", "run_binary")
 load("@aspect_bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
+load("@hermetic_launcher//launcher:lib.bzl", "launcher")
 load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
@@ -19,53 +21,49 @@ FAMILY_PLATFORMS = {
 }
 
 # ---------------------------------------------------------------------------
-# Helpers – runfiles path resolution
-# ---------------------------------------------------------------------------
-
-def _runfiles_path(f):
-    if f.owner.workspace_name:
-        prefix = "../" + f.owner.workspace_name + "/"
-        if f.short_path.startswith(prefix):
-            return f.owner.workspace_name + "/" + f.short_path[len(prefix):]
-        return f.short_path
-    else:
-        return "_main/" + f.short_path
-
-# ---------------------------------------------------------------------------
 # Flash rules  (OpenOCD + DFU)
+#
+# The executable each rule emits is a hermetic_launcher stub: a small native
+# binary that execs the flash script with the runfiles environment set up.
+# One code path on every OS, in place of a generated .cmd on Windows and a
+# bash script elsewhere. See README.md ("Shell-free, including the flash
+# wrappers").
 # ---------------------------------------------------------------------------
+
+_LAUNCHER_TOOLCHAINS = [
+    launcher.finalizer_toolchain_type,
+    launcher.template_toolchain_type,
+]
+
+def _flash_launcher(ctx, tool, files):
+    """Declares the rule's executable: a native launcher that runs `tool`.
+
+    Args:
+        ctx: the rule context. Needs _LAUNCHER_TOOLCHAINS and the
+            _windows_constraint attribute.
+        tool: the flash script's executable File.
+        files: Files handed to `tool` as leading arguments, in order.
+
+    Returns:
+        The launcher File.
+    """
+    is_windows = ctx.target_platform_has_constraint(ctx.attr._windows_constraint[platform_common.ConstraintValueInfo])
+    executable = ctx.actions.declare_file(ctx.label.name + (".exe" if is_windows else ""))
+
+    # The files are passed as rlocation paths, unresolved: the flash scripts
+    # look them up through the runfiles library themselves, using the
+    # RUNFILES_* environment the launcher exports. Only the tool itself is
+    # resolved by the launcher.
+    (launcher.entrypoint(tool)
+        .embedded_args(*[launcher.to_rlocation_path(f) for f in files])
+        .compile(ctx, output_file = executable))
+    return executable
 
 def _openocd_flash_impl(ctx):
-    is_windows = ctx.target_platform_has_constraint(ctx.attr._windows_constraint[platform_common.ConstraintValueInfo])
-
-    if is_windows:
-        executable = ctx.actions.declare_file(ctx.label.name + ".cmd")
-        content = """@echo off
-set RUNFILES_DIR=%~dp0{exe_name}.runfiles
-"%RUNFILES_DIR%\\{tool}" "{openocd}" "{elf}" "{cfg}" %*
-""".format(
-            exe_name = executable.basename,
-            tool = _runfiles_path(ctx.executable.flash_tool).replace("/", "\\"),
-            openocd = _runfiles_path(ctx.executable.openocd),
-            elf = _runfiles_path(ctx.file.elf),
-            cfg = _runfiles_path(ctx.file.cfg),
-        )
-    else:
-        executable = ctx.actions.declare_file(ctx.label.name)
-        content = """#!/bin/bash
-export RUNFILES_DIR="$0.runfiles"
-exec "$0.runfiles/{tool}" "{openocd}" "{elf}" "{cfg}" "$@"
-""".format(
-            tool = _runfiles_path(ctx.executable.flash_tool),
-            openocd = _runfiles_path(ctx.executable.openocd),
-            elf = _runfiles_path(ctx.file.elf),
-            cfg = _runfiles_path(ctx.file.cfg),
-        )
-
-    ctx.actions.write(
-        output = executable,
-        content = content,
-        is_executable = True,
+    executable = _flash_launcher(
+        ctx,
+        ctx.executable.flash_tool,
+        [ctx.executable.openocd, ctx.file.elf, ctx.file.cfg],
     )
 
     runfiles = ctx.runfiles(files = [
@@ -110,37 +108,14 @@ openocd_flash_target = rule(
             default = "@platforms//os:windows",
         ),
     },
+    toolchains = _LAUNCHER_TOOLCHAINS,
 )
 
 def _dfu_flash_impl(ctx):
-    is_windows = ctx.target_platform_has_constraint(ctx.attr._windows_constraint[platform_common.ConstraintValueInfo])
-
-    if is_windows:
-        executable = ctx.actions.declare_file(ctx.label.name + ".cmd")
-        content = """@echo off
-set RUNFILES_DIR=%~dp0{exe_name}.runfiles
-"%RUNFILES_DIR%\\{tool}" "{dfu_util}" "{bin_file}" %*
-""".format(
-            exe_name = executable.basename,
-            tool = _runfiles_path(ctx.executable.flash_tool).replace("/", "\\"),
-            dfu_util = _runfiles_path(ctx.executable.dfu_util),
-            bin_file = _runfiles_path(ctx.file.bin_file),
-        )
-    else:
-        executable = ctx.actions.declare_file(ctx.label.name)
-        content = """#!/bin/bash
-export RUNFILES_DIR="$0.runfiles"
-exec "$0.runfiles/{tool}" "{dfu_util}" "{bin_file}" "$@"
-""".format(
-            tool = _runfiles_path(ctx.executable.flash_tool),
-            dfu_util = _runfiles_path(ctx.executable.dfu_util),
-            bin_file = _runfiles_path(ctx.file.bin_file),
-        )
-
-    ctx.actions.write(
-        output = executable,
-        content = content,
-        is_executable = True,
+    executable = _flash_launcher(
+        ctx,
+        ctx.executable.flash_tool,
+        [ctx.executable.dfu_util, ctx.file.bin_file],
     )
 
     runfiles = ctx.runfiles(files = [
@@ -180,10 +155,14 @@ dfu_flash_target = rule(
             default = "@platforms//os:windows",
         ),
     },
+    toolchains = _LAUNCHER_TOOLCHAINS,
 )
 
 # ---------------------------------------------------------------------------
 # Objcopy output helpers
+#
+# run_binary, not genrule: a genrule's `cmd` runs under bash, and Windows
+# builds have none (ADR-013). run_binary execs objcopy directly.
 # ---------------------------------------------------------------------------
 
 def binary_out(name, src, visibility = None, **kwargs):
@@ -193,14 +172,15 @@ def binary_out(name, src, visibility = None, **kwargs):
       name: The name of the output target. The output filename will be `name + ".bin"`.
       src: The label of the single source file to convert.
       visibility: The visibility of the generated rule.
-      **kwargs: Additional arguments to pass to the underlying genrule.
+      **kwargs: Additional arguments to pass to the underlying run_binary.
     """
-    native.genrule(
+    run_binary(
         name = "{}_bin".format(name),
         srcs = [src],
         outs = ["{}.bin".format(name)],
-        cmd = "$(execpath @arm_none_eabi//:objcopy) -O binary $< $@",
-        tools = ["@arm_none_eabi//:objcopy"],
+        args = ["-O", "binary", "$<", "$@"],
+        mnemonic = "Objcopy",
+        tool = "@arm_none_eabi//:objcopy",
         visibility = visibility,
         **kwargs
     )
@@ -212,14 +192,15 @@ def hex_out(name, src, visibility = None, **kwargs):
       name: The name of the output target. The output filename will be `name + ".hex"`.
       src: The label of the single source file to convert.
       visibility: The visibility of the generated rule.
-      **kwargs: Additional arguments to pass to the underlying genrule.
+      **kwargs: Additional arguments to pass to the underlying run_binary.
     """
-    native.genrule(
+    run_binary(
         name = "{}_hex".format(name),
         srcs = [src],
         outs = ["{}.hex".format(name)],
-        cmd = "$(execpath @arm_none_eabi//:objcopy) -O ihex $< $@",
-        tools = ["@arm_none_eabi//:objcopy"],
+        args = ["-O", "ihex", "$<", "$@"],
+        mnemonic = "Objcopy",
+        tool = "@arm_none_eabi//:objcopy",
         visibility = visibility,
         **kwargs
     )

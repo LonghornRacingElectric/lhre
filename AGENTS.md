@@ -70,6 +70,15 @@ don't run them.
   instead of hand-editing. The on-target debug architecture (hermetic
   gdb/OpenOCD/SVD staged under `bazel-bin/tools/debug/`) is documented in
   [tools/debug/README.md](tools/debug/README.md).
+- Windows builds are shell-free: nothing that builds on Windows may need
+  bash. No `genrule` without `cmd_bat`, no `ctx.actions.run_shell`, no
+  generated wrapper scripts — exec the tool (`ctx.actions.run`,
+  `run_binary`, `hermetic_launcher` for `bazel run` wrappers) or mark the
+  target non-Windows. `.bazelrc` pins the shell there to a path that doesn't
+  exist, so a violation fails the Windows CI job with
+  `lhre-windows-builds-are-shell-free` in the error. The fix is never
+  "install bash" (see
+  [docs/build-system.md](docs/build-system.md#windows-builds-are-shell-free)).
 - Every module extension must end with
   `return ctx.extension_metadata(reproducible = True)` and pin its fetches
   (sha256/commit) — otherwise `MODULE.bazel.lock` churns across OSes (see
