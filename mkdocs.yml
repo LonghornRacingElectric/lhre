@@ -81,6 +81,8 @@ nav:
           - Run a BobSim Target: simulation/docs/skills/run-bobsim-target/SKILL.md
           - Edit the Vehicle: simulation/docs/skills/edit-vehicle/SKILL.md
           - Bump BobSim: simulation/docs/skills/bump-bobsim/SKILL.md
+          - BobSim Boundary: simulation/docs/skills/bobsim-boundary/SKILL.md
+          - Orchestrate Subagents: simulation/docs/skills/orchestrate-subagents/SKILL.md
       - Agent Instructions: simulation/AGENTS.md
   - Apps:
       - Overview: apps/README.md
