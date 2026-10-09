@@ -58,6 +58,7 @@ understandable.
 | `//toolchains` targets tagged `manual`, macro mirrored locally | [toolchains/README](../toolchains/README.md) — untagged, `bazel build //...` downloads every host's ~150 MB GCC archive |
 | Remote execution on Linux/macOS clients but not Windows; rc-file flag ordering | comments in [`.bazelrc`](https://github.com/LonghornRacingElectric/lhre/blob/main/.bazelrc) — Bazel can't reliably drive Linux executors from a Windows client, and `--enable_platform_specific_config` expands *before* plain `build` lines |
 | Windows machines uncomment a short `--output_user_root` in `.bazelrc.user` | comments in [`.bazelrc`](https://github.com/LonghornRacingElectric/lhre/blob/main/.bazelrc) — importing the pip protobuf runtime from runfiles exceeds the 260-char `MAX_PATH`, rules_python 2.x ignores `--build_python_zip` (the old escape hatch) on Windows, and startup options can't be set per-OS in an rc file |
+| Windows builds need no bash; `--shell_executable` pinned to a path that doesn't exist | [ADR-013](architecture/013-windows-shell-free.md) and "Windows builds are shell-free" below — MSYS2 was becoming a prerequisite, and autodetected bash locations split the remote cache |
 | Hermetic LLVM for host C++, registered before the BuildBuddy toolchain | comments in [`MODULE.bazel`](https://github.com/LonghornRacingElectric/lhre/blob/main/MODULE.bazel) — no dependency on Xcode/system GCC/MSVC, same clang everywhere |
 | Single FreeRTOS kernel version for firmware and host sims | [drivers/freertos/README](../drivers/freertos/README.md) |
 | Optimization level (`-Og`/`-Os`) keyed on `--compilation_mode` in the toolchain, not in target copts | [toolchains/README](../toolchains/README.md) — a hardcoded target-level `-O` silently overrides `-c opt` |
@@ -134,7 +135,9 @@ same way (`single_version_override(patches = ...)` for registry modules,
   (`lib/spec/proto/can_spec.proto`). Pinned to the newest *stable* BCR
   release: `36.0-rc1`'s prebuilt `protoc` fails checksum verification
   (upstream re-uploaded the RC artifact) and `36.0-rc2` gates prebuilts
-  behind a `-dev` guard. Safe to bump once a stable 36.x lands.
+  behind a `-dev` guard. Safe to bump once a stable 36.x lands. A bump also
+  has to keep `patches/protobuf_authenticity_windows.patch` applying (see
+  "Windows builds are shell-free" below).
 
 ### Protobuf without compiling protobuf
 
@@ -178,6 +181,65 @@ source builds from happening at all:
 The pip wheel is also why Windows machines shorten `--output_user_root`
 (see the table above). Its runfiles paths are what cross the 260-char
 `MAX_PATH`.
+
+### Windows builds are shell-free
+
+Nothing `bazel test //...` does on Windows needs bash, so MSYS2 and Git
+Bash are not prerequisites.
+[ADR-013](architecture/013-windows-shell-free.md) has the decision and the
+alternatives. Bazel wants a shell in more places than genrules, so it takes
+four pieces:
+
+1. **Build steps exec their tool.** A genrule's `cmd` and
+   `ctx.actions.run_shell` both run under bash. Use instead:
+    - a rule that calls `ctx.actions.run` (`tools/firmware/build_info.bzl`
+      is the worked example);
+    - `run_binary` from `aspect_bazel_lib` when one tool makes the outputs
+      (`binary_out` / `hex_out` in `firmware_project.bzl`);
+    - a genrule with `cmd_bat` when the command has no shell syntax
+      (`//apps/telemetry/stack/ingest:can_packets_pb2` shares one string
+      between `cmd` and `cmd_bat` so they can't drift).
+
+    This binds only what builds on Windows. A target that is
+    `target_compatible_with` non-Windows can stay a plain genrule.
+2. **A tripwire in `.bazelrc`.** `build:windows --shell_executable` points
+   at `C:/lhre-windows-builds-are-shell-free/bash.exe`, which exists
+   nowhere. Without it, rule 1 would hold only on machines that happen to
+   lack bash: CI's Windows runners have Git Bash, so a new bash-needing
+   action would pass CI and then break laptops. With it, the action fails
+   everywhere with that path in the error. It also repairs cache sharing.
+   Bazel puts the shell's directory on every action's `PATH`, and `PATH` is
+   part of the remote cache key, so autodetection gave machines with bash in
+   different places different keys for nearly every action.
+3. **A fixed shell toolchain, `//toolchains/sh`.** Every test rule
+   implicitly depends on `@bazel_tools//tools/test:collect_coverage`, an
+   `sh_binary`, and on Windows an `sh_binary` fails analysis when the shell
+   toolchain has no path ("No suitable shell toolchain found"). The default
+   toolchain autodetects that path, so with no bash on `PATH`, `bazel test`
+   died before running anything. Ours carries the same nonexistent path. It
+   is only baked into a launcher that runs under `bazel coverage`.
+4. **A protobuf patch, `patches/protobuf_authenticity_windows.patch`.**
+   protobuf attaches a validation action to every `proto_library` that
+   compares `protoc --version` against the module version, written with
+   `run_shell`. The patch adds a Windows-host branch that does the same
+   comparison with `cmd.exe` and `findstr`, so the check keeps running
+   there. The alternative, `--norun_validations`, would have turned it off.
+   On a protobuf bump the build fails loudly if the patch no longer
+   applies. Regenerate it against the new `protoc_authenticity.bzl`, and
+   drop it once upstream stops using `run_shell` there.
+
+`bazel run` wrappers follow the same rule. The flash targets' executables
+are [`hermetic_launcher`](https://registry.bazel.build/modules/hermetic_launcher)
+stubs (see [tools/firmware](../tools/firmware/README.md)). Use it for a new
+wrapper instead of generating one script per OS.
+
+What this gives up on Windows: `sh_binary` and `sh_test` targets, which are
+all marked non-Windows already, and `bazel coverage`.
+
+If you need a real bash for an experiment, a plain
+`build --shell_executable=C:/path/to/bash.exe` line in `.bazelrc.user`
+overrides the pin, because plain `build` lines expand after the per-OS
+config.
 
 ### Build latency
 

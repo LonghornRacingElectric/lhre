@@ -20,6 +20,7 @@ nav:
       - ADR-009 Autonomy Outside Bazel: docs/architecture/009-autonomy-outside-bazel.md
       - ADR-010 Telemetry Stack in Bazel: docs/architecture/010-telemetry-stack-in-bazel.md
       - ADR-012 Simulation Outside Bazel: docs/architecture/012-simulation-outside-bazel.md
+      - ADR-013 Windows Shell-Free: docs/architecture/013-windows-shell-free.md
       - Build System: docs/build-system.md
       - Cookbook: docs/cookbook.md
   - Boards:

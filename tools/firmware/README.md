@@ -160,6 +160,34 @@ Adding a family = adding it in those two packages, then mapping it in
 Flash targets are tagged `local` (they must run where the board is plugged
 in, never on remote executors).
 
+## Shell-free, including the flash wrappers
+
+Nothing this macro produces needs bash, so all of it builds on a Windows
+laptop with no MSYS2 or Git Bash
+([ADR-013](../../docs/architecture/013-windows-shell-free.md)):
+
+- `.bin` / `.hex` come from `run_binary`, which execs objcopy directly. A
+  genrule's `cmd` would run under bash. (`.elf` is still a genrule: it is a
+  plain copy, with a `cmd_bat` for Windows.)
+- `:openocd` / `:dfu` are native launchers built with
+  [`hermetic_launcher`](https://registry.bazel.build/modules/hermetic_launcher):
+  a small binary that execs the flash script and exports the runfiles
+  environment it needs. It replaced a generated `.cmd` on Windows and a bash
+  script elsewhere. Those two had to be kept in step by hand, and both
+  looked for the tool in a runfiles tree beside the wrapper, which exists
+  only when the flash target is the top-level `bazel run` target.
+
+The launcher hands the flash script its files as rlocation paths, not real
+ones. `tools/openocd/flash.py` and `tools/dfu/flash.py` resolve them through
+the runfiles library, so a new file for the script goes in the list passed
+to `_flash_launcher` and gets resolved the same way on the Python side.
+
+`flash_launcher_test` covers that wiring without hardware. It instantiates
+both flash rules with `flash_probe.py` standing in for the flash script and
+the flashing tool, then checks that the tool starts, can resolve every path
+it is handed, receives the user's extra arguments intact, and has its exit
+code passed back.
+
 ## Build provenance
 
 Every firmware binary automatically links `//tools/firmware:build_info`:

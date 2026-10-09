@@ -28,6 +28,12 @@ py_binary(
     main = "generate_can_packets_pb2.py",
 )
 
+# One command for both shells. It is a bare program invocation with no shell
+# syntax, so the same string works as `cmd` (bash, Linux/macOS) and `cmd_bat`
+# (cmd.exe). Windows builds have no bash (ADR-013), so a genrule that builds
+# there needs cmd_bat; sharing the string keeps the two from drifting.
+_GEN_CAN_PACKETS_PB2_CMD = "$(execpath :gen_can_packets_pb2) $(location //tools/protoc) $(location //apps/telemetry:current_schema_proto) $(RULEDIR) $@"
+
 genrule(
     name = "can_packets_pb2",
     srcs = [
@@ -36,7 +42,8 @@ genrule(
     outs = [
         "protobuf/can_packets_pb2.py",
     ],
-    cmd = "$(execpath :gen_can_packets_pb2) $(location //tools/protoc) $(location //apps/telemetry:current_schema_proto) $(RULEDIR) $@",
+    cmd = _GEN_CAN_PACKETS_PB2_CMD,
+    cmd_bat = _GEN_CAN_PACKETS_PB2_CMD,
     tools = [
         ":gen_can_packets_pb2",
         "//tools/protoc",
