@@ -47,6 +47,13 @@ centerline to leave `OFF`. Viz-only topics (`/lhr/sensor/cones_viz`,
 `/lhr/sensor/fov_viz`, `/lhr/track/centerline_markers`, `/lhr/control/lookahead`)
 and `/lhr/debug/*` are omitted. Full list under [Topics](#topics).
 
+The kinematic launch also supports `perception:=lidar`: ground-truth cones
+feed the [Mid-360 caster](src/lhr_lidar_sim/README.md), its point cloud feeds
+[lhr_perception](src/lhr_perception/README.md), and unclassified detections
+feed boundary planning and pure pursuit. This mode disables `sensor_sim` and
+automatically enables the cloud publisher. `lidar:=true` alone is a cloud
+preview while `perception:=sim` remains the driving source.
+
 ### Gazebo sim (run_gazebo_demo.sh)
 
 **Sim perception (default, `perception:=sim`):**
@@ -412,7 +419,7 @@ reproducible exactly. Gate on a tolerance band, not on equality.
 ```mermaid
 flowchart LR
     map["map<br>(world/track frame)"] --> base["base_link<br>(vehicle, rear-axle center)"]
-    base --> lidar["lidar<br>(Mid-360 mount, lidar:=true only)"]
+    base --> lidar["lidar<br>(Mid-360 mount, lidar enabled)"]
 ```
 
 `map -> base_link` is broadcast by `sim_kinematic` in the kinematic sim; in
@@ -420,7 +427,7 @@ Gazebo by the `OdometryPublisher` plugin, bridged from
 `/model/fsae_vehicle/tf` to `/tf`.
 
 `base_link -> lidar` is static, published by `lhr_lidar_sim` from its own
-mount pose and only when `lidar:=true`. It has to exist: a `PointCloud2`
+mount pose and when `lidar:=true` or `perception:=lidar`. It has to exist: a `PointCloud2`
 stamped in the `lidar` frame cannot be placed by Foxglove, RViz or any
 tf2 consumer without it, and the cloud silently fails to draw rather
 than erroring.
@@ -470,7 +477,7 @@ Cone IDs: left cones use IDs `0..N-1`, right cones use IDs `10000..10000+N-1`. T
 Cone pairing strategies:
 - **index** (default): Pairs left cone ID `i` with right cone ID `i + 10000`. Works with sim perception where cone IDs follow the trackgen convention.
 - **nearest**: Pairs each left cone with its nearest unpaired right cone.
-- **boundary**: Uses Delaunay triangulation to pair cones that are approximately `track_width` (3.5 m +/- `track_width_tolerance`) apart. Used for LiDAR perception where cones are unclassified (no left/right split).
+- **boundary**: Builds a bounded forward path through connected Delaunay edge midpoints, with width, gap, and turn checks. Used for unclassified LiDAR cones. See [track builder](src/lhr_track_builder/README.md).
 
 ### lhr_sim_kinematic (sim_node)
 
@@ -601,19 +608,22 @@ outer = atan(wheelbase / (R + track_width/2))
 
 ### lhr_perception (lidar_cone_detector)
 
-Processes LiDAR pointcloud to detect cones. Pipeline: ground removal → range filter → Euclidean clustering → cone validation → sensor-to-map transform → spatial dedup.
+Processes clouds using full scan-time transforms, with height and vehicle
+filters in `base_link`. See [perception](src/lhr_perception/README.md). Pipeline: ground removal → range filter → scan-time map registration → bounded cloud stacking → connected-component clustering → cone validation → spatial dedup.
 
 | Param | Default | Description |
 |-------|---------|-------------|
 | `max_range` | `20.0` | Max detection range (m) |
 | `min_range` | `0.9` | Min detection range, avoids vehicle self-hits (m) |
-| `ground_z_min` | `-0.40` | Ground removal lower threshold in sensor frame (m) |
-| `ground_z_max` | `0.5` | Ground removal upper threshold in sensor frame (m) |
+| `ground_z_min` | `0.05` | Minimum height above base_link ground plane (m) |
+| `ground_z_max` | `0.55` | Maximum height above base_link ground plane (m) |
 | `cluster_radius` | `0.35` | Euclidean clustering radius (m) |
-| `min_cluster_points` | `1` | Minimum points for a valid cluster |
+| `min_cluster_points` | `3` | Minimum points for a valid cluster |
 | `max_cluster_extent` | `0.5` | Maximum cluster bounding box extent (m) |
-| `max_cluster_points` | `50` | Maximum points in a valid cone cluster |
-| `dedup_radius` | `1.5` | Spatial dedup radius: new detections within this distance of existing ones are ignored (m) |
+| `max_cluster_points` | `500` | Maximum points in a valid cone cluster |
+| `dedup_radius` | `0.6` | Merge radius: nearby detections update the existing running average (m) |
+| `stack_window_sec` | `0.5` | Scan history window (s); 0 disables stacking |
+| `stack_max_frames` | `10` | Maximum retained scans |
 | `publish_hz` | `10.0` | Output publish rate (Hz) |
 
 All detected cones are published under a single "cones" namespace with IDs 0..N-1 (orange color). There is no left/right classification. The track builder's boundary pairing strategy (Delaunay triangulation) handles cone pairing by finding pairs that are approximately track-width apart.
@@ -650,13 +660,14 @@ metrics exit code does not reach the shell. Use
 `outcome` from the row and exits on that. Anything wiring this into CI
 must go through that script, not `ros2 launch` directly.
 
-The CSV is 29 columns in six groups, because a row of results alone
+The CSV is 39 columns in six groups, because a row of results alone
 cannot be compared with another row:
 
 ```
 run_id, vehicle_sha256, scenario, git_sha,
-seed, track_style, num_waypoints, mission,
-fov_deg, max_range_m, noise_std_m, false_negative_rate,
+seed, track_style, num_waypoints, mission, perception, start_finish_cones,
+stack_window_sec, min_cluster_points, ground_z_min, start_on_track,
+lidar, mount_pitch_rad, elevation_profile, return_profile, fov_deg, max_range_m, noise_std_m, false_negative_rate,
 lookahead_dist, a_lat_max, v_min, v_max, max_accel, max_decel,
 outcome, duration_s, samples, path_length_m, mean_cte, max_cte,
 off_track_count, off_track_dist_m, mean_speed, max_speed, lap_completed
@@ -691,3 +702,14 @@ See [lhr_metrics/README.md](src/lhr_metrics/README.md) for what the
 provenance fields mean and how to add a column. CSV data accumulates in
 `data/metrics.csv` across runs; a file written under an older column set
 is moved aside rather than having its fields dropped.
+
+LiDAR launch modes set `closed_path=false`; local paths do not wrap at their
+ends and expire after `path_timeout_sec=1.0`. See [control](src/lhr_control/README.md).
+
+The MVS launcher also accepts `plant:=bobsim` for the optional
+[BobSim 3 DOF plant](src/lhr_sim_bobsim/README.md). CI initializes the pinned
+BobSim submodule and exercises its acceleration, braking and frame conversion.
+
+Use the [driving study runner](src/lhr_demo/README.md#repeatable-driving-studies)
+to compare vehicle plants and perception conditions across seeds and speeds.
+Motion distortion and solid trackside clutter are opt-in MVS launch settings.

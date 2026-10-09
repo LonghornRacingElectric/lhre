@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>lhr_sim_bobsim</name><version>0.0.0</version>
+  <description>BobSim 3 DOF ROS vehicle plant.</description>
+  <maintainer email="autonomy@lhre.org">LHR</maintainer><license>MIT</license>
+  <exec_depend>lhr_sim_kinematic</exec_depend><exec_depend>lhr_vehicle</exec_depend>
+  <exec_depend>rclpy</exec_depend><exec_depend>std_msgs</exec_depend>
+  <exec_depend>python3-pandas</exec_depend>
+  <exec_depend>python3-numpy</exec_depend><exec_depend>python3-scipy</exec_depend>
+  <test_depend>ament_flake8</test_depend><test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+  <export><build_type>ament_python</build_type></export>
+</package>

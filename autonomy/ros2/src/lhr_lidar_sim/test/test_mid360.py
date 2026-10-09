@@ -1,7 +1,11 @@
 """Checks on the Mid-360 beam pattern."""
 
+import gzip
+import hashlib
 import math
+from pathlib import Path
 
+import lhr_lidar_sim.mid360 as mid360
 from lhr_lidar_sim.mid360 import (
     apply_range_model, beam_angles, Mid360Config, unit_directions)
 import numpy as np
@@ -14,8 +18,9 @@ def test_point_rate_sets_points_per_frame():
     assert Mid360Config(frame_rate_hz=20.0).points_per_frame() == 10_000
 
 
-def test_elevation_stays_inside_the_datasheet_field_of_view():
-    cfg = Mid360Config()
+@pytest.mark.parametrize('profile', ['rosette', 'uniform'])
+def test_synthetic_elevation_stays_inside_the_datasheet_field_of_view(profile):
+    cfg = Mid360Config(elevation_profile=profile)
     _, el = beam_angles(cfg, 0.0)
     assert np.min(el) >= math.radians(cfg.el_min_deg) - 1e-9
     assert np.max(el) <= math.radians(cfg.el_max_deg) + 1e-9
@@ -103,3 +108,50 @@ def test_dropout_removes_roughly_its_fraction():
     hit = np.ones(20_000, dtype=bool)
     kept = apply_range_model(ranges, hit, cfg, np.random.default_rng(1))
     assert kept.mean() == pytest.approx(0.7, abs=0.02)
+
+
+def test_vendor_table_matches_pinned_upstream_bytes():
+    path = Path(mid360.__file__).parent / 'patterns' / 'mid360.csv.gz'
+    raw = gzip.decompress(path.read_bytes())
+    assert hashlib.sha256(raw).hexdigest() == (
+        'aa1fc08b6a4400608dbd6ee832b7ea3a9c3c37197e734f60f58fe5abf762269a')
+    assert len(raw.splitlines()) == 800_001
+
+
+def test_vendor_zenith_conversion_points_above_horizon():
+    az, el = beam_angles(Mid360Config(), 0.0, count=2)
+    assert np.degrees(az) == pytest.approx([268.99, 269.0])
+    assert np.degrees(el) == pytest.approx([52.162, 49.175])
+    assert np.all(unit_directions(az, el)[:, 2] > 0.0)
+
+
+def test_vendor_replay_is_continuous_across_frame_boundaries():
+    cfg = Mid360Config()
+    whole = beam_angles(cfg, 0.2, count=40_000)
+    first = beam_angles(cfg, 0.2)
+    second = beam_angles(cfg, 0.3)
+    for full, left, right in zip(whole, first, second):
+        assert np.array_equal(full, np.concatenate((left, right)))
+
+
+def test_vendor_replay_wraps_without_resetting_frame():
+    cfg = Mid360Config()
+    crossing = beam_angles(cfg, 3.99999, count=4)
+    last = beam_angles(cfg, 3.99999, count=2)
+    first = beam_angles(cfg, 0.0, count=2)
+    repeated = beam_angles(cfg, 4.0, count=2)
+    for full, end, beginning, next_cycle in zip(crossing, last, first, repeated):
+        assert np.array_equal(full, np.concatenate((end, beginning)))
+        assert np.array_equal(beginning, next_cycle)
+
+
+def test_vendor_playback_rate_controls_sample_timing():
+    nominal = beam_angles(Mid360Config(), 0.5, count=10)
+    slower = beam_angles(Mid360Config(point_rate_hz=100_000.0), 1.0, count=10)
+    assert np.array_equal(nominal, slower)
+
+
+def test_vendor_elevation_preserves_table_bounds_without_clipping():
+    _, el = beam_angles(Mid360Config(), 0.0, count=800_000)
+    assert np.degrees(el.min()) == pytest.approx(-7.2123)
+    assert np.degrees(el.max()) == pytest.approx(52.164)

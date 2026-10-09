@@ -206,3 +206,87 @@ comes down on its own and a headless run cannot hang. The exit code does
 not survive `ros2 launch`, though, since `LaunchService` returns non-zero
 only when launch itself raises. Gates go through
 [`scripts/run_headless.sh`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/ros2/scripts/run_headless.sh).
+
+## LiDAR perception
+
+`perception:=sim` keeps the simplified cone detector and indexed complete
+track. `lidar:=true` alone previews the cloud without changing perception.
+`perception:=lidar` enables the Mid-360 cloud simulator, disables simplified
+detections and selects the cloud detector, geometric boundary planning and
+open-path control. That mode defaults to `v_max:=4.0` rather than 12 m/s.
+
+`start_on_track:=true` aligns the LiDAR-mode initial pose with the nearest
+generated centerline and its forward tangent; `false` preserves explicit
+`init_x`, `init_y`, `init_yaw`. Scene geometry sets only the starting pose;
+cone IDs and ground-truth centerlines do not reach the LiDAR planner.
+When no connected forward route exists, the controller stops. Full-lap
+reliability on complex autocross tracks remains open work.
+
+## Cone and accumulation studies
+
+Scene cones now use striped meshes and square feet rather than sphere
+markers. Optional `start_finish_cones:=true` adds nominal large orange gate
+cones; see [track generation](../lhr_trackgen/README.md) for layout limits.
+
+LiDAR detection defaults to `stack_window_sec:=0.5`,
+`min_cluster_points:=3` and `ground_z_min:=0.05`. Set the window to zero for
+single-scan comparisons. These launch arguments reach the detector and are
+recorded in metrics and bag metadata. They are candidate settings informed
+by the acceptance report, not hardware-validated tuning. See
+[perception](../lhr_perception/README.md) and
+[acceptance comparison](../lhr_lidar_sim/README.md#acceptance-comparison).
+
+`return_profile:=acceptance_overcast` selects the fitted stationary
+small-cone return-density profile. `baseline` is the default. The selection
+is recorded in CSV and bag metadata; see
+[the measured fit and limits](../lhr_lidar_sim/README.md#recorded-overcast-return-profile).
+
+## BobSim vehicle dynamics
+
+Select `plant:=bobsim` to replace the kinematic vehicle with
+[BobSim 3 DOF](../lhr_sim_bobsim/README.md). The default is `plant:=kinematic`.
+Both use the same perception, planning and command topics. In BobSim mode,
+`max_accel` and `max_decel` also limit the plant's speed-to-torque controller.
+Bags record `/lhr/sim/provenance`; metrics record the selected `plant`.
+
+## Repeatable driving studies
+
+Build the workspace, source it, and run in the ROS environment:
+
+```bash
+ros2 run lhr_demo driving_study --output data/studies/run-001 \
+  --seeds 1 7 --speeds 4 6 --plants kinematic bobsim \
+  --conditions clean motion clutter outdoor
+```
+
+Cases run sequentially on isolated ROS domain 66. Override `--domain-id`
+if needed. Each case stops after one forward circuit, 90 simulated seconds,
+or a 240 s wall watchdog. Both limits are configurable. The runner stops
+its own process group on completion or interruption. Existing output
+directories are rejected so studies do not overwrite each other.
+
+Each case saves arguments, outcomes, dynamics provenance, a launch log and
+a `trajectory.csv` with position, measured/requested speed and error.
+The matrix saves `manifest.json`, `summary.json` and `summary.csv` after each
+case, so a failed case remains reviewable. The manifest records repository
+revision, dirty status and per-file runtime source/configuration hashes; commit reviewed changes before formal studies.
+The runner exits nonzero if any case misses a circuit or travels off track.
+For a short diagnostic use `--sim-seconds 12`; incomplete circuits then
+remain `sim_limit` results, not successful laps.
+
+`clean` uses frozen scans and no clutter. `motion` uses rolling scans.
+`clutter` adds trackside objects to rolling scans. `outdoor` also enables
+the recording-informed overcast dropout profile. See
+[LiDAR](../lhr_lidar_sim/README.md#motion-and-clutter-studies) for assumptions.
+
+Scores use ground truth only in the observer: centerline error, distance
+outside the cone-center corridor, forward circuit progress, observed halts,
+and simulated seconds per total wall second (including startup). A halt
+means speed below 0.2 m/s after the car has first moved and the first three
+simulated seconds; events
+must last at least one second. These are observed stops, not proof of an
+incorrect planner decision. Corridor error scores the rear axle, not the
+whole vehicle footprint. Mapped candidate matches use a 0.35 m radius;
+repeated persistent-map publications count repeatedly. This is a map
+consistency measure, not per-scan recall or statistically independent
+precision. Truth never enters LiDAR detection or path planning.

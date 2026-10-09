@@ -1,42 +1,21 @@
 #!/usr/bin/env python3
 """
-Livox Mid-360 beam pattern and range model.
+Replay Livox's Mid-360 beam table and apply a simplified range model.
 
-No ROS imports on purpose: this runs and is tested anywhere numpy does,
-including a macOS laptop with no ROS install, which is where the sensor
-work actually happens.
-
-Held exactly, from the datasheet:
-
-- 360 degree horizontal field of view.
-- The asymmetric vertical field of view, -7 to +52 degrees. The sensor
-  looks mostly *up*, which is why mount pitch decides whether it sees
-  cones at all, and why the mount study exists.
-- The point rate, 200 kHz, and so the points per frame.
-- Non-repetition: the pattern never closes on itself, so successive
-  frames sample different directions and dwelling longer keeps adding
-  coverage.
-
-A model, and not the real device:
-
-- The beam's path *inside* that field of view. Livox does not publish
-  the Risley-prism geometry, so two incommensurate sweeps stand in for
-  it. That reproduces the non-repetition, the scan-line structure a
-  clustering algorithm sees, and a plausible angular density, but it is
-  not their curve.
-- Because the density is a guess, any conclusion drawn from this model
-  should be re-run with ``elevation_profile='uniform'``. If it survives
-  both, it does not rest on the guess. See the README.
+The default angles come from the MIT-licensed official Livox simulator.
+Legacy synthetic sweeps remain available for sensitivity studies. No ROS
+imports are needed to test the geometry or replay the bundled table.
 """
 
 from dataclasses import dataclass
+from functools import lru_cache
+import gzip
 import math
+from pathlib import Path
 
 import numpy as np
 
-# Ratio between the two sweeps. Irrational, so the pattern never closes
-# on itself: that non-repetition is the Mid-360's defining property and
-# the reason a uniform-grid sensor model cannot stand in for it.
+# Legacy synthetic sweeps use incommensurate frequencies.
 GOLDEN_RATIO = (1.0 + math.sqrt(5.0)) / 2.0
 
 
@@ -61,14 +40,28 @@ class Mid360Config:
     # of the model, not a datasheet number: it sets how many azimuth
     # sweeps land in one frame and therefore the scan-line spacing.
     az_sweep_hz: float = 400.0
-    # 'rosette' bunches points toward the field of view edges, as an
-    # oscillating scanner does. 'uniform' spreads them evenly in
-    # elevation and exists to test whether a result depends on this.
-    elevation_profile: str = 'rosette'
+    # 'livox' replays the vendor table; the others are synthetic studies.
+    elevation_profile: str = 'livox'
+    return_profile: str = 'baseline'
 
     def points_per_frame(self) -> int:
         """Return how many beams one frame contains."""
         return int(round(self.point_rate_hz / self.frame_rate_hz))
+
+
+@lru_cache(maxsize=1)
+def _livox_angles() -> np.ndarray:
+    """Load the bundled vendor table once, in sensor-frame radians."""
+    path = Path(__file__).parent / 'patterns' / 'mid360.csv.gz'
+    with gzip.open(path, 'rt', encoding='utf-8') as stream:
+        table = np.loadtxt(stream, delimiter=',', skiprows=1, usecols=(1, 2))
+    # Livox uses pitch = zenith - 90 degrees to rotate its forward ray.
+    # Positive pitch points down, whereas our elevation is positive up.
+    table[:, 1] = 90.0 - table[:, 1]
+    angles = np.deg2rad(table)
+    angles[:, 0] %= 2.0 * np.pi
+    angles.setflags(write=False)
+    return angles
 
 
 def _elevation_shape(phase: np.ndarray, profile: str) -> np.ndarray:
@@ -86,7 +79,7 @@ def _elevation_shape(phase: np.ndarray, profile: str) -> np.ndarray:
     if profile == 'uniform':
         return (2.0 / np.pi) * np.arcsin(np.sin(phase))
     raise ValueError(
-        f"elevation_profile must be 'rosette' or 'uniform', got {profile!r}")
+        f"elevation_profile must be 'livox', 'rosette' or 'uniform', got {profile!r}")
 
 
 def beam_angles(cfg: Mid360Config, t_start: float,
@@ -94,13 +87,21 @@ def beam_angles(cfg: Mid360Config, t_start: float,
     """
     Return the azimuth and elevation of each beam, in radians.
 
-    Angles come from absolute time, not from a per-frame counter, so
-    non-repetition across frames falls out of the incommensurate sweeps
-    rather than being bolted on. Two frames an exact second apart are
-    still different, which is the property that matters.
+    Absolute time selects a continuous sequence of vendor rows, wrapping
+    at the end of the four-second table at the nominal point rate. The
+    CSV's first column counts samples despite its Time/s heading; timing
+    follows point_rate_hz, as in the vendor plugin. Changing that rate
+    changes playback speed. Synthetic profiles use the legacy sweeps.
     """
     if count <= 0:
         count = cfg.points_per_frame()
+
+    if cfg.elevation_profile == 'livox':
+        angles = _livox_angles()
+        # Avoid skipping/repeating a row at floating-point frame boundaries.
+        start = math.floor(t_start * cfg.point_rate_hz + 1e-6)
+        indices = (start + np.arange(count, dtype=np.int64)) % len(angles)
+        return angles[indices, 0], angles[indices, 1]
 
     t = t_start + np.arange(count, dtype=np.float64) / cfg.point_rate_hz
 

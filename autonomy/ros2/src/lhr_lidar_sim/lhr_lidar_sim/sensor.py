@@ -14,6 +14,7 @@ import math
 
 from lhr_lidar_sim.mid360 import (
     apply_range_model, beam_angles, Mid360Config, unit_directions)
+from lhr_lidar_sim.return_profile import thin_small_cones
 from lhr_lidar_sim.scene import cast
 import numpy as np
 
@@ -79,7 +80,7 @@ class Mid360Sensor:
 
     def frame_labeled(self, t: float, vehicle_x: float, vehicle_y: float,
                       vehicle_yaw: float,
-                      cones_xy: np.ndarray) -> tuple:
+                      cones_xy: np.ndarray, boxes=None, poses=None) -> tuple:
         """
         Return (points, on_cone) for one frame, in the sensor frame.
 
@@ -92,8 +93,19 @@ class Mid360Sensor:
         az, el = beam_angles(self.config, t)
         dirs_sensor = unit_directions(az, el)
 
-        # sensor -> base_link -> world. Composed once, applied to all
-        # 20,000 beams at once.
+        if poses is None:
+            return self._cast_beams(dirs_sensor, vehicle_x, vehicle_y, vehicle_yaw,
+                                    cones_xy, boxes)
+        chunks, labels = [], []
+        for directions, pose in zip(np.array_split(dirs_sensor, len(poses)), poses):
+            points, on_cone = self._cast_beams(directions, *pose, cones_xy, boxes)
+            chunks.append(points)
+            labels.append(on_cone)
+        return np.concatenate(chunks), np.concatenate(labels)
+
+    def _cast_beams(self, dirs_sensor, vehicle_x, vehicle_y, vehicle_yaw, cones_xy, boxes):
+        """Cast a chronological beam chunk from its acquisition pose."""
+        # Each chunk returns coordinates in the sensor frame at acquisition time.
         world_from_sensor = (rotation_zyx(0.0, 0.0, vehicle_yaw)
                              @ self.mount.rotation())
         dirs_world = dirs_sensor @ world_from_sensor.T
@@ -105,15 +117,23 @@ class Mid360Sensor:
 
         cones = np.asarray(cones_xy, dtype=np.float64)
         if cones.size:
-            cones = cones.reshape(-1, 2) - origin[:2]
+            cones = cones.copy()
+            cones[:, :2] -= origin[:2]
         else:
             cones = np.empty((0, 2))
 
+        local_boxes = None
+        if boxes is not None:
+            local_boxes = np.asarray(boxes, dtype=float).copy().reshape(-1, 6)
+            local_boxes[:, [0, 3]] -= origin[0]
+            local_boxes[:, [1, 4]] -= origin[1]
         ranges, hit, on_cone = cast(dirs_world, cones, float(origin[2]),
-                                    max_range=self.config.max_range_m)
+                                    max_range=self.config.max_range_m, boxes=local_boxes)
         # cast leaves misses at infinity, which would poison the noise
         # draw and the comparisons in the range model.
         ranges = np.where(hit, ranges, 0.0)
+        hit = thin_small_cones(ranges, hit, on_cone, dirs_world, cones,
+                               self._rng, self.config.return_profile)
         hit = apply_range_model(ranges, hit, self.config, self._rng)
 
         if not np.any(hit):
@@ -130,9 +150,8 @@ def points_on_cone(sensor: Mid360Sensor, t: float, distance_m: float,
     Count returns landing on a single cone straight ahead.
 
     This is the mount study's measurement, kept here so the study and
-    the simulator cannot drift apart. Points are counted by proximity
-    to the cone rather than by any flag the caster sets, so the count
-    means the same thing it would on a recorded cloud.
+    the simulator cannot drift apart. Returns use the caster's surface
+    labels so ground points near a cone base do not inflate the count.
 
     ``distance_m`` is measured from the *sensor*, not from base_link.
     The mount sits 1.8 m ahead of the rear axle, and measuring from the

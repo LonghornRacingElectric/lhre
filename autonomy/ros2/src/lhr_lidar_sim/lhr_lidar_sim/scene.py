@@ -12,13 +12,14 @@ which is the FSG small-cone height. Changing it in one place and not
 the other would make the two simulators disagree about what a cone is.
 """
 
+from lhr_trackgen.cone_geometry import CONE_SPECS
 import numpy as np
 
-CONE_HEIGHT_M = 0.325
+CONE_HEIGHT_M = CONE_SPECS['blue'].height_m
 # Half the 0.228 m square base of an FSG small cone, as an inscribed
 # circle. The silhouette is what decides points-per-cone, so the
 # approximation is a slight under-estimate rather than a flattering one.
-CONE_BASE_RADIUS_M = 0.114
+CONE_BASE_RADIUS_M = CONE_SPECS['blue'].radius_m
 
 # Rays almost parallel to the cone surface give a vanishing quadratic
 # leading term; below this they are treated as missing it. The grazing
@@ -151,11 +152,44 @@ def cone_ranges(dirs: np.ndarray, cones_xy: np.ndarray, sensor_z: float,
             target = idx[improved]
             best[target] = hit_t[improved]
 
+    # The square foot is a slab. This also accounts for the flat lip missing
+    # from a circular cone, and uses the same envelope as the rendered mesh.
+    thickness = CONE_SPECS['blue'].base_height_m
+    for cone_x, cone_y in cones_xy:
+        low = np.array([cone_x - radius, cone_y - radius, -sensor_z])
+        high = np.array([cone_x + radius, cone_y + radius, thickness - sensor_z])
+        parallel = np.abs(dirs) < _PARALLEL_EPS
+        safe = np.where(parallel, 1.0, dirs)
+        t0, t1 = low / safe, high / safe
+        near = np.where(parallel, -np.inf, np.minimum(t0, t1)).max(axis=1)
+        far = np.where(parallel, np.inf, np.maximum(t0, t1)).min(axis=1)
+        outside = (parallel & ((low > 0) | (high < 0))).any(axis=1)
+        hit = ~outside & (far >= np.maximum(near, 0.0)) & (near > 0)
+        best = np.minimum(best, np.where(hit, near, np.inf))
     return best, np.isfinite(best)
 
 
+def box_ranges(dirs, boxes, sensor_z):
+    """Intersect rays with world-aligned solid boxes using the slab method."""
+    best = np.full(len(dirs), np.inf)
+    for box in boxes:
+        low, high = np.asarray(box[:3]).copy(), np.asarray(box[3:]).copy()
+        low[2] -= sensor_z
+        high[2] -= sensor_z
+        parallel = np.abs(dirs) < _PARALLEL_EPS
+        safe = np.where(parallel, 1., dirs)
+        t0, t1 = low / safe, high / safe
+        near = np.where(parallel, -np.inf, np.minimum(t0, t1)).max(axis=1)
+        far = np.where(parallel, np.inf, np.maximum(t0, t1)).min(axis=1)
+        outside = (parallel & ((low > 0) | (high < 0))).any(axis=1)
+        distance = np.where(near > 0, near, far)
+        valid = ~outside & (far >= np.maximum(near, 0)) & (distance > 0)
+        best = np.minimum(best, np.where(valid, distance, np.inf))
+    return best
+
+
 def cast(dirs: np.ndarray, cones_xy: np.ndarray, sensor_z: float,
-         max_range: float = np.inf) -> tuple:
+         max_range: float = np.inf, boxes=None) -> tuple:
     """
     Return the range to the nearest of ground or cone.
 
@@ -168,11 +202,25 @@ def cast(dirs: np.ndarray, cones_xy: np.ndarray, sensor_z: float,
     apart, and quietly counts ground as cone. The caster already knows,
     so it says.
     """
-    cone_r, cone_hit = cone_ranges(dirs, cones_xy, sensor_z,
-                                   max_range=max_range)
+    if cones_xy.size and cones_xy.shape[1] == 4:
+        cone_r = np.full(len(dirs), np.inf)
+        for height, width in np.unique(cones_xy[:, 2:], axis=0):
+            selected = cones_xy[(cones_xy[:, 2] == height) & (cones_xy[:, 3] == width)]
+            ranges, _ = cone_ranges(dirs, selected[:, :2], sensor_z,
+                                    height=height, radius=width / 2, max_range=max_range)
+            cone_r = np.minimum(cone_r, ranges)
+        cone_hit = np.isfinite(cone_r)
+    else:
+        cone_r, cone_hit = cone_ranges(dirs, cones_xy, sensor_z,
+                                       max_range=max_range)
     ground_r, ground_hit = ground_ranges(dirs, sensor_z)
 
     on_cone = cone_hit & (~ground_hit | (cone_r <= ground_r))
     ranges = np.where(on_cone, cone_r,
                       np.where(ground_hit, ground_r, np.inf))
-    return ranges, cone_hit | ground_hit, on_cone
+    if boxes is not None:
+        box_r = box_ranges(dirs, boxes, sensor_z)
+        nearer = box_r < ranges
+        ranges = np.minimum(ranges, box_r)
+        on_cone &= ~nearer
+    return ranges, np.isfinite(ranges), on_cone

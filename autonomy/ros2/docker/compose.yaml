@@ -13,5 +13,6 @@ services:
       # Mount the whole autonomy/ tree; build artifacts (ros2/build, ros2/install,
       # ros2/log) land on the host but are Linux-only, so don't use them natively.
       - ../..:/home/ubuntu/autonomy
+      - ../../..:/opt/lhr:ro
     shm_size: "2gb" # RViz/Gazebo rendering needs more than the 64MB default
     restart: unless-stopped

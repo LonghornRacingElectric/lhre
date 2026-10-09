@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Sensor simulation: FOV-limited cone detection with accumulation."""
 
+from copy import deepcopy
 import math
 import random
 
@@ -136,15 +137,8 @@ class SensorSim(Node):
                 continue
 
             # store (with optional noise)
-            m = Marker()
-            m.header = marker.header
-            m.ns = marker.ns
-            m.id = marker.id
-            m.type = marker.type
-            m.action = marker.action
-            m.scale = marker.scale
-            m.color = marker.color
-            m.pose = marker.pose
+            # Preserve mesh vertices/colors and keep noise off the scene message.
+            m = deepcopy(marker)
             m.pose.orientation.w = 1.0
 
             if self._noise_std > 0.0:
@@ -174,7 +168,7 @@ class SensorSim(Node):
             key = (marker.ns, marker.id)
             detected = key in self._accumulated
 
-            m = Marker()
+            m = deepcopy(marker)
             m.header.frame_id = 'map'
             m.header.stamp = now
             m.ns = marker.ns + '_viz'
@@ -190,6 +184,8 @@ class SensorSim(Node):
             else:
                 # dim: same hue but low alpha and desaturated
                 c = marker.color
+                m.colors = [ColorRGBA(r=c.r * .4 + .2, g=c.g * .4 + .2,
+                                      b=c.b * .4 + .2, a=c.a) for c in marker.colors]
                 m.color = ColorRGBA(
                     r=c.r * 0.4 + 0.2,
                     g=c.g * 0.4 + 0.2,

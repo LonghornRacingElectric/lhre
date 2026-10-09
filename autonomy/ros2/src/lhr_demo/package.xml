@@ -8,14 +8,22 @@
   <license>MIT</license>
 
   <exec_depend>ros2launch</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>ackermann_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>visualization_msgs</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
   <exec_depend>lhr_trackgen</exec_depend>
   <exec_depend>lhr_track_builder</exec_depend>
   <exec_depend>lhr_sim_kinematic</exec_depend>
+  <exec_depend>lhr_sim_bobsim</exec_depend>
   <exec_depend>lhr_control</exec_depend>
   <exec_depend>lhr_metrics</exec_depend>
   <exec_depend>lhr_mission_manager</exec_depend>
   <exec_depend>lhr_sensor_sim</exec_depend>
   <exec_depend>lhr_lidar_sim</exec_depend>
+  <exec_depend>lhr_perception</exec_depend>
 
   <!-- record:=true writes MCAP; foxglove:=true serves the live graph -->
   <exec_depend>ros2bag</exec_depend>

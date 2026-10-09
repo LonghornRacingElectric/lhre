@@ -1,0 +1,111 @@
+{
+  "profile": "acceptance_overcast",
+  "reference_commit": "52fb09e6a71e788323171ac86d29c1fae98e08c3",
+  "scope": "Stationary small cones; overcast daylight at October 4 acceptance setup",
+  "range_m": [
+    2.7,
+    3.9,
+    5.2,
+    6.5,
+    7.7,
+    9.0,
+    10.3,
+    11.6,
+    15.3,
+    17.9
+  ],
+  "survival_probability": [
+    1.0,
+    1.0,
+    0.6291208791208791,
+    0.5159944367176634,
+    0.6965317919075145,
+    0.5588235294117647,
+    0.5916368907166454,
+    0.6690140845070423,
+    0.5,
+    0.35714285714285715
+  ],
+  "extrapolation": "Hold endpoint; outside recorded range is unvalidated",
+  "training": [
+    {
+      "run": "small_out_2p54m_level",
+      "capture_sha256": "40e64fa5fd0f97476da13999c450f6270122afa54b3f8031f559fcbc1d42ee93"
+    },
+    {
+      "run": "small_out_3p81m_level",
+      "capture_sha256": "7eb160ed81c13d330a9ae039e19d741a7957afaf70ff29c2a8d2aa5a39b6a883"
+    },
+    {
+      "run": "small_out_5p08m_level",
+      "capture_sha256": "67d74286100a99519535955af5117520efd9ab3658b59a49b3a4f14ec2517d34"
+    },
+    {
+      "run": "small_out_6p35m_level",
+      "capture_sha256": "cb57c0f1438bb7f1573d1f8cc6c197eab57db420d249f397c38906a2fc9f0034"
+    },
+    {
+      "run": "small_out_7p62m_level",
+      "capture_sha256": "050d5cc74041bfbddb6ff2ecb8f7cdcc8070b80a625ef3bcde42a423f4acc666"
+    },
+    {
+      "run": "small_out_8p89m_level",
+      "capture_sha256": "748fdb302a844737a07ccd4dbdbc6c306b35d3cd369c5823e77b6f4404f915be"
+    },
+    {
+      "run": "small_out_10p16m_level_run1",
+      "capture_sha256": "2e4c06a907d2a8642b954edb86ed8bd4cb3dbc8ede383d49bdd4b9ac4a3fae8e"
+    },
+    {
+      "run": "small_out_10p16m_level_run2",
+      "capture_sha256": "2e5195298cba4039665ecb223b41e9083386b5f0f27360fbaf443dfc061b7d01"
+    },
+    {
+      "run": "small_out_11p43m_level",
+      "capture_sha256": "1b5956959eee4bcdb041a37e250e41377508f264ca32cb03d3335f9da7076595"
+    },
+    {
+      "run": "small_out_15p16m_level",
+      "capture_sha256": "d19a9bcb287d2918a6d83f43fdfc6a02e8b82de6ef31f0ecfdb822730115063c"
+    },
+    {
+      "run": "small_out_17p7m_level",
+      "capture_sha256": "889d07fb2da17823f03ea81da4f69f4492cbffe2f1ebd193baeabe3c044e102b"
+    }
+  ],
+  "held_out": [
+    {
+      "run": "small_out_10p16m_level_run3",
+      "observed_points_per_frame": 0.89,
+      "expected_points_per_frame": 0.9990985126565964,
+      "absolute_error": 0.10909851265659642
+    },
+    {
+      "run": "small_out_10p16m_level_run4",
+      "observed_points_per_frame": 1.29,
+      "expected_points_per_frame": 0.8747633930153904,
+      "absolute_error": 0.4152366069846096
+    }
+  ],
+  "scan_phase_known": false,
+  "limitations": [
+    "Does not model intensity, sun or non-cone surfaces",
+    "Independent thinning does not fit temporal dropout correlation",
+    "Cone geometry and recorded reference coordinates are approximate"
+  ],
+  "baseline_sensor_config": {
+    "point_rate_hz": 200000.0,
+    "frame_rate_hz": 10.0,
+    "el_min_deg": -7.0,
+    "el_max_deg": 52.0,
+    "min_range_m": 0.1,
+    "max_range_m": 40.0,
+    "range_noise_std_m": 0.02,
+    "dropout_rate": 0.0,
+    "az_sweep_hz": 400.0,
+    "elevation_profile": "livox",
+    "return_profile": "baseline"
+  },
+  "simulation_duration_sec": 10.0,
+  "seed": 1
+}

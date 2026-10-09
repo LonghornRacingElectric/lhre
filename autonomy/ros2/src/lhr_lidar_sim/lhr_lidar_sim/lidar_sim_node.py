@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Publish a synthetic Livox Mid-360 cloud on /lhr/lidar/points."""
 
+from collections import deque
 import math
 
 from geometry_msgs.msg import TransformStamped
 from lhr_lidar_sim.mid360 import Mid360Config
 from lhr_lidar_sim.sensor import Mid360Sensor, MountPose
+from lhr_trackgen.cone_geometry import CONE_SPECS
 from lhr_vehicle import load_vehicle
 from nav_msgs.msg import Odometry
 import numpy as np
@@ -94,7 +96,10 @@ class LidarSimNode(Node):
         self.declare_parameter('max_range_m', 40.0)
         self.declare_parameter('range_noise_std_m', 0.02)
         self.declare_parameter('dropout_rate', 0.0)
-        self.declare_parameter('elevation_profile', 'rosette')
+        self.declare_parameter('elevation_profile', 'livox')
+        self.declare_parameter('return_profile', 'baseline')
+        self.declare_parameter('motion_distortion', False)
+        self.declare_parameter('clutter_profile', 'none')
 
         def param(name):
             return self.get_parameter(name).value
@@ -107,14 +112,18 @@ class LidarSimNode(Node):
             range_noise_std_m=float(param('range_noise_std_m')),
             dropout_rate=float(param('dropout_rate')),
             elevation_profile=str(param('elevation_profile')),
+            return_profile=str(param('return_profile')),
         )
         mount = self._mount_from_params()
         self._sensor = Mid360Sensor(
             config=config, mount=mount, seed=int(param('seed')))
 
+        self._history = deque(maxlen=100)
+        self._boxes = np.empty((0, 6))
         self._cones = np.empty((0, 2))
         self._veh = (0.0, 0.0, 0.0)
         self._have_odom = False
+        self._odom_stamp = None
 
         latch_qos = QoSProfile(
             depth=1,
@@ -127,6 +136,8 @@ class LidarSimNode(Node):
             Odometry, '/lhr/vehicle/odom', self._odom_cb, 10)
         self._cloud_pub = self.create_publisher(
             PointCloud2, '/lhr/lidar/points', 10)
+        self._clutter_pub = self.create_publisher(
+            MarkerArray, '/lhr/scene/clutter', latch_qos)
         self._sensor_pub = self.create_publisher(
             MarkerArray, SENSOR_TOPIC, latch_qos)
 
@@ -255,18 +266,57 @@ class LidarSimNode(Node):
 
     def _cones_cb(self, msg: MarkerArray):
         self._cones = np.array(
-            [[m.pose.position.x, m.pose.position.y] for m in msg.markers],
-            dtype=np.float64).reshape(-1, 2)
+            [[m.pose.position.x, m.pose.position.y,
+              CONE_SPECS.get(m.text, CONE_SPECS['blue']).height_m,
+              CONE_SPECS.get(m.text, CONE_SPECS['blue']).base_width_m]
+             for m in msg.markers],
+            dtype=np.float64).reshape(-1, 4)
+        profile = self.get_parameter('clutter_profile').value
+        if profile not in ('none', 'trackside'):
+            raise ValueError('clutter_profile must be none or trackside')
+        left = sorted((m for m in msg.markers if m.ns == 'left_cones'), key=lambda m: m.id)
+        right = sorted((m for m in msg.markers if m.ns == 'right_cones'), key=lambda m: m.id)
+        boxes, markers = [], MarkerArray()
+        if profile == 'trackside':
+            for index, (a, b) in enumerate(zip(left, right)):
+                if index % 8:
+                    continue
+                for cone, other in ((a, b), (b, a)):
+                    position = np.array([cone.pose.position.x, cone.pose.position.y])
+                    direction = position - [other.pose.position.x, other.pose.position.y]
+                    position += direction / np.linalg.norm(direction) * .8
+                    x, y = position
+                    boxes.append([x - .3, y - .3, 0., x + .3, y + .3, .45])
+                    marker = Marker()
+                    marker.header.frame_id = 'map'
+                    marker.ns, marker.id = 'clutter', len(boxes)
+                    marker.type = Marker.CUBE
+                    marker.pose.position.x, marker.pose.position.y = float(x), float(y)
+                    marker.pose.position.z = .225
+                    marker.pose.orientation.w = 1.
+                    marker.scale.x, marker.scale.y, marker.scale.z = .6, .6, .45
+                    marker.color.r, marker.color.g, marker.color.b, marker.color.a = .5, .5, .5, 1.
+                    markers.markers.append(marker)
+        self._boxes = np.asarray(boxes).reshape(-1, 6)
+        self._clutter_pub.publish(markers)
 
     def _odom_cb(self, msg: Odometry):
         self._veh = (msg.pose.pose.position.x,
                      msg.pose.pose.position.y,
                      quat_to_yaw(msg.pose.pose.orientation))
+        stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        if self._history and stamp <= self._history[-1][0]:
+            if stamp < self._history[-1][0]:
+                self._history.clear()
+            else:
+                self._history.pop()
+        self._history.append((stamp, self._veh))
+        self._odom_stamp = msg.header.stamp
         self._have_odom = True
 
     def _tick(self):
         now = self.get_clock().now()
-        stamp = now.to_msg()
+        stamp = self._odom_stamp if self._have_odom else now.to_msg()
         # Broadcast before the odom check, so the frame exists from the
         # first tick and a viewer opened early is not left with a cloud
         # it cannot place.
@@ -278,10 +328,23 @@ class LidarSimNode(Node):
         # Scan time comes from the ROS clock so the pattern advances
         # with sim time, which is what keeps the non-repetition
         # reproducible under a seeded run.
-        t = now.nanoseconds * 1e-9
+        t = stamp.sec + stamp.nanosec * 1e-9
 
         x, y, yaw = self._veh
-        points = self._sensor.frame(t, x, y, yaw, self._cones)
+        poses = None
+        if self.get_parameter('motion_distortion').value:
+            period = 1. / self._sensor.config.frame_rate_hz
+            if len(self._history) < 2 or self._history[0][0] > t - period:
+                return
+            times = np.array([sample[0] for sample in self._history])
+            history = np.array([sample[1] for sample in self._history])
+            history[:, 2] = np.unwrap(history[:, 2])
+            acquisition = t - period + (np.arange(10) + .5) * period / 10
+            poses = np.column_stack([np.interp(acquisition, times, history[:, axis])
+                                     for axis in range(3)])
+            t -= period
+        points, _ = self._sensor.frame_labeled(t, x, y, yaw, self._cones,
+                                               boxes=self._boxes, poses=poses)
 
         header = Header()
         header.stamp = stamp

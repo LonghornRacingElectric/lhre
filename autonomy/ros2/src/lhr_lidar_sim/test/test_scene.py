@@ -156,3 +156,33 @@ def test_no_cones_means_ground_only():
     assert hit[0]
     assert not on_cone.any()
     assert ranges[0] == pytest.approx(ground_r[0])
+
+
+def test_square_base_corner_returns_before_the_ground():
+    # A vertical ray above a corner is outside the circular body but inside
+    # the square foot, which the former cone-only caster omitted.
+    ranges, hit, on_cone = cast(_dirs([[0., 0., -1.]]),
+                                np.array([[-.1, -.1]]), SENSOR_Z)
+    assert hit[0] and on_cone[0]
+    assert ranges[0] == pytest.approx(SENSOR_Z - .01)
+
+
+def test_large_cone_has_its_own_height_in_a_mixed_scene():
+    ranges, hit, on_cone = cast(_dirs([[0., 0., -1.]]),
+                                np.array([[0., 0., .505, .285], [6., 0., .325, .228]]),
+                                SENSOR_Z)
+    assert hit[0] and on_cone[0]
+    assert ranges[0] == pytest.approx(SENSOR_Z - .505)
+
+
+def test_box_occludes_cone_and_returns_nearest_surface():
+    from lhr_lidar_sim.scene import cast
+    directions = np.array([[1., 0., 0.]])
+    boxes = np.array([[2., -.5, 0., 3., .5, 1.]])
+    ranges, hit, on_cone = cast(directions, np.array([[5., 0.]]), .2, boxes=boxes)
+    assert hit[0] and not on_cone[0]
+    assert ranges[0] == pytest.approx(2.)
+    # Parallel rays outside a slab must not hit its infinite extension.
+    ranges, hit, _ = cast(directions, np.empty((0, 2)), .2,
+                          boxes=np.array([[2., 1., 0., 3., 2., 1.]]))
+    assert not hit[0] and np.isinf(ranges[0])

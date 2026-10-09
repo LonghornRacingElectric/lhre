@@ -45,3 +45,15 @@ Turning `use_sim_time` on for other nodes without turning `publish_clock`
 on here leaves them waiting for a clock that never arrives, and they will
 sit silent rather than error. `mvs_demo.launch.py` drives both from one
 argument so they cannot disagree.
+
+## Odometry velocity
+
+Pose is in `map`, but linear velocity is in `base_link`, as required by the
+Odometry message contract. Forward speed is `twist.twist.linear.x` regardless
+of heading, and lateral velocity is zero in this bicycle model. The Foxglove
+speed plot therefore compares forward speed to the command instead of the
+vehicle's map-axis velocity component.
+
+The shared node exposes a state-advance hook used by the optional
+[BobSim plant](../lhr_sim_bobsim/README.md). Clock, odometry and TF publication
+stay shared; the kinematic equations and default launch behavior stay the same.

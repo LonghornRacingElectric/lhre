@@ -66,6 +66,17 @@ if ! docker exec "$CONTAINER" \
     rebuild
 fi
 
+if [[ "$*" == *plant:=bobsim* ]]; then
+    if ! docker exec "$CONTAINER" test -d /opt/lhr/simulation/bobsim/_0_Utils/dyn_py; then
+        echo "BobSim is not mounted. Initialize simulation/bobsim and recreate the container:" >&2
+        rebuild
+    fi
+    if ! docker exec "$CONTAINER" python3 -c 'import pandas' >/dev/null 2>&1; then
+        echo "BobSim dependencies are missing. Rebuild the container:" >&2
+        rebuild
+    fi
+fi
+
 # A normal run is a gated one: metrics decides when it is over, so a completed
 # lap ends it after about 17 s and the viewer drops its connection. That is
 # right for the gate and useless for looking at the car. Turning metrics off

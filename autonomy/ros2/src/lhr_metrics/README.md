@@ -7,7 +7,7 @@ row per run to `data/metrics.csv` (never committed, see
 
 ## What a row holds
 
-29 columns in six groups, because a row of results alone cannot be
+39 columns in six groups, because a row of results alone cannot be
 compared with another row: nothing in it says what differed between the
 two runs that produced them.
 
@@ -15,8 +15,8 @@ two runs that produced them.
 | --- | --- |
 | Identity | `run_id` |
 | Provenance | `vehicle_sha256`, `git_sha`, `scenario` |
-| Scenario | `seed`, `track_style`, `num_waypoints`, `mission` |
-| Sensor | `fov_deg`, `max_range_m`, `noise_std_m`, `false_negative_rate` |
+| Scenario | `seed`, `track_style`, `num_waypoints`, `mission`, `perception`, `start_on_track`, `start_finish_cones` |
+| Sensor | `lidar`, `mount_pitch_rad`, `elevation_profile`, `return_profile`, `stack_window_sec`, `min_cluster_points`, `ground_z_min`, `fov_deg`, `max_range_m`, `noise_std_m`, `false_negative_rate` |
 | Control | `lookahead_dist`, `a_lat_max`, `v_min`, `v_max`, `max_accel`, `max_decel` |
 | Outcomes | `outcome`, `duration_s`, `samples`, `path_length_m`, `mean_cte`, `max_cte`, `off_track_count`, `off_track_dist_m`, `mean_speed`, `max_speed`, `lap_completed` |
 
@@ -139,3 +139,20 @@ through the script.
   weighted `mean_cte` agrees to 2.9% (0.604 against 0.622), but `max_cte`
   differs by 53% (1.88 against 2.89). A single-seed gate on `max_cte`
   measures the seed.
+
+## Perception provenance
+
+Rows record `start_on_track` and `perception` (`sim` or `lidar`), whether the cloud publisher is
+actually enabled (`lidar`), `mount_pitch_rad`, and `elevation_profile`.
+The kinematic launch passes these values so detector-driven runs can be
+separated from the simplified baseline. Existing CSV files with an older
+header use the existing schema-mismatch handling; do not compare modes using
+only the outcome columns.
+
+The `plant` field distinguishes `kinematic` and `bobsim` runs. BobSim's
+commit and dynamics vehicle hash are in the recorded `/lhr/sim/provenance`
+message; the existing `vehicle_sha256` column still hashes the autonomy YAML.
+
+`motion_distortion` and `clutter_profile` record the selected LiDAR scene
+conditions. The separate [driving study runner](../lhr_demo/README.md#repeatable-driving-studies)
+adds truth-based circuit progress, halt observations and map consistency.

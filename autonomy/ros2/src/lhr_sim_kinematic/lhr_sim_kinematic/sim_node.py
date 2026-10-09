@@ -25,8 +25,8 @@ def yaw_to_quat(yaw: float) -> Quaternion:
 class SimKinematic(Node):
     """Integrate a kinematic bicycle model and publish odom + TF."""
 
-    def __init__(self):
-        super().__init__('sim_kinematic')
+    def __init__(self, node_name='sim_kinematic'):
+        super().__init__(node_name)
 
         # --- Parameters (vehicle defaults come from lhr_vehicle) ---
         veh = load_vehicle()
@@ -63,6 +63,8 @@ class SimKinematic(Node):
             'init_yaw').get_parameter_value().double_value
         self._v = 0.0
         self._steer = 0.0
+        self._vy = 0.0
+        self._yaw_rate = 0.0
 
         # --- Command subscriber ---
         self.create_subscription(
@@ -96,7 +98,7 @@ class SimKinematic(Node):
         self._step_ns = int(round(self._dt * 1e9))
         self.create_timer(self._dt, self._step)
         self.get_logger().info(
-            f'SimKinematic ready  (L={self._L}, hz={update_hz}, '
+            f'Simulator interface ready  (L={self._L}, hz={update_hz}, '
             f'clock={"sim" if self._publish_clock else "wall"})')
 
     # ------------------------------------------------------------------
@@ -108,13 +110,18 @@ class SimKinematic(Node):
                               msg.drive.steering_angle))
 
     # ------------------------------------------------------------------
-    def _step(self):
-        """Integrate one timestep and publish."""
+    def _advance(self):
+        """Advance the plant state by one fixed timestep."""
         # Kinematic bicycle model
         dt = self._dt
         self._x += self._v * math.cos(self._yaw) * dt
         self._y += self._v * math.sin(self._yaw) * dt
-        self._yaw += (self._v / self._L) * math.tan(self._steer) * dt
+        self._yaw_rate = (self._v / self._L) * math.tan(self._steer)
+        self._yaw += self._yaw_rate * dt
+
+    def _step(self):
+        """Advance the plant and publish a consistent clock, odometry and TF."""
+        self._advance()
 
         if self._publish_clock:
             self._sim_ns += self._step_ns
@@ -133,13 +140,11 @@ class SimKinematic(Node):
         odom.pose.pose.position.y = self._y
         odom.pose.pose.orientation = yaw_to_quat(self._yaw)
 
-        odom.twist.twist.linear = Vector3(
-            x=self._v * math.cos(self._yaw),
-            y=self._v * math.sin(self._yaw),
-            z=0.0)
+        # Odometry twist belongs to child_frame_id, not the map frame.
+        odom.twist.twist.linear = Vector3(x=self._v, y=self._vy, z=0.0)
         odom.twist.twist.angular = Vector3(
             x=0.0, y=0.0,
-            z=(self._v / self._L) * math.tan(self._steer))
+            z=self._yaw_rate)
 
         self._odom_pub.publish(odom)
 

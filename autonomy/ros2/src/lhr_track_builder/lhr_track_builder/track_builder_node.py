@@ -30,6 +30,9 @@ class TrackBuilder(Node):
         self.declare_parameter('cone_topic', '/lhr/sensor/cones_detected')
         self.declare_parameter('track_width', 3.5)
         self.declare_parameter('track_width_tolerance', 1.0)
+        self.declare_parameter('planning_horizon_m', 30.0)
+        self.declare_parameter('max_path_gap_m', 4.0)
+        self.declare_parameter('max_path_turn_deg', 60.0)
 
         self._frame_id = self.get_parameter(
             'frame_id').get_parameter_value().string_value
@@ -45,6 +48,11 @@ class TrackBuilder(Node):
             'track_width').get_parameter_value().double_value
         self._track_width_tol = self.get_parameter(
             'track_width_tolerance').get_parameter_value().double_value
+
+        self._planning_horizon = float(self.get_parameter('planning_horizon_m').value)
+        self._max_path_gap = float(self.get_parameter('max_path_gap_m').value)
+        self._min_turn_cos = math.cos(math.radians(
+            float(self.get_parameter('max_path_turn_deg').value)))
 
         # --- Stored cone positions keyed by marker ID ---
         self._left_cones: dict = {}
@@ -124,6 +132,7 @@ class TrackBuilder(Node):
         """Compute centerline and publish Path + debug markers."""
         if self._pairing_strategy == 'boundary':
             if len(self._all_cones) < 4:
+                self._publish_path([], self.get_clock().now().to_msg())
                 return
         else:
             if not self._left_cones or not self._right_cones:
@@ -131,6 +140,8 @@ class TrackBuilder(Node):
 
         midpoints = self._compute_midpoints()
         if not midpoints:
+            if self._pairing_strategy == 'boundary':
+                self._publish_path([], self.get_clock().now().to_msg())
             return
 
         now = self.get_clock().now().to_msg()
@@ -216,9 +227,9 @@ class TrackBuilder(Node):
         """
         Pair cones across track boundaries using Delaunay triangulation.
 
-        Finds natural geometric neighbors via Delaunay, then filters
-        edges to those approximately track-width apart.  Each surviving
-        edge is a cross-track pair whose midpoint lies on the centerline.
+        Connect midpoint candidates through shared triangles, then select
+        a bounded forward corridor. Width alone cannot distinguish a
+        cross-track pair from an edge along one boundary.
         """
         if len(self._all_cones) < 4:
             return []
@@ -230,36 +241,137 @@ class TrackBuilder(Node):
         except QhullError:
             return []
 
-        # Extract unique edges from triangles
-        edges: set = set()
+        # Connect cross-track edge midpoints only through shared triangles.
+        # A global nearest-neighbour tour can join separate track sections or
+        # run back down a boundary as previously unseen cones enter the map.
+        edges = set()
+        triangles = []
         for simplex in tri.simplices:
-            for i in range(3):
-                a, b = int(simplex[i]), int(simplex[(i + 1) % 3])
-                edges.add((min(a, b), max(a, b)))
+            triangle = [tuple(sorted((int(simplex[i]), int(simplex[(i + 1) % 3]))))
+                        for i in range(3)]
+            triangles.append(triangle)
+            edges.update(triangle)
 
-        # Filter edges by track-width band
         lo = self._track_width - self._track_width_tol
         hi = self._track_width + self._track_width_tol
-        midpoints: List[Tuple[float, float]] = []
-        for a, b in edges:
-            dx = pts[a][0] - pts[b][0]
-            dy = pts[a][1] - pts[b][1]
-            d = math.sqrt(dx * dx + dy * dy)
-            if lo <= d <= hi:
-                mx = (pts[a][0] + pts[b][0]) / 2.0
-                my = (pts[a][1] + pts[b][1]) / 2.0
-                midpoints.append((mx, my))
+        # Short nearest-neighbour edges estimate each observed boundary's
+        # tangent without colour labels. Long edges along that tangent are
+        # skipped boundary cones, not cross-track pairs.
+        tangents = {}
+        for i, point in enumerate(pts):
+            delta = pts - point
+            distances = np.linalg.norm(delta, axis=1)
+            distances[i] = np.inf
+            neighbour = int(np.argmin(distances))
+            if 0.5 < distances[neighbour] < lo:
+                tangents[i] = delta[neighbour] / distances[neighbour]
 
-        if len(midpoints) > self._max_points:
-            midpoints = midpoints[:self._max_points]
+        candidates = {}
+        normals = {}
+        widths = {}
+        diagonal_limit = math.hypot(hi, self._max_path_gap)
+        for edge in sorted(edges):
+            a, b = edge
+            delta = pts[b] - pts[a]
+            width = float(np.linalg.norm(delta))
+            if not lo <= width <= diagonal_limit:
+                continue
+            if any(abs(float(tangents[i] @ delta)) / width > 0.85
+                   for i in (a, b) if i in tangents):
+                continue
+            midpoint = (pts[a] + pts[b]) / 2.0
+            # A same-boundary edge that skips an observed cone is not a
+            # cross-track pair. Preserve diagonals through curved corridors:
+            # their midpoints connect the triangles into a continuous path.
+            projection = (pts - pts[a]) @ delta / (width * width)
+            closest = pts[a] + projection[:, None] * delta
+            clearance = np.linalg.norm(pts - closest, axis=1)
+            if np.any((projection > 1e-6) & (projection < 1.0 - 1e-6)
+                      & (clearance < 0.25)):
+                continue
+            widths[edge] = width
+            candidates[edge] = midpoint
+            normals[edge] = np.array([-delta[1], delta[0]]) / width
 
-        # Chain into sequential path order from vehicle
-        if len(midpoints) > 2 and self._have_odom:
-            midpoints = self._chain_path_from_vehicle(midpoints)
-        elif len(midpoints) > 2:
-            midpoints = self._chain_path(midpoints, 0)
+        if not candidates or not self._have_odom:
+            return []
+        graph = {edge: set() for edge in candidates}
+        for triangle in triangles:
+            valid = [edge for edge in triangle if edge in candidates]
+            for edge in valid:
+                graph[edge].update(other for other in valid if other != edge)
 
-        return midpoints
+        vehicle = np.array([self._veh_x, self._veh_y])
+        heading = np.array([math.cos(self._veh_yaw), math.sin(self._veh_yaw)])
+        starts = [edge for edge, midpoint in candidates.items()
+                  if np.linalg.norm(midpoint - vehicle) <= self._max_path_gap * 2.5
+                  and abs(float(normals[edge] @ heading)) >= self._min_turn_cos]
+        # Prefer a seed with a forward graph continuation. The nearest
+        # candidate may be the end of a partially observed corridor.
+
+        def has_forward_link(edge):
+            for other in graph[edge]:
+                delta = candidates[other] - candidates[edge]
+                gap = float(np.linalg.norm(delta))
+                if gap > 1e-6 and gap <= self._max_path_gap:
+                    direction = delta / gap
+                    if (float(direction @ heading) >= self._min_turn_cos
+                            and abs(float(normals[other] @ direction)) >= self._min_turn_cos):
+                        return True
+            return False
+
+        starts = [edge for edge in starts if has_forward_link(edge)]
+        if not starts:
+            return []
+        paths = []
+        for start in starts:
+            current = start
+            ordered = [candidates[current]]
+            visited = {current}
+            direction_now = heading.copy()
+            length = 0.0
+            turn_cost = 0.0
+            while len(ordered) < self._max_points:
+                choices = []
+                for edge in sorted(graph[current] - visited):
+                    delta = candidates[edge] - candidates[current]
+                    gap = float(np.linalg.norm(delta))
+                    if gap < 1e-6 or gap > self._max_path_gap:
+                        continue
+                    direction = delta / gap
+                    forward = float(direction @ direction_now)
+                    alignment = abs(float(normals[edge] @ direction))
+                    cross_width = widths[edge] * alignment
+                    if (forward < self._min_turn_cos or alignment < self._min_turn_cos
+                            or not lo <= cross_width <= hi):
+                        continue
+                    cost = (2.0 - forward - alignment
+                            + abs(cross_width - self._track_width) / self._track_width)
+                    choices.append((cost, gap, edge, direction))
+                if not choices:
+                    break
+                cost, gap, edge, direction_now = min(choices, key=lambda choice: choice[:3])
+                if length + gap > self._planning_horizon:
+                    break
+                ordered.append(candidates[edge])
+                visited.add(edge)
+                current = edge
+                length += gap
+                turn_cost += cost
+            if len(ordered) < 2:
+                continue
+            # Do not select a nearby dead end when a continuous observed
+            # corridor exists. Require some of the route ahead of the car.
+            if max(float((point - vehicle) @ heading) for point in ordered) <= 0.1:
+                continue
+            score = (float(np.linalg.norm(candidates[start] - vehicle))
+                     + self._track_width * (1.0 - abs(float(normals[start] @ heading)))
+                     + 0.4 * turn_cost - 0.4 * length)
+            paths.append((score, start, ordered))
+        if not paths:
+            return []
+        ordered = min(paths, key=lambda path: path[:2])[2]
+        return [tuple(point) for point in ordered]
 
     # ------------------------------------------------------------------
     # Path chaining helpers

@@ -1,15 +1,15 @@
 # lhr_lidar_sim
 
-A synthetic Livox Mid-360: beam pattern, ray casting against cones and
-ground, seeded noise and dropout. Publishes `sensor_msgs/PointCloud2` on
-`/lhr/lidar/points`, which is the topic the perception lane consumes, so
-this and a real sensor are interchangeable from the detector's side.
+A simulated Livox Mid-360 using the **official Livox beam table**, ray
+casting against cones and ground, and seeded noise and dropout. Publishes
+`sensor_msgs/PointCloud2` on `/lhr/lidar/points`.
 
-The model exists because **Gazebo cannot represent this sensor**. A
-`gpu_lidar` is defined by `<horizontal>` and `<vertical>` sample counts,
-a uniform grid, and the Mid-360's defining property is a non-repetitive
-rosette that never samples the same direction twice. Modelling it in
-numpy is the more faithful option here, not the cheaper one.
+Livox's complete simulator plugin targets Gazebo Classic 9 and ROS 1.
+Our workspace uses Gazebo Harmonic and ROS 2 Jazzy, so we import its scan
+data into the existing headless caster rather than depend on that plugin.
+A regular Gazebo `gpu_lidar` uses a uniform angular grid and does not
+replay this table. This package currently runs in the kinematic demo;
+the Gazebo demo still uses its own sensor.
 
 ## Layout
 
@@ -20,79 +20,52 @@ numpy is the more faithful option here, not the cheaper one.
 | `sensor.py` | Mount pose and the per-frame pipeline. No ROS. |
 | `lidar_sim_node.py` | The ROS wrapper. |
 
-Only the last file imports ROS. The other three run and are tested
+Only the ROS wrapper imports ROS. The numerical modules run and are tested
 anywhere numpy does, including a macOS laptop with no ROS install, which
 is where this work actually happens.
 
-## What is real and what is a model
+## Imported scan pattern
 
-Taken from the datasheet and held exactly:
+The default `elevation_profile=livox` replays all 800,000 rows of
+[Livox's Mid-360 scan table](https://github.com/Livox-SDK/livox_laser_simulation/blob/1cce1073633a062b92e30243a4c2920e45551bb5/scan_mode/mid360.csv).
+The source revision is `1cce1073633a062b92e30243a4c2920e45551bb5`.
+The bundled `patterns/mid360.csv.gz` is a lossless gzip copy; the original
+CSV SHA-256 is
+`aa1fc08b6a4400608dbd6ee832b7ea3a9c3c37197e734f60f58fe5abf762269a`.
+The accompanying `patterns/LICENSE` preserves Livox's MIT license.
+Both files are installed with the Python package; runtime needs no download.
 
-- 360 degree horizontal field of view.
-- The asymmetric vertical field of view, **-7 to +52 degrees**. The
-  sensor looks mostly *up*. That single fact is why mount pitch matters.
-- 200 kHz point rate, so 20,000 beams per frame at 10 Hz.
-- Non-repetition: the pattern never closes on itself, so dwelling longer
-  keeps adding coverage instead of re-measuring the same directions.
+Conversion matches Livox's plugin: azimuth is the second column in
+degrees and elevation is `90 - zenith` from the third column. The first
+column increments once per sample despite its `Time/s` heading. We replay
+rows at `point_rate_hz`, using absolute simulation time so splitting a
+scan into frames does not reset the sequence. At the default 200 kHz,
+the table lasts four seconds, then wraps. This finite replay repeats;
+it is not a claim that the physical sensor repeats every four seconds.
+Changing the point rate changes playback speed, not angular resolution.
 
-A model, and not the real device:
+`rosette` and `uniform` retain the old synthetic sweeps for comparison.
+The table spans -7.2123 to +52.164 degrees, slightly beyond the nominal
+vertical limits; those vendor angles are preserved without clipping.
+The synthetic profiles are approximations, not device calibration. Their
+elevation limits and sweep frequency do not modify the imported `livox`
+table.
 
-- The beam's path *inside* that field of view. Livox does not publish
-  the Risley-prism geometry, so two incommensurate sweeps stand in for
-  it, with their frequency ratio set to the golden ratio so the pattern
-  cannot repeat. This reproduces the non-repetition and the scan-line
-  structure a clustering algorithm sees. It is not their curve.
+## Physical limits
 
-## The density assumption, and why it matters
+The nominal [Mid-360 specifications](https://www.livoxtech.com/mid-360/specs)
+are 360 degree horizontal coverage, -7 to +52 degree vertical coverage,
+and 200,000 points/s (20,000 beams per 10 Hz frame). Importing the vendor
+pattern improves beam direction and density; it does not make every
+aspect of the simulated returns match hardware.
 
-`elevation_profile` selects how beams distribute in elevation.
-`rosette` uses a sine sweep, which lingers at its turning points and so
-bunches beams toward the edges of the field of view, as an oscillating
-scanner does. `uniform` uses a triangle sweep and spreads them evenly.
-
-This is not a cosmetic switch. **Returns on one cone, accumulated over
-20 frames:**
-
-| Range | rosette, 0 deg | rosette, 20 deg | uniform, 0 deg | uniform, 20 deg |
-| --- | --- | --- | --- | --- |
-| 5 m | 196 | 70 | 100 | 103 |
-| 10 m | 30 | 17 | 26 | 27 |
-| 20 m | 14 | 8 | 13 | 12 |
-
-Under `rosette` a level mount looks dramatically better. Under
-`uniform` the mount pitch barely matters at all. So that apparent
-finding **is an artifact of the density guess, not a property of the
-Mid-360**, and this model cannot currently recommend a mount pitch. A
-defensible answer needs the real angular density, which means Livox's
-pattern specification or measurements from a real unit.
-
-Run any study both ways. A conclusion that survives both does not rest
-on the guess; one that does not survive is not a conclusion yet.
-
-## What the model does say
-
-These hold under both profiles, to within about a factor of two, and are
-the numbers worth planning against:
-
-- **A cone at 10 m returns roughly 2 to 3 points per frame.** At 20 m it
-  is closer to one. Detection range is bounded by this, and speed by
-  detection range.
-- **Cone returns are about 1% of the cloud.** On a 24-cone field: 4,152
-  returns per frame, of which 41 land on cones and the rest on the
-  ground. A detector has to find a handful of points among thousands.
-- **Ground reach is short.** Only the bottom 7 degrees of the field of
-  view can see the ground at all, so a level mount at 0.62 m reaches
-  about 5.1 m of ground before its beams pass over the horizon. Raising
-  the mount makes this worse, not better: the blind radius is
-  `z / tan(7 deg)`, so every millimetre of height pushes the nearest
-  visible ground further away. 0.62 m is where it sits because that is
-  the lowest it can go and still clear Orion's nose (see
-  [lhr_vehicle](../lhr_vehicle/meshes/README.md)).
-
-The first of those was cross-checked against a hand calculation: a cone
-at 10 m subtends 1.31 by 1.86 degrees, which over 20 frames predicts
-about 35 returns against 30 measured. The caster is not inventing or
-losing points.
+The caster uses ideal cone surfaces and a flat ground plane. Range
+noise is a constant Gaussian along each ray, and dropout is a constant
+fraction. The 40 m maximum corresponds to the datasheet's 10% reflectivity
+condition; the model does not reproduce material or lighting dependence.
+Mount studies and detector performance still need validation against
+recordings from the car. Previous return-count estimates based on the
+synthetic sweeps are not measurements of a Mid-360.
 
 ## Running it
 
@@ -100,8 +73,12 @@ As a node, inside the demo stack:
 
 ```bash
 ros2 launch lhr_demo mvs_demo.launch.py lidar:=true mount_pitch_rad:=0.25
-ros2 launch lhr_demo mvs_demo.launch.py lidar:=true record:=true
+ros2 launch lhr_demo mvs_demo.launch.py perception:=lidar record:=true
 ```
+
+Select `perception:=lidar` to drive through the real detector and boundary
+planner. `lidar:=true` alone keeps simplified detections for driving while
+publishing the cloud for inspection. See [demo launch](../lhr_demo/README.md).
 
 Off by default, deliberately: the gate's numbers were measured against
 the cheat-mode `lhr_sensor_sim`, and swapping the perception front end
@@ -123,8 +100,7 @@ print(points.shape, on_cone.sum())
 print(points_on_cone(sensor, 0.0, distance_m=10.0, frames=10))
 ```
 
-One frame against a 24-cone field takes about 5 ms, against a 100 ms
-budget at 10 Hz.
+The table is decoded once on first use and cached for subsequent frames.
 
 ## Moving the sensor without restarting
 
@@ -166,6 +142,10 @@ It is published here rather than from a URDF because this node already
 owns the mount pose, and a second copy would drift from it. A side
 benefit is that the mount pitch becomes visible in the viewer, which is
 the thing the mount study is arguing about.
+
+Each cloud and its mount transform use the timestamp of the odometry pose
+used to cast the scan, so detection can look up the same vehicle pose rather
+than a later timer pose. Scan-pattern time still follows the simulator clock.
 
 It goes on `/tf`, not `/tf_static`, even though the mount holds still
 for the length of any one run. `StaticTransformBroadcaster` adds a child
@@ -211,17 +191,15 @@ height. To check flatness, transform into `base_link` first.
 | `mount_y_m` | `vehicle.yaml` | Live |
 | `mount_z_m` | `vehicle.yaml` | Live |
 | `mount_roll_rad` | `0.0` | Live |
-| `mount_pitch_rad` | `0.0` | Positive is nose down. Unsettled, see above. Live |
+| `mount_pitch_rad` | `0.0` | Positive is nose down. Live |
 | `mount_yaw_rad` | `0.0` | Live |
-| `mount_roll_rad` | `0.0` | |
-| `mount_yaw_rad` | `0.0` | |
 | `seed` | `1` | Node-local stream, so a seed repeats |
 | `frame_rate_hz` | `10.0` | |
 | `point_rate_hz` | `200000.0` | Datasheet |
 | `max_range_m` | `40.0` | Datasheet, at 10% reflectivity |
 | `range_noise_std_m` | `0.02` | Applied along the beam, not per axis |
 | `dropout_rate` | `0.0` | Returns lost outright |
-| `elevation_profile` | `rosette` | Or `uniform`. See above |
+| `elevation_profile` | `livox` | Imported vendor table; `rosette`/`uniform` are legacy approximations |
 
 Passed through the launch file these are type-coerced, so
 `mount_pitch_rad:=0` works as well as `0.0`. See
@@ -257,9 +235,6 @@ make a placeholder look like a measurement.
 
 ## Not done yet
 
-- Nothing consumes this in the kinematic stack. `lhr_perception`'s
-  detector still only runs under `gazebo_demo.launch.py`; pointing it at
-  this topic is what would give perception a headless test path.
 - Cones are opaque cones of a single size, with no reflectivity model,
   so `dropout_rate` is a flat fraction rather than a function of range
   and colour. A dark cone at 30 m is the case that matters and this does
@@ -267,3 +242,124 @@ make a placeholder look like a measurement.
 - No motion within a frame. All 20,000 beams are cast from one pose, so
   at 15 m/s the 1.5 m travelled during a frame is ignored. That flatters
   the model at speed.
+
+## Hardware comparison
+
+The [Mid-360 acceptance results on main](https://github.com/LonghornRacingElectric/lhre/blob/52fb09e6a71e788323171ac86d29c1fae98e08c3/autonomy/testing/2026-10-04-mid360-acceptance/README.md)
+include measured cone hit counts and frame occupancy versus range, lighting,
+and pitch. The imported vendor beam table does not reproduce those material
+and lighting losses. Use those results and the linked recordings to validate
+future return-model changes; do not equate the nominal 40 m range with reliable
+small-cone detection at that distance.
+
+## Competition cone geometry
+
+The caster reads nominal dimensions from
+[lhr_trackgen](../lhr_trackgen/README.md). It intersects a continuous ideal
+cone and a 10 mm square base slab; the nearest surface wins over ground and
+other cones. The scene supports both small and large cones. An Nx2 cone
+array means small cones; Nx4 arrays contain x, y, height, square-base width
+in metres. Geometry is idealized; stripe reflectivity is not modeled.
+
+## Acceptance comparison
+
+`compare_acceptance` bundles the published small-cone results from main
+commit `52fb09e6a71e788323171ac86d29c1fae98e08c3`, keeping indoor and outdoor
+runs separate. It reproduces each measured range and sensor height with a
+level sensor and reports simulated versus observed mean points per frame
+and percentage of frames with returns. It also reports availability of
+three points across five frames. It does not silently fit a dropout curve.
+
+```bash
+ros2 run lhr_lidar_sim compare_acceptance --run small_10p16m_level \
+  --run small_out_10p16m_level_run2 --output data/acceptance-comparison.json
+```
+
+Use `--results PATH` for another results table or `--raw-dir PATH` for a
+folder containing downloaded acceptance NPZs. Captures use `xyz[N,3]` in
+metres, `t[N]` in seconds and `imu[N,6]` (gyro followed by acceleration),
+matching the acceptance tools. The evaluator levels stationary captures
+using mean IMU gravity and counts returns in a 35 cm ROI around the
+published cone location. It compares the 5 cm and 15 cm height cutoffs and
+includes missed frames in availability. ROI availability is not detector
+recall; clutter in the ROI can inflate the count. Moving recordings need
+stamped odometry and a replay through the production detector instead.
+
+Reports explicitly set `calibrated: false`: scan phase, exact molded cone
+shape, mount pitch, ambient-light response and real recordings remain
+validation inputs. Raw recordings stay outside Git. The published results
+are measurements, not a substitute for the ROS bags needed to tune false
+positives, range errors and production detector recall.
+
+## Recorded overcast return profile
+
+`return_profile=acceptance_overcast` applies a seeded, range-dependent
+survival probability **only to small-cone returns**. Ground, large cones
+and other surfaces retain the baseline model. Use it for studies of
+small-cone return scarcity under the October 4 overcast conditions:
+
+```bash
+./docker/foxglove.sh perception:=lidar return_profile:=acceptance_overcast
+```
+
+The derived table is packaged with the simulator, so running this profile
+needs no recordings. Its training entries retain capture SHA-256 values.
+The fit uses measured stationary mount angles from mean IMU gravity and
+published cone ranges/heights, then divides recorded ROI return density
+by baseline simulated density. It compensates the aggregate mismatch;
+it does not separately identify ambient-light, shape and scan-phase effects.
+
+Repeat runs 3 and 4 at 10.3 m are held out. The fitted expected point counts
+were about 1.00 versus 0.89 measured in run 3, and 0.87 versus 1.29 in run 4.
+Run 4 had fading light: that transfer error is retained in the profile,
+not removed by training on the held-out recording.
+
+Reproduce the fit from local raw recordings:
+
+```bash
+ros2 run lhr_lidar_sim compare_acceptance \
+  --raw-dir data/2026-10-04-mid360-acceptance/raw \
+  --fit-overcast data/acceptance-overcast.json \
+  --output data/acceptance-calibrated-comparison.json
+```
+
+To check the packaged fit, pass `--return-profile acceptance_overcast`
+without `--fit-overcast`. When raw captures are supplied, the comparison
+uses their gravity-derived mount angles; otherwise it assumes a level
+sensor. The default `return_profile=baseline` remains the unmodified
+return-density model. Both modes still apply configured range noise.
+
+The fit covers approximately 2.7–17.9 m. Interpolation holds endpoint values
+outside that range, which is unvalidated extrapolation. It is an empirical
+stationary small-cone profile, not validation of intensity, arbitrary
+materials, direct sunlight, moving scans or temporal dropout correlation.
+The report's `calibrated: false` flag means the complete sensor model remains
+unvalidated even when a component is fitted. See the production
+[recording evaluator](../lhr_perception/README.md#recording-evaluation).
+
+## Motion and clutter studies
+
+MVS launch accepts `motion_distortion:=true` and `clutter_profile:=trackside`.
+Defaults remain false and `none` for comparisons with prior results.
+
+Motion scans cover the 100 ms ending at the cloud stamp. Ten chronological
+beam groups use interpolated recorded odometry, with yaw unwrapped across
+±π. Startup waits for a complete pose history. Points retain the sensor
+coordinates at acquisition time; downstream processing treats the whole
+cloud at its end stamp. This intentionally exposes the current detector's
+lack of per-point deskew. Groups approximate motion at 10 ms resolution;
+this is not exact per-point hardware timing. Clouds still contain XYZ only.
+
+Trackside clutter consists of reproducible 0.6 × 0.6 × 0.45 m solid boxes,
+placed 0.8 m outward from every eighth boundary cone. These generic objects
+produce actual surface returns and occlude farther cones and ground.
+Their markers appear on `/lhr/scene/clutter`; enable that topic in the
+Foxglove 3D panel to see them. Their positions never enter
+perception as cone labels. Material reflectivity is not modeled. Combine
+with `return_profile:=acceptance_overcast` to test the existing recording-
+informed cone dropout model; it is not a general weather simulation.
+
+Terrain remains flat and the 3 DOF car stays level. Uneven ground, vehicle
+roll/pitch, sensor vibration, sunlight interference and calibrated material
+intensity remain future work. These scenarios test robustness without
+claiming the unavailable car has been physically validated.

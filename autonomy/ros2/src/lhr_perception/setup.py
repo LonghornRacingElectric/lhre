@@ -21,6 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'lidar_cone_detector = lhr_perception.lidar_cone_detector:main',
+            'evaluate_recordings = lhr_perception.evaluate_recordings:main',
         ],
     },
 )

@@ -26,6 +26,7 @@ from launch.actions import (
 )
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from lhr_vehicle import load_vehicle
 
 
 def _find_world(context: LaunchContext):
@@ -165,14 +166,30 @@ def _launch_setup(context: LaunchContext):
                 'use_sim_time': True,
                 'max_range': 20.0,
                 'min_range': 0.8,
-                'ground_z_min': -0.40,
-                'ground_z_max': 0.5,
+                'ground_z_min': 0.05,
+                'ground_z_max': 0.55,
                 'cluster_radius': 0.5,
-                'min_cluster_points': 1,
-                'dedup_radius': 1.5,
+                'min_cluster_points': 3,
+                'dedup_radius': 0.6,
             }],
             output='screen',
         ))
+
+    # The cloud uses an explicit sensor frame. The mount comes from the same
+    # vehicle YAML that generates its pose in the SDF.
+    lidar_position = load_vehicle().lidar_position_m
+    lidar_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='lidar_mount_tf',
+        arguments=[
+            '--x', str(lidar_position[0]), '--y', str(lidar_position[1]),
+            '--z', str(lidar_position[2]), '--frame-id', 'base_link',
+            '--child-frame-id', 'lidar',
+        ],
+        parameters=[{'use_sim_time': True}],
+        output='screen',
+    )
 
     # ----- Track builder -----
     if perception == 'lidar':
@@ -216,6 +233,7 @@ def _launch_setup(context: LaunchContext):
             'max_accel': LaunchConfiguration('max_accel'),
             'max_decel': LaunchConfiguration('max_decel'),
             'use_sim_time': True,
+            'closed_path': perception != 'lidar',
         }],
         output='screen',
     )
@@ -264,6 +282,7 @@ def _launch_setup(context: LaunchContext):
         bridge,
         cmd_adapter,
         *perception_nodes,
+        lidar_tf,
         centerline,
         mission_mgr,
         control,

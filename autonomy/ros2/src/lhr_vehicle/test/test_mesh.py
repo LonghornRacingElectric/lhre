@@ -13,8 +13,8 @@ the file, and compare it against the numbers vehicle_viz actually uses to
 place it.
 """
 
-import struct
 from pathlib import Path
+import struct
 
 from lhr_vehicle import load_vehicle
 import pytest

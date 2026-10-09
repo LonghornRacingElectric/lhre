@@ -106,3 +106,8 @@ pull), `docker start` resumes the stale image, so run `docker compose up -d
 - Gazebo renders on CPU (llvmpipe), so expect 0.7-0.8x real-time factor. Fine for
   development; use a native Ubuntu box for anything performance-sensitive.
 - The image layers a scipy fix over `tiryoh/ros2-desktop-vnc:jazzy` (see Dockerfile).
+
+The container also mounts the repository read-only at `/opt/lhr` for the optional [BobSim plant](../src/lhr_sim_bobsim/README.md).
+Initialize the BobSim submodule before selecting `plant:=bobsim`. Recreate
+an existing container to pick up these mounts. BobSim needs pandas alongside
+the image's existing NumPy, SciPy and PyYAML runtime dependencies.

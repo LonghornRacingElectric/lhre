@@ -1,18 +1,21 @@
 """Launch the full MVS autonomy demo stack."""
 
+import math
 from pathlib import Path
 import subprocess
 import time
 
 from launch import LaunchDescription
 from launch.actions import (
-    DeclareLaunchArgument, EmitEvent, ExecuteProcess, RegisterEventHandler)
-from launch.conditions import IfCondition
+    DeclareLaunchArgument, EmitEvent, ExecuteProcess, OpaqueFunction, RegisterEventHandler)
+from launch.conditions import IfCondition, UnlessCondition
 from launch.event_handlers import OnProcessExit
 from launch.events import Shutdown
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+from lhr_trackgen.publish_cones import GENERATORS
+import numpy as np
 
 
 # Recorded when `record:=true`. An explicit list rather than --all: the
@@ -24,6 +27,8 @@ from launch_ros.parameter_descriptions import ParameterValue
 RECORDED_TOPICS = (
     # Without /clock a sim-time bag has no timeline a viewer can read.
     '/clock',
+    '/lhr/sim/provenance',
+    '/lhr/scene/clutter',
     '/tf',
     '/tf_static',
     # The perception contract: points in, detected cones out, with the
@@ -126,6 +131,36 @@ def _b(name: str):
     return _typed(name, bool)
 
 
+def _launch_sim(context):
+    """Spawn the LiDAR-mode car on the generated track, respecting manual mode."""
+    def value(name):
+        return LaunchConfiguration(name).perform(context)
+
+    x, y, yaw = (float(value(name)) for name in ('init_x', 'init_y', 'init_yaw'))
+    if value('perception') == 'lidar' and value('start_on_track') == 'true':
+        left, right = GENERATORS.get(value('track_style'), GENERATORS['autocross'])(
+            seed=int(value('seed')), num_waypoints=int(value('num_waypoints')),
+            radius_m=25.0, jitter_m=10.0, width_m=3.5, cone_spacing_m=2.0)
+        centers = (np.asarray(left) + np.asarray(right)) / 2.0
+        index = int(np.argmin(np.linalg.norm(centers - [x, y], axis=1)))
+        x, y = map(float, centers[index])
+        tangent = centers[(index + 1) % len(centers)] - centers[index - 1]
+        yaw = math.atan2(float(tangent[1]), float(tangent[0]))
+    plant = value('plant')
+    if plant not in ('kinematic', 'bobsim'):
+        raise ValueError('plant must be kinematic or bobsim')
+    extra = ({'max_accel': float(value('max_accel')),
+              'max_decel': float(value('max_decel'))} if plant == 'bobsim' else {})
+    simulator = Node(
+        package='lhr_sim_' + plant, executable='sim_node', name='sim_' + plant,
+        parameters=[{'publish_clock': value('use_sim_time') == 'true',
+                     'init_x': x, 'init_y': y, 'init_yaw': yaw, **extra}],
+        output='screen')
+    return [simulator, RegisterEventHandler(OnProcessExit(
+        target_action=simulator,
+        on_exit=[EmitEvent(event=Shutdown(reason='Vehicle plant exited'))]))]
+
+
 def generate_launch_description():
     # ----- Launch arguments -----
     seed_arg = DeclareLaunchArgument('seed', default_value='1')
@@ -160,7 +195,11 @@ def generate_launch_description():
     # Speed planning
     a_lat_arg = DeclareLaunchArgument('a_lat_max', default_value='6.0')
     v_min_arg = DeclareLaunchArgument('v_min', default_value='2.0')
-    v_max_arg = DeclareLaunchArgument('v_max', default_value='12.0')
+    v_max_arg = DeclareLaunchArgument(
+        'v_max', default_value=PythonExpression([
+            "'4.0' if '", LaunchConfiguration('perception'),
+            "' == 'lidar' else '12.0'"]),
+        description='Speed ceiling: 4 m/s for LiDAR preview, 12 m/s for sim')
     max_accel_arg = DeclareLaunchArgument('max_accel', default_value='2.0')
     max_decel_arg = DeclareLaunchArgument('max_decel', default_value='3.0')
 
@@ -179,6 +218,10 @@ def generate_launch_description():
     init_x_arg = DeclareLaunchArgument('init_x', default_value='25.0')
     init_y_arg = DeclareLaunchArgument('init_y', default_value='0.0')
     init_yaw_arg = DeclareLaunchArgument('init_yaw', default_value='1.5708')
+    start_on_track_arg = DeclareLaunchArgument(
+        'start_on_track', default_value='true', choices=['true', 'false'],
+        description='In LiDAR mode, spawn at the nearest generated-track '
+                    'center and tangent; false uses the exact init pose')
 
     # Recording and viewing
     # The default run id is shared by the metrics row and the bag
@@ -217,6 +260,10 @@ def generate_launch_description():
                     'and cylinders, which need no asset server and so '
                     'still render when replaying a bag')
 
+    perception_arg = DeclareLaunchArgument(
+        'perception', default_value='sim', choices=['sim', 'lidar'],
+        description='Cone source: simplified sensor sim or LiDAR detector')
+
     # Synthetic Mid-360. Off by default: the cheat-mode sensor sim is
     # what the gate's numbers were measured against, and swapping the
     # perception front end silently would make those numbers lie.
@@ -228,10 +275,14 @@ def generate_launch_description():
         'mount_pitch_rad', default_value='0.0',
         description='Mid-360 mount pitch, positive is nose down. The '
                     'mount study has not settled this yet')
+    return_profile_arg = DeclareLaunchArgument(
+        'return_profile', default_value='baseline',
+        choices=['baseline', 'acceptance_overcast'],
+        description='Small-cone return density: baseline or recorded overcast acceptance fit')
     lidar_profile_arg = DeclareLaunchArgument(
-        'elevation_profile', default_value='rosette',
-        description="Beam density model: 'rosette' or 'uniform'. Run a "
-                    'study both ways to see if it depends on the guess')
+        'elevation_profile', default_value='livox',
+        description="Beam pattern: 'livox' vendor table (default), "
+                    "or legacy synthetic 'rosette'/'uniform' studies")
 
     # Mission manager
     mission_arg = DeclareLaunchArgument(
@@ -245,10 +296,33 @@ def generate_launch_description():
         'ready_hold_sec', default_value='5.0',
         description='Seconds to hold in READY before auto-go')
 
+    gates_arg = DeclareLaunchArgument(
+        'start_finish_cones', default_value='false',
+        description='Add nominal large orange start/finish gate cones')
+    stack_arg = DeclareLaunchArgument(
+        'stack_window_sec', default_value='0.5',
+        description='Scan-time compensated cloud history in seconds; 0 disables stacking')
+    cluster_arg = DeclareLaunchArgument(
+        'min_cluster_points', default_value='3',
+        description='Independent points required in a stacked cone cluster')
+    ground_arg = DeclareLaunchArgument(
+        'ground_z_min', default_value='0.05',
+        description='Flat-ground height cutoff in base_link, metres')
+
     # Declared and recorded off the same list on purpose. Keeping two
     # lists meant a new argument reached the nodes but never reached the
     # bag, so the recording claimed to describe a run it could not.
     launch_args = [
+        DeclareLaunchArgument('motion_distortion', default_value='false'),
+        DeclareLaunchArgument('clutter_profile', default_value='none',
+                              choices=['none', 'trackside']),
+        DeclareLaunchArgument(
+            'plant', default_value='kinematic', choices=['kinematic', 'bobsim']),
+        perception_arg,
+        gates_arg,
+        stack_arg,
+        cluster_arg,
+        ground_arg,
         seed_arg,
         lookahead_arg,
         metrics_arg,
@@ -270,6 +344,7 @@ def generate_launch_description():
         init_x_arg,
         init_y_arg,
         init_yaw_arg,
+        start_on_track_arg,
         mission_arg,
         auto_go_arg,
         ready_hold_arg,
@@ -282,6 +357,7 @@ def generate_launch_description():
         lidar_arg,
         lidar_pitch_arg,
         lidar_profile_arg,
+        return_profile_arg,
     ]
 
     # ----- Nodes -----
@@ -303,11 +379,19 @@ def generate_launch_description():
         parameters=[{
             'use_sim_time': _b('use_sim_time'),
             'seed': _i('seed'),
+            'start_finish_cones': _b('start_finish_cones'),
             'track_style': _s('track_style'),
             'num_waypoints': _i('num_waypoints'),
         }],
         output='screen',
     )
+
+    lidar_perception = PythonExpression([
+        "'", LaunchConfiguration('perception'), "' == 'lidar'"])
+
+    lidar_enabled = PythonExpression([
+        "'", LaunchConfiguration('lidar'), "'.lower() == 'true' or '",
+        LaunchConfiguration('perception'), "' == 'lidar'"])
 
     sensor_sim = Node(
         package='lhr_sensor_sim',
@@ -322,6 +406,7 @@ def generate_launch_description():
             'seed': _i('seed'),
         }],
         output='screen',
+        condition=UnlessCondition(lidar_perception),
     )
 
     centerline = Node(
@@ -330,22 +415,14 @@ def generate_launch_description():
         name='track_builder',
         parameters=[{
             'use_sim_time': _b('use_sim_time'),
+            'pairing_strategy': ParameterValue(PythonExpression([
+                "'boundary' if '", LaunchConfiguration('perception'),
+                "' == 'lidar' else 'index'"]), value_type=str),
         }],
         output='screen',
     )
 
-    sim = Node(
-        package='lhr_sim_kinematic',
-        executable='sim_node',
-        name='sim_kinematic',
-        parameters=[{
-            'publish_clock': _b('use_sim_time'),
-            'init_x': _f('init_x'),
-            'init_y': _f('init_y'),
-            'init_yaw': _f('init_yaw'),
-        }],
-        output='screen',
-    )
+    sim = OpaqueFunction(function=_launch_sim)
 
     control = Node(
         package='lhr_control',
@@ -353,6 +430,8 @@ def generate_launch_description():
         name='pure_pursuit',
         parameters=[{
             'use_sim_time': _b('use_sim_time'),
+            'closed_path': ParameterValue(PythonExpression([
+                "'", LaunchConfiguration('perception'), "' != 'lidar'"]), value_type=bool),
             'lookahead_dist': _f('lookahead_dist'),
             'a_lat_max': _f('a_lat_max'),
             'v_min': _f('v_min'),
@@ -378,6 +457,19 @@ def generate_launch_description():
             'track_style': _s('track_style'),
             'num_waypoints': _i('num_waypoints'),
             'mission': _s('mission'),
+            'perception': _s('perception'),
+            'start_finish_cones': _b('start_finish_cones'),
+            'stack_window_sec': _f('stack_window_sec'),
+            'min_cluster_points': _i('min_cluster_points'),
+            'ground_z_min': _f('ground_z_min'),
+            'start_on_track': _b('start_on_track'),
+            'lidar': ParameterValue(lidar_enabled, value_type=bool),
+            'mount_pitch_rad': _f('mount_pitch_rad'),
+            'elevation_profile': _s('elevation_profile'),
+            'return_profile': _s('return_profile'),
+            'motion_distortion': _b('motion_distortion'),
+            'clutter_profile': _s('clutter_profile'),
+            'plant': _s('plant'),
             'fov_deg': _f('fov_deg'),
             'max_range_m': _f('max_range_m'),
             'noise_std_m': _f('noise_std_m'),
@@ -415,9 +507,27 @@ def generate_launch_description():
             'seed': _i('seed'),
             'mount_pitch_rad': _f('mount_pitch_rad'),
             'elevation_profile': _s('elevation_profile'),
+            'return_profile': _s('return_profile'),
+            'motion_distortion': _b('motion_distortion'),
+            'clutter_profile': _s('clutter_profile'),
         }],
         output='screen',
-        condition=IfCondition(LaunchConfiguration('lidar')),
+        condition=IfCondition(lidar_enabled),
+    )
+
+    detector = Node(
+        package='lhr_perception',
+        executable='lidar_cone_detector',
+        name='lidar_cone_detector',
+        parameters=[{
+            'use_sim_time': _b('use_sim_time'),
+            'max_range': _f('max_range_m'),
+            'stack_window_sec': _f('stack_window_sec'),
+            'min_cluster_points': _i('min_cluster_points'),
+            'ground_z_min': _f('ground_z_min'),
+        }],
+        output='screen',
+        condition=IfCondition(lidar_perception),
     )
 
     def recorder(sim_time: bool) -> ExecuteProcess:
@@ -488,6 +598,7 @@ def generate_launch_description():
         control,
         metrics,
         lidar_sim,
+        detector,
         recorder(sim_time=True),
         recorder(sim_time=False),
         foxglove_bridge,

@@ -53,3 +53,7 @@ One surprise worth knowing: the false-negative draw happens per tick, not
 per cone, so at 10 Hz a cone rejected once is usually detected within a
 second. The parameter models a transient miss, not a cone the stack never
 sees.
+
+Cone triangle vertices and stripe colors are preserved in detections and
+visualization. The simplified sensor copies each scene marker before adding
+position noise, so it cannot alter the ground-truth scene positions.

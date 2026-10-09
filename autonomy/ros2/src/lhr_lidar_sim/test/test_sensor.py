@@ -56,9 +56,9 @@ def test_frame_returns_only_returns_not_every_beam():
 
 
 def test_labels_line_up_with_points():
-    cones = np.array([[6.0, 0.0]])
+    cones = np.array([[MountPose().x_m + 6.0, 0.0]])
     sensor = Mid360Sensor(config=NO_NOISE, mount=MountPose(), seed=1)
-    points, on_cone = sensor.frame_labeled(0.0, 0.0, 0.0, 0.0, cones)
+    points, on_cone = sensor.frame_labeled(0.1, 0.0, 0.0, 0.0, cones)
     assert on_cone.shape[0] == points.shape[0]
     assert on_cone.any(), 'a cone 6 m ahead should produce some returns'
 
@@ -82,7 +82,7 @@ def test_cone_returns_sit_within_the_cone_height():
     cones = np.array([[1.8 + 6.0, 0.0]])
     mount = MountPose()
     sensor = Mid360Sensor(config=NO_NOISE, mount=mount, seed=1)
-    points, on_cone = sensor.frame_labeled(0.0, 0.0, 0.0, 0.0, cones)
+    points, on_cone = sensor.frame_labeled(0.1, 0.0, 0.0, 0.0, cones)
 
     world = points[on_cone] @ mount.rotation().T
     world[:, 2] += mount.z_m
@@ -98,11 +98,11 @@ def test_vehicle_yaw_carries_the_sensor_around():
     sensor = Mid360Sensor(config=NO_NOISE, mount=mount, seed=1)
 
     ahead = np.array([[mount.x_m + 6.0, 0.0]])
-    _, straight = sensor.frame_labeled(0.0, 0.0, 0.0, 0.0, ahead)
+    _, straight = sensor.frame_labeled(0.1, 0.0, 0.0, 0.0, ahead)
 
     left = np.array([[0.0, mount.x_m + 6.0]])
     _, yawed = sensor.frame_labeled(
-        0.0, 0.0, 0.0, math.radians(90.0), left)
+        0.1, 0.0, 0.0, math.radians(90.0), left)
 
     assert straight.sum() > 0
     assert yawed.sum() > 0
@@ -111,22 +111,20 @@ def test_vehicle_yaw_carries_the_sensor_around():
 
 
 def test_returns_per_cone_fall_off_with_range():
-    # The robust result across elevation profiles: a cone at range
-    # gives very few returns. The absolute numbers are what bound
-    # detection range, so the ordering is asserted, not the values.
+    # Accumulate a complete vendor table so individual scan gaps do not
+    # masquerade as changes in detection range.
     sensor = Mid360Sensor(config=NO_NOISE, mount=MountPose(), seed=1)
-    near = points_on_cone(sensor, 0.0, 5.0, frames=10)
-    mid = points_on_cone(sensor, 0.0, 10.0, frames=10)
-    far = points_on_cone(sensor, 0.0, 20.0, frames=10)
+    near = points_on_cone(sensor, 0.0, 6.0, frames=40)
+    mid = points_on_cone(sensor, 0.0, 10.0, frames=40)
+    far = points_on_cone(sensor, 0.0, 20.0, frames=40)
     assert near > mid > far > 0
 
 
-def test_a_cone_at_range_gives_only_a_handful_of_returns_per_frame():
-    # Guards the finding the mount study rests on. If a refactor ever
-    # makes this large, the model has started inventing returns.
+def test_single_frame_scan_gap_does_not_imply_an_invisible_cone():
     sensor = Mid360Sensor(config=NO_NOISE, mount=MountPose(), seed=1)
-    per_second = points_on_cone(sensor, 0.0, 10.0, frames=10)
-    assert 5 <= per_second <= 60
+    assert points_on_cone(sensor, 0.0, 6.0) == 0
+    assert points_on_cone(sensor, 0.1, 6.0) > 0
+    assert points_on_cone(sensor, 0.0, 6.0, frames=40) > 0
 
 
 def test_nothing_beyond_max_range_comes_back():
@@ -134,3 +132,19 @@ def test_nothing_beyond_max_range_comes_back():
     sensor = Mid360Sensor(config=cfg, mount=MountPose(), seed=1)
     points = sensor.frame(0.0, 0.0, 0.0, 0.0, np.empty((0, 2)))
     assert np.all(np.linalg.norm(points, axis=1) <= 8.0 + 1e-9)
+
+
+def test_motion_scan_uses_acquisition_pose_without_end_frame_deskew():
+    sensor = Mid360Sensor(config=Mid360Config(range_noise_std_m=0.))
+    poses = np.zeros((10, 3))
+    stationary, _ = sensor.frame_labeled(0., 0., 0., 0., np.empty((0, 2)), poses=poses)
+    frozen, _ = sensor.frame_labeled(0., 0., 0., 0., np.empty((0, 2)))
+    assert stationary == pytest.approx(frozen)
+    # A world wall shifts in native sensor coordinates as the car advances.
+    poses[:, 0] = np.linspace(0., .8, 10)
+    boxes = np.array([[6., -10., 0., 6.5, 10., 3.]])
+    moving, _ = sensor.frame_labeled(0., .8, 0., 0., np.empty((0, 2)), boxes=boxes, poses=poses)
+    wall = moving[(moving[:, 0] > 3.3) & (moving[:, 0] < 4.21)
+                  & (moving[:, 2] > -.5) & (moving[:, 2] < 2.)]
+    assert len(wall) > 10
+    assert np.ptp(wall[:, 0]) > .5
