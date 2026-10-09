@@ -37,6 +37,8 @@ make test    # check that BobSim loads //vehicle
 | `make records` | Write `vehicle/vehicle.yml` into BobLib's Modelica records |
 | `make records-undo` | Put back only the files `make records` wrote |
 | `make bobsim T=<target>` | Run a BobSim make target. `T=help` lists them. |
+| `make fmu` | Build `vehicle/vehicle.yml` into a VehicleSim FMU at `out/fmu/VehicleSim.fmu`, with `provenance.json`. Runs `make records` and `make records-undo` for you. About 25 min. |
+| `make realtime-bench` | Time 50 Hz stepping of the FMU and the `dyn_py` models. Writes `out/realtime-bench/`. Run `make fmu` first. `ARGS=--skip-fmu` skips the FMU. |
 | `make study S=<name>` | Run `studies/<name>/run.py`. If it succeeds, write outputs to `out/<name>/`. `STUDY_WORKERS=n` limits the CPUs for parallel cases. `ARGS=... V=<name>` runs a variant to `out/<name>--<V>/`. |
 | `make bump-bobsim REF=<ref>` | Move the BobSim pin to a commit, tag or branch |
 | `make clean` | Delete `out/` |

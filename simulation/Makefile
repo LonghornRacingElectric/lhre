@@ -10,7 +10,7 @@ STUDY_OUT = $(S)$(if $(V),--$(V))
 
 GIT_LF := git -c core.autocrlf=false -c core.longpaths=true
 
-.PHONY: help init build shell test records records-undo bobsim study bump-bobsim clean
+.PHONY: help init build shell test records records-undo bobsim fmu realtime-bench study bump-bobsim clean
 
 help:
 	@echo "make init                  Get submodules and build the image"
@@ -20,6 +20,8 @@ help:
 	@echo "make records               Write //vehicle into BobLib's Modelica records"
 	@echo "make records-undo          Put back only the files make records wrote"
 	@echo "make bobsim T=<target>     Run a BobSim make target"
+	@echo "make fmu                   Build //vehicle as a VehicleSim FMU in out/fmu/"
+	@echo "make realtime-bench        Time closed-loop stepping of the FMU and dyn_py"
 	@echo "make study S=<name>        Run studies/<name>/run.py (STUDY_WORKERS=n limits CPUs)"
 	@echo "make bump-bobsim REF=<ref> Move the BobSim pin"
 	@echo "make clean                 Delete out/"
@@ -61,6 +63,20 @@ records-undo:
 bobsim:
 	@test -n "$(T)" || { echo "Set T=<bobsim target>. Run 'make bobsim T=help' to list them."; exit 1; }
 	$(RUN) sim make -C bobsim $(T)
+
+FMU_BUILD := bobsim/_3_StandardSim/BuildBobLib/VehicleFMU/VehicleSim.fmu
+
+fmu:
+	$(MAKE) records
+	$(RUN) sim make -C bobsim standard-build-fmu; status=$$?; $(MAKE) records-undo; exit $$status
+	mkdir -p out/fmu && cp $(FMU_BUILD) out/fmu/VehicleSim.fmu
+	$(RUN) -e STUDY=fmu -e OUT_DIR=out/fmu -e BOBSIM_SHA=$(BOBSIM_SHA) sim python tools/provenance.py
+
+realtime-bench:
+	@test -f out/fmu/VehicleSim.fmu || { echo "Run 'make fmu' first."; exit 1; }
+	$(RUN) sim python -m _3_StandardSim.RealtimeBench.realtime_bench \
+		--vehicle /lhre/vehicle/vehicle.yml --fmu /lhre/simulation/out/fmu/VehicleSim.fmu \
+		--output /lhre/simulation/out/realtime-bench/realtime_bench.json $(ARGS)
 
 study:
 	@test -n "$(S)" || { echo "Set S=<study name>."; exit 1; }
