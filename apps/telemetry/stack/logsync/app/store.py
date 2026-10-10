@@ -55,6 +55,7 @@ class Store:
             attempts=d.get("attempts", 0),
             error=d.get("error"),
             last_motion=d.get("last_motion"),
+            deletions=d.get("deletions", []),
         )
 
     def upsert(self, job: Job) -> None:

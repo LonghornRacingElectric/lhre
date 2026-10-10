@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 from .config import config
 from .models import FileProgress, Job, JobState, RemoteFile
 from .motion import MotionMonitor
+from .pi import delete_verified
 from .rsync import RSYNC_OK_CODES, RSYNC_TRANSIENT_CODES, Progress, RsyncRun, build_cmd
 from .store import Store
 
@@ -251,6 +252,29 @@ class JobManager:
             except Exception as e:  # never let one job kill the worker
                 job.error = f"worker error: {e}"
                 self._set_state(job, JobState.FAILED)
+            # Only a job that just completed: failed, canceled and paused ones
+            # leave the car untouched.
+            if job.state == JobState.COMPLETED and config.delete_after_sync:
+                await self._delete_synced(job)
+
+    async def _delete_synced(self, job: Job) -> None:
+        """Optional post-sync step (LOGSYNC_DELETE_AFTER_SYNC): remove from the
+        car the files this job holds a verified copy of, and record the outcome
+        per file in ``job.deletions``. The job stays COMPLETED whatever happens
+        here; a problem is only reported in ``job.error``."""
+        try:
+            job.deletions = await delete_verified(
+                {f.name: self.file_path(f.name) for f in job.files}
+            )
+            failed = [d for d in job.deletions if d["action"] == "failed"]
+            if failed:
+                job.error = (
+                    f"sync complete, but {len(failed)} file(s) could not be deleted "
+                    f"from the car: {failed[0]['reason']}"
+                )
+        except Exception as e:
+            job.error = f"sync complete, but delete-from-car failed: {e}"
+        self._persist(job)
 
     def _update_local_progress(self, job: Job) -> None:
         total = 0
