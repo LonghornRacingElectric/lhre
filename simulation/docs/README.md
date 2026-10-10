@@ -19,3 +19,5 @@ skill before they start. People can follow them too.
 | [run-bobsim-target](skills/run-bobsim-target/SKILL.md) | Run a BobSim evaluation, envelope or sweep |
 | [edit-vehicle](skills/edit-vehicle/SKILL.md) | Change a parameter in `vehicle/vehicle.yml` |
 | [bump-bobsim](skills/bump-bobsim/SKILL.md) | Move the BobSim submodule to a new commit |
+| [bobsim-boundary](skills/bobsim-boundary/SKILL.md) | Keep lhre code apart from BobSim and work across the line |
+| [orchestrate-subagents](skills/orchestrate-subagents/SKILL.md) | Plan and run study work as a team of subagents |
