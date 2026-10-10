@@ -54,6 +54,10 @@ nav:
       - ROS 2 Workspace: autonomy/ros2/README.md
       - Docker (macOS): autonomy/ros2/docker/README.md
       - Vehicle Parameters: autonomy/ros2/src/lhr_vehicle/README.md
+      - State Estimation: autonomy/ros2/src/lhr_state_estimation/README.md
+      - LiDAR Perception: autonomy/ros2/src/lhr_perception/README.md
+      - Track Builder: autonomy/ros2/src/lhr_track_builder/README.md
+      - Gazebo Simulation: autonomy/ros2/src/lhr_gazebo/README.md
       - Plans:
           - Overview: autonomy/docs/plans/README.md
           - Retrofit Roadmap 2026-27: autonomy/docs/plans/retrofit-roadmap-2026-27.md

@@ -12,8 +12,7 @@ here. Do not add `BUILD.bazel` files.
   ([GETTING-STARTED](ros2/GETTING-STARTED.md)). macOS uses the Docker image
   ([ros2/docker](ros2/docker/README.md)). No WSL.
 - Build: `cd ros2 && ./scripts/build.sh` (colcon). Test: `colcon test`
-  from `ros2/` (ament lint only today; functional tests are open work for
-  the Sim & Test Infra lane).
+  from `ros2/` (ament lint plus unit and generated-track regression tests).
 - CI: `.github/workflows/autonomy.yml` at the repo root runs the same
   build and `colcon test` on every PR that touches `autonomy/`. Not a
   required check. PRs that touch only `autonomy/` skip the Bazel jobs in

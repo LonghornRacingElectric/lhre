@@ -7,29 +7,31 @@ Replace the kinematic vehicle simulator (`lhr_sim_kinematic`) with a full Gazebo
 ## Current Status
 
 **Phase 1 (Gazebo physics):** Complete.
-**Phase 2 (LiDAR perception):** Functional on the oval track. Unreliable on autocross tracks.
+**Phase 2 (LiDAR perception):** Timestamp-aligned mapping and one-to-one pairing are implemented. Generated-track regressions pass, but a live Gazebo autocross run left the course after the geometry-only classifier locked incorrect side labels.
 **Phase 3 (Camera fusion + tuning):** Not started. See [camera-fusion.md](camera-fusion.md) for detailed plan.
 
 ## What Works Today
 
 - Gazebo physics sim with direct joint control (no AckermannSteering plugin)
 - Sim perception mode (`perception:=sim`) — ground-truth cones, index pairing, fully reliable
-- LiDAR perception mode (`perception:=lidar`) — pointcloud clustering, Delaunay boundary pairing
+- LiDAR perception mode (`perception:=lidar`) — pointcloud clustering, geometry-inferred sides, one-to-one pairing
 - Oval track (`track_style:=oval`) — LiDAR pipeline completes laps reliably
 - `OpaqueFunction`-based launch file auto-resolves world SDF from `track_style` + `seed`
 - RViz runs alongside Gazebo with centerline, cones, and odometry visualization
 
 ## Known Issues
 
-1. **Cone duplication during swerves** — when the car turns sharply, odom-based sensor→map transform jitter places the same cone at slightly different positions, exceeding the 1.5m dedup radius. Duplicated cones corrupt the Delaunay triangulation and produce spurious centerline points.
+1. **Residual cone-map drift** — timestamp-aligned transforms and one-to-one scan association remove the known sharp-turn duplication mechanism. EKF drift can still move the persistent map and needs visual and on-car validation.
 
-2. **Centerline unreliable on tight corners** — the Delaunay boundary pairing produces valid midpoints, but the greedy nearest-neighbor chaining can misoreder them on sharp curves where midpoints cluster close together.
+2. **Sparse-map side labels** — the live LiDAR scan contained fewer cones than the generated-track tests assumed. The initial Delaunay graph connected a right-boundary fragment to the left, and immutable labels preserved the mistake. One-to-one pairing cannot correct a wrong side label.
 
-3. **No left/right cone classification** — the LiDAR has no color information. The Delaunay approach sidesteps this but is fundamentally less robust than knowing which side each cone is on. A camera would solve this.
+3. **Path continuity** — greedy midpoint ordering can still make gaps or run out of path on a partial map. The controller needs a defined response when no safe continuation is available.
 
-4. **Backwards path wrapping** — the chain starts from the vehicle and goes forward, then wraps backwards through midpoints behind the vehicle. Cosmetic only (pure pursuit ignores the backwards portion) but messy in RViz.
+4. **No measured cone colour** — LiDAR infers the track side from vehicle-relative observations and boundary continuity. A camera is still needed to measure blue/yellow colour and independently validate the inference.
 
-5. **Cone collisions disabled** — cones are ghost objects. The car drives through them instead of being penalized.
+5. **Backwards path wrapping** — the chain starts from the vehicle and goes forward, then wraps backwards through midpoints behind the vehicle. Cosmetic only (pure pursuit ignores the backwards portion) but messy in RViz.
+
+6. **Cone collisions disabled** — cones are ghost objects. The car drives through them instead of being penalized.
 
 ---
 
@@ -43,7 +45,7 @@ Goal: make LiDAR perception reliable enough to complete autocross laps.
 
 **File:** `lhr_perception/lidar_cone_detector.py`
 
-The current dedup uses a fixed 1.5m radius with running-average position merging. During swerves, transform error can exceed this. Options:
+The detector now interpolates odometry at the pointcloud timestamp and performs nearest one-to-one association per scan. The remaining dedup uses a fixed 1.5m radius with running-average position merging. During swerves, residual localization or measurement error can exceed this. Options:
 - Gate new cone additions on vehicle angular velocity (skip detections during rapid yaw change)
 - Use a larger dedup radius (up to ~1.8m, limited by same-side cone spacing)
 - Weight running average by distance from sensor (closer = more accurate = higher weight)
@@ -52,7 +54,7 @@ The current dedup uses a fixed 1.5m radius with running-average position merging
 
 **File:** `lhr_track_builder/track_builder_node.py`
 
-The greedy nearest-neighbor chain produces poor results when midpoints are clustered. Options:
+When side labels are correct, minimum-cost one-to-one pairing removes duplicated midpoint candidates. Live validation has already shown wrong labels and an unsafe partial path. Rework side inference with reversible labels or measured colour, then evaluate ordering on partial maps. Possible continuity constraints include:
 - Add a maximum step distance to the chain (skip midpoints that are too far from the last chained point)
 - Use angular continuity — prefer the next point that continues roughly in the same direction
 - Only chain midpoints within a forward arc of the vehicle (ignore midpoints behind)
@@ -81,13 +83,14 @@ Add a forward-facing camera to the chassis link (near the LiDAR mount). Bridge t
 - Classify as blue (left) or yellow (right)
 - Publish classified MarkerArray with `left_cones`/`right_cones` namespaces
 
-This restores proper left/right classification, allowing the track builder to use simpler and more reliable pairing strategies (index or nearest-neighbor) instead of Delaunay.
+Measured colours would give the existing one-to-one pairing strategy more
+reliable left/right inputs than geometry alone.
 
 #### 3.3 — Update track builder for fused perception
 
 **File:** `lhr_track_builder/track_builder_node.py`
 
-With camera-classified cones, add a `'fused'` pairing strategy (or reuse `'nearest'`) that pairs left/right cones with confidence. Fall back to `'boundary'` for unclassified cones.
+With camera-classified cones, use the existing one-to-one `'classified'` pairing strategy with measured sides and confidence. Fall back to `'boundary'` for unclassified cones.
 
 ### Phase 4 — Fidelity Tuning
 
@@ -98,7 +101,7 @@ Goal: make the simulation match the real car closely enough for control paramete
 - Add sensor noise models (LiDAR range noise, camera exposure variation)
 - Test at competition speeds (up to 15 m/s)
 - Validate against real car telemetry data
-- Add IMU-based state estimation (replace ground-truth odometry)
+- Add GNSS correction and validate the existing IMU/wheel-speed EKF against car data
 
 ---
 
@@ -108,16 +111,16 @@ Goal: make the simulation match the real car closely enough for control paramete
 PHASE 1 (perception:=sim)            PHASE 2 (perception:=lidar)
 ─────────────────────────            ──────────────────────────
 lhr_trackgen (ground-truth cones)    Gazebo gpu_lidar sensor
-lhr_sensor_sim (FOV filter)          lhr_perception (pointcloud → unclassified cones)
+lhr_sensor_sim (FOV filter)          lhr_perception (pointcloud → inferred track sides)
 Gazebo physics (joint control)       Gazebo physics (joint control)
 
-lhr_track_builder (index pairing)    lhr_track_builder (Delaunay boundary pairing)
+lhr_track_builder (index pairing)    lhr_track_builder (one-to-one classified pairing)
 lhr_control                      →   STAYS (pure pursuit + curvature speed planning)
 lhr_mission_manager              →   STAYS (FSAE state machine)
 lhr_metrics                      →   STAYS (CTE, lap detection, CSV output)
 ```
 
-Future Phase 3 adds a camera branch feeding into `lhr_perception` for color classification, enabling the track builder to switch back to left/right pairing.
+Future Phase 3 adds a camera branch feeding into `lhr_perception` so measured cone colour can confirm or replace geometry-inferred sides.
 
 ## Implemented Components
 
@@ -203,7 +206,8 @@ ros2/src/lhr_gazebo/
 ros2/src/lhr_perception/
 ├── lhr_perception/
 │   ├── __init__.py
-│   └── lidar_cone_detector.py      (PointCloud2 → unclassified MarkerArray)
+│   ├── cone_side_classifier.py     (geometry-based side inference)
+│   └── lidar_cone_detector.py      (PointCloud2 → classified MarkerArray)
 ├── package.xml
 ├── setup.py
 └── setup.cfg
@@ -214,8 +218,8 @@ ros2/src/lhr_perception/
 1. **AckermannSteering plugin is too sluggish** — direct joint control gives near-instant response.
 2. **Gazebo Harmonic LiDAR topic** is `/lidar/points/points` (not `/lidar/points`) for PointCloud2.
 3. **LiDAR self-detection** — 360° LiDAR hits the car body. Requires vehicle exclusion zone filter in sensor frame.
-4. **Left/right classification by sensor-frame lateral position fails on curves** — both track boundaries appear on the same side of the sensor. Delaunay boundary pairing avoids this but camera fusion is the proper fix.
-5. **Cone duplication during swerves** — odom-based transform jitter places the same cone at multiple positions. Larger dedup radius + running average helps but doesn't eliminate it.
-6. **Greedy nearest-neighbor chaining** produces poor path ordering when midpoints cluster on tight curves.
+4. **A single sensor-frame side check fails on curves** — accumulated local votes plus boundary continuity are required when both boundaries briefly appear on the same side of the sensor.
+5. **Cone duplication during swerves** came from timestamp-mismatched transforms and many-to-one scan association; timestamp interpolation and one-to-one association address both causes.
+6. **Many Delaunay width edges create midpoint branches** even with good detections. Side inference plus one-to-one cross-track assignment removes those branches.
 7. **Vehicle spawn position matters** — spawn on the straightest section to avoid loop closure artifacts.
 8. **`symlink-install` doesn't always update** Python files. When in doubt: `rm -rf build/<pkg> install/<pkg>`.

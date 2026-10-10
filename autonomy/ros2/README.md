@@ -11,14 +11,15 @@ Colcon workspace for LHR driverless / autonomy nodes. This file is the **referen
 | Package | Description |
 |---------|-------------|
 | `lhr_trackgen` | Publishes a synthetic cone track (`/lhr/track/cones`) and cone IDs (left: 0..N-1, right: 10000..10000+N-1) |
-| `lhr_sensor_sim` | FOV-limited sensor simulation — filters cones by vehicle pose, accumulates detections |
-| `lhr_track_builder` | Subscribes to cones, pairs left/right by ID, publishes centerline path (`/lhr/track/centerline`) |
+| `lhr_sensor_sim` | FOV-limited sensor simulation — filters cones by vehicle pose, accumulates detections. `inertial_sim` does the same job for the IMU and wheel speeds |
+| `lhr_track_builder` | Builds the centerline from indexed simulation cones or one-to-one classified LiDAR cone pairs |
 | `lhr_sim_kinematic` | Kinematic bicycle-model vehicle simulator (lightweight, no Gazebo needed) |
 | `lhr_control` | Pure pursuit path-following controller with curvature-adaptive lookahead and speed planning |
 | `lhr_mission_manager` | FSAE driverless state machine (Off → Ready → Driving → Finished → Emergency) |
 | `lhr_metrics` | Cross-track error, off-track count, and lap detection (CSV output) |
 | `lhr_gazebo` | Gazebo Harmonic physics simulation — vehicle with direct joint control, ground-truth odometry, LiDAR sensor, RViz integration |
-| `lhr_perception` | LiDAR-based cone detection — pointcloud clustering, persistent mapping (unclassified cones, no left/right split). Functional on oval track; path quality needs tuning on complex tracks. |
+| `lhr_perception` | LiDAR pointcloud clustering, timestamp-aligned persistent mapping, and geometry-based track-side inference |
+| `lhr_state_estimation` | EKF fusing IMU and wheel speeds into `/lhr/vehicle/odom` + `map → base_link`, replacing ground-truth odometry. See [its README](src/lhr_state_estimation/README.md) |
 | `lhr_demo` | Launch file that starts the full kinematic stack in one command |
 | `lhr_vehicle` | Orion's physical parameters (`config/vehicle.yaml`) and their loader — the single source for wheelbase, track, steering limits, masses and sensor mounts. See [its README](src/lhr_vehicle/README.md) |
 
@@ -43,7 +44,28 @@ flowchart LR
 ```
 
 `sensor_sim` needs odometry to place the FOV; `mission_manager` watches the
-centerline to leave `OFF`. Viz-only topics (`/lhr/sensor/cones_viz`,
+centerline to leave `OFF`.
+
+### Estimated odometry (`estimator:=ekf`)
+
+Both demos take `estimator:=truth|ekf`. `truth` is the default and is the
+flow drawn above. Under `ekf` the simulator's ground truth is remapped out
+of the way and the EKF takes over the topic and the transform the rest of
+the stack already reads — nothing downstream is reconfigured:
+
+```mermaid
+flowchart LR
+    sim["simulator"] -- "/lhr/vehicle/odom_truth" --> inertial["inertial_sim<br>(noise, bias, scale error)"]
+    sim -- "/lhr/vehicle/odom_truth" --> metrics["metrics_node<br>(scores the estimate)"]
+    inertial -- "/lhr/imu/data" --> ekf["ekf_node"]
+    inertial -- "/lhr/sensor/wheel_speeds" --> ekf
+    ekf -- "/lhr/vehicle/odom + TF" --> upper["track_builder · pure_pursuit<br>mission_manager · metrics"]
+```
+
+In Gazebo the IMU is the bridged physics sensor rather than a synthesized
+one, so `inertial_sim` only supplies wheel speeds there. Details and the
+measured drift figures are in
+[`lhr_state_estimation`](src/lhr_state_estimation/README.md). Viz-only topics (`/lhr/sensor/cones_viz`,
 `/lhr/sensor/fov_viz`, `/lhr/track/centerline_markers`, `/lhr/control/lookahead`)
 and `/lhr/debug/*` are omitted — full list under [Topics](#topics).
 
@@ -68,8 +90,8 @@ flowchart LR
 ```
 
 `mission_manager` and `metrics_node` subscribe exactly as in the kinematic
-diagram (omitted here). The IMU is bridged to `/lhr/imu/data` but nothing
-consumes it yet — it is there for future state estimation.
+diagram (omitted here). The IMU is bridged to `/lhr/imu/data`; the EKF
+consumes it under `estimator:=ekf` and nothing reads it otherwise.
 
 **LiDAR perception (`perception:=lidar`):**
 ```mermaid
@@ -83,13 +105,16 @@ flowchart LR
     bridge -- "/lhr/lidar/points" --> detector["lidar_cone_detector"]
     bridge -- "/lhr/vehicle/odom" --> detector
     bridge -- "/lhr/vehicle/odom" --> pursuit
-    detector -- "/lhr/sensor/cones_detected<br>(unclassified, persistent map)" --> builder["track_builder<br>(boundary pairing, Delaunay)"]
+    detector -- "/lhr/sensor/cones_detected<br>(inferred left/right, persistent map)" --> builder["track_builder<br>(one-to-one classified pairing)"]
     builder -- "/lhr/track/centerline" --> pursuit["pure_pursuit"]
     pursuit -- "/lhr/vehicle/cmd" --> adapter["joint_cmd_adapter"]
     adapter -- "6× joint commands" --> bridge
 ```
 
 The upper stack (track_builder, control, mission_manager, metrics) is identical in both modes. The `perception` launch argument selects between the sim pipeline and LiDAR-based detection.
+For LiDAR mapping without inferred sides, set `lidar_classify_sides:=false`.
+The detector publishes all mapped cones as unclassified orange markers, and
+the track builder switches to `boundary` pairing.
 
 To bypass the sensor sim and use all cones directly (god-mode), override the cone topic:
 ```bash
@@ -126,6 +151,12 @@ Launch arguments can be passed through `run_demo.sh`:
 # Disable metrics collection:
 ./scripts/run_demo.sh enable_metrics:=false
 
+# Drive on the EKF estimate instead of ground-truth odometry:
+./scripts/run_demo.sh estimator:=ekf
+
+# ...with sensor error dialled in (gyro bias rad/s, rolling-radius scale):
+./scripts/run_demo.sh estimator:=ekf gyro_bias:=0.03 wheel_scale_error:=1.03
+
 # Manual go signal (don't auto-start driving):
 ./scripts/run_demo.sh auto_go:=false
 # Then in another terminal:
@@ -139,9 +170,10 @@ colcon test                     # from ros2/, after a build
 colcon test-result --verbose    # prints the failures
 ```
 
-Only the ament linters run today (`ament_flake8` and `ament_pep257`, one
-`test/` dir per package); functional tests are open work for the Sim & test
-infra lane.
+The package test suites include ament lint, state-estimation and perception
+unit tests, and generated-track regressions for the LiDAR centerline. These
+regressions use idealized cone visibility; they do not establish that the
+vehicle completes a live Gazebo autocross lap.
 
 CI runs the same build and test
 ([`.github/workflows/autonomy.yml`](https://github.com/LonghornRacingElectric/lhre/blob/main/.github/workflows/autonomy.yml))
@@ -214,8 +246,10 @@ Launch arguments work the same way:
 ./scripts/run_gazebo_demo.sh gui:=false          # headless Gazebo (no Gazebo GUI)
 ./scripts/run_gazebo_demo.sh rviz:=false         # disable RViz
 ./scripts/run_gazebo_demo.sh perception:=lidar   # LiDAR-based cone detection
+./scripts/run_gazebo_demo.sh perception:=lidar lidar_classify_sides:=false  # keep LiDAR mapping, skip side inference
 ./scripts/run_gazebo_demo.sh track_style:=oval   # oval track (also: autocross, simple)
 ./scripts/run_gazebo_demo.sh track_style:=oval perception:=lidar  # LiDAR on oval (best LiDAR experience)
+./scripts/run_gazebo_demo.sh estimator:=ekf      # EKF odometry instead of Gazebo ground truth
 ```
 
 The `track_style` argument selects the track generator (`oval`, `autocross`, or `simple`). The world SDF is auto-resolved from `track_style` + `seed` (e.g. `oval_seed1.sdf`). Pre-generated worlds are installed by colcon from `worlds/*.sdf`.
@@ -291,7 +325,7 @@ flowchart TB
 | Cone source | `publish_cones` | `publish_cones` (reused) | Gazebo GPU LiDAR |
 | Perception | `sensor_sim` (FOV filter) | `sensor_sim` (reused) | `lidar_cone_detector` (pointcloud clustering) |
 | Physics / vehicle | `sim_kinematic` | Gazebo | Gazebo |
-| `track_builder` pairing | index | index | boundary (Delaunay) |
+| `track_builder` pairing | index | index | classified by default; boundary when `lidar_classify_sides:=false` |
 | Actuation | `/lhr/vehicle/cmd` directly | `joint_cmd_adapter` → 6 joints | `joint_cmd_adapter` → 6 joints |
 
 All paths produce identical ROS 2 topic interfaces — the upper stack doesn't know the difference.
@@ -331,7 +365,9 @@ The bridge config (`config/ros_gz_bridge.yaml`) maps 11 topics:
 | `/lhr/track/centerline` | `nav_msgs/Path` | Ordered centerline path through midpoints |
 | `/lhr/track/centerline_markers` | `visualization_msgs/MarkerArray` | Debug: green spheres + line strip |
 | `/lhr/vehicle/cmd` | `ackermann_msgs/AckermannDriveStamped` | Steering + speed command |
-| `/lhr/vehicle/odom` | `nav_msgs/Odometry` | Vehicle pose and twist |
+| `/lhr/vehicle/odom` | `nav_msgs/Odometry` | Vehicle pose and twist — ground truth, or the EKF estimate under `estimator:=ekf` |
+| `/lhr/vehicle/odom_truth` | `nav_msgs/Odometry` | Ground truth, published only under `estimator:=ekf` |
+| `/lhr/sensor/wheel_speeds` | `sensor_msgs/JointState` | Per-wheel speeds (rad/s), names `fl`/`fr`/`rl`/`rr` |
 | `/lhr/control/lookahead` | `visualization_msgs/Marker` | Debug: lookahead target point |
 | `/lhr/mission/status` | `std_msgs/String` | Driverless system status (`OFF`, `READY`, `DRIVING`, `FINISHED`, `EMERGENCY`) |
 | `/lhr/mission/go` | `std_msgs/Bool` | Go signal — triggers Ready → Driving transition |
@@ -341,7 +377,7 @@ The bridge config (`config/ros_gz_bridge.yaml`) maps 11 topics:
 | `/lhr/debug/curvature` | `std_msgs/Float32` | Debug: estimated path curvature at lookahead |
 | `/lhr/debug/v_cmd` | `std_msgs/Float32` | Debug: commanded speed after accel limiting |
 | `/lhr/debug/mission_state` | `std_msgs/Float32` | Debug: numeric state for PlotJuggler (0=Off, 1=Ready, 2=Driving, 3=Finished, 4=Emergency) |
-| `/lhr/imu/data` | `sensor_msgs/Imu` | IMU data (Gazebo sim only) |
+| `/lhr/imu/data` | `sensor_msgs/Imu` | IMU — bridged from Gazebo physics, or synthesized by `inertial_sim` in the kinematic sim |
 | `/lhr/lidar/points` | `sensor_msgs/PointCloud2` | LiDAR pointcloud (Gazebo sim only) |
 | `/lhr/perception/debug` | `visualization_msgs/MarkerArray` | LiDAR perception debug visualization |
 
@@ -384,6 +420,36 @@ Cone IDs: left cones use IDs `0..N-1`, right cones use IDs `10000..10000+N-1`. T
 | `noise_std_m` | `0.0` | Gaussian position noise std-dev (0 = off) |
 | `false_negative_rate` | `0.0` | Probability of missing a visible cone (0 = off) |
 
+### lhr_sensor_sim (inertial_sim)
+
+Synthesizes the IMU and wheel-speed sensors by degrading ground-truth
+odometry — the same trick `sensor_sim` plays on cones. Speed and yaw rate
+are differentiated from the truth *pose*, not read from its twist, because
+the kinematic sim reports twist in the world frame and Gazebo reports it in
+the body frame.
+
+| Param | Default | Description |
+|-------|---------|-------------|
+| `truth_topic` | `/lhr/vehicle/odom_truth` | Ground-truth odometry input |
+| `wheel_topic` | `/lhr/sensor/wheel_speeds` | Wheel-speed output |
+| `imu_topic` | `/lhr/imu/data` | IMU output |
+| `publish_imu` | `true` | Off in Gazebo, which bridges a physics IMU |
+| `wheel_names` | `['fl', 'fr', 'rl', 'rr']` | Joint names on the wheel message |
+| `wheel_radius` / `track` | from `vehicle.yaml` | Rolling radius and track width (m) |
+| `gyro_noise_std` | `0.01` | Gyro noise std-dev (rad/s) |
+| `gyro_bias` | `0.0` | Gyro bias (rad/s) — the main driver of heading drift |
+| `accel_noise_std` | `0.1` | Accelerometer noise std-dev (m/s²) |
+| `accel_bias` | `0.0` | Accelerometer bias (m/s²) |
+| `wheel_speed_noise_std` | `0.05` | Wheel-speed noise std-dev (rad/s) |
+| `wheel_scale_error` | `1.0` | Rolling-radius scale error (1.0 = exact) |
+| `seed` | `0` | RNG seed |
+
+### lhr_state_estimation (ekf_node)
+
+The EKF over `[x, y, yaw, v, yaw_rate]`. Full parameter table, tuning notes
+and the measured drift figures are in
+[its README](src/lhr_state_estimation/README.md).
+
 ### lhr_track_builder (track_builder)
 
 | Param | Default | Description |
@@ -391,15 +457,16 @@ Cone IDs: left cones use IDs `0..N-1`, right cones use IDs `10000..10000+N-1`. T
 | `frame_id` | `"map"` | TF frame |
 | `publish_hz` | `5.0` | Publishing rate (Hz) |
 | `max_points` | `200` | Cap on centerline points |
-| `pairing_strategy` | `"index"` | Pairing strategy: `index` (ID-based, for sim), `nearest` (nearest-neighbor), or `boundary` (Delaunay triangulation, for LiDAR) |
-| `track_width` | `3.5` | Expected track width for boundary pairing (m) |
-| `track_width_tolerance` | `1.0` | Tolerance around track width for boundary pairing (m) |
+| `pairing_strategy` | `"index"` | Pairing strategy: `index`, `nearest`, `classified`, or `boundary` |
+| `track_width` | `3.5` | Expected track width for width-gated pairing (m) |
+| `track_width_tolerance` | `1.0` | Tolerance around track width (m) |
 | `cone_topic` | `"/lhr/sensor/cones_detected"` | Topic to subscribe for cone data |
 
 Cone pairing strategies:
 - **index** (default): Pairs left cone ID `i` with right cone ID `i + 10000`. Works with sim perception where cone IDs follow the trackgen convention.
 - **nearest**: Pairs each left cone with its nearest unpaired right cone.
-- **boundary**: Uses Delaunay triangulation to pair cones that are approximately `track_width` (3.5 m +/- `track_width_tolerance`) apart. Used for LiDAR perception where cones are unclassified (no left/right split).
+- **classified**: Computes a minimum-cost one-to-one assignment between inferred left and right cones, then rejects pairs outside the track-width band. Used by LiDAR perception.
+- **boundary**: Uses Delaunay triangulation to pair unclassified cones that are approximately `track_width` apart. Retained as a fallback for sources without side information.
 
 ### lhr_sim_kinematic (sim_node)
 
@@ -529,7 +596,7 @@ outer = atan(wheelbase / (R + track_width/2))
 
 ### lhr_perception (lidar_cone_detector)
 
-Processes LiDAR pointcloud to detect cones. Pipeline: ground removal → range filter → Euclidean clustering → cone validation → sensor-to-map transform → spatial dedup.
+Processes LiDAR pointcloud to detect cones. Pipeline: ground removal → range filter → Euclidean clustering → cone validation → timestamp-aligned sensor-to-map transform → spatial dedup → track-side inference. The detector buffers odometry and interpolates the vehicle pose at each pointcloud timestamp; it waits for the following odometry sample instead of projecting a sharp-turn scan with a pose from another instant. Detections are associated to their nearest existing cone, with each cone used at most once per scan, before positions are updated by a running average. Side votes come from a short local corridor and are shared only across geometrically continuous boundary fragments. Later labels require consistent proposals from vehicle poses separated by one metre and remain locked after acceptance.
 
 | Param | Default | Description |
 |-------|---------|-------------|
@@ -543,6 +610,17 @@ Processes LiDAR pointcloud to detect cones. Pipeline: ground removal → range f
 | `max_cluster_points` | `50` | Maximum points in a valid cone cluster |
 | `dedup_radius` | `1.5` | Spatial dedup radius — new detections within this distance of existing ones are ignored (m) |
 | `publish_hz` | `10.0` | Output publish rate (Hz) |
+| `pose_history_sec` | `2.0` | Odometry history retained for pointcloud timestamp synchronization (s) |
+| `classify_sides` | `true` | Infer track sides; false publishes all cones in the unclassified `cones` namespace |
+| `side_vote_max_range` | `7.0` | Maximum range used for side evidence (m) |
+| `side_vote_max_forward` | `3.0` | Forward classification corridor (m) |
+| `side_vote_max_lateral` | `5.0` | Lateral classification corridor (m) |
+| `side_vote_deadband` | `0.5` | Lateral no-vote band around the vehicle axis (m) |
+| `side_update_distance` | `1.0` | Travel between independent side updates (m) |
+| `side_confirmations` | `2` | Consistent traveled viewpoints before a later label locks |
+| `boundary_link_distance` | `3.0` | Direct same-boundary link distance (m) |
+| `boundary_gap_distance` | `3.3` | Maximum aligned boundary gap (m) |
+| `boundary_gap_angle_deg` | `40.0` | Maximum direction error across a boundary gap (degrees) |
 
 These defaults were tuned on the simulated VLP-16. On the real Mid-360
 ([2026-10-04 acceptance test](../testing/2026-10-04-mid360-acceptance/README.md)),
@@ -551,7 +629,14 @@ These defaults were tuned on the simulated VLP-16. On the real Mid-360
 both against that test's ROS 2 bags, which replay into this node unchanged:
 [SharePoint, Test Data > 2026-10-04-mid360-acceptance > ros2](https://utexas.sharepoint.com/sites/ENGR-LonghornRacing/LHR%20Electric/Design/_VMS_/Autonomous/Test%20Data/2026-10-04-mid360-acceptance/ros2).
 
-All detected cones are published under a single "cones" namespace with IDs 0..N-1 (orange color). There is no left/right classification — the track builder's boundary pairing strategy (Delaunay triangulation) handles cone pairing by finding pairs that are approximately track-width apart.
+The current LiDAR mode infers track sides from geometry. It publishes
+`left_cones` (blue) and `right_cones` (yellow), with `cones` (orange) for
+unknown sides. LiDAR does not measure cone colour. The side classifier is
+experimental: in a live Gazebo autocross run, sparse initial detections caused
+an entire right-boundary fragment to be locked as left, and the car left the
+course. The timestamp-aligned cone map remained accurate in that run. See
+[the perception package](src/lhr_perception/README.md) for the pipeline and
+its limits.
 
 ### lhr_metrics (metrics_node)
 
@@ -563,6 +648,7 @@ All detected cones are published under a single "cones" namespace with IDs 0..N-
 | `min_lap_time` | `5.0` | Minimum seconds before a lap return is accepted |
 | `output_csv` | `"data/metrics.csv"` | Path for CSV output (relative to cwd) |
 | `run_id` | `""` | Run identifier; auto-generates timestamp if empty |
+| `truth_odom_topic` | `""` | Ground-truth odometry to score `/lhr/vehicle/odom` against; empty leaves the error columns blank |
 
 ### Metrics output
 
@@ -571,7 +657,12 @@ The metrics node publishes `/lhr/metrics/lap_complete` (`std_msgs/Bool`) when a 
 It also prints a summary and appends a CSV row on lap completion or Ctrl+C:
 
 ```
-run_id, duration_s, samples, mean_cte, max_cte, off_track_count, mean_speed, max_speed, lap_completed
+run_id, duration_s, samples, mean_cte, max_cte, off_track_count, mean_speed, max_speed, lap_completed, mean_pos_error, max_pos_error, mean_yaw_error
 ```
 
-CSV data accumulates in `data/metrics.csv` across runs.
+The last three are the estimate-vs-truth error and are blank unless
+`truth_odom_topic` is set (both demos set it under `estimator:=ekf`).
+
+CSV data accumulates in `data/metrics.csv` across runs. Delete the file once
+after upgrading past the error columns, or new rows will not line up with the
+old header.
