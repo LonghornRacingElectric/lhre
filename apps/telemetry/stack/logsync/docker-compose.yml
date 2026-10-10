@@ -19,7 +19,10 @@ services:
       - path: ../../../../.env
         required: false
     environment:
-      LOGSYNC_HOST: 0.0.0.0
+      # Loopback only: the viewer on this box (LOGSYNC_URL=http://localhost:8090)
+      # is the way in, and it checks sign-in. Host networking would otherwise
+      # expose the worker on every interface, the tailnet included.
+      LOGSYNC_HOST: 127.0.0.1
       LOGSYNC_PORT: 8090
       BEVO_SSH_TARGET: ${BEVO_SSH_TARGET:-lhre@100.64.195.68}
       BEVO_SSH_KEY: /keys/id_logsync
