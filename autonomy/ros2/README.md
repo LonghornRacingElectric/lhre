@@ -279,6 +279,25 @@ modes by `lhr_gazebo/test/test_chaining_parameters.py`.
 
 **Launch file architecture:** `gazebo_demo.launch.py` uses `OpaqueFunction` instead of `IfCondition`/`UnlessCondition` for perception mode and world selection. All launch args are declared in `generate_launch_description()`, and nodes are built in the `_launch_setup()` callback which runs at launch time with access to resolved argument values.
 
+### ZED 2i stereo camera
+
+The vehicle model includes one ZED 2i with the 2.1 mm wide lens and a 0.12 m
+baseline. Opt into its ROS streams and RViz image panels:
+
+```bash
+./scripts/run_gazebo_demo.sh enable_stereo_camera:=true
+```
+
+The option defaults to `false` and is independent of `perception` and
+`estimator`. It publishes left/right `image_rect` and `camera_info` under
+`/lhr/sensor/zed2i/`, with optical TF frames and preserved simulation timestamps.
+Use best-effort sensor-data QoS. Model optics are idealized, initially
+1280x720 at 30 simulation Hz with 110-degree horizontal FOV; the physical
+mount/calibration still need measurement. Change camera geometry/settings
+in `lhr_vehicle`'s YAML and regenerate/rebuild the model.
+See [Gazebo stereo usage](src/lhr_gazebo/README.md#stereo-images-in-rosrviz)
+for the topic and frame contract.
+
 ### Vehicle model
 
 The FSAE vehicle (`models/fsae_vehicle/model.sdf`) uses STL meshes (`meshes/carBody.stl`, `meshes/carTire.stl`) for visuals with simplified collision geometry. **`model.sdf` is generated** — `scripts/generate_vehicle_model.py` renders `templates/model.sdf.in` from [`lhr_vehicle/config/vehicle.yaml`](src/lhr_vehicle/README.md), so the numbers below are Orion's and shared with the controller, the kinematic sim and perception:

@@ -68,3 +68,38 @@ regenerate the model after changing them.
 The camera-only link has no collision and uses 0.001 kg mass / 0.000001 kg m2
 diagonal inertia for simulation bookkeeping. The initial mount and optics
 are approximations awaiting measurement and physical device calibration.
+
+## Stereo images in ROS/RViz
+
+Enable the camera independently of perception and state estimation:
+
+```bash
+./scripts/run_gazebo_demo.sh track_style:=oval perception:=lidar \
+  estimator:=truth enable_stereo_camera:=true
+```
+
+`enable_stereo_camera` defaults to `false`. Enabling it starts a separate
+lazy image/calibration bridge, publishes the rig's static optical transforms,
+and selects an RViz configuration with left/right Image panels. The option
+works with both `perception:=sim` / `lidar` and `estimator:=truth` / `ekf`.
+Camera geometry and optics are model configuration, not ROS node parameters:
+edit `lhr_vehicle/config/vehicle.yaml`, regenerate, rebuild, and relaunch.
+
+| ROS topic | Type |
+| --- | --- |
+| `/lhr/sensor/zed2i/left/image_rect` | `sensor_msgs/msg/Image` |
+| `/lhr/sensor/zed2i/right/image_rect` | `sensor_msgs/msg/Image` |
+| `/lhr/sensor/zed2i/left/camera_info` | `sensor_msgs/msg/CameraInfo` |
+| `/lhr/sensor/zed2i/right/camera_info` | `sensor_msgs/msg/CameraInfo` |
+
+Use sensor-data QoS (best effort, volatile) for consumers. Images retain
+Gazebo timestamps and optical frame IDs. Both views are ideal rectified RGB;
+`CameraInfo` describes those rendered intrinsics, with right `P[3] = -fx * B`.
+The static chain is `base_link -> zed2i_link -> left/right camera frames ->
+optical frames` (optical x right, y down, z forward). The mount transform
+continues to attach to the estimator-owned `base_link` in EKF mode.
+
+The 30 Hz configured rate is in simulation time. Software rendering can
+reduce wall-clock throughput; no subscribers means the lazy bridges do not
+request images. Camera resources may still initialize at simulator startup.
+This milestone supplies camera inputs for later classification/fusion.

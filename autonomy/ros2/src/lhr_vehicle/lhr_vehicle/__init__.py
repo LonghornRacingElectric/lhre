@@ -41,7 +41,7 @@ class StereoCamera:
 
     @property
     def fy_px(self) -> float:
-        """The ideal simulation uses square pixels."""
+        """Return the same focal length for the ideal square pixels."""
         return self.fx_px
 
     @property

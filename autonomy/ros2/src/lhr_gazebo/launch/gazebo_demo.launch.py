@@ -97,6 +97,14 @@ def _launch_setup(context: LaunchContext):
     use_ekf = context.launch_configurations.get(
         'estimator', 'truth').lower() == 'ekf'
 
+    enable_stereo = context.launch_configurations.get(
+        'enable_stereo_camera', 'false').lower() == 'true'
+    camera_nodes = []
+    if enable_stereo:
+        from lhr_gazebo.stereo_camera import stereo_actions
+        from lhr_vehicle import load_vehicle
+        camera_nodes = stereo_actions(load_vehicle().stereo_camera, config_dir)
+
     _gz_env = {
         'GZ_SIM_RESOURCE_PATH': models_dir,
     }
@@ -322,7 +330,8 @@ def _launch_setup(context: LaunchContext):
             package='rviz2',
             executable='rviz2',
             name='rviz2',
-            arguments=['-d', os.path.join(config_dir, 'default.rviz')],
+            arguments=['-d', os.path.join(
+                config_dir, 'stereo.rviz' if enable_stereo else 'default.rviz')],
             parameters=[{'use_sim_time': True}],
             output='screen',
         ))
@@ -346,6 +355,7 @@ def _launch_setup(context: LaunchContext):
         gz_sim,
         bridge,
         cmd_adapter,
+        *camera_nodes,
         *estimation_nodes,
         *perception_nodes,
         centerline,
@@ -385,6 +395,10 @@ def generate_launch_description():
             description='Simulated rolling-radius error (1.0 = exact)'),
         DeclareLaunchArgument('seed', default_value='1'),
         DeclareLaunchArgument('num_waypoints', default_value='10'),
+        DeclareLaunchArgument(
+            'enable_stereo_camera', default_value='false',
+            choices=['true', 'false'],
+            description='Bridge ZED 2i stereo images/calibration and camera TF'),
         # Sensor sim
         DeclareLaunchArgument('fov_deg', default_value='200.0'),
         DeclareLaunchArgument('max_range_m', default_value='20.0'),
