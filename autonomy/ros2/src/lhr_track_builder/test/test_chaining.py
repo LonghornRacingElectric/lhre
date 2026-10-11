@@ -1,7 +1,8 @@
-"""Behavior checks for sector-constrained midpoint chaining."""
+"""Behavior checks for cone pairing and midpoint chaining."""
 
 import math
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 from lhr_track_builder.track_builder_node import TrackBuilder
 import pytest
@@ -17,14 +18,16 @@ def builder():
         _have_odom=True, _veh_x=0.0, _veh_y=0.0, _veh_yaw=0.0,
         _chaining_alg='constrained_greedy', _max_points=200,
         _track_width=3.5, _track_width_tol=1.0,
+        _beam_width=3, _beam_depth=10,
+        _boundary_use_color=True,
     )
     for name in (
         '_constrained_greedy', '_chain_path_from_vehicle',
         '_chain_path_without_vehicle', '_get_chaining_algorithm',
+        '_fixed_width_beam_search',
     ):
         setattr(state, name, getattr(TrackBuilder, name).__get__(state))
     state._greedy_chain_path = TrackBuilder._greedy_chain_path
-    state._fixed_width_beam_search = TrackBuilder._fixed_width_beam_search
     return state
 
 
@@ -103,12 +106,174 @@ def test_zero_minimum_still_suppresses_duplicates(builder):
 
 
 @pytest.mark.parametrize('strategy', ['nearest', 'boundary'])
-def test_pairing_filters_two_midpoints(builder, strategy):
+@pytest.mark.parametrize('algorithm', ['constrained_greedy', 'fixed_width_beam_search'])
+def test_pairing_filters_two_midpoints(builder, strategy, algorithm):
     """Both pairing strategies enforce the sector on two-point inputs."""
     builder._veh_x = 2.0
+    builder._chaining_alg = algorithm
     builder._left_cones = {0: (0.0, 1.75), 1: (2.0, 1.75)}
     builder._right_cones = {0: (0.0, -1.75), 1: (2.0, -1.75)}
     builder._unknown_cones = {}
     builder._track_width_tol = 0.1
     result = getattr(TrackBuilder, '_pair_' + strategy)(builder)
     assert result == [(2.0, 0.0)]
+
+
+def test_beam_keeps_alternative_to_greedy_dead_end(builder):
+    """Retain a costlier first step whose branch can continue around a corner."""
+    builder._beam_width = 2
+    builder._beam_depth = 3
+    builder._max_step_m = 1.5
+    points = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (1.0, 2.0), (1.0, 3.0)]
+    assert builder._constrained_greedy(points, 0) == points[:2]
+    assert builder._fixed_width_beam_search(points, 0) == [
+        points[0], points[2], points[3], points[4],
+    ]
+
+
+def test_beam_prunes_globally_and_can_keep_two_siblings(builder):
+    """Two cheap siblings displace another parent; a wider beam preserves it."""
+    builder._beam_width = 2
+    builder._beam_depth = 3
+    builder._max_step_m = 1.5
+    points = [
+        (0.0, 0.0), (1.0, 0.0), (1.0, 1.0),
+        (2.0, -0.2), (2.0, 0.2), (1.0, 2.0), (1.0, 3.0),
+    ]
+    # At depth two, both retained paths begin with point 1. Neither can extend.
+    assert builder._fixed_width_beam_search(points, 0) == [
+        points[0], points[1], points[3],
+    ]
+    builder._beam_width = 3
+    assert builder._fixed_width_beam_search(points, 0) == [
+        points[0], points[2], points[5], points[6],
+    ]
+
+
+def test_beam_uses_accumulated_cost(builder):
+    """Choose the cheaper complete prefix even when another final step is shorter."""
+    builder._beam_width = 4
+    builder._beam_depth = 2
+    builder._heading_weight = 0.0
+    points = [(0.0, 0.0), (1.0, 0.0), (2.0, 0.0), (2.0, 1.0), (2.0, 1.4)]
+    assert builder._fixed_width_beam_search(points, 0) == points[:3]
+
+
+@pytest.mark.parametrize('depth', [1, 2, 10])
+def test_beam_depth_counts_added_points(builder, depth):
+    """Return a bounded prefix and stop naturally when every point is visited."""
+    builder._beam_depth = depth
+    builder._max_step_m = 1.1
+    points = [(float(x), 0.0) for x in range(5)]
+    assert builder._fixed_width_beam_search(points, 0) == points[:depth + 1]
+
+
+@pytest.mark.parametrize('have_odom', [False, True])
+@pytest.mark.parametrize('points', [
+    [], [(0.0, 0.0)],
+    [(0.0, 0.0), (0.0, 0.0)],
+    [(0.0, 0.0), (0.1, 0.0), (1.0, 0.0), (2.0, 0.0), (7.0, 0.0)],
+    [(0.0, 0.0), (1.0, 0.0), (2.0, 1.0), (2.0, 2.0), (1.0, 3.0)],
+])
+def test_width_one_matches_constrained_greedy(builder, have_odom, points):
+    """Preserve sector, duplicate, heading, and stopping rules with one branch."""
+    builder._beam_width = 1
+    builder._have_odom = have_odom
+    builder._max_step_m = 1.5
+    original = list(points)
+    assert builder._fixed_width_beam_search(points, 0) == (
+        builder._constrained_greedy(points, 0)
+    )
+    assert points == original
+
+
+def test_beam_keeps_start_even_with_wide_sector(builder):
+    """The vehicle wrapper must not reverse a path already chosen by the beam."""
+    builder._chaining_alg = 'fixed_width_beam_search'
+    builder._beam_width = 1
+    builder._max_turn_rad = math.pi
+    builder._heading_weight = 0.0
+    points = [(0.0, 0.0), (-1.0, 0.0), (-2.0, 0.0)]
+    assert builder._chain_path_from_vehicle(points) == points
+
+
+def test_beam_equal_costs_use_path_indices(builder):
+    """Resolve equal-cost paths consistently at the search horizon."""
+    builder._beam_depth = 1
+    points = [(0.0, 0.0), (1.0, 1.0), (1.0, -1.0)]
+    assert builder._fixed_width_beam_search(points, 0) == points[:2]
+
+
+@pytest.mark.parametrize('use_color, expected', [
+    (True, []), (False, [(0.0, 0.0), (2.0, 0.0)]),
+])
+def test_geometry_only_boundary_retains_same_color_pairs(builder, use_color, expected):
+    """The legacy width-only filter can retain edges rejected by color."""
+    builder._boundary_use_color = use_color
+    builder._track_width_tol = 0.1
+    builder._chaining_alg = 'greedy'
+    builder._left_cones = {
+        0: (0.0, 1.75), 1: (0.0, -1.75),
+        2: (2.0, 1.75), 3: (2.0, -1.75),
+    }
+    builder._right_cones = {}
+    builder._unknown_cones = {}
+    assert TrackBuilder._pair_boundary(builder) == expected
+
+
+@pytest.mark.parametrize('use_color', [False, True])
+@pytest.mark.parametrize('known_color', [False, True])
+def test_boundary_accepts_unknown_color_edges(builder, use_color, known_color):
+    """Unclassified and mixed inputs both retain plausible cross-track edges."""
+    builder._boundary_use_color = use_color
+    builder._track_width_tol = 0.1
+    builder._chaining_alg = 'greedy'
+    builder._left_cones = {0: (0.0, 1.75), 1: (2.0, 1.75)} if known_color else {}
+    builder._right_cones = {}
+    builder._unknown_cones = {0: (0.0, -1.75), 1: (2.0, -1.75)}
+    if not known_color:
+        builder._unknown_cones.update({2: (0.0, 1.75), 3: (2.0, 1.75)})
+    assert set(TrackBuilder._pair_boundary(builder)) == {(0.0, 0.0), (2.0, 0.0)}
+
+
+@pytest.mark.parametrize('points', [
+    [], [(0.0, 0.0), (1.0, 0.0)], [(0.0, 0.0), (1.0, 0.0), (2.0, 0.0)],
+])
+def test_geometry_only_boundary_handles_degenerate_inputs(builder, points):
+    """Missing or collinear cones produce no new path."""
+    builder._boundary_use_color = False
+    builder._left_cones = {}
+    builder._right_cones = {}
+    builder._unknown_cones = dict(enumerate(points))
+    assert TrackBuilder._pair_boundary(builder) == []
+
+
+@pytest.mark.parametrize('strategy', ['nearest', 'boundary'])
+@pytest.mark.parametrize('uncolored', [False, True])
+def test_uncolored_cone_warning_preserves_detections(builder, strategy, uncolored):
+    """Warn with a throttle and strategy guidance only for unclassified inputs."""
+    builder._pairing_strategy = strategy
+    logger = Mock()
+    builder.get_logger = Mock(return_value=logger)
+    namespaces = ['left_cones', 'right_cones']
+    if uncolored:
+        namespaces.append('cones')
+    markers = [
+        SimpleNamespace(
+            ns=namespace, id=0,
+            pose=SimpleNamespace(position=SimpleNamespace(x=float(i), y=0.0)),
+        )
+        for i, namespace in enumerate(namespaces)
+    ]
+    TrackBuilder._cones_cb(builder, SimpleNamespace(markers=markers))
+    assert builder._left_cones == {0: (0.0, 0.0)}
+    assert builder._right_cones == {0: (1.0, 0.0)}
+    assert builder._unknown_cones == ({0: (2.0, 0.0)} if uncolored else {})
+    if uncolored:
+        logger.warning.assert_called_once()
+        message = logger.warning.call_args.args[0]
+        assert '1 uncolored cones' in message
+        assert ('uses geometry' if strategy == 'boundary' else 'ignores') in message
+        assert logger.warning.call_args.kwargs == {'throttle_duration_sec': 5.0}
+    else:
+        logger.warning.assert_not_called()

@@ -55,12 +55,15 @@ class TrackBuilder(Node):
         self.declare_parameter('cone_topic', '/lhr/sensor/cones_detected')
         self.declare_parameter('track_width', 3.5)
         self.declare_parameter('track_width_tolerance', 1.0)
+        self.declare_parameter('boundary_use_color', True)
         self.declare_parameter('chaining_alg', 'greedy')
         self.declare_parameter('min_step_m', 0.3)
         self.declare_parameter('max_step_m', 4.0)
         self.declare_parameter('max_turn_deg', 70.0)
         self.declare_parameter('distance_weight', 1.0)
         self.declare_parameter('heading_weight', 1.0)
+        self.declare_parameter('beam_width', 3)
+        self.declare_parameter('beam_depth', 10)
 
         self._frame_id = self.get_parameter(
             'frame_id').get_parameter_value().string_value
@@ -76,6 +79,8 @@ class TrackBuilder(Node):
             'track_width').get_parameter_value().double_value
         self._track_width_tol = self.get_parameter(
             'track_width_tolerance').get_parameter_value().double_value
+        self._boundary_use_color = self.get_parameter(
+            'boundary_use_color').get_parameter_value().bool_value
         self._chaining_alg = self.get_parameter(
             'chaining_alg').get_parameter_value().string_value
         self._min_step_m = self.get_parameter('min_step_m').value
@@ -97,6 +102,13 @@ class TrackBuilder(Node):
             raise ValueError(
                 'Chaining weights must be nonnegative with at least one positive')
         self._max_turn_rad = math.radians(max_turn_deg)
+        self._beam_width = self.get_parameter('beam_width').value
+        self._beam_depth = self.get_parameter('beam_depth').value
+        for name, value in (
+            ('beam_width', self._beam_width), ('beam_depth', self._beam_depth),
+        ):
+            if type(value) is not int or value <= 0:
+                raise ValueError(f'{name} must be a positive integer')
 
         # --- Stored cone positions grouped by known color ---
         self._left_cones: dict = {}
@@ -165,6 +177,19 @@ class TrackBuilder(Node):
         self._left_cones = left
         self._right_cones = right
         self._unknown_cones = unknown
+        if unknown:
+            if self._pairing_strategy == 'boundary':
+                handling = 'Boundary pairing uses geometry for these cones.'
+            else:
+                handling = (
+                    'Nearest pairing ignores these cones; select '
+                    'pairing_strategy:=boundary to use geometry-based pairing.'
+                )
+            self.get_logger().warning(
+                f'Received {len(unknown)} uncolored cones (namespace "cones"). '
+                f'{handling}',
+                throttle_duration_sec=5.0,
+            )
 
     def _odom_cb(self, msg: Odometry):
         self._veh_x = msg.pose.pose.position.x
@@ -265,7 +290,9 @@ class TrackBuilder(Node):
 
         # Chain midpoints into path order starting from the vehicle
         if len(midpoints) > 2 or (
-            midpoints and self._chaining_alg == 'constrained_greedy'
+            midpoints and self._chaining_alg in (
+                'constrained_greedy', 'fixed_width_beam_search',
+            )
         ):
             if self._have_odom:
                 midpoints = self._chain_path_from_vehicle(midpoints)
@@ -275,7 +302,7 @@ class TrackBuilder(Node):
         return midpoints
 
     def _pair_boundary(self) -> List[PathPoint]:
-        """Pair Delaunay neighbors that can span the track boundaries."""
+        """Filter Delaunay edges by track width and optionally by cone color."""
         blue_points = list(self._left_cones.values())
         yellow_points = list(self._right_cones.values())
         unknown_points = list(self._unknown_cones.values())
@@ -307,12 +334,13 @@ class TrackBuilder(Node):
         minimum_width = self._track_width - self._track_width_tol
         maximum_width = self._track_width + self._track_width_tol
 
-        # 3. Reject known same-color edges, then apply the width check.
+        # Disabling the color filter preserves the original geometry-only pairing.
         accepted_edges: List[Edge] = []
         for first, second in sorted(edges):
             first_color = colors[first]
             second_color = colors[second]
-            if first_color is not None and first_color == second_color:
+            if (self._boundary_use_color and first_color is not None
+                    and first_color == second_color):
                 continue
 
             distance = math.dist(positions[first], positions[second])
@@ -330,7 +358,9 @@ class TrackBuilder(Node):
         midpoints = midpoints[:self._max_points]
 
         if len(midpoints) > 2 or (
-            midpoints and self._chaining_alg == 'constrained_greedy'
+            midpoints and self._chaining_alg in (
+                'constrained_greedy', 'fixed_width_beam_search',
+            )
         ):
             if self._have_odom:
                 midpoints = self._chain_path_from_vehicle(midpoints)
@@ -354,8 +384,8 @@ class TrackBuilder(Node):
 
         ordered = chaining_algorithm(points, start_idx)
 
-        # Constrained greedy chooses its direction before extending the path.
-        if self._chaining_alg == 'constrained_greedy':
+        # Sector-based algorithms choose direction before extending the path.
+        if self._chaining_alg in ('constrained_greedy', 'fixed_width_beam_search'):
             return ordered
 
         if len(ordered) >= 2:
@@ -488,14 +518,79 @@ class TrackBuilder(Node):
 
         return ordered
 
-    @staticmethod
     def _fixed_width_beam_search(
-        points: List[PathPoint], start: int,
+        self, points: List[PathPoint], start: int,
     ) -> List[PathPoint]:
-        """Order points using fixed-width beam search."""
-        raise NotImplementedError(
-            'fixed-width beam search is not implemented',
-        )
+        """Keep the lowest-cost partial paths across each expansion depth."""
+        if not points:
+            return []
+        remaining = set(range(len(points)))
+        remaining.discard(start)
+        heading = self._veh_yaw
+        if not self._have_odom:
+            neighbors = [
+                j for j in remaining
+                if math.dist(points[start], points[j]) > 0.0
+                and math.dist(points[start], points[j]) >= self._min_step_m
+            ]
+            if not neighbors:
+                return [points[start]]
+            nearest = min(
+                neighbors,
+                key=lambda j: (math.dist(points[start], points[j]), j),
+            )
+            heading = math.atan2(
+                points[nearest][1] - points[start][1],
+                points[nearest][0] - points[start][0],
+            )
+
+        beam = [{
+            'path': [start], 'remaining': remaining,
+            'heading': heading, 'cost': 0.0,
+        }]
+        for _ in range(self._beam_depth):
+            extensions = []
+            for state in beam:
+                x, y = points[state['path'][-1]]
+                remaining = state['remaining'].copy()
+                # Remove duplicates before copying the candidate set to children.
+                redundant = {
+                    j for j in remaining
+                    if math.dist((x, y), points[j]) == 0.0
+                    or math.dist((x, y), points[j]) < self._min_step_m
+                }
+                remaining.difference_update(redundant)
+                for j in remaining:
+                    dx, dy = points[j][0] - x, points[j][1] - y
+                    distance = math.hypot(dx, dy)
+                    if distance > self._max_step_m:
+                        continue
+                    candidate_heading = math.atan2(dy, dx)
+                    heading_error = math.atan2(
+                        math.sin(candidate_heading - state['heading']),
+                        math.cos(candidate_heading - state['heading']),
+                    )
+                    if abs(heading_error) > self._max_turn_rad:
+                        continue
+                    step_cost = (
+                        self._distance_weight * distance / self._max_step_m
+                        + self._heading_weight
+                        * (heading_error / self._max_turn_rad) ** 2
+                    )
+                    extensions.append({
+                        'path': state['path'] + [j],
+                        'remaining': remaining - {j},
+                        'heading': candidate_heading,
+                        'cost': state['cost'] + step_cost,
+                    })
+
+            if not extensions:
+                break
+            # All extensions have equal depth; dead ends cannot win on low cost.
+            extensions.sort(key=lambda state: (state['cost'], state['path']))
+            beam = extensions[:self._beam_width]
+
+        return [points[j] for j in beam[0]['path']]
 
     # ------------------------------------------------------------------
     # Publishing helpers
