@@ -39,3 +39,18 @@ Geometry and classification remain heuristic: missing cones, clutter, or
 ambiguous intersecting corridors can prevent a path. Ground truth does not
 enter this planner. The midpoint graph tests cover straight and curved
 corridors, shuffled IDs, and disconnected sections.
+
+## Classified pairing
+
+## Pairing strategies
+
+- `index` pairs generator IDs and is the deterministic simulation default.
+- `nearest` greedily pairs classified cones and is retained for experiments.
+- `classified` computes a minimum-cost one-to-one assignment between inferred
+  left and right cones. Pairs outside the configured track-width band remain
+  unmatched. This is the current LiDAR launch setting. It depends on correct
+  side labels; the geometry-only classifier can mislabel a sparse boundary.
+- `boundary` uses width-filtered Delaunay edges when no side information is
+  available. The Gazebo launch selects it when
+  `perception:=lidar lidar_classify_sides:=false`. It can create several
+  candidates from one cone.

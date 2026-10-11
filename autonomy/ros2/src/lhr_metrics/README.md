@@ -156,3 +156,12 @@ message; the existing `vehicle_sha256` column still hashes the autonomy YAML.
 `motion_distortion` and `clutter_profile` record the selected LiDAR scene
 conditions. The separate [driving study runner](../lhr_demo/README.md#repeatable-driving-studies)
 adds truth-based circuit progress, halt observations and map consistency.
+
+## Estimator comparisons
+
+`truth_odom_topic` enables the upstream position and yaw error columns.
+They remain blank without a truth stream. The CSV includes `estimator`,
+`gyro_bias`, `wheel_scale_error`, and `lidar_classify_sides` alongside the
+existing run parameters. Distance-weighted CTE and run outcome checks remain
+active. Estimator errors compare to the latest truth sample, so callback
+timing can affect them; they are not a timestamp-aligned accuracy guarantee.

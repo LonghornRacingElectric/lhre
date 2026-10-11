@@ -26,6 +26,7 @@
   <exec_depend>lhr_mission_manager</exec_depend>
   <exec_depend>lhr_trackgen</exec_depend>
   <exec_depend>lhr_sensor_sim</exec_depend>
+  <exec_depend>lhr_state_estimation</exec_depend>
   <exec_depend>lhr_perception</exec_depend>
 
   <test_depend>ament_flake8</test_depend>

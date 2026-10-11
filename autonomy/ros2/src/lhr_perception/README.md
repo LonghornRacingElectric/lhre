@@ -135,3 +135,77 @@ the outdoor reference in 100% of frames through 7.7 m, 93% at 9.0 m,
 2.5% at 17.9 m. These are per-window reference-match rates in the recorded
 scenes, not persistent-map coverage. Captures without a measured reference
 centroid (including the blind 1.4 m small cone) are excluded from this table.
+
+## Optional side inference
+
+Set `classify_sides:=false` to publish unclassified cones. The node default
+is `true`; both demo launchers keep it opt-in with
+`lidar_classify_sides:=false`. Classification estimates track sides from
+geometry, not measured cone colour. Clustering and one-to-one map association
+remain active when classification is off.
+
+The detector accumulates a side vote from each cone's lateral position in a
+short local corridor beside the car. Short Delaunay edges share those votes
+along a boundary. A slightly longer gap is joined only when it follows the
+boundary's local direction. The starting straight seeds the initial labels;
+later labels require consistent proposals from poses separated by one metre
+and are immutable once accepted. A wrong initial proposal can therefore remain
+locked even after better observations arrive.
+
+LiDAR still does not observe cone colour. These labels describe the inferred
+track side, not a measured blue or yellow cone. A cone stays in the `cones`
+namespace until there is evidence, then moves to `left_cones` or
+`right_cones`. Namespace changes include a marker deletion so RViz does not
+leave a stale orange copy behind.
+
+Set `classify_sides:=false` on the node to skip side voting and publish every
+mapped cone in the orange `cones` namespace. Scan-time TF registration,
+clustering, one-to-one scan association, and position averaging remain active.
+The setting is read at startup; restart the node to change it.
+
+
+| Parameter | Default | Purpose |
+| --- | --- | --- |
+| `classify_sides` | `true` | Infer left/right track sides; false publishes unclassified cones |
+| `side_vote_max_range` | `7.0` | Furthest cone used for side evidence |
+| `side_vote_max_forward` | `3.0` | Forward extent of the classification corridor |
+| `side_vote_max_lateral` | `5.0` | Lateral extent of the classification corridor |
+| `side_vote_deadband` | `0.5` | Lateral region that contributes no side vote |
+| `side_update_distance` | `1.0` | Vehicle travel required between independent side proposals |
+| `side_confirmations` | `2` | Consistent traveled viewpoints required before locking a later label |
+| `boundary_link_distance` | `3.0` | Maximum direct same-boundary link length |
+| `boundary_gap_distance` | `3.3` | Maximum aligned boundary-gap link length |
+| `boundary_gap_angle_deg` | `40.0` | Largest direction change across a boundary gap |
+
+
+## Verification
+
+Unit tests cover pose interpolation through angle wrap, simulation clock
+resets, sharp-turn reprojection, nearest-cone selection, one-to-one scan
+association, side voting, label locking, and rejection of cross-track links.
+The Gazebo package also replays selected generated autocross tracks as
+progressively discovered maps through side inference and one-to-one centerline
+pairing with injected pose error. That replay assumes all cones in range are
+visible. Live Gazebo scans are sparser: an initial partial map incorrectly
+locked several right-side cones as left and the vehicle left the course. Treat
+the side-classification tests as algorithm checks, not evidence of autocross
+driving reliability.
+
+```bash
+cd autonomy/ros2
+colcon test --packages-select lhr_perception
+colcon test-result --verbose
+```
+
+For the full visual check, run the Gazebo autocross demo with LiDAR perception
+and ground-truth odometry. Each physical cone should form one stable blue or
+yellow map marker after classification. Orange markers may appear briefly
+before the car has enough evidence. The green centerline should contain one
+point across each cone pair and should not sprout branches as the car yaws:
+
+```bash
+./scripts/run_gazebo_demo.sh track_style:=autocross perception:=lidar estimator:=truth
+```
+
+Once that baseline is stable, repeat with `estimator:=ekf` to isolate errors
+introduced by state estimation.

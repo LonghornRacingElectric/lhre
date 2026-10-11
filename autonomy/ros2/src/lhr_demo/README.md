@@ -290,3 +290,24 @@ whole vehicle footprint. Mapped candidate matches use a 0.35 m radius;
 repeated persistent-map publications count repeatedly. This is a map
 consistency measure, not per-scan recall or statistically independent
 precision. Truth never enters LiDAR detection or path planning.
+
+## State estimation with either plant
+
+`estimator:=truth` keeps simulator odometry. `estimator:=ekf` sends simulator
+odometry to `/lhr/vehicle/odom_truth`, synthesizes IMU and wheel-speed inputs,
+and lets the EKF publish `/lhr/vehicle/odom`. Both `plant:=kinematic` and
+`plant:=bobsim` use this route. The EKF starts at the same resolved track pose
+as the simulator. LiDAR rendering uses truth motion; detection uses estimated
+motion. This allows pose drift to affect mapping without moving the physical
+scene. The simplified cone sensor still uses estimated visibility with truth
+cone locations; it is not a realistic sensing model under drift.
+
+`gyro_bias`, `wheel_scale_error`, `estimator`, and `lidar_classify_sides` go
+into metrics and bag provenance. Bags also record truth odometry, IMU,
+wheel speeds and truth TF. Metrics retain distance-weighted track error and
+append estimate-versus-truth errors. Side inference is opt-in; it estimates
+track side from geometry and can lock an incorrect early label.
+
+Docker mounts autonomy separately from the repository. Code provenance falls
+back to `/opt/lhr` (or `LHRE_ROOT`) when the launch file has no Git metadata
+above it. A dirty repository adds `-dirty` to the commit ID.

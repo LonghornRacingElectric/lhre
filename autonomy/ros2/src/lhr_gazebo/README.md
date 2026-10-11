@@ -46,3 +46,56 @@ optional gate layout is not added to existing generated Gazebo worlds.
 The seed-1 autocross and oval fixtures use the corrected closed-boundary
 spacing from [trackgen](../lhr_trackgen/README.md). Regenerate worlds after
 changing track generation so the Gazebo scene matches MVS track truth.
+
+## State estimation and optional side inference
+
+## Run
+
+```bash
+cd autonomy/ros2
+./scripts/run_gazebo_demo.sh track_style:=autocross perception:=lidar estimator:=truth
+```
+
+`perception:=sim` uses labelled generator cones and index pairing.
+`perception:=lidar` clusters the simulated pointcloud and maps unclassified
+cones by default. The track builder uses `boundary` pairing. Use
+`estimator:=truth` to check perception without EKF drift, then repeat with
+`estimator:=ekf`.
+
+To opt into left/right inference and one-to-one `classified` pairing, run:
+
+```bash
+./scripts/run_gazebo_demo.sh track_style:=autocross perception:=lidar lidar_classify_sides:=true estimator:=truth
+```
+
+By default, mapped cones appear orange in RViz. The unclassified `boundary`
+strategy can produce incorrect centerlines on sharp autocross turns; the
+classifier remains opt-in while its sparse-map failures are investigated.
+
+The geometry-based side classifier is experimental. In a live autocross run,
+the cone map had no duplicate cones, but sparse early detections caused a
+right-side boundary fragment to be labelled left and the car departed the
+course. The generated-track regression does not reproduce the LiDAR's
+occlusion and sparse returns.
+
+The launch starts graphical Gazebo and RViz by default. Use `gui:=false` or
+`rviz:=false` for a headless run. See the workspace
+[README](../../README.md) for all launch arguments and topic diagrams.
+
+## Visual check
+
+In RViz, inferred left cones are blue, inferred right cones are yellow, and
+cones awaiting evidence are orange. During a sharp turn:
+
+1. each physical cone should have one marker;
+2. a marker should remain fixed in the map frame;
+3. old orange markers should disappear when their side becomes known; and
+4. the green centerline should remain a single ordered band without branches.
+
+## Verification
+
+```bash
+cd autonomy/ros2
+colcon test --packages-select lhr_gazebo
+colcon test-result --verbose
+```

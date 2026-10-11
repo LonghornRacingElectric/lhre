@@ -152,3 +152,48 @@ def test_lidar_start_is_on_generated_track_and_manual_start_is_preserved():
     context.launch_configurations['start_on_track'] = 'false'
     manual = evaluate_parameters(context, module._launch_sim(context)[0]._Node__parameters)[0]
     assert (manual['init_x'], manual['init_y'], manual['init_yaw']) == (25., 0., 1.5708)
+
+
+@pytest.mark.parametrize('plant', ['kinematic', 'bobsim'])
+def test_estimator_starts_at_resolved_plant_pose(plant):
+    """Track spawning must move both the plant and its estimator together."""
+    path = Path(__file__).parents[1] / 'launch' / 'mvs_demo.launch.py'
+    spec = importlib.util.spec_from_file_location('mvs_ekf_launch', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    context = LaunchContext()
+    for action in module.generate_launch_description().entities:
+        if isinstance(action, DeclareLaunchArgument):
+            action.execute(context)
+    context.launch_configurations.update(
+        perception='lidar', estimator='ekf', plant=plant)
+    nodes = module._launch_sim(context)
+    plant_params = evaluate_parameters(context, nodes[0]._Node__parameters)[0]
+    estimator_params = evaluate_parameters(context, nodes[2]._Node__parameters)[0]
+    for name in ('init_x', 'init_y', 'init_yaw'):
+        assert plant_params[name] == estimator_params[name]
+    assert '/lhr/vehicle/odom_truth' in module.RECORDED_TOPICS
+    assert '/lhr/sensor/wheel_speeds' in module.RECORDED_TOPICS
+
+
+def test_provenance_uses_repository_mount_when_autonomy_mount_has_no_git(tmp_path, monkeypatch):
+    """Docker's separate autonomy mount must retain a useful code identity."""
+    import subprocess
+
+    path = Path(__file__).parents[1] / 'launch' / 'mvs_demo.launch.py'
+    spec = importlib.util.spec_from_file_location('mvs_provenance', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    repository = tmp_path / 'repository'
+    repository.mkdir()
+    subprocess.run(['git', 'init', '-q', str(repository)], check=True)
+    subprocess.run(['git', '-C', str(repository), '-c', 'user.name=Test',
+                    '-c', 'user.email=test@example.com', 'commit', '-q',
+                    '--allow-empty', '-m', 'fixture'], check=True)
+    expected = subprocess.check_output(
+        ['git', '-C', str(repository), 'rev-parse', '--short', 'HEAD'], text=True).strip()
+    module.__file__ = str(tmp_path / 'mounted-launch.py')
+    monkeypatch.setenv('LHRE_ROOT', str(repository))
+    assert module._git_sha() == expected
+    (repository / 'uncommitted').write_text('changed')
+    assert module._git_sha() == expected + '-dirty'

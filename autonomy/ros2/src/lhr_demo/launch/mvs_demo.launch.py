@@ -1,6 +1,7 @@
 """Launch the full MVS autonomy demo stack."""
 
 import math
+import os
 from pathlib import Path
 import subprocess
 import time
@@ -27,6 +28,10 @@ import numpy as np
 RECORDED_TOPICS = (
     # Without /clock a sim-time bag has no timeline a viewer can read.
     '/clock',
+    '/lhr/vehicle/odom_truth',
+    '/lhr/imu/data',
+    '/lhr/sensor/wheel_speeds',
+    '/tf_truth',
     '/lhr/sim/provenance',
     '/lhr/scene/clutter',
     '/tf',
@@ -80,22 +85,24 @@ def _git_sha() -> str:
     A '-dirty' suffix marks uncommitted changes anywhere in the repo,
     since a clean-looking id on a modified tree is worse than no id.
     """
-    here = str(Path(__file__).resolve().parent)
+    candidates = (Path(__file__).resolve().parent,
+                  Path(os.environ.get('LHRE_ROOT', '/opt/lhr')))
+    for here in candidates:
+        if not here.is_dir():
+            continue
 
-    def git(*args: str) -> str:
-        return subprocess.check_output(
-            ('git', '-C', here) + args,
-            stderr=subprocess.DEVNULL, text=True).strip()
+        def git(*args: str) -> str:
+            return subprocess.check_output(
+                ('git', '-c', f'safe.directory={here}', '-C', str(here)) + args,
+                stderr=subprocess.DEVNULL, text=True).strip()
 
-    try:
-        sha = git('rev-parse', '--short', 'HEAD')
-    except (OSError, subprocess.CalledProcessError):
-        return 'unknown'
-    try:
-        dirty = bool(git('status', '--porcelain'))
-    except (OSError, subprocess.CalledProcessError):
-        dirty = False
-    return f'{sha}-dirty' if dirty else sha
+        try:
+            sha = git('rev-parse', '--short', 'HEAD')
+            dirty = bool(git('status', '--porcelain'))
+        except (OSError, subprocess.CalledProcessError):
+            continue
+        return f'{sha}-dirty' if dirty else sha
+    return 'unknown'
 
 
 def _typed(name: str, kind):
@@ -151,12 +158,31 @@ def _launch_sim(context):
         raise ValueError('plant must be kinematic or bobsim')
     extra = ({'max_accel': float(value('max_accel')),
               'max_decel': float(value('max_decel'))} if plant == 'bobsim' else {})
+    use_ekf = value('estimator') == 'ekf'
+    if value('estimator') not in ('truth', 'ekf'):
+        raise ValueError('estimator must be truth or ekf')
+    remappings = ([('/lhr/vehicle/odom', '/lhr/vehicle/odom_truth'),
+                   ('/tf', '/tf_truth')] if use_ekf else [])
     simulator = Node(
         package='lhr_sim_' + plant, executable='sim_node', name='sim_' + plant,
         parameters=[{'publish_clock': value('use_sim_time') == 'true',
                      'init_x': x, 'init_y': y, 'init_yaw': yaw, **extra}],
-        output='screen')
-    return [simulator, RegisterEventHandler(OnProcessExit(
+        remappings=remappings, output='screen')
+    estimators = []
+    if use_ekf:
+        estimators = [
+            Node(package='lhr_sensor_sim', executable='inertial_sim',
+                 name='inertial_sim', parameters=[{
+                     'use_sim_time': value('use_sim_time') == 'true',
+                     'gyro_bias': float(value('gyro_bias')),
+                     'wheel_scale_error': float(value('wheel_scale_error'))}],
+                 output='screen'),
+            Node(package='lhr_state_estimation', executable='ekf_node',
+                 name='ekf_node', parameters=[{
+                     'use_sim_time': value('use_sim_time') == 'true',
+                     'init_x': x, 'init_y': y, 'init_yaw': yaw}], output='screen'),
+        ]
+    return [simulator, *estimators, RegisterEventHandler(OnProcessExit(
         target_action=simulator,
         on_exit=[EmitEvent(event=Shutdown(reason='Vehicle plant exited'))]))]
 
@@ -313,6 +339,11 @@ def generate_launch_description():
     # lists meant a new argument reached the nodes but never reached the
     # bag, so the recording claimed to describe a run it could not.
     launch_args = [
+        DeclareLaunchArgument('estimator', default_value='truth',
+                              choices=['truth', 'ekf']),
+        DeclareLaunchArgument('gyro_bias', default_value='0.0'),
+        DeclareLaunchArgument('wheel_scale_error', default_value='1.0'),
+        DeclareLaunchArgument('lidar_classify_sides', default_value='false'),
         DeclareLaunchArgument('motion_distortion', default_value='false'),
         DeclareLaunchArgument('clutter_profile', default_value='none',
                               choices=['none', 'trackside']),
@@ -416,8 +447,9 @@ def generate_launch_description():
         parameters=[{
             'use_sim_time': _b('use_sim_time'),
             'pairing_strategy': ParameterValue(PythonExpression([
-                "'boundary' if '", LaunchConfiguration('perception'),
-                "' == 'lidar' else 'index'"]), value_type=str),
+                "('classified' if '", LaunchConfiguration('lidar_classify_sides'),
+                "' == 'true' else 'boundary') if '",
+                LaunchConfiguration('perception'), "' == 'lidar' else 'index'"]), value_type=str),
         }],
         output='screen',
     )
@@ -449,6 +481,13 @@ def generate_launch_description():
         parameters=[{
             'use_sim_time': _b('use_sim_time'),
             'timeout_sec': _f('timeout_sec'),
+            'truth_odom_topic': PythonExpression([
+                "'/lhr/vehicle/odom_truth' if '", LaunchConfiguration('estimator'),
+                "' == 'ekf' else ''"]),
+            'estimator': _s('estimator'),
+            'gyro_bias': _f('gyro_bias'),
+            'wheel_scale_error': _f('wheel_scale_error'),
+            'lidar_classify_sides': _b('lidar_classify_sides'),
             'output_csv': _s('output_csv'),
             'run_id': _s('run_id'),
             'scenario': _s('scenario'),
@@ -459,6 +498,7 @@ def generate_launch_description():
             'mission': _s('mission'),
             'perception': _s('perception'),
             'start_finish_cones': _b('start_finish_cones'),
+            'classify_sides': _b('lidar_classify_sides'),
             'stack_window_sec': _f('stack_window_sec'),
             'min_cluster_points': _i('min_cluster_points'),
             'ground_z_min': _f('ground_z_min'),
@@ -502,6 +542,9 @@ def generate_launch_description():
         package='lhr_lidar_sim',
         executable='lidar_sim',
         name='lidar_sim',
+        remappings=[('/lhr/vehicle/odom', PythonExpression([
+            "'/lhr/vehicle/odom_truth' if '", LaunchConfiguration('estimator'),
+            "' == 'ekf' else '/lhr/vehicle/odom'"]))],
         parameters=[{
             'use_sim_time': _b('use_sim_time'),
             'seed': _i('seed'),
@@ -522,6 +565,7 @@ def generate_launch_description():
         parameters=[{
             'use_sim_time': _b('use_sim_time'),
             'max_range': _f('max_range_m'),
+            'classify_sides': _b('lidar_classify_sides'),
             'stack_window_sec': _f('stack_window_sec'),
             'min_cluster_points': _i('min_cluster_points'),
             'ground_z_min': _f('ground_z_min'),

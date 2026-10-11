@@ -56,8 +56,7 @@ jobs:
           source /opt/ros/jazzy/setup.bash
           colcon build
 
-      # ament lint (flake8, pep257) per package today; functional tests are
-      # open work for the Sim & Test Infra lane. Rules: ros2/README.md.
+      # Package tests include ament lint and functional simulation checks.
       - name: Test
         id: test
         run: |
