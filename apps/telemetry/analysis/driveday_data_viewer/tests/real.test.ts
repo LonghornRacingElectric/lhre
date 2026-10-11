@@ -16,8 +16,8 @@ describe.skipIf(!path)("a real session export", () => {
   let a: Analysis;
   beforeAll(() => {
     J = JSON.parse(readFileSync(path as string, "utf8")) as SessionExport;
-    const { D } = convertSession(J, "real.json", []);
-    s = new Session(rebuildRun(D, 0));
+    const { D } = convertSession(J, "real.json", [])[0];
+    s = new Session(rebuildRun(D));
     a = new Analysis(s, emptyUserState());
   });
 

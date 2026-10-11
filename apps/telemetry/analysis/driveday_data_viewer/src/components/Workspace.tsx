@@ -49,7 +49,6 @@ export function Workspace() {
       else if (k === ";") p.loopSegment();
       else if (k === "r" || k === "R") p.set("raceMode", !p.raceMode);
       else if (k === "Escape") {
-        if (p.pickSF) p.setPickSF(false);
         if (p.noteOpen) p.setNoteOpen(false);
       } else if (k === "d" || k === "D") setHidden((h) => !h);
     };

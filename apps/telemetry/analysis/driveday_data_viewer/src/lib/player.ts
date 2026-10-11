@@ -4,7 +4,7 @@ import { posAt } from "./geometry";
 import { interp, wrap } from "./math";
 import { pieces, segAt, zoneAt } from "./segments";
 import type { Session } from "./session";
-import { lsGet, lsSet, saveUserState, sfKey } from "./storage";
+import { lsGet, lsSet, saveUserState } from "./storage";
 import type { Lap, LapFlag, UserState } from "./types";
 import type { Units } from "./units";
 
@@ -84,9 +84,6 @@ export class Player {
   scFit = 1;
   cyScreen = 0;
   hits: Hit[] = [];
-  /* start/finish picking */
-  pickSF = false;
-  pickPrev: number | null = null;
   /* the note box under the timeline */
   noteOpen = false;
   /* where the car is now */
@@ -109,7 +106,6 @@ export class Player {
     readonly session: Session,
     user: UserState,
     units: Units,
-    readonly sf: number,
     prefs: Partial<Prefs> = {},
   ) {
     this.user = user;
@@ -472,22 +468,6 @@ export class Player {
     const k = ((this.curSeg < 0 ? 0 : this.curSeg) + dir + n) % n;
     if (this.view.z > 1.3) this.focusSeg(k);
     else this.seekToS(this.session.segs[k].a, 300);
-  }
-
-  /* ================= start/finish ================= */
-  setPickSF(on: boolean) {
-    this.pickSF = on;
-    this.pickPrev = null;
-    if (on) this.toast("Click the track where the start/finish line should be. Esc cancels.");
-    this.changed(false);
-  }
-  /** Stores the new line and asks the page to reload the run cut at it. */
-  commitSF(s: number, reload: () => void) {
-    const m = this.session.D.meta;
-    const next = wrap(this.sf + s, this.RL);
-    lsSet(sfKey(m), next);
-    this.toast("Re-cutting laps at the new start/finish…", "busy");
-    setTimeout(reload, 150);
   }
 
   /* ================= what the user marks ================= */

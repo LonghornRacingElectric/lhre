@@ -144,7 +144,3 @@ export function lsDel(key: string) {
 
 export const loadUserState = (sessId: string): UserState => ({ ...emptyUserState(), ...lsGet<Partial<UserState>>("state:" + sessId, {}) });
 export const saveUserState = (sessId: string, u: UserState) => lsSet("state:" + sessId, u);
-
-/** Start/finish line position (metres along the stored loop), shared by every run on a track layout. */
-export const sfKey = (d: { trackId: string; trackName: string }) => "sf:" + (d.trackId || d.trackName || "track");
-export const getSF = (meta: { trackId: string; trackName: string }) => lsGet<number>(sfKey(meta), 0);

@@ -88,9 +88,8 @@ function RunTitle({ p, run }: { p: Player; run: RunListEntry | undefined }) {
   const parts = [
     m.driver, m.venue, m.event, date,
     `${p.session.runs.length} timed laps`,
-    `${p.session.RL.toFixed(0)} m loop`,
+    `${p.session.RL.toFixed(0)} m ${p.session.open ? "course" : "loop"}`,
     `GPS ${gp.hz.toFixed(1)} Hz${gp.gaps ? ` with ${gp.gaps} gap${gp.gaps === 1 ? "" : "s"}` : ""}`,
-    p.sf ? `start/finish moved ${p.sf.toFixed(0)} m` : "",
   ].filter(Boolean);
   return (
     <>

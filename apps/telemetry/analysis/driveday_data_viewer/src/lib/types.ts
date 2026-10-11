@@ -137,7 +137,10 @@ export interface RunMeta {
 export interface RunData {
   ref: XY[];
   cum: number[];
+  /** Length of the loop, or of the course between the start line and the finish line when `open`. */
   RL: number;
+  /** The start and finish lines are in different places: the reference line is a path, not a closed loop. */
+  open?: boolean;
   laps: RawLap[];
   meta: RunMeta;
   warnings: string[];
@@ -157,6 +160,8 @@ export interface Track {
   cum: number[];
   RL: number;
   gates: number[];
+  /** A point-to-point course: `ref` runs from the start line to the finish line and is not closed. */
+  open?: boolean;
   created: number;
   from: string;
 }

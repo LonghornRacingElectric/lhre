@@ -8,7 +8,7 @@ import { defaultUnits } from "../src/lib/units";
 import { emptyUserState } from "../src/lib/types";
 import { synthSession } from "./fixtures/synth";
 
-const s = new Session(convertSession(synthSession({ laps: 8 }), "synth.json", []).D);
+const s = new Session(convertSession(synthSession({ laps: 8 }), "synth.json", [])[0].D);
 const units = defaultUnits();
 
 describe("Analysis", () => {

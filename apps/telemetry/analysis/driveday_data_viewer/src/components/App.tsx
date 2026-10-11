@@ -6,12 +6,12 @@ import { invalidatePalette } from "@/lib/draw/palette";
 import { Player, type Prefs } from "@/lib/player";
 import { rebuildRun } from "@/lib/rebuild";
 import { Session } from "@/lib/session";
-import { getSF, loadUserState, lsGet, lsSet, metaOf, runStore, storageProblem } from "@/lib/storage";
+import { loadUserState, lsGet, lsSet, metaOf, runStore, storageProblem } from "@/lib/storage";
 import type { RunListEntry, SessionExport } from "@/lib/types";
 import { defaultUnits } from "@/lib/units";
 import { Header, type Theme } from "./Header";
 import { Workspace } from "./Workspace";
-import { PlayerCtx, ReloadCtx, ToastProvider, useToast } from "./context";
+import { PlayerCtx, ToastProvider, useToast } from "./context";
 
 const NEXT_THEME: Record<Theme, Theme> = { auto: "light", light: "dark", dark: "auto" };
 
@@ -44,11 +44,10 @@ function Shell() {
       try {
         const D0 = await runStore.get(id);
         if (!D0) throw new Error("That run is no longer stored in this browser.");
-        const sf = getSF(D0.meta);
-        const D = rebuildRun(D0, sf);
+        const D = rebuildRun(D0);
         const session = new Session(D);
         const prefs = lsGet<Partial<Prefs>>("prefs", {});
-        const p = new Player(session, loadUserState(D.meta.sessId), prefs.units ?? defaultUnits(), sf, prefs);
+        const p = new Player(session, loadUserState(D.meta.sessId), prefs.units ?? defaultUnits(), prefs);
         p.toast = toast;
         live.current = p;
         lsSet("run", id);
@@ -59,10 +58,6 @@ function Shell() {
     },
     [toast],
   );
-
-  const reload = useCallback(() => {
-    if (current) void open(current);
-  }, [current, open]);
 
   /* first load: restore runs, theme, and the last run opened */
   useEffect(() => {
@@ -91,11 +86,17 @@ function Shell() {
         try {
           toast("Reading " + f.name + "…", "busy");
           const J = JSON.parse(await f.text()) as SessionExport;
-          const { D, track, isNew, renamed } = convertSession(J, f.name, await runStore.tracks());
-          if (isNew || renamed) await runStore.putTrack(track);
-          await runStore.put(metaOf(D), D);
-          last = D.meta.sessId;
-          toast(f.name + ": " + D.laps.filter((l) => l.kind === "lap").length + " laps." + (D.warnings.length ? " " + D.warnings.join(" ") : ""));
+          const courses = convertSession(J, f.name, await runStore.tracks());
+          const now = Date.now();
+          for (const [ci, { D, track, isNew, renamed }] of courses.entries()) {
+            if (isNew || renamed) await runStore.putTrack(track);
+            /* newest first in the list, so the courses of one file stay in order */
+            await runStore.put({ ...metaOf(D), added: now - ci }, D);
+            last ??= D.meta.sessId;
+          }
+          const n = courses.reduce((a, c) => a + c.D.laps.filter((l) => l.kind === "lap").length, 0);
+          const note = courses[0].D.warnings.join(" ");
+          toast(f.name + ": " + n + " laps" + (courses.length > 1 ? " in " + courses.length + " courses" : "") + "." + (note ? " " + note : ""));
         } catch (e) {
           toast(f.name + ": " + (e as Error).message, "err");
         }
@@ -166,7 +167,6 @@ function Shell() {
   };
 
   return (
-    <ReloadCtx.Provider value={reload}>
       <PlayerCtx.Provider value={player}>
         <div className="app">
           <Header
@@ -178,7 +178,7 @@ function Shell() {
             onImport={(f) => void importFiles(f)}
             onRemove={() => void remove()}
           />
-          {player && <Workspace key={player.session.D.meta.sessId + ":" + player.sf} />}
+          {player && <Workspace key={player.session.D.meta.sessId} />}
         </div>
         {ready && !player && !current && (
           <div className="welcome">
@@ -192,7 +192,6 @@ function Shell() {
         )}
         {dragOver && <div className="dropzone">Drop session JSON to import</div>}
       </PlayerCtx.Provider>
-    </ReloadCtx.Provider>
   );
 }
 

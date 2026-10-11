@@ -1,18 +1,19 @@
 import { interp } from "./math";
 import type { Lap, XY } from "./types";
 
-/** The closed reference loop every lap is measured against. */
+/** The reference line every lap is measured against: a closed loop, or a path from the start line to the finish line when `open`. */
 export class Geo {
   constructor(
     readonly ref: XY[],
     readonly cum: number[],
     readonly RL: number,
+    readonly open = false,
   ) {}
 
-  /** Position and heading at arc length s, wrapping around the loop. */
+  /** Position and heading at arc length s, wrapping around a loop or stopping at the ends of an open course. */
   at(s: number): [number, number, number] {
     const { ref, cum, RL } = this;
-    s = ((s % RL) + RL) % RL;
+    s = this.open ? Math.max(0, Math.min(RL, s)) : ((s % RL) + RL) % RL;
     for (let i = 0; i < cum.length - 1; i++) {
       if (s <= cum[i + 1]) {
         const f = (s - cum[i]) / (cum[i + 1] - cum[i] || 1);

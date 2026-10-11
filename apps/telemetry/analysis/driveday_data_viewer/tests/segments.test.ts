@@ -3,7 +3,7 @@ import { convertSession } from "../src/lib/convert";
 import { Session } from "../src/lib/session";
 import { synthSession } from "./fixtures/synth";
 
-const s = new Session(convertSession(synthSession({ laps: 8 }), "synth.json", []).D);
+const s = new Session(convertSession(synthSession({ laps: 8 }), "synth.json", [])[0].D);
 
 describe("corners, straights and braking zones", () => {
   it("finds the two U-turns and the two straights of a stadium", () => {

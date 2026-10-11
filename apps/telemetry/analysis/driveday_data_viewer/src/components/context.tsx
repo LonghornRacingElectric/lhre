@@ -68,7 +68,3 @@ export function ToastProvider({ children, bind }: { children: ReactNode; bind?: 
     </ToastCtx.Provider>
   );
 }
-
-/** Re-open the current run from storage, for when something it depends on changed (the start/finish line). */
-export const ReloadCtx = createContext<() => void>(() => {});
-export const useReload = () => useContext(ReloadCtx);

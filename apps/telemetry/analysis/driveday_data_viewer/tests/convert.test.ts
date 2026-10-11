@@ -4,7 +4,7 @@ import { synthSession, TRACK_LEN } from "./fixtures/synth";
 
 describe("convertSession", () => {
   const J = synthSession({ laps: 8 });
-  const { D, track, isNew } = convertSession(J, "synth.json", []);
+  const { D, track, isNew } = convertSession(J, "synth.json", [])[0];
   const timed = D.laps.filter((l) => l.kind === "lap");
 
   it("builds one lap per manual mark, plus an out lap and a tail", () => {
@@ -32,7 +32,7 @@ describe("convertSession", () => {
   });
 
   it("finds the same track again for another run on it", () => {
-    const again = convertSession(synthSession({ laps: 6, sessionId: "sess-synth-2" }), "again.json", [track]);
+    const again = convertSession(synthSession({ laps: 6, sessionId: "sess-synth-2" }), "again.json", [track])[0];
     expect(again.isNew).toBe(false);
     expect(again.D.meta.trackId).toBe(track.id);
   });

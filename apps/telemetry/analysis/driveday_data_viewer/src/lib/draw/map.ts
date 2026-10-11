@@ -68,7 +68,7 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
   ctx.lineJoin = "round";
 
   const gates = (): void => {
-    ([[0, "S/F", pal.ink], [RL / 3, "S1|S2", pal.s1], [(2 * RL) / 3, "S2|S3", pal.s2]] as [number, string, string][]).forEach((g) => {
+    ([[0, s.open ? "Start" : "S/F", pal.ink], [RL / 3, "S1|S2", pal.s1], [(2 * RL) / 3, "S2|S3", pal.s2]].concat(s.open ? [[RL, "Finish", pal.ink]] : []) as [number, string, string][]).forEach((g) => {
       const a3 = s.geo.at(g[0]);
       const nx = -Math.sin(a3[2]);
       const ny = Math.cos(a3[2]);
@@ -271,25 +271,6 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
     dots(a.cons.brake, pal.red);
     dots(a.cons.apex, pal.blue);
     ctx.globalAlpha = 1;
-  }
-  /* the new start/finish line being picked */
-  if (p.pickSF && p.pickPrev != null) {
-    const a3 = s.geo.at(p.pickPrev);
-    const nx = -Math.sin(a3[2]);
-    const ny = Math.cos(a3[2]);
-    ctx.strokeStyle = pal.s3;
-    ctx.lineWidth = 4;
-    ctx.setLineDash([6, 4]);
-    ctx.beginPath();
-    ctx.moveTo(X(a3[0]) + nx * 20 * wS, Y(a3[1]) - ny * 20 * wS);
-    ctx.lineTo(X(a3[0]) - nx * 20 * wS, Y(a3[1]) + ny * 20 * wS);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = pal.s3;
-    ctx.font = "700 12px " + pal.fMono;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("New S/F", X(a3[0]) + nx * 36 * wS, Y(a3[1]) - ny * 36 * wS);
   }
   /* a dot on every fix */
   ctx.fillStyle = pal.ink;

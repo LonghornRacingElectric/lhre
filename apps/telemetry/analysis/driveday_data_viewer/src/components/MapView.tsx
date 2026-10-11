@@ -6,7 +6,7 @@ import { drawMap } from "@/lib/draw/map";
 import { gradientCss, rampSpd } from "@/lib/draw/palette";
 import { cvS, sU } from "@/lib/units";
 import { Hud } from "./Hud";
-import { usePainter, usePlayer, useReload, useUi } from "./context";
+import { usePainter, usePlayer, useUi } from "./context";
 
 /* The map stage: canvas, overlay, legend and zoom controls. */
 
@@ -30,7 +30,6 @@ function Legend() {
 export function MapView() {
   const p = usePlayer();
   useUi(p);
-  const reload = useReload();
   const ref = usePainter(p, "map", (c) => drawMap(p, c), true);
   const tip = useRef<HTMLDivElement>(null);
 
@@ -62,13 +61,6 @@ export function MapView() {
       const r = cv.getBoundingClientRect();
       const mx = e.clientX - r.left;
       const my = e.clientY - r.top;
-      if (p.pickSF) {
-        const nr = p.session.geo.nearest((mx - p.ox) / p.sc, (p.oy - my) / p.sc);
-        p.pickPrev = nr.d < 30 ? nr.s : null;
-        hideTip();
-        p.schedule();
-        return;
-      }
       if (p.layoutOnly || !tip.current) return hideTip();
       const L = p.laps[p.sel];
       let bi = -1;
@@ -87,7 +79,6 @@ export function MapView() {
     };
     const leave = () => {
       hideTip();
-      if (p.pickSF) { p.pickPrev = null; p.schedule(); }
     };
     const up = (e: PointerEvent) => {
       const was = drag;
@@ -96,12 +87,6 @@ export function MapView() {
       const r = cv.getBoundingClientRect();
       const mx = e.clientX - r.left;
       const my = e.clientY - r.top;
-      if (p.pickSF) {
-        const nr = p.session.geo.nearest((mx - p.ox) / p.sc, (p.oy - my) / p.sc);
-        if (nr.d > 30) { p.toast("That is too far from the track. Click on the line.", "err"); return; }
-        p.commitSF(nr.s, reload);
-        return;
-      }
       for (const h of p.hits) {
         if (Math.hypot(h.x - mx, h.y - my) <= h.r) { h.fn(); return; }
       }
@@ -144,11 +129,11 @@ export function MapView() {
       cv.removeEventListener("wheel", wheel);
       cv.removeEventListener("dblclick", dbl);
     };
-  }, [p, reload, ref]);
+  }, [p, ref]);
 
   return (
     <div className={"viewer panel" + (p.layoutOnly ? " layoutonly" : "")} id="viewer">
-      <canvas ref={ref} id="cv" role="img" aria-label="GPS map of the current lap over the track layout. Click the track to jump to that point." style={p.pickSF ? { cursor: "copy" } : undefined} />
+      <canvas ref={ref} id="cv" role="img" aria-label="GPS map of the current lap over the track layout. Click the track to jump to that point." />
       <Hud />
       <Legend />
       <div className="maptip" id="maptip" ref={tip} hidden />

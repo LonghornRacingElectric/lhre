@@ -14,7 +14,7 @@ export const RADIUS = 14;
 export const TRACK_LEN = 2 * STRAIGHT + 2 * Math.PI * RADIUS;
 
 /** Position and heading at arc length s along the stadium, counter-clockwise, starting at the beginning of the first straight. */
-function pathAt(sIn: number): { x: number; y: number; turning: boolean } {
+export function pathAt(sIn: number): { x: number; y: number; turning: boolean } {
   const s = ((sIn % TRACK_LEN) + TRACK_LEN) % TRACK_LEN;
   const arc = Math.PI * RADIUS;
   if (s < STRAIGHT) return { x: s, y: 0, turning: false };

@@ -24,6 +24,7 @@ export interface Zone {
 
 /** Corners are where the loop turns tighter than about 18 m radius for at least 6 m. */
 export function buildSegments(geo: Geo): Seg[] {
+  if (geo.open) return buildOpenSegments(geo);
   const { RL } = geo;
   const NSEG = Math.round(RL / 2);
   const STEP = RL / NSEG;
@@ -121,6 +122,71 @@ export function buildSegments(geo: Geo): Seg[] {
   return rot;
 }
 
+/** The same corner test along a path from the start line to the finish line: nothing wraps, and the first and last pieces are just straights or corners. */
+function buildOpenSegments(geo: Geo): Seg[] {
+  const { RL } = geo;
+  const N = Math.max(4, Math.round(RL / 2));
+  const STEP = RL / N;
+  const P: [number, number][] = [];
+  for (let i = 0; i < N; i++) {
+    const a = geo.at(i * STEP);
+    P.push([a[0], a[1]]);
+  }
+  const at = (i: number) => Math.max(0, Math.min(N - 1, i));
+  const Q = P.map((p, i) => {
+    const a = P[at(i - 1)];
+    const b = P[at(i + 1)];
+    return [(a[0] + p[0] + b[0]) / 3, (a[1] + p[1] + b[1]) / 3];
+  });
+  const Hd = Q.map((p, i) => {
+    const b = Q[at(i + 2)];
+    return Math.atan2(b[1] - p[1], b[0] - p[0]);
+  });
+  const dh = (a: number, b: number) => {
+    let x = b - a;
+    while (x > Math.PI) x -= 2 * Math.PI;
+    while (x < -Math.PI) x += 2 * Math.PI;
+    return x;
+  };
+  const rate = Hd.map((_, i) => (dh(Hd[at(i - 1)], Hd[at(i + 1)]) * 180) / Math.PI / (2 * STEP));
+  interface Run { s: number; e: number; sign: number }
+  const runs: Run[] = [];
+  let cur: Run | null = null;
+  for (let i = 0; i < N; i++) {
+    if (Math.abs(rate[i]) > 3.2) {
+      const sg = rate[i] > 0 ? 1 : -1;
+      if (cur && cur.sign === sg && i - cur.e <= 4) cur.e = i;
+      else {
+        if (cur) runs.push(cur);
+        cur = { s: i, e: i, sign: sg };
+      }
+    }
+  }
+  if (cur) runs.push(cur);
+  const corners = runs.filter((r) => r.e - r.s + 1 >= 3);
+  interface Raw { k0: number; k1: number; type: "c" | "s"; dir: number }
+  const out: Raw[] = [];
+  let pos = 0;
+  corners.forEach((r) => {
+    const gap = r.s - pos;
+    if (gap >= 3) out.push({ k0: pos, k1: r.s, type: "s", dir: 0 });
+    else if (out.length) out[out.length - 1].k1 += gap;
+    out.push({ k0: gap >= 3 || !out.length ? r.s : pos, k1: r.e + 1, type: "c", dir: r.sign });
+    pos = r.e + 1;
+  });
+  if (N - pos >= 3 || !out.length) out.push({ k0: pos, k1: N, type: "s", dir: 0 });
+  else out[out.length - 1].k1 = N;
+  let nc = 0;
+  let ns = 0;
+  return out.map((o) => ({
+    a: o.k0 * STEP,
+    len: (o.k1 - o.k0) * STEP,
+    type: o.type,
+    dir: o.dir,
+    name: o.type === "c" ? "T" + ++nc : "Str " + ++ns,
+  }));
+}
+
 export const segAt = (segs: Seg[], RL: number, s: number): number => {
   s = wrap(s, RL);
   for (let i = 0; i < segs.length; i++) if (wrap(s - segs[i].a, RL) < segs[i].len) return i;
@@ -128,7 +194,7 @@ export const segAt = (segs: Seg[], RL: number, s: number): number => {
 };
 
 /** Brake application above 8% of peak that repeats on at least a quarter of the timed laps. */
-export function buildZones(runs: Lap[], RL: number): Zone[] {
+export function buildZones(runs: Lap[], RL: number, open = false): Zone[] {
   interface Raw { li: number; s0: number; s1: number; peak: number }
   const raw: Raw[] = [];
   runs.forEach((l, li) => {
@@ -156,7 +222,7 @@ export function buildZones(runs: Lap[], RL: number): Zone[] {
   raw.sort((a, b) => a.s0 - b.s0);
   const cl: { c: number; m: Raw[] }[] = [];
   raw.forEach((z) => {
-    let c = cl.find((k) => circDist(k.c, z.s0, RL) < 14);
+    let c = cl.find((k) => (open ? Math.abs(k.c - z.s0) : circDist(k.c, z.s0, RL)) < 14);
     if (!c) {
       c = { c: z.s0, m: [] };
       cl.push(c);
@@ -176,7 +242,7 @@ export function buildZones(runs: Lap[], RL: number): Zone[] {
         a = s0 - 3;
         b = s0 + 3;
       }
-      const w = wrap(a, RL);
+      const w = open ? Math.max(0, a) : wrap(a, RL);
       return { s0: w, len: b - a, s1: w + (b - a), n: new Set(c.m.map((m) => m.li)).size, peak: c.m.reduce((x, m) => x + m.peak, 0) / c.m.length, name: "" };
     });
   zs.sort((a, b) => a.s0 - b.s0);

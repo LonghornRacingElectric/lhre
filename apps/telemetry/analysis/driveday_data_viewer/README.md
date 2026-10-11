@@ -52,10 +52,11 @@ src/components/ React: header, map, transport, dock, panels
 tests/          vitest, with a synthetic stadium-shaped track in fixtures/
 ```
 
-- `convert.ts` turns an export into run data. It finds the track, matches it
-  to a stored layout if one exists, and cuts sectors at thirds of the loop.
-- `rebuild.ts` re-cuts the laps wherever the start/finish line is now. The
-  line is saved per track, so every run on that layout shares it.
+- `convert.ts` turns an export into run data. It sorts the logger's laps into
+  timed runs and slow drives back, groups the runs into courses, finds each
+  track (matching a stored layout if one exists), and cuts sectors at thirds.
+- `rebuild.ts` makes each lap of a loop end exactly where the next begins,
+  so the car marker never jumps between laps.
 - `Player` (`player.ts`) is the one mutable model: playhead, camera, ghost,
   notes. React reads it through two subscriptions, one for options and one
   per painted frame. Canvases are painted from it in one animation frame
@@ -63,6 +64,27 @@ tests/          vitest, with a synthetic stadium-shaped track in fixtures/
 - Stored data is under the `driveday:` prefix in localStorage, plus an
   IndexedDB database for runs and track layouts. If IndexedDB is blocked the
   app falls back to memory for the tab and says so.
+
+## Start and finish lines, and courses
+
+Lap times are always the logger's. The lines are never set by hand: the start
+line is where the car was when the timed laps began, and the finish line is
+where it was when they ended (the middle of those positions over all the
+laps), and the sectors are cut at thirds between them.
+
+- **A loop** (laps end where they began) has one start/finish line.
+- **An open course** (the finish line is somewhere else, as on an autocross
+  day) has a start line and a finish line, and the path between them is the
+  course.
+- **Courses.** The logger marks a lap every time the button is pressed, so a
+  drive back to the start is also a "lap". On import, short or slow legs
+  (under 60% of a typical run's length or 40% of its speed) are left out.
+  The remaining runs are grouped by where they start and finish and which way
+  they go, and each group opens as its own run in the dropdown (for example
+  "Course 2 (reverse of 1)"). Laps on different lines are not comparable, so
+  they are never mixed in one set of bests, ghosts and charts. Runs whose
+  start and finish both lie within about 25 m of each other (or 10% of the
+  run length) count as the same course.
 
 ## What it does not do
 

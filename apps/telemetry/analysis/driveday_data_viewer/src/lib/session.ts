@@ -41,6 +41,8 @@ export class Session {
   readonly D: RunData;
   readonly geo: Geo;
   readonly RL: number;
+  /** Start and finish are in different places, so there is no lap to wrap round. */
+  readonly open: boolean;
   readonly laps: Lap[];
   readonly runs: Lap[]; // timed laps, in order
   readonly base: Lap;
@@ -60,7 +62,8 @@ export class Session {
   constructor(D: RunData) {
     this.D = D;
     this.RL = D.RL;
-    this.geo = new Geo(D.ref, D.cum, D.RL);
+    this.open = !!D.open;
+    this.geo = new Geo(D.ref, D.cum, D.RL, this.open);
     this.brkMax = maxOf(D.laps.map((l) => l.ch.brk));
     this.brkrMax = maxOf(D.laps.map((l) => l.ch.brkr));
     this.laps = D.laps.map((l) => prepareLap(l, this.brkMax, this.brkrMax));
@@ -75,7 +78,7 @@ export class Session {
     this.vlo = pctl(spdAll, 0.04);
     this.vhi = Math.max(this.vlo + 1, pctl(spdAll, 0.97));
     this.segs = buildSegments(this.geo);
-    this.zones = buildZones(this.runs, this.RL);
+    this.zones = buildZones(this.runs, this.RL, this.open);
     const pts = [...D.ref, ...this.runs.flatMap((l) => l.pts.map((p) => [p[0], p[1]] as [number, number]))];
     this.bbox = {
       x: [Math.min(...pts.map((p) => p[0])), Math.max(...pts.map((p) => p[0]))],

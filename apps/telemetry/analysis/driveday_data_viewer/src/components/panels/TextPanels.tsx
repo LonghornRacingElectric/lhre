@@ -159,13 +159,15 @@ export function AboutPanel() {
     <div className="note2" style={{ paddingTop: 12 }}>
       <b>Timeline.</b> Everything follows the playhead along the whole run, out lap first. Click or drag the timeline, press Play, or click the track or any chart to jump. Laps are the chapters, with sector marks inside them and an orange marker for every cone hit.
       <br /><br />
-      <b>Sectors.</b> The base overlay lap&apos;s GPS path is split into three equal-distance sectors, and every other lap is projected onto it so each is timed through the same two gates. Crossings are interpolated between GPS fixes. S1 starts and S3 ends at the start/finish line, so the sectors add up to the lap time.
+      <b>Sectors.</b> The base overlay lap&apos;s GPS path is split into three equal-distance sectors, and every other lap is projected onto it so each is timed through the same two gates. Crossings are interpolated between GPS fixes. The sectors add up to the lap time: the first one starts at the logged lap start and the last one ends at the logged lap end.
       <br /><br />
       <b>Colours.</b> Purple is the session best, green is faster than the base lap, yellow is slower. Adjusted time adds the cone penalty to real time.
       <br /><br />
       <b>Limits.</b> GPS runs at about 1.8 Hz with roughly 1 m resolution, so expect a tenth or two of noise in sector times and treat speeds as approximate.
       <br /><br />
-      <b>Start/finish.</b> Use Set start/finish under Overlays, then click the track. Every lap, sector and energy figure is re-cut where the car crosses that line, and the same line is used for every run on this layout. Reset puts the logger marks back.
+      <b>Start and finish lines.</b> They are set for you: the start line is where the car was when the timed laps began, and the finish line is where it was when they ended. Lap times are always the ones the logger recorded.
+      <br /><br />
+      <b>Courses.</b> If the runs in one file start or finish in different places, or some go the other way, each group opens as its own run, because laps on different lines cannot be compared. Short, slow drives back to the line are left out.
       <br /><br />
       <b>Skipping laps.</b> A skipped lap stays on the timeline but is left out of the bests, the theoretical best, the debrief and the consistency view.
       <br /><br />
