@@ -59,3 +59,5 @@ versions; regenerate Gazebo worlds before comparing the two simulators.
 The legacy `simple` debug layout retains its original behavior.
 `test/test_track_layout.py` checks spacing, width, closure and crossings
 across several seeds for both styles.
+
+Node cleanup tolerates an already-stopped ROS context after launch shutdown.

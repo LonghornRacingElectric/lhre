@@ -99,3 +99,5 @@ cd autonomy/ros2
 colcon test --packages-select lhr_gazebo
 colcon test-result --verbose
 ```
+
+Node cleanup tolerates an already-stopped ROS context after launch shutdown.

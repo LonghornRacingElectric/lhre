@@ -61,3 +61,5 @@ validation and full-lap regression studies remain required.
 
 Run `colcon test --packages-select lhr_sim_bobsim lhr_sim_kinematic lhr_demo`.
 Functional BobSim tests need the mounted checkout and vehicle file.
+
+Node cleanup tolerates an already-stopped ROS context after launch shutdown.

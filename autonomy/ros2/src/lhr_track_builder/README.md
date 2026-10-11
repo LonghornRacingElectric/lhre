@@ -54,3 +54,5 @@ corridors, shuffled IDs, and disconnected sections.
   available. The Gazebo launch selects it when
   `perception:=lidar lidar_classify_sides:=false`. It can create several
   candidates from one cone.
+
+Node cleanup tolerates an already-stopped ROS context after launch shutdown.

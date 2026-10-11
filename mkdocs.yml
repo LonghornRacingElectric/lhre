@@ -63,6 +63,7 @@ nav:
       - Track Generation: autonomy/ros2/src/lhr_trackgen/README.md
       - Track Builder: autonomy/ros2/src/lhr_track_builder/README.md
       - Control: autonomy/ros2/src/lhr_control/README.md
+      - Mission Manager: autonomy/ros2/src/lhr_mission_manager/README.md
       - LiDAR Perception: autonomy/ros2/src/lhr_perception/README.md
       - Perception Tests: autonomy/ros2/src/lhr_perception/test/README.md
       - Gazebo: autonomy/ros2/src/lhr_gazebo/README.md

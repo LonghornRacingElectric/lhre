@@ -165,3 +165,5 @@ They remain blank without a truth stream. The CSV includes `estimator`,
 existing run parameters. Distance-weighted CTE and run outcome checks remain
 active. Estimator errors compare to the latest truth sample, so callback
 timing can affect them; they are not a timestamp-aligned accuracy guarantee.
+
+Node cleanup tolerates an already-stopped ROS context after launch shutdown.

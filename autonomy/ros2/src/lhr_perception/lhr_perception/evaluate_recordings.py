@@ -159,7 +159,7 @@ def main():
                                 round(e['unmatched_candidates_per_frame'], 1))
                                for e in result['evaluations']], flush=True)
     finally:
-        rclpy.shutdown()
+        rclpy.try_shutdown()
     report = {'scope': 'Stationary reference-cone matches, not exhaustive false-positive labels',
               'limitations': ['Mean gravity and published centroid supply reference coordinates',
                               'Unmatched candidates are not proven false positives',

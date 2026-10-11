@@ -445,5 +445,5 @@ def main():
         node.finish('interrupted')
     code = node.finalize()
     node.destroy_node()
-    rclpy.shutdown()
+    rclpy.try_shutdown()
     sys.exit(code)

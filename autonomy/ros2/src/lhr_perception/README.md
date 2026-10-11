@@ -209,3 +209,5 @@ point across each cone pair and should not sprout branches as the car yaws:
 
 Once that baseline is stable, repeat with `estimator:=ekf` to isolate errors
 introduced by state estimation.
+
+Node cleanup tolerates an already-stopped ROS context after launch shutdown.

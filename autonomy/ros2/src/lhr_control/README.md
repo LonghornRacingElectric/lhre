@@ -28,3 +28,5 @@ Other steering and speed parameters are listed in the
 Tests cover path endpoints, short horizons, stale/empty routes, open curvature,
 and acceleration from rest. The controller still assumes ideal vehicle state
 and actuation; closed-loop simulation does not validate hardware behavior.
+
+Node cleanup tolerates an already-stopped ROS context after launch shutdown.

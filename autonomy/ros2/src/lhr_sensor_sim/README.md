@@ -57,3 +57,5 @@ sees.
 Cone triangle vertices and stripe colors are preserved in detections and
 visualization. The simplified sensor copies each scene marker before adding
 position noise, so it cannot alter the ground-truth scene positions.
+
+Node cleanup tolerates an already-stopped ROS context after launch shutdown.

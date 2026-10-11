@@ -57,3 +57,5 @@ vehicle's map-axis velocity component.
 The shared node exposes a state-advance hook used by the optional
 [BobSim plant](../lhr_sim_bobsim/README.md). Clock, odometry and TF publication
 stay shared; the kinematic equations and default launch behavior stay the same.
+
+Node cleanup tolerates an already-stopped ROS context after launch shutdown.
