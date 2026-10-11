@@ -57,7 +57,6 @@ def test_lidar_sits_on_the_car():
     assert 0.0 < lz < 1.5
 
 
-
 def test_stereo_optics_describe_a_wide_rectified_pair():
     """The lens label must produce pixel calibration, not a millimeter K value."""
     veh = load_vehicle()

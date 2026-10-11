@@ -56,3 +56,15 @@ cd autonomy/ros2
 colcon test --packages-select lhr_gazebo
 colcon test-result --verbose
 ```
+
+## Stereo model
+
+The generated vehicle carries one ZED 2i rig with the 2.1 mm lens: two ideal
+RGB pinhole sensors, parallel axes, and a 0.12 m local-y separation. Both
+sensors share `zed2i_link`, so rotating the mount preserves Gazebo's stereo
+baseline calculation. Geometry and optics come from `lhr_vehicle`'s YAML;
+regenerate the model after changing them.
+
+The camera-only link has no collision and uses 0.001 kg mass / 0.000001 kg m2
+diagonal inertia for simulation bookkeeping. The initial mount and optics
+are approximations awaiting measurement and physical device calibration.
