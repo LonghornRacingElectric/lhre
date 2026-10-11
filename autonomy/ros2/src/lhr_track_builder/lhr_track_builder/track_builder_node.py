@@ -6,6 +6,7 @@ from typing import List, Tuple
 
 from builtin_interfaces.msg import Time
 from geometry_msgs.msg import Point, PoseStamped
+from lhr_track_builder.centerline import pair_classified_cones
 from nav_msgs.msg import Odometry, Path
 import numpy as np
 import rclpy
@@ -75,7 +76,7 @@ class TrackBuilder(Node):
         # --- Subscribers ---
         self.create_subscription(
             MarkerArray, cone_topic, self._cones_cb, sub_qos)
-        if self._pairing_strategy in ('nearest', 'boundary'):
+        if self._pairing_strategy in ('nearest', 'boundary', 'classified'):
             self.create_subscription(
                 Odometry, '/lhr/vehicle/odom', self._odom_cb, 10)
 
@@ -100,6 +101,8 @@ class TrackBuilder(Node):
         right: dict = {}
         all_cones: dict = {}
         for marker in msg.markers:
+            if marker.action != Marker.ADD:
+                continue
             pos = marker.pose.position
             if marker.ns == 'left_cones':
                 left[marker.id] = (pos.x, pos.y)
@@ -147,12 +150,32 @@ class TrackBuilder(Node):
         Strategy 'index': match left ID ``i`` with right ID ``10000 + i``.
         Strategy 'nearest': pair each left cone with its nearest right cone.
         Strategy 'boundary': Delaunay triangulation, filter by track width.
+        Strategy 'classified': minimum-cost one-to-one left/right pairing.
         """
         if self._pairing_strategy == 'boundary':
             return self._pair_boundary()
+        if self._pairing_strategy == 'classified':
+            return self._pair_classified()
         if self._pairing_strategy == 'nearest':
             return self._pair_nearest()
         return self._pair_by_index()
+
+    def _pair_classified(self) -> List[Tuple[float, float]]:
+        """Pair inferred left/right cones once within the track-width gate."""
+        left = [position for _, position in sorted(self._left_cones.items())]
+        right = [position for _, position in sorted(self._right_cones.items())]
+        midpoints = pair_classified_cones(
+            left,
+            right,
+            self._track_width,
+            self._track_width_tol,
+        )
+
+        if len(midpoints) > 2 and self._have_odom:
+            midpoints = self._chain_path_from_vehicle(midpoints)
+        elif len(midpoints) > 2:
+            midpoints = self._chain_path(midpoints, 0)
+        return midpoints[:self._max_points]
 
     def _pair_by_index(self) -> List[Tuple[float, float]]:
         """Pair left/right cones by matching ID offset (trackgen convention)."""

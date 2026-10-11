@@ -4,21 +4,33 @@ LiDAR-based cone detector for FSAE driverless.
 
 Subscribes to a PointCloud2 topic from Gazebo's gpu_lidar sensor,
 clusters the pointcloud to find cone-sized objects, and publishes
-an unclassified MarkerArray of all detected cones.
+a persistent MarkerArray with geometry-inferred track sides.
 
 Output contract (consumed by lhr_track_builder):
   - Topic: /lhr/sensor/cones_detected (MarkerArray)
   - QoS: RELIABLE + TRANSIENT_LOCAL, depth 1
-  - Namespace: "cones" (ids 0..N-1)
+  - Namespace: "left_cones", "right_cones", or "cones" while unknown or
+    when side classification is disabled
   - Markers: SPHERE type, scale 0.35, frame_id "map"
 
-Left/right classification is NOT performed here — the LiDAR has no
-colour information.  The track_builder's 'boundary' pairing strategy
-handles centerline construction from unclassified cones.
+LiDAR does not observe cone colour. Side classification accumulates the
+cone's vehicle-relative lateral position, then shares evidence along
+geometrically continuous boundary fragments.
 """
 
+from collections import deque
 import math
 
+from lhr_perception.cone_map import update_cone_map
+from lhr_perception.cone_side_classifier import (
+    classify_cone_sides,
+    LEFT,
+    RIGHT,
+    StableSideLabels,
+    UNKNOWN,
+    vehicle_relative_side_vote,
+)
+from lhr_perception.pose_history import Pose2D, PoseHistory, sensor_point_to_map
 from lhr_vehicle import load_vehicle
 from nav_msgs.msg import Odometry
 import numpy as np
@@ -72,6 +84,17 @@ class LidarConeDetector(Node):
         self.declare_parameter('max_cluster_points', 50)
         self.declare_parameter('dedup_radius', 1.5)
         self.declare_parameter('publish_hz', 10.0)
+        self.declare_parameter('pose_history_sec', 2.0)
+        self.declare_parameter('classify_sides', True)
+        self.declare_parameter('side_vote_max_range', 7.0)
+        self.declare_parameter('side_vote_max_forward', 3.0)
+        self.declare_parameter('side_vote_max_lateral', 5.0)
+        self.declare_parameter('side_vote_deadband', 0.5)
+        self.declare_parameter('side_update_distance', 1.0)
+        self.declare_parameter('side_confirmations', 2)
+        self.declare_parameter('boundary_link_distance', 3.0)
+        self.declare_parameter('boundary_gap_distance', 3.3)
+        self.declare_parameter('boundary_gap_angle_deg', 40.0)
 
         self._max_range = self.get_parameter('max_range').value
         self._min_range = self.get_parameter('min_range').value
@@ -82,18 +105,44 @@ class LidarConeDetector(Node):
         self._max_cluster_extent = self.get_parameter('max_cluster_extent').value
         self._max_cluster_pts = self.get_parameter('max_cluster_points').value
         self._dedup_radius = self.get_parameter('dedup_radius').value
-        self._dedup_radius_sq = self._dedup_radius ** 2
+        self._classify_sides = self.get_parameter('classify_sides').value
+        self._side_vote_max_range = self.get_parameter(
+            'side_vote_max_range').value
+        self._side_vote_max_forward = self.get_parameter(
+            'side_vote_max_forward').value
+        self._side_vote_max_lateral = self.get_parameter(
+            'side_vote_max_lateral').value
+        self._side_vote_deadband = self.get_parameter(
+            'side_vote_deadband').value
+        self._side_update_distance = self.get_parameter(
+            'side_update_distance').value
+        side_confirmations = self.get_parameter('side_confirmations').value
+        self._boundary_link_distance = self.get_parameter(
+            'boundary_link_distance').value
+        self._boundary_gap_distance = self.get_parameter(
+            'boundary_gap_distance').value
+        self._boundary_gap_angle = math.radians(self.get_parameter(
+            'boundary_gap_angle_deg').value)
         publish_hz = self.get_parameter('publish_hz').value
 
         # --- State ---
-        self._veh_x = 0.0
-        self._veh_y = 0.0
-        self._veh_yaw = 0.0
-        self._have_odom = False
-        self._latest_cloud: PointCloud2 | None = None
+        self._pose_history = PoseHistory(
+            self.get_parameter('pose_history_sec').value)
+        # A short queue prevents a scan from being overwritten while it waits
+        # for the odometry sample immediately after its timestamp.
+        self._cloud_queue: deque[PointCloud2] = deque(maxlen=3)
+        self._waiting_for_pose = False
+        self._processed_synced_scan = False
+        self._reported_startup_drop = False
 
         # Accumulated cone positions in map frame: [x, y, observation_count].
         self._cone_map: list[list[float]] = []
+        self._side_votes: list[float] = []
+        self._cone_sides: list[int] = []
+        self._stable_sides = StableSideLabels(side_confirmations)
+        self._last_side_pose: Pose2D | None = None
+        self._seeded_sides = False
+        self._published_namespaces: list[str] = []
 
         # --- QoS ---
         latch_qos = QoSProfile(
@@ -124,23 +173,49 @@ class LidarConeDetector(Node):
     # Callbacks
     # ------------------------------------------------------------------
     def _cloud_cb(self, msg: PointCloud2):
-        self._latest_cloud = msg
+        self._cloud_queue.append(msg)
 
     def _odom_cb(self, msg: Odometry):
-        self._veh_x = msg.pose.pose.position.x
-        self._veh_y = msg.pose.pose.position.y
-        self._veh_yaw = _quat_to_yaw(msg.pose.pose.orientation)
-        self._have_odom = True
+        self._pose_history.add(Pose2D(
+            stamp_ns=self._stamp_ns(msg.header.stamp),
+            x=msg.pose.pose.position.x,
+            y=msg.pose.pose.position.y,
+            yaw=_quat_to_yaw(msg.pose.pose.orientation),
+        ))
 
     # ------------------------------------------------------------------
     # Main processing loop
     # ------------------------------------------------------------------
     def _process(self):
-        if not self._have_odom or self._latest_cloud is None:
+        if not self._pose_history or not self._cloud_queue:
             return
 
-        cloud = self._latest_cloud
-        self._latest_cloud = None  # consume
+        cloud = self._cloud_queue[0]
+        cloud_stamp_ns = self._stamp_ns(cloud.header.stamp)
+        pose = self._pose_history.lookup(cloud_stamp_ns)
+        if pose is None:
+            oldest = self._pose_history.oldest_stamp_ns
+            if oldest is not None and cloud_stamp_ns < oldest:
+                self._cloud_queue.popleft()
+                if not self._processed_synced_scan:
+                    if not self._reported_startup_drop:
+                        self.get_logger().info(
+                            'discarding startup LiDAR scan captured before '
+                            'odometry began')
+                        self._reported_startup_drop = True
+                else:
+                    self.get_logger().warn(
+                        'dropping LiDAR scan older than retained odometry history')
+                return
+            if not self._waiting_for_pose:
+                self.get_logger().info(
+                    'waiting for timestamp-aligned odometry for LiDAR scan')
+                self._waiting_for_pose = True
+            return
+
+        self._waiting_for_pose = False
+        self._processed_synced_scan = True
+        self._cloud_queue.popleft()
 
         # Step 1: Deserialize to numpy
         points = point_cloud2.read_points_numpy(
@@ -179,7 +254,7 @@ class LidarConeDetector(Node):
         clusters = self._cluster(xy)
 
         # Step 6–8: Validate, transform, dedup
-        new_cones = 0
+        detections: list[tuple[float, float]] = []
         for cluster_xy in clusters:
             if not self._is_cone(cluster_xy):
                 continue
@@ -188,20 +263,17 @@ class LidarConeDetector(Node):
             sx, sy = float(centroid[0]), float(centroid[1])
 
             # Transform to map frame
-            mx, my = self._sensor_to_map(sx, sy)
+            mx, my = self._sensor_to_map(sx, sy, pose)
+            detections.append((mx, my))
 
-            # Dedup / merge against accumulated map
-            if self._try_merge(mx, my, self._cone_map):
-                continue
-
-            # New cone
-            self._cone_map.append([mx, my, 1.0])
-            new_cones += 1
+        new_cones = update_cone_map(
+            detections, self._cone_map, self._dedup_radius)
 
         if new_cones > 0:
             self.get_logger().info(
                 f'+{new_cones} cones  (total: {len(self._cone_map)})')
 
+        self._update_side_classification(pose)
         self._publish_accumulated()
         self._publish_debug()
 
@@ -243,39 +315,58 @@ class LidarConeDetector(Node):
     # ------------------------------------------------------------------
     # Coordinate transforms
     # ------------------------------------------------------------------
-    def _sensor_to_map(self, sx: float, sy: float) -> tuple[float, float]:
+    @staticmethod
+    def _stamp_ns(stamp) -> int:
+        """Convert a ROS time message to integer nanoseconds."""
+        return stamp.sec * 1_000_000_000 + stamp.nanosec
+
+    def _sensor_to_map(self, sx: float, sy: float,
+                       pose: Pose2D) -> tuple[float, float]:
         """Transform a point from sensor frame to map frame."""
-        # Sensor → vehicle base_link
-        vx = sx + self._sensor_x_offset
-        vy = sy + self._sensor_y_offset
+        return sensor_point_to_map(
+            sx, sy, self._sensor_x_offset, self._sensor_y_offset, pose)
 
-        # Vehicle → map
-        cos_y = math.cos(self._veh_yaw)
-        sin_y = math.sin(self._veh_yaw)
-        mx = self._veh_x + vx * cos_y - vy * sin_y
-        my = self._veh_y + vx * sin_y + vy * cos_y
-        return mx, my
+    def _update_side_classification(self, pose: Pose2D):
+        """Accumulate local side evidence and enforce boundary continuity."""
+        if not self._classify_sides:
+            self._cone_sides = [UNKNOWN] * len(self._cone_map)
+            return
 
-    # ------------------------------------------------------------------
-    # Deduplication with running average
-    # ------------------------------------------------------------------
-    def _try_merge(self, mx: float, my: float,
-                   cone_map: list[list[float]]) -> bool:
-        """
-        Try to merge into the nearest existing cone in *cone_map*.
+        while len(self._side_votes) < len(self._cone_map):
+            self._side_votes.append(0.0)
 
-        Returns True if merged (position updated via running average).
-        Returns False if no existing cone is within dedup radius.
-        """
-        for entry in cone_map:
-            ex, ey = entry[0], entry[1]
-            if (mx - ex) ** 2 + (my - ey) ** 2 < self._dedup_radius_sq:
-                n = entry[2]
-                entry[0] = (ex * n + mx) / (n + 1)
-                entry[1] = (ey * n + my) / (n + 1)
-                entry[2] = n + 1
-                return True
-        return False
+        self._cone_sides = self._stable_sides.labels(len(self._cone_map))
+        if self._last_side_pose is not None:
+            travelled = math.hypot(
+                pose.x - self._last_side_pose.x,
+                pose.y - self._last_side_pose.y,
+            )
+            if travelled < self._side_update_distance:
+                return
+
+        for index, entry in enumerate(self._cone_map):
+            self._side_votes[index] += vehicle_relative_side_vote(
+                entry[0],
+                entry[1],
+                pose,
+                min_distance=self._min_range,
+                max_distance=self._side_vote_max_range,
+                max_forward=self._side_vote_max_forward,
+                max_lateral=self._side_vote_max_lateral,
+                lateral_deadband=self._side_vote_deadband,
+            )
+
+        proposed = classify_cone_sides(
+            self._cone_map,
+            self._side_votes,
+            link_distance=self._boundary_link_distance,
+            gap_distance=self._boundary_gap_distance,
+            max_gap_angle=self._boundary_gap_angle,
+        )
+        self._cone_sides = self._stable_sides.update(
+            proposed, seed=not self._seeded_sides)
+        self._seeded_sides = True
+        self._last_side_pose = pose
 
     # ------------------------------------------------------------------
     # Publishing
@@ -288,11 +379,18 @@ class LidarConeDetector(Node):
         now = self.get_clock().now().to_msg()
         msg = MarkerArray()
 
-        for i, entry in enumerate(self._cone_map):
+        for i, (entry, side) in enumerate(zip(
+                self._cone_map, self._cone_sides)):
+            namespace, color = self._side_marker_style(side)
+            if (i < len(self._published_namespaces)
+                    and self._published_namespaces[i] != namespace):
+                msg.markers.append(self._make_delete_marker(
+                    i, self._published_namespaces[i], now))
             msg.markers.append(self._make_marker(
-                i, 'cones', entry[0], entry[1], now,
-                ColorRGBA(r=1.0, g=0.5, b=0.0, a=1.0)))
+                i, namespace, entry[0], entry[1], now, color))
 
+        self._published_namespaces = [
+            self._side_marker_style(side)[0] for side in self._cone_sides]
         self._det_pub.publish(msg)
 
     def _publish_debug(self):
@@ -303,16 +401,28 @@ class LidarConeDetector(Node):
         now = self.get_clock().now().to_msg()
         msg = MarkerArray()
 
-        for i, entry in enumerate(self._cone_map):
+        for i, (entry, side) in enumerate(zip(
+                self._cone_map, self._cone_sides)):
+            _, color = self._side_marker_style(side)
+            color.a = 0.5
             m = self._make_marker(
                 i, 'debug_cones', entry[0], entry[1], now,
-                ColorRGBA(r=1.0, g=0.5, b=0.0, a=0.5))
+                color)
             m.scale.x = 0.25
             m.scale.y = 0.25
             m.scale.z = 0.25
             msg.markers.append(m)
 
         self._debug_pub.publish(msg)
+
+    @staticmethod
+    def _side_marker_style(side: int) -> tuple[str, ColorRGBA]:
+        """Return the output namespace and RViz colour for one side."""
+        if side == LEFT:
+            return 'left_cones', ColorRGBA(r=0.0, g=0.3, b=1.0, a=1.0)
+        if side == RIGHT:
+            return 'right_cones', ColorRGBA(r=1.0, g=1.0, b=0.0, a=1.0)
+        return 'cones', ColorRGBA(r=1.0, g=0.5, b=0.0, a=1.0)
 
     @staticmethod
     def _make_marker(mid: int, ns: str, x: float, y: float,
@@ -333,6 +443,17 @@ class LidarConeDetector(Node):
         m.scale.z = 0.35
         m.color = color
         return m
+
+    @staticmethod
+    def _make_delete_marker(mid: int, ns: str, stamp) -> Marker:
+        """Remove the previous namespace when a cone changes classification."""
+        marker = Marker()
+        marker.header.frame_id = 'map'
+        marker.header.stamp = stamp
+        marker.ns = ns
+        marker.id = mid
+        marker.action = Marker.DELETE
+        return marker
 
 
 def main(args=None):
