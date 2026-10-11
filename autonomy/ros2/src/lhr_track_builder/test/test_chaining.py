@@ -24,7 +24,7 @@ def builder():
     for name in (
         '_constrained_greedy', '_chain_path_from_vehicle',
         '_chain_path_without_vehicle', '_get_chaining_algorithm',
-        '_fixed_width_beam_search',
+        '_fixed_width_beam_search', '_chain_midpoints', '_initial_heading',
     ):
         setattr(state, name, getattr(TrackBuilder, name).__get__(state))
     state._greedy_chain_path = TrackBuilder._greedy_chain_path

@@ -285,18 +285,7 @@ class TrackBuilder(Node):
                 rx, ry = right_items[best_idx][1]
                 midpoints.append(((lx + rx) / 2.0, (ly + ry) / 2.0))
 
-        # Chain midpoints into path order starting from the vehicle
-        if len(midpoints) > 2 or (
-            midpoints and self._chaining_alg in (
-                'constrained_greedy', 'fixed_width_beam_search',
-            )
-        ):
-            if self._have_odom:
-                midpoints = self._chain_path_from_vehicle(midpoints)
-            else:
-                midpoints = self._chain_path_without_vehicle(midpoints)
-
-        return midpoints[:self._max_points]
+        return self._chain_midpoints(midpoints)
 
     def _pair_boundary(self) -> List[PathPoint]:
         """Filter Delaunay edges by track width and optionally by cone color."""
@@ -352,6 +341,13 @@ class TrackBuilder(Node):
             )
             for first, second in accepted_edges
         ]
+        return self._chain_midpoints(midpoints)
+
+    # ------------------------------------------------------------------
+    # Path chaining helpers
+    # ------------------------------------------------------------------
+    def _chain_midpoints(self, midpoints: List[PathPoint]) -> List[PathPoint]:
+        """Order paired candidates before applying the published path cap."""
         if len(midpoints) > 2 or (
             midpoints and self._chaining_alg in (
                 'constrained_greedy', 'fixed_width_beam_search',
@@ -364,9 +360,6 @@ class TrackBuilder(Node):
 
         return midpoints[:self._max_points]
 
-    # ------------------------------------------------------------------
-    # Path chaining helpers
-    # ------------------------------------------------------------------
     def _chain_path_from_vehicle(
         self, points: List[PathPoint],
     ) -> List[PathPoint]:
@@ -442,6 +435,28 @@ class TrackBuilder(Node):
 
         return ordered
 
+    def _initial_heading(self, points: List[PathPoint], start: int) -> float | None:
+        """Use vehicle yaw or infer a tangent from a separated neighbor."""
+        if self._have_odom:
+            return self._veh_yaw
+
+        neighbors = [
+            j for j in range(len(points))
+            if j != start
+            and math.dist(points[start], points[j]) > 0.0
+            and math.dist(points[start], points[j]) >= self._min_step_m
+        ]
+        if not neighbors:
+            return None
+        nearest = min(
+            neighbors,
+            key=lambda j: (math.dist(points[start], points[j]), j),
+        )
+        return math.atan2(
+            points[nearest][1] - points[start][1],
+            points[nearest][0] - points[start][0],
+        )
+
     def _constrained_greedy(
         self, points: List[PathPoint], start: int,
     ) -> List[PathPoint]:
@@ -451,25 +466,9 @@ class TrackBuilder(Node):
         ordered = [points[start]]
         remaining = set(range(len(points)))
         remaining.discard(start)
-        heading = self._veh_yaw
-
-        if not self._have_odom:
-            # A separated neighbor supplies a tangent when yaw is unavailable.
-            neighbors = [
-                j for j in remaining
-                if math.dist(points[start], points[j]) > 0.0
-                and math.dist(points[start], points[j]) >= self._min_step_m
-            ]
-            if not neighbors:
-                return ordered
-            nearest = min(
-                neighbors,
-                key=lambda j: (math.dist(points[start], points[j]), j),
-            )
-            heading = math.atan2(
-                points[nearest][1] - points[start][1],
-                points[nearest][0] - points[start][0],
-            )
+        heading = self._initial_heading(points, start)
+        if heading is None:
+            return ordered
 
         while remaining:
             x, y = ordered[-1]
@@ -521,23 +520,9 @@ class TrackBuilder(Node):
             return []
         remaining = set(range(len(points)))
         remaining.discard(start)
-        heading = self._veh_yaw
-        if not self._have_odom:
-            neighbors = [
-                j for j in remaining
-                if math.dist(points[start], points[j]) > 0.0
-                and math.dist(points[start], points[j]) >= self._min_step_m
-            ]
-            if not neighbors:
-                return [points[start]]
-            nearest = min(
-                neighbors,
-                key=lambda j: (math.dist(points[start], points[j]), j),
-            )
-            heading = math.atan2(
-                points[nearest][1] - points[start][1],
-                points[nearest][0] - points[start][0],
-            )
+        heading = self._initial_heading(points, start)
+        if heading is None:
+            return [points[start]]
 
         beam = [{
             'path': [start], 'remaining': remaining,
