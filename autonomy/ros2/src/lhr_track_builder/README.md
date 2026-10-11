@@ -42,9 +42,10 @@ Delaunay triangulation can fail for fewer than three points or degenerate
 layouts such as collinear cones; the node publishes no new path for those
 inputs.
 
-The candidate midpoints are capped by `max_points` and ordered with the
-configured `chaining_alg`. With odometry, chaining starts at the midpoint
-nearest the vehicle. Without odometry, it starts at midpoint zero.
+All candidate midpoints are ordered with the configured `chaining_alg` before
+the published path is capped by `max_points`. With odometry, chaining starts
+at the midpoint nearest the vehicle, even when it lies beyond the first
+`max_points` candidates. Without odometry, it starts at midpoint zero.
 
 ## Chaining
 
@@ -139,7 +140,8 @@ example. Values take effect at startup; the default `greedy` ignores constrained
 step/score settings, and beam width/depth affect only beam search.
 
 Functional tests cover direction, moving sectors, scoring, gap termination,
-duplicates, pairing integration, global beam pruning, accumulated path costs,
+duplicates, pairing integration, path caps after vehicle-relative chaining,
+global beam pruning, accumulated path costs,
 depth limits, alternatives to greedy dead ends, geometry-only pairing, and
 unclassified-cone warnings. Run them in the ROS environment with
 `colcon test --packages-select lhr_track_builder` from the workspace root.

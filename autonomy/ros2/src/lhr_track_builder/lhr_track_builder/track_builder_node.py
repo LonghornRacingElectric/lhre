@@ -285,9 +285,6 @@ class TrackBuilder(Node):
                 rx, ry = right_items[best_idx][1]
                 midpoints.append(((lx + rx) / 2.0, (ly + ry) / 2.0))
 
-            if len(midpoints) >= self._max_points:
-                break
-
         # Chain midpoints into path order starting from the vehicle
         if len(midpoints) > 2 or (
             midpoints and self._chaining_alg in (
@@ -299,7 +296,7 @@ class TrackBuilder(Node):
             else:
                 midpoints = self._chain_path_without_vehicle(midpoints)
 
-        return midpoints
+        return midpoints[:self._max_points]
 
     def _pair_boundary(self) -> List[PathPoint]:
         """Filter Delaunay edges by track width and optionally by cone color."""
@@ -355,8 +352,6 @@ class TrackBuilder(Node):
             )
             for first, second in accepted_edges
         ]
-        midpoints = midpoints[:self._max_points]
-
         if len(midpoints) > 2 or (
             midpoints and self._chaining_alg in (
                 'constrained_greedy', 'fixed_width_beam_search',
@@ -367,7 +362,7 @@ class TrackBuilder(Node):
             else:
                 midpoints = self._chain_path_without_vehicle(midpoints)
 
-        return midpoints
+        return midpoints[:self._max_points]
 
     # ------------------------------------------------------------------
     # Path chaining helpers

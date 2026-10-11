@@ -119,6 +119,29 @@ def test_pairing_filters_two_midpoints(builder, strategy, algorithm):
     assert result == [(2.0, 0.0)]
 
 
+@pytest.mark.parametrize('strategy, cone_count, vehicle_x, step', [
+    ('boundary', 111, 200, 1), ('nearest', 221, 400, 2),
+])
+@pytest.mark.parametrize('algorithm', ['constrained_greedy', 'fixed_width_beam_search'])
+@pytest.mark.parametrize('max_points', [200, 5])
+def test_pairing_caps_path_after_vehicle_start(
+    builder, strategy, cone_count, vehicle_x, step, algorithm, max_points,
+):
+    """Keep forward candidates beyond the map cap, then limit the ordered path."""
+    builder._veh_x = float(vehicle_x)
+    builder._chaining_alg = algorithm
+    builder._max_points = max_points
+    builder._beam_depth = 40
+    builder._left_cones = {i: (2.0 * i, 1.75) for i in range(cone_count)}
+    builder._right_cones = {i: (2.0 * i, -1.75) for i in range(cone_count)}
+    builder._unknown_cones = {}
+    expected = [
+        (float(x), 0.0) for x in range(vehicle_x, 2 * cone_count - 1, step)
+    ]
+    result = getattr(TrackBuilder, '_pair_' + strategy)(builder)
+    assert result == expected[:max_points]
+
+
 def test_beam_keeps_alternative_to_greedy_dead_end(builder):
     """Retain a costlier first step whose branch can continue around a corner."""
     builder._beam_width = 2

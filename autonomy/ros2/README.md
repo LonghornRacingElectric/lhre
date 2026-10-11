@@ -479,8 +479,8 @@ and the measured drift figures are in
 |-------|---------|-------------|
 | `frame_id` | `"map"` | TF frame |
 | `publish_hz` | `5.0` | Publishing rate (Hz) |
-| `max_points` | `200` | Cap on centerline points |
-| `pairing_strategy` | `"nearest"` | Pairing strategy: `nearest` (classified nearest-neighbor) `classified` (one-to-one width-gated), or `boundary` (color-aware Delaunay triangulation) |
+| `max_points` | `200` | Cap on published centerline points, applied after chaining all candidates |
+| `pairing_strategy` | `"nearest"` | Pairing strategy: `nearest` (classified nearest-neighbor), `classified` (one-to-one width-gated), or `boundary` (color-aware Delaunay triangulation) |
 | `chaining_alg` | `"greedy"` | Midpoint ordering algorithm: `greedy`, `constrained_greedy`, or `fixed_width_beam_search` |
 | `min_step_m` | `0.3` | Constrained greedy and beam search: minimum midpoint separation (m) |
 | `max_step_m` | `4.0` | Constrained greedy and beam search: maximum step distance (m) |
