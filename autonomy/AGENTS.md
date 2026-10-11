@@ -60,5 +60,17 @@ here. Do not add `BUILD.bazel` files.
   site with the rest of the repo: a new page needs a `nav` entry in the
   root `mkdocs.yml`, and `uv run --group docs mkdocs build --strict` from
   the repo root must pass (it fails on broken links).
+- When adding or renaming a node parameter used in the Gazebo stack, also
+  expose it in `ros2/src/lhr_gazebo/launch/gazebo_demo.launch.py` in the same
+  change: declare the launch argument and forward its `LaunchConfiguration`
+  to the owning node in every applicable perception branch (`sim` and `lidar`).
+  Match the node's default and use explicit `ParameterValue` types for strings,
+  floats, integers, and booleans so CLI values retain the declared ROS type.
+  Preserve intentional mode-specific defaults; document any exception to
+  exposing a parameter. Update the adjacent README with usage and verify both
+  defaults and non-default overrides through launch evaluation and node startup,
+  including every applicable branch. A declared launch argument alone is not
+  evidence that a parameter reaches the node. If ROS is unavailable, report
+  which checks remain unverified.
 - The live plan, timeline, and hardware decisions are in Notion (VMS /
   Autonomous). If a doc here disagrees with Notion, Notion wins.
