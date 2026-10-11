@@ -8,7 +8,7 @@ markers on `/lhr/track/centerline_markers`.
 
 The `pairing_strategy` parameter selects one of three algorithms:
 
-- `nearest` (default) pairs each blue (`left_cones`) cone with the nearest unused yellow
+- `nearest` pairs each blue (`left_cones`) cone with the nearest unused yellow
   (`right_cones`) cone. This strategy requires classified cones.
 - `classified` computes a minimum-cost one-to-one left/right assignment within
   `track_width +/- track_width_tolerance`, leaving unmatched cones unused.
@@ -16,7 +16,7 @@ The `pairing_strategy` parameter selects one of three algorithms:
   `perception:=lidar lidar_classify_sides:=true`. It depends on correct side
   labels; sparse detections can cause the experimental classifier to mislabel
   a boundary and leave gaps or an incorrect path.
-- `boundary` Delaunay-triangulates all cone positions without considering
+- `boundary` (default) Delaunay-triangulates all cone positions without considering
   color, extracts the unique triangle edges, then rejects blue-blue and
   yellow-yellow edges. Blue-yellow edges and edges involving an unknown-color
   (`cones`) marker are retained only when their length is within
@@ -50,9 +50,9 @@ at the midpoint nearest the vehicle, even when it lies beyond the first
 
 ## Chaining
 
-- `greedy` (default) visits every midpoint using nearest-neighbor steps and
+- `greedy` visits every midpoint using nearest-neighbor steps and
   reverses the result if its initial direction opposes the vehicle heading.
-- `constrained_greedy` searches a sector centered on the last accepted midpoint.
+- `constrained_greedy` (default) searches a sector centered on the last accepted midpoint.
   The sector initially follows vehicle yaw, then follows each accepted segment.
   Without odometry, the nearest distinct midpoint at least `min_step_m` away
   supplies the initial heading; this cannot establish the car's forward direction.
@@ -137,7 +137,7 @@ ros2 launch lhr_gazebo gazebo_demo.launch.py perception:=lidar \
 ```
 
 See the [Gazebo launch reference](../../README.md#running) for a full tuning
-example. Values take effect at startup; the default `greedy` ignores constrained
+example. Values take effect at startup; `greedy` ignores constrained
 step/score settings, and beam width/depth affect only beam search.
 
 Functional tests cover direction, moving sectors, scoring, gap termination,

@@ -15,11 +15,11 @@ from rclpy.parameter import Parameter
 
 
 @pytest.mark.parametrize('perception, classify_sides, pairing_strategy', [
-    ('sim', False, 'nearest'), ('lidar', False, 'boundary'),
+    ('sim', False, 'boundary'), ('lidar', False, 'boundary'),
     ('lidar', True, 'classified'),
 ])
 @pytest.mark.parametrize('algorithm', [
-    None, 'constrained_greedy', 'fixed_width_beam_search',
+    None, 'greedy', 'constrained_greedy', 'fixed_width_beam_search',
 ])
 def test_chaining_launch_parameters(
     perception, classify_sides, pairing_strategy, algorithm, monkeypatch,
@@ -50,6 +50,8 @@ def test_chaining_launch_parameters(
     rclpy.init(args=[])
     baseline = TrackBuilder()
     try:
+        assert baseline._pairing_strategy == 'boundary'
+        assert baseline._chaining_alg == 'constrained_greedy'
         defaults = {name: baseline.get_parameter(name).value
                     for name in (*fields, 'max_turn_deg')}
     finally:

@@ -273,7 +273,7 @@ and `beam_depth`. Their defaults match the
 
 These values are read at node startup. Step limits and score weights apply to
 `constrained_greedy` and `fixed_width_beam_search`; `beam_width` and `beam_depth`
-apply only to beam search. The default `greedy` algorithm ignores those tuning
+apply only to beam search. The `greedy` algorithm ignores those tuning
 values. Launch forwarding and node startup are covered for both perception
 modes by `lhr_gazebo/test/test_chaining_parameters.py`.
 
@@ -348,7 +348,7 @@ flowchart TB
 | Cone source | `publish_cones` | `publish_cones` (reused) | Gazebo GPU LiDAR |
 | Perception | `sensor_sim` (FOV filter) | `sensor_sim` (reused) | `lidar_cone_detector` (pointcloud clustering) |
 | Physics / vehicle | `sim_kinematic` | Gazebo | Gazebo |
-| `track_builder` pairing | nearest | nearest | boundary by default; classified when `lidar_classify_sides:=true` |
+| `track_builder` pairing | boundary (Delaunay) | boundary (Delaunay) | boundary by default; classified when `lidar_classify_sides:=true` |
 | Actuation | `/lhr/vehicle/cmd` directly | `joint_cmd_adapter` → 6 joints | `joint_cmd_adapter` → 6 joints |
 
 All paths produce the same ROS 2 topic interfaces. Boundary pairing uses color when available and falls back to geometry for unclassified LiDAR cones.
@@ -480,8 +480,8 @@ and the measured drift figures are in
 | `frame_id` | `"map"` | TF frame |
 | `publish_hz` | `5.0` | Publishing rate (Hz) |
 | `max_points` | `200` | Cap on published centerline points, applied after chaining all candidates |
-| `pairing_strategy` | `"nearest"` | Pairing strategy: `nearest` (classified nearest-neighbor), `classified` (one-to-one width-gated), or `boundary` (color-aware Delaunay triangulation) |
-| `chaining_alg` | `"greedy"` | Midpoint ordering algorithm: `greedy`, `constrained_greedy`, or `fixed_width_beam_search` |
+| `pairing_strategy` | `"boundary"` | Pairing strategy: `nearest` (classified nearest-neighbor), `classified` (one-to-one width-gated), or `boundary` (color-aware Delaunay triangulation) |
+| `chaining_alg` | `"constrained_greedy"` | Midpoint ordering algorithm: `greedy`, `constrained_greedy`, or `fixed_width_beam_search` |
 | `min_step_m` | `0.3` | Constrained greedy and beam search: minimum midpoint separation (m) |
 | `max_step_m` | `4.0` | Constrained greedy and beam search: maximum step distance (m) |
 | `max_turn_deg` | `70.0` | Constrained greedy and beam search: sector half-angle from the current heading (degrees) |
@@ -495,9 +495,9 @@ and the measured drift figures are in
 | `cone_topic` | `"/lhr/sensor/cones_detected"` | Topic to subscribe for cone data |
 
 Cone pairing strategies:
-- **nearest** (default): Pairs each left cone with its nearest unpaired right cone.
+- **nearest**: Pairs each left cone with its nearest unpaired right cone.
 - **classified**: Computes a minimum-cost one-to-one left/right assignment within the track-width band, leaving unmatched cones unused. Opt-in for LiDAR perception.
-- **boundary**: Delaunay-triangulates all cone positions independently of color. It rejects blue-blue and yellow-yellow edges, then retains blue-yellow edges and edges involving unknown colors when they are approximately `track_width` (3.5 m +/- `track_width_tolerance`) apart.
+- **boundary** (default): Delaunay-triangulates all cone positions independently of color. It rejects blue-blue and yellow-yellow edges, then retains blue-yellow edges and edges involving unknown colors when they are approximately `track_width` (3.5 m +/- `track_width_tolerance`) apart.
 
 Set `boundary_use_color:=false` with `pairing_strategy:=boundary` to use the
 original geometry-only Delaunay edge filter, ignoring color labels entirely.

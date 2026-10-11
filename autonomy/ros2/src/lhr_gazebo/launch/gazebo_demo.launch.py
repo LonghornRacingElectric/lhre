@@ -259,7 +259,7 @@ def _launch_setup(context: LaunchContext):
             name='track_builder',
             parameters=[{
                 'use_sim_time': True,
-                'pairing_strategy': 'nearest',
+                'pairing_strategy': 'boundary',
                 'chaining_alg': ParameterValue(
                     LaunchConfiguration('chaining_alg'), value_type=str),
                 'min_step_m': ParameterValue(
@@ -389,7 +389,7 @@ def generate_launch_description():
         DeclareLaunchArgument('fov_deg', default_value='200.0'),
         DeclareLaunchArgument('max_range_m', default_value='20.0'),
         # Track builder chaining (both perception modes)
-        DeclareLaunchArgument('chaining_alg', default_value='greedy'),
+        DeclareLaunchArgument('chaining_alg', default_value='constrained_greedy'),
         DeclareLaunchArgument('min_step_m', default_value='0.3'),
         DeclareLaunchArgument('max_step_m', default_value='4.0'),
         DeclareLaunchArgument('max_turn_deg', default_value='70.0'),
