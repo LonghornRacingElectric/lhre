@@ -437,6 +437,8 @@
       filename="gz-sim-odometry-publisher-system"
       name="gz::sim::systems::OdometryPublisher">
       <odom_topic>/model/fsae_vehicle/odometry</odom_topic>
+      <!-- Harmonic defaults to /pose; the bridge explicitly consumes /tf. -->
+      <tf_topic>/model/fsae_vehicle/tf</tf_topic>
       <odom_frame>map</odom_frame>
       <robot_base_frame>base_link</robot_base_frame>
       <odom_publish_frequency>50</odom_publish_frequency>

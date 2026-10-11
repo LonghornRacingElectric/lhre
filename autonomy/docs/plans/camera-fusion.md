@@ -5,9 +5,10 @@
 Add one ZED 2i stereo camera with the 2.1 mm wide lens to the Gazebo model and fuse its output with the existing LiDAR pipeline to classify cones as left (blue) or right (yellow). Use color labels to strengthen Delaunay-based boundary pairing rather than replace it.
 
 The camera unit and lens were confirmed on 2026-10-11. The first milestone is
-stereo images and calibration in ROS/RViz; its proposed implementation is in
-[ZED 2i Stereo Simulation](zed2i-stereo.md). Classification and fusion follow
-after that input interface is validated.
+stereo images and calibration in ROS/RViz; its design and implementation scope are in
+[ZED 2i Stereo Simulation](zed2i-stereo.md). The stereo input interface is implemented; runtime validation is recorded
+in the [Gazebo README](../../ros2/src/lhr_gazebo/README.md#stereo-validation).
+Classification and fusion remain subsequent work.
 
 ## Background
 

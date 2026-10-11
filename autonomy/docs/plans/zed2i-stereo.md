@@ -1,6 +1,7 @@
 # ZED 2i Stereo Simulation
 
-Status: design approved by Celina on 2026-10-11. Implementation has not started.
+Status: design approved by Celina on 2026-10-11. Implementation is on branch `celina/zed2i-stereo`; runtime evidence is recorded
+in the [Gazebo README](../../ros2/src/lhr_gazebo/README.md#stereo-validation).
 See the [implementation plan](zed2i-stereo-implementation.md).
 
 ## Outcome

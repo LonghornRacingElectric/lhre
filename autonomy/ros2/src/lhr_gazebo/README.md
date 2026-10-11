@@ -103,3 +103,52 @@ The 30 Hz configured rate is in simulation time. Software rendering can
 reduce wall-clock throughput; no subscribers means the lazy bridges do not
 request images. Camera resources may still initialize at simulator startup.
 This milestone supplies camera inputs for later classification/fusion.
+
+The model explicitly publishes vehicle TF on `/model/fsae_vehicle/tf` to
+match the bridge. Harmonic's default is `/model/fsae_vehicle/pose`; leaving
+that implicit prevents `map -> base_link` from reaching ROS in truth mode.
+
+## Stereo validation
+
+Checked on 2026-10-11 in the repository's Ubuntu 24.04 / ROS 2 Jazzy /
+Gazebo Harmonic Docker image on Apple Silicon with software OpenGL:
+
+- Full workspace `colcon test`: 208 tests, no errors/failures/skips.
+- Generated model passes `gz sdf -k` and the model freshness check.
+- Launch evaluation covers enabled/disabled/default stereo across both
+  perception modes and truth/EKF estimation; 15 stereo integration tests pass.
+- A stationary dynamic vehicle in a zero-gravity target scene yielded 100
+  exact-timestamp sets of both 1280x720 RGB images and both calibration messages.
+  Intrinsics, distortion/rectification, optical headers, and baseline passed.
+  Both optical frames were reachable from `base_link` and `map`.
+- The original oval track with LiDAR perception and EKF yielded another 100
+  matching image/calibration sets with optical TF reachable from `map`.
+  RViz displayed both rendered cone views.
+- A 1 m green target face at 5 m yielded 11 px horizontal disparity against
+  10.76 px predicted, with zero vertical disparity. RViz showed both images
+  and a valid map fixed frame.
+
+The 100 paired sets took 20.94 wall-clock seconds including startup. This
+measures matched-set delivery through the checker, not sensor generation
+frequency; dropped samples and software rendering limit throughput. Target
+scene statistics reported a real-time factor near 1 after startup. The
+oval/EKF run delivered 100 matched sets in 30.36 wall-clock seconds with
+RViz active. After RViz and the checker stopped, Gazebo reported no image
+subscribers, confirming the lazy bridge disconnected. Physical
+calibration, rolling shutter/exposure effects, and performance on the eventual
+compute platform remain unvalidated. This is camera-interface acceptance,
+not validation of camera-based cone detection or driving behavior.
+
+The stationary target fixture is `test/stereo_target.sdf`. For a visual repeat
+from the ROS workspace on a machine with a display:
+
+```bash
+ros2 launch lhr_gazebo gazebo_demo.launch.py \
+  world:="$(pwd)/src/lhr_gazebo/test/stereo_target.sdf" \
+  enable_stereo_camera:=true auto_go:=false estimator:=truth
+```
+
+The fixture disables gravity to hold the dynamic vehicle stationary while
+its odometry plugin publishes TF. Its green target front face is at world
+x=6.8 m, 5 m in front of the current assumed rig center, so changed mount
+geometry requires recomputing the measured target distance.

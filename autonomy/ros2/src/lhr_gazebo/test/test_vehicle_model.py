@@ -7,6 +7,7 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 
 import pytest
+import yaml
 
 PKG_DIR = Path(__file__).resolve().parents[1]
 
@@ -85,3 +86,14 @@ def test_mount_rotation_preserves_local_baseline():
     assert joint.attrib['type'] == 'fixed'
     assert joint.findtext('parent') == 'chassis'
     assert joint.findtext('child') == 'zed2i_link'
+
+
+def test_odometry_tf_publisher_matches_bridge():
+    """Vehicle map TF must reach the same topic consumed by the ROS bridge."""
+    gen = _generator()
+    root = ET.fromstring(gen.render(gen.load_source_vehicle()))
+    plugin = root.find("./model/plugin[@name='gz::sim::systems::OdometryPublisher']")
+    mappings = yaml.safe_load((PKG_DIR / 'config' / 'ros_gz_bridge.yaml').read_text())
+    bridge = next(m for m in mappings if m['ros_topic_name'] == '/tf')
+    published = plugin.findtext('tf_topic', default='/model/fsae_vehicle/pose')
+    assert published == bridge['gz_topic_name']

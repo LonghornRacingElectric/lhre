@@ -77,7 +77,7 @@ and `src/lhr_vehicle/README.md`.
 `Vehicle.stereo_camera`. Properties `fx_px`, `fy_px`, `cx_px`, `cy_px`
 are derived from size/FOV.
 
-- [ ] Add failing default/geometry tests:
+- [x] Add failing default/geometry tests:
 
   ```python
   def test_stereo_camera_defaults():
@@ -92,16 +92,16 @@ are derived from size/FOV.
       assert camera.fy_px == camera.fx_px
   ```
 
-- [ ] Add malformed-YAML tests by reading `config_path()` with `yaml.safe_load`,
+- [x] Add malformed-YAML tests by reading `config_path()` with `yaml.safe_load`,
   replacing one entry in `raw['sensors']['stereo_camera']`, writing it with
   `yaml.safe_dump` into `tmp_path`, then expecting `load_vehicle(path)` to raise
   `ValueError` naming that field. Parameterize baseline/rate at zero, negative,
   infinity and NaN; width/height at zero, negative, fractional, and boolean;
   FOV at 0, 180, NaN; position/RPY with wrong length, nonnumeric or nonfinite
   elements. Missing camera configuration also raises a clear `ValueError`.
-- [ ] Run `PYTHONPATH=src/lhr_vehicle python3 -m pytest src/lhr_vehicle/test/test_vehicle.py -q`.
+- [x] Run `PYTHONPATH=src/lhr_vehicle python3 -m pytest src/lhr_vehicle/test/test_vehicle.py -q`.
   New cases must fail before implementation; preserve existing tests.
-- [ ] Add configuration:
+- [x] Add configuration:
 
   ```yaml
   stereo_camera:
@@ -116,7 +116,7 @@ are derived from size/FOV.
     horizontal_fov_deg: 110.0    # ideal pinhole approximation
   ```
 
-- [ ] Parse with field-specific finite/range/type validation; reject booleans
+- [x] Parse with field-specific finite/range/type validation; reject booleans
   as integers and numeric strings as image dimensions. Use the formulas:
 
   ```python
@@ -130,7 +130,7 @@ are derived from size/FOV.
   rig. Preserve these labels through loading and test rejection of a different
   model or lens. Validate before deriving intrinsics.
 
-- [ ] Document the optical approximation and required model regeneration;
+- [x] Document the optical approximation and required model regeneration;
   run vehicle tests and lint, then commit only the Task 1 files on the feature branch.
 
 ## Task 2: Generated stereo rig
@@ -142,7 +142,7 @@ are derived from size/FOV.
 **Produces:** Two camera sensors on the same `zed2i_link`, rigidly attached to
 `chassis`, with explicit Gazebo topics and optical IDs.
 
-- [ ] Add XML tests against `gen.render(gen.load_source_vehicle())`:
+- [x] Add XML tests against `gen.render(gen.load_source_vehicle())`:
 
   ```python
   def test_stereo_pair_shares_rig_and_baseline():
@@ -156,19 +156,19 @@ are derived from size/FOV.
       assert all(sensor.findtext('update_rate') == '30' for sensor in cameras)
   ```
 
-- [ ] Test 1280x720 RGB format, equal HFOV, explicit separate image/info topics,
+- [x] Test 1280x720 RGB format, equal HFOV, explicit separate image/info topics,
   exact optical frame IDs, zero distortion, and valid nonzero pixel intrinsics.
   Compare render geometry using a dataclass-replaced vehicle with nonzero rig
   yaw/pitch: local camera separation must remain 0.12 m along rig y. Confirm
   joint parent/child and the rig pose's `relative_to` frame explicitly.
-- [ ] Run model tests and confirm the new XML tests fail.
-- [ ] Add one sensor-only rigid link. Its pose is relative to `chassis`, using
+- [x] Run model tests and confirm the new XML tests fail.
+- [x] Add one sensor-only rigid link. Its pose is relative to `chassis`, using
   mount position minus the chassis origin and the configured RPY. Attach it
   with a fixed joint. Give it explicit negligible simulation inertia (mass
   0.001 kg, diagonal inertia 0.000001 kg m2) and no collision geometry; document
   this bookkeeping approximation so an omitted SDF inertia cannot add a
   default kilogram to the car.
-- [ ] Add left/right sensor poses `(0, +baseline/2, 0)` and
+- [x] Add left/right sensor poses `(0, +baseline/2, 0)` and
   `(0, -baseline/2, 0)` in the rig. Each uses `type="camera"`, equal update
   rate, `R8G8B8`, clips 0.1/100 m, explicit topics, and optical frame ID.
   Set lens intrinsics to Task 1 values, centered principal point, zero skew,
@@ -199,10 +199,10 @@ are derived from size/FOV.
   The right sensor uses name `zed2i_right`, negative local y, and `/right/`
   topics plus `zed2i_right_camera_optical_frame`. Its physical pose supplies
   the baseline; Harmonic supplies the stereo projection translation.
-- [ ] Extend generator substitutions for all camera values. Preserve adequate
+- [x] Extend generator substitutions for all camera values. Preserve adequate
   precision for pixel intrinsics and baseline; avoid changing unrelated
   existing model formatting.
-- [ ] Regenerate and run:
+- [x] Regenerate and run:
 
   ```bash
   python3 src/lhr_gazebo/scripts/generate_vehicle_model.py
@@ -210,7 +210,7 @@ are derived from size/FOV.
   PYTHONPATH=src/lhr_vehicle python3 -m pytest src/lhr_gazebo/test/test_vehicle_model.py -q
   ```
 
-- [ ] Update the Gazebo README with model assumptions, run lint, and commit
+- [x] Update the Gazebo README with model assumptions, run lint, and commit
   template/generator/generated output/tests/docs together.
 
 ## Task 3: Optional ROS bridge, camera TF, and RViz
@@ -226,7 +226,7 @@ records contain `parent`, `child`, `translation` tuple and `rpy` tuple;
 the records into named `tf2_ros/static_transform_publisher` Nodes and a
 separate named `ros_gz_bridge/parameter_bridge` Node.
 
-- [ ] Test five static transforms and their axes:
+- [x] Test five static transforms and their axes:
 
   ```python
   def test_stereo_transform_chain():
@@ -239,21 +239,21 @@ separate named `ros_gz_bridge/parameter_bridge` Node.
       assert by_child['zed2i_left_camera_optical_frame']['rpy'] == (-math.pi/2, 0.0, -math.pi/2)
   ```
 
-- [ ] Numerically compose the transforms for a nonzero mount yaw/pitch and
+- [x] Numerically compose the transforms for a nonzero mount yaw/pitch and
   verify forward/right/down axes and 0.12 m separation; compare with the rig
   and sensor poses rendered by Task 2. This catches coordinate-convention
   errors beyond checking identical constants.
-- [ ] Extend the existing `_launch_setup` action-capture test pattern to all
+- [x] Extend the existing `_launch_setup` action-capture test pattern to all
   `sim/lidar` x `truth/ekf` x `true/false` combinations. Defaults must produce
   no camera actions. Enabled cases must produce one stereo bridge and five
   static transform nodes; stereo transforms never remap to `/tf_truth`.
   Existing main bridge EKF remappings remain intact.
-- [ ] Test bridge YAML has exactly four unique mappings, GZ_TO_ROS direction,
+- [x] Test bridge YAML has exactly four unique mappings, GZ_TO_ROS direction,
   `gz.msgs.Image` / `sensor_msgs/msg/Image` and `gz.msgs.CameraInfo` /
   `sensor_msgs/msg/CameraInfo`. Test RViz defaults remain the same when disabled
   and both enabled Image topics match the bridge configuration.
-- [ ] Run new tests before implementation and confirm failures.
-- [ ] Implement transforms with the rig center/RPY, local y offsets, and
+- [x] Run new tests before implementation and confirm failures.
+- [x] Implement transforms with the rig center/RPY, local y offsets, and
   optical RPY above. Static publisher arguments use explicit `--x`, `--y`,
   `--z`, `--roll`, `--pitch`, `--yaw`, `--frame-id`, `--child-frame-id` options.
   Use `use_sim_time=True` where appropriate.
@@ -276,7 +276,7 @@ separate named `ros_gz_bridge/parameter_bridge` Node.
           ])
       return transforms
   ```
-- [ ] Add a dedicated four-entry bridge YAML with sensor-data QoS and lazy
+- [x] Add a dedicated four-entry bridge YAML with sensor-data QoS and lazy
   subscriptions. CameraInfo must still flow with image consumers; verify the
   installed bridge supports the selected QoS/lazy fields. Add `sensor_msgs`
   to package dependencies.
@@ -293,20 +293,20 @@ separate named `ros_gz_bridge/parameter_bridge` Node.
     qos_profile: SENSOR_DATA
     lazy: true
   ```
-- [ ] Declare `enable_stereo_camera` with default `false` and boolean choices.
+- [x] Declare `enable_stereo_camera` with default `false` and boolean choices.
   Resolve it in `_launch_setup`; import/call camera actions only when true.
   Select `stereo.rviz` when enabled, preserving `default.rviz` otherwise.
   Build stereo.rviz from the current default with two Image displays using
   matching sensor-data subscriber QoS. Existing `setup.py` globs already
   install `config/*`.
-- [ ] Document exact launch usage and rebuild requirements:
+- [x] Document exact launch usage and rebuild requirements:
 
   ```bash
   ./scripts/run_gazebo_demo.sh track_style:=oval perception:=lidar \
     estimator:=truth enable_stereo_camera:=true
   ```
 
-- [ ] Run the launch tests in ROS, package lint, and commit Task 3 files.
+- [x] Run the launch tests in ROS, package lint, and commit Task 3 files.
   Without ROS, run pure helper/XML/YAML tests and explicitly leave launch
   evaluation and node startup unverified.
 
@@ -321,7 +321,7 @@ existing tests so it does not create a new undocumented code directory.
 acceptance criteria. **Produces:** Verified results or explicit unresolved
 runtime checks, with no invented pass claims.
 
-- [ ] Build and run the relevant test suite in the supported ROS environment:
+- [x] Build and run the relevant test suite in the supported ROS environment:
 
   ```bash
   ./scripts/build.sh
@@ -329,7 +329,7 @@ runtime checks, with no invented pass claims.
   colcon test-result --verbose
   ```
 
-- [ ] On a machine with a display, run the documented camera launch command.
+- [x] On a machine with a display, run the documented camera launch command.
   Pause mission motion using `auto_go:=false` for the initial image check.
   Read topic metadata, sample calibration, TF, and image rates:
 
@@ -341,7 +341,7 @@ runtime checks, with no invented pass claims.
   ros2 topic hz /lhr/sensor/zed2i/right/image_rect
   ```
 
-- [ ] Collect 100 four-way equal-timestamp sets using temporary rclpy
+- [x] Collect 100 four-way equal-timestamp sets using temporary rclpy
   subscriptions to the four image/info topics, keyed by
   `(msg.header.stamp.sec, msg.header.stamp.nanosec)`. Use sensor-data QoS,
   spin until 100 complete sets or 120 wall-clock seconds, and fail the check
@@ -351,7 +351,7 @@ runtime checks, with no invented pass claims.
   and `-right.p[3] / right.p[0] == 0.12` within `1e-6` m. Keep temporary
   recordings and scripts outside tracked source unless a reusable tool is
   explicitly warranted; no raw logs or bags enter git.
-- [ ] Use a fixed colored/textured target whose front face is measured 5 m
+- [x] Use a fixed colored/textured target whose front face is measured 5 m
   along camera-forward from the rig center. Place it in a stationary fixture
   world using the generated vehicle model and the same Sensors plugin. At
   default intrinsics expected horizontal disparity is about 10.76 pixels;
@@ -359,15 +359,15 @@ runtime checks, with no invented pass claims.
   approved two-pixel horizontal/vertical tolerances. Confirm RViz scene
   visibility and TF in both truth and EKF modes. Save a concise result table
   and selected evidence, distinguishing runtime facts from assumptions.
-- [ ] Measure real-time factor with Gazebo statistics and wall-clock image
+- [x] Measure real-time factor with Gazebo statistics and wall-clock image
   throughput. Disable the camera bridge/RViz subscribers and confirm camera
   image rendering becomes lazy; initialization overhead may remain. Do not
   equate simulation-time update rate with wall-clock throughput.
-- [ ] Update docs with observed results, limitations, and follow-up for
+- [x] Update docs with observed results, limitations, and follow-up for
   physical calibration; run `uv run --group docs mkdocs build --strict` and
   `git diff --check`. If runtime is unavailable, retain an explicit pending
   acceptance list instead of marking this milestone fully validated.
-- [ ] Review the whole diff against the approved design, commit only owned
+- [x] Review the whole diff against the approved design, commit only owned
   files, and prepare a PR titled `Autonomous: add ZED 2i stereo simulation`.
   Do not include the pre-existing root `AGENTS.md` edit. Publishing a PR is
   a separate step from this implementation plan's approval.
@@ -375,17 +375,37 @@ runtime checks, with no invented pass claims.
 ## Execution environment and handoff
 
 Use an isolated feature worktree at execution time. The current source is
-local main `5719b088f226b4a9f60d34cbe53e8ead768f8e31`; planning changes are
+local main `07571fb879e369395b06a800f792bfbbb350bb7d`; planning changes are
 uncommitted and must be carried into that worktree without disturbing the
-pre-existing root `AGENTS.md` modification. Do not depend on unmerged PR 83.
+pre-existing root `AGENTS.md` modification. PR 83 is now merged in that base; preserve its current perception/chaining defaults.
 
-The current Mac has Docker/Colima installed, but the daemon is stopped and
-ROS is unavailable on the host. Pure configuration/generator checks can run
+The Mac host has no ROS install. Execution started the existing Colima VM
+and built the documented ROS/Gazebo image. Pure configuration/generator checks can run
 locally; the ROS launch, stereo stream, and visual checks require the
 documented Ubuntu environment. No GUI demo scripts run from a headless agent.
 
 Recommended execution: native implementation in this session, with one
 whole-branch review afterward. The three code tasks share configuration,
 generated geometry, and frame interfaces, making sequential implementation
-straightforward. The user must review this plan and select native or
-subagent-driven execution before implementation starts.
+straightforward. Celina approved this plan and selected native execution. Implementation and
+ROS/Gazebo acceptance are complete; the whole-branch review is the final gate.
+
+
+## Execution evidence (2026-10-11)
+
+Tasks 1–3 were implemented in separate commits with failing tests before
+implementation. Configuration tests passed locally; real ROS launch tests
+passed across all 12 mode/enable combinations. Full colcon verification
+passed 208 tests with no failures or skips. Strict docs build passed.
+
+Task 4 verified 100 exact-timestamp four-stream sets in both the stationary
+target/truth scene and the original oval/LiDAR/EKF scene, checked optical
+TF from map/base_link, inspected both RViz views, measured target disparity
+(11 px vs 10.76 px expected; zero vertical), and confirmed lazy image bridge
+disconnection. Software rendering throughput is recorded in the Gazebo README.
+
+Runtime uncovered the existing OdometryPublisher TF-topic mismatch:
+Harmonic defaults to /model/fsae_vehicle/pose, while the bridge consumed /tf.
+A regression test failed before adding an explicit tf_topic in the template;
+regeneration restored map-frame camera transforms without a second moving
+TF publisher. This is the only product-scope deviation from the approved plan.
