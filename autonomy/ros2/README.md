@@ -1,4 +1,4 @@
-# Autonomy – ROS 2 Workspace
+# Autonomy: ROS 2 Workspace
 
 Colcon workspace for LHR driverless / autonomy nodes. This file is the **reference**: packages, data flow, topics, parameters.
 
@@ -21,7 +21,7 @@ Colcon workspace for LHR driverless / autonomy nodes. This file is the **referen
 | `lhr_perception` | LiDAR pointcloud clustering, timestamp-aligned persistent mapping, and geometry-based track-side inference |
 | `lhr_state_estimation` | EKF fusing IMU and wheel speeds into `/lhr/vehicle/odom` + `map → base_link`, replacing ground-truth odometry. See [its README](src/lhr_state_estimation/README.md) |
 | `lhr_demo` | Launch file that starts the full kinematic stack in one command |
-| `lhr_vehicle` | Orion's physical parameters (`config/vehicle.yaml`) and their loader — the single source for wheelbase, track, steering limits, masses and sensor mounts. See [its README](src/lhr_vehicle/README.md) |
+| `lhr_vehicle` | Orion's physical parameters (`config/vehicle.yaml`) and their loader, the single source for wheelbase, track, steering limits, masses and sensor mounts. See [its README](src/lhr_vehicle/README.md) |
 
 ## Data flow
 
@@ -67,7 +67,14 @@ one, so `inertial_sim` only supplies wheel speeds there. Details and the
 measured drift figures are in
 [`lhr_state_estimation`](src/lhr_state_estimation/README.md). Viz-only topics (`/lhr/sensor/cones_viz`,
 `/lhr/sensor/fov_viz`, `/lhr/track/centerline_markers`, `/lhr/control/lookahead`)
-and `/lhr/debug/*` are omitted — full list under [Topics](#topics).
+and `/lhr/debug/*` are omitted. Full list under [Topics](#topics).
+
+The kinematic launch also supports `perception:=lidar`: ground-truth cones
+feed the [Mid-360 caster](src/lhr_lidar_sim/README.md), its point cloud feeds
+[lhr_perception](src/lhr_perception/README.md), and unclassified detections
+feed boundary planning and pure pursuit. This mode disables `sensor_sim` and
+automatically enables the cloud publisher. `lidar:=true` alone is a cloud
+preview while `perception:=sim` remains the driving source.
 
 ### Gazebo sim (run_gazebo_demo.sh)
 
@@ -79,7 +86,7 @@ flowchart LR
     builder -- "/lhr/track/centerline" --> pursuit["pure_pursuit"]
     pursuit -- "/lhr/vehicle/cmd" --> adapter["joint_cmd_adapter"]
     adapter -- "2× steering cmd_pos<br>4× wheel cmd_vel" --> bridge["ros_gz_bridge"]
-    subgraph gz["Gazebo — fsae_vehicle"]
+    subgraph gz["Gazebo: fsae_vehicle"]
         joints["JointPositionController (steering)<br>JointController (wheels)"]
         odo["OdometryPublisher<br>(ground-truth pose)"]
     end
@@ -100,7 +107,7 @@ placement, so it is not a realistic model of sensing under EKF drift.
 **LiDAR perception (`perception:=lidar`):**
 ```mermaid
 flowchart LR
-    subgraph gz["Gazebo — fsae_vehicle"]
+    subgraph gz["Gazebo: fsae_vehicle"]
         lidar["GPU LiDAR sensor"]
         odo["OdometryPublisher"]
     end
@@ -135,13 +142,13 @@ Machine setup lives in [GETTING-STARTED.md](GETTING-STARTED.md): Ubuntu 24.04 na
 # Build once
 ./scripts/build.sh
 
-# Terminal 1 – start the full stack
+# Terminal 1: start the full stack
 ./scripts/run_demo.sh
 
-# Terminal 2 – open RViz (pre-configured displays + fixed frame = map)
+# Terminal 2: open RViz (pre-configured displays + fixed frame = map)
 ./scripts/rviz_demo.sh
 
-# Terminal 3 (optional) – open PlotJuggler for debug signals
+# Terminal 3 (optional): open PlotJuggler for debug signals
 ./scripts/run_plotjuggler.sh
 ```
 
@@ -216,6 +223,9 @@ All scripts live in `scripts/` and should be run from the `autonomy/ros2` direct
 | `run_sensor.sh` | Runs only the sensor simulation (`lhr_sensor_sim`). |
 | `run_metrics.sh` | Runs only the metrics node (`lhr_metrics`). Prints summary on Ctrl+C and appends to `data/metrics.csv`. |
 | `run_plotjuggler.sh` | Opens PlotJuggler for plotting debug signals (curvature, speed, steering). |
+| `run_headless.sh` | Runs the kinematic stack with no display and exits non-zero unless the run finished cleanly. The entry point for any gate. |
+| `check_stability.sh` | Repeats one run `RUNS` times at one `SEED` and fails if the gated metrics drift outside their per-metric bands. Answers whether the gate is trustworthy before you trust a result from it. |
+| `check_layout.sh` | Checks the committed Foxglove layout against a recorded bag and fails if it names a topic or frame the bag lacks. A renamed topic otherwise shows up as empty panels, which reads as a broken sim. |
 | `generate_gazebo_world.sh` | Generates a Gazebo world SDF from the track generator. Accepts `--seed`, `--style`, `--num-waypoints`, etc. |
 | `run_gazebo_demo.sh` | Launches the Gazebo-based stack (physics sim + adapters + upper stack). Accepts same args as `run_demo.sh`. |
 | `src/lhr_gazebo/scripts/generate_vehicle_model.py` | Regenerates the Gazebo vehicle `model.sdf` from `lhr_vehicle/config/vehicle.yaml`. Run after editing the YAML; commit both. |
@@ -238,7 +248,7 @@ The `lhr_gazebo` package provides an alternative simulation backend using Gazebo
 ### Running
 
 ```bash
-# Single command — launches Gazebo + RViz + full autonomy stack
+# Single command: launches Gazebo + RViz + full autonomy stack
 ./scripts/run_gazebo_demo.sh
 ```
 
@@ -262,7 +272,7 @@ The `track_style` argument selects the track generator (`oval`, `autocross`, or 
 
 ### Vehicle model
 
-The FSAE vehicle (`models/fsae_vehicle/model.sdf`) uses STL meshes (`meshes/carBody.stl`, `meshes/carTire.stl`) for visuals with simplified collision geometry. **`model.sdf` is generated** — `scripts/generate_vehicle_model.py` renders `templates/model.sdf.in` from [`lhr_vehicle/config/vehicle.yaml`](src/lhr_vehicle/README.md), so the numbers below are Orion's and shared with the controller, the kinematic sim and perception:
+The FSAE vehicle (`models/fsae_vehicle/model.sdf`) uses STL meshes (`meshes/carBody.stl`, `meshes/carTire.stl`) for visuals with simplified collision geometry. **`model.sdf` is generated**: `scripts/generate_vehicle_model.py` renders `templates/model.sdf.in` from [`lhr_vehicle/config/vehicle.yaml`](src/lhr_vehicle/README.md), so the numbers below are Orion's and shared with the controller, the kinematic sim and perception:
 
 | Parameter | Value | Source |
 |-----------|-------|--------|
@@ -272,7 +282,7 @@ The FSAE vehicle (`models/fsae_vehicle/model.sdf`) uses STL meshes (`meshes/carB
 | Chassis mass | 160.6 kg (no driver) | BobSim |
 | Wheel mass | 8.5 kg each | BobSim |
 | Steering limit | ±0.55 rad (~31.5 deg) | assumed until measured |
-| Reference point | Rear axle center at ground level | — |
+| Reference point | Rear axle center at ground level | n/a |
 
 Edit `vehicle.yaml`, rerun the generator, and commit both files together; `generate_vehicle_model.py --check` (and `lhr_gazebo`'s tests) fail when they disagree.
 
@@ -309,7 +319,7 @@ Odometry comes from Gazebo's `OdometryPublisher` system plugin, which reports th
 
 ```mermaid
 flowchart TB
-    subgraph upper["Upper stack — identical in every mode"]
+    subgraph upper["Upper stack: identical in every mode"]
         direction LR
         builder["track_builder"] --> pursuit["pure_pursuit"]
         mission["mission_manager"] --> pursuit
@@ -332,7 +342,7 @@ flowchart TB
 | `track_builder` pairing | index | index | boundary by default; classified when `lidar_classify_sides:=true` |
 | Actuation | `/lhr/vehicle/cmd` directly | `joint_cmd_adapter` → 6 joints | `joint_cmd_adapter` → 6 joints |
 
-All paths produce identical ROS 2 topic interfaces — the upper stack doesn't know the difference.
+All paths produce identical ROS 2 topic interfaces. The upper stack doesn't know the difference.
 
 ### World generation
 
@@ -358,6 +368,65 @@ The bridge config (`config/ros_gz_bridge.yaml`) maps 11 topics:
 | ROS → GZ | 2x steering `cmd_pos` | (same) | Float64/Double |
 | ROS → GZ | 4x wheel `cmd_vel` | (same) | Float64/Double |
 
+## Recording and viewing runs
+
+A run can record itself to MCAP, and a recorded run opens in Foxglove
+with no ROS install involved.
+
+```bash
+ros2 launch lhr_demo mvs_demo.launch.py record:=true    # writes data/bags/<run_id>
+ros2 launch lhr_demo mvs_demo.launch.py foxglove:=true  # live, ws://localhost:8765
+```
+
+MCAP is the default rosbag2 storage in Jazzy, so recording needs nothing
+installed. The live bridge needs `ros-jazzy-foxglove-bridge`, declared in
+`lhr_demo`'s `package.xml` so `rosdep install` provides it.
+
+The bag lands under the same `run_id` the metrics row carries, so a row
+reporting a bad number names the recording that explains it, and the bag
+itself carries `run_id`, `git_sha`, `scenario` and `seed` as rosbag2
+`custom_data`. Recording is off by default: a lap is roughly 6 MiB and
+the gate runs many seeds.
+
+Load [`foxglove/lhr_sim.json`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/ros2/foxglove/lhr_sim.json)
+as the layout so everyone is looking at the same panels: a 3D view of
+the track and cloud, command against actual speed, steering, and
+mission state.
+
+The layout sets **Scene → Mesh up-axis → Z-up** to match Orion's CAD.
+For an existing layout, change that setting manually or import the updated
+file; Y-up rolls the STL car onto its side.
+
+Its structure is checked against a real Foxglove export, and
+`./scripts/check_layout.sh <bag>` confirms every topic and frame it
+names is present. That check validates topic and frame names, not mesh
+orientation or rendering; verify those in the app. After changing the
+mesh up-axis, reload the Foxglove tab if the latched car marker disappears.
+
+Which topics get recorded, why the list is explicit rather than `--all`,
+and the YAML trap in `run_id` are all in
+[lhr_demo/README.md](src/lhr_demo/README.md).
+
+## Simulation clock
+
+Both stacks run on simulated time. Gazebo publishes `/clock` through the
+bridge; in the kinematic stack `lhr_sim_kinematic` does it, because that
+node is the plant and already integrates a fixed `dt`. Publishing that step
+as `/clock` makes every other node advance in exact increments instead of
+drifting with host load.
+
+`mvs_demo.launch.py` takes `use_sim_time` (default `true`), which sets
+`use_sim_time` on every node and `publish_clock` on the simulator. The
+simulator itself stays on wall time and paces the run: a clock source that
+waited on its own clock would never tick.
+
+What this buys, measured over repeat runs of one seed: the spread in
+`mean_cte` fell from 1.08% to 0.31%. What it does not buy is bit-identical
+runs. Each node is its own process with its own executor, so which odom
+sample a controller sees before its next timer fires is still up to the OS
+scheduler. Repeat runs land within about 0.5%, and `max_cte` is
+reproducible exactly. Gate on a tolerance band, not on equality.
+
 ## Topics
 
 | Topic | Type | Description |
@@ -374,9 +443,9 @@ The bridge config (`config/ros_gz_bridge.yaml`) maps 11 topics:
 | `/lhr/sensor/wheel_speeds` | `sensor_msgs/JointState` | Per-wheel speeds (rad/s), names `fl`/`fr`/`rl`/`rr` |
 | `/lhr/control/lookahead` | `visualization_msgs/Marker` | Debug: lookahead target point |
 | `/lhr/mission/status` | `std_msgs/String` | Driverless system status (`OFF`, `READY`, `DRIVING`, `FINISHED`, `EMERGENCY`) |
-| `/lhr/mission/go` | `std_msgs/Bool` | Go signal — triggers Ready → Driving transition |
-| `/lhr/mission/emergency` | `std_msgs/Bool` | Emergency stop — triggers Driving → Emergency transition |
-| `/lhr/mission/reset` | `std_msgs/Bool` | Reset — triggers Emergency → Off transition |
+| `/lhr/mission/go` | `std_msgs/Bool` | Go signal, triggers Ready → Driving transition |
+| `/lhr/mission/emergency` | `std_msgs/Bool` | Emergency stop, triggers Driving → Emergency transition |
+| `/lhr/mission/reset` | `std_msgs/Bool` | Reset, triggers Emergency → Off transition |
 | `/lhr/metrics/lap_complete` | `std_msgs/Bool` | Published by metrics node when a lap is completed |
 | `/lhr/debug/curvature` | `std_msgs/Float32` | Debug: estimated path curvature at lookahead |
 | `/lhr/debug/v_cmd` | `std_msgs/Float32` | Debug: commanded speed after accel limiting |
@@ -390,10 +459,18 @@ The bridge config (`config/ros_gz_bridge.yaml`) maps 11 topics:
 ```mermaid
 flowchart LR
     map["map<br>(world/track frame)"] --> base["base_link<br>(vehicle, rear-axle center)"]
+    base --> lidar["lidar<br>(Mid-360 mount, lidar enabled)"]
 ```
 
-One transform. Broadcast by `sim_kinematic` in the kinematic sim; in Gazebo by
-the `OdometryPublisher` plugin, bridged from `/model/fsae_vehicle/tf` to `/tf`.
+`map -> base_link` is broadcast by `sim_kinematic` in the kinematic sim; in
+Gazebo by the `OdometryPublisher` plugin, bridged from
+`/model/fsae_vehicle/tf` to `/tf`.
+
+`base_link -> lidar` is static, published by `lhr_lidar_sim` from its own
+mount pose and when `lidar:=true` or `perception:=lidar`. It has to exist: a `PointCloud2`
+stamped in the `lidar` frame cannot be placed by Foxglove, RViz or any
+tf2 consumer without it, and the cloud silently fails to draw rather
+than erroring.
 
 ## Parameters
 
@@ -423,6 +500,7 @@ Cone IDs: left cones use IDs `0..N-1`, right cones use IDs `10000..10000+N-1`. T
 | `detection_hz` | `10.0` | Publish rate (Hz) |
 | `noise_std_m` | `0.0` | Gaussian position noise std-dev (0 = off) |
 | `false_negative_rate` | `0.0` | Probability of missing a visible cone (0 = off) |
+| `seed` | `1` | Seeds this node's own random stream (see the package README) |
 
 ### lhr_sensor_sim (inertial_sim)
 
@@ -469,8 +547,8 @@ and the measured drift figures are in
 Cone pairing strategies:
 - **index** (default): Pairs left cone ID `i` with right cone ID `i + 10000`. Works with sim perception where cone IDs follow the trackgen convention.
 - **nearest**: Pairs each left cone with its nearest unpaired right cone.
-- **classified**: Computes a minimum-cost one-to-one assignment between inferred left and right cones, then rejects pairs outside the track-width band. Opt-in for LiDAR perception.
-- **boundary**: Uses Delaunay triangulation to pair unclassified cones that are approximately `track_width` apart. Default for LiDAR perception.
+- **boundary**: Builds a bounded forward path through connected Delaunay edge midpoints, with width, gap, and turn checks. Used for unclassified LiDAR cones. See [track builder](src/lhr_track_builder/README.md).
+- **classified**: One-to-one assignment between inferred left and right cones; opt-in for LiDAR.
 
 ### lhr_sim_kinematic (sim_node)
 
@@ -485,6 +563,7 @@ Cone pairing strategies:
 | `init_x` | `0.0` | Initial X position (m) |
 | `init_y` | `0.0` | Initial Y position (m) |
 | `init_yaw` | `0.0` | Initial heading (rad) |
+| `publish_clock` | `false` | Publish `/clock` from the fixed step, making this node the sim clock source |
 
 ### lhr_mission_manager (mission_manager)
 
@@ -587,7 +666,7 @@ Debug topics: `/lhr/debug/curvature` and `/lhr/debug/v_cmd` (both `std_msgs/Floa
 
 Converts `AckermannDriveStamped` into 6 individual Gazebo joint commands with proper Ackermann differential steering geometry.
 
-Wheelbase, track width, wheel radius and the steering clamp come from `lhr_vehicle` (`vehicle.yaml`) at startup — the same values the generated `model.sdf` uses, so the adapter and the model cannot disagree.
+Wheelbase, track width, wheel radius and the steering clamp come from `lhr_vehicle` (`vehicle.yaml`) at startup, the same values the generated `model.sdf` uses, so the adapter and the model cannot disagree.
 
 **Ackermann geometry:** When turning left, the left (inner) wheel steers at a sharper angle than the right (outer) wheel. The adapter computes both angles from the bicycle-model center angle using:
 ```
@@ -600,19 +679,24 @@ outer = atan(wheelbase / (R + track_width/2))
 
 ### lhr_perception (lidar_cone_detector)
 
-Processes LiDAR pointcloud to detect cones. Pipeline: ground removal → range filter → Euclidean clustering → cone validation → timestamp-aligned sensor-to-map transform → spatial dedup → track-side inference. The detector buffers odometry and interpolates the vehicle pose at each pointcloud timestamp; it waits for the following odometry sample instead of projecting a sharp-turn scan with a pose from another instant. Detections are associated to their nearest existing cone, with each cone used at most once per scan, before positions are updated by a running average. Side votes come from a short local corridor and are shared only across geometrically continuous boundary fragments. Later labels require consistent proposals from vehicle poses separated by one metre and remain locked after acceptance.
+Processes clouds using full scan-time transforms, with height and vehicle
+filters in `base_link`. See [perception](src/lhr_perception/README.md). Pipeline: ground removal → range filter → scan-time map registration → bounded cloud stacking → connected-component clustering → cone validation → spatial dedup.
+
+Side inference remains opt-in through `lidar_classify_sides:=true`. It uses geometry, not measured cone colour.
 
 | Param | Default | Description |
 |-------|---------|-------------|
 | `max_range` | `20.0` | Max detection range (m) |
-| `min_range` | `0.9` | Min detection range — avoids vehicle self-hits (m) |
-| `ground_z_min` | `-(mount height - 0.15)` | Ground removal lower threshold in sensor frame (m), from the LiDAR mount height in `vehicle.yaml`: drops everything within 15 cm of the ground |
-| `ground_z_max` | `0.5` | Ground removal upper threshold in sensor frame (m) |
+| `min_range` | `0.9` | Min detection range, avoids vehicle self-hits (m) |
+| `ground_z_min` | `0.05` | Minimum height above base_link ground plane (m) |
+| `ground_z_max` | `0.55` | Maximum height above base_link ground plane (m) |
 | `cluster_radius` | `0.35` | Euclidean clustering radius (m) |
-| `min_cluster_points` | `1` | Minimum points for a valid cluster |
+| `min_cluster_points` | `3` | Minimum points for a valid cluster |
 | `max_cluster_extent` | `0.5` | Maximum cluster bounding box extent (m) |
-| `max_cluster_points` | `50` | Maximum points in a valid cone cluster |
-| `dedup_radius` | `1.5` | Spatial dedup radius — new detections within this distance of existing ones are ignored (m) |
+| `max_cluster_points` | `500` | Maximum points in a valid cone cluster |
+| `dedup_radius` | `0.6` | Merge radius: nearby detections update the existing running average (m) |
+| `stack_window_sec` | `0.5` | Scan history window (s); 0 disables stacking |
+| `stack_max_frames` | `10` | Maximum retained scans |
 | `publish_hz` | `10.0` | Output publish rate (Hz) |
 | `pose_history_sec` | `2.0` | Odometry history retained for pointcloud timestamp synchronization (s) |
 | `classify_sides` | `true` | Infer track sides; false publishes all cones in the unclassified `cones` namespace |
@@ -625,13 +709,6 @@ Processes LiDAR pointcloud to detect cones. Pipeline: ground removal → range f
 | `boundary_link_distance` | `3.0` | Direct same-boundary link distance (m) |
 | `boundary_gap_distance` | `3.3` | Maximum aligned boundary gap (m) |
 | `boundary_gap_angle_deg` | `40.0` | Maximum direction error across a boundary gap (degrees) |
-
-These defaults were tuned on the simulated VLP-16. On the real Mid-360
-([2026-10-04 acceptance test](../testing/2026-10-04-mid360-acceptance/README.md)),
-31 to 71% of the hits on a small cone fall within 15 cm of the ground, where
-`ground_z_min` drops them, and a 1-point cluster is not a credible cone. Retune
-both against that test's ROS 2 bags, which replay into this node unchanged:
-[SharePoint, Test Data > 2026-10-04-mid360-acceptance > ros2](https://utexas.sharepoint.com/sites/ENGR-LonghornRacing/LHR%20Electric/Design/_VMS_/Autonomous/Test%20Data/2026-10-04-mid360-acceptance/ros2).
 
 The default LiDAR mode publishes unclassified `cones` (orange). With
 `lidar_classify_sides:=true`, it infers track sides from geometry and publishes
@@ -653,21 +730,81 @@ its limits.
 | `min_lap_time` | `5.0` | Minimum seconds before a lap return is accepted |
 | `output_csv` | `"data/metrics.csv"` | Path for CSV output (relative to cwd) |
 | `run_id` | `""` | Run identifier; auto-generates timestamp if empty |
+| `timeout_sec` | `120.0` | Wall-clock watchdog; ends the run non-zero rather than hanging (0 = off) |
+| `output_csv` | `"data/metrics.csv"` | Also an `mvs_demo.launch.py` argument, so a runner can redirect it |
 | `truth_odom_topic` | `""` | Ground-truth odometry to score `/lhr/vehicle/odom` against; empty leaves the error columns blank |
 
 ### Metrics output
 
 The metrics node publishes `/lhr/metrics/lap_complete` (`std_msgs/Bool`) when a lap is detected, which the mission manager uses to trigger the Driving → Finished transition.
 
-It also prints a summary and appends a CSV row on lap completion or Ctrl+C:
+A run now ends by itself. Metrics finishes on a completed lap, on the
+mission reaching `FINISHED` (so missions with no lap, such as
+acceleration, still record), on `EMERGENCY`, or on the `timeout_sec`
+watchdog. Every ending writes a row, and the metrics process exits 0 only
+for `lap` and `mission_finished`. In `mvs_demo.launch.py` the metrics
+process exiting tears the whole launch down, so a headless run cannot
+hang.
+
+**`ros2 launch` always exits 0.** `LaunchService` returns non-zero only
+when launch itself raises, never because a node it managed failed, so the
+metrics exit code does not reach the shell. Use
+[`scripts/run_headless.sh`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/ros2/scripts/run_headless.sh), which reads
+`outcome` from the row and exits on that. Anything wiring this into CI
+must go through that script, not `ros2 launch` directly.
+
+The CSV is 39 columns in six groups, because a row of results alone
+cannot be compared with another row:
 
 ```
-run_id, duration_s, samples, mean_cte, max_cte, off_track_count, mean_speed, max_speed, lap_completed, mean_pos_error, max_pos_error, mean_yaw_error
+run_id, vehicle_sha256, scenario, git_sha,
+seed, track_style, num_waypoints, mission, perception, start_finish_cones,
+stack_window_sec, min_cluster_points, ground_z_min, start_on_track,
+lidar, mount_pitch_rad, elevation_profile, return_profile, fov_deg, max_range_m, noise_std_m, false_negative_rate,
+lookahead_dist, a_lat_max, v_min, v_max, max_accel, max_decel,
+outcome, duration_s, samples, path_length_m, mean_cte, max_cte,
+off_track_count, off_track_dist_m, mean_speed, max_speed, lap_completed
 ```
 
-The last three are the estimate-vs-truth error and are blank unless
-`truth_odom_topic` is set (both demos set it under `estimator:=ekf`).
+`mean_cte` and `off_track_dist_m` are weighted by distance travelled, not
+by sample count, so they do not move with the odom publish rate. The
+difference is not cosmetic: on one seed 38% of *samples* sit beyond the
+off-track threshold while only 2.0% of the *distance* does, because the
+car is slowest exactly where it is off line and so reports many samples
+while barely moving.
 
-CSV data accumulates in `data/metrics.csv` across runs. Delete the file once
-after upgrading past the error columns, or new rows will not line up with the
-old header.
+### Is the gate trustworthy?
+
+Repeat runs are close but never identical: each node is its own process
+with its own executor, so callback interleaving is the scheduler's call.
+Gate on a band, never on equality. Measured over 8 runs at one seed:
+
+| Metric | Spread | Band |
+|--------|--------|------|
+| `mean_cte` | 1.03% | 2% |
+| `path_length_m` | 0.14% | 1% |
+| `max_cte` | 2.46% | 5% |
+
+`max_cte` gets the loose band because it is an extreme-value statistic:
+adding runs can only widen its observed spread, so a tight band on it is
+a promise that breaks later. Whether `max_cte` is *acceptable* is a
+separate, absolute question that belongs in the per-run gate.
+`./scripts/check_stability.sh` enforces the table above.
+
+See [lhr_metrics/README.md](src/lhr_metrics/README.md) for what the
+provenance fields mean and how to add a column. CSV data accumulates in
+`data/metrics.csv` across runs; a file written under an older column set
+is moved aside rather than having its fields dropped.
+
+LiDAR launch modes set `closed_path=false`; local paths do not wrap at their
+ends and expire after `path_timeout_sec=1.0`. See [control](src/lhr_control/README.md).
+
+The MVS launcher also accepts `plant:=bobsim` for the optional
+[BobSim 3 DOF plant](src/lhr_sim_bobsim/README.md). CI initializes the pinned
+BobSim submodule and exercises its acceleration, braking and frame conversion.
+
+Use the [driving study runner](src/lhr_demo/README.md#repeatable-driving-studies)
+to compare vehicle plants and perception conditions across seeds and speeds.
+Motion distortion and solid trackside clutter are opt-in MVS launch settings.
+
+Estimator error columns (`mean_pos_error`, `max_pos_error`, `mean_yaw_error`) are appended and stay blank without a truth topic.

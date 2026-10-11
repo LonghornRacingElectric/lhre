@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 from lhr_perception.cone_side_classifier import UNKNOWN
 from lhr_perception.lidar_cone_detector import LidarConeDetector
-from lhr_perception.pose_history import Pose2D
+from nav_msgs.msg import Odometry
 import rclpy
 from sensor_msgs_py import point_cloud2
 from std_msgs.msg import Header
@@ -14,10 +14,10 @@ def _scan(sec, nanosec, x_offset=0.0):
     header = Header()
     header.stamp.sec = sec
     header.stamp.nanosec = nanosec
-    header.frame_id = 'lidar'
+    header.frame_id = 'base_link'
     return point_cloud2.create_cloud_xyz32(header, [
-        (5.0 + x_offset, 2.0, 0.0),
-        (5.0 + x_offset, -2.0, 0.0),
+        (5.0 + x_offset, 2.0, 0.25),
+        (5.0 + x_offset, -2.0, 0.25),
     ])
 
 
@@ -29,8 +29,15 @@ def test_unclassified_scans_still_deduplicate_and_publish_all_cones():
     node._det_pub = SimpleNamespace(publish=published.append)
     try:
         assert node._classify_sides is False
-        node._pose_history.add(Pose2D(0, 0.0, 0.0, 0.0))
-        node._pose_history.add(Pose2D(2_000_000_000, 0.0, 0.0, 0.0))
+        node._min_cluster_pts = 1
+        node._stack_window = 0.0
+        for sec in (0, 2):
+            odom = Odometry()
+            odom.header.frame_id = 'map'
+            odom.child_frame_id = 'base_link'
+            odom.header.stamp.sec = sec
+            odom.pose.pose.orientation.w = 1.0
+            node._odom_cb(odom)
 
         node._cloud_cb(_scan(1, 0))
         node._process()

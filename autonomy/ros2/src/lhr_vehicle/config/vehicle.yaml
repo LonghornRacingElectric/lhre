@@ -1,4 +1,4 @@
-# Orion (2025-26 EV) physical parameters — the single source of truth for the
+# Orion (2025-26 EV) physical parameters: the single source of truth for the
 # autonomy stack. Nodes read their vehicle defaults from here, and the Gazebo
 # model (lhr_gazebo/models/fsae_vehicle/model.sdf) is generated from it.
 #
@@ -7,9 +7,9 @@
 # transforms).
 #
 # Provenance tags:
-#   BobSim   — derived from VMOD's BobDyn/BobSim vehicle.yml for Orion
+#   BobSim:    derived from VMOD's BobDyn/BobSim vehicle.yml for Orion
 #              (schema boblib.vehicle.v1), via dyn_py's parameter helpers
-#   ASSUMED  — sim placeholder; measure on the car and replace
+#   ASSUMED:   sim placeholder; measure on the car and replace
 schema: lhr.vehicle.v1
 vehicle:
   name: orion
@@ -46,5 +46,13 @@ sensors:
   # Positions in base_link. The VLP-16 sits on a mast ahead of the driver
   # cell. The IMU is at the chassis link origin (half the wheelbase forward,
   # chassis_z_m up) and is derived from that, not listed here.
+  # The height is not free: at z=0.55 the sensor sat *inside* the nose
+  # bodywork, which the CAD mesh (lhr_vehicle/meshes) made visible. The
+  # Mid-360's lowest beam is -7 deg, so bodywork at horizontal distance d
+  # and height z blocks it unless z_mount >= z + d*tan(7 deg). Over the
+  # forward arc of the real body that bound is 0.5965 m, which
+  # lhr_vehicle's test_mesh.py asserts. Going higher costs range: the
+  # near-ground blind radius is z/tan(7 deg), so the lowest clearing
+  # height is the best one, not the safest one.
   lidar:
-    position_m: [1.8, 0.0, 0.55]     # ASSUMED (Gazebo mount)
+    position_m: [1.8, 0.0, 0.62]     # x,y ASSUMED; z clears the CAD nose

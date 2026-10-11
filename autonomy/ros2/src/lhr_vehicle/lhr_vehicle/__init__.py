@@ -8,6 +8,7 @@ where each number came from.
 """
 
 from dataclasses import dataclass
+import hashlib
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -82,6 +83,21 @@ def config_path() -> Path:
     raise FileNotFoundError(
         f'{CONFIG_NAME} not found; looked in: '
         + ', '.join(str(c) for c in candidates))
+
+
+def vehicle_sha256(path: Optional[Path] = None) -> str:
+    """
+    Fingerprint the vehicle file's bytes.
+
+    Stamped onto anything derived from these numbers, so a stored
+    result says which car description produced it. A commit id does
+    not cover that: the file is often edited without being committed.
+
+    Same formula as the study harness in ``simulation/tools``, so a
+    sim run and a BobDyn study are comparable on this field.
+    """
+    source = Path(path) if path is not None else config_path()
+    return hashlib.sha256(source.read_bytes()).hexdigest()
 
 
 def _vec3(values) -> Vec3:

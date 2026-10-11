@@ -22,12 +22,18 @@ jobs:
   colcon:
     runs-on: ubuntu-latest
     container: ros:jazzy-ros-base
+    env:
+      BOBSIM_ROOT: ${{ github.workspace }}/simulation/bobsim
+      BOBSIM_VEHICLE: ${{ github.workspace }}/vehicle/vehicle.yml
     defaults:
       run:
         shell: bash
         working-directory: autonomy/ros2
     steps:
       - uses: actions/checkout@v7
+
+      - name: Initialize dynamics dependency
+        run: git -C ../.. submodule update --init --recursive simulation/bobsim
 
       # Dependencies come from each package.xml, so declaring one there is
       # enough. ros_gz is skipped: it pulls in all of Gazebo Harmonic and
@@ -50,8 +56,7 @@ jobs:
           source /opt/ros/jazzy/setup.bash
           colcon build
 
-      # ament lint (flake8, pep257) per package today; functional tests are
-      # open work for the Sim & Test Infra lane. Rules: ros2/README.md.
+      # Package tests include ament lint and functional simulation checks.
       - name: Test
         id: test
         run: |
