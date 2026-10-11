@@ -161,6 +161,8 @@ type LiveSessionState = {
   lapDistanceM: number;
   deltaRate: number | null;
   deltaMs: number;
+  // Event flags fired this session (saved = the /api/event-flag POST succeeded).
+  flags: { t: number; label: string; saved: boolean }[];
 };
 type SavedCurrentLap = {
   lapStartMs: number | null;
@@ -192,6 +194,7 @@ type SavedSession = {
   currentLap?: SavedCurrentLap | null;
   hasSectors: boolean;
   sessionInfo?: TracksideSessionInfo | null;
+  flags?: LiveSessionState["flags"];
 };
 const SESSION_STORAGE_KEY = "motec-live-session";
 const TOUR_STORAGE_KEY = "trackside-tour-done";
@@ -262,6 +265,7 @@ const EMPTY_LIVE_STATE: LiveSessionState = {
   lapDistanceM: 0,
   deltaRate: null,
   deltaMs: 0,
+  flags: [],
 };
 
 function readLocalSavedSession() {
@@ -2047,7 +2051,7 @@ function App() {
   // session on screen. Does NOT pull the raw car CSVs — Log Sync handles those.
   function stopEventAndDownload() {
     if (isMirrorRef.current) return;
-    const hasData = liveStateRef.current.laps.length > 0 || liveStateRef.current.samples.length > 0;
+    const hasData = liveStateRef.current.laps.length > 0 || liveStateRef.current.samples.length > 0 || liveStateRef.current.flags.length > 0;
     // Nothing to stop ONLY if there's no data AND no active session. A named
     // session with no laps yet must still be ended + cleared here — otherwise its
     // persisted sessionInfo restores on the next reload (looks like "stop didn't
@@ -2151,10 +2155,21 @@ function App() {
     if (!sessionInfo) { setLiveState((prev) => ({ ...prev, status: "Start a session before flagging events." })); return; }
     // Optionally flash the same flag on the driver's dash.
     if (flagSendsMessage) fireFlagDriverMessage(label);
+    // Kept in session state too (persisted + in the end-of-session JSON), so a
+    // failed POST still leaves a record (saved: false).
+    const t = Date.now();
+    let saved = false;
+    let status = "Flag failed — offline?";
     try {
-      const res = await fetch("/api/event-flag", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ eventFlag: label }) });
-      setLiveState((prev) => ({ ...prev, status: res.ok ? `Flagged: ${label}` : "Flag failed — no active drive day on the server." }));
-    } catch { setLiveState((prev) => ({ ...prev, status: "Flag failed — offline?" })); }
+      const res = await fetch("/api/event-flag", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ eventFlag: label, t }) });
+      saved = res.ok;
+      status = res.ok ? `Flagged: ${label}` : "Flag failed — no active drive day on the server.";
+    } catch { /* offline — kept locally with saved: false */ }
+    const cur = liveStateRef.current;
+    const next = { ...cur, status, flags: [...cur.flags, { t, label, saved }] };
+    liveStateRef.current = next;
+    setLiveState(next);
+    persistLiveSession(next, { saveLocal: true, saveBackend: true, includeFullLapSamples: false });
   }
   // Flash an event flag on the driver's dash (used when "Show on driver dash" is
   // on). The per-flag picker decides which screen: a chosen message-library
@@ -2582,6 +2597,7 @@ function App() {
       sampleTail: current.samples.slice(includeFullLapSamples ? 0 : -SESSION_AUTOSAVE_SAMPLE_CAP),
       currentLap,
       hasSectors: sessionFromFile || current.laps.some((lap) => lap.sectors.length > 0),
+      flags: current.flags,
       // Inject the LIVE metadata / plan / setup into sessionInfo so the saved
       // session always reflects the latest edits. patchSession only writes to
       // localStorage + server, not React state — without this merge,
@@ -2624,6 +2640,7 @@ function App() {
       lapEnergyInWh: cur?.lapEnergyInWh ?? 0,
       lapDistanceM: cur?.lapDistanceM ?? 0,
       deltaMs: cur?.deltaMs ?? 0,
+      flags: saved.flags ?? current.flags,
     };
     knownLapIdsRef.current = new Set(laps.map((lap) => lap.id));
     liveStateRef.current = merged;
@@ -2694,6 +2711,7 @@ function App() {
       lapEnergyInWh: currentLap?.lapEnergyInWh ?? 0,
       lapDistanceM: currentLap?.lapDistanceM ?? 0,
       deltaMs: currentLap?.deltaMs ?? 0,
+      flags: saved.flags ?? [],
     };
     knownLapIdsRef.current = new Set(laps.map((lap) => lap.id));
     liveStateRef.current = restored;
@@ -3561,7 +3579,7 @@ function App() {
                 </button>
                 <button
                   className="tool liveAction"
-                  disabled={isMirror || eventEnded || (!liveState.laps.length && !liveState.samples.length)}
+                  disabled={isMirror || eventEnded || (!liveState.laps.length && !liveState.samples.length && !liveState.flags.length)}
                   onClick={() => setConfirmStopOpen(true)}
                   title={eventEnded ? "Event already stopped — start a new session to run again" : "End the session and download everything to review it locally (laps CSV + full session JSON). Raw car CSVs come from Log Sync."}
                 >

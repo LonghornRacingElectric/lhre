@@ -13,11 +13,15 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
+    // Use the client's flag time so the row matches the session JSON; fall back
+    // to server time if it's missing or more than 5 min off (bad device clock).
+    const t = Number(body.t);
+    const startTime = Number.isSafeInteger(t) && Math.abs(t - Date.now()) < 5 * 60_000 ? t : Date.now();
 
     await prisma.classifier.create({
       data: {
         type: "event_flag",
-        start_time: BigInt(Date.now()),
+        start_time: BigInt(startTime),
         day_id: BigInt(activeDay.day_id),
         notes: body.eventFlag,
       },
