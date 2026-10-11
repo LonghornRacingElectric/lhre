@@ -152,3 +152,7 @@ The fixture disables gravity to hold the dynamic vehicle stationary while
 its odometry plugin publishes TF. Its green target front face is at world
 x=6.8 m, 5 m in front of the current assumed rig center, so changed mount
 geometry requires recomputing the measured target distance.
+
+Camera extrinsics are fixed relative to `base_link`. The existing vehicle
+state/TF is planar, so the map-frame camera pose does not fully represent
+physics roll/pitch. Future 3D projection/fusion needs a 6-DoF vehicle pose.
