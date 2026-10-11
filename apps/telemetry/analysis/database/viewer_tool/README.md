@@ -80,3 +80,12 @@ Run dev server:
 ```bash
 npm run dev
 ```
+
+## Drive day viewer
+
+`/trackside-retro` replays a trackside-live session export after the fact:
+map with sectors, lap timeline, corners and braking zones, cell temperatures,
+energy plan. It runs entirely in the browser and keeps its data in IndexedDB.
+How it sorts lap presses into courses, where the export comes from and how to
+test it are in [src/lib/driveday/README.md](src/lib/driveday/README.md);
+`npm run test:driveday` runs its tests.

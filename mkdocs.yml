@@ -168,6 +168,7 @@ plugins:
         - "site/**" # mkdocs build output
         - "external/**" # third-party staging
         - "patches/**"
+        - "**/node_modules/**" # npm deps of viewer_tool and the autonomy UI, when installed locally
         - "autonomy/ros2/build/**" # colcon outputs on dev machines
         - "autonomy/ros2/install/**"
         - "autonomy/ros2/log/**"
