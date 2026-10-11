@@ -17,6 +17,8 @@ a Bazel package tree
 | Run a BobSim evaluation, envelope or sweep | [run-bobsim-target](docs/skills/run-bobsim-target/SKILL.md) |
 | Change a vehicle parameter | [edit-vehicle](docs/skills/edit-vehicle/SKILL.md) |
 | Move the BobSim pin | [bump-bobsim](docs/skills/bump-bobsim/SKILL.md) |
+| Use, patch or question BobSim from lhre code | [bobsim-boundary](docs/skills/bobsim-boundary/SKILL.md) |
+| Plan and run study work as a team of subagents | [orchestrate-subagents](docs/skills/orchestrate-subagents/SKILL.md) |
 
 ## Build, test, verify
 

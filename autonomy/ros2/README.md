@@ -92,6 +92,10 @@ flowchart LR
 `mission_manager` and `metrics_node` subscribe exactly as in the kinematic
 diagram (omitted here). The IMU is bridged to `/lhr/imu/data`; the EKF
 consumes it under `estimator:=ekf` and nothing reads it otherwise.
+With `perception:=sim estimator:=ekf`, `sensor_sim` uses the estimated pose to
+decide which cones are visible but publishes their generator-provided map
+positions. This mixes pose drift into visibility without applying it to cone
+placement, so it is not a realistic model of sensing under EKF drift.
 
 **LiDAR perception (`perception:=lidar`):**
 ```mermaid
@@ -105,16 +109,16 @@ flowchart LR
     bridge -- "/lhr/lidar/points" --> detector["lidar_cone_detector"]
     bridge -- "/lhr/vehicle/odom" --> detector
     bridge -- "/lhr/vehicle/odom" --> pursuit
-    detector -- "/lhr/sensor/cones_detected<br>(inferred left/right, persistent map)" --> builder["track_builder<br>(one-to-one classified pairing)"]
+    detector -- "/lhr/sensor/cones_detected<br>(unclassified, persistent map)" --> builder["track_builder<br>(boundary pairing)"]
     builder -- "/lhr/track/centerline" --> pursuit["pure_pursuit"]
     pursuit -- "/lhr/vehicle/cmd" --> adapter["joint_cmd_adapter"]
     adapter -- "6× joint commands" --> bridge
 ```
 
 The upper stack (track_builder, control, mission_manager, metrics) is identical in both modes. The `perception` launch argument selects between the sim pipeline and LiDAR-based detection.
-For LiDAR mapping without inferred sides, set `lidar_classify_sides:=false`.
-The detector publishes all mapped cones as unclassified orange markers, and
-the track builder switches to `boundary` pairing.
+LiDAR mapping publishes unclassified orange cones and uses `boundary` pairing
+by default. Set `lidar_classify_sides:=true` to infer left/right sides and use
+one-to-one `classified` pairing. That mode remains experimental on autocross.
 
 To bypass the sensor sim and use all cones directly (god-mode), override the cone topic:
 ```bash
@@ -246,7 +250,7 @@ Launch arguments work the same way:
 ./scripts/run_gazebo_demo.sh gui:=false          # headless Gazebo (no Gazebo GUI)
 ./scripts/run_gazebo_demo.sh rviz:=false         # disable RViz
 ./scripts/run_gazebo_demo.sh perception:=lidar   # LiDAR-based cone detection
-./scripts/run_gazebo_demo.sh perception:=lidar lidar_classify_sides:=false  # keep LiDAR mapping, skip side inference
+./scripts/run_gazebo_demo.sh perception:=lidar lidar_classify_sides:=true  # opt into side inference and classified pairing
 ./scripts/run_gazebo_demo.sh track_style:=oval   # oval track (also: autocross, simple)
 ./scripts/run_gazebo_demo.sh track_style:=oval perception:=lidar  # LiDAR on oval (best LiDAR experience)
 ./scripts/run_gazebo_demo.sh estimator:=ekf      # EKF odometry instead of Gazebo ground truth
@@ -325,7 +329,7 @@ flowchart TB
 | Cone source | `publish_cones` | `publish_cones` (reused) | Gazebo GPU LiDAR |
 | Perception | `sensor_sim` (FOV filter) | `sensor_sim` (reused) | `lidar_cone_detector` (pointcloud clustering) |
 | Physics / vehicle | `sim_kinematic` | Gazebo | Gazebo |
-| `track_builder` pairing | index | index | classified by default; boundary when `lidar_classify_sides:=false` |
+| `track_builder` pairing | index | index | boundary by default; classified when `lidar_classify_sides:=true` |
 | Actuation | `/lhr/vehicle/cmd` directly | `joint_cmd_adapter` → 6 joints | `joint_cmd_adapter` → 6 joints |
 
 All paths produce identical ROS 2 topic interfaces — the upper stack doesn't know the difference.
@@ -465,8 +469,8 @@ and the measured drift figures are in
 Cone pairing strategies:
 - **index** (default): Pairs left cone ID `i` with right cone ID `i + 10000`. Works with sim perception where cone IDs follow the trackgen convention.
 - **nearest**: Pairs each left cone with its nearest unpaired right cone.
-- **classified**: Computes a minimum-cost one-to-one assignment between inferred left and right cones, then rejects pairs outside the track-width band. Used by LiDAR perception.
-- **boundary**: Uses Delaunay triangulation to pair unclassified cones that are approximately `track_width` apart. Retained as a fallback for sources without side information.
+- **classified**: Computes a minimum-cost one-to-one assignment between inferred left and right cones, then rejects pairs outside the track-width band. Opt-in for LiDAR perception.
+- **boundary**: Uses Delaunay triangulation to pair unclassified cones that are approximately `track_width` apart. Default for LiDAR perception.
 
 ### lhr_sim_kinematic (sim_node)
 
@@ -629,7 +633,8 @@ These defaults were tuned on the simulated VLP-16. On the real Mid-360
 both against that test's ROS 2 bags, which replay into this node unchanged:
 [SharePoint, Test Data > 2026-10-04-mid360-acceptance > ros2](https://utexas.sharepoint.com/sites/ENGR-LonghornRacing/LHR%20Electric/Design/_VMS_/Autonomous/Test%20Data/2026-10-04-mid360-acceptance/ros2).
 
-The current LiDAR mode infers track sides from geometry. It publishes
+The default LiDAR mode publishes unclassified `cones` (orange). With
+`lidar_classify_sides:=true`, it infers track sides from geometry and publishes
 `left_cones` (blue) and `right_cones` (yellow), with `cones` (orange) for
 unknown sides. LiDAR does not measure cone colour. The side classifier is
 experimental: in a live Gazebo autocross run, sparse initial detections caused

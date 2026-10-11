@@ -92,7 +92,7 @@ def _launch_setup(context: LaunchContext):
 
     perception = context.launch_configurations.get('perception', 'sim')
     classify_sides = context.launch_configurations.get(
-        'lidar_classify_sides', 'true').lower() == 'true'
+        'lidar_classify_sides', 'false').lower() == 'true'
     use_ekf = context.launch_configurations.get(
         'estimator', 'truth').lower() == 'ekf'
 
@@ -336,8 +336,8 @@ def generate_launch_description():
             'perception', default_value='sim',
             description='Perception mode: "sim" or "lidar"'),
         DeclareLaunchArgument(
-            'lidar_classify_sides', default_value='true',
-            description='Infer LiDAR cone sides (false publishes unlabeled cones)'),
+            'lidar_classify_sides', default_value='false',
+            description='Infer LiDAR cone sides (opt in; false publishes unlabeled cones)'),
         DeclareLaunchArgument(
             'track_style', default_value='autocross',
             description='Track style: "autocross", "oval", or "simple"'),

@@ -134,8 +134,8 @@ class InertialSim(Node):
 
     def _publish_wheels(self, stamp, speed: float, yaw_rate: float):
         # A wheel at body-frame offset y sees speed - yaw_rate * y; left
-        # wheels sit at +half_track. Steering is ignored: at FSAE lock the
-        # rolling-speed error is far below the noise floor.
+        # wheels sit at +half_track. Front steering is ignored here, so front
+        # wheel speeds are approximate in tight turns; the EKF uses rears only.
         lateral = yaw_rate * self._half_track
         wheel_speeds = [speed - lateral, speed + lateral,
                         speed - lateral, speed + lateral]

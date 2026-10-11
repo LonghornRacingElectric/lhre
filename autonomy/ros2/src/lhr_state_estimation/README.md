@@ -26,9 +26,11 @@ sensor degrades the estimate instead of freezing it.
 **Nothing measures position.** Without GNSS there is no absolute reference,
 so `x` and `y` are dead reckoned and their covariance grows without bound —
 that is correct behavior, not a bug, and it is why the position covariance is
-published. Gyro bias is not estimated for the same reason: with no absolute
-heading reference it is unobservable, so a bias state would only random-walk.
-Both change when GNSS lands.
+published. Gyro bias is not estimated yet, but it is observable without GNSS
+when rear-wheel differential speed gives an independent yaw-rate measurement;
+standstill also provides a zero-rate check. Slip and standstill detection are
+needed before adding those corrections. Absolute position still needs an
+external reference.
 
 The wheel conversion uses the rear pair only: they are unsteered, so their
 rolling direction is the body x axis and no steering angle enters it. All four
@@ -42,8 +44,10 @@ one CAN frame per corner) and slip detection will want them.
 publishes `/lhr/vehicle/odom` (`nav_msgs/Odometry`, twist in the body frame
 per REP-103) and the `map → base_link` transform.
 
-Pose and twist covariances are filled from the filter's own `P`, so a
-consumer can tell how much to trust the estimate.
+The planar pose (`x`, `y`, `yaw`) and twist (`v`, `yaw_rate`) covariance entries
+come from the filter's `P`. This is a 2D estimate: the unmodelled z, roll,
+pitch, lateral and vertical velocity entries remain zero in the ROS odometry
+covariance arrays and must not be interpreted as measured certainty.
 
 | Param | Default | Description |
 |-------|---------|-------------|

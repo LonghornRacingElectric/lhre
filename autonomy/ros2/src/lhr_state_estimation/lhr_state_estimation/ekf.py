@@ -32,9 +32,10 @@ class VehicleEkf:
     """
     Five-state EKF for a planar vehicle.
 
-    Gyro bias is deliberately *not* estimated: with no absolute heading
-    reference (no GNSS, no magnetometer) it is unobservable, so a bias state
-    would only random-walk. Add it with the GNSS work, not before.
+    Gyro bias is not estimated yet. It can be constrained without GNSS by
+    comparing the gyro with rear-wheel differential yaw rate, and by taking
+    zero-rate measurements while stationary. Both need slip and standstill
+    checks before adding a bias state.
     """
 
     def __init__(self, sigma_accel: float = 1.0,

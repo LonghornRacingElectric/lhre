@@ -4,6 +4,9 @@ import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
 
+from launch import LaunchContext
+from launch.actions import DeclareLaunchArgument
+from launch.utilities import perform_substitutions
 import pytest
 
 
@@ -16,6 +19,7 @@ class _Node:
 
 
 @pytest.mark.parametrize('setting, enabled, strategy', [
+    (None, False, 'boundary'),
     ('true', True, 'classified'),
     ('false', False, 'boundary'),
 ])
@@ -34,12 +38,13 @@ def test_lidar_side_mode_configures_detector_and_builder(
 
     context = SimpleNamespace(launch_configurations={
         'perception': 'lidar',
-        'lidar_classify_sides': setting,
         'estimator': 'truth',
         'gui': 'false',
         'rviz': 'false',
         'enable_metrics': 'false',
     })
+    if setting is not None:
+        context.launch_configurations['lidar_classify_sides'] = setting
     nodes = {
         action.name: action for action in module._launch_setup(context)
         if isinstance(action, _Node)
@@ -47,3 +52,19 @@ def test_lidar_side_mode_configures_detector_and_builder(
 
     assert nodes['lidar_cone_detector'].parameters['classify_sides'] is enabled
     assert nodes['track_builder'].parameters['pairing_strategy'] == strategy
+
+
+def test_lidar_side_launch_argument_defaults_to_false():
+    """Launching without an override must keep side inference opt-in."""
+    launch_path = (Path(__file__).resolve().parents[1]
+                   / 'launch' / 'gazebo_demo.launch.py')
+    spec = importlib.util.spec_from_file_location('gazebo_demo', launch_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    arguments = [action for action in module.generate_launch_description().entities
+                 if isinstance(action, DeclareLaunchArgument)]
+    side_argument = next(action for action in arguments
+                         if action.name == 'lidar_classify_sides')
+    assert perform_substitutions(LaunchContext(),
+                                 side_argument.default_value) == 'false'

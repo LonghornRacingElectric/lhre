@@ -12,22 +12,20 @@ cd autonomy/ros2
 ```
 
 `perception:=sim` uses labelled generator cones and index pairing.
-`perception:=lidar` clusters the simulated pointcloud, infers track sides from
-vehicle-relative observations and boundary continuity, then uses one-to-one
-classified pairing. Use `estimator:=truth` to check perception without EKF
-drift, then repeat with `estimator:=ekf`.
+`perception:=lidar` clusters the simulated pointcloud and maps unclassified
+cones by default. The track builder uses `boundary` pairing. Use
+`estimator:=truth` to check perception without EKF drift, then repeat with
+`estimator:=ekf`.
 
-To keep LiDAR cone mapping but disable left/right inference, run:
+To opt into left/right inference and one-to-one `classified` pairing, run:
 
 ```bash
-./scripts/run_gazebo_demo.sh track_style:=autocross perception:=lidar lidar_classify_sides:=false estimator:=truth
+./scripts/run_gazebo_demo.sh track_style:=autocross perception:=lidar lidar_classify_sides:=true estimator:=truth
 ```
 
-All mapped cones then appear orange in RViz. The launch selects the
-track builder's unclassified `boundary` pairing strategy so it still receives
-cone positions. That strategy can produce incorrect centerlines on sharp
-autocross turns; the switch isolates side classification for inspection, not
-driving reliability.
+By default, mapped cones appear orange in RViz. The unclassified `boundary`
+strategy can produce incorrect centerlines on sharp autocross turns; the
+classifier remains opt-in while its sparse-map failures are investigated.
 
 The geometry-based side classifier is experimental. In a live autocross run,
 the cone map had no duplicate cones, but sparse early detections caused a
