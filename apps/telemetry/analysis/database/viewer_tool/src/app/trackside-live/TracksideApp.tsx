@@ -1367,19 +1367,21 @@ function App() {
     return () => { document.removeEventListener("visibilitychange", acquire); void lock?.release(); };
   }, [phoneFull]);
 
-  // Leader pulls this session's flags from the DB (active drive day, since the
+  // Leader pulls this session's flags from the DB (its own drive day, since the
   // session started) so flags logged by another device or lost from local state
   // still show. Mirrors get them from the leader's shared doc.
   // ponytail: dedupe is exact t+label; a POST whose client clock was >5 min off
   // is stored at server time and would show twice.
   const sessionStartedAt = sessionInfo?.startedAt ?? null;
+  const sessionDayId = sessionInfo?.dayId ?? null;
   useEffect(() => {
-    if (isMirror || sessionStartedAt == null || resumeAvailable) return;
+    if (isMirror || sessionStartedAt == null || sessionDayId == null || resumeAvailable) return;
     let cancelled = false;
-    fetch("/api/event-flag")
+    const pull = () => fetch("/api/event-flag")
       .then((r) => (r.ok ? r.json() : null))
-      .then((j: { flags?: { t: number; label: string }[] } | null) => {
-        if (cancelled || !Array.isArray(j?.flags)) return;
+      .then((j: { dayId?: number; flags?: { t: number; label: string }[] } | null) => {
+        // Another drive day is active (old session restored): not this session's flags.
+        if (cancelled || j?.dayId !== sessionDayId || !Array.isArray(j.flags)) return;
         const cur = liveStateRef.current;
         const have = new Set(cur.flags.map((f) => `${f.t}|${f.label}`));
         const add = j.flags.filter((f) => f.t >= sessionStartedAt && !have.has(`${f.t}|${f.label}`));
@@ -1389,8 +1391,11 @@ function App() {
         setLiveState(next);
       })
       .catch(() => { /* offline — local flags still show */ });
-    return () => { cancelled = true; };
-  }, [isMirror, sessionStartedAt, resumeAvailable]);
+    pull();
+    // ponytail: 10 s poll; flags from other devices are rare and not time-critical.
+    const iv = window.setInterval(pull, 10_000);
+    return () => { cancelled = true; window.clearInterval(iv); };
+  }, [isMirror, sessionStartedAt, sessionDayId, resumeAvailable]);
 
   // Mirror clients adopt the leader's shared session (laps, totals, lap-in-
   // progress, targets, identity) by polling the session-cache, while keeping
@@ -2211,8 +2216,13 @@ function App() {
     // Optionally flash the same flag on the driver's dash.
     if (flagSendsMessage) fireFlagDriverMessage(label);
     // Kept in session state too (persisted + in the end-of-session JSON), so a
-    // failed POST still leaves a record (saved: false).
+    // failed POST still leaves a record (saved: false). Recorded before the POST
+    // so the count moves on tap and a slow network or closed page can't lose it.
     const t = Date.now();
+    const recorded = { ...liveStateRef.current, flags: [...liveStateRef.current.flags, { t, label, saved: false }] };
+    liveStateRef.current = recorded;
+    setLiveState(recorded);
+    persistLiveSession(recorded, { saveLocal: true, saveBackend: false, includeFullLapSamples: false });
     let saved = false;
     let status = "Flag failed — offline?";
     try {
@@ -2221,7 +2231,7 @@ function App() {
       status = res.ok ? `Flagged: ${label}` : "Flag failed — no active drive day on the server.";
     } catch { /* offline — kept locally with saved: false */ }
     const cur = liveStateRef.current;
-    const next = { ...cur, status, flags: [...cur.flags, { t, label, saved }] };
+    const next = { ...cur, status, flags: cur.flags.map((f) => (f.t === t && f.label === label ? { ...f, saved } : f)) };
     liveStateRef.current = next;
     setLiveState(next);
     persistLiveSession(next, { saveLocal: true, saveBackend: true, includeFullLapSamples: false });
