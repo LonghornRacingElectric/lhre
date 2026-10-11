@@ -182,7 +182,7 @@ class TrackBuilder(Node):
                 handling = 'Boundary pairing uses geometry for these cones.'
             else:
                 handling = (
-                    'Nearest pairing ignores these cones; select '
+                    f'{self._pairing_strategy.capitalize()} pairing ignores these cones; select '
                     'pairing_strategy:=boundary to use geometry-based pairing.'
                 )
             self.get_logger().warning(
@@ -245,11 +245,7 @@ class TrackBuilder(Node):
             self._track_width_tol,
         )
 
-        if len(midpoints) > 2 and self._have_odom:
-            midpoints = self._chain_path_from_vehicle(midpoints)
-        elif len(midpoints) > 2:
-            midpoints = self._chain_path_without_vehicle(midpoints)
-        return midpoints[:self._max_points]
+        return self._chain_midpoints(midpoints)
 
     def _pair_nearest(self) -> List[PathPoint]:
         """

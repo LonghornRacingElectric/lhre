@@ -6,6 +6,7 @@ from unittest.mock import Mock
 
 from lhr_track_builder.track_builder_node import TrackBuilder
 import pytest
+from visualization_msgs.msg import Marker
 
 
 @pytest.fixture
@@ -25,6 +26,7 @@ def builder():
         '_constrained_greedy', '_chain_path_from_vehicle',
         '_chain_path_without_vehicle', '_get_chaining_algorithm',
         '_fixed_width_beam_search', '_chain_midpoints', '_initial_heading',
+        '_pair_nearest', '_pair_boundary', '_pair_classified', '_get_pairing_algorithm',
     ):
         setattr(state, name, getattr(TrackBuilder, name).__get__(state))
     state._greedy_chain_path = TrackBuilder._greedy_chain_path
@@ -105,22 +107,25 @@ def test_zero_minimum_still_suppresses_duplicates(builder):
     assert builder._constrained_greedy(points, 0) == [points[0], points[2]]
 
 
-@pytest.mark.parametrize('strategy', ['nearest', 'boundary'])
+@pytest.mark.parametrize('strategy', ['nearest', 'boundary', 'classified'])
 @pytest.mark.parametrize('algorithm', ['constrained_greedy', 'fixed_width_beam_search'])
 def test_pairing_filters_two_midpoints(builder, strategy, algorithm):
-    """Both pairing strategies enforce the sector on two-point inputs."""
+    """Every pairing strategy enforces the sector on two-point inputs."""
     builder._veh_x = 2.0
     builder._chaining_alg = algorithm
     builder._left_cones = {0: (0.0, 1.75), 1: (2.0, 1.75)}
     builder._right_cones = {0: (0.0, -1.75), 1: (2.0, -1.75)}
     builder._unknown_cones = {}
     builder._track_width_tol = 0.1
-    result = getattr(TrackBuilder, '_pair_' + strategy)(builder)
+    builder._pairing_strategy = strategy
+    builder._pairing_algorithm = builder._get_pairing_algorithm()
+    result = TrackBuilder._compute_midpoints(builder)
     assert result == [(2.0, 0.0)]
 
 
 @pytest.mark.parametrize('strategy, cone_count, vehicle_x, step', [
     ('boundary', 111, 200, 1), ('nearest', 221, 400, 2),
+    ('classified', 221, 400, 2),
 ])
 @pytest.mark.parametrize('algorithm', ['constrained_greedy', 'fixed_width_beam_search'])
 @pytest.mark.parametrize('max_points', [200, 5])
@@ -271,7 +276,7 @@ def test_geometry_only_boundary_handles_degenerate_inputs(builder, points):
     assert TrackBuilder._pair_boundary(builder) == []
 
 
-@pytest.mark.parametrize('strategy', ['nearest', 'boundary'])
+@pytest.mark.parametrize('strategy', ['nearest', 'boundary', 'classified'])
 @pytest.mark.parametrize('uncolored', [False, True])
 def test_uncolored_cone_warning_preserves_detections(builder, strategy, uncolored):
     """Warn with a throttle and strategy guidance only for unclassified inputs."""
@@ -283,7 +288,7 @@ def test_uncolored_cone_warning_preserves_detections(builder, strategy, uncolore
         namespaces.append('cones')
     markers = [
         SimpleNamespace(
-            ns=namespace, id=0,
+            ns=namespace, id=0, action=Marker.ADD,
             pose=SimpleNamespace(position=SimpleNamespace(x=float(i), y=0.0)),
         )
         for i, namespace in enumerate(namespaces)
@@ -300,3 +305,24 @@ def test_uncolored_cone_warning_preserves_detections(builder, strategy, uncolore
         assert logger.warning.call_args.kwargs == {'throttle_duration_sec': 5.0}
     else:
         logger.warning.assert_not_called()
+
+
+@pytest.mark.parametrize('namespace, field', [
+    ('left_cones', '_left_cones'), ('right_cones', '_right_cones'),
+    ('cones', '_unknown_cones'),
+])
+@pytest.mark.parametrize('action', [Marker.DELETE, Marker.DELETEALL])
+def test_cone_callback_ignores_deletion_markers(builder, namespace, field, action):
+    """Namespace cleanup markers must not replace current cone positions."""
+    builder._pairing_strategy = 'classified'
+    builder.get_logger = Mock()
+    added = Marker()
+    added.ns = namespace
+    added.id = 1
+    added.pose.position.x = 2.0
+    deleted = Marker()
+    deleted.ns = namespace
+    deleted.id = 1
+    deleted.action = action
+    TrackBuilder._cones_cb(builder, SimpleNamespace(markers=[added, deleted]))
+    assert getattr(builder, field) == {1: (2.0, 0.0)}

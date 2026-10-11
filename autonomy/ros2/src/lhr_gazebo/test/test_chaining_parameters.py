@@ -14,11 +14,16 @@ import rclpy
 from rclpy.parameter import Parameter
 
 
-@pytest.mark.parametrize('perception', ['sim', 'lidar'])
+@pytest.mark.parametrize('perception, classify_sides, pairing_strategy', [
+    ('sim', False, 'nearest'), ('lidar', False, 'boundary'),
+    ('lidar', True, 'classified'),
+])
 @pytest.mark.parametrize('algorithm', [
     None, 'constrained_greedy', 'fixed_width_beam_search',
 ])
-def test_chaining_launch_parameters(perception, algorithm, monkeypatch):
+def test_chaining_launch_parameters(
+    perception, classify_sides, pairing_strategy, algorithm, monkeypatch,
+):
     """Check matching defaults, CLI types, forwarding, and initialized state."""
     launch_path = Path(__file__).parents[1] / 'launch/gazebo_demo.launch.py'
     spec = importlib.util.spec_from_file_location('gazebo_demo', launch_path)
@@ -32,6 +37,7 @@ def test_chaining_launch_parameters(perception, algorithm, monkeypatch):
         if isinstance(action, DeclareLaunchArgument):
             action.execute(context)
     context.launch_configurations['perception'] = perception
+    context.launch_configurations['lidar_classify_sides'] = str(classify_sides).lower()
     fields = {
         'chaining_alg': '_chaining_alg',
         'min_step_m': '_min_step_m',
@@ -70,8 +76,7 @@ def test_chaining_launch_parameters(perception, algorithm, monkeypatch):
     for name, value in expected.items():
         assert parameters[name] == value
         assert type(parameters[name]) is type(value)
-    assert parameters['pairing_strategy'] == (
-        'boundary' if perception == 'lidar' else 'nearest')
+    assert parameters['pairing_strategy'] == pairing_strategy
     # Feed the evaluated launch values through ROS startup, including validation.
     ros_args = ['--ros-args']
     for name, value in parameters.items():
@@ -80,6 +85,7 @@ def test_chaining_launch_parameters(perception, algorithm, monkeypatch):
     rclpy.init(args=ros_args)
     builder = TrackBuilder()
     try:
+        assert builder._pairing_algorithm.__name__ == '_pair_' + pairing_strategy
         for name, field in fields.items():
             assert getattr(builder, field) == expected[name]
         assert builder._max_turn_rad == math.radians(expected['max_turn_deg'])

@@ -11,7 +11,7 @@ cd autonomy/ros2
 ./scripts/run_gazebo_demo.sh track_style:=autocross perception:=lidar estimator:=truth
 ```
 
-`perception:=sim` uses labelled generator cones and index pairing.
+`perception:=sim` uses labelled generator cones and nearest-neighbor pairing.
 `perception:=lidar` clusters the simulated pointcloud and maps unclassified
 cones by default. The track builder uses `boundary` pairing. Use
 `estimator:=truth` to check perception without EKF drift, then repeat with

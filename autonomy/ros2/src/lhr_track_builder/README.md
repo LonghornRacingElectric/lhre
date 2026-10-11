@@ -8,7 +8,7 @@ markers on `/lhr/track/centerline_markers`.
 
 The `pairing_strategy` parameter selects one of three algorithms:
 
-- `nearest` pairs each blue (`left_cones`) cone with the nearest unused yellow
+- `nearest` (default) pairs each blue (`left_cones`) cone with the nearest unused yellow
   (`right_cones`) cone. This strategy requires classified cones.
 - `classified` computes a minimum-cost one-to-one left/right assignment within
   `track_width +/- track_width_tolerance`, leaving unmatched cones unused.
@@ -34,7 +34,8 @@ Classification comes from marker namespaces (`left_cones`, `right_cones`,
 and unclassified `cones`), not the displayed marker RGB color. Receiving
 unclassified cones emits a warning at most once every five seconds. With
 `boundary`, the message explains that geometry is used for those cones; with
-`nearest`, it explains that they are ignored and suggests selecting `boundary`.
+`nearest` or `classified`, it explains that they are ignored and suggests
+selecting `boundary`.
 Deletion markers are ignored when reading the current cone map.
 The warning does not interrupt processing or discard stored detections.
 
@@ -142,8 +143,9 @@ step/score settings, and beam width/depth affect only beam search.
 Functional tests cover direction, moving sectors, scoring, gap termination,
 duplicates, pairing integration, path caps after vehicle-relative chaining,
 global beam pruning, accumulated path costs,
-depth limits, alternatives to greedy dead ends, geometry-only pairing, and
-unclassified-cone warnings. Run them in the ROS environment with
+depth limits, alternatives to greedy dead ends, geometry-only pairing,
+classified pairing, deletion-marker handling, and unclassified-cone warnings.
+Run them in the ROS environment with
 `colcon test --packages-select lhr_track_builder` from the workspace root.
 
 See the [ROS 2 workspace reference](../../README.md#lhr_track_builder-track_builder)

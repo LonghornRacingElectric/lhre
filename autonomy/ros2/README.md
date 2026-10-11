@@ -503,7 +503,7 @@ Set `boundary_use_color:=false` with `pairing_strategy:=boundary` to use the
 original geometry-only Delaunay edge filter, ignoring color labels entirely.
 Unclassified cones (`cones` namespace) trigger a warning throttled to five
 seconds. Boundary pairing uses geometry for these cones in either mode;
-nearest pairing ignores them and the warning suggests switching to boundary.
+Nearest and classified pairing ignore them; the warning suggests switching to boundary.
 
 All three chaining algorithms are implemented. With odometry,
 chaining starts at the midpoint nearest the vehicle. Without odometry, it starts
