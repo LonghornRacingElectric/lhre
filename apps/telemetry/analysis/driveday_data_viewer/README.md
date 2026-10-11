@@ -101,3 +101,6 @@ would need a server, so they are follow-ups.
   counted on completed laps.
 - Units (mph or km/h, °C or °F) and the theme are display settings. Stored
   speeds are mph and temperatures °C.
+
+  THIS IS A TEST FOR PUSHING
+ 
