@@ -2,7 +2,7 @@
 import './trackside.css';
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type Dispatch, type MouseEvent, type ReactNode, type SetStateAction } from "react";
-import { Activity, AlertTriangle, ArrowDown, ArrowUp, CalendarDays, ChevronLeft, ChevronRight, Crosshair, Disc3, Download, FileText, Flag, Gauge, GraduationCap, HelpCircle, MapPinned, Minus, MonitorCog, Moon, NotebookText, Plus, Power, Radio, RefreshCcw, Save, Scissors, SlidersHorizontal, Sun, Target, Thermometer, Timer, Trash2, Upload, Users, WifiOff, X, Zap } from "lucide-react";
+import { Activity, AlertTriangle, ArrowDown, ArrowUp, CalendarDays, ChevronLeft, ChevronRight, Crosshair, Disc3, Download, FileText, Flag, Gauge, GraduationCap, HelpCircle, History, MapPinned, Minus, MonitorCog, Moon, NotebookText, Plus, Power, Radio, RefreshCcw, Save, Scissors, SlidersHorizontal, Sun, Target, Thermometer, Timer, Trash2, Upload, Users, WifiOff, X, Zap } from "lucide-react";
 import { api } from "@/lib/trackside/api";
 import { useCarStatus, CAR_STATE_META, humanizeReason, type CarState, type CarStatusFeed } from "@/lib/trackside/useCarStatus";
 import { EVENT_TYPES, upsertSession, patchSession, syncRegistryWithServer, type TracksideSessionInfo } from "@/lib/trackside/sessionRegistry";
@@ -3005,6 +3005,10 @@ function App() {
             <span className="statusSep">·</span>
             <span className="statusSrc">{sourceLabel}</span>
           </div>
+          {/* plain <a>: a full load keeps trackside.css out of the viewer */}
+          <a className="tool" href="/trackside-retro" title="Review an exported session JSON: laps, sectors, corners, cones">
+            <History size={14} /> Retro
+          </a>
           <button className="tool iconOnly" onClick={() => setShowTour(true)} aria-label="Show guided tour" title="Guided tour">
             <HelpCircle size={16} />
           </button>
