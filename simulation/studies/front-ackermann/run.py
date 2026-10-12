@@ -1,5 +1,6 @@
 import argparse
 import copy
+import dataclasses
 import hashlib
 import csv
 import json
@@ -30,7 +31,6 @@ G = 9.80665
 MU_SCALE = 0.623
 RADII_M = (3.5, 4.5, 6.0, 8.0, 15.0)
 ACKERMANN_PCT = (-50, -25, 0, 25, 50, 75, 100)
-LKY_CASES = {"lky_1": 1.0, "lky_scaled": MU_SCALE}
 SLIP_SIDES = {"pos": 1.0, "neg": -1.0}
 LLTD_OFFSETS = (-0.10, 0.0, 0.10)
 NOMINAL = ("lky_1", "pos", 0.0)
@@ -112,6 +112,41 @@ RADIUS_COLORS = ("#0d366b", "#1c5cab", "#2a78d6", "#5598e7", "#86b6ef")
 GAIN_MAP = LinearSegmentedColormap.from_list("gain", ("#e34948", "#f0efec", "#2a78d6"))
 CAR_COLORS = {DESIGN: "#2a78d6", "Orion": "#eb6834"}
 INK, MUTED, SURFACE = "#0b0b0b", "#52514e", "#fcfcfb"
+
+
+QUICK = {
+    "lltd_offsets": (0.0,), "slip_sides": {"pos": 1.0}, "brake_g": (0.5,), "brake_radii_m": (3.5,),
+    "toe_out_deg": (0.0,), "toe_ackermann_pct": (0, 50, 100), "mass_cases": MASS_CASES[:1],
+    "map_radii_m": (3.5, 4.5, 8.0, 15.0), "map_ax_g": (-0.6, 0.0, 0.3), "deriv_radii_m": (3.5,),
+    "variant_radii_m": (3.5, 8.0), "variant_ax_g": (-0.6, 0.0, 0.3),
+}
+
+
+@dataclasses.dataclass(frozen=True)
+class Inputs:
+    mu: float = MU_SCALE
+    brake_bias: float = BRAKE_BIAS_NOMINAL
+    ackermann_pct: tuple = ACKERMANN_PCT
+    steer_fix_targets_pct: tuple = STEER_FIX_TARGETS_PCT
+    lltd_offsets: tuple = LLTD_OFFSETS
+    slip_sides: dict = dataclasses.field(default_factory=lambda: dict(SLIP_SIDES))
+    brake_g: tuple = BRAKE_G
+    brake_radii_m: tuple = BRAKE_RADII_M
+    toe_out_deg: tuple = TOE_OUT_DEG
+    toe_ackermann_pct: tuple = TOE_ACKERMANN_PCT
+    mass_cases: tuple = MASS_CASES
+    map_radii_m: tuple = MAP_RADII_M
+    map_ax_g: tuple = MAP_AX_G
+    deriv_radii_m: tuple = DERIV_RADII_M
+    variant_radii_m: tuple = VARIANT_RADII_M
+    variant_ax_g: tuple = VARIANT_AX_G
+
+    @property
+    def lky_cases(self):
+        return {"lky_1": 1.0, "lky_scaled": self.mu}
+
+    def tire(self, tir, lky_name):
+        return {**tir, "LMUY": self.mu, "LMUX": self.mu, "LKY": self.lky_cases[lky_name]}
 
 
 class Car:
@@ -392,13 +427,13 @@ def exit_accel_g(car, max_drive_force):
     return min(traction, max_drive_force / (car.mass * G))
 
 
-def build_cases(ggv, tir, curves, outer_max, biases, orion, steer_targets, nominal_car):
+def build_cases(inputs, ggv, tir, curves, outer_max, biases, orion, steer_targets, nominal_car):
     cases = []
-    for lky_name, lky in LKY_CASES.items():
-        tire = {**tir, "LMUY": MU_SCALE, "LMUX": MU_SCALE, "LKY": lky}
-        for lltd_offset in LLTD_OFFSETS:
+    for lky_name, lky in inputs.lky_cases.items():
+        tire = {**tir, "LMUY": inputs.mu, "LMUX": inputs.mu, "LKY": lky}
+        for lltd_offset in inputs.lltd_offsets:
             car = Car(ggv, (tire,) * 4, ggv.lltd + lltd_offset)
-            for side_name, side in SLIP_SIDES.items():
+            for side_name, side in inputs.slip_sides.items():
                 for radius in RADII_M:
                     cases.append({
                         "kind": "main", "car": car, "curves": curves, "outer_max": outer_max,
@@ -414,16 +449,16 @@ def build_cases(ggv, tir, curves, outer_max, biases, orion, steer_targets, nomin
         car = copy.copy(nominal_car)
         car.combined = model
         for bias in biases:
-            for brake_g in BRAKE_G:
-                for radius in BRAKE_RADII_M:
+            for brake_g in inputs.brake_g:
+                for radius in inputs.brake_radii_m:
                     cases.append({
                         "kind": "braking", "car": car, "curves": brake_curves, "outer_max": outer_max,
                         "radius": radius, "lon": Longitudinal(brake_g, bias=bias),
                         "labels": {"combined_slip": model, "brake_bias_front": bias, "brake_g": brake_g, "radius_m": radius},
                     })
     toe_curves = {BASELINE: curves[BASELINE]}
-    toe_curves.update({f"{p:+d}%": ConstantAckermann(p, ggv.track_front, ggv.wheelbase) for p in TOE_ACKERMANN_PCT})
-    for toe in TOE_OUT_DEG:
+    toe_curves.update({f"{p:+d}%": ConstantAckermann(p, ggv.track_front, ggv.wheelbase) for p in inputs.toe_ackermann_pct})
+    for toe in inputs.toe_out_deg:
         for radius in TOE_RADII_M:
             cases.append({
                 "kind": "toe", "car": nominal_car, "curves": {k: ToeCurve(v, toe) for k, v in toe_curves.items()},
@@ -432,7 +467,7 @@ def build_cases(ggv, tir, curves, outer_max, biases, orion, steer_targets, nomin
             })
     mass_curves = {name: curves[name] for name in (BASELINE, *MASS_CURVES)}
     tires = nominal_car.tires
-    for name, field, delta in MASS_CASES:
+    for name, field, delta in inputs.mass_cases:
         variant = types.SimpleNamespace(**{f: getattr(ggv, f) for f in GGV_FIELDS})
         if field == "camber":
             car = Car(variant, tires, nominal_car.lltd, camber_deg=TEAM_CAMBER_DEG)
@@ -573,9 +608,7 @@ def track_corners(line):
     return corners
 
 
-def balanced_lltd(ggv, tir, curve, outer_max, mu=None):
-    mu = MU_SCALE if mu is None else mu
-    tire = {**tir, "LMUY": mu, "LMUX": mu, "LKY": LKY_CASES[NOMINAL[0]]}
+def balanced_lltd(ggv, tire, curve, outer_max):
     car = Car(ggv, (tire,) * 4, 0.5)
 
     def negative_ay(lltd):
@@ -772,14 +805,14 @@ def solve_map_case(case):
     return rows
 
 
-def check_map(rows, curve, brake_g, drive_g):
+def check_map(rows, curve, brake_g, drive_g, inputs):
     grid = {(r["radius_m"], r["ax_g"]): r["ay_max_g"] for r in rows if r["curve"] == curve}
     caps = []
-    for radius in MAP_RADII_M:
+    for radius in inputs.map_radii_m:
         if not math.isfinite(grid[(radius, 0.0)]):
             raise RuntimeError(f"{curve} has no steady limit at {radius} m")
         for sign, endpoint in ((-1.0, brake_g), (1.0, drive_g)):
-            levels = sorted((x for x in MAP_AX_G if x * sign > 0), key=abs)
+            levels = sorted((x for x in inputs.map_ax_g if x * sign > 0), key=abs)
             finite = [math.isfinite(grid[(radius, x)]) for x in levels]
             if any(f and not all(finite[:k]) for k, f in enumerate(finite)):
                 raise RuntimeError(f"{curve} has an envelope gap at {radius} m")
@@ -790,18 +823,18 @@ def check_map(rows, curve, brake_g, drive_g):
     return caps
 
 
-def envelope_ggv(rows, curve, brake_g, drive_g, mass, power_w, refine=False):
-    radii = np.asarray(MAP_RADII_M)
+def envelope_ggv(rows, curve, brake_g, drive_g, mass, power_w, inputs, refine=False):
+    radii = np.asarray(inputs.map_radii_m)
     grid = {(r["radius_m"], r["ax_g"]): r["ay_max_g"] for r in rows if r["curve"] == curve}
-    if not all(math.isfinite(grid[(r, 0.0)]) for r in MAP_RADII_M):
+    if not all(math.isfinite(grid[(r, 0.0)]) for r in inputs.map_radii_m):
         raise RuntimeError(f"{curve} has no steady limit at some radius")
 
     def at(radius, ax):
-        return float(np.interp(radius, radii, [grid[(r, ax)] for r in MAP_RADII_M]))
+        return float(np.interp(radius, radii, [grid[(r, ax)] for r in inputs.map_radii_m]))
 
     def side(radius, steady, sign, endpoint):
         points, top = [(steady, 0.0)], endpoint
-        for x in sorted((x for x in MAP_AX_G if x * sign > 0), key=abs):
+        for x in sorted((x for x in inputs.map_ax_g if x * sign > 0), key=abs):
             ay = at(radius, x)
             if not math.isfinite(ay):
                 top = points[-1][1]
@@ -840,7 +873,7 @@ def envelope_ggv(rows, curve, brake_g, drive_g, mass, power_w, refine=False):
 
 def solve_qss_case(case):
     ggv = envelope_ggv(case["rows"], case["labels"]["curve"], case["brake_g"], case["drive_g"], case["mass"], case["power_w"],
-                       case.get("refine", False))
+                       case["inputs"], case.get("refine", False))
     lap = solve_qss_lap(case["line"], ggv)
     if not lap.converged:
         raise RuntimeError(f"QSS lap did not converge for {case['labels']}")
@@ -848,33 +881,33 @@ def solve_qss_case(case):
             "ax_mps2": lap.longitudinal_acceleration_mps2, "speed_mps": lap.speed_mps}
 
 
-def cap_fill_cases(qss_cases, op_rows, caps):
-    if not any(c.get("mu") == MU_SCALE for c in caps):
+def cap_fill_cases(qss_cases, op_rows, caps, inputs):
+    if not any(c.get("mu") == inputs.mu for c in caps):
         return []
     top = {}
     for r in op_rows:
-        if r["mu"] == MU_SCALE and math.isfinite(r["ay_max_g"]):
+        if r["mu"] == inputs.mu and math.isfinite(r["ay_max_g"]):
             top[(r["radius_m"], r["ax_g"])] = max(top.get((r["radius_m"], r["ax_g"]), 0.0), r["ay_max_g"])
     rows = [r if math.isfinite(r["ay_max_g"]) else {**r, "ay_max_g": top.get((r["radius_m"], r["ax_g"]), float("nan"))}
-            for r in op_rows if r["mu"] == MU_SCALE]
-    return [{**c, "rows": rows, "labels": {**c["labels"], "fill": True}} for c in qss_cases if c["labels"]["mu"] == MU_SCALE]
+            for r in op_rows if r["mu"] == inputs.mu]
+    return [{**c, "rows": rows, "labels": {**c["labels"], "fill": True}} for c in qss_cases if c["labels"]["mu"] == inputs.mu]
 
 
-def cap_check_result(nominal_laps, fill_laps):
+def cap_check_result(nominal_laps, fill_laps, inputs):
     if not fill_laps:
         return {"laws": {}, "max_change_ms": 0.0}
-    base = {k: next(r["lap_time_s"] for r in laps if r["mu"] == MU_SCALE and r["curve"] == BASELINE)
+    base = {k: next(r["lap_time_s"] for r in laps if r["mu"] == inputs.mu and r["curve"] == BASELINE)
             for k, laps in (("capped", nominal_laps), ("filled", fill_laps))}
     change = {}
     for r in fill_laps:
         if r["curve"] == BASELINE:
             continue
-        capped = next(n["lap_time_s"] for n in nominal_laps if n["mu"] == MU_SCALE and n["curve"] == r["curve"]) - base["capped"]
+        capped = next(n["lap_time_s"] for n in nominal_laps if n["mu"] == inputs.mu and n["curve"] == r["curve"]) - base["capped"]
         change[r["curve"]] = round(1000.0 * (r["lap_time_s"] - base["filled"] - capped), 2)
     return {"laws": change, "max_change_ms": round(max(abs(v) for v in change.values()), 2)}
 
 
-def circle_check(rows, brake_g, drive_g, mass, power_w):
+def circle_check(rows, brake_g, drive_g, mass, power_w, inputs):
     count = 400
     angle = np.linspace(0.0, 2.0 * math.pi, count, endpoint=False)
     step = 2.0 * math.pi * CIRCLE_CHECK_RADIUS_M / count
@@ -883,7 +916,7 @@ def circle_check(rows, brake_g, drive_g, mass, power_w):
         heading_rad=angle + math.pi / 2.0, curvature_per_m=np.full(count, 1.0 / CIRCLE_CHECK_RADIUS_M),
         segment_length_m=np.full(count, step), gate_offsets_m=np.zeros(count), track_length_m=count * step,
     )
-    lap = solve_qss_lap(line, envelope_ggv(rows, BASELINE, brake_g, drive_g, mass, power_w))
+    lap = solve_qss_lap(line, envelope_ggv(rows, BASELINE, brake_g, drive_g, mass, power_w, inputs))
     ay = next(r["ay_max_g"] for r in rows if r["curve"] == BASELINE and r["ax_g"] == 0.0 and r["radius_m"] == CIRCLE_CHECK_RADIUS_M)
     expected = 2.0 * math.pi * CIRCLE_CHECK_RADIUS_M / math.sqrt(ay * G * CIRCLE_CHECK_RADIUS_M)
     error = lap.lap_time_s / expected - 1.0
@@ -924,11 +957,11 @@ def hairpin_time_s(rows, curve, radius):
     return math.pi * radius / math.sqrt(ay * G * radius)
 
 
-def best_laws(op_rows, mu):
-    cell = {(r["radius_m"], r["ax_g"], r["curve"]): r for r in op_rows if r["mu"] == mu}
+def best_laws(op_rows, inputs):
+    cell = {(r["radius_m"], r["ax_g"], r["curve"]): r for r in op_rows if r["mu"] == inputs.mu}
     out = {}
-    for radius in MAP_RADII_M:
-        for ax in MAP_AX_G:
+    for radius in inputs.map_radii_m:
+        for ax in inputs.map_ax_g:
             laws = [(cell[(radius, ax, f"{p:+d}%")], p) for p in MAP_PCTS]
             if not math.isfinite(cell[(radius, ax, BASELINE)]["ay_max_g"]):
                 feasible = [p for r, p in laws if math.isfinite(r["ay_max_g"])]
@@ -1001,13 +1034,13 @@ def clipped_braking(op_rows):
     }
 
 
-def skidpad_time_s(rows, curve):
+def skidpad_time_s(rows, curve, inputs):
     steady = {r["radius_m"]: r["ay_max_g"] for r in rows if r["curve"] == curve and r["ax_g"] == 0.0}
-    ay = float(np.interp(SKIDPAD_RADIUS_M, MAP_RADII_M, [steady[r] for r in MAP_RADII_M]))
+    ay = float(np.interp(SKIDPAD_RADIUS_M, inputs.map_radii_m, [steady[r] for r in inputs.map_radii_m]))
     return 2.0 * math.pi * SKIDPAD_RADIUS_M / math.sqrt(ay * G * SKIDPAD_RADIUS_M)
 
 
-def lap_phases(laps, curvature, op_rows):
+def lap_phases(laps, curvature, op_rows, inputs):
     radius = 1.0 / np.maximum(np.abs(curvature), 1e-9)
     bands = np.digitize(radius, LAP_RADIUS_BANDS_M)
     band_names = [f"under {LAP_RADIUS_BANDS_M[0]:g} m", f"{LAP_RADIUS_BANDS_M[0]:g} to {LAP_RADIUS_BANDS_M[1]:g} m",
@@ -1026,11 +1059,11 @@ def lap_phases(laps, curvature, op_rows):
                 "delta_s": round(lap["lap_time_s"] - base["lap_time_s"], 3),
                 **{f"delta_{k}_s": round(float(delta[phase == k].sum()), 3) for k in ("braking", "corner", "exit")},
                 **{f"delta_band_{i}_s": round(float(delta[bands == i].sum()), 3) for i in range(len(band_names))},
-                "skidpad_delta_s": round(skidpad_time_s(rows_mu, lap["curve"]) - skidpad_time_s(rows_mu, BASELINE), 4),
+                "skidpad_delta_s": round(skidpad_time_s(rows_mu, lap["curve"], inputs) - skidpad_time_s(rows_mu, BASELINE, inputs), 4),
             }
         out[f"{mu:g}"][BASELINE] = {
             "lap_time_s": round(base["lap_time_s"], 3),
-            "skidpad_time_s": round(skidpad_time_s([r for r in op_rows if r["mu"] == mu], BASELINE), 3),
+            "skidpad_time_s": round(skidpad_time_s([r for r in op_rows if r["mu"] == mu], BASELINE, inputs), 3),
             "time_share_by_band": {n: round(float(base["segment_time_s"][bands == i].sum() / base["lap_time_s"]), 3)
                                    for i, n in enumerate(band_names)},
         }
@@ -1117,7 +1150,7 @@ def linkage_row(name, fix, arm_mm, plane_mm, lock):
     ]
 
 
-def write_readme_parts(out, s, op_rows):
+def write_readme_parts(out, s, op_rows, inputs):
     nominal, spread, fix = s["nominal"], s["ay_change_pct_range_all_cases"], s["steering_fix"]
     laws = [f"{p:+d}%" for p in MAP_PCTS]
     parts = {}
@@ -1147,29 +1180,29 @@ def write_readme_parts(out, s, op_rows):
     ])
 
     parts["toe"] = table(["Total toe-out", "3.5 m best", "4.5 m best"], [
-        [signed(t, "°") + (" (toe-in)" if t < 0 and t == min(TOE_OUT_DEG) else "")]
-        + [s["toe"][f"toe-out {t:g} deg, {r:g} m"]["best_curve"] for r in TOE_RADII_M] for t in TOE_OUT_DEG
+        [signed(t, "°") + (" (toe-in)" if t < 0 and t == min(inputs.toe_out_deg) else "")]
+        + [s["toe"][f"toe-out {t:g} deg, {r:g} m"]["best_curve"] for r in TOE_RADII_M] for t in inputs.toe_out_deg
     ])
 
     cell = {(r["mu"], r["radius_m"], r["ax_g"], r["curve"]): r for r in op_rows}
-    best = best_laws(op_rows, MU_SCALE)
+    best = best_laws(op_rows, inputs)
 
     def best_cell(radius, ax):
         pct, gain = best[(radius, ax)]
-        axle = cell[(MU_SCALE, radius, ax, BASELINE)].get("limiting_axle")
+        axle = cell[(inputs.mu, radius, ax, BASELINE)].get("limiting_axle")
         return best_text(pct, gain) + (f" {axle[0].upper()}" if axle else "")
 
-    parts["map"] = table(["Longitudinal", *(f"{r:g} m" for r in MAP_RADII_M)], [
-        [ax_label(a)] + [best_cell(r, a) for r in MAP_RADII_M] for a in MAP_AX_G
+    parts["map"] = table(["Longitudinal", *(f"{r:g} m" for r in inputs.map_radii_m)], [
+        [ax_label(a)] + [best_cell(r, a) for r in inputs.map_radii_m] for a in inputs.map_ax_g
     ])
 
     deriv = lambda r: f"{1000 * r['n_beta_per_deg']:+.1f} / {1000 * r['n_delta_per_deg']:.1f}".replace("-", "−")
     parts["limit"] = table(["R", *LIMIT_CURVES], [
-        [f"{radius:g} m"] + [deriv(cell[(MU_SCALE, radius, 0.0, c)]) for c in LIMIT_CURVES] for radius in DERIV_RADII_M
+        [f"{radius:g} m"] + [deriv(cell[(inputs.mu, radius, 0.0, c)]) for c in LIMIT_CURVES] for radius in inputs.deriv_radii_m
     ])
 
     others = [c for c in s["operating_map"]["curves"] if c != BASELINE]
-    nominal_rows = [r for r in op_rows if r["mu"] == MU_SCALE]
+    nominal_rows = [r for r in op_rows if r["mu"] == inputs.mu]
     parts["hairpin"] = table(["Option", *(f"{r:g} m" for r in TOE_RADII_M)], [
         [c] + [signed(1000 * (hairpin_time_s(nominal_rows, c, r) - hairpin_time_s(nominal_rows, BASELINE, r)), " ms", 0)
                for r in TOE_RADII_M] for c in others
@@ -1177,7 +1210,7 @@ def write_readme_parts(out, s, op_rows):
 
     lock_rows = []
     for c in s["operating_map"]["curves"]:
-        r = cell[(MU_SCALE, 3.5, 0.0, c)]
+        r = cell[(inputs.mu, 3.5, 0.0, c)]
         mean = 0.5 * (r["inner_deg"] + r["outer_deg"])
         lock_rows.append([c, f"{mean:.1f}°", f"{r['inner_deg']:.1f}° / {r['outer_deg']:.1f}°"])
     parts["lock"] = table(["Option", "Mean steer at the 3.5 m limit", "Inner / outer"], lock_rows)
@@ -1192,7 +1225,6 @@ def write_readme_parts(out, s, op_rows):
     ])
 
     laps = s["lap_qss"]
-    bands = laps["radius_bands"]
     mus = [m for m in laps if m != "radius_bands"]
     parts["lap"] = table(
         ["Option", *(f"Endurance lap, grip {m}" for m in mus), *(f"Skidpad lap, grip {m}" for m in mus)],
@@ -1212,13 +1244,13 @@ def write_readme_parts(out, s, op_rows):
     lsd = {(r["radius_m"], r["ax_g"], r["curve"]): r["ay_change_pct"] for r in s["lsd_rows"]}
     cov = s["trim_coverage"]
     track = s["track_minimum_curvature_line"]
-    bias = limits[f"{BRAKE_BIAS_NOMINAL:.2f}"]
+    bias = limits[f"{inputs.brake_bias:.2f}"]
     values = {
         "lltd_front_pct": 100.0 * s["vehicle"]["lltd_front"],
         "base_ackermann_pct": f"{signed(min(ack.values()))} to {signed(max(ack.values()))}",
         "steer_at_travel_deg": lock["mean_steer_at_travel_deg"],
         "steer_needed_3p5_deg": lock["mean_steer_needed_at_limit_deg"]["3.5m"],
-        "steer_needed_3p5_powered_deg": 0.5 * (cell[(MU_SCALE, 3.5, 0.0, DESIGN)]["inner_deg"] + cell[(MU_SCALE, 3.5, 0.0, DESIGN)]["outer_deg"]),
+        "steer_needed_3p5_powered_deg": 0.5 * (cell[(inputs.mu, 3.5, 0.0, DESIGN)]["inner_deg"] + cell[(inputs.mu, 3.5, 0.0, DESIGN)]["outer_deg"]),
         "cap_check_max_ms": s["cap_check"]["max_change_ms"],
         "tightest_radius_m": lock["tightest_cg_radius_at_limit_m"],
         "min_radius_low_speed_m": lock["min_cg_radius_low_speed_m"],
@@ -1246,10 +1278,10 @@ def write_readme_parts(out, s, op_rows):
         "map_cells": len(best), "no_grip_cells": len(best) - len(signs), "pro_cells": sum(1 for v in signs if v > 0), "anti_cells": sum(1 for v in signs if v < 0),
         "parallel_cells": sum(1 for v in signs if v == 0),
         "best_3p5_steady": pct_label(best[(3.5, 0.0)][0]), "best_3p5_steady_gain_pct": best[(3.5, 0.0)][1],
-        "best_3p5_hard_brake": next(pct_label(best[(3.5, a)][0]) for a in sorted(MAP_AX_G) if best[(3.5, a)][0] is not None),
-        "pro50_apex_3p5": cell[(MU_SCALE, 3.5, 0.0, "+50%")]["ay_change_pct"],
-        "anti50_apex_3p5": cell[(MU_SCALE, 3.5, 0.0, "-50%")]["ay_change_pct"],
-        "pro50_authority_ratio_3p5": cell[(MU_SCALE, 3.5, 0.0, "+50%")]["n_delta_per_deg"] / cell[(MU_SCALE, 3.5, 0.0, BASELINE)]["n_delta_per_deg"],
+        "best_3p5_hard_brake": next(pct_label(best[(3.5, a)][0]) for a in sorted(inputs.map_ax_g) if best[(3.5, a)][0] is not None),
+        "pro50_apex_3p5": cell[(inputs.mu, 3.5, 0.0, "+50%")]["ay_change_pct"],
+        "anti50_apex_3p5": cell[(inputs.mu, 3.5, 0.0, "-50%")]["ay_change_pct"],
+        "pro50_authority_ratio_3p5": cell[(inputs.mu, 3.5, 0.0, "+50%")]["n_delta_per_deg"] / cell[(inputs.mu, 3.5, 0.0, BASELINE)]["n_delta_per_deg"],
         "circle_check_error_pct": s["circle_check"]["error_pct"],
         "coverage_pct": 100.0 * cov["all"], "coverage_points": cov["points"],
         "coverage_demand_pct": 100.0 * cov["demand"], "coverage_radius_max_m": cov["radius_max_m"],
@@ -1311,13 +1343,13 @@ def plot_curves(path, tables, track_wheelbase, steer_band):
     plt.close(fig)
 
 
-def plot_grip(path, rows, base_pct, op_rows):
+def plot_grip(path, rows, base_pct, op_rows, inputs):
     fig, (left, right) = plt.subplots(1, 2, figsize=(10.5, 4.4), facecolor=SURFACE)
-    pct = np.array(ACKERMANN_PCT, dtype=float)
-    plot_best(right, op_rows)
+    pct = np.array(inputs.ackermann_pct, dtype=float)
+    plot_best(right, op_rows, inputs)
     for radius, color in zip(RADII_M, RADIUS_COLORS):
         def series(key, select):
-            picked = [next(r.get(key) for r in rows if select(r) and r["radius_m"] == radius and r["curve"] == f"{p:+d}%") for p in ACKERMANN_PCT]
+            picked = [next(r.get(key) for r in rows if select(r) and r["radius_m"] == radius and r["curve"] == f"{p:+d}%") for p in inputs.ackermann_pct]
             return np.array([np.nan if v is None else v for v in picked], dtype=float)
 
         nominal = series("ay_change_pct", is_nominal)
@@ -1338,16 +1370,16 @@ def plot_grip(path, rows, base_pct, op_rows):
     plt.close(fig)
 
 
-def plot_best(ax, op_rows):
-    best = best_laws(op_rows, MU_SCALE)
-    values = np.array([[np.nan if best[(r, a)][0] is None else best[(r, a)][0] for r in MAP_RADII_M] for a in MAP_AX_G], dtype=float)
+def plot_best(ax, op_rows, inputs):
+    best = best_laws(op_rows, inputs)
+    values = np.array([[np.nan if best[(r, a)][0] is None else best[(r, a)][0] for r in inputs.map_radii_m] for a in inputs.map_ax_g], dtype=float)
     ax.imshow(values, cmap=GAIN_MAP, norm=TwoSlopeNorm(0.0, min(MAP_PCTS), max(MAP_PCTS)), aspect="auto", origin="lower")
-    for i, a in enumerate(MAP_AX_G):
-        for j, r in enumerate(MAP_RADII_M):
+    for i, a in enumerate(inputs.map_ax_g):
+        for j, r in enumerate(inputs.map_radii_m):
             pct, gain = best[(r, a)]
             ax.text(j, i, best_text(pct, gain, "\n"), ha="center", va="center", fontsize=7.5, color=INK)
-    ax.set_xticks(range(len(MAP_RADII_M)), [f"{r:g}" for r in MAP_RADII_M])
-    ax.set_yticks(range(len(MAP_AX_G)), [ax_label(a) for a in MAP_AX_G])
+    ax.set_xticks(range(len(inputs.map_radii_m)), [f"{r:g}" for r in inputs.map_radii_m])
+    ax.set_yticks(range(len(inputs.map_ax_g)), [ax_label(a) for a in inputs.map_ax_g])
     ax.set_xlabel("Corner radius (m)", color=INK)
     ax.set_title("Best law vs parallel, powered (red anti, blue pro)", color=INK, loc="left", fontsize=10)
     ax.tick_params(colors=MUTED, labelsize=8)
@@ -1366,29 +1398,23 @@ def style(ax):
     ax.tick_params(colors=MUTED, labelsize=8)
 
 
-def apply_args(argv=None):
-    global MU_SCALE, LKY_CASES, ACKERMANN_PCT, STEER_FIX_TARGETS_PCT, BRAKE_BIAS_NOMINAL
-    global LLTD_OFFSETS, SLIP_SIDES, BRAKE_G, BRAKE_RADII_M, TOE_OUT_DEG, TOE_ACKERMANN_PCT, MASS_CASES
-    global MAP_RADII_M, MAP_AX_G, DERIV_RADII_M, VARIANT_RADII_M, VARIANT_AX_G
+def parse_inputs(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--mu", type=float, default=MU_SCALE, help="tire grip scale, LMUY = LMUX")
     parser.add_argument("--ackermann", type=int, nargs="*", default=[], help="extra Ackermann %% to sweep and solve a linkage for")
     parser.add_argument("--bias", type=float, default=BRAKE_BIAS_NOMINAL, help="nominal front brake bias, 0 to 1")
     parser.add_argument("--quick", action="store_true", help="small sweep that runs every code path, for a smoke test")
     args = parser.parse_args(argv)
-    MU_SCALE, BRAKE_BIAS_NOMINAL = args.mu, args.bias
-    LKY_CASES = {**LKY_CASES, "lky_scaled": MU_SCALE}
-    ACKERMANN_PCT = tuple(sorted(set(ACKERMANN_PCT) | set(args.ackermann)))
-    STEER_FIX_TARGETS_PCT = tuple(sorted(set(STEER_FIX_TARGETS_PCT) | {float(p) for p in args.ackermann}))
-    if args.quick:
-        LLTD_OFFSETS, SLIP_SIDES, BRAKE_G, BRAKE_RADII_M = (0.0,), {"pos": 1.0}, (0.5,), (3.5,)
-        TOE_OUT_DEG, TOE_ACKERMANN_PCT, MASS_CASES = (0.0,), (0, 50, 100), MASS_CASES[:1]
-        MAP_RADII_M, MAP_AX_G, DERIV_RADII_M = (3.5, 4.5, 8.0, 15.0), (-0.6, 0.0, 0.3), (3.5,)
-        VARIANT_RADII_M, VARIANT_AX_G = (3.5, 8.0), (-0.6, 0.0, 0.3)
+    inputs = Inputs(
+        mu=args.mu, brake_bias=args.bias,
+        ackermann_pct=tuple(sorted(set(ACKERMANN_PCT) | set(args.ackermann))),
+        steer_fix_targets_pct=tuple(sorted(set(STEER_FIX_TARGETS_PCT) | {float(p) for p in args.ackermann})),
+    )
+    return dataclasses.replace(inputs, **QUICK) if args.quick else inputs
 
 
 def main():
-    apply_args()
+    inputs = parse_inputs()
     out = Path(os.environ["OUT_DIR"])
     orion = load_yaml(Path(os.environ["BOBSIM_VEHICLE"]))
     base = with_front(orion)
@@ -1409,24 +1435,24 @@ def main():
     ])
 
     curves = {BASELINE: ConstantAckermann(0, ggv.track_front, ggv.wheelbase)}
-    curves.update({f"{p:+d}%": ConstantAckermann(p, ggv.track_front, ggv.wheelbase) for p in ACKERMANN_PCT})
+    curves.update({f"{p:+d}%": ConstantAckermann(p, ggv.track_front, ggv.wheelbase) for p in inputs.ackermann_pct})
     curves[DESIGN] = TableCurve(base_table)
     outer_max = float(base_table[-1, 2])
     tir_path = tire_templates_root(base) / f"{base['front']['tire']['template']}.tir"
     tir = parse_tir(tir_path)
-    ggv.lltd = balanced_lltd(ggv, tir, curves[BASELINE], outer_max)
-    nominal_tire = {**tir, "LMUY": MU_SCALE, "LMUX": MU_SCALE, "LKY": LKY_CASES[NOMINAL[0]]}
+    nominal_tire = inputs.tire(tir, NOMINAL[0])
+    ggv.lltd = balanced_lltd(ggv, nominal_tire, curves[BASELINE], outer_max)
     nominal_car = Car(ggv, (nominal_tire,) * 4, ggv.lltd)
-    op_cars = {MU_SCALE: nominal_car}
-    if MU_SENSITIVITY != MU_SCALE:
-        sens_tire = {**tir, "LMUY": MU_SENSITIVITY, "LMUX": MU_SENSITIVITY, "LKY": LKY_CASES[NOMINAL[0]]}
+    op_cars = {inputs.mu: nominal_car}
+    if MU_SENSITIVITY != inputs.mu:
+        sens_tire = {**tir, "LMUY": MU_SENSITIVITY, "LMUX": MU_SENSITIVITY, "LKY": inputs.lky_cases[NOMINAL[0]]}
         op_cars[MU_SENSITIVITY] = Car(ggv, (sens_tire,) * 4, ggv.lltd)
     steer_targets = {
         pct: needed_mean_steer_deg(nominal_car, ConstantAckermann(pct, ggv.track_front, ggv.wheelbase), RADII_M[0], outer_max)
-        for pct in STEER_FIX_TARGETS_PCT
+        for pct in inputs.steer_fix_targets_pct
     }
-    biases = (BRAKE_BIAS_NOMINAL, float(base["brake"]["front_bias"]))
-    cases = build_cases(ggv, tir, curves, outer_max, biases, orion, steer_targets, nominal_car)
+    biases = (inputs.brake_bias, float(base["brake"]["front_bias"]))
+    cases = build_cases(inputs, ggv, tir, curves, outer_max, biases, orion, steer_targets, nominal_car)
     order = sorted(range(len(cases)), key=lambda i: (cost(cases[i]), i))
     solved = map_cases(solve_case, [cases[i] for i in order])
     results = [None] * len(cases)
@@ -1444,9 +1470,9 @@ def main():
     kinetic = base["powertrain"]["pDriveline"]["diff_kineticFrictionRatio"]
     rears = {REAR_BASELINE: (0.0, 0.0, kinetic), "LSD": PLANNED_DIFF + (kinetic,)}
     brakes = {f"brakes {b:.2f}": b for b in biases}
-    brake_nominal = f"brakes {BRAKE_BIAS_NOMINAL:.2f}"
+    brake_nominal = f"brakes {inputs.brake_bias:.2f}"
     rear_radius = float(base["rear"]["wheel"]["radius_m"])
-    lky = LKY_CASES["lky_scaled"]
+    lky = inputs.lky_cases["lky_scaled"]
     sens_cars = {
         "LLTD -0.10": Car(ggv, (nominal_tire,) * 4, ggv.lltd - 0.10),
         "LLTD +0.10": Car(ggv, (nominal_tire,) * 4, ggv.lltd + 0.10),
@@ -1455,9 +1481,9 @@ def main():
 
     def map_case(car, radius, ax, model, labels, tol=2e-5):
         lon = Longitudinal(-ax, bias=brakes[model]) if ax < 0.0 else Longitudinal(-ax, diff=rears[model], wheel_radius=rear_radius)
-        baseline = labels == {"mu": MU_SCALE} and model in (REAR_BASELINE, brake_nominal)
+        baseline = labels == {"mu": inputs.mu} and model in (REAR_BASELINE, brake_nominal)
         return {"kind": "map", "car": car, "curves": op_curves, "outer_max": outer_max, "radius": radius, "lon": lon, "tol": tol,
-                "probe": baseline, "deriv": baseline and ax == 0.0 and radius in DERIV_RADII_M,
+                "probe": baseline, "deriv": baseline and ax == 0.0 and radius in inputs.deriv_radii_m,
                 "labels": {**labels, "rear": model, "radius_m": radius, "ax_g": ax}}
 
     def models(ax, nominal):
@@ -1467,11 +1493,11 @@ def main():
 
     op_cases = [
         map_case(car, radius, ax, model, {"mu": mu})
-        for mu, car in op_cars.items() for radius in MAP_RADII_M for ax in MAP_AX_G for model in models(ax, mu == MU_SCALE)
+        for mu, car in op_cars.items() for radius in inputs.map_radii_m for ax in inputs.map_ax_g for model in models(ax, mu == inputs.mu)
     ]
     sens_cases = [
-        map_case(car, radius, ax, model, {"mu": MU_SCALE, "variant": variant}, VARIANT_TOL)
-        for variant, car in sens_cars.items() for radius in VARIANT_RADII_M for ax in VARIANT_AX_G for model in models(ax, False)
+        map_case(car, radius, ax, model, {"mu": inputs.mu, "variant": variant}, VARIANT_TOL)
+        for variant, car in sens_cars.items() for radius in inputs.variant_radii_m for ax in inputs.variant_ax_g for model in models(ax, False)
     ]
     map_results = map_cases(solve_case, op_cases + sens_cases)
     op_rows = [row for result in map_results[:len(op_cases)] for row in result]
@@ -1479,7 +1505,7 @@ def main():
     for r in op_rows + sens_rows:
         r["lock_limited"] = bool(math.isfinite(r["ay_max_g"]) and r["lock_margin_deg"] < LOCK_MARGIN_MIN_DEG)
     base_rows = [r for r in op_rows if r["rear"] in (REAR_BASELINE, brake_nominal)]
-    design_rows = [r for r in op_rows + sens_rows if r["ax_g"] in VARIANT_AX_G]
+    design_rows = [r for r in op_rows + sens_rows if r["ax_g"] in inputs.variant_ax_g]
     robust = {"all": robust_region(design_rows), "beyond_3p5": robust_region([r for r in design_rows if r["radius_m"] > RADII_M[0]])}
     power_w = float(load_yaml(repo_root() / LAP_CONFIG)["event"]["drive_power_limit_w"])
 
@@ -1489,30 +1515,30 @@ def main():
 
     qss_cases, caps = [], []
     for mu, car in op_cars.items():
-        limits = lap_limits(car, BRAKE_BIAS_NOMINAL)
+        limits = lap_limits(car, inputs.brake_bias)
         rows_mu = [r for r in base_rows if r["mu"] == mu]
         for name in op_curves:
-            caps += [{"mu": mu, **c} for c in check_map(rows_mu, name, limits["brake_g"], limits["drive_g"])]
-            qss_cases.append({"kind": "qss", "line": line["line"], "rows": rows_mu, **limits, "labels": {"mu": mu, "curve": name}})
-    refined = [{**c, "refine": True} for c in qss_cases if c["labels"]["mu"] == MU_SCALE and c["labels"]["curve"] in (BASELINE, *CONVERGENCE_CURVES)]
-    fill_qss = cap_fill_cases(qss_cases, base_rows, caps)
+            caps += [{"mu": mu, **c} for c in check_map(rows_mu, name, limits["brake_g"], limits["drive_g"], inputs)]
+            qss_cases.append({"kind": "qss", "line": line["line"], "rows": rows_mu, "inputs": inputs, **limits, "labels": {"mu": mu, "curve": name}})
+    refined = [{**c, "refine": True} for c in qss_cases if c["labels"]["mu"] == inputs.mu and c["labels"]["curve"] in (BASELINE, *CONVERGENCE_CURVES)]
+    fill_qss = cap_fill_cases(qss_cases, base_rows, caps, inputs)
     qss_results = map_cases(solve_case, qss_cases + refined + fill_qss)
     nominal_laps = qss_results[:len(qss_cases)]
     refined_laps = qss_results[len(qss_cases):len(qss_cases) + len(refined)]
     fill_laps = qss_results[len(qss_cases) + len(refined):]
-    laps = lap_phases(nominal_laps, line["curvature"], base_rows)
-    lap_time = {(r["curve"], r["refine"]): r["lap_time_s"] for r in nominal_laps + refined_laps if r["mu"] == MU_SCALE}
+    laps = lap_phases(nominal_laps, line["curvature"], base_rows, inputs)
+    lap_time = {(r["curve"], r["refine"]): r["lap_time_s"] for r in nominal_laps + refined_laps if r["mu"] == inputs.mu}
     convergence = {}
     for name in CONVERGENCE_CURVES:
         coarse = lap_time[(name, False)] - lap_time[(BASELINE, False)]
         fine = lap_time[(name, True)] - lap_time[(BASELINE, True)]
         convergence[name] = {"delta_s": round(coarse, 4), "delta_refined_s": round(fine, 4), "change_s": round(fine - coarse, 4)}
     convergence["band_s"] = round(2.0 * max(abs(v["change_s"]) for v in convergence.values()), 4)
-    reference_lap = next(r for r in nominal_laps if r["mu"] == MU_SCALE and r["curve"] == BASELINE)
+    reference_lap = next(r for r in nominal_laps if r["mu"] == inputs.mu and r["curve"] == BASELINE)
     coverage = trim_coverage(reference_lap, line["curvature"], nominal_car, op_curves[BASELINE], outer_max, rears[REAR_BASELINE],
-                             rear_radius, BRAKE_BIAS_NOMINAL)
-    nominal_limits = next(c for c in qss_cases if c["labels"] == {"mu": MU_SCALE, "curve": BASELINE})
-    circle = circle_check(nominal_limits["rows"], *(nominal_limits[k] for k in ("brake_g", "drive_g", "mass", "power_w")))
+                             rear_radius, inputs.brake_bias)
+    nominal_limits = next(c for c in qss_cases if c["labels"] == {"mu": inputs.mu, "curve": BASELINE})
+    circle = circle_check(nominal_limits["rows"], *(nominal_limits[k] for k in ("brake_g", "drive_g", "mass", "power_w")), inputs)
     for f in fix:
         f.pop("table")
     for name, data in (("limits", rows), ("braking", braking), ("toe", toe), ("mass_cg", mass), ("operating_map", op_rows),
@@ -1532,7 +1558,7 @@ def main():
     tables = {"Orion": orion_table, DESIGN: base_table}
     geometry = {"Orion": (orion_ggv.track_front, orion_ggv.wheelbase), DESIGN: (ggv.track_front, ggv.wheelbase)}
     plot_curves(out / "ackermann_curves.png", tables, geometry, steer_band)
-    plot_grip(out / "grip_vs_ackermann.png", rows, base_pct, base_rows)
+    plot_grip(out / "grip_vs_ackermann.png", rows, base_pct, base_rows, inputs)
 
     table_rows = {}
     for radius in RADII_M:
@@ -1542,7 +1568,7 @@ def main():
         }
     spread = {}
     for radius in RADII_M:
-        for p in ACKERMANN_PCT:
+        for p in inputs.ackermann_pct:
             values = [r["ay_change_pct"] for r in rows if r["radius_m"] == radius and r["curve"] == f"{p:+d}%"]
             spread.setdefault(f"{radius:g}m", {})[f"{p:+d}%"] = [round(float(np.nanmin(values)), 2), round(float(np.nanmax(values)), 2)]
     slip_norm = [r for r in braking if r["combined_slip"] == "slip_norm"]
@@ -1559,13 +1585,13 @@ def main():
         "effective_inputs": {
             "mass_kg": round(ggv.mass, 2), "cg_height_m": round(ggv.cg_height, 4), "front_static_frac": ggv.front_static_frac,
             "wheelbase_m": round(ggv.wheelbase, 4), "track_front_m": round(ggv.track_front, 4), "track_rear_m": round(ggv.track_rear, 4),
-            "lltd_front": round(ggv.lltd, 4), "grip_scale": [MU_SCALE, MU_SENSITIVITY], "LKY": sorted(LKY_CASES.values()),
+            "lltd_front": round(ggv.lltd, 4), "grip_scale": [inputs.mu, MU_SENSITIVITY], "LKY": sorted(inputs.lky_cases.values()),
             "brake_bias_front": list(biases), "rear_models": {k: {"preload_nm": v[0], "lock": v[1], "kinetic": v[2]} for k, v in rears.items()},
             "rear_wheel_radius_m": rear_radius, "drive_force_cap_n": round(ggv.max_drive_force, 1), "power_w": power_w, "aero": "none",
             "static_toe_deg": 0.0, "static_camber_deg": STATIC_CAMBER_DEG, "vehicle_front_yml": "front geometry only",
         },
         "tire": {"template": base["front"]["tire"]["template"], "sha256": hashlib.sha256(tir_path.read_bytes()).hexdigest(),
-                 "LMUY_LMUX": MU_SCALE, "LKY_cases": LKY_CASES},
+                 "LMUY_LMUX": inputs.mu, "LKY_cases": inputs.lky_cases},
         "ackermann_pct_at_rack": {
             name: {f"{r:g}mm": round(float(ackermann_pct(at_rack(t, r, 1), at_rack(t, r, 2), *geometry[name])), 1) for r in REPORT_RACK_MM}
             for name, t in tables.items()
@@ -1588,9 +1614,9 @@ def main():
             "corners": [{"turn_deg": round(math.degrees(t), 1), "min_radius_m": round(r, 2)} for t, r in corners],
         },
         "operating_map": {
-            "radii_m": MAP_RADII_M, "ax_g": MAP_AX_G, "curves": list(op_curves), "mu": list(op_cars),
+            "radii_m": inputs.map_radii_m, "ax_g": inputs.map_ax_g, "curves": list(op_curves), "mu": list(op_cars),
             "rear_models": list(rears) + list(brakes), "rear_baseline": REAR_BASELINE, "variants": list(sens_cars),
-            "variant_radii_m": VARIANT_RADII_M, "variant_ax_g": VARIANT_AX_G,
+            "variant_radii_m": inputs.variant_radii_m, "variant_ax_g": inputs.variant_ax_g,
             "lltd_front": {f"{mu:g}": round(car.lltd, 4) for mu, car in op_cars.items()},
             "law_no_grip_cells": sum(1 for r in base_rows if not math.isfinite(r["ay_max_g"])),
             "caps": caps,
@@ -1604,12 +1630,12 @@ def main():
         "lap_qss": laps,
         "circle_check": circle,
         "grid_convergence": convergence,
-        "cap_check": cap_check_result(nominal_laps, fill_laps),
+        "cap_check": cap_check_result(nominal_laps, fill_laps, inputs),
         "trim_coverage": coverage,
         "clipped_braking": clipped_braking(base_rows),
     }
     (out / "summary.json").write_text(json.dumps(finite(summary), indent=2, allow_nan=False), encoding="utf-8")
-    write_readme_parts(out, json.loads(json.dumps(finite(summary))), base_rows)
+    write_readme_parts(out, json.loads(json.dumps(finite(summary))), base_rows, inputs)
 
 
 if __name__ == "__main__":
