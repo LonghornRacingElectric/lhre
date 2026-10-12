@@ -1,0 +1,40 @@
+"""Shell toolchain for Windows that doesn't depend on what's installed.
+
+Windows builds are shell-free (ADR-013), but Bazel still resolves a shell
+toolchain there: every test rule implicitly depends on
+@bazel_tools//tools/test:collect_coverage, an sh_binary, and on Windows an
+sh_binary fails *analysis* ("No suitable shell toolchain found ... set the
+BAZEL_SH environment variable") when its toolchain has no bash path.
+rules_shell's default toolchain autodetects that path from BAZEL_SH and PATH,
+so a machine without MSYS2 or Git Bash on PATH could not even analyze
+`bazel test //...`.
+
+This toolchain fixes the path instead, to the same nonexistent one .bazelrc
+pins --shell_executable to. The path is only baked into that launcher, which
+runs solely under `bazel coverage`, so nothing needs it to exist.
+Root-module registrations (MODULE.bazel) win over rules_shell's own.
+
+The cost: a real sh_binary or sh_test cannot run on Windows. Ours are all
+target_compatible_with non-Windows already; new ones must be too.
+"""
+
+load("@rules_shell//shell/toolchains:sh_toolchain.bzl", "sh_toolchain")
+
+sh_toolchain(
+    name = "windows_no_bash",
+    launcher = "@bazel_tools//tools/launcher",
+    launcher_maker = "@bazel_tools//tools/launcher:launcher_maker",
+    # Keep in sync with --shell_executable in .bazelrc.
+    path = "C:/lhre-windows-builds-are-shell-free/bash.exe",
+    # Reached only through toolchain resolution (which ignores tags), so
+    # `//...` on Linux/macOS never analyzes Bazel's Windows launcher.
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+toolchain(
+    name = "windows_no_bash_toolchain",
+    target_compatible_with = ["@platforms//os:windows"],
+    toolchain = ":windows_no_bash",
+    toolchain_type = "@rules_shell//shell:toolchain_type",
+)

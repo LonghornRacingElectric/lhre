@@ -75,7 +75,9 @@ behind its forks, pins, and patches — in
 - Git
 
 That's it — compilers (ARM GCC for firmware, LLVM for host code) are hermetic
-and downloaded by Bazel. No Xcode, MSVC, or system GCC needed for C++.
+and downloaded by Bazel. No Xcode, MSVC, or system GCC needed for C++, and
+no MSYS2 or Git Bash on Windows: builds there are shell-free
+([ADR-013](docs/architecture/013-windows-shell-free.md)).
 STM32CubeMX is only needed when changing a board's peripheral configuration.
 
 On Windows, builds run locally instead of on remote executors; for full remote

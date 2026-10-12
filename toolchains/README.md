@@ -36,3 +36,21 @@ New CPU core (say cortex-m33): add a `constraint_value` in `//platforms`,
 an `arm_none_eabi_toolchain(...)` call in `BUILD.bazel` here with the core's
 flags, and use the constraint in the new family's platform. `//toolchains:all`
 is already registered in `MODULE.bazel`.
+
+## Not ARM: `proto/` and `sh/`
+
+Two small non-C++ toolchains live in subpackages. Each is one `BUILD.bazel`
+whose docstring is its documentation:
+
+- [`proto/`](https://github.com/LonghornRacingElectric/lhre/blob/main/toolchains/proto/BUILD.bazel)
+  is the Python proto toolchain backed by the pip protobuf runtime, which
+  keeps protobuf's C++ out of the build (see "Protobuf without compiling
+  protobuf" in [build-system.md](../docs/build-system.md)).
+- [`sh/`](https://github.com/LonghornRacingElectric/lhre/blob/main/toolchains/sh/BUILD.bazel)
+  is a shell toolchain for Windows with a fixed bash path that deliberately
+  does not exist. Windows builds are shell-free
+  ([ADR-013](../docs/architecture/013-windows-shell-free.md)), but every
+  test rule still resolves a shell toolchain through an implicit `sh_binary`
+  dep, and the autodetected one is empty on a machine without bash, which
+  fails `bazel test` at analysis. Keep its path in sync with
+  `--shell_executable` in `.bazelrc`.
