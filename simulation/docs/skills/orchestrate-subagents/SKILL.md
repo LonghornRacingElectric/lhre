@@ -47,8 +47,10 @@ the team to the person and the task. There is no fixed team.
    Each brief states:
     - the decision the work informs;
     - the files to read and the files it may change;
-    - the skills to load (for example `study-design`,
-      `vehicle-dynamics-first-principles`, `bobsim-boundary`);
+    - the skills to load, by name (for example `study-design`,
+      `vehicle-dynamics-first-principles`, `bobsim-boundary`). Write "load
+      these first". A subagent can skip a skill that the brief only
+      mentions. Ask the report to name the rules that it applied;
     - the rules: writing style, no attribution, BobSim is a black box;
     - the output: format, length limit, and what "done" means.
 8. **Check what comes back.** A subagent report is a claim, not evidence.
@@ -79,4 +81,5 @@ the team to the person and the task. There is no fixed team.
 - No two subagents changed the same file.
 - Each finding you report was checked against a file or a run output.
 - Only one sim ran at a time.
+- Each brief told the subagent to load named skills first, and each report named the rules that it applied.
 - The report names the roles and what each changed.
