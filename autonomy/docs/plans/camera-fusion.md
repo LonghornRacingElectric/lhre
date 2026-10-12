@@ -10,7 +10,10 @@ stereo images and calibration in ROS/RViz; its design and implementation scope a
 in the [Gazebo README](../../ros2/src/lhr_gazebo/README.md#stereo-validation).
 Camera-only HSV region classification is implemented as an opt-in debug view;
 see [classifier usage](../../ros2/src/lhr_perception/README.md#camera-color-classification).
-Live classification validation and LiDAR fusion remain subsequent work.
+Celina has visually exercised classification in VNC. The next milestone is a
+separate colored LiDAR map for inspection; its approach was approved on
+2026-10-12. The [detailed fusion design](camera-lidar-fusion-design.md) awaits
+review before implementation. Track-builder integration remains a later step.
 
 ## Background
 
@@ -57,19 +60,20 @@ For our sim pipeline, the equivalent is: render camera image, segment by color, 
 - Implemented: subscribe to the left camera image and segment blue/yellow/orange
   regions using configurable HSV bounds and minimum connected pixel area.
 - Publish a labeled debug image, retaining input timestamps and frames.
-- These are color candidates, not cone-object detections. Live validation and
-  a machine-readable region interface for fusion remain follow-up work.
+- These are color candidates, not cone-object detections. The selected fusion
+  approach reuses segmentation on raw images rather than introducing a new
+  region transport interface. Physical-camera accuracy remains unvalidated.
 
 ### 3.3 — LiDAR-camera fusion node
-- Subscribe to both LiDAR cone detections and camera image
-- Project each LiDAR cone position into the camera frame using TF
-- Look up the color at that pixel location in the classified image
-- Publish cone markers with color labels (blue/yellow/unknown)
+- Implement the reviewed detailed design linked above: timestamp-aligned
+  projection, conservative region matching, and correctable per-ID votes.
+- Publish blue/yellow/orange/unknown markers on a separate RViz topic,
+  preserving LiDAR positions and IDs. No planning integration in this step.
 
 ### 3.4 — Update track builder to use color
-- In `_pair_boundary`, add a filter: reject Delaunay edges where both endpoints have the same known color
-- Accept edges where at least one endpoint is unknown (fallback to distance-only)
-- Minimal change — ~5 lines in the existing method
+- The boundary strategy already has a same-known-color edge filter and keeps
+  unknown cones in geometry-based pairing. Future work connects the validated
+  fused map to that input and decides how orange cones should affect planning.
 
 ### 3.5 — Validate on autocross track
 - Run full pipeline on an autocross layout

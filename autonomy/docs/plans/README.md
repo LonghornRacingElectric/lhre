@@ -5,7 +5,8 @@ Working documents: integration plans, change logs, the year roadmap. Written as 
 | Doc | What it is |
 |-----|-----------|
 | [gazebo-integration.md](gazebo-integration.md) | Gazebo + LiDAR integration plan, current status, known issues |
-| [camera-fusion.md](camera-fusion.md) | Phase 3 camera fusion plan (not started) |
+| [camera-fusion.md](camera-fusion.md) | Phase 3 roadmap: stereo and color classification implemented; fusion is next |
+| [camera-lidar-fusion-design.md](camera-lidar-fusion-design.md) | Separate colored cone map: detailed fusion design awaiting review |
 | [zed2i-stereo.md](zed2i-stereo.md) | Implemented first camera milestone: one ZED 2i, 2.1 mm lens, stereo images and calibration |
 | [zed2i-stereo-implementation.md](zed2i-stereo-implementation.md) | Implementation plan for stereo geometry, ROS/RViz integration, and runtime validation |
 | [on-car-architecture.md](on-car-architecture.md) | Target stack on the retrofit car: sensors, nodes, CAN, safety loop, and what swaps versus sim |
