@@ -69,5 +69,6 @@ flowchart LR
 - Timestamp-aligned LiDAR mapping avoided duplicates in the tested autocross
   run; geometry-only side inference still mislabels sparse cone fragments and
   the car leaves the course
-- Camera work not started
+- ZED 2i stereo inputs implemented; camera color-region classification is
+  available as an opt-in debug image. LiDAR color fusion remains future work
 - Retrofit hardware being ordered (details in Notion)
