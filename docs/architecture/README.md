@@ -21,6 +21,7 @@ three years after everyone who made the decision graduated.
 | [010](010-telemetry-stack-in-bazel.md) | Telemetry server stack builds in Bazel, its tests run beside Docker | Superseded by ADR-011 |
 | [011](011-bazel-owned-telemetry-images.md) | Bazel owns every telemetry stack image; Compose only runs loaded tags | Accepted |
 | [012](012-simulation-outside-bazel.md) | Simulation runs BobSim in Docker, outside Bazel | Accepted |
+| [013](013-driveday-viewer-outside-bazel.md) | The drive day viewer is a local Next.js app, outside Bazel | Accepted |
 
 ## ADRs vs. READMEs
 

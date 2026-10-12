@@ -20,6 +20,7 @@ nav:
       - ADR-009 Autonomy Outside Bazel: docs/architecture/009-autonomy-outside-bazel.md
       - ADR-010 Telemetry Stack in Bazel: docs/architecture/010-telemetry-stack-in-bazel.md
       - ADR-012 Simulation Outside Bazel: docs/architecture/012-simulation-outside-bazel.md
+      - ADR-013 Drive Day Viewer Outside Bazel: docs/architecture/013-driveday-viewer-outside-bazel.md
       - Build System: docs/build-system.md
       - Cookbook: docs/cookbook.md
   - Boards:
@@ -99,6 +100,7 @@ nav:
           - Overview: apps/telemetry/README.md
           - Bazel Build Guide: apps/telemetry/BAZEL_BUILD.md
           - Viewer Tool: apps/telemetry/analysis/database/viewer_tool/README.md
+          - Drive Day Viewer: apps/telemetry/analysis/driveday_data_viewer/README.md
           - Multi-Car Viewer Plan: apps/telemetry/VIEWER_MULTI_CAR_PLAN.md
           - Field Pipeline: apps/telemetry/TELEMETRY_FIELD_PIPELINE.md
           - Car Status: apps/telemetry/docs/car_status_design.md
@@ -168,6 +170,7 @@ plugins:
         - "simulation/bobsim/**"
         - "simulation/out/**"
         - "apps/telemetry/stack/ingest/grafana-kafka-datasource/**" # vendored plugin
+        - "apps/telemetry/analysis/driveday_data_viewer/node_modules/**" # npm install, see ADR-013
 
 theme:
   name: material
