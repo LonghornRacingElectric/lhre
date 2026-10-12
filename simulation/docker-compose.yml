@@ -3,7 +3,6 @@ services:
     build:
       context: bobsim
       dockerfile: Dockerfile
-      network: host
     image: lhre-simulation:local
     volumes:
       - ..:/lhre

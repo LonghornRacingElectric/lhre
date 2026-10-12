@@ -1,0 +1,62 @@
+{
+  "configById": {
+    "3D!mid360": {
+      "followTf": "livox_frame",
+      "followMode": "follow-pose",
+      "scene": { "enableStats": false, "backgroundColor": "#11161d" },
+      "cameraState": { "distance": 18, "perspective": true, "phi": 50, "thetaOffset": 45, "targetOffset": [0, 0, 0], "target": [0, 0, 0], "targetOrientation": [0, 0, 0, 1], "fovy": 45, "near": 0.01, "far": 5000 },
+      "transforms": { "frame:world": { "visible": false }, "frame:livox_frame": { "visible": true } },
+      "topics": {
+        "/livox/points": { "visible": true, "colorField": "intensity", "colorMode": "colormap", "colorMap": "turbo", "pointSize": 2, "pointShape": "circle", "decayTime": 0 }
+      },
+      "layers": {
+        "grid": { "visible": true, "layerId": "foxglove.Grid", "frameLocked": true, "frameId": "livox_frame", "size": 40, "divisions": 40, "lineWidth": 1, "color": "#4b5563", "position": [0, 0, -0.5], "rotation": [0, 0, 0], "order": 1 }
+      },
+      "publish": { "type": "point", "poseTopic": "/move_base_simple/goal", "pointTopic": "/clicked_point", "poseEstimateTopic": "/initialpose", "poseEstimateXDeviation": 0.5, "poseEstimateYDeviation": 0.5, "poseEstimateThetaDeviation": 0.26179939 },
+      "imageMode": {}
+    },
+    "Plot!gyro": {
+      "title": "Gyro (deg/s)",
+      "paths": [
+        { "value": "/livox/imu.gyro_dps.x", "enabled": true, "timestampMethod": "receiveTime", "label": "x" },
+        { "value": "/livox/imu.gyro_dps.y", "enabled": true, "timestampMethod": "receiveTime", "label": "y" },
+        { "value": "/livox/imu.gyro_dps.z", "enabled": true, "timestampMethod": "receiveTime", "label": "z" }
+      ],
+      "showXAxisLabels": true, "showYAxisLabels": true, "showLegend": true, "legendDisplay": "floating", "showPlotValuesInLegend": true,
+      "isSynced": true, "xAxisVal": "timestamp", "sidebarDimension": 240, "followingViewWidth": 30
+    },
+    "Plot!accel": {
+      "title": "Accel (g)",
+      "paths": [
+        { "value": "/livox/imu.accel_g.x", "enabled": true, "timestampMethod": "receiveTime", "label": "x" },
+        { "value": "/livox/imu.accel_g.y", "enabled": true, "timestampMethod": "receiveTime", "label": "y" },
+        { "value": "/livox/imu.accel_g.z", "enabled": true, "timestampMethod": "receiveTime", "label": "z" }
+      ],
+      "showXAxisLabels": true, "showYAxisLabels": true, "showLegend": true, "legendDisplay": "floating", "showPlotValuesInLegend": true,
+      "isSynced": true, "xAxisVal": "timestamp", "sidebarDimension": 240, "followingViewWidth": 30
+    },
+    "Plot!health": {
+      "title": "Lost packets per second",
+      "paths": [
+        { "value": "/livox/health.lost_1s", "enabled": true, "timestampMethod": "receiveTime", "label": "lost/s" }
+      ],
+      "showXAxisLabels": true, "showYAxisLabels": true, "showLegend": true, "legendDisplay": "floating", "showPlotValuesInLegend": true,
+      "isSynced": true, "xAxisVal": "timestamp", "sidebarDimension": 240, "followingViewWidth": 300
+    },
+    "RawMessages!health": { "topicPath": "/livox/health", "diffEnabled": false, "diffMethod": "custom", "diffTopicPath": "", "showFullMessageForDiff": false, "expansion": "all" }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": { "speed": 1 },
+  "layout": {
+    "first": "3D!mid360",
+    "second": {
+      "first": { "first": "Plot!gyro", "second": "Plot!accel", "direction": "column" },
+      "second": { "first": "Plot!health", "second": "RawMessages!health", "direction": "row" },
+      "direction": "column",
+      "splitPercentage": 66
+    },
+    "direction": "row",
+    "splitPercentage": 62
+  }
+}

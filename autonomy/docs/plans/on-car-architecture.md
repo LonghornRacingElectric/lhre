@@ -3,7 +3,7 @@
 The stack as it should look on Orion for the April 2027 demo. Nothing to the
 right of the CAN bus exists in software yet; the point of this page is to
 have one picture to build toward. Hardware is the 8/2 decided order with the
-September changes noted inline (donated LiDAR, DYN reopening the brake, BEVO
+September changes noted inline (donated LiDAR, the 9/27 brake decision, BEVO
 as the only radio). Node names follow the Software Architecture page in
 Notion — if this page and Notion disagree, Notion wins.
 
@@ -15,7 +15,7 @@ flowchart LR
     classDef planned stroke-dasharray: 6 4
 
     subgraph sensors["Sensors — mast and chassis"]
-        lidar["Livox Mid-360 (donated, under test)<br>Ethernet, 10 Hz, 200 Hz IMU built in"]
+        lidar["Livox Mid-360 (donated, passed acceptance 10/4, provisional)<br>Ethernet, 10 Hz, 200 Hz IMU built in"]
         cam["Stereolabs ZED 2i<br>USB3"]
         gnss["LocusLock unit pair<br>RTK GNSS + moving-base heading<br>(second unit unverified)"]
     end
@@ -36,7 +36,7 @@ flowchart LR
         subgraph pnc["Planning & control"]
             tb["track_builder"]
             pp["pure_pursuit"]
-            lon["longitudinal controller<br>speed → throttle / brake"]:::planned
+            lon["longitudinal controller<br>speed → signed torque (drive / regen)"]:::planned
         end
         mm["mission_manager"]
         safe["safety_node<br>heartbeat · watchdog · e-stop mapping"]:::planned
@@ -45,10 +45,9 @@ flowchart LR
     end
 
     subgraph can["CAN"]
-        steer["Kraken X60 steering motor<br>2.5:1 on the column · CTRE Phoenix"]
-        brake["Brake actuator — DYN redesign open (Sept)<br>last decided: Thomson Electrak HD, J1939 · master cylinder"]:::planned
-        vcu["VCU<br>torque request → inverter · line valves · wheel speeds · mode"]
-        bevo["BEVO: Pi CM5 gateway<br>CAN in · 5G out · the car's only radio"]
+        steer["Kraken X60 steering motor<br>reduction being specced · CTRE Phoenix"]
+        vcu["VCU<br>signed torque → inverter · rear regen is the service brake<br>wheel speeds · mode · watchdogs the Jetson heartbeat"]
+        bevo["BEVO: Pi CM5 gateway<br>CAN in · 5G out · the car's only radio · on the team tailnet"]
     end
 
     cloud["Telemetry cloud<br>MQTT → Kafka → Grafana"]
@@ -57,7 +56,8 @@ flowchart LR
         res["Remote e-stop: phone or handheld<br>heartbeat over 5G (GF2000i if sponsored)"]
         wd["heartbeat watchdog on the BEVO board<br>hardware timer drops a GPIO"]:::planned
         relay["normally-energized relay chain"]
-        spring["fail-safe spring back-drives<br>the master cylinder"]
+        valve["front line valve<br>opens when de-energized"]:::planned
+        spring["spring-preloaded pedal<br>applies the front brakes"]:::planned
     end
 
     lidar --> dlidar --> det
@@ -74,15 +74,14 @@ flowchart LR
     tb -- "/lhr/track/centerline" --> pp
     pp --> lon
     mm -- "/lhr/mission/status" --> pp
-    lon -- "/lhr/vehicle/cmd<br>steer · throttle · brake" --> vif
+    lon -- "/lhr/vehicle/cmd<br>steer · signed torque" --> vif
     safe -- "heartbeat, mode" --> vif
     ops -- "status frames" --> vif
     vif <--> dcan
     dcan <--> steer
-    dcan <--> brake
     dcan <--> vcu
     dcan --> bevo -- "cellular" --> cloud
-    res -- "cellular" --> wd --> relay --> spring
+    res -- "cellular" --> wd --> relay --> valve --> spring
     relay -- "torque enable" --> vcu
 ```
 
@@ -98,10 +97,10 @@ interface swaps (see the
 | Gazebo GPU LiDAR (VLP-16 model) / `sensor_sim` cones | Livox Mid-360 through `livox_ros_driver2`, same `lidar_cone_detector`. The Gazebo sensor stays a VLP-16 until someone models the Mid-360's rosette in `gpu_lidar` | Perception (car), Sim & test infra (model) |
 | No camera; unclassified cones | ZED 2i → `cone_color_classifier` → `cone_fusion`; color-aware Delaunay | Perception |
 | Ground-truth `OdometryPublisher` | `lhr_state_estimation` EKF on the Mid-360 IMU (ZED IMU as backup) + LocusLock RTK position + wheel speeds + steer angle. Moving-base heading only if the second LocusLock unit works; otherwise the EKF derives heading from GNSS velocity and the IMU | State estimation |
-| `pure_pursuit` publishes a speed; Gazebo sets wheel velocity directly | Longitudinal controller turns speed into throttle and brake (with software brake bias) | Planning & control |
-| `joint_cmd_adapter` → Gazebo joints | `vehicle_interface` → CAN: column angle to the steering motor, a brake command whose semantics wait on the DYN redesign, torque request to the VCU; feedback back in | Sim & test infra + ELC |
+| `pure_pursuit` publishes a speed; Gazebo sets wheel velocity directly | Longitudinal controller turns speed into one signed torque request: positive drives, negative is rear regen, which is the service brake. No friction brake in normal driving | Planning & control |
+| `joint_cmd_adapter` → Gazebo joints | `vehicle_interface` → CAN: column angle to the steering motor and a signed torque request to the VCU; feedback back in. The emergency brake is not on CAN | Sim & test infra + ELC |
 | `auto_go` timer | An explicit go command from the pit device over the same link as the heartbeat. Heartbeat presence is liveness only and never grants go. `safety_node` heartbeat that the VCU watchdogs | Lead + ELC |
-| RViz and PlotJuggler on the dev box | BEVO relays autonomy status frames from CAN over 5G to the existing telemetry stack; point clouds stay in rosbag on the Jetson; RViz only over Ethernet with the car parked. There is no WiFi on the car | Telemetry + Sim & test infra |
+| RViz and PlotJuggler on the dev box | BEVO relays autonomy status frames from CAN over 5G to the existing telemetry stack; point clouds stay in rosbag on the Jetson. The Pi is already on the team tailnet, so low-rate topics (cones, path, pose) can reach a pit laptop live once the Jetson joins it; full RViz is over Ethernet with the car parked. There is no WiFi on the car | Telemetry + Sim & test infra |
 | `map → base_link` only | `map → odom → base_link` plus sensor frames with measured extrinsics | State estimation |
 | `use_sim_time` | PPS from GNSS into the LiDAR, PTP/chrony on the Jetson | Sim & test infra |
 
@@ -132,23 +131,34 @@ presence permits nothing. Go is an explicit command from the pit device;
 heartbeats alive, and the `mode` that `safety_node` sends to
 `vehicle_interface` is that enable state, so a lost heartbeat clears it.
 
-Power loss or a de-energized chain removes torque enable and lets the spring
-apply the brakes.
+Power loss or a de-energized chain removes torque enable and opens the front
+line valve, so the spring-preloaded pedal applies the front brakes.
 
 ## Open decisions this picture depends on
 
 - The CAN message set between the Jetson and the VCU (commands, feedback,
   heartbeat) and the autonomy status frames BEVO relays — to be written as
   an ADR with ELC before the bench rig.
-- Whether the donated Mid-360 passes its acceptance test (LiDAR Test Plan
-  in the Notion wiki). If not, a used VLP-16 through `velodyne_driver`, which
-  is what the sim already models.
-- Brake actuation: DYN (Jack, with Abishek) reopened the design in
-  September. The Electrak HD, line valves, and fail-safe spring are the last
-  decided state until DYN publishes the new one; the actuator-position
-  versus pressure question and line-valve bias commanding move with it.
+- The donated Mid-360 passed its acceptance checks provisionally on
+  2026-10-04 ([results](../../testing/2026-10-04-mid360-acceptance/README.md)).
+  Still open: the 60 minute endurance run and the connector check. If either
+  fails, a used VLP-16 through `velodyne_driver`, which is what the sim
+  already models. The test also set two things this picture depends on: the
+  LiDAR mount height and pitch decide the near-field blind zone, and
+  perception has to stack about 0.5 to 0.7 s of frames to see a small cone
+  at 10 m in daylight.
+- Brakes, decided with DYN on 9/27: regen is the service brake, and the
+  emergency brake is a spring preloading the pedal plus a front line valve
+  that opens on power loss. Still open: the spring rate and where it reacts
+  against the frame, the valve and its continuous-hold rating, what the VCU
+  does with negative torque below about 5 km/h, and regen authority at high
+  state of charge (the working answer is not to run near full charge).
+  Numbers live in Autonomous Orion Requirements in the Notion wiki.
 - Steering command semantics: column angle versus road-wheel angle, and the
-  measured rack ratio. `vehicle.yaml` is the home for the numbers.
+  measured rack ratio. `vehicle.yaml` is the home for the numbers. The
+  reduction ratio reopened 9/27: the vehicle model shows about 19 N·m at the
+  column against about 17 N·m peak at 2.5:1, so DYN is re-speccing it before
+  the Kraken is ordered.
 - The remote e-stop is the 5G heartbeat unless the GF2000i sponsorship
   lands. Telemetry owns the heartbeat validator, the key handling, and the
   sequence state on BEVO; ELC owns the hardware timer and the GPIO into the

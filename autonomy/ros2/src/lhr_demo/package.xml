@@ -15,6 +15,7 @@
   <exec_depend>lhr_metrics</exec_depend>
   <exec_depend>lhr_mission_manager</exec_depend>
   <exec_depend>lhr_sensor_sim</exec_depend>
+  <exec_depend>lhr_state_estimation</exec_depend>
 
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>

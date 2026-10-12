@@ -26,6 +26,7 @@ from launch.actions import (
 )
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def _find_world(context: LaunchContext):
@@ -91,6 +92,10 @@ def _launch_setup(context: LaunchContext):
     config_dir = os.path.join(pkg_share, 'config')
 
     perception = context.launch_configurations.get('perception', 'sim')
+    classify_sides = context.launch_configurations.get(
+        'lidar_classify_sides', 'false').lower() == 'true'
+    use_ekf = context.launch_configurations.get(
+        'estimator', 'truth').lower() == 'ekf'
 
     _gz_env = {
         'GZ_SIM_RESOURCE_PATH': models_dir,
@@ -110,6 +115,15 @@ def _launch_setup(context: LaunchContext):
     )
 
     # ----- ros_gz_bridge -----
+    # Under 'ekf' the ground truth Gazebo publishes steps aside so the
+    # estimator owns /lhr/vehicle/odom and the map -> base_link transform.
+    bridge_remaps = []
+    if use_ekf:
+        bridge_remaps = [
+            ('/lhr/vehicle/odom', '/lhr/vehicle/odom_truth'),
+            ('/tf', '/tf_truth'),
+        ]
+
     bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
@@ -117,8 +131,40 @@ def _launch_setup(context: LaunchContext):
         parameters=[{
             'config_file': os.path.join(config_dir, 'ros_gz_bridge.yaml'),
         }],
+        remappings=bridge_remaps,
         output='screen',
     )
+
+    # ----- State estimation -----
+    estimation_nodes = []
+    if use_ekf:
+        # Gazebo already bridges a physics IMU, so only the wheel speeds
+        # are synthesized here.
+        estimation_nodes.append(Node(
+            package='lhr_sensor_sim',
+            executable='inertial_sim',
+            name='inertial_sim',
+            parameters=[{
+                'publish_imu': False,
+                'gyro_bias': LaunchConfiguration('gyro_bias'),
+                'wheel_scale_error': LaunchConfiguration(
+                    'wheel_scale_error'),
+                'use_sim_time': True,
+            }],
+            output='screen',
+        ))
+        estimation_nodes.append(Node(
+            package='lhr_state_estimation',
+            executable='ekf_node',
+            name='ekf_node',
+            parameters=[{
+                # The world file picks the spawn pose, so seed from the
+                # first truth sample rather than from a launch argument.
+                'init_pose_topic': '/lhr/vehicle/odom_truth',
+                'use_sim_time': True,
+            }],
+            output='screen',
+        ))
 
     # ----- Joint command adapter -----
     cmd_adapter = Node(
@@ -170,6 +216,7 @@ def _launch_setup(context: LaunchContext):
                 'cluster_radius': 0.5,
                 'min_cluster_points': 1,
                 'dedup_radius': 1.5,
+                'classify_sides': classify_sides,
             }],
             output='screen',
         ))
@@ -182,7 +229,24 @@ def _launch_setup(context: LaunchContext):
             name='track_builder',
             parameters=[{
                 'use_sim_time': True,
-                'pairing_strategy': 'boundary',
+                'pairing_strategy': (
+                    'classified' if classify_sides else 'boundary'),
+                'chaining_alg': ParameterValue(
+                    LaunchConfiguration('chaining_alg'), value_type=str),
+                'min_step_m': ParameterValue(
+                    LaunchConfiguration('min_step_m'), value_type=float),
+                'max_step_m': ParameterValue(
+                    LaunchConfiguration('max_step_m'), value_type=float),
+                'max_turn_deg': ParameterValue(
+                    LaunchConfiguration('max_turn_deg'), value_type=float),
+                'distance_weight': ParameterValue(
+                    LaunchConfiguration('distance_weight'), value_type=float),
+                'heading_weight': ParameterValue(
+                    LaunchConfiguration('heading_weight'), value_type=float),
+                'beam_width': ParameterValue(
+                    LaunchConfiguration('beam_width'), value_type=int),
+                'beam_depth': ParameterValue(
+                    LaunchConfiguration('beam_depth'), value_type=int),
                 'track_width': 3.5,
                 'track_width_tolerance': 1.0,
             }],
@@ -195,7 +259,23 @@ def _launch_setup(context: LaunchContext):
             name='track_builder',
             parameters=[{
                 'use_sim_time': True,
-                'pairing_strategy': 'index',
+                'pairing_strategy': 'boundary',
+                'chaining_alg': ParameterValue(
+                    LaunchConfiguration('chaining_alg'), value_type=str),
+                'min_step_m': ParameterValue(
+                    LaunchConfiguration('min_step_m'), value_type=float),
+                'max_step_m': ParameterValue(
+                    LaunchConfiguration('max_step_m'), value_type=float),
+                'max_turn_deg': ParameterValue(
+                    LaunchConfiguration('max_turn_deg'), value_type=float),
+                'distance_weight': ParameterValue(
+                    LaunchConfiguration('distance_weight'), value_type=float),
+                'heading_weight': ParameterValue(
+                    LaunchConfiguration('heading_weight'), value_type=float),
+                'beam_width': ParameterValue(
+                    LaunchConfiguration('beam_width'), value_type=int),
+                'beam_depth': ParameterValue(
+                    LaunchConfiguration('beam_depth'), value_type=int),
             }],
             output='screen',
         )
@@ -228,7 +308,10 @@ def _launch_setup(context: LaunchContext):
             package='lhr_metrics',
             executable='metrics_node',
             name='metrics_node',
-            parameters=[{'use_sim_time': True}],
+            parameters=[{
+                'truth_odom_topic': '/lhr/vehicle/odom_truth',
+                'use_sim_time': True,
+            }],
             output='screen',
         ))
 
@@ -263,6 +346,7 @@ def _launch_setup(context: LaunchContext):
         gz_sim,
         bridge,
         cmd_adapter,
+        *estimation_nodes,
         *perception_nodes,
         centerline,
         mission_mgr,
@@ -285,13 +369,34 @@ def generate_launch_description():
             'perception', default_value='sim',
             description='Perception mode: "sim" or "lidar"'),
         DeclareLaunchArgument(
+            'lidar_classify_sides', default_value='false',
+            description='Infer LiDAR cone sides (opt in; false publishes unlabeled cones)'),
+        DeclareLaunchArgument(
             'track_style', default_value='autocross',
             description='Track style: "autocross", "oval", or "simple"'),
+        DeclareLaunchArgument(
+            'estimator', default_value='truth',
+            description='Odometry source: "truth" (Gazebo) or "ekf"'),
+        DeclareLaunchArgument(
+            'gyro_bias', default_value='0.0',
+            description='Simulated gyro bias (rad/s); drives heading drift'),
+        DeclareLaunchArgument(
+            'wheel_scale_error', default_value='1.0',
+            description='Simulated rolling-radius error (1.0 = exact)'),
         DeclareLaunchArgument('seed', default_value='1'),
         DeclareLaunchArgument('num_waypoints', default_value='10'),
         # Sensor sim
         DeclareLaunchArgument('fov_deg', default_value='200.0'),
         DeclareLaunchArgument('max_range_m', default_value='20.0'),
+        # Track builder chaining (both perception modes)
+        DeclareLaunchArgument('chaining_alg', default_value='constrained_greedy'),
+        DeclareLaunchArgument('min_step_m', default_value='0.3'),
+        DeclareLaunchArgument('max_step_m', default_value='4.0'),
+        DeclareLaunchArgument('max_turn_deg', default_value='70.0'),
+        DeclareLaunchArgument('distance_weight', default_value='1.0'),
+        DeclareLaunchArgument('heading_weight', default_value='1.0'),
+        DeclareLaunchArgument('beam_width', default_value='3'),
+        DeclareLaunchArgument('beam_depth', default_value='10'),
         # Control
         DeclareLaunchArgument('lookahead_dist', default_value='5.0'),
         DeclareLaunchArgument('lookahead_min', default_value='2.0'),

@@ -24,7 +24,7 @@ const VCU_MODE_COMMAND_ID: u32 = 0x029;
 const WS_PORT: u16 = 8001;
 const WS_SEND_HZ: u64 = 30;
 
-const MQTT_HOST: &str = "18.191.225.118";
+const MQTT_HOST: &str = "100.88.194.126"; // telemetry server, over Tailscale
 const MQTT_PORT: u16 = 1883;
 const MQTT_CLIENT_ID: &str = "BEVO-DASHD";
 const MQTT_TOPIC_PREFIX: &str = "lhre/dash/";
