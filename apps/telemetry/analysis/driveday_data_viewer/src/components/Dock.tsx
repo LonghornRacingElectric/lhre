@@ -21,7 +21,7 @@ interface PanelDef {
   body: ReactNode;
 }
 
-const MAIN = ["laps", "trace", "corners", "compare", "debrief", "notes", "setup"];
+const MAIN = ["laps", "trace", "corners", "debrief"];
 
 const PANELS: PanelDef[] = [
   { id: "laps", chip: "Laps", title: "Laps and cones", body: <LapsPanel /> },

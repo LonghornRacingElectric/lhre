@@ -7,6 +7,7 @@ export function SegStrip() {
   const p = usePlayer();
   useUi(p);
   useFrame(p);
+  if (!p.showSeg) return null;
   const { segs, zones } = p.session;
   return (
     <div className="segstrip panel" id="segstrip" aria-label="Corners, straights and braking zones">

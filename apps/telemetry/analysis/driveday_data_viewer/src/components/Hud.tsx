@@ -21,7 +21,7 @@ export function HudLeft() {
   const cones = a.conesOf(L);
 
   let secs = null;
-  if (L.sec && L.sec[0] != null) {
+  if (R && L.sec && L.sec[0] != null) {
     const e0 = L.sec[0] as number;
     const e1 = e0 + (L.sec[1] as number);
     const act = rel < e0 ? 0 : rel < e1 ? 1 : 2;
@@ -89,11 +89,13 @@ export function HudRight() {
   return (
     <div className="hud hud-r" id="hudr">
       <div className="big">{cvS(p.units, V("spd")).toFixed(0)}<small>{sU(p.units).toUpperCase()}</small></div>
-      <div className="bars">
-        <div>THR<em><i style={{ width: V("thr").toFixed(0) + "%", background: "var(--green)" }} /></em></div>
-        <div>BRK<em><i style={{ width: V("brkp").toFixed(0) + "%", background: "var(--red)" }} /></em></div>
-      </div>
-      <div className="mono">{g >= 0 ? "+" : "−"}{Math.abs(g).toFixed(2)} g · {V("kw").toFixed(0)} kW · {Math.round(V("rpm"))} rpm</div>
+      {p.mode === "pedal" && (
+        <div className="bars">
+          <div>THR<em><i style={{ width: V("thr").toFixed(0) + "%", background: "var(--green)" }} /></em></div>
+          <div>BRK<em><i style={{ width: V("brkp").toFixed(0) + "%", background: "var(--red)" }} /></em></div>
+        </div>
+      )}
+      {p.mode === "acc" && <div className="mono">{g >= 0 ? "+" : "−"}{Math.abs(g).toFixed(2)} g · {V("kw").toFixed(0)} kW</div>}
     </div>
   );
 }

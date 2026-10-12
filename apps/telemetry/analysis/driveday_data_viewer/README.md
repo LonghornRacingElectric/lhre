@@ -17,7 +17,8 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:3002>, then click **Import JSON** or drop a file on the
+Open <http://localhost:3002> for the LAPDOG landing page, or go straight to
+<http://localhost:3002/lapdogviewer> for the viewer, then click **Import** or drop a file on the
 page. The page remembers imported runs, your notes, cones, setup values and
 where you were in each run.
 

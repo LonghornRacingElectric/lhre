@@ -23,11 +23,11 @@ export function MapTools({ dockHidden, onToggleDock }: { dockHidden: boolean; on
   );
   return (
     <div className="maptools">
-      <div className="seg" role="group" aria-label="Colour the lap by">
-        {MODES.map(([m, label, title]) => (
-          <button key={m} data-m={m} aria-pressed={p.mode === m} title={title} onClick={() => p.set("mode", m)}>{label}</button>
-        ))}
-      </div>
+      <label className="lab">Colour by{" "}
+        <select className="mini" aria-label="Colour the lap by" value={p.mode} onChange={(e) => p.set("mode", e.target.value as Mode)}>
+          {MODES.map(([m, label]) => <option key={m} value={m}>{label}</option>)}
+        </select>
+      </label>
       <Menu label="Overlays">
         {check("Corners and braking zones", "showSeg")}
         {check("Cone hits", "showCones", "Show each cone hit where it happened on the track")}

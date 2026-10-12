@@ -63,7 +63,7 @@ export class Player {
   cmp: Cmp = "best";
   ghostLapI: number;
   ghostAll = false;
-  showSeg = true;
+  showSeg = false;
   showCones = true;
   raceMode = false;
   consMode = false;

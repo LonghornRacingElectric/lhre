@@ -289,3 +289,4 @@ label.lab select{margin-left:4px}
 .cchip button:hover{background:var(--sel)}
 .cchip button:focus-visible{outline:2px solid var(--s1);outline-offset:-2px}
 .cchip .x{width:22px;padding:2px 0;text-align:center;color:var(--mute)}
+.menupop.right{left:auto;right:0}

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { clock, fmt } from "@/lib/format";
 import { RATES, type Cmp, type EndMode } from "@/lib/player";
+import { Menu } from "./Menu";
 import { Timeline } from "./Timeline";
 import { useFrame, usePlayer, useUi } from "./context";
 
@@ -89,18 +90,6 @@ export function Transport() {
         <button className="btn" type="button" title="Next lap (Shift+Right)" aria-label="Next lap" onClick={() => p.stepLap(1)}>⏭</button>
         <Clock />
         <span className="sp" />
-        <label className="lab">Speed{" "}
-          <select className="mini" aria-label="Playback speed" value={p.rate} onChange={(e) => p.set("rate", +e.target.value)}>
-            {RATES.map((r) => <option key={r} value={r}>{r}×</option>)}
-          </select>
-        </label>
-        <label className="lab">At lap end{" "}
-          <select className="mini" aria-label="At the end of a lap" value={p.endMode} onChange={(e) => p.set("endMode", e.target.value as EndMode)}>
-            <option value="go">Keep playing</option>
-            <option value="stop">Stop</option>
-            <option value="loop">Loop the lap</option>
-          </select>
-        </label>
         <span className="lab">Ghost</span>
         <div className="seg" role="group" aria-label="Ghost lap. Click the active one again to turn it off.">
           {GHOSTS.map(([c, label, title]) => (
@@ -117,19 +106,38 @@ export function Transport() {
             </select>
           </span>
         )}
-      </div>
-      <div className="trow second">
-        <span className="lab">Loop</span>
-        <div className="seg" role="group" aria-label="A to B loop">
-          <button type="button" aria-pressed={p.loopA != null} title="Loop start at the playhead (I)" onClick={() => p.setLoopA()}>A</button>
-          <button type="button" aria-pressed={p.loopB != null} title="Loop end at the playhead (O)" onClick={() => p.setLoopB()}>B</button>
-          <button type="button" title="Loop the current corner or straight (;)" onClick={() => p.loopSegment()}>Corner</button>
-          <button type="button" title="Clear the loop (X)" onClick={() => p.clearLoop()}>Clear</button>
-        </div>
         <button className="btn" type="button" title="Pin a note to the playhead (N)" onClick={() => p.setNoteOpen(true)}>+ Note</button>
         <button className="btn" type="button" title="Add a cone to this lap (C). Shift+C removes one." onClick={() => p.coneKey(1)}>+ Cone</button>
-        <span className="sp" />
-        <button className="btn" type="button" aria-pressed={keys} title="Show the keyboard shortcuts" onClick={() => setKeys(!keys)}>Keys</button>
+        <Menu label={p.rate + "×"} right>
+          <div className="mrow">
+            <span className="lab">Speed</span>
+            <select className="mini" aria-label="Playback speed" value={p.rate} onChange={(e) => p.set("rate", +e.target.value)}>
+              {RATES.map((r) => <option key={r} value={r}>{r}×</option>)}
+            </select>
+          </div>
+          <div className="mrow">
+            <span className="lab">At lap end</span>
+            <select className="mini" aria-label="At the end of a lap" value={p.endMode} onChange={(e) => p.set("endMode", e.target.value as EndMode)}>
+              <option value="go">Keep playing</option>
+              <option value="stop">Stop</option>
+              <option value="loop">Loop the lap</option>
+            </select>
+          </div>
+        </Menu>
+        <Menu label={p.loopA != null || p.loopB != null ? "More •" : "More"} right>
+          <div className="mrow">
+            <span className="lab">Loop</span>
+            <div className="seg" role="group" aria-label="A to B loop">
+              <button type="button" aria-pressed={p.loopA != null} title="Loop start at the playhead (I)" onClick={() => p.setLoopA()}>A</button>
+              <button type="button" aria-pressed={p.loopB != null} title="Loop end at the playhead (O)" onClick={() => p.setLoopB()}>B</button>
+              <button type="button" title="Loop the current corner or straight (;)" onClick={() => p.loopSegment()}>Corner</button>
+              <button type="button" title="Clear the loop (X)" onClick={() => p.clearLoop()}>Clear</button>
+            </div>
+          </div>
+          <div className="mrow">
+            <button className="btn" type="button" aria-pressed={keys} title="Show the keyboard shortcuts" onClick={() => setKeys(!keys)}>Keyboard shortcuts</button>
+          </div>
+        </Menu>
       </div>
       <Timeline />
       <NoteBar />

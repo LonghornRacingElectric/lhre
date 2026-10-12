@@ -61,9 +61,11 @@ function Kpis() {
       </div>
     )],
   ];
+  /* adjusted time and the cone count only say something once a cone has been hit */
+  const shown = total ? items : items.filter(([label]) => label === "Best real" || label === "Theoretical best");
   return (
     <div className="kpis" id="kpis">
-      {items.map(([label, value, pop]) => (
+      {shown.map(([label, value, pop]) => (
         <div className="kpi has" tabIndex={0} key={label}>
           <b>{value}</b>
           <span>{label} ⓘ</span>
@@ -102,7 +104,7 @@ function RunTitle({ p, run }: { p: Player; run: RunListEntry | undefined }) {
 function SettingsMenu({ theme, onTheme, onRemove }: Pick<Props, "theme" | "onTheme" | "onRemove">) {
   const p = useContext(PlayerCtx);
   return p ? <RunSettings p={p} theme={theme} onTheme={onTheme} onRemove={onRemove} /> : (
-    <Menu label="Settings">
+    <Menu label={<span title="Settings" aria-label="Settings">⚙</span>}>
       <div className="mrow">
         <span className="lab">Theme</span>
         <button className="btn" type="button" onClick={onTheme}>Theme: {theme}</button>
@@ -114,7 +116,7 @@ function SettingsMenu({ theme, onTheme, onRemove }: Pick<Props, "theme" | "onThe
 function RunSettings({ p, theme, onTheme, onRemove }: Pick<Props, "theme" | "onTheme" | "onRemove"> & { p: Player }) {
   useUi(p);
   return (
-    <Menu label="Settings">
+    <Menu label={<span title="Settings" aria-label="Settings">⚙</span>}>
       {(
         <div className="mrow">
           <span className="lab">Units</span>
@@ -143,11 +145,12 @@ export function Header({ runs, current, theme, onTheme, onSelect, onImport, onRe
       <div>
         <Title run={runs.find((r) => r.id === current)} />
         <div className="runbar">
-          <select aria-label="Driver run" value={current ?? ""} onChange={(e) => onSelect(e.target.value)}>
-            {runs.length === 0 && <option value="">No runs</option>}
-            {runs.map((r) => <option key={r.id} value={r.id}>{runLabel(r)}</option>)}
-          </select>
-          <button className="btn primary" type="button" title="Import one or more session JSON files" onClick={() => file.current?.click()}>Import JSON</button>
+          {runs.length > 1 && (
+            <select aria-label="Run" value={current ?? ""} onChange={(e) => onSelect(e.target.value)}>
+              {runs.map((r) => <option key={r.id} value={r.id}>{runLabel(r)}</option>)}
+            </select>
+          )}
+          <button className="btn primary" type="button" title="Import one or more session JSON files" onClick={() => file.current?.click()}>Import</button>
           <input
             ref={file}
             type="file"
