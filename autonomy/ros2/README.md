@@ -299,8 +299,9 @@ See [Gazebo stereo usage](src/lhr_gazebo/README.md#stereo-images-in-rosrviz)
 for the topic and frame contract.
 
 To label blue/yellow/orange candidate regions in the left image, also pass
-`enable_camera_color_classifier:=true`. Add an RViz Image display for
-`/lhr/perception/cone_colors/debug_image` with Best Effort reliability.
+`enable_camera_color_classifier:=true`. The stereo RViz configuration includes
+`/lhr/perception/cone_colors/debug_image` with Best Effort reliability; add an
+Image display for that topic if using a custom RViz configuration.
 This opt-in debug classifier does not yet attach colors to the LiDAR map.
 See [camera classification](src/lhr_perception/README.md#camera-color-classification)
 for HSV thresholds, area filtering, and launch overrides.

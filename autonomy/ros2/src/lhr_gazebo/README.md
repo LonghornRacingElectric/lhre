@@ -117,8 +117,10 @@ Opt into labeled blue/yellow/orange candidate regions:
 `enable_camera_color_classifier` defaults to `false` and requires
 `enable_stereo_camera:=true`. It starts `lhr_perception`'s
 `camera_color_classifier` in either perception mode and with either estimator.
-Add an RViz Image display for `/lhr/perception/cone_colors/debug_image`, using
-Best Effort reliability. The existing left/right camera panels stay available.
+The stereo RViz configuration includes an Image display for
+`/lhr/perception/cone_colors/debug_image`, using Best Effort reliability.
+It receives no frames until classification is enabled. The existing left/right
+camera panels stay available. Add the same display when using a custom config.
 
 All classifier settings are forwarded through launch: `cone_color_min_region_area`
 (integer, default `25`), `cone_color_blue_hsv` (default

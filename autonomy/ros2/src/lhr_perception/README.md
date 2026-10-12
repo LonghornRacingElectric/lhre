@@ -46,8 +46,9 @@ From `autonomy/ros2`, after building:
 
 The classifier is opt-in, default `false`, under either perception mode and
 either estimator. Enabling it without `enable_stereo_camera:=true` fails
-launch. Add an RViz Image display for `/lhr/perception/cone_colors/debug_image`
-with Reliability **Best Effort** to inspect the labels. For example, increase
+launch. The stereo RViz configuration includes the debug Image display. In
+a custom configuration, add `/lhr/perception/cone_colors/debug_image` with
+Reliability **Best Effort** to inspect the labels. For example, increase
 the area cutoff and adjust blue bounds:
 
 ```bash

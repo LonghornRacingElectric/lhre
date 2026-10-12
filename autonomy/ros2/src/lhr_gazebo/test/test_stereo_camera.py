@@ -116,7 +116,10 @@ def test_stereo_rviz_preserves_existing_displays():
     assert path.exists()
     stereo = yaml.safe_load(path.read_text())['Visualization Manager']['Displays']
     original = yaml.safe_load((PKG / 'config' / 'default.rviz').read_text())
-    assert stereo[:-2] == original['Visualization Manager']['Displays']
-    assert [d['Topic']['Value'] for d in stereo[-2:]] == [
-        '/lhr/sensor/zed2i/left/image_rect', '/lhr/sensor/zed2i/right/image_rect']
-    assert all(d['Topic']['Reliability Policy'] == 'Best Effort' for d in stereo[-2:])
+    images = [d for d in stereo if d['Class'] == 'rviz_default_plugins/Image']
+    driving = [d for d in stereo if d['Class'] != 'rviz_default_plugins/Image']
+    assert driving == original['Visualization Manager']['Displays']
+    assert [d['Topic']['Value'] for d in images] == [
+        '/lhr/sensor/zed2i/left/image_rect', '/lhr/sensor/zed2i/right/image_rect',
+        '/lhr/perception/cone_colors/debug_image']
+    assert all(d['Topic']['Reliability Policy'] == 'Best Effort' for d in images)
