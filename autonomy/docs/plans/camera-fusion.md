@@ -8,7 +8,9 @@ The camera unit and lens were confirmed on 2026-10-11. The first milestone is
 stereo images and calibration in ROS/RViz; its design and implementation scope are in
 [ZED 2i Stereo Simulation](zed2i-stereo.md). The stereo input interface is implemented; runtime validation is recorded
 in the [Gazebo README](../../ros2/src/lhr_gazebo/README.md#stereo-validation).
-Classification and fusion remain subsequent work.
+Camera-only HSV region classification is implemented as an opt-in debug view;
+see [classifier usage](../../ros2/src/lhr_perception/README.md#camera-color-classification).
+Live classification validation and LiDAR fusion remain subsequent work.
 
 ## Background
 
@@ -47,14 +49,16 @@ For our sim pipeline, the equivalent is: render camera image, segment by color, 
 ## Implementation Tasks
 
 ### 3.1 — Add camera sensor to Gazebo model
-- Mount a forward-facing camera on the vehicle SDF/URDF
-- Bridge the image topic to ROS 2 (`/lhr/sensor/camera/image_raw`)
-- Verify image stream in RViz
+- Implemented as the ZED 2i stereo pair; the left input is
+  `/lhr/sensor/zed2i/left/image_rect`, with a corresponding right stream.
+- Stereo validation is recorded in the Gazebo README linked above.
 
 ### 3.2 — Cone color classifier (sim)
-- Subscribe to camera image
-- Use color segmentation (HSV thresholding) to identify blue/yellow regions
-- Publish classified regions or a lookup service
+- Implemented: subscribe to the left camera image and segment blue/yellow/orange
+  regions using configurable HSV bounds and minimum connected pixel area.
+- Publish a labeled debug image, retaining input timestamps and frames.
+- These are color candidates, not cone-object detections. Live validation and
+  a machine-readable region interface for fusion remain follow-up work.
 
 ### 3.3 — LiDAR-camera fusion node
 - Subscribe to both LiDAR cone detections and camera image

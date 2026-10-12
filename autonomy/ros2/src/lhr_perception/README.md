@@ -1,9 +1,72 @@
 # lhr_perception
 
-LiDAR cone detection for the Gazebo autonomy pipeline. The node turns
+LiDAR cone detection and camera color segmentation for the Gazebo autonomy
+pipeline. The LiDAR node turns
 `/lhr/lidar/points` into a persistent cone map on
 `/lhr/sensor/cones_detected`. It also publishes experimental geometry-inferred
 track sides for `lhr_track_builder`.
+
+## Camera color classification
+
+`camera_color_classifier` reads `/lhr/sensor/zed2i/left/image_rect` and
+publishes `/lhr/perception/cone_colors/debug_image` (`sensor_msgs/msg/Image`).
+The output is an RGB copy with blue, yellow, and orange region boxes and text
+labels. It preserves the input timestamp and optical frame ID and uses
+best-effort sensor-data QoS for both input and output. RGB8, BGR8, RGBA8, and
+BGRA8 inputs are supported, including row padding. Unsupported encodings or
+malformed frames are dropped with a throttled warning.
+
+HSV masks find connected color patches; patches below `min_region_area` are
+discarded. These are **candidate color regions**, not validated cone objects:
+other colored objects can trigger boxes, occlusion can split a cone, and
+touching patches can merge. Orange cone sizes are not distinguished. Neutral
+and out-of-range pixels remain unclassified, with no box. No ground-truth
+labels, stereo depth, LiDAR association, cone-map labels, or track-builder
+changes are involved in this first step.
+
+| Node parameter | Default | Gazebo launch argument |
+| --- | --- | --- |
+| `min_region_area` | `25` pixels | `cone_color_min_region_area` |
+| `blue_hsv` | `[100, 100, 50, 130, 255, 255]` | `cone_color_blue_hsv` |
+| `yellow_hsv` | `[20, 100, 50, 35, 255, 255]` | `cone_color_yellow_hsv` |
+| `orange_hsv` | `[5, 100, 50, 19, 255, 255]` | `cone_color_orange_hsv` |
+
+Each HSV array is `[h_min, s_min, v_min, h_max, s_max, v_max]`, inclusive.
+OpenCV hue uses 0–179; saturation/value use 0–255. Bounds must be ordered
+integer ranges and area must be positive. Invalid settings fail startup.
+Settings are read at startup; restart to change them. Defaults target the
+simulated cone materials and require tuning on physical camera recordings.
+
+From `autonomy/ros2`, after building:
+
+```bash
+./scripts/run_gazebo_demo.sh enable_stereo_camera:=true \
+  enable_camera_color_classifier:=true
+```
+
+The classifier is opt-in, default `false`, under either perception mode and
+either estimator. Enabling it without `enable_stereo_camera:=true` fails
+launch. Add an RViz Image display for `/lhr/perception/cone_colors/debug_image`
+with Reliability **Best Effort** to inspect the labels. For example, increase
+the area cutoff and adjust blue bounds:
+
+```bash
+./scripts/run_gazebo_demo.sh enable_stereo_camera:=true \
+  enable_camera_color_classifier:=true cone_color_min_region_area:=100 \
+  'cone_color_blue_hsv:=[95, 80, 40, 135, 255, 255]'
+```
+
+Standalone: `ros2 run lhr_perception camera_color_classifier`. Use standard
+ROS topic remapping for other input/output topics. The node needs
+`python3-opencv`; rebuild the [Mac Docker image](../../docker/README.md) after
+pulling the dependency change.
+
+Tests cover known color patches, neutral pixels, small-region rejection,
+threshold/area overrides, supported channel layouts, malformed inputs, debug
+annotation, and ROS header preservation. Launch tests evaluate enabled and
+disabled settings plus parameter overrides in both perception modes and
+estimators and feed the evaluated parameters into node startup. Synthetic
+tests do not establish accuracy on live Gazebo frames or physical footage.
 
 ## Pipeline
 

@@ -298,6 +298,13 @@ in `lhr_vehicle`'s YAML and regenerate/rebuild the model.
 See [Gazebo stereo usage](src/lhr_gazebo/README.md#stereo-images-in-rosrviz)
 for the topic and frame contract.
 
+To label blue/yellow/orange candidate regions in the left image, also pass
+`enable_camera_color_classifier:=true`. Add an RViz Image display for
+`/lhr/perception/cone_colors/debug_image` with Best Effort reliability.
+This opt-in debug classifier does not yet attach colors to the LiDAR map.
+See [camera classification](src/lhr_perception/README.md#camera-color-classification)
+for HSV thresholds, area filtering, and launch overrides.
+
 ### Vehicle model
 
 The FSAE vehicle (`models/fsae_vehicle/model.sdf`) uses STL meshes (`meshes/carBody.stl`, `meshes/carTire.stl`) for visuals with simplified collision geometry. **`model.sdf` is generated** — `scripts/generate_vehicle_model.py` renders `templates/model.sdf.in` from [`lhr_vehicle/config/vehicle.yaml`](src/lhr_vehicle/README.md), so the numbers below are Orion's and shared with the controller, the kinematic sim and perception:

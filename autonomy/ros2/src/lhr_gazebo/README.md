@@ -102,7 +102,32 @@ continues to attach to the estimator-owned `base_link` in EKF mode.
 The 30 Hz configured rate is in simulation time. Software rendering can
 reduce wall-clock throughput; no subscribers means the lazy bridges do not
 request images. Camera resources may still initialize at simulator startup.
-This milestone supplies camera inputs for later classification/fusion.
+Camera color segmentation can now consume the left stream; LiDAR fusion
+remains later work.
+
+### Camera color debug view
+
+Opt into labeled blue/yellow/orange candidate regions:
+
+```bash
+./scripts/run_gazebo_demo.sh enable_stereo_camera:=true \
+  enable_camera_color_classifier:=true
+```
+
+`enable_camera_color_classifier` defaults to `false` and requires
+`enable_stereo_camera:=true`. It starts `lhr_perception`'s
+`camera_color_classifier` in either perception mode and with either estimator.
+Add an RViz Image display for `/lhr/perception/cone_colors/debug_image`, using
+Best Effort reliability. The existing left/right camera panels stay available.
+
+All classifier settings are forwarded through launch: `cone_color_min_region_area`
+(integer, default `25`), `cone_color_blue_hsv` (default
+`[100, 100, 50, 130, 255, 255]`), `cone_color_yellow_hsv` (default
+`[20, 100, 50, 35, 255, 255]`), and `cone_color_orange_hsv` (default
+`[5, 100, 50, 19, 255, 255]`). HSV bounds are six-element integer arrays.
+See [classifier usage and limitations](../lhr_perception/README.md#camera-color-classification)
+for overrides and input/output details. These image labels do not yet change
+the cone map or driving behavior.
 
 The model explicitly publishes vehicle TF on `/model/fsae_vehicle/tf` to
 match the bridge. Harmonic's default is `/model/fsae_vehicle/pose`; leaving
