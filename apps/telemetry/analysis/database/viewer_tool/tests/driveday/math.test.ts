@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { circDist, interp, med, nice, pctl, sd, theil, wrap } from "../../src/lib/driveday/math";
+import { circDist, interp, med, nice, pctl, sd, theil, timeAverage, wrap } from "../../src/lib/driveday/math";
 
 describe("math", () => {
+  it("smooths spikes without dropping samples or biasing a constant ramp", () => {
+    const t = Array.from({ length: 21 }, (_, i) => i * 50);
+    const constant = timeAverage(t, t.map(() => 10));
+    expect(constant).toEqual(t.map(() => 10));
+    expect(timeAverage(t, t.map((v) => v / 100))[10]).toBeCloseTo(5, 8);
+    const spike = timeAverage(t, t.map((_, i) => i === 10 ? 10 : 0));
+    expect(spike).toHaveLength(t.length);
+    expect(spike[10]).toBeGreaterThan(0);
+    expect(spike[10]).toBeLessThan(2);
+  });
   it("interpolates and clamps", () => {
     expect(interp([0, 10], [0, 100], 5)).toBe(50);
     expect(interp([0, 10], [0, 100], -3)).toBe(0);

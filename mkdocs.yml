@@ -105,6 +105,7 @@ nav:
           - Overview: apps/telemetry/README.md
           - Bazel Build Guide: apps/telemetry/BAZEL_BUILD.md
           - Viewer Tool: apps/telemetry/analysis/database/viewer_tool/README.md
+          - Drive Day Viewer: apps/telemetry/analysis/database/viewer_tool/src/lib/driveday/README.md
           - Multi-Car Viewer Plan: apps/telemetry/VIEWER_MULTI_CAR_PLAN.md
           - Field Pipeline: apps/telemetry/TELEMETRY_FIELD_PIPELINE.md
           - Car Status: apps/telemetry/docs/car_status_design.md

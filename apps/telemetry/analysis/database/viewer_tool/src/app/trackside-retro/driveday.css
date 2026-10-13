@@ -134,12 +134,12 @@
 .ddv .form{padding:12px;display:flex;flex-direction:column;gap:16px}
 .ddv .fg h4{margin:0 0 8px;font:600 16px/1 var(--f-disp);letter-spacing:.05em;text-transform:uppercase}
 .ddv .fgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
-.ddv .carwrap{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;padding:12px;align-items:start}
+.ddv .carwrap{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:14px;padding:12px;align-items:start}
 .ddv #car{width:100%;max-width:260px;margin:0 auto;display:block}
-.ddv .tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;min-width:0}
+.ddv .tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,130px),1fr));gap:8px;min-width:0}
 .ddv .tile{border:1px solid var(--line);border-radius:5px;padding:7px 9px;display:flex;flex-direction:column;gap:3px;min-width:0}
 .ddv .tile span{font:500 10px var(--f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
-.ddv .tile b{font:500 18px/1.1 var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.ddv .tile b{font:500 18px/1.3 var(--f-mono);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .ddv .tile b small{font:400 10.5px var(--f-mono);color:var(--mute);margin-left:3px}
 .ddv .tile .meter{height:4px;border-radius:2px;background:var(--line);overflow:hidden}
 .ddv .tile .meter i{display:block;height:100%}
@@ -225,7 +225,7 @@
 .ddv .dropzone{position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bg) 82%,transparent);border:3px dashed var(--s1);font:600 24px var(--f-disp);letter-spacing:.04em;text-transform:uppercase;pointer-events:none}
 
 /* ---- v3: resizable split, flags, notes, debrief, alerts, loops ---- */
-.ddv .main{grid-template-columns:minmax(0,1fr) 12px var(--dock,520px);gap:0}
+.ddv .main{grid-template-columns:minmax(0,1fr) 12px min(var(--dock,520px),60%);gap:0}
 .ddv .split{position:relative;cursor:col-resize;touch-action:none;display:flex;align-items:center;justify-content:center;min-height:0}
 .ddv .split::before{content:"";width:2px;height:100%;background:var(--line);border-radius:1px}
 .ddv .split::after{content:"";position:absolute;top:50%;left:50%;width:6px;height:46px;transform:translate(-50%,-50%);border-radius:3px;background:var(--panel);border:1px solid var(--line);box-shadow:0 0 0 3px var(--bg)}
@@ -293,3 +293,39 @@ body.resizing{cursor:col-resize;user-select:none}
   --f-disp:var(--font-disp),'Barlow Condensed','Arial Narrow',sans-serif; --f-body:var(--font-body),'IBM Plex Sans',system-ui,sans-serif; --f-mono:var(--font-mono),'IBM Plex Mono',ui-monospace,Consolas,monospace;
 }
 .ddv{position:fixed;inset:3.5rem 0 0;height:auto;overflow:auto}
+.ddv .menupop.right{left:auto;right:0}
+
+/* ---- v4: lateral g, phone layout ---- */
+.ddv .latg{display:flex;flex-direction:column;gap:2px;text-align:right;font:500 13px var(--f-mono);font-variant-numeric:tabular-nums}
+.ddv .latg span{font:500 9px var(--f-body);color:var(--mute);text-transform:uppercase;letter-spacing:.05em}
+.ddv .latg b{font-weight:600}
+.ddv .tile span{overflow-wrap:anywhere}
+.ddv #pn-car{container-type:inline-size}
+@container (min-width:440px){.ddv .carwrap{grid-template-columns:minmax(140px,.8fr) minmax(0,1.2fr)}}
+.ddv .maplegend{max-width:calc(100% - 20px);color:var(--ink)}
+.ddv .maptools select,.ddv .runbar select{max-width:100%}
+.ddv .menupop{min-width:min(230px,80vw);max-width:calc(100vw - 32px)}
+.ddv .maptip{max-width:calc(100% - 8px);white-space:normal;overflow-wrap:anywhere}
+@media (max-width:600px){
+  .ddv .app{padding:10px 8px;gap:8px}
+  .ddv .kpis{gap:10px 16px}
+  .ddv .kpi b{font-size:17px}
+  .ddv .maptools{gap:8px}
+  .ddv .viewer{height:380px;min-height:340px}
+  .ddv .hud-l{left:6px;top:6px;max-width:calc(100% - 120px)}
+  .ddv .hud-r{right:6px;top:6px;max-width:106px}
+  .ddv .lapname{font-size:18px;overflow-wrap:anywhere}
+  .ddv .clock{font-size:15px}
+  .ddv .secs{gap:3px}
+  .ddv .sch{min-width:40px;padding:3px 4px}
+  .ddv .gap{font-size:12px;overflow-wrap:anywhere}
+  .ddv .seginfo{font-size:10px}
+  .ddv .maplegend{left:6px;right:6px;bottom:6px;gap:4px 10px;font-size:10px;max-width:none}
+  .ddv .zoomctl{right:6px}
+  .ddv .trow{gap:6px}
+  .ddv .rivalpick{flex-wrap:wrap;min-width:0;max-width:100%}
+  .ddv .rivalpick select{max-width:100%}
+  .ddv ul.notes li{grid-template-columns:minmax(0,1fr) auto}
+  .ddv ul.notes .nt{grid-column:1/-1}
+  .ddv .btn,.ddv .chip{min-height:34px}
+}

@@ -63,6 +63,7 @@ export function Timeline() {
           p.setT(posOf(e));
         }}
         onPointerUp={() => { down.current = false; }}
+        onPointerCancel={() => { down.current = false; }}
         onPointerMove={onMove}
         onPointerLeave={() => {
           p.hoverT = null;

@@ -7,7 +7,7 @@ import { cvS, cvT, sU, tU } from "@/lib/driveday/units";
 import { useFrame, usePlayer, useUi } from "../context";
 import { Tile } from "./Tile";
 
-type Ch = ChKey | "spd" | "gacc" | "brkp" | "brkrp";
+type Ch = ChKey | "spd" | "gacc" | "glat" | "brkp" | "brkrp";
 
 const heatHsl = (v: number, lo: number, hi: number) => heat(v, lo, hi);
 
@@ -32,6 +32,7 @@ export function CarPanel() {
   const br = V("brkrp") / 100;
   const kw = V("kw");
   const gacc = V("gacc");
+  const glat = V("glat");
   const accPct = (Math.abs(gacc) / (p.session.accScale / 9.80665)) * 100;
   const stroke = { stroke: "var(--mute)", strokeWidth: 1.5 };
   return (
@@ -98,7 +99,8 @@ export function CarPanel() {
         </svg>
         <div className="tiles" id="tiles">
           <Tile label="Speed (GPS)" value={cvS(u, V("spd")).toFixed(1)} unit={sU(u)} />
-          <Tile label="Accel (GPS)" value={(gacc >= 0 ? "+" : "−") + Math.abs(gacc).toFixed(2)} unit="g" meter={[accPct, gacc >= 0 ? "--green" : "--red"]} />
+          <Tile label="Longitudinal (GPS)" value={(gacc >= 0 ? "+" : "−") + Math.abs(gacc).toFixed(2)} unit="g" meter={[accPct, gacc >= 0 ? "--green" : "--red"]} />
+          <Tile label="Lateral (GPS estimate)" value={Number.isFinite(glat) ? Math.abs(glat).toFixed(2) : "—"} unit={Number.isFinite(glat) ? "g" + (Math.abs(glat) < 0.005 ? "" : glat > 0 ? " L" : " R") : undefined} />
           <Tile label="Motor speed" value={Math.round(V("rpm"))} unit="rpm" />
           <Tile label="Torque" value={V("trq").toFixed(0)} unit="Nm" />
           <Tile label={kw < -0.5 ? "DC power (regen)" : "DC power"} value={kw.toFixed(1)} unit="kW" />
@@ -114,10 +116,12 @@ export function CarPanel() {
           <Tile label="Inverter hotspot" value={T("invT").toFixed(0)} unit={tU(u)} />
           <Tile label="Gate driver" value={T("gateT").toFixed(0)} unit={tU(u)} />
           <Tile label="Coolant" value={T("coolT").toFixed(0)} unit={tU(u)} />
-          <Tile label="Pack modules A · B · C" value={T("modA").toFixed(0) + " · " + T("modB").toFixed(0) + " · " + T("modC").toFixed(0)} unit={tU(u)} />
+          <Tile label="Pack module A" value={T("modA").toFixed(0)} unit={tU(u)} />
+          <Tile label="Pack module B" value={T("modB").toFixed(0)} unit={tU(u)} />
+          <Tile label="Pack module C" value={T("modC").toFixed(0)} unit={tU(u)} />
         </div>
       </div>
-      <div className="note2">Follows the playhead. Colours run cool blue to hot red as a display scale, not a limit. Tire pressure and wheel speed are not in this log, so the corners show the pressures you enter in Setup.</div>
+      <div className="note2">Follows the playhead. Lateral g is estimated from GPS speed and path curvature; L/R indicates the turn direction. A dash means too little movement or insufficient fixes. Colours run cool blue to hot red as a display scale, not a limit. Tire pressure and wheel speed are not in this log, so the corners show the pressures you enter in Setup.</div>
     </>
   );
 }

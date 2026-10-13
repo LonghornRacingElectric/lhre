@@ -32,9 +32,11 @@ function Shell() {
   const [theme, setTheme] = useState<Theme>("auto");
   const file = useRef<HTMLInputElement>(null);
   const live = useRef<Player | null>(null);
+  const openReq = useRef(0);
 
   const open = useCallback(
     async (id: string | null) => {
+      const req = ++openReq.current;
       live.current?.savePos();
       live.current?.dispose();
       live.current = null;
@@ -43,6 +45,7 @@ function Shell() {
       if (!id) return;
       try {
         const D0 = await runStore.get(id);
+        if (req !== openReq.current) return; // a later open() took over while this one loaded
         if (!D0) throw new Error("That run is no longer stored in this browser.");
         const D = rebuildRun(D0);
         const session = new Session(D);

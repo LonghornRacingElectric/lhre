@@ -11,7 +11,7 @@ IndexedDB, so the page works on an archived export with no car and no Kafka.
 
 ## Use it
 
-Open `/trackside-retro` in `viewer_tool`, then **Import JSON** (or drop a
+Open `/trackside-retro` in `viewer_tool`, then **Import** (or drop a
 file on the page) or **Last Trackside session**, which loads the server's
 cached live session. That cache is the trackside-live autosave and holds only
 the last ~1500 samples (about 14 minutes), so for a whole day use the JSON
@@ -29,9 +29,14 @@ that is a property of the day, not the code.
 
 ## Where the export comes from
 
-The JSON is the session export from the trackside-live page: `sampleTail`,
-`laps`, `sessionInfo`, `soeCutoffCellV`, `targetLaps` and, when the live page
-logged any, `flags`. `types.ts` has the shape this code expects. There is no
+The JSON is the session export from the trackside-live page: `laps` (with
+each lap's `samples`), `currentLap.lapSamples`, `sampleTail` (the exporter
+caps it at 6,000 samples), `sessionInfo`, `soeCutoffCellV`, `targetLaps` and,
+when the live page logged any, `flags`. The three sample lists are merged by
+timestamp, so every distinct sample in the file is kept, 20 Hz included, and
+a sample between two GPS fixes keeps its time and gets an interpolated
+position. Runs imported before this merge existed need reimporting to pick
+up the samples the old importer dropped. `types.ts` has the shape this code expects. There is no
 shared type with trackside-live yet; when the export changes, this is the
 file that has to follow. A session needs at least 30 GPS fixes.
 
@@ -103,9 +108,14 @@ need a server, so they are follow-ups.
 
 ## Gotchas
 
-- GPS runs at about 1.8 Hz, so sector times carry a tenth or two of noise and
-  some braking zones are only one or two fixes long. Expect the drawn line to
-  cut corners on a tight autocross course; that is the data, not the fit.
+- The GPS rate is whatever the export has. Playback position, speed and
+  acceleration are centred 0.5 s time averages over the raw fixes (no sample
+  is dropped, the logged lap times are untouched), so expect the drawn line
+  to cut corners on a tight autocross course; that is the data, not the fit.
+- Lateral g (map HUD, hover readout, Car panel) is a **GPS estimate**: speed
+  squared times the signed curvature of three fixes on the smoothed path.
+  It is not an IMU reading and ignores banking; endpoints, repeated
+  timestamps, speeds under 1 m/s and fixes under 1 m apart show a dash.
 - Third sectors are missing on the unfinished last lap, and cones are only
   counted on completed laps.
 - Units (mph or km/h, °C or °F) and the theme are display settings. Stored

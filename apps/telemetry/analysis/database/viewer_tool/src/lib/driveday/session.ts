@@ -1,8 +1,8 @@
 import { Geo, curveOf } from "./geometry";
 import { MPH } from "./format";
-import { pctl } from "./math";
+import { interp, pctl, timeAverage } from "./math";
 import { buildSegments, buildZones, type Seg, type Zone } from "./segments";
-import type { Channels, Lap, RawLap, RunData } from "./types";
+import type { Channels, Lap, Pt, RawLap, RunData } from "./types";
 
 const maxOf = (a: number[][], f = 1) => {
   let m = f;
@@ -10,16 +10,42 @@ const maxOf = (a: number[][], f = 1) => {
   return m;
 };
 
+/** GPS curvature is an estimate, so endpoints and fixes without a usable heading stay unavailable. */
+export function lateralGs(pts: Pt[], times: number[]): number[] {
+  return pts.map((p, i) => {
+    if (i === 0 || i === pts.length - 1) return NaN;
+    let before = i - 1, after = i + 1;
+    while (before > 0 && (times[i] - times[before] < 150 || Math.hypot(p[0] - pts[before][0], p[1] - pts[before][1]) < 1)) before--;
+    while (after < pts.length - 1 && (times[after] - times[i] < 150 || Math.hypot(pts[after][0] - p[0], pts[after][1] - p[1]) < 1)) after++;
+    const a = pts[before], b = pts[after];
+    const ax = p[0] - a[0], ay = p[1] - a[1];
+    const bx = b[0] - p[0], by = b[1] - p[1];
+    const incoming = Math.hypot(ax, ay), outgoing = Math.hypot(bx, by);
+    const chord = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (!(times[i] > times[i - 1] && times[i + 1] > times[i]) ||
+        times[i] - times[before] > 1500 || times[after] - times[i] > 1500 ||
+        incoming < 1 || outgoing < 1 || chord < 1 || p[2] < 1) return NaN;
+    // The circumcircle of three fixes avoids heading wrap at ±pi.
+    const curvature = 2 * (ax * by - ay * bx) / (incoming * outgoing * chord);
+    const g = p[2] ** 2 * curvature / 9.80665;
+    return Number.isFinite(g) ? g : NaN;
+  });
+}
+
 /** Add the channels that are worked out when a run is opened: speed, acceleration, brake percent, curves. */
 export function prepareLap(raw: RawLap, brkMax: number, brkrMax: number): Lap {
   const c = raw.ch;
-  const spdMs = raw.pts.map((p) => p[2]);
+  const spdMs = timeAverage(c.t, raw.pts.map((p) => p[2]));
   const acc = spdMs.map((_, i) => {
-    const a = Math.max(0, i - 1);
-    const b = Math.min(spdMs.length - 1, i + 1);
-    const dt = (c.t[b] - c.t[a]) / 1000;
-    return dt > 0 ? (spdMs[b] - spdMs[a]) / dt : 0;
+    const a = Math.max(c.t[0], c.t[i] - 250);
+    const b = Math.min(c.t[c.t.length - 1], c.t[i] + 250);
+    return b > a ? (interp(c.t, spdMs, b) - interp(c.t, spdMs, a)) / ((b - a) / 1000) : 0;
   });
+  const smoothAcc = timeAverage(c.t, acc);
+  const smoothX = timeAverage(c.t, raw.pts.map((p) => p[0]));
+  const smoothY = timeAverage(c.t, raw.pts.map((p) => p[1]));
+  const playbackPts: Pt[] = raw.pts.map((p, i) =>
+    i === 0 || i === raw.pts.length - 1 ? [...p] : [smoothX[i], smoothY[i], p[2], p[3], p[4]]);
   const cellCols = c.cells.length && c.cells[0] ? c.cells[0].map((_, j) => c.cells.map((r) => r[j])) : [];
   const ch: Channels = {
     ...c,
@@ -28,12 +54,13 @@ export function prepareLap(raw: RawLap, brkMax: number, brkrMax: number): Lap {
     y: raw.pts.map((p) => p[1]),
     brkp: c.brk.map((v) => (v / brkMax) * 100),
     brkrp: c.brkr.map((v) => (v / brkrMax) * 100),
-    acc,
-    gacc: acc.map((a) => a / 9.80665),
+    acc: smoothAcc,
+    gacc: smoothAcc.map((a) => a / 9.80665),
+    glat: lateralGs(playbackPts.map((p, i) => [p[0], p[1], spdMs[i], p[3], p[4]]), c.t),
     cellCols,
     cellAvg: c.cells.map((r) => (r.length ? r.reduce((a, b) => a + b, 0) / r.length : 0)),
   };
-  return { ...raw, ch, sec: raw.sec, curve: curveOf(raw.pts) };
+  return { ...raw, ch, sec: raw.sec, playbackPts, curve: curveOf(playbackPts) };
 }
 
 /** Everything about a run that does not depend on what the user has marked: laps, track geometry, corners, braking zones. */
@@ -80,10 +107,15 @@ export class Session {
     this.segs = buildSegments(this.geo);
     this.zones = buildZones(this.runs, this.RL, this.open);
     const pts = [...D.ref, ...this.runs.flatMap((l) => l.pts.map((p) => [p[0], p[1]] as [number, number]))];
-    this.bbox = {
-      x: [Math.min(...pts.map((p) => p[0])), Math.max(...pts.map((p) => p[0]))],
-      y: [Math.min(...pts.map((p) => p[1])), Math.max(...pts.map((p) => p[1]))],
-    };
+    /* a loop, not Math.min(...pts): at 20 Hz a day has more points than the engine takes as arguments */
+    const bb = { x: [Infinity, -Infinity] as [number, number], y: [Infinity, -Infinity] as [number, number] };
+    for (const q of pts) {
+      if (q[0] < bb.x[0]) bb.x[0] = q[0];
+      if (q[0] > bb.x[1]) bb.x[1] = q[0];
+      if (q[1] < bb.y[0]) bb.y[0] = q[1];
+      if (q[1] > bb.y[1]) bb.y[1] = q[1];
+    }
+    this.bbox = bb;
   }
 
   /** The lap the session clock T (ms from the start of the out lap) falls in. */

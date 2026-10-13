@@ -84,7 +84,13 @@ export function DebriefPanel() {
             <li
               key={i}
               className={it.k + (go ? " go" : "")}
+              tabIndex={go ? 0 : undefined}
               onClick={() => {
+                if (it.seg != null) p.focusSeg(it.seg);
+                else if (it.zone != null) p.focusZone(it.zone);
+              }}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" || e.target !== e.currentTarget) return;
                 if (it.seg != null) p.focusSeg(it.seg);
                 else if (it.zone != null) p.focusZone(it.zone);
               }}
@@ -163,7 +169,7 @@ export function AboutPanel() {
       <br /><br />
       <b>Colours.</b> Purple is the session best, green is faster than the base lap, yellow is slower. Adjusted time adds the cone penalty to real time.
       <br /><br />
-      <b>Limits.</b> GPS runs at about 1.8 Hz with roughly 1 m resolution, so expect a tenth or two of noise in sector times and treat speeds as approximate.
+      <b>Samples and smoothing.</b> Imports combine the session tail and full lap samples at their original timestamps, including 20 Hz exports. Playback positions and derived speed/acceleration use a centred 0.5 s average; imported fixes, telemetry channels and logged lap times are retained. Lateral g is a GPS curvature estimate, not an IMU reading. GPS noise and gaps affect its accuracy.
       <br /><br />
       <b>Start and finish lines.</b> They are set for you: the start line is where the car was when the timed laps began, and the finish line is where it was when they ended. Lap times are always the ones the logger recorded.
       <br /><br />

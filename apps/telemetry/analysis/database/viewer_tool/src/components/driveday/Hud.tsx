@@ -21,7 +21,7 @@ export function HudLeft() {
   const cones = a.conesOf(L);
 
   let secs: React.ReactNode = null; // typed: viewer_tool has noImplicitAny off, so a bare null is narrowed to null
-  if (L.sec && L.sec[0] != null) {
+  if (R && L.sec && L.sec[0] != null) {
     const e0 = L.sec[0] as number;
     const e1 = e0 + (L.sec[1] as number);
     const act = rel < e0 ? 0 : rel < e1 ? 1 : 2;
@@ -84,16 +84,20 @@ export function HudRight() {
   useUi(p);
   useFrame(p);
   const { L, rel } = p.curState();
-  const V = (k: "spd" | "thr" | "brkp" | "gacc" | "kw" | "rpm") => interp(L.ch.t, L.ch[k], rel);
+  const V = (k: "spd" | "thr" | "brkp" | "gacc" | "glat" | "kw" | "rpm") => interp(L.ch.t, L.ch[k], rel);
   const g = V("gacc");
+  const lat = V("glat");
   return (
     <div className="hud hud-r" id="hudr">
       <div className="big">{cvS(p.units, V("spd")).toFixed(0)}<small>{sU(p.units).toUpperCase()}</small></div>
-      <div className="bars">
-        <div>THR<em><i style={{ width: V("thr").toFixed(0) + "%", background: "var(--green)" }} /></em></div>
-        <div>BRK<em><i style={{ width: V("brkp").toFixed(0) + "%", background: "var(--red)" }} /></em></div>
-      </div>
-      <div className="mono">{g >= 0 ? "+" : "−"}{Math.abs(g).toFixed(2)} g · {V("kw").toFixed(0)} kW · {Math.round(V("rpm"))} rpm</div>
+      <div className="latg"><span>Lateral · GPS est.</span><b>{Number.isFinite(lat) ? Math.abs(lat).toFixed(2) + " g" + (Math.abs(lat) < 0.005 ? "" : lat > 0 ? " L" : " R") : "—"}</b></div>
+      {p.mode === "pedal" && (
+        <div className="bars">
+          <div>THR<em><i style={{ width: V("thr").toFixed(0) + "%", background: "var(--green)" }} /></em></div>
+          <div>BRK<em><i style={{ width: V("brkp").toFixed(0) + "%", background: "var(--red)" }} /></em></div>
+        </div>
+      )}
+      {p.mode === "acc" && <div className="mono">{g >= 0 ? "+" : "−"}{Math.abs(g).toFixed(2)} g · {V("kw").toFixed(0)} kW</div>}
     </div>
   );
 }

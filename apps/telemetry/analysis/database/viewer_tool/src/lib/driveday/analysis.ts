@@ -73,7 +73,7 @@ export class Analysis {
     const { runs } = this.s;
     const vr = runs.filter((l) => this.valid(l));
     const pool = vr.length ? vr : runs;
-    this.best = [0, 1, 2].map((i) => Math.min(...pool.map((l) => l.sec[i] as number)));
+    this.best = [0, 1, 2].map((i) => Math.min(...pool.map((l) => l.sec[i]).filter((v): v is number => v != null)));
     this.bestLap = Math.min(...pool.map((l) => l.dur));
     this.theo = this.best.reduce((a, b) => a + b, 0);
     this.bestRun = pool.reduce((a, b) => (b.dur < a.dur ? b : a));

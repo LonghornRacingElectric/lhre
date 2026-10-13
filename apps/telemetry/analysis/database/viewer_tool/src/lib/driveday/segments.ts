@@ -170,8 +170,8 @@ function buildOpenSegments(geo: Geo): Seg[] {
   corners.forEach((r) => {
     const gap = r.s - pos;
     if (gap >= 3) out.push({ k0: pos, k1: r.s, type: "s", dir: 0 });
-    else if (out.length) out[out.length - 1].k1 += gap;
-    out.push({ k0: gap >= 3 || !out.length ? r.s : pos, k1: r.e + 1, type: "c", dir: r.sign });
+    /* a gap too short to be a straight belongs to the corner, so every sample has exactly one owner */
+    out.push({ k0: gap >= 3 ? r.s : pos, k1: r.e + 1, type: "c", dir: r.sign });
     pos = r.e + 1;
   });
   if (N - pos >= 3 || !out.length) out.push({ k0: pos, k1: N, type: "s", dir: 0 });

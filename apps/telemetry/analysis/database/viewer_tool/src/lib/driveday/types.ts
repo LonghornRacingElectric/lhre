@@ -53,6 +53,7 @@ export interface SessionExport {
   laps: LiveLapExport[];
   selectedLapIds?: string[];
   sampleTail: LiveSample[];
+  currentLap?: { lapSamples?: LiveSample[] } | null;
   hasSectors?: boolean;
   sessionInfo?: SessionInfoExport | null;
   metadata?: Record<string, string>;
@@ -84,6 +85,7 @@ export type Channels = BaseChannels & {
   brkrp: number[];
   acc: number[]; // m/s², from GPS speed
   gacc: number[];
+  glat: number[]; // signed GPS lateral g; positive left, NaN when unavailable
   cellCols: number[][];
   cellAvg: number[];
 };
@@ -114,6 +116,8 @@ export interface Lap extends Omit<RawLap, "ch" | "sec"> {
   sec: (number | null)[];
   /** Smoothed curve through the fixes, four short steps per fix interval. */
   curve: XY[][];
+  /** Smoothed positions used only for drawing and playback; pts keeps imported fixes. */
+  playbackPts?: Pt[];
   theo?: boolean;
   /** Cached gain-against-ghost, keyed by the ghost it was built for. */
   gainKey?: string;

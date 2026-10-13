@@ -63,7 +63,7 @@ export class Player {
   cmp: Cmp = "best";
   ghostLapI: number;
   ghostAll = false;
-  showSeg = true;
+  showSeg = false;
   showCones = true;
   raceMode = false;
   consMode = false;
@@ -256,6 +256,7 @@ export class Player {
     this.seekLap(order[n]);
   }
   play(on: boolean) {
+    if (on && this.playing) return; // a second tick loop would double the playback speed
     this.playing = on;
     if (on) {
       if (this.endMode === "stop" && this.T >= this.laps[this.sel].t1 - this.T0 - 80 && this.T < this.TD - 80) this.T = this.laps[this.sel].t1 - this.T0 + 1;

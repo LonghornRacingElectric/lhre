@@ -206,11 +206,36 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
   if (!J || !Array.isArray(J.sampleTail) || !Array.isArray(J.laps)) {
     throw new Error("This does not look like a session export (no sampleTail or laps).");
   }
-  const st = J.sampleTail.filter((s) => s && typeof s.t === "number").sort((a, b) => a.t - b.t);
-  const hasGps = (s: LiveSample) => !!(s && s.lat && s.lon);
+  const hasGps = (s: LiveSample) => !!s && Number.isFinite(s.lat) && Number.isFinite(s.lon) &&
+    Math.abs(s.lat) <= 90 && Math.abs(s.lon) <= 180 && (s.lat !== 0 || s.lon !== 0);
+  // The session tail is capped upstream; complete lap exports carry the older samples.
+  const byTime = new Map<number, LiveSample>();
+  for (const s of [...J.laps.flatMap((l) => Array.isArray(l.samples) ? l.samples : []),
+    ...(Array.isArray(J.currentLap?.lapSamples) ? J.currentLap.lapSamples : []), ...J.sampleTail]) {
+    if (!s || !Number.isFinite(s.t)) continue;
+    const old = byTime.get(s.t);
+    byTime.set(s.t, old ? {
+      ...old, ...s, values: { ...old.values, ...s.values },
+      lat: hasGps(s) ? s.lat : old.lat, lon: hasGps(s) ? s.lon : old.lon,
+      cellTemps: s.cellTemps?.length ? s.cellTemps : old.cellTemps,
+    } : s);
+  }
+  const st = [...byTime.values()].sort((a, b) => a.t - b.t);
   const nGps = st.reduce((n, s) => n + (hasGps(s) ? 1 : 0), 0);
   if (nGps < 30) {
     throw new Error("This session has no usable GPS fixes (" + nGps + " of " + st.length + " samples), so there is no track to draw.");
+  }
+  // Keep intervening telemetry at its original timestamps, with a GPS position
+  // interpolated only between valid fixes. Never invent positions outside that range.
+  const fixes = st.filter(hasGps);
+  let fixIndex = 0;
+  for (let i = 0; i < st.length; i++) {
+    const s = st[i];
+    if (hasGps(s) || s.t < fixes[0].t || s.t > fixes[fixes.length - 1].t) continue;
+    while (fixIndex < fixes.length - 2 && fixes[fixIndex + 1].t < s.t) fixIndex++;
+    const a = fixes[fixIndex], b = fixes[fixIndex + 1];
+    const f = (s.t - a.t) / (b.t - a.t);
+    st[i] = { ...s, lat: a.lat + f * (b.lat - a.lat), lon: a.lon + f * (b.lon - a.lon) };
   }
   const info = J.sessionInfo || {};
   const md = J.metadata || {};
@@ -255,7 +280,7 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
   const firstT = timed[0].l.startMs;
   const lastT = timed[timed.length - 1].l.endMs;
 
-  const cellN = Math.max(0, ...st.map((s) => (Array.isArray(s.cellTemps) ? s.cellTemps.length : 0)));
+  const cellN = st.reduce((n, s) => Math.max(n, Array.isArray(s.cellTemps) ? s.cellTemps.length : 0), 0);
   const cellIdx: number[] = [];
   if (cellN) {
     const cnt = new Array(cellN).fill(0);
@@ -461,11 +486,6 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
     ): RawLap & { span: number } {
       const m = samples.length;
       const P = samples.map(proj);
-      const sm = P.map((p, k) =>
-        k === 0 || k === m - 1
-          ? p
-          : ([0.25 * P[k - 1][0] + 0.5 * p[0] + 0.25 * P[k + 1][0], 0.25 * P[k - 1][1] + 0.5 * p[1] + 0.25 * P[k + 1][1]] as XY),
-      );
       const spd = P.map((p, k) => {
         const a = Math.max(0, k - 1);
         const b = Math.min(m - 1, k + 1);
@@ -510,8 +530,8 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
       set("vavgC", (s) => V(s, "avg_cell_v_stat"), 3);
       ch.cells = samples.map((s) => cellIdx.map((i) => R2(num(s.cellTemps && s.cellTemps[i]), 1)));
       const pts: Pt[] = samples.map((_, k) => [
-        R2(sm[k][0], 2),
-        R2(sm[k][1], 2),
+        P[k][0],
+        P[k][1],
         R2(spd[k], 2),
         open ? R2(Math.min(RL - 0.05, sd[k][0]), 1) : R2(((sd[k][0] % RL) + RL) % RL, 1),
         R2(sd[k][1], 2),
@@ -536,7 +556,7 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
       }
       let dist = 0;
       for (let k = 1; k < m; k++) dist += Math.hypot(P[k][0] - P[k - 1][0], P[k][1] - P[k - 1][1]);
-      const vmax = Math.max(...spd);
+      const vmax = spd.reduce((a, b) => (b > a ? b : a), -Infinity);
       return {
         ch: ch as BaseChannels,
         name,
