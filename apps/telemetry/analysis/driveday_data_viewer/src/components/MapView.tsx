@@ -6,7 +6,7 @@ import { drawMap } from "@/lib/draw/map";
 import { gradientCss, rampSpd } from "@/lib/draw/palette";
 import { cvS, sU } from "@/lib/units";
 import { Hud } from "./Hud";
-import { usePainter, usePlayer, useUi } from "./context";
+import { useFrame, usePainter, usePlayer, useUi } from "./context";
 
 /* The map stage: canvas, overlay, legend and zoom controls. */
 
@@ -25,6 +25,22 @@ function Legend() {
   else if (mode === "acc") body = <><span>Braking<span className="ramp" style={{ background: "linear-gradient(90deg,var(--red),var(--line),var(--green))" }} />Accelerating</span><span>±{s.accScale.toFixed(1)} m/s²</span></>;
   else body = <>{["--s1", "--s2", "--s3"].map((c, i) => sw(c, "S" + (i + 1)))}</>;
   return <div className="maplegend" id="legend">{body}</div>;
+}
+
+/** Who is who on the map when another driver's lap is the ghost. */
+function CmpKey() {
+  const p = usePlayer();
+  useUi(p);
+  useFrame(p);
+  const R = p.refLap();
+  const L = p.laps[p.sel];
+  if (p.cmp !== "rival" || !R || R === L || p.layoutOnly) return null;
+  return (
+    <div className="cmpkey">
+      <div><i className="me" />{(p.session.D.meta.driver || "This run") + " · " + L.name}</div>
+      <div><i className="them" />{R.name}</div>
+    </div>
+  );
 }
 
 export function MapView() {
@@ -141,6 +157,7 @@ export function MapView() {
       <canvas ref={ref} id="cv" role="img" aria-label="GPS map of the current lap over the track layout. Click the track to jump to that point." />
       <Hud />
       <Legend />
+      <CmpKey />
       <div className="maptip" id="maptip" ref={tip} hidden />
       <div className="zoomctl">
         <button className="btn sq" type="button" aria-label="Zoom in" title="Zoom in (+)" onClick={() => p.zoomBy(1.6)}>+</button>

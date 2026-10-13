@@ -210,8 +210,10 @@ textarea{resize:vertical;font-family:var(--f-body)}
 .cmpkey[hidden]{display:none}
 .cmpkey div{display:flex;align-items:center;gap:8px;white-space:nowrap}
 .cmpkey i{width:14px;height:14px;border-radius:50%;flex:none;box-sizing:border-box}
-.cmpkey .me{background:var(--panel);border:2.5px solid var(--ink)}
-.cmpkey .them{background:var(--rival);border:2.5px solid var(--ink)}
+.cmpkey i{position:relative;width:16px;height:16px}
+.cmpkey i::after{content:"";position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%}
+.cmpkey .me{background:var(--panel);border:2.5px solid var(--ink)}.cmpkey .me::after{background:var(--ink)}
+.cmpkey .them{background:var(--panel);border:2.5px solid var(--rival)}.cmpkey .them::after{background:var(--rival)}
 .runbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
 .runbar select{width:auto;max-width:min(520px,60vw);height:30px;padding:0 8px;font:500 12px var(--f-body)}
 .btn.primary{background:var(--ink);color:var(--bg);font-weight:600}

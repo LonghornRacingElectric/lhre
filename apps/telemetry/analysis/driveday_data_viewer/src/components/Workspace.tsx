@@ -56,6 +56,11 @@ export function Workspace() {
     return () => document.removeEventListener("keydown", onKey);
   }, [p]);
 
+  /* other runs on this layout and direction, for the Driver ghost */
+  useEffect(() => {
+    void p.findRivals();
+  }, [p]);
+
   useEffect(() => {
     const save = () => p.savePos();
     addEventListener("pagehide", save);

@@ -148,6 +148,19 @@ export interface RunData {
   laps: RawLap[];
   meta: RunMeta;
   warnings: string[];
+  /** The road edges, when the run is on a base layout that has them (same frame as `ref`). */
+  edges?: RoadEdges;
+  /** How far the base layout was slid to sit on this run's GPS, in metres. Another run's laps are moved by the difference
+   *  when they are laid over this one, so both line up with the same road. */
+  layoutShift?: XY;
+}
+
+/** A road drawn at its real width: the corrected centre line and the two edges, in metres in the track's frame. */
+export interface RoadEdges {
+  centre: XY[];
+  left: XY[];
+  right: XY[];
+  width: number;
 }
 
 /** A track layout shared by every run driven on it. */
@@ -168,6 +181,10 @@ export interface Track {
   open?: boolean;
   created: number;
   from: string;
+  /** Shipped with the app (src/lib/layouts), not saved from an import. Preferred over saved tracks when both match. */
+  builtin?: boolean;
+  /** Road edges for drawing, when the layout has them. */
+  edges?: RoadEdges;
 }
 
 export interface RunListEntry {

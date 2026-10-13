@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { clock, fmt } from "@/lib/format";
 import { RATES, type Cmp, type EndMode } from "@/lib/player";
+import { runLabel } from "@/lib/storage";
 import { Menu } from "./Menu";
 import { Timeline } from "./Timeline";
 import { useFrame, usePlayer, useUi } from "./context";
@@ -11,6 +12,7 @@ const GHOSTS: [Cmp, string, string][] = [
   ["theo", "Best sectors", "A lap stitched together from your fastest S1, S2 and S3"],
   ["best", "Best", "Your fastest lap"],
   ["lap", "Lap…", "Any lap from this run"],
+  ["rival", "Driver", "A lap from another run on this same layout, driven the same way round"],
 ];
 
 function Clock() {
@@ -77,7 +79,10 @@ export function Transport() {
   const { laps, TLAPS } = p.session;
   const pickGhost = (c: Cmp) => {
     if (p.cmp === c) p.set("cmp", "none");
-    else {
+    else if (c === "rival") {
+      if (p.rival) p.set("cmp", "rival");
+      else if (p.rivalRuns[0]) void p.loadRival(p.rivalRuns[0].id).then((ok) => ok && p.set("cmp", "rival"));
+    } else {
       p.set("cmp", c);
       if (c === "lap") p.toast("Ghost: " + laps[p.ghostLapI].name + (p.ghostLapI === p.sel ? ". It is the lap you are watching, so pick another to compare." : ""));
     }
@@ -93,7 +98,15 @@ export function Transport() {
         <span className="lab">Ghost</span>
         <div className="seg" role="group" aria-label="Ghost lap. Click the active one again to turn it off.">
           {GHOSTS.map(([c, label, title]) => (
-            <button key={c} aria-pressed={p.cmp === c} title={title} onClick={() => pickGhost(c)}>{label}</button>
+            <button
+              key={c}
+              aria-pressed={p.cmp === c}
+              disabled={c === "rival" && !p.rivalRuns.length}
+              title={c === "rival" && !p.rivalRuns.length ? "No other run on this layout yet. Import another run driven the same way round to compare drivers." : title}
+              onClick={() => pickGhost(c)}
+            >
+              {label}
+            </button>
           ))}
         </div>
         {p.cmp === "lap" && (
@@ -102,6 +115,19 @@ export function Transport() {
               {TLAPS.filter((l) => l.kind !== "partial").map((l) => {
                 const i = laps.indexOf(l);
                 return <option key={i} value={i}>{l.kind === "out" ? "Out lap" : l.name} · {fmt(l.dur)}</option>;
+              })}
+            </select>
+          </span>
+        )}
+        {p.cmp === "rival" && p.rival && (
+          <span className="rivalpick">
+            <select aria-label="Run to compare with" value={p.rival.id} onChange={(e) => void p.loadRival(e.target.value)}>
+              {p.rivalRuns.map((m) => <option key={m.id} value={m.id}>{runLabel(m)}</option>)}
+            </select>
+            <select aria-label="Lap to compare with" value={p.rival.i} onChange={(e) => p.setRivalLap(+e.target.value)}>
+              {p.rival.laps.map((l, i) => {
+                const fastest = Math.min(...p.rival!.laps.map((x) => x.dur));
+                return <option key={i} value={i}>{l.name.replace(p.rival!.driver + " · ", "")} · {fmt(l.dur)}{l.dur === fastest ? " (best)" : ""}</option>;
               })}
             </select>
           </span>

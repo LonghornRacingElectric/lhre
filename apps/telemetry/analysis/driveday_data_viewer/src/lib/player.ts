@@ -4,15 +4,20 @@ import { posAt } from "./geometry";
 import { interp, wrap } from "./math";
 import { pieces, segAt, zoneAt } from "./segments";
 import type { Session } from "./session";
-import { lsGet, lsSet, saveUserState } from "./storage";
-import type { Lap, LapFlag, UserState } from "./types";
+import { rebuildRun } from "./rebuild";
+import { prepareLap } from "./session";
+import { lsGet, lsSet, runStore, saveUserState } from "./storage";
+import type { Lap, LapFlag, RunListEntry, UserState } from "./types";
 import type { Units } from "./units";
 
 /* The one mutable model behind the screen: where the playhead is, which lap is watched, what the camera sees, what the user has marked.
    React reads it through subscriptions; canvases are painted from it once per animation frame. */
 
 export type Mode = "speed" | "pedal" | "acc" | "gain" | "sec";
-export type Cmp = "best" | "theo" | "lap" | "none";
+export type Cmp = "best" | "theo" | "lap" | "rival" | "none";
+
+/** Another driver's run on the same layout, driven the same way round, whose laps can be the ghost. */
+export interface Rival { id: string; driver: string; laps: Lap[]; i: number }
 export type EndMode = "go" | "stop" | "loop";
 export interface View { cx: number; cy: number; z: number }
 export interface Focus { a: number; len: number; type: "c" | "s" | "b"; name: string }
@@ -61,6 +66,9 @@ export class Player {
   /* what the map shows */
   mode: Mode = "speed";
   cmp: Cmp = "best";
+  /** Other runs on this layout and direction (filled in by findRivals), and the one loaded as the ghost. */
+  rivalRuns: RunListEntry[] = [];
+  rival: Rival | null = null;
   ghostLapI: number;
   ghostAll = false;
   showSeg = false;
@@ -68,6 +76,8 @@ export class Player {
   raceMode = false;
   consMode = false;
   layoutOnly = false;
+  /** Draw the road at its real width with its edges, when the run is on a base layout. */
+  showEdges = true;
   baseIdx: number;
   hoverT: number | null = null;
   /* camera */
@@ -141,11 +151,60 @@ export class Player {
       case "best": return this.analysis.bestRun;
       case "theo": return this.analysis.theoLap();
       case "lap": return this.laps[this.ghostLapI] ?? null;
+      case "rival": return this.rival ? this.rival.laps[this.rival.i] ?? null : null;
       default: return null;
     }
   }
   refKey() {
-    return this.cmp + "|" + this.ghostLapI;
+    return this.cmp + "|" + (this.cmp === "rival" && this.rival ? this.rival.id + "#" + this.rival.i : this.ghostLapI);
+  }
+
+  /* ================= another driver on the same layout ================= */
+  /** Saved runs on the same layout as this one. A layout is one direction, so runs the other way round never appear. */
+  async findRivals() {
+    const me = this.session.D.meta;
+    if (!me.trackId) return;
+    const list = await runStore.list();
+    if (this.disposed) return;
+    this.rivalRuns = list.filter((m) => m.trackId === me.trackId && m.id !== me.sessId && m.laps > 0).sort((a, b) => (a.best ?? 1e12) - (b.best ?? 1e12));
+    this.changed(false);
+  }
+  /** Load another run's timed laps as ghosts, starting with its best. */
+  async loadRival(id: string): Promise<boolean> {
+    const s = this.session;
+    const D0 = await runStore.get(id);
+    if (this.disposed) return false;
+    if (!D0 || D0.meta.trackId !== s.D.meta.trackId || Math.abs(D0.RL - s.RL) > 1) {
+      this.toast("That run is on a different layout or direction, so it cannot be laid over this one.");
+      return false;
+    }
+    const D = rebuildRun(D0);
+    /* each run's copy of a base layout was slid onto its own GPS; move the other run's laps by the difference so both sit on the same road */
+    const a = s.D.layoutShift ?? [0, 0];
+    const b = D.layoutShift ?? [0, 0];
+    const dx = a[0] - b[0];
+    const dy = a[1] - b[1];
+    const who = D.meta.driver || "Other driver";
+    const laps = D.laps
+      .filter((l) => l.kind === "lap")
+      .map((l) => {
+        const moved = { ...l, name: who + " · " + l.name, pts: l.pts.map((q) => [q[0] + dx, q[1] + dy, q[2], q[3], q[4]] as typeof q) };
+        /* brake percent on this run's scale, so the two drivers' pressures compare directly */
+        return prepareLap(moved, s.brkMax, s.brkrMax);
+      });
+    if (!laps.length) {
+      this.toast("That run has no timed laps.");
+      return false;
+    }
+    const bi = laps.reduce((m, l, i) => (l.dur < laps[m].dur ? i : m), 0);
+    this.rival = { id, driver: who, laps, i: bi };
+    this.changed();
+    return true;
+  }
+  setRivalLap(i: number) {
+    if (!this.rival || !this.rival.laps[i]) return;
+    this.rival = { ...this.rival, i };
+    this.changed();
   }
   lapLabelAt(tms: number) {
     const l = this.laps[this.session.lapIndexAt(tms)];
@@ -173,7 +232,7 @@ export class Player {
     this.schedule(forceStatic);
   }
 
-  set<K extends "mode" | "cmp" | "ghostLapI" | "ghostAll" | "showSeg" | "showCones" | "raceMode" | "consMode" | "layoutOnly" | "baseIdx" | "endMode" | "rate">(k: K, v: this[K]) {
+  set<K extends "mode" | "cmp" | "ghostLapI" | "ghostAll" | "showSeg" | "showCones" | "raceMode" | "consMode" | "layoutOnly" | "showEdges" | "baseIdx" | "endMode" | "rate">(k: K, v: this[K]) {
     (this as unknown as Record<string, unknown>)[k] = v;
     if (k === "baseIdx") lsSet("base:" + this.session.D.meta.sessId, v);
     if (k === "mode" || k === "endMode" || k === "rate") this.savePrefs();

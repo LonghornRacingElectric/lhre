@@ -14,7 +14,7 @@ export function ComparePanel() {
   const L = p.laps[p.sel];
   const R = p.refLap();
   if (!R || R === L) {
-    return <div className="empty">Pick a ghost under the timeline (Lap…, Best or Best sectors) that is a different lap from the one you are watching. The two are compared here, on the map and in the charts.</div>;
+    return <div className="empty">Pick a ghost under the timeline (Lap…, Best, Best sectors, or Driver for another run on this layout) that is a different lap from the one you are watching. The two are compared here, on the map and in the charts.</div>;
   }
   const u = p.units;
   const mx = (a: number[]) => Math.max(...a);
@@ -36,7 +36,7 @@ export function ComparePanel() {
           <tr>
             <th />
             <th><span className="dot" style={{ background: "var(--ink)" }} />{p.session.D.meta.driver || "This run"} · {L.name}</th>
-            <th><span className="dot" style={{ background: "var(--mute)" }} />{R.name}</th>
+            <th><span className="dot" style={{ background: p.cmp === "rival" ? "var(--rival)" : "var(--mute)" }} />{R.name}</th>
             <th>Diff</th>
           </tr>
         </thead>

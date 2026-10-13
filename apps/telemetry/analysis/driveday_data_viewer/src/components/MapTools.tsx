@@ -16,7 +16,7 @@ export function MapTools({ dockHidden, onToggleDock }: { dockHidden: boolean; on
   const p = usePlayer();
   useUi(p);
   const { session: s } = p;
-  const check = (label: string, k: "showSeg" | "showCones" | "ghostAll" | "raceMode" | "consMode" | "layoutOnly", title?: string) => (
+  const check = (label: string, k: "showSeg" | "showCones" | "ghostAll" | "raceMode" | "consMode" | "layoutOnly" | "showEdges", title?: string) => (
     <label className="chk" title={title}>
       <input type="checkbox" checked={p[k]} onChange={(e) => p.set(k, e.target.checked)} /> {label}
     </label>
@@ -35,6 +35,7 @@ export function MapTools({ dockHidden, onToggleDock }: { dockHidden: boolean; on
         {check("Race replay", "raceMode", "Every clean lap as a dot, all running from the start/finish line together")}
         {check("Consistency", "consMode", "Where you braked and where you were slowest, on every clean lap")}
         {check("Layout only", "layoutOnly", "Show only the standard track layout with its sector colours and gates")}
+        {s.D.edges && check("Track edges", "showEdges", "Draw the base layout's road at its real width (11.5 ft), centred 1 ft right of the layout drive's GPS line")}
         <div className="mrow">
           <span className="lab">Base overlay</span>
           <select aria-label="Base overlay lap" value={p.baseIdx} onChange={(e) => p.set("baseIdx", +e.target.value)}>

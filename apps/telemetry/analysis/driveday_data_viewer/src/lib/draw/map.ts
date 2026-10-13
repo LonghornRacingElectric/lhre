@@ -68,6 +68,27 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
+  /* the road at its real width with its two edges, when the run is on a base layout that has them */
+  const E = s.D.edges;
+  const road = (): boolean => {
+    if (!p.showEdges || !E || E.centre.length < 2) return false;
+    ctx.strokeStyle = pal.track;
+    ctx.lineWidth = Math.max(4, E.width * p.sc);
+    path(E.centre);
+    ctx.stroke();
+    if (E.width * p.sc >= 6) {
+      ctx.strokeStyle = pal.base;
+      ctx.globalAlpha = 0.8;
+      ctx.lineWidth = 1.25;
+      path(E.left);
+      ctx.stroke();
+      path(E.right);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    return true;
+  };
+
   const gates = (): void => {
     ([[0, s.open ? "Start" : "S/F", pal.ink], [RL / 3, "S1|S2", pal.s1], [(2 * RL) / 3, "S2|S3", pal.s2]].concat(s.open ? [[RL, "Finish", pal.ink]] : []) as [number, string, string][]).forEach((g) => {
       const a3 = s.geo.at(g[0]);
@@ -91,11 +112,15 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
     /* the standard layout itself: the shared reference line, split at the sector gates, no laps */
     const ref = s.D.ref;
     const cum = s.D.cum;
-    ctx.strokeStyle = pal.track;
-    ctx.lineWidth = 15 * wS;
-    path(ref);
-    ctx.stroke();
-    ctx.lineWidth = 7 * wS;
+    const edged = road();
+    if (!edged) {
+      ctx.strokeStyle = pal.track;
+      ctx.lineWidth = 15 * wS;
+      path(ref);
+      ctx.stroke();
+    }
+    /* with edges on, keep the sector line inside the road */
+    ctx.lineWidth = edged && E ? Math.max(2, Math.min(7 * wS, E.width * p.sc * 0.3)) : 7 * wS;
     for (let i = 0; i < ref.length - 1; i++) {
       const k = Math.min(2, Math.max(0, Math.floor((cum[i] + cum[i + 1]) / 2 / (RL / 3))));
       ctx.strokeStyle = pal.sector[k];
@@ -109,7 +134,7 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     ctx.fillStyle = pal.ink;
-    ctx.fillText((s.D.meta.trackName || "Track layout") + " · " + RL.toFixed(0) + " m", 16, p.H - Player.PADB + 34);
+    ctx.fillText((s.D.meta.trackName || "Track layout") + " · " + RL.toFixed(0) + " m" + (edged ? " · road " + (E!.width / 0.3048).toFixed(1) + " ft wide" : ""), 16, p.H - Player.PADB + 34);
     [0, 1, 2].forEach((k) => {
       const x = 16 + k * 84;
       const y = p.H - Player.PADB + 54;
@@ -122,10 +147,12 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
   }
 
   /* base overlay: the road, tinted by sector */
-  ctx.strokeStyle = pal.track;
-  ctx.lineWidth = 15 * wS;
-  path(BL);
-  ctx.stroke();
+  if (!road()) {
+    ctx.strokeStyle = pal.track;
+    ctx.lineWidth = 15 * wS;
+    path(BL);
+    ctx.stroke();
+  }
   ctx.lineWidth = 5 * wS;
   for (let i = 0; i < BL.length - 1; i++) {
     const k = Math.min(2, Math.max(0, Math.floor(BL[i][3] / (RL / 3))));
@@ -354,30 +381,44 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
   }
   /* ghost and the car */
   const R = p.refLap();
+  const isRival = p.cmp === "rival" && !!R && R !== L;
+  if (isRival && R) {
+    /* the other driver's whole lap, under the car marker, so the two lines can be compared corner by corner */
+    ctx.strokeStyle = pal.rival;
+    ctx.globalAlpha = 0.85;
+    ctx.lineWidth = 2.2 * tw;
+    R.curve.forEach((cu) => segCurve(cu));
+    ctx.globalAlpha = 1;
+  }
+  /** The car marker: a ring with a dot in the middle. The other driver gets the same marker in teal. */
+  const marker = (x: number, y: number, col: string) => {
+    ctx.fillStyle = pal.panel;
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(x, y, 8, 0, 7);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(x, y, 3, 0, 7);
+    ctx.fill();
+  };
   if (R && R !== L) {
     const tc0 = interp(L.ch.u, L.ch.t, 0);
     const tr0 = interp(R.ch.u, R.ch.t, 0);
     const gp = posAt(R, Math.max(0, tr0 + (rel - tc0)));
-    ctx.strokeStyle = pal.mute;
-    ctx.lineWidth = 2;
-    ctx.fillStyle = pal.panel;
-    ctx.beginPath();
-    ctx.arc(X(gp[0]), Y(gp[1]), 6, 0, 7);
-    ctx.fill();
-    ctx.stroke();
+    if (isRival) marker(X(gp[0]), Y(gp[1]), pal.rival);
+    else {
+      ctx.strokeStyle = pal.mute;
+      ctx.lineWidth = 2;
+      ctx.fillStyle = pal.panel;
+      ctx.beginPath();
+      ctx.arc(X(gp[0]), Y(gp[1]), 6, 0, 7);
+      ctx.fill();
+      ctx.stroke();
+    }
   }
   const mp = posAt(L, rel);
-  const mx = X(mp[0]);
-  const my = Y(mp[1]);
-  ctx.fillStyle = pal.panel;
-  ctx.strokeStyle = pal.ink;
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.arc(mx, my, 8, 0, 7);
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = pal.ink;
-  ctx.beginPath();
-  ctx.arc(mx, my, 3, 0, 7);
-  ctx.fill();
+  marker(X(mp[0]), Y(mp[1]), pal.ink);
 }

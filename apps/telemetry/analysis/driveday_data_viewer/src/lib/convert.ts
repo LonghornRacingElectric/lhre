@@ -78,6 +78,58 @@ const nearOn = (poly: XY[], cum: number[], p: XY): [number, number] => {
   return [bs, best];
 };
 
+/** Nearest point on a polyline. */
+const nearPt = (poly: XY[], p: XY): XY => {
+  let best = Infinity;
+  let q: XY = poly[0];
+  for (let i = 0; i < poly.length - 1; i++) {
+    const a = poly[i];
+    const b = poly[i + 1];
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const l2 = dx * dx + dy * dy;
+    let t = l2 ? ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2 : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const x = a[0] + t * dx;
+    const y = a[1] + t * dy;
+    const d = (p[0] - x) ** 2 + (p[1] - y) ** 2;
+    if (d < best) {
+      best = d;
+      q = [x, y];
+    }
+  }
+  return q;
+};
+
+/** How far to slide a layout, without turning it, so it sits on these fixes: least squares over nearest points, a few rounds.
+ *  Fixes more than 8 m off are left out so a lap that ran wide does not pull it. */
+const alignShift = (ref: XY[], P: XY[]): XY => {
+  let sx = 0;
+  let sy = 0;
+  for (let it = 0; it < 10; it++) {
+    let ax = 0;
+    let ay = 0;
+    let n = 0;
+    for (const p of P) {
+      const q = nearPt(ref, [p[0] - sx, p[1] - sy]);
+      const rx = p[0] - q[0];
+      const ry = p[1] - q[1];
+      if (Math.hypot(rx - sx, ry - sy) > 8) continue;
+      ax += rx;
+      ay += ry;
+      n++;
+    }
+    if (!n) break;
+    const nx = ax / n;
+    const ny = ay / n;
+    const done = Math.hypot(nx - sx, ny - sy) < 0.01;
+    sx = nx;
+    sy = ny;
+    if (done) break;
+  }
+  return [sx, sy];
+};
+
 const segDist = (a: XY, b: XY, p: XY) => {
   const dx = b[0] - a[0];
   const dy = b[1] - a[1];
@@ -298,6 +350,7 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
           - a typical lap is within 12% of the saved lap length, and progress runs the same direction
           Open courses are never matched: their start and finish lines are part of what they are. */
     let track: Track | null = null;
+    let shift: XY | undefined;
     let isNew = false;
     let renamed = false;
 
@@ -350,15 +403,33 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
     if (!course.open) {
       let bestScore = 0;
       for (const t of tracks) {
-        const sc = sameTrack(t);
+        /* a built-in base layout wins over a layout saved from an earlier import when both fit */
+        const fit = sameTrack(t);
+        const sc = fit > 0 && t.builtin ? fit + 1 : fit;
         if (sc > bestScore) {
           bestScore = sc;
           track = t;
         }
       }
-      if (track && !track.num) {
+      if (track && !track.num && !track.builtin) {
         track = Object.assign({}, track, layoutName());
         renamed = true;
+      }
+      /* A base layout was recorded at another time, and GPS drifts by a metre or two between drives. Slide it onto this run's
+         laps so the road edges line up. More than 6 m means something else is off, so it is left where it is. */
+      if (track && track.builtin) {
+        const pr = projWith(frame(track.lat0, track.lon0));
+        const [dx, dy] = alignShift(track.ref, probe.map(pr));
+        const d = Math.hypot(dx, dy);
+        if (d > 0.05 && d <= 6) {
+          const mv = (a: XY[]) => a.map((q) => [q[0] + dx, q[1] + dy] as XY);
+          const e = track.edges;
+          track = { ...track, ref: mv(track.ref), edges: e ? { ...e, centre: mv(e.centre), left: mv(e.left), right: mv(e.right) } : e };
+          shift = [R2(dx, 3), R2(dy, 3)];
+          if (d >= 0.3) cw.push("The " + track.name + " base layout was moved " + d.toFixed(1) + " m to line up with this run's GPS.");
+        } else if (d > 6) {
+          cw.push("This run's GPS sits " + d.toFixed(0) + " m off the " + track.name + " base layout, so the layout was left where it was recorded.");
+        }
       }
     }
 
@@ -644,6 +715,15 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
         trackName: tk.name,
       },
       warnings: cw,
+      layoutShift: shift,
+      edges: tk.edges
+        ? {
+            centre: tk.edges.centre.map((p) => [R2(p[0], 2), R2(p[1], 2)] as XY),
+            left: tk.edges.left.map((p) => [R2(p[0], 2), R2(p[1], 2)] as XY),
+            right: tk.edges.right.map((p) => [R2(p[0], 2), R2(p[1], 2)] as XY),
+            width: tk.edges.width,
+          }
+        : undefined,
     };
     return { D, track: tk, isNew, renamed, label: course.label };
   });

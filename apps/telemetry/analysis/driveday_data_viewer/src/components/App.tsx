@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { convertSession } from "@/lib/convert";
 import { invalidatePalette } from "@/lib/draw/palette";
+import { builtinTracks } from "@/lib/layouts";
 import { Player, type Prefs } from "@/lib/player";
 import { rebuildRun } from "@/lib/rebuild";
 import { Session } from "@/lib/session";
@@ -86,7 +87,7 @@ function Shell() {
         try {
           toast("Reading " + f.name + "…", "busy");
           const J = JSON.parse(await f.text()) as SessionExport;
-          const courses = convertSession(J, f.name, await runStore.tracks());
+          const courses = convertSession(J, f.name, [...builtinTracks(), ...(await runStore.tracks())]);
           const now = Date.now();
           for (const [ci, { D, track, isNew, renamed }] of courses.entries()) {
             if (isNew || renamed) await runStore.putTrack(track);

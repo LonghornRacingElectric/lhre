@@ -87,12 +87,41 @@ laps), and the sectors are cut at thirds between them.
   start and finish both lie within about 25 m of each other (or 10% of the
   run length) count as the same course.
 
+## Base layouts and track edges
+
+A base layout is one slow lap driven down the middle of the track. It ships with the app in `src/lib/layouts/`, so every run
+on that track is measured against the same line.
+
+```bash
+node scripts/build-layout.mjs "<Drive Day Logs>/Layout_session.json" src/lib/layouts/pickle-lot.json "Pickle Lot"
+```
+
+- **Two directions.** Each layout becomes two tracks, for example "Pickle Lot · counter-clockwise" and "Pickle Lot ·
+  clockwise". A run only matches the one it was driven in, so laps the other way round are never mixed in.
+- **Matching.** On import, a closed-loop run matches a base layout with the same rules as a saved track (90% of fixes within
+  6 m of the line, 90% of the line covered, length within 12%, same direction). A base layout wins over a saved track when
+  both fit. Other tracks (Shakedown, COTA) still get their own saved layouts.
+- **Edges.** The real centre line is taken as 1 ft right of the layout drive's GPS line, because the antenna is on the left of
+  the car. The road is drawn 11.5 ft wide either side of that. Both numbers are `GPS_RIGHT_OFFSET_M` and `TRACK_WIDTH_M` in
+  `src/lib/geometry.ts`. Overlays → **Track edges** turns the road on and off.
+- **GPS drift.** GPS shifts by a metre or two between drives, so on import the layout is slid (not turned) onto the run's
+  laps, by up to 6 m. The import message says how far it moved.
+
+## Comparing drivers
+
+Under **Ghost**, **Driver** lays a lap from another imported run over the one you are watching. Only runs on the same layout
+are offered, and a layout is one direction, so a clockwise run is never compared with a counter-clockwise one. Pick the run
+and the lap (its best is chosen first). The other driver's line is drawn in teal with a teal dot, both laps start together
+at the start/finish line, and the Compare panel, the delta and trace charts, the Corners panel and the Gain colouring all
+use that lap. Each run's copy of a base layout was slid onto its own GPS, so the other run's laps are moved by the
+difference to sit on the same road. Brake percent uses this run's scale so pressures compare directly. The button is
+greyed out until a second run on the layout is imported.
+
 ## What it does not do
 
 The earlier single-file version had a few things that depended on its host
-and were left out here: shared notes between people, an "ask about this run"
-box, and comparing against another driver's run. Notes are per browser. Each
-would need a server, so they are follow-ups.
+and were left out here: shared notes between people and an "ask about this run"
+box. Notes are per browser. Each would need a server, so they are follow-ups.
 
 ## Gotchas
 
