@@ -36,7 +36,7 @@ export function MapTools({ dockHidden, onToggleDock }: { dockHidden: boolean; on
         {check("Consistency", "consMode", "Where you braked and where you were slowest, on every clean lap")}
         {check("Layout only", "layoutOnly", "Show only the standard track layout with its sector colours and gates")}
         {s.D.edges && check("Track edges", "showEdges", "Draw the base layout's road at its real width (11.5 ft), centred 1 ft right of the layout drive's GPS line")}
-        <div className="mrow">
+        {!s.D.edges && <div className="mrow">
           <span className="lab">Base overlay</span>
           <select aria-label="Base overlay lap" value={p.baseIdx} onChange={(e) => p.set("baseIdx", +e.target.value)}>
             {s.TLAPS.map((l) => {
@@ -44,7 +44,7 @@ export function MapTools({ dockHidden, onToggleDock }: { dockHidden: boolean; on
               return <option key={i} value={i}>{l.kind === "out" ? "Out lap" : l.kind === "partial" ? l.name.replace(" (in progress)", "") : l.name}</option>;
             })}
           </select>
-        </div>
+        </div>}
       </Menu>
       <span className="sp" />
       <button className="btn" type="button" title="Hide or show the panels (D)" onClick={onToggleDock}>{dockHidden ? "Show panels" : "Hide panels"}</button>

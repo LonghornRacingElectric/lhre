@@ -102,8 +102,10 @@ node scripts/build-layout.mjs "<Drive Day Logs>/Layout_session.json" src/lib/lay
   6 m of the line, 90% of the line covered, length within 12%, same direction). A base layout wins over a saved track when
   both fit. Other tracks (Shakedown, COTA) still get their own saved layouts.
 - **Edges.** The real centre line is taken as 1 ft right of the layout drive's GPS line, because the antenna is on the left of
-  the car. The road is drawn 11.5 ft wide either side of that. Both numbers are `GPS_RIGHT_OFFSET_M` and `TRACK_WIDTH_M` in
+  the car. The road is drawn 11.5 ft wide in total, 5.75 ft either side of that. Both numbers are `GPS_RIGHT_OFFSET_M` and `TRACK_WIDTH_M` in
   `src/lib/geometry.ts`. Overlays → **Track edges** turns the road on and off.
+- **Background.** Runs with track-edge geometry use that layout as their background; the lap-based base overlay and its
+  selector are omitted, including when **Track edges** is off. Runs without track-edge geometry keep the base overlay.
 - **GPS drift.** GPS shifts by a metre or two between drives, so on import the layout is slid (not turned) onto the run's
   laps, by up to 6 m. The import message says how far it moved.
 
@@ -114,7 +116,8 @@ are offered, and a layout is one direction, so a clockwise run is never compared
 and the lap (its best is chosen first). The other driver's line is drawn in teal with a teal dot, both laps start together
 at the start/finish line, and the Compare panel, the delta and trace charts, the Corners panel and the Gain colouring all
 use that lap. Each run's copy of a base layout was slid onto its own GPS, so the other run's laps are moved by the
-difference to sit on the same road. Brake percent uses this run's scale so pressures compare directly. The button is
+difference to sit on the same road. Each driver's brake percent uses their own run's peak pressure, keeping both traces
+within 0–100% and consistent when the main driver is switched. Raw pressure channels are unchanged. The button is
 greyed out until a second run on the layout is imported.
 
 ## What it does not do
@@ -125,6 +128,9 @@ box. Notes are per browser. Each would need a server, so they are follow-ups.
 
 ## Gotchas
 
+- The speed HUD always shows compact throttle and brake bars with percentages. Throttle comes from recorded pedal travel;
+  brake percentage is recorded front brake pressure relative to this run's peak, not measured brake pedal travel. Both are
+  interpolated between telemetry samples at the playback time on every frame; bar widths retain fractional precision.
 - The selected lap has a thicker, outlined colour trace. Low-value sections
   and the path ahead of the playhead stay visible; ghost laps remain faint.
 - Lateral g is shown in the map HUD, GPS hover readings and Car panel as a

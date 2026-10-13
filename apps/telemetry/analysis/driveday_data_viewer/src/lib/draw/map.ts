@@ -54,7 +54,7 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
   const zr = p.sc / p.scFit;
   const wS = Math.min(3, Math.sqrt(zr));
   const tw = Math.min(2.2, Math.sqrt(zr));
-  const BL = roadOf(s.laps[p.baseIdx]);
+  const BL = s.D.edges ? null : roadOf(s.laps[p.baseIdx]);
   const path = (pts: ArrayLike<number>[]) => {
     ctx.beginPath();
     pts.forEach((q, i) => (i ? ctx.lineTo(X(q[0]), Y(q[1])) : ctx.moveTo(X(q[0]), Y(q[1]))));
@@ -146,22 +146,23 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
     return;
   }
 
-  /* base overlay: the road, tinted by sector */
-  if (!road()) {
+  /* A recorded edge layout replaces the lap-based background, even when its edges are hidden. */
+  road();
+  if (BL) {
     ctx.strokeStyle = pal.track;
     ctx.lineWidth = 15 * wS;
     path(BL);
     ctx.stroke();
-  }
-  ctx.lineWidth = 5 * wS;
-  for (let i = 0; i < BL.length - 1; i++) {
-    const k = Math.min(2, Math.max(0, Math.floor(BL[i][3] / (RL / 3))));
-    ctx.strokeStyle = pal.sector[k];
-    ctx.globalAlpha = p.mode === "sec" ? 0.9 : 0.18;
-    ctx.beginPath();
-    ctx.moveTo(X(BL[i][0]), Y(BL[i][1]));
-    ctx.lineTo(X(BL[i + 1][0]), Y(BL[i + 1][1]));
-    ctx.stroke();
+    ctx.lineWidth = 5 * wS;
+    for (let i = 0; i < BL.length - 1; i++) {
+      const k = Math.min(2, Math.max(0, Math.floor(BL[i][3] / (RL / 3))));
+      ctx.strokeStyle = pal.sector[k];
+      ctx.globalAlpha = p.mode === "sec" ? 0.9 : 0.18;
+      ctx.beginPath();
+      ctx.moveTo(X(BL[i][0]), Y(BL[i][1]));
+      ctx.lineTo(X(BL[i + 1][0]), Y(BL[i + 1][1]));
+      ctx.stroke();
+    }
   }
   ctx.globalAlpha = 1;
   /* focus glow, brake zone bands */
@@ -195,14 +196,16 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
     });
     ctx.globalAlpha = 1;
   }
-  ctx.strokeStyle = pal.base;
-  ctx.globalAlpha = 0.55;
-  ctx.lineWidth = 1;
-  ctx.setLineDash([2, 3]);
-  path(BL);
-  ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.globalAlpha = 1;
+  if (BL) {
+    ctx.strokeStyle = pal.base;
+    ctx.globalAlpha = 0.55;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 3]);
+    path(BL);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+  }
   const pts = L.pts;
   const ct = L.ch.t;
   if (p.ghostAll && paint) {

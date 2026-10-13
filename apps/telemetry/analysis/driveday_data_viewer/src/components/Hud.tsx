@@ -87,16 +87,29 @@ export function HudRight() {
   const V = (k: "spd" | "thr" | "brkp" | "gacc" | "glat" | "kw" | "rpm") => interp(L.ch.t, L.ch[k], rel);
   const g = V("gacc");
   const lat = V("glat");
+  const pedals = [
+    { label: "THR", name: "Throttle", value: V("thr"), colour: "var(--green)" },
+    { label: "BRK", name: "Brake pressure (% of this run’s peak)", value: V("brkp"), colour: "var(--red)" },
+  ];
   return (
     <div className="hud hud-r" id="hudr">
       <div className="big">{cvS(p.units, V("spd")).toFixed(0)}<small>{sU(p.units).toUpperCase()}</small></div>
       <div className="latg"><span>Lateral · GPS est.</span><b>{Number.isFinite(lat) ? Math.abs(lat).toFixed(2) + " g" + (Math.abs(lat) < 0.005 ? "" : lat > 0 ? " L" : " R") : "—"}</b></div>
-      {p.mode === "pedal" && (
-        <div className="bars">
-          <div>THR<em><i style={{ width: V("thr").toFixed(0) + "%", background: "var(--green)" }} /></em></div>
-          <div>BRK<em><i style={{ width: V("brkp").toFixed(0) + "%", background: "var(--red)" }} /></em></div>
-        </div>
-      )}
+      <div className="bars">
+        {pedals.map(({ label, name, value, colour }) => {
+          const percent = Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : null;
+          return (
+            <div key={label} title={name}>
+              <span className="pedal-label">{label}</span>
+              <em role="meter" aria-label={name} aria-valuemin={0} aria-valuemax={100}
+                aria-valuenow={percent ?? undefined} aria-valuetext={percent == null ? "Unavailable" : percent.toFixed(0) + "%"}>
+                <i style={{ width: (percent ?? 0) + "%", background: colour }} />
+              </em>
+              <span className="pedal-value">{percent == null ? "—" : percent.toFixed(0) + "%"}</span>
+            </div>
+          );
+        })}
+      </div>
       {p.mode === "acc" && <div className="mono">{g >= 0 ? "+" : "−"}{Math.abs(g).toFixed(2)} g · {V("kw").toFixed(0)} kW</div>}
     </div>
   );

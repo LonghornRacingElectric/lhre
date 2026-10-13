@@ -185,12 +185,14 @@ export class Player {
     const dx = a[0] - b[0];
     const dy = a[1] - b[1];
     const who = D.meta.driver || "Other driver";
+    const brkMax = D.laps.reduce((peak, l) => l.ch.brk.reduce((m, v) => Math.max(m, v), peak), 1);
+    const brkrMax = D.laps.reduce((peak, l) => l.ch.brkr.reduce((m, v) => Math.max(m, v), peak), 1);
     const laps = D.laps
       .filter((l) => l.kind === "lap")
       .map((l) => {
         const moved = { ...l, name: who + " · " + l.name, pts: l.pts.map((q) => [q[0] + dx, q[1] + dy, q[2], q[3], q[4]] as typeof q) };
-        /* brake percent on this run's scale, so the two drivers' pressures compare directly */
-        return prepareLap(moved, s.brkMax, s.brkrMax);
+        /* Percent of peak belongs to the driver's own run, including when it is displayed as a ghost. */
+        return prepareLap(moved, brkMax, brkrMax);
       });
     if (!laps.length) {
       this.toast("That run has no timed laps.");
