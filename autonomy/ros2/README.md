@@ -12,7 +12,7 @@ Colcon workspace for LHR driverless / autonomy nodes. This file is the **referen
 |---------|-------------|
 | `lhr_trackgen` | Publishes a synthetic cone track (`/lhr/track/cones`) and cone IDs (left: 0..N-1, right: 10000..10000+N-1) |
 | `lhr_sensor_sim` | FOV-limited sensor simulation — filters cones by vehicle pose, accumulates detections. `inertial_sim` does the same job for the IMU and wheel speeds |
-| `lhr_track_builder` | Builds the centerline from indexed simulation cones or one-to-one classified LiDAR cone pairs |
+| `lhr_track_builder` | Builds an ordered centerline using nearest-neighbor, one-to-one classified, or Delaunay boundary pairing |
 | `lhr_sim_kinematic` | Kinematic bicycle-model vehicle simulator (lightweight, no Gazebo needed) |
 | `lhr_control` | Pure pursuit path-following controller with curvature-adaptive lookahead and speed planning |
 | `lhr_mission_manager` | FSAE driverless state machine (Off → Ready → Driving → Finished → Emergency) |
@@ -224,7 +224,7 @@ The individual `run_*.sh` scripts are useful for debugging a single node. For no
 
 ## Gazebo simulation
 
-The `lhr_gazebo` package provides an alternative simulation backend using Gazebo physics. It replaces the kinematic bicycle model (`lhr_sim_kinematic`) with a full physics vehicle in Gazebo while the cone detection pipeline and upper stack remain unchanged.
+The `lhr_gazebo` package provides an alternative simulation backend using Gazebo physics. It replaces the kinematic bicycle model (`lhr_sim_kinematic`) with a full physics vehicle while the cone detection pipeline and upper stack remain unchanged.
 
 ### Setup
 
@@ -257,6 +257,25 @@ Launch arguments work the same way:
 ```
 
 The `track_style` argument selects the track generator (`oval`, `autocross`, or `simple`). The world SDF is auto-resolved from `track_style` + `seed` (e.g. `oval_seed1.sdf`). Pre-generated worlds are installed by colcon from `worlds/*.sdf`.
+
+The track builder's eight chaining parameters are also launch arguments in
+both `perception:=sim` and `perception:=lidar`: `chaining_alg`, `min_step_m`,
+`max_step_m`, `max_turn_deg`, `distance_weight`, `heading_weight`, `beam_width`,
+and `beam_depth`. Their defaults match the
+[track builder parameters](#lhr_track_builder-track_builder). For example:
+
+```bash
+./scripts/run_gazebo_demo.sh perception:=lidar \
+  chaining_alg:=fixed_width_beam_search min_step_m:=0.3 max_step_m:=4.0 \
+  max_turn_deg:=70.0 distance_weight:=1.0 heading_weight:=2.0 \
+  beam_width:=5 beam_depth:=20
+```
+
+These values are read at node startup. Step limits and score weights apply to
+`constrained_greedy` and `fixed_width_beam_search`; `beam_width` and `beam_depth`
+apply only to beam search. The `greedy` algorithm ignores those tuning
+values. Launch forwarding and node startup are covered for both perception
+modes by `lhr_gazebo/test/test_chaining_parameters.py`.
 
 **Launch file architecture:** `gazebo_demo.launch.py` uses `OpaqueFunction` instead of `IfCondition`/`UnlessCondition` for perception mode and world selection. All launch args are declared in `generate_launch_description()`, and nodes are built in the `_launch_setup()` callback which runs at launch time with access to resolved argument values.
 
@@ -329,10 +348,10 @@ flowchart TB
 | Cone source | `publish_cones` | `publish_cones` (reused) | Gazebo GPU LiDAR |
 | Perception | `sensor_sim` (FOV filter) | `sensor_sim` (reused) | `lidar_cone_detector` (pointcloud clustering) |
 | Physics / vehicle | `sim_kinematic` | Gazebo | Gazebo |
-| `track_builder` pairing | index | index | boundary by default; classified when `lidar_classify_sides:=true` |
+| `track_builder` pairing | boundary (Delaunay) | boundary (Delaunay) | boundary by default; classified when `lidar_classify_sides:=true` |
 | Actuation | `/lhr/vehicle/cmd` directly | `joint_cmd_adapter` → 6 joints | `joint_cmd_adapter` → 6 joints |
 
-All paths produce identical ROS 2 topic interfaces — the upper stack doesn't know the difference.
+All paths produce the same ROS 2 topic interfaces. Boundary pairing uses color when available and falls back to geometry for unclassified LiDAR cones.
 
 ### World generation
 
@@ -411,7 +430,7 @@ the `OdometryPublisher` plugin, bridged from `/model/fsae_vehicle/tf` to `/tf`.
 | `width_m` | `3.5` | Track width in meters |
 | `cone_spacing_m` | `2.0` | Distance between cones along the track (autocross only) |
 
-Cone IDs: left cones use IDs `0..N-1`, right cones use IDs `10000..10000+N-1`. The track builder relies on this convention for pairing.
+Cone IDs: left cones use IDs `0..N-1`, right cones use IDs `10000..10000+N-1`. IDs identify markers but do not determine pairing.
 
 ### lhr_sensor_sim (sensor_sim)
 
@@ -460,17 +479,47 @@ and the measured drift figures are in
 |-------|---------|-------------|
 | `frame_id` | `"map"` | TF frame |
 | `publish_hz` | `5.0` | Publishing rate (Hz) |
-| `max_points` | `200` | Cap on centerline points |
-| `pairing_strategy` | `"index"` | Pairing strategy: `index`, `nearest`, `classified`, or `boundary` |
-| `track_width` | `3.5` | Expected track width for width-gated pairing (m) |
-| `track_width_tolerance` | `1.0` | Tolerance around track width (m) |
+| `max_points` | `200` | Cap on published centerline points, applied after chaining all candidates |
+| `pairing_strategy` | `"boundary"` | Pairing strategy: `nearest` (classified nearest-neighbor), `classified` (one-to-one width-gated), or `boundary` (color-aware Delaunay triangulation) |
+| `chaining_alg` | `"constrained_greedy"` | Midpoint ordering algorithm: `greedy`, `constrained_greedy`, or `fixed_width_beam_search` |
+| `min_step_m` | `0.3` | Constrained greedy and beam search: minimum midpoint separation (m) |
+| `max_step_m` | `4.0` | Constrained greedy and beam search: maximum step distance (m) |
+| `max_turn_deg` | `70.0` | Constrained greedy and beam search: sector half-angle from the current heading (degrees) |
+| `distance_weight` | `1.0` | Constrained greedy and beam search: normalized distance cost weight |
+| `heading_weight` | `1.0` | Constrained greedy and beam search: squared normalized heading-error cost weight |
+| `beam_width` | `3` | Beam search: positive integer limit on retained partial paths per depth |
+| `beam_depth` | `10` | Beam search: positive integer limit on added points (returns at most depth + 1 midpoints) |
+| `track_width` | `3.5` | Expected track width for classified and boundary pairing (m) |
+| `track_width_tolerance` | `1.0` | Tolerance around track width for classified and boundary pairing (m) |
+| `boundary_use_color` | `true` | Boundary pairing: reject known same-color edges; set false for the original geometry-only width filter |
 | `cone_topic` | `"/lhr/sensor/cones_detected"` | Topic to subscribe for cone data |
 
 Cone pairing strategies:
-- **index** (default): Pairs left cone ID `i` with right cone ID `i + 10000`. Works with sim perception where cone IDs follow the trackgen convention.
 - **nearest**: Pairs each left cone with its nearest unpaired right cone.
-- **classified**: Computes a minimum-cost one-to-one assignment between inferred left and right cones, then rejects pairs outside the track-width band. Opt-in for LiDAR perception.
-- **boundary**: Uses Delaunay triangulation to pair unclassified cones that are approximately `track_width` apart. Default for LiDAR perception.
+- **classified**: Computes a minimum-cost one-to-one left/right assignment within the track-width band, leaving unmatched cones unused. Opt-in for LiDAR perception.
+- **boundary** (default): Delaunay-triangulates all cone positions independently of color. It rejects blue-blue and yellow-yellow edges, then retains blue-yellow edges and edges involving unknown colors when they are approximately `track_width` (3.5 m +/- `track_width_tolerance`) apart.
+
+Set `boundary_use_color:=false` with `pairing_strategy:=boundary` to use the
+original geometry-only Delaunay edge filter, ignoring color labels entirely.
+Unclassified cones (`cones` namespace) trigger a warning throttled to five
+seconds. Boundary pairing uses geometry for these cones in either mode;
+Nearest and classified pairing ignore them; the warning suggests switching to boundary.
+
+All three chaining algorithms are implemented. With odometry,
+chaining starts at the midpoint nearest the vehicle. Without odometry, it starts
+at midpoint zero. Greedy reverses the result to match vehicle heading when
+needed. Constrained greedy instead initializes a forward sector from vehicle
+yaw (or a separated nearest neighbor without odometry), then moves and rotates
+it along the accepted path. It chooses the lowest normalized distance and
+squared heading-error cost and stops when no valid candidate remains.
+Fixed-width beam search uses the same sector and step score, accumulating costs
+over each partial path and keeping the best `beam_width` extensions globally
+at each depth. It returns the best prefix after `beam_depth` expansions or when
+no retained path can advance. Dead ends drop out when another path can advance;
+cost comparisons are always between equal-depth paths. The default depth
+returns at most 11 midpoints, and beam search does not reverse the result.
+See [Track Builder](src/lhr_track_builder/README.md#chaining) for parameter
+validation, tuning, and a startup example.
 
 ### lhr_sim_kinematic (sim_node)
 

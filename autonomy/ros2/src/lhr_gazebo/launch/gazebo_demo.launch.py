@@ -26,6 +26,7 @@ from launch.actions import (
 )
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def _find_world(context: LaunchContext):
@@ -230,6 +231,22 @@ def _launch_setup(context: LaunchContext):
                 'use_sim_time': True,
                 'pairing_strategy': (
                     'classified' if classify_sides else 'boundary'),
+                'chaining_alg': ParameterValue(
+                    LaunchConfiguration('chaining_alg'), value_type=str),
+                'min_step_m': ParameterValue(
+                    LaunchConfiguration('min_step_m'), value_type=float),
+                'max_step_m': ParameterValue(
+                    LaunchConfiguration('max_step_m'), value_type=float),
+                'max_turn_deg': ParameterValue(
+                    LaunchConfiguration('max_turn_deg'), value_type=float),
+                'distance_weight': ParameterValue(
+                    LaunchConfiguration('distance_weight'), value_type=float),
+                'heading_weight': ParameterValue(
+                    LaunchConfiguration('heading_weight'), value_type=float),
+                'beam_width': ParameterValue(
+                    LaunchConfiguration('beam_width'), value_type=int),
+                'beam_depth': ParameterValue(
+                    LaunchConfiguration('beam_depth'), value_type=int),
                 'track_width': 3.5,
                 'track_width_tolerance': 1.0,
             }],
@@ -242,7 +259,23 @@ def _launch_setup(context: LaunchContext):
             name='track_builder',
             parameters=[{
                 'use_sim_time': True,
-                'pairing_strategy': 'index',
+                'pairing_strategy': 'boundary',
+                'chaining_alg': ParameterValue(
+                    LaunchConfiguration('chaining_alg'), value_type=str),
+                'min_step_m': ParameterValue(
+                    LaunchConfiguration('min_step_m'), value_type=float),
+                'max_step_m': ParameterValue(
+                    LaunchConfiguration('max_step_m'), value_type=float),
+                'max_turn_deg': ParameterValue(
+                    LaunchConfiguration('max_turn_deg'), value_type=float),
+                'distance_weight': ParameterValue(
+                    LaunchConfiguration('distance_weight'), value_type=float),
+                'heading_weight': ParameterValue(
+                    LaunchConfiguration('heading_weight'), value_type=float),
+                'beam_width': ParameterValue(
+                    LaunchConfiguration('beam_width'), value_type=int),
+                'beam_depth': ParameterValue(
+                    LaunchConfiguration('beam_depth'), value_type=int),
             }],
             output='screen',
         )
@@ -355,6 +388,15 @@ def generate_launch_description():
         # Sensor sim
         DeclareLaunchArgument('fov_deg', default_value='200.0'),
         DeclareLaunchArgument('max_range_m', default_value='20.0'),
+        # Track builder chaining (both perception modes)
+        DeclareLaunchArgument('chaining_alg', default_value='constrained_greedy'),
+        DeclareLaunchArgument('min_step_m', default_value='0.3'),
+        DeclareLaunchArgument('max_step_m', default_value='4.0'),
+        DeclareLaunchArgument('max_turn_deg', default_value='70.0'),
+        DeclareLaunchArgument('distance_weight', default_value='1.0'),
+        DeclareLaunchArgument('heading_weight', default_value='1.0'),
+        DeclareLaunchArgument('beam_width', default_value='3'),
+        DeclareLaunchArgument('beam_depth', default_value='10'),
         # Control
         DeclareLaunchArgument('lookahead_dist', default_value='5.0'),
         DeclareLaunchArgument('lookahead_min', default_value='2.0'),
