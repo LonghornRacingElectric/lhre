@@ -1353,7 +1353,7 @@ function App() {
     try { localStorage.setItem("trackside-phone-full", phoneFull ? "1" : "0"); } catch { /* quota */ }
   }, [phoneFull]);
 
-  // Keep a phone's screen on in drive view: a sleeping phone can't press Stop
+  // Keep a phone's screen on in drive view: a sleeping phone can't log a lap
   // and drops its presence heartbeat. Needs HTTPS; silently skipped otherwise.
   useEffect(() => {
     if (phoneFull || !("wakeLock" in navigator)) return;
@@ -2481,7 +2481,7 @@ function App() {
     return completedLap;
   }
 
-  function triggerManualLap(stop = false) {
+  function triggerManualLap() {
     if (isMirrorRef.current) return;
     const current = liveStateRef.current;
     const sample = current.lastSample;
@@ -2541,22 +2541,20 @@ function App() {
       maxCellTempC: lapMaxCellTempC(current.lapSamples),
     };
     laps.push(completedLap);
-    // stop: close the lap without starting the next (autocross runs with waits
-    // between them; the flying-lap model logged the wait as a lap).
     const nextState = {
       ...current,
       laps,
-      lapStartMs: stop ? null : pressT,
-      sectorStartMs: stop ? null : pressT,
+      lapStartMs: pressT,
+      sectorStartMs: pressT,
       nextSplitIndex: 0,
       currentSectors: [],
       lapEnergyWh: 0,
       lapEnergyOutWh: 0,
       lapEnergyInWh: 0,
       lapDistanceM: 0,
-      lapSamples: stop ? [] : [sample],
+      lapSamples: [sample],
       deltaMs: 0,
-      status: `${completedLap.label} logged${stop ? " — timer stopped" : ""}.`,
+      status: `${completedLap.label} logged.`,
     };
     liveStateRef.current = nextState;
     selectCompletedLapByDefault(completedLap.id);
@@ -2572,11 +2570,11 @@ function App() {
   // trackside viewer (source of truth) AND fires the driver's dash lap card when
   // a lap actually completes — so either tab does the whole thing. We bump
   // dashLastLapCountRef so the auto-send effect doesn't double-fire for this lap.
-  function markLap(stop = false) {
+  function markLap() {
     if (isMirrorRef.current) return; // read-only mirror — leader owns laps
     const beforeLaps = liveStateRef.current.laps.length;
     const beforeStartMs = liveStateRef.current.lapStartMs;
-    triggerManualLap(stop);
+    triggerManualLap();
     const after = liveStateRef.current.laps.length;
     const lapClosed = after > beforeLaps;
     // On a completed lap, request the car's lap card. The actual lapTrigger is
@@ -2973,7 +2971,7 @@ function App() {
     <main className={phoneFull ? "shell" : "shell driveMode"}>
       {/* Phone drive view — CSS shows it only at <=760px in driveMode. Layout from
           the drivers' whiteboard: status, flying-lap timer, lap n/target, last
-          lap, two big flag buttons, one big Start/Stop. The rest is in Full view. */}
+          lap, two big flag buttons, one big Start Lap / Log Lap. The rest is in Full view. */}
       <section className="driveView" aria-label="Drive view">
         <div className="driveChips">
           <button className="tool driveFull" onClick={() => setPhoneFull(true)}>Full view</button>
@@ -2999,7 +2997,7 @@ function App() {
         </div>
         <div className="driveTimer">
           <b>{liveState.lapStartMs ? formatLapTime(liveLapElapsedMs) : "0:00.00"}</b>
-          <small>{eventEnded ? "Event ended" : liveState.lapStartMs ? "Flying lap" : "Stopped"}</small>
+          <small>{eventEnded ? "Event ended" : liveState.lapStartMs ? "Flying lap" : "Out lap / waiting for start"}</small>
         </div>
         <div className="driveLap">
           <b>Lap {liveState.laps.length + (liveState.lapStartMs ? 1 : 0)} / {targetLaps > 0 ? targetLaps : "—"}</b>
@@ -3023,17 +3021,17 @@ function App() {
           ) : <span>No flags yet</span>}
         </div>
         <button
-          className={`driveBtn driveStart${liveState.lapStartMs ? " running" : ""}`}
+          className="driveBtn driveStart"
           disabled={isMirror || !telemetryFresh}
           onClick={() => {
             // ponytail: 1.5 s lockout — drivers' logs showed double taps (1–3 s junk laps).
             const now = Date.now();
             if (now - lastDrivePressRef.current < 1500) return;
             lastDrivePressRef.current = now;
-            markLap(!!liveStateRef.current.lapStartMs);
+            markLap();
           }}
         >
-          {liveState.lapStartMs ? "Stop" : "Start"}
+          {liveState.lapStartMs ? "Log Lap" : "Start Lap"}
           {isMirror ? <small>Leader controls the timer</small> : !telemetryFresh ? <small>No live telemetry</small> : null}
         </button>
         {msgSendStatus || liveState.status ? <small className="driveStatus" role="status">{msgSendStatus || liveState.status}</small> : null}
@@ -3716,7 +3714,7 @@ function App() {
                 className="primary liveAction"
                 disabled={isMirror || !telemetryFresh}
                 title={isMirror ? "Read-only mirror — the leader logs laps" : !telemetryFresh ? "No live telemetry from the car" : "Logs the lap here on the Live tab and fires the driver's dash lap card on the car — same button as the Dash tab"}
-                onClick={() => markLap()}
+                onClick={markLap}
               >
                 <Flag size={20} /> {liveState.lapStartMs ? "Log Lap" : "Start Lap"}
               </button>
@@ -4410,7 +4408,7 @@ function App() {
               style={{ fontSize: "1.3rem", padding: "16px 18px", width: "100%", justifyContent: "center" }}
               disabled={isMirror || !telemetryFresh}
               title={isMirror ? "Read-only mirror" : !telemetryFresh ? "No live telemetry from the car" : "Same action as the Live tab's Start/Log Lap button"}
-              onClick={() => markLap()}
+              onClick={markLap}
             >
               <Flag size={18} /> {liveState.lapStartMs ? "Log Lap" : "Start Lap"}
             </button>

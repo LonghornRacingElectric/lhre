@@ -1780,5 +1780,4 @@ textarea:focus-visible,
 .driveCount { font-size: var(--fs-2xl); font-variant-numeric: tabular-nums; }
 .driveFlagLine { font-size: var(--fs-base); color: var(--muted-text); min-height: var(--ctl-h); display: flex; align-items: center; }
 .driveStart { flex: 1 1 0; min-height: 96px; font-size: 44px; background: var(--good); border-color: transparent; color: #fff; }
-.driveStart.running { background: var(--danger); }
 .driveStatus { color: var(--muted-text); font-size: var(--fs-sm); text-align: center; }
