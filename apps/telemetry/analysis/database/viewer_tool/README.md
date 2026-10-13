@@ -81,6 +81,15 @@ Run dev server:
 npm run dev
 ```
 
+## Hosting
+
+The viewer is self-hosted: `npm run build` + `npm start` on the telemetry
+box, kept up by PM2 (see [the stack README](../../../stack/README.md)) and
+reached through a Cloudflare tunnel. Nothing in this directory targets
+Vercel; the `lapdog` Vercel check that used to post on PRs belonged to the
+removed standalone drive day app and is managed in Vercel's dashboard, not
+here.
+
 ## Drive day viewer
 
 `/trackside-retro` replays a trackside-live session export after the fact:
