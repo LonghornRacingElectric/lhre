@@ -9,6 +9,10 @@ const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500", "600"], 
 export const metadata: Metadata = {
   title: "LAPDOG",
   description: "Lap Analysis & Playback for Drive-day Operations Group.",
+  icons: {
+    icon: { url: "/lapdoglogo2.png", type: "image/png" },
+    apple: "/lapdoglogo2.png",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

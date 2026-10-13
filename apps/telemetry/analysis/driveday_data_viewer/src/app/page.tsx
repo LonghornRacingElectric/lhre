@@ -8,7 +8,7 @@ export default function Landing() {
       <h1 className={styles.srOnly}>Trackside LAPDOG</h1>
       <Image
         className={styles.logo}
-        src="/lapdog-logo.webp"
+        src="/lapdoglogo2.png"
         alt="Trackside LAPDOG logo: a dachshund's face in a circle"
         width={1500}
         height={1500}

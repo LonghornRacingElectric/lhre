@@ -84,11 +84,13 @@ export function HudRight() {
   useUi(p);
   useFrame(p);
   const { L, rel } = p.curState();
-  const V = (k: "spd" | "thr" | "brkp" | "gacc" | "kw" | "rpm") => interp(L.ch.t, L.ch[k], rel);
+  const V = (k: "spd" | "thr" | "brkp" | "gacc" | "glat" | "kw" | "rpm") => interp(L.ch.t, L.ch[k], rel);
   const g = V("gacc");
+  const lat = V("glat");
   return (
     <div className="hud hud-r" id="hudr">
       <div className="big">{cvS(p.units, V("spd")).toFixed(0)}<small>{sU(p.units).toUpperCase()}</small></div>
+      <div className="latg"><span>Lateral · GPS est.</span><b>{Number.isFinite(lat) ? Math.abs(lat).toFixed(2) + " g" + (Math.abs(lat) < 0.005 ? "" : lat > 0 ? " L" : " R") : "—"}</b></div>
       {p.mode === "pedal" && (
         <div className="bars">
           <div>THR<em><i style={{ width: V("thr").toFixed(0) + "%", background: "var(--green)" }} /></em></div>

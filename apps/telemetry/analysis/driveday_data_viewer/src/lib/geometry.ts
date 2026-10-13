@@ -92,10 +92,11 @@ export function curveOf(P: ArrayLike<number>[]): XY[][] {
 
 /** Where a lap's car is, rel ms after the lap start, on the smooth curve. */
 export function posAt(L: Lap, rel: number): XY {
+  const pts = L.playbackPts ?? L.pts;
   const t = L.ch.t;
   const n = t.length;
-  if (rel <= t[0]) return [L.pts[0][0], L.pts[0][1]];
-  if (rel >= t[n - 1]) return [L.pts[n - 1][0], L.pts[n - 1][1]];
+  if (rel <= t[0]) return [pts[0][0], pts[0][1]];
+  if (rel >= t[n - 1]) return [pts[n - 1][0], pts[n - 1][1]];
   let lo = 0;
   let hi = n - 1;
   while (hi - lo > 1) {
@@ -104,7 +105,7 @@ export function posAt(L: Lap, rel: number): XY {
     else hi = m;
   }
   const f = (rel - t[lo]) / (t[hi] - t[lo] || 1);
-  const g = (i: number) => L.pts[Math.max(0, Math.min(n - 1, i))];
+  const g = (i: number) => pts[Math.max(0, Math.min(n - 1, i))];
   return cr(g(lo - 1), g(lo), g(hi), g(hi + 1), f);
 }
 

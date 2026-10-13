@@ -96,8 +96,31 @@ would need a server, so they are follow-ups.
 
 ## Gotchas
 
-- GPS runs at about 1.8 Hz, so sector times carry a tenth or two of noise and
-  some braking zones are only one or two fixes long.
+- The selected lap has a thicker, outlined colour trace. Low-value sections
+  and the path ahead of the playhead stay visible; ghost laps remain faint.
+- Lateral g is shown in the map HUD, GPS hover readings and Car panel as a
+  **GPS estimate**: speed squared times the signed curvature of three
+  fixes on the smoothed playback path, divided by standard gravity. L/R means left/right turn.
+  Endpoints, repeated timestamps, speeds below 1 m/s and fixes less than
+  1 m apart over the estimation window show a dash. The window expands
+  around high-rate fixes until each side covers at least 150 ms and 1 m,
+  up to 1.5 s per side. GPS noise affects this estimate; it is not an IMU
+  reading and does not account for banking.
+- Car readings reflow within the panel; pack modules A, B and C have their
+  own temperature tiles. On phones the map and panels stack vertically,
+  legends wrap and tables scroll within their panel.
+- The landing page and browser icon use the current LAPDOG logo.
+
+- Imports merge full `laps[].samples` and `currentLap.lapSamples` with `sampleTail` (which the exporter
+  caps at 6,000 samples). Overlapping timestamps are merged, not duplicated;
+  all distinct timestamps in retained laps are kept, including 20 Hz data.
+  Telemetry between GPS fixes keeps its timestamp and gets an interpolated
+  position. Samples outside the available GPS range cannot be mapped.
+- GPS rate depends on the export, not a fixed 1.8 Hz limit. Playback positions
+  and derived speed and acceleration use centred 0.5 s time averages without
+  removing samples. Imported fixes, telemetry and logged lap times are kept;
+  lap boundaries remain fixed so adjacent laps meet. Already imported runs
+  need reimporting to recover lap samples missed by the old importer.
 - Third sectors are missing on the unfinished last lap, and cones are only
   counted on completed laps.
 - Units (mph or km/h, °C or °F) and the theme are display settings. Stored

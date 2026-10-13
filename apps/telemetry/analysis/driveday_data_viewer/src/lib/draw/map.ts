@@ -1,5 +1,6 @@
 import { posAt, roadOf } from "../geometry";
 import { interp } from "../math";
+import { MPH } from "../format";
 import { Player } from "../player";
 import type { Lap, XY } from "../types";
 import { palette, ramp, rampSpd, type Palette } from "./palette";
@@ -11,24 +12,24 @@ export function segPaint(p: Player, L: Lap, i: number, pal: Palette): [string, n
   const { session: s, mode } = p;
   const pts = L.pts;
   const c = L.ch;
-  if (mode === "speed") return [rampSpd(((pts[i][2] + pts[i + 1][2]) / 2 - s.vlo) / (s.vhi - s.vlo)), 1];
+  if (mode === "speed") return [rampSpd(((c.spd[i] + c.spd[i + 1]) / (2 * MPH) - s.vlo) / (s.vhi - s.vlo)), 1];
   if (mode === "gain") {
     const g = p.analysis.gainFor(L, p.refLap(), p.refKey());
-    if (!g) return [pal.mute, 0.5];
+    if (!g) return [pal.mute, 0.85];
     const v = g[i];
     const m = Math.min(1, Math.abs(v) / (L.gainScale ?? 1));
-    return [v > 0 ? pal.red : pal.green, 0.25 + 0.75 * m];
+    return [v > 0 ? pal.red : pal.green, 0.7 + 0.3 * m];
   }
   if (mode === "pedal") {
     const b = (c.brkp[i] + c.brkp[i + 1]) / 2;
     const t = (c.thr[i] + c.thr[i + 1]) / 2;
-    if (b > 8) return [pal.red, 0.6 + 0.4 * Math.min(1, b / 60)];
-    if (t > 3) return [pal.green, 0.4 + 0.6 * t / 100];
-    return [pal.mute, 0.55];
+    if (b > 8) return [pal.red, 0.8 + 0.2 * Math.min(1, b / 60)];
+    if (t > 3) return [pal.green, 0.75 + 0.25 * t / 100];
+    return [pal.mute, 0.9];
   }
   if (mode === "acc") {
     const a = (c.acc[i] + c.acc[i + 1]) / 2 / s.accScale;
-    return [a < 0 ? pal.red : pal.green, 0.2 + 0.8 * Math.min(1, Math.abs(a))];
+    return [a < 0 ? pal.red : pal.green, 0.7 + 0.3 * Math.min(1, Math.abs(a))];
   }
   return [pal.sector[Math.min(2, Math.max(0, Math.floor((pts[i][3] + pts[i + 1][3]) / 2 / (s.RL / 3))))], 1];
 }
@@ -129,7 +130,7 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
   for (let i = 0; i < BL.length - 1; i++) {
     const k = Math.min(2, Math.max(0, Math.floor(BL[i][3] / (RL / 3))));
     ctx.strokeStyle = pal.sector[k];
-    ctx.globalAlpha = p.mode === "sec" ? 0.9 : 0.38;
+    ctx.globalAlpha = p.mode === "sec" ? 0.9 : 0.18;
     ctx.beginPath();
     ctx.moveTo(X(BL[i][0]), Y(BL[i][1]));
     ctx.lineTo(X(BL[i + 1][0]), Y(BL[i + 1][1]));
@@ -191,11 +192,15 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
     ctx.globalAlpha = 1;
   }
   if (L.kind === "out") ctx.setLineDash([6, 4]);
+  // A solid casing separates the selected lap from the road, ghosts and zone bands.
+  ctx.strokeStyle = pal.panel;
+  ctx.lineWidth = 10 * tw;
+  for (const curve of L.curve) segCurve(curve);
   for (let i = 0; i < pts.length - 1; i++) {
     const pp = segPaint(p, L, i, pal);
-    ctx.globalAlpha = pp[1] * (ct[i + 1] <= rel ? 1 : 0.3);
+    ctx.globalAlpha = pp[1] * (ct[i + 1] <= rel ? 1 : 0.8);
     ctx.strokeStyle = pp[0];
-    ctx.lineWidth = (paint ? 6 : 3.4) * tw;
+    ctx.lineWidth = 6.5 * tw;
     segCurve(L.curve[i]);
   }
   ctx.globalAlpha = 1;
@@ -272,13 +277,19 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
     dots(a.cons.apex, pal.blue);
     ctx.globalAlpha = 1;
   }
-  /* a dot on every fix */
-  ctx.fillStyle = pal.ink;
-  pts.forEach((q) => {
-    ctx.beginPath();
-    ctx.arc(X(q[0]), Y(q[1]), 1.8 * Math.min(1.6, tw), 0, 7);
-    ctx.fill();
-  });
+  // Dense 20 Hz fixes must not cover the colour trace; reveal spaced dots when zoomed in.
+  if (zr > 2) {
+    ctx.fillStyle = pal.ink;
+    let last: XY | null = null;
+    pts.forEach((q) => {
+      const x = X(q[0]), y = Y(q[1]);
+      if (last && Math.hypot(x - last[0], y - last[1]) < 8) return;
+      last = [x, y];
+      ctx.beginPath();
+      ctx.arc(x, y, 1.4, 0, 7);
+      ctx.fill();
+    });
+  }
   gates();
 
   /* corner labels and brake zone badges */

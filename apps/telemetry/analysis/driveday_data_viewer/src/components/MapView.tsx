@@ -73,13 +73,16 @@ export function MapView() {
       const c = L.ch;
       const g = c.gacc[bi];
       tip.current.hidden = false;
-      tip.current.textContent = `${cvS(p.units, c.spd[bi]).toFixed(0)} ${sU(p.units)} · THR ${c.thr[bi].toFixed(0)} · BRK ${c.brkp[bi].toFixed(0)} · ${g >= 0 ? "+" : "−"}${Math.abs(g).toFixed(2)} g · ${clock(c.t[bi])}`;
-      tip.current.style.left = Math.max(4, Math.min(r.width - 250, mx + 14)) + "px";
+      const lat = c.glat[bi];
+      const lateral = Number.isFinite(lat) ? Math.abs(lat).toFixed(2) + " g" + (Math.abs(lat) < 0.005 ? "" : lat > 0 ? " L" : " R") : "—";
+      tip.current.textContent = `${cvS(p.units, c.spd[bi]).toFixed(0)} ${sU(p.units)} · THR ${c.thr[bi].toFixed(0)} · BRK ${c.brkp[bi].toFixed(0)} · LONG ${g >= 0 ? "+" : "−"}${Math.abs(g).toFixed(2)} g · LAT ${lateral} (GPS est.) · ${clock(c.t[bi])}`;
+      tip.current.style.left = Math.max(4, Math.min(r.width - tip.current.offsetWidth - 4, mx + 14)) + "px";
       tip.current.style.top = Math.max(4, my - 32) + "px";
     };
     const leave = () => {
       hideTip();
     };
+    const cancel = () => { drag = null; hideTip(); };
     const up = (e: PointerEvent) => {
       const was = drag;
       drag = null;
@@ -118,6 +121,7 @@ export function MapView() {
     cv.addEventListener("pointerdown", down);
     cv.addEventListener("pointermove", move);
     cv.addEventListener("pointerup", up);
+    cv.addEventListener("pointercancel", cancel);
     cv.addEventListener("pointerleave", leave);
     cv.addEventListener("wheel", wheel, { passive: false });
     cv.addEventListener("dblclick", dbl);
@@ -125,6 +129,7 @@ export function MapView() {
       cv.removeEventListener("pointerdown", down);
       cv.removeEventListener("pointermove", move);
       cv.removeEventListener("pointerup", up);
+      cv.removeEventListener("pointercancel", cancel);
       cv.removeEventListener("pointerleave", leave);
       cv.removeEventListener("wheel", wheel);
       cv.removeEventListener("dblclick", dbl);
