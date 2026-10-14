@@ -1,6 +1,6 @@
 /** Lap-style time: 19.622, or 1:02.345 once past a minute. Input is milliseconds. */
 export function fmt(ms: number | null | undefined, p = 3): string {
-  if (ms == null) return "—";
+  if (ms == null || !Number.isFinite(ms)) return "—";
   const s = ms / 1000;
   if (s >= 60) {
     const m = Math.floor(s / 60);

@@ -12,7 +12,7 @@ const MODES: [Mode, string, string?][] = [
   ["sec", "Sector"],
 ];
 
-export function MapTools({ dockHidden, onToggleDock }: { dockHidden: boolean; onToggleDock: () => void }) {
+export function MapTools({ dockHidden, onToggleDock }: { dockHidden?: boolean; onToggleDock?: () => void } = {}) {
   const p = usePlayer();
   useUi(p);
   const { session: s } = p;
@@ -45,8 +45,15 @@ export function MapTools({ dockHidden, onToggleDock }: { dockHidden: boolean; on
           </select>
         </div>
       </Menu>
+      <Menu label="Sectors">
+        <span>{p.sectorMethod === "manual" ? "Custom boundaries" : "Automatic · balanced time, near corner/straight transitions"}</span>
+        <button className="btn" type="button" onClick={() => p.setSectorAtPlayhead(0)}>End S1 here</button>
+        <button className="btn" type="button" onClick={() => p.setSectorAtPlayhead(1)}>End S2 here</button>
+        <button className="btn" type="button" onClick={() => p.autoSectors()}>Auto-place sectors</button>
+        <span className="note2">Pause a completed lap at a useful landmark, then set its boundary. Saved for this track in this browser.</span>
+      </Menu>
       <span className="sp" />
-      <button className="btn" type="button" title="Hide or show the panels (D)" onClick={onToggleDock}>{dockHidden ? "Show panels" : "Hide panels"}</button>
+      {onToggleDock && <button className="btn" type="button" title="Hide or show the panels (D)" onClick={onToggleDock}>{dockHidden ? "Show panels" : "Hide panels"}</button>}
     </div>
   );
 }

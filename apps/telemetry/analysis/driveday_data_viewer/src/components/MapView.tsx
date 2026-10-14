@@ -3,16 +3,18 @@
 import { useEffect, useRef } from "react";
 import { clock, MPH } from "@/lib/format";
 import { drawMap } from "@/lib/draw/map";
+import { lapCutJoin } from "@/lib/geometry";
 import { gradientCss, rampSpd } from "@/lib/draw/palette";
 import { cvS, sU } from "@/lib/units";
 import { Hud } from "./Hud";
-import { usePainter, usePlayer, useUi } from "./context";
+import { useFrame, usePainter, usePlayer, useUi } from "./context";
 
 /* The map stage: canvas, overlay, legend and zoom controls. */
 
 function Legend() {
   const p = usePlayer();
   useUi(p);
+  useFrame(p);
   const { mode, units } = p;
   const s = p.session;
   const sw = (c: string, n: string) => (
@@ -24,7 +26,8 @@ function Legend() {
   else if (mode === "gain") body = <><span>Gaining<span className="ramp" style={{ background: "linear-gradient(90deg,var(--green),var(--line),var(--red))" }} />Losing</span><span>against the ghost{p.refLap() ? "" : " (turn the ghost on)"}</span></>;
   else if (mode === "acc") body = <><span>Braking<span className="ramp" style={{ background: "linear-gradient(90deg,var(--red),var(--line),var(--green))" }} />Accelerating</span><span>±{s.accScale.toFixed(1)} m/s²</span></>;
   else body = <>{["--s1", "--s2", "--s3"].map((c, i) => sw(c, "S" + (i + 1)))}</>;
-  return <div className="maplegend" id="legend">{body}</div>;
+  const join = lapCutJoin(p.curState().L, s.geo);
+  return <div className="maplegend" id="legend">{body}{join && !p.layoutOnly && <span title="Manual lap presses were at different positions. The dashed continuation follows the known layout, without snapping recorded endpoints to it or inventing timing/colour data.">Dashed layout · untimed ({join.distance.toFixed(0)} m)</span>}</div>;
 }
 
 export function MapView() {

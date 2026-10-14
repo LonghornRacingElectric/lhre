@@ -34,20 +34,20 @@ function pedalMix(l: Lap): number[] {
 
 const sel = (p: Player) => p.session.runs.indexOf(p.laps[p.sel]);
 const bars = (p: Player, series: { col: Col; vals: number[] }[], fmt: (v: number) => string, hline?: { v: number; label: string }) =>
-  (c: HTMLCanvasElement) => barChart(c, { n: p.session.runs.length, series, hline, fmt, selected: sel(p) });
+  (c: HTMLCanvasElement) => barChart(c, { n: p.session.runs.length, labels: p.session.runs.map((l) => l.name), series, hline, fmt, selected: sel(p) });
 
 export const CHARTS: ChartDef[] = [
   {
     id: "sect", title: "Sector times", live: false,
-    desc: "Seconds in each third of the lap, with the cone penalty stacked on top. Click a bar to jump to that lap.",
+    desc: "Seconds through the shared sector gates, with the cone penalty stacked on top. Click a bar to jump to that lap.",
     legend: [["--s1", "S1"], ["--s2", "S2"], ["--s3", "S3"], ["--red", "Cone penalty"]],
     draw: (p, c) => {
       const { runs, base } = p.session;
       const a = p.analysis;
       bars(p, [
-        ...[0, 1, 2].map((k) => ({ col: (["s1", "s2", "s3"] as Col[])[k], vals: runs.map((l) => (l.sec[k] as number) / 1000) })),
+        ...[0, 1, 2].map((k) => ({ col: (["s1", "s2", "s3"] as Col[])[k], vals: runs.map((l) => l.sec[k] != null ? l.sec[k]! / 1000 : NaN) })),
         { col: "red" as Col, vals: runs.map((l) => a.conesOf(l) * a.pen()) },
-      ], (v) => v + "s", { v: base.dur / 1000, label: "Lap 1" })(c);
+      ], (v) => v + "s", { v: base.dur / 1000, label: base.name })(c);
     },
   },
   {

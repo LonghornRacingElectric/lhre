@@ -41,6 +41,7 @@ export interface SessionInfoExport {
 }
 
 export interface SessionExport {
+  flags?: { id?: string | number; t: number; label: string; saved?: boolean }[];
   version?: number;
   savedAt?: number;
   source?: string;
@@ -139,6 +140,8 @@ export interface RunMeta {
 }
 
 export interface RunData {
+  /** Exported cone hits assigned to completed laps; t is absolute logger time. */
+  coneEvents?: ConeEvent[];
   ref: XY[];
   cum: number[];
   /** Length of the loop, or of the course between the start line and the finish line when `open`. */
@@ -200,6 +203,8 @@ export interface ConeEvent {
   t: number;
 }
 export interface UserState {
+  /** Imported hits explicitly removed by the user, so reopening does not restore them. */
+  dismissedCones?: string[];
   setup: Record<string, string | number>;
   /** Cone counts that were entered without a time, keyed by lap number. */
   cones: Record<string, number>;
