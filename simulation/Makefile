@@ -10,7 +10,7 @@ STUDY_OUT = $(S)$(if $(V),--$(V))
 
 GIT_LF := git -c core.autocrlf=false -c core.longpaths=true
 
-.PHONY: help init build shell test records records-undo bobsim study bump-bobsim clean
+.PHONY: help init build shell test records records-undo bobsim fmu study bump-bobsim clean
 
 help:
 	@echo "make init                  Get submodules and build the image"
@@ -20,6 +20,7 @@ help:
 	@echo "make records               Write //vehicle into BobLib's Modelica records"
 	@echo "make records-undo          Put back only the files make records wrote"
 	@echo "make bobsim T=<target>     Run a BobSim make target"
+	@echo "make fmu                   Build out/fmu/OrionFMI.fmu from BobLib VehicleFMI"
 	@echo "make study S=<name>        Run studies/<name>/run.py (STUDY_WORKERS=n limits CPUs)"
 	@echo "make bump-bobsim REF=<ref> Move the BobSim pin"
 	@echo "make clean                 Delete out/"
@@ -57,6 +58,9 @@ records:
 
 records-undo:
 	cd $(BOBLIB) && git checkout -- $$(git ls-files -- $(RECORD_FILES)) && git clean -f -- $(RECORD_FILES)
+
+fmu:
+	$(RUN) sim sh tools/fmu/build.sh
 
 bobsim:
 	@test -n "$(T)" || { echo "Set T=<bobsim target>. Run 'make bobsim T=help' to list them."; exit 1; }

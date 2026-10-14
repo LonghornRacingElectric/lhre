@@ -37,6 +37,7 @@ make test    # check that BobSim loads //vehicle
 | `make records` | Write `vehicle/vehicle.yml` into BobLib's Modelica records |
 | `make records-undo` | Put back only the files `make records` wrote |
 | `make bobsim T=<target>` | Run a BobSim make target. `T=help` lists them. |
+| `make fmu` | Build `out/fmu/OrionFMI.fmu`, BobLib's full vehicle with `vehicle/vehicle.yml` as an FMU, for `lhr_sim_bobsim`. Experimental; see [tools/fmu](tools/fmu/README.md) |
 | `make study S=<name>` | Run `studies/<name>/run.py`. If it succeeds, write outputs to `out/<name>/`. `STUDY_WORKERS=n` limits the CPUs for parallel cases. `ARGS=... V=<name>` runs a variant to `out/<name>--<V>/`. |
 | `make bump-bobsim REF=<ref>` | Move the BobSim pin to a commit, tag or branch |
 | `make clean` | Delete `out/` |
@@ -50,6 +51,7 @@ simulation/
   bobsim/             # submodule, pinned SHA
   studies/<name>/     # README.md + run.py
   tools/              # make test, study provenance, README fill and shared study helpers
+  tools/fmu/          # make fmu: the vehicle FMU build
   docs/               # detail and agent skills
   out/                # gitignored outputs
 ```

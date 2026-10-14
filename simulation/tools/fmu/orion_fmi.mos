@@ -1,0 +1,16 @@
+setCommandLineOptions("--simCodeTarget=C");
+setCommandLineOptions("--maxSizeLinearTearing=5000");
+setCommandLineOptions("--indexReductionMethod=dynamicStateSelection");
+setCommandLineOptions("--matchingAlgorithm=PFPlusExt");
+setCommandLineOptions("-d=initialization,NLSanalyticJacobian,disableStartCalc");
+setCommandLineOptions("--generateDynamicJacobian=none");
+setCommandLineOptions("--fmiFlags=s:cvode");
+setCommandLineOptions("--fmiFilter=internal");
+loadModel(Modelica, {"4.1.0"});
+loadModel(VehicleInterfaces, {"2.0.2"});
+loadFile("out/fmu/build/BobLib/package.mo");
+loadFile("out/fmu/build/OrionFMI.mo");
+getErrorString();
+cd("out/fmu/build");
+buildModelFMU(OrionFMI, version = "2.0", fmuType = "me_cs", fileNamePrefix = "OrionFMI", platforms = fill("", 0));
+getErrorString();

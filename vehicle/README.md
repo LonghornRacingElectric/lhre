@@ -13,7 +13,8 @@ simulation. Other packages can use it too.
 - **Simulation:** `make test`, `make records` and studies read this file
   through the `BOBSIM_VEHICLE` environment variable. BobSim targets
   (`make bobsim T=...`) do not read that variable yet. For a Modelica
-  target to use this file, run `make records` first. See
+  target to use this file, run `make records` first. `make fmu` is the
+  exception: it reads this file each time. See
   [simulation/README.md](../simulation/README.md).
 - **Bazel:** depend on `//vehicle:vehicle.yml` or `//vehicle:tires`. Both are
   public.
@@ -33,5 +34,7 @@ simulation. Other packages can use it too.
 - Autonomy has its own copy of some of these numbers in
   `autonomy/ros2/src/lhr_vehicle/config/vehicle.yaml`. It does not read this
   file yet. If you change wheelbase, track or mass, tell the autonomy team.
+  The vehicle FMU that autonomy can simulate with (`lhr_sim_bobsim`) does
+  use this file, through `make -C simulation fmu`.
 - Files here are LF on every OS (`.gitattributes`). This keeps the
   `vehicle_sha256` in study provenance the same on Windows and Linux.
