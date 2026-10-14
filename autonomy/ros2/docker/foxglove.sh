@@ -66,6 +66,17 @@ if ! docker exec "$CONTAINER" \
     rebuild
 fi
 
+if [[ "$*" == *plant:=fmu* ]]; then
+    if ! docker exec "$CONTAINER" test -f /opt/lhr/simulation/out/fmu/OrionFMI.fmu; then
+        echo "The vehicle FMU is not built. Run 'make -C simulation fmu' first." >&2
+        exit 1
+    fi
+    if ! docker exec "$CONTAINER" python3 -c 'import fmpy' >/dev/null 2>&1; then
+        echo "fmpy is missing from the container. Rebuild it:" >&2
+        rebuild
+    fi
+fi
+
 if [[ "$*" == *plant:=bobsim* ]]; then
     if ! docker exec "$CONTAINER" test -d /opt/lhr/simulation/bobsim/_0_Utils/dyn_py; then
         echo "BobSim is not mounted. Initialize simulation/bobsim and recreate the container:" >&2

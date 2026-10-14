@@ -6,6 +6,7 @@ setup(
                 ('share/lhr_sim_bobsim', ['package.xml'])],
     install_requires=['setuptools'], tests_require=['pytest'], zip_safe=True,
     maintainer='LHR', maintainer_email='autonomy@lhre.org',
-    description='BobSim 3 DOF ROS vehicle plant.', license='MIT',
-    entry_points={'console_scripts': ['sim_node = lhr_sim_bobsim.sim_node:main']},
+    description='BobSim 3 DOF and full-vehicle FMU ROS vehicle plants.', license='MIT',
+    entry_points={'console_scripts': ['sim_node = lhr_sim_bobsim.sim_node:main',
+                                      'fmu_node = lhr_sim_bobsim.fmu_node:main']},
 )

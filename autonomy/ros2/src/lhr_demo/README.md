@@ -244,9 +244,12 @@ is recorded in CSV and bag metadata; see
 ## BobSim vehicle dynamics
 
 Select `plant:=bobsim` to replace the kinematic vehicle with
-[BobSim 3 DOF](../lhr_sim_bobsim/README.md). The default is `plant:=kinematic`.
-Both use the same perception, planning and command topics. In BobSim mode,
+[BobSim 3 DOF](../lhr_sim_bobsim/README.md), or `plant:=fmu` for
+[Orion's full vehicle FMU](../lhr_sim_bobsim/README.md#full-vehicle-fmu-plantfmu).
+The default is `plant:=kinematic`.
+All three use the same perception, planning and command topics. In BobSim mode,
 `max_accel` and `max_decel` also limit the plant's speed-to-torque controller.
+`plant:=fmu` has its own pedal controller and ignores them.
 Bags record `/lhr/sim/provenance`; metrics record the selected `plant`.
 
 ## Repeatable driving studies

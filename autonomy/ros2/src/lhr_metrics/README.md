@@ -149,9 +149,9 @@ separated from the simplified baseline. Existing CSV files with an older
 header use the existing schema-mismatch handling; do not compare modes using
 only the outcome columns.
 
-The `plant` field distinguishes `kinematic` and `bobsim` runs. BobSim's
-commit and dynamics vehicle hash are in the recorded `/lhr/sim/provenance`
-message; the existing `vehicle_sha256` column still hashes the autonomy YAML.
+The `plant` field distinguishes `kinematic`, `bobsim` and `fmu` runs.
+BobSim's commit and dynamics vehicle hash, or the FMU's hash, are in the
+recorded `/lhr/sim/provenance` message; the existing `vehicle_sha256` column still hashes the autonomy YAML.
 
 `motion_distortion` and `clutter_profile` record the selected LiDAR scene
 conditions. The separate [driving study runner](../lhr_demo/README.md#repeatable-driving-studies)

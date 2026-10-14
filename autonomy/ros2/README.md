@@ -802,6 +802,9 @@ ends and expire after `path_timeout_sec=1.0`. See [control](src/lhr_control/READ
 The MVS launcher also accepts `plant:=bobsim` for the optional
 [BobSim 3 DOF plant](src/lhr_sim_bobsim/README.md). CI initializes the pinned
 BobSim submodule and exercises its acceleration, braking and frame conversion.
+`plant:=fmu` runs Orion's full vehicle model (suspension, tires, powertrain)
+from `make -C simulation fmu`; see
+[the FMU plant](src/lhr_sim_bobsim/README.md#full-vehicle-fmu-plantfmu).
 
 Use the [driving study runner](src/lhr_demo/README.md#repeatable-driving-studies)
 to compare vehicle plants and perception conditions across seeds and speeds.

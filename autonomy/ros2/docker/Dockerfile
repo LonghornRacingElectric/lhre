@@ -22,3 +22,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # breaking apt's scipy (built against numpy 1.x). Shadow scipy the same way so
 # the pair is ABI-consistent.
 RUN pip install --no-cache-dir --break-system-packages --ignore-installed "scipy>=1.14" "pandas>=2.2"
+
+# fmpy loads the vehicle FMU for plant:=fmu. --no-deps keeps apt's lark and lxml, which ROS uses.
+RUN pip install --no-cache-dir --break-system-packages --no-deps "fmpy>=0.3.20"
