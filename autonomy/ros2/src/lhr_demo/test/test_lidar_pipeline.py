@@ -154,7 +154,7 @@ def test_lidar_start_is_on_generated_track_and_manual_start_is_preserved():
     assert (manual['init_x'], manual['init_y'], manual['init_yaw']) == (25., 0., 1.5708)
 
 
-@pytest.mark.parametrize('plant', ['kinematic', 'bobsim'])
+@pytest.mark.parametrize('plant', ['kinematic', 'bobsim', 'fmu'])
 def test_estimator_starts_at_resolved_plant_pose(plant):
     """Track spawning must move both the plant and its estimator together."""
     path = Path(__file__).parents[1] / 'launch' / 'mvs_demo.launch.py'

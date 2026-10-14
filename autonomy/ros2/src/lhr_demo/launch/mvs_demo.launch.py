@@ -19,6 +19,13 @@ from lhr_trackgen.publish_cones import GENERATORS
 import numpy as np
 
 
+# The vehicle plants: package and executable of each simulator node.
+PLANTS = {
+    'kinematic': ('lhr_sim_kinematic', 'sim_node'),
+    'bobsim': ('lhr_sim_bobsim', 'sim_node'),
+    'fmu': ('lhr_sim_bobsim', 'fmu_node'),
+}
+
 # Recorded when `record:=true`. An explicit list rather than --all: the
 # viz topics republish every cone marker at rate and would dominate the
 # bag, and this list doubles as a statement of what the seam between
@@ -154,8 +161,8 @@ def _launch_sim(context):
         tangent = centers[(index + 1) % len(centers)] - centers[index - 1]
         yaw = math.atan2(float(tangent[1]), float(tangent[0]))
     plant = value('plant')
-    if plant not in ('kinematic', 'bobsim'):
-        raise ValueError('plant must be kinematic or bobsim')
+    if plant not in PLANTS:
+        raise ValueError('plant must be ' + ', '.join(PLANTS))
     extra = ({'max_accel': float(value('max_accel')),
               'max_decel': float(value('max_decel'))} if plant == 'bobsim' else {})
     use_ekf = value('estimator') == 'ekf'
@@ -164,7 +171,7 @@ def _launch_sim(context):
     remappings = ([('/lhr/vehicle/odom', '/lhr/vehicle/odom_truth'),
                    ('/tf', '/tf_truth')] if use_ekf else [])
     simulator = Node(
-        package='lhr_sim_' + plant, executable='sim_node', name='sim_' + plant,
+        package=PLANTS[plant][0], executable=PLANTS[plant][1], name='sim_' + plant,
         parameters=[{'publish_clock': value('use_sim_time') == 'true',
                      'init_x': x, 'init_y': y, 'init_yaw': yaw, **extra}],
         remappings=remappings, output='screen')
@@ -348,7 +355,7 @@ def generate_launch_description():
         DeclareLaunchArgument('clutter_profile', default_value='none',
                               choices=['none', 'trackside']),
         DeclareLaunchArgument(
-            'plant', default_value='kinematic', choices=['kinematic', 'bobsim']),
+            'plant', default_value='kinematic', choices=list(PLANTS)),
         perception_arg,
         gates_arg,
         stack_arg,

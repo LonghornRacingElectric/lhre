@@ -111,3 +111,6 @@ The container also mounts the repository read-only at `/opt/lhr` for the optiona
 Initialize the BobSim submodule before selecting `plant:=bobsim`. Recreate
 an existing container to pick up these mounts. BobSim needs pandas alongside
 the image's existing NumPy, SciPy and PyYAML runtime dependencies.
+For `plant:=fmu`, run `make -C simulation fmu` on the host first: the
+container reads `/opt/lhr/simulation/out/fmu/OrionFMI.fmu`, and the image
+installs `fmpy`.

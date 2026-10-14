@@ -1,8 +1,10 @@
 # lhr_sim_bobsim
 
-Run BobSim's public `dyn_py` 3 DOF model as the ROS vehicle plant. The model
-imports the pinned submodule; no BobSim source is copied here. The existing
-kinematic model remains the default.
+Run BobSim's public `dyn_py` 3 DOF model (`plant:=bobsim`), or Orion's full
+vehicle model compiled to an FMU (`plant:=fmu`, see
+[below](#full-vehicle-fmu-plantfmu)), as the ROS vehicle plant. The 3 DOF
+model imports the pinned submodule; no BobSim source is copied here. The
+existing kinematic model remains the default.
 
 ## Run
 
@@ -63,3 +65,49 @@ Run `colcon test --packages-select lhr_sim_bobsim lhr_sim_kinematic lhr_demo`.
 Functional BobSim tests need the mounted checkout and vehicle file.
 
 Node cleanup tolerates an already-stopped ROS context after launch shutdown.
+
+## Full-vehicle FMU (`plant:=fmu`)
+
+BobLib's full vehicle model: MultiBody suspension from the hardpoints, MF5.2
+tires and the EV powertrain, with the car from `vehicle/vehicle.yml`. Build it
+on the host, then select it:
+
+```bash
+make -C simulation fmu        # about 6 minutes, see simulation/tools/fmu
+ros2 launch lhr_demo mvs_demo.launch.py plant:=fmu
+```
+
+`fmu_node` subclasses the kinematic node, like `sim_node`, so `/clock`,
+odometry, TF and the command timeout behave the same. It publishes
+`/lhr/sim/provenance` with the FMU's hash. `FmuPlant` (`fmu_plant.py`) finds
+the FMU at `$ORION_FMU`, in the checkout, or at `/opt/lhr` in the container,
+and needs `fmpy` (in the image).
+
+The FMU's inputs are driver controls, so `FmuPlant` adds the driver:
+
+- the road-wheel steering command times 4.1 is the steering-wheel angle,
+  held inside 0.6 rad: past about 0.7 rad the FMU's steering linkage has no
+  solution;
+- a PI loop on speed works the accelerator and brake pedals. A pedal is
+  pressed at most 2 per second and released at once. At a standstill it
+  holds the brake at 0.3, since BobLib's brakes have no static friction;
+- the battery starts at 90 %: BobLib switches regen off at the voltage of
+  the full pack, and its battery equations have no solution at that switch;
+- BobLib's motor pushes the way its shaft last turned, and the driveline
+  rings backwards when the rear wheels stop. While the motor is reversed the
+  driver stays off the accelerator. If the car is stopped and told to go,
+  `FmuPlant` resets the FMU at the same pose; it starts forward;
+- if an FMU step fails, it starts a new FMU where the car is and logs a
+  warning. A command that is not a number is a stop.
+
+The node also publishes the car and the force on each tire as markers on
+`/lhr/vehicle/forces`, in `base_link` (red: force in the road plane, green:
+vertical load, 1 m per kN; the label gives the load and the friction used).
+
+In the headless runner (`./scripts/run_headless.sh plant:=fmu`, autocross
+seed 1, Docker on an Apple Silicon laptop) three runs each completed a lap
+with no failed FMU step: mean cross-track error 0.59 to 0.61 m against 0.50
+to 0.54 m for the kinematic plant. The FMU car runs wide in the tightest
+corner at the planner's speed, 2.2 to 3.4 m off the path, where the
+kinematic car stays within 1.6 m: real tires have a grip limit and the
+bicycle model has none. The FMU is not validated against Orion data.
