@@ -90,6 +90,26 @@ Vercel; the `lapdog` Vercel check that used to post on PRs belonged to the
 removed standalone drive day app and is managed in Vercel's dashboard, not
 here.
 
+## Trackside live
+
+`/trackside-live` is the pit-wall page: live samples from Kafka, lap timing,
+energy plan, driver dash. Lap controls, in the Live Laps panel:
+
+- **Start Lap / Log Lap** starts the timer, then closes a lap and re-arms the
+  next one (a loop). **Stop Lap** closes the lap without re-arming, for
+  autocross, accel and skidpad runs where the drive back is not a lap; Start
+  Lap arms the next run. Both are leader-only.
+- **Add time** enters a lap by its duration (`m:ss.ss` or seconds) when the
+  official timing or a stopwatch has it and the page does not. It is a
+  `manual` lap with no samples, sectors or energy, so it counts toward laps
+  and the average and nothing else.
+- A new session is named `<venue> · <event type> N · YYYY-MM-DD`, N counting
+  this browser's sessions of that type today; type over it if you want.
+
+The page keeps the last 6,000 samples in memory and in the JSON export, so
+at 20 Hz the export holds the last 5 minutes of samples and at 50 Hz the last
+2 minutes (laps keep their times either way). The full stream is in Postgres.
+
 ## Drive day viewer
 
 `/trackside-retro` replays a trackside-live session export after the fact:

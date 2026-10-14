@@ -186,3 +186,16 @@ export function parseLogStartMs(fileName: string): number | null {
   // 10-digit values are seconds; 13-digit are ms.
   return m[1].length <= 10 ? n * 1000 : n;
 }
+
+/** Default session name: "<venue> · <event type> N · YYYY-MM-DD", where N counts
+ *  this device's sessions of the same type started today, so two autocross
+ *  sessions in one day don't both end up as "COTA · Autocross". */
+export function suggestSessionName(venue: string, eventType: string, now = Date.now()): string {
+  const d = new Date(now);
+  const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const n = 1 + loadSessionRegistry().filter((s) => {
+    const t = new Date(s.startedAt);
+    return s.eventType === eventType && t.getFullYear() === d.getFullYear() && t.getMonth() === d.getMonth() && t.getDate() === d.getDate();
+  }).length;
+  return `${venue || 'Session'} · ${eventType} ${n} · ${day}`;
+}
