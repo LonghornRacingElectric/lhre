@@ -5,10 +5,12 @@ import types
 import numpy as np
 import pytest
 
+from tools.support import SupportPolicy
 from tools.trim_status import BoundKind, LimitResult, TrimRecord, TrimStatus
 
 G = 9.80665
 OUTER_MAX = math.radians(40.0)
+POLICY = SupportPolicy(min_coverage=1.0, ay_floor_g=0.2, tolerances_pct=(0.5, 1.0))
 # Check case from the vehicle-dynamics-first-principles skill (seven-point tire sweep note).
 SKILL_CAR = {"mass": 261.07265114, "cg_height": 0.284217678378, "wheelbase": 1.5494,
              "track_front": 1.2122215, "track_rear": 1.2122215, "front_static_frac": 0.46}
@@ -178,7 +180,7 @@ def test_lock_margin_is_measured_to_the_bound_of_the_law(study, make_car):
     table = law_table(study.ConstantAckermann(50, car.track_front, car.wheelbase, OUTER_MAX))
     curve = study.TableCurve(*study.to_rack_stop(table, 25.0))
     case = {"car": car, "curves": {study.BASELINE: curve}, "radius": 8.0, "lon": None, "outer_max": OUTER_MAX, "tol": 1e-3,
-            "probe": False, "deriv": False, "labels": {"mu": 1.0, "rear": "open", "radius_m": 8.0, "ax_g": 0.0}}
+            "probe": False, "deriv": False, "policy": POLICY, "labels": {"mu": 1.0, "rear": "open", "radius_m": 8.0, "ax_g": 0.0}}
     row = study.solve_map_case(case)[0]
     assert row["ay_max_g"] is not None
     assert row["lock_margin_deg"] == pytest.approx(25.0 - row["outer_deg"])
@@ -299,12 +301,19 @@ def test_braking_is_open_axle_and_lsd_braking_is_not_modeled(study, make_car):
     assert not study.Longitudinal(0.3, diff=(0.0, 0.0, 0.85), wheel_radius=0.2).withheld
 
 
+def test_a_row_change_needs_a_baseline_above_the_floor(study):
+    limit = LimitResult(0.3, BoundKind.PHYSICAL, TrimStatus.ACCEPTED)
+    assert study.limit_row({}, limit, 0.25, POLICY)["ay_change_pct"] == pytest.approx(20.0)
+    assert study.limit_row({}, limit, 0.1, POLICY)["ay_change_pct"] is None
+    assert study.limit_row({}, limit, None, POLICY)["ay_change_pct"] is None
+
+
 def test_map_rows_record_status_and_wheel_states(study, make_car):
     car = make_car()
     curves = {name: study.ConstantAckermann(p, car.track_front, car.wheelbase, OUTER_MAX)
               for name, p in ((study.BASELINE, 0), ("+100%", 100))}
     case = {"car": car, "curves": curves, "radius": 4.5, "lon": study.Longitudinal(0.3, bias=0.65), "outer_max": OUTER_MAX,
-            "tol": 1e-3, "probe": False, "deriv": False,
+            "tol": 1e-3, "probe": False, "deriv": False, "policy": POLICY,
             "labels": {"mu": 1.0, "rear": study.brake_model(0.65), "radius_m": 4.5, "ax_g": -0.3}}
     rows = study.solve_map_case(case)
     for row in rows:
@@ -326,7 +335,7 @@ def test_lltd_balance_refuses_a_failed_limit(study, make_ggv, synthetic_tire, mo
     monkeypatch.setattr(study, "limit_ay", lambda *a, **k: LimitResult(None, BoundKind.NUMERICAL, TrimStatus.NUMERICAL_FAILURE, upper=failed))
     law = study.ConstantAckermann(0, 1.25, 1.55, OUTER_MAX)
     with pytest.raises(RuntimeError, match="not a limit"):
-        study.balanced_lltd(make_ggv(), tire, law, OUTER_MAX, support)
+        study.balanced_lltd(make_ggv(), tire, law, OUTER_MAX, support, 0.0, 15.0)
 
 
 def map_row(study, curve, ay, kind="physical", status="accepted", radius=3.5, ax=0.0, rear="open"):
@@ -340,7 +349,7 @@ def test_robust_region_without_common_support_names_no_law(study):
     rows = [map_row(study, study.BASELINE, 1.0), map_row(study, "+50%", 1.05), map_row(study, "-50%", 0.9, kind="domain"),
             map_row(study, study.BASELINE, 1.0, radius=4.5), map_row(study, "+50%", 1.02, radius=4.5),
             map_row(study, "-50%", None, kind="numerical", status="numerical_failure", radius=4.5)]
-    robust = study.robust_region(rows)
+    robust = study.robust_region(rows, POLICY)
     assert robust["status"] == "withheld" and robust["n_supported"] == 0
     text = study.region_text(robust)
     assert text.startswith("No recommendation")
@@ -349,7 +358,7 @@ def test_robust_region_without_common_support_names_no_law(study):
 
 
 def test_best_law_map_withholds_a_cell_with_a_failure(study):
-    inputs = type("Inputs", (), {"mu": 0.623, "map_radii_m": (3.5,), "map_ax_g": (0.0,)})()
+    inputs = type("Inputs", (), {"mu": 0.623, "map_radii_m": (3.5,), "map_ax_g": (0.0,), "policy": POLICY})()
     rows = [map_row(study, study.BASELINE, 1.0)] + [map_row(study, f"{p:+d}%", 1.0 + p / 1000) for p in study.MAP_PCTS]
     assert study.best_laws(rows, inputs)[(3.5, 0.0)][0] == 100
     rows[1] = map_row(study, "-50%", None, kind="domain", status="domain_rejected")
@@ -360,7 +369,7 @@ def test_best_law_map_withholds_a_cell_with_a_failure(study):
 def test_toe_summary_never_picks_a_failed_law(study):
     rows = [{"toe_out_deg": 0.0, "radius_m": 3.5, "curve": c, "ay_max_g": ay}
             for c, ay in ((study.BASELINE, 1.0), ("+10%", None), ("+20%", 1.01))]
-    entry = study.toe_summary(rows)["toe-out 0 deg, 3.5 m"]
+    entry = study.toe_summary(rows, POLICY)["toe-out 0 deg, 3.5 m"]
     assert entry["best_curve"] is None and entry["excluded"] == ["+10%"]
 
 

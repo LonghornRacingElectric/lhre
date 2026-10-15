@@ -1,0 +1,141 @@
+schema: lhre.study-inputs.v1
+study: front-ackermann
+bundle_id:
+  value: null
+  status: unavailable
+  source: vehicle/bundle.yml does not exist at this commit. The vehicle bundle (contract C7) adds it.
+front_geometry:
+  label: Front V34
+  kind: transcription
+  release_status: candidate
+  release_source: No release record. Front V34 is the study design point. It is not a frozen or approved revision.
+  transcription_of:
+    name: 2027_FrontV34.shk
+    block: FRONT SUSPENSION
+    sha256: 95063c3b8a0ccaadfd9971088b65b395eb299acdcfb4ea31b8fe5b68ee254562
+    stored: external
+  units: mm
+  axes:
+    value: x forward, y left, z up
+    status: assumed
+    source: The .shk file does not state its axes. The transcription reads the values as written in the BobSim frame (BobSim docs/conventions.md at fe03bab). Row 1 has x = +110.4 mm and is read as the fore inner pivot. Nobody has confirmed the export axes.
+  origin_xy:
+    value: front axle line and car centerline
+    status: assumed
+    source: The .shk wheel center row has x = 0 and y = 635 mm. The transcription reads that as the BobSim origin (docs/conventions.md at fe03bab).
+  datum_z:
+    value: null
+    status: unavailable
+    source: The .shk file does not state the vertical datum. BobSim docs/conventions.md lists the z datum as unresolved. The study uses z as written. Only point-to-point differences enter the steering kinematics.
+  mirror:
+    value: left side stored, right side by y flip
+    status: assumed
+    source: BobSim stores the left side and makes the right side by a y flip (docs/conventions.md at fe03bab). The .shk file does not say which side it holds.
+  points:
+    value:
+      lower_fore_i: [110.431, 198.700, 76.000]
+      lower_aft_i: [-100.273, 198.700, 76.000]
+      lower_o: [2.000, 599.739, 104.495]
+      upper_fore_i: [165.945, 239.958, 217.000]
+      upper_aft_i: [-104.470, 241.260, 196.410]
+      upper_o: [-6.000, 570.866, 295.000]
+      tie_o: [80.000, 605.350, 199.930]
+      wheel_center: [0.000, 635.000, 199.930]
+    status: declared
+    source: FRONT SUSPENSION rows 1 to 6, 9 and 14 of 2027_FrontV34.shk, copied by hand to 0.001 mm. Each value matched the file to under 1e-5 mm when checked on 2026-10-14 and 2026-10-15.
+  rack_pickup:
+    value: [25.277, 240.652, 140.010]
+    status: declared
+    source: FRONT SUSPENSION row 10 of 2027_FrontV34.shk, copied by hand to 0.001 mm. Checked against the file on 2026-10-15.
+steering:
+  rack_travel:
+    value: 31.75
+    unit: mm
+    status: assumed
+    source: 1.25 in of rack travel (vault note 2026-10-03, memory_id cdd3d917, unreviewed). The study applies it in each direction. It is not in 2027_FrontV34.shk. No part number.
+mass_properties:
+  mass:
+    value: 580.0
+    unit: lb
+    status: assumed
+    source: Team 2027 estimate from Will, a 430 lb car plus a 150 lb driver (vault note 2026-10-03, memory_id cdd3d917, unreviewed). Not measured.
+  cg_height:
+    value: 11.0
+    unit: in
+    status: assumed
+    source: Team 2027 estimate from Will (vault note 2026-10-03, memory_id cdd3d917, unreviewed). Not measured.
+  front_static_frac:
+    value: 0.45
+    unit: "1"
+    status: assumed
+    source: Team 2027 estimate from Will (vault note 2026-10-03, memory_id cdd3d917, unreviewed). Not measured.
+alignment:
+  static_camber:
+    value: 0.0
+    unit: deg
+    status: declared
+    source: vehicle/vehicle.yml front.wheel.camber_deg.
+  static_toe:
+    value: 0.0
+    unit: deg
+    status: declared
+    source: vehicle/vehicle.yml front.wheel.toe_deg. The corner model has no static toe input. The toe sweep varies total toe.
+  camber_variant:
+    value: -1.0
+    unit: deg
+    status: assumed
+    source: Camber variant of the mass and CG sweep. It was a run.py literal before this file. No setup sheet names it.
+lltd:
+  balance_radius:
+    value: 15.0
+    unit: m
+    status: assumed
+    source: Study method. The run sets the front LLTD for the highest parallel-steer lateral g at this radius (vault note 2026-10-03, memory_id cdd3d917, unreviewed). That LLTD replaces the one from the vehicle/vehicle.yml roll stiffness.
+tire:
+  grip_scale:
+    value: 0.623
+    unit: "1"
+    status: assumed
+    source: 0.6225 correlated by Abishek Rathnakumar, as the study README Inputs table at the 2026-10-11 run states. Unreviewed and not validated. Sets LMUX and LMUY.
+  grip_scale_sensitivity:
+    value: 0.75
+    unit: "1"
+    status: assumed
+    source: Study sensitivity value for the grip scale (vault note 2026-10-03, memory_id cdd3d917, unreviewed).
+brake:
+  front_bias_nominal:
+    value: 0.65
+    unit: "1"
+    status: assumed
+    source: Study assumption (vault note 2026-10-03, memory_id cdd3d917, unreviewed). vehicle/vehicle.yml brake.front_bias (0.84, no source) runs as the second brake model.
+differential:
+  planned_lsd_preload:
+    value: 5.0
+    unit: N m
+    status: assumed
+    source: Planned LSD preload per side, an assumption (vault note 2026-10-03, memory_id cdd3d917, unreviewed). vehicle/vehicle.yml has diff_T_preload 20.
+  planned_lsd_lock:
+    value: 0.60
+    unit: "1"
+    status: assumed
+    source: Planned LSD lock fraction, an assumption (vault note 2026-10-03, memory_id cdd3d917, unreviewed). vehicle/vehicle.yml has diff_lockFractionAccel 0.35.
+  braking_coupling:
+    value: withheld
+    status: declared
+    source: Coordination decision D7 option A. Braking is open axle. No braking result models LSD coupling.
+policy:
+  min_coverage:
+    value: 1.0
+    unit: "1"
+    status: assumed
+    source: Study choice, not reviewed. A comparison with any excluded condition gives no recommendation.
+  ay_floor:
+    value: 0.2
+    unit: g
+    status: assumed
+    source: Study choice, not reviewed. A baseline below this lateral g makes a relative change ill-conditioned.
+  region_tolerances:
+    value: [0.5, 1.0]
+    unit: pct
+    status: assumed
+    source: 0.5 point is the gap between the two combined-slip models in the 2026-10-11 run. 1 point is a second view. Not reviewed.

@@ -1,15 +1,58 @@
 # front-ackermann
 
-**Status: historical.** BobSim `4da577a` made these results. They are stale at BobSim `fe03bab`. BobSim changed the KinPy corner solver that the study uses (#83, #84), and other modules that it calls. See [the BobSim changes](../../docs/bobsim.md#what-changed-in-bobsim-from-4da577a-to-fe03bab). Run the study again before you use a result.
+## Result status
 
-**The code changed after this run.** The numbers on this page come from the old code. The current `run.py` does these things differently (see [Trim statuses and support](#trim-statuses-and-support)):
+**Historical.** This page reports the 2026-10-11 run at BobSim `4da577a`. Software fixes supersede that run. The study has not run again. It is a screening model, not hardware approval.
+
+| | |
+| --- | --- |
+| Status | historical |
+| Run | 2026-10-11 20:15:27 UTC, BobSim `4da577a`, BobLib `2777aa5` |
+| Superseded by | software fixes after the run (see [Software changes after the run](#software-changes-after-the-run)) |
+| Re-run | not re-run |
+| Kind of result | screening model, not hardware approval |
+
+Do not use the numbers on this page for a design decision. The 2026-10-11 run made them with code that had the known defects below. The study has not run again since the fixes. The BobSim pin also moved to `fe03bab`, which changed the KinPy corner solver that the study uses (#83, #84) and other modules that it calls. See [the BobSim changes](../../docs/bobsim.md#what-changed-in-bobsim-from-4da577a-to-fe03bab). Change this block when the study runs again.
+
+### Dependency keys
+
+A change to any key makes a result stale. A change to this README does not.
+
+| Key | At the 2026-10-11 run | At this commit |
+| --- | --- | --- |
+| Study inputs | none, the values were literals in `run.py` | `inputs.yml`. Each run writes its hash, and the hashes of the vehicle file, the tire file, the BobSim lap config and `run.py`, to `inputs.resolved.json`. |
+| Front geometry source | `2027_FrontV34.shk` SHA-256 `95063c3b8a0ccaad…`, outside git | same file and transcription |
+| Vehicle file | `vehicle/vehicle.yml` SHA-256 `3ab02bbf3e573aad…` | `e024a5e36ac36608…` (`paths.boblib` moved with the pin) |
+| Tire file | `16x7p5_10_12psi.tir` SHA-256 `f38da74e929e4a1a…` | same |
+| `run.py` | not recorded. The run used the code before PR #66. | changed |
+| BobSim | `4da577a` | `fe03bab` |
+| BobLib | `2777aa5` | `1bd6d78` |
+| Vehicle bundle | none | none yet (`bundle_id` is unavailable in `inputs.yml`) |
+
+### Known defects that affected the published result
+
+An audit of the published outputs on 2026-10-14 found these. The outputs are gitignored, so the counts come from the audit, not from this repository. Nobody has reviewed the audit.
+
+1. **Out-of-fit tire states were ranked.** The `.tir` fit covers slip angles to ±15°, slip ratios to ±0.15 and loads from 100 N to 1800 N. At 3.5 m, −50% ran the outer front at 18.3° to 19.9° in all 12 apex cases. The claim that every anti law loses in all 12 cases rests on these rows. Some inner rear tires ran at 93 N to 99 N. 29 of 480 apex rows, 9 of 128 braking rows and 7 of 70 mass rows were out of fit. The map rows did not record wheel states, so the map cannot be audited.
+2. **The LSD cells ran past the slip fit.** The locked LSD put the inner rear at slip ratio 0.3 to 0.44. LSD cells set the worst case of −25% and −50%, and the −18.0% value below.
+3. **One outcome for every failure.** Non-convergence, a steering-table bound and a past-peak state all became "no trim". The bisection read any failure as the grip limit. The outer-wheel bound was the end of the `kin_py` table (up to 60 mm of rack), not the 31.75 mm rack stop.
+4. **Braking was open axle without a label.** Hydraulic braking split by bias with no differential coupling. `vehicle.yml` enables an LSD with a preload. The binding conditions of +50%, Front V34, +75% and +100% are braking cells, so the region depends on open-axle braking.
+5. **A missing trim scored 100%.** No published design row had a missing trim, so this rule did not set a published number. It applied to any re-run.
+6. **A near-zero baseline gave a large ratio.** The map cell "+100% (+134.6%)" at 3.5 m and 0.9 g drive divides by a parallel-steer limit of 0.09 g.
+7. **Wheel lift broke the vertical balance.** A lifted inner wheel did not move its load to the outer wheel. No recorded row had a lifted wheel. The map rows did not record loads.
+8. **The design geometry was hidden in `run.py`.** The Front V34 points were literals. Provenance did not identify them. The 31.75 mm rack stop is not in `2027_FrontV34.shk`, although an earlier version of this page said it was. The V34 wheel center also set the 1.270 m front track of every cell, not only the lock section.
+
+### Software changes after the run
+
+The current `run.py` does these things differently (see [Trim statuses and support](#trim-statuses-and-support) and [Inputs](#inputs)):
 
 - A law with no trim no longer scores a 100% shortfall. The comparison drops that condition for every law and shows the coverage loss.
 - A trim outside the `.tir` fit ranges, or with a lifted wheel, is rejected. It is not ranked.
 - Numerical failure, domain rejection and physical infeasibility are separate statuses.
 - A lifted inner wheel puts its axle load on the outer wheel. The four loads sum to the weight.
 - Braking cells are labeled open axle. The study does not model LSD coupling under braking.
-- Front V34 trims stop at the 31.75 mm rack stop. A trim that needs more steer is `domain_rejected` (`steer_bound`). Constant laws have no linkage, so they keep the end of the `kin_py` table as their bound. A row's lock margin is measured to the bound of its own law. The lock gate still uses the full table, so it can report a need past the stop.
+- Every vehicle and geometry number comes from `inputs.yml` with its status and source.
+- Front V34 trims stop at the rack stop (`steering.rack_travel`, 31.75 mm). A trim that needs more steer is `domain_rejected` (`steer_bound`). Constant laws have no linkage, so they keep the end of the `kin_py` table as their bound. A row's lock margin is measured to the bound of its own law. The lock gate still uses the full table, so it can report a need past the stop.
 - A README number with no valid value shows `withheld: <reason>`. A re-run replaces the findings bullets with "No recommendation" when the comparison is withheld.
 - A slip_norm braking trim is rejected when MF5.2 runs outside the slip fit. The 2026-10-11 slip_norm rows of `braking.csv` and `brake_model_gap_pts` had no such check. They are stale until a re-run.
 
@@ -17,7 +60,9 @@
 
 Is pro-Ackermann or anti-Ackermann steering better for the 2027 car, and which laws stay good when the inputs we do not trust change? The study compares constant steering laws from −50% to +100% against parallel steer on one car, one tire and one track. Front V34 is the current design point. It is a screening model. It gives the direction and the robust range, not an exact percentage.
 
-## Answer
+## Historical answer
+
+Every number from here to [Confidence](#confidence) comes from the 2026-10-11 run. Each one is historical. A re-run replaces the values in the `out:` blocks, not the prose around them.
 
 | | |
 | --- | --- |
@@ -114,7 +159,7 @@ Why the fast corners tie, from first principles: at the limit the outer front ca
 
 ![Ackermann against mean roadwheel steer for Front V34 and Orion, from hardpoints. Grey band = mean steer at the grip limit for R = 3.5 to 8 m](ackermann_curves.png)
 
-Only this section uses the Front V34 hardpoints, through BobSim `kin_py`. Front V34 has <!-- out:readme.json#base_ackermann_pct -->+48.9% to +53.7%<!-- /out --> Ackermann from 10 mm to the full 31.75 mm of rack and reaches <!-- out:readme.json#steer_at_travel_deg|.1f -->23.4<!-- /out -->° of mean roadwheel steer there. At walking pace that is a <!-- out:readme.json#min_radius_low_speed_m|.2f -->3.83<!-- /out --> m CG radius, so the car does not reach the rule-minimum hairpin below the grip limit. At the limit the rear slides and less steer is needed: a 3.5 m hairpin needs <!-- out:readme.json#steer_needed_3p5_powered_deg|.1f -->22.8<!-- /out -->° with the open differential, which fits, or <!-- out:readme.json#steer_needed_3p5_deg|.1f -->25.0<!-- /out -->° in the coasting apex solve, which is <!-- out:readme.json#rack_needed_mm|.1f -->33.8<!-- /out --> mm of rack with the <!-- out:readme.json#arm_offset_mm|.0f -->84<!-- /out --> mm arm. The inner wheel scrub of a +50% law widens the turn, so the fix is rack travel or a shorter arm, not less Ackermann. The gate does not bind on the Michigan line, whose tightest corner is <!-- out:readme.json#tightest_corner_m|.2f -->4.47<!-- /out --> m. The 31.75 mm rack stop comes from the `.shk` file and needs a part number.
+This section uses the Front V34 steering kinematics, through BobSim `kin_py`. The V34 wheel center also sets the front track that every cell uses. Front V34 has <!-- out:readme.json#base_ackermann_pct -->+48.9% to +53.7%<!-- /out --> Ackermann from 10 mm to the full 31.75 mm of rack and reaches <!-- out:readme.json#steer_at_travel_deg|.1f -->23.4<!-- /out -->° of mean roadwheel steer there. At walking pace that is a <!-- out:readme.json#min_radius_low_speed_m|.2f -->3.83<!-- /out --> m CG radius, so the car does not reach the rule-minimum hairpin below the grip limit. At the limit the rear slides and less steer is needed: a 3.5 m hairpin needs <!-- out:readme.json#steer_needed_3p5_powered_deg|.1f -->22.8<!-- /out -->° with the open differential, which fits, or <!-- out:readme.json#steer_needed_3p5_deg|.1f -->25.0<!-- /out -->° in the coasting apex solve, which is <!-- out:readme.json#rack_needed_mm|.1f -->33.8<!-- /out --> mm of rack with the <!-- out:readme.json#arm_offset_mm|.0f -->84<!-- /out --> mm arm. The inner wheel scrub of a +50% law widens the turn, so the fix is rack travel or a shorter arm, not less Ackermann. The gate does not bind on the Michigan line, whose tightest corner is <!-- out:readme.json#tightest_corner_m|.2f -->4.47<!-- /out --> m. The 31.75 mm rack stop is an assumption (`steering.rack_travel` in `inputs.yml`). It is not in the `.shk` file and needs a part number.
 
 <!-- out:lock.md -->
 
@@ -261,33 +306,45 @@ A limit search bisects lateral g. Only a search whose failing bracket is `physic
 
 The `kappa` column is the slip ratio that the combined-slip model uses. The ellipse model reports the pure-slip slip ratio that gives the wheel's Fx. The slip_norm model solves its own slip ratio and evaluates MF5.2 at a larger slip ratio and slip angle. The run checks those evaluated slips against the fit too (`kappa_eval_out_of_fit`, `alpha_eval_out_of_fit`).
 
-`tools/support.py` compares laws on common support. A condition counts only when every law, the baseline included, has a grip limit there and the baseline is at or above the floor. The result lists each excluded cell and its kind. With no common support, or with coverage under the minimum, the region is empty and the README shows "No recommendation". The minimum coverage (1.0) and the floor (0.2 g) are study choices. Nobody has reviewed them.
+`tools/support.py` compares laws on common support. A condition counts only when every law, the baseline included, has a grip limit there and the baseline is at or above the floor. The result lists each excluded cell and its kind. With no common support, or with coverage under the minimum, the region is empty and the README shows "No recommendation". The minimum coverage (1.0), the floor (0.2 g) and the region tolerances are study choices in `inputs.yml` (`policy`). Nobody has reviewed them. The floor also applies to every `ay_change_pct` in the output rows.
 
 An envelope cap in the lap reference needs a `physically_infeasible` cell with no accepted trim. Any other failure removes that law from the lap reference.
 
 
 ## Before design freeze
 
+These actions come from the 2026-10-11 run. They are historical too. Check each one against a re-run before you act on it.
+
 1. **Lock.** Add rack travel or shorten the arm until the rule-minimum hairpin fits. Confirm the rack stop and measure the steering curves on turn plates.
 2. **Roll stiffness split.** Measure the installed bar rates and rerun at that LLTD. It moves the result the most.
 3. **Brake bias and differential.** Get the 2027 hydraulic bias and the diff preload and ramps. Log rear wheel speeds in 3.5 to 8 m corners to see whether the axle locks.
 4. **A/B on track.** Compare two linkages with the same static toe at 3.5 and 4.5 m: steer gradient, yaw rate, lateral g and wheel speeds, A-B-A order, several runs, accept only differences above the run-to-run scatter.
-5. **Geometry.** `run.py` holds a copy of the Front V34 hardpoints. Copy any `.shk` change into it.
+5. **Geometry.** `inputs.yml` holds a hand copy of the Front V34 hardpoints with the `.shk` SHA-256. Copy any `.shk` change into it and change the hash. Replace the copy with a CAD export when one exists.
 
 ## Inputs
+
+`inputs.yml` holds every vehicle and geometry number that `run.py` reads. Each value has a status (`measured`, `cad_export`, `declared`, `assumed`, `guessed` or `unavailable`) and a source. `tools/study_inputs.py` loads the file. It stops the run when a field, a unit, the axes, the origin or the mirror rule is missing. It also stops the run when a transcription claims an export status. `--mu` and `--bias` override one value each, and the run records the override.
+
+Front V34 is a hand transcription of the `FRONT SUSPENSION` block of `2027_FrontV34.shk`, with release status `candidate`. It is not a released geometry. The `.shk` file is outside git, so the run cannot check its hash. The export axes and the vertical datum are not confirmed. No vehicle bundle exists yet.
+
+A run writes `inputs.resolved.json` with every effective value, its status and source, and the SHA-256 of each file it read. It also writes the table below from that file. The table below is from the 2026-10-11 run, when these values were literals in `run.py`.
+
+<!-- out:inputs.md -->
 
 | Input | Value | Source |
 | ----- | ----- | ------ |
 | Mass with driver, CG height, front weight | 263.1 kg (430 + 150 lb), 0.279 m (11 in), 45% | team 2027 estimate |
 | Front hardpoints and rack, feasibility only | `2027_FrontV34.shk`, `FRONT SUSPENSION`, SHA-256 `95063c3b…`, front track 1270 mm, rack travel 31.75 mm each way | Front V34 |
 | Wheelbase, rear track, rear suspension | 1.5494 m, 1.2122 m, Orion rear | Orion carryover |
-| Tire | `16x7p5_10_12psi`, SHA-256 <!-- out:readme.json#tire_sha256 -->f38da74e929e4a1a<!-- /out -->… | Orion carryover |
-| Grip scale | <!-- out:readme.json#mu_nominal -->0.623<!-- /out --> nominal, <!-- out:readme.json#mu_sensitivity -->0.75<!-- /out --> variant | 0.6225 correlated by Abishek Rathnakumar (unreviewed), not validated |
-| LLTD | <!-- out:readme.json#lltd_front_pct|.1f -->34.4<!-- /out -->% front, balanced at 15 m with parallel steer, held at both grip scales | assumption, not measured |
+| Tire | `16x7p5_10_12psi`, SHA-256 `f38da74e929e4a1a…` | Orion carryover |
+| Grip scale | 0.623 nominal, 0.75 variant | 0.6225 correlated by Abishek Rathnakumar (unreviewed), not validated |
+| LLTD | 34.4% front, balanced at 15 m with parallel steer, held at both grip scales | assumption, not measured |
 | Brake bias | 65% front nominal, 84% second model (`vehicle.yml`, no source) | assumption |
 | Differential | open (baseline) and planned LSD: preload 5 Nm per side, lock 0.60, kinetic 0.85 (`vehicle.yml` differs) | assumption |
 | Static toe and camber, aero | 0, 0, none | assumption |
 | Track, power limit | Michigan 2019 endurance, 32 kW | BobSim lap config |
+
+<!-- /out -->
 
 `out/front-ackermann/vehicle_front.yml` holds the front geometry only. `summary.json` `effective_inputs` holds every value the run used. BobSim interfaces: public `solve_qss_lap`, `GGVMap.from_arrays`, `optimize_racing_line`, `CornerKinematics`, `project_vehicle_yaml` and the loaders, plus private `_mf52_fx_pure` and `_mf52_fy_pure` from `app.tire_eval` (see the [bobsim-boundary skill](../../docs/skills/bobsim-boundary/SKILL.md)).
 

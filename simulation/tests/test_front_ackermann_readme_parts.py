@@ -1,11 +1,14 @@
 import json
+import re
 from pathlib import Path
 
 import pytest
 
-from tools.readme import fill
+from tools.readme import BLOCK, fill
 
 README = Path(__file__).resolve().parents[1] / "studies" / "front-ackermann" / "README.md"
+# make study writes provenance.json and main() writes inputs.md. write_readme_parts writes the rest.
+WRITTEN_ELSEWHERE = {"provenance.json", "inputs.md"}
 
 
 def row(study, mu, radius, ax, curve, ay, kind="physical", status="accepted"):
@@ -20,7 +23,7 @@ def row(study, mu, radius, ax, curve, ay, kind="physical", status="accepted"):
 
 @pytest.fixture
 def rendered(study, tmp_path):
-    inputs = study.parse_inputs(["--quick"])
+    inputs, _ = study.parse_inputs(["--quick"])
     curves = [study.BASELINE, *(f"{p:+d}%" for p in study.MAP_PCTS), study.DESIGN]
     op_rows = []
     for radius in inputs.map_radii_m:
@@ -32,18 +35,19 @@ def rendered(study, tmp_path):
                     op_rows.append(row(study, inputs.mu, radius, ax, curve, 1.0 + 0.001 * i))
     for r in op_rows:
         base = next(b for b in op_rows if (b["radius_m"], b["ax_g"], b["curve"]) == (r["radius_m"], r["ax_g"], study.BASELINE))
-        r["ay_change_pct"] = study.gain_pct(r["ay_max_g"], base["ay_max_g"], study.POLICY)
-    robust = study.robust_region(op_rows)
+        r["ay_change_pct"] = study.gain_pct(r["ay_max_g"], base["ay_max_g"], inputs.policy)
+    robust = study.robust_region(op_rows, inputs.policy)
     nominal = {f"{r:g}m": {c: {"ay_change_pct": None, "limiting_axle": None, "bound_kind": "domain"} for c in curves}
                for r in study.RADII_M}
     spread = {f"{r:g}m": {c: [None, None, 0, 12] for c in curves} for r in study.RADII_M}
     toe = study.toe_summary([{"toe_out_deg": t, "radius_m": r, "curve": c, "ay_max_g": None if c == "+10%" else 1.0}
-                             for t in inputs.toe_out_deg for r in study.TOE_RADII_M for c in (study.BASELINE, "+10%", "+20%")])
+                             for t in inputs.toe_out_deg for r in study.TOE_RADII_M for c in (study.BASELINE, "+10%", "+20%")],
+                            inputs.policy)
     lap = {"delta_s": 0.01, "skidpad_delta_s": 0.001}
     s = {
         "nominal": nominal, "ay_change_pct_range_all_cases": spread, "steering_fix": [],
         "steering_fix_skipped": {"-40%": "domain: alpha_out_of_fit:FR"},
-        "front_base_linkage": {"arm_offset_mm": 84.0, "inner_wheel_at_travel": {
+        "front_base_linkage": {"arm_offset_mm": 84.0, "tie_o_inboard_of_wheel_center_plane_mm": 29.7, "inner_wheel_at_travel": {
             "toggle_margin_deg": 45.0, "bump_toe_change_deg": {"-25mm": 0.2, "+25mm": -0.4}}},
         "first_principles_optimum": {"3.5m": {"status": "unavailable", "reason": "x"}, "4.5m": {"status": "unavailable", "reason": "x"}},
         "toe": toe,
@@ -51,12 +55,12 @@ def rendered(study, tmp_path):
             "locks_first": "rear", "limit_g": 1.46, "ideal_front_bias": 0.68, "ideal_limit_g": 1.5}}},
         "operating_map": {"curves": curves, "variants": [], "caps": [], "lap_excluded": [{"curve": "-50%"}],
                           "lock_limited_cells": [], "lock_margin_min_deg": {c: None for c in curves}},
-        "robust": {"all": robust, "beyond_3p5": study.robust_region([r for r in op_rows if r["radius_m"] > 3.5])},
+        "robust": {"all": robust, "beyond_3p5": study.robust_region([r for r in op_rows if r["radius_m"] > 3.5], inputs.policy)},
         "lap_qss": {"0.623": {c: lap for c in curves if c != "-50%"}, "radius_bands": []},
         "lock_at_rack_travel": {"mean_steer_at_travel_deg": 23.4, "mean_steer_needed_at_limit_deg": {},
                                 "tightest_cg_radius_at_limit_m": None, "min_cg_radius_low_speed_m": 3.83,
                                 "rule_hairpin_cg_radius_m": 3.67, "rack_needed_for_3p5m_at_limit_mm": None},
-        "ackermann_pct_at_rack": {study.DESIGN: {"10mm": 48.9, "20mm": 50.0, f"{study.RACK_TRAVEL_MM:g}mm": 53.7}},
+        "ackermann_pct_at_rack": {study.DESIGN: {"10mm": 48.9, "20mm": 50.0, f"{inputs.rack_travel_mm:g}mm": 53.7}},
         "grid_convergence": {"band_s": None}, "lsd_rows": [],
         "trim_coverage": {"all": 0.9, "points": 10, "demand": 0.98, "radius_max_m": 15.0},
         "track_minimum_curvature_line": {"length_m": 1989.0, "corners_under_15m": 42, "corners": [{"min_radius_m": 4.47}]},
@@ -86,6 +90,23 @@ def test_failed_cells_render_as_withheld_or_not_modeled(study, rendered):
     assert "not solved: the 3.5 m limit is not a grip limit" in (out / "linkage.md").read_text(encoding="utf-8")
     assert "withheld" in (out / "toe.md").read_text(encoding="utf-8")
     assert "no grip" not in "".join(p.read_text(encoding="utf-8") for p in out.glob("*.md"))
+
+
+def test_every_readme_reference_is_written(rendered):
+    out, _ = rendered
+    values = json.loads((out / "readme.json").read_text(encoding="utf-8"))
+    text = README.read_text(encoding="utf-8")
+    refs = re.findall(r"<!-- out:([^ ]+) -->", text)
+    assert "inputs.md" in refs
+    assert [m["ref"] for m in BLOCK.finditer(text)] == refs, "An out: block is nested or not closed."
+    for ref in refs:
+        name, _, rest = ref.partition("#")
+        if name in WRITTEN_ELSEWHERE:
+            continue
+        if name == "readme.json":
+            assert rest.partition("|")[0] in values, f"README reads {ref}. write_readme_parts does not write it."
+        else:
+            assert (out / name).is_file(), f"README reads {ref}. write_readme_parts does not write it."
 
 
 def test_a_missing_readme_value_says_withheld_not_null(rendered):
