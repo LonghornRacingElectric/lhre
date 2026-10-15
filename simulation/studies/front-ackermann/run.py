@@ -495,12 +495,16 @@ def classify(car, curve, radius, side, ay_g, lon, res):
         if res.status <= 0:
             reason = "max_evaluations" if res.status == 0 else "solver_error"
             return TrimRecord(TrimStatus.NUMERICAL_FAILURE, (reason,), residual, 1, unknowns, active)
-        if res.optimality <= STATIONARY_TOL:
-            return TrimRecord(TrimStatus.PHYSICALLY_INFEASIBLE, ("no_equilibrium",), residual, 1, unknowns, active)
-        return TrimRecord(TrimStatus.NUMERICAL_FAILURE, ("not_converged",), residual, 1, unknowns, active)
+        if res.optimality > STATIONARY_TOL:
+            return TrimRecord(TrimStatus.NUMERICAL_FAILURE, ("not_converged",), residual, 1, unknowns, active)
     s = state(car, curve, radius, side, unknowns[0], unknowns[1], ay_g, lon, unknowns[2] if lon else 0.0)
     wheels = car.wheel_states(s, side)
     domain = tuple(flag for w in wheels for flag in w["flags"])
+    if residual >= RESIDUAL_TOL:
+        # A stationary point outside the tire fit is no evidence that the in-fit car saturates.
+        if domain:
+            return TrimRecord(TrimStatus.DOMAIN_REJECTED, domain, residual, 1, unknowns, active, wheels)
+        return TrimRecord(TrimStatus.PHYSICALLY_INFEASIBLE, ("no_equilibrium",), residual, 1, unknowns, active, wheels)
     if domain:
         return TrimRecord(TrimStatus.DOMAIN_REJECTED, domain, residual, 1, unknowns, active, wheels)
     used = tuple(f"tire_use:{w['corner'].upper()}" for w in wheels if w["use"] >= 1.0)

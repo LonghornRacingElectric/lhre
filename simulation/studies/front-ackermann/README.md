@@ -242,7 +242,7 @@ Each trim attempt ends in one status from `tools/trim_status.py`:
 | ------ | ------- |
 | `accepted` | The residual is under 1e-7, every wheel is inside the tire fit, and both axles are on the rising branch. |
 | `domain_rejected` | The solve left the model domain: a wheel outside the `.tir` load, slip-angle, slip-ratio or camber range, a lifted wheel, or a solver bound (steer, sideslip, longitudinal force). |
-| `physically_infeasible` | A converged in-domain state uses more than the tire can give or is past the peak, or every start stopped at a stationary point with a nonzero residual (`no_equilibrium`). The last case is local evidence of saturation, not a global proof. |
+| `physically_infeasible` | A converged in-domain state uses more than the tire can give or is past the peak, or a start stopped at a stationary point with a nonzero residual and every wheel inside the fit (`no_equilibrium`). The last case is local evidence of saturation, not a global proof. A stationary point outside the fit is `domain_rejected`. |
 | `numerical_failure` | The solver stopped on its evaluation limit or did not reach a stationary point. Nothing is known about the physics. |
 | `not_modeled` | The study withholds the capability, for example LSD coupling under braking. |
 

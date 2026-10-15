@@ -1,5 +1,6 @@
 import dataclasses
 import math
+import types
 
 import numpy as np
 import pytest
@@ -143,6 +144,30 @@ def test_an_iteration_cap_is_a_numerical_failure(study, make_car):
     record = study.trim(car, law, 3.5, 1.0, 0.2, OUTER_MAX, max_nfev=1)
     assert record.status is TrimStatus.NUMERICAL_FAILURE
     assert record.reasons == ("max_evaluations",)
+
+
+def stationary(beta, outer):
+    return types.SimpleNamespace(x=np.array([beta, outer]), fun=np.array([0.05, 0.0]), active_mask=np.zeros(2, dtype=int),
+                                 status=1, optimality=1e-12)
+
+
+def test_no_equilibrium_counts_as_physical_only_inside_the_fit(study, make_car):
+    car = make_car()
+    radius, ay = 3.5, 1.2
+    law = study.ConstantAckermann(0, car.track_front, car.wheelbase, math.radians(60.0))
+    beta, probe = car.wheelbase * car.front_frac / radius, 0.5
+    path = [probe - a for a in study.state(car, law, radius, 1.0, beta, probe, ay)["alphas"][:2]]
+    inside, outside = sum(path) / 2, max(path) + 0.25
+
+    def flags(outer):
+        return [f for w in car.wheel_states(study.state(car, law, radius, 1.0, beta, outer, ay), 1.0) for f in w["flags"]]
+
+    assert flags(inside) == [] and "alpha_out_of_fit:FL" in flags(outside)
+    record = study.classify(car, law, radius, 1.0, ay, None, stationary(beta, inside))
+    assert record.status is TrimStatus.PHYSICALLY_INFEASIBLE and record.reasons == ("no_equilibrium",)
+    record = study.classify(car, law, radius, 1.0, ay, None, stationary(beta, outside))
+    assert record.status is TrimStatus.DOMAIN_REJECTED
+    assert {"alpha_out_of_fit:FL", "alpha_out_of_fit:FR"} <= set(record.reasons)
 
 
 def test_a_grip_limit_ends_at_physical_saturation(study, make_car):
