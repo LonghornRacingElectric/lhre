@@ -75,8 +75,10 @@ study:
 	@test -n "$(S)" || { echo "Set S=<study name>."; exit 1; }
 	@test -f studies/$(S)/run.py || { echo "studies/$(S)/run.py does not exist."; exit 1; }
 	@test -z "$(ARGS)" || test -n "$(V)" || { echo "Set V=<variant name> with ARGS."; exit 1; }
-	$(RUN) -e STUDY=$(S) -e OUT_DIR=out/.staging/$(STUDY_OUT) -e BOBSIM_SHA=$(BOBSIM_SHA) -e STUDY_WORKERS=$(STUDY_WORKERS) sim \
-		sh -c 'rm -rf out/.staging/$(STUDY_OUT) && python tools/provenance.py && python studies/$(S)/run.py $(ARGS) \
+	$(RUN) -e STUDY=$(S) -e STUDY_VARIANT=$(V) -e OUT_DIR=out/.staging/$(STUDY_OUT) -e STUDY_WORKERS=$(STUDY_WORKERS) \
+		-e BOBSIM_SHA=$(BOBSIM_SHA) -e LHRE_SHA=$$(git -C .. rev-parse HEAD 2>/dev/null) -e LHRE_REQUIRE_GIT=$(LHRE_REQUIRE_GIT) \
+		-e LHRE_IMAGE_ID=$$(docker image inspect --format '{{.Id}}' $$($(COMPOSE) config --images sim 2>/dev/null) 2>/dev/null) sim \
+		sh -c 'rm -rf out/.staging/$(STUDY_OUT) && python tools/provenance.py studies/$(S)/run.py $(ARGS) && python studies/$(S)/run.py $(ARGS) \
 			&& rm -rf out/$(STUDY_OUT) && mv out/.staging/$(STUDY_OUT) out/$(STUDY_OUT) \
 			$(if $(V),,&& python tools/readme.py studies/$(S)/README.md out/$(S))'
 

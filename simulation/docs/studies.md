@@ -22,8 +22,12 @@ The script gets these environment variables:
 | `BOBSIM_VEHICLE` | `/lhre/vehicle/vehicle.yml` |
 | `OUT_DIR` | `out/.staging/<name>`. It exists before `run.py` starts. |
 | `STUDY` | `<name>` |
+| `STUDY_VARIANT` | The variant name `V`. Empty for the main run. |
 | `BOBSIM_SHA` | The pinned BobSim commit |
 | `STUDY_WORKERS` | CPU limit for parallel cases. Empty means all CPUs. |
+
+`make study` also passes `LHRE_SHA`, `LHRE_IMAGE_ID` and
+`LHRE_REQUIRE_GIT` to `tools/provenance.py`. `run.py` does not need them.
 
 Rules:
 
@@ -137,14 +141,67 @@ If `run.py` succeeds, `make study` moves `OUT_DIR` to `out/<name>/`. If it
 fails, `out/<name>/` keeps the last good result, and the failed run stays in
 `out/.staging/<name>/`.
 
-```json
-{
-  "study": "<name>",
-  "bobsim_sha": "7ff5191…",
-  "vehicle_sha256": "8a06ba5…",
-  "utc": "2026-09-23T07:30:31+00:00"
-}
+The schema is `lhre.provenance.v2`. The file records:
+
+- The study, the variant and the arguments of `run.py` (`argv`).
+- The lhre, BobSim and BobLib commits and their dirty state. BobLib also
+  has `gitlink`, the commit that the BobSim pin names.
+- The image ID and the Python version.
+- The vehicle path and SHA-256, the bundle ID and the SHA-256 of each tire
+  file. It never copies tire data.
+- The SHA-256 of each study file and each lhre tool that `run.py` imports
+  (`study_code`).
+- The invalidation keys (`invalidation`).
+
+A value that the run cannot read is `null`, with the reason. The tool never
+guesses it. In a git worktree, git in the container cannot read the
+repositories. Then the commits come from the host, the dirty state is
+`null`, and the BobSim and BobLib keys are `null`. With
+`LHRE_REQUIRE_GIT=1`, as in CI, a `null` from git stops the run.
+
+### Invalidation keys
+
+Each key is a digest of the content of one input. A commit SHA is never a
+key, so a commit that changes only docs does not change a key.
+
+| Key | Input |
+| --- | ----- |
+| `vehicle` | The bytes of the vehicle file |
+| `tire:<name>` | The bytes of each `.tir` file that the vehicle names |
+| `bundle_id` | `bundle_id` in `bundle.yml` next to the vehicle, or `absent` |
+| `bundle_physics` | The values in `frame`, `axles`, `setup` and `torque_topology` of `bundle.yml`, or `absent` |
+| `lhre:<path>` | Each file in the study folder, and each lhre module that the study imports |
+| `bobsim:<folder>` | The files of each BobSim physics folder: `common`, `engines`, `simulations`, `optimization`, `Dockerfile` and `requirements.txt` |
+| `bobsim:<file>` | Each BobSim module outside those folders that the study imports, for example `app/tire_eval.py` |
+| `boblib:BobLib` | The files of the BobLib package, also the records that `make records` writes |
+
+These changes do not change a key:
+
+- Markdown, reStructuredText, PDF and image files, in any folder.
+- Comments, blank lines and indent width in Python files.
+- BobSim `docs/`, `tests/`, `visualization/`, and `app/` modules that the
+  study does not import.
+- `__pycache__/` folders, and files that git ignores in BobSim and
+  BobLib, such as build output.
+- The `status` and `source` of a bundle value, and the bundle `status` and
+  `release` fields.
+
+### Check a result
+
+```bash
+docker compose run --rm -T sim python tools/invalidation.py stale out/<name>/provenance.json
 ```
 
-If the vehicle or the BobSim pin changes, run the study again before you
-use its result.
+The check compares the recorded keys with the current files. It uses the
+vehicle in `BOBSIM_VEHICLE`, or the file that `--vehicle PATH` names. It
+prints one of:
+
+| Output | Exit code | Meaning |
+| ------ | --------- | ------- |
+| `CURRENT <name>` | 0 | Every key is the same. |
+| `STALE <name>` and the changed keys | 1 | An input changed. Run the study again before you use its result. |
+| `UNKNOWN <name>` and the keys it cannot compare | 3 | A key was `null` at the run or cannot be read now. Do not treat the result as current. |
+
+A `provenance.json` without keys (schema version 1) is never `CURRENT`.
+`CURRENT` means that the software inputs did not change. It is not a
+hardware approval.
