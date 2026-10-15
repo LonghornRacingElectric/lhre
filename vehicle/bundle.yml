@@ -1,0 +1,208 @@
+schema: lhre.vehicle-bundle.v1
+bundle_id: orion-baseline-1
+status: candidate
+superseded_by: null
+release:
+  approved_by:
+    value: null
+    status: unavailable
+    source: No release decision exists for this car.
+  decision_ref:
+    value: null
+    status: unavailable
+    source: No release decision exists for this car.
+  date:
+    value: null
+    status: unavailable
+    source: No release decision exists for this car.
+members:
+  vehicle:
+    path: vehicle/vehicle.yml
+    sha256: e024a5e36ac3660889e298a8f88e599718b5fd97e23a39e1ec58f60f4df200f5
+    schema: boblib.vehicle.v1
+  tires:
+    - id: 16x7p5_10_12psi
+      path: vehicle/tires/16x7p5_10_12psi.tir
+      sha256: f38da74e929e4a1aa4e7101a4f524c21768ce05d7f74b8e83d2fbb63ac6b34d0
+      axles: [front, rear]
+      license:
+        value: null
+        status: unavailable
+        source: >-
+          The .tir header names no owner and no license. BobSim (GPL-3.0) holds the same bytes,
+          but that does not license the tire data. A missing license means restricted.
+      source:
+        value: null
+        status: unavailable
+        source: >-
+          The .tir header gives PAC2002, "Tire 16x7.5", 82737 Pa, rim radius 0.127 m and a test speed
+          of 12 m/s. It names no manufacturer, test or fit. The bytes equal BobSim fe03bab
+          common/tire_templates/16x7p5_10_12psi.tir.
+  sources:
+    - id: bobsim-4da577a-vehicle
+      kind: copied-model
+      file:
+        name: BobDyn/BobSim@4da577af1b04d86c53706eb6e80fb0064f71cee6:vehicle.yml
+        sha256: 6e2ca9184af612c179311aef9a29dcdfc10cce03dfbc14cb201fc732ed12807f
+        stored: external
+      units:
+        value: {length: m, mass: kg, alignment_angle: deg}
+        status: declared
+        source: The key suffixes in the file (_m, _kg, _deg).
+frame:
+  axes:
+    value: {x: forward, y: left, z: up}
+    status: declared
+    source: >-
+      BobSim fe03bab docs/conventions.md lines 9 to 11 state the boblib.vehicle.v1 frame. That page
+      says it was derived from the BobSim code.
+  units:
+    value: {length: m, mass: kg, alignment_angle: deg}
+    status: declared
+    source: BobSim fe03bab docs/conventions.md lines 9 to 12 and the key suffixes in vehicle.yml.
+  datum_z:
+    front:
+      value: null
+      status: unavailable
+      source: >-
+        BobSim fe03bab docs/conventions.md line 50 says the vertical datum is unresolved. No LHRe
+        record gives the z datum of the front points.
+    rear:
+      value: null
+      status: unavailable
+      source: >-
+        BobSim fe03bab docs/conventions.md line 50 says the vertical datum is unresolved. No LHRe
+        record gives the z datum of the rear points.
+  mirror:
+    stored_side:
+      value: left
+      status: declared
+      source: BobSim fe03bab docs/conventions.md line 10. Only the left side is stored.
+    rule:
+      value: negate_y
+      status: declared
+      source: BobSim fe03bab docs/conventions.md line 25. The opposite corner negates y.
+axles:
+  front:
+    revision:
+      value: null
+      status: unavailable
+      source: >-
+        No record names a front suspension revision for this car. vehicle.version 0.1.0 is a file
+        version, not a suspension revision.
+    source:
+      value: bobsim-4da577a-vehicle
+      status: assumed
+      source: >-
+        Every front key equals BobSim 4da577a vehicle.yml (diff on 2026-10-14). lhre commit e7a2852
+        added the file and states no source. No record says where BobSim got the values.
+    transform:
+      value: identity
+      status: assumed
+      source: >-
+        The front points equal the copied model. No record gives a transform from CAD or a SHARK
+        export to that model.
+    cad:
+      value: null
+      status: unavailable
+      source: vehicle/, simulation/ and BobSim name no CAD file or part for the front axle.
+    svn:
+      value: null
+      status: unavailable
+      source: vehicle/, simulation/ and BobSim name no SVN URL or revision for the front axle.
+  rear:
+    revision:
+      value: null
+      status: unavailable
+      source: >-
+        No record names a rear suspension revision for this car. vehicle.version 0.1.0 is a file
+        version, not a suspension revision.
+    source:
+      value: bobsim-4da577a-vehicle
+      status: assumed
+      source: >-
+        Every rear key equals BobSim 4da577a vehicle.yml (diff on 2026-10-14). lhre commit e7a2852
+        added the file and states no source. No record says where BobSim got the values.
+    transform:
+      value: identity
+      status: assumed
+      source: >-
+        The rear points equal the copied model. No record gives a transform from CAD or a SHARK
+        export to that model.
+    cad:
+      value: null
+      status: unavailable
+      source: vehicle/, simulation/ and BobSim name no CAD file or part for the rear axle.
+    svn:
+      value: null
+      status: unavailable
+      source: vehicle/, simulation/ and BobSim name no SVN URL or revision for the rear axle.
+setup:
+  id:
+    value: null
+    status: unavailable
+    source: No setup sheet or setup name exists for this car.
+  source:
+    value: bobsim-4da577a-vehicle
+    status: assumed
+    source: >-
+      Toe, camber, spring tables, free lengths, bar rates and brake bias equal BobSim 4da577a
+      vehicle.yml. No LHRe setup sheet states them.
+torque_topology:
+  drive:
+    front_share:
+      value: 0.0
+      status: assumed
+      source: >-
+        vehicle.yml powertrain.implementation EVBatInvMotDiff names one motor and a differential.
+        BobSim fe03bab maps that driveline to Drivelines.RearFinalDriveDifferentialRecord
+        (app/modelica_generator.py line 249) and sets drive_distribution_front to 0.0
+        (engines/dynpy/parameters.py line 281). No LHRe record states the driven axle.
+    rear_share:
+      value: 1.0
+      status: assumed
+      source: >-
+        vehicle.yml powertrain.implementation EVBatInvMotDiff names one motor and a differential.
+        BobSim fe03bab maps that driveline to Drivelines.RearFinalDriveDifferentialRecord
+        (app/modelica_generator.py line 249) and sets drive_distribution_front to 0.0
+        (engines/dynpy/parameters.py line 281). No LHRe record states the driven axle.
+    reaction:
+      value: null
+      status: unavailable
+      source: >-
+        No LHRe record states where the drive torque reacts. pDriveline lists halfshafts, which
+        suggests a differential on the chassis, but no drawing or decision states it.
+  hydraulic_brake:
+    front:
+      reaction:
+        value: null
+        status: unavailable
+        source: >-
+          No LHRe record states the front caliper location. An unreviewed vault note of 2026-10-04
+          assumed outboard brakes because vehicle.yml does not say.
+    rear:
+      reaction:
+        value: null
+        status: unavailable
+        source: >-
+          No LHRe record states the rear caliper location. An unreviewed vault note of 2026-10-04
+          assumed outboard brakes because vehicle.yml does not say.
+  regen:
+    front_share:
+      value: 0.0
+      status: assumed
+      source: >-
+        Regen uses the one motor and the same driveline as drive. BobSim fe03bab maps that
+        driveline to the rear axle (app/modelica_generator.py line 249). No LHRe record states
+        the regen axle.
+    rear_share:
+      value: 1.0
+      status: assumed
+      source: >-
+        Regen uses the one motor and the same driveline as drive. BobSim fe03bab maps that
+        driveline to the rear axle (app/modelica_generator.py line 249). No LHRe record states
+        the regen axle.
+    reaction:
+      value: null
+      status: unavailable
+      source: No LHRe record states where the regen torque reacts.
