@@ -1017,7 +1017,7 @@ def check_map(rows, curve, brake_g, drive_g, inputs):
 
 def envelope_ggv(rows, curve, brake_g, drive_g, mass, power_w, inputs, refine=False):
     radii = np.asarray(inputs.map_radii_m)
-    # NaN marks a missing cell inside this function only; check_map admits only physical caps.
+    # NaN marks a missing cell inside this function only. check_map admits only physical caps.
     grid = {(r["radius_m"], r["ax_g"]): (math.nan if r["ay_max_g"] is None else r["ay_max_g"]) for r in rows if r["curve"] == curve}
     if not all(math.isfinite(grid[(r, 0.0)]) for r in inputs.map_radii_m):
         raise RuntimeError(f"{curve} has no steady limit at some radius")
