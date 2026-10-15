@@ -353,6 +353,15 @@ def test_a_candidate_copy_is_checked_by_path(root, monkeypatch, capsys):
     assert capsys.readouterr().out.rstrip().splitlines()[-1] == CANDIDATE_LINE
 
 
+def test_a_candidate_path_is_relative_to_the_working_directory(root, monkeypatch, capsys):
+    _candidate(root)
+    monkeypatch.setattr(vb, "REPO", root)
+    monkeypatch.chdir(root / "simulation")
+    paths = ["--bundle", "out/candidate/bundle.yml", "--vehicle", "out/candidate/vehicle.yml"]
+    assert vb.main(["check", *paths]) == 0, capsys.readouterr().out
+    assert "BobSim load: OK" in capsys.readouterr().out
+
+
 def test_a_candidate_copy_cannot_be_released(root):
     bundle, vehicle = _candidate(root, status="released")
     assert _codes(_check(root, bundle, vehicle)) == {("status", "release_not_committed_vehicle")}

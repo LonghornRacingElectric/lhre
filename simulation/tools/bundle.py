@@ -359,7 +359,8 @@ def vehicle_file(
     bundle: Bundle, vehicle_path: str | os.PathLike[str] | None = None, *, root: Path | None = None
 ) -> Path | None:
     if vehicle_path is not None:
-        return Path(vehicle_path)
+        # BobSim resolves a relative vehicle path from the BobSim root, not from the working directory.
+        return Path(vehicle_path).absolute()
     member = _mapping(bundle.data, "members", "vehicle").get("path")
     if not isinstance(member, str) or _relative_path(member):
         return None
