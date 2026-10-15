@@ -74,6 +74,19 @@ The pin is the submodule commit. To move it, follow
 [bump-bobsim](skills/bump-bobsim/SKILL.md). One PR moves the pin and fixes
 anything the move breaks.
 
+After you pull a pin move, update your checkout from `simulation/`:
+
+```bash
+git -C bobsim submodule deinit -f --all
+make init
+```
+
+The first command removes the nested submodules of the old pin. Without
+it, a nested submodule that BobSim moved stays as an untracked folder.
+`make init` gets the new submodules and builds the image again. The image
+tag does not change with the pin, so an old image stays in use until you
+build again.
+
 ### Old to new names
 
 BobSim `6629ab8` (#82) and `6329270` (#97) moved its source. The pin moved
