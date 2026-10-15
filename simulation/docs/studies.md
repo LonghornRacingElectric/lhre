@@ -124,8 +124,9 @@ published page shows only the value.
 - `run.py` writes the tables as `.md` files to `OUT_DIR`.
 - `make study` also copies each figure that the README links, such as
   `![Result](result.png)`, from `out/<name>/` to the study folder.
-- A marker that names a missing file or key stops `make study`. Fix the
-  marker or `run.py`.
+- A marker that names a missing file or key stops `make study`. A value
+  that is `null` or NaN also stops it. The README never shows `None`. Fix
+  the marker or `run.py`.
 - Words stay yours. Read the new numbers after each run, and change the
   text if the result changed.
 
