@@ -12,8 +12,8 @@ copy BobSim code into lhre.
 
 | Tier | What it is | Typical targets | Needs OpenModelica |
 | ---- | ---------- | --------------- | ------------------ |
-| Geometry | `kin_py` kinematics | `shark-overlay` | No |
-| Reduced order | `dyn_py`, 3 to 14 DOF | `reduced-eval`, `lap-eval`, `envelope-ggv`, `envelope-ymd` | No |
+| Geometry | KinPy kinematics (`engines/kinpy`) | `shark-overlay` | No |
+| Reduced order | DynPy, 3 to 14 DOF (`engines/dynpy`) | `reduced-eval`, `lap-eval`, `envelope-ggv`, `envelope-ymd` | No |
 | High fidelity | BobLib Modelica, compiled | `standard-build`, `standard-eval-*` | Yes |
 
 Run any target with `make bobsim T=<target>`. `make bobsim T=help` lists
@@ -40,18 +40,98 @@ Start long targets in the background. Do not run them in CI.
 - BobSim targets do not read `BOBSIM_VEHICLE` yet. `make bobsim T=...` uses
   `simulation/bobsim/vehicle.yml` until BobSim reads the variable.
 - The Modelica tier compiles BobLib's `.mo` records. Run `make records`
-  first. It writes our vehicle into those records inside the submodule.
-  Do not commit those files. `make records-undo` puts back only those files.
-- At `4da577a`, BobLib's checked-in records do not match BobSim's generator
-  output, even for BobSim's own `vehicle.yml`. Most of the difference is
-  formatting. So BobSim's `sync-vehicle` reports "stale" before you change
-  anything. This is not a problem with our vehicle.
+  first. It writes our vehicle into those records inside the submodule, at
+  `bobsim/engines/boblib`. Do not commit those files. `make records-undo`
+  puts back only those files.
+- Our vehicle has the same name as BobSim's default car. So `make records`
+  replaces BobSim's record for that car until `make records-undo`.
+
+### Modelica initialization
+
+BobLib's `VehicleSim` starts from a solved quasi-steady-state (QSS) pose,
+`pQSSInitialization`. That pose was solved for BobSim's own car. Since BobSim
+`276e720` (#74), the generator keeps the pose only when the new record
+matches the solved record exactly. Otherwise it stops and writes nothing,
+unless the vehicle file sets `modelica_initialization: legacy`.
+
+Our `vehicle/vehicle.yml` sets `legacy`. The reasons:
+
+- Our car differs from the solved record, so the default (`preserve`)
+  stops `make records`. BobSim's own `vehicle.yml` also differs from it.
+  BobSim's `tests/test_modelica_generator.py` expects that.
+- With `legacy`, `make records` writes a `VehicleSim` without the solved
+  pose. The model starts from BobLib's settling start.
+- At the old pin `4da577a`, `make records` did the same, without a
+  setting and without a message. So `legacy` keeps the start that
+  `make records` gave our car before the move.
+
+A solved pose for our car needs a recalibrated BobLib record. That is
+BobLib work. Until it exists, keep `legacy`.
 
 ## The pin
 
 The pin is the submodule commit. To move it, follow
 [bump-bobsim](skills/bump-bobsim/SKILL.md). One PR moves the pin and fixes
 anything the move breaks.
+
+### Old to new names
+
+BobSim `6629ab8` (#82) and `6329270` (#97) moved its source. The pin moved
+from `4da577a` to `fe03bab` in two steps. This table maps the names that
+lhre used.
+
+| At `4da577a` | At `fe03bab` |
+| ------------ | ------------ |
+| `_0_Utils.vehicle_io` | `common.vehicle_io` |
+| `_0_Utils.kin_py.kinematics` | `engines.kinpy.kinematics` |
+| `_0_Utils.dyn_py` | `engines.dynpy` |
+| `_0_Utils.lap_sim.{qss,racing_line,track}` | `simulations.lap.core.{qss,racing_line,track}` |
+| `_2_EnvelopeSim.{vehicle_loader,vehicle_yaml}` | `simulations.envelope.{vehicle_loader,vehicle_yaml}` |
+| `_5_App.tire_eval` | `app.tire_eval` |
+| `_5_App.modelica_generator` | `app.modelica_generator` |
+| `_3_StandardSim/LapTimeEval/lap_time_eval_config.yml` | `simulations/lap/lap_time_eval_config.yml` |
+| `_3_StandardSim/_modelica_runner.py` | `simulations/response/mbd/_modelica_runner.py` |
+| `_3_StandardSim/generated_results/` | `simulations/mbd/generated_results/` |
+| BobLib at `_0_Utils/external/BobLib` | BobLib at `engines/boblib` |
+
+`make test` fails if lhre code or docs use a name from the left column.
+
+### What changed in BobSim from `4da577a` to `fe03bab`
+
+The move takes 43 BobSim commits. These 21 change physics, numerics or
+model inputs. A result made at `4da577a` is stale when it depends on one
+of them. Run the study again before you use it.
+
+| Commit | PR | What changes |
+| ------ | -- | ------------ |
+| `739143a` | #70 | FourPost front anti-dive report sign. lhre adopted it first, in its own pin move. |
+| `bfebb33` | #71 | OpenModelica 1.26.3 to 1.27.1. FourPost does not compile at this commit alone. |
+| `4f25698` | #72 | BobLib `e03da04`: new joint reference frame. 7 ramp-steer metrics leave tolerance. |
+| `276e720` | #74 | Generator keeps a solved QSS pose only on an exact record match. |
+| `8d66f07` | #75 | DynPy suspension rates come from the requested vehicle. |
+| `dc248ef` | #83 | KinPy quarter-car solver replaces the corner solver. |
+| `816ac5f` | #84 | Rack and corner travel couple through KinPy in DynPy and GGV. |
+| `58c7f58` | #86 | MF5.2 force module. |
+| `1e95049` | #87 | MF5.2 replaces the tanh tire and the 0.8 friction floor. |
+| `37a0057` | #88 | Front and rear tire fits stay separate. |
+| `9054512` | #90 | MF5.2 moments and the full tire wrench. |
+| `6cfac24` | #91 | Centered QSS derivatives near zero. |
+| `9a56d44` | #92 | Out-of-fit tire trims fail. GGV retries roots. |
+| `e8436f3` | #93 | QSS path-frame and rolling acceleration targets. |
+| `29b3c88` | #95 | QSS height and attitude stay stationary on level roads. |
+| `40cd2da` | #99 | DynPy slip-root search starts at zero slip. |
+| `87ae3ca` | #101 | DynPy ramp and step steer path. |
+| `b6dcd1e` | #103 | Implicit solver Jacobian probes and a separate ramp end time. |
+| `d0e3d00` | #105 | PI speed control and Radau for 10 and 14 DOF. |
+| `c0537ff` | #106 | Live ride heights and CFD aero moments in DynPy. BobSim's own ride-height references change. |
+| `95253a2` | #110 | BobLib `1bd6d78`: bellcrank visual pickups. Equation counts change. |
+
+The other 22 commits change layout, build, docs, reports, cache identity
+or the app. `9e463c8` (#80) can evict a stale lap GGV cache. That can
+change a lap result without a physics change.
+
+Our `vehicle/vehicle.yml` did not take the ride-height references from
+#106. Its values need a named source before they change.
 
 ## Windows
 

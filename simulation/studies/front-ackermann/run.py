@@ -18,13 +18,13 @@ import numpy as np
 import yaml
 from scipy.optimize import brentq, least_squares, minimize_scalar
 
-from _0_Utils.kin_py.kinematics import CornerKinematics
-from _0_Utils.lap_sim.qss import GGVMap, solve_qss_lap
-from _0_Utils.lap_sim.racing_line import optimize_racing_line
-from _0_Utils.lap_sim.track import RacingLine, TrackCorridor
-from _0_Utils.vehicle_io import load_yaml, parse_tir, repo_root, tire_templates_root
-from _2_EnvelopeSim.vehicle_yaml import project_vehicle_yaml
-from _5_App.tire_eval import _mf52_fx_pure, _mf52_fy_pure
+from app.tire_eval import _mf52_fx_pure, _mf52_fy_pure
+from common.vehicle_io import load_yaml, parse_tir, repo_root, tire_templates_root
+from engines.kinpy.kinematics import CornerKinematics
+from simulations.envelope.vehicle_yaml import project_vehicle_yaml
+from simulations.lap.core.qss import GGVMap, solve_qss_lap
+from simulations.lap.core.racing_line import optimize_racing_line
+from simulations.lap.core.track import RacingLine, TrackCorridor
 from tools.parallel import map_cases
 
 G = 9.80665
@@ -64,7 +64,7 @@ ANTI_LINKAGE_PCT = -40
 STEER_FIX_TARGETS_PCT = (float(ANTI_LINKAGE_PCT), 0.0, 70.0)
 STEER_RESERVE = 0.9
 PLANNED_DIFF = (5.0, 0.60)
-LAP_CONFIG = "_3_StandardSim/LapTimeEval/lap_time_eval_config.yml"
+LAP_CONFIG = "simulations/lap/lap_time_eval_config.yml"
 CORNER_RADIUS_MAX_M = 15.0
 MU_SENSITIVITY = 0.75
 MAP_RADII_M = (3.5, 4.5, 6.0, 8.0, 11.0, 15.0)

@@ -33,6 +33,10 @@ description: Change a parameter of the current car in vehicle/vehicle.yml and ch
 ## Do not
 
 - Do not change `paths:`. Its entries resolve from `simulation/bobsim`.
+  Only a BobSim pin move changes them, when BobSim moves a folder. See
+  [bump-bobsim](../bump-bobsim/SKILL.md).
+- Do not change `modelica_initialization`. See
+  [bobsim.md](../../bobsim.md#modelica-initialization).
 - Do not add a second vehicle file. Studies that need a changed vehicle
   write a copy to `out/`.
 - Do not change line endings. The file is LF.

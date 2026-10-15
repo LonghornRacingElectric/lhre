@@ -2,8 +2,8 @@ import os
 import sys
 from pathlib import Path
 
-from _0_Utils.vehicle_io import load_yaml, tire_templates_root
-from _2_EnvelopeSim.vehicle_loader import load_active_envelope_inputs
+from common.vehicle_io import load_yaml, repo_root, tire_templates_root
+from simulations.envelope.vehicle_loader import load_active_envelope_inputs
 
 SCHEMA = "boblib.vehicle.v1"
 
@@ -13,6 +13,11 @@ def main() -> int:
     data = load_yaml(path)
     if data.get("schema") != SCHEMA:
         print(f"{path}: schema is {data.get('schema')!r}, expected {SCHEMA!r}")
+        return 1
+
+    boblib = repo_root() / data["paths"]["boblib"]
+    if not (boblib / "package.mo").is_file():
+        print(f"{path}: paths.boblib {data['paths']['boblib']!r} has no package.mo under {repo_root()}")
         return 1
 
     tires = tire_templates_root(data)

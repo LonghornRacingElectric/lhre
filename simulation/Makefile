@@ -16,7 +16,7 @@ help:
 	@echo "make init                  Get submodules and build the image"
 	@echo "make build                 Rebuild the image"
 	@echo "make shell                 Open a shell in the container"
-	@echo "make test                  Check that BobSim loads //vehicle"
+	@echo "make test                  Check that BobSim loads //vehicle and run tests/"
 	@echo "make records               Write //vehicle into BobLib's Modelica records"
 	@echo "make records-undo          Put back only the files make records wrote"
 	@echo "make bobsim T=<target>     Run a BobSim make target"
@@ -38,9 +38,9 @@ shell:
 	$(COMPOSE) run --rm sim bash
 
 test:
-	$(RUN) sim python tools/check_vehicle.py
+	$(RUN) sim sh -c 'python tools/check_vehicle.py && python -m pytest -q -p no:cacheprovider tests'
 
-BOBLIB := bobsim/_0_Utils/external/BobLib
+BOBLIB := bobsim/engines/boblib
 VEHICLE_NAME = $(shell sed -n 's/^  name: *//p' ../vehicle/vehicle.yml | head -n 1)
 RECORD_FILES = \
 	BobLib/Records/VehicleDefn/$(VEHICLE_NAME)Record.mo \
@@ -53,7 +53,7 @@ RECORD_FILES = \
 	BobLib/Experiments/Standards/FourPostSim.mo
 
 records:
-	$(RUN) sim sh -c 'cd bobsim && python -m _5_App.modelica_generator "$$BOBSIM_VEHICLE" --write'
+	$(RUN) sim sh -c 'cd bobsim && python -m app.modelica_generator "$$BOBSIM_VEHICLE" --write'
 
 records-undo:
 	cd $(BOBLIB) && git checkout -- $$(git ls-files -- $(RECORD_FILES)) && git clean -f -- $(RECORD_FILES)
@@ -73,8 +73,10 @@ study:
 
 bump-bobsim:
 	@test -n "$(REF)" || { echo "Set REF=<BobSim commit, tag or branch>."; exit 1; }
+	@test -z "$$(git -C bobsim status --short)" || { echo "bobsim has local changes. Run 'make records-undo' first."; exit 1; }
 	git -C bobsim fetch origin
-	git -C bobsim checkout --detach $(REF)
+	$(GIT_LF) -C bobsim submodule deinit -f --all
+	$(GIT_LF) -C bobsim checkout --detach $(REF)
 	$(GIT_LF) -C bobsim submodule update --init --recursive
 	@echo "Pinned BobSim at $$(git -C bobsim rev-parse --short HEAD). Run 'make build test', then commit simulation/bobsim."
 

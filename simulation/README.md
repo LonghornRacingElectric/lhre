@@ -33,7 +33,7 @@ make test    # check that BobSim loads //vehicle
 | `make init` | Get the submodules and build the image |
 | `make build` | Rebuild the image, for example after a BobSim bump |
 | `make shell` | Open a shell in the container |
-| `make test` | Check that BobSim loads `vehicle/vehicle.yml` and its tires |
+| `make test` | Check that BobSim loads `vehicle/vehicle.yml` and its tires, then run `tests/` |
 | `make records` | Write `vehicle/vehicle.yml` into BobLib's Modelica records |
 | `make records-undo` | Put back only the files `make records` wrote |
 | `make bobsim T=<target>` | Run a BobSim make target. `T=help` lists them. |
@@ -50,6 +50,7 @@ simulation/
   bobsim/             # submodule, pinned SHA
   studies/<name>/     # README.md + run.py
   tools/              # make test, study provenance, README fill and shared study helpers
+  tests/              # checks that lhre matches the pinned BobSim layout
   docs/               # detail and agent skills
   out/                # gitignored outputs
 ```
