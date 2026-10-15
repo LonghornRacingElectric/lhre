@@ -45,7 +45,7 @@ smoke:
 	$(RUN) sim python tools/check_vehicle.py
 
 unit:
-	$(RUN) sim python -m pytest -q -ra -p no:cacheprovider tests
+	$(RUN) -e LHRE_REQUIRE_GIT=$(LHRE_REQUIRE_GIT) sim python -m pytest -q -ra -p no:cacheprovider tests
 	@test -z "$$(git -C bobsim status --porcelain --ignore-submodules=none)" || { echo "bobsim/ has local changes after the tests. Tests must not write into BobSim. If make records wrote them, run make records-undo."; git -C bobsim status --short --ignore-submodules=none; exit 1; }
 
 BOBLIB := bobsim/engines/boblib

@@ -48,6 +48,7 @@ def test_make_smoke_only_loads_the_vehicle():
 def test_make_unit_checks_bobsim_after_the_tests():
     commands = _dry_run("unit")
     assert "pytest" in commands
+    assert "LHRE_REQUIRE_GIT" in commands
     assert "git -C bobsim status" in commands
     assert commands.index("pytest") < commands.index("git -C bobsim status")
 
@@ -73,3 +74,7 @@ def test_fast_job_runs_only_fast_make_targets(fast_job):
         for target in re.findall(r"\bmake\s+(\S+)", step.get("run", ""))
     }
     assert targets <= FAST_MAKE_TARGETS, f"The fast job runs {sorted(targets - FAST_MAKE_TARGETS)}."
+
+
+def test_fast_job_fails_when_git_checks_cannot_run(fast_job):
+    assert str(fast_job.get("env", {}).get("LHRE_REQUIRE_GIT")) == "1"

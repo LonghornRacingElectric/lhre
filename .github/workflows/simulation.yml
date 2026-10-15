@@ -20,6 +20,8 @@ jobs:
   fast:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      LHRE_REQUIRE_GIT: "1"
     defaults:
       run:
         working-directory: simulation
@@ -27,6 +29,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
+
+      - name: Get the BobSim history for the pin check
+        run: test "$(git -C bobsim rev-parse --is-shallow-repository)" = false || git -C bobsim fetch --unshallow --no-recurse-submodules origin
 
       - name: Build the image
         run: make build
