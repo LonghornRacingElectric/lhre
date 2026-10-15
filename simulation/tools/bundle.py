@@ -278,13 +278,13 @@ class Bundle:
         return keys
 
     def restricted_files(self) -> list[str]:
-        files = [tire["path"] for tire in _items(self.data, "members", "tires") if not tire_is_public(tire)]
+        files = [tire.get("path") for tire in _items(self.data, "members", "tires") if not tire_is_public(tire)]
         files += [
-            _mapping(source, "file")["name"]
+            _mapping(source, "file").get("name")
             for source in _items(self.data, "members", "sources")
             if _mapping(source, "file").get("stored") == "in-bundle"
         ]
-        return [str(path) for path in files]
+        return [str(path) for path in files if path]
 
 
 def load_bundle(path: str | os.PathLike[str]) -> Bundle:
@@ -379,13 +379,15 @@ def _check_hash(c: _Checker, path: str, file: Path, expected: Any) -> bool:
     if not file.is_file():
         c.add(path, "missing_file", f"{_show(file)} does not exist.")
         return False
-    actual = file_sha256(file)
+    data = file.read_bytes()
+    actual = hashlib.sha256(data).hexdigest()
     if actual != expected:
+        crlf = " The file has CRLF line ends. Hashes use the LF bytes that git commits." if b"\r\n" in data else ""
         c.add(
             path,
             "sha256_mismatch",
             f"{_show(file)} has sha256 {actual}. The bundle records {expected}. "
-            "A changed member needs its new sha256 and a new bundle_id.",
+            f"A changed member needs its new sha256 and a new bundle_id.{crlf}",
         )
         return False
     return True
@@ -651,7 +653,10 @@ def _check_command(bundle: Bundle, vehicle_path: str | None, base_ref: str | Non
         lines += info
     committed = REPO / BUNDLE
     if committed.is_file() and bundle.path.resolve() != committed.resolve():
-        problems += check_immutable(load_bundle(committed), bundle)
+        try:
+            problems += check_immutable(load_bundle(committed), bundle)
+        except (yaml.YAMLError, BundleError) as error:
+            problems.append(Problem("bundle_id", "committed_unreadable", f"Cannot compare with {BUNDLE}: {error}"))
     if base_ref is None:
         lines.append("Immutability: not checked against a base. Pass --base <git ref> to check it.")
     else:

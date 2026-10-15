@@ -52,7 +52,8 @@ Run it from `simulation/`. It runs `python tools/bundle.py check` in the
 container.
 
 1. Each member hash matches the file bytes. The hash basis is the file as
-   committed, with LF line ends.
+   committed, with LF line ends. A source file outside git records the
+   hash of its own bytes and `stored: external`. The check cannot read it.
 2. The tires that `vehicle.yml` loads are the bundle tires, byte for byte.
 3. BobSim loads `vehicle.yml`. BobSim at this pin has no vehicle validator.
    The check says so in its output. It runs the validator when a later pin

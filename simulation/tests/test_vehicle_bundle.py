@@ -112,6 +112,14 @@ def test_vehicle_hash_must_match_the_bytes(root):
     assert _sha(vehicle) in " ".join(problem.message for problem in problems)
 
 
+def test_a_crlf_copy_fails_with_a_hint(root):
+    vehicle = root / "vehicle" / "vehicle.yml"
+    vehicle.write_bytes(vehicle.read_bytes().replace(b"\n", b"\r\n"))
+    problems = [problem for problem in _check(root) if problem.code == "sha256_mismatch"]
+    assert [problem.path for problem in problems] == ["members.vehicle.sha256"]
+    assert "CRLF" in problems[0].message
+
+
 def test_tire_hash_must_match_the_bytes(root):
     tire = root / "vehicle" / "tires" / f"{TIRE}.tir"
     tire.write_bytes(tire.read_bytes() + b"!\n")
