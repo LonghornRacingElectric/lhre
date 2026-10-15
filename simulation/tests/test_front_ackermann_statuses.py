@@ -1,0 +1,259 @@
+import dataclasses
+import math
+
+import numpy as np
+import pytest
+
+from tools.trim_status import BoundKind, LimitResult, TrimRecord, TrimStatus
+
+G = 9.80665
+OUTER_MAX = math.radians(40.0)
+# Check case from the vehicle-dynamics-first-principles skill (seven-point tire sweep note).
+SKILL_CAR = {"mass": 261.07265114, "cg_height": 0.284217678378, "wheelbase": 1.5494,
+             "track_front": 1.2122215, "track_rear": 1.2122215, "front_static_frac": 0.46}
+
+
+@pytest.fixture(scope="module")
+def skill_car(make_car):
+    return lambda lltd: make_car(lltd=lltd, **SKILL_CAR)
+
+
+def test_loads_sum_to_weight_with_and_without_lift(skill_car):
+    for lltd in (0.2, 0.4, 0.6):
+        car = skill_car(lltd)
+        weight = car.mass * G
+        for ay in np.linspace(0.0, 2.5, 11):
+            for decel in (-1.2, -0.6, 0.0, 0.6, 0.9):
+                fz, _ = car.loads(ay, decel)
+                assert sum(fz) == pytest.approx(weight, rel=1e-9), (lltd, ay, decel)
+                assert min(fz) >= 0.0
+
+
+def test_lift_caps_the_outer_wheel_at_the_axle_load(skill_car):
+    car = skill_car(0.6)
+    weight = car.mass * G
+    front_axle, rear_axle = 0.46 * weight, 0.54 * weight
+    fz, lifted = car.loads(2.0, 0.0)
+    assert lifted == (True, False, False, False)
+    assert fz[0] == pytest.approx(0.0, abs=1e-9)
+    assert fz[1] == pytest.approx(front_axle, abs=1e-6)
+    assert fz[1] == pytest.approx(1178.0, abs=0.5)
+    roll = weight * 2.0 * car.cg_height
+    rear_transfer = (roll - front_axle / 2 * car.track_front) / car.track_rear
+    assert fz[3] == pytest.approx(rear_axle / 2 + rear_transfer, rel=1e-9)
+
+
+def test_longitudinal_transfer_has_no_factor_of_two(skill_car):
+    fz, lifted = skill_car(0.5).loads(0.0, -1.5)
+    assert fz[1] == pytest.approx(236.6, abs=0.05)
+    assert fz[3] == pytest.approx(1043.5, abs=0.05)
+    assert not any(lifted)
+
+
+@pytest.mark.parametrize("pct", [-50, 0, 50, 100])
+@pytest.mark.parametrize("outer_deg", [2.0, 10.0, 25.0])
+def test_constant_ackermann_reproduces_its_percentage(study, pct, outer_deg):
+    law = study.ConstantAckermann(pct, 1.25, 1.55, OUTER_MAX)
+    outer = math.radians(outer_deg)
+    assert study.ackermann_pct(law(outer), outer, 1.25, 1.55) == pytest.approx(pct, abs=1e-9)
+
+
+def test_table_curve_matches_its_source_law_at_the_nodes(study):
+    law = study.ConstantAckermann(50, 1.25, 1.55, OUTER_MAX)
+    outer = np.radians([0.0, 5.0, 10.0, 20.0, 30.0])
+    table = np.column_stack([np.arange(5.0), [law(o) for o in outer], outer])
+    curve = study.TableCurve(table)
+    for o in outer[1:]:
+        assert study.ackermann_pct(curve(o), o, 1.25, 1.55) == pytest.approx(50.0, abs=1e-9)
+
+
+def test_table_curve_rejects_an_angle_outside_its_table(study):
+    table = np.column_stack([[0.0, 10.0], np.radians([0.0, 12.0]), np.radians([0.0, 10.0])])
+    curve = study.TableCurve(table)
+    assert curve.domain == pytest.approx((0.0, math.radians(10.0)))
+    with pytest.raises(study.SteeringDomainError, match="table_end"):
+        curve(math.radians(10.5))
+    shifted = study.ToeCurve(curve, 1.0)
+    with pytest.raises(study.SteeringDomainError):
+        shifted(math.radians(9.9))
+
+
+def test_engine_sees_the_requested_steering_law(study, make_car, synthetic_tire):
+    _, support = synthetic_tire
+    car = make_car(support_override=dataclasses.replace(support, alpha=(-0.35, 0.35)))
+    radius, b = 3.5, car.wheelbase * car.front_frac
+    rear_axle_radius = math.sqrt(radius ** 2 - b ** 2)
+    path_gap = (math.atan(car.wheelbase / (rear_axle_radius - car.track_front / 2))
+                - math.atan(car.wheelbase / (rear_axle_radius + car.track_front / 2)))
+    trims, limits = {}, {}
+    for pct in (0, 100):
+        law = study.ConstantAckermann(pct, car.track_front, car.wheelbase, OUTER_MAX)
+        record = study.trim(car, law, radius, 1.0, 0.2, OUTER_MAX)
+        assert record.accepted, record
+        beta, outer = record.unknowns
+        alphas = [w["alpha_rad"] for w in record.wheels]
+        trims[pct] = (alphas[0] - alphas[1], law(outer) - outer)
+        limits[pct] = study.limit_ay(car, law, radius, 1.0, OUTER_MAX)
+    assert trims[0][1] == pytest.approx(0.0, abs=1e-12)
+    assert math.degrees(trims[100][1]) == pytest.approx(math.degrees(path_gap), abs=0.1)
+    assert math.degrees(trims[100][0] - trims[0][0]) == pytest.approx(math.degrees(path_gap), abs=0.25)
+    assert all(limit.is_grip_limit for limit in limits.values())
+    assert abs(limits[100].ay_g - limits[0].ay_g) > 0.05
+
+
+def test_out_of_fit_slip_is_rejected_not_ranked(study, make_car):
+    car = make_car()
+    law = study.ConstantAckermann(-50, car.track_front, car.wheelbase, OUTER_MAX)
+    record = study.trim(car, law, 3.5, 1.0, 0.2, OUTER_MAX)
+    assert record.status is TrimStatus.DOMAIN_REJECTED
+    assert "alpha_out_of_fit:FR" in record.reasons
+    limit = study.limit_ay(car, law, 3.5, 1.0, OUTER_MAX)
+    assert limit.bound_kind is BoundKind.DOMAIN and limit.grip_g() is None
+
+
+def test_a_wheel_below_the_load_fit_is_rejected(study, make_car, synthetic_tire):
+    _, support = synthetic_tire
+    car = make_car(support_override=dataclasses.replace(support, fz=(500.0, 2000.0)))
+    law = study.ConstantAckermann(100, car.track_front, car.wheelbase, OUTER_MAX)
+    record = study.trim(car, law, 3.5, 1.0, 0.8, OUTER_MAX)
+    assert record.status is TrimStatus.DOMAIN_REJECTED
+    assert "fz_out_of_fit:RL" in record.reasons
+
+
+def test_peak_tables_stay_inside_the_load_fit(make_car, synthetic_tire):
+    _, support = synthetic_tire
+    car = make_car()
+    assert car.fz_table[0] == support.fz[0] and car.fz_table[-1] == support.fz[1]
+    assert all(k <= support.kappa[1] + 1e-12 for table in car.kappa_peak[1] for k in table)
+
+
+def test_a_steering_bound_is_a_domain_limit_not_grip(study, make_car):
+    car = make_car()
+    lock = math.radians(5.0)
+    law = study.ConstantAckermann(100, car.track_front, car.wheelbase, lock)
+    limit = study.limit_ay(car, law, 3.5, 1.0, lock)
+    assert limit.bound_kind is BoundKind.DOMAIN
+    assert "steer_bound" in limit.upper.reasons
+    assert not limit.is_grip_limit
+
+
+def test_an_iteration_cap_is_a_numerical_failure(study, make_car):
+    car = make_car()
+    law = study.ConstantAckermann(100, car.track_front, car.wheelbase, OUTER_MAX)
+    record = study.trim(car, law, 3.5, 1.0, 0.2, OUTER_MAX, max_nfev=1)
+    assert record.status is TrimStatus.NUMERICAL_FAILURE
+    assert record.reasons == ("max_evaluations",)
+
+
+def test_a_grip_limit_ends_at_physical_saturation(study, make_car):
+    car = make_car()
+    law = study.ConstantAckermann(100, car.track_front, car.wheelbase, OUTER_MAX)
+    limit = study.limit_ay(car, law, 3.5, 1.0, OUTER_MAX)
+    assert limit.is_grip_limit
+    assert limit.upper_status is TrimStatus.PHYSICALLY_INFEASIBLE
+    assert limit.record.accepted and limit.record.wheels
+
+
+def test_locked_lsd_slip_is_checked_against_the_fit(study, make_car):
+    car = make_car()
+    law = study.ConstantAckermann(100, car.track_front, car.wheelbase, OUTER_MAX)
+    lon = study.Longitudinal(-0.3, diff=(500.0, 0.0, 0.85), wheel_radius=0.2)
+    s = study.state(car, law, 3.5, 1.0, 0.0, math.radians(20.0), 0.5, lon, 800.0)
+    assert s["kappas"][2] > car.support.kappa[1]
+    flags = car.wheel_states(s, 1.0)[2]["flags"]
+    assert "kappa_out_of_fit:RL" in flags
+
+
+def test_braking_is_open_axle_and_lsd_braking_is_not_modeled(study, make_car):
+    car = make_car()
+    law = study.ConstantAckermann(100, car.track_front, car.wheelbase, OUTER_MAX)
+    brakes = study.Longitudinal(0.3, bias=0.65)
+    assert brakes.coupling == "open_axle" and not brakes.withheld
+    assert "open axle" in study.brake_model(0.65) and "lsd" not in study.brake_model(0.65).lower()
+    lsd = study.Longitudinal(0.3, diff=(5.0, 0.6, 0.85), wheel_radius=0.2)
+    assert lsd.withheld
+    assert study.trim(car, law, 3.5, 1.0, 0.3, OUTER_MAX, lon=lsd).status is TrimStatus.NOT_MODELED
+    limit = study.limit_ay(car, law, 3.5, 1.0, OUTER_MAX, lon=lsd)
+    assert limit.bound_kind is BoundKind.NOT_MODELED and limit.ay_g is None
+    assert not study.Longitudinal(0.3, diff=(0.0, 0.0, 0.85), wheel_radius=0.2).withheld
+
+
+def test_map_rows_record_status_and_wheel_states(study, make_car):
+    car = make_car()
+    curves = {name: study.ConstantAckermann(p, car.track_front, car.wheelbase, OUTER_MAX)
+              for name, p in ((study.BASELINE, 0), ("+100%", 100))}
+    case = {"car": car, "curves": curves, "radius": 4.5, "lon": study.Longitudinal(0.3, bias=0.65), "outer_max": OUTER_MAX,
+            "tol": 1e-3, "probe": False, "deriv": False,
+            "labels": {"mu": 1.0, "rear": study.brake_model(0.65), "radius_m": 4.5, "ax_g": -0.3}}
+    rows = study.solve_map_case(case)
+    for row in rows:
+        assert row["driveline_coupling"] == "open_axle"
+        assert row["trim_status"] in {s.value for s in TrimStatus}
+        assert row["bound_kind"] in {k.value for k in BoundKind}
+        if row["ay_accepted_g"] is not None:
+            for corner in study.CORNERS:
+                for key in (f"fz_{corner}_n", f"alpha_{corner}_deg", f"kappa_{corner}", f"gamma_{corner}_deg",
+                            f"use_{corner}", f"support_{corner}"):
+                    assert key in row
+        if row["bound_kind"] != "physical":
+            assert row["ay_max_g"] is None and row["ay_change_pct"] is None
+
+
+def test_lltd_balance_refuses_a_failed_limit(study, make_ggv, synthetic_tire, monkeypatch):
+    tire, support = synthetic_tire
+    failed = TrimRecord(TrimStatus.NUMERICAL_FAILURE, ("not_converged",))
+    monkeypatch.setattr(study, "limit_ay", lambda *a, **k: LimitResult(None, BoundKind.NUMERICAL, TrimStatus.NUMERICAL_FAILURE, upper=failed))
+    law = study.ConstantAckermann(0, 1.25, 1.55, OUTER_MAX)
+    with pytest.raises(RuntimeError, match="not a limit"):
+        study.balanced_lltd(make_ggv(), tire, law, OUTER_MAX, support)
+
+
+def map_row(study, curve, ay, kind="physical", status="accepted", radius=3.5, ax=0.0, rear="open"):
+    accepted = None if status != "accepted" else ay
+    return {"mu": 0.623, "rear": rear, "radius_m": radius, "ax_g": ax, "curve": curve,
+            "ay_max_g": ay if kind == "physical" and status == "accepted" else None,
+            "ay_accepted_g": accepted, "bound_kind": kind, "trim_status": status, "upper_reason": ""}
+
+
+def test_robust_region_without_common_support_names_no_law(study):
+    rows = [map_row(study, study.BASELINE, 1.0), map_row(study, "+50%", 1.05), map_row(study, "-50%", 0.9, kind="domain"),
+            map_row(study, study.BASELINE, 1.0, radius=4.5), map_row(study, "+50%", 1.02, radius=4.5),
+            map_row(study, "-50%", None, kind="numerical", status="numerical_failure", radius=4.5)]
+    robust = study.robust_region(rows)
+    assert robust["status"] == "withheld" and robust["n_supported"] == 0
+    text = study.region_text(robust)
+    assert text.startswith("No recommendation")
+    assert "+50%" not in text and "-50%" not in text
+    assert all(v["worst_shortfall_pct"] != 100.0 for v in robust["laws"].values())
+
+
+def test_best_law_map_withholds_a_cell_with_a_failure(study):
+    inputs = type("Inputs", (), {"mu": 0.623, "map_radii_m": (3.5,), "map_ax_g": (0.0,)})()
+    rows = [map_row(study, study.BASELINE, 1.0)] + [map_row(study, f"{p:+d}%", 1.0 + p / 1000) for p in study.MAP_PCTS]
+    assert study.best_laws(rows, inputs)[(3.5, 0.0)][0] == 100
+    rows[1] = map_row(study, "-50%", None, kind="domain", status="domain_rejected")
+    assert study.best_laws(rows, inputs)[(3.5, 0.0)] == (None, None)
+    assert study.best_text(None, None) == "withheld"
+
+
+def test_toe_summary_never_picks_a_failed_law(study):
+    rows = [{"toe_out_deg": 0.0, "radius_m": 3.5, "curve": c, "ay_max_g": ay}
+            for c, ay in ((study.BASELINE, 1.0), ("+10%", None), ("+20%", 1.01))]
+    entry = study.toe_summary(rows)["toe-out 0 deg, 3.5 m"]
+    assert entry["best_curve"] is None and entry["excluded"] == ["+10%"]
+
+
+def test_envelope_caps_only_physical_failures(study):
+    inputs = type("Inputs", (), {"map_radii_m": (3.5,), "map_ax_g": (-0.3, 0.0, 0.3, 0.6)})()
+    base = [map_row(study, "+0%", 1.0, ax=0.0), map_row(study, "+0%", 0.9, ax=-0.3), map_row(study, "+0%", 0.8, ax=0.3)]
+    infeasible = map_row(study, "+0%", None, kind="physical", status="physically_infeasible", ax=0.6)
+    caps, excluded = study.check_map(base + [infeasible], "+0%", 1.0, 1.0, inputs)
+    assert [c["cap_g"] for c in caps] == [0.3] and not excluded
+    domain = map_row(study, "+0%", None, kind="domain", status="domain_rejected", ax=0.6)
+    caps, excluded = study.check_map(base + [domain], "+0%", 1.0, 1.0, inputs)
+    assert not caps and excluded[0]["bound_kind"] == "domain"
+
+
+def test_limiting_axle_is_unknown_without_both_probes(study):
+    assert study.limiting_axle(None, 0.01) is None
+    assert study.limiting_axle(0.02, 0.01) == "front"

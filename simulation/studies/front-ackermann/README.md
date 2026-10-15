@@ -2,6 +2,14 @@
 
 **Status: historical.** BobSim `4da577a` made these results. They are stale at BobSim `fe03bab`. BobSim changed the KinPy corner solver that the study uses (#83, #84), and other modules that it calls. See [the BobSim changes](../../docs/bobsim.md#what-changed-in-bobsim-from-4da577a-to-fe03bab). Run the study again before you use a result.
 
+**The code changed after this run.** The numbers on this page come from the old code. The current `run.py` does these things differently (see [Trim statuses and support](#trim-statuses-and-support)):
+
+- A law with no trim no longer scores a 100% shortfall. The comparison drops that condition for every law and shows the coverage loss.
+- A trim outside the `.tir` fit ranges, or with a lifted wheel, is rejected. It is not ranked.
+- Numerical failure, domain rejection and physical infeasibility are separate statuses.
+- A lifted inner wheel puts its axle load on the outer wheel. The four loads sum to the weight.
+- Braking cells are labeled open axle. The study does not model LSD coupling under braking.
+
 ## Question
 
 Is pro-Ackermann or anti-Ackermann steering better for the 2027 car, and which laws stay good when the inputs we do not trust change? The study compares constant steering laws from −50% to +100% against parallel steer on one car, one tire and one track. Front V34 is the current design point. It is a screening model. It gives the direction and the robust range, not an exact percentage.
@@ -29,7 +37,7 @@ Is pro-Ackermann or anti-Ackermann steering better for the 2027 car, and which l
 
 - Ackermann % is `100 · (cot δ_outer − cot δ_inner) · L / t`, with roadwheel steer δ, wheelbase L = 1.5494 m and front track t = 1.270 m. Positive is pro, zero is parallel steer, negative is anti.
 - A design condition is one car, one rear model, one corner radius and one longitudinal level. The cars are nominal, grip scale <!-- out:readme.json#mu_sensitivity -->0.75<!-- /out -->, and <!-- out:readme.json#variants -->LLTD -0.10, LLTD +0.10, LKY 0.62<!-- /out -->. The rear models are an open differential (the baseline), the planned LSD, and hydraulic brakes at 65% and 84% front bias. The levels run from 0.6 g braking to 0.6 g drive.
-- Shortfall is `100 · (1 − ay / ay_best)` in a condition, with `ay_best` the best law there. A law with no trim in a condition scores 100%.
+- Shortfall is `100 · (1 − ay / ay_best)` in a condition, with `ay_best` the best law there. In the 2026-10-11 run, a law with no trim in a condition scored 100%. The current code drops that condition for every law instead.
 - The robust region is every law whose worst shortfall is within 0.5 points of the smallest worst shortfall. The 0.5 points equals the measured gap between the two combined-slip tire models (<!-- out:readme.json#brake_model_gap_pts|.1f -->0.5<!-- /out --> points). The table also shows the 1 point region.
 - Grip reserve is the limit lateral g of a law against parallel steer at the same condition. Steering authority is the yaw moment per degree of mean roadwheel steer at 90% of the limit.
 - Lock gate: the mean roadwheel steer at full rack must reach the steer a rule-minimum hairpin needs. The hairpin is 9 m outside diameter (FSAE rules, course specification). With the outside tire on the edge, the CG radius is <!-- out:readme.json#rule_hairpin_radius_m|.2f -->3.67<!-- /out --> m (hand calculation from t, the tire width and the CG position). 3.5 m is that radius with a margin.
@@ -220,11 +228,32 @@ BobSim's quasi-steady-state (QSS) lap solver runs each law's open-differential e
 
 ## Method
 
-`run.py` solves a quasi-steady corner at constant radius with four MF52 tires from BobSim, LLTD-split load transfer, a yaw moment balance and a stability check. Each map cell is a bisection on lateral g to the last stable trim. Drive force goes through the rear model. The open differential sends half the axle force to each wheel. The LSD follows the BobLib `Differential1D` convention: the clutch holds up to `2 · preload + lock · |T|` of left-right torque difference and slips at 0.85 of that toward the slower wheel. Hydraulic brakes split by bias and never pass through the differential, so braking cells do not depend on the rear model. For feasibility only, `kin_py` gives the Front V34 steering curve. The lap envelopes use the open-differential rows. Lap time is a reference.
+`run.py` solves a quasi-steady corner at constant radius with four MF52 tires from BobSim, LLTD-split load transfer, a yaw moment balance and a stability check. Each map cell is a bisection on lateral g to the last stable trim. Drive force goes through the rear model. The open differential sends half the axle force to each wheel. The LSD follows the BobLib `Differential1D` convention: the clutch holds up to `2 · preload + lock · |T|` of left-right torque difference and slips at 0.85 of that toward the slower wheel. Hydraulic brakes split by bias and never pass through the differential, so braking cells do not depend on the rear model. Each braking cell is an open-axle cell. `vehicle.yml` enables an LSD with a preload, and a preload couples the rear wheels with no input torque. The study withholds that coupling: a braking request through a coupled differential returns `not_modeled`. For feasibility only, `kin_py` gives the Front V34 steering curve. The lap envelopes use the open-differential rows. Lap time is a reference.
 
 Solver checks in every run: each trim residual under 1e-7 with a stability check, a four-tire trim at <!-- out:readme.json#coverage_demand_pct|.0f -->98<!-- /out -->% of the lap's demand exists for <!-- out:readme.json#coverage_pct|.1f -->98.1<!-- /out -->% of the cornering time inside <!-- out:readme.json#coverage_radius_max_m|.0f -->15<!-- /out --> m, an envelope gap stops the run, <!-- out:readme.json#caps_count -->1<!-- /out --> envelope caps and a cap check that changes the lap by <!-- out:readme.json#cap_check_max_ms|.1f -->0.0<!-- /out --> ms, the braking clip binds in <!-- out:readme.json#clip_cells -->14<!-- /out --> of <!-- out:readme.json#clip_of -->384<!-- /out --> solves (up to <!-- out:readme.json#clip_anti50_g|.2f -->0.21<!-- /out --> g for −50%), every QSS lap converges, and a QSS lap on an 8 m circle differs from 2πR/v by <!-- out:readme.json#circle_check_error_pct|+.3f -->+0.008<!-- /out -->%.
 
 Before a full run: `make study S=front-ackermann ARGS="--quick" V=smoke`.
+
+### Trim statuses and support
+
+Each trim attempt ends in one status from `tools/trim_status.py`:
+
+| Status | Meaning |
+| ------ | ------- |
+| `accepted` | The residual is under 1e-7, every wheel is inside the tire fit, and both axles are on the rising branch. |
+| `domain_rejected` | The solve left the model domain: a wheel outside the `.tir` load, slip-angle, slip-ratio or camber range, a lifted wheel, or a solver bound (steer, sideslip, longitudinal force). |
+| `physically_infeasible` | A converged in-domain state uses more than the tire can give or is past the peak, or every start stopped at a stationary point with a nonzero residual (`no_equilibrium`). The last case is local evidence of saturation, not a global proof. |
+| `numerical_failure` | The solver stopped on its evaluation limit or did not reach a stationary point. Nothing is known about the physics. |
+| `not_modeled` | The study withholds the capability, for example LSD coupling under braking. |
+
+A limit search bisects lateral g. Only a search whose failing bracket is `physically_infeasible` gives a grip limit. Rows keep `ay_accepted_g`, `trim_status`, `bound_kind`, `upper_status`, `upper_reason` and the per-wheel load, slip angle, slip ratio, camber, use and support flags. `ay_max_g` is empty unless the row is a grip limit.
+
+`tools/tire_support.py` reads `FZMIN`, `FZMAX`, `ALPMIN`, `ALPMAX`, `KPUMIN`, `KPUMAX`, `CAMMIN` and `CAMMAX` from the `.tir` file. A missing range stops the run. The peak tables and peak searches stay inside these ranges.
+
+`tools/support.py` compares laws on common support. A condition counts only when every law, the baseline included, has a grip limit there and the baseline is at or above the floor. The result lists each excluded cell and its kind. With no common support, or with coverage under the minimum, the region is empty and the README shows "No recommendation". The minimum coverage (1.0) and the floor (0.2 g) are study choices. Nobody has reviewed them.
+
+An envelope cap in the lap reference needs a `physically_infeasible` cell with no accepted trim. Any other failure removes that law from the lap reference.
+
 
 ## Before design freeze
 
