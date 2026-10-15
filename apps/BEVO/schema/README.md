@@ -31,14 +31,48 @@ coupling every service to this package's generator layout.
 ## Changing the schema
 
 1. Edit the CSVs.
-2. `bazel run //apps/BEVO/schema:update_can_proto` — rewrites
+2. `bazel run --config=local //apps/BEVO/schema:update_can_proto` — rewrites
    `can_packets.proto` in place, preserving existing field numbers and
-   annotating new fields in the CSVs.
+   annotating new fields in the CSVs. (`--config=local` because the default
+   config needs a BuildBuddy key.)
 3. Commit the CSVs and the proto together. Everything else regenerates on
-   the next build.
+   the next build. `:proto_current_test` fails if the proto doesn't match the
+   CSVs, which catches a skipped step 2.
 
 For the non-Bazel Cargo flow, `nonhermetic/sync_assets.sh` produces the
 runtime `can.json` from the same sources.
+
+### Cell format and gotchas
+
+A `Data[n]` cell is `"Human Name (can_type, scale); proto_name (float) #N"`,
+for example
+`"Accelerator Pedal Travel (uint16, 0.0001 %); accel_pedal_travel (float) #8"`.
+Bitfield cells are `"Name (bitfield, key)"`, and their bits live in
+`can_bitfields.csv` as `Bit Name; proto_name`. The generator parses these
+loosely, so most mistakes lose a signal instead of failing:
+
+- **Any `Warning:` line means a signal was skipped or guessed.** The updater
+  warns when the proto part doesn't parse (spaces or dashes in the name, a
+  missing type), when a cell looks like a mapping but has no `;`, and when the
+  proto type isn't `float` or `bool`. `build.rs` only handles those two, so
+  any other type breaks `//apps/BEVO:sensor_proto` with a Rust `E0308`.
+- **Only `unused` cells are free.** A blank cell after a `uint16`/`uint32` is
+  that signal's continuation byte. If you put a signal there, the generator
+  quietly shifts every later signal in the row. The DLC is not checked
+  against the signals either.
+- **Reusing an existing proto name merges into that field.** That's
+  intentional when several packets carry the same quantity (`motor_temp`), and
+  silent otherwise. If the type differs, the updater refuses: a field's
+  number and type are permanent, so pick a new name.
+- **The name picks the message.** Substrings route the field: `accel`, `gps`,
+  `steer`, `wheel_speed`, ... go to `Dynamics` before `fault`, `status`, ...
+  go to diagnostics (`DiagnosticsHigh` at ≥ 50 Hz, else `DiagnosticsLow`).
+  See `_partition_for_field` in
+  [generate_can_proto.py](https://github.com/LonghornRacingElectric/lhre/blob/main/apps/BEVO/schema/generate_can_proto.py).
+- **Never type `#N` yourself.** The updater assigns ids. A hand-typed one
+  that collides stops the run with `Duplicate proto id`.
+- **In `can_bitfields.csv` the separator is `;` too.** A bit cell without it
+  is dropped silently.
 
 These files came from `drivers/longhorn-lib` in
 [lhre-2026](https://github.com/LonghornRacingElectric/lhre-2026); this copy

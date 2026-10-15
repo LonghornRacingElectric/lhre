@@ -251,7 +251,9 @@ def process_csv(can_filepath, bitfield_definitions, bitfield_csv_filename):
                             parts = byte_info_str.split(";", 1)
                             can_part = parts[0].strip()
                             proto_part_raw = parts[1].strip()
-                            proto_match = protobuf_pattern.search(proto_part_raw)
+                            # match, not search: search would turn "Practice Fault (bool)"
+                            # or "practice-fault (bool)" into a field named "fault".
+                            proto_match = protobuf_pattern.match(proto_part_raw)
                             if proto_match:
                                 proto_field, proto_index_str, proto_type = (
                                     proto_match.groups()
@@ -262,6 +264,12 @@ def process_csv(can_filepath, bitfield_definitions, bitfield_csv_filename):
                                     "type": proto_type,
                                     "field": proto_field,
                                 }
+                                if proto_type not in ("float", "bool"):
+                                    # BEVO's build.rs assigns every non-bool field an f32,
+                                    # so any other type is a Rust compile error there.
+                                    print(
+                                        f"Warning: Row {row_num}, ID {packet_id_str}, Data[{byte_num}]: Protobuf type '{proto_type}' for '{proto_field}' is not float or bool; //apps/BEVO:sensor_proto will not compile."
+                                    )
                                 # Capture the persistent field id (#N) if the author or a
                                 # previous generator run wrote one. Searching after the
                                 # protobuf field match avoids matching '#' inside the type.
@@ -286,8 +294,14 @@ def process_csv(can_filepath, bitfield_definitions, bitfield_csv_filename):
                                     protobuf_info["field_index"] = None
                             else:
                                 print(
-                                    f"Warning: Row {row_num}, ID {packet_id_str}, Data[{byte_num}]: Could not parse protobuf format in '{proto_part_raw}'."
+                                    f"Warning: Row {row_num}, ID {packet_id_str}, Data[{byte_num}]: Could not parse protobuf format in '{proto_part_raw}' (expected e.g. 'my_signal (float)'); left out of the proto."
                                 )
+                        elif byte_info_str.count("(") >= 2:
+                            # Without ';' the mapping is ignored and the signal silently
+                            # never reaches the proto.
+                            print(
+                                f"Warning: Row {row_num}, ID {packet_id_str}, Data[{byte_num}]: '{byte_info_str}' looks like it has a protobuf mapping but no ';' before it; left out of the proto."
+                            )
 
                         # --- Parse the CAN signal part ---
                         bitfield_encoding_details = None  # Reset for each field
