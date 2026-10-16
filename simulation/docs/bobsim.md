@@ -143,8 +143,32 @@ The other 22 commits change layout, build, docs, reports, cache identity
 or the app. `9e463c8` (#80) can evict a stale lap GGV cache. That can
 change a lap result without a physics change.
 
+### Aero ride-height references
+
 Our `vehicle/vehicle.yml` did not take the ride-height references from
 #106. Its values need a named source before they change.
+
+- Our references are BobSim's values from before #106. They are the
+  wheel centers, with z = 0.1999 m.
+- That is above both CFD grids. The front grid covers 0.03556 m to
+  0.10668 m. The rear grid covers 0.04191 m to 0.12573 m.
+- So aero from our points clamps at the grid corner. It does not change
+  with ride height or pitch.
+- The Modelica tier reads these points after `make records`. It clamped
+  in the same way at `4da577a`. A Modelica result at speed for our car
+  uses the corner of the map.
+- At `fe03bab`, DynPy, GGV and the lap read these points too. At
+  `4da577a`, DynPy used a fixed 76.2 mm ride height. No lhre target or
+  study runs DynPy, GGV or the lap on our file today.
+- Treat an aero-dependent DynPy, GGV or lap result for our car as invalid
+  until a named source gives chassis ride-height points.
+- BobLib's record for BobSim's car holds chassis points for the same aero
+  map. A vehicle change that uses them for our car needs a named source
+  that says they fit our chassis.
+
+`tests/test_aero_ride_heights.py` marks this state as an expected failure
+(xfail). When the points move inside the grids, the test reports XPASS
+and `make test` fails. Then remove the mark and this section.
 
 ## Windows
 

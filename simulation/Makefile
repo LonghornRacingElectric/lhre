@@ -38,7 +38,7 @@ shell:
 	$(COMPOSE) run --rm sim bash
 
 test:
-	$(RUN) sim sh -c 'python tools/check_vehicle.py && python -m pytest -q -p no:cacheprovider tests'
+	$(RUN) sim sh -c 'python tools/check_vehicle.py && python -m pytest -q -ra -p no:cacheprovider tests'
 
 BOBLIB := bobsim/engines/boblib
 VEHICLE_NAME = $(shell sed -n 's/^  name: *//p' ../vehicle/vehicle.yml | head -n 1)

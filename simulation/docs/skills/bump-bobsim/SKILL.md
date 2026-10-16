@@ -76,6 +76,13 @@ description: Move the simulation/bobsim submodule to a newer BobSim commit and f
 8. If `simulation/bobsim/vehicle.yml` gained new keys, add them to
    `vehicle/vehicle.yml` with values for our car. Each value needs a named
    source. If there is no source, ask.
+
+   Also look for a key whose value BobSim changed, when our file has the
+   old BobSim value. Find out why BobSim changed it. Write in
+   `docs/bobsim.md` what the old value does at the new pin. Do not change
+   our value without a named source. BobSim `c0537ff` (#106) changed its
+   aero ride-height references in this way. See
+   [bobsim.md](../../bobsim.md#aero-ride-height-references).
 9. Commit `simulation/bobsim` and your fixes together. In the PR, list the
    BobSim commits and what they change for us.
 
