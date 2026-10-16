@@ -7,6 +7,37 @@ import pytest
 from tools import four_post_acceptance as acceptance
 
 METRICS = "generated_results/four_post_eval_report_metrics.csv"
+MANIFEST = "runs/FourPostSim/run_1/manifest.json"
+VEHICLE = """\
+vehicle:
+  name: TestCar
+front:
+  actuation:
+    shock:
+      spring_table:
+        table: [[0, 0], [1, 1000.0]]
+    stabar:
+      rate_n_m_per_rad: 250.0
+rear:
+  actuation:
+    shock:
+      spring_table:
+        table: [[0, 0], [1, 2000.0]]
+"""
+EXECUTED_SETUP = {
+    "heaveMagnitude": 0.03,
+    "pVehicle.pFrAxleDW.springFreeLength": 0.2,
+    "pFrStabar.barRate": 250.0,
+    "pVehicle.pFrStabar.barRate": 250.0,
+    "pVehicle.pFrAxleDW.springTable[1,1]": 0.0,
+    "pVehicle.pFrAxleDW.springTable[1,2]": 0.0,
+    "pVehicle.pFrAxleDW.springTable[2,1]": 1.0,
+    "pVehicle.pFrAxleDW.springTable[2,2]": 1000.0,
+    "pVehicle.pRrAxleDW.springTable[1,1]": 0.0,
+    "pVehicle.pRrAxleDW.springTable[1,2]": 0.0,
+    "pVehicle.pRrAxleDW.springTable[2,1]": 1.0,
+    "pVehicle.pRrAxleDW.springTable[2,2]": 2000.0,
+}
 FE03BAB_KEYS = (
     "arb_roll_stiffness_front_Nm_per_rad", "arb_roll_stiffness_rear_Nm_per_rad", "avg_anti_dive_pct",
     "avg_anti_roll_front_pct", "avg_anti_roll_rear_pct", "avg_anti_squat_pct",
@@ -36,10 +67,10 @@ def _legacy_rows():
     return {key: ("True" if key == "static_balance_pass" else "1.5") for key in FE03BAB_KEYS}
 
 
-def _write_run(tmp_path, rows, *, statuses=None, target="standard-eval-four-post", status="ok"):
+def _write_run(tmp_path, rows, *, statuses=None, target="standard-eval-four-post", status="ok", case=None):
     vehicle = tmp_path / "vehicle.yml"
     if not vehicle.exists():
-        vehicle.write_text("vehicle:\n  name: TestCar\n", encoding="utf-8")
+        vehicle.write_text(VEHICLE, encoding="utf-8")
     run = tmp_path / "out" / "car" / target
     metrics = run / METRICS
     metrics.parent.mkdir(parents=True, exist_ok=True)
@@ -48,6 +79,9 @@ def _write_run(tmp_path, rows, *, statuses=None, target="standard-eval-four-post
         writer.writerow(["metric", "value"] + (["status"] if statuses is not None else []))
         for key, value in rows.items():
             writer.writerow([key, value] + ([statuses.get(key, "ok")] if statuses is not None else []))
+    manifest = run / MANIFEST
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(json.dumps({"status": "succeeded", "case": case or EXECUTED_SETUP}), encoding="utf-8")
     identity = {
         "schema": "lhre.car-run.v1",
         "status": status,
@@ -57,7 +91,7 @@ def _write_run(tmp_path, rows, *, statuses=None, target="standard-eval-four-post
         "vehicle": {"path": "vehicle/vehicle.yml", "sha256": _sha256(vehicle)},
         "records": {"state": "written", "executables": []},
         "bobsim": {"commit": "fe03bab", "clean_after": True},
-        "outputs": [{"path": METRICS, "sha256": _sha256(metrics)}],
+        "outputs": [{"path": name, "sha256": _sha256(run / name)} for name in (METRICS, MANIFEST)],
     }
     (run / "identity.json").write_text(json.dumps(identity), encoding="utf-8")
     return run, vehicle
@@ -117,7 +151,7 @@ def test_a_non_ok_status_fails_when_the_csv_has_a_status_column(tmp_path, monkey
 def test_a_full_status_csv_with_measured_equilibrium_and_vehicle_stamp_passes(tmp_path, monkeypatch):
     rows = _legacy_rows()
     rows["static_equilibrium_pass"] = "True"
-    (tmp_path / "vehicle.yml").write_text("vehicle:\n  name: TestCar\n", encoding="utf-8")
+    (tmp_path / "vehicle.yml").write_text(VEHICLE, encoding="utf-8")
     rows["vehicle_sha256"] = _sha256(tmp_path / "vehicle.yml")
     run, vehicle = _write_run(tmp_path, rows, statuses={})
     code, checks, report = _accept(run, vehicle, monkeypatch)
@@ -153,7 +187,7 @@ def test_a_run_without_identity_fails(tmp_path, monkeypatch):
 
 def test_a_run_for_another_vehicle_fails(tmp_path, monkeypatch):
     run, vehicle = _write_run(tmp_path, _legacy_rows())
-    vehicle.write_text("vehicle:\n  name: TestCar\n  changed: true\n", encoding="utf-8")
+    vehicle.write_text(VEHICLE + "changed: true\n", encoding="utf-8")
     code, checks, _ = _accept(run, vehicle, monkeypatch)
     assert code == 1
     assert checks["vehicle"]["result"] == "FAIL"
@@ -190,7 +224,7 @@ def test_a_duplicated_metric_row_fails(tmp_path, monkeypatch):
     metrics = run / METRICS
     metrics.write_text(metrics.read_text(encoding="utf-8") + "avg_lltd_front_pct,9.9\n", encoding="utf-8")
     identity = json.loads((run / "identity.json").read_text(encoding="utf-8"))
-    identity["outputs"] = [{"path": METRICS, "sha256": _sha256(metrics)}]
+    identity["outputs"][0] = {"path": METRICS, "sha256": _sha256(metrics)}
     (run / "identity.json").write_text(json.dumps(identity), encoding="utf-8")
     code, checks, _ = _accept(run, vehicle, monkeypatch)
     assert code == 1
@@ -203,3 +237,43 @@ def test_a_run_of_another_target_fails(tmp_path, monkeypatch):
     code, checks, _ = _accept(run, vehicle, monkeypatch)
     assert code == 1
     assert checks["run identity"]["result"] == "FAIL"
+
+
+def test_the_executed_setup_matches_the_vehicle(tmp_path, monkeypatch):
+    run, vehicle = _write_run(tmp_path, _legacy_rows())
+    code, checks, _ = _accept(run, vehicle, monkeypatch)
+    assert code == 0
+    assert checks["executed setup"]["result"] == "PASS"
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("pFrStabar.barRate", 390.0),
+        ("pVehicle.pFrStabar.barRate", 390.0),
+        ("pRrStabar.barRate", 525.0),
+        ("pVehicle.pRrAxleDW.springTable[2,2]", 2500.0),
+    ],
+)
+def test_a_fourpost_override_that_differs_from_the_vehicle_fails(tmp_path, monkeypatch, key, value):
+    run, vehicle = _write_run(tmp_path, _legacy_rows(), case={**EXECUTED_SETUP, key: value})
+    code, checks, _ = _accept(run, vehicle, monkeypatch)
+    assert code == 1
+    assert checks["executed setup"]["result"] == "FAIL"
+    assert key in checks["executed setup"]["detail"]
+
+
+def test_a_run_without_a_fourpost_manifest_fails(tmp_path, monkeypatch):
+    run, vehicle = _write_run(tmp_path, _legacy_rows())
+    (run / MANIFEST).unlink()
+    code, checks, _ = _accept(run, vehicle, monkeypatch)
+    assert code == 1
+    assert checks["executed setup"]["result"] == "FAIL"
+
+
+def test_a_fourpost_manifest_that_changed_after_the_run_fails(tmp_path, monkeypatch):
+    run, vehicle = _write_run(tmp_path, _legacy_rows())
+    (run / MANIFEST).write_text(json.dumps({"case": {}}), encoding="utf-8")
+    code, checks, _ = _accept(run, vehicle, monkeypatch)
+    assert code == 1
+    assert checks["executed setup"]["result"] == "FAIL"

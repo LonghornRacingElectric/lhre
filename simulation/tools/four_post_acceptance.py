@@ -3,11 +3,17 @@ import hashlib
 import json
 import math
 import os
+import re
 import sys
 from pathlib import Path
 
+import yaml
+
 SCHEMA = "lhre.four-post-acceptance.v1"
 METRICS = "generated_results/four_post_eval_report_metrics.csv"
+MANIFESTS = "runs/FourPostSim/*/manifest.json"
+AXLES = {"front": "Fr", "rear": "Rr"}
+SETUP_KEY = re.compile(r"(pVehicle\.)?p(Fr|Rr)Stabar\.barRate|pVehicle\.p(Fr|Rr)AxleDW\.springTable\[\d+,\d+\]")
 TARGETS = ("standard-eval-four-post", "standard-eval-all")
 REQUIRED_METRICS = (
     "avg_motion_ratio_front",
@@ -91,11 +97,59 @@ def _read_metrics(path):
     return fields, rows, duplicates
 
 
+def _recorded(identity):
+    return {item.get("path"): item.get("sha256") for item in (identity or {}).get("outputs", [])}
+
+
+def _vehicle_setup(vehicle):
+    data = yaml.safe_load(Path(vehicle).read_text(encoding="utf-8")) or {}
+    setup = {}
+    for axle, tag in AXLES.items():
+        actuation = (data.get(axle) or {}).get("actuation") or {}
+        stabar = actuation.get("stabar")
+        rate = stabar.get("rate_n_m_per_rad") if isinstance(stabar, dict) else None
+        setup[f"p{tag}Stabar.barRate"] = setup[f"pVehicle.p{tag}Stabar.barRate"] = rate
+        table = ((actuation.get("shock") or {}).get("spring_table") or {}).get("table") or []
+        for i, row in enumerate(table, 1):
+            for j, value in enumerate(row, 1):
+                setup[f"pVehicle.p{tag}AxleDW.springTable[{i},{j}]"] = value
+    return setup
+
+
+def _setup_check(run, identity, vehicle):
+    manifests = sorted(run.glob(MANIFESTS))
+    if not manifests:
+        return _check("executed setup", FAIL, f"{run} has no FourPost run manifest. The setup that ran is unknown.")
+    recorded = _recorded(identity)
+    expected = _vehicle_setup(vehicle)
+    problems, compared = {}, set()
+    for manifest in manifests:
+        name = manifest.relative_to(run).as_posix()
+        if recorded.get(name) != _sha256(manifest):
+            problems[f"{name} is not the manifest this run wrote"] = None
+            continue
+        case = json.loads(manifest.read_text(encoding="utf-8")).get("case") or {}
+        for key, value in sorted(case.items()):
+            if not SETUP_KEY.fullmatch(key):
+                continue
+            compared.add(key)
+            want = expected.get(key)
+            if want is None or not math.isclose(float(value), float(want), rel_tol=1e-9, abs_tol=1e-12):
+                problems[f"{key} ran at {value}, {vehicle.name} has {'none' if want is None else want}"] = None
+    if problems:
+        return _check("executed setup", FAIL, f"The FourPost runs did not use the vehicle file: {'. '.join(problems)}.")
+    return _check(
+        "executed setup",
+        PASS,
+        f"{len(manifests)} FourPost runs use the {len(compared)} spring table and bar rate values of {vehicle.name}.",
+    )
+
+
 def _file_check(run, identity):
     path = run / METRICS
     if not path.is_file():
         return _check("metrics file", FAIL, f"{path} does not exist. The FourPost evaluation wrote no metrics.")
-    recorded = {item.get("path"): item.get("sha256") for item in (identity or {}).get("outputs", [])}.get(METRICS)
+    recorded = _recorded(identity).get(METRICS)
     if recorded is None:
         return _check("metrics file", FAIL, f"identity.json does not list {METRICS}. This run did not write it.")
     if recorded != _sha256(path):
@@ -169,6 +223,7 @@ def evaluate(run, vehicle):
     checks.append(file_check)
     if (run / METRICS).is_file():
         checks.extend(_metric_checks(*_read_metrics(run / METRICS), vehicle))
+    checks.append(_setup_check(run, identity, vehicle))
     failed = [check for check in checks if check["result"] == FAIL]
     return {
         "schema": SCHEMA,
@@ -185,14 +240,14 @@ def main(argv):
     print(f"FourPost acceptance for {run}")
     for check in report["checks"]:
         print(f"  {check['result']:<12} {check['name']}: {check['detail']}")
+    total = len(report["checks"])
     counts = {result: sum(check["result"] == result for check in report["checks"]) for result in (FAIL, UNAVAILABLE)}
+    print(f"Failed checks: {counts[FAIL]} of {total}. Unavailable checks: {counts[UNAVAILABLE]} of {total}.")
+    print("An unavailable check is not a pass. This is a software check. It is not a physical validation.")
     if counts[FAIL]:
-        print(f"Rejected. {counts[FAIL]} checks failed.")
+        print("Result: rejected.")
         return 1
-    print(
-        f"Accepted with {counts[UNAVAILABLE]} unavailable checks. An unavailable check is not a pass. "
-        "This is a software check. It is not a physical validation."
-    )
+    print("Result: accepted.")
     return 0
 
 

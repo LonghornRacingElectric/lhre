@@ -99,6 +99,8 @@ true:
 - A required metric is missing or has no finite value.
 - The CSV has a `status` column and a row has a status other than `ok`.
 - The pin reports a static balance or equilibrium failure.
+- A FourPost run manifest sets a spring table or an anti-roll bar rate
+  that differs from `vehicle/vehicle.yml`.
 
 A check that the pin cannot answer is `UNAVAILABLE`. It is not a pass.
 At `fe03bab` three checks are unavailable. The CSV has no status column.
@@ -106,6 +108,14 @@ The CSV does not name its vehicle. The only static balance value,
 `static_balance_pass`, compares target loads with themselves, so it is
 not a measurement. The acceptance is a software check. It is not a
 physical validation of the car.
+
+At `fe03bab` our car fails the executed setup check. FourPost takes the
+anti-roll bar rates from `model_overrides` in its own
+`four_post_eval_config.yml`: 390 and 525 N·m/rad. Our `vehicle.yml` has
+257.62 and 535.47 N·m/rad. `run.log` shows that the model applied 390 and
+525. So the FourPost bar roll stiffness and load transfer are not for our
+bars. BobSim PR #117 removes these overrides. Until the pin has a fix,
+the FourPost check in CI fails for our car.
 
 ### Modelica initialization
 
