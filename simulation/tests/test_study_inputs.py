@@ -2,8 +2,10 @@ import ast
 import copy
 import hashlib
 import json
+import math
 from pathlib import Path
 
+import numpy as np
 import pytest
 import yaml
 
@@ -185,7 +187,9 @@ def test_a_released_export_needs_a_stated_datum_and_a_checked_hash(study, inputs
         study.load_inputs(inputs_copy(released(local_copy=False)))
 
 
-def test_a_geometry_change_changes_the_hash_and_points(study, inputs_copy):
+def test_a_geometry_change_reaches_the_steering_table_and_the_trim(study, inputs_copy, make_car):
+    from common.vehicle_io import load_yaml
+
     base = study.load_inputs(inputs_copy())
 
     def move(d):
@@ -194,6 +198,18 @@ def test_a_geometry_change_changes_the_hash_and_points(study, inputs_copy):
     moved = study.load_inputs(inputs_copy(move))
     assert moved.sha256 != base.sha256
     assert moved.geometry.points_m["tie_o_m"][1] == pytest.approx(base.geometry.points_m["tie_o_m"][1] + 0.001)
+    vehicle = load_yaml(SIM.parent / "vehicle" / "vehicle.yml")
+    rack = np.arange(0.0, 30.5, 0.5)
+    tables = [study.steer_table(study.with_front(vehicle, loaded.geometry), rack)[0] for loaded in (base, moved)]
+    assert [t[:, 0].tolist() for t in tables] == [rack.tolist()] * 2
+    assert np.max(np.abs(np.degrees(tables[1][:, 1] - tables[0][:, 1]))) > 0.05
+    car, gaps = make_car(), []
+    for table in tables:
+        curve = study.TableCurve(table)
+        record = study.trim(car, curve, 4.5, 1.0, 0.3, curve.domain[1])
+        assert record.accepted, record
+        gaps.append(record.wheels[0]["alpha_rad"] - record.wheels[1]["alpha_rad"])
+    assert abs(math.degrees(gaps[1] - gaps[0])) > 0.02
 
 
 def test_a_named_external_copy_is_hash_checked(study, inputs_copy, tmp_path):
