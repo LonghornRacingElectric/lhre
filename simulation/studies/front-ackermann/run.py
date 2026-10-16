@@ -359,6 +359,13 @@ def at_rack(table, rack_mm, column):
     return float(np.interp(rack_mm, table[:, 0], table[:, column]))
 
 
+def to_rack_stop(table, rack_mm):
+    if rack_mm >= table[-1, 0]:
+        return table, "table_end"
+    stop = [rack_mm, at_rack(table, rack_mm, 1), at_rack(table, rack_mm, 2)]
+    return np.vstack([table[table[:, 0] < rack_mm], stop]), "rack_stop"
+
+
 class Longitudinal:
     def __init__(self, decel_g, bias=None, diff=None, wheel_radius=None):
         self.decel_g, self.bias, self.diff, self.wheel_radius = decel_g, bias, diff, wheel_radius
@@ -821,11 +828,11 @@ def needed_mean_steer_deg(car, curve, radius, outer_max):
     return math.degrees(0.5 * (curve(outer) + outer)), None
 
 
-def lock_check(table, rows, car, curve, outer_max, tire_width_m):
-    nominal = sorted((r for r in rows if is_nominal(r) and r["curve"] == DESIGN and r["ay_max_g"] is not None),
-                     key=lambda r: r["radius_m"])
-    radii = [r["radius_m"] for r in nominal]
-    need = [0.5 * (r["inner_deg"] + r["outer_deg"]) for r in nominal]
+def lock_check(table, car, curve, outer_max, tire_width_m):
+    # The curve is the full kin_py table, so a need past the rack stop still has a value.
+    needed = {r: needed_mean_steer_deg(car, curve, r, outer_max)[0] for r in RADII_M}
+    radii = [r for r, n in needed.items() if n is not None]
+    need = [needed[r] for r in radii]
     mean = np.degrees(0.5 * (table[:, 1] + table[:, 2]))
     reach = float(np.interp(RACK_TRAVEL_MM, table[:, 0], mean))
     outer_full = float(np.interp(RACK_TRAVEL_MM, table[:, 0], table[:, 2]))
@@ -842,6 +849,7 @@ def lock_check(table, rows, car, curve, outer_max, tire_width_m):
     return {
         "rack_travel_mm": RACK_TRAVEL_MM,
         "mean_steer_at_travel_deg": round(reach, 1),
+        "outer_at_travel_deg": round(math.degrees(outer_full), 2),
         "min_cg_radius_low_speed_m": round(brentq(outer_excess, 2.5, 12.0, xtol=1e-3), 2),
         "rule_hairpin_cg_radius_m": round(math.sqrt(edge ** 2 - (car.wheelbase * (1.0 - car.front_frac)) ** 2), 2),
         "mean_steer_needed_at_limit_deg": {f"{r:g}m": round(n, 1) for r, n in zip(radii, need)},
@@ -1003,7 +1011,7 @@ def solve_map_case(case):
         if limit.ay_g is not None:
             outer = limit.record.unknowns[1]
             row["inner_deg"], row["outer_deg"] = math.degrees(curve(outer)), math.degrees(outer)
-            row["lock_margin_deg"] = math.degrees(outer_max - outer)
+            row["lock_margin_deg"] = math.degrees(min(outer_max, curve.domain[1]) - outer)
         if limit.is_grip_limit:
             if case["probe"] and name == BASELINE:
                 front = probe_gain(car.with_grip(front=GRIP_PROBE), curve, radius, 1.0, outer_max, limit.ay_g, lon)
@@ -1739,7 +1747,7 @@ def main():
     outer_max = float(base_table[-1, 2])
     curves = {BASELINE: ConstantAckermann(0, ggv.track_front, ggv.wheelbase, outer_max)}
     curves.update({f"{p:+d}%": ConstantAckermann(p, ggv.track_front, ggv.wheelbase, outer_max) for p in inputs.ackermann_pct})
-    curves[DESIGN] = TableCurve(base_table)
+    curves[DESIGN] = TableCurve(*to_rack_stop(base_table, RACK_TRAVEL_MM))
     tir_path = tire_templates_root(base) / f"{base['front']['tire']['template']}.tir"
     tir = parse_tir(tir_path)
     support = TireSupport.from_tir(tir_path)
@@ -1924,7 +1932,7 @@ def main():
             "mass_kg": round(TEAM_2027["mass"], 1), "cg_height_m": round(TEAM_2027["cg_height"], 4),
             "front_static_frac": TEAM_2027["front_static_frac"], "straight_braking_limit": braking_limit,
         },
-        "lock_at_rack_travel": lock_check(base_table, rows, nominal_car, curves[DESIGN], outer_max, float(tir["WIDTH"])),
+        "lock_at_rack_travel": lock_check(base_table, nominal_car, TableCurve(base_table), outer_max, float(tir["WIDTH"])),
         "front_base_linkage": {"arm_offset_mm": arm_offset_mm(base), "inner_wheel_at_travel": lock_geometry(base, RACK_TRAVEL_MM)},
         "steering_fix": fix,
         "steering_fix_skipped": steer_skipped,

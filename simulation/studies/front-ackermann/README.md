@@ -9,6 +9,7 @@
 - Numerical failure, domain rejection and physical infeasibility are separate statuses.
 - A lifted inner wheel puts its axle load on the outer wheel. The four loads sum to the weight.
 - Braking cells are labeled open axle. The study does not model LSD coupling under braking.
+- Front V34 trims stop at the 31.75 mm rack stop. A trim that needs more steer is `domain_rejected` (`steer_bound`). Constant laws have no linkage, so they keep the end of the `kin_py` table as their bound. A row's lock margin is measured to the bound of its own law. The lock gate still uses the full table, so it can report a need past the stop.
 - A slip_norm braking trim is rejected when MF5.2 runs outside the slip fit. The 2026-10-11 slip_norm rows of `braking.csv` and `brake_model_gap_pts` had no such check. They are stale until a re-run.
 
 ## Question
@@ -125,7 +126,7 @@ Only this section uses the Front V34 hardpoints, through BobSim `kin_py`. Front 
 
 <!-- /out -->
 
-An anti law needs more lock than a pro law for the same hairpin. The solver bounds the outer wheel at the end of the Front V34 `kin_py` table, a table property, not a physical lock. The minimum margin to it is <!-- out:readme.json#lock_margin_min_deg|.2f -->0.01<!-- /out -->°, for −50%. Lock-limited cells: <!-- out:readme.json#lock_limited_nominal_count -->2<!-- /out --> in the nominal map, <!-- out:readme.json#lock_limited_count -->2<!-- /out --> in all.
+An anti law needs more lock than a pro law for the same hairpin. The solver bounds each constant law at the end of the Front V34 `kin_py` table, a table property, not a physical lock. It bounds Front V34 at the rack stop. The 2026-10-11 run bounded Front V34 at the table end too. The smallest margin to a bound is <!-- out:readme.json#lock_margin_min_deg|.2f -->0.01<!-- /out -->°, for −50% in that run. Lock-limited cells: <!-- out:readme.json#lock_limited_nominal_count -->2<!-- /out --> in the nominal map, <!-- out:readme.json#lock_limited_count -->2<!-- /out --> in all.
 
 The linkage table shows linkages solved from the Front V34 hardpoints. Each moves the tie rod outer point and the rack pickup, reaches its hairpin steer at <!-- out:readme.json#fix_rack_mm|.1f -->28.6<!-- /out --> mm of rack and keeps bump steer at zero at center. Toggle margin is how far the arm and the tie rod are from lining up. Bump toe is kinematic, with rigid links. Articulation, clearance, strength, steering effort, loaded bump steer and compliance steer are not computed.
 

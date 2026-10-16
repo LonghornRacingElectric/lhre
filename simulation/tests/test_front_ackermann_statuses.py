@@ -138,6 +138,42 @@ def test_a_steering_bound_is_a_domain_limit_not_grip(study, make_car):
     assert not limit.is_grip_limit
 
 
+def law_table(law, outer_max_deg=40.0):
+    outer = np.radians(np.arange(0.0, outer_max_deg + 0.25, 0.5))
+    return np.column_stack([np.degrees(outer), [law(o) for o in outer], outer])
+
+
+def test_the_design_curve_ends_at_the_rack_stop(study):
+    rack = np.arange(0.0, 60.5, 0.5)
+    table = np.column_stack([rack, np.radians(0.7 * rack), np.radians(0.6 * rack)])
+    curve = study.TableCurve(*study.to_rack_stop(table, 31.75))
+    assert curve.domain[1] == pytest.approx(math.radians(0.6 * 31.75))
+    assert curve(curve.domain[1]) == pytest.approx(math.radians(0.7 * 31.75))
+    with pytest.raises(study.SteeringDomainError, match="rack_stop"):
+        curve(math.radians(0.6 * 32.0))
+    assert study.to_rack_stop(table, 70.0)[1] == "table_end"
+
+
+def test_a_design_trim_past_the_rack_stop_is_a_domain_limit(study, make_car):
+    car = make_car()
+    table = law_table(study.ConstantAckermann(100, car.track_front, car.wheelbase, OUTER_MAX))
+    assert study.limit_ay(car, study.TableCurve(table), 3.5, 1.0, OUTER_MAX).is_grip_limit
+    stopped = study.limit_ay(car, study.TableCurve(*study.to_rack_stop(table, 10.0)), 3.5, 1.0, OUTER_MAX)
+    assert stopped.bound_kind is BoundKind.DOMAIN and not stopped.is_grip_limit
+    assert "steer_bound" in stopped.upper.reasons
+
+
+def test_lock_margin_is_measured_to_the_bound_of_the_law(study, make_car):
+    car = make_car()
+    table = law_table(study.ConstantAckermann(50, car.track_front, car.wheelbase, OUTER_MAX))
+    curve = study.TableCurve(*study.to_rack_stop(table, 25.0))
+    case = {"car": car, "curves": {study.BASELINE: curve}, "radius": 8.0, "lon": None, "outer_max": OUTER_MAX, "tol": 1e-3,
+            "probe": False, "deriv": False, "labels": {"mu": 1.0, "rear": "open", "radius_m": 8.0, "ax_g": 0.0}}
+    row = study.solve_map_case(case)[0]
+    assert row["ay_max_g"] is not None
+    assert row["lock_margin_deg"] == pytest.approx(25.0 - row["outer_deg"])
+
+
 def test_an_iteration_cap_is_a_numerical_failure(study, make_car):
     car = make_car()
     law = study.ConstantAckermann(100, car.track_front, car.wheelbase, OUTER_MAX)
