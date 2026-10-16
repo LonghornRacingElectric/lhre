@@ -1436,6 +1436,32 @@ def robust_md(robust, beyond):
     return text + "\n" + "\n\n".join(lines) + "\n"
 
 
+def findings_md(robust, beyond):
+    if robust["status"] != "ok":
+        return (f"- **No recommendation.** The comparison is withheld ({robust['reason']}). "
+                f"{robust['n_supported']} of {robust['n_total']} conditions have common support. "
+                "The findings of an earlier run do not apply.\n")
+    without = region_text(beyond) if beyond["status"] == "ok" else "withheld"
+    return (f"- **Robust region.** {region_text(robust)} at 0.5 point tolerance. Without the 3.5 m cells: {without}. "
+            "A person writes the findings of this run from the tables on this page.\n")
+
+
+WITHHELD_REASONS = {
+    "robust_floor_pct": "the comparison is withheld",
+    "convergence_band_ms": "no refined lap",
+    "fix_rack_mm": "no linkage was solved",
+    "brake_model_gap_pts": "no pair of valid rows",
+    "mass_gap_pts": "no pair of valid rows",
+    "clip_max_curve": "no clipped cell",
+    **{f"{law}_lap{sens}_s": "the law has no lap reference" for law in ("anti50", "pro50", "design") for sens in ("", "_sensitivity")},
+}
+
+
+def shown(values):
+    return {k: f"withheld: {WITHHELD_REASONS.get(k, 'no valid value in this run')}" if v is None else v
+            for k, v in finite(values).items()}
+
+
 def write_readme_parts(out, s, op_rows, inputs):
     nominal, spread, fix = s["nominal"], s["ay_change_pct_range_all_cases"], s["steering_fix"]
     laws = [f"{p:+d}%" for p in MAP_PCTS]
@@ -1512,6 +1538,7 @@ def write_readme_parts(out, s, op_rows, inputs):
     parts["lock"] = table(["Option", "Mean steer at the 3.5 m limit", "Inner / outer"], lock_rows)
 
     parts["robust"] = robust_md(s["robust"]["all"], s["robust"]["beyond_3p5"])
+    parts["findings"] = findings_md(s["robust"]["all"], s["robust"]["beyond_3p5"])
 
     laps = s["lap_qss"]
     mus = [m for m in laps if m != "radius_bands"]
@@ -1555,7 +1582,7 @@ def write_readme_parts(out, s, op_rows, inputs):
         "rule_hairpin_radius_m": lock["rule_hairpin_cg_radius_m"],
         "rear_baseline": REAR_BASELINE,
         "robust_status": s["robust"]["all"]["status"],
-        "robust_floor_pct": s["robust"]["all"]["floor_pct"],
+        "robust_floor_pct": s["robust"]["all"]["floor_pct"] if s["robust"]["all"]["status"] == "ok" else None,
         "robust_laws": region_text(s["robust"]["all"]), "robust_laws_beyond_3p5": region_text(s["robust"]["beyond_3p5"]),
         "robust_supported": f"{s['robust']['all']['n_supported']} of {s['robust']['all']['n_total']}",
         "lsd_pro50_apex_3p5": lsd.get((3.5, 0.0, "+50%")), "lsd_anti50_apex_3p5": lsd.get((3.5, 0.0, "-50%")),
@@ -1599,7 +1626,7 @@ def write_readme_parts(out, s, op_rows, inputs):
         "tightest_corner_m": min(c["min_radius_m"] for c in track["corners"]),
         "tire_sha256": s["tire"]["sha256"][:16],
     }
-    (out / "readme.json").write_text(json.dumps(finite(values), indent=2), encoding="utf-8")
+    (out / "readme.json").write_text(json.dumps(shown(values), indent=2), encoding="utf-8")
 
 
 def write_csv(path, rows):

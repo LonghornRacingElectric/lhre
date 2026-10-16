@@ -10,6 +10,7 @@
 - A lifted inner wheel puts its axle load on the outer wheel. The four loads sum to the weight.
 - Braking cells are labeled open axle. The study does not model LSD coupling under braking.
 - Front V34 trims stop at the 31.75 mm rack stop. A trim that needs more steer is `domain_rejected` (`steer_bound`). Constant laws have no linkage, so they keep the end of the `kin_py` table as their bound. A row's lock margin is measured to the bound of its own law. The lock gate still uses the full table, so it can report a need past the stop.
+- A README number with no valid value shows `withheld: <reason>`. A re-run replaces the findings bullets with "No recommendation" when the comparison is withheld.
 - A slip_norm braking trim is rejected when MF5.2 runs outside the slip fit. The 2026-10-11 slip_norm rows of `braking.csv` and `brake_model_gap_pts` had no such check. They are stale until a re-run.
 
 ## Question
@@ -27,11 +28,15 @@ Is pro-Ackermann or anti-Ackermann steering better for the 2027 car, and which l
 | Tightest CG radius at any speed / rule-minimum hairpin | <!-- out:readme.json#min_radius_low_speed_m|.2f -->3.83<!-- /out --> m / <!-- out:readme.json#rule_hairpin_radius_m|.2f -->3.67<!-- /out --> m |
 | Endurance lap, laws tied with parallel steer | <!-- out:readme.json#lap_tied_laws -->-25%, +25%, +50%, Front V34<!-- /out --> |
 
-- **Pro, not anti.** Every variant, rear model and brake bias keeps −50% out of the robust region. Its worst case is the 3.5 m steady cell, where it loses <!-- out:readme.json#anti50_apex_3p5|.1f -->−12.4<!-- /out -->% of grip against parallel steer and <!-- out:readme.json#lsd_anti50_apex_3p5|.1f -->−18.0<!-- /out -->% with the LSD.
+<!-- out:findings.md -->
+
+- **Pro, not anti.** Every variant, rear model and brake bias keeps −50% out of the robust region. Its worst case is the 3.5 m steady cell, where it loses −12.4% of grip against parallel steer and −18.0% with the LSD.
 - **The top is flat.** The robust region holds the laws whose worst shortfall over every design condition is within 0.5 points of the best. Choosing inside it is a packaging and steering-feel decision, not a grip decision.
 - **Fast corners tie.** Every law is within 0.5% of parallel at 11 m and 15 m. The hairpins decide the direction.
-- **Lock is the real gate, at low speed.** At the powered grip limit Front V34 reaches a 3.5 m hairpin with 0.6° of steer to spare. Below the limit the rear does not slide, so the car needs more steer, and its tightest CG radius at walking pace is <!-- out:readme.json#min_radius_low_speed_m|.2f -->3.83<!-- /out --> m against <!-- out:readme.json#rule_hairpin_radius_m|.2f -->3.67<!-- /out --> m for a rule-minimum hairpin. Fix that before the Ackermann value.
-- **Lap time is a reference.** +25%, +50% and Front V34 tie parallel steer inside the <!-- out:readme.json#convergence_band_ms|.0f -->24<!-- /out --> ms lap grid band. +75% and +100% lose 25 to 46 ms, spread over the fast corners where they give up 0.2% to 0.3% of grip. −50% loses <!-- out:readme.json#anti50_lap_s|+.3f -->+0.064<!-- /out --> s.
+- **Lock is the real gate, at low speed.** At the powered grip limit Front V34 reaches a 3.5 m hairpin with 0.6° of steer to spare. Below the limit the rear does not slide, so the car needs more steer, and its tightest CG radius at walking pace is 3.83 m against 3.67 m for a rule-minimum hairpin. Fix that before the Ackermann value.
+- **Lap time is a reference.** +25%, +50% and Front V34 tie parallel steer inside the 24 ms lap grid band. +75% and +100% lose 25 to 46 ms, spread over the fast corners where they give up 0.2% to 0.3% of grip. −50% loses +0.064 s.
+
+<!-- /out -->
 
 **Why not copy other cars?** A video shows a law. It does not show the roll stiffness split, the tire's load sensitivity, the toe or the rack geometry, and each of those moves the answer here. Another team's law is a data point about their car. It is not evidence about ours. Formula 1 runs anti because downforce gives its outer front tire 5 to 10 times the inner's load at 50 m radii, so the load term wins there. We corner at 3.5 to 15 m with a 2:1 load split and no downforce in this model, so the geometry term wins here.
 

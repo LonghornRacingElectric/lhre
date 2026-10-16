@@ -1,6 +1,11 @@
 import json
+from pathlib import Path
 
 import pytest
+
+from tools.readme import fill
+
+README = Path(__file__).resolve().parents[1] / "studies" / "front-ackermann" / "README.md"
 
 
 def row(study, mu, radius, ax, curve, ay, kind="physical", status="accepted"):
@@ -81,3 +86,33 @@ def test_failed_cells_render_as_withheld_or_not_modeled(study, rendered):
     assert "not solved: the 3.5 m limit is not a grip limit" in (out / "linkage.md").read_text(encoding="utf-8")
     assert "withheld" in (out / "toe.md").read_text(encoding="utf-8")
     assert "no grip" not in "".join(p.read_text(encoding="utf-8") for p in out.glob("*.md"))
+
+
+def test_a_missing_readme_value_says_withheld_not_null(rendered):
+    out, _ = rendered
+    values = json.loads((out / "readme.json").read_text(encoding="utf-8"))
+    assert [k for k, v in values.items() if v is None] == []
+    assert values["brake_model_gap_pts"] == "withheld: no pair of valid rows"
+    assert values["robust_floor_pct"] == "withheld: the comparison is withheld"
+
+
+def test_findings_print_only_with_common_support(study, rendered):
+    out, robust = rendered
+    text = (out / "findings.md").read_text(encoding="utf-8")
+    assert text.startswith("- **No recommendation.**")
+    assert not any(law in text for law in robust["laws"])
+    ok = {**robust, "status": "ok", "region": {"0.5": ["+50%", "Front V34"]}}
+    text = study.findings_md(ok, ok)
+    assert "+50%, Front V34" in text and "No recommendation" not in text
+
+
+def test_a_filled_readme_shows_no_none_and_no_stale_finding(rendered, tmp_path_factory):
+    out, _ = rendered
+    (out / "provenance.json").write_text("{}", encoding="utf-8")
+    (out / "inputs.md").write_text("| Input |\n", encoding="utf-8")
+    readme = tmp_path_factory.mktemp("readme") / "README.md"
+    readme.write_text(README.read_text(encoding="utf-8"), encoding="utf-8")
+    fill(readme, out)
+    text = readme.read_text(encoding="utf-8")
+    assert "None" not in text
+    assert "Pro, not anti" not in text and "No recommendation" in text
