@@ -8,6 +8,7 @@ import math
 import os
 import types
 from pathlib import Path
+from typing import Optional
 
 import matplotlib
 
@@ -160,6 +161,14 @@ class Inputs:
         return {**tir, "LMUY": self.mu, "LMUX": self.mu, "LKY": self.lky_cases[lky_name]}
 
 
+@dataclasses.dataclass(frozen=True)
+class SlipNormPoint:
+    fy: float
+    use: float
+    kappa: float
+    evaluated: Optional[tuple]
+
+
 class Car:
     def __init__(self, ggv, tires, lltd, support, camber_deg=STATIC_CAMBER_DEG):
         self.mass, self.wheelbase, self.cg_height = ggv.mass, ggv.wheelbase, ggv.cg_height
@@ -236,6 +245,12 @@ class Car:
             limit = self.peak(self.fx_max_n[sign], corner, fz)
             use = abs(fx_w) / limit if limit > 0.0 else math.inf
             return lateral_n(tire, fz, alpha, side, gamma) * math.sqrt(max(0.0, 1.0 - use * use)), use
+        point = self.slip_norm_point(corner, fz, alpha, fx_w, side)
+        return point.fy, point.use
+
+    def slip_norm_point(self, corner, fz, alpha, fx_w, side):
+        tire, gamma = self.tires[corner], self.camber[corner]
+        sign = 1 if fx_w > 0.0 else -1
         kp, ap = self.peak(self.kappa_peak[sign], corner, fz), self.peak(self.alpha_peak, corner, fz)
         sy = math.tan(alpha) / math.tan(ap)
 
@@ -250,9 +265,12 @@ class Car:
         best = minimize_scalar(lambda k: -forces(k)[0], bounds=(0.0, self.kappa_limit[sign]), method="bounded", options={"xatol": 1e-6})
         capacity = -best.fun
         if abs(fx_w) >= capacity:
-            return forces(best.x)[1], abs(fx_w) / capacity
-        kappa = brentq(lambda k: forces(k)[0] - abs(fx_w), 0.0, best.x, xtol=1e-9)
-        return forces(kappa)[1], abs(fx_w) / capacity
+            kappa = best.x
+        else:
+            kappa = brentq(lambda k: forces(k)[0] - abs(fx_w), 0.0, best.x, xtol=1e-9)
+        s = math.hypot(kappa / kp, sy)
+        evaluated = (sign * s * kp, side * math.atan(s * math.tan(ap))) if s >= 1e-12 else None
+        return SlipNormPoint(forces(kappa)[1], abs(fx_w) / capacity, sign * kappa, evaluated)
 
     def with_grip(self, front=1.0, rear=1.0):
         probe = copy.copy(self)
@@ -280,12 +298,22 @@ class Car:
         wheels = []
         for i, name in enumerate(CORNERS):
             fz, alpha, fx_w = s["loads"][i], s["alphas"][i], s["wheel_fx"][i]
-            kappa = s["kappas"][i] if s["kappas"][i] is not None else self.implied_kappa(i, fz, fx_w)
+            point = None
+            if self.combined == "slip_norm" and fx_w != 0.0 and fz > LIFT_FZ_N:
+                point = self.slip_norm_point(i, fz, alpha, fx_w, side)
+            kappa = s["kappas"][i]
+            if kappa is None:
+                kappa = self.implied_kappa(i, fz, fx_w) if point is None else point.kappa
             gamma = side * self.camber[i]
             if s["lifted"][i] or fz <= LIFT_FZ_N:
                 flags = (f"wheel_lift:{name.upper()}",)
             else:
                 flags = self.support.violations(fz, side * alpha, kappa, gamma, name.upper())
+                if point is not None and point.evaluated is not None:
+                    fx_slip, fy_slip = point.evaluated
+                    flags += tuple(f.replace("_out_of_fit", "_eval_out_of_fit")
+                                   for f in self.support.violations(fz, fy_slip, fx_slip, gamma, name.upper())
+                                   if f.startswith(("alpha_", "kappa_")))
             wheels.append({"corner": name, "fz_n": fz, "alpha_rad": alpha, "kappa": kappa, "gamma_rad": gamma,
                            "use": s["brake_use"][i], "flags": flags})
         return tuple(wheels)

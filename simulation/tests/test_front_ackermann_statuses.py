@@ -211,6 +211,34 @@ def test_locked_lsd_slip_is_checked_against_the_fit(study, make_car):
     assert "kappa_out_of_fit:RL" in flags
 
 
+def slip_norm_car(make_car):
+    car = make_car()
+    car.combined = "slip_norm"
+    return car
+
+
+def test_slip_norm_reports_the_model_slip_and_checks_the_evaluated_slips(make_car):
+    car = slip_norm_car(make_car)
+    fz, alpha = 800.0, math.radians(11.0)
+    fx = -0.9 / car.slip_norm_point(0, fz, alpha, -1.0, 1.0).use
+    point = car.slip_norm_point(0, fz, alpha, fx, 1.0)
+    s = {"loads": (fz,) * 4, "alphas": (alpha, 0.0, 0.0, 0.0), "wheel_fx": (fx, 0.0, 0.0, 0.0), "kappas": (None,) * 4,
+         "lifted": (False,) * 4, "brake_use": (point.use, 0.0, 0.0, 0.0)}
+    wheel = car.wheel_states(s, 1.0)[0]
+    assert point.kappa == pytest.approx(-0.154, abs=0.002)
+    assert wheel["kappa"] == pytest.approx(point.kappa)
+    assert {"kappa_eval_out_of_fit:FL", "alpha_eval_out_of_fit:FL"} <= set(wheel["flags"])
+
+
+def test_a_slip_norm_braking_trim_evaluated_outside_the_fit_is_rejected(study, make_car):
+    car = slip_norm_car(make_car)
+    law = study.ConstantAckermann(0, car.track_front, car.wheelbase, OUTER_MAX)
+    # Above this car's in-fit braking limit, below the limit found without the evaluated-slip check.
+    record = study.trim(car, law, 3.5, 1.0, 1.275, OUTER_MAX, lon=study.Longitudinal(0.5, bias=0.5))
+    assert record.status is TrimStatus.DOMAIN_REJECTED
+    assert {"kappa_eval_out_of_fit:RL", "alpha_eval_out_of_fit:RL"} <= set(record.reasons)
+
+
 def test_braking_is_open_axle_and_lsd_braking_is_not_modeled(study, make_car):
     car = make_car()
     law = study.ConstantAckermann(100, car.track_front, car.wheelbase, OUTER_MAX)

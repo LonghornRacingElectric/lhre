@@ -9,6 +9,7 @@
 - Numerical failure, domain rejection and physical infeasibility are separate statuses.
 - A lifted inner wheel puts its axle load on the outer wheel. The four loads sum to the weight.
 - Braking cells are labeled open axle. The study does not model LSD coupling under braking.
+- A slip_norm braking trim is rejected when MF5.2 runs outside the slip fit. The 2026-10-11 slip_norm rows of `braking.csv` and `brake_model_gap_pts` had no such check. They are stale until a re-run.
 
 ## Question
 
@@ -241,14 +242,16 @@ Each trim attempt ends in one status from `tools/trim_status.py`:
 | Status | Meaning |
 | ------ | ------- |
 | `accepted` | The residual is under 1e-7, every wheel is inside the tire fit, and both axles are on the rising branch. |
-| `domain_rejected` | The solve left the model domain: a wheel outside the `.tir` load, slip-angle, slip-ratio or camber range, a lifted wheel, or a solver bound (steer, sideslip, longitudinal force). |
+| `domain_rejected` | The solve left the model domain: a wheel outside the `.tir` load, slip-angle, slip-ratio or camber range, a lifted wheel, or a solver bound (steer, sideslip, longitudinal force) at a stationary point. |
 | `physically_infeasible` | A converged in-domain state uses more than the tire can give or is past the peak, or a start stopped at a stationary point with a nonzero residual and every wheel inside the fit (`no_equilibrium`). The last case is local evidence of saturation, not a global proof. A stationary point outside the fit is `domain_rejected`. |
-| `numerical_failure` | The solver stopped on its evaluation limit or did not reach a stationary point. Nothing is known about the physics. |
+| `numerical_failure` | The solver stopped on its evaluation limit or did not reach a stationary point, with or without an active bound. Nothing is known about the physics. |
 | `not_modeled` | The study withholds the capability, for example LSD coupling under braking. |
 
 A limit search bisects lateral g. Only a search whose failing bracket is `physically_infeasible` gives a grip limit. Rows keep `ay_accepted_g`, `trim_status`, `bound_kind`, `upper_status`, `upper_reason` and the per-wheel load, slip angle, slip ratio, camber, use and support flags. `ay_max_g` is empty unless the row is a grip limit.
 
 `tools/tire_support.py` reads `FZMIN`, `FZMAX`, `ALPMIN`, `ALPMAX`, `KPUMIN`, `KPUMAX`, `CAMMIN` and `CAMMAX` from the `.tir` file. A missing range stops the run. The peak tables and peak searches stay inside these ranges.
+
+The `kappa` column is the slip ratio that the combined-slip model uses. The ellipse model reports the pure-slip slip ratio that gives the wheel's Fx. The slip_norm model solves its own slip ratio and evaluates MF5.2 at a larger slip ratio and slip angle. The run checks those evaluated slips against the fit too (`kappa_eval_out_of_fit`, `alpha_eval_out_of_fit`).
 
 `tools/support.py` compares laws on common support. A condition counts only when every law, the baseline included, has a grip limit there and the baseline is at or above the floor. The result lists each excluded cell and its kind. With no common support, or with coverage under the minimum, the region is empty and the README shows "No recommendation". The minimum coverage (1.0) and the floor (0.2 g) are study choices. Nobody has reviewed them.
 

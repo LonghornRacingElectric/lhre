@@ -22,6 +22,7 @@ class BoundKind(str, Enum):
 
 DOMAIN_REASONS = frozenset({
     "alpha_out_of_fit", "kappa_out_of_fit", "fz_out_of_fit", "camber_out_of_fit",
+    "alpha_eval_out_of_fit", "kappa_eval_out_of_fit",
     "steer_bound", "steer_domain", "beta_bound", "lon_force_bound", "wheel_lift",
 })
 PHYSICAL_REASONS = frozenset({"tire_use", "past_peak_axle", "no_equilibrium", "capacity_bound"})
