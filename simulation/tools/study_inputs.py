@@ -13,6 +13,8 @@ RESOLVED_SCHEMA = "lhre.study-inputs.resolved.v1"
 STATUSES = frozenset({"measured", "cad_export", "declared", "assumed", "guessed", "unavailable"})
 KINDS = frozenset({"transcription", "cad_export"})
 RELEASE_STATUSES = frozenset({"candidate", "released", "unavailable"})
+# Same release grade as the vehicle bundle checker (contract C7).
+RELEASE_GRADE = frozenset({"measured", "cad_export", "declared"})
 STORED = frozenset({"git", "external"})
 POINTS = ("lower_fore_i", "lower_aft_i", "lower_o", "upper_fore_i", "upper_aft_i", "upper_o", "tie_o", "wheel_center")
 GEOMETRY_UNITS = {"mm": lambda v: v / 1000.0, "m": lambda v: v}
@@ -173,6 +175,17 @@ def _source_file(path, geometry):
     return record
 
 
+def _check_release(path, kind, source_file, leaves):
+    problems = [] if kind == "cad_export" else [f"kind is {kind}"]
+    problems += [f"{key} is {field.status}" for key, field in leaves.items() if field.status not in RELEASE_GRADE]
+    if not source_file.get("verified"):
+        problems.append(f"the {source_file['field']} hash is not checked against a local copy")
+    if problems:
+        raise StudyInputsError(
+            f"{_where(path, 'front_geometry')} is released, but {', '.join(problems)}. A released geometry needs kind "
+            f"cad_export, a hash-checked export file and every leaf at {', '.join(sorted(RELEASE_GRADE))}.")
+
+
 def _geometry(path, node):
     where = "front_geometry"
     if not isinstance(node, dict):
@@ -213,9 +226,12 @@ def _geometry(path, node):
     to_m = GEOMETRY_UNITS[node["units"]]
     points_m = {f"{name}_m": [to_m(c) for c in _point(path, f"{where}.points.{name}", points[name])] for name in POINTS}
     rack_m = [to_m(c) for c in _point(path, f"{where}.rack_pickup", rack_field.value)]
+    source_file = _source_file(path, node)
+    if node["release_status"] == "released":
+        _check_release(path, node["kind"], source_file, {**frame, "points": points_field, "rack_pickup": rack_field})
     return FrontGeometry(
         label=str(node["label"]), kind=node["kind"], release_status=node["release_status"],
-        release_source=str(node["release_source"]), source_file=_source_file(path, node), units=node["units"],
+        release_source=str(node["release_source"]), source_file=source_file, units=node["units"],
         frame=frame, points_m=points_m, rack_pickup_m=rack_m, points_field=points_field, rack_field=rack_field,
     )
 

@@ -144,6 +144,47 @@ def test_released_needs_a_release_record(study, inputs_copy):
         study.load_inputs(path)
 
 
+RELEASE = {"approved_by": "A. Person", "decision_ref": "design review 1", "date": "2026-10-15"}
+
+
+def test_a_guessed_transcription_cannot_be_released(study, inputs_copy):
+    def edit(d):
+        g = d["front_geometry"]
+        g.update(release_status="released", release=dict(RELEASE))
+        for key in ("points", "rack_pickup", "axes"):
+            g[key]["status"] = "guessed"
+
+    with pytest.raises(StudyInputsError, match="is released, but") as error:
+        study.load_inputs(inputs_copy(edit))
+    for leaf in ("kind is transcription", "points is guessed", "rack_pickup is guessed", "axes is guessed",
+                 "datum_z is unavailable", "hash is not checked"):
+        assert leaf in str(error.value)
+
+
+def test_a_released_export_needs_a_stated_datum_and_a_checked_hash(study, inputs_copy, tmp_path):
+    export = tmp_path / "front_v34.csv"
+    export.write_text("hardpoints", encoding="utf-8")
+
+    def released(datum=True, local_copy=True):
+        def edit(d):
+            g = d["front_geometry"]
+            g.pop("transcription_of")
+            g.update(kind="cad_export", release_status="released", release=dict(RELEASE), export_file={
+                "name": export.name, "sha256": hashlib.sha256(export.read_bytes()).hexdigest(), "stored": "git",
+                **({"path": str(export)} if local_copy else {})})
+            for key in ("points", "rack_pickup", "axes", "origin_xy", "mirror"):
+                g[key]["status"] = "cad_export"
+            if datum:
+                g["datum_z"].update(value="ground plane at static ride height", status="declared")
+        return edit
+
+    assert study.load_inputs(inputs_copy(released())).geometry.release_status == "released"
+    with pytest.raises(StudyInputsError, match="datum_z is unavailable"):
+        study.load_inputs(inputs_copy(released(datum=False)))
+    with pytest.raises(StudyInputsError, match="hash is not checked"):
+        study.load_inputs(inputs_copy(released(local_copy=False)))
+
+
 def test_a_geometry_change_changes_the_hash_and_points(study, inputs_copy):
     base = study.load_inputs(inputs_copy())
 
