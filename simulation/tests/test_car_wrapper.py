@@ -2,8 +2,10 @@ import hashlib
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -132,6 +134,11 @@ dirty:
 \t$(write_run)
 \ttouch {EXE}
 \tprintf 'changed\\n' >> README.md
+
+hang:
+\t$(write_run)
+\ttouch {EXE} $(RESULTS)/started
+\tsleep 60
 """
 
 FAKE_COMPOSE = '''\
@@ -317,6 +324,30 @@ def test_make_car_fails_on_an_executable_older_than_the_records(lhre):
     identity = _identity(lhre, "stale")
     assert identity["status"] == "failed"
     assert identity["records"]["executables"] == [{"path": f"bobsim/{EXE}", "built_after_records": False}]
+
+
+def test_make_car_restores_bobsim_after_an_interrupt(lhre):
+    compose = f"{sys.executable} {lhre.parent / 'compose.py'}"
+    started = lhre / "simulation/bobsim/simulations/mbd/generated_results/started"
+    process = subprocess.Popen(
+        ["make", "car", "T=hang", f"COMPOSE={compose}"],
+        cwd=lhre / "simulation",
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        env={**os.environ, **GIT_ENV},
+        start_new_session=True,
+    )
+    deadline = time.monotonic() + 30
+    while not started.exists() and process.poll() is None and time.monotonic() < deadline:
+        time.sleep(0.1)
+    assert started.exists(), "The fake target did not start."
+    os.killpg(process.pid, signal.SIGINT)
+    output, _ = process.communicate(timeout=60)
+    assert process.returncode != 0, output
+    assert _bobsim_status(lhre) == "", output
+    assert (lhre / "simulation/bobsim/vehicle.yml").read_text(encoding="utf-8") == BOBSIM_VEHICLE
+    assert _identity(lhre, "hang")["status"] == "failed"
 
 
 def test_make_car_refuses_a_bobsim_with_local_changes(lhre):
