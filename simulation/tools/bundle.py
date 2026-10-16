@@ -34,7 +34,7 @@ REACTIONS = ("chassis", "upright")
 FRAME_AXES = {"x": "forward", "y": "left", "z": "up"}
 FRAME_UNITS = {"length": "m", "mass": "kg", "alignment_angle": "deg"}
 SHARE_SUM_TOLERANCE = 1e-9
-NOT_APPROVAL = "software checks passed; not hardware approval"
+NOT_APPROVAL = "software checks passed. Not hardware approval."
 SLUG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 SHA256 = re.compile(r"[0-9a-f]{64}")
 # The container runs git as root on files that the host or CI runner owns.
@@ -637,7 +637,7 @@ def _verdict(bundle: Bundle) -> str:
         )
     if status == "superseded":
         return (
-            f"superseded by {bundle.data.get('superseded_by')}: {NOT_APPROVAL}. "
+            f"superseded by {bundle.data.get('superseded_by')}: {NOT_APPROVAL} "
             f"Results that cite {bundle.bundle_id} are stale."
         )
     return f"{status}: {NOT_APPROVAL}"

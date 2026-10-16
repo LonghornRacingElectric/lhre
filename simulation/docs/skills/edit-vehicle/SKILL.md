@@ -35,7 +35,7 @@ description: Change a parameter of the current car in vehicle/vehicle.yml, updat
    ```
 
    `make test` must print `OK`. `make check-vehicle` must end with
-   `candidate: software checks passed; not hardware approval`. In a git
+   `candidate: software checks passed. Not hardware approval.` In a git
    worktree, leave out `BASE=`. CI runs that part.
 4. If the change affects the Modelica tier, run `make records`, then
    `make bobsim T=standard-build`. The build must pass.

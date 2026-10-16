@@ -60,7 +60,7 @@ container.
    has `common.vehicle_schema`.
 4. A `draft` or `candidate` bundle can hold `assumed`, `guessed` and
    `unavailable` entries. The check lists them. A pass ends with
-   `candidate: software checks passed; not hardware approval`.
+   `candidate: software checks passed. Not hardware approval.`
 5. A `released` bundle needs `release.approved_by`, `release.decision_ref`
    and `release.date`. Every entry must be `measured`, `cad_export` or
    `declared`. Only `vehicle/vehicle.yml` can be released.

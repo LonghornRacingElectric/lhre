@@ -14,7 +14,7 @@ SIM = Path(__file__).resolve().parents[1]
 REPO = SIM.parent
 TIRE = "16x7p5_10_12psi"
 MEMBERS = ("vehicle/vehicle.yml", "vehicle/bundle.yml", f"vehicle/tires/{TIRE}.tir")
-CANDIDATE_LINE = "candidate: software checks passed; not hardware approval"
+CANDIDATE_LINE = "candidate: software checks passed. Not hardware approval."
 HEX64 = "0" * 64
 
 
@@ -238,6 +238,16 @@ def test_superseded_names_its_replacement(root):
     assert ("superseded_by", "missing_value") in _codes(_check(root, bundle))
     bundle = _edit(root, lambda data: data.update(superseded_by="orion-baseline-2"))
     assert _check(root, bundle) == []
+
+
+def test_cli_says_a_superseded_bundle_is_stale_and_not_approved(root, monkeypatch, capsys):
+    bundle = _edit(root, lambda data: data.update(status="superseded", superseded_by="orion-baseline-2"))
+    monkeypatch.setattr(vb, "REPO", root)
+    assert vb.main(["check"]) == 0
+    assert capsys.readouterr().out.rstrip().splitlines()[-1] == (
+        "superseded by orion-baseline-2: software checks passed. Not hardware approval. "
+        f"Results that cite {bundle.bundle_id} are stale."
+    )
 
 
 def _hand_entered(data, status):
