@@ -1,5 +1,6 @@
 """A small lhre, BobSim and BobLib tree in a temporary folder, for provenance tests."""
 
+import hashlib
 import subprocess
 from pathlib import Path
 
@@ -7,6 +8,7 @@ VEHICLE = """\
 schema: boblib.vehicle.v1
 vehicle:
   name: Demo
+  mass_kg: 280.0
 paths:
   boblib: engines/boblib/BobLib
   tire_templates: ../../vehicle/tires
@@ -26,7 +28,7 @@ superseded_by: null
 release:
   approved_by: {value: null, status: unavailable, source: none}
 members:
-  vehicle: {path: vehicle/vehicle.yml, sha256: 0000, schema: boblib.vehicle.v1}
+  vehicle: {path: vehicle/vehicle.yml, sha256: VEHICLE_SHA256, schema: boblib.vehicle.v1}
 frame:
   units: {value: m, status: declared, source: CAD export note}
   datum_z:
@@ -127,7 +129,8 @@ def build_tree(base: Path, *, bundle: bool = False) -> Path:
     _commit_repo(bobsim)
     _write(repo, FILES)
     if bundle:
-        _write(repo, {"vehicle/bundle.yml": BUNDLE})
+        vehicle_sha256 = hashlib.sha256(VEHICLE.encode()).hexdigest()
+        _write(repo, {"vehicle/bundle.yml": BUNDLE.replace("VEHICLE_SHA256", vehicle_sha256)})
     (repo / ".gitignore").write_text("simulation/bobsim/\nsimulation/out/\n")
     _commit_repo(repo)
     return repo

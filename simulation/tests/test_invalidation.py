@@ -1,3 +1,4 @@
+import hashlib
 import json
 import shutil
 from pathlib import Path
@@ -43,6 +44,11 @@ def _set_bundle(repo, change):
     path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8", newline="\n")
 
 
+def _follow_vehicle(repo):
+    digest = invalidation.sha256_file(repo / "vehicle/vehicle.yml")
+    _set_bundle(repo, lambda d: d["members"]["vehicle"].update(sha256=digest))
+
+
 BOBSIM = "simulation/bobsim"
 BOBLIB = "simulation/bobsim/engines/boblib"
 STUDY = "simulation/studies/demo"
@@ -67,10 +73,26 @@ COSMETIC = {
     "bundle leaf status and source": lambda r: _set_bundle(
         r, lambda d: d["frame"]["datum_z"]["front"].update(status="measured", source="CMM report 12")
     ),
+    "vehicle comment": lambda r: _append(r / "vehicle/vehicle.yml", "# Weighed on 2026-10-01.\n"),
+    "vehicle trailing space": lambda r: _append(r / "vehicle/vehicle.yml", " "),
+    "vehicle number format": lambda r: _edit(r / "vehicle/vehicle.yml", "mass_kg: 280.0", "mass_kg: 280.00"),
+    "vehicle flow style": lambda r: _edit(
+        r / "vehicle/vehicle.yml",
+        "vehicle:\n  name: Demo\n  mass_kg: 280.0\n",
+        "vehicle: {mass_kg: 280.0, name: Demo}\n",
+    ),
+    "study inputs comment": lambda r: _append(r / STUDY / "inputs.yml", "# From the setup sheet.\n"),
+    "study inputs source text": lambda r: _edit(r / STUDY / "inputs.yml", "source: sheet", "source: setup sheet rev B"),
+    "study inputs status": lambda r: _edit(r / STUDY / "inputs.yml", "status: declared", "status: measured"),
+    "BobSim config comment": lambda r: _append(r / BOBSIM / "simulations/lap/config.yml", "# Motor limit.\n"),
 }
 
 PHYSICS = {
-    "vehicle byte": (lambda r: _append(r / "vehicle/vehicle.yml", " "), "vehicle"),
+    "vehicle value": (lambda r: _edit(r / "vehicle/vehicle.yml", "mass_kg: 280.0", "mass_kg: 281.0"), "vehicle"),
+    "vehicle new key": (
+        lambda r: _edit(r / "vehicle/vehicle.yml", "  name: Demo\n", "  name: Demo\n  cg_z_m: 0.28\n"),
+        "vehicle",
+    ),
     "front tire byte": (lambda r: _append(r / "vehicle/tires/demo_front.tir", " "), "tire:demo_front"),
     "run.py code": (lambda r: _edit(r / STUDY / "run.py", "scale(force", "scale(2 * force"), f"lhre:{STUDY}/run.py"),
     "imported tool": (
@@ -167,7 +189,7 @@ def test_bundle_id_can_be_a_metadata_triple(tree):
     assert _keys(tree)["bundle_id"] == "demo-2027-a"
 
 
-def test_vehicle_outside_the_repo_is_hashed_by_its_bytes(tree, tmp_path):
+def test_vehicle_outside_the_repo_is_keyed_by_its_content(tree, tmp_path):
     copy = tmp_path / "candidate" / "vehicle.yml"
     copy.parent.mkdir()
     shutil.copyfile(tree / "vehicle/vehicle.yml", copy)
@@ -219,13 +241,15 @@ def test_stale_check_reports_current(tree, tmp_path, capsys):
 
 def test_stale_check_prints_stale_and_the_changed_keys(tree, tmp_path, capsys):
     path = _record(tree, tmp_path)
-    _append(tree / "vehicle/vehicle.yml", " ")
+    PHYSICS["vehicle value"][0](tree)
+    _follow_vehicle(tree)
     _edit(tree / BOBSIM / "engines/dynpy/tire.py", "1.0", "0.9")
     code, out = _stale(tree, path, capsys)
     assert code == 1
     lines = out.splitlines()
     assert lines[0] == "STALE demo"
     assert any(line.split()[0] == "vehicle" for line in lines[1:])
+    assert not any(line.split()[0].startswith("bundle") for line in lines[1:])
     assert any(line.split()[0] == "bobsim:engines" for line in lines[1:])
     assert not any(line.split()[0].startswith("tire:") for line in lines[1:])
 
@@ -267,6 +291,38 @@ def test_stale_check_needs_the_study_folder(tree, tmp_path, capsys, study):
     assert "no study folder" in out
 
 
+@pytest.mark.parametrize(
+    ("change", "expected", "key"),
+    [
+        (lambda d: d.update(status="superseded", superseded_by="demo-2027-b"), "STALE", "bundle_status"),
+        (lambda d: d["members"]["vehicle"].update(sha256="0" * 64), "STALE", "bundle_vehicle"),
+        (lambda d: d["members"]["vehicle"].pop("sha256"), "UNKNOWN", "bundle_vehicle"),
+        (lambda d: d.update(status="released"), "CURRENT", None),
+    ],
+    ids=["superseded", "names another vehicle", "names no vehicle hash", "released"],
+)
+def test_bundle_state_counts_in_the_stale_check(tree, tmp_path, capsys, change, expected, key):
+    path = _record(tree, tmp_path)
+    before = _keys(tree)
+    _set_bundle(tree, change)
+    assert _keys(tree) == before
+    _, out = _stale(tree, path, capsys)
+    lines = out.splitlines()
+    assert lines[0] == f"{expected} demo"
+    assert key is None or any(line.split()[0] == key for line in lines[1:])
+
+
+def test_vehicle_comment_is_current_once_the_bundle_follows(tree, tmp_path, capsys):
+    path = _record(tree, tmp_path)
+    COSMETIC["vehicle comment"](tree)
+    code, out = _stale(tree, path, capsys)
+    assert code == 1 and "bundle_vehicle" in out
+    assert not any(line.split()[0] == "vehicle" for line in out.splitlines()[1:])
+    _follow_vehicle(tree)
+    code, out = _stale(tree, path, capsys)
+    assert code == 0, out
+
+
 def test_version_1_provenance_is_never_current(tree, tmp_path, capsys):
     vehicle = tree / "vehicle/vehicle.yml"
     path = tmp_path / "provenance.json"
@@ -284,11 +340,31 @@ def test_version_1_provenance_is_never_current(tree, tmp_path, capsys):
 def test_stale_check_uses_bobsim_vehicle_when_no_vehicle_is_given(tree, tmp_path, capsys, monkeypatch):
     path = _record(tree, tmp_path)
     copy = tmp_path / "other.yml"
-    copy.write_bytes((tree / "vehicle/vehicle.yml").read_bytes() + b" ")
+    copy.write_bytes((tree / "vehicle/vehicle.yml").read_bytes().replace(b"280.0", b"281.0"))
     monkeypatch.setenv("BOBSIM_VEHICLE", str(copy))
     code = invalidation.main(["stale", str(path)], layout=Layout(tree))
     out = capsys.readouterr().out
     assert code == 1 and "vehicle" in out
+
+
+def _yaml(text):
+    return invalidation.yaml_digest(text.encode())
+
+
+def test_yaml_digest_ignores_comments_layout_and_triple_metadata_only():
+    base = "a: {value: 1.0, status: declared, source: sheet, unit: m}\nb: [1, 2]\n"
+    same = "# note\nb:\n  - 1\n  - 2\na:\n  value: 1.00\n  unit: m\n  status: assumed\n  source: other\n"
+    assert _yaml(base) == _yaml(same)
+    assert _yaml(base) != _yaml(base.replace("unit: m", "unit: mm"))
+    assert _yaml(base) != _yaml(base.replace("value: 1.0", "value: 1.5"))
+    assert _yaml(base) != _yaml(base.replace("[1, 2]", "[2, 1]"))
+    assert _yaml("source: sheet\nstatus: x\n") != _yaml("source: other\nstatus: x\n")
+
+
+def test_yaml_digest_falls_back_to_bytes_for_text_that_is_not_yaml():
+    bad = b"a: [1, 2\n"
+    assert invalidation.yaml_digest(bad) == hashlib.sha256(bad).hexdigest()
+    assert invalidation.yaml_digest(bad) != invalidation.yaml_digest(b"a: [1, 3\n")
 
 
 def test_python_digest_ignores_comments_and_layout_only():

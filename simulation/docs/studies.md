@@ -166,7 +166,7 @@ key, so a commit that changes only docs does not change a key.
 
 | Key | Input |
 | --- | ----- |
-| `vehicle` | The bytes of the vehicle file |
+| `vehicle` | The parsed values of the vehicle file |
 | `tire:<name>` | The bytes of each `.tir` file that the vehicle names |
 | `bundle_id` | `bundle_id` in `bundle.yml` next to the vehicle, or `absent` |
 | `bundle_physics` | The values in `frame`, `axles`, `setup` and `torque_topology` of `bundle.yml`, or `absent` |
@@ -175,16 +175,35 @@ key, so a commit that changes only docs does not change a key.
 | `bobsim:<file>` | Each BobSim module outside those folders that the study imports, for example `app/tire_eval.py` |
 | `boblib:BobLib` | The files of the BobLib package, also the records that `make records` writes |
 
+Python files are keyed by their tokens. YAML files are keyed by their
+parsed values. A file that does not parse is keyed by its bytes.
+
 These changes do not change a key:
 
 - Markdown, reStructuredText, PDF and image files, in any folder.
 - Comments, blank lines and indent width in Python files.
+- Comments, layout, key order and number format (`280.0` or `280.00`) in
+  YAML files.
+- The `status` and `source` of a `{value, status, source}` value in a YAML
+  file, for example in a study `inputs.yml`.
 - BobSim `docs/`, `tests/`, `visualization/`, and `app/` modules that the
   study does not import.
 - `__pycache__/` folders, and files that git ignores in BobSim and
   BobLib, such as build output.
 - The `status` and `source` of a bundle value, and the bundle `status` and
   `release` fields.
+
+The bundle next to the vehicle can also make a result stale. The stale
+check reads it when it compares the keys:
+
+- A bundle with `status: superseded` gives `STALE` (`bundle_status`).
+- A bundle whose `members.vehicle.sha256` is not the SHA-256 of the vehicle
+  file bytes gives `STALE` (`bundle_vehicle`). A bundle with no such hash
+  gives `UNKNOWN`.
+
+So a comment edit in the vehicle file keeps the `vehicle` key. It changes
+the bytes, so update the bundle too. `make study` prints a warning when it
+records a superseded bundle or a bundle that does not describe the vehicle.
 
 ### Check a result
 

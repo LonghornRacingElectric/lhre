@@ -24,8 +24,9 @@ SCHEMA = "lhre.provenance.v2"
 EXIT_CURRENT, EXIT_STALE, EXIT_UNKNOWN = 0, 1, 3
 ABSENT = "absent"
 METHOD = (
-    "Content digests of the inputs. Python files are hashed by their tokens, so comments and layout "
-    "do not count. Docs and figures do not count. A null key means the input could not be read."
+    "Content digests of the inputs. Python files are hashed by their tokens and YAML files by their parsed "
+    "values, so comments and layout do not count. Docs and figures do not count. A null key means the input "
+    "could not be read."
 )
 
 BOBSIM_PHYSICS = ("common", "engines", "simulations", "optimization", "Dockerfile", "requirements.txt")
@@ -34,6 +35,9 @@ BUNDLE_PHYSICS = ("frame", "axles", "setup", "torque_topology")
 DOC_SUFFIXES = frozenset({".md", ".markdown", ".rst", ".png", ".svg", ".jpg", ".jpeg", ".gif", ".pdf"})
 SKIP_PARTS = frozenset({"__pycache__", ".pytest_cache", ".ipynb_checkpoints"})
 TRIPLE = frozenset({"value", "status", "source"})
+TRIPLE_METADATA = frozenset({"status", "source"})
+YAML_SUFFIXES = frozenset({".yml", ".yaml"})
+NOT_RECORDED, CANNOT_READ = "not recorded", "cannot read now"
 # The container runs git as root on files that the host owns.
 SAFE_DIRECTORY = {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "safe.directory", "GIT_CONFIG_VALUE_0": "*"}
 
@@ -109,9 +113,28 @@ def python_digest(source: bytes) -> str:
     return digest.hexdigest()
 
 
+def _without_metadata(node):
+    if isinstance(node, Mapping):
+        keep = node.keys() - TRIPLE_METADATA if TRIPLE <= node.keys() else node.keys()
+        return {str(key): _without_metadata(node[key]) for key in keep}
+    if isinstance(node, list):
+        return [_without_metadata(value) for value in node]
+    return node
+
+
+def yaml_digest(source: bytes) -> str:
+    try:
+        documents = list(yaml.safe_load_all(source))
+    except yaml.YAMLError:
+        return hashlib.sha256(source).hexdigest()
+    return _sha256_text(json.dumps(_without_metadata(documents), sort_keys=True, separators=(",", ":"), default=str))
+
+
 def file_digest(path: Path) -> str:
     data = path.read_bytes()
-    return python_digest(data) if path.suffix == ".py" else hashlib.sha256(data).hexdigest()
+    if path.suffix == ".py":
+        return python_digest(data)
+    return yaml_digest(data) if path.suffix in YAML_SUFFIXES else hashlib.sha256(data).hexdigest()
 
 
 def is_doc(relative: PurePosixPath) -> bool:
@@ -282,6 +305,11 @@ def read_bundle(vehicle_path: Path) -> dict | None:
     return dict(data)
 
 
+def describes_vehicle(bundle: Mapping, vehicle_sha256: str) -> bool | None:
+    member = ((bundle.get("members") or {}).get("vehicle") or {}).get("sha256")
+    return None if member is None else str(member) == vehicle_sha256
+
+
 def _bundle_id(vehicle_path: Path) -> str:
     bundle = read_bundle(vehicle_path)
     if bundle is None:
@@ -341,7 +369,7 @@ def _put_boblib(keys: Keys, layout: Layout) -> None:
 
 def dependency_keys(study: str, vehicle_path: Path, layout: Layout) -> Keys:
     keys = Keys()
-    keys.put("vehicle", lambda: sha256_file(vehicle_path))
+    keys.put("vehicle", lambda: yaml_digest(vehicle_path.read_bytes()))
     _put_tires(keys, vehicle_path, layout)
     keys.put("bundle_id", lambda: _bundle_id(vehicle_path))
     keys.put("bundle_physics", lambda: _bundle_physics(vehicle_path))
@@ -372,16 +400,44 @@ def compare(recorded: Mapping[str, str | None], recorded_unavailable: Mapping[st
             continue
         old, new = recorded[key], current.values[key]
         if old is None:
-            verdict.unknown.append((key, f"not recorded: {recorded_unavailable.get(key, 'no reason given')}"))
+            verdict.unknown.append((key, f"{NOT_RECORDED}: {recorded_unavailable.get(key, 'no reason given')}"))
         elif new is None:
-            verdict.unknown.append((key, f"cannot read now: {current.unavailable.get(key, 'no reason given')}"))
+            verdict.unknown.append((key, f"{CANNOT_READ}: {current.unavailable.get(key, 'no reason given')}"))
         elif old != new:
             verdict.changed.append((key, f"changed {_short(old)} -> {_short(new)}"))
+    return _settle(verdict)
+
+
+def _settle(verdict: Verdict) -> Verdict:
     verdict.status = "stale" if verdict.changed else "unknown" if verdict.unknown else "current"
     return verdict
 
 
+def _check_bundle(verdict: Verdict, vehicle_path: Path) -> Verdict:
+    try:
+        bundle = read_bundle(vehicle_path)
+        vehicle_sha256 = sha256_file(vehicle_path) if bundle is not None else ""
+    except (OSError, ValueError, yaml.YAMLError) as error:
+        verdict.unknown.append(("bundle", f"{CANNOT_READ}: {error}"))
+        return _settle(verdict)
+    if bundle is None:
+        return verdict
+    name, successor = plain(bundle.get("bundle_id")), plain(bundle.get("superseded_by"))
+    if plain(bundle.get("status")) == "superseded":
+        verdict.changed.append(("bundle_status", f"bundle {name} is superseded by {successor}"))
+    describes = describes_vehicle(bundle, vehicle_sha256)
+    if describes is False:
+        verdict.changed.append(("bundle_vehicle", f"bundle {name} names another vehicle file sha256"))
+    elif describes is None:
+        verdict.unknown.append(("bundle_vehicle", f"bundle {name} has no members.vehicle.sha256"))
+    return _settle(verdict)
+
+
 def check(record: Mapping, vehicle_path: Path, layout: Layout) -> Verdict:
+    return _check_bundle(_check_keys(record, vehicle_path, layout), vehicle_path)
+
+
+def _check_keys(record: Mapping, vehicle_path: Path, layout: Layout) -> Verdict:
     study = str(record.get("study", ""))
     if record.get("schema") != SCHEMA:
         schema = record.get("schema", "v1")

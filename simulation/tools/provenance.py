@@ -21,6 +21,7 @@ from tools.invalidation import (
     Layout,
     bundle_path,
     dependency_keys,
+    describes_vehicle,
     git,
     git_root,
     plain,
@@ -83,15 +84,29 @@ def _bundle(vehicle_path: Path, vehicle_sha256: str, layout: Layout) -> dict | N
     data = read_bundle(vehicle_path)
     if data is None:
         return None
-    member = ((data.get("members") or {}).get("vehicle") or {}).get("sha256")
     path = bundle_path(vehicle_path)
     return {
         "path": _location(path, layout)[0],
         "sha256": sha256_file(path),
         "bundle_id": plain(data.get("bundle_id")),
         "status": plain(data.get("status")),
-        "describes_vehicle": None if member is None else str(member) == vehicle_sha256,
+        "describes_vehicle": describes_vehicle(data, vehicle_sha256),
     }
+
+
+def _bundle_warnings(bundle: Mapping | None) -> list[str]:
+    if bundle is None:
+        return []
+    warnings = []
+    if bundle["status"] == "superseded":
+        warnings.append(f"bundle {bundle['bundle_id']} is superseded. The stale check reports this result STALE.")
+    if bundle["describes_vehicle"] is not True:
+        problem = "is missing" if bundle["describes_vehicle"] is None else "is not the SHA-256 of the file"
+        warnings.append(
+            f"bundle {bundle['bundle_id']} does not describe the vehicle file. Its members.vehicle.sha256 {problem}. "
+            "Until you update bundle.yml, the stale check does not report this result CURRENT."
+        )
+    return warnings
 
 
 def _study_code(layout: Layout, study: str) -> dict:
@@ -146,6 +161,8 @@ def main(argv: list[str] | None = None, layout: Layout | None = None) -> int:
         print("provenance.py: LHRE_REQUIRE_GIT=1, but git cannot read these repositories:", file=sys.stderr)
         print("\n".join(failures), file=sys.stderr)
         return 1
+    for warning in _bundle_warnings(record["bundle"]):
+        print(f"provenance.py: warning: {warning}", file=sys.stderr)
     unavailable = record["invalidation"]["unavailable"]
     if unavailable:
         print(

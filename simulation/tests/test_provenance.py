@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 from study_tree import build_tree, git
 
 from tools import invalidation, provenance
@@ -56,6 +57,7 @@ def test_record_has_every_v2_field(tree):
     }
     assert record["bundle"]["bundle_id"] == "demo-2027-a"
     assert record["bundle"]["sha256"] == _sha(tree / "vehicle/bundle.yml")
+    assert record["bundle"]["status"] == "candidate" and record["bundle"]["describes_vehicle"] is True
     tires = {tire["id"]: tire for tire in record["tires"]}
     assert tires["demo_front"]["sha256"] == _sha(tree / "vehicle/tires/demo_front.tir")
     assert tires["demo_front"]["path"] == "vehicle/tires/demo_front.tir"
@@ -118,6 +120,42 @@ def test_main_writes_provenance_json(tree, tmp_path, monkeypatch):
     text = (out / "provenance.json").read_text(encoding="utf-8")
     assert text.endswith("\n")
     assert json.loads(text)["schema"] == provenance.SCHEMA
+
+
+def _set_bundle(repo, change):
+    path = repo / "vehicle/bundle.yml"
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    change(data)
+    path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8", newline="\n")
+
+
+def _run_main(repo, out, monkeypatch, capsys):
+    for name, value in {**_env(repo), "OUT_DIR": str(out)}.items():
+        monkeypatch.setenv(name, value)
+    code = provenance.main(ARGV, layout=Layout(repo))
+    return code, capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("change", "warning"),
+    [
+        (lambda d: d.update(status="superseded", superseded_by="demo-2027-b"), "demo-2027-a is superseded"),
+        (lambda d: d["members"]["vehicle"].update(sha256="0" * 64), "does not describe"),
+        (lambda d: d["members"]["vehicle"].pop("sha256"), "does not describe"),
+    ],
+    ids=["superseded", "names another vehicle", "names no vehicle hash"],
+)
+def test_main_warns_when_the_bundle_cannot_back_the_result(tree, tmp_path, monkeypatch, capsys, change, warning):
+    _set_bundle(tree, change)
+    code, err = _run_main(tree, tmp_path / "out", monkeypatch, capsys)
+    assert code == 0
+    assert "warning" in err and warning in err
+    assert (tmp_path / "out/provenance.json").is_file()
+
+
+def test_main_does_not_warn_for_a_bundle_that_describes_the_vehicle(tree, tmp_path, monkeypatch, capsys):
+    code, err = _run_main(tree, tmp_path / "out", monkeypatch, capsys)
+    assert code == 0 and "warning" not in err
 
 
 def test_main_fails_when_git_is_required_and_unavailable(tree, tmp_path, monkeypatch, capsys):
