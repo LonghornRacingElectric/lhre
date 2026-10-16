@@ -1758,6 +1758,17 @@ def load_inputs(path=INPUTS_FILE, mu=None, bias=None):
     return study
 
 
+def check_alignment(study, vehicle):
+    for key, name in (("alignment.static_camber", "camber_deg"), ("alignment.static_toe", "toe_deg")):
+        want = study.value(key)
+        for axle in ("front", "rear"):
+            have = vehicle[axle].get("wheel", {}).get(name)
+            if have is None or abs(float(have) - want) > 1e-9:
+                raise StudyInputsError(
+                    f"{study.path.name} sets {key} to {want:g} deg, but the vehicle file has {axle}.wheel.{name} = {have}. "
+                    "The corner model applies one value to every wheel. Make them the same.")
+
+
 def parse_inputs(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--inputs", type=Path, default=INPUTS_FILE, help="study inputs file, schema lhre.study-inputs.v1")
@@ -1787,6 +1798,7 @@ def main():
     out = Path(os.environ["OUT_DIR"])
     vehicle_path = Path(os.environ["BOBSIM_VEHICLE"])
     orion = load_yaml(vehicle_path)
+    check_alignment(study, orion)
     front_geometry = study.geometry
     base = with_front(orion, front_geometry)
     (out / "vehicle_front.yml").write_text(yaml.safe_dump(base, sort_keys=False), encoding="utf-8")

@@ -286,3 +286,18 @@ def test_the_design_front_matches_the_old_literals(study):
     assert front["front"]["steering"]["rack_pickup_m"] == pytest.approx([c / 1000.0 for c in OLD_RACK_PICKUP_MM], abs=1e-12)
     assert project_vehicle_yaml(front).ggv.track_front == pytest.approx(1.270, abs=1e-12)
     assert vehicle["front"]["suspension"] != front["front"]["suspension"]
+
+
+@pytest.mark.parametrize("axle, name", [("front", "camber_deg"), ("rear", "camber_deg"), ("front", "toe_deg"), ("rear", "toe_deg")])
+def test_alignment_must_match_the_vehicle_file(study, axle, name):
+    from common.vehicle_io import load_yaml
+
+    _, loaded = study.parse_inputs([])
+    vehicle = load_yaml(SIM.parent / "vehicle" / "vehicle.yml")
+    study.check_alignment(loaded, vehicle)
+    vehicle[axle]["wheel"][name] = 0.5
+    with pytest.raises(StudyInputsError, match=f"{axle}.wheel.{name}"):
+        study.check_alignment(loaded, vehicle)
+    del vehicle[axle]["wheel"][name]
+    with pytest.raises(StudyInputsError, match=f"{axle}.wheel.{name}"):
+        study.check_alignment(loaded, vehicle)

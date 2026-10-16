@@ -74,12 +74,12 @@ alignment:
     value: 0.0
     unit: deg
     status: declared
-    source: vehicle/vehicle.yml front.wheel.camber_deg.
+    source: vehicle/vehicle.yml front.wheel.camber_deg and rear.wheel.camber_deg. The run stops when either differs from this value.
   static_toe:
     value: 0.0
     unit: deg
     status: declared
-    source: vehicle/vehicle.yml front.wheel.toe_deg. The corner model has no static toe input. The toe sweep varies total toe.
+    source: vehicle/vehicle.yml front.wheel.toe_deg and rear.wheel.toe_deg. The run stops when either differs from this value. The corner model has no static toe input. The toe sweep varies total toe.
   camber_variant:
     value: -1.0
     unit: deg
