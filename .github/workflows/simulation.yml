@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  simulation:
+  fast:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     defaults:
@@ -31,5 +31,8 @@ jobs:
       - name: Build the image
         run: make build
 
-      - name: Load the vehicle and run the tests
-        run: make test
+      - name: Check that BobSim loads the vehicle
+        run: make smoke
+
+      - name: Run the unit and contract tests
+        run: make unit

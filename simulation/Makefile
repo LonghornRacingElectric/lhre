@@ -10,13 +10,15 @@ STUDY_OUT = $(S)$(if $(V),--$(V))
 
 GIT_LF := git -c core.autocrlf=false -c core.longpaths=true
 
-.PHONY: help init build shell test records records-undo bobsim study bump-bobsim clean
+.PHONY: help init build shell test smoke unit records records-undo bobsim study bump-bobsim clean
 
 help:
 	@echo "make init                  Get submodules and build the image"
 	@echo "make build                 Rebuild the image"
 	@echo "make shell                 Open a shell in the container"
-	@echo "make test                  Check that BobSim loads //vehicle and run tests/"
+	@echo "make test                  Run make smoke, then make unit"
+	@echo "make smoke                 Check that BobSim loads //vehicle"
+	@echo "make unit                  Run the fast tests in tests/, then check that bobsim/ is clean"
 	@echo "make records               Write //vehicle into BobLib's Modelica records"
 	@echo "make records-undo          Put back only the files make records wrote"
 	@echo "make bobsim T=<target>     Run a BobSim make target"
@@ -37,8 +39,14 @@ build:
 shell:
 	$(COMPOSE) run --rm sim bash
 
-test:
-	$(RUN) sim sh -c 'python tools/check_vehicle.py && python -m pytest -q -ra -p no:cacheprovider tests'
+test: smoke unit
+
+smoke:
+	$(RUN) sim python tools/check_vehicle.py
+
+unit:
+	$(RUN) sim python -m pytest -q -ra -p no:cacheprovider tests
+	@test -z "$$(git -C bobsim status --porcelain --ignore-submodules=none)" || { echo "bobsim/ has local changes after the tests. Tests must not write into BobSim. If make records wrote them, run make records-undo."; git -C bobsim status --short --ignore-submodules=none; exit 1; }
 
 BOBLIB := bobsim/engines/boblib
 VEHICLE_NAME = $(shell sed -n 's/^  name: *//p' ../vehicle/vehicle.yml | head -n 1)

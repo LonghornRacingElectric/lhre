@@ -26,7 +26,7 @@ Measured on a Windows laptop with Docker Desktop, BobSim `7ff5191`:
 | Command | Time |
 | ------- | ---- |
 | `make init` on a fresh clone (image cached) | 1 min 35 s |
-| `make test` | under 10 s |
+| `make test` | about 16 s at BobSim `fe03bab` (see [tests.md](tests.md)) |
 | `make records` | under 10 s |
 | `make bobsim T=standard-build` | 2 min 20 s to 2 min 35 s |
 | `make bobsim T=envelope-ggv` | 1 h 55 min, one core |

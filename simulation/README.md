@@ -23,7 +23,7 @@ You need `make` and Docker on every OS. Every target runs in the container.
 ```bash
 cd simulation
 make init    # get BobSim and BobLib, build the image
-make test    # check that BobSim loads //vehicle
+make test    # check that BobSim loads //vehicle, then run the fast tests
 ```
 
 ## Targets
@@ -33,7 +33,9 @@ make test    # check that BobSim loads //vehicle
 | `make init` | Get the submodules and build the image |
 | `make build` | Rebuild the image, for example after a BobSim bump |
 | `make shell` | Open a shell in the container |
-| `make test` | Check that BobSim loads `vehicle/vehicle.yml` and its tires, then run `tests/` |
+| `make test` | Run `make smoke`, then `make unit` |
+| `make smoke` | Check that BobSim loads `vehicle/vehicle.yml` and its tires. It checks loading only. |
+| `make unit` | Run the fast unit and contract tests in `tests/`. Then check that `bobsim/` has no local changes. See [docs/tests.md](docs/tests.md). |
 | `make records` | Write `vehicle/vehicle.yml` into BobLib's Modelica records |
 | `make records-undo` | Put back only the files `make records` wrote |
 | `make bobsim T=<target>` | Run a BobSim make target. `T=help` lists them. |
@@ -49,8 +51,8 @@ simulation/
   docker-compose.yml  # the image is built from bobsim/Dockerfile
   bobsim/             # submodule, pinned SHA
   studies/<name>/     # README.md + run.py
-  tools/              # make test, study provenance, README fill and shared study helpers
-  tests/              # checks that lhre matches the pinned BobSim layout
+  tools/              # make smoke, study provenance, README fill and shared study helpers
+  tests/              # make unit: fast unit and contract tests
   docs/               # detail and agent skills
   out/                # gitignored outputs
 ```
