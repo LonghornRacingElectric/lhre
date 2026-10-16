@@ -48,3 +48,20 @@ def test_search_bounds_stay_inside_the_fit(synthetic_tir):
     assert support.search_bounds("alpha", 0.0, 0.6) == (0.0, 0.2)
     with pytest.raises(TireSupportError):
         support.search_bounds("fz", 2500.0, 3000.0)
+
+
+def test_the_summary_names_the_fit_limits_without_their_values(synthetic_tir):
+    support = TireSupport.from_tir(synthetic_tir)
+    summary = support.summary()
+    assert summary["sha256"] == support.sha256
+    assert summary["limit_keys"] == {"fz": ["FZMIN", "FZMAX"], "alpha": ["ALPMIN", "ALPMAX"],
+                                     "kappa": ["KPUMIN", "KPUMAX"], "gamma": ["CAMMIN", "CAMMAX"]}
+
+    def leaves(node):
+        if isinstance(node, dict):
+            return [x for v in node.values() for x in leaves(v)]
+        if isinstance(node, (list, tuple)):
+            return [x for v in node for x in leaves(v)]
+        return [node]
+
+    assert not [v for v in leaves(summary) if isinstance(v, (int, float))]

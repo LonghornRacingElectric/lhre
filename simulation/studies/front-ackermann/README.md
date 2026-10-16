@@ -252,7 +252,7 @@ Each trim attempt ends in one status from `tools/trim_status.py`:
 
 A limit search bisects lateral g. Only a search whose failing bracket is `physically_infeasible` gives a grip limit. Rows keep `ay_accepted_g`, `trim_status`, `bound_kind`, `upper_status`, `upper_reason` and the per-wheel load, slip angle, slip ratio, camber, use and support flags. `ay_max_g` is empty unless the row is a grip limit.
 
-`tools/tire_support.py` reads `FZMIN`, `FZMAX`, `ALPMIN`, `ALPMAX`, `KPUMIN`, `KPUMAX`, `CAMMIN` and `CAMMAX` from the `.tir` file. A missing range stops the run. The peak tables and peak searches stay inside these ranges.
+`tools/tire_support.py` reads `FZMIN`, `FZMAX`, `ALPMIN`, `ALPMAX`, `KPUMIN`, `KPUMAX`, `CAMMIN` and `CAMMAX` from the `.tir` file. A missing range stops the run. The peak tables and peak searches stay inside these ranges. Tire data is restricted by default, so `summary.json` records the tire SHA-256 and the names of these keys, not their values.
 
 The `kappa` column is the slip ratio that the combined-slip model uses. The ellipse model reports the pure-slip slip ratio that gives the wheel's Fx. The slip_norm model solves its own slip ratio and evaluates MF5.2 at a larger slip ratio and slip angle. The run checks those evaluated slips against the fit too (`kappa_eval_out_of_fit`, `alpha_eval_out_of_fit`).
 

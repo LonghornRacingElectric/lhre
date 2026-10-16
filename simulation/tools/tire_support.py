@@ -82,4 +82,5 @@ class TireSupport:
         return abs(value - lo) <= tol or abs(value - hi) <= tol
 
     def summary(self):
-        return {"source": self.source, "sha256": self.sha256, **{name: list(getattr(self, name)) for name in LIMIT_KEYS}}
+        # Tire data is restricted by default, so artifacts name the limits and carry no .tir values.
+        return {"source": self.source, "sha256": self.sha256, "limit_keys": {name: list(keys) for name, keys in LIMIT_KEYS.items()}}
