@@ -490,13 +490,13 @@ def classify(car, curve, radius, side, ay_g, lon, res):
         return TrimRecord(TrimStatus.NUMERICAL_FAILURE, ("non_finite",), None, 1, unknowns, active)
     residual = float(np.max(np.abs(res.fun)))
     if residual >= RESIDUAL_TOL:
-        if active:
-            return TrimRecord(TrimStatus.DOMAIN_REJECTED, active, residual, 1, unknowns, active)
         if res.status <= 0:
             reason = "max_evaluations" if res.status == 0 else "solver_error"
             return TrimRecord(TrimStatus.NUMERICAL_FAILURE, (reason,), residual, 1, unknowns, active)
         if res.optimality > STATIONARY_TOL:
             return TrimRecord(TrimStatus.NUMERICAL_FAILURE, ("not_converged",), residual, 1, unknowns, active)
+        if active:
+            return TrimRecord(TrimStatus.DOMAIN_REJECTED, active, residual, 1, unknowns, active)
     s = state(car, curve, radius, side, unknowns[0], unknowns[1], ay_g, lon, unknowns[2] if lon else 0.0)
     wheels = car.wheel_states(s, side)
     domain = tuple(flag for w in wheels for flag in w["flags"])

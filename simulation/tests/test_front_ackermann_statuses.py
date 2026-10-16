@@ -151,6 +151,28 @@ def stationary(beta, outer):
                                  status=1, optimality=1e-12)
 
 
+@pytest.mark.parametrize("status, optimality, reason", [(0, 1.0, "max_evaluations"), (-1, 1.0, "solver_error"),
+                                                        (2, 1.0, "not_converged")])
+def test_a_solver_stop_on_a_bound_is_a_numerical_failure(study, make_car, status, optimality, reason):
+    car = make_car()
+    law = study.ConstantAckermann(0, car.track_front, car.wheelbase, OUTER_MAX)
+    res = types.SimpleNamespace(x=np.array([0.1, 0.2]), fun=np.array([0.3, 0.0]), active_mask=np.array([1, 0]),
+                                status=status, optimality=optimality)
+    record = study.classify(car, law, 3.5, 1.0, 0.5, None, res)
+    assert record.status is TrimStatus.NUMERICAL_FAILURE
+    assert record.reasons == (reason,)
+
+
+def test_a_converged_stop_on_a_bound_is_a_domain_rejection(study, make_car):
+    car = make_car()
+    law = study.ConstantAckermann(0, car.track_front, car.wheelbase, OUTER_MAX)
+    res = types.SimpleNamespace(x=np.array([0.1, 0.2]), fun=np.array([0.3, 0.0]), active_mask=np.array([0, 1]),
+                                status=3, optimality=1e-12)
+    record = study.classify(car, law, 3.5, 1.0, 0.5, None, res)
+    assert record.status is TrimStatus.DOMAIN_REJECTED
+    assert record.reasons == ("steer_bound",)
+
+
 def test_no_equilibrium_counts_as_physical_only_inside_the_fit(study, make_car):
     car = make_car()
     radius, ay = 3.5, 1.2
