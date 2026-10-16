@@ -78,6 +78,7 @@ bump-bobsim:
 	$(GIT_LF) -C bobsim submodule deinit -f --all
 	$(GIT_LF) -C bobsim checkout --detach $(REF)
 	$(GIT_LF) -C bobsim submodule update --init --recursive
+	git -C bobsim submodule foreach --recursive 'git config core.autocrlf false && git config core.longpaths true'
 	@echo "Pinned BobSim at $$(git -C bobsim rev-parse --short HEAD). Run 'make build test', then commit simulation/bobsim."
 
 clean:
