@@ -10,7 +10,7 @@ STUDY_OUT = $(S)$(if $(V),--$(V))
 
 GIT_LF := git -c core.autocrlf=false -c core.longpaths=true
 
-.PHONY: help init build shell test smoke unit records records-undo bobsim study bump-bobsim clean
+.PHONY: help init build shell test smoke unit records records-undo bobsim study stale bump-bobsim clean
 
 help:
 	@echo "make init                  Get submodules and build the image"
@@ -23,6 +23,7 @@ help:
 	@echo "make records-undo          Put back only the files make records wrote"
 	@echo "make bobsim T=<target>     Run a BobSim make target"
 	@echo "make study S=<name>        Run studies/<name>/run.py (STUDY_WORKERS=n limits CPUs)"
+	@echo "make stale [S=<name>]      Check if a committed study result is stale (no S: every study)"
 	@echo "make bump-bobsim REF=<ref> Move the BobSim pin"
 	@echo "make clean                 Delete out/"
 
@@ -81,6 +82,9 @@ study:
 		sh -c 'rm -rf out/.staging/$(STUDY_OUT) && python tools/provenance.py studies/$(S)/run.py $(ARGS) && python studies/$(S)/run.py $(ARGS) \
 			&& rm -rf out/$(STUDY_OUT) && mv out/.staging/$(STUDY_OUT) out/$(STUDY_OUT) \
 			$(if $(V),,&& python tools/readme.py studies/$(S)/README.md out/$(S))'
+
+stale:
+	$(RUN) sim python tools/invalidation.py stale $(S)
 
 bump-bobsim:
 	@test -n "$(REF)" || { echo "Set REF=<BobSim commit, tag or branch>."; exit 1; }

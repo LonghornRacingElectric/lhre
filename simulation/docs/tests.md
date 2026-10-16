@@ -26,6 +26,9 @@ The BobSim test takes about 6 s of `make unit`.
 - `test_ci_contract.py`: the `make` targets and the CI `fast` job keep the
   shape on this page. `make init` and `make bump-bobsim` keep LF and long
   paths in the nested submodules.
+- `test_committed_results.py`: each committed study result is current, or
+  its README marks it historical or stale. See
+  [studies.md](studies.md#status).
 
 
 The lhre tests do not check physics results. Later PRs add physics

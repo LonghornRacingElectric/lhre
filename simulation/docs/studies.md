@@ -111,6 +111,28 @@ simple:
 4. **Provenance.** The BobSim SHA, the vehicle hash and the date, from
    `out/<name>/provenance.json`.
 
+### Status
+
+A committed result can become stale when an input changes. Then run the
+study again, or mark the README as historical. Put the mark near the top,
+in one of these two forms:
+
+```markdown
+**Status: historical.** BobSim `4da577a` made these results. ...
+```
+
+```markdown
+| Status | historical |
+```
+
+The status word is `historical` or `stale`. `make unit` runs
+`tests/test_committed_results.py`. For each README without this mark, the
+test fails when the result is `STALE` or `UNKNOWN`, or when the README has
+no readable provenance block. In a git worktree, git in the container cannot
+read BobSim and BobLib. A result that is `UNKNOWN` only for that reason then
+skips. `LHRE_REQUIRE_GIT=1`, as in CI, makes it fail. See
+[Check a result](#check-a-result).
+
 ### Numbers from the run
 
 `make study` fills the README from the run, so the numbers do not go stale.
@@ -208,18 +230,33 @@ records a superseded bundle or a bundle that does not describe the vehicle.
 ### Check a result
 
 ```bash
+make stale S=<name>
+make stale
+```
+
+`make stale S=<name>` checks the result in `studies/<name>/README.md`. It
+reads the JSON in the `<!-- out:provenance.json -->` block. `make stale`
+checks every study. The tool also takes a path to a study `README.md` or
+to a `provenance.json`:
+
+```bash
 docker compose run --rm -T sim python tools/invalidation.py stale out/<name>/provenance.json
 ```
 
 The check compares the recorded keys with the current files. It uses the
 vehicle in `BOBSIM_VEHICLE`, or the file that `--vehicle PATH` names. It
-prints one of:
+prints one of these for each result:
 
 | Output | Exit code | Meaning |
 | ------ | --------- | ------- |
 | `CURRENT <name>` | 0 | Every key is the same. |
 | `STALE <name>` and the changed keys | 1 | An input changed. Run the study again before you use its result. |
 | `UNKNOWN <name>` and the keys it cannot compare | 3 | A key was `null` at the run or cannot be read now. Do not treat the result as current. |
+| `Cannot read <path>` | 2 | The file has no provenance, or its JSON is not valid. |
+
+For a README, the check also prints the README status. With more than one
+study, the exit code is the worst result. The order from best to worst is
+0, 3, 1, 2.
 
 A `provenance.json` without keys (schema version 1) is never `CURRENT`.
 `CURRENT` means that the software inputs did not change. It is not a

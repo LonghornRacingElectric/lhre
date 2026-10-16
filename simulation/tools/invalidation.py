@@ -1,6 +1,6 @@
 """Dependency keys of a study result and the stale check.
 
-python tools/invalidation.py stale out/<name>/provenance.json [--vehicle PATH]
+python tools/invalidation.py stale [<name> | studies/<name>/README.md | out/<name>/provenance.json] [--vehicle PATH]
 python tools/invalidation.py keys <name> [--vehicle PATH]
 """
 
@@ -20,8 +20,10 @@ from pathlib import Path, PurePosixPath
 
 import yaml
 
+from tools.readme import BLOCK
+
 SCHEMA = "lhre.provenance.v2"
-EXIT_CURRENT, EXIT_STALE, EXIT_UNKNOWN = 0, 1, 3
+EXIT_CURRENT, EXIT_STALE, EXIT_UNREADABLE, EXIT_UNKNOWN = 0, 1, 2, 3
 ABSENT = "absent"
 METHOD = (
     "Content digests of the inputs. Python files are hashed by their tokens and YAML files by their parsed "
@@ -38,6 +40,9 @@ TRIPLE = frozenset({"value", "status", "source"})
 TRIPLE_METADATA = frozenset({"status", "source"})
 YAML_SUFFIXES = frozenset({".yml", ".yaml"})
 NOT_RECORDED, CANNOT_READ = "not recorded", "cannot read now"
+MARKED = frozenset({"historical", "stale"})
+STATUS_LINE = re.compile(r"^(?:\*\*Status:[ \t]*|\|[ \t]*Status[ \t]*\|[ \t]*)(?P<status>[A-Za-z]+)", re.M)
+FENCE = re.compile(r"```[A-Za-z]*\n(?P<body>.*)\n```", re.S)
 # The container runs git as root on files that the host owns.
 SAFE_DIRECTORY = {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "safe.directory", "GIT_CONFIG_VALUE_0": "*"}
 
@@ -461,14 +466,56 @@ def _vehicle(explicit: str | None, layout: Layout) -> Path:
     return Path(explicit or os.environ.get("BOBSIM_VEHICLE") or layout.repo / "vehicle" / "vehicle.yml")
 
 
+def readme_status(text: str) -> str | None:
+    match = STATUS_LINE.search(text)
+    return match["status"].lower() if match else None
+
+
+def record_from_readme(path: Path) -> dict:
+    text = path.read_text(encoding="utf-8")
+    blocks = [m["body"].strip() for m in BLOCK.finditer(text) if m["ref"] == "provenance.json"]
+    if len(blocks) != 1:
+        raise ValueError(f"it has {len(blocks)} <!-- out:provenance.json --> blocks, not 1")
+    fence = FENCE.fullmatch(blocks[0])
+    return json.loads(fence["body"] if fence else blocks[0])
+
+
+def load_record(path: Path) -> dict:
+    record = record_from_readme(path) if path.suffix.lower() == ".md" else json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(record, dict):
+        raise ValueError("the provenance is not a JSON object")
+    return record
+
+
+def _targets(target: str | None, layout: Layout) -> list[Path]:
+    if target is None:
+        return sorted((layout.sim / "studies").glob("*/README.md"))
+    if Path(target).is_file():
+        return [Path(target)]
+    readme = study_dir(layout, target) / "README.md"
+    if readme.is_file():
+        return [readme]
+    raise FileNotFoundError(f"{target} is not a file, and studies/{target}/README.md does not exist")
+
+
 def _stale(args, layout: Layout) -> int:
-    path = Path(args.provenance)
     try:
-        record = json.loads(path.read_text(encoding="utf-8"))
+        paths = _targets(args.target, layout)
+    except FileNotFoundError as error:
+        print(error, file=sys.stderr)
+        return EXIT_UNREADABLE
+    codes = [_report(path, _vehicle(args.vehicle, layout), layout) for path in paths]
+    order = (EXIT_CURRENT, EXIT_UNKNOWN, EXIT_STALE, EXIT_UNREADABLE)
+    return max(codes, key=order.index, default=EXIT_CURRENT)
+
+
+def _report(path: Path, vehicle: Path, layout: Layout) -> int:
+    try:
+        record = load_record(path)
     except (OSError, ValueError) as error:
         print(f"Cannot read {path}: {error}", file=sys.stderr)
-        return 2
-    verdict = check(record, _vehicle(args.vehicle, layout), layout)
+        return EXIT_UNREADABLE
+    verdict = check(record, vehicle, layout)
     print(f"{verdict.status.upper()} {record.get('study', '?')}")
     for key, detail in verdict.changed:
         print(f"  {key}  {detail}")
@@ -477,6 +524,8 @@ def _stale(args, layout: Layout) -> int:
         reasons.setdefault(detail, []).append(key)
     for detail, names in reasons.items():
         print(f"  {', '.join(names)}  unknown, {detail}")
+    if path.suffix.lower() == ".md" and (status := readme_status(path.read_text(encoding="utf-8"))):
+        print(f"  README status: {status}")
     if verdict.status == "stale":
         print("An input changed. Run the study again before you use this result.")
         return EXIT_STALE
@@ -495,8 +544,10 @@ def _keys(args, layout: Layout) -> int:
 def main(argv: list[str] | None = None, layout: Layout | None = None) -> int:
     parser = argparse.ArgumentParser(description="Compare a study result with the current inputs.")
     commands = parser.add_subparsers(dest="command", required=True)
-    stale = commands.add_parser("stale", help="Print CURRENT, STALE or UNKNOWN for a provenance.json.")
-    stale.add_argument("provenance")
+    stale = commands.add_parser("stale", help="Print CURRENT, STALE or UNKNOWN for each result.")
+    stale.add_argument(
+        "target", nargs="?", help="A study name, a study README.md or a provenance.json. Default: every study."
+    )
     stale.add_argument("--vehicle", help="Vehicle file. Default: BOBSIM_VEHICLE, then vehicle/vehicle.yml.")
     keys = commands.add_parser("keys", help="Print the current dependency keys of a study.")
     keys.add_argument("study")
