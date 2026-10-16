@@ -8,6 +8,7 @@ import yaml
 from study_tree import build_tree, git
 
 from tools import invalidation
+from tools.bundle import load_bundle
 from tools.invalidation import Layout
 
 SIM = Path(__file__).resolve().parents[1]
@@ -50,6 +51,8 @@ def _follow_vehicle(repo):
 
 
 BOBSIM = "simulation/bobsim"
+DECLARED = {"status": "declared", "source": "setup sheet"}
+SOURCE_FILE = {"name": "front.csv", "sha256": "a" * 64, "stored": "external"}
 BOBLIB = "simulation/bobsim/engines/boblib"
 STUDY = "simulation/studies/demo"
 
@@ -129,11 +132,19 @@ PHYSICS = {
     "bundle id": (lambda r: _set_bundle(r, lambda d: d.update(bundle_id="demo-2027-b")), "bundle_id"),
     "bundle torque topology": (
         lambda r: _set_bundle(r, lambda d: d["torque_topology"]["drive"].update(reaction="upright")),
-        "bundle_physics",
+        "bundle:torque_topology",
     ),
     "bundle datum value": (
         lambda r: _set_bundle(r, lambda d: d["frame"]["datum_z"]["front"].update(value=0.01)),
-        "bundle_physics",
+        "bundle:frame",
+    ),
+    "bundle front axle": (
+        lambda r: _set_bundle(r, lambda d: d.update(axles={"front": {"revision": {"value": "v35", **DECLARED}}})),
+        "bundle:axle:front",
+    ),
+    "bundle source file": (
+        lambda r: _set_bundle(r, lambda d: d["members"].update(sources=[{"id": "front-export", "file": SOURCE_FILE}])),
+        "bundle:source:front-export",
     ),
 }
 
@@ -181,7 +192,16 @@ def test_every_key_group_is_present(tree):
 def test_no_bundle_is_a_recorded_value(tmp_path):
     repo = build_tree(tmp_path, bundle=False)
     keys = _keys(repo)
-    assert keys["bundle_id"] == "absent" and keys["bundle_physics"] == "absent"
+    assert keys["bundle_id"] == "absent"
+    assert not [name for name in keys if name.startswith("bundle:")]
+
+
+def test_bundle_keys_are_the_bundle_dependency_keys(tree):
+    expected = load_bundle(tree / "vehicle/bundle.yml").dependency_keys()
+    keys = _keys(tree)
+    found = {name.removeprefix("bundle:"): value for name, value in keys.items() if name.startswith("bundle:")}
+    assert found == {name: value for name, value in expected.items() if name != "vehicle"}
+    assert {"frame", "axle:front", "axle:rear", "setup", "torque_topology"} <= found.keys()
 
 
 def test_bundle_id_can_be_a_metadata_triple(tree):
@@ -310,6 +330,14 @@ def test_bundle_state_counts_in_the_stale_check(tree, tmp_path, capsys, change, 
     lines = out.splitlines()
     assert lines[0] == f"{expected} demo"
     assert key is None or any(line.split()[0] == key for line in lines[1:])
+
+
+def test_an_unreadable_bundle_is_unknown_not_stale(tree, tmp_path, capsys):
+    path = _record(tree, tmp_path)
+    (tree / "vehicle/bundle.yml").write_bytes(b"bundle_id: [demo\n")
+    code, out = _stale(tree, path, capsys)
+    assert code == invalidation.EXIT_UNKNOWN, out
+    assert "bundle:frame" in out and "removed" not in out
 
 
 def test_vehicle_comment_is_current_once_the_bundle_follows(tree, tmp_path, capsys):

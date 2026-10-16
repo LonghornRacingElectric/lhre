@@ -191,7 +191,7 @@ key, so a commit that changes only docs does not change a key.
 | `vehicle` | The parsed values of the vehicle file |
 | `tire:<name>` | The bytes of each `.tir` file that the vehicle names |
 | `bundle_id` | `bundle_id` in `bundle.yml` next to the vehicle, or `absent` |
-| `bundle_physics` | The values in `frame`, `axles`, `setup` and `torque_topology` of `bundle.yml`, or `absent` |
+| `bundle:<name>` | Each key of `dependency_keys()` in `tools/bundle.py`: the values of `frame`, `axle:front`, `axle:rear`, `setup` and `torque_topology`, and the hash of each tire and source member. The vehicle member is left out, because the `vehicle` key covers that file. There is no such key when there is no bundle. |
 | `lhre:<path>` | Each file in the study folder, and each lhre module that the study imports |
 | `bobsim:<folder>` | The files of each BobSim physics folder: `common`, `engines`, `simulations`, `optimization`, `Dockerfile` and `requirements.txt` |
 | `bobsim:<file>` | Each BobSim module outside those folders that the study imports, for example `app/tire_eval.py` |
@@ -222,6 +222,7 @@ check reads it when it compares the keys:
 - A bundle whose `members.vehicle.sha256` is not the SHA-256 of the vehicle
   file bytes gives `STALE` (`bundle_vehicle`). A bundle with no such hash
   gives `UNKNOWN`.
+- A `bundle.yml` that does not parse gives `UNKNOWN`.
 
 So a comment edit in the vehicle file keeps the `vehicle` key. It changes
 the bytes, so update the bundle too. `make study` prints a warning when it

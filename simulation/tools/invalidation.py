@@ -20,6 +20,7 @@ from pathlib import Path, PurePosixPath
 
 import yaml
 
+from tools.bundle import load_bundle
 from tools.readme import BLOCK
 
 SCHEMA = "lhre.provenance.v2"
@@ -33,7 +34,9 @@ METHOD = (
 
 BOBSIM_PHYSICS = ("common", "engines", "simulations", "optimization", "Dockerfile", "requirements.txt")
 BOBLIB_PACKAGE = "BobLib"
-BUNDLE_PHYSICS = ("frame", "axles", "setup", "torque_topology")
+BUNDLE_KEY, BUNDLE_UNREADABLE = "bundle:", "bundle:*"
+# The "vehicle" key holds the parsed vehicle file, so the byte hash of the bundle member does not count again.
+BUNDLE_SKIPPED = frozenset({"vehicle"})
 DOC_SUFFIXES = frozenset({".md", ".markdown", ".rst", ".png", ".svg", ".jpg", ".jpeg", ".gif", ".pdf"})
 SKIP_PARTS = frozenset({"__pycache__", ".pytest_cache", ".ipynb_checkpoints"})
 TRIPLE = frozenset({"value", "status", "source"})
@@ -291,15 +294,6 @@ def plain(node):
     return node["value"] if isinstance(node, Mapping) and TRIPLE <= node.keys() else node
 
 
-def _values_only(node):
-    node = plain(node)
-    if isinstance(node, Mapping):
-        return {str(key): _values_only(value) for key, value in node.items()}
-    if isinstance(node, list):
-        return [_values_only(value) for value in node]
-    return node
-
-
 def read_bundle(vehicle_path: Path) -> dict | None:
     path = bundle_path(vehicle_path)
     if not path.is_file():
@@ -325,13 +319,19 @@ def _bundle_id(vehicle_path: Path) -> str:
     return str(value)
 
 
-def _bundle_physics(vehicle_path: Path) -> str:
-    bundle = read_bundle(vehicle_path)
-    if bundle is None:
-        return ABSENT
-    sections = {name: _values_only(bundle.get(name)) for name in BUNDLE_PHYSICS}
-    text = json.dumps(sections, sort_keys=True, separators=(",", ":"), default=str)
-    return hashlib.sha256(text.encode()).hexdigest()
+def _put_bundle(keys: Keys, vehicle_path: Path) -> None:
+    keys.put("bundle_id", lambda: _bundle_id(vehicle_path))
+    path = bundle_path(vehicle_path)
+    if not path.is_file():
+        return
+    try:
+        found = load_bundle(path).dependency_keys()
+    except (OSError, ValueError, yaml.YAMLError) as error:
+        keys.unavailable[BUNDLE_UNREADABLE] = f"cannot read {path.name}: {error}"
+        return
+    for name, digest in found.items():
+        if name not in BUNDLE_SKIPPED:
+            keys.values[BUNDLE_KEY + name] = digest
 
 
 def _put_tires(keys: Keys, vehicle_path: Path, layout: Layout) -> None:
@@ -376,8 +376,7 @@ def dependency_keys(study: str, vehicle_path: Path, layout: Layout) -> Keys:
     keys = Keys()
     keys.put("vehicle", lambda: yaml_digest(vehicle_path.read_bytes()))
     _put_tires(keys, vehicle_path, layout)
-    keys.put("bundle_id", lambda: _bundle_id(vehicle_path))
-    keys.put("bundle_physics", lambda: _bundle_physics(vehicle_path))
+    _put_bundle(keys, vehicle_path)
     sources = study_sources(layout, study)
     for path in sources.lhre:
         keys.put(f"lhre:{path.relative_to(layout.repo).as_posix()}", lambda p=path: file_digest(p))
@@ -400,6 +399,9 @@ def _short(value: str) -> str:
 def compare(recorded: Mapping[str, str | None], recorded_unavailable: Mapping[str, str], current: Keys) -> Verdict:
     verdict = Verdict("current")
     for key in sorted(recorded.keys() | current.values.keys()):
+        if key not in current.values and key.startswith(BUNDLE_KEY) and BUNDLE_UNREADABLE in current.unavailable:
+            verdict.unknown.append((key, f"{CANNOT_READ}: {current.unavailable[BUNDLE_UNREADABLE]}"))
+            continue
         if key not in current.values or key not in recorded:
             verdict.changed.append((key, "removed" if key not in current.values else "added"))
             continue
