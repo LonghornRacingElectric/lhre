@@ -1,8 +1,6 @@
 import argparse
 import datetime
 import hashlib
-import importlib
-import importlib.util
 import json
 import math
 import os
@@ -18,6 +16,7 @@ import yaml
 
 from common.vehicle_io import load_yaml, tire_template_name, tire_templates_root
 from simulations.envelope.vehicle_loader import load_active_envelope_inputs
+from tools import vehicle_checks
 
 REPO = Path(__file__).resolve().parents[2]
 BUNDLE = "vehicle/bundle.yml"
@@ -471,6 +470,15 @@ def _check_members(c: _Checker, data: dict, root: Path, vehicle: Path | None) ->
             f"is {member['schema']!r}, but {vehicle} has schema {parsed.get('schema')!r}.",
         )
     _check_tires(c, tires, parsed)
+    _check_geometry(c, data, parsed)
+
+
+def _check_geometry(c: _Checker, data: dict, vehicle: dict) -> None:
+    reported = {problem.path for problem in c.problems}
+    for problem in vehicle_checks.check_vehicle(vehicle, vehicle_checks.Frame.from_bundle(data)):
+        path = problem.path if problem.path.startswith("frame.") else f"vehicle:{problem.path}"
+        if path not in reported:
+            c.add(path, problem.code, problem.message)
 
 
 def _check_sources(c: _Checker, data: dict) -> None:
@@ -613,17 +621,21 @@ def bobsim_checks(vehicle: Path) -> tuple[list[Problem], list[str]]:
         lines.append(f"BobSim load: OK ({type(inputs).__name__})")
     except Exception as error:  # BobSim raises many error types for a bad vehicle file.
         problems.append(Problem("members.vehicle.path", "bobsim_load", f"BobSim cannot load {vehicle}: {error}"))
-    if importlib.util.find_spec("common.vehicle_schema") is None:
-        lines.append(
-            "BobSim vehicle validation: not available at this BobSim pin (no common.vehicle_schema). "
-            "Only the bundle rules and the BobSim load ran."
-        )
-        return problems, lines
-    schema = importlib.import_module("common.vehicle_schema")
-    found = schema.validate_vehicle_file(vehicle, strict=False)
-    problems += [Problem(f"vehicle:{item.path}", f"bobsim_{item.code}", item.message) for item in found]
-    lines.append(f"BobSim vehicle validation: {f'{len(found)} problem(s)' if found else 'passed'}")
     return problems, lines
+
+
+def _geometry_lines(bundle: Bundle, problems: list[Problem]) -> list[str]:
+    blocked = sorted({problem.path for problem in problems} & {"members.vehicle.sha256", "members.vehicle.path"})
+    if blocked:
+        geometry = f"not run. Fix {' and '.join(blocked)} first."
+    else:
+        found = sum(problem.path.startswith("vehicle:") for problem in problems)
+        geometry = f"{found} problem(s)" if found else "passed"
+    datum = vehicle_checks.Frame.from_bundle(bundle.data).datum_z
+    return [
+        f"Vehicle checks (units, hardpoints, stored side, singular geometry): {geometry}",
+        "Vertical datum: " + ", ".join(f"{axle} {datum[axle].status}" for axle in vehicle_checks.AXLES),
+    ]
 
 
 def _verdict(bundle: Bundle) -> str:
@@ -648,6 +660,7 @@ def _check_command(bundle: Bundle, vehicle_path: str | None, base_ref: str | Non
     vehicle = vehicle_file(bundle, vehicle_path)
     shown = _show(vehicle) if vehicle is not None else None
     lines = [f"{_show(bundle.path)}: bundle {bundle.bundle_id} ({bundle.status}), vehicle {shown}"]
+    lines += _geometry_lines(bundle, problems)
     if vehicle is not None and vehicle.is_file():
         found, info = bobsim_checks(vehicle)
         problems += found

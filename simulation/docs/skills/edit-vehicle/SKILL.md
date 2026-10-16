@@ -34,6 +34,9 @@ description: Change a parameter of the current car in vehicle/vehicle.yml, updat
    make check-vehicle BASE=origin/main
    ```
 
+   `make check-vehicle` checks units, hardpoints, the stored side and
+   singular geometry. A failure names the key path. Fix the value. Do not
+   remove the check.
    `make test` must print `OK`. `make check-vehicle` must end with
    `candidate: software checks passed. Not hardware approval.` In a git
    worktree, leave out `BASE=`. CI runs that part on a pull request.

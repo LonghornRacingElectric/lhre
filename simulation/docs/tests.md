@@ -37,6 +37,10 @@ The BobSim test takes about 6 s of `make unit`.
 - `test_four_post_acceptance.py`: the FourPost acceptance on small
   synthetic metrics files and run manifests. The metrics files use the
   `fe03bab` format, and a format with a `status` column.
+- `test_vehicle_bundle.py`: the bundle rules of `make check-vehicle`.
+- `test_vehicle_checks.py`: `tools/vehicle_checks.py` fails a bad vehicle
+  with its key path: units, missing hardpoints, the stored side, the frame
+  and singular geometry. The bundle check runs these checks.
 
 
 The lhre tests do not check physics results. Later PRs add physics
