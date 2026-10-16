@@ -35,8 +35,8 @@ The BobSim test takes about 6 s of `make unit`.
   changed fails. An executable older than the records fails. No `.tir`
   file reaches the outputs. It runs no Modelica.
 - `test_four_post_acceptance.py`: the FourPost acceptance on small
-  synthetic metrics files, in the `fe03bab` format and with a `status`
-  column.
+  synthetic metrics files and run manifests. The metrics files use the
+  `fe03bab` format, and a format with a `status` column.
 
 
 The lhre tests do not check physics results. Later PRs add physics
@@ -97,6 +97,10 @@ push changes `vehicle/`, the BobSim pin, `simulation/tools/`,
 `simulation/Makefile`, `simulation/docker-compose.yml` or the workflow.
 If the `changes` job fails, `four-post` runs. A manual run always runs it.
 The weekly run does not, because `full-regeneration` covers FourPost.
+
+At BobSim `fe03bab` the acceptance fails for our car. FourPost runs its
+own anti-roll bar rates, not ours. See
+[bobsim.md](bobsim.md#run-a-bobsim-target-on-our-car).
 
 ### full-regeneration
 

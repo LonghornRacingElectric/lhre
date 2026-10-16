@@ -31,7 +31,8 @@ Measured on a Windows laptop with Docker Desktop, BobSim `7ff5191`:
 | `make bobsim T=standard-build` | 2 min 20 s to 2 min 35 s |
 | `make bobsim T=envelope-ggv` | 1 h 55 min, one core |
 
-Start long targets in the background. Do not run them in CI.
+Start long targets in the background. CI runs only the standard
+evaluations, through `make car`. See [tests.md](tests.md#ci).
 
 ## Our vehicle and BobSim
 
@@ -78,7 +79,8 @@ make four-post-acceptance T=standard-eval-four-post
    manifest, overrides, `run.log` and result CSV (under 1 MiB) of each new
    Modelica run. It never copies a `.tir` file.
 7. It fails if a Modelica executable that ran is older than the records.
-   Such an executable was built for another car.
+   Such an executable was built before our records, so it can be for
+   another car.
 8. It always puts back `bobsim/vehicle.yml` and runs `make records-undo`,
    also after a failure or Ctrl+C. Then it fails if
    `git -C bobsim status --short --ignore-submodules=none` prints anything.
