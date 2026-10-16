@@ -1442,7 +1442,7 @@ def findings_md(robust, beyond):
                 f"{robust['n_supported']} of {robust['n_total']} conditions have common support. "
                 "The findings of an earlier run do not apply.\n")
     without = region_text(beyond) if beyond["status"] == "ok" else "withheld"
-    return (f"- **Robust region.** {region_text(robust)} at 0.5 point tolerance. Without the 3.5 m cells: {without}. "
+    return (f"- **Robust region.** {region_text(robust)} at {next(iter(robust['region']))} point tolerance. Without the 3.5 m cells: {without}. "
             "A person writes the findings of this run from the tables on this page.\n")
 
 

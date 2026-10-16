@@ -103,7 +103,7 @@ def test_findings_print_only_with_common_support(study, rendered):
     assert not any(law in text for law in robust["laws"])
     ok = {**robust, "status": "ok", "region": {"0.5": ["+50%", "Front V34"]}}
     text = study.findings_md(ok, ok)
-    assert "+50%, Front V34" in text and "No recommendation" not in text
+    assert "+50%, Front V34 at 0.5 point tolerance" in text and "No recommendation" not in text
 
 
 def test_a_filled_readme_shows_no_none_and_no_stale_finding(rendered, tmp_path_factory):
