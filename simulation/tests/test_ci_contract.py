@@ -8,7 +8,7 @@ import yaml
 SIM = Path(__file__).resolve().parents[1]
 WORKFLOW = SIM.parent / ".github" / "workflows" / "simulation.yml"
 SMOKE_STEP = "Check that BobSim loads the vehicle"
-FAST_MAKE_TARGETS = {"build", "smoke", "unit"}
+FAST_MAKE_TARGETS = {"build", "smoke", "unit", "check-vehicle"}
 
 
 def _dry_run(target, *args):
@@ -79,3 +79,14 @@ def test_fast_job_runs_only_fast_make_targets(fast_job):
 
 def test_fast_job_fails_when_git_checks_cannot_run(fast_job):
     assert str(fast_job.get("env", {}).get("LHRE_REQUIRE_GIT")) == "1"
+
+
+def test_pull_requests_check_bundle_immutability_against_the_base_branch(fast_job):
+    steps = [step for step in fast_job["steps"] if re.search(r"\bmake\s+check-vehicle\b", step.get("run", ""))]
+    assert len(steps) == 1, "The fast job does not run make check-vehicle, so CI never checks bundle_id immutability."
+    step = steps[0]
+    assert "github.event_name == 'pull_request'" in str(step.get("if", ""))
+    run = step["run"]
+    assert re.search(r"\bBASE=\S*GITHUB_BASE_REF", run), "make check-vehicle needs BASE set to the base branch."
+    fetch = re.search(r"\bgit fetch\b.*GITHUB_BASE_REF", run)
+    assert fetch and fetch.start() < run.index("make check-vehicle"), "The step must fetch the base branch first."

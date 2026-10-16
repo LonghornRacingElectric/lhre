@@ -69,7 +69,8 @@ container.
 7. With `BASE=<git ref>`, the check fails when a member hash changed and the
    `bundle_id` did not. A released bundle can only change to `superseded`.
    In a git worktree, the container cannot read the `.git` link. Run a
-   `BASE=` check in a normal clone or in CI.
+   `BASE=` check in a normal clone. CI runs it on a pull request, against
+   the base branch.
 
 The tool never writes `bundle.yml`. Only a person sets `released`, and only
 with a release decision to cite. A passed check is a software result. It is

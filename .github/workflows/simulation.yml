@@ -39,5 +39,11 @@ jobs:
       - name: Check that BobSim loads the vehicle
         run: make smoke
 
+      - name: Check that a changed bundle member has a new bundle_id
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin "+refs/heads/$GITHUB_BASE_REF:refs/remotes/origin/$GITHUB_BASE_REF"
+          make check-vehicle BASE="origin/$GITHUB_BASE_REF"
+
       - name: Run the unit and contract tests
         run: make unit
