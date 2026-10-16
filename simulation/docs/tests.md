@@ -5,11 +5,12 @@ before you finish.
 
 | Target | What it checks | Time |
 | ------ | -------------- | ---- |
-| `make smoke` | BobSim loads `vehicle/vehicle.yml` and its tires. It checks loading only. It does not check physics. | about 3 s |
-| `make unit` | `pytest` runs the files in `tests/`. Then the target checks that `bobsim/` has no local changes. | about 14 s |
-| `make test` | `make smoke`, then `make unit`. | about 16 s |
+| `make smoke` | BobSim loads `vehicle/vehicle.yml` and its tires. It checks loading only. It does not check physics. | about 6 s |
+| `make unit` | `pytest` runs the files in `tests/` and one BobSim test. Then the target checks that `bobsim/` has no local changes. | about 31 s |
+| `make test` | `make smoke`, then `make unit`. | about 40 s |
 
 The times are from a Windows laptop with Docker Desktop, BobSim `fe03bab`.
+The BobSim test takes about 6 s of `make unit`.
 
 ## What the tests check
 
@@ -18,10 +19,23 @@ The times are from a Windows laptop with Docker Desktop, BobSim `fe03bab`.
   BobSim.
 - `test_bobsim_pin.py`: the checked-out BobSim contains `739143a`, the
   front anti-dive sign fix (BobSim PR #70). BobSim has no local changes.
+- `test_aero_ride_heights.py`: the static aero ride heights lie inside the
+  CFD grids. BobSim's car passes. Our car does not, so its test is a
+  strict xfail. See
+  [bobsim.md](bobsim.md#aero-ride-height-references).
 - `test_ci_contract.py`: the `make` targets and the CI `fast` job keep the
-  shape on this page.
+  shape on this page. `make init` and `make bump-bobsim` keep LF and long
+  paths in the nested submodules.
 
-These tests do not check physics. Later PRs add physics fixtures.
+`make unit` also runs one BobSim test by node id:
+`bobsim/tests/test_kinematics.py::test_four_post_anti_dive_sign_is_independent_of_pulse_direction`.
+It gives the FourPost report code a synthetic jacking force with a known
+sign. It checks the sign of the front anti-dive percent. It runs no
+Modelica. It fails when a pin reverts the sign fix. It also fails when
+the pin does not have the test.
+
+The lhre tests do not check physics results. Later PRs add physics
+fixtures.
 
 ## Add a test
 

@@ -18,7 +18,7 @@ help:
 	@echo "make shell                 Open a shell in the container"
 	@echo "make test                  Run make smoke, then make unit"
 	@echo "make smoke                 Check that BobSim loads //vehicle"
-	@echo "make unit                  Run the fast tests in tests/, then check that bobsim/ is clean"
+	@echo "make unit                  Run tests/ and the BobSim anti-dive sign test, then check that bobsim/ is clean"
 	@echo "make records               Write //vehicle into BobLib's Modelica records"
 	@echo "make records-undo          Put back only the files make records wrote"
 	@echo "make bobsim T=<target>     Run a BobSim make target"
@@ -39,13 +39,15 @@ build:
 shell:
 	$(COMPOSE) run --rm sim bash
 
+BOBSIM_SIGN_TEST := bobsim/tests/test_kinematics.py::test_four_post_anti_dive_sign_is_independent_of_pulse_direction
+
 test: smoke unit
 
 smoke:
 	$(RUN) sim python tools/check_vehicle.py
 
 unit:
-	$(RUN) -e LHRE_REQUIRE_GIT=$(LHRE_REQUIRE_GIT) sim python -m pytest -q -ra -p no:cacheprovider tests
+	$(RUN) -e LHRE_REQUIRE_GIT=$(LHRE_REQUIRE_GIT) sim sh -c 'python -m pytest -q -ra -p no:cacheprovider tests && python -m pytest -q -ra -p no:cacheprovider $(BOBSIM_SIGN_TEST)'
 	@test -z "$$(git -C bobsim status --porcelain --ignore-submodules=none)" || { echo "bobsim/ has local changes after the tests. Tests must not write into BobSim. If make records wrote them, run make records-undo."; git -C bobsim status --short --ignore-submodules=none; exit 1; }
 
 BOBLIB := bobsim/engines/boblib
