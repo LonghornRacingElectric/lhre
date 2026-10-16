@@ -277,6 +277,15 @@ def test_records_carry_the_c5_contract():
     assert _record(records, "rear", "hydraulic_brake")["axle_force_share"] == pytest.approx(0.16)
 
 
+def test_unequal_tire_radii_flag_the_brake_share():
+    vehicle = _asymmetric()
+    vehicle["rear"]["wheel"]["radius_m"] = 0.21
+    records = ap.anti_records(vehicle, _bundle())
+    for record in records:
+        flagged = "brake.front_bias is a torque share" in (record["reason"] or "")
+        assert flagged is (record["source"] == "hydraulic_brake")
+
+
 def test_singular_geometry_fails_with_its_key_path():
     vehicle = copy.deepcopy(VEHICLE)
     vehicle["rear"]["suspension"]["lower_aft_i_m"] = list(vehicle["rear"]["suspension"]["lower_fore_i_m"])
