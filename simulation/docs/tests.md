@@ -41,10 +41,17 @@ The BobSim test takes about 6 s of `make unit`.
 - `test_vehicle_checks.py`: `tools/vehicle_checks.py` fails a bad vehicle
   with its key path: units, missing hardpoints, the stored side, the frame
   and singular geometry. The bundle check runs these checks.
+- `test_anti_oracle.py`: the analytical oracle in `anti_oracle.py` against
+  closed forms. Cases: horizontal and inclined parallel links, known
+  instant centers, front and rear signs, Fx sign reversal, inboard and
+  outboard brakes, and wrench closure.
+- `test_anti_paths.py`: `tools/anti_paths.py` against the oracle. A changed
+  brake reaction alone does not change inboard-drive anti-squat. A negated
+  sign fails.
 
 
-The lhre tests do not check physics results. Later PRs add physics
-fixtures.
+The anti tests check a model against an oracle. They do not validate the
+car. See [anti-paths.md](anti-paths.md).
 
 ## Add a test
 
