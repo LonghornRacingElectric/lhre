@@ -121,6 +121,16 @@ def test_a_wheel_below_the_load_fit_is_rejected(study, make_car, synthetic_tire)
     assert "fz_out_of_fit:RL" in record.reasons
 
 
+@pytest.mark.parametrize("side, below_fit", [(1.0, {"FL", "RL"}), (-1.0, {"FR", "RR"})])
+def test_negative_camber_leaves_a_positive_only_camber_fit_on_one_side(study, make_car, synthetic_tire, side, below_fit):
+    _, support = synthetic_tire
+    car = make_car(camber_deg=-1.0, support_override=dataclasses.replace(support, gamma=(0.0, 0.0698)))
+    law = study.ConstantAckermann(0, car.track_front, car.wheelbase, OUTER_MAX)
+    record = study.trim(car, law, 8.0, side, 0.3, OUTER_MAX)
+    assert record.status is TrimStatus.DOMAIN_REJECTED
+    assert {r.split(":")[1] for r in record.reasons if r.startswith("camber_out_of_fit")} == below_fit
+
+
 def test_peak_tables_stay_inside_the_load_fit(make_car, synthetic_tire):
     _, support = synthetic_tire
     car = make_car()

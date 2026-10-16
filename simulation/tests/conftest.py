@@ -93,8 +93,8 @@ def make_ggv():
 def make_car(study, synthetic_tire, make_ggv):
     tire, support = synthetic_tire
 
-    def make(lltd=0.5, tire_overrides=None, support_override=None, **ggv):
+    def make(lltd=0.5, tire_overrides=None, support_override=None, camber_deg=0.0, **ggv):
         t = {**tire, **(tire_overrides or {})}
-        return study.Car(make_ggv(**ggv), (t,) * 4, lltd, support_override or support)
+        return study.Car(make_ggv(**ggv), (t,) * 4, lltd, support_override or support, camber_deg)
 
     return make
