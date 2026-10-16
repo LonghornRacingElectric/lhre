@@ -41,6 +41,7 @@ An audit of the published outputs on 2026-10-14 found these. The outputs are git
 6. **A near-zero baseline gave a large ratio.** The map cell "+100% (+134.6%)" at 3.5 m and 0.9 g drive divides by a parallel-steer limit of 0.09 g.
 7. **Wheel lift broke the vertical balance.** A lifted inner wheel did not move its load to the outer wheel. No recorded row had a lifted wheel. The map rows did not record loads.
 8. **The design geometry was hidden in `run.py`.** The Front V34 points were literals. Provenance did not identify them. The 31.75 mm rack stop is not in `2027_FrontV34.shk`, although an earlier version of this page said it was. The V34 wheel center also set the 1.270 m front track of every cell, not only the lock section.
+9. **The slip_norm braking rows did not check the evaluated slips.** That model evaluates MF5.2 at a larger slip ratio and slip angle than the row shows. A code review on 2026-10-15 found this. Nobody has counted the affected rows in the published outputs. `brake_model_gap_pts`, which sets the 0.5 point tolerance, comes from these rows.
 
 ### Software changes after the run
 
@@ -62,7 +63,7 @@ Is pro-Ackermann or anti-Ackermann steering better for the 2027 car, and which l
 
 ## Historical answer
 
-Every number from here to [Confidence](#confidence) comes from the 2026-10-11 run. Each one is historical. A re-run replaces the values in the `out:` blocks, not the prose around them.
+Every number and rating from here to the end of [Confidence](#confidence) comes from the 2026-10-11 run. Each one is historical. A re-run replaces the values in the `out:` blocks and the findings bullets below the table. It does not change the other prose.
 
 | | |
 | --- | --- |
@@ -90,7 +91,7 @@ Every number from here to [Confidence](#confidence) comes from the 2026-10-11 ru
 - Ackermann % is `100 · (cot δ_outer − cot δ_inner) · L / t`, with roadwheel steer δ, wheelbase L = 1.5494 m and front track t = 1.270 m. Positive is pro, zero is parallel steer, negative is anti.
 - A design condition is one car, one rear model, one corner radius and one longitudinal level. The cars are nominal, grip scale <!-- out:readme.json#mu_sensitivity -->0.75<!-- /out -->, and <!-- out:readme.json#variants -->LLTD -0.10, LLTD +0.10, LKY 0.62<!-- /out -->. The rear models are an open differential (the baseline), the planned LSD, and hydraulic brakes at 65% and 84% front bias. The levels run from 0.6 g braking to 0.6 g drive.
 - Shortfall is `100 · (1 − ay / ay_best)` in a condition, with `ay_best` the best law there. In the 2026-10-11 run, a law with no trim in a condition scored 100%. The current code drops that condition for every law instead.
-- The robust region is every law whose worst shortfall is within 0.5 points of the smallest worst shortfall. The 0.5 points equals the measured gap between the two combined-slip tire models (<!-- out:readme.json#brake_model_gap_pts|.1f -->0.5<!-- /out --> points). The table also shows the 1 point region.
+- The robust region is every law whose worst shortfall is within 0.5 points of the smallest worst shortfall. The 0.5 points equals the measured gap between the two combined-slip tire models (<!-- out:readme.json#brake_model_gap_pts|.1f -->0.5<!-- /out --> points). The 2026-10-11 gap is stale, because that run did not check the slip_norm evaluated slips. The table also shows the 1 point region.
 - Grip reserve is the limit lateral g of a law against parallel steer at the same condition. Steering authority is the yaw moment per degree of mean roadwheel steer at 90% of the limit.
 - Lock gate: the mean roadwheel steer at full rack must reach the steer a rule-minimum hairpin needs. The hairpin is 9 m outside diameter (FSAE rules, course specification). With the outside tire on the edge, the CG radius is <!-- out:readme.json#rule_hairpin_radius_m|.2f -->3.67<!-- /out --> m (hand calculation from t, the tire width and the CG position). 3.5 m is that radius with a margin.
 
@@ -275,7 +276,9 @@ BobSim's quasi-steady-state (QSS) lap solver runs each law's open-differential e
 
 ## Confidence
 
-- **Direction: medium.** The closed form and the solver agree at 3.5 m. The −50% loss holds in every car, rear model and bias. Against this: no transient, steer camber, compliance steer or aligning moment, and the inner-rear tire in the LSD cells runs past its peak slip ratio where the ellipse tire model is not valid.
+**Historical, and the direction rating is withdrawn.** These ratings are for the 2026-10-11 run. Known defect 1 voids the direction rating: the claim that −50% loses in every case rests on out-of-fit rows. Known defect 2 adds LSD rows past the slip fit. Rate the direction again after a re-run.
+
+- **Direction: medium in the 2026-10-11 run, withdrawn now.** The closed form and the solver agreed at 3.5 m. That run found the −50% loss in every car, rear model and bias. Against this: no transient, steer camber, compliance steer or aligning moment, and the inner-rear tire in the LSD cells runs past its peak slip ratio where the ellipse tire model is not valid.
 - **Size: low.** The grip scale, the LLTD and the rear model are not validated, and together they move the 3.5 m pro gain from large to near zero. The robust region, not a single percentage, is the result.
 
 ## Method

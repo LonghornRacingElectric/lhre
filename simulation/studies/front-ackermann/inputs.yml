@@ -138,4 +138,4 @@ policy:
     value: [0.5, 1.0]
     unit: pct
     status: assumed
-    source: 0.5 point is the gap between the two combined-slip models in the 2026-10-11 run. 1 point is a second view. Not reviewed.
+    source: 0.5 point is the gap between the two combined-slip models in the 2026-10-11 run. That run did not check the slip_norm evaluated slips, so the gap is stale. 1 point is a second view. Not reviewed.
