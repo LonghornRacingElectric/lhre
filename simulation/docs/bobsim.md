@@ -38,13 +38,74 @@ Start long targets in the background. Do not run them in CI.
 - `make test` and studies load `vehicle/vehicle.yml` through
   `BOBSIM_VEHICLE`.
 - BobSim targets do not read `BOBSIM_VEHICLE` yet. `make bobsim T=...` uses
-  `simulation/bobsim/vehicle.yml` until BobSim reads the variable.
-- The Modelica tier compiles BobLib's `.mo` records. Run `make records`
-  first. It writes our vehicle into those records inside the submodule, at
+  `simulation/bobsim/vehicle.yml`. To run a BobSim target on our car, use
+  `make car T=...`. See [Run a BobSim target on our car](#run-a-bobsim-target-on-our-car).
+- The Modelica tier compiles BobLib's `.mo` records. `make records`
+  writes our vehicle into those records inside the submodule, at
   `bobsim/engines/boblib`. Do not commit those files. `make records-undo`
   puts back only those files.
 - Our vehicle has the same name as BobSim's default car. So `make records`
   replaces BobSim's record for that car until `make records-undo`.
+
+### Run a BobSim target on our car
+
+With `make records` alone, the Modelica model uses our records, but the
+Python steps of the target read `bobsim/vehicle.yml`. FourPost, for
+example, reads its target loads and spring data from that file. The run
+then mixes two cars and gives no error. `make car` prevents this.
+
+```bash
+make car T=standard-eval-four-post
+make four-post-acceptance T=standard-eval-four-post
+```
+
+`make car T=<target>` does these steps:
+
+1. It stops if `bobsim/` has local changes.
+2. It runs `make records`. The generator must report the records as
+   written for our vehicle, inside `bobsim/engines/boblib`.
+3. It copies `vehicle/vehicle.yml` to `bobsim/vehicle.yml`. The copy has
+   the same bytes, so the same sha256. Entries under `paths:` resolve from
+   the BobSim root, so they still resolve. The generator checks the
+   installed file again. It must report the records as written.
+4. It deletes the old files in `bobsim/simulations/mbd/generated_results/`.
+   At BobSim `fe03bab`, FourPost reads its spring free length from the
+   metrics CSV of the previous run in that folder
+   (`four_post_eval_sim.py`, `_metrics_csv_value`). A CSV from another car
+   would change this run.
+5. It runs `make bobsim T=<target>`.
+6. It copies the outputs to `out/car/<target>/`: the metrics, and the
+   manifest, overrides, `run.log` and result CSV (under 1 MiB) of each new
+   Modelica run. It never copies a `.tir` file.
+7. It fails if a Modelica executable that ran is older than the records.
+   Such an executable was built for another car.
+8. It always puts back `bobsim/vehicle.yml` and runs `make records-undo`,
+   also after a failure or Ctrl+C. Then it fails if
+   `git -C bobsim status --short --ignore-submodules=none` prints anything.
+9. It writes `out/car/<target>/identity.json`: the lhre commit and dirty
+   state, the BobSim and BobLib commits, the vehicle and tire sha256, the
+   records state, the image id, the target, its exit status and the
+   sha256 of each output.
+
+If a `make car` run stops before step 8, for example on a power cut, run
+`git -C bobsim checkout -- vehicle.yml` and `make records-undo`.
+
+`make four-post-acceptance T=<target>` reads `out/car/<target>/`. It
+writes `four_post_acceptance.json` there. It fails when one of these is
+true:
+
+- The run failed, or it was for another target or another vehicle file.
+- The metrics CSV is missing, or it changed after the run.
+- A required metric is missing or has no finite value.
+- The CSV has a `status` column and a row has a status other than `ok`.
+- The pin reports a static balance or equilibrium failure.
+
+A check that the pin cannot answer is `UNAVAILABLE`. It is not a pass.
+At `fe03bab` three checks are unavailable. The CSV has no status column.
+The CSV does not name its vehicle. The only static balance value,
+`static_balance_pass`, compares target loads with themselves, so it is
+not a measurement. The acceptance is a software check. It is not a
+physical validation of the car.
 
 ### Modelica initialization
 
