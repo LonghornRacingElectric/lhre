@@ -440,6 +440,7 @@ function normalizeCarPreset(value: unknown): CarPreset | null {
   };
 }
 
+/** Render the trackside telemetry dashboard and manage live and saved sessions. */
 function App() {
   const [activeTab, setActiveTab] = useState<AppTab>("live");
   // First-load onboarding tour. Opens automatically until the user finishes/skips
@@ -627,7 +628,7 @@ function App() {
 
   const selectedChannel = channels.find((c) => c.key === channel);
   // Numeric-aware ordering for the pickers so repeated/array channels (e.g.
-  // pack.cells_v[0..131]) list as 0,1,2,…,10,…,100 instead of lexicographically
+  // pack.cells_v[0..139]) list as 0,1,2,…,10,…,100 instead of lexicographically
   // (the schema-driven natural-sort idea from the loggerd CSV work, PR #284).
   const sortedChannels = useMemo(
     () => [...channels].sort((a, b) => NATURAL_COLLATOR.compare(a.label, b.label)),
@@ -6849,9 +6850,9 @@ function alphaForDt(dtSeconds: number, tauSeconds: number) {
   return clamp(1 - Math.exp(-Math.max(0.001, dtSeconds) / Math.max(0.001, tauSeconds)), 0.02, 0.45);
 }
 
-// Accumulator geometry: 130 series cells (HVC hvc_bms.c TOTAL_IC*CELLS_PER_IC)
+// Accumulator geometry: 140 series cells (HVC hvc_bms.c TOTAL_IC*CELLS_PER_IC)
 // x 5 parallel Molicel P30B cells (3.0 Ah, 3.6 V nominal => 10.8 Wh/cell).
-const PACK_SERIES_CELLS = 130;
+const PACK_SERIES_CELLS = 140;
 const PACK_PARALLEL_CELLS = 5;
 const CELL_CAPACITY_AH = 3.0;
 const CELL_NOMINAL_V = 3.6;
