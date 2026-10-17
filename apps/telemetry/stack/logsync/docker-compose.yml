@@ -37,6 +37,11 @@ services:
       # Password defaults to $ELECTRIC_PWD from the env_file.
       LOGSYNC_SPEED_THRESHOLD_MPS: ${LOGSYNC_SPEED_THRESHOLD_MPS:-0.5}
       LOGSYNC_DEFAULT_BWLIMIT_KBPS: ${LOGSYNC_DEFAULT_BWLIMIT_KBPS:-0}
+      # Delete logs from the car's SD card after a verified sync. Off by default;
+      # with it on, DRY_RUN=true only records what would be deleted. See README.
+      LOGSYNC_DELETE_AFTER_SYNC: "${LOGSYNC_DELETE_AFTER_SYNC:-false}"
+      LOGSYNC_DELETE_DRY_RUN: "${LOGSYNC_DELETE_DRY_RUN:-true}"
+      LOGSYNC_DELETE_MIN_AGE_S: ${LOGSYNC_DELETE_MIN_AGE_S:-300}
       LOGSYNC_STAGING_DIR: /data/staging
       LOGSYNC_STATE_DB: /data/state/logsync.db
     volumes:
