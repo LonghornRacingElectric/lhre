@@ -1,3 +1,4 @@
+load("@aspect_bazel_lib//lib:run_binary.bzl", "run_binary")
 load("@rules_python//python:defs.bzl", "py_binary")
 
 package(default_visibility = ["//apps/BEVO:__subpackages__"])
@@ -21,15 +22,21 @@ py_binary(
 # The runtime CAN decode map, generated from the CSV source of truth.
 # Never check the output in — everything downstream (daemon runfiles, the
 # prost build script, the Pi bundle) consumes this target.
-genrule(
+# run_binary rather than a genrule so it needs no bash: this builds on
+# Windows, where there is none (ADR-013).
+run_binary(
     name = "can_json",
     srcs = [
         "can_bitfields.csv",
         "can_packets.csv",
     ],
     outs = ["can.json"],
-    cmd = "$(execpath :gen_can_json) $(location can_packets.csv) $(location can_bitfields.csv) $@",
-    tools = [":gen_can_json"],
+    args = [
+        "$(execpath can_packets.csv)",
+        "$(execpath can_bitfields.csv)",
+        "$@",
+    ],
+    tool = ":gen_can_json",
     visibility = [
         "//apps/BEVO:__subpackages__",
         "//apps/telemetry:__subpackages__",

@@ -74,6 +74,23 @@ build:windows --workspace_status_command=tools/workspace_status.bat
 # actions a sane PATH regardless of the client OS.
 build --incompatible_strict_action_env
 
+# Windows builds are shell-free: nothing `bazel test //...` does may need
+# bash, so nobody installs MSYS2 or Git Bash to build (ADR-013;
+# docs/build-system.md, "Windows builds are shell-free"). This path is
+# deliberately one that exists on no machine:
+#   - An action that wants bash (a genrule without cmd_bat, a run_shell)
+#     fails on every Windows machine, CI included, instead of only on the
+#     laptops that happen to have no bash on PATH.
+#   - Bazel puts the shell's directory on every action's PATH, and PATH is
+#     part of the remote cache key. Autodetection gave each machine keys for
+#     wherever its bash lived; a fixed path gives every Windows machine the
+#     same keys, so they actually share the cache.
+# //toolchains/sh is the analysis-time half of this. Same ordering gotcha as
+# remote execution below: only ever SET here, inside the per-OS config. A
+# plain `build --shell_executable=...` line in .bazelrc.user overrides it if
+# you need a real bash for an experiment.
+build:windows --shell_executable=C:/lhre-windows-builds-are-shell-free/bash.exe
+
 # Never strip at link time. Bazel's default (--strip=sometimes) adds -Wl,-S
 # in fastbuild, which silently discards the DWARF that //toolchains bakes in
 # with -g3 — the firmware .elf must keep it for VS Code debugging (see
