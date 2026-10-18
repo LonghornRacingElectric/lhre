@@ -42,6 +42,19 @@ On Windows every Rust target here is skipped (rules_rust expects the MSVC
 triple, our hermetic clang is MinGW); `bazel build //...` still passes,
 it just builds nothing from BEVO. Use Linux, macOS, or the Linux CI job.
 
+CI explicitly builds `//apps/BEVO:pi_core_binaries`, which cross-compiles
+`cand`, `loggerd`, and `publishd` for 64-bit Raspberry Pi OS. The accompanying
+`//apps/BEVO:pi_core_binary_test` verifies that all three outputs are static
+AArch64 ELF executables. This target intentionally produces executables only;
+it does not build OCI images for the dashboard or server logsync, nor package
+the dashboard frontend. The CI path invokes Bazel only; `rules_rust` compiles
+the crates and their pinned dependencies without running `cargo build`.
+
+BEVO's prost bindings and CAN decode JSON come from the same
+`//lib/codegen/telemetry:can_packets_proto` and `:can_json` targets selected by
+the telemetry server. Both sides therefore rebuild from `lib/spec` together;
+there is no separately generated BEVO wire schema in the Bazel path.
+
 ## Deploying to the Pi
 
 The repo never goes on the Pi — deploys ship binaries:
