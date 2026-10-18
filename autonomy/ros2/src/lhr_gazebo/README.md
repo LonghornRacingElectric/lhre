@@ -56,3 +56,135 @@ cd autonomy/ros2
 colcon test --packages-select lhr_gazebo
 colcon test-result --verbose
 ```
+
+Camera classifier launch tests cover defaults and overrides in both perception
+and estimator modes. Evaluated parameters use JSON encoding for ROS CLI startup
+so arrays keep their type. Each case shuts down ROS even if node startup fails,
+so a startup error does not cascade into later cases.
+
+## Stereo model
+
+The generated vehicle carries one ZED 2i rig with the 2.1 mm lens: two ideal
+RGB pinhole sensors, parallel axes, and a 0.12 m local-y separation. Both
+sensors share `zed2i_link`, so rotating the mount preserves Gazebo's stereo
+baseline calculation. Geometry and optics come from `lhr_vehicle`'s YAML;
+regenerate the model after changing them.
+
+The camera-only link has no collision and uses 0.001 kg mass / 0.000001 kg m2
+diagonal inertia for simulation bookkeeping. The initial mount and optics
+are approximations awaiting measurement and physical device calibration.
+
+## Stereo images in ROS/RViz
+
+Enable the camera independently of perception and state estimation:
+
+```bash
+./scripts/run_gazebo_demo.sh track_style:=oval perception:=lidar \
+  estimator:=truth enable_stereo_camera:=true
+```
+
+`enable_stereo_camera` defaults to `false`. Enabling it starts a separate
+lazy image/calibration bridge, publishes the rig's static optical transforms,
+and selects an RViz configuration with left/right Image panels. The option
+works with both `perception:=sim` / `lidar` and `estimator:=truth` / `ekf`.
+Camera geometry and optics are model configuration, not ROS node parameters:
+edit `lhr_vehicle/config/vehicle.yaml`, regenerate, rebuild, and relaunch.
+
+| ROS topic | Type |
+| --- | --- |
+| `/lhr/sensor/zed2i/left/image_rect` | `sensor_msgs/msg/Image` |
+| `/lhr/sensor/zed2i/right/image_rect` | `sensor_msgs/msg/Image` |
+| `/lhr/sensor/zed2i/left/camera_info` | `sensor_msgs/msg/CameraInfo` |
+| `/lhr/sensor/zed2i/right/camera_info` | `sensor_msgs/msg/CameraInfo` |
+
+Use sensor-data QoS (best effort, volatile) for consumers. Images retain
+Gazebo timestamps and optical frame IDs. Both views are ideal rectified RGB;
+`CameraInfo` describes those rendered intrinsics, with right `P[3] = -fx * B`.
+The static chain is `base_link -> zed2i_link -> left/right camera frames ->
+optical frames` (optical x right, y down, z forward). The mount transform
+continues to attach to the estimator-owned `base_link` in EKF mode.
+
+The 30 Hz configured rate is in simulation time. Software rendering can
+reduce wall-clock throughput; no subscribers means the lazy bridges do not
+request images. Camera resources may still initialize at simulator startup.
+Camera color segmentation can now consume the left stream; LiDAR fusion
+remains later work.
+
+### Camera color debug view
+
+Opt into labeled blue/yellow/orange candidate regions:
+
+```bash
+./scripts/run_gazebo_demo.sh enable_stereo_camera:=true \
+  enable_camera_color_classifier:=true
+```
+
+`enable_camera_color_classifier` defaults to `false` and requires
+`enable_stereo_camera:=true`. It starts `lhr_perception`'s
+`camera_color_classifier` in either perception mode and with either estimator.
+The stereo RViz configuration includes an Image display for
+`/lhr/perception/cone_colors/debug_image`, using Best Effort reliability.
+It receives no frames until classification is enabled. The existing left/right
+camera panels stay available. Add the same display when using a custom config.
+
+All classifier settings are forwarded through launch: `cone_color_min_region_area`
+(integer, default `25`), `cone_color_blue_hsv` (default
+`[100, 100, 50, 130, 255, 255]`), `cone_color_yellow_hsv` (default
+`[20, 100, 50, 35, 255, 255]`), and `cone_color_orange_hsv` (default
+`[5, 100, 50, 19, 255, 255]`). HSV bounds are six-element integer arrays.
+See [classifier usage and limitations](../lhr_perception/README.md#camera-color-classification)
+for overrides and input/output details. These image labels do not yet change
+the cone map or driving behavior.
+
+The model explicitly publishes vehicle TF on `/model/fsae_vehicle/tf` to
+match the bridge. Harmonic's default is `/model/fsae_vehicle/pose`; leaving
+that implicit prevents `map -> base_link` from reaching ROS in truth mode.
+
+## Stereo validation
+
+Checked on 2026-10-11 in the repository's Ubuntu 24.04 / ROS 2 Jazzy /
+Gazebo Harmonic Docker image on Apple Silicon with software OpenGL:
+
+- Full workspace `colcon test`: 208 tests, no errors/failures/skips.
+- Generated model passes `gz sdf -k` and the model freshness check.
+- Launch evaluation covers enabled/disabled/default stereo across both
+  perception modes and truth/EKF estimation; 15 stereo integration tests pass.
+- A stationary dynamic vehicle in a zero-gravity target scene yielded 100
+  exact-timestamp sets of both 1280x720 RGB images and both calibration messages.
+  Intrinsics, distortion/rectification, optical headers, and baseline passed.
+  Both optical frames were reachable from `base_link` and `map`.
+- The original oval track with LiDAR perception and EKF yielded another 100
+  matching image/calibration sets with optical TF reachable from `map`.
+  RViz displayed both rendered cone views.
+- A 1 m green target face at 5 m yielded 11 px horizontal disparity against
+  10.76 px predicted, with zero vertical disparity. RViz showed both images
+  and a valid map fixed frame.
+
+The 100 paired sets took 20.94 wall-clock seconds including startup. This
+measures matched-set delivery through the checker, not sensor generation
+frequency; dropped samples and software rendering limit throughput. Target
+scene statistics reported a real-time factor near 1 after startup. The
+oval/EKF run delivered 100 matched sets in 30.36 wall-clock seconds with
+RViz active. After RViz and the checker stopped, Gazebo reported no image
+subscribers, confirming the lazy bridge disconnected. Physical
+calibration, rolling shutter/exposure effects, and performance on the eventual
+compute platform remain unvalidated. This is camera-interface acceptance,
+not validation of camera-based cone detection or driving behavior.
+
+The stationary target fixture is `test/stereo_target.sdf`. For a visual repeat
+from the ROS workspace on a machine with a display:
+
+```bash
+ros2 launch lhr_gazebo gazebo_demo.launch.py \
+  world:="$(pwd)/src/lhr_gazebo/test/stereo_target.sdf" \
+  enable_stereo_camera:=true auto_go:=false estimator:=truth
+```
+
+The fixture disables gravity to hold the dynamic vehicle stationary while
+its odometry plugin publishes TF. Its green target front face is at world
+x=6.8 m, 5 m in front of the current assumed rig center, so changed mount
+geometry requires recomputing the measured target distance.
+
+Camera extrinsics are fixed relative to `base_link`. The existing vehicle
+state/TF is planar, so the map-frame camera pose does not fully represent
+physics roll/pitch. Future 3D projection/fusion needs a 6-DoF vehicle pose.

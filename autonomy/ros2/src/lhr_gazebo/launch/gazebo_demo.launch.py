@@ -16,7 +16,6 @@ Usage:
 import os
 
 from ament_index_python.packages import get_package_share_directory
-
 from launch import LaunchContext, LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
@@ -27,6 +26,7 @@ from launch.actions import (
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+import yaml
 
 
 def _find_world(context: LaunchContext):
@@ -96,6 +96,38 @@ def _launch_setup(context: LaunchContext):
         'lidar_classify_sides', 'false').lower() == 'true'
     use_ekf = context.launch_configurations.get(
         'estimator', 'truth').lower() == 'ekf'
+
+    enable_stereo = context.launch_configurations.get(
+        'enable_stereo_camera', 'false').lower() == 'true'
+    camera_nodes = []
+    enable_color = context.launch_configurations.get(
+        'enable_camera_color_classifier', 'false').lower() == 'true'
+    if enable_color and not enable_stereo:
+        raise RuntimeError('Camera classification requires enable_stereo_camera:=true')
+    if enable_stereo:
+        from lhr_gazebo.stereo_camera import stereo_actions
+        from lhr_vehicle import load_vehicle
+        camera_nodes = stereo_actions(load_vehicle().stereo_camera, config_dir)
+    if enable_color:
+        from lhr_perception.cone_color import DEFAULT_THRESHOLDS, validate_config
+        thresholds = {
+            color: yaml.safe_load(context.launch_configurations[f'cone_color_{color}_hsv'])
+            for color in DEFAULT_THRESHOLDS
+        }
+        min_area = int(context.launch_configurations['cone_color_min_region_area'])
+        validate_config(thresholds, min_area)
+        camera_nodes.append(Node(
+            package='lhr_perception',
+            executable='camera_color_classifier',
+            name='camera_color_classifier',
+            parameters=[{
+                'use_sim_time': True,
+                'min_region_area': ParameterValue(
+                    LaunchConfiguration('cone_color_min_region_area'), value_type=int),
+                **{f'{color}_hsv': bounds for color, bounds in thresholds.items()},
+            }],
+            output='screen',
+        ))
 
     _gz_env = {
         'GZ_SIM_RESOURCE_PATH': models_dir,
@@ -322,7 +354,8 @@ def _launch_setup(context: LaunchContext):
             package='rviz2',
             executable='rviz2',
             name='rviz2',
-            arguments=['-d', os.path.join(config_dir, 'default.rviz')],
+            arguments=['-d', os.path.join(
+                config_dir, 'stereo.rviz' if enable_stereo else 'default.rviz')],
             parameters=[{'use_sim_time': True}],
             output='screen',
         ))
@@ -346,6 +379,7 @@ def _launch_setup(context: LaunchContext):
         gz_sim,
         bridge,
         cmd_adapter,
+        *camera_nodes,
         *estimation_nodes,
         *perception_nodes,
         centerline,
@@ -385,6 +419,26 @@ def generate_launch_description():
             description='Simulated rolling-radius error (1.0 = exact)'),
         DeclareLaunchArgument('seed', default_value='1'),
         DeclareLaunchArgument('num_waypoints', default_value='10'),
+        DeclareLaunchArgument(
+            'enable_stereo_camera', default_value='false',
+            choices=['true', 'false'],
+            description='Bridge ZED 2i stereo images/calibration and camera TF'),
+        DeclareLaunchArgument(
+            'enable_camera_color_classifier', default_value='false',
+            choices=['true', 'false'],
+            description='Label ZED color regions; requires enable_stereo_camera'),
+        DeclareLaunchArgument(
+            'cone_color_min_region_area', default_value='25',
+            description='Minimum connected color region area in pixels'),
+        DeclareLaunchArgument(
+            'cone_color_blue_hsv', default_value='[100, 100, 50, 130, 255, 255]',
+            description='Blue HSV bounds [h_min, s_min, v_min, h_max, s_max, v_max]'),
+        DeclareLaunchArgument(
+            'cone_color_yellow_hsv', default_value='[20, 100, 50, 35, 255, 255]',
+            description='Yellow HSV bounds [h_min, s_min, v_min, h_max, s_max, v_max]'),
+        DeclareLaunchArgument(
+            'cone_color_orange_hsv', default_value='[5, 100, 50, 19, 255, 255]',
+            description='Orange HSV bounds [h_min, s_min, v_min, h_max, s_max, v_max]'),
         # Sensor sim
         DeclareLaunchArgument('fov_deg', default_value='200.0'),
         DeclareLaunchArgument('max_range_m', default_value='20.0'),

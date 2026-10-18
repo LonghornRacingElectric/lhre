@@ -61,3 +61,19 @@ Commit the regenerated `model.sdf` alongside the YAML change — it is
 checked in, like the generated world files. `generate_vehicle_model.py
 --check` reports whether the two agree, and `lhr_gazebo`'s tests fail when
 they don't, so CI catches a forgotten regenerate.
+
+## Stereo camera
+
+The car uses one ZED 2i with the 2.1 mm wide lens. `sensors.stereo_camera`
+contains its 0.12 m baseline, rig-center pose in `base_link`, and simulated
+image size/rate/FOV. `load_vehicle().stereo_camera` exposes these values and
+pixel intrinsics to the model generator and camera transforms. Invalid or
+missing camera configuration fails explicitly; rebuild installed packages
+after updating the YAML.
+
+The initial mount is assumed. Images use an ideal rectified pinhole with
+zero distortion and square pixels, rather than a physical camera calibration.
+At 1280x720, the 110-degree horizontal FOV implies about 77.6 degrees vertical;
+manufacturer FOV values do not supply exact rectified intrinsics. Measure the
+mount and obtain device calibration before matching the physical unit.
+See the [stereo design](../../../docs/plans/zed2i-stereo.md) for scope.
