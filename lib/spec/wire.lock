@@ -6,11 +6,21 @@
 # telemetry server decodes: changing any existing line breaks deployed
 # consumers and archived data, which is why it is committed and reviewed
 # rather than silently regenerated. Types are derived from the spec's
-# encodings (lib/spec/wire.py) — note that editing a signal's `scale` can
-# change its type here without changing its id.
+# encodings unless a deployed field has a compatibility override
+# (lib/spec/wire.py). Encoding edits can still change a non-overridden type.
+
+[BoardStatus] next_free_id=9
+BoardStatus.csm_last_seen_s 1 float
+BoardStatus.dui_last_seen_s 2 float
+BoardStatus.hvc_last_seen_s 3 float
+BoardStatus.inverter_last_seen_s 4 float
+BoardStatus.pdu_last_seen_s 5 float
+BoardStatus.tsm_last_seen_s 6 float
+BoardStatus.usm_last_seen_s 7 float
+BoardStatus.vcu_last_seen_s 8 float
 
 [Controls] next_free_id=46
-Controls.motor_speed 1 int32
+Controls.motor_speed 1 float
 Controls.torque_feedback 2 float
 Controls.apps1_travel 3 float
 Controls.apps1_v 4 float
@@ -29,7 +39,7 @@ Controls.bse1_v 16 float
 Controls.bse2_v 17 float
 Controls.bse3_v 18 float
 Controls.lights_current 19 float
-Controls.rpm_request 20 int32
+Controls.rpm_request 20 float
 Controls.torque_command 21 float
 Controls.torque_limit 22 float
 Controls.torque_request 23 float
@@ -40,9 +50,9 @@ Controls.enable 27 bool
 Controls.line_lock_enabled 28 bool
 Controls.torque_shudder 29 float
 Controls.bse3 30 float
-Controls.event_mode 39 uint32
-Controls.net_energy 40 double
-Controls.regen_energy 41 double
+Controls.event_mode 39 float
+Controls.net_energy 40 float
+Controls.regen_energy 41 float
 Controls.torque_lookup 42 float
 Controls.torque_derated 43 float
 Controls.torque_power_limited 44 float
@@ -57,11 +67,11 @@ Controls RESERVED_ID 37
 Controls RESERVED_ID 38
 
 [DiagnosticsHigh] next_free_id=39
-DiagnosticsHigh.prndl_state 1 uint32
+DiagnosticsHigh.prndl_state 1 float
 DiagnosticsHigh.shutdown_current 2 float
-DiagnosticsHigh.hvc_state_machine 3 uint32
-DiagnosticsHigh.post_faults 4 uint32
-DiagnosticsHigh.run_faults 5 uint32
+DiagnosticsHigh.hvc_state_machine 3 float
+DiagnosticsHigh.post_faults 4 float
+DiagnosticsHigh.run_faults 5 float
 DiagnosticsHigh.apps1_disconnect 6 bool
 DiagnosticsHigh.apps1_out_range 7 bool
 DiagnosticsHigh.apps2_disconnect 8 bool
@@ -116,24 +126,27 @@ DiagnosticsLow.charger_enabled 16 bool
 DiagnosticsLow.imd_led 17 bool
 
 [Dynamics] next_free_id=36
-Dynamics.bl_unsprung_accel 4 repeated IndexedFloat[3]
-Dynamics.br_unsprung_accel 5 repeated IndexedFloat[3]
-Dynamics.fl_unsprung_accel 6 repeated IndexedFloat[3]
-Dynamics.fr_unsprung_accel 7 repeated IndexedFloat[3]
+Dynamics.gps 1 repeated float
+Dynamics.gps_imu 2 repeated float
+Dynamics.gps_speed 3 float
+Dynamics.bl_unsprung_accel 4 repeated float[3]
+Dynamics.br_unsprung_accel 5 repeated float[3]
+Dynamics.fl_unsprung_accel 6 repeated float[3]
+Dynamics.fr_unsprung_accel 7 repeated float[3]
 Dynamics.accel_pedal_travel 8 float
 Dynamics.bl_wheel_speed 9 float
 Dynamics.br_wheel_speed 10 float
 Dynamics.fl_wheel_speed 11 float
 Dynamics.fr_wheel_speed 12 float
 Dynamics.steer_col_angle 13 float
-Dynamics.bl_gyro 14 repeated IndexedFloat[3]
-Dynamics.bl_sprung_accel 15 repeated IndexedFloat[3]
-Dynamics.br_gyro 16 repeated IndexedFloat[3]
-Dynamics.br_sprung_accel 17 repeated IndexedFloat[3]
-Dynamics.fl_gyro 18 repeated IndexedFloat[3]
-Dynamics.fl_sprung_accel 19 repeated IndexedFloat[3]
-Dynamics.fr_gyro 20 repeated IndexedFloat[3]
-Dynamics.fr_sprung_accel 21 repeated IndexedFloat[3]
+Dynamics.bl_gyro 14 repeated float[3]
+Dynamics.bl_sprung_accel 15 repeated float[3]
+Dynamics.br_gyro 16 repeated float[3]
+Dynamics.br_sprung_accel 17 repeated float[3]
+Dynamics.fl_gyro 18 repeated float[3]
+Dynamics.fl_sprung_accel 19 repeated float[3]
+Dynamics.fr_gyro 20 repeated float[3]
+Dynamics.fr_sprung_accel 21 repeated float[3]
 Dynamics.bl_ride_height 22 float
 Dynamics.bl_strain_gauge_v 23 float
 Dynamics.bl_sus_pot_v 24 float
@@ -148,26 +161,20 @@ Dynamics.fr_strain_gauge_v 32 float
 Dynamics.fr_sus_pot_v 33 float
 Dynamics.ride_height 34 float
 Dynamics.wheel_speed 35 float
-Dynamics RESERVED_ID 1
-Dynamics RESERVED_ID 2
-Dynamics RESERVED_ID 3
-Dynamics RESERVED_NAME gps
-Dynamics RESERVED_NAME gps_imu
-Dynamics RESERVED_NAME gps_speed
 
 [Pack] next_free_id=23
 Pack.bus_voltage 1 float
 Pack.lv_boards_current 2 float
 Pack.soc_estimate 3 float
-Pack.cells_v 4 repeated IndexedFloat[132]
+Pack.cells_v 4 repeated float[132]
 Pack.dc_bus_v 5 float
 Pack.delta_resolver_angle 6 float
 Pack.inverter_freq 7 float
 Pack.neutral_output_v 8 float
-Pack.time_since_on 9 double
+Pack.time_since_on 9 float
 Pack.vab_vq_v 10 float
 Pack.vbc_vd_v 11 float
-Pack.cells_temps 12 repeated IndexedFloat[92]
+Pack.cells_temps 12 repeated float[92]
 Pack.dc_bus_current 13 float
 Pack.hv_c 14 float
 Pack.hv_pack_v 15 float
@@ -187,16 +194,16 @@ Thermal.motor_temp 4 float
 Thermal.batt_loop_batt_temp 5 float
 Thermal.batt_loop_rad_fan_speed 6 float
 Thermal.batt_loop_rad_temp 7 float
-Thermal.battery_fan_rpm 8 uint32
+Thermal.battery_fan_rpm 8 float
 Thermal.bus_bar_temp1 9 float
 Thermal.bus_bar_temp2 10 float
 Thermal.bus_bar_temp3 11 float
-Thermal.cell_bottom_temp 12 uint32
-Thermal.cell_top_temp 13 uint32
+Thermal.cell_bottom_temp 12 float
+Thermal.cell_top_temp 13 float
 Thermal.coolant_flow_lpm 14 float
 Thermal.coolant_temp 15 float
 Thermal.discharge_r_temp 16 float
-Thermal.fan_rpm 17 uint32
+Thermal.fan_rpm 17 float
 Thermal.gate_driver_temp 18 float
 Thermal.inverter_hotspot_temp 19 float
 Thermal.inverter_temp 20 float

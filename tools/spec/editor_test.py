@@ -24,6 +24,7 @@ groups {
   group {
     name: "Vehicle"
     next_free_id: 2
+    snapshot_id: 3
   }
 }
 """

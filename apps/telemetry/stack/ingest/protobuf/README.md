@@ -10,9 +10,11 @@ Compiles the Longhorn-generated CAN schema into a Python `_pb2.py` module as a n
 
 Output path:
 
-- `bazel-bin/telemetry/stack/ingest/protobuf/can_packets_pb2.py`
+- `bazel-bin/apps/telemetry/stack/ingest/protobuf/can_packets_pb2.py`
 
-This target depends on `//drivers/longhorn-lib:can_proto`, so changing `drivers/longhorn-lib/config/can_packets.csv` triggers regeneration.
+This target depends on `//apps/telemetry:current_schema_proto`, which selects
+the protobuf generated from `//lib/spec`. A textproto change therefore
+regenerates both this Python module and the matching Orion database DDL.
 
 ## 2) Workspace writer (useful for local dev / non-Bazel runs)
 
@@ -22,6 +24,6 @@ Materializes the generated module into this source folder:
 
 Output path:
 
-- `telemetry/stack/ingest/protobuf/can_packets_pb2.py`
+- `apps/telemetry/stack/ingest/protobuf/can_packets_pb2.py`
 
 Note: Bazel provides the `protoc` compiler via the `protobuf` module dependency declared in `MODULE.bazel`.
