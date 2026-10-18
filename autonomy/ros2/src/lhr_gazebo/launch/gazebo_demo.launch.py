@@ -74,6 +74,39 @@ def _find_world(context: LaunchContext):
     return ''
 
 
+def _fault_remaps(fault: str, use_ekf: bool, configs: dict) -> dict:
+    """
+    Where fault:=<kind> splices fault_injector in: node name -> remappings.
+
+    A topic fault moves the producer (or, for steer_freeze, the consumer) onto
+    a side topic so the injector sits in the middle. Process faults need no
+    rewiring. No fault means no change to any node. A fault that cannot trip
+    under the other launch arguments fails the launch.
+    """
+    if not fault:
+        return {}
+    from lhr_gazebo.fault_injector import FAULTS
+    if fault not in FAULTS:
+        raise RuntimeError(
+            f'Unknown fault {fault!r}, expected one of {sorted(FAULTS)}')
+    for arg, value in FAULTS[fault].needs:
+        if configs.get(arg, '').lower() != value:
+            raise RuntimeError(f'fault:={fault} can only trip with {arg}:={value}')
+    odom_raw = [('/lhr/vehicle/odom', '/lhr/vehicle/odom_raw')]
+    # Under ekf the bridge's odom is already truth; corrupt the estimate.
+    odom_owner = 'ekf_node' if use_ekf else 'ros_gz_bridge'
+    return {
+        'odom_nan': {odom_owner: odom_raw},
+        'odom_spike': {odom_owner: odom_raw},
+        'lidar_drop': {'ros_gz_bridge': [
+            ('/lhr/lidar/points', '/lhr/lidar/points_raw')]},
+        'cmd_nan': {'pure_pursuit': [
+            ('/lhr/vehicle/cmd', '/lhr/vehicle/cmd_raw')]},
+        'steer_freeze': {'joint_cmd_adapter': [
+            ('/lhr/vehicle/cmd', '/lhr/vehicle/cmd_actuated')]},
+    }.get(fault, {})
+
+
 def _launch_setup(context: LaunchContext):
     """
     Build all launch actions.
@@ -96,6 +129,8 @@ def _launch_setup(context: LaunchContext):
         'lidar_classify_sides', 'false').lower() == 'true'
     use_ekf = context.launch_configurations.get(
         'estimator', 'truth').lower() == 'ekf'
+    fault = context.launch_configurations.get('fault', '')
+    fault_remaps = _fault_remaps(fault, use_ekf, context.launch_configurations)
 
     enable_stereo = context.launch_configurations.get(
         'enable_stereo_camera', 'false').lower() == 'true'
@@ -163,7 +198,7 @@ def _launch_setup(context: LaunchContext):
         parameters=[{
             'config_file': os.path.join(config_dir, 'ros_gz_bridge.yaml'),
         }],
-        remappings=bridge_remaps,
+        remappings=bridge_remaps + fault_remaps.get('ros_gz_bridge', []),
         output='screen',
     )
 
@@ -195,6 +230,7 @@ def _launch_setup(context: LaunchContext):
                 'init_pose_topic': '/lhr/vehicle/odom_truth',
                 'use_sim_time': True,
             }],
+            remappings=fault_remaps.get('ekf_node', []),
             output='screen',
         ))
 
@@ -208,6 +244,7 @@ def _launch_setup(context: LaunchContext):
                 LaunchConfiguration('adapter_cmd_timeout_s'), value_type=float),
             'use_sim_time': True,
         }],
+        remappings=fault_remaps.get('joint_cmd_adapter', []),
         output='screen',
     )
 
@@ -333,6 +370,7 @@ def _launch_setup(context: LaunchContext):
             'max_decel': LaunchConfiguration('max_decel'),
             'use_sim_time': True,
         }],
+        remappings=fault_remaps.get('pure_pursuit', []),
         output='screen',
     )
 
@@ -408,6 +446,25 @@ def _launch_setup(context: LaunchContext):
             output='screen',
         ))
 
+    # ----- Fault injection (safety testing, #117; sim only) -----
+    fault_nodes = []
+    if fault:
+        fault_nodes.append(Node(
+            package='lhr_gazebo',
+            executable='fault_injector',
+            name='fault_injector',
+            parameters=[{
+                'fault': ParameterValue(LaunchConfiguration('fault'),
+                                        value_type=str),
+                'fault_after_s': ParameterValue(
+                    LaunchConfiguration('fault_after_s'), value_type=float),
+                'fault_duration_s': ParameterValue(
+                    LaunchConfiguration('fault_duration_s'), value_type=float),
+                'use_sim_time': True,
+            }],
+            output='screen',
+        ))
+
     return [
         SetEnvironmentVariable('GZ_SIM_RESOURCE_PATH', models_dir),
         gz_sim,
@@ -421,6 +478,7 @@ def _launch_setup(context: LaunchContext):
         control,
         *metrics_nodes,
         *safety_nodes,
+        *fault_nodes,
         *rviz_nodes,
     ]
 
@@ -504,6 +562,12 @@ def generate_launch_description():
         DeclareLaunchArgument('ready_hold_sec', default_value='5.0'),
         # Joint adapter: stop the wheels when commands stop (0 disables)
         DeclareLaunchArgument('adapter_cmd_timeout_s', default_value='0.3'),
+        # Fault injection for safety testing (#117). Empty = no injector.
+        DeclareLaunchArgument(
+            'fault', default_value='',
+            description='One fault_injector kind, e.g. ekf_kill, lidar_drop'),
+        DeclareLaunchArgument('fault_after_s', default_value='30.0'),
+        DeclareLaunchArgument('fault_duration_s', default_value='0.0'),
         # Safety monitor (lhr_safety). Off until #117's fault injection
         # has tuned the thresholds; defaults match the node's.
         DeclareLaunchArgument(

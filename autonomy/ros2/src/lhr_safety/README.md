@@ -124,7 +124,8 @@ arguments:
 - A dead `mission_manager` is not detected
   ([#127](https://github.com/LonghornRacingElectric/lhre/issues/127)).
 - Thresholds are starting points; #117 measures time to trip and stop
-  distance against the PDR table.
+  distance against the PDR table with
+  [the fault injection tools](../../../testing/tools/fault_injection/README.md).
 - The geofence is a radius around where the car armed. The car's will be
   the surveyed test-area boundary from RTK.
 

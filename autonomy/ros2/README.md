@@ -691,6 +691,16 @@ outer = atan(wheelbase / (R + track_width/2))
 |-------|---------|-------------|
 | `cmd_timeout_s` | `0.3` | Command age (s) after which the wheels stop; `0` disables. Launch argument `adapter_cmd_timeout_s` |
 
+#### fault_injector
+
+Sim-only, started by `fault:=<kind>` on the Gazebo launch to test `lhr_safety` (#117). See [lhr_gazebo](src/lhr_gazebo/README.md#fault-injection).
+
+| Param | Default | Description |
+|-------|---------|-------------|
+| `fault` | `""` | Fault kind; launch argument `fault`, empty starts no injector |
+| `fault_after_s` | `30.0` | Seconds after the mission first reports `DRIVING` |
+| `fault_duration_s` | `0.0` | How long the fault lasts; `0` is until shutdown |
+
 ### lhr_perception (lidar_cone_detector)
 
 Processes LiDAR pointcloud to detect cones. Pipeline: ground removal → range filter → Euclidean clustering → cone validation → timestamp-aligned sensor-to-map transform → spatial dedup → track-side inference. The detector buffers odometry and interpolates the vehicle pose at each pointcloud timestamp; it waits for the following odometry sample instead of projecting a sharp-turn scan with a pose from another instant. Detections are associated to their nearest existing cone, with each cone used at most once per scan, before positions are updated by a running average. Side votes come from a short local corridor and are shared only across geometrically continuous boundary fragments. Later labels require consistent proposals from vehicle poses separated by one metre and remain locked after acceptance.
