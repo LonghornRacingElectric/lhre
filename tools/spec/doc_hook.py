@@ -164,7 +164,7 @@ def generate_markdown(spec: dict) -> str:
         from_b = m.get("from_board", [""])[0]
         to_b = ", ".join(m.get("to_boards", ["*"]))
         bus = m.get("bus", [""])[0]
-        dlc = m.get("dlc", [8])[0]
+        dlc = m.get("dlc", [0])[0]
         freq = m.get("frequency_hz", [0.0])[0]
         desc = m.get("description", [""])[0]
 
@@ -205,7 +205,7 @@ def generate_markdown(spec: dict) -> str:
         name = m.get("name", [""])[0]
         from_b = m.get("from_board", [""])[0]
         bus = m.get("bus", [""])[0]
-        dlc = m.get("dlc", [8])[0]
+        dlc = m.get("dlc", [0])[0]
         freq = m.get("frequency_hz", [0.0])[0]
         desc = m.get("description", [""])[0]
         signals = m.get("signal", [])

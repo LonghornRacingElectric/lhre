@@ -15,7 +15,15 @@ load(":can_lib.bzl", "can_lib_sources")
 # Must match the lib/spec/messages/*.textproto file stems; the generator
 # errors with instructions when a board file is added or removed.
 CAN_BOARDS = [
+    "charger",
+    "csm",
+    "dui",
     "hvc",
+    "inverter",
+    "pdu",
+    "pi",
+    "tsm",
+    "usm",
     "vcu",
 ]
 

@@ -1,0 +1,156 @@
+# proto-file: lib/spec/proto/can_spec.proto
+# proto-message: lhre.canspec.SpecFile
+
+message {
+  name: "COOLANT_LOOP_TEMPS"
+  can_id: 416
+  from_board: "TSM"
+  to_boards: "Pi"
+  bus: "Data Acq"
+  dlc: 8
+  frequency_hz: 10.0
+  description: "Coolant Loop Temps"
+  signal {
+    name: "loop_temp_after_motor"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    telemetry {
+      group: "Thermal"
+      field: "motor_loop_motor_temp"
+      id: 27
+    }
+    description: "Loop Temp After Motor"
+  }
+  signal {
+    name: "loop_temp_after_inverter"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    telemetry {
+      group: "Thermal"
+      field: "motor_loop_inverter_temp"
+      id: 26
+    }
+    description: "Loop Temp After Inverter"
+  }
+  signal {
+    name: "temp_after_radiator"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    telemetry {
+      group: "Thermal"
+      field: "motor_loop_rad_temp"
+      id: 28
+    }
+    description: "Temp After Radiator"
+  }
+}
+message {
+  name: "FAN_FLOW_SPEEDS"
+  can_id: 418
+  from_board: "TSM"
+  to_boards: "Pi"
+  bus: "Data Acq"
+  dlc: 8
+  frequency_hz: 10.0
+  description: "Fan/Flow Speeds"
+  signal {
+    name: "radiator_fan_speed"
+    encoding {
+      bit_length: 16
+    }
+    logical {
+      physical {
+        unit: "rpm"
+      }
+    }
+    telemetry {
+      group: "Thermal"
+      field: "fan_rpm"
+      id: 17
+    }
+    description: "Radiator Fan Speed"
+  }
+  signal {
+    name: "battery_fan_speed"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+    }
+    logical {
+      physical {
+        unit: "rpm"
+      }
+    }
+    telemetry {
+      group: "Thermal"
+      field: "battery_fan_rpm"
+      id: 8
+    }
+    description: "Battery Fan Speed"
+  }
+  signal {
+    name: "coolant_flow"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "LPM"
+      }
+    }
+    telemetry {
+      group: "Thermal"
+      field: "coolant_flow_lpm"
+      id: 14
+    }
+    description: "Coolant Flow"
+  }
+  signal {
+    name: "ambient_temp"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    telemetry {
+      group: "Thermal"
+      field: "ambient_temp"
+      id: 3
+    }
+    description: "Ambient Temp"
+  }
+}

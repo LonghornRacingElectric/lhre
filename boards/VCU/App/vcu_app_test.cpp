@@ -14,9 +14,8 @@
 
 namespace {
 
-using lhre::can::VcuState;
-using lhre::can::hvc::HvcPackStatus;
-using lhre::can::vcu::VcuStatus;
+using lhre::can::hvc::ContactorStatus;
+using VcuStateMessage = lhre::can::vcu::VcuState;
 
 TEST(VcuApp, BlinksAndBroadcastsStatus) {
   lhal::host::TestClock clock;
@@ -31,10 +30,10 @@ TEST(VcuApp, BlinksAndBroadcastsStatus) {
   p.can = &vcu_can;
   vcu::App app(p);
 
-  // Simulate one second in 10 ms main-loop ticks.
-  for (int i = 0; i < 100; ++i) {
+  // Simulate one second in 1 ms main-loop ticks.
+  for (int i = 0; i < 1000; ++i) {
     app.Step();
-    clock.Advance(10);
+    clock.Advance(1);
   }
   app.Step();
 
@@ -42,30 +41,29 @@ TEST(VcuApp, BlinksAndBroadcastsStatus) {
   // toggles → on.
   EXPECT_TRUE(led.Read());
 
-  // 100 ms status period over 1 s: t=0..1000 inclusive.
-  EXPECT_EQ(app.statuses_sent(), 11u);
+  // 3 ms status period over 1 s: t=0, 3, ..., 999.
+  EXPECT_EQ(app.statuses_sent(), 334u);
 
-  // The observer decodes every status with the generated bindings: idle,
-  // no faults, zero torque.
+  // The observer decodes every real 2026 VCU_STATE packet.
   lhal::CanFrame frame;
   uint32_t received = 0;
   while (dash.Receive(&frame)) {
-    ASSERT_TRUE(VcuStatus::Matches(frame.id));
-    ASSERT_EQ(frame.len, VcuStatus::kDlc);
-    VcuStatus status = VcuStatus::FromFrame(frame);
-    EXPECT_EQ(status.state, VcuState::kIdle);
-    EXPECT_FALSE(status.faults_overtemp);
-    EXPECT_EQ(status.torque_request_raw, 0);
+    ASSERT_TRUE(VcuStateMessage::Matches(frame.id));
+    ASSERT_EQ(frame.len, VcuStateMessage::kDlc);
+    VcuStateMessage status = VcuStateMessage::FromFrame(frame);
+    EXPECT_EQ(status.prndl_state, static_cast<uint8_t>(vcu::State::kIdle));
+    EXPECT_FALSE(status.stomp_fault);
+    EXPECT_FALSE(status.ready_to_drive_buzzer);
     ++received;
   }
-  EXPECT_EQ(received, 11u);
+  EXPECT_EQ(received, 334u);
 }
 
-TEST(VcuApp, TracksPackStatusAndLatchesOvertemp) {
+TEST(VcuApp, TracksHvcContactorsAndEntersDrive) {
   lhal::host::TestClock clock;
   lhal::host::CanNetwork network;
   lhal::host::Can vcu_can(&network);
-  lhal::host::Can hvc(&network);   // fake HVC feeding pack status
+  lhal::host::Can hvc(&network);   // fake HVC feeding contactor status
   lhal::host::Can dash(&network);  // observer
 
   vcu::Peripherals p;
@@ -73,47 +71,37 @@ TEST(VcuApp, TracksPackStatusAndLatchesOvertemp) {
   p.can = &vcu_can;
   vcu::App app(p);
 
-  EXPECT_FALSE(app.pack_status_seen());
+  EXPECT_FALSE(app.contactor_status_seen());
 
-  // Healthy pack: 543.2 V, 40 degC coolant.
-  HvcPackStatus pack;
-  pack.set_pack_voltage(543.2f);
-  pack.coolant_temp = 40;
-  hvc.Send(pack.ToFrame());
+  ContactorStatus contactors;
+  contactors.positive_hv_contactor = true;
+  hvc.Send(contactors.ToFrame());
   app.Step();
 
-  ASSERT_TRUE(app.pack_status_seen());
-  EXPECT_NEAR(app.pack_status().pack_voltage(), 543.2f, 0.1f);
-  EXPECT_EQ(app.state(), VcuState::kIdle);
+  ASSERT_TRUE(app.contactor_status_seen());
+  EXPECT_TRUE(app.contactor_status().positive_hv_contactor);
+  EXPECT_EQ(app.state(), vcu::State::kIdle);
 
-  // Coolant hits the limit: fault latches and the broadcast reflects it.
-  pack.coolant_temp = vcu::App::kCoolantOvertempDegC;
-  hvc.Send(pack.ToFrame());
+  contactors.negative_hv_contactor = true;
+  hvc.Send(contactors.ToFrame());
   clock.Advance(vcu::App::kStatusPeriodMs);
   app.Step();
 
-  EXPECT_EQ(app.state(), VcuState::kFault);
+  EXPECT_EQ(app.state(), vcu::State::kDrive);
 
-  // Cooling back down does not clear the latch.
-  pack.coolant_temp = 30;
-  hvc.Send(pack.ToFrame());
-  clock.Advance(vcu::App::kStatusPeriodMs);
-  app.Step();
-  EXPECT_EQ(app.state(), VcuState::kFault);
-
-  // The last status frame on the bus carries the fault.
+  // The last status frame reflects the ready-to-drive state.
   lhal::CanFrame frame;
-  VcuStatus last;
+  VcuStateMessage last;
   bool saw_status = false;
   while (dash.Receive(&frame)) {
-    if (VcuStatus::Matches(frame.id)) {
-      last = VcuStatus::FromFrame(frame);
+    if (VcuStateMessage::Matches(frame.id)) {
+      last = VcuStateMessage::FromFrame(frame);
       saw_status = true;
     }
   }
   ASSERT_TRUE(saw_status);
-  EXPECT_EQ(last.state, VcuState::kFault);
-  EXPECT_TRUE(last.faults_overtemp);
+  EXPECT_EQ(last.prndl_state, static_cast<uint8_t>(vcu::State::kDrive));
+  EXPECT_TRUE(last.ready_to_drive_buzzer);
 }
 
 TEST(VcuApp, RunsWithoutOptionalPeripherals) {
@@ -143,10 +131,10 @@ TEST(VcuApp, ShellReportsStateOverDebugUart) {
   vcu::App app(p);
   uart.TakeTx();  // discard the boot banner (contents vary with git state)
 
-  // Latch an overtemp fault, then query /state like tools/monitor would.
-  HvcPackStatus pack;
-  pack.coolant_temp = vcu::App::kCoolantOvertempDegC;
-  hvc.Send(pack.ToFrame());
+  ContactorStatus contactors;
+  contactors.positive_hv_contactor = true;
+  contactors.negative_hv_contactor = true;
+  hvc.Send(contactors.ToFrame());
   app.Step();
 
   const std::string cmd = "/state\r";
@@ -155,9 +143,9 @@ TEST(VcuApp, ShellReportsStateOverDebugUart) {
 
   const auto tx = uart.TakeTx();
   const std::string out(tx.begin(), tx.end());
-  EXPECT_NE(out.find("state=fault"), std::string::npos) << out;
-  EXPECT_NE(out.find("overtemp_latched=1"), std::string::npos) << out;
-  EXPECT_NE(out.find("coolant 60 degC"), std::string::npos) << out;
+  EXPECT_NE(out.find("state=drive"), std::string::npos) << out;
+  EXPECT_NE(out.find("positive=1"), std::string::npos) << out;
+  EXPECT_NE(out.find("negative=1"), std::string::npos) << out;
 }
 
 TEST(VcuApp, LoggerOutputsTimestampedLogsOverDebugUart) {
