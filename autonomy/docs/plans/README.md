@@ -9,5 +9,6 @@ Working documents: integration plans, change logs, the year roadmap. Written as 
 | [on-car-architecture.md](on-car-architecture.md) | Target stack on the retrofit car: sensors, nodes, CAN, safety loop, and what swaps versus sim |
 | [gazebo-change-notes.md](gazebo-change-notes.md) | Chronological change log (historical) |
 | [retrofit-roadmap-2026-27.md](retrofit-roadmap-2026-27.md) | Year roadmap snapshot. The live version is the VMS Timeline in Notion |
+| [mvp-pass-criteria.md](mvp-pass-criteria.md) | What the 10/28 software MVP gate run must show (draft) |
 
 For onboarding, start at [ros2/GETTING-STARTED.md](../../ros2/GETTING-STARTED.md).
