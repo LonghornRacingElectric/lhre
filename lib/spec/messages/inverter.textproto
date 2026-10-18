@@ -1,0 +1,787 @@
+# proto-file: lib/spec/proto/can_spec.proto
+# proto-message: lhre.canspec.SpecFile
+
+message {
+  name: "INVERTER_TEMPS"
+  can_id: 160
+  from_board: "Inverter"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 8
+  frequency_hz: 10.0
+  description: "Inverter Temps"
+  signal {
+    name: "module_a_temp"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    telemetry {
+      group: "Thermal"
+      field: "module_a_temp"
+      id: 23
+    }
+    description: "Module A Temp"
+  }
+  signal {
+    name: "module_b_temp"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    telemetry {
+      group: "Thermal"
+      field: "module_b_temp"
+      id: 24
+    }
+    description: "Module B Temp"
+  }
+  signal {
+    name: "module_c_temp"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    telemetry {
+      group: "Thermal"
+      field: "module_c_temp"
+      id: 25
+    }
+    description: "Module C Temp"
+  }
+  signal {
+    name: "gate_driver_temp"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    telemetry {
+      group: "Thermal"
+      field: "gate_driver_temp"
+      id: 18
+    }
+    description: "Gate Driver Temp"
+  }
+}
+message {
+  name: "INVERTER_TEMPS_2"
+  can_id: 162
+  from_board: "Inverter"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 8
+  frequency_hz: 10.0
+  description: "Inverter Temps 2"
+  signal {
+    name: "coolant_temp"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    telemetry {
+      group: "Thermal"
+      field: "coolant_temp"
+      id: 15
+    }
+    description: "Coolant Temp"
+  }
+  signal {
+    name: "inverter_hot_spot_temp"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    telemetry {
+      group: "Thermal"
+      field: "inverter_hotspot_temp"
+      id: 19
+    }
+    description: "Inverter Hot Spot Temp"
+  }
+  signal {
+    name: "motor_temp"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    telemetry {
+      group: "Thermal"
+      field: "motor_temp"
+      id: 4
+    }
+    description: "Motor Temp"
+  }
+  signal {
+    name: "torque_shudder"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "Nm"
+      }
+    }
+    telemetry {
+      group: "Controls"
+      field: "torque_shudder"
+      id: 29
+    }
+    description: "Torque Shudder"
+  }
+}
+message {
+  name: "INVERTER_STATUS"
+  can_id: 165
+  from_board: "Inverter"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 8
+  frequency_hz: 100.0
+  description: "Inverter Status"
+  signal {
+    name: "motor_angle"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "deg"
+      }
+    }
+    telemetry {
+      group: "Controls"
+      field: "motor_angle"
+      id: 25
+    }
+    description: "Motor Angle"
+  }
+  signal {
+    name: "motor_speed"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+    }
+    logical {
+      physical {
+        unit: "rpm"
+      }
+    }
+    description: "Motor Speed"
+  }
+  signal {
+    name: "inverter_frequency"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "Hz"
+      }
+    }
+    telemetry {
+      group: "Pack"
+      field: "inverter_freq"
+      id: 7
+    }
+    description: "Inverter Frequency"
+  }
+  signal {
+    name: "delta_resolver_angle"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "deg"
+      }
+    }
+    telemetry {
+      group: "Pack"
+      field: "delta_resolver_angle"
+      id: 6
+    }
+    description: "Delta Resolver Angle"
+  }
+}
+message {
+  name: "INVERTER_CURRENT"
+  can_id: 166
+  from_board: "Inverter"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 8
+  frequency_hz: 10.0
+  description: "Inverter Current"
+  signal {
+    name: "phase_a_current"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "A"
+      }
+    }
+    telemetry {
+      group: "Pack"
+      field: "phase_a_current"
+      id: 20
+    }
+    description: "Phase A Current"
+  }
+  signal {
+    name: "phase_b_current"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "A"
+      }
+    }
+    telemetry {
+      group: "Pack"
+      field: "phase_b_current"
+      id: 21
+    }
+    description: "Phase B Current"
+  }
+  signal {
+    name: "phase_c_current"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "A"
+      }
+    }
+    telemetry {
+      group: "Pack"
+      field: "phase_c_current"
+      id: 22
+    }
+    description: "Phase C Current"
+  }
+  signal {
+    name: "dc_bus_current"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "A"
+      }
+    }
+    telemetry {
+      group: "Pack"
+      field: "dc_bus_current"
+      id: 13
+    }
+    description: "DC Bus Current"
+  }
+}
+message {
+  name: "INVERTER_VOLTAGE"
+  can_id: 167
+  from_board: "Inverter"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 8
+  frequency_hz: 100.0
+  description: "Inverter Voltage"
+  signal {
+    name: "dc_bus_voltage"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    telemetry {
+      group: "Pack"
+      field: "dc_bus_v"
+      id: 5
+    }
+    description: "DC Bus Voltage"
+  }
+  signal {
+    name: "neutral_output_voltage"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    telemetry {
+      group: "Pack"
+      field: "neutral_output_v"
+      id: 8
+    }
+    description: "Neutral Output Voltage"
+  }
+  signal {
+    name: "vab_vq_voltage"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    telemetry {
+      group: "Pack"
+      field: "vab_vq_v"
+      id: 10
+    }
+    description: "Vab / Vq Voltage"
+  }
+  signal {
+    name: "vbc_vd_voltage"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    telemetry {
+      group: "Pack"
+      field: "vbc_vd_v"
+      id: 11
+    }
+    description: "Vbc / Vd Voltage"
+  }
+}
+message {
+  name: "INVERTER_DETAILS"
+  can_id: 170
+  from_board: "Inverter"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 8
+  frequency_hz: 100.0
+  description: "Inverter Details"
+  signal {
+    name: "vsm"
+    encoding {
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "VSM"
+  }
+  signal {
+    name: "pwm_freq"
+    encoding {
+      start_bit: 8
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "PWM Freq"
+  }
+  signal {
+    name: "inverter"
+    encoding {
+      start_bit: 16
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Inverter"
+  }
+  signal {
+    name: "relay"
+    encoding {
+      start_bit: 24
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Relay"
+  }
+  signal {
+    name: "misc_1"
+    encoding {
+      start_bit: 32
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Misc. 1"
+  }
+  signal {
+    name: "misc_2"
+    encoding {
+      start_bit: 40
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Misc. 2"
+  }
+  signal {
+    name: "misc_3"
+    encoding {
+      start_bit: 48
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Misc. 3"
+  }
+  signal {
+    name: "misc_4"
+    encoding {
+      start_bit: 56
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Misc. 4"
+  }
+}
+message {
+  name: "INVERTER_FAULTS"
+  can_id: 171
+  from_board: "Inverter"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 8
+  frequency_hz: 100.0
+  description: "Inverter Faults"
+  signal {
+    name: "post_faults"
+    encoding {
+      bit_length: 32
+    }
+    logical {
+      physical {
+      }
+    }
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "post_faults"
+      id: 4
+      wire_type: PROTO_FLOAT
+    }
+    description: "POST Faults"
+  }
+  signal {
+    name: "run_faults"
+    encoding {
+      start_bit: 32
+      bit_length: 32
+    }
+    logical {
+      physical {
+      }
+    }
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "run_faults"
+      id: 5
+      wire_type: PROTO_FLOAT
+    }
+    description: "Run Faults"
+  }
+}
+message {
+  name: "INVERTER_TSO"
+  can_id: 172
+  from_board: "Inverter"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 8
+  frequency_hz: 100.0
+  description: "Inverter TSO"
+  signal {
+    name: "commanded_torque"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "Nm"
+      }
+    }
+    telemetry {
+      group: "Controls"
+      field: "commanded_torque"
+      id: 24
+    }
+    description: "commanded torque"
+  }
+  signal {
+    name: "torque_feedback"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "Nm"
+      }
+    }
+    description: "torque feedback"
+  }
+  signal {
+    name: "time_since_turned_on"
+    encoding {
+      start_bit: 32
+      bit_length: 32
+      scale: 0.003
+    }
+    logical {
+      physical {
+        unit: "s"
+      }
+    }
+    telemetry {
+      group: "Pack"
+      field: "time_since_on"
+      id: 9
+      wire_type: PROTO_FLOAT
+    }
+    description: "Time since turned ON"
+  }
+}
+message {
+  name: "INVERTER_SPEED"
+  can_id: 176
+  from_board: "Inverter"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 8
+  frequency_hz: 333.0
+  description: "Inverter Speed"
+  signal {
+    name: "commanded_torque"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "Nm"
+      }
+    }
+    telemetry {
+      group: "Controls"
+      field: "torque_command"
+      id: 21
+    }
+    description: "commanded torque"
+  }
+  signal {
+    name: "torque_feedback"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "Nm"
+      }
+    }
+    telemetry {
+      group: "Controls"
+      field: "torque_feedback"
+      id: 2
+    }
+    description: "torque feedback"
+  }
+  signal {
+    name: "motor_speed"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+    }
+    logical {
+      physical {
+        unit: "rpm"
+      }
+    }
+    telemetry {
+      group: "Controls"
+      field: "motor_speed"
+      id: 1
+      wire_type: PROTO_FLOAT
+    }
+    description: "Motor Speed"
+  }
+  signal {
+    name: "bus_voltage"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    telemetry {
+      group: "Pack"
+      field: "bus_voltage"
+      id: 1
+    }
+    description: "Bus Voltage"
+  }
+}
+message {
+  name: "INVERTER_PARAMETER_RESPONSE"
+  can_id: 194
+  from_board: "Inverter"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 8
+  description: "Inverter Parameter Response"
+  signal {
+    name: "parameter_address"
+    encoding {
+      bit_length: 16
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "parameter address"
+  }
+  signal {
+    name: "success"
+    encoding {
+      start_bit: 16
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    description: "success"
+  }
+  signal {
+    name: "data_that_has_been_read"
+    encoding {
+      start_bit: 32
+      bit_length: 32
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Data that has been read"
+  }
+}

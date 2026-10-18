@@ -9,9 +9,9 @@ copy.
 | Directory | Output | Status |
 | --------- | ------ | ------ |
 | [cpp/](cpp/README.md) | Firmware pack/unpack library (`//lib/codegen/cpp:can_lib`) | Done |
-| proto/ | Telemetry snapshot proto | Planned |
+| [telemetry/](telemetry/README.md) | Snapshot proto, gateway CAN JSON, and Orion database DDL | Done |
 | gateway/ | Gateway decode + snapshot assignment tables | Planned |
-| ingest/ | Presence-aware ingest helpers + DDL | Planned |
+| ingest/ | Presence-aware ingest helpers | Planned |
 | dbc/ | DBC export for commercial CAN tooling | Planned |
 | docs/ | Markdown signal reference for the docs site | Planned |
 

@@ -163,6 +163,16 @@ def _check_registries(spec, report):
                          f"from_board '{message.from_board}' does not match its file "
                          f"(messages/{stem.group(1)}.textproto holds {stem.group(1).upper()}'s messages)")
 
+    snapshot_ids = {}
+    for filename, group in spec.groups():
+        where = f"{filename}: group {group.name}"
+        if group.snapshot_id < 3:
+            report.error(where, 5, "snapshot_id must be >= 3; root fields 1 and 2 are time and packet_id")
+        elif group.snapshot_id in snapshot_ids:
+            report.error(where, 5, f"snapshot_id {group.snapshot_id} already used by {snapshot_ids[group.snapshot_id]}")
+        else:
+            snapshot_ids[group.snapshot_id] = group.name
+
     for filename, enum_type in spec.enum_types():
         seen_names, seen_numbers = {}, {}
         for value in enum_type.value:
@@ -310,47 +320,57 @@ def _check_ledgers(spec, report):
     live = {name: {} for name in groups}  # group -> id -> (where, field)
     field_names = {}  # bare field name -> where (rule 2)
 
+    def record(group_name, field, field_id, repeated, array_index, where):
+        if group_name not in groups:
+            report.error(where, 5, f"unknown telemetry group '{group_name}'")
+            return
+        if not field or not _LOWER_SNAKE.match(field):
+            report.error(where, 1, f"telemetry field '{field}' must be lower_snake")
+            return
+        if field_id == 0:
+            report.error(where, 1, "telemetry id 0 is not a valid proto field number")
+            return
+        # One ledger entry per field name. Repeated fields share one entry
+        # (and one id) across array_index bindings; anything else that
+        # reuses a name or an id is a collision.
+        group_live = live[group_name]
+        entry = group_live.get(field)
+        if entry is None:
+            for other_field, other in group_live.items():
+                if other["id"] == field_id:
+                    report.error(where, 1, f"telemetry id {field_id} already used by '{other_field}' ({other['where']})")
+            group_live[field] = {
+                "id": field_id, "repeated": repeated,
+                "indexes": {array_index}, "where": where,
+            }
+        else:
+            if entry["id"] != field_id:
+                report.error(where, 1, f"field '{field}' bound with id {field_id} but {entry['where']} uses id {entry['id']}")
+            if not (entry["repeated"] and repeated):
+                report.error(where, 1, f"field '{field}' already bound by {entry['where']}")
+            elif array_index in entry["indexes"]:
+                report.error(where, 1, f"field '{field}' array_index {array_index} already bound by {entry['where']}")
+            entry["indexes"].add(array_index)
+
+        prior = field_names.setdefault(field, (group_name, where))
+        if prior[0] != group_name:
+            report.error(where, 2, f"field name '{field}' already used by {prior[1]}")
+
     for filename, message, signal, bit, telemetry in telemetry_bindings(spec):
         suffix = f".{bit.name}" if bit is not None else ""
         prefix = f"{message.name}." if message.name else ""
         where = f"{filename}: {prefix}{signal.name}{suffix}"
-        if telemetry.group not in groups:
-            report.error(where, 5, f"unknown telemetry group '{telemetry.group}'")
-            continue
-        if not telemetry.field or not _LOWER_SNAKE.match(telemetry.field):
-            report.error(where, 1, f"telemetry field '{telemetry.field}' must be lower_snake")
-            continue
-        if telemetry.id == 0:
-            report.error(where, 1, "telemetry id 0 is not a valid proto field number")
-            continue
         if resolve_tier(message, telemetry) == can_spec_pb2.TIER_UNSPECIFIED:
             report.error(where, 7, "signal does not resolve to a concrete rate tier")
+        record(telemetry.group, telemetry.field, telemetry.id, telemetry.repeated,
+               telemetry.array_index, where)
 
-        # One ledger entry per field name. Repeated fields share one entry
-        # (and one id) across array_index bindings; anything else that
-        # reuses a name or an id is a collision.
-        group_live = live[telemetry.group]
-        entry = group_live.get(telemetry.field)
-        if entry is None:
-            for other_field, other in group_live.items():
-                if other["id"] == telemetry.id:
-                    report.error(where, 1, f"telemetry id {telemetry.id} already used by '{other_field}' ({other['where']})")
-            group_live[telemetry.field] = {
-                "id": telemetry.id, "repeated": telemetry.repeated,
-                "indexes": {telemetry.array_index}, "where": where,
-            }
-        else:
-            if entry["id"] != telemetry.id:
-                report.error(where, 1, f"field '{telemetry.field}' bound with id {telemetry.id} but {entry['where']} uses id {entry['id']}")
-            if not (entry["repeated"] and telemetry.repeated):
-                report.error(where, 1, f"field '{telemetry.field}' already bound by {entry['where']}")
-            elif telemetry.array_index in entry["indexes"]:
-                report.error(where, 1, f"field '{telemetry.field}' array_index {telemetry.array_index} already bound by {entry['where']}")
-            entry["indexes"].add(telemetry.array_index)
-
-        prior = field_names.setdefault(telemetry.field, (telemetry.group, where))
-        if prior[0] != telemetry.group:
-            report.error(where, 2, f"field name '{telemetry.field}' already used by {prior[1]}")
+    for filename, group in spec.groups():
+        for field in group.external_field:
+            where = f"{filename}: {group.name}.{field.name}"
+            if field.type == can_spec_pb2.PROTO_SCALAR_TYPE_UNSPECIFIED:
+                report.error(where, 5, "external snapshot field type is required")
+            record(group.name, field.name, field.id, field.repeated, 0, where)
 
     for group_name, (filename, group) in groups.items():
         where = f"{filename}: group {group_name}"

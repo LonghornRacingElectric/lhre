@@ -74,11 +74,10 @@ git clone --filter=blob:none --sparse https://github.com/LonghornRacingElectric/
 
 ## The CAN schema
 
-[schema/](schema/README.md) holds the source of truth (CSVs + the proto)
-and generates everything else at build time — `can.json`, the prost
-bindings, and the signal-dispatch code all come out of Bazel (or `build.rs`
-under Cargo); **no generated file is checked in**. To change the schema:
-edit the CSVs, `bazel run //apps/BEVO/schema:update_can_proto`, commit both.
+[`lib/spec`](../../lib/spec/README.md) is the Bazel source of truth. It
+generates `can.json`, the deployed snapshot proto, prost bindings, dispatch
+code, and server database DDL; **no generated Bazel artifact is checked in**.
+The files under [schema/](schema/README.md) remain a plain-Cargo fallback.
 
 ## Not built by Bazel (on purpose)
 

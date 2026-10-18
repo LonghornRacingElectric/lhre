@@ -4,21 +4,20 @@
 
 namespace vcu {
 
-using lhre::can::VcuState;
-using lhre::can::hvc::HvcPackStatus;
-using lhre::can::vcu::VcuStatus;
+using lhre::can::hvc::ContactorStatus;
+using VcuStateMessage = lhre::can::vcu::VcuState;
 
 namespace {
 
-const char* StateName(VcuState state) {
+const char* StateName(State state) {
   switch (state) {
-    case VcuState::kInit:
+    case State::kInit:
       return "init";
-    case VcuState::kIdle:
+    case State::kIdle:
       return "idle";
-    case VcuState::kDrive:
+    case State::kDrive:
       return "drive";
-    case VcuState::kFault:
+    case State::kFault:
       return "fault";
   }
   return "?";
@@ -93,13 +92,15 @@ void App::ShellTaskLoop() {
 }
 
 void App::PrintState(longhorn::Console& out) {
-  out.Printf("state=%s overtemp_latched=%d statuses_sent=%lu",
-             StateName(state_), overtemp_latched_ ? 1 : 0,
+  out.Printf("state=%s statuses_sent=%lu", StateName(state_),
              static_cast<unsigned long>(statuses_sent_));
-  if (pack_status_seen_) {
-    out.Printf("pack: coolant %d degC", pack_status_.coolant_temp);
+  if (contactor_status_seen_) {
+    out.Printf("contactors: positive=%d negative=%d precharge=%d",
+               contactor_status_.positive_hv_contactor ? 1 : 0,
+               contactor_status_.negative_hv_contactor ? 1 : 0,
+               contactor_status_.precharge_contactor ? 1 : 0);
   } else {
-    out.Println("pack: no HvcPackStatus seen yet");
+    out.Println("contactors: no ContactorStatus seen yet");
   }
 }
 
@@ -139,29 +140,23 @@ void App::Step() {
 void App::ProcessCanRx() {
   lhal::CanFrame frame;
   while (p_.can->Receive(&frame)) {
-    if (HvcPackStatus::Matches(frame.id) && frame.len >= HvcPackStatus::kDlc) {
-      pack_status_ = HvcPackStatus::FromFrame(frame);
-      pack_status_seen_ = true;
-      if (pack_status_.coolant_temp >= kCoolantOvertempDegC) {
-        if (!overtemp_latched_) {
-          logger_.Error("Coolant overtemp! %d degC >= %d degC",
-                        pack_status_.coolant_temp, kCoolantOvertempDegC);
-          logger_.DrainOne(0);
-        }
-        overtemp_latched_ = true;  // faults latch until reset
-      }
+    if (ContactorStatus::Matches(frame.id) &&
+        frame.len >= ContactorStatus::kDlc) {
+      contactor_status_ = ContactorStatus::FromFrame(frame);
+      contactor_status_seen_ = true;
     }
     // Other IDs: nothing subscribed yet; drop them.
   }
-  state_ = overtemp_latched_ ? VcuState::kFault : VcuState::kIdle;
+  state_ = contactor_status_seen_ && contactor_status_.positive_hv_contactor &&
+                   contactor_status_.negative_hv_contactor
+               ? State::kDrive
+               : State::kIdle;
 }
 
 void App::SendStatus() {
-  VcuStatus status;
-  status.state = state_;
-  status.faults_overtemp = overtemp_latched_;
-  status.set_torque_request(0.0f);  // no pedal input wired up yet
-  status.speed_raw = 0;
+  VcuStateMessage status;
+  status.prndl_state = static_cast<uint8_t>(state_);
+  status.ready_to_drive_buzzer = state_ == State::kDrive;
   if (lhal::IsOk(p_.can->Send(status.ToFrame()))) {
     ++statuses_sent_;
   }

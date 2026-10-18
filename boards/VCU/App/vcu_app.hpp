@@ -23,12 +23,19 @@ struct Peripherals {
   lhal::Uart* debug_uart = nullptr;
 };
 
+enum class State : uint8_t {
+  kInit = 0,
+  kIdle = 1,
+  kDrive = 2,
+  kFault = 3,
+};
+
 // VCU application logic. LHAL interfaces + raw FreeRTOS API — no ST HAL —
 // so it compiles and runs on the host unchanged (the host build links the
 // kernel's simulator port; see drivers/freertos).
 //
 // CAN messages come from the generated spec library (lib/codegen/cpp):
-// the status task broadcasts lhre::can::vcu::VcuStatus, and every received
+// the status task broadcasts lhre::can::vcu::VcuState, and every received
 // frame is decoded through the generated Matches()/FromFrame() pairs —
 // no hand-packed frames, no magic IDs.
 //
@@ -42,14 +49,11 @@ struct Peripherals {
 class App {
  public:
   static constexpr uint32_t kBlinkPeriodMs = 100;
-  static constexpr uint32_t kStatusPeriodMs = 100;
+  static constexpr uint32_t kStatusPeriodMs = 3;
   // Shell RX poll period. The UART buffers only a handful of bytes between
   // polls (RX FIFO + RDR), so this must stay well under the time a burst
   // takes to overflow them; tools/monitor paces its probe to match.
   static constexpr uint32_t kShellPollMs = 2;
-  // Latch an overtemp fault when the HVC reports coolant at or above this.
-  static constexpr int8_t kCoolantOvertempDegC = 60;
-
   explicit App(const Peripherals& peripherals);
 
   // Creates the app's FreeRTOS tasks (statically allocated — no heap use).
@@ -62,14 +66,13 @@ class App {
   void Step();
 
   uint32_t statuses_sent() const { return statuses_sent_; }
-  // Last accumulator state received from the HVC; meaningful only once
-  // pack_status_seen() is true.
-  bool pack_status_seen() const { return pack_status_seen_; }
-  const lhre::can::hvc::HvcPackStatus& pack_status() const {
-    return pack_status_;
+  // Last HVC contactor state; meaningful only once contactor_status_seen().
+  bool contactor_status_seen() const { return contactor_status_seen_; }
+  const lhre::can::hvc::ContactorStatus& contactor_status() const {
+    return contactor_status_;
   }
   longhorn::Logger& logger() { return logger_; }
-  lhre::can::VcuState state() const { return state_; }
+  State state() const { return state_; }
 
  private:
   // In words, and relative to the platform's minimum: 2×128 words on the
@@ -108,10 +111,9 @@ class App {
   uint32_t last_status_ms_ = 0;
   uint32_t statuses_sent_ = 0;
 
-  lhre::can::VcuState state_ = lhre::can::VcuState::kIdle;
-  lhre::can::hvc::HvcPackStatus pack_status_;
-  bool pack_status_seen_ = false;
-  bool overtemp_latched_ = false;
+  State state_ = State::kIdle;
+  lhre::can::hvc::ContactorStatus contactor_status_;
+  bool contactor_status_seen_ = false;
 
   StaticTask_t blink_tcb_;
   StackType_t blink_stack_[kTaskStackDepth];

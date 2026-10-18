@@ -3,8 +3,9 @@
 Source of truth for every CAN message on the vehicle bus: wire encoding,
 logical meaning, and telemetry mapping. Everything downstream is
 generated from these files: the firmware library
-([lib/codegen/cpp](../codegen/cpp/README.md)) today, plus the snapshot
-proto, gateway tables, and DBC later. See
+([lib/codegen/cpp](../codegen/cpp/README.md)) and server schema bundle
+([lib/codegen/telemetry](../codegen/telemetry/README.md)) today, with DBC
+and richer gateway tables later. See
 [ADR-008](../../docs/architecture/008-can-spec-pipeline.md).
 
 ## Files
@@ -14,14 +15,45 @@ proto, gateway tables, and DBC later. See
 | `proto/can_spec.proto` | The meta-schema. Review changes to it like code. |
 | `buses.textproto` | Bus definitions. |
 | `types.textproto` | Shared enums and bitfields. |
-| `groups.textproto` | Telemetry groups and their id ledgers. |
-| `messages/<board>.textproto` | Messages sent by one board. `from_board` must match the filename, which is what lets codegen emit one namespace and library per board. |
+| `groups.textproto` | Telemetry groups, root ids, field ledgers, and gateway-produced fields such as GPS. |
+| `messages/<board>.textproto` | Messages sent by one source named by the lhre-2026 `From` column. `from_board` must match the filename, which is what lets codegen emit one namespace and library per source. |
 | `wire.lock` | Generated, committed. See below. |
 | `ir/` | The Python that reads, validates, and serializes the spec. |
 
-Every file parses as one `lhre.canspec.SpecFile`. Current messages are
-seed examples, pending migration of the real set from the lhre-2026 CSVs
-(staged at `apps/BEVO/schema/` on the `bevo-migration` branch).
+Every file parses as one `lhre.canspec.SpecFile`. The 71-message base matrix
+was migrated from lhre-2026 commit `d981057b8830f5f8be9c8b70a206dd2345748cd6`:
+[can_packets.csv](https://github.com/LonghornRacingElectric/lhre-2026/blob/d981057b8830f5f8be9c8b70a206dd2345748cd6/drivers/longhorn-lib/config/can_packets.csv)
+and
+[can_bitfields.csv](https://github.com/LonghornRacingElectric/lhre-2026/blob/d981057b8830f5f8be9c8b70a206dd2345748cd6/drivers/longhorn-lib/config/can_bitfields.csv).
+Their SHA-256 digests at migration were
+`695d06925f3302c103b78ae52da8359d697e389235e36e8f3456c880b8ccd7a0`
+and `418f03dd0061d3fe99586f429fafa6f9ff5c18eddaa4b5f59c8dc1c9d8a7ecc9`,
+respectively.
+
+The CSV needed explicit normalization where its rows could not satisfy the
+typed spec:
+
+- `FAN_FLOW_SPEEDS` uses `Data Acq`; that value was shifted into `Data[6]`.
+- `BSE_3` uses `Critical`; that value was shifted into `Data[7]`.
+- `HVC_BOUNDS_PARAMETERS` uses `Critical`; `ALLOW_BALANCE_COMMAND` already
+  named `Critical`. Both have no defined payload, so their DLC is `0`.
+- `CONTACTOR_STATUS` has four byte-aligned fields, so its source DLC `3` was
+  corrected to `4`.
+- Legacy `Quantity` was not an ID-range contract. Only cell voltages (`33`)
+  and cell temperatures (`23`) occupy consecutive IDs; firmware-update rows
+  are single IDs.
+- Four telemetry names had multiple producers. The canonical bindings are
+  `ambient_temp` from `FAN_FLOW_SPEEDS`, `motor_temp` from
+  `INVERTER_TEMPS_2`, and `motor_speed` plus `torque_feedback` from
+  `INVERTER_SPEED`. The duplicate CAN signals remain in the spec but are
+  bus-only.
+- GPS fields have no CAN rows because the gateway populates them from NMEA.
+  They remain live `Dynamics` fields in `groups.textproto`, alongside the
+  gateway-produced `BoardStatus` fields.
+
+The repository also retains the later `VCU_MODE_COMMAND` (`0x029`) addition
+used by the telemetry gateway, for 72 generated runtime messages total. It has
+no snapshot field and does not change the deployed protobuf surface.
 
 Spec files carry no comments. Textproto comments do not survive the
 canonical serializer, so prose goes in `description` fields, which the
@@ -62,10 +94,13 @@ is the Python in `ir/`: loader, validator, canonical serializer, and wire
 types. Nothing else understands the format. The loader is small and
 isolated so a future syntax change stays cheap.
 
+The vehicle has two 1 Mbit/s classic CAN buses: `Critical` for controls and
+powertrain traffic, and `Data Acq` for CSM, USM, and TSM sensor traffic.
+
 ## Derived wire types
 
-Nothing in the spec declares a field's type. It falls out of the
-encoding, and `ir/wire.py` is the one implementation of the rule:
+New CAN-backed fields derive their type from the encoding, and `ir/wire.py` is
+the one implementation of the rule:
 
 | Logical kind | Condition | Proto type |
 | --- | --- | --- |
@@ -85,6 +120,11 @@ Editing `scale` therefore changes a live field's wire type while its id
 stays the same. The ledger cannot see that, which is what `wire.lock` is
 for.
 
+Fields already deployed by lhre-2026 retain their exact protobuf scalar type.
+When that differs from the derived type, the telemetry binding carries a
+`wire_type` compatibility override. Gateway-produced fields declare their type
+in `groups.textproto`. Both appear in `wire.lock` and feed the same generators.
+
 ## wire.lock
 
 `wire.lock` records every telemetry field as `<group>.<field> <id>
@@ -93,7 +133,8 @@ for.
 Regenerate with `bazel run //tools/spec:lock` and read the diff: those
 lines are what deployed consumers and archived data can see.
 
-The generated `.proto` stays a build output and is never committed.
+The generated `.proto`, runtime `can.json`, and Orion database DDL stay Bazel
+outputs under `//lib/codegen/telemetry` and are never committed.
 
 ## Indexed arrays
 
@@ -107,7 +148,7 @@ indexed by frame ID:
 
 Element index is `(frame_id − can_id) × slots_per_frame + array_index`,
 so 4 slots with `quantity: 4` gives 16 elements on one ledger id.
-`HVC_CELL_TEMPS` in `messages/hvc.textproto` is the worked example.
+`CELL_TEMPERATURES` in `messages/hvc.textproto` is the worked example.
 
 ## Mux
 
