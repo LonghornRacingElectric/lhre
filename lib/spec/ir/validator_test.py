@@ -15,7 +15,7 @@ enum_type {
   value { name: "ON" number: 1 }
 }
 groups {
-  group { name: "Vehicle" next_free_id: 2 }
+  group { name: "Vehicle" next_free_id: 2 snapshot_id: 3 }
 }
 """
 
@@ -82,8 +82,9 @@ class ValidatorTest(unittest.TestCase):
     # Rule 2: global field-name uniqueness.
     def test_same_name_in_two_groups(self):
         registry = REGISTRY.replace(
-            'group { name: "Vehicle" next_free_id: 2 }',
-            'group { name: "Vehicle" next_free_id: 2 } group { name: "Other" next_free_id: 2 }')
+            'group { name: "Vehicle" next_free_id: 2 snapshot_id: 3 }',
+            'group { name: "Vehicle" next_free_id: 2 snapshot_id: 3 } '
+            'group { name: "Other" next_free_id: 2 snapshot_id: 4 }')
         other = MESSAGE.replace("STATUS", "STATUS2").replace("0x100", "0x101").replace(
             '"Vehicle"', '"Other"')
         errors, _ = _validate(registry, MESSAGE, other)
@@ -165,6 +166,22 @@ message {
         message = MESSAGE.replace('logical { physical { unit: "kph" } }', 'logical { enum_type: "Nope" }')
         errors, _ = _validate(REGISTRY, message)
         self.assert_error(errors, "unknown enum_type")
+
+    def test_external_snapshot_field_satisfies_ledger(self):
+        registry = REGISTRY.replace(
+            'next_free_id: 2 snapshot_id: 3',
+            'next_free_id: 3 snapshot_id: 3 '
+            'external_field { name: "gps" id: 2 type: PROTO_FLOAT repeated: true }')
+        errors, _ = _validate(registry, MESSAGE)
+        self.assertEqual(errors, [])
+
+    def test_duplicate_snapshot_id(self):
+        registry = REGISTRY.replace(
+            'group { name: "Vehicle" next_free_id: 2 snapshot_id: 3 }',
+            'group { name: "Vehicle" next_free_id: 2 snapshot_id: 3 } '
+            'group { name: "Other" snapshot_id: 3 }')
+        errors, _ = _validate(registry, MESSAGE)
+        self.assert_error(errors, "snapshot_id 3 already used")
 
     # Rule 6: encoding sanity.
     def test_signed_needs_two_bits(self):

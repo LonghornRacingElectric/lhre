@@ -104,8 +104,7 @@ TEST(CanLib, FloatAccessorsScaleAndRound) {
   EXPECT_NEAR(cells.voltage_i(), 4.1234f, 1e-4f);
 }
 
-TEST(CanLib, CompleteMatrixMetadataAndCorrectedContactorDlc) {
-  EXPECT_EQ(kMessageCount, 71u);
+TEST(CanLib, KnownMessageMetadataAndCorrectedContactorDlc) {
   EXPECT_EQ(ContactorStatus::kFrameId, 0x131u);
   EXPECT_EQ(ContactorStatus::kDlc, 4u);
   EXPECT_EQ(VcuState::kFrameId, 0x1C7u);

@@ -20,6 +20,16 @@ For Bazel-managed components, `build` invokes each component's `_load` target
 and then `docker compose up --no-build`. Logsync and the PM2 viewer retain their
 existing non-Bazel workflows. The Linux devtool is authoritative for the new
 image path; the Windows script has not yet been ported to the Bazel loader.
+Before invoking the ingest Compose project, the devtool resolves
+`//apps/telemetry:current_schema_sql` and mounts that generated Orion DDL into
+Postgres. A `lib/spec` edit therefore reaches a newly initialized server
+database without rewriting `orion_db_init.sql` in the source tree.
+
+Disk preflight uses Docker's data root on Linux. On macOS, that path exists
+inside Docker Desktop's VM, so the devtool reports free space on the host
+filesystem backing Docker Desktop instead. It also checks the daemon before
+running preflight; start Docker Desktop when the daemon-unavailable message is
+shown.
 
 Docker-managed volumes are the default, which works on Linux, macOS, and CI.
 The production server opts into bind-backed storage explicitly:

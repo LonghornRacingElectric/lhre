@@ -3,8 +3,9 @@
 Source of truth for every CAN message on the vehicle bus: wire encoding,
 logical meaning, and telemetry mapping. Everything downstream is
 generated from these files: the firmware library
-([lib/codegen/cpp](../codegen/cpp/README.md)) today, plus the snapshot
-proto, gateway tables, and DBC later. See
+([lib/codegen/cpp](../codegen/cpp/README.md)) and server schema bundle
+([lib/codegen/telemetry](../codegen/telemetry/README.md)) today, with DBC
+and richer gateway tables later. See
 [ADR-008](../../docs/architecture/008-can-spec-pipeline.md).
 
 ## Files
@@ -14,13 +15,13 @@ proto, gateway tables, and DBC later. See
 | `proto/can_spec.proto` | The meta-schema. Review changes to it like code. |
 | `buses.textproto` | Bus definitions. |
 | `types.textproto` | Shared enums and bitfields. |
-| `groups.textproto` | Telemetry groups and their id ledgers. |
+| `groups.textproto` | Telemetry groups, root ids, field ledgers, and gateway-produced fields such as GPS. |
 | `messages/<board>.textproto` | Messages sent by one source named by the lhre-2026 `From` column. `from_board` must match the filename, which is what lets codegen emit one namespace and library per source. |
 | `wire.lock` | Generated, committed. See below. |
 | `ir/` | The Python that reads, validates, and serializes the spec. |
 
-Every file parses as one `lhre.canspec.SpecFile`. The 71-message matrix was
-migrated from lhre-2026 commit `d981057b8830f5f8be9c8b70a206dd2345748cd6`:
+Every file parses as one `lhre.canspec.SpecFile`. The 71-message base matrix
+was migrated from lhre-2026 commit `d981057b8830f5f8be9c8b70a206dd2345748cd6`:
 [can_packets.csv](https://github.com/LonghornRacingElectric/lhre-2026/blob/d981057b8830f5f8be9c8b70a206dd2345748cd6/drivers/longhorn-lib/config/can_packets.csv)
 and
 [can_bitfields.csv](https://github.com/LonghornRacingElectric/lhre-2026/blob/d981057b8830f5f8be9c8b70a206dd2345748cd6/drivers/longhorn-lib/config/can_bitfields.csv).
@@ -46,8 +47,13 @@ typed spec:
   `INVERTER_TEMPS_2`, and `motor_speed` plus `torque_feedback` from
   `INVERTER_SPEED`. The duplicate CAN signals remain in the spec but are
   bus-only.
-- The source's synthetic GPS fields have no CAN rows. Their Dynamics ids and
-  names are tombstoned rather than recycled.
+- GPS fields have no CAN rows because the gateway populates them from NMEA.
+  They remain live `Dynamics` fields in `groups.textproto`, alongside the
+  gateway-produced `BoardStatus` fields.
+
+The repository also retains the later `VCU_MODE_COMMAND` (`0x029`) addition
+used by the telemetry gateway, for 72 generated runtime messages total. It has
+no snapshot field and does not change the deployed protobuf surface.
 
 Spec files carry no comments. Textproto comments do not survive the
 canonical serializer, so prose goes in `description` fields, which the
@@ -93,8 +99,8 @@ powertrain traffic, and `Data Acq` for CSM, USM, and TSM sensor traffic.
 
 ## Derived wire types
 
-Nothing in the spec declares a field's type. It falls out of the
-encoding, and `ir/wire.py` is the one implementation of the rule:
+New CAN-backed fields derive their type from the encoding, and `ir/wire.py` is
+the one implementation of the rule:
 
 | Logical kind | Condition | Proto type |
 | --- | --- | --- |
@@ -114,6 +120,11 @@ Editing `scale` therefore changes a live field's wire type while its id
 stays the same. The ledger cannot see that, which is what `wire.lock` is
 for.
 
+Fields already deployed by lhre-2026 retain their exact protobuf scalar type.
+When that differs from the derived type, the telemetry binding carries a
+`wire_type` compatibility override. Gateway-produced fields declare their type
+in `groups.textproto`. Both appear in `wire.lock` and feed the same generators.
+
 ## wire.lock
 
 `wire.lock` records every telemetry field as `<group>.<field> <id>
@@ -122,7 +133,8 @@ for.
 Regenerate with `bazel run //tools/spec:lock` and read the diff: those
 lines are what deployed consumers and archived data can see.
 
-The generated `.proto` stays a build output and is never committed.
+The generated `.proto`, runtime `can.json`, and Orion database DDL stay Bazel
+outputs under `//lib/codegen/telemetry` and are never committed.
 
 ## Indexed arrays
 

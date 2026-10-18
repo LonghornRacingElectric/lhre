@@ -45,6 +45,7 @@ message {
       group: "Controls"
       field: "rpm_request"
       id: 20
+      wire_type: PROTO_FLOAT
     }
     description: "rpm request"
   }
@@ -867,6 +868,7 @@ message {
       group: "DiagnosticsHigh"
       field: "prndl_state"
       id: 1
+      wire_type: PROTO_FLOAT
     }
     description: "PRNDL State"
   }
@@ -951,6 +953,7 @@ message {
       group: "Controls"
       field: "event_mode"
       id: 39
+      wire_type: PROTO_FLOAT
     }
     description: "Event Mode"
   }
@@ -979,6 +982,7 @@ message {
       group: "Controls"
       field: "net_energy"
       id: 40
+      wire_type: PROTO_FLOAT
     }
     description: "Net Energy"
   }
@@ -998,6 +1002,7 @@ message {
       group: "Controls"
       field: "regen_energy"
       id: 41
+      wire_type: PROTO_FLOAT
     }
     description: "Regen Energy"
   }

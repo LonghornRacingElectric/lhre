@@ -93,6 +93,7 @@ message {
       group: "Thermal"
       field: "fan_rpm"
       id: 17
+      wire_type: PROTO_FLOAT
     }
     description: "Radiator Fan Speed"
   }
@@ -111,6 +112,7 @@ message {
       group: "Thermal"
       field: "battery_fan_rpm"
       id: 8
+      wire_type: PROTO_FLOAT
     }
     description: "Battery Fan Speed"
   }

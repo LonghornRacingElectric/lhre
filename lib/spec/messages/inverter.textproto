@@ -567,6 +567,7 @@ message {
       group: "DiagnosticsHigh"
       field: "post_faults"
       id: 4
+      wire_type: PROTO_FLOAT
     }
     description: "POST Faults"
   }
@@ -584,6 +585,7 @@ message {
       group: "DiagnosticsHigh"
       field: "run_faults"
       id: 5
+      wire_type: PROTO_FLOAT
     }
     description: "Run Faults"
   }
@@ -647,6 +649,7 @@ message {
       group: "Pack"
       field: "time_since_on"
       id: 9
+      wire_type: PROTO_FLOAT
     }
     description: "Time since turned ON"
   }
@@ -715,6 +718,7 @@ message {
       group: "Controls"
       field: "motor_speed"
       id: 1
+      wire_type: PROTO_FLOAT
     }
     description: "Motor Speed"
   }
