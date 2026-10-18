@@ -363,3 +363,34 @@ Terrain remains flat and the 3 DOF car stays level. Uneven ground, vehicle
 roll/pitch, sensor vibration, sunlight interference and calibrated material
 intensity remain future work. These scenarios test robustness without
 claiming the unavailable car has been physically validated.
+
+
+## Ray-casting cost
+
+The caster sorts beam azimuths once per cone-size group and selects
+conservative intervals before solving intersections. Square feet use a
+circumscribed circle so their corners are retained. This preserves the
+unculled surface hits while avoiding every-beam/every-base array work.
+A numerical comparison on the recorded 170-cone PR #91 scene, with
+20,000 beams, took about 390 ms before culling and 20 ms after it on one
+machine, with exactly matching ranges, hit masks and surface labels. Startup table decoding and
+optional ten-pose motion scans add cost; these timings do not establish
+real-time guarantees for every profile.
+
+Tests compare culled and uncensored intersections at azimuth wrap, square
+corners, near/overhead cones and vertical rays. Offline mount positions
+read the same vehicle configuration as the ROS wrapper rather than copy
+its current numbers. These changes retain this branch's launch arguments,
+sim-time clock, Foxglove layout, detector pipeline and metrics contract.
+
+
+Validation on the PR #91 base built 14 packages and passed 210 checks in
+13 packages; optional BobSim solver checks were not run because the
+external solver checkout and pandas are absent. Strict MkDocs and
+`check_layout.sh` passed, including car/sensor markers and every shared
+layout topic/frame. The full truth/EKF recordings produced about four
+clouds per simulated second while another preview was also running; the
+numerical speedup alone is not a live 10 Hz guarantee for this mesh-heavy
+stack. The truth harness returned `lap`, but max CTE was 13.2 m and its
+last command was nonzero. Those are integration diagnostics, not a safe
+finished lap or an MVP pass. Foxglove rendering remains a manual check.

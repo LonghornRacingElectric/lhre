@@ -50,28 +50,29 @@ def ground_ranges(dirs: np.ndarray, sensor_z: float) -> tuple:
     return ranges, going_down & (ranges > 0.0)
 
 
-def _candidate_rays(dirs: np.ndarray, ax: float, ay: float,
-                    radius: float) -> np.ndarray:
-    """
-    Return indices of rays whose azimuth could reach this cone.
-
-    A cone 10 m away is about 1.3 degrees wide, so this discards over
-    99% of a 20,000-beam frame before any quadratic is solved. Without
-    it the full cross product of beams and cones would be solved every
-    frame for no benefit.
-    """
+def _candidate_rays(azimuths: np.ndarray, order: np.ndarray,
+                    ax: float, ay: float, radius: float) -> np.ndarray:
+    """Select beams inside a conservative azimuth interval, including wrap."""
     horizontal = float(np.hypot(ax, ay))
     if horizontal <= radius:
-        return np.arange(dirs.shape[0])
+        return order
 
     half_width = float(np.arcsin(radius / horizontal))
-    # One beam spacing of slack, so a cone edge is never clipped by the
-    # cull itself rather than by geometry.
-    margin = half_width * 0.5 + 1e-3
+    # Keep the existing edge slack; culling must never remove a surface hit.
+    half_width += half_width * 0.5 + 1e-3
     cone_az = float(np.arctan2(ay, ax))
-    ray_az = np.arctan2(dirs[:, 1], dirs[:, 0])
-    delta = np.abs((ray_az - cone_az + np.pi) % (2.0 * np.pi) - np.pi)
-    return np.flatnonzero(delta <= half_width + margin)
+    low, high = cone_az - half_width, cone_az + half_width
+    if low < -np.pi:
+        start = np.searchsorted(azimuths, low + 2.0 * np.pi, side='left')
+        end = np.searchsorted(azimuths, high, side='right')
+        return np.concatenate((order[start:], order[:end]))
+    if high > np.pi:
+        start = np.searchsorted(azimuths, low, side='left')
+        end = np.searchsorted(azimuths, high - 2.0 * np.pi, side='right')
+        return np.concatenate((order[start:], order[:end]))
+    start = np.searchsorted(azimuths, low, side='left')
+    end = np.searchsorted(azimuths, high, side='right')
+    return order[start:end]
 
 
 def cone_ranges(dirs: np.ndarray, cones_xy: np.ndarray, sensor_z: float,
@@ -99,6 +100,11 @@ def cone_ranges(dirs: np.ndarray, cones_xy: np.ndarray, sensor_z: float,
     cos_sq = float(np.cos(half_angle) ** 2)
     sin_sq = float(np.sin(half_angle) ** 2)
 
+    # Sort once so each cone selects a small interval instead of scanning
+    # all beams again. The same index also bounds the square base below.
+    ray_az = np.arctan2(dirs[:, 1], dirs[:, 0])
+    order = np.argsort(ray_az)
+    azimuths = ray_az[order]
     apex_z = height - sensor_z
 
     for cone_x, cone_y in cones_xy:
@@ -106,7 +112,7 @@ def cone_ranges(dirs: np.ndarray, cones_xy: np.ndarray, sensor_z: float,
         if np.hypot(cone_x, cone_y) - radius > max_range:
             continue
 
-        idx = _candidate_rays(dirs, cone_x, cone_y, radius)
+        idx = _candidate_rays(azimuths, order, cone_x, cone_y, radius)
         if idx.size == 0:
             continue
 
@@ -140,7 +146,8 @@ def cone_ranges(dirs: np.ndarray, cones_xy: np.ndarray, sensor_z: float,
         for sign in (-1.0, 1.0):
             t = np.where(usable, (-b + sign * sqrt_disc) / (2.0 * a),
                          np.inf)
-            point_z = t * dz
+            point_z = np.full_like(t, np.inf)
+            np.multiply(t, dz, out=point_z, where=np.isfinite(t))
             # In front of the sensor, below the apex, above the ground:
             # the last two bounds are what make the cone finite.
             ok = (usable & (t > 0.0) & (point_z <= apex_z)
@@ -155,17 +162,23 @@ def cone_ranges(dirs: np.ndarray, cones_xy: np.ndarray, sensor_z: float,
     # The square foot is a slab. This also accounts for the flat lip missing
     # from a circular cone, and uses the same envelope as the rendered mesh.
     thickness = CONE_SPECS['blue'].base_height_m
+    foot_radius = np.sqrt(2.0) * radius
     for cone_x, cone_y in cones_xy:
+        # The circumscribed circle includes square corners outside the body.
+        idx = _candidate_rays(azimuths, order, cone_x, cone_y, foot_radius)
+        if idx.size == 0:
+            continue
+        d = dirs[idx]
         low = np.array([cone_x - radius, cone_y - radius, -sensor_z])
         high = np.array([cone_x + radius, cone_y + radius, thickness - sensor_z])
-        parallel = np.abs(dirs) < _PARALLEL_EPS
-        safe = np.where(parallel, 1.0, dirs)
+        parallel = np.abs(d) < _PARALLEL_EPS
+        safe = np.where(parallel, 1.0, d)
         t0, t1 = low / safe, high / safe
         near = np.where(parallel, -np.inf, np.minimum(t0, t1)).max(axis=1)
         far = np.where(parallel, np.inf, np.maximum(t0, t1)).min(axis=1)
         outside = (parallel & ((low > 0) | (high < 0))).any(axis=1)
         hit = ~outside & (far >= np.maximum(near, 0.0)) & (near > 0)
-        best = np.minimum(best, np.where(hit, near, np.inf))
+        best[idx] = np.minimum(best[idx], np.where(hit, near, np.inf))
     return best, np.isfinite(best)
 
 
