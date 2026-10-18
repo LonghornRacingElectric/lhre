@@ -68,7 +68,6 @@ def test_lidar_check_can_be_off():
 
 
 @pytest.mark.parametrize('sample', [
-    {'var_x': 1.5 ** 2},                       # uncertainty past the bound
     {'vx': 410.0},                             # the 10/18 EKF spike
     {'x': math.nan},                           # non-finite pose
     {'yaw_rate': math.inf},                    # non-finite twist
@@ -82,6 +81,27 @@ def test_ekf_divergence(sample):
     m.on_lidar(1.05)
     m.on_odom(1.05, **odom)
     assert m.check(1.05) == Fault.EKF_DIVERGED
+
+
+def test_uncertainty_bound_is_off_by_default():
+    # Dead-reckoning variance only grows without GNSS; 10 m std is normal.
+    m = SafetyMonitor(CFG, now=0.0)
+    m.on_lidar(0.0)
+    m.on_command(0.0)
+    m.on_odom(0.0, 0.0, 0.0, 5.0, 0.0, 0.0, 100.0, 100.0)
+    assert m.check(0.0) == Fault.NONE
+
+
+def test_uncertainty_bound_when_enabled():
+    cfg = SafetyConfig(wheelbase_m=WHEELBASE, max_speed_mps=15.0,
+                       max_position_std_m=1.0)
+    m = SafetyMonitor(cfg, now=0.0)
+    m.on_lidar(0.0)
+    m.on_command(0.0)
+    m.on_odom(0.0, 0.0, 0.0, 5.0, 0.0, 0.0, 0.9 ** 2, 0.01)
+    assert m.check(0.0) == Fault.NONE
+    m.on_odom(0.05, 0.0, 0.0, 5.0, 0.0, 0.0, 1.1 ** 2, 0.01)
+    assert m.check(0.05) == Fault.EKF_DIVERGED
 
 
 def test_divergence_clears_when_the_estimate_recovers():

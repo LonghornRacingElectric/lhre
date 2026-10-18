@@ -15,10 +15,15 @@ so a fault, a crash or a hang all look the same to whatever is listening.
 | Fault | Trips when | Reads |
 |---|---|---|
 | `ODOM_STALE` | No odometry for `odom_timeout_s` (the EKF or bridge died or hung) | `/lhr/vehicle/odom` |
-| `EKF_DIVERGED` | Position standard deviation over `max_position_std_m`, any non-finite field, or speed over `max_speed_factor` x the car's top speed from `vehicle.yaml` | `/lhr/vehicle/odom` |
+| `EKF_DIVERGED` | Any non-finite field, speed over `max_speed_factor` x the car's top speed from `vehicle.yaml`, or (once enabled) position standard deviation over `max_position_std_m` | `/lhr/vehicle/odom` |
 | `LIDAR_STALE` | No cloud for `lidar_timeout_s` (only with `monitor_lidar`) | `/lhr/lidar/points` |
 | `GEOFENCE` | Further than `geofence_radius_m` from the first reported pose | `/lhr/vehicle/odom` |
 | `STEER_TRACKING` | Above `steer_min_speed_mps`, measured yaw rate differs from v·tan(δ)/L for the commanded δ by more than `max(steer_yaw_rate_tol, steer_rel_tol x expected)` for `steer_window_s` | `/lhr/vehicle/cmd`, `/lhr/vehicle/odom` |
+
+The uncertainty bound is off by default (`max_position_std_m: 0`). Without
+GNSS the EKF's position variance starts at 1 m² and only grows, so any bound
+trips before the car moves; the first Gazebo run on 10/18 did exactly that.
+Turn it on once GNSS keeps the covariance bounded.
 
 None of them read ground truth. The steering check stands in for a steering
 angle sensor the sim does not have; on the car the same comparison runs off

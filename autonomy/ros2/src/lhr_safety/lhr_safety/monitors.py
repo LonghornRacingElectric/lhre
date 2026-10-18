@@ -40,8 +40,11 @@ class SafetyConfig:
     # The EKF and the Gazebo bridge both publish odom at 50 Hz or more.
     odom_timeout_s: float = 0.25
     # A divergence bound, not an accuracy bound: the MVP's 0.5 m accuracy
-    # check is scored against truth, which this node never reads.
-    max_position_std_m: float = 1.0
+    # check is scored against truth, which this node never reads. 0 turns it
+    # off, the default: without GNSS the EKF's position variance starts at
+    # 1 m^2 and only grows, so any bound trips at startup. Set it once GNSS
+    # keeps the covariance bounded.
+    max_position_std_m: float = 0.0
     # Speed above this multiple of the car's top speed is a broken estimate.
     max_speed_factor: float = 1.5
     geofence_radius_m: float = 150.0
@@ -86,7 +89,8 @@ class SafetyMonitor:
             return
         speed = math.hypot(vx, vy)
         std = math.sqrt(max(var_x, var_y, 0.0))
-        self._diverged = (std > cfg.max_position_std_m
+        too_uncertain = 0.0 < cfg.max_position_std_m < std
+        self._diverged = (too_uncertain
                           or speed > cfg.max_speed_factor * cfg.max_speed_mps)
 
         # The test area is anchored where the car first reports a pose,

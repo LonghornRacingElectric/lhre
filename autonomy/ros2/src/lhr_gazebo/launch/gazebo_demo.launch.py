@@ -503,7 +503,7 @@ def generate_launch_description():
             description='Run safety_node: trips the mission on stack faults'),
         DeclareLaunchArgument('safety_lidar_timeout_s', default_value='0.3'),
         DeclareLaunchArgument('safety_odom_timeout_s', default_value='0.25'),
-        DeclareLaunchArgument('safety_max_position_std_m', default_value='1.0'),
+        DeclareLaunchArgument('safety_max_position_std_m', default_value='0.0'),
         DeclareLaunchArgument('safety_max_speed_factor', default_value='1.5'),
         DeclareLaunchArgument('safety_geofence_radius_m', default_value='150.0'),
         DeclareLaunchArgument('safety_steer_min_speed_mps', default_value='2.0'),

@@ -761,7 +761,7 @@ old header.
 | `monitor_lidar` | `true` | Check LiDAR age (the Gazebo launch sets it from `perception`) |
 | `lidar_timeout_s` | `0.3` | Cloud age (s) that counts as stale, about three missed frames |
 | `odom_timeout_s` | `0.25` | Odometry age (s) that counts as stale |
-| `max_position_std_m` | `1.0` | Largest pose standard deviation (m) before the EKF counts as diverged |
+| `max_position_std_m` | `0.0` | Largest pose standard deviation (m) before the EKF counts as diverged; 0 is off, the default until GNSS bounds the EKF's covariance |
 | `max_speed_factor` | `1.5` | Speed above this multiple of `vehicle.yaml`'s top speed counts as diverged |
 | `geofence_radius_m` | `150.0` | Distance (m) from the first reported pose that trips the geofence |
 | `steer_min_speed_mps` | `2.0` | Speed (m/s) below which the steering check is skipped |
