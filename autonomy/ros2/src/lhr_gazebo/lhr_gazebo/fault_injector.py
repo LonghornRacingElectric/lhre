@@ -24,8 +24,7 @@ from ackermann_msgs.msg import AckermannDriveStamped
 from nav_msgs.msg import Odometry
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import (DurabilityPolicy, qos_profile_sensor_data,
-                       QoSProfile, ReliabilityPolicy)
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import PointCloud2
 from std_msgs.msg import String
 
@@ -135,12 +134,12 @@ class FaultInjector(Node):
 
         f = self._fault
         if f.src is not None:
-            # The LiDAR relay passes clouds through as bytes; nothing here
-            # needs to look inside one.
-            raw = f.msg is PointCloud2
-            qos = qos_profile_sensor_data if raw else 10
-            self._out = self.create_publisher(f.msg, f.dst, qos)
-            self.create_subscription(f.msg, f.src, self._relay_cb, qos, raw=raw)
+            # Reliable like the producers it stands in for: a best-effort
+            # relay is invisible to reliable consumers (lidar_cone_detector).
+            # Clouds pass through as bytes; nothing here looks inside one.
+            self._out = self.create_publisher(f.msg, f.dst, 10)
+            self.create_subscription(f.msg, f.src, self._relay_cb, 10,
+                                     raw=f.msg is PointCloud2)
 
         self.create_timer(0.02, self._tick)
         self.get_logger().warning(

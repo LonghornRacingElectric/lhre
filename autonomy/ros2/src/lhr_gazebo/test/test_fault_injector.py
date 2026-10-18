@@ -18,6 +18,7 @@ from lhr_safety.monitors import Fault
 from nav_msgs.msg import Odometry
 import pytest
 import rclpy
+from rclpy.qos import ReliabilityPolicy
 
 
 # ----- FaultClock ------------------------------------------------------------
@@ -67,6 +68,14 @@ def injector(request):
     finally:
         # Always, so one failure cannot poison every later rclpy test.
         rclpy.shutdown()
+
+
+@pytest.mark.parametrize(
+    'injector', sorted(k for k, f in FAULTS.items() if f.src), indirect=True)
+def test_relay_is_reliable(injector):
+    # A best-effort relay never connects to a reliable consumer, so the
+    # car silently loses that input before the fault even starts.
+    assert injector._out.qos_profile.reliability == ReliabilityPolicy.RELIABLE
 
 
 @pytest.mark.parametrize('injector', ['odom_spike'], indirect=True)
