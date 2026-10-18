@@ -12,7 +12,7 @@ CFG = SafetyConfig(wheelbase_m=WHEELBASE, max_speed_mps=15.0)
 def _healthy(monitor, t, x=0.0, y=0.0, speed=5.0, steer=0.0):
     """Feed one consistent tick: fresh LiDAR, odom and a matching command."""
     monitor.on_lidar(t)
-    monitor.on_command(steer)
+    monitor.on_command(t, steer)
     yaw_rate = speed * math.tan(steer) / WHEELBASE
     monitor.on_odom(t, x, y, speed, 0.0, yaw_rate, 0.01, 0.01)
 
@@ -53,7 +53,7 @@ def test_lidar_that_stops_is_stale():
     t = last
     while t < last + 0.5:
         t += 0.05
-        m.on_command(0.0)
+        m.on_command(t, 0.0)
         m.on_odom(t, 0.0, 0.0, 5.0, 0.0, 0.0, 0.01, 0.01)
     assert m.check(t) == Fault.LIDAR_STALE
 
@@ -62,7 +62,7 @@ def test_lidar_check_can_be_off():
     cfg = SafetyConfig(wheelbase_m=WHEELBASE, max_speed_mps=15.0,
                        monitor_lidar=False)
     m = SafetyMonitor(cfg, now=0.0)
-    m.on_command(0.0)
+    m.on_command(1.0, 0.0)
     m.on_odom(1.0, 0.0, 0.0, 5.0, 0.0, 0.0, 0.01, 0.01)
     assert m.check(1.0) == Fault.NONE
 
@@ -87,7 +87,7 @@ def test_uncertainty_bound_is_off_by_default():
     # Dead-reckoning variance only grows without GNSS; 10 m std is normal.
     m = SafetyMonitor(CFG, now=0.0)
     m.on_lidar(0.0)
-    m.on_command(0.0)
+    m.on_command(0.0, 0.0)
     m.on_odom(0.0, 0.0, 0.0, 5.0, 0.0, 0.0, 100.0, 100.0)
     assert m.check(0.0) == Fault.NONE
 
@@ -97,7 +97,7 @@ def test_uncertainty_bound_when_enabled():
                        max_position_std_m=1.0)
     m = SafetyMonitor(cfg, now=0.0)
     m.on_lidar(0.0)
-    m.on_command(0.0)
+    m.on_command(0.0, 0.0)
     m.on_odom(0.0, 0.0, 0.0, 5.0, 0.0, 0.0, 0.9 ** 2, 0.01)
     assert m.check(0.0) == Fault.NONE
     m.on_odom(0.05, 0.0, 0.0, 5.0, 0.0, 0.0, 1.1 ** 2, 0.01)
@@ -128,12 +128,13 @@ def test_steering_that_does_not_track_trips_after_the_window():
     t = 0.0
     while t < CFG.steer_window_s - 0.1:
         m.on_lidar(t)
-        m.on_command(0.3)
+        m.on_command(t, 0.3)
         m.on_odom(t, 5.0 * t, 0.0, 5.0, 0.0, 0.0, 0.01, 0.01)
         assert m.check(t) == Fault.NONE
         t += 0.05
     while t < CFG.steer_window_s + 0.1:
         m.on_lidar(t)
+        m.on_command(t, 0.3)
         m.on_odom(t, 5.0 * t, 0.0, 5.0, 0.0, 0.0, 0.01, 0.01)
         t += 0.05
     assert m.check(t - 0.05) == Fault.STEER_TRACKING
@@ -142,7 +143,7 @@ def test_steering_that_does_not_track_trips_after_the_window():
 def test_brief_steering_lag_does_not_trip():
     m = SafetyMonitor(CFG, now=0.0)
     m.on_lidar(0.0)
-    m.on_command(0.3)
+    m.on_command(0.0, 0.3)
     m.on_odom(0.0, 0.0, 0.0, 5.0, 0.0, 0.0, 0.01, 0.01)
     # The car catches up well inside the window.
     _drive(m, 0.05, 3.0, steer=0.3)
@@ -154,7 +155,7 @@ def test_steering_is_ignored_at_low_speed():
     t = 0.0
     while t < 3.0:
         m.on_lidar(t)
-        m.on_command(0.5)
+        m.on_command(t, 0.5)
         m.on_odom(t, 0.0, 0.0, 1.0, 0.0, 0.0, 0.01, 0.01)
         t += 0.05
     assert m.check(t - 0.05) == Fault.NONE
@@ -162,16 +163,42 @@ def test_steering_is_ignored_at_low_speed():
 
 def test_priority_reports_the_root_cause_first():
     m = SafetyMonitor(CFG, now=0.0)
-    m.on_command(0.0)
+    m.on_command(0.0, 0.0)
     m.on_odom(0.0, 1000.0, 0.0, 400.0, 0.0, 0.0, 0.01, 0.01)
-    # Divergence outranks the LiDAR, fence and steering checks: a bad pose
-    # explains everything downstream of it.
+    # Divergence outranks the command, LiDAR, fence and steering checks: a
+    # bad pose explains everything downstream of it.
     assert m.check(0.0) == Fault.EKF_DIVERGED
+
+
+def test_command_that_never_arrives_is_stale():
+    m = SafetyMonitor(CFG, now=0.0)
+    t = 0.0
+    while t < 0.5:
+        m.on_lidar(t)
+        m.on_odom(t, 0.0, 0.0, 0.0, 0.0, 0.0, 0.01, 0.01)
+        t += 0.05
+    assert m.check(t - 0.05) == Fault.CMD_STALE
+
+
+def test_command_that_stops_is_stale():
+    # The controller dies; odom and the cloud keep coming.
+    m = SafetyMonitor(CFG, now=0.0)
+    last = _drive(m, 0.0, 1.0)
+    t = last
+    while t < last + CFG.cmd_timeout_s - 0.05:
+        t += 0.05
+        m.on_lidar(t)
+        m.on_odom(t, 0.0, 0.0, 5.0, 0.0, 0.0, 0.01, 0.01)
+    assert m.check(t) == Fault.NONE
+    t += 0.1
+    m.on_lidar(t)
+    m.on_odom(t, 0.0, 0.0, 5.0, 0.0, 0.0, 0.01, 0.01)
+    assert m.check(t) == Fault.CMD_STALE
 
 
 def test_fault_codes_are_stable():
     # These go on the CAN heartbeat; renumbering breaks the receiver.
-    assert [f.value for f in Fault] == [0, 1, 2, 3, 4, 5]
+    assert [f.value for f in Fault] == [0, 1, 2, 3, 4, 5, 6]
     assert [f.name for f in Fault] == [
         'NONE', 'ODOM_STALE', 'EKF_DIVERGED', 'LIDAR_STALE', 'GEOFENCE',
-        'STEER_TRACKING']
+        'STEER_TRACKING', 'CMD_STALE']

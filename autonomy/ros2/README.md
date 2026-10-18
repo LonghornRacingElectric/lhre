@@ -17,7 +17,7 @@ Colcon workspace for LHR driverless / autonomy nodes. This file is the **referen
 | `lhr_control` | Pure pursuit path-following controller with curvature-adaptive lookahead and speed planning |
 | `lhr_mission_manager` | FSAE driverless state machine (Off → Ready → Driving → Finished → Emergency) |
 | `lhr_metrics` | Cross-track error, off-track count, and lap detection (CSV output) |
-| `lhr_safety` | `safety_node`: odometry, EKF, LiDAR, geofence and steering checks, a heartbeat that stops on any fault, and a latched trip onto `/lhr/mission/emergency`. Off unless `safety:=true`. See [its README](src/lhr_safety/README.md) |
+| `lhr_safety` | `safety_node`: odometry, EKF, command, LiDAR, geofence and steering checks, a heartbeat that stops on any fault, and a latched trip onto `/lhr/mission/emergency`. Off unless `safety:=true`. See [its README](src/lhr_safety/README.md) |
 | `lhr_gazebo` | Gazebo Harmonic physics simulation — vehicle with direct joint control, ground-truth odometry, LiDAR sensor, RViz integration |
 | `lhr_perception` | LiDAR pointcloud clustering, timestamp-aligned persistent mapping, and geometry-based track-side inference |
 | `lhr_state_estimation` | EKF fusing IMU and wheel speeds into `/lhr/vehicle/odom` + `map → base_link`, replacing ground-truth odometry. See [its README](src/lhr_state_estimation/README.md) |
@@ -761,6 +761,7 @@ old header.
 | `monitor_lidar` | `true` | Check LiDAR age (the Gazebo launch sets it from `perception`) |
 | `lidar_timeout_s` | `0.3` | Cloud age (s) that counts as stale, about three missed frames |
 | `odom_timeout_s` | `0.25` | Odometry age (s) that counts as stale |
+| `cmd_timeout_s` | `0.25` | Control command age (s) that counts as stale; the controller publishes at 20 Hz |
 | `max_position_std_m` | `0.0` | Largest pose standard deviation (m) before the EKF counts as diverged; 0 is off, the default until GNSS bounds the EKF's covariance |
 | `max_speed_factor` | `1.5` | Speed above this multiple of `vehicle.yaml`'s top speed counts as diverged |
 | `geofence_radius_m` | `150.0` | Distance (m) from the first reported pose that trips the geofence |

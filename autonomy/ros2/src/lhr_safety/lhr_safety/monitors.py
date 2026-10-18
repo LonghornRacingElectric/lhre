@@ -26,6 +26,7 @@ class Fault(IntEnum):
     LIDAR_STALE = 3
     GEOFENCE = 4
     STEER_TRACKING = 5
+    CMD_STALE = 6
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,9 @@ class SafetyConfig:
     lidar_timeout_s: float = 0.3
     # The EKF and the Gazebo bridge both publish odom at 50 Hz or more.
     odom_timeout_s: float = 0.25
+    # pursuit_node publishes at 20 Hz in every mission state, so silence
+    # means the controller died; the actuators would hold the last command.
+    cmd_timeout_s: float = 0.25
     # A divergence bound, not an accuracy bound: the MVP's 0.5 m accuracy
     # check is scored against truth, which this node never reads. 0 turns it
     # off, the default: without GNSS the EKF's position variance starts at
@@ -65,6 +69,7 @@ class SafetyMonitor:
         self._start = now
         self._last_lidar: Optional[float] = None
         self._last_odom: Optional[float] = None
+        self._last_cmd: Optional[float] = None
         self._origin: Optional[tuple] = None
         self._diverged = False
         self._outside = False
@@ -75,7 +80,8 @@ class SafetyMonitor:
     def on_lidar(self, now: float):
         self._last_lidar = now
 
-    def on_command(self, steering_angle: float):
+    def on_command(self, now: float, steering_angle: float):
+        self._last_cmd = now
         self._steer_cmd = steering_angle
 
     def on_odom(self, now: float, x: float, y: float, vx: float, vy: float,
@@ -131,6 +137,8 @@ class SafetyMonitor:
             return Fault.ODOM_STALE
         if self._diverged:
             return Fault.EKF_DIVERGED
+        if self._age(self._last_cmd, now) > cfg.cmd_timeout_s:
+            return Fault.CMD_STALE
         if (cfg.monitor_lidar
                 and self._age(self._last_lidar, now) > cfg.lidar_timeout_s):
             return Fault.LIDAR_STALE

@@ -16,6 +16,7 @@ so a fault, a crash or a hang all look the same to whatever is listening.
 |---|---|---|
 | `ODOM_STALE` | No odometry for `odom_timeout_s` (the EKF or bridge died or hung) | `/lhr/vehicle/odom` |
 | `EKF_DIVERGED` | Any non-finite field, speed over `max_speed_factor` x the car's top speed from `vehicle.yaml`, or (once enabled) position standard deviation over `max_position_std_m` | `/lhr/vehicle/odom` |
+| `CMD_STALE` | No `/lhr/vehicle/cmd` for `cmd_timeout_s`. `pure_pursuit` publishes at 20 Hz in every mission state, so silence means the controller died while the actuators hold its last command | `/lhr/vehicle/cmd` |
 | `LIDAR_STALE` | No cloud for `lidar_timeout_s` (only with `monitor_lidar`) | `/lhr/lidar/points` |
 | `GEOFENCE` | Further than `geofence_radius_m` from the first reported pose | `/lhr/vehicle/odom` |
 | `STEER_TRACKING` | Above `steer_min_speed_mps`, measured yaw rate differs from v·tan(δ)/L for the commanded δ by more than `max(steer_yaw_rate_tol, steer_rel_tol x expected)` for `steer_window_s` | `/lhr/vehicle/cmd`, `/lhr/vehicle/odom` |
@@ -87,6 +88,10 @@ the same default as the node. `monitor_lidar` is not an argument: it follows
 
 ## Not done here
 
+- In sim the stop goes through `pure_pursuit` commanding speed 0. After a
+  `CMD_STALE` trip that node is the dead one, so the sim car keeps rolling on
+  its last command until `joint_cmd_adapter` gets a command timeout of its
+  own. On the car the hardware loop opens regardless.
 - Normal braking is still the controller commanding speed 0, so stops in
   sim are optimistic. A regen and spring-brake model is the other half of
   [#116](https://github.com/LonghornRacingElectric/lhre/issues/116).

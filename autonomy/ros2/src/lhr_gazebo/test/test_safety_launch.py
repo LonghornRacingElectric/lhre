@@ -16,6 +16,7 @@ import rclpy
 ARGS = {
     'safety_lidar_timeout_s': 'lidar_timeout_s',
     'safety_odom_timeout_s': 'odom_timeout_s',
+    'safety_cmd_timeout_s': 'cmd_timeout_s',
     'safety_max_position_std_m': 'max_position_std_m',
     'safety_max_speed_factor': 'max_speed_factor',
     'safety_geofence_radius_m': 'geofence_radius_m',

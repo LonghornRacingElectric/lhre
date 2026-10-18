@@ -39,6 +39,7 @@ class SafetyNode(Node):
         self.declare_parameter('monitor_lidar', defaults.monitor_lidar)
         self.declare_parameter('lidar_timeout_s', defaults.lidar_timeout_s)
         self.declare_parameter('odom_timeout_s', defaults.odom_timeout_s)
+        self.declare_parameter('cmd_timeout_s', defaults.cmd_timeout_s)
         self.declare_parameter('max_position_std_m', defaults.max_position_std_m)
         self.declare_parameter('max_speed_factor', defaults.max_speed_factor)
         self.declare_parameter('geofence_radius_m', defaults.geofence_radius_m)
@@ -56,6 +57,7 @@ class SafetyNode(Node):
             monitor_lidar=bool(param('monitor_lidar')),
             lidar_timeout_s=float(param('lidar_timeout_s')),
             odom_timeout_s=float(param('odom_timeout_s')),
+            cmd_timeout_s=float(param('cmd_timeout_s')),
             max_position_std_m=float(param('max_position_std_m')),
             max_speed_factor=float(param('max_speed_factor')),
             geofence_radius_m=float(param('geofence_radius_m')),
@@ -102,7 +104,7 @@ class SafetyNode(Node):
         self._monitor.on_lidar(self._now())
 
     def _cmd_cb(self, msg: AckermannDriveStamped):
-        self._monitor.on_command(msg.drive.steering_angle)
+        self._monitor.on_command(self._now(), msg.drive.steering_angle)
 
     def _odom_cb(self, msg: Odometry):
         pose, twist = msg.pose, msg.twist.twist
