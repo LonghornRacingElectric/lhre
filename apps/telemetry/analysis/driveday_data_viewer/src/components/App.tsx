@@ -1,14 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { convertSession } from "@/lib/convert";
 import { invalidatePalette } from "@/lib/draw/palette";
-import { builtinTracks } from "@/lib/layouts";
+import { convertDriverSession, detachLayout, importLayoutRecording, isLayoutRecording } from "@/lib/layout-import";
+import { builtinTracks, layoutId } from "@/lib/layouts";
 import { Player, type Prefs } from "@/lib/player";
 import { rebuildRun } from "@/lib/rebuild";
 import { Session } from "@/lib/session";
 import { loadUserState, lsGet, lsSet, metaOf, runStore, storageProblem } from "@/lib/storage";
-import type { RunListEntry, SessionExport } from "@/lib/types";
+import type { RunListEntry, SessionExport, Track } from "@/lib/types";
 import { defaultUnits } from "@/lib/units";
 import { Header, type Theme } from "./Header";
 import { Workspace } from "./Workspace";
@@ -26,6 +26,8 @@ function applyTheme(t: Theme) {
 function Shell() {
   const toast = useToast();
   const [runs, setRuns] = useState<RunListEntry[]>([]);
+  const [layouts, setLayouts] = useState<Track[]>([]);
+  const [layout, setLayout] = useState<Track | null>(null);
   const [current, setCurrent] = useState<string | null>(null);
   const [player, setPlayer] = useState<Player | null>(null);
   const [ready, setReady] = useState(false);
@@ -40,12 +42,21 @@ function Shell() {
       live.current?.dispose();
       live.current = null;
       setPlayer(null);
+      setLayout(null);
       setCurrent(id);
       if (!id) return;
       try {
         const D0 = await runStore.get(id);
         if (!D0) throw new Error("That run is no longer stored in this browser.");
-        const D = rebuildRun(D0);
+        // Old bundled matches are not user-approved layout imports.
+        const bundled = (await runStore.tracks()).find(t => t.id === D0.meta.trackId)?.builtin || builtinTracks().some(t => t.id === D0.meta.trackId);
+        const clean = bundled && D0.edges ? detachLayout(D0) : D0;
+        if (clean !== D0) {
+          const saved = (await runStore.list()).find(r => r.id === id);
+          await runStore.put({ ...metaOf(clean), added: saved?.added ?? Date.now() }, clean);
+          setRuns(await runStore.list());
+        }
+        const D = rebuildRun(clean);
         const session = new Session(D);
         const prefs = lsGet<Partial<Prefs>>("prefs", {});
         const p = new Player(session, loadUserState(D.meta.sessId, D), prefs.units ?? defaultUnits(), prefs);
@@ -53,6 +64,7 @@ function Shell() {
         void p.findRivals();
         live.current = p;
         lsSet("run", id);
+        lsSet("view", { kind: "run", id });
         setPlayer(p);
       } catch (e) {
         toast("Could not open this run: " + (e as Error).message, "err");
@@ -60,6 +72,16 @@ function Shell() {
     },
     [toast],
   );
+
+  const openLayout = useCallback((track: Track) => {
+    live.current?.savePos();
+    live.current?.dispose();
+    live.current = null;
+    setPlayer(null);
+    setCurrent(null);
+    setLayout(track);
+    lsSet("view", { kind: "layout", id: layoutId(track) });
+  }, []);
 
   /* first load: restore runs, theme, and the last run opened */
   useEffect(() => {
@@ -69,10 +91,16 @@ function Shell() {
     void (async () => {
       const list = (await runStore.list()).sort((a, b) => b.added - a.added);
       setRuns(list);
+      const savedLayouts = (await runStore.tracks()).filter(t => t.edges && !t.builtin);
+      setLayouts(savedLayouts);
       if (storageProblem) toast(storageProblem, "err");
-      const last = lsGet<string | null>("run", null);
-      const pick = list.find((r) => r.id === last)?.id ?? list[0]?.id ?? null;
-      await open(pick);
+      const view = lsGet<{ kind: "run" | "layout"; id: string } | null>("view", null);
+      const savedLayout = view?.kind === "layout" ? savedLayouts.find(t => t.id === view.id || layoutId(t) === view.id) : undefined;
+      const last = view?.kind === "run" ? view.id : lsGet<string | null>("run", null);
+      const pick = list.find(r => r.id === last)?.id ?? list[0]?.id ?? null;
+      if (savedLayout) openLayout(savedLayout);
+      else if (pick) await open(pick);
+      else if (savedLayouts[0]) openLayout(savedLayouts[0]);
       setReady(true);
     })();
     return () => {
@@ -82,15 +110,26 @@ function Shell() {
   }, []);
 
   const importFiles = useCallback(
-    async (files: FileList | File[]) => {
+    async (files: FileList | File[], asLayout = false) => {
       let last: string | null = null;
-      for (const f of Array.from(files)) {
+      // Register layouts before drivers even if the file chooser returns a different order.
+      const ordered = Array.from(files).sort((a, b) => Number(asLayout || isLayoutRecording(b.name)) - Number(asLayout || isLayoutRecording(a.name)));
+      let importedLayout: Track | null = null;
+      for (const f of ordered) {
         try {
           toast("Reading " + f.name + "…", "busy");
           const J = JSON.parse(await f.text()) as SessionExport;
-          const courses = convertSession(J, f.name, [...builtinTracks(), ...(await runStore.tracks())]);
+          if (asLayout || isLayoutRecording(f.name)) {
+            const result = await importLayoutRecording(J, f.name);
+            importedLayout = result.tracks[0];
+            toast(f.name + ": track edges created for both directions; " + result.updated.length + " saved runs updated.");
+            continue;
+          }
+          const courses = convertDriverSession(J, f.name, await runStore.tracks());
           const now = Date.now();
-          for (const [ci, { D, track, isNew, renamed }] of courses.entries()) {
+          for (const [ci, { D: converted, track, isNew, renamed }] of courses.entries()) {
+            const existing = await runStore.get(converted.meta.sessId);
+            const D = existing?.layoutDetached ? detachLayout(converted) : converted;
             if (isNew || renamed) await runStore.putTrack(track);
             /* newest first in the list, so the courses of one file stay in order */
             await runStore.put({ ...metaOf(D), added: now - ci }, D);
@@ -104,9 +143,11 @@ function Shell() {
         }
       }
       setRuns((await runStore.list()).sort((a, b) => b.added - a.added));
+      setLayouts((await runStore.tracks()).filter(t => t.edges && !t.builtin));
       if (last) await open(last);
+      else if (importedLayout) openLayout(importedLayout);
     },
-    [open, toast],
+    [open, openLayout, toast],
   );
 
   const remove = useCallback(async (id: string) => {
@@ -117,10 +158,30 @@ function Shell() {
       await runStore.del(id);
       const list = (await runStore.list()).sort((a, b) => b.added - a.added);
       setRuns(list);
-      if (id === current) await open(list[0]?.id ?? null);
+      if (id === current) {
+        if (list[0]) await open(list[0].id);
+        else if (layouts[0]) openLayout(layouts[0]);
+        else { lsSet("view", null); await open(null); }
+      }
       toast("Run removed.");
     } catch (e) { toast("Could not delete this run: " + (e as Error).message, "err"); }
-  }, [current, runs, open, toast]);
+  }, [current, runs, layouts, open, openLayout, toast]);
+
+  const removeLayout = useCallback(async (id: string) => {
+    const track = layouts.find(t => layoutId(t) === id);
+    if (!track || !window.confirm("Delete this saved layout? Existing driver runs and their road geometry will be kept. You can reimport the layout JSON.")) return;
+    try {
+      await runStore.delLayout(id);
+      const remaining = (await runStore.tracks()).filter(t => t.edges && !t.builtin);
+      setLayouts(remaining);
+      if (layout && layoutId(layout) === id) {
+        if (remaining[0]) openLayout(remaining[0]);
+        else if (runs[0]) await open(runs[0].id);
+        else { lsSet("view", null); await open(null); }
+      }
+      toast("Layout removed.");
+    } catch (e) { toast("Could not delete layout: " + (e as Error).message, "err"); }
+  }, [layouts, layout, runs, openLayout, open, toast]);
 
   /* drag and drop anywhere */
   useEffect(() => {
@@ -177,19 +238,25 @@ function Shell() {
           <Header
             runs={runs}
             current={current}
+            layouts={layouts}
+            layout={layout}
+            onSelectLayout={id => { const selected = layouts.find(t => layoutId(t) === id); if (selected) openLayout(selected); }}
+            onRemoveLayout={id => void removeLayout(id)}
             theme={theme}
             onTheme={cycleTheme}
             onSelect={(id) => void open(id)}
             onImport={(f) => void importFiles(f)}
+            onImportLayout={(f) => void importFiles(f, true)}
             onRemove={(id) => void remove(id)}
           />
+          {layout && <Workspace key={layoutId(layout)} track={layout} />}
           {player && <Workspace key={player.session.D.meta.sessId} />}
         </div>
-        {ready && !player && !current && (
+        {ready && !player && !current && !layout && (
           <div className="welcome">
             <div>
-              <h2>No runs loaded</h2>
-              <p>Import a session JSON exported from the logger. Each run is kept in this browser, and the dropdown at the top switches between them. You can also drop files anywhere on this page.</p>
+              <h2>No runs or layouts loaded</h2>
+              <p>Import a driver session or use Import layout for a centreline recording. Both are saved in this browser and organized by date and location in the picker. You can also drop files anywhere on this page.</p>
               <button className="btn primary" type="button" onClick={() => file.current?.click()}>Import JSON</button>
               <input ref={file} type="file" accept=".json,application/json" multiple hidden onChange={(e) => { if (e.target.files?.length) void importFiles(e.target.files); e.target.value = ""; }} />
             </div>

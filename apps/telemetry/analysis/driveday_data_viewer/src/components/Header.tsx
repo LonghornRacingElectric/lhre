@@ -1,11 +1,12 @@
 "use client";
 
 import { useContext, useRef } from "react";
+import { layoutId, layoutName } from "@/lib/layouts";
 import { gpsStats } from "@/lib/analysis";
 import { fmt } from "@/lib/format";
 import type { Player } from "@/lib/player";
-import type { RunListEntry } from "@/lib/types";
-import { runLabel } from "@/lib/storage";
+import type { RunListEntry, Track } from "@/lib/types";
+import { RunPicker } from "./RunPicker";
 import { Menu } from "./Menu";
 import { PlayerCtx, useUi } from "./context";
 
@@ -14,10 +15,15 @@ export type Theme = "auto" | "light" | "dark";
 interface Props {
   runs: RunListEntry[];
   current: string | null;
+  layouts: Track[];
+  layout: Track | null;
+  onRemoveLayout: (id: string) => void;
+  onSelectLayout: (id: string) => void;
   theme: Theme;
   onTheme: () => void;
   onSelect: (id: string) => void;
   onImport: (files: FileList) => void;
+  onImportLayout: (files: FileList) => void;
   onRemove: (id: string) => void;
 }
 
@@ -75,8 +81,9 @@ function Kpis() {
   );
 }
 
-function Title({ run }: { run: RunListEntry | undefined }) {
+function Title({ run, layout }: { run: RunListEntry | undefined; layout: Track | null }) {
   const p = useContext(PlayerCtx);
+  if (layout) return <><h1 id="title">{layoutName(layout)}</h1><div className="sub" id="sub">{[layout.venue, "Saved track layout", `${layout.RL.toFixed(0)} m`].filter(Boolean).join(" · ")}</div></>;
   if (!p) return <><h1 id="title">Drive day visualizer</h1><div className="sub" id="sub" /></>;
   return <RunTitle p={p} run={run} />;
 }
@@ -133,24 +140,16 @@ function RunSettings({ p, theme, onTheme }: Pick<Props, "theme" | "onTheme"> & {
   );
 }
 
-export function Header({ runs, current, theme, onTheme, onSelect, onImport, onRemove }: Props) {
+export function Header({ runs, current, layouts, layout, onSelectLayout, onRemoveLayout, theme, onTheme, onSelect, onImport, onImportLayout, onRemove }: Props) {
   const file = useRef<HTMLInputElement>(null);
+  const layoutFile = useRef<HTMLInputElement>(null);
   const p = useContext(PlayerCtx);
   return (
     <header className="top">
       <div>
-        <Title run={runs.find((r) => r.id === current)} />
+        <Title run={runs.find((r) => r.id === current)} layout={layout} />
         <div className="runbar">
-          {runs.length > 0 && (
-            <div className="run-selector"><Menu wide ariaLabel="Select run" label={<span className="run-selector-label">{runs.find(r => r.id === current)?.name || "Choose run"}</span>}>
-              <div className="run-selector-list" aria-label="Saved runs">
-                {runs.map(r => <div className={"run-selector-row" + (r.id === current ? " selected" : "")} key={r.id}>
-                  <button className="run-choice" type="button" aria-current={r.id === current ? "true" : undefined} title={runLabel(r)} onClick={() => onSelect(r.id)}><strong>{r.name || "Untitled run"}</strong><small>{runLabel(r)}</small></button>
-                  <button className="run-delete" type="button" aria-label={"Delete " + (r.name || "Untitled run")} title="Delete this saved run" onClick={() => onRemove(r.id)}>Delete</button>
-                </div>)}
-              </div>
-            </Menu></div>
-          )}
+          <RunPicker runs={runs} current={current} layouts={layouts} currentLayout={layout ? layoutId(layout) : null} onRemoveLayout={onRemoveLayout} onSelectLayout={onSelectLayout} onSelect={onSelect} onRemove={onRemove} />
           <button className="btn primary" type="button" title="Import one or more session JSON files" onClick={() => file.current?.click()}>Import</button>
           <input
             ref={file}
@@ -163,11 +162,25 @@ export function Header({ runs, current, theme, onTheme, onSelect, onImport, onRe
               e.target.value = "";
             }}
           />
+          <button className="btn" type="button" title="Create track edges from a centreline GPS recording (11.5 ft wide, antenna 1 ft left)" onClick={() => layoutFile.current?.click()}>Import layout</button>
+          <input ref={layoutFile} type="file" accept=".json,application/json" hidden onChange={e => {
+            if (e.target.files?.length) onImportLayout(e.target.files);
+            e.target.value = "";
+          }} />
+          {p && <LayoutStatus p={p} />}
           <SettingsMenu theme={theme} onTheme={onTheme} />
           <div id="workspace-actions" />
         </div>
       </div>
-      {p && <Kpis />}
+      {p ? <Kpis /> : layout && <div className="kpis">{["Best real", "Theoretical best"].map(label => <div className="kpi" key={label}><b>—</b><span>{label}</span></div>)}</div>}
     </header>
   );
+}
+
+function LayoutStatus({ p }: { p: Player }) {
+  useUi(p);
+  const data = p.session.D;
+  return <span className="layout-status">
+    {data.edges ? <span>Using layout: {layoutName({ name: data.meta.trackName })}</span> : <span>Using run GPS reference</span>}
+  </span>;
 }

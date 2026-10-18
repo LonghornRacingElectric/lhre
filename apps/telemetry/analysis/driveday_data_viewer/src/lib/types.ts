@@ -124,7 +124,11 @@ export interface Lap extends Omit<RawLap, "ch" | "sec"> {
   gainScale?: number;
 }
 
+export type TrackDirection = "cw" | "ccw" | "unknown";
+
 export interface RunMeta {
+  /** Inferred from GPS circulation, not a course number or venue name. */
+  direction?: TrackDirection;
   cellIdx: number[];
   sessId: string;
   cutoff: number;
@@ -140,6 +144,10 @@ export interface RunMeta {
 }
 
 export interface RunData {
+  /** Pre-layout processed run for exact detachment; source telemetry is shared until stored. */
+  layoutOriginal?: RunData;
+  /** Explicit per-run opt-out, also respected by later layout imports. */
+  layoutDetached?: boolean;
   /** Exported cone hits assigned to completed laps; t is absolute logger time. */
   coneEvents?: ConeEvent[];
   ref: XY[];
@@ -191,6 +199,7 @@ export interface Track {
 }
 
 export interface RunListEntry {
+  direction?: TrackDirection;
   id: string;
   name: string;
   driver: string;

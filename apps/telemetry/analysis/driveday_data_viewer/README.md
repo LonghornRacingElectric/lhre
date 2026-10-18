@@ -20,13 +20,30 @@ npm run dev
 Open <http://localhost:3002> for the LAPDOG landing page, or go straight to
 <http://localhost:3002/lapdogviewer> for the viewer, then click **Import** or drop a file on the
 page. The page remembers imported runs, your notes, cones, setup values and
-where you were in each run. The run dropdown lists every saved run with a
-**Delete** button, including when there is only one run. Deletion asks which
-run to remove; the original JSON file is untouched. Removing another run
-does not change the currently open run. Removing the current run opens the
-next available run, or the import screen if none remain.
-Run deletion lives in this dropdown rather than Settings. Dropdowns are
-positioned within the viewport and displayed above scrolling/floating panes.
+where you were in each run. **Choose a run** in the toolbar opens a picker
+organized by drive-day date and location, newest dates first. Its **Runs** and
+**Layouts** tabs keep saved roads separate from driver sessions. Driver and
+direction filters start at All; search narrows the sessions within that day.
+The current drive day and view type are selected when reopening the picker. Rows show the
+driver, GPS-derived direction, session name and optional event, without
+lap counts or best times. Missing dates, drivers and locations stay explicitly unspecified.
+
+Grouping and sorting are derived from saved metadata on every import, including
+the first file; no manual folders, reimport or storage migration is needed.
+Dates use the run timestamp in the browser's local timezone, not upload time.
+Missing venues use the built-in layout location when available. Runs within a
+day are grouped Clockwise then Counter-clockwise, then by recorded time and
+session name. Different locations on
+the same date remain separate drive days.
+
+The picker supports Tab, Escape, arrow navigation between run buttons and
+click-outside dismissal, and returns focus to its toolbar button. On phones
+it fills the screen. A **Delete** button appears beside each run and layout; deletion
+asks for confirmation and leaves the original JSON untouched. Removing another
+run does not change the open run; removing the current run opens the next
+available run, then a saved layout, or the import screen if neither remains.
+Deleting a layout removes both stored direction variants from the layout library.
+Existing driver sessions retain their road geometry and comparison eligibility.
 
 | Script | What it does |
 | --- | --- |
@@ -34,7 +51,10 @@ positioned within the viewport and displayed above scrolling/floating panes.
 | `npm run build` / `npm start` | Production build and server |
 | `npm run lint` | ESLint (`next/core-web-vitals` + TypeScript) |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | vitest |
+| `npm test` | vitest (logic and standalone layout rendering; automatic JSX transform) |
+
+Three importable synthetic JSON files (a layout recording and two drivers)
+are provided in [test-data](test-data/README.md).
 
 To run the tests against a real export as well (they are too big to commit):
 
@@ -132,7 +152,7 @@ start/finish, so their final gap matches the difference in lap times.
   (under 60% of a typical run's length or 40% of its speed) are left out.
   The remaining runs are grouped by where they start and finish and which way
   they go, and each group opens as its own run in the dropdown (for example
-  "Course 2 (reverse of 1)"). Laps on different lines are not comparable, so
+  "Clockwise" or "Counter-clockwise"). Laps on different lines are not comparable, so
   they are never mixed in one set of bests, ghosts and charts. Runs whose
   start and finish both lie within about 25 m of each other (or 10% of the
   run length) count as the same course.
@@ -168,23 +188,88 @@ from returning on reload. Reimport older runs to pick up exported flags that
 the previous importer ignored. Older exports without `flags` cannot supply
 automatic cone counts; you can still enter them manually.
 
+### GPS direction labels
+
+Direction is inferred for every imported course from its local east/north GPS
+geometry, independent of the venue, filename, course number or driving speed.
+The path is sampled every 2 m and lightly smoothed; positive signed enclosed
+area is Counter-clockwise and negative area is Clockwise. For a point-to-point
+course, a straight closing chord connects finish to start for the area estimate;
+this chord is used only for classification, never drawn or added to telemetry.
+If the reference is ambiguous, completed GPS paths vote on the direction.
+Straight paths, stationary jitter and near-cancelling figure-eights show
+**Direction unclear** instead of a fabricated direction.
+
+Existing imports are classified on the next load. The run list caches the
+result in its small metadata record; old generated Course/reverse suffixes
+are replaced in display names. The stored GPS, lap names, times, layout IDs,
+run IDs, notes and comparison eligibility are unchanged. No reimport is needed.
+New imports get direction metadata automatically. Changing a direction label
+does not combine different routes that happen to circulate the same way.
+
 ## Base layouts and track edges
 
-A base layout is one slow lap driven down the middle of the track. It ships with the app in `src/lib/layouts/`, so every run
-on that track is measured against the same line.
+A base layout is one slow closed circuit driven down the middle of the track.
+Use **Import layout** for that logger JSON recording. Standard **Import** and
+file dropping also recognize `layout.json` and `Layout_session.json`; mixed
+imports register layouts before reading the drivers, regardless of file order.
+Other filenames are ordinary driver runs unless explicitly imported as layouts.
+
+The browser prepares a closed reference from the recording, samples it about
+every metre, applies the 1 ft antenna correction, and calculates both road
+edges and both travel directions. It saves those base layouts in IndexedDB,
+prioritizes them over lap-only references, and updates matching already-saved
+runs automatically. GPS is re-expressed in the layout's coordinate frame;
+logged samples, lap names/times, run IDs, notes and cone events stay intact.
+Unrelated routes and opposite directions are never combined. Layout identity
+includes a geometry fingerprint so different routes with the same name do not
+overwrite each other. Point-to-point and ambiguous recordings are rejected
+rather than closed with an invented edge.
+
+Only layouts explicitly imported into this browser are eligible for automatic road matching.
+Driver-only imports use a GPS-derived reference line, without calculated track edges.
+The toolbar shows **Using layout: …** or **Using run GPS reference** as a status
+label; there is no manual detach control. Existing opt-outs from older versions
+remain respected. Old bundled-layout matches are removed when opened, rebuilding
+a reference from saved GPS if no pre-layout baseline exists. Other saved runs
+retain their explicitly imported layouts even if the layout is removed from the library.
+
+Original JSON files are never rewritten. Layout matching re-expresses local GPS
+coordinates without snapping driver points onto the road or clamping them inside
+its edges. Sensor channels and logged lap times stay intact; calculated progress,
+sectors and comparisons use the selected reference.
+
+Import the layout once, even if the driver files are already saved. No driver
+reimport or app-source edit is required. A layout recording registers a road and opens its standalone map immediately,
+even when no drivers have been imported. It is saved in the picker's **Layouts**
+tab as one physical track, separate from the **Runs** tab; direction filters apply
+only to driver runs. The layout opens in the normal workspace with Video, Track
+and Analysis windows and all analysis tabs available. Data panels and the timeline
+stay empty and playback is disabled until a driver is selected. The map shows
+real-width edges and an optional sector centreline, with mouse/touch panning,
+wheel/trackpad zoom anchored at the pointer, zoom buttons and keyboard navigation.
+Scrolling over the map zooms it without scrolling the workspace. No laps or telemetry are fabricated. The last run or layout selection survives
+reloads; previously imported edge layouts appear after refreshing. Adding driver
+runs does not remove their layout entry. The bundled
+Pickle Lot asset is retained for tooling, but is not used automatically by the viewer. For preparing additional
+bundled assets outside the browser, the standalone script remains available:
 
 ```bash
 node scripts/build-layout.mjs "<Drive Day Logs>/Layout_session.json" src/lib/layouts/pickle-lot.json "Pickle Lot"
 ```
 
-- **Two directions.** Each layout becomes two tracks, for example "Pickle Lot · counter-clockwise" and "Pickle Lot ·
+- **Two directions.** One browser layout entry retains two internal matching tracks, for example "Pickle Lot · counter-clockwise" and "Pickle Lot ·
   clockwise". A run only matches the one it was driven in, so laps the other way round are never mixed in.
 - **Matching.** On import, a closed-loop run matches a base layout with the same rules as a saved track (90% of fixes within
   6 m of the line, 90% of the line covered, length within 12%, same direction). A base layout wins over a saved track when
-  both fit. Other tracks (Shakedown, COTA) still get their own saved layouts.
+  both fit. Tracks without an imported road retain their lap-based reference.
 - **Edges.** The real centre line is taken as 1 ft right of the layout drive's GPS line, because the antenna is on the left of
   the car. The road is drawn 11.5 ft wide in total, 5.75 ft either side of that. Both numbers are `GPS_RIGHT_OFFSET_M` and `TRACK_WIDTH_M` in
   `src/lib/geometry.ts`. Overlays → **Track edges** turns the road on and off.
+  Legacy saved roads with missing or invalid width metadata recover their width
+  from corresponding edge points, falling back to the configured 11.5 ft width.
+  Boundaries are drawn above telemetry, with narrower lap strokes inside the
+  road, so a thick GPS trace cannot hide them at the default zoom.
 - **Background.** Runs with track-edge geometry use that layout as their background; the lap-based base overlay and its
   selector are omitted, including when **Track edges** is off. Runs without track-edge geometry keep the base overlay.
 - **GPS drift.** GPS shifts by a metre or two between drives, so on import the layout is slid (not turned) onto the run's
@@ -193,7 +278,7 @@ node scripts/build-layout.mjs "<Drive Day Logs>/Layout_session.json" src/lib/lay
 ## Comparing drivers
 
 Under **Ghost**, **Driver** lays a lap from another imported run over the one you are watching. Only runs on the same layout
-are offered, and a layout is one direction, so a clockwise run is never compared with a counter-clockwise one. Pick the run
+are offered. Internal matching tracks retain direction, so a clockwise run is never compared with a counter-clockwise one, even though the picker shows one physical layout. Pick the run
 and the lap (its best is chosen first). The other driver's line is drawn in teal with a teal dot, both laps start together
 at the start/finish line, and the Compare panel, the delta and trace charts, the Corners panel and the Gain colouring all
 use that lap. Each run's copy of a base layout was slid onto its own GPS, so the other run's laps are moved by the
@@ -209,8 +294,8 @@ box. Notes are per browser; sharing them would need a server.
 
 The previous prototype comparison widget and stored-layout migration helpers
 are superseded by the active **Driver** and **Compare another file** controls
-and the built-in layout importer. No background layout migration runs when
-opening saved data.
+and the explicit centreline layout importer. Matching saved runs are upgraded
+when a layout is imported; no blind background layout migration runs on open.
 
 ## Compare files and play video
 

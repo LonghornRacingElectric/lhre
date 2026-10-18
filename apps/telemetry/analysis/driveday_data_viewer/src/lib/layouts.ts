@@ -29,7 +29,11 @@ const DIR = { ccw: "counter-clockwise", cw: "clockwise" } as const;
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
 /** Both directions of one layout file, in a local metre frame centred on the layout. */
-export function tracksFromLayout(f: LayoutFile): Track[] {
+export function tracksFromLayout(f: LayoutFile, builtin = true): Track[] {
+  // Imported layouts with the same venue/name can have different shapes.
+  let hash = 2166136261;
+  if (!builtin) for (const char of JSON.stringify(f.line)) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+  const identity = slug(f.name) + (builtin ? "" : "-" + (hash >>> 0).toString(36));
   const lat0 = f.line.reduce((a, p) => a + p[0], 0) / f.line.length;
   const lon0 = f.line.reduce((a, p) => a + p[1], 0) / f.line.length;
   const KY = (6378137 * Math.PI) / 180;
@@ -41,7 +45,7 @@ export function tracksFromLayout(f: LayoutFile): Track[] {
   const one = (dir: "ccw" | "cw", ref: XY[], edges: RoadEdges): Track => {
     const cum = cumOf(ref);
     return {
-      id: "layout-" + slug(f.name) + "-" + dir,
+      id: "layout-" + identity + "-" + dir,
       name: f.name + " · " + DIR[dir],
       date: f.recorded.slice(0, 10),
       event: "Base layout",
@@ -55,7 +59,7 @@ export function tracksFromLayout(f: LayoutFile): Track[] {
       gates: [1 / 3, 2 / 3],
       created: made,
       from: f.from,
-      builtin: true,
+      builtin,
       edges,
     };
   };
@@ -70,5 +74,9 @@ export function tracksFromLayout(f: LayoutFile): Track[] {
 let cache: Track[] | null = null;
 /** Every built-in layout, both directions. */
 export function builtinTracks(): Track[] {
-  return (cache ??= FILES.flatMap(tracksFromLayout));
+  return (cache ??= FILES.flatMap(f => tracksFromLayout(f)));
 }
+
+/** Direction variants share one physical road; keep their IDs for run matching. */
+export const layoutId = (track: Pick<Track, "id">): string => track.id.replace(/-(?:ccw|cw)$/, "");
+export const layoutName = (track: Pick<Track, "name">): string => track.name.replace(/\s*·\s*(?:counter[ -]?clockwise|clockwise)\s*$/i, "");

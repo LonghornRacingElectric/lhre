@@ -1,3 +1,4 @@
+import { directionLabel, pathsDirection, signedArea, withRunDirection } from "./direction";
 import { sectorsOf } from "./sectors";
 import type {
   BaseChannels,
@@ -104,7 +105,7 @@ const nearPt = (poly: XY[], p: XY): XY => {
 
 /** How far to slide a layout, without turning it, so it sits on these fixes: least squares over nearest points, a few rounds.
  *  Fixes more than 8 m off are left out so a lap that ran wide does not pull it. */
-const alignShift = (ref: XY[], P: XY[]): XY => {
+export const alignShift = (ref: XY[], P: XY[]): XY => {
   let sx = 0;
   let sy = 0;
   for (let it = 0; it < 10; it++) {
@@ -180,11 +181,7 @@ const dirOf = (a: XY, b: XY): XY => {
   return [(b[0] - a[0]) / d, (b[1] - a[1]) / d];
 };
 /** +1 counter-clockwise, -1 clockwise. */
-const turnSign = (P: XY[]) => {
-  let a = 0;
-  for (let k = 0; k < P.length - 1; k++) a += P[k][0] * P[k + 1][1] - P[k + 1][0] * P[k][1];
-  return a >= 0 ? 1 : -1;
-};
+const turnSign = (P: XY[]) => signedArea(P) >= 0 ? 1 : -1;
 
 /**
  * A logger lap is not always a lap. On an autocross day the marks bracket a run from the start line to a finish line somewhere else,
@@ -243,22 +240,9 @@ function planCourses(prep: Prepared[], pr: (s: LiveSample) => XY): { courses: Co
     if (g) g.push(l);
     else groups.push([l]);
   });
-  /* a course driven the other way round an earlier one says so */
-  const reverseOf = (g: Leg[], k: number): number => {
-    for (let j = 0; j < k; j++) {
-      const a = groups[j][0];
-      const b = g[0];
-      if (open) {
-        const R = Math.max(25, 0.1 * Math.max(a.len, b.len));
-        if (dist2d(a.start, b.end) < R && dist2d(a.end, b.start) < R) return j;
-      } else if (turnSign(a.P) !== turnSign(b.P)) return j;
-    }
-    return -1;
-  };
-  const courses = groups.map((legs, k) => {
-    const rv = reverseOf(legs, k);
-    return { legs, open, label: groups.length === 1 ? "" : "Course " + (k + 1) + (rv >= 0 ? " (reverse of " + (rv + 1) + ")" : "") };
-  });
+  const courses = groups.map((legs) => ({
+    legs, open, label: directionLabel(pathsDirection(legs.map(l => l.P))),
+  }));
   return { courses, left };
 }
 
@@ -430,9 +414,9 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
     {
       let bestScore = 0;
       for (const t of tracks) {
-        /* a built-in base layout wins over a layout saved from an earlier import when both fit */
+        /* a base layout with calculated edges wins over a lap-only saved layout when both fit */
         const fit = sameTrack(t);
-        const sc = fit > 0 && t.builtin ? fit + 1 : fit;
+        const sc = fit > 0 && t.edges ? fit + 1 : fit;
         if (sc > bestScore) {
           bestScore = sc;
           track = t;
@@ -444,7 +428,7 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
       }
       /* A base layout was recorded at another time, and GPS drifts by a metre or two between drives. Slide it onto this run's
          laps so the road edges line up. More than 6 m means something else is off, so it is left where it is. */
-      if (track && track.builtin) {
+      if (track && track.edges) {
         const pr = projWith(frame(track.lat0, track.lon0));
         const [dx, dy] = alignShift(track.ref, probe.map(pr));
         const d = Math.hypot(dx, dy);
@@ -765,6 +749,9 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
           }
         : undefined,
     };
-    return { D, track: tk, isNew, renamed, label: course.label };
+    const named = withRunDirection(D);
+    const label = directionLabel(named.meta.direction!);
+    if (multi) named.meta.name = nm + " · " + label;
+    return { D: named, track: tk, isNew, renamed, label };
   });
 }

@@ -1,21 +1,23 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { lsGet, lsSet } from "@/lib/storage";
 import { defaultWorkspace, movePane, resizePair, restoreWorkspace, PANE_IDS, type PaneId, type PaneState, type WorkspaceLayout } from "@/lib/workspace";
-import { Dock } from "./Dock";
+import type { Track } from "@/lib/types";
+import { LayoutView } from "./LayoutView";
+import { Dock, PanelDock } from "./Dock";
 import { MapTools } from "./MapTools";
 import { MapView } from "./MapView";
 import { SegStrip } from "./SegStrip";
 import { WorkspacePane, PaneDivider } from "./WorkspacePane";
 import { VideoPanel } from "./panels/VideoPanel";
 import { Transport } from "./Transport";
-import { usePlayer } from "./context";
+import { PlayerCtx } from "./context";
 
 /** Independent video, track and analysis windows share one playback clock. */
-export function Workspace() {
-  const p = usePlayer();
+export function Workspace({ track }: { track?: Track } = {}) {
+  const p = useContext(PlayerCtx);
   const [layout, setLayout] = useState(() => restoreWorkspace(lsGet<WorkspaceLayout | null>("workspace", null)));
   const [timelineMode, setTimelineMode] = useState<"full" | "track">(() => lsGet<string>("timeline-layout", "full") === "track" ? "track" : "full");
   const [toolbarHost, setToolbarHost] = useState<HTMLElement | null>(null);
@@ -51,10 +53,11 @@ export function Workspace() {
   }, []);
 
   useEffect(() => {
-    p.schedule(true);
+    p?.schedule(true);
   }, [p, layout, timelineMode, timelineHeight]);
 
   useEffect(() => {
+    if (!p) return;
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t?.closest(".video-panel, .pane-header, .layout-toolbar, .pane-divider, .pane-resize, .timeline-resize")) return;
@@ -92,14 +95,20 @@ export function Workspace() {
 
   /* other runs on this layout and direction, for the Driver ghost */
   useEffect(() => {
-    void p.findRivals();
+    void p?.findRivals();
   }, [p]);
 
   useEffect(() => {
-    const save = () => p.savePos();
+    const save = () => p?.savePos();
     addEventListener("pagehide", save);
     return () => removeEventListener("pagehide", save);
   }, [p]);
+
+  const transport = () => p ? <Transport height={timelineHeight} onHeight={resizeTimeline} docked={timelineMode === "track"} onPlacement={toggleTimelineDock} /> :
+    <div className="transport panel empty-transport" aria-label="Playback unavailable without a driver run">
+      <div className="trow"><button className="btn" disabled aria-label="Previous lap">⏮</button><button className="btn play" disabled>Play</button><button className="btn" disabled aria-label="Next lap">⏭</button><span className="time">— / —</span><span className="sp" /><button className="btn" disabled>Ghost: Off</button><button className="btn" disabled>+ Note</button><button className="btn" disabled>+ Cone</button></div>
+      <div className="empty-timeline" style={{ height: timelineHeight }} aria-label="Empty timeline">Import or select a driver run to see laps and telemetry.</div>
+    </div>;
 
   const toolbar = <div className="layout-toolbar" aria-label="Workspace layout">
         <span className="lab">Windows</span>
@@ -116,13 +125,13 @@ export function Workspace() {
           onPatch={changes => patch(id, changes)}
           onMove={direction => { const target = layout.order[layout.order.indexOf(id) + direction]; if (target) update(current => movePane(current, id, target)); }}
           onDrop={source => update(current => movePane(current, source, id))}>
-          {id === "video" ? <VideoPanel visible={layout.panes.video.visible} /> : id === "analysis" ? <Dock /> :
-            <section className="stage" aria-label="Player"><MapTools /><MapView /><SegStrip />{timelineMode === "track" && layout.panes.track.visible && <Transport height={timelineHeight} onHeight={resizeTimeline} docked onPlacement={toggleTimelineDock} />}</section>}
+          {id === "video" ? p ? <VideoPanel visible={layout.panes.video.visible} /> : <div className="empty">No driver run selected.</div> : id === "analysis" ? p ? <Dock /> : <PanelDock /> : !p && track ? <><LayoutView track={track} />{timelineMode === "track" && layout.panes.track.visible && transport()}</> :
+            <section className="stage" aria-label="Player"><MapTools /><MapView /><SegStrip />{timelineMode === "track" && layout.panes.track.visible && transport()}</section>}
         </WorkspacePane>)}
         {docked.slice(0, -1).map((id, i) => <PaneDivider key={id + docked[i + 1]} left={id} right={docked[i + 1]} order={layout.order.indexOf(id)} fraction={layout.panes[id].weight / (layout.panes[id].weight + layout.panes[docked[i + 1]].weight)} onResize={fraction => update(current => resizePair(current, id, docked[i + 1], fraction))} />)}
         {!docked.length && <div className="workspace-empty">All windows are hidden or floating. Use the buttons above to restore them.</div>}
       </div>
-      {(timelineMode !== "track" || !layout.panes.track.visible) && <section className={"workspace-timeline" + (timelineHeight < 70 ? " is-compact" : "")} aria-label="Playback and full-width timeline"><Transport height={timelineHeight} onHeight={resizeTimeline} docked={timelineMode === "track"} onPlacement={toggleTimelineDock} /></section>}
+      {(timelineMode !== "track" || !layout.panes.track.visible) && <section className={"workspace-timeline" + (timelineHeight < 70 ? " is-compact" : "")} aria-label="Playback and full-width timeline">{transport()}</section>}
     </div>
   );
 }

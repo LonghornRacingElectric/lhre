@@ -29,7 +29,7 @@ describe("manual presses at different positions on a loop", () => {
 describe("a session with separate start and finish lines, and a run the other way", () => {
   it("opens each way round as its own course", () => {
     expect(courses.length).toBe(2);
-    expect(courses.map((c) => c.label)).toEqual(["Course 1", "Course 2 (reverse of 1)"]);
+    expect(courses.map((c) => c.label)).toEqual(["Counter-clockwise", "Clockwise"]);
     expect(courses.map((c) => c.D.meta.sessId)).toEqual(["sess-courses-1~1", "sess-courses-1~2"]);
   });
 

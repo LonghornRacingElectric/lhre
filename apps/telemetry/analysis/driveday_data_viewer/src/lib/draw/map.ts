@@ -72,21 +72,22 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
   const road = (): boolean => {
     if (!p.showEdges || !E || E.centre.length < 2) return false;
     ctx.strokeStyle = pal.track;
-    ctx.lineWidth = Math.max(4, E.width * p.sc);
+    ctx.lineWidth = Math.max(1, E.width * p.sc);
     path(E.centre);
     ctx.stroke();
-    if (E.width * p.sc >= 6) {
-      ctx.strokeStyle = pal.base;
-      ctx.globalAlpha = 0.8;
-      ctx.lineWidth = 1.25;
-      path(E.left);
-      ctx.stroke();
-      path(E.right);
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-    }
     return true;
   };
+  // Draw boundaries after telemetry so thick lap strokes cannot hide the road.
+  const borders = () => {
+    if (!p.showEdges || !E) return;
+    ctx.strokeStyle = pal.base;
+    ctx.globalAlpha = 0.9;
+    ctx.lineWidth = Math.min(1.25, Math.max(0.65, E.width * p.sc * 0.16));
+    path(E.left); ctx.stroke();
+    path(E.right); ctx.stroke();
+    ctx.globalAlpha = 1;
+  };
+  const traceWidth = (width: number) => p.showEdges && E ? Math.min(width, Math.max(0.9, E.width * p.sc * 0.35)) : width;
 
   const gates = (): void => {
     ([[0, s.open ? "Start" : "S/F", pal.ink], [s.gates[0], "S1|S2", pal.s1], [s.gates[1], "S2|S3", pal.s2]].concat(s.open ? [[RL, "Finish", pal.ink]] : []) as [number, string, string][]).forEach((g) => {
@@ -119,7 +120,7 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
       ctx.stroke();
     }
     /* with edges on, keep the sector line inside the road */
-    ctx.lineWidth = edged && E ? Math.max(2, Math.min(7 * wS, E.width * p.sc * 0.3)) : 7 * wS;
+    ctx.lineWidth = edged && E ? Math.max(0.9, Math.min(7 * wS, E.width * p.sc * 0.3)) : 7 * wS;
     for (let i = 0; i < ref.length - 1; i++) {
       const k = s.sectorAt((cum[i] + cum[i + 1]) / 2);
       ctx.strokeStyle = pal.sector[k];
@@ -128,6 +129,7 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
       ctx.lineTo(X(ref[i + 1][0]), Y(ref[i + 1][1]));
       ctx.stroke();
     }
+    borders();
     gates();
     ctx.font = "600 12px " + pal.fMono;
     ctx.textAlign = "left";
@@ -209,7 +211,7 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
   const pts = L.pts;
   const ct = L.ch.t;
   if (p.ghostAll && paint) {
-    ctx.lineWidth = 5 * tw;
+    ctx.lineWidth = traceWidth(5 * tw);
     s.laps.forEach((l) => {
       if (l.kind !== "lap" || l === L) return;
       for (let i = 0; i < l.pts.length - 1; i++) {
@@ -224,13 +226,13 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
   if (L.kind === "out") ctx.setLineDash([6, 4]);
   // A solid casing separates the selected lap from the road, ghosts and zone bands.
   ctx.strokeStyle = pal.panel;
-  ctx.lineWidth = 10 * tw;
+  ctx.lineWidth = p.showEdges && E ? Math.min(10 * tw, Math.max(1.2, E.width * p.sc * 0.65)) : 10 * tw;
   for (const curve of L.curve) segCurve(curve);
   for (let i = 0; i < pts.length - 1; i++) {
     const pp = segPaint(p, L, i, pal);
     ctx.globalAlpha = pp[1] * (ct[i + 1] <= rel ? 1 : 0.8);
     ctx.strokeStyle = pp[0];
-    ctx.lineWidth = 6.5 * tw;
+    ctx.lineWidth = traceWidth(6.5 * tw);
     segCurve(L.curve[i]);
   }
   ctx.globalAlpha = 1;
@@ -396,10 +398,11 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
     /* the other driver's whole lap, under the car marker, so the two lines can be compared corner by corner */
     ctx.strokeStyle = pal.rival;
     ctx.globalAlpha = 0.85;
-    ctx.lineWidth = 2.2 * tw;
+    ctx.lineWidth = traceWidth(2.2 * tw);
     R.curve.forEach((cu) => segCurve(cu));
     ctx.globalAlpha = 1;
   }
+  borders();
   /** The car marker: a ring with a dot in the middle. The other driver gets the same marker in teal. */
   const marker = (x: number, y: number, col: string) => {
     ctx.fillStyle = pal.panel;

@@ -241,3 +241,11 @@ export function lapCutJoin(L: Lap, geo: Geo): { points: XY[]; distance: number }
 export const timeAtU = (L: Lap, u: number) => interp(L.ch.u, L.ch.t, u);
 /** Speed (mph) at distance u. */
 export const speedAtU = (L: Lap, u: number) => interp(L.ch.u, L.ch.spd, u);
+
+/** Older saved roads may lack width metadata. Recover it from corresponding boundaries. */
+export function roadWidth(edges: { width?: number; left: XY[]; right: XY[] }): number {
+  if (Number.isFinite(edges.width) && edges.width! > 0) return edges.width!;
+  const widths = edges.left.map((p, i) => edges.right[i] ? Math.hypot(p[0] - edges.right[i][0], p[1] - edges.right[i][1]) : NaN)
+    .filter(w => Number.isFinite(w) && w > 0).sort((a, b) => a - b);
+  return widths.length ? widths[Math.floor(widths.length / 2)] : TRACK_WIDTH_M;
+}

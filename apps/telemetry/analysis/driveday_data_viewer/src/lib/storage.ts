@@ -1,3 +1,6 @@
+import { roadWidth } from "./geometry";
+import { layoutId } from "./layouts";
+import { withRunDirection } from "./direction";
 import { emptyUserState, type RunData, type RunListEntry, type Track, type UserState } from "./types";
 
 /* Browser-side storage. Runs and track layouts go in IndexedDB (an export can be 15 MB). Small things the user
@@ -76,8 +79,24 @@ async function guard<T>(idb: () => Promise<T>, mem: () => T): Promise<T> {
 export let storageProblem: string | null = null;
 
 export const runStore = {
-  list: () => guard<RunListEntry[]>(() => run(["meta"], "readonly", ([m]) => m.getAll()), () => [...memory.meta.values()]),
-  get: (id: string) => guard<RunData | undefined>(() => run(["data"], "readonly", ([d]) => d.get(id)), () => memory.data.get(id)),
+  list: async (): Promise<RunListEntry[]> => {
+    const list = await guard<RunListEntry[]>(() => run(["meta"], "readonly", ([m]) => m.getAll()), () => [...memory.meta.values()]);
+    const upgraded: RunListEntry[] = [];
+    // Read each old run once, then cache only its small display metadata. Saved telemetry stays untouched.
+    for (const meta of list) {
+      if (meta.direction != null) { upgraded.push(meta); continue; }
+      const data = await runStore.get(meta.id);
+      if (!data) { upgraded.push(meta); continue; }
+      const next = { ...meta, direction: data.meta.direction, name: data.meta.name, track: data.meta.trackName };
+      await guard<void>(() => run(["meta"], "readwrite", ([m]) => { m.put(next); }), () => { memory.meta.set(meta.id, next); });
+      upgraded.push(next);
+    }
+    return upgraded;
+  },
+  get: async (id: string): Promise<RunData | undefined> => {
+    const data = await guard<RunData | undefined>(() => run(["data"], "readonly", ([d]) => d.get(id)), () => memory.data.get(id));
+    return data ? withRunDirection({ ...data, edges: data.edges ? { ...data.edges, width: roadWidth(data.edges) } : undefined }) : undefined;
+  },
   put: (meta: RunListEntry, D: RunData) =>
     guard<void>(
       () => run(["meta", "data"], "readwrite", ([m, d]) => { m.put(meta); return d.put(D, meta.id); }),
@@ -88,15 +107,22 @@ export const runStore = {
       () => run(["meta", "data"], "readwrite", ([m, d]) => { m.delete(id); return d.delete(id); }),
       () => { memory.meta.delete(id); memory.data.delete(id); },
     ),
-  tracks: () => guard<Track[]>(() => run(["tracks"], "readonly", ([t]) => t.getAll()), () => [...memory.tracks.values()]),
+  tracks: async () => (await guard<Track[]>(() => run(["tracks"], "readonly", ([t]) => t.getAll()), () => [...memory.tracks.values()])).map(t => ({ ...t, edges: t.edges ? { ...t.edges, width: roadWidth(t.edges) } : undefined })),
+  delLayout: async (id: string) => {
+    const ids = (await runStore.tracks()).filter(t => t.edges && layoutId(t) === id).map(t => t.id);
+    await guard<void>(() => run(["tracks"], "readwrite", ([s]) => { ids.forEach(key => s.delete(key)); }),
+      () => { ids.forEach(key => memory.tracks.delete(key)); });
+  },
   putTrack: (t: Track) => guard<void>(() => run(["tracks"], "readwrite", ([s]) => s.put(t)), () => { memory.tracks.set(t.id, t); }),
 };
 
 export function metaOf(D: RunData): RunListEntry {
+  D = withRunDirection(D);
   const runs = D.laps.filter((l) => l.kind === "lap");
   const best = runs.length ? Math.min(...runs.map((l) => l.dur)) : null;
   return {
     id: D.meta.sessId,
+    direction: D.meta.direction,
     name: D.meta.name,
     driver: D.meta.driver,
     venue: D.meta.venue,

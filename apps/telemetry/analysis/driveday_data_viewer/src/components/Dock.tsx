@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import type { Player } from "@/lib/player";
 import { lsGet, lsSet } from "@/lib/storage";
 import { Menu } from "./Menu";
 import { usePlayer, useUi } from "./context";
@@ -48,16 +49,20 @@ const PANELS: PanelDef[] = [
 export function Dock() {
   const p = usePlayer();
   useUi(p);
+  return <PanelDock player={p} />;
+}
+
+export function PanelDock({ player: p = null }: { player?: Player | null }) {
   const [open, setOpen] = useState<string | null>(() => { const saved = lsGet<string | null>("panel", "laps"); return saved === "video" ? "laps" : saved; });
   const toggle = (id: string) => {
     const next = open === id ? null : id;
     setOpen(next);
     lsSet("panel", next);
-    p.schedule(true);
+    p?.schedule(true);
   };
   const label = (d: PanelDef) => {
-    if (d.id === "alerts" && p.analysis.alerts.length) return `${d.chip} (${p.analysis.alerts.length})`;
-    if (d.id === "notes" && p.user.marks.length) return `${d.chip} (${p.user.marks.length})`;
+    if (d.id === "alerts" && p?.analysis.alerts.length) return `${d.chip} (${p?.analysis.alerts.length})`;
+    if (d.id === "notes" && p?.user.marks.length) return `${d.chip} (${p?.user.marks.length})`;
     return d.chip;
   };
   const chip = (d: PanelDef) => (
@@ -68,7 +73,7 @@ export function Dock() {
     <aside className="dock" aria-label="Panels">
       <div className="chips" id="chips">
         {MAIN.map((id) => chip(PANELS.find((d) => d.id === id)!))}
-        <Menu label={p.analysis.alerts.length ? "More •" : "More"} chip wide>
+        <Menu label={p?.analysis.alerts.length ? "More •" : "More"} chip wide>
           {PANELS.filter((d) => !MAIN.includes(d.id)).map(chip)}
         </Menu>
       </div>
@@ -79,7 +84,7 @@ export function Dock() {
               <h3>{cur.title}</h3>
               <button className="x" type="button" aria-label={"Close " + cur.title} onClick={() => toggle(cur.id)}>×</button>
             </div>
-            <div className="pnb">{cur.body}</div>
+            <div className="pnb">{p ? cur.body : <div className="empty">Import or select a driver run to view {cur.chip.toLowerCase()} data.</div>}</div>
           </section>
         ) : (
           <div className="empty">No panels open. Pick one above.</div>
