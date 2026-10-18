@@ -219,6 +219,7 @@ All scripts live in `scripts/` and should be run from the `autonomy/ros2` direct
 | `generate_gazebo_world.sh` | Generates a Gazebo world SDF from the track generator. Accepts `--seed`, `--style`, `--num-waypoints`, etc. |
 | `run_gazebo_demo.sh` | Launches the Gazebo-based stack (physics sim + adapters + upper stack). Accepts same args as `run_demo.sh`. |
 | `src/lhr_gazebo/scripts/generate_vehicle_model.py` | Regenerates the Gazebo vehicle `model.sdf` from `lhr_vehicle/config/vehicle.yaml`. Run after editing the YAML; commit both. |
+| `check_layout.sh` | Checks a Foxglove layout (`LAYOUT`, default `foxglove/lhr_sim.json`) against a recorded bag and fails if it names a topic or frame the bag lacks. A renamed topic otherwise shows up as empty panels, which reads as a broken sim. |
 
 The individual `run_*.sh` scripts are useful for debugging a single node. For normal use, prefer the two-terminal workflow (`run_demo.sh` + `rviz_demo.sh`).
 
@@ -254,7 +255,13 @@ Launch arguments work the same way:
 ./scripts/run_gazebo_demo.sh track_style:=oval   # oval track (also: autocross, simple)
 ./scripts/run_gazebo_demo.sh track_style:=oval perception:=lidar  # LiDAR on oval (best LiDAR experience)
 ./scripts/run_gazebo_demo.sh estimator:=ekf      # EKF odometry instead of Gazebo ground truth
+./scripts/run_gazebo_demo.sh foxglove:=true rviz:=false  # live view in Foxglove (layout: foxglove/lhr_gazebo.json)
+./scripts/run_gazebo_demo.sh gui:=false record:=true     # record the run to MCAP under data/bags/<run_id>
 ```
+
+Foxglove, recording, and the extra nodes every run now starts
+(`publish_cones` in both modes, the `lidar` mount transform, `vehicle_viz`)
+are described in [lhr_gazebo's README](src/lhr_gazebo/README.md#foxglove-and-recording).
 
 The `track_style` argument selects the track generator (`oval`, `autocross`, or `simple`). The world SDF is auto-resolved from `track_style` + `seed` (e.g. `oval_seed1.sdf`). Pre-generated worlds are installed by colcon from `worlds/*.sdf`.
 
