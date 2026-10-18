@@ -307,6 +307,26 @@ message {
   }
 }
 message {
+  name: "VCU_MODE_COMMAND"
+  can_id: 41
+  from_board: "Pi"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 8
+  description: "Runtime VCU parameter-table selection command."
+  signal {
+    name: "event_mode"
+    encoding {
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Event mode: acceleration, skidpad, autocross, or endurance."
+  }
+}
+message {
   name: "HVC_BOUNDS_PARAMETERS"
   can_id: 48
   from_board: "Pi"

@@ -65,7 +65,14 @@ class ProtoTypeTest(unittest.TestCase):
 
 REGISTRY = """
 bus { name: "Critical" bitrate_bps: 1000000 }
-groups { group { name: "Battery" next_free_id: 3 } }
+groups {
+  group {
+    name: "Battery"
+    next_free_id: 4
+    snapshot_id: 3
+    external_field { name: "gateway_temp" id: 3 type: PROTO_FLOAT }
+  }
+}
 """
 
 ARRAY_MESSAGE = """
@@ -108,14 +115,22 @@ class ManifestTest(unittest.TestCase):
     def test_repeated_bound_spans_the_id_block(self):
         # 2 slots per frame x quantity 4 = 8 elements, one field, one id.
         types = wire.field_types(self.spec())
-        self.assertEqual(types[("Battery", "cell_temps")], ("repeated IndexedFloat", 8))
+        self.assertEqual(types[("Battery", "cell_temps")], ("repeated float", 8))
         self.assertEqual(types[("Battery", "cell_count")], ("uint32", None))
+        self.assertEqual(types[("Battery", "gateway_temp")], ("float", None))
+
+    def test_compatibility_override_wins(self):
+        spec = self.spec()
+        message = next(spec.messages())[1]
+        message.signal[2].telemetry.wire_type = can_spec_pb2.PROTO_FLOAT
+        self.assertEqual(wire.field_types(spec)[("Battery", "cell_count")], ("float", None))
 
     def test_manifest_lists_fields_and_tombstones(self):
         text = wire.manifest(self.spec())
-        self.assertIn("Battery.cell_temps 1 repeated IndexedFloat[8]", text)
+        self.assertIn("Battery.cell_temps 1 repeated float[8]", text)
         self.assertIn("Battery.cell_count 2 uint32", text)
-        self.assertIn("[Battery] next_free_id=3", text)
+        self.assertIn("Battery.gateway_temp 3 float", text)
+        self.assertIn("[Battery] next_free_id=4", text)
 
     def test_manifest_is_stable(self):
         self.assertEqual(wire.manifest(self.spec()), wire.manifest(self.spec()))

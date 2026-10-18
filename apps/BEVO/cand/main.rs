@@ -34,7 +34,7 @@ const CAN_INTERFACE_1: &str = "can1";
 const DEFAULT_PUBLISH_HZ: u64 = 100;
 const DEFAULT_NMEA_LISTEN_ADDR: &str = "0.0.0.0:2000";
 
-const DEFAULT_CAN_JSON_PATH: &str = "apps/BEVO/schema/can.json";
+const DEFAULT_CAN_JSON_PATH: &str = "lib/codegen/telemetry/can.json";
 const TRACKED_BOARD_SOURCES: [&str; 8] = ["CSM", "DUI", "HVC", "Inverter", "PDU", "TSM", "USM", "VCU"];
 
 #[derive(Debug)]

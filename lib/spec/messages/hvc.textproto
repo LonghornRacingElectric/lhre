@@ -304,6 +304,7 @@ message {
       group: "DiagnosticsHigh"
       field: "hvc_state_machine"
       id: 3
+      wire_type: PROTO_FLOAT
     }
     description: "HVC State Machine"
   }
@@ -436,6 +437,7 @@ message {
       group: "Thermal"
       field: "cell_top_temp"
       id: 13
+      wire_type: PROTO_FLOAT
     }
     description: "Cell Top Temp"
   }
@@ -454,6 +456,7 @@ message {
       group: "Thermal"
       field: "cell_bottom_temp"
       id: 12
+      wire_type: PROTO_FLOAT
     }
     description: "Cell Bottom Temp"
   }

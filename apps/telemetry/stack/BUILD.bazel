@@ -4,6 +4,7 @@
 
 load("@rules_python//python:defs.bzl", "py_library")
 load("@rules_python//python:pip.bzl", "compile_pip_requirements")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//apps/telemetry:compatibility.bzl", "NOT_WINDOWS")
 
 package(default_visibility = ["//apps/telemetry/stack:__subpackages__"])
@@ -35,6 +36,13 @@ exports_files([
     "server_devtool.sh",
     "win_server_devtools.ps1",
 ])
+
+sh_test(
+    name = "server_devtool_test",
+    srcs = ["server_devtool_test.sh"],
+    data = ["server_devtool.sh"],
+    target_compatible_with = NOT_WINDOWS,
+)
 
 # Aggregate target for all stack Docker images
 filegroup(

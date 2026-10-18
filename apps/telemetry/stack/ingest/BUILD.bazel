@@ -53,8 +53,12 @@ exports_files([
     "nightwatch_db_init.sql",
     "angelique_db_init.sql",
     "orion_db_init.sql",
-    "common_schema.sql",
 ])
+
+exports_files(
+    ["common_schema.sql"],
+    visibility = ["//visibility:public"],
+)
 
 # Filegroup for SQL initialization scripts
 filegroup(
@@ -63,7 +67,7 @@ filegroup(
         "angelique_db_init.sql",
         "init-databases.sh",
         "nightwatch_db_init.sql",
-        "orion_db_init.sql",
+        "//apps/telemetry:current_schema_sql",
     ],
     target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],

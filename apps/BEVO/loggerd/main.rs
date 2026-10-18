@@ -94,7 +94,7 @@ fn can_json_path() -> PathBuf {
         return PathBuf::from(path);
     }
     let mut path = workspace_root();
-    path.push("apps/BEVO/schema/can.json");
+    path.push("lib/codegen/telemetry/can.json");
     path
 }
 
@@ -485,7 +485,7 @@ mod tests {
         if std::env::var("LOGGERD_CAN_JSON_PATH").is_err() {
             let path = option_env!("OUT_DIR")
                 .map(|dir| format!("{dir}/can.json"))
-                .unwrap_or_else(|| "apps/BEVO/schema/can.json".to_string());
+                .unwrap_or_else(|| "lib/codegen/telemetry/can.json".to_string());
             std::env::set_var("LOGGERD_CAN_JSON_PATH", path);
         }
         canonical_csv_headers()
