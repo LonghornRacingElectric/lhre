@@ -77,7 +77,8 @@ def test_clock_jumping_backwards_stops_the_wheels(adapter):
 def test_zero_disables_the_watchdog(adapter):
     node, _ = adapter
     assert node._cmd_timeout == 0.0
-    assert len(node.timers) == 0
+    # Node.timers is a generator in Jazzy.
+    assert list(node.timers) == []
 
 
 def _launch_params(monkeypatch, **overrides):
