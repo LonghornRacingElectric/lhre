@@ -29,6 +29,11 @@ from launch_ros.parameter_descriptions import ParameterValue
 import yaml
 
 
+def _float(name):
+    """Forward a launch argument as a double, so v_max:=5 is not an int."""
+    return ParameterValue(LaunchConfiguration(name), value_type=float)
+
+
 def _find_world(context: LaunchContext):
     """
     Resolve the world SDF path from track_style and seed.
@@ -213,9 +218,8 @@ def _launch_setup(context: LaunchContext):
             name='inertial_sim',
             parameters=[{
                 'publish_imu': False,
-                'gyro_bias': LaunchConfiguration('gyro_bias'),
-                'wheel_scale_error': LaunchConfiguration(
-                    'wheel_scale_error'),
+                'gyro_bias': _float('gyro_bias'),
+                'wheel_scale_error': _float('wheel_scale_error'),
                 'use_sim_time': True,
             }],
             output='screen',
@@ -257,9 +261,11 @@ def _launch_setup(context: LaunchContext):
             executable='publish_cones',
             name='publish_cones',
             parameters=[{
-                'seed': LaunchConfiguration('seed'),
-                'track_style': LaunchConfiguration('track_style'),
-                'num_waypoints': LaunchConfiguration('num_waypoints'),
+                'seed': ParameterValue(LaunchConfiguration('seed'), value_type=int),
+                'track_style': ParameterValue(
+                    LaunchConfiguration('track_style'), value_type=str),
+                'num_waypoints': ParameterValue(
+                    LaunchConfiguration('num_waypoints'), value_type=int),
                 'use_sim_time': True,
             }],
             output='screen',
@@ -269,8 +275,8 @@ def _launch_setup(context: LaunchContext):
             executable='sensor_sim',
             name='sensor_sim',
             parameters=[{
-                'fov_deg': LaunchConfiguration('fov_deg'),
-                'max_range_m': LaunchConfiguration('max_range_m'),
+                'fov_deg': _float('fov_deg'),
+                'max_range_m': _float('max_range_m'),
                 'use_sim_time': True,
             }],
             output='screen',
@@ -375,15 +381,14 @@ def _launch_setup(context: LaunchContext):
         executable='pursuit_node',
         name='pure_pursuit',
         parameters=[{
-            'lookahead_dist': LaunchConfiguration('lookahead_dist'),
-            'lookahead_min': LaunchConfiguration('lookahead_min'),
-            'lookahead_curvature_gain': LaunchConfiguration(
-                'lookahead_curvature_gain'),
-            'a_lat_max': LaunchConfiguration('a_lat_max'),
-            'v_min': LaunchConfiguration('v_min'),
-            'v_max': LaunchConfiguration('v_max'),
-            'max_accel': LaunchConfiguration('max_accel'),
-            'max_decel': LaunchConfiguration('max_decel'),
+            'lookahead_dist': _float('lookahead_dist'),
+            'lookahead_min': _float('lookahead_min'),
+            'lookahead_curvature_gain': _float('lookahead_curvature_gain'),
+            'a_lat_max': _float('a_lat_max'),
+            'v_min': _float('v_min'),
+            'v_max': _float('v_max'),
+            'max_accel': _float('max_accel'),
+            'max_decel': _float('max_decel'),
             'use_sim_time': True,
             'closed_path': perception != 'lidar',
         }],
@@ -425,9 +430,11 @@ def _launch_setup(context: LaunchContext):
         executable='mission_manager',
         name='mission_manager',
         parameters=[{
-            'mission': LaunchConfiguration('mission'),
-            'auto_go': LaunchConfiguration('auto_go'),
-            'ready_hold_sec': LaunchConfiguration('ready_hold_sec'),
+            'mission': ParameterValue(
+                LaunchConfiguration('mission'), value_type=str),
+            'auto_go': ParameterValue(
+                LaunchConfiguration('auto_go'), value_type=bool),
+            'ready_hold_sec': _float('ready_hold_sec'),
             'use_sim_time': True,
         }],
         output='screen',
@@ -436,9 +443,6 @@ def _launch_setup(context: LaunchContext):
     # ----- Safety monitor -----
     safety_nodes = []
     if context.launch_configurations.get('safety', 'false').lower() == 'true':
-        def _float(name):
-            return ParameterValue(LaunchConfiguration(name), value_type=float)
-
         safety_nodes.append(Node(
             package='lhr_safety',
             executable='safety_node',
