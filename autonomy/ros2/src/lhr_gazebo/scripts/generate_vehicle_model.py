@@ -100,8 +100,23 @@ def render(veh) -> str:
         'joint_steer_limit': inner_steer_limit(veh),
         'max_steer_rate': veh.max_steer_rate_rad_s,
     }
+    substitutions = {k: _fmt(v) for k, v in values.items()}
+    camera = veh.stereo_camera
+    x, y, z = camera.position_m
+    roll, pitch, yaw = camera.rpy_rad
+    stereo_values = {
+        'stereo_dx': x - cx, 'stereo_dy': y, 'stereo_dz': z - cz,
+        'stereo_roll': roll, 'stereo_pitch': pitch, 'stereo_yaw': yaw,
+        'stereo_half_baseline': camera.baseline_m / 2.0,
+        'stereo_width': camera.image_width, 'stereo_height': camera.image_height,
+        'stereo_rate': camera.update_rate_hz, 'stereo_hfov': camera.horizontal_fov_rad,
+        'stereo_fx': camera.fx_px, 'stereo_fy': camera.fy_px,
+        'stereo_cx': camera.cx_px, 'stereo_cy': camera.cy_px,
+    }
+    # Optical metadata needs more precision than the existing chassis dimensions.
+    substitutions.update({k: format(v, '.12g') for k, v in stereo_values.items()})
     template = Template(TEMPLATE.read_text(encoding='utf-8'))
-    return template.substitute({k: _fmt(v) for k, v in values.items()})
+    return template.substitute(substitutions)
 
 
 def main(argv=None) -> int:

@@ -1,3 +1,5 @@
 # Review requests are routed by path. Teams need write access on the repo
 # for GitHub to honor these entries.
 /autonomy/  @LonghornRacingElectric/autonomous
+/simulation/ @LonghornRacingElectric/vehicle-modeling
+/vehicle/    @LonghornRacingElectric/vehicle-modeling

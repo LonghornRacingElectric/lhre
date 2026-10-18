@@ -11,9 +11,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-colcon-common-extensions \
     python3-numpy \
     python3-scipy \
+    python3-opencv \
     && rm -rf /var/lib/apt/lists/*
 
 # The base image ships a pip numpy 2.x in /usr/local that shadows apt's numpy,
-# breaking apt's scipy (built against numpy 1.x). Shadow scipy the same way so
-# the pair is ABI-consistent.
-RUN pip install --no-cache-dir --break-system-packages --ignore-installed "scipy>=1.14"
+# breaking apt's scipy and OpenCV (built against numpy 1.x). Shadow both with
+# wheels that support the base image's NumPy ABI.
+RUN pip install --no-cache-dir --break-system-packages --ignore-installed \
+    "scipy>=1.14" "opencv-python-headless>=4.10,<5"

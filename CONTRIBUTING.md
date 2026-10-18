@@ -25,6 +25,11 @@ everywhere.
 - Repository admins can bypass these rules (the ruleset lists the admin
   role as a bypass actor); every bypass is logged and shown on the PR, so
   use it for stalled reviews, not as the normal path.
+- CodeRabbit reviews every PR automatically, except autonomy's: PRs whose
+  title contains `Autonomous:` are skipped, and `autonomy/` files are left
+  out of every review. Its repo settings live in
+  [`.coderabbit.yaml`](https://github.com/LonghornRacingElectric/lhre/blob/main/.coderabbit.yaml);
+  everything else follows the org's CodeRabbit settings.
 - Presubmit runs `bazel test //...` (builds all firmware, runs host tests)
   and `bazel run //tools/format:check`. Run both locally before pushing.
 - `autonomy/` is outside Bazel

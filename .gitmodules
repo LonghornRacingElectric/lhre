@@ -1,0 +1,3 @@
+[submodule "simulation/bobsim"]
+	path = simulation/bobsim
+	url = https://github.com/BobDyn/BobSim.git

@@ -1,0 +1,35 @@
+name: simulation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "simulation/**"
+      - "vehicle/**"
+      - ".gitmodules"
+      - ".github/workflows/simulation.yml"
+  pull_request:
+    paths:
+      - "simulation/**"
+      - "vehicle/**"
+      - ".gitmodules"
+      - ".github/workflows/simulation.yml"
+  workflow_dispatch:
+
+jobs:
+  simulation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: simulation
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Build the image
+        run: make build
+
+      - name: Check that BobSim loads the vehicle
+        run: make test

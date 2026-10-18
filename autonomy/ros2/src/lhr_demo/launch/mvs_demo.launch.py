@@ -2,8 +2,8 @@
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration
+from launch.conditions import IfCondition, UnlessCondition
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 
 
@@ -49,6 +49,17 @@ def generate_launch_description():
         'ready_hold_sec', default_value='5.0',
         description='Seconds to hold in READY before auto-go')
 
+    # State estimation
+    estimator_arg = DeclareLaunchArgument(
+        'estimator', default_value='truth',
+        description='Odometry source: "truth" (simulator) or "ekf"')
+    gyro_bias_arg = DeclareLaunchArgument(
+        'gyro_bias', default_value='0.0',
+        description='Simulated gyro bias (rad/s); drives heading drift')
+    wheel_scale_arg = DeclareLaunchArgument(
+        'wheel_scale_error', default_value='1.0',
+        description='Simulated rolling-radius error (1.0 = perfectly known)')
+
     # ----- Nodes -----
     cones = Node(
         package='lhr_trackgen',
@@ -80,15 +91,55 @@ def generate_launch_description():
         output='screen',
     )
 
-    sim = Node(
-        package='lhr_sim_kinematic',
-        executable='sim_node',
-        name='sim_kinematic',
+    # Odometry source A/B. Under 'ekf' the simulator's ground truth steps
+    # aside to /lhr/vehicle/odom_truth (and /tf_truth) so the estimator owns
+    # the topic and the transform the rest of the stack already consumes.
+    use_ekf = PythonExpression(
+        ["'", LaunchConfiguration('estimator'), "' == 'ekf'"])
+
+    def sim_node(remappings, condition):
+        return Node(
+            package='lhr_sim_kinematic',
+            executable='sim_node',
+            name='sim_kinematic',
+            parameters=[{
+                'init_x': LaunchConfiguration('init_x'),
+                'init_y': LaunchConfiguration('init_y'),
+                'init_yaw': LaunchConfiguration('init_yaw'),
+            }],
+            remappings=remappings,
+            condition=condition,
+            output='screen',
+        )
+
+    sim_truth = sim_node([], UnlessCondition(use_ekf))
+    sim_ekf = sim_node(
+        [('/lhr/vehicle/odom', '/lhr/vehicle/odom_truth'),
+         ('/tf', '/tf_truth')],
+        IfCondition(use_ekf))
+
+    inertial_sim = Node(
+        package='lhr_sensor_sim',
+        executable='inertial_sim',
+        name='inertial_sim',
+        parameters=[{
+            'gyro_bias': LaunchConfiguration('gyro_bias'),
+            'wheel_scale_error': LaunchConfiguration('wheel_scale_error'),
+        }],
+        condition=IfCondition(use_ekf),
+        output='screen',
+    )
+
+    ekf = Node(
+        package='lhr_state_estimation',
+        executable='ekf_node',
+        name='ekf_node',
         parameters=[{
             'init_x': LaunchConfiguration('init_x'),
             'init_y': LaunchConfiguration('init_y'),
             'init_yaw': LaunchConfiguration('init_yaw'),
         }],
+        condition=IfCondition(use_ekf),
         output='screen',
     )
 
@@ -111,6 +162,7 @@ def generate_launch_description():
         package='lhr_metrics',
         executable='metrics_node',
         name='metrics_node',
+        parameters=[{'truth_odom_topic': '/lhr/vehicle/odom_truth'}],
         output='screen',
         condition=IfCondition(LaunchConfiguration('enable_metrics')),
     )
@@ -146,10 +198,16 @@ def generate_launch_description():
         mission_arg,
         auto_go_arg,
         ready_hold_arg,
+        estimator_arg,
+        gyro_bias_arg,
+        wheel_scale_arg,
         cones,
         sensor_sim,
         centerline,
-        sim,
+        sim_truth,
+        sim_ekf,
+        inertial_sim,
+        ekf,
         mission_mgr,
         control,
         metrics,

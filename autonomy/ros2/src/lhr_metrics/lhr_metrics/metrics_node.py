@@ -5,7 +5,7 @@ import csv
 import math
 import os
 import time
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from nav_msgs.msg import Odometry, Path
 import rclpy
@@ -16,7 +16,21 @@ from std_msgs.msg import Bool
 CSV_HEADER = [
     'run_id', 'duration_s', 'samples', 'mean_cte', 'max_cte',
     'off_track_count', 'mean_speed', 'max_speed', 'lap_completed',
+    'mean_pos_error', 'max_pos_error', 'mean_yaw_error',
 ]
+
+ERROR_FIELDS = ('mean_pos_error', 'max_pos_error', 'mean_yaw_error')
+
+
+def quat_to_yaw(q) -> float:
+    """Extract the yaw angle (rad) from a quaternion."""
+    return math.atan2(2.0 * (q.w * q.z + q.x * q.y),
+                      1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+
+
+def wrap_angle(angle: float) -> float:
+    """Wrap an angle into [-pi, pi)."""
+    return (angle + math.pi) % (2.0 * math.pi) - math.pi
 
 
 class MetricsNode(Node):
@@ -32,6 +46,9 @@ class MetricsNode(Node):
         self.declare_parameter('min_lap_time', 5.0)
         self.declare_parameter('output_csv', 'data/metrics.csv')
         self.declare_parameter('run_id', '')
+        # Set this to the ground-truth odometry topic to score an estimator
+        # against it. Empty (the default) leaves the error columns blank.
+        self.declare_parameter('truth_odom_topic', '')
 
         self._off_track_thresh = self.get_parameter(
             'off_track_threshold').get_parameter_value().double_value
@@ -61,6 +78,13 @@ class MetricsNode(Node):
         self._speed_sum = 0.0
         self._speed_max = 0.0
 
+        # --- Estimate-vs-truth stats (only when a truth topic is given) ---
+        self._truth: Optional[Tuple[float, float, float]] = None
+        self._err_samples = 0
+        self._pos_err_sum = 0.0
+        self._pos_err_max = 0.0
+        self._yaw_err_sum = 0.0
+
         # --- Lap detection state ---
         self._lap_completed = False
         self._near_start = False
@@ -77,9 +101,16 @@ class MetricsNode(Node):
         self.create_subscription(
             Odometry, '/lhr/vehicle/odom', self._odom_cb, 10)
 
+        truth_topic = self.get_parameter(
+            'truth_odom_topic').get_parameter_value().string_value
+        if truth_topic:
+            self.create_subscription(
+                Odometry, truth_topic, self._truth_cb, 10)
+
         self.get_logger().info(
             f'Metrics v0 ready  (run_id={self._run_id}, '
-            f'off_track>{self._off_track_thresh}m)')
+            f'off_track>{self._off_track_thresh}m, '
+            f'truth={truth_topic or "none"})')
 
     # ------------------------------------------------------------------
     # Callbacks
@@ -119,13 +150,35 @@ class MetricsNode(Node):
         if speed > self._speed_max:
             self._speed_max = speed
 
+        # --- Estimate vs truth ---
+        if self._truth is not None:
+            self._accumulate_error(px, py, msg.pose.pose.orientation)
+
         # --- Lap detection ---
         if not self._lap_completed and len(self._path) > 1:
             self._update_lap_detection(px, py, now)
 
+    def _truth_cb(self, msg: Odometry):
+        self._truth = (
+            msg.pose.pose.position.x,
+            msg.pose.pose.position.y,
+            quat_to_yaw(msg.pose.pose.orientation))
+
     # ------------------------------------------------------------------
     # Geometry
     # ------------------------------------------------------------------
+    def _accumulate_error(self, px: float, py: float, orientation):
+        """Score the published estimate against the latest truth sample."""
+        tx, ty, tyaw = self._truth
+        pos_err = math.hypot(px - tx, py - ty)
+        yaw_err = abs(wrap_angle(quat_to_yaw(orientation) - tyaw))
+
+        self._err_samples += 1
+        self._pos_err_sum += pos_err
+        self._yaw_err_sum += yaw_err
+        if pos_err > self._pos_err_max:
+            self._pos_err_max = pos_err
+
     def _nearest_distance(self, px: float, py: float) -> float:
         """Distance from (px, py) to nearest point on centerline."""
         best = float('inf')
@@ -165,6 +218,16 @@ class MetricsNode(Node):
         duration = time.monotonic() - self._start_time if self._samples else 0.0
         mean_cte = (self._cte_sum / self._samples) if self._samples else 0.0
         mean_speed = (self._speed_sum / self._samples) if self._samples else 0.0
+
+        if self._err_samples:
+            errors = {
+                'mean_pos_error': f'{self._pos_err_sum / self._err_samples:.4f}',
+                'max_pos_error': f'{self._pos_err_max:.4f}',
+                'mean_yaw_error': f'{self._yaw_err_sum / self._err_samples:.4f}',
+            }
+        else:
+            errors = {field: '' for field in ERROR_FIELDS}
+
         return {
             'run_id': self._run_id,
             'duration_s': f'{duration:.2f}',
@@ -175,6 +238,7 @@ class MetricsNode(Node):
             'mean_speed': f'{mean_speed:.2f}',
             'max_speed': f'{self._speed_max:.2f}',
             'lap_completed': str(self._lap_completed).lower(),
+            **errors,
         }
 
     def _print_summary(self):

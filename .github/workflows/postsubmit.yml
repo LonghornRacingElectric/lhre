@@ -3,11 +3,13 @@ name: postsubmit
 on:
   push:
     branches: [main]
-    # autonomy/ is outside Bazel (ADR-009); nothing built here changes when
-    # only it does. A path filter is safe here: no required check waits on
-    # this workflow (presubmit gates per job instead, see there).
+    # autonomy/ and simulation/ are outside Bazel (ADR-009, ADR-012); nothing
+    # built here changes when only they do. A path filter is safe here: no
+    # required check waits on this workflow (presubmit gates per job
+    # instead, see there).
     paths-ignore:
       - "autonomy/**"
+      - "simulation/**"
 
 jobs:
   postsubmit:
