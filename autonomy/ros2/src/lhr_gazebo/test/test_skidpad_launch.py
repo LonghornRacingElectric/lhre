@@ -32,7 +32,9 @@ def test_acquisition_launch(perception, override, monkeypatch):
     expected = dict(ACQUISITION_DEFAULTS, fov_deg=240.0, max_range_m=15.0)
     if override:
         expected.update(acquisition_speed=0.25, acquisition_distance=3.0,
-                        fit_stable_frames=3, fov_deg=180.0, max_range_m=12.0)
+                        fit_stable_frames=3, fov_deg=180.0, max_range_m=12.0,
+                        fit_min_chord_m=3.0, fit_max_centers=10,
+                        fit_max_hypotheses=4, fit_heading_tolerance_deg=35.0)
         for name, value in expected.items():
             context.launch_configurations[name] = str(value)
     actions = module._launch_setup(context)

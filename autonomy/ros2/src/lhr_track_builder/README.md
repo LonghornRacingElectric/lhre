@@ -166,12 +166,23 @@ are supported. Larger views are rejected. Sim perception additionally disables
 accumulation, so its output contains only currently visible cones. LiDAR's map
 is filtered again at the planner; this does not change the physical sensor FOV.
 
-Only translation and orientation are fitted, using multi-start robust
-least squares against the four boundary circles. Initialization uses the
-published staging distance and initial vehicle heading; it never reads the
-world SDF or trackgen cone positions. Translation is bounded to +/-5 m and
-yaw to +/-30 degrees around that initialization. Unique cone positions must
-support both circles and both radii. Comparable conflicting fits are rejected.
+Only translation and orientation are fitted. Initial guesses come from cone
+chords: two points and a known boundary radius give two candidate centers.
+Candidates are scored against both radii, merged within twice the inlier
+distance, and paired when their separation is within four times the inlier
+distance of the published center separation. The initial vehicle heading
+resolves the template's symmetry; template +y points along entry. No staging
+translation, world SDF, or generated cone coordinates enter the fitter.
+
+At most 48 spatially spread observations generate chords; all unique input
+observations score candidates and participate in refinement. The best bounded
+set of rigid-pose hypotheses, including the previous fit when competitive,
+is refined using `soft_l1` nonlinear least squares and an analytic Jacobian.
+Each solve holds boundary assignments fixed; reassignment occurs between
+solves, with at most five rounds. Translation is unrestricted, while yaw stays
+within the configured heading prior. Fits on a yaw bound, rank-deficient fits,
+insufficient angular/boundary support and comparable conflicting fits are
+rejected. Unique cone positions must support both circles and both radii.
 Color-side inference is not used as ground truth. Orange lane markers are
 excluded from circle fitting.
 
@@ -211,6 +222,10 @@ Every parameter is exposed by the Gazebo launch with the same name and type.
 | `fit_min_cones_per_circle` | `6` | Unique cones per center; also two per radius |
 | `fit_min_arc_deg` | `60.0` | Minimum angular coverage per center |
 | `fit_stable_frames` | `5` | Consecutive consistent fits (0.1 m / 1 degree) |
+| `fit_min_chord_m` | `2.0` | Minimum cone-pair separation for center proposals, m |
+| `fit_max_centers` | `12` | Maximum spatially distinct center candidates, at least 2 |
+| `fit_max_hypotheses` | `6` | Maximum rigid-pose hypotheses to refine |
+| `fit_heading_tolerance_deg` | `45.0` | Allowed template yaw deviation from entry-heading prior; less than 90 |
 
 Outputs: `/lhr/track/centerline` is only the finite approach path (or one hold
 point), `/lhr/planning/speed_limit` is the controller cap, and
@@ -222,4 +237,6 @@ Restart from a fresh simulator state for another trial. There is no automatic
 handoff to circle following, no fallback to constrained greedy, and no claim
 that acquisition is a completed skidpad mission. Tests cover noisy transformed
 fits, missing support, view limits, stale inputs, Go gating, travel limits,
-and stopping before terminal acquisition.
+and stopping before terminal acquisition. Chord initialization tests also cover
+large unknown translations, yaw wrapping, shuffled observations, outliers,
+narrow-arc rejection and the analytic Jacobian against central differences.

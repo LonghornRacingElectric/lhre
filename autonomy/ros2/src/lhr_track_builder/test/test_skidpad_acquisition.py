@@ -4,7 +4,8 @@ import math
 from unittest.mock import Mock
 
 from lhr_track_builder.skidpad_acquisition import (
-    _entry_corridor, _fit_layout, _visible, ACQUISITION_DEFAULTS, SkidpadAcquisition)
+    _entry_corridor, _fit_layout, _layout_residuals, _visible,
+    ACQUISITION_DEFAULTS, SkidpadAcquisition)
 from lhr_trackgen.publish_cones import generate_skidpad_track
 from lhr_trackgen.skidpad_geometry import generate_skidpad_lanes
 from nav_msgs.msg import Odometry
@@ -46,6 +47,61 @@ def test_fit_rejects_duplicate_support_one_circle_and_wrong_dimensions():
     assert _fit_layout(left[:17], [0, 0, 0], ACQUISITION_DEFAULTS) is None
     points = np.array(left + right) * 1.4
     assert _fit_layout(points, [0, 0, 0], ACQUISITION_DEFAULTS) is None
+
+
+def test_chord_guesses_recover_translation_without_staging_position():
+    yaw = -2.9
+    rotation = np.array([[math.cos(yaw), math.sin(yaw)], [-math.sin(yaw), math.cos(yaw)]])
+    translation = np.array([75.0, -42.0])
+    points = np.array(sum(generate_skidpad_track(), [])) @ rotation + translation
+    vehicle = np.r_[translation - 16.8747 * rotation[1], yaw + math.pi / 2]
+    points = _visible(points, vehicle, 15, 240)
+    points += np.random.default_rng(5).normal(0, 0.025, points.shape)
+    # The heading prior crosses +/-pi; its x/y coordinates are deliberately wrong.
+    prior = [0.0, 0.0, yaw + 2 * math.pi + math.radians(20)]
+    fit = _fit_layout(points, prior, ACQUISITION_DEFAULTS)
+    assert fit is not None
+    assert fit['pose'][:2] == pytest.approx(translation, abs=0.10)
+    assert math.atan2(math.sin(fit['pose'][2] - yaw),
+                      math.cos(fit['pose'][2] - yaw)) == pytest.approx(0, abs=0.02)
+    assert 1 <= fit['hypotheses'] <= ACQUISITION_DEFAULTS['fit_max_hypotheses']
+    shuffled = np.random.default_rng(8).permutation(points)
+    assert _fit_layout(shuffled, prior, ACQUISITION_DEFAULTS)['pose'] == pytest.approx(fit['pose'])
+
+
+def test_robust_fit_handles_outliers_and_uses_previous_pose():
+    points = np.array(sum(generate_skidpad_track(), []))
+    points += np.random.default_rng(7).normal(0, 0.03, points.shape)
+    points = np.vstack([points, [[30, 30], [-30, 25], [0, 35], [-25, -30]]])
+    fit = _fit_layout(points, [100, 100, 0.1], ACQUISITION_DEFAULTS,
+                      previous=np.array([0.08, -0.07, 0.01]))
+    assert fit is not None
+    assert fit['pose'] == pytest.approx([0, 0, 0], abs=0.04)
+    assert min(fit['support']) >= 25
+
+
+def test_fit_rejects_narrow_arcs_and_wrong_entry_direction():
+    angles = np.linspace(-0.15, 0.15, 8)
+    points = [(cx + radius * math.cos(angle), radius * math.sin(angle))
+              for cx in (-9.125, 9.125) for radius in (7.625, 10.625) for angle in angles]
+    assert _fit_layout(points, [0, 0, 0], ACQUISITION_DEFAULTS) is None
+    full = np.array(sum(generate_skidpad_track(), []))
+    assert _fit_layout(full, [0, 0, math.pi / 2], ACQUISITION_DEFAULTS) is None
+
+
+def test_radial_jacobian_matches_central_differences():
+    pose = np.array([3.0, -4.0, 0.6])
+    points = np.array([[12, 5], [-5, 3], [15, -7], [-10, -8]], dtype=float)
+    assignment = np.array([0, 1, 2, 3])
+    _, jacobian = _layout_residuals(pose, points, assignment)
+    numerical = np.empty_like(jacobian)
+    for column in range(3):
+        step = np.zeros(3)
+        step[column] = 1e-6
+        numerical[:, column] = (
+            _layout_residuals(pose + step, points, assignment)[0]
+            - _layout_residuals(pose - step, points, assignment)[0]) / 2e-6
+    assert jacobian == pytest.approx(numerical, abs=1e-7)
 
 
 def test_entry_corridor_requires_both_sides_and_stops_before_last_cones():

@@ -27,6 +27,10 @@ ACQUISITION_DEFAULTS = {
     'fit_min_cones_per_circle': 6,
     'fit_min_arc_deg': 60.0,
     'fit_stable_frames': 5,
+    'fit_min_chord_m': 2.0,
+    'fit_max_centers': 12,
+    'fit_max_hypotheses': 6,
+    'fit_heading_tolerance_deg': 45.0,
 }
 
 
@@ -42,20 +46,36 @@ def _visible(points, pose, radius, fov_deg):
     return points[keep]
 
 
-def _fit_layout(points, origin, limits):
-    """Fit only template translation/yaw; require both circles and boundaries."""
+def _layout_residuals(pose, points, assignment):
+    """Return radial residuals and their analytic Jacobian for fixed assignments."""
+    offsets = np.where(assignment // 2 == 0, -1, 1) * CENTER_SEPARATION / 2
+    c, s = math.cos(pose[2]), math.sin(pose[2])
+    centers = pose[:2] + offsets[:, None] * np.array([c, s])
+    delta = points - centers
+    distance = np.linalg.norm(delta, axis=1)
+    # A detection at a center is not a usable radial observation.
+    safe_distance = np.maximum(distance, 1e-9)
+    jacobian = np.column_stack([
+        -delta[:, 0] / safe_distance, -delta[:, 1] / safe_distance,
+        offsets * (delta[:, 0] * s - delta[:, 1] * c) / safe_distance])
+    radii = np.where(assignment % 2 == 0, INNER_RADIUS, OUTER_RADIUS)
+    return distance - radii, jacobian
+
+
+def _fit_layout(points, origin, limits, previous=None):
+    """Initialize from cone chords, then refine rigid poses with fixed assignments."""
     points = np.asarray(points, dtype=float).reshape(-1, 2)
-    # Coordinates, not repeated messages or generator IDs, define unique support.
     unique = []
-    for point in points:
-        if np.isfinite(point).all() and all(
-            np.linalg.norm(point - other) >= 0.4 for other in unique
-        ):
+    for point in np.unique(points[np.isfinite(points).all(axis=1)], axis=0):
+        if all(np.linalg.norm(point - other) >= 0.4 for other in unique):
             unique.append(point)
     points = np.asarray(unique).reshape(-1, 2)
     if len(points) < 2 * limits['fit_min_cones_per_circle']:
         return None
     radii = np.array([INNER_RADIUS, OUTER_RADIUS])
+    threshold = limits['fit_inlier_distance']
+    heading = float(origin[2])  # No assumed staging translation enters the fit.
+    heading_limit = math.radians(limits['fit_heading_tolerance_deg'])
 
     def centers(pose):
         axis = np.array([math.cos(pose[2]), math.sin(pose[2])])
@@ -67,30 +87,124 @@ def _fit_layout(points, origin, limits):
         assignment = np.argmin(np.abs(residual), axis=1)
         return residual[np.arange(len(points)), assignment], assignment
 
+    # Bound pair generation using spatially spread observations, rather than
+    # IDs or input order. All observations still participate in scoring/fitting.
+    selected = [0]
+    nearest = np.linalg.norm(points - points[0], axis=1)
+    for _ in range(min(48, len(points)) - 1):
+        index = int(np.argmax(nearest))
+        selected.append(index)
+        nearest = np.minimum(nearest, np.linalg.norm(points - points[index], axis=1))
+    sample = points[selected]
+    i, j = np.triu_indices(len(sample), 1)
+    chord = sample[j] - sample[i]
+    length = np.linalg.norm(chord, axis=1)
+    candidates = []
+    for radius in radii:
+        keep = (length >= limits['fit_min_chord_m']) & (length < 2 * radius)
+        midpoint = (sample[i[keep]] + sample[j[keep]]) / 2
+        normal = chord[keep][:, ::-1] * [-1, 1] / length[keep, None]
+        height = np.sqrt(radius ** 2 - (length[keep] / 2) ** 2)
+        for sign in (-1, 1):
+            candidates.extend(midpoint + sign * height[:, None] * normal)
+    candidates = np.asarray(candidates).reshape(-1, 2)
+    if not len(candidates):
+        return None
+
+    scored_centers = []
+    for start in range(0, len(candidates), 256):
+        chunk = candidates[start:start + 256]
+        distance = np.linalg.norm(points[None, :, :] - chunk[:, None, :], axis=2)
+        residual = np.abs(distance[:, :, None] - radii)
+        ring = np.argmin(residual, axis=2)
+        error = np.min(residual, axis=2)
+        inliers = error <= threshold
+        for k, center in enumerate(chunk):
+            count = int(np.count_nonzero(inliers[k]))
+            if (count < limits['fit_min_cones_per_circle']
+                    or any(np.count_nonzero(inliers[k] & (ring[k] == r)) < 2
+                           for r in range(2))):
+                continue
+            rms = float(np.sqrt(np.mean(error[k, inliers[k]] ** 2)))
+            scored_centers.append((-count, rms, center))
+    scored_centers.sort(key=lambda item: item[:2])
+    distinct = []
+    for _, _, center in scored_centers:
+        if all(np.linalg.norm(center - other) > 2 * threshold for other in distinct):
+            distinct.append(center)
+        if len(distinct) >= limits['fit_max_centers']:
+            break
+
+    guesses = []
+    if previous is not None and np.isfinite(previous).all():
+        guesses.append(np.array(previous, dtype=float))
+    for left in distinct:
+        for right in distinct:
+            delta = right - left
+            if abs(np.linalg.norm(delta) - CENTER_SEPARATION) > 4 * threshold:
+                continue
+            yaw = math.atan2(delta[1], delta[0])
+            yaw = heading + math.atan2(math.sin(yaw - heading), math.cos(yaw - heading))
+            if abs(yaw - heading) <= heading_limit:
+                guesses.append(np.r_[(left + right) / 2, yaw])
+    ranked = []
+    for guess in guesses:
+        guess[2] = heading + math.atan2(
+            math.sin(guess[2] - heading), math.cos(guess[2] - heading))
+        if abs(guess[2] - heading) >= heading_limit:
+            continue
+        residual, _ = errors(guess)
+        inliers = np.abs(residual) <= threshold
+        if np.count_nonzero(inliers) < 2 * limits['fit_min_cones_per_circle']:
+            continue
+        ranked.append((-int(np.count_nonzero(inliers)),
+                       float(np.mean(np.minimum(residual ** 2, threshold ** 2))), guess))
+    ranked.sort(key=lambda item: item[:2])
+    starts = []
+    for _, _, guess in ranked:
+        if all(np.linalg.norm(guess[:2] - other[:2]) > threshold
+               or abs(guess[2] - other[2]) > math.radians(3) for other in starts):
+            starts.append(guess)
+        if len(starts) >= limits['fit_max_hypotheses']:
+            break
+
     fits = []
-    lower = np.array(origin) - [5.0, 5.0, math.radians(30)]
-    upper = np.array(origin) + [5.0, 5.0, math.radians(30)]
-    for turn in (-20.0, 0.0, 20.0):
-        initial = np.array(origin) + [0, 0, math.radians(turn)]
-        result = least_squares(
-            lambda pose: errors(pose)[0], initial, bounds=(lower, upper),
-            loss='soft_l1', f_scale=0.1, max_nfev=80)
-        residual, assignment = errors(result.x)
-        inliers = np.abs(residual) <= limits['fit_inlier_distance']
+    for initial in starts:
+        pose = initial
+        # Keep associations fixed during each differentiable optimization.
+        for _ in range(5):
+            _, assignment = errors(pose)
+            result = least_squares(
+                lambda value: _layout_residuals(value, points, assignment)[0], pose,
+                jac=lambda value: _layout_residuals(value, points, assignment)[1],
+                bounds=([-np.inf, -np.inf, heading - heading_limit],
+                        [np.inf, np.inf, heading + heading_limit]),
+                loss='soft_l1', f_scale=0.1, max_nfev=80)
+            pose = result.x
+            residual, updated = errors(pose)
+            if np.array_equal(updated, assignment):
+                break
+        else:
+            continue
+        inliers = np.abs(residual) <= threshold
         if (not result.success or np.any(result.active_mask)
                 or np.mean(inliers) < limits['fit_inlier_fraction']):
             continue
         rms = float(np.sqrt(np.mean(residual[inliers] ** 2)))
         if rms > limits['fit_rms_limit']:
             continue
-        fitted_centers = centers(result.x)
+        # Small residuals do not guarantee all three pose variables are observable.
+        jacobian = _layout_residuals(pose, points[inliers], updated[inliers])[1]
+        if np.linalg.matrix_rank(jacobian) < 3:
+            continue
+        fitted_centers = centers(pose)
         support = []
         for circle in range(2):
-            selected = inliers & (assignment // 2 == circle)
+            selected = inliers & (updated // 2 == circle)
             count = int(np.count_nonzero(selected))
             if count < limits['fit_min_cones_per_circle']:
                 break
-            if any(np.count_nonzero(inliers & (assignment == 2 * circle + ring)) < 2
+            if any(np.count_nonzero(inliers & (updated == 2 * circle + ring)) < 2
                    for ring in range(2)):
                 break
             delta = points[selected] - fitted_centers[circle]
@@ -100,12 +214,12 @@ def _fit_layout(points, origin, limits):
                 break
             support.append(count)
         if len(support) == 2:
-            fits.append({'pose': result.x, 'rms': rms, 'support': support})
+            fits.append({'pose': pose, 'rms': rms, 'support': support,
+                         'hypotheses': len(starts), 'center_candidates': len(distinct)})
     if not fits:
         return None
     fits.sort(key=lambda fit: fit['rms'])
     best = fits[0]
-    # Do not accept two comparably supported, materially different solutions.
     for other in fits[1:]:
         if (other['rms'] <= best['rms'] + 0.02
                 and (np.linalg.norm(other['pose'][:2] - best['pose'][:2]) > 0.25
@@ -165,6 +279,9 @@ class SkidpadAcquisition(Node):
                        for value in self._limits.values())
                 or self._limits['fit_inlier_fraction'] > 1
                 or self._limits['fit_min_arc_deg'] > 360
+                or self._limits['fit_heading_tolerance_deg'] >= 90
+                or self._limits['fit_min_chord_m'] >= 2 * INNER_RADIUS
+                or self._limits['fit_max_centers'] < 2
                 or self._limits['fit_min_cones_per_circle'] < 4
                 or self._limits['acquisition_speed'] > 0.5
                 or self._limits['acquisition_distance'] > 5):
@@ -232,9 +349,7 @@ class SkidpadAcquisition(Node):
         self._pose, self._odom_time = pose, now
         if self._origin is None:
             heading = pose[2]
-            center = pose[:2] + (15.0 + self._front) * np.array([
-                math.cos(heading), math.sin(heading)])
-            self._origin = np.r_[center, heading - math.pi / 2]
+            self._origin = np.r_[pose[:2], heading - math.pi / 2]
 
     def _cones_cb(self, msg):
         self._circular, self._orange = [], []
@@ -274,7 +389,9 @@ class SkidpadAcquisition(Node):
             orange = _visible(self._orange, self._pose, self._range, self._fov)
             if self._frame != self._last_frame and self._phase != 'ACQUIRED':
                 self._last_frame = self._frame
-                fit = _fit_layout(circular, self._origin, self._limits)
+                fit = _fit_layout(
+                    circular, self._origin, self._limits,
+                    previous=self._fit['pose'] if self._fit is not None else None)
                 consistent = (fit is not None and self._fit is not None
                               and np.linalg.norm(fit['pose'][:2] - self._fit['pose'][:2]) <= 0.1
                               and abs(fit['pose'][2] - self._fit['pose'][2]) <= math.radians(1))
@@ -327,7 +444,9 @@ class SkidpadAcquisition(Node):
                   'visible_cones': len(self._circular), 'fault': self._fault}
         if self._fit is not None:
             report.update(rms_m=self._fit['rms'], support=self._fit['support'],
-                          layout_pose=self._fit['pose'].tolist())
+                          layout_pose=self._fit['pose'].tolist(),
+                          hypotheses=self._fit['hypotheses'],
+                          center_candidates=self._fit['center_candidates'])
         self._state_pub.publish(String(data=json.dumps(report)))
         if self._phase != self._reported_phase:
             self.get_logger().info(json.dumps(report))

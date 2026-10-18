@@ -71,6 +71,10 @@ creep before the fit is declared stable, use `fit_stable_frames:=40`; this
 extends stability checking for the demonstration, not the geometry fit.
 RViz shows the limited visible cones, FOV and fitted circles. Gazebo shows
 the physical car and cones. The car holds at `ACQUIRED` and never starts laps.
+The fitter now initializes from detected cone chords and the known center
+separation, rather than assuming a center from the staging distance. It uses
+the initial vehicle heading to resolve orientation. Acquisition reports include
+the number of retained center candidates and refined pose hypotheses.
 
 `perception:=lidar` applies the same planner view filter and detector range;
 there is no orange classification in that pipeline, so acquisition cannot
