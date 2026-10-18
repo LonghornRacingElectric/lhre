@@ -27,6 +27,8 @@ class SensorSim(Node):
         super().__init__('sensor_sim')
 
         # --- Parameters ---
+        self.declare_parameter('accumulate_detections', True)
+        self._accumulate = bool(self.get_parameter('accumulate_detections').value)
         self.declare_parameter('fov_deg', 200.0)
         self.declare_parameter('max_range_m', 20.0)
         self.declare_parameter('min_range_m', 0.5)
@@ -99,6 +101,8 @@ class SensorSim(Node):
             return
 
         half_fov = self._fov_rad / 2.0
+        if not self._accumulate:
+            self._accumulated.clear()
 
         for marker in self._all_cones:
             key = (marker.ns, marker.id)

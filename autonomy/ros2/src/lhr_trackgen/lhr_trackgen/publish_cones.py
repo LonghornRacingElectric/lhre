@@ -5,6 +5,8 @@ import math
 import random
 from typing import List, Tuple
 
+from lhr_trackgen.skidpad_geometry import (
+    CENTER_SEPARATION, generate_skidpad_lanes, INNER_RADIUS, OUTER_RADIUS)
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
@@ -322,19 +324,19 @@ def generate_skidpad_track(
 
     Entry is along +y between the circles. Blue marks the left boundary
     in the prescribed direction (right circle clockwise, left circle
-    counterclockwise). Orange entry/exit lanes and gates are not included.
+    counterclockwise). Orange entry/exit lanes and gates are published separately.
     The rules geometry is fixed; seed and generic track options are ignored.
     """
     left: ConeList = []
     right: ConeList = []
-    for cx in (-9.125, 9.125):
+    for cx in (-CENTER_SEPARATION / 2.0, CENTER_SEPARATION / 2.0):
         # Seventeen inner cones, including the cone beside the crossing.
         phase = 0.0 if cx < 0.0 else math.pi
         inner = []
         for i in range(17):
             angle = phase + 2.0 * math.pi * i / 17
-            inner.append((cx + 7.625 * math.cos(angle),
-                          7.625 * math.sin(angle)))
+            inner.append((cx + INNER_RADIUS * math.cos(angle),
+                          INNER_RADIUS * math.sin(angle)))
 
         # Thirteen outer cones at 22.5-degree intervals. Omit the inward
         # quarter-circle so the crossing and its 3 m entry lane stay open.
@@ -342,8 +344,8 @@ def generate_skidpad_track(
         outer = []
         for i in range(13):
             angle = phase + math.pi * i / 8.0
-            outer.append((cx + 10.625 * math.cos(angle),
-                          10.625 * math.sin(angle)))
+            outer.append((cx + OUTER_RADIUS * math.cos(angle),
+                          OUTER_RADIUS * math.sin(angle)))
 
         left.extend(inner if cx < 0.0 else outer)
         right.extend(outer if cx < 0.0 else inner)
@@ -410,6 +412,8 @@ class ConePublisher(Node):
             cone_spacing_m=spacing,
         )
 
+        self._orange = generate_skidpad_lanes() if style == 'skidpad' else ([], [])
+
         # --- Publisher ---
         qos = QoSProfile(depth=1)
         qos.reliability = ReliabilityPolicy.RELIABLE
@@ -468,6 +472,14 @@ class ConePublisher(Node):
                 self.make_cone_marker(base + i, 'right_cones', x, y,
                                       1.0, 1.0, 0.0))
 
+        for group, (points, ns, size) in enumerate(zip(
+            self._orange, ('orange_small', 'orange_large'), (0.325, 0.505),
+        )):
+            for i, (x, y) in enumerate(points):
+                marker = self.make_cone_marker(
+                    20000 + group * 10000 + i, ns, x, y, 1.0, 0.5, 0.0)
+                marker.scale.z = size
+                arr.markers.append(marker)
         self.pub.publish(arr)
 
 

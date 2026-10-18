@@ -24,9 +24,10 @@ from launch.actions import (
     OpaqueFunction,
     SetEnvironmentVariable,
 )
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+from lhr_track_builder.skidpad_acquisition import ACQUISITION_DEFAULTS
 
 
 def _find_world(context: LaunchContext):
@@ -91,6 +92,12 @@ def _launch_setup(context: LaunchContext):
     models_dir = os.path.join(pkg_share, 'models')
     config_dir = os.path.join(pkg_share, 'config')
 
+    skidpad = context.launch_configurations.get('mission', 'autocross') == 'skidpad'
+    if skidpad and (
+        context.launch_configurations.get('path_closed', 'false').lower() != 'false'
+        or context.launch_configurations.get('require_planner_limit', 'true').lower() != 'true'
+    ):
+        raise ValueError('Skidpad acquisition requires an open path and planner speed limit')
     perception = context.launch_configurations.get('perception', 'sim')
     classify_sides = context.launch_configurations.get(
         'lidar_classify_sides', 'false').lower() == 'true'
@@ -196,8 +203,11 @@ def _launch_setup(context: LaunchContext):
             executable='sensor_sim',
             name='sensor_sim',
             parameters=[{
-                'fov_deg': LaunchConfiguration('fov_deg'),
-                'max_range_m': LaunchConfiguration('max_range_m'),
+                'fov_deg': ParameterValue(LaunchConfiguration('fov_deg'), value_type=float),
+                'max_range_m': ParameterValue(
+                    LaunchConfiguration('max_range_m'), value_type=float),
+                'accumulate_detections': ParameterValue(
+                    LaunchConfiguration('accumulate_detections'), value_type=bool),
                 'use_sim_time': True,
             }],
             output='screen',
@@ -209,7 +219,7 @@ def _launch_setup(context: LaunchContext):
             name='lidar_cone_detector',
             parameters=[{
                 'use_sim_time': True,
-                'max_range': 20.0,
+                'max_range': ParameterValue(LaunchConfiguration('max_range_m'), value_type=float),
                 'min_range': 0.8,
                 'ground_z_min': -0.40,
                 'ground_z_max': 0.5,
@@ -221,8 +231,19 @@ def _launch_setup(context: LaunchContext):
             output='screen',
         ))
 
-    # ----- Track builder -----
-    if perception == 'lidar':
+    # ----- Track builder (one owner of the path topic) -----
+    if skidpad:
+        centerline = Node(
+            package='lhr_track_builder', executable='skidpad_acquisition',
+            name='skidpad_acquisition', parameters=[{
+                'use_sim_time': True,
+                'fov_deg': ParameterValue(LaunchConfiguration('fov_deg'), value_type=float),
+                'max_range_m': ParameterValue(
+                    LaunchConfiguration('max_range_m'), value_type=float),
+                **{name: ParameterValue(LaunchConfiguration(name), value_type=type(default))
+                   for name, default in ACQUISITION_DEFAULTS.items()},
+            }], output='screen')
+    elif perception == 'lidar':
         centerline = Node(
             package='lhr_track_builder',
             executable='track_builder',
@@ -286,6 +307,11 @@ def _launch_setup(context: LaunchContext):
         executable='pursuit_node',
         name='pure_pursuit',
         parameters=[{
+            'path_closed': ParameterValue(LaunchConfiguration('path_closed'), value_type=bool),
+            'require_planner_limit': ParameterValue(
+                LaunchConfiguration('require_planner_limit'), value_type=bool),
+            'planner_timeout_sec': ParameterValue(
+                LaunchConfiguration('planner_timeout_sec'), value_type=float),
             'lookahead_dist': LaunchConfiguration('lookahead_dist'),
             'lookahead_min': LaunchConfiguration('lookahead_min'),
             'lookahead_curvature_gain': LaunchConfiguration(
@@ -322,7 +348,8 @@ def _launch_setup(context: LaunchContext):
             package='rviz2',
             executable='rviz2',
             name='rviz2',
-            arguments=['-d', os.path.join(config_dir, 'default.rviz')],
+            arguments=['-d', os.path.join(
+                config_dir, 'skidpad.rviz' if skidpad else 'default.rviz')],
             parameters=[{'use_sim_time': True}],
             output='screen',
         ))
@@ -373,7 +400,7 @@ def generate_launch_description():
             description='Infer LiDAR cone sides (opt in; false publishes unlabeled cones)'),
         DeclareLaunchArgument(
             'track_style', default_value='autocross',
-            description='Track style: "autocross", "oval", or "simple"'),
+            description='Track style: "autocross", "oval", "simple", or "skidpad"'),
         DeclareLaunchArgument(
             'estimator', default_value='truth',
             description='Odometry source: "truth" (Gazebo) or "ekf"'),
@@ -386,8 +413,15 @@ def generate_launch_description():
         DeclareLaunchArgument('seed', default_value='1'),
         DeclareLaunchArgument('num_waypoints', default_value='10'),
         # Sensor sim
-        DeclareLaunchArgument('fov_deg', default_value='200.0'),
-        DeclareLaunchArgument('max_range_m', default_value='20.0'),
+        DeclareLaunchArgument('mission', default_value='autocross'),
+        DeclareLaunchArgument('fov_deg', default_value=PythonExpression([
+            "240.0 if '", LaunchConfiguration('mission'), "' == 'skidpad' else 200.0"])),
+        DeclareLaunchArgument('max_range_m', default_value=PythonExpression([
+            "15.0 if '", LaunchConfiguration('mission'), "' == 'skidpad' else 20.0"])),
+        DeclareLaunchArgument('accumulate_detections', default_value=PythonExpression([
+            "'false' if '", LaunchConfiguration('mission'), "' == 'skidpad' else 'true'"])),
+        *[DeclareLaunchArgument(name, default_value=str(default))
+          for name, default in ACQUISITION_DEFAULTS.items()],
         # Track builder chaining (both perception modes)
         DeclareLaunchArgument('chaining_alg', default_value='constrained_greedy'),
         DeclareLaunchArgument('min_step_m', default_value='0.3'),
@@ -398,6 +432,11 @@ def generate_launch_description():
         DeclareLaunchArgument('beam_width', default_value='3'),
         DeclareLaunchArgument('beam_depth', default_value='10'),
         # Control
+        DeclareLaunchArgument('path_closed', default_value=PythonExpression([
+            "'false' if '", LaunchConfiguration('mission'), "' == 'skidpad' else 'true'"])),
+        DeclareLaunchArgument('require_planner_limit', default_value=PythonExpression([
+            "'true' if '", LaunchConfiguration('mission'), "' == 'skidpad' else 'false'"])),
+        DeclareLaunchArgument('planner_timeout_sec', default_value='0.5'),
         DeclareLaunchArgument('lookahead_dist', default_value='5.0'),
         DeclareLaunchArgument('lookahead_min', default_value='2.0'),
         DeclareLaunchArgument('lookahead_curvature_gain', default_value='3.0'),
@@ -410,7 +449,6 @@ def generate_launch_description():
         DeclareLaunchArgument('rviz', default_value='true'),
         DeclareLaunchArgument('enable_metrics', default_value='true'),
         # Mission
-        DeclareLaunchArgument('mission', default_value='autocross'),
         DeclareLaunchArgument('auto_go', default_value='true'),
         DeclareLaunchArgument('ready_hold_sec', default_value='5.0'),
         # ----- Build all nodes via OpaqueFunction -----

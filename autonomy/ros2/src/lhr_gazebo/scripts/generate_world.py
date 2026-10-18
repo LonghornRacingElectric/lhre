@@ -19,12 +19,14 @@ import textwrap
 # Allow importing lhr_trackgen even when not installed as a ROS package.
 # Walk up to find the src directory and add trackgen to the path.
 _this_dir = os.path.dirname(os.path.abspath(__file__))
-_trackgen_pkg = os.path.join(
-    _this_dir, os.pardir, os.pardir, 'lhr_trackgen')
-if os.path.isdir(_trackgen_pkg):
-    sys.path.insert(0, _trackgen_pkg)
+for _package in ('lhr_trackgen', 'lhr_vehicle'):
+    _source = os.path.join(_this_dir, os.pardir, os.pardir, _package)
+    if os.path.isdir(_source):
+        sys.path.insert(0, _source)
 
 from lhr_trackgen.publish_cones import GENERATORS  # noqa: E402
+from lhr_trackgen.skidpad_geometry import generate_skidpad_lanes  # noqa: E402
+from lhr_vehicle import load_vehicle  # noqa: E402
 
 
 def _cone_include(model_name: str, instance_name: str,
@@ -80,6 +82,7 @@ def generate_world_sdf(
     vehicle_y: float = None,
     vehicle_yaw: float = None,
     model_dir: str = '',
+    orange_small=(), orange_large=(),
 ) -> str:
     """Build a complete Gazebo world SDF string."""
     # Auto-compute spawn from track geometry if not explicitly set
@@ -105,6 +108,13 @@ def generate_world_sdf(
             _cone_include('cone_yellow', f'cone_yellow_{i}',
                           cx, cy, yellow_half_h))
 
+    for points, model, height in (
+        (orange_small, 'cone_orange_small', 0.325),
+        (orange_large, 'cone_orange_large', 0.505),
+    ):
+        for i, (cx, cy) in enumerate(points):
+            cone_blocks.append(_cone_include(
+                model, f'{model}_{i}', cx, cy, height / 2.0))
     cones_xml = '\n'.join(cone_blocks)
 
     # Vehicle spawn height: wheel radius so it sits on the ground
@@ -240,11 +250,23 @@ def main():
 
     print(f'Generated track: {len(left)} left cones, {len(right)} right cones')
 
+    orange = generate_skidpad_lanes() if args.style == 'skidpad' else ([], [])
+    if args.style == 'skidpad':
+        vehicle = load_vehicle()
+        front = max(vehicle.chassis_center_x_m + vehicle.body_length_m / 2,
+                    vehicle.wheelbase_m + vehicle.wheel_radius_m)
+        if args.vehicle_x is None:
+            args.vehicle_x = 0.0
+        if args.vehicle_y is None:
+            args.vehicle_y = -15.0 - front
+        if args.vehicle_yaw is None:
+            args.vehicle_yaw = math.pi / 2
     sdf = generate_world_sdf(
         left, right,
         vehicle_x=args.vehicle_x,
         vehicle_y=args.vehicle_y,
         vehicle_yaw=args.vehicle_yaw,
+        orange_small=orange[0], orange_large=orange[1],
     )
 
     if args.output is None:

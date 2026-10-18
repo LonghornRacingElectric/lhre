@@ -57,6 +57,7 @@ nav:
       - State Estimation: autonomy/ros2/src/lhr_state_estimation/README.md
       - LiDAR Perception: autonomy/ros2/src/lhr_perception/README.md
       - Track Builder: autonomy/ros2/src/lhr_track_builder/README.md
+      - Path Following: autonomy/ros2/src/lhr_control/README.md
       - Gazebo Simulation: autonomy/ros2/src/lhr_gazebo/README.md
       - Plans:
           - Overview: autonomy/docs/plans/README.md

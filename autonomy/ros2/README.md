@@ -431,7 +431,12 @@ has 17 inner cones (DD.4.3) and 13 outer cones with the crossing left open.
 Entry runs along +y at x=0. Blue/yellow boundaries match clockwise travel
 on the right circle and counterclockwise travel on the left. Generic seed,
 width, radius, spacing and jitter options do not alter this rules layout.
-Orange lanes/gates and skidpad planning/completion are not implemented.
+Orange lanes/gates are generated separately from the circular boundaries.
+Their spacing and lengths are illustrative simulation choices.
+`mission:=skidpad track_style:=skidpad` selects the dedicated
+[acquisition planner](src/lhr_track_builder/README.md#skidpad-acquisition),
+with 15 m / 240-degree detection, optional bounded creep and a stationary
+`ACQUIRED` result. Event lap planning/completion is not implemented.
 | `num_waypoints` | `10` | Number of waypoints around the loop (autocross only) |
 | `radius_m` | `25.0` | Base radius of the track (autocross only) |
 | `jitter_m` | `10.0` | Radial jitter per waypoint (autocross only) |
@@ -444,8 +449,9 @@ Cone IDs: left cones use IDs `0..N-1`, right cones use IDs `10000..10000+N-1`. I
 
 | Param | Default | Description |
 |-------|---------|-------------|
-| `fov_deg` | `200.0` | Total field of view (degrees) |
-| `max_range_m` | `20.0` | Max detection range (m) |
+| `accumulate_detections` | `true` | Retain previously observed cones; skidpad launch defaults to false |
+| `fov_deg` | `200.0` | Total field of view (degrees); skidpad launch defaults to 240 |
+| `max_range_m` | `20.0` | Max detection range (m); skidpad launch defaults to 15 |
 | `min_range_m` | `0.5` | Min detection range (m) |
 | `detection_hz` | `10.0` | Publish rate (Hz) |
 | `noise_std_m` | `0.0` | Gaussian position noise std-dev (0 = off) |
@@ -578,7 +584,8 @@ stateDiagram-v2
 Mission completion triggers:
 - **autocross**: lap detected by `lhr_metrics` (via `/lhr/metrics/lap_complete`)
 - **inspection**: 28 seconds elapsed
-- **acceleration, skidpad, ebs_test, manual**: not yet implemented
+- **skidpad**: acquisition only; the car stops at `ACQUIRED`, without event laps or mission completion
+- **acceleration, ebs_test, manual**: not yet implemented
 
 The control node (`pursuit_node`) subscribes to `/lhr/mission/status` and only sends drive commands when status is `DRIVING`. When the mission manager is not running, the control node operates freely for backward compatibility.
 

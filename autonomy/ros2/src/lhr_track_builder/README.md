@@ -150,3 +150,76 @@ Run them in the ROS environment with
 
 See the [ROS 2 workspace reference](../../README.md#lhr_track_builder-track_builder)
 for topics and all parameters.
+
+
+## Skidpad acquisition
+
+`mission:=skidpad` in the Gazebo launch replaces this package's autocross
+planner with `skidpad_acquisition`. It only acquires the layout and stops;
+it does not count or drive event laps. The rigid template's dimensions live
+in `lhr_trackgen.skidpad_geometry`, shared with world generation. Inputs are
+`/lhr/sensor/cones_detected` and `/lhr/vehicle/odom`, both in `map`.
+
+The planner filters every candidate to a rear-axle-centered radius of 15 m
+and a forward 240-degree FOV (including after vehicle motion). Smaller views
+are supported. Larger views are rejected. Sim perception additionally disables
+accumulation, so its output contains only currently visible cones. LiDAR's map
+is filtered again at the planner; this does not change the physical sensor FOV.
+
+Only translation and orientation are fitted, using multi-start robust
+least squares against the four boundary circles. Initialization uses the
+published staging distance and initial vehicle heading; it never reads the
+world SDF or trackgen cone positions. Translation is bounded to +/-5 m and
+yaw to +/-30 degrees around that initialization. Unique cone positions must
+support both circles and both radii. Comparable conflicting fits are rejected.
+Color-side inference is not used as ground truth. Orange lane markers are
+excluded from circle fitting.
+
+The phases are `ACQUIRE`, `APPROACH`, `HOLD`, and terminal `ACQUIRED`.
+A robust parallel-line fit to the observed small orange lane cones can
+supply a finite approach path while the layout fit stabilizes. It requires
+three cones per side spanning at least 4 m, width 2.8-3.2 m, heading within
+15 degrees of the car, side slopes within 5 degrees, and 0.2 m residuals.
+Vehicle footprint clearance and stopping room shorten the supported path.
+No orange classification means no approach authorization: today's uncolored
+LiDAR pipeline can fit circles but must hold if initial support is insufficient.
+
+Only mission `DRIVING` permits a nonzero speed cap. Creep is bounded by
+0.5 m/s and 5 m accumulated odometry travel. A conservative simulation envelope
+uses 0.5 m/s² braking, 0.5 s latency and a 0.5 m margin. These are simulation
+assumptions, not validated hardware braking performance. Stale inputs,
+invalid frames, insufficient corridor support or exhausted travel cause a hold;
+odometry jumps latch a fault until node restart. `ACQUIRED` requires a stable
+fit and speed below 0.05 m/s for one second. It keeps the command cap at zero.
+
+The fit is evaluated at 5 Hz, counting only new observation messages.
+Persistence is a stability check, not independent statistical evidence.
+The default ideal sim view already fits from staging, so it need not creep.
+All thresholds below are initial simulation values, not measured vehicle limits.
+Every parameter is exposed by the Gazebo launch with the same name and type.
+
+| Parameter | Default | Meaning |
+| --- | --- | --- |
+| `fov_deg` | `240.0` | Forward total view, degrees; maximum 240 |
+| `max_range_m` | `15.0` | Maximum view radius, m; maximum 15 |
+| `acquisition_speed` | `0.5` | Creep cap, m/s; maximum 0.5 |
+| `acquisition_distance` | `5.0` | Total travel budget, m; maximum 5 |
+| `acquisition_timeout` | `0.5` | Input receipt freshness, seconds |
+| `fit_rms_limit` | `0.10` | Maximum inlier radial RMS, m |
+| `fit_inlier_distance` | `0.25` | Inlier radial distance, m |
+| `fit_inlier_fraction` | `0.8` | Minimum fraction of circular candidates explained |
+| `fit_min_cones_per_circle` | `6` | Unique cones per center; also two per radius |
+| `fit_min_arc_deg` | `60.0` | Minimum angular coverage per center |
+| `fit_stable_frames` | `5` | Consecutive consistent fits (0.1 m / 1 degree) |
+
+Outputs: `/lhr/track/centerline` is only the finite approach path (or one hold
+point), `/lhr/planning/speed_limit` is the controller cap, and
+`/lhr/skidpad/acquisition` is JSON with phase, fit, support and distance.
+`/lhr/skidpad/layout` displays the fitted middle circles; it is not a drive
+path. `/lhr/skidpad/visible_cones` displays only the accepted view.
+
+Restart from a fresh simulator state for another trial. There is no automatic
+handoff to circle following, no fallback to constrained greedy, and no claim
+that acquisition is a completed skidpad mission. Tests cover noisy transformed
+fits, missing support, view limits, stale inputs, Go gating, travel limits,
+and stopping before terminal acquisition.
