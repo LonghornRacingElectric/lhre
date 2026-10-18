@@ -159,7 +159,7 @@ export function AboutPanel() {
     <div className="note2" style={{ paddingTop: 12 }}>
       <b>Timeline.</b> Everything follows the playhead along the whole run, out lap first. Click or drag the timeline, press Play, or click the track or any chart to jump. Laps are the chapters, with sector marks inside them and an orange marker for every cone hit.
       <br /><br />
-      <b>Sectors.</b> The base overlay lap&apos;s GPS path is split into three equal-distance sectors, and every other lap is projected onto it so each is timed through the same two gates. Crossings are interpolated between GPS fixes. The sectors add up to the lap time: the first one starts at the logged lap start and the last one ends at the logged lap end.
+      <b>Sectors.</b> The shared track layout is split into three equal-distance sectors, and every other lap is projected onto it so each is timed through the same two gates. Crossings are interpolated between GPS fixes. Missing crossings show as unavailable, never equal-time estimates. When all crossings are available, the sectors add up to the lap time: the first one starts at the logged lap start and the last one ends at the logged lap end.
       <br /><br />
       <b>Colours.</b> Purple is the session best, green is faster than the base lap, yellow is slower. Adjusted time adds the cone penalty to real time.
       <br /><br />

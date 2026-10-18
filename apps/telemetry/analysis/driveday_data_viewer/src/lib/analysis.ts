@@ -73,17 +73,16 @@ export class Analysis {
     const { runs } = this.s;
     const vr = runs.filter((l) => this.valid(l));
     const pool = vr.length ? vr : runs;
-    this.best = [0, 1, 2].map((i) => Math.min(...pool.map((l) => l.sec[i] as number)));
     this.bestLap = Math.min(...pool.map((l) => l.dur));
-    this.theo = this.best.reduce((a, b) => a + b, 0);
     this.bestRun = pool.reduce((a, b) => (b.dur < a.dur ? b : a));
     this.bestSec = [0, 1, 2].map((k) => {
-      let bl = pool[0];
-      pool.forEach((l) => {
-        if ((l.sec[k] as number) < (bl.sec[k] as number)) bl = l;
-      });
-      return { v: bl.sec[k] as number, lap: runs.indexOf(bl) + 1 };
+      const candidates = pool.filter((l) => l.sec[k] != null);
+      if (!candidates.length) return { v: NaN, lap: 0 };
+      const bl = candidates.reduce((a, b) => b.sec[k]! < a.sec[k]! ? b : a);
+      return { v: bl.sec[k]!, lap: runs.indexOf(bl) + 1 };
     });
+    this.best = this.bestSec.map((b) => b.v);
+    this.theo = this.best.reduce((a, b) => a + b, 0);
     this.buildConsistency();
     this.computeAlerts();
   }
@@ -210,7 +209,9 @@ export class Analysis {
     const vr = s.runs.filter((l) => this.valid(l));
     if (vr.length < 2) return (this.theoCache = null);
     const g = [0, RL / 3, (2 * RL) / 3, RL];
-    const bl = [0, 1, 2].map((k) => vr.reduce((a, l) => ((l.sec[k] as number) < (a.sec[k] as number) ? l : a)));
+    const candidates = [0, 1, 2].map((k) => vr.filter((l) => l.sec[k] != null));
+    if (candidates.some((laps) => !laps.length)) return (this.theoCache = null);
+    const bl = candidates.map((laps, k) => laps.reduce((a, l) => l.sec[k]! < a.sec[k]! ? l : a));
     const bk = ["thr", "brk", "brkr", "steer", "rpm", "trq", "dcv", "dca", "kw", "packv", "soc", "motT", "invT", "gateT", "coolT", "cellT", "cellV", "modA", "modB", "modC", "vmaxC", "vavgC"] as const;
     const T: number[] = [];
     const U: number[] = [];
@@ -299,5 +300,6 @@ export function sectorClass(a: Analysis, l: Lap, i: number): "p" | "g" | "y" | "
   const v = l.sec[i];
   if (v == null) return "n";
   if (l.kind === "lap" && Math.abs(v - a.best[i]) < 1) return "p";
-  return v <= (a.s.base.sec[i] as number) ? "g" : "y";
+  const base = a.s.base.sec[i];
+  return base == null ? "n" : v <= base ? "g" : "y";
 }

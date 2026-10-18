@@ -68,7 +68,15 @@ describe("the start and finish lines", () => {
       });
     });
   });
-  it("leave an open course as it was imported", () => {
-    courses.forEach((c) => expect(rebuildRun(c.D)).toBe(c.D));
+  it("keeps open-course samples and logged times while recalculating splits", () => {
+    courses.forEach((c) => {
+      const rebuilt = rebuildRun(c.D);
+      rebuilt.laps.forEach((l, i) => {
+        expect(l.ch).toBe(c.D.laps[i].ch);
+        expect(l.pts).toBe(c.D.laps[i].pts);
+        expect(l.dur).toBe(c.D.laps[i].dur);
+        if (l.kind === "lap") expect(l.sec.reduce<number>((sum, v) => sum + (v ?? 0), 0)).toBeCloseTo(l.dur);
+      });
+    });
   });
 });

@@ -1,3 +1,4 @@
+import { sectorsOf } from "./sectors";
 import type {
   BaseChannels,
   ChKey,
@@ -598,23 +599,8 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
         R2(sd[k][1], 2),
       ]);
       /* sector splits: the standard gates sit at fixed distances past the start line, so every lap and every driver is cut at the same places */
-      const cross = (th: number): number | null => {
-        for (let k = 1; k < m; k++) {
-          if (u[k - 1] < th && u[k] >= th) return tt[k - 1] + ((tt[k] - tt[k - 1]) * (th - u[k - 1])) / (u[k] - u[k - 1]);
-        }
-        return null;
-      };
-      const c1 = cross(gates[0]);
-      const c2 = cross(gates[1]);
-      let sec: number[] = [];
-      if (c1 != null) sec.push(c1);
-      if (c1 != null && c2 != null) {
-        sec.push(c2 - c1);
-        if (complete) sec.push(dur - c2);
-      } else if (complete) {
-        sec = [dur / 3, dur / 3, dur / 3];
-        oddStart.push(name);
-      }
+      const sec = sectorsOf(u, tt, RL, dur, complete, gates);
+      if (complete && sec.some((v) => v == null)) oddStart.push(name);
       let dist = 0;
       for (let k = 1; k < m; k++) dist += Math.hypot(P[k][0] - P[k - 1][0], P[k][1] - P[k - 1][1]);
       const vmax = Math.max(...spd);
@@ -660,7 +646,7 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
       laps.push(strip(L));
     });
     if (!laps.length) throw new Error("No timed lap was a clean single " + noun + " of the track.");
-    if (oddStart.length) cw.push(oddStart.join(", ") + ": did not pass both standard sector gates, sectors split evenly by time");
+    if (oddStart.length) cw.push(oddStart.join(", ") + ": GPS did not establish both distance-sector crossings; missing sector times are unavailable");
 
     const spdAt = (arr: LiveSample[], k: number) => {
       const a = arr[Math.max(0, k - 1)];

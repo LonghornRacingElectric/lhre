@@ -1,3 +1,4 @@
+import { sectorsOf } from "./sectors";
 import { CH_KEYS, type BaseChannels, type ChKey, type Pt, type RawLap, type RunData } from "./types";
 
 /* The start line is wherever the car was when each timed lap began, and the finish line wherever it was when the lap ended
@@ -10,27 +11,6 @@ const round = (v: number, d: number) => {
   const m = Math.pow(10, d);
   return Math.round(v * m) / m;
 };
-
-/** Sector times for a lap from its distance along the track, cut at thirds of the track length. */
-function sectorsOf(u: number[], tt: number[], RL: number, dur: number, complete: boolean): number[] {
-  const cross = (th: number): number | null => {
-    for (let k = 1; k < u.length; k++) {
-      if (u[k - 1] < th && u[k] >= th) return tt[k - 1] + ((tt[k] - tt[k - 1]) * (th - u[k - 1])) / (u[k] - u[k - 1]);
-    }
-    return null;
-  };
-  const c1 = cross(RL / 3);
-  const c2 = cross((2 * RL) / 3);
-  let sec: number[] = [];
-  if (c1 != null) sec.push(c1);
-  if (c1 != null && c2 != null) {
-    sec.push(c2 - c1);
-    if (complete) sec.push(dur - c2);
-  } else if (complete) {
-    sec = [dur / 3, dur / 3, dur / 3];
-  }
-  return sec;
-}
 
 interface Sample {
   t: number;
@@ -46,7 +26,10 @@ interface Sample {
 
 /** Make each lap of a loop end exactly where the next one begins. An open course has no neighbouring laps, so it is left as it is. */
 export function rebuildRun(D0: RunData): RunData {
-  if (!D0 || !D0.laps || !D0.laps.length || !D0.laps[0].ch || D0.open) return D0;
+  if (!D0 || !D0.laps || !D0.laps.length || !D0.laps[0].ch) return D0;
+  // Recalculate stored splits too, so old equal-time fallbacks do not survive a reload.
+  D0 = { ...D0, laps: D0.laps.map((l) => ({ ...l, sec: sectorsOf(l.ch.u, l.ch.t, D0.RL, l.dur, l.kind !== "partial") })) };
+  if (D0.open) return D0;
   const RL = D0.RL;
   const L0 = [...D0.laps].sort((a, b) => a.t0 - b.t0);
 

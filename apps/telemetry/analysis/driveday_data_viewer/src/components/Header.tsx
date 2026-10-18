@@ -54,10 +54,10 @@ function Kpis() {
         <h5>Theoretical best</h5>
         <p>Your fastest S1, S2 and S3, each taken from whichever lap it was set on, added together. It is a target, not a lap you drove.</p>
         <table><tbody>
-          {a.bestSec.map((b, k) => <tr key={k}><td>S{k + 1}</td><td>Lap {b.lap}</td><td>{fmt(b.v)}</td></tr>)}
+          {a.bestSec.map((b, k) => <tr key={k}><td>S{k + 1}</td><td>{b.lap ? `Lap ${b.lap}` : "—"}</td><td>{fmt(b.v)}</td></tr>)}
           <tr className="tot"><td colSpan={2}>Sum</td><td>{fmt(a.theo)}</td></tr>
         </tbody></table>
-        <p>Your best real lap is {fmt(a.bestLap)}, so {((a.bestLap - a.theo) / 1000).toFixed(3)} s is still on the table.</p>
+        {Number.isFinite(a.theo) ? <p>Your best real lap is {fmt(a.bestLap)}, so {((a.bestLap - a.theo) / 1000).toFixed(3)} s is still on the table.</p> : <p>Missing GPS crossings prevent a complete theoretical best.</p>}
       </div>
     )],
   ];

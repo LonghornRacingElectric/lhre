@@ -86,7 +86,8 @@ export function drawTimeline(p: Player, canvas: HTMLCanvasElement) {
       g.strokeStyle = pal.bg;
       g.globalAlpha = 0.8;
       g.lineWidth = 1;
-      [l.sec[0] as number, (l.sec[0] as number) + (l.sec[1] as number)].forEach((m) => {
+      [l.sec[0], l.sec[0] != null && l.sec[1] != null ? l.sec[0] + l.sec[1] : null].forEach((m) => {
+        if (m == null) return;
         const x = tx(l.t0 - T0 + m);
         g.beginPath();
         g.moveTo(x, STRIP_Y + STRIP_H - 7);

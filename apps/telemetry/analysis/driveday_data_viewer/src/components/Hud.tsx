@@ -21,7 +21,7 @@ export function HudLeft() {
   const cones = a.conesOf(L);
 
   let secs = null;
-  if (R && L.sec && L.sec[0] != null) {
+  if (R && L.sec && L.sec[0] != null && L.sec[1] != null) {
     const e0 = L.sec[0] as number;
     const e1 = e0 + (L.sec[1] as number);
     const act = rel < e0 ? 0 : rel < e1 ? 1 : 2;
@@ -41,6 +41,12 @@ export function HudLeft() {
         })}
       </div>
     );
+  }
+  if (R && !secs) {
+    secs = <div className="secs">{[0, 1, 2].map((k) => <div key={k} className="sch fut">
+      <span><i style={{ background: `var(${SEC_VAR[k]})` }} />S{k + 1}</span>
+      <span className="c0">{rel >= L.dur - 1 ? fmt(L.sec[k], 2) : "—"}</span>
+    </div>)}</div>;
   }
   let gap = null;
   if (R && R !== L) {

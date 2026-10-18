@@ -71,7 +71,11 @@ tests/          vitest, with a synthetic stadium-shaped track in fixtures/
 Lap times are always the logger's. The lines are never set by hand: the start
 line is where the car was when the timed laps began, and the finish line is
 where it was when they ended (the middle of those positions over all the
-laps), and the sectors are cut at thirds between them.
+laps), and the sectors are cut at equal-distance thirds of the shared reference path between them.
+Crossing times are interpolated between GPS fixes. Missing crossings show as
+unavailable, never as equal-time estimates; sector bests ignore missing splits.
+The theoretical best and its ghost require a measured time for every sector.
+Stored splits are recalculated on load, including previously estimated splits.
 
 - **A loop** (laps end where they began) has one start/finish line.
 - **An open course** (the finish line is somewhere else, as on an autocross
