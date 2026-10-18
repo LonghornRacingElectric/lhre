@@ -37,6 +37,10 @@ The numbers below come from BobSim `4da577a`, OpenModelica 1.26.3 and
    28,000 variables and 6 MB.
 4. Run `split_init.py` and `patch_runtime.py` on the generated sources.
 5. Build the FMU's CMake project with clang, and zip the result.
+6. Write `out/fmu/OrionFMI.json` next to the FMU: the BobSim SHA, the
+   hashes of `vehicle.yml` and of the FMU, the OpenModelica version and the
+   platform. A consumer can check that the FMU matches the current
+   `vehicle.yml`.
 
 `patch_runtime.py` stops the build if the code it edits changes. Then check
 whether OpenModelica fixed the problem.

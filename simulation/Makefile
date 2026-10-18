@@ -60,7 +60,7 @@ records-undo:
 	cd $(BOBLIB) && git checkout -- $$(git ls-files -- $(RECORD_FILES)) && git clean -f -- $(RECORD_FILES)
 
 fmu:
-	$(RUN) sim sh tools/fmu/build.sh
+	$(RUN) -e BOBSIM_SHA=$(BOBSIM_SHA) sim sh tools/fmu/build.sh
 
 bobsim:
 	@test -n "$(T)" || { echo "Set T=<bobsim target>. Run 'make bobsim T=help' to list them."; exit 1; }

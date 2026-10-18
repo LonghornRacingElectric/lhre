@@ -25,4 +25,5 @@ rm -f "$fmu"
 cd "$src"
 python3 -m zipfile -c "../../OrionFMI.fmu" modelDescription.xml binaries resources
 cd - >/dev/null
+python3 tools/fmu/provenance.py "$fmu"
 echo "wrote $fmu ($(du -h "$fmu" | cut -f1))"
