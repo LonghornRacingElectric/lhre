@@ -57,6 +57,11 @@ colcon test --packages-select lhr_gazebo
 colcon test-result --verbose
 ```
 
+Camera classifier launch tests cover defaults and overrides in both perception
+and estimator modes. Evaluated parameters use JSON encoding for ROS CLI startup
+so arrays keep their type. Each case shuts down ROS even if node startup fails,
+so a startup error does not cascade into later cases.
+
 ## Stereo model
 
 The generated vehicle carries one ZED 2i rig with the 2.1 mm lens: two ideal

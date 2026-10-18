@@ -1,6 +1,7 @@
 """Evaluate optional camera classification and parameter forwarding."""
 
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -65,11 +66,12 @@ def test_color_classifier_launch(perception, estimator, enabled, override, monke
     assert params['use_sim_time'] is True
     ros_args = ['--ros-args']
     for name, value in params.items():
-        text = str(value).lower() if isinstance(value, bool) else str(value)
-        ros_args.extend(['-p', f'{name}:={text}'])
+        # Launch evaluates arrays as tuples; ROS CLI values need YAML sequences.
+        ros_args.extend(['-p', f'{name}:={json.dumps(value)}'])
     rclpy.init(args=ros_args)
-    node = CameraColorClassifier()
+    node = None
     try:
+        node = CameraColorClassifier()
         for name, value in expected.items():
             actual = node.get_parameter(name).value
             if isinstance(value, list):
@@ -79,5 +81,6 @@ def test_color_classifier_launch(perception, estimator, enabled, override, monke
                 assert params[name] == value
                 assert actual == value
     finally:
-        node.destroy_node()
+        if node is not None:
+            node.destroy_node()
         rclpy.shutdown()

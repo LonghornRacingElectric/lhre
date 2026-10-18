@@ -1,10 +1,5 @@
 """Publish a labeled RGB debug image from the ZED left camera."""
 
-import rclpy
-from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
-from sensor_msgs.msg import Image
-
 from lhr_perception.cone_color import (
     annotate_regions,
     classify_regions,
@@ -13,6 +8,10 @@ from lhr_perception.cone_color import (
     DEFAULT_THRESHOLDS,
     validate_config,
 )
+import rclpy
+from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
+from sensor_msgs.msg import Image
 
 
 class CameraColorClassifier(Node):
