@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-Score one fault-injection run from its bag and append a row to a CSV.
+Score one fault-injection run from its bag and write its row to a CSV.
 
 Times are sim seconds: every message's receive time is mapped through the
 recorded /clock, so latencies stay honest when the sim runs slower than
 real time. The fault instant comes from fault_injector's /lhr/sim/fault
 event; for the geofence case it is the first ground-truth sample outside
-the fence, and a clean run has none.
+the fence, and a clean run has none. A rerun replaces the row with the
+same id.
 
     python3 analyze_run.py <bag dir> --id ID --case KIND --csv results.csv
 """
@@ -16,6 +17,7 @@ import bisect
 import csv
 import math
 import os
+import sys
 
 from rclpy.serialization import deserialize_message
 from rosbag2_py import ConverterOptions, SequentialReader, StorageOptions
@@ -26,12 +28,27 @@ from rosidl_runtime_py.utilities import get_message
 APPLY_S = 0.2
 DECEL = 6.0
 STOPPED = 0.1  # m/s
+MOVED = 0.5  # m/s: rolling again after the stop fails the run
+MIN_DRIVE_M = 10.0  # less than this before the fault and the run proves nothing
 
 FIELDS = [
-    'id', 'case', 'track', 'seed', 'v_max', 'expected', 'tripped', 'match',
-    'v_at_fault', 'trip_latency_s', 'emergency_latency_s', 'stop_time_s',
-    'stop_dist_m', 'pdr_dist_m', 'within_pdr', 'false_trip',
+    'id', 'case', 'track', 'seed', 'v_max', 'result', 'expected', 'tripped',
+    'match', 'v_at_fault', 'trip_latency_s', 'emergency_latency_s',
+    'stop_time_s', 'stop_dist_m', 'pdr_dist_m', 'within_pdr',
+    'max_v_after_stop', 'false_trip', 'drove_m',
 ]
+
+# result: what the run shows. Only the first four (and the two clean ones)
+# are evidence; the rest say the run itself went wrong.
+#   caught       the expected check tripped after the fault
+#   wrong_check  another check tripped after the fault
+#   missed       the fault ran and nothing tripped
+#   early_trip   something tripped before the fault: a false trip
+#   clean        a clean lap that drove and never tripped
+#   false_trip   a clean lap that tripped
+#   no_drive     never reached DRIVING, or barely moved before the fault
+#   no_fault     drove, but the fault never started (RUN_S too short?)
+#   error        the bag could not be read
 
 
 def read(bag):
@@ -65,8 +82,8 @@ def path_length(samples, start, end):
     return sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(pts, pts[1:]))
 
 
-def analyze(bag, case, fence):
-    data = read(bag)
+def score(data, case, fence):
+    """Score one run from {topic: [(receive time, msg)]}."""
     to_sim = sim_time(data.get('/clock', []))
     mission = [(to_sim(t), m.data) for t, m in data.get('/lhr/mission/status', [])]
     truth = [(to_sim(t), m.pose.pose.position.x, m.pose.pose.position.y,
@@ -77,6 +94,7 @@ def analyze(bag, case, fence):
                  if any(kv.key == 'latched' and kv.value == 'True'
                         for kv in m.values)), None)
     emergency = next((t for t, s in mission if s == 'EMERGENCY'), None)
+    driving = next((t for t, s in mission if s == 'DRIVING'), None)
 
     fault_t, expected = None, ''
     for t, m in data.get('/lhr/sim/fault', []):
@@ -93,14 +111,34 @@ def analyze(bag, case, fence):
             fault_t = next((t for t, x, y, _ in truth if t > armed and math.hypot(
                 x - start[0], y - start[1]) > fence), None)
 
-    row = {'case': case, 'expected': expected,
-           'tripped': trip[1] if trip else '', 'false_trip': ''}
-    if case == 'clean':
-        row['false_trip'] = str(trip is not None)
+    end = truth[-1][0] if truth else 0.0
+    first = min(t for t in (trip and trip[0], fault_t, end) if t is not None)
+    drove = path_length(truth, driving, first) if driving is not None else 0.0
+    early = trip is not None and (fault_t is None or trip[0] < fault_t)
+    if case == 'geofence' and trip and trip[1] == 'GEOFENCE':
+        early = False  # it trips on the estimate, which may cross first
+
+    if driving is None:
+        result = 'no_drive'
+    elif case == 'clean':
+        result = ('false_trip' if trip else
+                  'no_drive' if drove < MIN_DRIVE_M else 'clean')
+    elif early:
+        result = 'early_trip'
+    elif drove < MIN_DRIVE_M:
+        result = 'no_drive'
+    elif trip is None:
+        result = 'missed' if fault_t is not None else 'no_fault'
+    else:
+        result = 'caught' if trip[1] == expected else 'wrong_check'
+
+    row = {'case': case, 'result': result, 'expected': expected,
+           'tripped': trip[1] if trip else '', 'drove_m': f'{drove:.1f}',
+           'match': str(result == 'caught'),
+           'false_trip': str(result in ('early_trip', 'false_trip'))}
+    if result not in ('caught', 'wrong_check') or fault_t is None:
         return row
-    row['match'] = str(bool(trip) and trip[1] == expected)
-    if fault_t is None or trip is None:
-        return row
+
     v = next((s for t, _, _, s in reversed(truth) if t <= fault_t), math.nan)
     stop = next((t for t, _, _, s in truth if t > trip[0] and s < STOPPED), None)
     latency = trip[0] - fault_t
@@ -111,13 +149,32 @@ def analyze(bag, case, fence):
         'emergency_latency_s': (f'{emergency - trip[0]:.3f}'
                                 if emergency is not None else ''),
         'pdr_dist_m': f'{pdr:.2f}',
+        'within_pdr': 'False',
     })
     if stop is not None:
         dist = path_length(truth, fault_t, stop)
+        # A car that rolls off again (a controller resuming on stale state)
+        # has not stopped, however short the first stop was.
+        after = max((s for t, _, _, s in truth if t > stop), default=0.0)
         row.update({'stop_time_s': f'{stop - fault_t:.2f}',
                     'stop_dist_m': f'{dist:.2f}',
-                    'within_pdr': str(dist <= pdr)})
+                    'max_v_after_stop': f'{after:.2f}',
+                    'within_pdr': str(dist <= pdr and after <= MOVED)})
     return row
+
+
+def save(path, row):
+    """Write row into the CSV, replacing an earlier row with the same id."""
+    rows = []
+    if os.path.exists(path):
+        with open(path, newline='') as f:
+            rows = [r for r in csv.DictReader(f) if r.get('id') != row['id']]
+    rows.append(row)
+    with open(path, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=FIELDS, restval='',
+                                extrasaction='ignore')
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def main():
@@ -132,17 +189,18 @@ def main():
     ap.add_argument('--csv', required=True)
     args = ap.parse_args()
 
-    row = analyze(args.bag, args.case, args.fence)
+    status = 0
+    try:
+        row = score(read(args.bag), args.case, args.fence)
+    except Exception as e:  # a bad bag still gets a row, so it is not lost
+        print(f'analyze_run: {args.bag}: {e}', file=sys.stderr)
+        row, status = {'case': args.case, 'result': 'error'}, 1
     row.update({'id': args.id, 'track': args.track, 'seed': args.seed,
                 'v_max': args.v_max})
-    new = not os.path.exists(args.csv)
-    with open(args.csv, 'a', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=FIELDS, restval='')
-        if new:
-            writer.writeheader()
-        writer.writerow(row)
+    save(args.csv, row)
     print('  '.join(f'{k}={row[k]}' for k in FIELDS if row.get(k)))
+    return status
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

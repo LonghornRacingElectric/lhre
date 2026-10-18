@@ -18,7 +18,7 @@ from dataclasses import dataclass
 import math
 import signal
 import subprocess
-from typing import Optional
+from typing import Optional, Tuple
 
 from ackermann_msgs.msg import AckermannDriveStamped
 from nav_msgs.msg import Odometry
@@ -42,6 +42,9 @@ class FaultKind:
     # Process faults: pkill -f pattern and the signal to send.
     process: Optional[str] = None
     sig: Optional[int] = None
+    # Launch arguments without which the fault cannot trip its check. The
+    # launch refuses the combination rather than score a guaranteed miss.
+    needs: Tuple[Tuple[str, str], ...] = ()
 
 
 EKF = 'lib/lhr_state_estimation/ekf_node'
@@ -51,7 +54,8 @@ CMD = '/lhr/vehicle/cmd'
 
 FAULTS = {
     'ekf_kill': FaultKind(
-        'ODOM_STALE', process=EKF, sig=signal.SIGKILL),
+        'ODOM_STALE', process=EKF, sig=signal.SIGKILL,
+        needs=(('estimator', 'ekf'),)),
     'controller_kill': FaultKind(
         'CMD_STALE', process=CONTROLLER, sig=signal.SIGKILL),
     'controller_pause': FaultKind(
@@ -60,9 +64,10 @@ FAULTS = {
         'EKF_DIVERGED', ODOM + '_raw', ODOM, Odometry),
     'odom_spike': FaultKind(
         'EKF_DIVERGED', ODOM + '_raw', ODOM, Odometry),
+    # safety_node only watches the LiDAR under perception:=lidar.
     'lidar_drop': FaultKind(
         'LIDAR_STALE', '/lhr/lidar/points_raw', '/lhr/lidar/points',
-        PointCloud2),
+        PointCloud2, needs=(('perception', 'lidar'),)),
     'cmd_nan': FaultKind(
         'CMD_INVALID', CMD + '_raw', CMD, AckermannDriveStamped),
     # Only the actuators see the frozen command; safety_node still reads
@@ -157,17 +162,22 @@ class FaultInjector(Node):
         if not edge:
             return
         f = self._fault
+        # Announce first: pkill blocks, and the scorer times from this event.
+        self._event_pub.publish(String(data=f'{edge} {self._kind} {f.expect}'))
+        self.get_logger().warning(f'Fault {edge}: {self._kind}')
         if f.process is not None:
             if edge == 'start':
                 self._signal(f.sig)
             elif f.sig == signal.SIGSTOP:
                 self._signal(signal.SIGCONT)
-        self._event_pub.publish(String(data=f'{edge} {self._kind} {f.expect}'))
-        self.get_logger().warning(f'Fault {edge}: {self._kind}')
 
     def _signal(self, sig: int):
-        subprocess.run(['pkill', f'-{int(sig)}', '-f', self._fault.process],
-                       check=False)
+        done = subprocess.run(
+            ['pkill', f'-{int(sig)}', '-f', self._fault.process], check=False)
+        if done.returncode != 0:
+            self.get_logger().error(
+                f'pkill -{int(sig)} matched no {self._fault.process}: '
+                'this run injected nothing')
 
     def _relay_cb(self, msg):
         if self._fault_clock.active:

@@ -190,3 +190,14 @@ def test_process_faults_need_no_rewiring(monkeypatch):
 def test_unknown_fault_fails_the_launch(monkeypatch):
     with pytest.raises(RuntimeError):
         _launch(monkeypatch, fault='meteor')
+
+
+@pytest.mark.parametrize('fault, estimator, perception', [
+    ('ekf_kill', 'truth', 'lidar'),   # no ekf_node to kill
+    ('lidar_drop', 'ekf', 'sim'),     # safety_node ignores the LiDAR
+])
+def test_fault_that_cannot_trip_fails_the_launch(monkeypatch, fault,
+                                                 estimator, perception):
+    with pytest.raises(RuntimeError, match='can only trip'):
+        _launch(monkeypatch, fault=fault, estimator=estimator,
+                perception=perception)

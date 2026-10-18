@@ -58,11 +58,17 @@ driving.
 | Kind | How |
 |---|---|
 | `ekf_kill`, `controller_kill` | `pkill -9` the node |
-| `controller_pause` | `SIGSTOP` the controller, `SIGCONT` when the fault ends |
+| `controller_pause` | `SIGSTOP` the controller, `SIGCONT` after `fault_duration_s` (with the default 0 it stays frozen) |
 | `odom_nan`, `odom_spike` | The odometry producer (the EKF, or the bridge under `estimator:=truth`) publishes `/lhr/vehicle/odom_raw`; the injector relays it, corrupted |
 | `lidar_drop` | The bridge publishes `/lhr/lidar/points_raw`; the injector stops relaying |
 | `cmd_nan` | `pure_pursuit` publishes `/lhr/vehicle/cmd_raw`; the injector relays it with NaN steering |
 | `steer_freeze` | `joint_cmd_adapter` reads `/lhr/vehicle/cmd_actuated`, which the injector holds at the fault's steering angle |
+
+`ekf_kill` needs `estimator:=ekf` (there is no `ekf_node` otherwise) and
+`lidar_drop` needs `perception:=lidar` (`safety_node` only watches the LiDAR
+there); the launch refuses either combination rather than run a fault that
+cannot trip. The `/lhr/sim/fault` event goes out before the signal, and the
+injector logs an error if `pkill` finds no process.
 
 The matrix runner and scoring are in
 [`autonomy/testing/tools/fault_injection`](../../../testing/tools/fault_injection/README.md).

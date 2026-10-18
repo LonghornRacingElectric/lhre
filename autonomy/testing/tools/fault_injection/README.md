@@ -12,7 +12,7 @@ count false trips.
 | File | What it does |
 |---|---|
 | `run_faults.sh` | Runs the matrix: every case at every speed, `REPEATS` times, plus clean autocross laps. One headless launch per run, recorded to a bag |
-| `analyze_run.py` | Scores one bag and appends a row to `results.csv` |
+| `analyze_run.py` | Scores one bag and writes its row to `results.csv`, replacing an earlier run with the same id |
 | `summarize.py` | Turns `results.csv` into the markdown table for the campaign README |
 
 The faults themselves come from `lhr_gazebo`'s `fault_injector`
@@ -30,7 +30,7 @@ The faults themselves come from `lhr_gazebo`'s `fault_injector`
 | `cmd_nan` | NaN steering in every command | `CMD_INVALID` |
 | `steer_freeze` | The actuators keep the steering angle from the fault on; `safety_node` still sees the real command | `STEER_TRACKING` |
 | `geofence` | No injection: the fence shrinks to `FENCE` m (20) | `GEOFENCE` |
-| `clean` | None, on autocross seeds | Nothing |
+| `clean` | None, on autocross seeds (a seed with no committed world gets one generated into `$OUT/worlds`) | Nothing |
 
 ## Running
 
@@ -42,10 +42,13 @@ container:
 ```
 
 Environment variables pick the matrix: `CASES`, `SPEEDS` (`v_max` values,
-default `3 5 8`), `REPEATS` (2), `CLEAN_SEEDS` (`1 2 3 4 5`, empty for none),
-`AFTER` (fault seconds after `DRIVING`, 25), `RUN_S` (60), `CLEAN_S` (150),
-`OUT` and `EXTRA` (more launch arguments). The full matrix is about 60 runs,
-roughly 2.5 hours. A quick check:
+default `3 5 8`), `REPEATS` (2), `TRACK` (for the fault cases, `oval`),
+`CLEAN_SEEDS` (`1 2 3 4 5`, empty for none), `AFTER` (fault seconds after
+`DRIVING`, 25), `RUN_S` (60), `CLEAN_S` (150), `OUT` and `EXTRA` (more launch
+arguments). `AFTER` is sim time but `RUN_S` and `CLEAN_S` are wall time, so
+raise them on a machine that runs well below real time; runs that end before
+the fault show up as `no_fault`. The full matrix is about 60 runs, roughly
+2.5 hours. A quick check:
 
 ```bash
 CASES="ekf_kill steer_freeze" SPEEDS=5 REPEATS=1 CLEAN_SEEDS= \
@@ -57,21 +60,37 @@ add `EXTRA="safety_lidar_timeout_s:=1.5"` or every run trips `LIDAR_STALE`
 first ([#123](https://github.com/LonghornRacingElectric/lhre/issues/123)).
 
 Output goes to `~/lhr-test-data/<date>-fault-injection/`: `bags/` (one bag
-plus launch and recorder logs per run), `results.csv`, `summary.md`. Bags
+plus launch and recorder logs per run), `worlds/` (generated seeds),
+`results.csv`, `summary.md`. Bags
 never go in git; the campaign folder under `autonomy/testing/` gets
 `results.csv`, the summary and the chosen figures, and the bags go to
 SharePoint ([testing/README.md](../../README.md)).
 
 ## Reading the results
 
-- `match`: the check that tripped is the one the fault should trip. A
-  different check tripping first is a finding, not noise.
+- `result`: what the run shows.
+  - `caught`: the expected check tripped after the fault.
+  - `wrong_check`: a different check tripped first. That's a finding, not
+    noise.
+  - `missed`: the fault ran and nothing tripped.
+  - `early_trip`: something tripped before the fault, which is a false trip.
+    The geofence case is the exception: the fence trips on the estimate,
+    which can cross before the truth does, so an early `GEOFENCE` counts and
+    its latency is negative.
+  - `clean` and `false_trip`: a clean lap without or with a trip.
+  - `no_drive` (never reached `DRIVING`, or covered under 10 m before the
+    fault), `no_fault` (the run ended before the fault) and `error` (the bag
+    did not read): the run itself went wrong. These are listed under the
+    summary table, not counted in it. Rerun them.
 - `trip_latency_s`: fault to latched trip, in sim time.
 - `stop_dist_m`: path length from the fault to standstill, from ground
   truth. Stops are optimistic until the regen and spring-brake model lands
   (the rest of [#116](https://github.com/LonghornRacingElectric/lhre/issues/116)):
   the sim stops the wheels outright.
-- `within_pdr`: the stop fits the formula with the measured latency.
-- `false_trip`: a clean lap tripped anything.
+- `within_pdr`: the stop fits the formula with the measured latency, and
+  the car stayed stopped (`max_v_after_stop` at most 0.5 m/s). A run that
+  never stops is false.
+- `drove_m`: distance covered in `DRIVING` before the fault or trip.
 
-Any run with `match` or `within_pdr` false, or a false trip, gets an issue.
+Any run that is not `caught` (or `clean`), or has `within_pdr` false, gets
+an issue.

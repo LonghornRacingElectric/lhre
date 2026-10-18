@@ -74,13 +74,14 @@ def _find_world(context: LaunchContext):
     return ''
 
 
-def _fault_remaps(fault: str, use_ekf: bool) -> dict:
+def _fault_remaps(fault: str, use_ekf: bool, configs: dict) -> dict:
     """
     Where fault:=<kind> splices fault_injector in: node name -> remappings.
 
     A topic fault moves the producer (or, for steer_freeze, the consumer) onto
     a side topic so the injector sits in the middle. Process faults need no
-    rewiring. No fault means no change to any node.
+    rewiring. No fault means no change to any node. A fault that cannot trip
+    under the other launch arguments fails the launch.
     """
     if not fault:
         return {}
@@ -88,6 +89,9 @@ def _fault_remaps(fault: str, use_ekf: bool) -> dict:
     if fault not in FAULTS:
         raise RuntimeError(
             f'Unknown fault {fault!r}, expected one of {sorted(FAULTS)}')
+    for arg, value in FAULTS[fault].needs:
+        if configs.get(arg, '').lower() != value:
+            raise RuntimeError(f'fault:={fault} can only trip with {arg}:={value}')
     odom_raw = [('/lhr/vehicle/odom', '/lhr/vehicle/odom_raw')]
     # Under ekf the bridge's odom is already truth; corrupt the estimate.
     odom_owner = 'ekf_node' if use_ekf else 'ros_gz_bridge'
@@ -126,7 +130,7 @@ def _launch_setup(context: LaunchContext):
     use_ekf = context.launch_configurations.get(
         'estimator', 'truth').lower() == 'ekf'
     fault = context.launch_configurations.get('fault', '')
-    fault_remaps = _fault_remaps(fault, use_ekf)
+    fault_remaps = _fault_remaps(fault, use_ekf, context.launch_configurations)
 
     enable_stereo = context.launch_configurations.get(
         'enable_stereo_camera', 'false').lower() == 'true'
