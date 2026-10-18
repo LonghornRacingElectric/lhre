@@ -1,5 +1,4 @@
-import { posAt, roadOf } from "../geometry";
-import { interp } from "../math";
+import { lapCutJoin, roadOf } from "../geometry";
 import { MPH } from "../format";
 import { Player } from "../player";
 import type { Lap, XY } from "../types";
@@ -10,7 +9,6 @@ import { palette, ramp, rampSpd, type Palette } from "./palette";
 /** Colour and opacity for the stretch of a lap between fix i and i+1. */
 export function segPaint(p: Player, L: Lap, i: number, pal: Palette): [string, number] {
   const { session: s, mode } = p;
-  const pts = L.pts;
   const c = L.ch;
   if (mode === "speed") return [rampSpd(((c.spd[i] + c.spd[i + 1]) / (2 * MPH) - s.vlo) / (s.vhi - s.vlo)), 1];
   if (mode === "gain") {
@@ -31,7 +29,8 @@ export function segPaint(p: Player, L: Lap, i: number, pal: Palette): [string, n
     const a = (c.acc[i] + c.acc[i + 1]) / 2 / s.accScale;
     return [a < 0 ? pal.red : pal.green, 0.7 + 0.3 * Math.min(1, Math.abs(a))];
   }
-  return [pal.sector[Math.min(2, Math.max(0, Math.floor((pts[i][3] + pts[i + 1][3]) / 2 / (s.RL / 3))))], 1];
+  const distance = (c.u[i] + c.u[i + 1]) / 2;
+  return [pal.sector[s.sectorAt(s.open ? distance : ((distance % s.RL) + s.RL) % s.RL)], 1];
 }
 
 export function drawMap(p: Player, canvas: HTMLCanvasElement) {
@@ -90,7 +89,7 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
   };
 
   const gates = (): void => {
-    ([[0, s.open ? "Start" : "S/F", pal.ink], [RL / 3, "S1|S2", pal.s1], [(2 * RL) / 3, "S2|S3", pal.s2]].concat(s.open ? [[RL, "Finish", pal.ink]] : []) as [number, string, string][]).forEach((g) => {
+    ([[0, s.open ? "Start" : "S/F", pal.ink], [s.gates[0], "S1|S2", pal.s1], [s.gates[1], "S2|S3", pal.s2]].concat(s.open ? [[RL, "Finish", pal.ink]] : []) as [number, string, string][]).forEach((g) => {
       const a3 = s.geo.at(g[0]);
       const nx = -Math.sin(a3[2]);
       const ny = Math.cos(a3[2]);
@@ -122,7 +121,7 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
     /* with edges on, keep the sector line inside the road */
     ctx.lineWidth = edged && E ? Math.max(2, Math.min(7 * wS, E.width * p.sc * 0.3)) : 7 * wS;
     for (let i = 0; i < ref.length - 1; i++) {
-      const k = Math.min(2, Math.max(0, Math.floor((cum[i] + cum[i + 1]) / 2 / (RL / 3))));
+      const k = s.sectorAt((cum[i] + cum[i + 1]) / 2);
       ctx.strokeStyle = pal.sector[k];
       ctx.beginPath();
       ctx.moveTo(X(ref[i][0]), Y(ref[i][1]));
@@ -141,7 +140,8 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
       ctx.fillStyle = pal.sector[k];
       ctx.fillRect(x, y - 5, 14, 10);
       ctx.fillStyle = pal.ink;
-      ctx.fillText("S" + (k + 1) + " " + (RL / 3).toFixed(0) + " m", x + 20, y);
+      const edges = [0, ...s.gates, RL];
+      ctx.fillText("S" + (k + 1) + " " + (edges[k + 1] - edges[k]).toFixed(0) + " m", x + 20, y);
     });
     return;
   }
@@ -155,7 +155,7 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
     ctx.stroke();
     ctx.lineWidth = 5 * wS;
     for (let i = 0; i < BL.length - 1; i++) {
-      const k = Math.min(2, Math.max(0, Math.floor(BL[i][3] / (RL / 3))));
+      const k = s.sectorAt(BL[i][3]);
       ctx.strokeStyle = pal.sector[k];
       ctx.globalAlpha = p.mode === "sec" ? 0.9 : 0.18;
       ctx.beginPath();
@@ -236,6 +236,16 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
   ctx.globalAlpha = 1;
   ctx.setLineDash([]);
 
+  const join = lapCutJoin(L, s.geo);
+  if (join) {
+    ctx.strokeStyle = pal.mute;
+    ctx.lineWidth = 2.5 * tw;
+    ctx.setLineDash([4, 4]);
+    path(join.points);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
   /* cones hit on the lap being watched, as plain orange dots */
   if (p.showCones && p.user.ce.length) {
     const cur = s.laps.indexOf(L);
@@ -256,11 +266,8 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
   }
   /* race replay: every clean lap at the same time since the start/finish line */
   if (p.raceMode) {
-    const tc0 = interp(L.ch.u, L.ch.t, 0);
-    const el = rel - tc0;
     s.runs.filter((l) => a.valid(l)).forEach((l) => {
-      const tl = Math.max(0, Math.min(l.dur, interp(l.ch.u, l.ch.t, 0) + el));
-      const q = posAt(l, tl);
+      const q = p.replayPosition(l, rel);
       const isSel = l === L;
       const x = X(q[0]);
       const y = Y(q[1]);
@@ -278,7 +285,7 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
         ctx.font = "600 10px " + pal.fMono;
         ctx.textAlign = "center";
         ctx.textBaseline = "bottom";
-        ctx.fillText(String(s.runs.indexOf(l) + 1), x, y - 8);
+        ctx.fillText(l.name, x, y - 8);
       }
     });
   }
@@ -384,7 +391,7 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
   }
   /* ghost and the car */
   const R = p.refLap();
-  const isRival = p.cmp === "rival" && !!R && R !== L;
+  const isRival = (p.cmp === "rival" || p.cmp === "external") && !!R && R !== L;
   if (isRival && R) {
     /* the other driver's whole lap, under the car marker, so the two lines can be compared corner by corner */
     ctx.strokeStyle = pal.rival;
@@ -408,9 +415,7 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
     ctx.fill();
   };
   if (R && R !== L) {
-    const tc0 = interp(L.ch.u, L.ch.t, 0);
-    const tr0 = interp(R.ch.u, R.ch.t, 0);
-    const gp = posAt(R, Math.max(0, tr0 + (rel - tc0)));
+    const gp = p.replayPosition(R, rel);
     if (isRival) marker(X(gp[0]), Y(gp[1]), pal.rival);
     else {
       ctx.strokeStyle = pal.mute;
@@ -421,7 +426,14 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
       ctx.fill();
       ctx.stroke();
     }
+    if (rel >= R.dur) {
+      ctx.fillStyle = pal.ink;
+      ctx.font = "600 10px " + pal.fMono;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "bottom";
+      ctx.fillText("Finished · " + R.name, X(gp[0]), Y(gp[1]) - 10);
+    }
   }
-  const mp = posAt(L, rel);
+  const mp = p.replayPosition(L, rel);
   marker(X(mp[0]), Y(mp[1]), pal.ink);
 }

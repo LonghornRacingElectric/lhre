@@ -2,10 +2,29 @@ import { describe, expect, it } from "vitest";
 import { convertSession } from "../src/lib/convert";
 import { rebuildRun } from "../src/lib/rebuild";
 import { Session } from "../src/lib/session";
+import { segAt } from "../src/lib/segments";
 import { COURSE_LEN, synthCourses } from "./fixtures/courses";
+import { synthSession, TRACK_LEN } from "./fixtures/synth";
 
 const J = synthCourses();
 const courses = convertSession(J, "courses.json", []);
+
+describe("manual presses at different positions on a loop", () => {
+  it("uses a full loop and preserves logger labels even when cuts are far apart", () => {
+    const j = synthSession({ laps: 4 });
+    const offsets = [0, 3500, -1800, 2300, 0];
+    j.laps.forEach((l, i) => {
+      l.startMs += offsets[i]; l.endMs += offsets[i + 1];
+      l.durationMs = l.endMs - l.startMs;
+      l.label = "Manual " + (i * 2 + 3);
+    });
+    const imported = convertSession(j, "varied-cuts.json");
+    expect(imported).toHaveLength(1);
+    expect(imported[0].D.open).toBeUndefined();
+    expect(Math.abs(imported[0].D.RL - TRACK_LEN)).toBeLessThan(TRACK_LEN * 0.1);
+    expect(imported[0].D.laps.filter((l) => l.kind === "lap").map((l) => l.name)).toEqual(j.laps.map((l) => l.label));
+  });
+});
 
 describe("a session with separate start and finish lines, and a run the other way", () => {
   it("opens each way round as its own course", () => {
@@ -52,6 +71,7 @@ describe("a session with separate start and finish lines, and a run the other wa
     const last = s.segs[s.segs.length - 1];
     expect(last.a + last.len).toBeCloseTo(s.RL, 0);
     expect(s.segs.some((g) => g.type === "c")).toBe(true);
+    expect(segAt(s.segs, s.RL, s.RL, true)).toBe(s.segs.length - 1);
   });
 });
 

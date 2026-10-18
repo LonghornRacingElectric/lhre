@@ -2,6 +2,7 @@ import { interp, pctl, sd, wrap } from "./math";
 import { MPH } from "./format";
 import { prepareLap, type Session } from "./session";
 import { segAt } from "./segments";
+import { elapsedAtDistance } from "./sectors";
 import type { BaseChannels, ChKey, Lap, Pt, RawLap, UserState } from "./types";
 
 /* Everything that depends on what the user has marked on a run: skipped laps, cones, alert limits.
@@ -10,6 +11,7 @@ import type { BaseChannels, ChKey, Lap, Pt, RawLap, UserState } from "./types";
 export interface BestSector {
   v: number;
   lap: number;
+  label: string;
 }
 
 export interface Consistency {
@@ -76,10 +78,10 @@ export class Analysis {
     this.bestLap = Math.min(...pool.map((l) => l.dur));
     this.bestRun = pool.reduce((a, b) => (b.dur < a.dur ? b : a));
     this.bestSec = [0, 1, 2].map((k) => {
-      const candidates = pool.filter((l) => l.sec[k] != null);
-      if (!candidates.length) return { v: NaN, lap: 0 };
+      const candidates = pool.filter((l) => l.sec[k] != null && Number.isFinite(l.sec[k]));
+      if (!candidates.length) return { v: NaN, lap: 0, label: "—" };
       const bl = candidates.reduce((a, b) => b.sec[k]! < a.sec[k]! ? b : a);
-      return { v: bl.sec[k]!, lap: runs.indexOf(bl) + 1 };
+      return { v: bl.sec[k]!, lap: runs.indexOf(bl) + 1, label: bl.name };
     });
     this.best = this.bestSec.map((b) => b.v);
     this.theo = this.best.reduce((a, b) => a + b, 0);
@@ -207,11 +209,9 @@ export class Analysis {
     const { s } = this;
     const { RL } = s;
     const vr = s.runs.filter((l) => this.valid(l));
-    if (vr.length < 2) return (this.theoCache = null);
-    const g = [0, RL / 3, (2 * RL) / 3, RL];
-    const candidates = [0, 1, 2].map((k) => vr.filter((l) => l.sec[k] != null));
-    if (candidates.some((laps) => !laps.length)) return (this.theoCache = null);
-    const bl = candidates.map((laps, k) => laps.reduce((a, l) => l.sec[k]! < a.sec[k]! ? l : a));
+    if (vr.length < 2 || !this.best.every(Number.isFinite)) return (this.theoCache = null);
+    const g = [0, ...s.gates, RL];
+    const bl = [0, 1, 2].map((k) => vr.filter((l) => l.sec[k] != null).reduce((a, l) => (l.sec[k]! < a.sec[k]! ? l : a)));
     const bk = ["thr", "brk", "brkr", "steer", "rpm", "trq", "dcv", "dca", "kw", "packv", "soc", "motT", "invT", "gateT", "coolT", "cellT", "cellV", "modA", "modB", "modC", "vmaxC", "vavgC"] as const;
     const T: number[] = [];
     const U: number[] = [];
@@ -233,7 +233,8 @@ export class Analysis {
       });
       times.push(tB);
       times.forEach((tt, j) => {
-        T.push(off + (tt - tA) + (k > 0 && j === 0 ? 1 : 0));
+        if (k > 0 && j === 0) return;
+        T.push(off + (tt - tA));
         const uu = Math.max(g[k], Math.min(g[k + 1], interp(c.t, c.u, tt)));
         U.push(uu);
         P.push([interp(c.t, c.x, tt), interp(c.t, c.y, tt), interp(c.t, c.spd, tt) / MPH, uu % RL, 0]);
@@ -259,9 +260,7 @@ export class Analysis {
     const key = this.s.laps.indexOf(L) + "|" + refKey;
     if (L.gainKey === key && L.gain) return L.gain;
     const c = L.ch;
-    const tL0 = interp(c.u, c.t, 0);
-    const tR0 = interp(R.ch.u, R.ch.t, 0);
-    const dl = c.u.map((u, i) => c.t[i] - tL0 - (interp(R.ch.u, R.ch.t, u) - tR0));
+    const dl = c.u.map((u, i) => c.t[i] - elapsedAtDistance(R, u, this.s.RL));
     const g: number[] = [];
     for (let i = 0; i < dl.length - 1; i++) g.push(dl[i + 1] - dl[i]);
     L.gainKey = key;
@@ -272,7 +271,7 @@ export class Analysis {
 
   segIndexAt(L: Lap, rel: number): number {
     const u = interp(L.ch.t, L.ch.u, rel);
-    return segAt(this.s.segs, this.s.RL, u);
+    return segAt(this.s.segs, this.s.RL, u, this.s.open);
   }
 }
 
@@ -298,7 +297,7 @@ export function gpsStats(s: Session): { hz: number; gaps: number } {
 /** Timing colour for one sector of a lap: p = session best, g = faster than Lap 1, y = slower, n = not timed. */
 export function sectorClass(a: Analysis, l: Lap, i: number): "p" | "g" | "y" | "n" {
   const v = l.sec[i];
-  if (v == null) return "n";
+  if (v == null || !Number.isFinite(v)) return "n";
   if (l.kind === "lap" && Math.abs(v - a.best[i]) < 1) return "p";
   const base = a.s.base.sec[i];
   return base == null ? "n" : v <= base ? "g" : "y";

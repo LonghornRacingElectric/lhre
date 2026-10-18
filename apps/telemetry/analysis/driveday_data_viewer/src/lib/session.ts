@@ -2,6 +2,7 @@ import { Geo, curveOf } from "./geometry";
 import { MPH } from "./format";
 import { interp, pctl, timeAverage } from "./math";
 import { buildSegments, buildZones, type Seg, type Zone } from "./segments";
+import { sectorTimes, validGates, type SectorGates } from "./sectors";
 import type { Channels, Lap, Pt, RawLap, RunData } from "./types";
 
 const maxOf = (a: number[][], f = 1) => {
@@ -84,6 +85,7 @@ export class Session {
   readonly vhi: number;
   readonly segs: Seg[];
   readonly zones: Zone[];
+  gates: SectorGates;
   readonly bbox: { x: [number, number]; y: [number, number] };
 
   constructor(D: RunData) {
@@ -106,11 +108,24 @@ export class Session {
     this.vhi = Math.max(this.vlo + 1, pctl(spdAll, 0.97));
     this.segs = buildSegments(this.geo);
     this.zones = buildZones(this.runs, this.RL, this.open);
+    this.gates = [this.RL / 3, 2 * this.RL / 3];
+    this.setGates(this.gates);
     const pts = [...D.ref, ...this.runs.flatMap((l) => l.pts.map((p) => [p[0], p[1]] as [number, number]))];
     this.bbox = {
       x: [Math.min(...pts.map((p) => p[0])), Math.max(...pts.map((p) => p[0]))],
       y: [Math.min(...pts.map((p) => p[1])), Math.max(...pts.map((p) => p[1]))],
     };
+  }
+
+  setGates(gates: SectorGates): boolean {
+    if (!validGates(gates, this.RL)) return false;
+    this.gates = [...gates];
+    this.laps.forEach((lap) => { lap.sec = sectorTimes(lap, gates); lap.gainKey = undefined; });
+    return true;
+  }
+
+  sectorAt(distance: number): number {
+    return distance < this.gates[0] ? 0 : distance < this.gates[1] ? 1 : 2;
   }
 
   /** The lap the session clock T (ms from the start of the out lap) falls in. */

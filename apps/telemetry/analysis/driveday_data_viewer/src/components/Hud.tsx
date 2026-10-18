@@ -3,6 +3,7 @@
 import { sectorClass } from "@/lib/analysis";
 import { clock, fmt } from "@/lib/format";
 import { interp } from "@/lib/math";
+import { elapsedAtDistance } from "@/lib/sectors";
 import { cvS, cvT, sU, tU } from "@/lib/units";
 import { usePlayer, useFrame, useUi } from "./context";
 
@@ -29,7 +30,7 @@ export function HudLeft() {
     secs = (
       <div className="secs">
         {[0, 1, 2].map((k) => {
-          const done = (k === 0 && rel >= e0) || (k === 1 && rel >= e1) || (k === 2 && L.sec[2] != null && rel >= L.dur - 1);
+          const done = L.sec[k] != null && ((k === 0 && rel >= e0) || (k === 1 && rel >= e1) || (k === 2 && rel >= L.dur - 1));
           const state = done ? "done" : k === act ? "act" : "fut";
           const val = done ? (L.sec[k] as number) : k === act ? rel - starts[k] : null;
           return (
@@ -50,10 +51,8 @@ export function HudLeft() {
   }
   let gap = null;
   if (R && R !== L) {
-    const tc0 = interp(L.ch.u, L.ch.t, 0);
-    const tr0 = interp(R.ch.u, R.ch.t, 0);
     const u = interp(L.ch.t, L.ch.u, rel);
-    const g = rel - tc0 - (interp(R.ch.u, R.ch.t, u) - tr0);
+    const g = rel <= 0 ? 0 : rel >= L.dur ? L.dur - R.dur : rel - elapsedAtDistance(R, u, p.RL);
     gap = (
       <div className={"gap " + (g > 0 ? "pos" : "neg")}>
         {g >= 0 ? "+" : "−"}{(Math.abs(g) / 1000).toFixed(2)}<small>vs {R.name}</small>

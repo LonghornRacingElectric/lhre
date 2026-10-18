@@ -48,8 +48,9 @@ function Shell() {
         const D = rebuildRun(D0);
         const session = new Session(D);
         const prefs = lsGet<Partial<Prefs>>("prefs", {});
-        const p = new Player(session, loadUserState(D.meta.sessId), prefs.units ?? defaultUnits(), prefs);
+        const p = new Player(session, loadUserState(D.meta.sessId, D), prefs.units ?? defaultUnits(), prefs);
         p.toast = toast;
+        void p.findRivals();
         live.current = p;
         lsSet("run", id);
         setPlayer(p);
@@ -108,15 +109,18 @@ function Shell() {
     [open, toast],
   );
 
-  const remove = useCallback(async () => {
-    if (!current) return;
-    if (!window.confirm("Remove this run from the browser? Your notes for it go too.")) return;
-    await runStore.del(current);
-    const list = (await runStore.list()).sort((a, b) => b.added - a.added);
-    setRuns(list);
-    await open(list[0]?.id ?? null);
-    toast("Run removed.");
-  }, [current, open, toast]);
+  const remove = useCallback(async (id: string) => {
+    const run = runs.find(r => r.id === id);
+    if (!run) return;
+    if (!window.confirm('Delete "' + (run.name || "Untitled run") + '" from saved runs? You can reimport the original JSON.')) return;
+    try {
+      await runStore.del(id);
+      const list = (await runStore.list()).sort((a, b) => b.added - a.added);
+      setRuns(list);
+      if (id === current) await open(list[0]?.id ?? null);
+      toast("Run removed.");
+    } catch (e) { toast("Could not delete this run: " + (e as Error).message, "err"); }
+  }, [current, runs, open, toast]);
 
   /* drag and drop anywhere */
   useEffect(() => {
@@ -177,7 +181,7 @@ function Shell() {
             onTheme={cycleTheme}
             onSelect={(id) => void open(id)}
             onImport={(f) => void importFiles(f)}
-            onRemove={() => void remove()}
+            onRemove={(id) => void remove(id)}
           />
           {player && <Workspace key={player.session.D.meta.sessId} />}
         </div>

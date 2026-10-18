@@ -72,10 +72,11 @@ function NoteBar() {
 }
 
 /** Play controls, ghost choice, loops, and the timeline underneath. */
-export function Transport() {
+export function Transport({ height = 108, onHeight, docked = false, onPlacement }: { height?: number; onHeight?: (height: number) => void; docked?: boolean; onPlacement?: () => void } = {}) {
   const p = usePlayer();
   useUi(p);
   const [keys, setKeys] = useState(false);
+  const resize = useRef<{ y: number; height: number } | null>(null);
   const { laps, TLAPS } = p.session;
   const pickGhost = (c: Cmp) => {
     if (p.cmp === c) p.set("cmp", "none");
@@ -88,14 +89,19 @@ export function Transport() {
     }
   };
   return (
-    <div className="transport panel">
+    <div className="transport panel" style={{ ["--timeline-height" as string]: height + "px" }}>
+      {onHeight && <div className="timeline-resize" role="separator" aria-orientation="horizontal" aria-label="Resize timeline height" aria-valuenow={height} aria-valuemin={48} aria-valuemax={240} tabIndex={0} title="Drag up or down to resize the timeline. Double-click for a compact strip."
+        onPointerDown={e => { resize.current = { y: e.clientY, height }; e.currentTarget.focus(); e.currentTarget.setPointerCapture(e.pointerId); e.preventDefault(); }}
+        onPointerMove={e => { if (resize.current) onHeight(Math.max(48, Math.min(240, resize.current.height + resize.current.y - e.clientY))); }}
+        onPointerUp={() => { resize.current = null; }} onPointerCancel={() => { resize.current = null; }} onDoubleClick={() => onHeight(48)}
+        onKeyDown={e => { if (e.key === "ArrowUp" || e.key === "ArrowDown") { onHeight(Math.max(48, Math.min(240, height + (e.key === "ArrowUp" ? 12 : -12)))); e.preventDefault(); e.stopPropagation(); } }}><span /></div>}
       <div className="trow">
         <button className="btn" type="button" title="Previous lap (Shift+Left)" aria-label="Previous lap" onClick={() => p.stepLap(-1)}>⏮</button>
         <button className="btn play" type="button" title="Play or pause (Space)" onClick={() => p.play(!p.playing)}>{p.playing ? "Pause" : "Play"}</button>
         <button className="btn" type="button" title="Next lap (Shift+Right)" aria-label="Next lap" onClick={() => p.stepLap(1)}>⏭</button>
         <Clock />
         <span className="sp" />
-        <span className="lab">Ghost</span>
+        <Menu label={"Ghost: " + (p.cmp === "best" ? "Best" : p.cmp === "theo" ? "Best sectors" : p.cmp === "lap" ? "Lap" : p.cmp === "external" ? "Other file" : p.cmp === "rival" ? "Driver" : "Off")} right>
         <div className="seg" role="group" aria-label="Ghost lap. Click the active one again to turn it off.">
           {GHOSTS.map(([c, label, title]) => (
             <button
@@ -132,6 +138,8 @@ export function Transport() {
             </select>
           </span>
         )}
+        {p.cmp === "external" && <button className="btn" title="Turn off the other-file ghost" onClick={() => p.set("cmp", "none")}>Other file ×</button>}
+        </Menu>
         <button className="btn" type="button" title="Pin a note to the playhead (N)" onClick={() => p.setNoteOpen(true)}>+ Note</button>
         <button className="btn" type="button" title="Add a cone to this lap (C). Shift+C removes one." onClick={() => p.coneKey(1)}>+ Cone</button>
         <Menu label={p.rate + "×"} right>
@@ -151,6 +159,7 @@ export function Transport() {
           </div>
         </Menu>
         <Menu label={p.loopA != null || p.loopB != null ? "More •" : "More"} right>
+          {onPlacement && <button className="btn" aria-label={docked ? "Expand timeline across workspace" : "Dock timeline into track"} onClick={onPlacement}>{docked ? "Undock timeline" : "Dock timeline into track"}</button>}
           <div className="mrow">
             <span className="lab">Loop</span>
             <div className="seg" role="group" aria-label="A to B loop">

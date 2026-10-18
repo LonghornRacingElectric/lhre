@@ -3,6 +3,7 @@
 import { fmt, MPH } from "@/lib/format";
 import { cvS, sU } from "@/lib/units";
 import { useFrame, usePlayer, useUi } from "../context";
+import { ExternalComparison } from "./ExternalComparison";
 
 type Kind = "t" | "n1" | "n0";
 
@@ -14,7 +15,7 @@ export function ComparePanel() {
   const L = p.laps[p.sel];
   const R = p.refLap();
   if (!R || R === L) {
-    return <div className="empty">Pick a ghost under the timeline (Lap…, Best, Best sectors, or Driver for another run on this layout) that is a different lap from the one you are watching. The two are compared here, on the map and in the charts.</div>;
+    return <><ExternalComparison /><div className="empty">Pick a different ghost lap below or under the timeline. The two are compared here, on the map and in the charts.</div></>;
   }
   const u = p.units;
   const mx = (a: number[]) => Math.max(...a);
@@ -31,12 +32,13 @@ export function ComparePanel() {
   const show = (v: number | null, k: Kind) => (v == null ? "—" : k === "t" ? fmt(v) : v.toFixed(k === "n1" ? 1 : 0));
   return (
     <>
+      <ExternalComparison />
       <table className="cmpt">
         <thead>
           <tr>
             <th />
             <th><span className="dot" style={{ background: "var(--ink)" }} />{p.session.D.meta.driver || "This run"} · {L.name}</th>
-            <th><span className="dot" style={{ background: p.cmp === "rival" ? "var(--rival)" : "var(--mute)" }} />{R.name}</th>
+            <th><span className="dot" style={{ background: (p.cmp === "rival" || p.cmp === "external") ? "var(--rival)" : "var(--mute)" }} />{R.name}</th>
             <th>Diff</th>
           </tr>
         </thead>

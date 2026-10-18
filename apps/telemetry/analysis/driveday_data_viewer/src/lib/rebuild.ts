@@ -1,5 +1,6 @@
 import { sectorsOf } from "./sectors";
 import { CH_KEYS, type BaseChannels, type ChKey, type Pt, type RawLap, type RunData } from "./types";
+import { sectorTimes } from "./sectors";
 
 /* The start line is wherever the car was when each timed lap began, and the finish line wherever it was when the lap ended
    (convert.ts puts them there). Lap times, laps and energy are always the logger's.
@@ -113,7 +114,7 @@ export function rebuildRun(D0: RunData): RunData {
     for (let k = 1; k < m; k++) dist += Math.hypot(sm[k].x - sm[k - 1].x, sm[k].y - sm[k - 1].y);
     return {
       ch, name: src.name, kind: src.kind, t0, t1, dur: src.dur,
-      sec: sectorsOf(u, tt, RL, src.dur, src.kind !== "partial"),
+      sec: sectorTimes({ ch: { u, t: tt }, dur: src.dur, kind: src.kind }, [RL / 3, 2 * RL / 3]),
       pts, dist,
       vmax: Math.max(...sm.map((s) => s.spd)),
       vavg: src.dur > 0 ? dist / (src.dur / 1000) : 0,

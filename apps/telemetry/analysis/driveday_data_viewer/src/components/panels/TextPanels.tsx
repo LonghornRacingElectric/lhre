@@ -159,9 +159,11 @@ export function AboutPanel() {
     <div className="note2" style={{ paddingTop: 12 }}>
       <b>Timeline.</b> Everything follows the playhead along the whole run, out lap first. Click or drag the timeline, press Play, or click the track or any chart to jump. Laps are the chapters, with sector marks inside them and an orange marker for every cone hit.
       <br /><br />
-      <b>Sectors.</b> The shared track layout is split into three equal-distance sectors, and every other lap is projected onto it so each is timed through the same two gates. Crossings are interpolated between GPS fixes. Missing crossings show as unavailable, never equal-time estimates. When all crossings are available, the sectors add up to the lap time: the first one starts at the logged lap start and the last one ends at the logged lap end.
+      <b>Sectors.</b> By default the shared track layout is split into three equal-distance sectors. The Sectors menu can save custom gates or suggest corner-based boundaries, and every other lap is projected onto it so each is timed through the same two gates. Crossings are interpolated between GPS fixes. Missing crossings show as unavailable, never equal-time estimates. When all crossings are available, the sectors add up to the lap time: the first one starts at the logged lap start and the last one ends at the logged lap end.
       <br /><br />
       <b>Colours.</b> Purple is the session best, green is faster than the base lap, yellow is slower. Adjusted time adds the cone penalty to real time.
+      <br /><br />
+      <b>Ghost.</b> Best is the fastest unskipped logged lap. Replay starts both laps at logged time zero and stops each at its logged finish; a faster lap can still be behind in an individual section. Best sectors stitches the fastest measured sectors using the same boundaries.
       <br /><br />
       <b>Samples and smoothing.</b> Imports combine the session tail and full lap samples at their original timestamps, including 20 Hz exports. Playback positions and derived speed/acceleration use a centred 0.5 s average; imported fixes, telemetry channels and logged lap times are retained. Lateral g is a GPS curvature estimate, not an IMU reading. GPS noise and gaps affect its accuracy.
       <br /><br />
