@@ -63,6 +63,7 @@ class MetricsNode(Node):
         run_id = self.get_parameter(
             'run_id').get_parameter_value().string_value
         self._run_id = run_id if run_id else time.strftime('%Y%m%d_%H%M%S')
+        self._row_written = False
 
         # --- Centerline cache ---
         self._path: List[Tuple[float, float]] = []
@@ -247,7 +248,9 @@ class MetricsNode(Node):
         for k, v in row.items():
             self.get_logger().info(f'  {k}: {v}')
 
-    def _write_csv(self):
+    def _write_csv(self, *, log: bool = True):
+        if self._row_written:
+            return
         csv_dir = os.path.dirname(self._csv_path)
         if csv_dir:
             os.makedirs(csv_dir, exist_ok=True)
@@ -261,13 +264,15 @@ class MetricsNode(Node):
                 writer.writeheader()
             writer.writerow(row)
 
-        self.get_logger().info(f'CSV row appended to {self._csv_path}')
+        self._row_written = True
+        if log:
+            self.get_logger().info(f'CSV row appended to {self._csv_path}')
 
     def on_shutdown(self):
-        """Dump a summary on shutdown (Ctrl+C)."""
+        """Persist the final row during shutdown."""
         if self._samples > 0:
-            self._print_summary()
-            self._write_csv()
+            # ROS logging may already be unavailable after launch sends SIGINT.
+            self._write_csv(log=False)
 
 
 def main():

@@ -1,10 +1,40 @@
 """Launch the full MVS autonomy demo stack."""
 
+from pathlib import Path
+import subprocess
+import time
+
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, ExecuteProcess
 from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
+
+
+RECORDED_TOPICS = (
+    '/clock', '/tf', '/tf_static',
+    '/lhr/lidar/points', '/lhr/sensor/cones_detected', '/lhr/track/cones',
+    '/lhr/track/centerline', '/lhr/vehicle/odom',
+    '/lhr/vehicle/odom_truth', '/lhr/vehicle/cmd',
+    '/lhr/mission/status', '/lhr/metrics/lap_complete',
+    '/lhr/imu/data', '/lhr/sensor/wheel_speeds',
+)
+
+
+def _git_sha() -> str:
+    """Identify the source checkout used by this launch file."""
+    repo = Path(__file__).resolve().parent
+    try:
+        sha = subprocess.check_output(
+            ['git', '-C', str(repo), 'rev-parse', '--short', 'HEAD'],
+            text=True, stderr=subprocess.DEVNULL).strip()
+        status = subprocess.check_output(
+            ['git', '-C', str(repo), 'status', '--porcelain'],
+            text=True, stderr=subprocess.DEVNULL)
+        return sha + ('-dirty' if status else '')
+    except (OSError, subprocess.CalledProcessError):
+        return 'unknown'
 
 
 def generate_launch_description():
@@ -59,6 +89,18 @@ def generate_launch_description():
     wheel_scale_arg = DeclareLaunchArgument(
         'wheel_scale_error', default_value='1.0',
         description='Simulated rolling-radius error (1.0 = perfectly known)')
+
+    # The row and bag share an ID; neither name depends on YAML's numeric
+    # interpretation of an all-digit launch argument.
+    run_id_arg = DeclareLaunchArgument(
+        'run_id', default_value=time.strftime('%Y%m%dT%H%M%S'))
+    output_csv_arg = DeclareLaunchArgument(
+        'output_csv', default_value='data/metrics.csv')
+    record_arg = DeclareLaunchArgument('record', default_value='false')
+    bag_dir_arg = DeclareLaunchArgument('bag_dir', default_value='data/bags')
+    foxglove_arg = DeclareLaunchArgument('foxglove', default_value='false')
+    foxglove_port_arg = DeclareLaunchArgument(
+        'foxglove_port', default_value='8765')
 
     # ----- Nodes -----
     cones = Node(
@@ -162,7 +204,12 @@ def generate_launch_description():
         package='lhr_metrics',
         executable='metrics_node',
         name='metrics_node',
-        parameters=[{'truth_odom_topic': '/lhr/vehicle/odom_truth'}],
+        parameters=[{
+            'truth_odom_topic': '/lhr/vehicle/odom_truth',
+            'run_id': ParameterValue(LaunchConfiguration('run_id'), value_type=str),
+            'output_csv': ParameterValue(
+                LaunchConfiguration('output_csv'), value_type=str),
+        }],
         output='screen',
         condition=IfCondition(LaunchConfiguration('enable_metrics')),
     )
@@ -177,6 +224,30 @@ def generate_launch_description():
             'ready_hold_sec': LaunchConfiguration('ready_hold_sec'),
         }],
         output='screen',
+    )
+
+    recorder = ExecuteProcess(
+        cmd=[
+            'ros2', 'bag', 'record',
+            '--output', [LaunchConfiguration('bag_dir'), '/',
+                         LaunchConfiguration('run_id')],
+            '--storage', 'mcap',
+            '--custom-data', ['run_id=', LaunchConfiguration('run_id')],
+            f'git_sha={_git_sha()}',
+            '--topics', *RECORDED_TOPICS,
+        ],
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('record')),
+    )
+
+    foxglove_bridge = Node(
+        package='foxglove_bridge',
+        executable='foxglove_bridge',
+        name='foxglove_bridge',
+        parameters=[{'port': ParameterValue(
+            LaunchConfiguration('foxglove_port'), value_type=int)}],
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('foxglove')),
     )
 
     return LaunchDescription([
@@ -201,6 +272,12 @@ def generate_launch_description():
         estimator_arg,
         gyro_bias_arg,
         wheel_scale_arg,
+        run_id_arg,
+        output_csv_arg,
+        record_arg,
+        bag_dir_arg,
+        foxglove_arg,
+        foxglove_port_arg,
         cones,
         sensor_sim,
         centerline,
@@ -211,4 +288,6 @@ def generate_launch_description():
         mission_mgr,
         control,
         metrics,
+        recorder,
+        foxglove_bridge,
     ])
