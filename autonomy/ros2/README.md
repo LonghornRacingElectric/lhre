@@ -174,6 +174,10 @@ not change the simulator or its simplified cone perception. See the
 [demo package](src/lhr_demo/README.md) for dependencies, bag contents, and
 arguments.
 
+Use `lidar:=true` to inspect a synthetic Mid-360 cloud in the kinematic demo.
+It does not switch the driving perception pipeline; the [LiDAR simulator](src/lhr_lidar_sim/README.md)
+documents the scan pattern and return-model limits.
+
 ## Tests and CI
 
 ```bash

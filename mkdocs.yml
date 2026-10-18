@@ -53,6 +53,8 @@ nav:
       - Getting Started: autonomy/ros2/GETTING-STARTED.md
       - ROS 2 Workspace: autonomy/ros2/README.md
       - Kinematic Demo: autonomy/ros2/src/lhr_demo/README.md
+      - Synthetic LiDAR: autonomy/ros2/src/lhr_lidar_sim/README.md
+      - Track Generation: autonomy/ros2/src/lhr_trackgen/README.md
       - Metrics: autonomy/ros2/src/lhr_metrics/README.md
       - Docker (macOS): autonomy/ros2/docker/README.md
       - Vehicle Parameters: autonomy/ros2/src/lhr_vehicle/README.md

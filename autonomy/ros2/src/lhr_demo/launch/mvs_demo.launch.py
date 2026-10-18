@@ -101,6 +101,23 @@ def generate_launch_description():
     foxglove_arg = DeclareLaunchArgument('foxglove', default_value='false')
     foxglove_port_arg = DeclareLaunchArgument(
         'foxglove_port', default_value='8765')
+    lidar_arg = DeclareLaunchArgument(
+        'lidar', default_value='false',
+        description='Publish a synthetic Mid-360 cloud for inspection; '
+                    'driving still uses the simplified cone sensor')
+    mount_pitch_arg = DeclareLaunchArgument(
+        'mount_pitch_rad', default_value='0.0')
+    return_profile_arg = DeclareLaunchArgument(
+        'return_profile', default_value='baseline',
+        choices=['baseline', 'acceptance_overcast'])
+    elevation_profile_arg = DeclareLaunchArgument(
+        'elevation_profile', default_value='livox',
+        choices=['livox', 'rosette', 'uniform'])
+    motion_distortion_arg = DeclareLaunchArgument(
+        'motion_distortion', default_value='false')
+    clutter_profile_arg = DeclareLaunchArgument(
+        'clutter_profile', default_value='none',
+        choices=['none', 'trackside'])
 
     # ----- Nodes -----
     cones = Node(
@@ -124,6 +141,33 @@ def generate_launch_description():
             'max_range_m': LaunchConfiguration('max_range_m'),
         }],
         output='screen',
+    )
+
+    # Preview scans follow the physical simulator pose under EKF; the
+    # estimator may drift, but it must not move the rendered scene.
+    lidar_odom = PythonExpression([
+        "'/lhr/vehicle/odom_truth' if '", LaunchConfiguration('estimator'),
+        "' == 'ekf' else '/lhr/vehicle/odom'"])
+    lidar_sim = Node(
+        package='lhr_lidar_sim',
+        executable='lidar_sim',
+        name='lidar_sim',
+        remappings=[('/lhr/vehicle/odom', lidar_odom)],
+        parameters=[{
+            'seed': ParameterValue(LaunchConfiguration('seed'), value_type=int),
+            'mount_pitch_rad': ParameterValue(
+                LaunchConfiguration('mount_pitch_rad'), value_type=float),
+            'return_profile': ParameterValue(
+                LaunchConfiguration('return_profile'), value_type=str),
+            'elevation_profile': ParameterValue(
+                LaunchConfiguration('elevation_profile'), value_type=str),
+            'motion_distortion': ParameterValue(
+                LaunchConfiguration('motion_distortion'), value_type=bool),
+            'clutter_profile': ParameterValue(
+                LaunchConfiguration('clutter_profile'), value_type=str),
+        }],
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('lidar')),
     )
 
     centerline = Node(
@@ -278,8 +322,15 @@ def generate_launch_description():
         bag_dir_arg,
         foxglove_arg,
         foxglove_port_arg,
+        lidar_arg,
+        mount_pitch_arg,
+        return_profile_arg,
+        elevation_profile_arg,
+        motion_distortion_arg,
+        clutter_profile_arg,
         cones,
         sensor_sim,
+        lidar_sim,
         centerline,
         sim_truth,
         sim_ekf,

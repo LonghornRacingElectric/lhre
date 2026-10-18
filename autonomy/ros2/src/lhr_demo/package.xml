@@ -16,6 +16,7 @@
   <exec_depend>lhr_mission_manager</exec_depend>
   <exec_depend>lhr_sensor_sim</exec_depend>
   <exec_depend>lhr_state_estimation</exec_depend>
+  <exec_depend>lhr_lidar_sim</exec_depend>
   <exec_depend>ros2bag</exec_depend>
   <exec_depend>rosbag2_storage_mcap</exec_depend>
   <exec_depend>foxglove_bridge</exec_depend>
