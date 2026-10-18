@@ -39,6 +39,14 @@ The launch starts graphical Gazebo and RViz by default. Use `gui:=false` or
 `rviz:=false` for a headless run. See the workspace
 [README](../../README.md) for all launch arguments and topic diagrams.
 
+## Safety monitor
+
+`safety:=true` adds `lhr_safety`'s `safety_node`, which trips the mission
+on stale odometry, commands or LiDAR, a diverged EKF, leaving the geofence,
+or steering that does not track. It is off by default while the thresholds
+are tuned; each one is a `safety_*` launch argument. See
+[lhr_safety](../lhr_safety/README.md).
+
 ## Visual check
 
 In RViz, inferred left cones are blue, inferred right cones are yellow, and

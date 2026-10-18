@@ -374,6 +374,36 @@ def _launch_setup(context: LaunchContext):
         output='screen',
     )
 
+    # ----- Safety monitor -----
+    safety_nodes = []
+    if context.launch_configurations.get('safety', 'false').lower() == 'true':
+        def _float(name):
+            return ParameterValue(LaunchConfiguration(name), value_type=float)
+
+        safety_nodes.append(Node(
+            package='lhr_safety',
+            executable='safety_node',
+            name='safety_node',
+            parameters=[{
+                # Follows the perception mode rather than being an argument:
+                # the Gazebo LiDAR always publishes, but under
+                # perception:=sim nothing reads the cloud.
+                'monitor_lidar': perception == 'lidar',
+                'lidar_timeout_s': _float('safety_lidar_timeout_s'),
+                'odom_timeout_s': _float('safety_odom_timeout_s'),
+                'cmd_timeout_s': _float('safety_cmd_timeout_s'),
+                'max_position_std_m': _float('safety_max_position_std_m'),
+                'max_speed_factor': _float('safety_max_speed_factor'),
+                'geofence_radius_m': _float('safety_geofence_radius_m'),
+                'steer_min_speed_mps': _float('safety_steer_min_speed_mps'),
+                'steer_yaw_rate_tol': _float('safety_steer_yaw_rate_tol'),
+                'steer_rel_tol': _float('safety_steer_rel_tol'),
+                'steer_window_s': _float('safety_steer_window_s'),
+                'use_sim_time': True,
+            }],
+            output='screen',
+        ))
+
     return [
         SetEnvironmentVariable('GZ_SIM_RESOURCE_PATH', models_dir),
         gz_sim,
@@ -386,6 +416,7 @@ def _launch_setup(context: LaunchContext):
         mission_mgr,
         control,
         *metrics_nodes,
+        *safety_nodes,
         *rviz_nodes,
     ]
 
@@ -467,6 +498,21 @@ def generate_launch_description():
         DeclareLaunchArgument('mission', default_value='autocross'),
         DeclareLaunchArgument('auto_go', default_value='true'),
         DeclareLaunchArgument('ready_hold_sec', default_value='5.0'),
+        # Safety monitor (lhr_safety). Off until #117's fault injection
+        # has tuned the thresholds; defaults match the node's.
+        DeclareLaunchArgument(
+            'safety', default_value='false',
+            description='Run safety_node: trips the mission on stack faults'),
+        DeclareLaunchArgument('safety_lidar_timeout_s', default_value='0.3'),
+        DeclareLaunchArgument('safety_odom_timeout_s', default_value='0.25'),
+        DeclareLaunchArgument('safety_cmd_timeout_s', default_value='0.25'),
+        DeclareLaunchArgument('safety_max_position_std_m', default_value='0.0'),
+        DeclareLaunchArgument('safety_max_speed_factor', default_value='1.5'),
+        DeclareLaunchArgument('safety_geofence_radius_m', default_value='150.0'),
+        DeclareLaunchArgument('safety_steer_min_speed_mps', default_value='2.0'),
+        DeclareLaunchArgument('safety_steer_yaw_rate_tol', default_value='0.15'),
+        DeclareLaunchArgument('safety_steer_rel_tol', default_value='0.5'),
+        DeclareLaunchArgument('safety_steer_window_s', default_value='1.0'),
         # ----- Build all nodes via OpaqueFunction -----
         OpaqueFunction(function=_launch_setup),
     ])
