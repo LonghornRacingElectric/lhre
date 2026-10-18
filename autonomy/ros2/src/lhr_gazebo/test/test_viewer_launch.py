@@ -53,7 +53,9 @@ def _recorders(context, actions):
     """Return the command line of every ros2 bag process."""
     lines = []
     for action in actions:
-        if isinstance(action, ExecuteProcess):
+        # A launch_ros Node is an ExecuteProcess too, and resolving its
+        # command looks up the package, which CI may not have installed.
+        if isinstance(action, ExecuteProcess) and not isinstance(action, Node):
             line = [_text(context, part) for part in action.cmd]
             if line[:3] == ['ros2', 'bag', 'record']:
                 lines.append(line)
