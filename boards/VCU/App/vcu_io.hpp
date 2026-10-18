@@ -7,6 +7,9 @@
 #include <cstdint>
 
 #include "lhal/lhal.hpp"
+#include "rgb_led.hpp"
+#include "vcu_adc.hpp"
+#include "vcu_uart.hpp"
 
 namespace vcu {
 
@@ -62,30 +65,26 @@ class BoardServices {
   // on target.
   virtual void EnterBootloader() = 0;
 
-  // Non-volatile storage for the brake comparator soft latch, which a power
-  // cycle must not clear. Save may block (flash write); call it from a
-  // low-priority context, never the control loop.
+  // Flash writes may block; save from telemetry, never control.
   virtual uint32_t LoadFaultLatch() = 0;
   virtual void SaveFaultLatch(uint32_t value) = 0;
 };
 
-// Everything the application needs from the outside world. On the target
-// these are LHAL STM32 adapters wired up in Board/main.cpp; in tests and
-// sims they are LHAL host fakes. `clock` is required; the rest may be left
-// null and the app skips them.
+// Board-provided peripherals; clock is required, optional devices may be null.
 struct Peripherals {
   lhal::Clock* clock = nullptr;
-  lhal::CanBus* critical_can = nullptr;  // FDCAN2 (PB12/PB13)
-  lhal::CanBus* data_can = nullptr;      // FDCAN1 (PD0/PD1)
-  lhal::Uart* debug_uart = nullptr;      // STDC14 VCP (USART3, PC10/PC11)
-  lhal::Uart* usb_uart = nullptr;        // USB CDC
-  lhal::AdcScan* adc1 = nullptr;         // ranks per Adc1Rank
-  lhal::AdcScan* adc2 = nullptr;         // ranks per Adc2Rank
+  lhal::CanBus* critical_can = nullptr;   // FDCAN2 (PB12/PB13)
+  lhal::CanBus* data_can = nullptr;       // FDCAN1 (PD0/PD1)
+  lhal::Uart* debug_uart = nullptr;       // STDC14 VCP (USART3, PC10/PC11)
+  vcu::RecoveryUart* usb_uart = nullptr;  // USB CDC
+  vcu::AdcScan* adc1 = nullptr;           // ranks per Adc1Rank
+  vcu::AdcScan* adc2 = nullptr;           // ranks per Adc2Rank
   lhal::WaveformDac* audio_dac = nullptr;
   lhal::Watchdog* watchdog = nullptr;
   lhal::Pwm* led_r = nullptr;  // status RGB, duty = brightness
   lhal::Pwm* led_g = nullptr;
   lhal::Pwm* led_b = nullptr;
+  vcu::RgbLed* status_led = nullptr;
   DigitalInputPins inputs;
   DigitalOutputPins outputs;
   BoardServices* board = nullptr;

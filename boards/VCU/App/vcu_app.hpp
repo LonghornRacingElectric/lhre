@@ -7,15 +7,18 @@
 #include "analog.hpp"
 #include "battery.hpp"
 #include "buzzer.hpp"
+#include "control_features.hpp"
 #include "debounce.hpp"
+#include "dfu.hpp"
 #include "digital_io.hpp"
 #include "faults.hpp"
 #include "lhal/lhal.hpp"
 #include "lhre_can_types.hpp"
 #include "longhorn/logger.hpp"
-#include "longhorn/shell.hpp"
 #include "pedals.hpp"
+#include "rainbow_task.hpp"
 #include "semphr.h"
+#include "shell.hpp"
 #include "shutdown_loop.hpp"
 #include "state_machine.hpp"
 #include "steering.hpp"
@@ -27,9 +30,7 @@
 
 namespace vcu {
 
-// What the control loop computed on its last tick. The control task owns
-// the live state; other tasks (telemetry, shell) read a copy published
-// under a mutex.
+// Control owns live state; telemetry and consoles read a mutex-protected copy.
 struct ControlSnapshot {
   uint32_t now_ms = 0;
   VcuState state = VcuState::kInit;
@@ -46,6 +47,7 @@ struct ControlSnapshot {
   DigitalOutputs outputs;
   float motor_rpm = 0.0f;
   bool motor_speed_valid = false;
+  bool adc_fresh = false;
   TorqueOutputs torque;
   float torque_command = 0.0f;
   bool inverter_enable = false;
@@ -56,18 +58,12 @@ struct ControlSnapshot {
   uint8_t fault_resets = 0;
   float bse3_psi = 0.0f;
   bool bse3_available = false;
+  bool launch_armed = false;
+  bool regen_current_cut = false;
+  WheelControlResult wheel_control;
 };
 
-// VCU vehicle application. LHAL interfaces + raw FreeRTOS API, no ST HAL,
-// so it runs unchanged on the host against LHAL fakes.
-//
-// Tasks (statically allocated, StartTasks()):
-//   supervisor  20 ms  feeds the IWDG only if every critical task progressed
-//   control      3 ms  inputs -> plausibility -> state machine -> torque ->
-//                      outputs -> Critical-bus TX (333 Hz like lhre-2026)
-//   telemetry   10 ms  Data-bus diagnostics, status LED, fault persistence
-//   shell x2, logger   debug consoles (STDC14 VCP and USB CDC)
-// Step() runs the same ticks scheduler-less for deterministic tests.
+// Vehicle app. StartTasks() runs on target; Step() drives host tests.
 class App {
  public:
   static constexpr uint32_t kControlPeriodMs = 3;
@@ -81,7 +77,8 @@ class App {
   static constexpr uint32_t kTelemetryDeadlineMs = 300;
   static constexpr uint32_t kShellPollMs = 2;
 
-  explicit App(const Peripherals& peripherals);
+  explicit App(const Peripherals& peripherals,
+               const Params* initial_params = nullptr);
 
   // Creates the tasks. Call once, before vTaskStartScheduler(). The App
   // must outlive the scheduler (static storage in main() on the MCU).
@@ -99,9 +96,7 @@ class App {
   uint32_t watchdog_refreshes() const { return watchdog_refreshes_; }
 
  private:
-  // Task stacks, in words. Multiples of configMINIMAL_STACK_SIZE so the
-  // host simulator (page-sized pthread stacks) works too. The control and
-  // telemetry tasks log, and a log call needs ~256 bytes of stack.
+  // Stacks are multiples of the host FreeRTOS port's minimum stack size.
   static constexpr configSTACK_DEPTH_TYPE kControlStack =
       4 * configMINIMAL_STACK_SIZE;
   static constexpr configSTACK_DEPTH_TYPE kTelemetryStack =
@@ -112,9 +107,8 @@ class App {
       3 * configMINIMAL_STACK_SIZE;
   static constexpr size_t kSineSamples = 32;
 
-  // Accumulating schedule for periodic TX from a fixed-rate loop: the
-  // average rate is exact even when the period isn't a multiple of the
-  // tick.
+  // Accumulate deadlines to avoid drift when periods are not whole control
+  // ticks.
   struct RateGate {
     uint32_t next_ms = 0;
     bool started = false;
@@ -154,31 +148,42 @@ class App {
   void SendCritical(uint32_t now_ms);
   void Publish(uint32_t now_ms);
 
-  void RegisterShellCommands(longhorn::Shell& shell);
+  void RegisterShellCommands(vcu::Shell& shell);
   static void StateCommand(void* ctx, longhorn::Console& out, const char*);
   static void FaultsCommand(void* ctx, longhorn::Console& out, const char*);
   static void IoCommand(void* ctx, longhorn::Console& out, const char*);
   static void AnalogCommand(void* ctx, longhorn::Console& out, const char*);
   static void ModeCommand(void* ctx, longhorn::Console& out, const char* args);
+  static void LaunchCommand(void* ctx, longhorn::Console& out,
+                            const char* args);
   static void PlainLine(void* ctx, longhorn::Console& out, const char* line);
+  static bool UsbByte(void* ctx, uint8_t byte);
+  static void UsbReceive(void* ctx, const uint8_t* bytes, size_t len);
+  static bool VcpByte(void* ctx, uint8_t byte);
 
   Peripherals p_;
 
-  // Consoles ---------------------------------------------------------------
+  // Consoles
   StaticSemaphore_t vcp_mutex_control_;
   SemaphoreHandle_t vcp_mutex_ = nullptr;
   StaticSemaphore_t usb_mutex_control_;
   SemaphoreHandle_t usb_mutex_ = nullptr;
-  longhorn::Shell vcp_shell_;
-  longhorn::Shell usb_shell_;
+  vcu::Shell vcp_shell_;
+  vcu::Shell usb_shell_;
   longhorn::Logger logger_;
+  vcu::RainbowTask rainbow_;
+  vcu::DfuCommand usb_dfu_;
+  vcu::DfuCommand vcp_dfu_;
 
-  // Control state (control task only) --------------------------------------
+  // Control state (control task only)
   const Params* params_;
   CanInbox critical_inbox_;
   CanInbox data_inbox_;
   VehicleRx rx_;
+  WheelRx wheels_;
   PedalProcessor pedals_;
+  AdcProgress adc1_progress_;
+  AdcProgress adc2_progress_;
   BrakeBias brake_bias_;
   ShutdownLoop shutdown_loop_;
   Debouncer b1_disconnect_;
@@ -194,6 +199,9 @@ class App {
   TorquePath torque_path_;
   BatteryEstimator battery_;
   Buzzer buzzer_;
+  BrakeRegen regen_;
+  LaunchRamp launch_;
+  WheelSlipController wheel_control_;
   uint16_t sine_[kSineSamples] = {};
   bool dac_playing_ = false;
   bool prev_fault_reset_ = false;
@@ -210,21 +218,24 @@ class App {
   RateGate faults_gate_;
   RateGate energy_gate_;
 
-  // Shared between tasks ---------------------------------------------------
+  // Shared between tasks
   StaticSemaphore_t snapshot_mutex_control_;
   SemaphoreHandle_t snapshot_mutex_ = nullptr;
   ControlSnapshot published_;
+  std::atomic<bool> bootloader_request_{false};
+  std::atomic<bool> launch_request_{false};
+  std::atomic<bool> bootloader_entered_{false};
   std::atomic<int> shell_mode_request_{-1};
   std::atomic<uint32_t> control_beats_{0};
   std::atomic<uint32_t> telemetry_beats_{0};
   std::atomic<bool> latch_save_pending_{false};
   std::atomic<uint32_t> latch_save_value_{0};
 
-  // Telemetry state --------------------------------------------------------
+  // Telemetry state
   RateGate diag_fast_gate_;
   RateGate diag_slow_gate_;
 
-  // Supervisor state -------------------------------------------------------
+  // Supervisor state
   bool watchdog_started_ = false;
   uint32_t seen_control_beats_ = 0;
   uint32_t seen_telemetry_beats_ = 0;
@@ -232,7 +243,7 @@ class App {
   uint32_t telemetry_progress_ms_ = 0;
   uint32_t watchdog_refreshes_ = 0;
 
-  // Scheduler-less timing --------------------------------------------------
+  // Scheduler-less timing
   bool stepped_ = false;
   uint32_t step_control_ms_ = 0;
   uint32_t step_telemetry_ms_ = 0;

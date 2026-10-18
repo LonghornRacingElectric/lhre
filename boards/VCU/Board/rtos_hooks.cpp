@@ -1,7 +1,4 @@
-// FreeRTOS failure hooks (enabled in Core/Inc/FreeRTOSConfig.h USER CODE).
-// Both are unrecoverable: put every output in its safe state, then halt with
-// interrupts off. The supervisor stops feeding the IWDG, so the watchdog
-// resets the MCU and the reset cause reads back as IWDG.
+// Leave outputs safe and let the watchdog reset after an RTOS failure.
 
 #include "FreeRTOS.h"
 #include "board_safe_state.hpp"

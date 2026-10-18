@@ -1,18 +1,11 @@
 load("//tools/firmware:firmware_project.bzl", "firmware_project")
 
-# The whole board: firmware image, flash targets, and — synthesized
-# from the App/ file names — the app library, host tests, and sims.
-# Everything else is derived from mcu or the CubeMX layout; see
-# tools/firmware/README.md. State only what this board adds.
 firmware_project(
     name = "vcu",
-    # Generated CAN bindings, per source board: what the VCU sends plus
-    # what it listens to — not the whole bus.
     app_deps = [
-        # Debug shells over the STDC14 VCP (USART3) and USB CDC;
-        # tools/monitor is the laptop side.
         "//drivers/longhorn:logger",
-        "//drivers/longhorn:shell",
+        "//drivers/longhorn:console",
+        "//tools/firmware:build_info",
         "//lib/codegen/cpp:can_bench",
         "//lib/codegen/cpp:can_dui",
         "//lib/codegen/cpp:can_hvc",
@@ -20,15 +13,13 @@ firmware_project(
         "//lib/codegen/cpp:can_pdu",
         "//lib/codegen/cpp:can_pi",
         "//lib/codegen/cpp:can_vcu",
+        "//lib/codegen/cpp:can_usm",
     ],
-    # USART3 (the STDC14 VCP on PC10/PC11) isn't in VCU.ioc yet, so the
-    # CubeMX-owned hal_conf.h can't enable the UART HAL module; supply the
-    # define here until it is (see the debug-UART note in Board/main.cpp).
+    # USART3 is configured in Board/comms_setup.cpp, not the .ioc.
     defines = ["HAL_UART_MODULE_ENABLED"],
     enable_freertos = True,
     enable_usb = True,
     mcu = "stm32g474xx",
-    # :vcu_test is the bring-up test image (vcu::TestApp): no vehicle logic,
-    # no inverter frames. See README.md.
+    # Bring-up image: no inverter commands.
     variants = {"test": ["VCU_TEST_IMAGE"]},
 )

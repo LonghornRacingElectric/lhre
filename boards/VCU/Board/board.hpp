@@ -1,9 +1,8 @@
 #pragma once
 
-// Rev A board bring-up pieces that the CubeMX output doesn't cover yet (see
-// boards/VCU/README.md, "IOC gaps"). Each is ST HAL level; App/ sees only
-// the LHAL adapters wrapped around the handles below.
+// Peripheral setup missing from the CubeMX configuration.
 
+#include <atomic>
 #include <cstdint>
 
 #include "main.h"
@@ -20,11 +19,10 @@ extern DMA_HandleTypeDef hdma_dac1;
 // DMA targets, one halfword per scan rank.
 extern volatile uint16_t g_adc1_buffer[vcu::kAdc1Channels];
 extern volatile uint16_t g_adc2_buffer[vcu::kAdc2Channels];
+extern std::atomic<uint32_t> g_adc1_scans;
+extern std::atomic<uint32_t> g_adc2_scans;
 
-// Reconfigures the CubeMX ADCs into timer-triggered, 16x oversampled scans
-// with circular DMA (adds the shutdown-tap and VREFINT ranks), and readies the
-// DAC for timer-paced DMA. Call after the MX_*_Init functions, before
-// starting the LHAL adapters.
+// Call after MX_*_Init and before starting the ADC/DAC adapters.
 void ConfigureAnalog();
 
 // Starts the ADC trigger timer once both DMA scans are running.

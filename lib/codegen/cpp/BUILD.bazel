@@ -22,6 +22,7 @@ CAN_BOARDS = [
     "pdu",
     "pi",
     "vcu",
+    "usm",
 ]
 
 py_binary(

@@ -2,15 +2,34 @@
 
 #include <cstdint>
 
-#include "lhal/adc.hpp"
+#include "vcu_adc.hpp"
 #include "vcu_config.hpp"
 
 namespace vcu {
 
-// Every analog channel, in raw counts, MCU pin volts, and the volts on the
-// far side of the board's divider. The ADC reference is the 3.3 V rail
-// (VREF+ = VDDA), not the sensors' +5V_AN, so readings are corrected with
-// VREFINT each sample.
+// Tracks completed conversions, not changes in pedal voltage: a driver may
+// legitimately hold the pedal still indefinitely.
+class AdcProgress {
+ public:
+  bool Fresh(const vcu::AdcScan* adc, uint32_t now_ms) {
+    if (adc == nullptr) return false;
+    const uint32_t count = adc->completed_scans();
+    if (count != previous_) {
+      previous_ = count;
+      last_ms_ = now_ms;
+      seen_ = true;
+    }
+    return seen_ && static_cast<uint32_t>(now_ms - last_ms_) < 10;
+  }
+
+ private:
+  uint32_t previous_ = 0;
+  uint32_t last_ms_ = 0;
+  bool seen_ = false;
+};
+
+// VREFINT corrects the 3.3 V ADC reference; sensors use the separate 5V_AN
+// rail.
 struct AnalogReadings {
   struct Channel {
     uint16_t counts = 0;

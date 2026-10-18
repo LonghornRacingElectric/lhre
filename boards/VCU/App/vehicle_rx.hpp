@@ -8,10 +8,11 @@
 #include "lhre_can_inverter.hpp"
 #include "lhre_can_pdu.hpp"
 #include "lhre_can_pi.hpp"
+#include "lhre_can_usm.hpp"
 
 namespace vcu {
 
-// Everything the vehicle image listens to, all on the Critical bus.
+// Vehicle feedback on the Critical bus.
 struct VehicleRx {
   RxSlot<lhre::can::inverter::InverterMotorPosition> motor_position;
   RxSlot<lhre::can::inverter::InverterCurrent> inverter_current;
@@ -41,10 +42,12 @@ struct VehicleRx {
            mode_command.TryDecode(f, now_ms);
   }
 
-  // Inverter is up: status and fault frames fresh and no POST/run faults.
-  // VSM state is not interpreted (TODO(verify) against the Cascadia doc).
+  // Require measurement feedback as well as status. TODO(verify): inverter VSM
+  // states.
   bool InverterFresh(uint32_t now_ms) const {
-    return inverter_faults.Fresh(now_ms) && inverter_states.Fresh(now_ms);
+    return inverter_faults.Fresh(now_ms) && inverter_states.Fresh(now_ms) &&
+           inverter_current.Fresh(now_ms) && inverter_voltage.Fresh(now_ms) &&
+           (inverter_high_speed.Fresh(now_ms) || motor_position.Fresh(now_ms));
   }
   bool InverterFaulted(uint32_t now_ms) const {
     return inverter_faults.Fresh(now_ms) &&
@@ -65,6 +68,22 @@ struct VehicleRx {
     }
     *rpm = 0.0f;
     return false;
+  }
+};
+
+// Wheel measurements arrive on Data, not Critical.
+struct WheelRx {
+  RxSlot<lhre::can::usm::AccelerationVectorUnsprungWheelSpeedFl> fl;
+  RxSlot<lhre::can::usm::AccelerationVectorUnsprungWheelSpeedFr> fr;
+  RxSlot<lhre::can::usm::AccelerationVectorUnsprungWheelSpeedRl> rl;
+  RxSlot<lhre::can::usm::AccelerationVectorUnsprungWheelSpeedRr> rr;
+
+  bool Dispatch(const lhal::CanFrame& f, uint32_t now) {
+    return fl.TryDecode(f, now) || fr.TryDecode(f, now) ||
+           rl.TryDecode(f, now) || rr.TryDecode(f, now);
+  }
+  bool Fresh(uint32_t now) const {
+    return fl.Fresh(now) && fr.Fresh(now) && rl.Fresh(now) && rr.Fresh(now);
   }
 };
 

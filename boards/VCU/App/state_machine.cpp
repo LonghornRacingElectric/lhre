@@ -18,10 +18,7 @@ bool Ready(const StateInputs& in) { return C::ReadyForRtd(in); }
 bool NotReady(const StateInputs& in) { return !C::ReadyForRtd(in); }
 bool RtdRequest(const StateInputs& in) { return C::RtdRequest(in); }
 
-// Leave DRIVE on: shutdown loop open, contactors open / HVC not energized,
-// CAN timeout (HVC, inverter, PDU), inverter fault, or any torque-cut
-// fault. Timeouts and the loop also raise torque-cut fault bits; they are
-// checked directly here so the table doesn't depend on fault bookkeeping.
+// Check liveness and shutdown directly, independent of the fault mask.
 bool DriveExitFault(const StateInputs& in) {
   return !C::Energized(in) || !in.loop_closed || in.torque_cut_fault ||
          !in.inverter_ready || !in.pdu_fresh;

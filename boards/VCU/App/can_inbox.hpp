@@ -10,10 +10,7 @@
 
 namespace vcu {
 
-// Single-producer/single-consumer queue from a bus's RX callback (interrupt
-// context on target) to the control task. Classic frames only: the VCU's
-// buses run without FD, so anything longer than 8 bytes is dropped and
-// counted.
+// ISR-to-control SPSC queue for classic CAN frames.
 class CanInbox {
  public:
   static constexpr size_t kDepth = 64;  // power of two

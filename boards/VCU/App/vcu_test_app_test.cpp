@@ -69,6 +69,20 @@ TEST_F(TestImage, ReportsDigitalInputs) {
   EXPECT_FALSE(io.inputs_b1_disconnect);
 }
 
+TEST_F(TestImage, SharedRainbowRunsWithoutVehicleCanAndResumesAfterOverride) {
+  Run(20);
+  const float red = b_.led_r.duty();
+  Run(500);
+  EXPECT_NE(b_.led_r.duty(), red);
+  Shell("/led 100 0 0");
+  Run(20);
+  EXPECT_FLOAT_EQ(b_.led_r.duty(), 1);
+  EXPECT_FLOAT_EQ(b_.led_g.duty(), 0);
+  Shell("/led auto");
+  Run(40);
+  EXPECT_GT(b_.led_g.duty(), 0);
+}
+
 TEST_F(TestImage, DrivesOutputsFromShellAndCan) {
   Run(20);
   EXPECT_NE(Shell("/out linelock 1").find("linelock=1"), std::string::npos);

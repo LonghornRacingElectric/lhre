@@ -15,9 +15,7 @@ struct TorqueInputs {
   float dc_bus_current = 0.0f;  // inverter 0x0A6 (negative = regen)
   float ocv_min_cell_v = 0.0f;  // battery estimate
   uint32_t dt_ms = 0;
-  // Hooks: wheel speeds (rad/s, FL FR RL RR) once USM frames are
-  // subscribed; not used by the ported traction control.
-  const float* wheel_speeds_rad_s = nullptr;
+  uint32_t speed_sample_ms = 0;  // arrival time of the chosen CAN speed sample
 };
 
 struct TorqueOutputs {
@@ -28,9 +26,8 @@ struct TorqueOutputs {
   float power_w = 0.0f;
 };
 
-// Positive torque request chain, ported from lhre-2026 TorqueMap.c,
-// PowerLimit.c and TractionControl.c in model order. Fault and state gating
-// happen in the app.
+// Pedal map -> power limit -> acceleration limiter. App handles state/fault
+// gating.
 class TorquePath {
  public:
   TorqueOutputs Update(const TorqueInputs& in, const TorqueParams& torque,
@@ -41,17 +38,10 @@ class TorquePath {
   float power_integral_ = 0.0f;
   float tc_integral_ = 0.0f;
   float tc_prev_omega_ = 0.0f;
+  uint32_t tc_prev_sample_ms_ = 0;
+  float tc_trim_ = 0.0f;
   bool tc_seeded_ = false;
   Ema tc_alpha_filter_;
 };
-
-// Regen blending hook. lhre-2026's RegenLinelock.c (endurance only) is not
-// ported: Rev A keeps the line lock request at 0 until regen blending is
-// designed around BSE3 from the PDU.
-struct RegenOutputs {
-  float torque_nm = 0.0f;  // <= 0 when active
-  bool linelock_request = false;
-};
-RegenOutputs RegenHook(float bse3_psi, bool bse3_available);
 
 }  // namespace vcu

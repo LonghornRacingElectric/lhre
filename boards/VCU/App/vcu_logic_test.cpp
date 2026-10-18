@@ -8,7 +8,7 @@
 #include "buzzer.hpp"
 #include "debounce.hpp"
 #include "faults.hpp"
-#include "lhal/host/adc.hpp"
+#include "host_adc.hpp"
 #include "lookup.hpp"
 #include "pedals.hpp"
 #include "shutdown_loop.hpp"
@@ -24,8 +24,7 @@ using vcu::Params;
 
 const Params& P() { return vcu::ParamsFor(vcu::kDefaultEventMode); }
 
-// Analog -------------------------------------------------------------------
-
+// Analog
 TEST(Analog, VddaFromVrefint) {
   bool from = false;
   // 3.0 V x 1650 / 1500 = 3.3 V.
@@ -45,8 +44,8 @@ TEST(Analog, VddaFromVrefint) {
 }
 
 TEST(Analog, DividerMathMatchesTheSchematic) {
-  lhal::host::AdcScan adc1(vcu::kAdc1Channels);
-  lhal::host::AdcScan adc2(vcu::kAdc2Channels);
+  vcu::host::AdcScan adc1(vcu::kAdc1Channels);
+  vcu::host::AdcScan adc2(vcu::kAdc2Channels);
   adc1.Set(vcu::kAdc1Vrefint, 1500);
   // 4.5 V sensor -> 2.980 V pin through 5.1k/10k.
   adc1.SetVolts(vcu::kAdc1Apps1, 4.5f * 10.0f / 15.1f, 3.3f);
@@ -66,8 +65,7 @@ TEST(Analog, NullBanksReadZero) {
   EXPECT_EQ(r.vdda, 3.3f);
 }
 
-// Lookup -------------------------------------------------------------------
-
+// Lookup
 TEST(Lookup, InterpolatesAndClamps) {
   const float y[] = {0.0f, 10.0f, 20.0f};
   EXPECT_FLOAT_EQ(vcu::Lookup1D(y, 3, 0.0f, 2.0f, -1.0f), 0.0f);
@@ -76,8 +74,7 @@ TEST(Lookup, InterpolatesAndClamps) {
   EXPECT_FLOAT_EQ(vcu::Lookup1D(y, 3, 0.0f, 2.0f, 9.0f), 20.0f);
 }
 
-// Debounce -----------------------------------------------------------------
-
+// Debounce
 TEST(Debouncer, NeedsStableLevelForTheWholeWindow) {
   vcu::Debouncer d;
   EXPECT_FALSE(d.Update(true, 0, 10));
@@ -118,8 +115,7 @@ TEST(PersistenceTimer, HoldsAfterDurationAndDropsAtOnce) {
   EXPECT_FALSE(p.Update(true, 102, 100));  // restarts
 }
 
-// Pedals -------------------------------------------------------------------
-
+// Pedals
 vcu::PedalInputs Pedal(float travel, float brake_psi = 0.0f) {
   const auto& a = P().apps;
   const auto& b = P().bse;
@@ -227,8 +223,7 @@ TEST(Pedals, HardBrakeCrossCheck) {
   EXPECT_TRUE(Settle(pp, in, &t, 30).hard_brake_mismatch);
 }
 
-// Steering -----------------------------------------------------------------
-
+// Steering
 TEST(Steering, PortedMappingAndRange) {
   // pct 0.33 is the 2026 car's centre (+7 deg offset).
   const float v = 0.5f + 0.33f * 4.0f;
@@ -246,8 +241,7 @@ TEST(BrakeBias, HoldsBelowThreshold) {
   EXPECT_FLOAT_EQ(bias.Update(100, 100, 1000), 0.75f);
 }
 
-// Shutdown loop ------------------------------------------------------------
-
+// Shutdown loop
 ShutdownLoopState Loop(float in_loop_v, float out_loop_v) {
   vcu::ShutdownLoop loop;
   const float r = P().analog.shutdown_divider_ratio;
@@ -287,8 +281,7 @@ TEST(ShutdownLoop, HysteresisHoldsNearThreshold) {
   EXPECT_FALSE(loop.closed());
 }
 
-// Faults -------------------------------------------------------------------
-
+// Faults
 TEST(Faults, PrimaryFaultPriority) {
   using lhre::can::VcuFaultCode;
   EXPECT_EQ(vcu::PrimaryFault(0), VcuFaultCode::kNone);
@@ -339,8 +332,7 @@ TEST(Faults, ErrorLedsDefaultOnAndLatch) {
   EXPECT_TRUE(leds.imd_on());
 }
 
-// Torque -------------------------------------------------------------------
-
+// Torque
 TEST(Torque, MapPowerLimitAndDerate) {
   vcu::TorquePath path;
   vcu::TorqueInputs in;
@@ -381,14 +373,7 @@ TEST(Torque, SkidpadParamsSaturateAt70Percent) {
   EXPECT_NEAR(out.lookup, 210.0f * 0.70f, 0.01f);
 }
 
-TEST(Torque, RegenHookIsInertUntilBlendingExists) {
-  const vcu::RegenOutputs r = vcu::RegenHook(800.0f, true);
-  EXPECT_EQ(r.torque_nm, 0.0f);
-  EXPECT_FALSE(r.linelock_request);
-}
-
-// Battery ------------------------------------------------------------------
-
+// Battery
 TEST(Battery, SoeTracksRestedCellVoltage) {
   vcu::BatteryEstimator est;
   vcu::BatteryInputs in;
@@ -420,8 +405,7 @@ TEST(Battery, EnergyMetering) {
   EXPECT_NEAR(out.regen_energy_wh, 10000.0 / 3600.0, 1e-6);
 }
 
-// Buzzer -------------------------------------------------------------------
-
+// Buzzer
 TEST(Buzzer, DurationCapAndLoopCut) {
   vcu::Buzzer bz;
   bz.Start(0, 1200);

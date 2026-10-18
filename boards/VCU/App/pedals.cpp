@@ -24,7 +24,7 @@ PedalOutputs PedalProcessor::Update(const PedalInputs& in, uint32_t now_ms,
                                     const BseParams& bse) {
   PedalOutputs out;
 
-  // APPS ------------------------------------------------------------------
+  // APPS
   out.apps1_travel_unclamped =
       Normalize(in.apps1_v, apps.apps1_v_at_0, apps.apps1_v_at_100);
   out.apps2_travel_unclamped =
@@ -52,7 +52,7 @@ PedalOutputs PedalProcessor::Update(const PedalInputs& in, uint32_t now_ms,
       Deadzone(pedal_filter_.Update(average, apps.ema_alpha),
                apps.min_travel_deadzone, apps.max_travel_deadzone);
 
-  // BSE -------------------------------------------------------------------
+  // BSE
   out.bse1_psi_unclamped =
       Normalize(in.bse1_v, bse.v_at_0_psi, bse.v_at_full) * bse.full_scale_psi;
   out.bse2_psi_unclamped =

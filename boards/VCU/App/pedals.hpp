@@ -21,7 +21,7 @@ struct PedalInputs {
 };
 
 struct PedalOutputs {
-  // APPS ------------------------------------------------------------------
+  // APPS
   float apps1_travel_unclamped = 0.0f;
   float apps2_travel_unclamped = 0.0f;
   float apps1_travel = 0.0f;  // clamped 0..1
@@ -33,7 +33,7 @@ struct PedalOutputs {
   bool apps2_out_of_range = false;
   bool apps_mismatch = false;     // deviation over threshold (instantaneous)
   bool apps_implausible = false;  // T.4.2: persisted > implausible_ms
-  // BSE -------------------------------------------------------------------
+  // BSE
   float bse1_psi_unclamped = 0.0f;
   float bse2_psi_unclamped = 0.0f;
   float bse1_psi = 0.0f;  // clamped 0..full scale
@@ -49,7 +49,7 @@ struct PedalOutputs {
   float brake_light = 0.0f;    // duty for the PDU
   bool brake_for_rtd = false;  // filtered >= brake_light_psi
   bool brake_over_throttle = false;
-  // Cross-check -----------------------------------------------------------
+  // Cross-check
   bool firmware_hard_brake = false;
   bool hard_brake_mismatch = false;
 };

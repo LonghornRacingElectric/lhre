@@ -12,6 +12,7 @@
 
 #include "FreeRTOS.h"
 #include "lhal/host/can.hpp"
+#include "lhal/host/pwm.hpp"
 #include "lhal/host/system.hpp"
 #include "lhal/host/watchdog.hpp"
 #include "lhre_can_vcu.hpp"
@@ -33,11 +34,14 @@ TEST(VcuRtos, TasksRunUnderScheduler) {
   static lhal::host::Can vcu_can(&network);
   static lhal::host::Can observer(&network);
   static lhal::host::Watchdog watchdog;
+  static lhal::host::Pwm red, green, blue;
+  static vcu::RgbLed led(&red, &green, &blue);
 
   vcu::Peripherals p;
   p.clock = &clock;
   p.critical_can = &vcu_can;
   p.watchdog = &watchdog;
+  p.status_led = &led;
   static vcu::App app(p);
 
   app.StartTasks();
@@ -69,6 +73,8 @@ TEST(VcuRtos, TasksRunUnderScheduler) {
   EXPECT_TRUE(watchdog.started());
   EXPECT_GE(watchdog.refresh_count(), 5u);
   EXPECT_EQ(app.state(), vcu::VcuState::kIdle);
+  EXPECT_GT(green.duty(), 0);
+  EXPECT_LT(red.duty(), 0.5f) << "independent rainbow task must advance";
 }
 
 }  // namespace

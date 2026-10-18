@@ -29,6 +29,15 @@ until the telemetry side moves over. `VCU_STATUS`, `VCU_DEBUG`,
 `VCU_BOOTLOADER_DATA`, and the `HVC_PACK_STATUS`/`HVC_CELL_TEMPS` pair are
 the original seed examples.
 
+VCU fault code 21 / fault bit 20 reports stalled ADC acquisition. Existing
+fault numbers and message layouts are preserved. Inverter timeout includes
+required measurement feedback; motor disconnect now cuts torque.
+
+USM wheel speeds arrive on Data at IDs 0x402–0x405 (FL, FR, RL, RR),
+with signed little-endian speed in bytes 6–7 at 0.01 rad/s. The legacy
+sender schedules these every 3 ms; its `FREQ` macro stores milliseconds,
+not Hz. The old 0x130 packet is not four independent wheel speeds.
+
 Spec files carry no comments. Textproto comments do not survive the
 canonical serializer, so prose goes in `description` fields, which the
 generators forward into generated code and docs.

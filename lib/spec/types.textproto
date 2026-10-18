@@ -221,7 +221,7 @@ enum_type {
   value {
     name: "INVERTER_TIMEOUT"
     number: 11
-    description: "Inverter status timed out"
+    description: "Required inverter status, speed, current or voltage feedback timed out"
   }
   value {
     name: "PDU_TIMEOUT"
@@ -261,12 +261,17 @@ enum_type {
   value {
     name: "MOTOR_DISCONNECT"
     number: 19
-    description: "motor_disconnect input asserted (diagnostic)"
+    description: "motor_disconnect input asserted; torque cut and DRIVE exit"
   }
   value {
     name: "SHUTDOWN_SENSE_IMPLAUSIBLE"
     number: 20
     description: "Shutdown out tap high with in tap low (diagnostic)"
+  }
+  value {
+    name: "ADC_STALE"
+    number: 21
+    description: "An ADC bank stopped completing scans; torque cut"
   }
 }
 enum_type {
@@ -485,7 +490,7 @@ bitfield_type {
   }
   bit {
     name: "inverter_timeout"
-    description: "Inverter status timed out"
+    description: "Required inverter status, speed, current or voltage feedback timed out"
   }
   bit {
     name: "pdu_timeout"
@@ -517,11 +522,15 @@ bitfield_type {
   }
   bit {
     name: "motor_disconnect"
-    description: "motor_disconnect input asserted (diagnostic)"
+    description: "motor_disconnect input asserted; torque cut and DRIVE exit"
   }
   bit {
     name: "shutdown_sense_implausible"
     description: "Shutdown out tap high with in tap low (diagnostic)"
+  }
+  bit {
+    name: "adc_stale"
+    description: "An ADC bank stopped completing scans; torque cut"
   }
 }
 bitfield_type {

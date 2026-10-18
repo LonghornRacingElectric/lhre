@@ -1,16 +1,6 @@
-// VCU Rev A firmware entry point — hand-written, not CubeMX-generated.
-// Everything under Core/ is CubeMX-owned; everything under Board/ is ours.
-//
-// Order matters for safety: reset cause first (before anything clears the
-// flags), then clocks, then every output pin into its safe state before
-// any peripheral or task can touch it. The application (App/) only ever
-// sees LHAL adapters; the vehicle image (vcu::App) and the bring-up test
-// image (vcu::TestApp, built as :vcu_test with VCU_TEST_IMAGE) share this
-// bring-up.
+// VCU Rev A startup, shared by the vehicle and test images.
 
 #include "main.h"
-
-#include <cstring>
 
 #include "FreeRTOS.h"
 #include "adc.h"
@@ -18,9 +8,9 @@
 #include "board_safe_state.hpp"
 #include "dac.h"
 #include "dma.h"
+#include "dma_adc.hpp"
 #include "fdcan.h"
 #include "gpio.h"
-#include "lhal/stm32/adc.hpp"
 #include "lhal/stm32/can.hpp"
 #include "lhal/stm32/dac.hpp"
 #include "lhal/stm32/gpio.hpp"
@@ -29,12 +19,12 @@
 #include "lhal/stm32/reset.hpp"
 #include "lhal/stm32/system.hpp"
 #include "lhal/stm32/uart.hpp"
-#include "lhal/stm32/usb_cdc.hpp"
 #include "lhal/stm32/watchdog.hpp"
-#include "lhre/build_info.hpp"
 #include "task.h"
 #include "tim.h"
+#include "usb_cdc.hpp"
 #include "usb_device.h"
+#include "usbd_desc.h"
 #include "vcu_io.hpp"
 #ifdef VCU_TEST_IMAGE
 #include "vcu_test_app.hpp"
@@ -60,13 +50,6 @@ class Board final : public vcu::BoardServices {
   }
 };
 
-// Hook for the future "build info" CAN response frame: 7 ASCII bytes of the
-// commit SHA plus a dirty flag.
-[[maybe_unused]] void FillBuildInfoFrame(uint8_t out[8]) {
-  std::memcpy(out, lhre::kBuildInfo.git_sha, 7);
-  out[7] = lhre::kBuildInfo.dirty ? 1 : 0;
-}
-
 }  // namespace
 
 int main() {
@@ -75,10 +58,7 @@ int main() {
 
   lhal::stm32::InitCore();  // HAL_Init + CubeMX-generated SystemClock_Config
 
-  // Pins: CubeMX drives every output low first, which is safe for
-  // Linelock_Ctrl, Amp_Shutdown_SW and the STB pins; BMS/IMD_Error_SW go
-  // straight back high (LED on, the board default) — the .ioc should set
-  // them high initially (IOC changes needed #9).
+  // Restore the lamp-on defaults after CubeMX initializes the GPIOs.
   MX_GPIO_Init();
   vcu_board::ForceSafeOutputs();
 
@@ -101,10 +81,12 @@ int main() {
   static lhal::stm32::Clock clock;
   static Board board;
 
-  static lhal::stm32::DmaAdc adc1(&hadc1, vcu_board::g_adc1_buffer,
-                                  vcu::kAdc1Channels);
-  static lhal::stm32::DmaAdc adc2(&hadc2, vcu_board::g_adc2_buffer,
-                                  vcu::kAdc2Channels);
+  static vcu_board::DmaAdc adc1(&hadc1, vcu_board::g_adc1_buffer,
+                                vcu::kAdc1Channels, 4095,
+                                &vcu_board::g_adc1_scans);
+  static vcu_board::DmaAdc adc2(&hadc2, vcu_board::g_adc2_buffer,
+                                vcu::kAdc2Channels, 4095,
+                                &vcu_board::g_adc2_scans);
   if (!lhal::IsOk(adc1.Start()) || !lhal::IsOk(adc2.Start())) {
     Error_Handler();
   }
@@ -128,10 +110,21 @@ int main() {
   led_r.Start();
   led_g.Start();
   led_b.Start();
+  // Match the old CCR brightness: boot 125, rainbow peak 127 (ARR=1000).
+  static vcu::RgbLed status_led(&led_r, &led_g, &led_b,
+                                127.0f / (htim2.Init.Period + 1),
+                                125.0f / (htim2.Init.Period + 1));
 
   static lhal::stm32::Uart debug_uart(&vcu_board::huart3);
-  static lhal::stm32::UsbCdc usb(&hUsbDeviceFS);  // before MX_USB_Device_Init
-  MX_USB_Device_Init();
+  static vcu_board::UsbCdc usb(&hUsbDeviceFS);
+  // Same startup as CubeMX, with the VCU receive callbacks installed before USB
+  // starts.
+  if (USBD_Init(&hUsbDeviceFS, &CDC_Desc, DEVICE_FS) != USBD_OK ||
+      USBD_RegisterClass(&hUsbDeviceFS, &USBD_CDC) != USBD_OK ||
+      USBD_CDC_RegisterInterface(&hUsbDeviceFS, &VcuUsbInterface) != USBD_OK ||
+      USBD_Start(&hUsbDeviceFS) != USBD_OK) {
+    Error_Handler();
+  }
   static lhal::stm32::Iwdg watchdog;
 
   static lhal::stm32::Gpio b1_disconnect(GPIOD, GPIO_PIN_13);
@@ -166,6 +159,7 @@ int main() {
   p.led_r = &led_r;
   p.led_g = &led_g;
   p.led_b = &led_b;
+  p.status_led = &status_led;
   p.inputs.b1_disconnect = &b1_disconnect;
   p.inputs.b1_overvoltage = &b1_overvoltage;
   p.inputs.b2_disconnect = &b2_disconnect;
@@ -198,6 +192,3 @@ int main() {
 
   Error_Handler();  // the scheduler only returns if it failed to start
 }
-
-// Error_Handler() and assert_failed() come from the CubeMX-generated
-// Core/Src/main.c; customize them there inside USER CODE sections.

@@ -23,10 +23,7 @@ struct BatteryOutputs {
   double regen_energy_wh = 0.0;
 };
 
-// State of energy and energy metering, ported from lhre-2026 Battery.c.
-// The open-circuit cell voltage is tracked only after the pack has rested
-// (|I| below rest_current_a for rest_time_ms); until then the last estimate
-// holds (0 at boot).
+// Update OCV only after the pack rests; hold the estimate under load.
 class BatteryEstimator {
  public:
   BatteryOutputs Update(const BatteryInputs& in, const BatteryParams& p);

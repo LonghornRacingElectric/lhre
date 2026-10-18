@@ -7,13 +7,13 @@
 #include <cstdint>
 #include <memory>
 
-#include "lhal/host/adc.hpp"
+#include "host_adc.hpp"
+#include "host_uart.hpp"
 #include "lhal/host/can.hpp"
 #include "lhal/host/dac.hpp"
 #include "lhal/host/gpio.hpp"
 #include "lhal/host/pwm.hpp"
 #include "lhal/host/system.hpp"
-#include "lhal/host/uart.hpp"
 #include "lhal/host/watchdog.hpp"
 #include "lhre_can_bench.hpp"
 #include "lhre_can_dui.hpp"
@@ -21,6 +21,7 @@
 #include "lhre_can_inverter.hpp"
 #include "lhre_can_pdu.hpp"
 #include "lhre_can_pi.hpp"
+#include "lhre_can_usm.hpp"
 #include "lhre_can_vcu.hpp"
 #include "vcu_config.hpp"
 #include "vcu_io.hpp"
@@ -54,13 +55,14 @@ struct Bench {
   lhal::host::Can vcu_data{&data_net};
   lhal::host::Can car{&critical_net};  // HVC/inverter/PDU/DUI/Pi
   lhal::host::Can logger{&data_net};   // Pi / bench adapter on Data
-  lhal::host::Uart vcp;
-  lhal::host::Uart usb;
-  lhal::host::AdcScan adc1{kAdc1Channels};
-  lhal::host::AdcScan adc2{kAdc2Channels};
+  vcu::host::Uart vcp;
+  vcu::host::Uart usb;
+  vcu::host::AdcScan adc1{kAdc1Channels};
+  vcu::host::AdcScan adc2{kAdc2Channels};
   lhal::host::WaveformDac dac;
   lhal::host::Watchdog watchdog;
   lhal::host::Pwm led_r, led_g, led_b;
+  vcu::RgbLed status_led{&led_r, &led_g, &led_b};
   lhal::host::Gpio b1_disconnect, b1_overvoltage, b2_disconnect, b2_overvoltage,
       hard_braking, combined_condition, fault_confirmed, latch_state,
       linelock_out, motor_power, motor_disconnect, rtd_switch;
@@ -92,6 +94,7 @@ struct Bench {
     p.led_r = &led_r;
     p.led_g = &led_g;
     p.led_b = &led_b;
+    p.status_led = &status_led;
     p.inputs = {&b1_disconnect,   &b1_overvoltage,   &b2_disconnect,
                 &b2_overvoltage,  &hard_braking,     &combined_condition,
                 &fault_confirmed, &latch_state,      &linelock_out,
@@ -105,7 +108,7 @@ struct Bench {
   }
 
   // Sensor-side volts through the board divider onto the ADC.
-  void SetSensor(lhal::host::AdcScan& adc, size_t rank, float source_v,
+  void SetSensor(vcu::host::AdcScan& adc, size_t rank, float source_v,
                  float ratio) {
     adc.SetVolts(rank, source_v * ratio, kVdda);
   }
@@ -141,11 +144,18 @@ struct Bench {
   }
   void PressRtd(bool pressed) { rtd_switch.Write(!pressed); }
 
-  // The rest of the car --------------------------------------------------
+  // The rest of the car
   bool hvc_alive = true;
   lhre::can::HvcState hvc_state = lhre::can::HvcState::kNotEnergized;
   bool contactors = false;
   bool inverter_alive = true;
+  bool speed_alive = true;
+  bool current_alive = true;
+  bool voltage_alive = true;
+  bool adc1_alive = true;
+  bool adc2_alive = true;
+  float dc_bus_voltage = 500.0f;
+  float dc_bus_current = 0.0f;
   uint32_t inverter_run_faults = 0;
   bool pdu_alive = true;
   float bse3_psi = 0.0f;
@@ -155,6 +165,23 @@ struct Bench {
   bool bms_error = false;
   bool imd_error = false;
   int16_t motor_rpm = 0;
+  bool wheel_alive[4] = {};
+  float wheel_rad_s[4] = {};
+
+  void SendWheelFrames() {
+    lhre::can::usm::AccelerationVectorUnsprungWheelSpeedFl fl;
+    lhre::can::usm::AccelerationVectorUnsprungWheelSpeedFr fr;
+    lhre::can::usm::AccelerationVectorUnsprungWheelSpeedRl rl;
+    lhre::can::usm::AccelerationVectorUnsprungWheelSpeedRr rr;
+    fl.set_wheel_speed(wheel_rad_s[0]);
+    fr.set_wheel_speed(wheel_rad_s[1]);
+    rl.set_wheel_speed(wheel_rad_s[2]);
+    rr.set_wheel_speed(wheel_rad_s[3]);
+    if (wheel_alive[0]) logger.Send(fl.ToFrame());
+    if (wheel_alive[1]) logger.Send(fr.ToFrame());
+    if (wheel_alive[2]) logger.Send(rl.ToFrame());
+    if (wheel_alive[3]) logger.Send(rr.ToFrame());
+  }
 
   void Energize() {
     hvc_state = lhre::can::HvcState::kEnergized;
@@ -188,7 +215,17 @@ struct Bench {
       car.Send(inverter::InverterInternalStates{}.ToFrame());
       inverter::InverterHighSpeed hs;
       hs.motor_speed = motor_rpm;
-      car.Send(hs.ToFrame());
+      if (speed_alive) car.Send(hs.ToFrame());
+      if (current_alive) {
+        inverter::InverterCurrent current;
+        current.set_dc_bus_current(dc_bus_current);
+        car.Send(current.ToFrame());
+      }
+      if (voltage_alive) {
+        inverter::InverterVoltage voltage;
+        voltage.set_dc_bus_voltage(dc_bus_voltage);
+        car.Send(voltage.ToFrame());
+      }
     }
     if (pdu_alive) {
       pdu::PduBse3 b;
@@ -206,9 +243,12 @@ struct Bench {
   template <class AppT>
   void Run(AppT& app, uint32_t ms) {
     for (uint32_t i = 0; i < ms; ++i) {
+      if (adc1_alive) adc1.CompleteScan();
+      if (adc2_alive) adc2.CompleteScan();
       if (clock.Millis() % 5 == 0) {
         SendCarFrames();
       }
+      if (clock.Millis() % 3 == 0) SendWheelFrames();
       app.Step();
       clock.Advance(1);
     }

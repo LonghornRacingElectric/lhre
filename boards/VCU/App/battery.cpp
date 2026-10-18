@@ -26,7 +26,6 @@ BatteryOutputs BatteryEstimator::Update(const BatteryInputs& in,
       Lookup1D(p.soe_from_cell_voltage, kLookupPoints, p.soe_min_cell_v,
                p.soe_max_cell_v, out_.ocv_min_cell_v);
 
-  // Battery.c:46-57 energy metering on inverter V x I.
   const double step_wh = static_cast<double>(in.dc_bus_current) *
                          static_cast<double>(in.dc_bus_voltage) *
                          static_cast<double>(in.dt_ms) / 3.6e6;

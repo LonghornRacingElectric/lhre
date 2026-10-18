@@ -7,9 +7,7 @@
 
 namespace vcu {
 
-// Ready-to-drive sound timing. Starts on DRIVE entry, runs for the
-// configured duration but never past the local max_on_ms ceiling (no CAN
-// input can extend it), and cuts immediately if the shutdown loop opens.
+// Stop at the duration/ceiling or when the shutdown loop opens.
 class Buzzer {
  public:
   void Start(uint32_t now_ms, uint32_t duration_ms) {

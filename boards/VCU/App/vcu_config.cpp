@@ -11,8 +11,6 @@ Params MakeDefaults() {
   return p;
 }
 
-// lhre-2026 acceleration_params.h:6-48 (traction control present there but
-// disabled).
 Params MakeAcceleration() {
   Params p = MakeDefaults();
   p.event_mode = EventMode::kAcceleration;
@@ -24,8 +22,7 @@ Params MakeAcceleration() {
   return p;
 }
 
-// lhre-2026 skidpad_params.h (final values from #297): torque saturates at
-// 70% of available above 40% pedal, linear curve.
+// Cap skidpad torque at 70% above 40% pedal.
 Params MakeSkidpad() {
   Params p = MakeDefaults();
   p.event_mode = EventMode::kSkidpad;
@@ -44,9 +41,8 @@ Params MakeAutocross() {
   return p;
 }
 
-// lhre-2026 endurance_params.h enabled regen + line lock. Rev A keeps the
-// line lock request at 0 until regen blending exists, so endurance runs on
-// the defaults.
+// Last year's endurance enabled regen. Keep the new board's pressure and
+// valve commissioning opt-in; see RegenParams before enabling it here.
 Params MakeEndurance() {
   Params p = MakeDefaults();
   p.event_mode = EventMode::kEndurance;

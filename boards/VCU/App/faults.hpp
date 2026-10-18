@@ -29,26 +29,23 @@ enum FaultBit : uint32_t {
   kFaultContactorsOpen = 1u << 17,
   kFaultMotorDisconnect = 1u << 18,
   kFaultShutdownSenseImplausible = 1u << 19,
+  kFaultAdcStale = 1u << 20,
 };
 
-// Faults that zero torque and force DRIVE -> FAULT. Brake-over-throttle
-// zeroes torque without leaving DRIVE (it clears when the pedal is
-// released). The rest are diagnostics.
+// These faults exit DRIVE. Brake-over-throttle only cuts torque until pedal
+// release.
 inline constexpr uint32_t kTorqueCutFaults =
     kFaultAppsImplausible | kFaultBse1Range | kFaultBse2Range |
     kFaultBrakeFlagLatched | kFaultShutdownOpen | kFaultHvcTimeout |
     kFaultInverterTimeout | kFaultPduTimeout | kFaultInverterFault |
-    kFaultBspdTripped;
+    kFaultBspdTripped | kFaultMotorDisconnect | kFaultAdcStale;
 
 // The fault the dash shows when several are active: what most needs the
 // driver's attention first.
 lhre::can::VcuFaultCode PrimaryFault(uint32_t faults);
 
-// Soft latch for the board's brake comparator flags (B1/B2 disconnect and
-// overvoltage). Any debounced flag sets it; only an explicit driver reset
-// from the dash clears it, and only while no flag is active. It survives a
-// power cycle through BoardServices::SaveFaultLatch (the caller persists
-// when dirty()).
+// Brake comparator faults latch until a dash reset with all flags clear.
+// The app persists changes through BoardServices.
 class BrakeFlagLatch {
  public:
   // Persisted encoding: 0 = clear, kPersistedSet = latched.
@@ -82,10 +79,7 @@ class BrakeFlagLatch {
   uint8_t resets_ = 0;
 };
 
-// BMS/IMD error LEDs. The board lights them by default (pull-up on the FET
-// gate) when the MCU is dead; firmware only ever adds indication. A flag
-// once seen stays lit until power cycle (the HVC also latches them), and a
-// silent or never-heard HVC leaves them lit.
+// Latch reported BMS/IMD faults; light both lamps when HVC feedback is stale.
 class ErrorLeds {
  public:
   void Update(bool indicators_fresh, bool bms_error, bool imd_error) {

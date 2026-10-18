@@ -15,15 +15,9 @@ constexpr uint32_t kDebugUartBaud = 115200;
 }  // namespace
 
 void ConfigureCan() {
-  // No filter elements and the reset-default global filter (every frame
-  // into RX FIFO0), as on the 2026 VCU; the app filters in software.
-  // The .ioc leaves FDCAN2 (Critical) with automatic retransmission off,
-  // unlike FDCAN1; the 2026 Critical bus retransmitted. The controller is
-  // still in configuration mode until HAL_FDCAN_Start, so DAR is writable.
+  // Use the default accept-all RX filter. Enable Critical-bus retransmission.
   CLEAR_BIT(hfdcan2.Instance->CCCR, FDCAN_CCCR_DAR);
-  // Only FDCAN1's IRQs are enabled in the .ioc; LHAL's CAN adapter needs
-  // line 0 on both (RX, TX FIFO empty, bus-off). Priority 5 is
-  // configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY.
+  // CubeMX only enables FDCAN1 IRQs. Priority 5 permits FreeRTOS calls.
   HAL_NVIC_SetPriority(FDCAN2_IT0_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(FDCAN2_IT0_IRQn);
   HAL_NVIC_SetPriority(FDCAN2_IT1_IRQn, 5, 0);

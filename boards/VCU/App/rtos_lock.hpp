@@ -6,10 +6,8 @@
 
 namespace vcu {
 
-// Locks `mutex` for a scope when the scheduler runs. The scheduler-less
-// Step() path is single-threaded and can't take a mutex before the kernel
-// starts, so it skips the lock. With a zero wait the lock may fail; check
-// locked().
+// Scheduler-less tests are single-threaded and skip the mutex.
+// Check locked() when a timed lock can fail.
 class SchedulerLock {
  public:
   SchedulerLock(SemaphoreHandle_t mutex, TickType_t wait)

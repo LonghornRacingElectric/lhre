@@ -24,6 +24,7 @@ The DUI is a plain CAN peripheral this year.
 | `:vcu_app_test`           | Vehicle app end to end through `Step()` with LHAL fakes. |
 | `:vcu_test_app_test`      | Test image end to end.                                  |
 | `:vcu_rtos_test`          | Real FreeRTOS tasks under the simulator port.           |
+| `:control_features_test`  | Regen, launch ramp, sampled traction limiter, ADC progress. |
 | `:vcu_sim`                | Scripted drive under the simulator (`bazel run --config=local`). |
 | `:release`                | Both images' elf/bin/hex for CI artifacts.              |
 
@@ -37,7 +38,7 @@ The DUI is a plain CAN peripheral this year.
     hard-brake cross-check), `steering`, `shutdown_loop`, `faults` (fault
     bits, brake comparator soft latch, BMS/IMD lamp policy),
     `state_machine`, `torque` (ported 2026 torque map, power limit,
-    traction control, regen hook), `battery` (SoE, energy), `buzzer`,
+    motor-acceleration limiter), `control_features` (regen and launch ramp), `battery` (SoE, energy), `buzzer`,
     `status_led`.
   - `vcu_config.hpp`: every tunable, with per-event sets.
   - `vcu_io.hpp`: the Board/App contract (ADC ranks, pins, `Peripherals`,
@@ -54,8 +55,8 @@ The DUI is a plain CAN peripheral this year.
   - `board_safe_state.cpp`: the safe output levels, also used from
     `Error_Handler` and the fault handlers.
   - `rtos_hooks.cpp`, `irq_handlers.cpp`.
-- `Core/`: CubeMX-generated from `VCU.ioc`. Hand-edit only inside `USER
-  CODE` sections.
+- `Core/`: CubeMX-generated from `VCU.ioc`; change through regeneration,
+  not hand edits.
 - `STM32G474XX_FLASH.ld` / `startup_stm32g474xx.s`: linker script and
   startup. The linker script stops 2 KB short of the end of flash: the last
   page of bank 2 holds the brake fault latch.
@@ -66,7 +67,8 @@ The DUI is a plain CAN peripheral this year.
 | ---------- | ------ | -------- | --- |
 | supervisor | 20 ms  | idle+6   | Feeds the IWDG (100 ms) only if control and telemetry both made progress; otherwise forces safe outputs and lets the IWDG reset. |
 | control    | 3 ms   | idle+5   | Inputs, plausibility, state machine, torque, outputs, Critical-bus TX (333 Hz, as on the 2026 car). |
-| telemetry  | 10 ms  | idle+3   | Data-bus diagnostics, status LED, flash writes for the fault latch. |
+| telemetry  | 10 ms  | idle+3   | Data-bus diagnostics, flash writes for the fault latch. |
+| rainbow | 33 ms | idle+2 | VCU LED task; continuous five-second rainbow, as last year. |
 | shell ×2, logger | — | idle+1 | Debug consoles on the STDC14 VCP (USART3) and USB CDC. |
 
 ## Pin map (Rev A netlist)
@@ -96,6 +98,28 @@ The DUI is a plain CAN peripheral this year.
 - **Boot**: the reset cause is read before anything else (reported in
   `VCU_DIAG`, the boot log, and `/state`). Outputs are safe before any
   peripheral starts. The state starts at INIT, then IDLE, and torque is 0.
+  The board-local `vcu::RgbLed` starts white, then a dedicated static
+  `vcu::RainbowTask` runs the five-second rainbow continuously at
+  33 ms intervals, as last year's shared LED task did. Only this task
+  writes the PWM; BSPD_TRIPPED overrides its color. The test image also
+  cycles continuously; `/led` overrides it and `/led auto` resumes it.
+  TIM2 channel order/polarity and the legacy CCR=125 boot brightness /
+  CCR<=127 rainbow brightness are preserved. Unlike the old VCU's CAN
+  callback, control never repeatedly creates or destroys LED threads.
+- **ADC progress**: each completed DMA scan increments a counter. Either
+  bank without progress for 10 ms raises `ADC_STALE` (fault code 21), cuts
+  torque, disables the inverter command and leaves DRIVE. Constant sensor
+  values are healthy if conversions keep running. This is independent of
+  the task-progress watchdog.
+- **Inverter feedback**: status, faults, current, voltage and either speed
+  frame must be fresh. Losing any required measurement cuts torque and
+  requires a new RTD sequence; continued status messages cannot mask it.
+  Timeouts remain twice the spec period, including 200 ms for 10 Hz current.
+- **Motor disconnect**: PE6 high for 15 ms raises `MOTOR_DISCONNECT`, cuts
+  torque, disables the inverter command and leaves DRIVE. Clearing it does
+  not restart the car: a new RTD press is required. Bench-check polarity.
+  An unplugged cable can float; firmware cannot guarantee open-wire
+  detection without an electrical pull resistor or a defined source.
 - **States**: IDLE (LV on) → PRECHARGE → TS_ACTIVE → RTD_WAIT → DRIVE, with
   FAULT and a terminal BSPD_TRIPPED. RTD_WAIT needs:
   - the HVC energized, with both AIRs reading closed;
@@ -110,8 +134,10 @@ The DUI is a plain CAN peripheral this year.
   sequence. The table and its rationale are in `App/state_machine.cpp`.
 - **BSPD**: `latch_state_mcu` zeroes torque the same tick and enters
   BSPD_TRIPPED. Only a power cycle clears it, in hardware and in firmware.
-- **Brake comparator flags** cut torque through a soft latch. The latch is
-  stored in flash, so a power cycle doesn't clear it; only the dash's
+- **Brake comparator flags**: B1 disconnect, B2 disconnect, B1 overvoltage
+  and B2 overvoltage each cut torque, disable the inverter and exit DRIVE
+  after the 10 ms input debounce. They share a soft latch stored in flash,
+  so a power cycle doesn't clear it; only the dash's
   `DUI_DRIVER_INPUTS.fault_reset`, pressed while no flag is active, does.
 - **RTD sound**: a 1 kHz sine from the DAC for 1.2 s on entering DRIVE.
   There is a local 1.5 s ceiling, and the amp is cut immediately if the
@@ -119,15 +145,109 @@ The DUI is a plain CAN peripheral this year.
 - **BMS/IMD lamps**: firmware only ever adds indication. A flag in
   `HVC_INDICATORS` latches the lamp until power cycle, and a silent HVC
   lights both lamps.
-- **Line lock**: `Linelock_Ctrl` is a driven output but stays 0 until regen
-  blending exists (`RegenHook`). `VCU_DRIVE_STATE` carries the actual gated
+- **Line lock**: controlled over CAN to the PDU. Disabled in the default
+  configuration along with regen. `VCU_DRIVE_STATE` carries the gated
   `linelock_out` (byte 5, which the PDU acts on) and the request (byte 7).
 - **Event modes**: `VCU_MODE_COMMAND` (0x029) or `/mode` selects the
   acceleration, skidpad, autocross or endurance parameters. The change
   applies only outside DRIVE and is echoed in `VCU_DRIVE_STATE.event_mode`.
-- **Bootloader**: typing `update.` on either console (what `tools/dfu`
-  sends) reboots into the ST ROM DFU bootloader through BOOT0trig. It is
-  refused while the tractive system is up.
+- **Bootloader**: raw `update.` over USB works with or without a newline,
+  across USB packet boundaries, with no vehicle CAN or sensor prerequisite,
+  as in last year's shared DFU helper. USB reception detects the token
+  before buffering; the high-priority supervisor drives outputs safe,
+  sends a zero/disabled inverter request and enters ROM DFU independently
+  of the control task. The debug VCP accepts the same token via its shell.
+  Each console has its own matcher so partial tokens cannot join across
+  ports. Both vehicle and test images support standalone USB flashing.
+  The board selects flash bank 1 if needed (the old `ota_set_bank1` behavior),
+  holds PB7 BOOT0trig high for a measured 50 ms, then resets. USB flashing
+  still writes 0x08000000 with `tools/dfu`; no dual-bank OTA implementation
+  was copied. Physical BOOT0/reset and ST-Link remain recovery paths.
+
+## Control commissioning
+
+The inherited pedal calibration, map and event tables remain unchanged.
+Confirm endpoints with `/cal`: the inherited upper deadzone maps 74% of
+calibrated sensor travel to full pedal demand.
+
+Four independent wheel speeds are subscribed on the **Data** CAN bus,
+not GPIO: `0x402` FL, `0x403` FR, `0x404` RL and `0x405` RR. This matches
+last year's USM sender and generated packer: bytes 6–7 are signed
+little-endian counts at 0.01 rad/s. The actual sender period is 3 ms;
+legacy `FREQ=3` means milliseconds, not 3 Hz. Each corner expires after two
+periods. The older 0x130 packet cannot supply four independent speeds.
+`/state` reports wheel validity and drive/braking slip.
+
+`WheelControlParams::enabled` enables rear-drive slip control. It uses the
+faster undriven front wheel as speed reference, the faster rear wheel to
+detect one-wheel spin, and a bounded PI torque reduction. Reductions act
+immediately; torque recovery is limited. Missing/negative wheel feedback
+cuts positive torque while this feature is enabled. Near-zero speed uses a
+bounded denominator. Both tire radii match `vehicle/vehicle.yml` (0.2045 m).
+The 10% slip targets and controller gains are commissioning values; defaults
+remain off pending tire/vehicle tuning. Front/rear geometry differences in
+corners and front-wheel locking can bias this reference; it is not an ABS
+or a validated vehicle-speed observer.
+
+The inherited `TractionParams` motor-acceleration limiter remains available
+as a fallback, disabled as last year. It uses CAN sample intervals, filtered
+acceleration, held trim and a bounded integral. Enabling wheel-slip control
+bypasses that fallback so two traction limiters do not fight each other.
+
+`LaunchParams::enabled` defaults false. `/launch arm` requires acceleration
+mode, DRIVE, the brake pressed, released accelerator, near-zero motor speed
+and fresh stationary wheel feedback. Releasing the brake and applying
+throttle starts a torque cap ramp; the pedal, power and wheel-slip limits
+still win. Brake application, lost wheel data, faults, invalid timing or
+timeout abort it; an abort holds zero torque until pedal release. The
+initial 30 Nm / 100 Nm/s values require vehicle tuning. Tests exercise the
+feature enabled through the app's optional immutable parameter set.
+
+The pack is **132s3p Reliance INR21700-RS50**, confirmed by Rishi; the
+VCU regen settings use this configuration without changing the shared vehicle model. RS50 end-of-charge
+voltage is 4.2 V/cell, so the cell-based pack ceiling is 554.4 V. The inherited
+4.05 V max-cell regen cutoff remains more conservative.
+
+The [RS50 manufacturer product page](https://www.reliance-battery.com/products-en.html)
+lists 5 Ah capacity and 3C charging performance; the manufacturer-authored
+[datasheet](https://www.nkon.nl/amfile/file/download/file/504/product/5764/)
+lists 15 A maximum continuous charging per cell. Multiplying by three parallel
+cells gives a 45 A cell-based ceiling, not a verified pack/BMS permission.
+The existing HVC charger setting of 9.5 A is a charger command, not a regen
+charge-limit broadcast.
+
+`RegenParams::enabled` remains false. The unverified charging-current limit,
+hard-cut threshold and DC pack resistance default to zero, which prevents
+isolation/regen even if only the enable flag is switched on. Set these from
+validated pack/BMS limits and measured DC resistance before commissioning.
+Do not reuse last year's 130s5p resistance or substitute datasheet 1 kHz AC
+impedance for the DC model. Battery-temperature/charge-acceptance feedback
+still needs connecting. Tests supply explicitly synthetic limits to exercise
+the enabled algorithm without treating them as real pack settings.
+
+The inherited pressure mapping remains 67 Nm per 500 psi, with a 200 ms
+valve-command delay; both still require hydraulic/actuator validation.
+
+Regen pre-requests isolation only while both rear pressures are at most
+10 psi, the accelerator is released, speed/voltage/cell/BSE3 feedback is
+fresh (including all four Data-bus wheel speeds), and neither hardware nor
+firmware reports hard braking. It waits
+for the VCU's gated output and the 200 ms command delay, then requests
+negative torque proportional to pre-lock pressure minus post-lock pressure.
+That subtraction compensates estimated remaining hydraulic rear braking.
+Pack voltage/current and motor speed further limit torque. Hard braking,
+stale feedback, rear braking slip above the configured threshold, low speed,
+accelerator demand or a current cut releases
+the request and removes negative torque. After fallback it cannot close
+again under existing brake pressure. Positive torque is suppressed during
+a regen braking demand, even if regen becomes unavailable.
+
+`linelock_out` is the VCU logic gate, not physical valve acknowledgement.
+The PDU still owns actuation over CAN; validate its response and stale-CAN
+release behavior. Brake equivalence, transitions and rear-wheel stability
+need bench/vehicle measurements before enabling regen. The slower rear wheel
+is checked for locking relative to the front reference; this suppresses regen
+and opens isolation, but cannot modulate hydraulic brake pressure like ABS.
 
 CAN IDs, layouts, and buses are defined in [lib/spec](../../lib/spec/README.md)
 (see the [CAN matrix](../../docs/can-matrix.md)). Critical-bus content keeps
@@ -201,7 +321,18 @@ FDCAN on PCLK1, ADC on HCLK/2 = 48 MHz, USB on PLLQ.
 - Steering mapping constants (carried from the 2026 sensor), and the
   hard-brake trimmer set point (`BseParams::hard_brake_pin_v`).
 - Polarity of `motor_disconnect`. Neither motor cable has a pull resistor,
-  so an unplugged cable reads undefined; firmware uses those inputs as
-  diagnostics only.
+  so an unplugged cable reads undefined. `motor_power` remains diagnostic;
+  `motor_disconnect` now cuts torque when high after debounce.
 - Rule text for every threshold marked `TODO(verify rule)`. The RTD sound
   needs measuring against its 80-90 dBA band.
+
+### Board-local compatibility support
+
+The VCU keeps its ADC progress interface, host ADC/UART fakes, raw-command
+shell, RGB animation and rainbow task in `App/`. `Board/dma_adc.hpp` and
+`Board/usb_cdc.*` provide the hardware adapters. These are VCU-local versions
+of the existing shared implementations, extended for completed-scan monitoring,
+legacy brightness and newline-free DFU recovery. Shared drivers remain unchanged.
+Board startup follows CubeMX’s initialization sequence but registers the
+VCU USB callbacks before starting USB; generated files are unchanged.
+CAN message definitions and generated-code target declarations remain shared.

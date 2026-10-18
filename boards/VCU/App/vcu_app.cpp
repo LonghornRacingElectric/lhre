@@ -30,21 +30,18 @@ int Send(lhal::CanBus* bus, const lhal::CanFrame& frame) {
   return bus != nullptr && lhal::IsOk(bus->Send(frame)) ? 1 : 0;
 }
 
-bool InDriveOrTractive(VcuState s) {
-  return s == VcuState::kDrive || s == VcuState::kRtdWait ||
-         s == VcuState::kTsActive || s == VcuState::kPrecharge;
-}
-
 }  // namespace
 
-App::App(const Peripherals& peripherals)
+App::App(const Peripherals& peripherals, const Params* initial_params)
     : p_(peripherals),
       vcp_mutex_(xSemaphoreCreateMutexStatic(&vcp_mutex_control_)),
       usb_mutex_(xSemaphoreCreateMutexStatic(&usb_mutex_control_)),
       vcp_shell_(p_.debug_uart, p_.clock, "VCU", vcp_mutex_),
       usb_shell_(p_.usb_uart, p_.clock, "VCU", usb_mutex_),
       logger_(p_.debug_uart, p_.clock, vcp_mutex_),
-      params_(&ParamsFor(kDefaultEventMode)),
+      rainbow_(p_.status_led, p_.clock),
+      params_(initial_params != nullptr ? initial_params
+                                        : &ParamsFor(kDefaultEventMode)),
       snapshot_mutex_(xSemaphoreCreateMutexStatic(&snapshot_mutex_control_)) {
   // Outputs to their safe state before anything else runs (Board/ already
   // did this at the pin level before constructing the app).
@@ -62,6 +59,11 @@ App::App(const Peripherals& peripherals)
 
   RegisterShellCommands(vcp_shell_);
   RegisterShellCommands(usb_shell_);
+  if (p_.usb_uart == nullptr ||
+      !p_.usb_uart->SetRxObserver(&App::UsbReceive, this)) {
+    usb_shell_.SetByteHandler(&App::UsbByte, this);
+  }
+  vcp_shell_.SetByteHandler(&App::VcpByte, this);
   vcp_shell_.PrintBanner();
   logger_.Info("reset cause: %s", lhal::ToString(p_.reset_cause));
   if (brake_latch_.latched()) {
@@ -70,10 +72,9 @@ App::App(const Peripherals& peripherals)
 }
 
 void App::StartTasks() {
-  // Supervisor outranks everything so a wedged task can't starve the
-  // watchdog decision; control outranks telemetry; consoles sit at the
-  // bottom with the logger drain.
+  // Keep watchdog supervision above control and telemetry.
   logger_.StartTask(tskIDLE_PRIORITY + 1);
+  rainbow_.Start();
   xTaskCreateStatic(&App::SupervisorTaskEntry, "supervisor", kSupervisorStack,
                     this, tskIDLE_PRIORITY + 6, supervisor_stack_,
                     &supervisor_tcb_);
@@ -142,6 +143,7 @@ void App::Step() {
   }
   vcp_shell_.Poll();
   usb_shell_.Poll();
+  rainbow_.Step(now);
   logger_.DrainOne(0);
   if (lhal::ElapsedMs(now, step_control_ms_, kControlPeriodMs)) {
     step_control_ms_ = now;
@@ -157,9 +159,7 @@ void App::Step() {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Control loop
-// ---------------------------------------------------------------------------
 
 void App::ControlTick(uint32_t now) {
   if (!control_started_) {
@@ -173,8 +173,11 @@ void App::ControlTick(uint32_t now) {
 
   DrainCan(now);
 
-  // Inputs --------------------------------------------------------------
+  // Inputs
   live_.analog = ReadAnalog(p_.adc1, p_.adc2, p_.vrefint_cal, P.analog);
+  const bool adc1_fresh = adc1_progress_.Fresh(p_.adc1, now);
+  const bool adc2_fresh = adc2_progress_.Fresh(p_.adc2, now);
+  live_.adc_fresh = adc1_fresh && adc2_fresh;
   const AnalogReadings& a = live_.analog;
   DigitalInputs raw = ReadDigitalInputs(p_.inputs);
   DigitalInputs& in = live_.inputs;
@@ -187,9 +190,8 @@ void App::ControlTick(uint32_t now) {
                                            P.digital.brake_flag_debounce_ms);
   in.b2_overvoltage = b2_overvoltage_.Update(raw.b2_overvoltage, now,
                                              P.digital.brake_flag_debounce_ms);
-  // The motor_power / motor_disconnect cables have no pull resistors on
-  // Rev A: an unplugged cable leaves the Schmitt buffer input floating, so
-  // these are diagnostics only and debounced against chatter.
+  // The disconnected cable can float; verify polarity and add an electrical
+  // pull.
   in.motor_power =
       motor_power_.Update(raw.motor_power, now, P.digital.motor_debounce_ms);
   in.motor_disconnect = motor_disconnect_.Update(raw.motor_disconnect, now,
@@ -233,7 +235,7 @@ void App::ControlTick(uint32_t now) {
   live_.bse3_psi =
       live_.bse3_available ? rx_.pdu_bse3.msg.brake_pressure() : 0.0f;
 
-  // Faults and state ----------------------------------------------------
+  // Faults and state
   const bool inverter_fresh = rx_.InverterFresh(now);
   const bool inverter_faulted = rx_.InverterFaulted(now);
   faults_ = ComputeFaults(now, inverter_fresh, inverter_faulted);
@@ -273,12 +275,12 @@ void App::ControlTick(uint32_t now) {
   const VcuState state = sm_.state();
   ApplyModeRequests();
 
-  // Torque --------------------------------------------------------------
+  // Torque
   float rpm = 0.0f;
   live_.motor_speed_valid = rx_.MotorRpm(now, &rpm);
   live_.motor_rpm = rpm;
-  // Last value held when stale, as in lhre-2026 (0x0A6 is only 10 Hz); a
-  // dead inverter already forces DRIVE -> FAULT through InverterFresh().
+  // Values may be held for diagnostics, but every required feedback frame
+  // must be fresh for DRIVE (including the slower 10 Hz current frame).
   const float dc_v = rx_.inverter_voltage.seen()
                          ? rx_.inverter_voltage.msg.dc_bus_voltage()
                          : 0.0f;
@@ -305,19 +307,82 @@ void App::ControlTick(uint32_t now) {
   tin.dc_bus_current = dc_a;
   tin.ocv_min_cell_v = live_.battery.ocv_min_cell_v;
   tin.dt_ms = dt_ms;
-  live_.torque = torque_path_.Update(tin, P.torque, P.power_limit, P.traction);
-  const RegenOutputs regen = RegenHook(live_.bse3_psi, live_.bse3_available);
+  tin.speed_sample_ms = rx_.inverter_high_speed.Fresh(now)
+                            ? rx_.inverter_high_speed.last_ms
+                            : rx_.motor_position.last_ms;
+  TractionParams acceleration_limiter = P.traction;
+  if (P.wheel_control.enabled) acceleration_limiter.enabled = false;
+  live_.torque =
+      torque_path_.Update(tin, P.torque, P.power_limit, acceleration_limiter);
 
   // Torque only in DRIVE with no torque-cut fault and no brake-over-throttle.
-  const bool torque_allowed = state == VcuState::kDrive &&
-                              (faults_ & kTorqueCutFaults) == 0 &&
-                              !ped.brake_over_throttle;
-  torque_command_ = torque_allowed ? Clamp(live_.torque.traction, 0.0f,
-                                           P.inverter.torque_limit_nm)
-                                   : 0.0f;
+  const bool torque_allowed =
+      state == VcuState::kDrive && (faults_ & kTorqueCutFaults) == 0 &&
+      !ped.brake_over_throttle && !bootloader_entered_.load() &&
+      !bootloader_request_.load();
+  WheelInputs win;
+  win.fresh = wheels_.Fresh(now);
+  win.rad_s[0] = wheels_.fl.msg.wheel_speed();
+  win.rad_s[1] = wheels_.fr.msg.wheel_speed();
+  win.rad_s[2] = wheels_.rl.msg.wheel_speed();
+  win.rad_s[3] = wheels_.rr.msg.wheel_speed();
+  live_.wheel_control = wheel_control_.Update(
+      win, torque_allowed ? live_.torque.traction : 0, dt_ms, P.wheel_control);
+  if (launch_request_.exchange(false)) {
+    const bool armed =
+        launch_.Arm(torque_allowed && live_.wheel_control.valid &&
+                        live_.wheel_control.reference_m_s < 0.5f &&
+                        P.event_mode == EventMode::kAcceleration,
+                    ped.brake_for_rtd, ped.pedal_travel, rpm, P.launch);
+    logger_.Info(
+        "launch %s",
+        armed ? "armed" : "refused (disabled or not stationary/braked)");
+  }
+  if (P.launch.enabled && !live_.wheel_control.valid) launch_.Abort();
+  const float launch_torque =
+      launch_.Update(live_.wheel_control.positive_nm, torque_allowed,
+                     ped.brake_for_rtd, ped.pedal_travel, rpm, dt_ms, P.launch);
+  const float positive =
+      P.launch.enabled && !live_.wheel_control.valid ? 0 : launch_torque;
+  live_.launch_armed = launch_.armed();
+
+  RegenInputs rin;
+  rin.drive = torque_allowed;
+  rin.feedback_fresh = inverter_fresh && live_.bse3_available &&
+                       live_.wheel_control.valid &&
+                       live_.wheel_control.regen_allowed &&
+                       rx_.hvc_cell_limits.Fresh(now) && live_.adc_fresh;
+  rin.hard_braking = in.hard_braking || ped.firmware_hard_brake;
+  rin.linelock_out = in.linelock_out;
+  rin.pedal = ped.pedal_travel;
+  rin.rear_pre_psi = ped.bse2_psi;
+  rin.rear_post_psi = live_.bse3_psi;
+  rin.motor_rpm = rpm;
+  rin.dc_v = dc_v;
+  rin.dc_a = dc_a;
+  rin.max_cell_v = rx_.hvc_cell_limits.msg.max_cell_voltage();
+  rin.dt_ms = dt_ms;
+  const RegenResult regen = regen_.Update(rin, P.regen);
+  live_.regen_current_cut = regen.current_cut;
+  const bool regen_braking =
+      P.regen.enabled && ped.bse2_psi > P.regen.engage_max_psi;
+  torque_command_ = 0.0f;
+  if (torque_allowed && !regen.current_cut) {
+    if (regen.torque_nm < 0.0f) {
+      torque_command_ =
+          Clamp(regen.torque_nm, -P.inverter.torque_limit_nm, 0.0f);
+    } else if (!regen_braking) {
+      torque_command_ = Clamp(positive, 0.0f, P.inverter.torque_limit_nm);
+    }
+  }
+  if (!torque_allowed) torque_path_.Reset();
   live_.torque_command = torque_command_;
-  live_.inverter_enable = state == VcuState::kDrive;
+  live_.inverter_enable =
+      state == VcuState::kDrive && (faults_ & kTorqueCutFaults) == 0 &&
+      !bootloader_entered_.load() && !bootloader_request_.load();
   live_.linelock_request = torque_allowed && regen.linelock_request;
+
+  if (state == VcuState::kBspdTripped) rainbow_.Override(0.3f, 0, 0.3f);
 
   DriveOutputs(now);
   SendCritical(now);
@@ -332,6 +397,7 @@ void App::DrainCan(uint32_t now) {
   }
   // The vehicle image ignores bench frames on the Data bus.
   while (data_inbox_.Pop(&frame)) {
+    wheels_.Dispatch(frame, now);
   }
 }
 
@@ -363,6 +429,7 @@ uint32_t App::ComputeFaults(uint32_t now, bool inverter_fresh,
                             bool inverter_faulted) const {
   const PedalOutputs& ped = live_.pedals;
   uint32_t f = 0;
+  if (!live_.adc_fresh) f |= kFaultAdcStale;
   if (ped.apps_implausible) f |= kFaultAppsImplausible;
   if (ped.apps1_disconnect || ped.apps1_out_of_range) f |= kFaultApps1Range;
   if (ped.apps2_disconnect || ped.apps2_out_of_range) f |= kFaultApps2Range;
@@ -550,6 +617,7 @@ void App::SendCritical(uint32_t now) {
     vf.active_faults_motor_disconnect = (f & kFaultMotorDisconnect) != 0;
     vf.active_faults_shutdown_sense_implausible =
         (f & kFaultShutdownSenseImplausible) != 0;
+    vf.active_faults_adc_stale = (f & kFaultAdcStale) != 0;
     vf.primary_fault = PrimaryFault(f);
     vf.state = sm_.state();
     vf.brake_flags_latched = brake_latch_.latched();
@@ -592,12 +660,10 @@ void App::Publish(uint32_t now) {
 
 ControlSnapshot App::snapshot() {
   SchedulerLock lock(snapshot_mutex_, pdMS_TO_TICKS(5));
-  return published_;
+  return lock.locked() ? published_ : ControlSnapshot{};
 }
 
-// ---------------------------------------------------------------------------
 // Telemetry
-// ---------------------------------------------------------------------------
 
 void App::TelemetryTick(uint32_t now) {
   const ControlSnapshot s = snapshot();
@@ -625,11 +691,6 @@ void App::TelemetryTick(uint32_t now) {
     SendHealthDiag(p_.data_can, p_.reset_cause, now, crit, data);
   }
 
-  const Rgb rgb = StatusColor(s.state, s.primary_fault, now);
-  if (p_.led_r != nullptr) p_.led_r->SetDuty(rgb.r);
-  if (p_.led_g != nullptr) p_.led_g->SetDuty(rgb.g);
-  if (p_.led_b != nullptr) p_.led_b->SetDuty(rgb.b);
-
   // Flash writes for the brake latch happen here, off the control loop.
   if (latch_save_pending_.exchange(false) && p_.board != nullptr) {
     p_.board->SaveFaultLatch(latch_save_value_.load());
@@ -637,11 +698,20 @@ void App::TelemetryTick(uint32_t now) {
   telemetry_beats_.fetch_add(1);
 }
 
-// ---------------------------------------------------------------------------
 // Supervisor
-// ---------------------------------------------------------------------------
 
 void App::SupervisorTick(uint32_t now) {
+  // Like last year's DFU helper, updates work without the rest of the car
+  // and do not depend on control-task health. Quiesce outputs before reset.
+  if (bootloader_request_.exchange(false) && p_.board != nullptr) {
+    bootloader_entered_.store(true);
+    WriteDigitalOutputs(p_.outputs, SafeOutputs());
+    msg::InverterTorqueCommand stop;
+    stop.direction = true;
+    Send(p_.critical_can, stop.ToFrame());
+    p_.board->EnterBootloader();
+    return;
+  }
   if (!watchdog_started_) {
     watchdog_started_ = true;
     control_progress_ms_ = now;
@@ -675,11 +745,9 @@ void App::SupervisorTick(uint32_t now) {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Shell
-// ---------------------------------------------------------------------------
 
-void App::RegisterShellCommands(longhorn::Shell& shell) {
+void App::RegisterShellCommands(vcu::Shell& shell) {
   shell.AddCommand(
       {"state", "state, faults, mode, torque", &App::StateCommand, this});
   shell.AddCommand({"faults", "active fault list", &App::FaultsCommand, this});
@@ -689,6 +757,8 @@ void App::RegisterShellCommands(longhorn::Shell& shell) {
       {"analog", "ADC counts, volts, calibrated", &App::AnalogCommand, this});
   shell.AddCommand({"mode", "event mode [0-4] (applied outside DRIVE)",
                     &App::ModeCommand, this});
+  shell.AddCommand({"launch", "launch arm (opt-in acceleration ramp)",
+                    &App::LaunchCommand, this});
   shell.SetPlainLineHandler(&App::PlainLine, this);
 }
 
@@ -711,6 +781,12 @@ void App::StateCommand(void* ctx, longhorn::Console& out, const char*) {
              lhal::ToString(app->p_.reset_cause), s.brake_flags_latched ? 1 : 0,
              s.fault_resets, static_cast<int>(s.battery.soe_pct),
              s.buzzer ? 1 : 0);
+  out.Printf("adc_fresh=%d launch_armed=%d regen_current_cut=%d", s.adc_fresh,
+             s.launch_armed, s.regen_current_cut);
+  out.Printf("wheel_feedback=%d drive_slip=%d%% brake_slip=%d%%",
+             s.wheel_control.valid,
+             static_cast<int>(s.wheel_control.drive_slip * 100),
+             static_cast<int>(s.wheel_control.braking_slip * 100));
 }
 
 void App::FaultsCommand(void* ctx, longhorn::Console& out, const char*) {
@@ -775,22 +851,42 @@ void App::ModeCommand(void* ctx, longhorn::Console& out, const char* args) {
 }
 
 void App::PlainLine(void* ctx, longhorn::Console& out, const char* line) {
-  auto* app = static_cast<App*>(ctx);
+  (void)ctx;
   // tools/dfu sends "update." to reboot into the ROM bootloader. Refused
   // while the tractive system is up.
   if (std::strcmp(line, "update.") == 0) {
-    if (InDriveOrTractive(app->sm_.state())) {
-      out.Println("refused: tractive system active");
-      return;
-    }
     out.Println("entering bootloader");
-    WriteDigitalOutputs(app->p_.outputs, SafeOutputs());
-    if (app->p_.board != nullptr) {
-      app->p_.board->EnterBootloader();
-    }
     return;
   }
   out.Println("commands start with '/' (try /help)");
+}
+
+bool App::UsbByte(void* ctx, uint8_t byte) {
+  auto* app = static_cast<App*>(ctx);
+  const bool match = app->usb_dfu_.Feed(byte);
+  if (match) app->bootloader_request_.store(true);
+  return match;
+}
+
+void App::UsbReceive(void* ctx, const uint8_t* bytes, size_t len) {
+  for (size_t i = 0; i < len; ++i) UsbByte(ctx, bytes[i]);
+}
+
+bool App::VcpByte(void* ctx, uint8_t byte) {
+  auto* app = static_cast<App*>(ctx);
+  const bool match = app->vcp_dfu_.Feed(byte);
+  if (match) app->bootloader_request_.store(true);
+  return match;
+}
+
+void App::LaunchCommand(void* ctx, longhorn::Console& out, const char* args) {
+  if (std::strcmp(args, "arm") != 0) {
+    out.Println("usage: /launch arm");
+    return;
+  }
+  static_cast<App*>(ctx)->launch_request_.store(true);
+  out.Println(
+      "launch request queued (requires enabled acceleration configuration)");
 }
 
 }  // namespace vcu

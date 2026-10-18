@@ -1,8 +1,6 @@
 #pragma once
 
-// Board-level safe output state, shared by bring-up, the fault hooks, and
-// Error_Handler. Pin assignments come from the Rev A netlist (see
-// boards/VCU/README.md, "Pin map").
+// Safe outputs for startup and fault handlers.
 
 #include "main.h"
 

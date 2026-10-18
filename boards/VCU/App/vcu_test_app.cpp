@@ -71,6 +71,7 @@ TestApp::TestApp(const Peripherals& peripherals)
       vcp_shell_(p_.debug_uart, p_.clock, "VCU-TEST", vcp_mutex_),
       usb_shell_(p_.usb_uart, p_.clock, "VCU-TEST", usb_mutex_),
       logger_(p_.debug_uart, p_.clock, vcp_mutex_),
+      rainbow_(p_.status_led, p_.clock),
       state_mutex_(xSemaphoreCreateMutexStatic(&state_mutex_control_)) {
   shared_.outputs = SafeOutputs();
   WriteDigitalOutputs(p_.outputs, shared_.outputs);
@@ -81,6 +82,11 @@ TestApp::TestApp(const Peripherals& peripherals)
   data_inbox_.Attach(p_.data_can);
   RegisterShellCommands(vcp_shell_);
   RegisterShellCommands(usb_shell_);
+  if (p_.usb_uart == nullptr ||
+      !p_.usb_uart->SetRxObserver(&TestApp::UsbReceive, this)) {
+    usb_shell_.SetByteHandler(&TestApp::UsbByte, this);
+  }
+  vcp_shell_.SetByteHandler(&TestApp::VcpByte, this);
   vcp_shell_.PrintBanner();
   logger_.Warning("VCU bring-up test image: no vehicle logic");
   logger_.Info("reset cause: %s", lhal::ToString(p_.reset_cause));
@@ -88,6 +94,7 @@ TestApp::TestApp(const Peripherals& peripherals)
 
 void TestApp::StartTasks() {
   logger_.StartTask(tskIDLE_PRIORITY + 1);
+  rainbow_.Start();
   xTaskCreateStatic(&TestApp::SupervisorTaskEntry, "supervisor",
                     kSupervisorStack, this, tskIDLE_PRIORITY + 6,
                     supervisor_stack_, &supervisor_tcb_);
@@ -142,6 +149,7 @@ void TestApp::Step() {
   }
   vcp_shell_.Poll();
   usb_shell_.Poll();
+  rainbow_.Step(now);
   logger_.DrainOne(0);
   if (lhal::ElapsedMs(now, step_io_ms_, kIoPeriodMs)) {
     step_io_ms_ = now;
@@ -212,13 +220,10 @@ void TestApp::IoTick(uint32_t now) {
   UpdateTone(now, s);
   WriteDigitalOutputs(p_.outputs, s.outputs);
 
-  const Rgb rgb = s.led_override
-                      ? s.led
-                      : StatusColor(lhre::can::VcuState::kInit,
-                                    lhre::can::VcuFaultCode::kNone, now);
-  if (p_.led_r != nullptr) p_.led_r->SetDuty(rgb.r);
-  if (p_.led_g != nullptr) p_.led_g->SetDuty(rgb.g);
-  if (p_.led_b != nullptr) p_.led_b->SetDuty(rgb.b);
+  if (s.led_override)
+    rainbow_.Override(s.led.r, s.led.g, s.led.b);
+  else
+    rainbow_.Auto();
 
   // CAN streaming: analog + digital at 100 Hz, health at 10 Hz.
   SendAnalogDiag(p_.data_can, a, s.cal);
@@ -349,6 +354,11 @@ void TestApp::Stream(uint32_t now, const Shared& s) {
 }
 
 void TestApp::SupervisorTick(uint32_t now) {
+  if (bootloader_request_.exchange(false) && p_.board != nullptr) {
+    WriteDigitalOutputs(p_.outputs, SafeOutputs());
+    p_.board->EnterBootloader();
+    return;
+  }
   if (!watchdog_started_) {
     watchdog_started_ = true;
     io_progress_ms_ = now;
@@ -373,11 +383,9 @@ void TestApp::SupervisorTick(uint32_t now) {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Shell
-// ---------------------------------------------------------------------------
 
-void TestApp::RegisterShellCommands(longhorn::Shell& shell) {
+void TestApp::RegisterShellCommands(vcu::Shell& shell) {
   shell.AddCommand({"adc", "every analog channel: counts, mV pin/source, cal",
                     &TestApp::AdcCommand, this});
   shell.AddCommand(
@@ -587,16 +595,30 @@ void TestApp::InfoCommand(void* ctx, longhorn::Console& out, const char*) {
 }
 
 void TestApp::PlainLine(void* ctx, longhorn::Console& out, const char* line) {
-  auto* app = static_cast<TestApp*>(ctx);
+  (void)ctx;
   if (std::strcmp(line, "update.") == 0) {
     out.Println("entering bootloader");
-    WriteDigitalOutputs(app->p_.outputs, SafeOutputs());
-    if (app->p_.board != nullptr) {
-      app->p_.board->EnterBootloader();
-    }
     return;
   }
   out.Println("commands start with '/' (try /help)");
+}
+
+bool TestApp::UsbByte(void* ctx, uint8_t byte) {
+  auto* app = static_cast<TestApp*>(ctx);
+  const bool match = app->usb_dfu_.Feed(byte);
+  if (match) app->bootloader_request_.store(true);
+  return match;
+}
+
+void TestApp::UsbReceive(void* ctx, const uint8_t* bytes, size_t len) {
+  for (size_t i = 0; i < len; ++i) UsbByte(ctx, bytes[i]);
+}
+
+bool TestApp::VcpByte(void* ctx, uint8_t byte) {
+  auto* app = static_cast<TestApp*>(ctx);
+  const bool match = app->vcp_dfu_.Feed(byte);
+  if (match) app->bootloader_request_.store(true);
+  return match;
 }
 
 }  // namespace vcu

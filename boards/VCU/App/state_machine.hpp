@@ -57,10 +57,7 @@ struct Transition {
   const char* reason;
 };
 
-// Table-driven VCU state machine:
-//   INIT -> IDLE (LV on) -> PRECHARGE -> TS_ACTIVE -> RTD_WAIT -> DRIVE
-//   DRIVE -> FAULT on any drive-exit condition; FAULT -> IDLE once clear
-//   any -> BSPD_TRIPPED (terminal) when the hardware BSPD latch is set
+// First matching transition wins; BSPD_TRIPPED is terminal.
 class StateMachine {
  public:
   // Applies at most one transition. Returns true if the state changed.

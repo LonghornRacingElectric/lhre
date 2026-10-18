@@ -7,12 +7,14 @@
 #include "analog.hpp"
 #include "buzzer.hpp"
 #include "can_inbox.hpp"
+#include "dfu.hpp"
 #include "diag_frames.hpp"
 #include "digital_io.hpp"
 #include "lhal/lhal.hpp"
 #include "longhorn/logger.hpp"
-#include "longhorn/shell.hpp"
+#include "rainbow_task.hpp"
 #include "semphr.h"
+#include "shell.hpp"
 #include "status_led.hpp"
 #include "task.h"
 #include "vcu_config.hpp"
@@ -20,16 +22,8 @@
 
 namespace vcu {
 
-// Bring-up test image (Board/ builds it instead of App under
-// VCU_TEST_IMAGE; target :vcu_test). No vehicle logic and no inverter
-// frames. It:
-//   - streams every ADC channel (counts, pin volts, source volts,
-//     calibrated) and every digital input over the Data bus and the VCP
-//   - drives each digital output, the status LED, and the DAC tone on
-//     command (shell or BENCH_TEST_COMMAND)
-//   - echoes BENCH_ECHO_REQUEST_* back on the bus it came from
-//   - reports the reset cause, and can deliberately starve the watchdog
-//   - captures min/max/mean per analog channel for pedal calibration
+// Bench image: IO, calibration, CAN echo and watchdog tests; no inverter
+// commands.
 class TestApp {
  public:
   static constexpr uint32_t kIoPeriodMs = 10;
@@ -103,7 +97,7 @@ class TestApp {
   void UpdateTone(uint32_t now_ms, Shared& shared);
   void Stream(uint32_t now_ms, const Shared& shared);
 
-  void RegisterShellCommands(longhorn::Shell& shell);
+  void RegisterShellCommands(vcu::Shell& shell);
   static void AdcCommand(void* ctx, longhorn::Console& out, const char*);
   static void IoCommand(void* ctx, longhorn::Console& out, const char*);
   static void OutCommand(void* ctx, longhorn::Console& out, const char* args);
@@ -116,6 +110,9 @@ class TestApp {
   static void WdTestCommand(void* ctx, longhorn::Console& out, const char*);
   static void InfoCommand(void* ctx, longhorn::Console& out, const char*);
   static void PlainLine(void* ctx, longhorn::Console& out, const char* line);
+  static bool UsbByte(void* ctx, uint8_t byte);
+  static void UsbReceive(void* ctx, const uint8_t* bytes, size_t len);
+  static bool VcpByte(void* ctx, uint8_t byte);
 
   Peripherals p_;
   const Params& params_;
@@ -124,9 +121,13 @@ class TestApp {
   SemaphoreHandle_t vcp_mutex_ = nullptr;
   StaticSemaphore_t usb_mutex_control_;
   SemaphoreHandle_t usb_mutex_ = nullptr;
-  longhorn::Shell vcp_shell_;
-  longhorn::Shell usb_shell_;
+  vcu::Shell vcp_shell_;
+  vcu::Shell usb_shell_;
   longhorn::Logger logger_;
+  vcu::RainbowTask rainbow_;
+  vcu::DfuCommand usb_dfu_;
+  vcu::DfuCommand vcp_dfu_;
+  std::atomic<bool> bootloader_request_{false};
 
   StaticSemaphore_t state_mutex_control_;
   SemaphoreHandle_t state_mutex_ = nullptr;

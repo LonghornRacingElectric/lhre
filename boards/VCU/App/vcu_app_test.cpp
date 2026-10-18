@@ -355,15 +355,264 @@ TEST_F(VcuAppTest, DataBusCarriesDiagnostics) {
   EXPECT_EQ(diag.reset_cause, lhre::can::ResetCause::kPowerOn);
 }
 
-TEST_F(VcuAppTest, ShellStateAndBootloaderGate) {
+TEST_F(VcuAppTest, UsbDfuWorksStandaloneWithoutCanOrNewline) {
+  b_.hvc_alive = b_.inverter_alive = b_.pdu_alive = b_.dui_alive = false;
   b_.Run(*app_, 30);
-  EXPECT_NE(Shell("/state").find("state=IDLE"), std::string::npos);
-  EXPECT_NE(Shell("update.").find("entering bootloader"), std::string::npos);
+  const uint8_t first[] = {'u', 'p', 'd'};
+  b_.usb.InjectRx(first, sizeof(first));
+  b_.Run(*app_, 25);
+  EXPECT_EQ(b_.board.bootloader_requests, 0);
+  const uint8_t second[] = {'a', 't', 'e', '.'};
+  b_.usb.InjectRx(second, sizeof(second));
+  b_.Run(*app_, 25);
   EXPECT_EQ(b_.board.bootloader_requests, 1);
+  EXPECT_FALSE(b_.linelock_ctrl.Read());
+  EXPECT_FALSE(b_.amp_shutdown.Read());
+}
 
+TEST_F(VcuAppTest, ExplicitUsbUpdateStopsTorqueAndRebootsLikeLastYear) {
   ReachDrive();
-  EXPECT_NE(Shell("update.").find("refused"), std::string::npos);
+  b_.SetPedalTravel(0.5f);
+  b_.Run(*app_, 100);
+  ASSERT_GT(app_->torque_command(), 0);
+  const std::string token = "update.\n";
+  b_.usb.InjectRx(reinterpret_cast<const uint8_t*>(token.data()), token.size());
+  b_.Run(*app_, 25);
   EXPECT_EQ(b_.board.bootloader_requests, 1);
+  msg::InverterTorqueCommand cmd;
+  ASSERT_TRUE(b_.LastFrame(b_.car, &cmd));
+  EXPECT_FALSE(cmd.enable);
+  EXPECT_EQ(cmd.torque_request(), 0);
+}
+
+TEST_F(VcuAppTest, PartialTokensCannotJoinAcrossConsoles) {
+  const std::string first = "upd";
+  const std::string second = "ate.";
+  b_.usb.InjectRx(reinterpret_cast<const uint8_t*>(first.data()), first.size());
+  b_.vcp.InjectRx(reinterpret_cast<const uint8_t*>(second.data()),
+                  second.size());
+  b_.Run(*app_, 30);
+  EXPECT_EQ(b_.board.bootloader_requests, 0);
+}
+
+TEST_F(VcuAppTest, MotorDisconnectCutsTorqueAndRequiresNewRtd) {
+  ReachDrive();
+  b_.SetPedalTravel(0.5f);
+  b_.Run(*app_, 100);
+  ASSERT_GT(app_->torque_command(), 0);
+  b_.motor_disconnect.Write(true);
+  b_.Run(*app_, 21);
+  EXPECT_EQ(app_->torque_command(), 0);
+  EXPECT_EQ(app_->state(), VcuState::kFault);
+  EXPECT_NE(app_->faults() & vcu::kFaultMotorDisconnect, 0u);
+  msg::InverterTorqueCommand cmd;
+  ASSERT_TRUE(b_.LastFrame(b_.car, &cmd));
+  EXPECT_FALSE(cmd.enable);
+  b_.motor_disconnect.Write(false);
+  b_.Run(*app_, 100);
+  EXPECT_NE(app_->state(), VcuState::kDrive);
+  EXPECT_EQ(app_->torque_command(), 0);
+}
+
+TEST_F(VcuAppTest, MissingIndividualInverterMeasurementsCutTorque) {
+  for (int missing = 0; missing < 3; ++missing) {
+    b_.PressRtd(false);
+    b_.SetPedalTravel(0);
+    b_.speed_alive = b_.current_alive = b_.voltage_alive = true;
+    ReachDrive();
+    b_.SetPedalTravel(0.5f);
+    b_.Run(*app_, 100);
+    ASSERT_GT(app_->torque_command(), 0);
+    if (missing == 0) b_.speed_alive = false;
+    if (missing == 1) b_.current_alive = false;
+    if (missing == 2) b_.voltage_alive = false;
+    b_.Run(*app_, 250);
+    EXPECT_EQ(app_->state(), VcuState::kFault);
+    EXPECT_EQ(app_->torque_command(), 0);
+    EXPECT_NE(app_->faults() & vcu::kFaultInverterTimeout, 0u);
+  }
+}
+
+TEST_F(VcuAppTest, EitherFrozenAdcBankCutsTorqueEvenWithPlausibleCounts) {
+  for (int bank = 0; bank < 2; ++bank) {
+    b_.PressRtd(false);
+    b_.SetPedalTravel(0);
+    b_.adc1_alive = b_.adc2_alive = true;
+    ReachDrive();
+    b_.SetPedalTravel(0.5f);
+    b_.Run(*app_, 100);
+    ASSERT_GT(app_->torque_command(), 0);
+    if (bank == 0)
+      b_.adc1_alive = false;
+    else
+      b_.adc2_alive = false;
+    b_.Run(*app_, 15);
+    EXPECT_EQ(app_->torque_command(), 0);
+    EXPECT_EQ(app_->state(), VcuState::kFault);
+    EXPECT_NE(app_->faults() & vcu::kFaultAdcStale, 0u);
+  }
+}
+
+TEST_F(VcuAppTest, SharedRainbowAdvancesAndBspdOverridesIt) {
+  b_.Run(*app_, 20);
+  const float red = b_.led_r.duty();
+  b_.Run(*app_, 500);
+  EXPECT_NE(b_.led_r.duty(), red);
+  b_.latch_state.Write(true);
+  b_.Run(*app_, 40);
+  EXPECT_FLOAT_EQ(b_.led_r.duty(), b_.led_b.duty());
+  EXPECT_FLOAT_EQ(b_.led_g.duty(), 0);
+}
+
+TEST_F(VcuAppTest, RainbowStillRunsAfterMoreThanOneCycleWithoutVehicleCan) {
+  b_.hvc_alive = b_.inverter_alive = b_.pdu_alive = false;
+  b_.Run(*app_, 6000);
+  const float red = b_.led_r.duty();
+  b_.Run(*app_, 400);
+  EXPECT_NE(b_.led_r.duty(), red);
+}
+
+TEST_F(VcuAppTest, DataBusGoldenWheelPacketsDecodeAndExpireIndependently) {
+  // Handwritten bytes from the legacy wire format, not generated roundtrip.
+  lhal::CanFrame f;
+  f.len = 8;
+  f.data[6] = 0x88;
+  f.data[7] = 0x13;  // 0x1388 = 5000 -> 50.00 rad/s
+  for (uint32_t id = 0x402; id <= 0x405; ++id) {
+    f.id = id;
+    b_.car.Send(f);  // wrong bus must not satisfy wheel freshness
+  }
+  b_.Run(*app_, 3);
+  EXPECT_FALSE(app_->snapshot().wheel_control.valid);
+  for (uint32_t id = 0x402; id <= 0x405; ++id) {
+    f.id = id;
+    b_.logger.Send(f);
+  }
+  b_.Run(*app_, 3);
+  auto wheels = app_->snapshot().wheel_control;
+  ASSERT_TRUE(wheels.valid);
+  EXPECT_NEAR(wheels.reference_m_s, 50 * 0.2045f, 0.001f);
+  b_.Run(*app_, 9);
+  EXPECT_FALSE(app_->snapshot().wheel_control.valid);
+}
+
+TEST_F(VcuAppTest, EnabledSlipControlCutsOneWheelSpinAndMissingData) {
+  b_.params.wheel_control.enabled = true;
+  app_ = std::make_unique<vcu::App>(b_.peripherals(), &b_.params);
+  for (int i = 0; i < 4; ++i) {
+    b_.wheel_alive[i] = true;
+    b_.wheel_rad_s[i] = 50;
+  }
+  ReachDrive();
+  b_.motor_rpm = 1600;
+  b_.SetPedalTravel(0.5f);
+  b_.Run(*app_, 400);
+  const float normal = app_->torque_command();
+  ASSERT_GT(normal, 0);
+  b_.wheel_rad_s[2] = 150;
+  b_.Run(*app_, 9);
+  EXPECT_LT(app_->torque_command(), normal);
+  b_.wheel_alive[1] = false;
+  b_.Run(*app_, 12);
+  EXPECT_EQ(app_->torque_command(), 0);
+  EXPECT_FALSE(app_->snapshot().wheel_control.valid);
+}
+
+TEST_F(VcuAppTest, EnabledRegenProducesSignedTorqueAndFallsBackOnRearSlip) {
+  // Synthetic limits exercise control wiring, not the uncommissioned BMS.
+  b_.params.regen.enabled = true;
+  b_.params.regen.max_current_a = 45;
+  b_.params.regen.hard_cut_current_a = 54;
+  b_.params.regen.max_pack_v = 546;
+  b_.params.regen.pack_resistance_ohm = 0.442f;
+  app_ = std::make_unique<vcu::App>(b_.peripherals(), &b_.params);
+  for (int i = 0; i < 4; ++i) {
+    b_.wheel_alive[i] = true;
+    b_.wheel_rad_s[i] = 50;
+  }
+  ReachDrive();
+  b_.motor_rpm = 1600;
+  b_.linelock_out.Write(true);
+  b_.Run(*app_, 220);
+  ASSERT_TRUE(b_.linelock_ctrl.Read());
+  b_.SetBrakePsi(500);
+  b_.Run(*app_, 30);
+  msg::InverterTorqueCommand cmd;
+  ASSERT_TRUE(b_.LastFrame(b_.car, &cmd));
+  EXPECT_NEAR(cmd.torque_request(), -67, 0.2f);
+  EXPECT_TRUE(cmd.enable);
+  b_.bse3_psi = 250;
+  b_.Run(*app_, 15);
+  EXPECT_NEAR(app_->torque_command(), -33.5f, 0.2f);
+  b_.wheel_rad_s[3] = 10;
+  b_.Run(*app_, 9);
+  EXPECT_EQ(app_->torque_command(), 0);
+  EXPECT_FALSE(b_.linelock_ctrl.Read());
+  b_.wheel_rad_s[3] = 50;
+  b_.Run(*app_, 250);
+  EXPECT_FALSE(b_.linelock_ctrl.Read()) << "cannot re-isolate while braking";
+}
+
+TEST_F(VcuAppTest, EnabledLaunchUsesWheelFeedbackAndAbortsOnLoss) {
+  b_.params.event_mode = EventMode::kAcceleration;
+  b_.params.launch.enabled = true;
+  app_ = std::make_unique<vcu::App>(b_.peripherals(), &b_.params);
+  for (bool& alive : b_.wheel_alive) alive = true;
+  ReachDrive();
+  b_.SetBrakePsi(100);
+  b_.Run(*app_, 100);
+  Shell("/launch arm");
+  b_.Run(*app_, 6);
+  ASSERT_TRUE(app_->snapshot().launch_armed);
+  b_.SetBrakePsi(0);
+  b_.Run(*app_, 100);
+  b_.SetPedalTravel(1);
+  b_.Run(*app_, 100);
+  EXPECT_GT(app_->torque_command(), 0);
+  EXPECT_LT(app_->torque_command(), 50);
+  b_.wheel_alive[0] = false;
+  b_.Run(*app_, 12);
+  EXPECT_EQ(app_->torque_command(), 0);
+  b_.wheel_alive[0] = true;
+  b_.Run(*app_, 30);
+  EXPECT_EQ(app_->torque_command(), 0) << "release pedal after launch abort";
 }
 
 }  // namespace
+
+TEST_F(VcuAppTest, EachBrakeComparatorFlagCutsTorqueAndLatches) {
+  for (int flag = 0; flag < 4; ++flag) {
+    Bench b;
+    auto app = std::make_unique<vcu::App>(b.peripherals());
+    b.Energize();
+    b.SetBrakePsi(500.0f);
+    b.Run(*app, 200);
+    b.PressRtd(true);
+    b.Run(*app, 50);
+    ASSERT_EQ(app->state(), VcuState::kDrive);
+    b.SetBrakePsi(0.0f);
+    b.Run(*app, 50);
+    b.SetPedalTravel(0.6f);
+    b.Run(*app, 100);
+    ASSERT_GT(app->torque_command(), 0.0f);
+    lhal::host::Gpio* flags[] = {&b.b1_disconnect, &b.b2_disconnect,
+                                 &b.b1_overvoltage, &b.b2_overvoltage};
+    flags[flag]->Write(true);
+    b.Run(*app, 30);
+    EXPECT_EQ(app->state(), VcuState::kFault) << flag;
+    EXPECT_NE(app->faults() & vcu::kFaultBrakeFlagLatched, 0u) << flag;
+    EXPECT_EQ(app->torque_command(), 0.0f) << flag;
+    msg::InverterTorqueCommand cmd;
+    ASSERT_TRUE(b.LastFrame(b.car, &cmd));
+    EXPECT_FALSE(cmd.enable) << flag;
+    EXPECT_EQ(cmd.torque_request_raw, 0) << flag;
+    flags[flag]->Write(false);
+    b.Run(*app, 50);
+    EXPECT_NE(app->faults() & vcu::kFaultBrakeFlagLatched, 0u) << flag;
+    EXPECT_EQ(app->torque_command(), 0.0f) << flag;
+    b.fault_reset = true;
+    b.Run(*app, 30);
+    EXPECT_EQ(app->faults() & vcu::kFaultBrakeFlagLatched, 0u) << flag;
+    EXPECT_NE(app->state(), VcuState::kDrive) << flag;
+  }
+}
