@@ -115,9 +115,9 @@ arguments:
 ## Not done here
 
 - In sim the stop goes through `pure_pursuit` commanding speed 0. After a
-  `CMD_STALE` trip that node is the dead one, so the sim car keeps rolling on
-  its last command until `joint_cmd_adapter` gets a command timeout of its
-  own. On the car the hardware loop opens regardless.
+  `CMD_STALE` trip that node is the dead one, so the stop comes from
+  `joint_cmd_adapter`'s own command timeout (`adapter_cmd_timeout_s`) instead.
+  On the car the hardware loop opens regardless.
 - Normal braking is still the controller commanding speed 0, so stops in
   sim are optimistic. A regen and spring-brake model is the other half of
   [#116](https://github.com/LonghornRacingElectric/lhre/issues/116).

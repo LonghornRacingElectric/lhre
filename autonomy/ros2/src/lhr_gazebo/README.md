@@ -39,6 +39,13 @@ The launch starts graphical Gazebo and RViz by default. Use `gui:=false` or
 `rviz:=false` for a headless run. See the workspace
 [README](../../README.md) for all launch arguments and topic diagrams.
 
+## Command timeout
+
+`joint_cmd_adapter` stops the wheels when `/lhr/vehicle/cmd` has been silent
+for `adapter_cmd_timeout_s` (0.3 s; `0` disables). Gazebo's joint controllers
+would otherwise hold the last target and keep a car with a dead controller
+driving.
+
 ## Safety monitor
 
 `safety:=true` adds `lhr_safety`'s `safety_node`, which trips the mission
