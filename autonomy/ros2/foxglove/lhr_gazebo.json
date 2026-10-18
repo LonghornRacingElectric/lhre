@@ -1,0 +1,134 @@
+{
+  "configById": {
+    "3D!lhrgz3d": {
+      "foxglovePanelTitle": "Track and cloud",
+      "followMode": "follow-pose",
+      "followTf": "base_link",
+      "scene": {
+        "backgroundColor": "#15151a",
+        "meshUpAxis": "z_up"
+      },
+      "transforms": {
+        "frame:map": {
+          "visible": true
+        },
+        "frame:base_link": {
+          "visible": true
+        },
+        "frame:lidar": {
+          "visible": true
+        }
+      },
+      "cameraState": {
+        "perspective": true,
+        "distance": 45,
+        "phi": 55,
+        "thetaOffset": 0,
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOffset": [
+          0,
+          0,
+          0
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "fovy": 45,
+        "near": 0.5,
+        "far": 5000
+      },
+      "topics": {
+        "/lhr/vehicle/body": {
+          "visible": true
+        },
+        "/lhr/track/cones": {
+          "visible": true
+        },
+        "/lhr/sensor/cones_detected": {
+          "visible": true
+        },
+        "/lhr/track/centerline": {
+          "visible": true
+        },
+        "/lhr/lidar/points": {
+          "visible": true,
+          "colorMode": "colormap",
+          "colorField": "z",
+          "colorMap": "turbo"
+        }
+      },
+      "layers": {},
+      "publish": {}
+    },
+    "Plot!lhrgzspeed": {
+      "foxglovePanelTitle": "Speed: command vs actual",
+      "paths": [
+        {
+          "value": "/lhr/vehicle/cmd.drive.speed",
+          "label": "cmd",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/lhr/vehicle/odom.twist.twist.linear.x",
+          "label": "actual",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!lhrgzsteer": {
+      "foxglovePanelTitle": "Steering command",
+      "paths": [
+        {
+          "value": "/lhr/vehicle/cmd.drive.steering_angle",
+          "label": "steer",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "RawMessages!lhrgzmission": {
+      "foxglovePanelTitle": "Mission state",
+      "topicPath": "/lhr/mission/status"
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "first": "3D!lhrgz3d",
+    "second": {
+      "first": "Plot!lhrgzspeed",
+      "second": {
+        "first": "Plot!lhrgzsteer",
+        "second": "RawMessages!lhrgzmission",
+        "direction": "column",
+        "splitPercentage": 65
+      },
+      "direction": "column",
+      "splitPercentage": 40
+    },
+    "direction": "row",
+    "splitPercentage": 62
+  }
+}

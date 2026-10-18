@@ -11,9 +11,14 @@ Usage:
     ros2 launch lhr_gazebo gazebo_demo.launch.py perception:=lidar
     ros2 launch lhr_gazebo gazebo_demo.launch.py track_style:=oval
     ros2 launch lhr_gazebo gazebo_demo.launch.py track_style:=oval perception:=lidar
+    ros2 launch lhr_gazebo gazebo_demo.launch.py foxglove:=true rviz:=false
+    ros2 launch lhr_gazebo gazebo_demo.launch.py gui:=false record:=true
 """
 
 import os
+from pathlib import Path
+import subprocess
+import time
 
 from ament_index_python.packages import get_package_share_directory
 
@@ -27,6 +32,35 @@ from launch.actions import (
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+from lhr_vehicle import load_vehicle
+
+
+# What record:=true keeps: enough to replay a run in the Foxglove layout
+# (foxglove/lhr_gazebo.json) and to rescore it. /tf_truth only exists under
+# estimator:=ekf; topics a run never publishes are simply absent.
+RECORDED_TOPICS = (
+    '/clock', '/tf', '/tf_static', '/tf_truth',
+    '/lhr/lidar/points', '/lhr/sensor/cones_detected', '/lhr/track/cones',
+    '/lhr/track/centerline', '/lhr/vehicle/odom',
+    '/lhr/vehicle/odom_truth', '/lhr/vehicle/cmd', '/lhr/vehicle/body',
+    '/lhr/mission/status', '/lhr/metrics/lap_complete',
+    '/lhr/imu/data', '/lhr/sensor/wheel_speeds',
+)
+
+
+def _git_sha() -> str:
+    """Identify the source checkout used by this launch file."""
+    repo = Path(__file__).resolve().parent
+    try:
+        sha = subprocess.check_output(
+            ['git', '-C', str(repo), 'rev-parse', '--short', 'HEAD'],
+            text=True, stderr=subprocess.DEVNULL).strip()
+        status = subprocess.check_output(
+            ['git', '-C', str(repo), 'status', '--porcelain'],
+            text=True, stderr=subprocess.DEVNULL)
+        return sha + ('-dirty' if status else '')
+    except (OSError, subprocess.CalledProcessError):
+        return 'unknown'
 
 
 def _find_world(context: LaunchContext):
@@ -175,22 +209,27 @@ def _launch_setup(context: LaunchContext):
         output='screen',
     )
 
+    # ----- Ground-truth cones -----
+    # The same generator that built the world, so these match it cone for
+    # cone. Under perception:=sim they feed sensor_sim. Under lidar nothing
+    # in the stack reads them; they are there for viewers and scoring.
+    truth_cones = Node(
+        package='lhr_trackgen',
+        executable='publish_cones',
+        name='publish_cones',
+        parameters=[{
+            'seed': LaunchConfiguration('seed'),
+            'track_style': LaunchConfiguration('track_style'),
+            'num_waypoints': LaunchConfiguration('num_waypoints'),
+            'use_sim_time': True,
+        }],
+        output='screen',
+    )
+
     # ----- Perception nodes -----
     perception_nodes = []
 
     if perception == 'sim':
-        perception_nodes.append(Node(
-            package='lhr_trackgen',
-            executable='publish_cones',
-            name='publish_cones',
-            parameters=[{
-                'seed': LaunchConfiguration('seed'),
-                'track_style': LaunchConfiguration('track_style'),
-                'num_waypoints': LaunchConfiguration('num_waypoints'),
-                'use_sim_time': True,
-            }],
-            output='screen',
-        ))
         perception_nodes.append(Node(
             package='lhr_sensor_sim',
             executable='sensor_sim',
@@ -310,8 +349,71 @@ def _launch_setup(context: LaunchContext):
             name='metrics_node',
             parameters=[{
                 'truth_odom_topic': '/lhr/vehicle/odom_truth',
+                # Shared with the bag under record:=true, so a row and its
+                # recording can be matched.
+                'run_id': ParameterValue(
+                    LaunchConfiguration('run_id'), value_type=str),
+                'output_csv': ParameterValue(
+                    LaunchConfiguration('output_csv'), value_type=str),
                 'use_sim_time': True,
             }],
+            output='screen',
+        ))
+
+    # ----- Viewer support -----
+    # The cloud is stamped in 'lidar' (gz_frame_id in model.sdf.in), so a
+    # viewer needs that frame on the tree. The mount comes from the same
+    # vehicle YAML that places the sensor in the SDF.
+    lidar_x, lidar_y, lidar_z = load_vehicle().lidar_position_m
+    lidar_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='lidar_mount_tf',
+        arguments=[
+            '--x', str(lidar_x), '--y', str(lidar_y), '--z', str(lidar_z),
+            '--frame-id', 'base_link', '--child-frame-id', 'lidar',
+        ],
+        parameters=[{'use_sim_time': True}],
+        output='screen',
+    )
+
+    vehicle_viz = Node(
+        package='lhr_vehicle',
+        executable='vehicle_viz',
+        name='vehicle_viz',
+        parameters=[{
+            # The node defaults to the CAD mesh, which is not on main yet.
+            'use_mesh': ParameterValue(
+                LaunchConfiguration('vehicle_mesh'), value_type=bool),
+            'use_sim_time': True,
+        }],
+        output='screen',
+    )
+
+    viewer_nodes = []
+    if context.launch_configurations.get('foxglove', 'false').lower() == 'true':
+        viewer_nodes.append(Node(
+            package='foxglove_bridge',
+            executable='foxglove_bridge',
+            name='foxglove_bridge',
+            parameters=[{
+                'port': ParameterValue(
+                    LaunchConfiguration('foxglove_port'), value_type=int),
+                'use_sim_time': True,
+            }],
+            output='screen',
+        ))
+    if context.launch_configurations.get('record', 'false').lower() == 'true':
+        run_id = context.launch_configurations['run_id']
+        bag_dir = context.launch_configurations['bag_dir']
+        viewer_nodes.append(ExecuteProcess(
+            cmd=[
+                'ros2', 'bag', 'record',
+                '--output', f'{bag_dir}/{run_id}',
+                '--storage', 'mcap',
+                '--custom-data', f'run_id={run_id}', f'git_sha={_git_sha()}',
+                '--topics', *RECORDED_TOPICS,
+            ],
             output='screen',
         ))
 
@@ -347,11 +449,15 @@ def _launch_setup(context: LaunchContext):
         bridge,
         cmd_adapter,
         *estimation_nodes,
+        truth_cones,
         *perception_nodes,
         centerline,
         mission_mgr,
         control,
         *metrics_nodes,
+        lidar_tf,
+        vehicle_viz,
+        *viewer_nodes,
         *rviz_nodes,
     ]
 
@@ -409,6 +515,23 @@ def generate_launch_description():
         # RViz / metrics
         DeclareLaunchArgument('rviz', default_value='true'),
         DeclareLaunchArgument('enable_metrics', default_value='true'),
+        # Metrics row and bag share run_id. The T keeps YAML from reading
+        # an all-digit ID as a number.
+        DeclareLaunchArgument(
+            'run_id', default_value=time.strftime('%Y%m%dT%H%M%S')),
+        DeclareLaunchArgument('output_csv', default_value='data/metrics.csv'),
+        # Foxglove and recording (same names as lhr_demo's mvs_demo)
+        DeclareLaunchArgument(
+            'foxglove', default_value='false',
+            description='Serve the live graph to Foxglove on foxglove_port'),
+        DeclareLaunchArgument('foxglove_port', default_value='8765'),
+        DeclareLaunchArgument(
+            'record', default_value='false',
+            description='Record the run to MCAP under bag_dir/run_id'),
+        DeclareLaunchArgument('bag_dir', default_value='data/bags'),
+        DeclareLaunchArgument(
+            'vehicle_mesh', default_value='false',
+            description='Draw the CAD mesh instead of box + wheels'),
         # Mission
         DeclareLaunchArgument('mission', default_value='autocross'),
         DeclareLaunchArgument('auto_go', default_value='true'),

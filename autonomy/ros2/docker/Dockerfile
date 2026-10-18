@@ -3,11 +3,14 @@
 # noVNC (browser at http://localhost:6080). Works on arm64 (Apple Silicon) and amd64.
 FROM tiryoh/ros2-desktop-vnc:jazzy
 
+# Nothing here runs rosdep, so exec_depends a launch needs are named
+# explicitly: without foxglove-bridge, foxglove:=true fails at launch.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-jazzy-ros-gz \
     ros-jazzy-ackermann-msgs \
     ros-jazzy-tf2-ros \
     ros-jazzy-plotjuggler-ros \
+    ros-jazzy-foxglove-bridge \
     python3-colcon-common-extensions \
     python3-numpy \
     python3-scipy \

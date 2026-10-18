@@ -47,6 +47,26 @@ source-tree copy when imported straight from the checkout. The model
 generator always passes the source-tree path explicitly so an installed
 copy can never be stale relative to the YAML being edited.
 
+## Drawing the car
+
+`vehicle_viz` publishes the car on `/lhr/vehicle/body`, in `base_link`. It
+exists because a 3D viewer otherwise shows a grid, a line and a cloud, with
+nothing to say where the car is or which way it points.
+
+```bash
+ros2 run lhr_vehicle vehicle_viz --ros-args -p use_mesh:=false
+```
+
+`use_mesh:=false` draws a chassis box and four wheels sized from this file.
+The node also has a CAD mesh mode (`use_mesh:=true`, its default) that
+needs `meshes/orion.stl`, which has not landed on main yet; until it does,
+launch files pass `use_mesh:=false`. A mesh marker names an asset the
+viewer has to fetch, which works against a live `foxglove_bridge` but not
+when replaying a bag, so the primitives stay available either way.
+
+The markers are latched and published once, not on a timer: the car's shape
+does not change, and a marker array per tick would bloat every bag.
+
 ## Regenerating the Gazebo model
 
 After editing `vehicle.yaml`:

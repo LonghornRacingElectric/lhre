@@ -35,6 +35,15 @@ DISPLAY=:1 LIBGL_ALWAYS_SOFTWARE=1 ./scripts/rviz_demo.sh
 
 (In a terminal opened inside the noVNC desktop, `DISPLAY` is already set.)
 
+Foxglove skips the desktop entirely: run the stack headless with the bridge
+on, then open the Foxglove app on the Mac, connect to `ws://localhost:8765`
+(published by `compose.yaml`) and import `ros2/foxglove/lhr_gazebo.json` as
+the layout.
+
+```bash
+./scripts/run_gazebo_demo.sh gui:=false rviz:=false foxglove:=true perception:=lidar
+```
+
 After a reboot: `colima start && docker start lhr-autonomy`. If the
 `Dockerfile` or `compose.yaml` changed since the image was built (e.g. after a
 pull), `docker start` resumes the stale image — run `docker compose up -d
