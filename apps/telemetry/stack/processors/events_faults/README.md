@@ -1,10 +1,8 @@
 # Events and faults processor
 
-Starter project for new members. The processor is a **skeleton**: it connects to
-Kafka and logs incoming frames, and the fault-event logic is yours to write. You
-will touch Kafka, protobuf decoding, and the Docker/Bazel wiring of a processor,
-which is the shape of every other processor in this stack. New to it? Start
-with [GETTING_STARTED.md](GETTING_STARTED.md).
+Starter project for new members. The processor connects to Kafka and logs
+incoming frames; its fault detection logic is being developed in stages. New to
+it? Start with [GETTING_STARTED.md](GETTING_STARTED.md).
 
 ## What it should do
 
@@ -19,6 +17,13 @@ Orion's `diagnostics_high` block (`OrionDiagnosticsHigh` in
 - `post_faults` and `run_faults`: inverter fault bitmasks, one bit per fault.
 - Pedal-sensor booleans ending in `_disconnect`, `_out_range`, `_implause`, or `_mismatch` (APPS / BPPS / BSE).
 - `stomp_fault`.
+
+The detector treats asserted pedal and stomp booleans as active faults. It
+decodes set bits 0–23 of `post_faults` and `run_faults`, labeling them by field
+and bit index (for example, `run_faults[2]`) because this repo has no inverter
+bit-name table. Fuse, contactor, and shutdown/status fields are omitted because
+their asserted polarity is not documented. Bits above 23 are omitted because
+the fields are float32 and cannot reliably preserve higher integer bits.
 
 The finished processor keeps the set of active faults and publishes to
 `fault_events` whenever that set changes:

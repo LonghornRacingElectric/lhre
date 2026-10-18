@@ -42,6 +42,23 @@ coupling every service to this package's generator layout.
 For the non-Bazel Cargo flow, `nonhermetic/sync_assets.sh` produces the
 runtime `can.json` from the same sources.
 
+## Packet and telemetry rates
+
+`can_packets.csv` currently stores a packet-level `Frequency (Hz)`. The
+generator exposes that as `frequency` (Hz) and `frequency_ms` in `can.json`;
+this describes CAN packet cadence, not separate uplink or logging cadence.
+The generator also uses packet frequency, DLC, and quantity when estimating
+CAN bus utilization.
+
+There are no per-signal `uplink_hz` or `log_hz` fields in the schema today,
+and no defaults or override mechanism for them. Adding those fields to the
+CSV source and passing them through to `can.json` is a proposal, not an
+implemented schema contract. Defaults, who may override source rates at
+runtime, and validation against radio and storage budgets remain open. A
+radio estimate needs signal rates, encoded payload size, and transport
+overhead; logging volume depends on logged rate and serialized storage size.
+Neither estimate follows from CAN utilization alone.
+
 ### Cell format and gotchas
 
 A `Data[n]` cell is `"Human Name (can_type, scale); proto_name (float) #N"`,

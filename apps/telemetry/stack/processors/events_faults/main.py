@@ -1,4 +1,4 @@
-"""events_faults processor skeleton.
+"""events_faults processor.
 
 Kafka plumbing only: connects, reads ``sensor_data``, and logs what arrives. The
 actual events-faults logic is the exercise; see README.md.
@@ -19,6 +19,56 @@ OUTPUT_TOPIC = os.getenv("KAFKA_OUTPUT_TOPIC", "fault_events")
 GROUP_ID = os.getenv("KAFKA_GROUP_ID", "events-faults-group")
 
 stop = False
+
+# These boolean fields are explicit fault signals. Fuse/contactor/status bits
+# are intentionally omitted: their asserted polarity is not documented here.
+_BOOLEAN_FAULTS = (
+    "apps1_disconnect",
+    "apps2_disconnect",
+    "apps1_out_range",
+    "apps2_out_range",
+    "apps_mismatch",
+    "apps_implause",
+    "bpps1_disconnect",
+    "bpps2_disconnect",
+    "bpps1_out_range",
+    "bpps2_out_range",
+    "bpps_mismatch",
+    "bse1_disconnect",
+    "bse2_disconnect",
+    "bse1_out_range",
+    "bse2_out_range",
+    "stomp_fault",
+)
+
+
+def detect_active_faults(diagnostics_high):
+    """Return stable names for asserted fault signals in a diagnostics block.
+
+    The inverter fields are float32 bitmasks. Only bits 0–23 are decoded:
+    binary32 cannot preserve every integer bit above that range. Their per-bit
+    meanings are not available in this repo, so retain the source and bit index.
+    """
+    active = set()
+    if diagnostics_high is None:
+        return active
+
+    for field in _BOOLEAN_FAULTS:
+        if getattr(diagnostics_high, field, False):
+            active.add(field)
+
+    for field in ("post_faults", "run_faults"):
+        value = getattr(diagnostics_high, field, 0.0)
+        try:
+            mask = int(value)
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if mask < 0 or mask != value:
+            continue
+        for bit in range(24):
+            if mask & (1 << bit):
+                active.add(f"{field}[{bit}]")
+    return active
 
 
 def _request_stop(signum, _frame):
