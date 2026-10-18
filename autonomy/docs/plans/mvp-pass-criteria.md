@@ -65,12 +65,23 @@ planner's own centerline, and timed on sim time.
 The gate passes when **all 21 runs pass**. A failure gets an issue in the
 milestone and the run is repeated after the fix, never dropped.
 
+### Recorded, not gating
+
+| Check | Target | Source |
+| --- | --- | --- |
+| Injected faults stop the car | Stale LiDAR, EKF divergence, geofence exit and a blocked steering command each trip `safety_node`, and the car stops within d = v(T + 0.2 s) + v²/2a | PDR safety loop ([#116](https://github.com/LonghornRacingElectric/lhre/issues/116), [#117](https://github.com/LonghornRacingElectric/lhre/issues/117)) |
+
+Reported with the gate run. It becomes a gate at the 12/2 bench rig, once
+the hardware half of the loop exists.
+
 ### Gaps in today's metrics
 
 - `cones_hit` and an OC flag do not exist yet. Both need the vehicle
   footprint from `lhr_vehicle` checked against trackgen cone positions;
   that belongs in #94's rework.
 - Distance to stop after the finish line is not recorded.
+- Off `DRIVING`, the controller commands speed 0 at once, so sim stop
+  distances are optimistic until #116 adds a regen and spring-brake model.
 - [#91](https://github.com/LonghornRacingElectric/lhre/pull/91) already
   moves timing to sim time, weights CTE by distance, and adds an `outcome`
   column, so it lands first.
