@@ -17,6 +17,7 @@ Colcon workspace for LHR driverless / autonomy nodes. This file is the **referen
 | `lhr_control` | Pure pursuit path-following controller with curvature-adaptive lookahead and speed planning |
 | `lhr_mission_manager` | FSAE driverless state machine (Off → Ready → Driving → Finished → Emergency) |
 | `lhr_metrics` | Cross-track error, off-track count, and lap detection (CSV output) |
+| `lhr_safety` | `safety_node`: odometry, EKF, LiDAR, geofence and steering checks, a heartbeat that stops on any fault, and a latched trip onto `/lhr/mission/emergency`. Off unless `safety:=true`. See [its README](src/lhr_safety/README.md) |
 | `lhr_gazebo` | Gazebo Harmonic physics simulation — vehicle with direct joint control, ground-truth odometry, LiDAR sensor, RViz integration |
 | `lhr_perception` | LiDAR pointcloud clustering, timestamp-aligned persistent mapping, and geometry-based track-side inference |
 | `lhr_state_estimation` | EKF fusing IMU and wheel speeds into `/lhr/vehicle/odom` + `map → base_link`, replacing ground-truth odometry. See [its README](src/lhr_state_estimation/README.md) |
@@ -254,6 +255,7 @@ Launch arguments work the same way:
 ./scripts/run_gazebo_demo.sh track_style:=oval   # oval track (also: autocross, simple)
 ./scripts/run_gazebo_demo.sh track_style:=oval perception:=lidar  # LiDAR on oval (best LiDAR experience)
 ./scripts/run_gazebo_demo.sh estimator:=ekf      # EKF odometry instead of Gazebo ground truth
+./scripts/run_gazebo_demo.sh perception:=lidar estimator:=ekf safety:=true  # trip the mission on stack faults (lhr_safety)
 ```
 
 The `track_style` argument selects the track generator (`oval`, `autocross`, or `simple`). The world SDF is auto-resolved from `track_style` + `seed` (e.g. `oval_seed1.sdf`). Pre-generated worlds are installed by colcon from `worlds/*.sdf`.
@@ -421,7 +423,9 @@ The bridge config (`config/ros_gz_bridge.yaml`) maps 11 topics:
 | `/lhr/control/lookahead` | `visualization_msgs/Marker` | Debug: lookahead target point |
 | `/lhr/mission/status` | `std_msgs/String` | Driverless system status (`OFF`, `READY`, `DRIVING`, `FINISHED`, `EMERGENCY`) |
 | `/lhr/mission/go` | `std_msgs/Bool` | Go signal — triggers Ready → Driving transition |
-| `/lhr/mission/emergency` | `std_msgs/Bool` | Emergency stop — triggers Driving → Emergency transition |
+| `/lhr/mission/emergency` | `std_msgs/Bool` | Emergency stop — triggers Driving → Emergency transition. `safety_node` publishes it every tick while tripped |
+| `/lhr/safety/heartbeat` | `std_msgs/UInt32` | Counter that advances only while every safety check passes |
+| `/lhr/safety/status` | `diagnostic_msgs/DiagnosticStatus` | Safety state: `OK` or the fault name, with code, latch and heartbeat |
 | `/lhr/mission/reset` | `std_msgs/Bool` | Reset — triggers Emergency → Off transition |
 | `/lhr/metrics/lap_complete` | `std_msgs/Bool` | Published by metrics node when a lap is completed |
 | `/lhr/debug/curvature` | `std_msgs/Float32` | Debug: estimated path curvature at lookahead |
@@ -747,3 +751,24 @@ The last three are the estimate-vs-truth error and are blank unless
 CSV data accumulates in `data/metrics.csv` across runs. Delete the file once
 after upgrading past the error columns, or new rows will not line up with the
 old header.
+
+### lhr_safety (safety_node)
+
+| Param | Default | Description |
+|-------|---------|-------------|
+| `rate_hz` | `20.0` | Check, heartbeat and status rate |
+| `lidar_topic` | `"/lhr/lidar/points"` | Cloud whose age is checked |
+| `monitor_lidar` | `true` | Check LiDAR age (the Gazebo launch sets it from `perception`) |
+| `lidar_timeout_s` | `0.3` | Cloud age (s) that counts as stale, about three missed frames |
+| `odom_timeout_s` | `0.25` | Odometry age (s) that counts as stale |
+| `max_position_std_m` | `1.0` | Largest pose standard deviation (m) before the EKF counts as diverged |
+| `max_speed_factor` | `1.5` | Speed above this multiple of `vehicle.yaml`'s top speed counts as diverged |
+| `geofence_radius_m` | `150.0` | Distance (m) from the first reported pose that trips the geofence |
+| `steer_min_speed_mps` | `2.0` | Speed (m/s) below which the steering check is skipped |
+| `steer_yaw_rate_tol` | `0.15` | Smallest yaw-rate mismatch (rad/s) that counts |
+| `steer_rel_tol` | `0.5` | Mismatch allowed as a fraction of the expected yaw rate |
+| `steer_window_s` | `1.0` | How long (s) a mismatch must last before it trips |
+
+The Gazebo launch exposes every threshold as `safety_<param>` and starts
+the node only with `safety:=true`. See [lhr_safety](src/lhr_safety/README.md)
+for what a trip does.
