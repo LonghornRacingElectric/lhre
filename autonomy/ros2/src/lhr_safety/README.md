@@ -69,6 +69,16 @@ append-only: never renumber or reuse one.
 ./scripts/run_gazebo_demo.sh perception:=lidar estimator:=ekf safety:=true
 ```
 
+On a CPU-rendered machine (the Mac Docker container) Gazebo drops LiDAR
+frames: the cloud arrived at 5.6 Hz with gaps up to 1.1 s on 10/18 (#123),
+and up to 0.5 s even without the ZED cameras. The default
+`lidar_timeout_s` (0.3 s, three missed frames) is for the real Mid-360, so
+add `safety_lidar_timeout_s:=1.5` there:
+
+```bash
+./scripts/run_gazebo_demo.sh gui:=false perception:=lidar estimator:=ekf safety:=true safety_lidar_timeout_s:=1.5
+```
+
 `safety:=true` is off by default until the fault-injection runs
 ([#117](https://github.com/LonghornRacingElectric/lhre/issues/117)) have
 tuned the thresholds. Every threshold is a `safety_*` launch argument with
