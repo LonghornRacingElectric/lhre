@@ -79,8 +79,8 @@ def test_ground_returns_land_on_the_ground():
 
 
 def test_cone_returns_sit_within_the_cone_height():
-    cones = np.array([[1.8 + 6.0, 0.0]])
     mount = MountPose()
+    cones = np.array([[mount.x_m + 6.0, mount.y_m]])
     sensor = Mid360Sensor(config=NO_NOISE, mount=mount, seed=1)
     points, on_cone = sensor.frame_labeled(0.1, 0.0, 0.0, 0.0, cones)
 
@@ -121,7 +121,8 @@ def test_returns_per_cone_fall_off_with_range():
 
 
 def test_single_frame_scan_gap_does_not_imply_an_invisible_cone():
-    sensor = Mid360Sensor(config=NO_NOISE, mount=MountPose(), seed=1)
+    # This scan-phase fixture uses a fixed height, independent of car setup.
+    sensor = Mid360Sensor(config=NO_NOISE, mount=MountPose(z_m=0.62), seed=1)
     assert points_on_cone(sensor, 0.0, 6.0) == 0
     assert points_on_cone(sensor, 0.1, 6.0) > 0
     assert points_on_cone(sensor, 0.0, 6.0, frames=40) > 0
@@ -148,3 +149,12 @@ def test_motion_scan_uses_acquisition_pose_without_end_frame_deskew():
                   & (moving[:, 2] > -.5) & (moving[:, 2] < 2.)]
     assert len(wall) > 10
     assert np.ptp(wall[:, 0]) > .5
+
+
+def test_offline_mount_reads_vehicle_configuration(monkeypatch):
+    from types import SimpleNamespace
+    import lhr_lidar_sim.sensor as sensor_module
+    monkeypatch.setattr(sensor_module, 'load_vehicle',
+                        lambda: SimpleNamespace(lidar_position_m=(2.1, .2, .9)))
+    mount = MountPose()
+    assert (mount.x_m, mount.y_m, mount.z_m) == (2.1, .2, .9)
