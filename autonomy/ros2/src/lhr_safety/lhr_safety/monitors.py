@@ -27,6 +27,7 @@ class Fault(IntEnum):
     GEOFENCE = 4
     STEER_TRACKING = 5
     CMD_STALE = 6
+    CMD_INVALID = 7
 
 
 @dataclass(frozen=True)
@@ -40,8 +41,9 @@ class SafetyConfig:
     lidar_timeout_s: float = 0.3
     # The EKF and the Gazebo bridge both publish odom at 50 Hz or more.
     odom_timeout_s: float = 0.25
-    # pursuit_node publishes at 20 Hz in every mission state, so silence
-    # means the controller died; the actuators would hold the last command.
+    # pure_pursuit publishes at 20 Hz once it has a mission status, so
+    # silence means the controller died; the actuators would hold the last
+    # command.
     cmd_timeout_s: float = 0.25
     # A divergence bound, not an accuracy bound: the MVP's 0.5 m accuracy
     # check is scored against truth, which this node never reads. 0 turns it
@@ -70,9 +72,14 @@ class SafetyMonitor:
         self._last_lidar: Optional[float] = None
         self._last_odom: Optional[float] = None
         self._last_cmd: Optional[float] = None
+        self._pose: Optional[tuple] = None
         self._origin: Optional[tuple] = None
-        self._diverged = False
-        self._outside = False
+        # Odom arrives faster than check() runs, so a one-sample excursion
+        # is remembered until the next check rather than overwritten by the
+        # sample after it.
+        self._diverged = self._diverged_seen = False
+        self._outside = self._outside_seen = False
+        self._cmd_invalid = self._cmd_invalid_seen = False
         self._steer_cmd: Optional[float] = None
         self._mismatch_since: Optional[float] = None
         self._steer_fault = False
@@ -82,67 +89,90 @@ class SafetyMonitor:
 
     def on_command(self, now: float, steering_angle: float):
         self._last_cmd = now
-        self._steer_cmd = steering_angle
+        # A NaN steering angle clamps to full lock in the actuator adapter.
+        self._cmd_invalid = not math.isfinite(steering_angle)
+        self._cmd_invalid_seen |= self._cmd_invalid
+        self._steer_cmd = None if self._cmd_invalid else steering_angle
+
+    def anchor_geofence(self):
+        """Centre the test area on the latest pose; call when arming."""
+        self._origin = self._pose
+        self._outside = False
 
     def on_odom(self, now: float, x: float, y: float, vx: float, vy: float,
                 yaw_rate: float, var_x: float, var_y: float):
-        """Feed one odometry sample; velocity may be in any planar frame."""
+        """Feed one odometry sample, twist in the body frame (REP-105)."""
         cfg = self._config
         self._last_odom = now
         values = (x, y, vx, vy, yaw_rate, var_x, var_y)
         if not all(math.isfinite(v) for v in values):
-            self._diverged = True
+            self._diverged = self._diverged_seen = True
             return
         speed = math.hypot(vx, vy)
         std = math.sqrt(max(var_x, var_y, 0.0))
         too_uncertain = 0.0 < cfg.max_position_std_m < std
         self._diverged = (too_uncertain
                           or speed > cfg.max_speed_factor * cfg.max_speed_mps)
+        self._diverged_seen |= self._diverged
 
-        # The test area is anchored where the car first reports a pose,
-        # the way a surveyed fence is anchored to the start box.
-        if self._origin is None:
-            self._origin = (x, y)
-        dist = math.hypot(x - self._origin[0], y - self._origin[1])
-        self._outside = dist > cfg.geofence_radius_m
+        # The fence is centred where the car arms, the way a surveyed fence
+        # is anchored to the start box, not wherever the stack booted.
+        self._pose = (x, y)
+        if self._origin is not None:
+            dist = math.hypot(x - self._origin[0], y - self._origin[1])
+            self._outside = dist > cfg.geofence_radius_m
+            self._outside_seen |= self._outside
 
-        self._check_steering(now, speed, yaw_rate)
+        self._check_steering(now, vx, yaw_rate)
 
-    def _check_steering(self, now: float, speed: float, yaw_rate: float):
+    def _check_steering(self, now: float, forward: float, yaw_rate: float):
         """Compare measured yaw rate with what the command should produce."""
         cfg = self._config
-        if self._steer_cmd is None or speed < cfg.steer_min_speed_mps:
+        # Signed forward speed: reversing flips the sign of the yaw rate a
+        # given steering angle produces.
+        if self._steer_cmd is None or abs(forward) < cfg.steer_min_speed_mps:
             self._mismatch_since = None
             self._steer_fault = False
             return
-        expected = speed * math.tan(self._steer_cmd) / cfg.wheelbase_m
+        expected = forward * math.tan(self._steer_cmd) / cfg.wheelbase_m
         tol = max(cfg.steer_yaw_rate_tol, cfg.steer_rel_tol * abs(expected))
         if abs(yaw_rate - expected) <= tol:
             self._mismatch_since = None
             self._steer_fault = False
             return
-        if self._mismatch_since is None:
+        if self._mismatch_since is None or self._mismatch_since > now:
             self._mismatch_since = now
         self._steer_fault = now - self._mismatch_since >= cfg.steer_window_s
 
     def _age(self, last: Optional[float], now: float) -> float:
         # Never having heard a topic counts from startup, so a sensor that
         # never comes up is stale rather than silently ignored.
-        return now - (self._start if last is None else last)
+        age = now - (self._start if last is None else last)
+        # A clock that jumped backwards (a sim reset) leaves every stored
+        # time in the future. Treat that as stale, not as perfectly fresh.
+        return math.inf if age < 0 else age
 
     def check(self, now: float) -> Fault:
         """Return the highest-priority fault right now, or NONE."""
         cfg = self._config
+        diverged = self._diverged or self._diverged_seen
+        outside = self._outside or self._outside_seen
+        cmd_invalid = self._cmd_invalid or self._cmd_invalid_seen
+        self._diverged_seen = self._outside_seen = False
+        self._cmd_invalid_seen = False
+
         if self._age(self._last_odom, now) > cfg.odom_timeout_s:
             return Fault.ODOM_STALE
-        if self._diverged:
+        if diverged:
             return Fault.EKF_DIVERGED
         if self._age(self._last_cmd, now) > cfg.cmd_timeout_s:
             return Fault.CMD_STALE
+        if cmd_invalid:
+            return Fault.CMD_INVALID
         if (cfg.monitor_lidar
                 and self._age(self._last_lidar, now) > cfg.lidar_timeout_s):
             return Fault.LIDAR_STALE
-        if self._outside:
+        if outside:
             return Fault.GEOFENCE
         if self._steer_fault:
             return Fault.STEER_TRACKING

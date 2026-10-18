@@ -386,7 +386,8 @@ def _launch_setup(context: LaunchContext):
             name='safety_node',
             parameters=[{
                 # Follows the perception mode rather than being an argument:
-                # there is no cloud to go stale under perception:=sim.
+                # the Gazebo LiDAR always publishes, but under
+                # perception:=sim nothing reads the cloud.
                 'monitor_lidar': perception == 'lidar',
                 'lidar_timeout_s': _float('safety_lidar_timeout_s'),
                 'odom_timeout_s': _float('safety_odom_timeout_s'),

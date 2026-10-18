@@ -4,13 +4,15 @@ Stop the car when the software stack stops being trustworthy.
 
 The software half of the PDR safety loop: the checks in monitors.py, a
 heartbeat that only advances while they pass, and a latched trip onto the
-emergency topic mission_manager already handles. Software can keep the
-loop alive; it can never hold it open, so the heartbeat stops on any
-fault even when the car is not armed.
+emergency topic mission_manager already handles (latch.py). The rule from
+the PDR: software may only ever keep the stop loop from firing by actively
+saying all is well. It can never block a stop, so silence, a crash or a
+hang all read as a fault to whatever listens to the heartbeat.
 """
 
 from ackermann_msgs.msg import AckermannDriveStamped
 from diagnostic_msgs.msg import DiagnosticStatus, KeyValue
+from lhr_safety.latch import SafetyLatch
 from lhr_safety.monitors import Fault, SafetyConfig, SafetyMonitor
 from lhr_vehicle import load_vehicle
 from nav_msgs.msg import Odometry
@@ -19,10 +21,6 @@ from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import PointCloud2
 from std_msgs.msg import Bool, String, UInt32
-
-# A fault only trips the car in these states. Before READY the stack is
-# still coming up, and after FINISHED or EMERGENCY it is already stopped.
-ARMED_STATES = ('READY', 'DRIVING')
 
 
 class SafetyNode(Node):
@@ -67,9 +65,8 @@ class SafetyNode(Node):
             steer_window_s=float(param('steer_window_s')),
         )
         self._monitor = SafetyMonitor(self._config, self._now())
+        self._latch = SafetyLatch()
         self._mission_state = ''
-        self._tripped = Fault.NONE
-        self._counter = 0
 
         self._emergency_pub = self.create_publisher(
             Bool, '/lhr/mission/emergency', 10)
@@ -79,9 +76,11 @@ class SafetyNode(Node):
             DiagnosticStatus, '/lhr/safety/status', 10)
 
         if self._config.monitor_lidar:
+            # Only arrival matters, so skip deserializing a cloud that can
+            # be close to a megabyte.
             self.create_subscription(
                 PointCloud2, param('lidar_topic'), self._lidar_cb,
-                qos_profile_sensor_data)
+                qos_profile_sensor_data, raw=True)
         self.create_subscription(
             Odometry, '/lhr/vehicle/odom', self._odom_cb, 10)
         self.create_subscription(
@@ -100,7 +99,7 @@ class SafetyNode(Node):
     def _now(self) -> float:
         return self.get_clock().now().nanoseconds * 1e-9
 
-    def _lidar_cb(self, _msg: PointCloud2):
+    def _lidar_cb(self, _msg):
         self._monitor.on_lidar(self._now())
 
     def _cmd_cb(self, msg: AckermannDriveStamped):
@@ -118,40 +117,40 @@ class SafetyNode(Node):
         self._mission_state = msg.data
 
     def _reset_cb(self, msg: Bool):
-        if msg.data and self._tripped != Fault.NONE:
-            self.get_logger().info(f'Reset clears latched {self._tripped.name}')
-            self._tripped = Fault.NONE
+        if not msg.data:
+            return
+        cleared = self._latch.reset()
+        if cleared != Fault.NONE:
+            self.get_logger().info(f'Reset clears latched {cleared.name}')
 
     def _tick(self):
         fault = self._monitor.check(self._now())
-        armed = self._mission_state in ARMED_STATES
-        if armed and fault != Fault.NONE and self._tripped == Fault.NONE:
-            self._tripped = fault
+        decision = self._latch.step(fault, self._mission_state)
+        if decision.newly_armed:
+            self._monitor.anchor_geofence()
+        if decision.newly_tripped:
             self.get_logger().error(
                 f'Safety trip: {fault.name} in {self._mission_state}')
-
-        if self._tripped != Fault.NONE:
-            # Repeated, not sent once: a single dropped message must not
-            # leave the car driving.
+        if decision.emergency:
             self._emergency_pub.publish(Bool(data=True))
-        elif fault == Fault.NONE:
-            self._counter += 1
-            self._heartbeat_pub.publish(UInt32(data=self._counter))
+        if decision.heartbeat is not None:
+            self._heartbeat_pub.publish(UInt32(data=decision.heartbeat))
+        self._status_pub.publish(self._status(decision, fault))
 
-        self._status_pub.publish(self._status(fault))
-
-    def _status(self, fault: Fault) -> DiagnosticStatus:
-        shown = self._tripped if self._tripped != Fault.NONE else fault
+    def _status(self, decision, live: Fault) -> DiagnosticStatus:
         status = DiagnosticStatus()
         status.name = 'lhr_safety'
         status.hardware_id = 'safety_node'
-        status.level = (DiagnosticStatus.OK if shown == Fault.NONE
+        status.level = (DiagnosticStatus.OK if decision.shown == Fault.NONE
                         else DiagnosticStatus.ERROR)
-        status.message = shown.name
+        status.message = decision.shown.name
         status.values = [
-            KeyValue(key='code', value=str(int(shown))),
-            KeyValue(key='latched', value=str(self._tripped != Fault.NONE)),
-            KeyValue(key='heartbeat', value=str(self._counter)),
+            KeyValue(key='code', value=str(int(decision.shown))),
+            KeyValue(key='latched', value=str(decision.emergency)),
+            # While latched, message shows what tripped; this is what the
+            # checks see now.
+            KeyValue(key='live', value=live.name),
+            KeyValue(key='heartbeat', value=str(self._latch.counter)),
             KeyValue(key='mission_state', value=self._mission_state),
         ]
         return status

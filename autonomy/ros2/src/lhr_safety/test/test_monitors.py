@@ -33,17 +33,21 @@ def test_healthy_run_reports_no_fault():
 
 def test_odom_that_never_arrives_is_stale():
     m = SafetyMonitor(CFG, now=0.0)
-    m.on_lidar(0.3)
+    m.on_lidar(0.2)
     assert m.check(0.2) == Fault.NONE
+    m.on_lidar(0.3)
     assert m.check(0.3) == Fault.ODOM_STALE
 
 
 def test_odom_that_stops_is_stale():
     m = SafetyMonitor(CFG, now=0.0)
     last = _drive(m, 0.0, 1.0)
-    m.on_lidar(last + 0.3)
-    assert m.check(last + CFG.odom_timeout_s - 0.01) == Fault.NONE
-    assert m.check(last + CFG.odom_timeout_s + 0.01) == Fault.ODOM_STALE
+    before = last + CFG.odom_timeout_s - 0.01
+    m.on_lidar(before)
+    assert m.check(before) == Fault.NONE
+    after = last + CFG.odom_timeout_s + 0.01
+    m.on_lidar(after)
+    assert m.check(after) == Fault.ODOM_STALE
 
 
 def test_lidar_that_stops_is_stale():
@@ -113,9 +117,13 @@ def test_divergence_clears_when_the_estimate_recovers():
     assert m.check(0.15) == Fault.NONE
 
 
-def test_geofence_anchors_at_first_pose():
+def test_geofence_anchors_where_the_car_arms():
     m = SafetyMonitor(CFG, now=0.0)
-    _healthy(m, 0.0, x=500.0, y=500.0)
+    # Booted far from the start box; no fence until the car arms.
+    _healthy(m, 0.0, x=0.0, y=0.0)
+    _healthy(m, 0.02, x=500.0, y=500.0)
+    assert m.check(0.02) == Fault.NONE
+    m.anchor_geofence()
     _healthy(m, 0.05, x=500.0 + CFG.geofence_radius_m - 1.0, y=500.0)
     assert m.check(0.05) == Fault.NONE
     _healthy(m, 0.1, x=500.0 + CFG.geofence_radius_m + 1.0, y=500.0)
@@ -196,9 +204,66 @@ def test_command_that_stops_is_stale():
     assert m.check(t) == Fault.CMD_STALE
 
 
+@pytest.mark.parametrize('bad', [
+    {'vx': 410.0}, {'x': math.nan}, {'yaw_rate': math.inf}])
+def test_one_bad_odom_sample_between_checks_is_caught(bad):
+    # Odom runs at 50 Hz and checks at 20 Hz: a good sample right after a
+    # bad one must not hide it.
+    m = SafetyMonitor(CFG, now=0.0)
+    _drive(m, 0.0, 1.0)
+    odom = {'x': 0.0, 'y': 0.0, 'vx': 5.0, 'vy': 0.0, 'yaw_rate': 0.0,
+            'var_x': 0.01, 'var_y': 0.01}
+    odom.update(bad)
+    m.on_odom(1.02, **odom)
+    _healthy(m, 1.04)
+    assert m.check(1.05) == Fault.EKF_DIVERGED
+    _healthy(m, 1.1)
+    assert m.check(1.1) == Fault.NONE
+
+
+def test_one_sample_outside_the_fence_is_caught():
+    m = SafetyMonitor(CFG, now=0.0)
+    _healthy(m, 0.0)
+    m.anchor_geofence()
+    _healthy(m, 0.02, x=CFG.geofence_radius_m + 1.0)
+    _healthy(m, 0.04, x=CFG.geofence_radius_m - 1.0)
+    assert m.check(0.05) == Fault.GEOFENCE
+
+
+def test_reversing_does_not_trip_steering():
+    m = SafetyMonitor(CFG, now=0.0)
+    t = 0.0
+    while t < 3.0:
+        m.on_lidar(t)
+        m.on_command(t, 0.2)
+        # Backing up: negative forward speed flips the yaw rate's sign.
+        yaw_rate = -3.0 * math.tan(0.2) / WHEELBASE
+        m.on_odom(t, 0.0, 0.0, -3.0, 0.0, yaw_rate, 0.01, 0.01)
+        t += 0.05
+    assert m.check(t - 0.05) == Fault.NONE
+
+
+def test_clock_jumping_backwards_counts_as_stale():
+    # A Gazebo world reset rewinds sim time below every stored timestamp.
+    m = SafetyMonitor(CFG, now=0.0)
+    last = _drive(m, 0.0, 10.0)
+    assert m.check(last) == Fault.NONE
+    assert m.check(1.0) == Fault.ODOM_STALE
+
+
+def test_non_finite_command_is_a_fault():
+    m = SafetyMonitor(CFG, now=0.0)
+    _drive(m, 0.0, 1.0)
+    m.on_command(1.02, math.nan)
+    m.on_command(1.04, 0.0)
+    assert m.check(1.05) == Fault.CMD_INVALID
+    _healthy(m, 1.1)
+    assert m.check(1.1) == Fault.NONE
+
+
 def test_fault_codes_are_stable():
     # These go on the CAN heartbeat; renumbering breaks the receiver.
-    assert [f.value for f in Fault] == [0, 1, 2, 3, 4, 5, 6]
+    assert [f.value for f in Fault] == [0, 1, 2, 3, 4, 5, 6, 7]
     assert [f.name for f in Fault] == [
         'NONE', 'ODOM_STALE', 'EKF_DIVERGED', 'LIDAR_STALE', 'GEOFENCE',
-        'STEER_TRACKING', 'CMD_STALE']
+        'STEER_TRACKING', 'CMD_STALE', 'CMD_INVALID']
