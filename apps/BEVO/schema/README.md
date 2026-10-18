@@ -47,17 +47,64 @@ runtime `can.json` from the same sources.
 `can_packets.csv` currently stores a packet-level `Frequency (Hz)`. The
 generator exposes that as `frequency` (Hz) and `frequency_ms` in `can.json`;
 this describes CAN packet cadence, not separate uplink or logging cadence.
-The generator also uses packet frequency, DLC, and quantity when estimating
-CAN bus utilization.
+The generator also uses packet frequency, DLC, and quantity (number of CAN
+IDs) when estimating CAN bus utilization. Frequency is per ID.
 
-There are no per-signal `uplink_hz` or `log_hz` fields in the schema today,
-and no defaults or override mechanism for them. Adding those fields to the
-CSV source and passing them through to `can.json` is a proposal, not an
-implemented schema contract. Defaults, who may override source rates at
-runtime, and validation against radio and storage budgets remain open. A
-radio estimate needs signal rates, encoded payload size, and transport
-overhead; logging volume depends on logged rate and serialized storage size.
-Neither estimate follows from CAN utilization alone.
+Per-signal `uplink_hz` and `log_hz` can be specified in a `Data[n]` cell
+with a trailing annotation, for example
+`"Vehicle Speed (uint16, 0.1) [uplink_hz=10, log_hz=5]; vehicle_speed (float)"`.
+The generator passes supplied values through to that signal in the
+`bytes` list in `can.json`. The two rates are independent:
+
+| Source value | Policy |
+| --- | --- |
+| Omitted | No additional per-signal limit; keep incoming updates. The JSON key stays absent and Rust reads `None`. |
+| `0` | Disable that signal for that stream. |
+| Positive finite Hz | Maximum updates per second for that stream. Fractional rates are allowed. |
+
+These are requested caps, not resampling frequencies. A 100 Hz CAN signal
+with `uplink_hz=10, log_hz=100` requests at most 10 uplink updates and 100
+logged updates per second; it still arrives on CAN at 100 Hz. A cap above
+the native rate cannot create samples. Event-driven packets (`0` / `NA`
+packet frequency) keep incoming events when a rate is omitted.
+
+Annotations may appear before or after the protobuf mapping. Array indexes
+such as `Voltage[i]` and `cells_v[0]`, scaling, and `#N` field ids are
+preserved. Unknown keys, malformed rate assignments, duplicate keys,
+negative rates, NaN, and infinity fail generation with the source location.
+
+For bitfields, a `Data[n]` annotation supplies defaults for its expanded
+boolean signals. Each bit may override either rate in `can_bitfields.csv`,
+for example `"Fault [uplink_hz=5]; fault #2"`; an omitted bit rate inherits
+the byte's rate, then falls back to no added cap. Rates are independent for
+each slot of an indexed array and each CAN ID in a quantity block.
+
+**Ownership and enforcement:** CSV edits reviewed through the normal PR
+workflow define the policy; generated JSON is never edited. There is no
+runtime per-signal override API. This is schema metadata only: `cand`,
+`publishd`, and `loggerd` do not yet enforce these caps or zero-disable
+requests. `PUBLISHD_PUBLISH_HZ` still controls whole snapshots (default
+20 Hz; `0` means unthrottled there), and logging still writes each incoming
+snapshot. Implementing per-signal scheduling is separate work.
+
+CAN utilization uses packet frequency, DLC, and quantity. Cellular data use
+needs signal uplink rates, encoded payload size, and cellular/network protocol
+overhead; logging volume depends on log rate and serialized storage size.
+Neither estimate follows from CAN utilization alone. For planning:
+
+- CAN bits/s ≈ sum of packet Hz × quantity × (payload bits + frame overhead).
+  The printed Classic/FD figures are estimates, not a bus timing guarantee.
+- Uplink bytes/s ≈ sum of effective signal Hz × encoded bytes per update,
+  plus snapshot, MQTT, TLS, and network overhead at their actual send rates.
+- Log bytes/day ≈ bytes per recorded update × effective updates/s × 86,400,
+  including timestamps, CSV separators, and other storage overhead.
+
+The generator only calculates CAN utilization. No radio or storage budget
+is enforced; those require a measured encoding/transport model, and today's
+whole-snapshot daemons do not yet follow per-signal policy.
+
+Verify rate parsing and protobuf compatibility with
+`bazel test --config=local //apps/BEVO/schema:signal_rates_test //apps/BEVO/schema:proto_current_test`.
 
 ### Cell format and gotchas
 

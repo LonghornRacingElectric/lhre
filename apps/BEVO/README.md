@@ -81,6 +81,13 @@ under Cargo); **no generated file is checked in**. To change the schema:
 edit the CSVs, `bazel run --config=local //apps/BEVO/schema:update_can_proto`,
 commit both.
 
+The schema also carries optional per-signal `uplink_hz` / `log_hz` policy
+into the runtime decode map and Rust `SignalConfig`. Omitted means no added
+cap, zero requests disabling the stream, and positive Hz requests a cap.
+The daemons do not yet enforce these per-signal rates; see the
+[rate contract](schema/README.md#packet-and-telemetry-rates) for defaults,
+ownership, and the distinction from packet frequency.
+
 ## Not built by Bazel (on purpose)
 
 - `dashd/frontend/` — React kiosk UI, plain `npm` (see its README).

@@ -54,6 +54,19 @@ py_binary(
     main = "update_can_proto.py",
 )
 
+# Rate policy must not alter decoding or protobuf field identities.
+py_test(
+    name = "signal_rates_test",
+    srcs = [
+        "generate_can_json.py",
+        "generate_can_proto.py",
+        "test_signal_rates.py",
+    ],
+    imports = ["."],
+    size = "small",
+    main = "test_signal_rates.py",
+)
+
 # Fails when a CSV edit wasn't followed by update_can_proto.
 py_test(
     name = "proto_current_test",

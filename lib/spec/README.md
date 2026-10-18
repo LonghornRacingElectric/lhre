@@ -108,12 +108,14 @@ policy that consumes it. To inspect the implementation, start at
 `Telemetry.rate_tier`), then read `ir/validator.py` (`resolve_tier` and
 `_check_bus_load`).
 
-The older BEVO CSV pipeline is separate: `apps/BEVO/schema/can_packets.csv`
-contains native packet frequencies and generates the BEVO runtime `can.json`
-through `generate_can_json.py`. That JSON currently does not get these
-`lib/spec` rate tiers. Proposed per-signal `uplink_hz` / `log_hz` fields
-would need an explicit default and consumer policy before they can be
-meaningfully added; they should remain distinct from CAN packet frequency.
+The older [BEVO CSV pipeline](../../apps/BEVO/schema/README.md#packet-and-telemetry-rates)
+is separate: `apps/BEVO/schema/can_packets.csv` contains native packet
+frequencies and generates the BEVO runtime `can.json` through
+`generate_can_json.py`. That JSON does not get these `lib/spec` rate tiers.
+BEVO supports optional per-signal `uplink_hz` / `log_hz` metadata: omitted
+means no added cap, zero requests disabling the stream, and positive Hz
+requests an update cap. BEVO's daemons do not yet enforce this policy. These
+fields are not part of the textproto spec and never change CAN packet cadence.
 
 ## wire.lock
 
