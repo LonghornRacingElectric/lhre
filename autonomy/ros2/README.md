@@ -155,7 +155,10 @@ Machine setup lives in [GETTING-STARTED.md](GETTING-STARTED.md): Ubuntu 24.04 na
 
 In PlotJuggler: click **Streaming** → **ROS2 Topic Subscriber** → **Start**, select topics, then drag them onto the plot area. Useful topics: `/lhr/debug/curvature`, `/lhr/debug/v_cmd`, `/lhr/debug/mission_state`, `/lhr/vehicle/cmd`.
 
-Launch arguments can be passed through `run_demo.sh`:
+Launch arguments can be passed through `run_demo.sh`. Both demo launches
+give every argument they forward the receiving node's declared type, so a
+whole number like `v_max:=8` or `init_yaw:=0` still arrives as a double
+(each package's `test_launch_param_types.py` checks it):
 
 ```bash
 ./scripts/run_demo.sh lookahead_dist:=6.0 seed:=42
@@ -255,7 +258,7 @@ The `lhr_gazebo` package provides an alternative simulation backend using Gazebo
 
 RViz launches automatically alongside Gazebo (disable with `rviz:=false`). The RViz config shows centerline, cones, odometry trail, lookahead point, and FOV visualization.
 
-Launch arguments work the same way:
+Launch arguments work the same way as `run_demo.sh`'s, typed the same way:
 ```bash
 ./scripts/run_gazebo_demo.sh seed:=42 lookahead_dist:=6.0
 ./scripts/run_gazebo_demo.sh gui:=false          # headless Gazebo (no Gazebo GUI)
