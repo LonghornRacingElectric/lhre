@@ -46,6 +46,27 @@ for `adapter_cmd_timeout_s` (0.3 s; `0` disables). Gazebo's joint controllers
 would otherwise hold the last target and keep a car with a dead controller
 driving.
 
+## Fault injection
+
+`fault:=<kind>` starts `fault_injector`, which breaks one thing
+`fault_after_s` (30) after the mission reaches `DRIVING`, for
+`fault_duration_s` (0 = until shutdown), and announces it on
+`/lhr/sim/fault`. It exists to test `lhr_safety`
+([#117](https://github.com/LonghornRacingElectric/lhre/issues/117)); without
+`fault:=` nothing is rewired.
+
+| Kind | How |
+|---|---|
+| `ekf_kill`, `controller_kill` | `pkill -9` the node |
+| `controller_pause` | `SIGSTOP` the controller, `SIGCONT` when the fault ends |
+| `odom_nan`, `odom_spike` | The odometry producer (the EKF, or the bridge under `estimator:=truth`) publishes `/lhr/vehicle/odom_raw`; the injector relays it, corrupted |
+| `lidar_drop` | The bridge publishes `/lhr/lidar/points_raw`; the injector stops relaying |
+| `cmd_nan` | `pure_pursuit` publishes `/lhr/vehicle/cmd_raw`; the injector relays it with NaN steering |
+| `steer_freeze` | `joint_cmd_adapter` reads `/lhr/vehicle/cmd_actuated`, which the injector holds at the fault's steering angle |
+
+The matrix runner and scoring are in
+[`autonomy/testing/tools/fault_injection`](../../../testing/tools/fault_injection/README.md).
+
 ## Safety monitor
 
 `safety:=true` adds `lhr_safety`'s `safety_node`, which trips the mission
