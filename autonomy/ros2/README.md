@@ -423,7 +423,15 @@ the `OdometryPublisher` plugin, bridged from `/model/fsae_vehicle/tf` to `/tf`.
 | `seed` | `1` | Random seed for track generation |
 | `frame_id` | `"map"` | TF frame |
 | `publish_hz` | `5.0` | Publishing rate (Hz) |
-| `track_style` | `"autocross"` | Generator: `autocross` (Catmull-Rom spline), `simple` (original oval), or `oval` (dedicated oval generator) |
+| `track_style` | `"autocross"` | Generator: `autocross` (Catmull-Rom spline), `simple` (original oval), `oval` (dedicated oval generator), or `skidpad` (fixed circular boundaries; visual preview only) |
+
+The `skidpad` generator uses the 2026 FSAE D.10.1 dimensions: centers
+18.25 m apart, inner diameter 15.25 m, outer diameter 21.25 m. Each circle
+has 17 inner cones (DD.4.3) and 13 outer cones with the crossing left open.
+Entry runs along +y at x=0. Blue/yellow boundaries match clockwise travel
+on the right circle and counterclockwise travel on the left. Generic seed,
+width, radius, spacing and jitter options do not alter this rules layout.
+Orange lanes/gates and skidpad planning/completion are not implemented.
 | `num_waypoints` | `10` | Number of waypoints around the loop (autocross only) |
 | `radius_m` | `25.0` | Base radius of the track (autocross only) |
 | `jitter_m` | `10.0` | Radial jitter per waypoint (autocross only) |

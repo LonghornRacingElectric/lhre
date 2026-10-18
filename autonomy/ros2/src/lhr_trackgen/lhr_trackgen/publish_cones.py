@@ -310,6 +310,48 @@ def generate_autocross_track(
 
 
 # ---------------------------------------------------------------------------
+# Skidpad generator
+# ---------------------------------------------------------------------------
+
+def generate_skidpad_track(
+    seed: int = 0,
+    **_kw,
+) -> Tuple[ConeList, ConeList]:
+    """
+    Generate the circular boundaries from FSAE D.10.1 and DD.4.3.
+
+    Entry is along +y between the circles. Blue marks the left boundary
+    in the prescribed direction (right circle clockwise, left circle
+    counterclockwise). Orange entry/exit lanes and gates are not included.
+    The rules geometry is fixed; seed and generic track options are ignored.
+    """
+    left: ConeList = []
+    right: ConeList = []
+    for cx in (-9.125, 9.125):
+        # Seventeen inner cones, including the cone beside the crossing.
+        phase = 0.0 if cx < 0.0 else math.pi
+        inner = []
+        for i in range(17):
+            angle = phase + 2.0 * math.pi * i / 17
+            inner.append((cx + 7.625 * math.cos(angle),
+                          7.625 * math.sin(angle)))
+
+        # Thirteen outer cones at 22.5-degree intervals. Omit the inward
+        # quarter-circle so the crossing and its 3 m entry lane stay open.
+        phase = math.pi / 4.0 if cx < 0.0 else -3.0 * math.pi / 4.0
+        outer = []
+        for i in range(13):
+            angle = phase + math.pi * i / 8.0
+            outer.append((cx + 10.625 * math.cos(angle),
+                          10.625 * math.sin(angle)))
+
+        left.extend(inner if cx < 0.0 else outer)
+        right.extend(outer if cx < 0.0 else inner)
+
+    return left, right
+
+
+# ---------------------------------------------------------------------------
 # Dispatcher
 # ---------------------------------------------------------------------------
 
@@ -317,6 +359,7 @@ GENERATORS = {
     'simple': generate_simple_track,
     'autocross': generate_autocross_track,
     'oval': generate_oval_track,
+    'skidpad': generate_skidpad_track,
 }
 
 

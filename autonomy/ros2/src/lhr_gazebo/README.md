@@ -41,6 +41,19 @@ The launch starts graphical Gazebo and RViz by default. Use `gui:=false` or
 
 ## Visual check
 
+For a stationary preview of the skidpad circular boundaries (no autonomy
+nodes), source ROS and run from `autonomy/ros2`:
+
+```bash
+export GZ_SIM_RESOURCE_PATH="$PWD/src/lhr_gazebo/models${GZ_SIM_RESOURCE_PATH:+:$GZ_SIM_RESOURCE_PATH}"
+gz sim src/lhr_gazebo/worlds/skidpad_seed1.sdf
+```
+
+The preview has 17 inner and 13 outer cones per circle. Orange entry/exit
+lanes and timing gates are not included yet. Its vehicle reference frame
+is at (0, -15), facing +y; this is a viewing pose, not a verified foremost-part
+staging distance. Do not use the autocross planner to drive this world.
+
 In RViz, inferred left cones are blue, inferred right cones are yellow, and
 cones awaiting evidence are orange. During a sharp turn:
 
