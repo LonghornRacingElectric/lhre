@@ -37,8 +37,9 @@ here. Do not add `BUILD.bazel` files.
 - Everything is LF. `autonomy/.gitattributes` enforces it for tracked
   files; on Windows run `sed -i 's/\r$//' <file>` on anything new before
   committing.
-- `ros2/build`, `ros2/install`, `ros2/log`, and `ros2/data/metrics.csv` are
-  gitignored build/run outputs. Never commit them.
+- `ros2/build`, `ros2/install`, `ros2/log`, and everything under `ros2/data/`
+  (metrics CSVs, `record:=true` bags) are gitignored build/run outputs.
+  Never commit them.
 - Hardware test recordings (MCAP, `.npz`, ROS 2 bags) never go in git. They
   live on SharePoint under _VMS_ > Autonomous > Test Data; only the writeup,
   results table, chosen figures and scripts go in `testing/`
