@@ -68,9 +68,10 @@ def test_clamps_steering_to_what_the_linkage_can_reach(plant):
     assert plant.yaw_rate > 0.7
 
 
-def test_a_nan_command_is_a_stop_and_not_a_failed_step(plant):
+@pytest.mark.parametrize('bad', [math.nan, math.inf, -math.inf])
+def test_a_command_that_is_not_finite_is_a_stop_and_not_a_failed_step(plant, bad):
     run(plant, 4.0, 0.0, 3.0)
-    run(plant, math.nan, math.nan, 3.0)
+    run(plant, bad, bad, 3.0)
     assert plant.restarts == 0
     assert abs(plant.speed) < 0.3
 
@@ -113,6 +114,7 @@ def test_resets_the_fmu_and_launches_forward_after_the_motor_reverses(plant, mon
     reverse_motor(plant)
     run(plant, 3.0, 0.0, 4.0)
     assert len(resets) == 1
+    assert (plant.resets, plant.rolling_resets) == (1, 0)
     assert plant._fmu is fmu
     assert plant.y + 3.0 > 3.0
     assert plant.speed == pytest.approx(3.0, abs=0.5)
@@ -126,6 +128,7 @@ def test_a_second_reset_within_two_seconds_starts_rolling(plant):
     reverse_motor(plant)
     plant.step(3.0, 0.0, DT)
     assert plant.speed == pytest.approx(fmu_plant.LAUNCH_SPEED_MPS, abs=0.2)
+    assert (plant.resets, plant.rolling_resets) == (2, 1)
 
 
 def test_stays_off_the_accelerator_while_the_motor_is_reversed(plant):

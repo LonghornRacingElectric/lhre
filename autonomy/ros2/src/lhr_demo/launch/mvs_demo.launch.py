@@ -40,6 +40,7 @@ RECORDED_TOPICS = (
     '/lhr/sensor/wheel_speeds',
     '/tf_truth',
     '/lhr/sim/provenance',
+    '/lhr/sim/recoveries',
     '/lhr/scene/clutter',
     '/tf',
     '/tf_static',
@@ -165,6 +166,8 @@ def _launch_sim(context):
         raise ValueError('plant must be ' + ', '.join(PLANTS))
     extra = ({'max_accel': float(value('max_accel')),
               'max_decel': float(value('max_decel'))} if plant == 'bobsim' else {})
+    if plant == 'fmu':
+        extra['fail_on_recovery'] = value('fail_on_recovery') == 'true'
     use_ekf = value('estimator') == 'ekf'
     if value('estimator') not in ('truth', 'ekf'):
         raise ValueError('estimator must be truth or ekf')
@@ -356,6 +359,9 @@ def generate_launch_description():
                               choices=['none', 'trackside']),
         DeclareLaunchArgument(
             'plant', default_value='kinematic', choices=list(PLANTS)),
+        DeclareLaunchArgument(
+            'fail_on_recovery', default_value='false', choices=['true', 'false'],
+            description='plant:=fmu: end the run at the first FMU reset or restart'),
         perception_arg,
         gates_arg,
         stack_arg,

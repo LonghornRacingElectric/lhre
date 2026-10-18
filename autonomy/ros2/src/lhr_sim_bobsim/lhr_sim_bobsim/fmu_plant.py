@@ -100,7 +100,9 @@ class FmuPlant:
         self._forces = ([self._vr[n] for n in FORCES]
                         if all(n in self._vr for n in FORCES) else None)
         self._max_steer = min(max_steer_rad, MAX_STEER_RAD)
-        self.restarts = 0
+        # The physics is not continuous across any of these: a reset at a
+        # standstill (some start rolling) or a new FMU after a failed step.
+        self.resets = self.rolling_resets = self.restarts = 0
         self._fmu = None
         self._clock = 0.0
         self._fresh_at = -math.inf
@@ -153,7 +155,7 @@ class FmuPlant:
 
     def step(self, speed_cmd: float, steer_cmd: float, dt: float):
         """Hold the commands for dt; return (x, y, yaw, speed, yaw_rate) of base_link."""
-        if math.isnan(speed_cmd) or math.isnan(steer_cmd):
+        if not (math.isfinite(speed_cmd) and math.isfinite(steer_cmd)):
             # A controller fault must not reach the FMU: stop, wheels straight.
             speed_cmd = steer_cmd = 0.0
         self._clock += dt
@@ -164,6 +166,8 @@ class FmuPlant:
             # last reset did not hold, start this one rolling.
             rolling = self._clock - self._fresh_at < RETRY_S
             self._fresh_at = self._clock
+            self.resets += 1
+            self.rolling_resets += rolling
             self._start(self.x, self.y, self.yaw, LAUNCH_SPEED_MPS if rolling else 0.0)
         error = speed_cmd - self.speed
         demand = SPEED_KP * error + self._integral

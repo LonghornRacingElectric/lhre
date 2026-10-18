@@ -98,7 +98,14 @@ The FMU's inputs are driver controls, so `FmuPlant` adds the driver:
   driver stays off the accelerator. If the car is stopped and told to go,
   `FmuPlant` resets the FMU at the same pose; it starts forward;
 - if an FMU step fails, it starts a new FMU where the car is and logs a
-  warning. A command that is not a number is a stop.
+  warning. A command that is not finite is a stop.
+
+The physics is not continuous across a reset or a restart, so the node counts
+both on `/lhr/sim/recoveries` (latched JSON, recorded in bags) and logs each
+one. Stop-and-go driving resets the FMU now and then by design; for a run
+that must have continuous physics, `fail_on_recovery:=true` ends it at the
+first one. `/lhr/sim/provenance` includes the record `make fmu` writes next
+to the FMU (BobSim SHA, `vehicle.yml` and FMU hashes, OpenModelica version).
 
 The node also publishes the car and the force on each tire as markers on
 `/lhr/vehicle/forces`, in `base_link` (red: force in the road plane, green:
