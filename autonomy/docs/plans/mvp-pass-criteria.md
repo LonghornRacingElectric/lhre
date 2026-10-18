@@ -1,6 +1,6 @@
 # Software MVP pass criteria (10/28)
 
-**Status: draft, 2026-10-18.** Tracks
+**Status: approved, 2026-10-18.** Tracks
 [#108](https://github.com/LonghornRacingElectric/lhre/issues/108). The gate
 run itself is
 [#109](https://github.com/LonghornRacingElectric/lhre/issues/109), and the
