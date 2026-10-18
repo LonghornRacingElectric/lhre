@@ -1,0 +1,316 @@
+# proto-file: lib/spec/proto/can_spec.proto
+# proto-message: lhre.canspec.SpecFile
+
+message {
+  name: "FIRMWARE_UPDATE_COMMAND_PACKET"
+  can_id: 16
+  from_board: "Pi"
+  to_boards: "*"
+  bus: "Critical"
+  dlc: 8
+  description: "Firmware Update Command Packet"
+  signal {
+    name: "command"
+    encoding {
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Command"
+  }
+  signal {
+    name: "address"
+    encoding {
+      start_bit: 8
+      bit_length: 32
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Address"
+  }
+  signal {
+    name: "num_blocks"
+    encoding {
+      start_bit: 40
+      bit_length: 16
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Num Blocks"
+  }
+  signal {
+    name: "crc"
+    encoding {
+      start_bit: 56
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "CRC"
+  }
+}
+message {
+  name: "BUS_ENABLE_DISABLE"
+  can_id: 17
+  from_board: "Pi"
+  to_boards: "HVC"
+  to_boards: "VCU"
+  to_boards: "USM"
+  to_boards: "CSM"
+  bus: "Critical"
+  dlc: 8
+  description: "Bus Enable/Disable. Bus Silence when DISABLED"
+  signal {
+    name: "enable"
+    encoding {
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    description: "Enable"
+  }
+  signal {
+    name: "fw_update"
+    encoding {
+      start_bit: 8
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    description: "FW Update"
+  }
+  signal {
+    name: "device"
+    encoding {
+      start_bit: 16
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Device"
+  }
+}
+message {
+  name: "FIRMWARE_UPDATE_DATA_PACKET"
+  can_id: 18
+  from_board: "Pi"
+  to_boards: "*"
+  bus: "Critical"
+  dlc: 8
+  description: "Firmware Update Data Packet"
+  signal {
+    name: "index"
+    encoding {
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Index"
+  }
+  signal {
+    name: "data0"
+    encoding {
+      start_bit: 8
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "data0"
+  }
+  signal {
+    name: "data1"
+    encoding {
+      start_bit: 16
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "data1"
+  }
+  signal {
+    name: "data2"
+    encoding {
+      start_bit: 24
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "data2"
+  }
+  signal {
+    name: "data3"
+    encoding {
+      start_bit: 32
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "data3"
+  }
+  signal {
+    name: "data4"
+    encoding {
+      start_bit: 40
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "data4"
+  }
+  signal {
+    name: "data5"
+    encoding {
+      start_bit: 48
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "data5"
+  }
+  signal {
+    name: "data6"
+    encoding {
+      start_bit: 56
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "data6"
+  }
+}
+message {
+  name: "DEVICE_FIRMWARE_UPDATE_RESPONSE_PACKET"
+  can_id: 19
+  from_board: "Pi"
+  to_boards: "*"
+  bus: "Critical"
+  dlc: 1
+  description: "Device Firmware Update Response Packet. Enum response"
+  signal {
+    name: "response"
+    encoding {
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Response"
+  }
+}
+message {
+  name: "VCU_ENTER_BOOTLOADER"
+  can_id: 37
+  from_board: "Pi"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 1
+  description: "VCU Enter Bootloader"
+  signal {
+    name: "enable"
+    encoding {
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Enable"
+  }
+}
+message {
+  name: "CSM_ENTER_BOOTLOADER"
+  can_id: 38
+  from_board: "Pi"
+  to_boards: "CSM"
+  bus: "Critical"
+  dlc: 1
+  description: "CSM Enter Bootloader"
+  signal {
+    name: "enable"
+    encoding {
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Enable"
+  }
+}
+message {
+  name: "HVC_ENTER_BOOTLOADER"
+  can_id: 39
+  from_board: "Pi"
+  to_boards: "HVC"
+  bus: "Critical"
+  dlc: 1
+  description: "HVC Enter Bootloader"
+  signal {
+    name: "enable"
+    encoding {
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Enable"
+  }
+}
+message {
+  name: "USM_ENTER_BOOTLOADER"
+  can_id: 40
+  from_board: "Pi"
+  to_boards: "USM"
+  bus: "Critical"
+  dlc: 1
+  description: "USM Enter Bootloader"
+  signal {
+    name: "enable"
+    encoding {
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Enable"
+  }
+}
+message {
+  name: "HVC_BOUNDS_PARAMETERS"
+  can_id: 48
+  from_board: "Pi"
+  to_boards: "HVC"
+  bus: "Critical"
+  description: "HVC Bounds Parameters"
+}

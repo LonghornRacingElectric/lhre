@@ -2,20 +2,19 @@
 # proto-message: lhre.canspec.SpecFile
 
 message {
-  name: "HVC_PACK_STATUS"
-  can_id: 1024
+  name: "HVC_CHARGER_COMMAND"
+  can_id: 80
   from_board: "HVC"
-  to_boards: "*"
+  to_boards: "Charger"
   bus: "Critical"
-  dlc: 8
-  frequency_hz: 50.0
-  description: "Seed example: accumulator pack electrical and thermal state."
+  dlc: 7
+  frequency_hz: 10.0
+  description: "HVC Charger Command"
   signal {
-    name: "pack_voltage"
+    name: "max_charge_voltage"
     encoding {
       bit_length: 16
-      scale: 0.1
-      max: 600.0
+      scale: 0.01
     }
     logical {
       physical {
@@ -23,19 +22,18 @@ message {
       }
     }
     telemetry {
-      group: "Battery"
-      field: "pack_voltage"
-      id: 1
+      group: "Thermal"
+      field: "max_charge_voltage"
+      id: 36
     }
-    description: "Total pack voltage"
+    description: "Max Charge Voltage"
   }
   signal {
-    name: "pack_current"
+    name: "max_charge_current"
     encoding {
       start_bit: 16
       bit_length: 16
-      sign: SIGNED
-      scale: 0.1
+      scale: 0.01
     }
     logical {
       physical {
@@ -43,18 +41,373 @@ message {
       }
     }
     telemetry {
-      group: "Battery"
-      field: "pack_current"
-      id: 2
+      group: "Thermal"
+      field: "max_charge_current"
+      id: 35
     }
-    description: "Pack current, positive = discharge"
+    description: "Max Charge Current"
   }
   signal {
-    name: "soc"
+    name: "imd_led_state"
     encoding {
       start_bit: 32
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    telemetry {
+      group: "DiagnosticsLow"
+      field: "imd_led"
+      id: 17
+    }
+    description: "IMD LED State"
+  }
+  signal {
+    name: "bms_led_state"
+    encoding {
+      start_bit: 40
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    telemetry {
+      group: "Thermal"
+      field: "bms_led"
+      id: 37
+    }
+    description: "BMS LED State"
+  }
+  signal {
+    name: "charger_enable"
+    encoding {
+      start_bit: 48
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    telemetry {
+      group: "Thermal"
+      field: "charger_enable"
+      id: 38
+    }
+    description: "Charger Enable"
+  }
+}
+message {
+  name: "CELL_VOLTAGES"
+  can_id: 208
+  quantity: 33
+  from_board: "HVC"
+  to_boards: "PDU"
+  bus: "Critical"
+  dlc: 8
+  frequency_hz: 1.0
+  description: "Cell Voltages. Orion has 130 cells: 33 frames x 4 cells/frame = 132 slots (last 2 unused). (Packet 1 is 0x0D0, Packet 33 is 0x0F0)"
+  signal {
+    name: "voltage_i"
+    encoding {
+      bit_length: 16
+      scale: 0.0001
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    telemetry {
+      group: "Pack"
+      field: "cells_v"
+      id: 4
+      repeated: true
+    }
+    description: "Voltage[i]"
+  }
+  signal {
+    name: "voltage_i_1"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      scale: 0.0001
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    telemetry {
+      group: "Pack"
+      field: "cells_v"
+      id: 4
+      array_index: 1
+      repeated: true
+    }
+    description: "Voltage[i+1]"
+  }
+  signal {
+    name: "voltage_i_2"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      scale: 0.0001
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    telemetry {
+      group: "Pack"
+      field: "cells_v"
+      id: 4
+      array_index: 2
+      repeated: true
+    }
+    description: "Voltage[i+2]"
+  }
+  signal {
+    name: "voltage_i_3"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      scale: 0.0001
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    telemetry {
+      group: "Pack"
+      field: "cells_v"
+      id: 4
+      array_index: 3
+      repeated: true
+    }
+    description: "Voltage[i+3]"
+  }
+}
+message {
+  name: "CELL_TEMPERATURES"
+  can_id: 256
+  quantity: 23
+  from_board: "HVC"
+  to_boards: "PDU"
+  bus: "Critical"
+  dlc: 8
+  frequency_hz: 1.0
+  description: "Cell Temperatures. (Packet 1 is 0x0E8, Packet 23 is 0x0FE)"
+  signal {
+    name: "temp_i"
+    encoding {
+      bit_length: 16
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    telemetry {
+      group: "Pack"
+      field: "cells_temps"
+      id: 12
+      repeated: true
+    }
+    description: "Temp[i]"
+  }
+  signal {
+    name: "temp_i_1"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    telemetry {
+      group: "Pack"
+      field: "cells_temps"
+      id: 12
+      array_index: 1
+      repeated: true
+    }
+    description: "Temp[i+1]"
+  }
+  signal {
+    name: "temp_i_2"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    telemetry {
+      group: "Pack"
+      field: "cells_temps"
+      id: 12
+      array_index: 2
+      repeated: true
+    }
+    description: "Temp[i+2]"
+  }
+  signal {
+    name: "temp_i_3"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    telemetry {
+      group: "Pack"
+      field: "cells_temps"
+      id: 12
+      array_index: 3
+      repeated: true
+    }
+    description: "Temp[i+3]"
+  }
+}
+message {
+  name: "CONTACTOR_STATUS"
+  can_id: 305
+  from_board: "HVC"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 4
+  frequency_hz: 100.0
+  description: "Contactor Status"
+  signal {
+    name: "hvc_state_machine"
+    encoding {
       bit_length: 8
-      scale: 0.5
+    }
+    logical {
+      physical {
+      }
+    }
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "hvc_state_machine"
+      id: 3
+    }
+    description: "HVC State Machine"
+  }
+  signal {
+    name: "positive_hv_contactor"
+    encoding {
+      start_bit: 8
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "pos_hv_contactor"
+      id: 37
+    }
+    description: "Positive HV Contactor"
+  }
+  signal {
+    name: "negative_hv_contactor"
+    encoding {
+      start_bit: 16
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "neg_hv_contactor"
+      id: 36
+    }
+    description: "Negative HV Contactor"
+  }
+  signal {
+    name: "precharge_contactor"
+    encoding {
+      start_bit: 24
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "precharge_contactor"
+      id: 38
+    }
+    description: "Precharge Contactor"
+  }
+}
+message {
+  name: "BATTERY_PACK_STATUS"
+  can_id: 306
+  from_board: "HVC"
+  to_boards: "PDU"
+  bus: "Critical"
+  dlc: 8
+  frequency_hz: 10.0
+  description: "Battery Pack Status"
+  signal {
+    name: "pack_voltage"
+    encoding {
+      bit_length: 16
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    telemetry {
+      group: "Pack"
+      field: "hv_pack_v"
+      id: 15
+    }
+    description: "Pack Voltage"
+  }
+  signal {
+    name: "tractive_current"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "A"
+      }
+    }
+    telemetry {
+      group: "Pack"
+      field: "hv_c"
+      id: 14
+    }
+    description: "Tractive Current"
+  }
+  signal {
+    name: "state_of_charge"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      scale: 0.01
     }
     logical {
       physical {
@@ -62,19 +415,17 @@ message {
       }
     }
     telemetry {
-      group: "Battery"
-      field: "pack_soc"
-      id: 3
-      rate_tier: SLOW
+      group: "Pack"
+      field: "hv_soc"
+      id: 16
     }
-    description: "State of charge"
+    description: "State of Charge"
   }
   signal {
-    name: "coolant_temp"
+    name: "cell_top_temp"
     encoding {
-      start_bit: 40
+      start_bit: 48
       bit_length: 8
-      sign: SIGNED
     }
     logical {
       physical {
@@ -83,27 +434,43 @@ message {
     }
     telemetry {
       group: "Thermal"
-      field: "coolant_temp"
-      id: 2
+      field: "cell_top_temp"
+      id: 13
     }
-    description: "Coolant temperature at pack outlet"
+    description: "Cell Top Temp"
+  }
+  signal {
+    name: "cell_bottom_temp"
+    encoding {
+      start_bit: 56
+      bit_length: 8
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    telemetry {
+      group: "Thermal"
+      field: "cell_bottom_temp"
+      id: 12
+    }
+    description: "Cell Bottom Temp"
   }
 }
 message {
-  name: "HVC_CELL_TEMPS"
-  can_id: 1040
-  quantity: 4
+  name: "BATTERY_TEMPERATURE_STATUS"
+  can_id: 307
   from_board: "HVC"
-  to_boards: "*"
+  to_boards: "PDU"
   bus: "Critical"
   dlc: 8
-  frequency_hz: 5.0
-  description: "Seed example: indexed array block. 4 temps per frame over 4 consecutive IDs = cells 0-15; cell = (frame_id - 0x410) * 4 + slot."
+  frequency_hz: 10.0
+  description: "Battery Temperature Status"
   signal {
-    name: "cell_temp_slot0"
+    name: "bus_bar_1_temp"
     encoding {
       bit_length: 16
-      sign: SIGNED
       scale: 0.1
     }
     logical {
@@ -112,19 +479,17 @@ message {
       }
     }
     telemetry {
-      group: "Battery"
-      field: "cell_temps"
-      id: 4
-      repeated: true
+      group: "Thermal"
+      field: "bus_bar_temp1"
+      id: 9
     }
-    description: "Cell temperature, slot 0 of this frame"
+    description: "Bus Bar 1 Temp"
   }
   signal {
-    name: "cell_temp_slot1"
+    name: "bus_bar_2_temp"
     encoding {
       start_bit: 16
       bit_length: 16
-      sign: SIGNED
       scale: 0.1
     }
     logical {
@@ -133,20 +498,17 @@ message {
       }
     }
     telemetry {
-      group: "Battery"
-      field: "cell_temps"
-      id: 4
-      array_index: 1
-      repeated: true
+      group: "Thermal"
+      field: "bus_bar_temp2"
+      id: 10
     }
-    description: "Cell temperature, slot 1 of this frame"
+    description: "Bus Bar 2 Temp"
   }
   signal {
-    name: "cell_temp_slot2"
+    name: "bus_bar_3_temp"
     encoding {
       start_bit: 32
       bit_length: 16
-      sign: SIGNED
       scale: 0.1
     }
     logical {
@@ -155,20 +517,17 @@ message {
       }
     }
     telemetry {
-      group: "Battery"
-      field: "cell_temps"
-      id: 4
-      array_index: 2
-      repeated: true
+      group: "Thermal"
+      field: "bus_bar_temp3"
+      id: 11
     }
-    description: "Cell temperature, slot 2 of this frame"
+    description: "Bus Bar 3 Temp"
   }
   signal {
-    name: "cell_temp_slot3"
+    name: "precharge_resistor_temp"
     encoding {
       start_bit: 48
       bit_length: 16
-      sign: SIGNED
       scale: 0.1
     }
     logical {
@@ -177,12 +536,162 @@ message {
       }
     }
     telemetry {
-      group: "Battery"
-      field: "cell_temps"
-      id: 4
-      array_index: 3
-      repeated: true
+      group: "DiagnosticsLow"
+      field: "precharge_r_temp"
+      id: 1
     }
-    description: "Cell temperature, slot 3 of this frame"
+    description: "Precharge Resistor Temp"
+  }
+}
+message {
+  name: "INDICATORS_SHUTDOWN_STATUS"
+  can_id: 308
+  from_board: "HVC"
+  to_boards: "PDU"
+  bus: "Critical"
+  dlc: 6
+  frequency_hz: 10.0
+  description: "Indicators + Shutdown Status"
+  signal {
+    name: "bms_error"
+    encoding {
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    telemetry {
+      group: "DiagnosticsLow"
+      field: "bmb_comm_error"
+      id: 2
+    }
+    description: "BMS Error"
+  }
+  signal {
+    name: "imd_error"
+    encoding {
+      start_bit: 8
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    telemetry {
+      group: "DiagnosticsLow"
+      field: "imd_gnd_isolation_error"
+      id: 3
+    }
+    description: "IMD Error"
+  }
+  signal {
+    name: "shutdown_leg_1"
+    encoding {
+      start_bit: 16
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    telemetry {
+      group: "DiagnosticsLow"
+      field: "shutdown_leg1"
+      id: 6
+    }
+    description: "Shutdown Leg 1"
+  }
+  signal {
+    name: "shutdown_leg_2"
+    encoding {
+      start_bit: 24
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    telemetry {
+      group: "DiagnosticsLow"
+      field: "shutdown_leg2"
+      id: 7
+    }
+    description: "Shutdown Leg 2"
+  }
+  signal {
+    name: "shutdown_leg_3"
+    encoding {
+      start_bit: 32
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    telemetry {
+      group: "DiagnosticsLow"
+      field: "shutdown_leg3"
+      id: 8
+    }
+    description: "Shutdown Leg 3"
+  }
+  signal {
+    name: "shutdown_leg_4"
+    encoding {
+      start_bit: 40
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    telemetry {
+      group: "DiagnosticsLow"
+      field: "shutdown_leg4"
+      id: 9
+    }
+    description: "Shutdown Leg 4"
+  }
+}
+message {
+  name: "BATTERY_CELL_LIMITS"
+  can_id: 310
+  from_board: "HVC"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 4
+  frequency_hz: 10.0
+  description: "Battery Cell Limits"
+  signal {
+    name: "min_cell_voltage"
+    encoding {
+      bit_length: 16
+      scale: 0.0001
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    telemetry {
+      group: "Thermal"
+      field: "min_cell_voltage"
+      id: 22
+    }
+    description: "Min Cell Voltage"
+  }
+  signal {
+    name: "max_cell_voltage"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      scale: 0.0001
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    telemetry {
+      group: "Thermal"
+      field: "max_cell_voltage"
+      id: 21
+    }
+    description: "Max Cell Voltage"
   }
 }

@@ -15,13 +15,39 @@ proto, gateway tables, and DBC later. See
 | `buses.textproto` | Bus definitions. |
 | `types.textproto` | Shared enums and bitfields. |
 | `groups.textproto` | Telemetry groups and their id ledgers. |
-| `messages/<board>.textproto` | Messages sent by one board. `from_board` must match the filename, which is what lets codegen emit one namespace and library per board. |
+| `messages/<board>.textproto` | Messages sent by one source named by the lhre-2026 `From` column. `from_board` must match the filename, which is what lets codegen emit one namespace and library per source. |
 | `wire.lock` | Generated, committed. See below. |
 | `ir/` | The Python that reads, validates, and serializes the spec. |
 
-Every file parses as one `lhre.canspec.SpecFile`. Current messages are
-seed examples, pending migration of the real set from the lhre-2026 CSVs
-(staged at `apps/BEVO/schema/` on the `bevo-migration` branch).
+Every file parses as one `lhre.canspec.SpecFile`. The 71-message matrix was
+migrated from lhre-2026 commit `d981057b8830f5f8be9c8b70a206dd2345748cd6`:
+[can_packets.csv](https://github.com/LonghornRacingElectric/lhre-2026/blob/d981057b8830f5f8be9c8b70a206dd2345748cd6/drivers/longhorn-lib/config/can_packets.csv)
+and
+[can_bitfields.csv](https://github.com/LonghornRacingElectric/lhre-2026/blob/d981057b8830f5f8be9c8b70a206dd2345748cd6/drivers/longhorn-lib/config/can_bitfields.csv).
+Their SHA-256 digests at migration were
+`695d06925f3302c103b78ae52da8359d697e389235e36e8f3456c880b8ccd7a0`
+and `418f03dd0061d3fe99586f429fafa6f9ff5c18eddaa4b5f59c8dc1c9d8a7ecc9`,
+respectively.
+
+The CSV needed explicit normalization where its rows could not satisfy the
+typed spec:
+
+- `FAN_FLOW_SPEEDS` uses `Data Acq`; that value was shifted into `Data[6]`.
+- `BSE_3` uses `Critical`; that value was shifted into `Data[7]`.
+- `HVC_BOUNDS_PARAMETERS` uses `Critical`; `ALLOW_BALANCE_COMMAND` already
+  named `Critical`. Both have no defined payload, so their DLC is `0`.
+- `CONTACTOR_STATUS` has four byte-aligned fields, so its source DLC `3` was
+  corrected to `4`.
+- Legacy `Quantity` was not an ID-range contract. Only cell voltages (`33`)
+  and cell temperatures (`23`) occupy consecutive IDs; firmware-update rows
+  are single IDs.
+- Four telemetry names had multiple producers. The canonical bindings are
+  `ambient_temp` from `FAN_FLOW_SPEEDS`, `motor_temp` from
+  `INVERTER_TEMPS_2`, and `motor_speed` plus `torque_feedback` from
+  `INVERTER_SPEED`. The duplicate CAN signals remain in the spec but are
+  bus-only.
+- The source's synthetic GPS fields have no CAN rows. Their Dynamics ids and
+  names are tombstoned rather than recycled.
 
 Spec files carry no comments. Textproto comments do not survive the
 canonical serializer, so prose goes in `description` fields, which the
@@ -61,6 +87,9 @@ The full message matrix and signal directory is published at
 is the Python in `ir/`: loader, validator, canonical serializer, and wire
 types. Nothing else understands the format. The loader is small and
 isolated so a future syntax change stays cheap.
+
+The vehicle has two 1 Mbit/s classic CAN buses: `Critical` for controls and
+powertrain traffic, and `Data Acq` for CSM, USM, and TSM sensor traffic.
 
 ## Derived wire types
 
@@ -107,7 +136,7 @@ indexed by frame ID:
 
 Element index is `(frame_id − can_id) × slots_per_frame + array_index`,
 so 4 slots with `quantity: 4` gives 16 elements on one ledger id.
-`HVC_CELL_TEMPS` in `messages/hvc.textproto` is the worked example.
+`CELL_TEMPERATURES` in `messages/hvc.textproto` is the worked example.
 
 ## Mux
 

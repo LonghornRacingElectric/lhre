@@ -3,25 +3,47 @@
 
 groups {
   group {
-    name: "Battery"
-    next_free_id: 5
-    description: "Accumulator pack state."
+    name: "Controls"
+    next_free_id: 46
+    reserved_ids: 31
+    reserved_ids: 32
+    reserved_ids: 33
+    reserved_ids: 34
+    reserved_ids: 35
+    reserved_ids: 36
+    reserved_ids: 37
+    reserved_ids: 38
+    description: "Driver controls, torque commands, and VCU outputs."
   }
   group {
-    name: "Faults"
-    next_free_id: 4
-    description: "Latched fault flags, one bool per fault."
+    name: "DiagnosticsHigh"
+    next_free_id: 39
+    description: "High-rate state, shutdown, and fault telemetry."
+  }
+  group {
+    name: "DiagnosticsLow"
+    next_free_id: 18
+    description: "Low-rate state, shutdown, and fault telemetry."
+  }
+  group {
+    name: "Dynamics"
+    next_free_id: 36
+    reserved_ids: 1
+    reserved_ids: 2
+    reserved_ids: 3
+    reserved_names: "gps"
+    reserved_names: "gps_imu"
+    reserved_names: "gps_speed"
+    description: "Vehicle motion and suspension telemetry."
+  }
+  group {
+    name: "Pack"
+    next_free_id: 23
+    description: "Accumulator and inverter electrical telemetry."
   }
   group {
     name: "Thermal"
-    next_free_id: 3
-    reserved_ids: 1
-    reserved_names: "old_coolant_temp"
-    description: "Temperatures across the car."
-  }
-  group {
-    name: "Vehicle"
-    next_free_id: 4
-    description: "Driver inputs and vehicle dynamics."
+    next_free_id: 39
+    description: "Temperatures, cooling, and charger telemetry."
   }
 }
