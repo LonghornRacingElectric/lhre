@@ -119,7 +119,8 @@ class FaultInjector(Node):
             raise ValueError(
                 f'Unknown fault {self._kind!r}, expected one of {sorted(FAULTS)}')
         self._fault = FAULTS[self._kind]
-        self._clock = FaultClock(
+        # rclpy's Node keeps its own clock in an attribute named _clock.
+        self._fault_clock = FaultClock(
             float(self.get_parameter('fault_after_s').value),
             float(self.get_parameter('fault_duration_s').value))
         self._driving = False
@@ -144,7 +145,7 @@ class FaultInjector(Node):
         self.create_timer(0.02, self._tick)
         self.get_logger().warning(
             f'Fault injector armed: {self._kind} (expect {f.expect}), '
-            f'{self._clock.after_s:.1f} s after DRIVING')
+            f'{self._fault_clock.after_s:.1f} s after DRIVING')
 
     def _now(self) -> float:
         return self.get_clock().now().nanoseconds * 1e-9
@@ -153,7 +154,7 @@ class FaultInjector(Node):
         self._driving = msg.data == 'DRIVING'
 
     def _tick(self):
-        edge = self._clock.update(self._now(), self._driving)
+        edge = self._fault_clock.update(self._now(), self._driving)
         if not edge:
             return
         f = self._fault
@@ -170,7 +171,7 @@ class FaultInjector(Node):
                        check=False)
 
     def _relay_cb(self, msg):
-        if self._clock.active:
+        if self._fault_clock.active:
             msg = self._corrupt(msg)
             if msg is None:
                 return

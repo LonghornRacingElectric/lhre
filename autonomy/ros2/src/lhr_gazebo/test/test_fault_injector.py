@@ -60,10 +60,13 @@ def test_every_fault_names_a_real_safety_check(kind):
 @pytest.fixture
 def injector(request):
     rclpy.init(args=['--ros-args', '-p', f'fault:={request.param}'])
-    node = FaultInjector()
-    yield node
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        node = FaultInjector()
+        yield node
+        node.destroy_node()
+    finally:
+        # Always, so one failure cannot poison every later rclpy test.
+        rclpy.shutdown()
 
 
 @pytest.mark.parametrize('injector', ['odom_spike'], indirect=True)
