@@ -3,7 +3,11 @@ import sys
 from pathlib import Path
 
 import yaml
-from _5_App.modelica_generator import generate_modelica_stack
+
+try:
+    from app.modelica_generator import generate_modelica_stack
+except ImportError:  # BobSim before its app/ and engines/ layout
+    from _5_App.modelica_generator import generate_modelica_stack
 
 BOBSIM = Path('bobsim').resolve()
 FMI_MODEL = 'Experiments/Standards/VehicleFMI.mo'
@@ -14,6 +18,8 @@ def write(work: Path) -> str:
     data = yaml.safe_load(source.read_text(encoding='utf-8'))
     boblib = (work / 'BobLib').resolve()
     data['paths'] = {**(data.get('paths') or {}), 'boblib': str(boblib)}
+    # VehicleFMI does not use the record's solved QSS pose, so do not require one.
+    data['modelica_initialization'] = 'legacy'
     vehicle = (work / 'vehicle.yml').resolve()
     vehicle.write_text(yaml.safe_dump(data, sort_keys=False), encoding='utf-8')
     record = generate_modelica_stack(vehicle, root=BOBSIM).record_name

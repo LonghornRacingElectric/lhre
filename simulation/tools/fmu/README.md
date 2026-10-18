@@ -17,7 +17,9 @@ The numbers below come from BobSim `4da577a`, OpenModelica 1.26.3 and
 ## What build.sh does
 
 1. Copy BobLib from the submodule working tree to `out/fmu/build/BobLib`.
-   The submodule does not change.
+   The submodule does not change. BobLib is in `engines/boblib` in current
+   BobSim and in `_0_Utils/external/BobLib` in older pins; the build finds
+   either, and also imports the record generator from `app/` or `_5_App/`.
 2. Run `records.py`. It calls BobSim's record generator, the one that
    `make records` uses, to write the records of `vehicle.yml` into the copy.
    It also writes the model `OrionFMI`: BobLib's `VehicleFMI` with

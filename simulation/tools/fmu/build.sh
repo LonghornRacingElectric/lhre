@@ -7,7 +7,10 @@ fmu=out/fmu/OrionFMI.fmu
 
 rm -rf "$work"
 mkdir -p "$work"
-cp -R bobsim/_0_Utils/external/BobLib/BobLib "$work/BobLib"
+# BobSim has BobLib in engines/boblib since its PR #82, in _0_Utils/external before.
+boblib=bobsim/engines/boblib/BobLib
+[ -d "$boblib" ] || boblib=bobsim/_0_Utils/external/BobLib/BobLib
+cp -R "$boblib" "$work/BobLib"
 python3 tools/fmu/records.py "$work"
 omc tools/fmu/orion_fmi.mos
 test -f "$work/OrionFMI.fmu" || { echo "omc did not write $work/OrionFMI.fmu"; exit 1; }
