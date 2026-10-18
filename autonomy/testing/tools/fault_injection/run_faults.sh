@@ -46,9 +46,12 @@ one_run() {  # id kind track seed v_max seconds [launch args...]
     ros2 bag record -s mcap -o "$bag" --topics $TOPICS \
         > "$OUT/bags/$id.record.log" 2>&1 &
     local rec=$!
+    # The launch file forwards v_max untyped, so "5" arrives as an INTEGER
+    # and pursuit_node dies declaring it as a DOUBLE.
     timeout -s INT "$secs" ros2 launch lhr_gazebo gazebo_demo.launch.py \
         gui:=false rviz:=false track_style:="$track" seed:="$seed" \
-        perception:=lidar estimator:=ekf safety:=true v_max:="$vmax" \
+        perception:=lidar estimator:=ekf safety:=true \
+        v_max:="$(printf '%.1f' "$vmax")" \
         $EXTRA "$@" > "$OUT/bags/$id.launch.log" 2>&1
     # A background job ignores SIGINT in a non-interactive shell; TERM is
     # what makes the recorder close the bag.
