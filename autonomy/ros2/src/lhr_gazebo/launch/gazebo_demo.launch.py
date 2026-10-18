@@ -203,7 +203,11 @@ def _launch_setup(context: LaunchContext):
         package='lhr_gazebo',
         executable='joint_cmd_adapter',
         name='joint_cmd_adapter',
-        parameters=[{'use_sim_time': True}],
+        parameters=[{
+            'cmd_timeout_s': ParameterValue(
+                LaunchConfiguration('adapter_cmd_timeout_s'), value_type=float),
+            'use_sim_time': True,
+        }],
         output='screen',
     )
 
@@ -498,6 +502,8 @@ def generate_launch_description():
         DeclareLaunchArgument('mission', default_value='autocross'),
         DeclareLaunchArgument('auto_go', default_value='true'),
         DeclareLaunchArgument('ready_hold_sec', default_value='5.0'),
+        # Joint adapter: stop the wheels when commands stop (0 disables)
+        DeclareLaunchArgument('adapter_cmd_timeout_s', default_value='0.3'),
         # Safety monitor (lhr_safety). Off until #117's fault injection
         # has tuned the thresholds; defaults match the node's.
         DeclareLaunchArgument(

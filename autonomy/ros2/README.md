@@ -685,6 +685,12 @@ outer = atan(wheelbase / (R + track_width/2))
 
 **Wheel velocity differential:** Each wheel's angular velocity accounts for its distance from the instantaneous center of rotation. Outer wheels travel farther and spin faster than inner wheels in a turn.
 
+**Command timeout:** Gazebo's joint controllers hold their last target, so a dead controller would otherwise leave the car driving. With no command for `cmd_timeout_s` the adapter sets all four wheel speeds to 0 (steering holds), the way the real car's actuators stop when commands stop. It acts once per dropout and resumes on the next command; a sim clock that jumps backwards counts as a dropout.
+
+| Param | Default | Description |
+|-------|---------|-------------|
+| `cmd_timeout_s` | `0.3` | Command age (s) after which the wheels stop; `0` disables. Launch argument `adapter_cmd_timeout_s` |
+
 ### lhr_perception (lidar_cone_detector)
 
 Processes LiDAR pointcloud to detect cones. Pipeline: ground removal → range filter → Euclidean clustering → cone validation → timestamp-aligned sensor-to-map transform → spatial dedup → track-side inference. The detector buffers odometry and interpolates the vehicle pose at each pointcloud timestamp; it waits for the following odometry sample instead of projecting a sharp-turn scan with a pose from another instant. Detections are associated to their nearest existing cone, with each cone used at most once per scan, before positions are updated by a running average. Side votes come from a short local corridor and are shared only across geometrically continuous boundary fragments. Later labels require consistent proposals from vehicle poses separated by one metre and remain locked after acceptance.
