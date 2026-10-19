@@ -1,3 +1,4 @@
+import { gpsProblem, hasGps, MAX_GPS_GAP_MS, recordingSamples } from "./gps-quality";
 import { directionLabel, pathsDirection, signedArea, withRunDirection } from "./direction";
 import { sectorsOf } from "./sectors";
 import type {
@@ -248,28 +249,14 @@ function planCourses(prep: Prepared[], pr: (s: LiveSample) => XY): { courses: Co
 
 /* ---------- the export, one run per course ---------- */
 
-export function convertSession(J: SessionExport, fileName: string, tracks: Track[] = []): ConvertResult[] {
+export function convertSession(J: SessionExport, fileName: string, tracks: Track[] = [], bounds: { start?: number; end?: number } = {}): ConvertResult[] {
   const warn: string[] = [];
   if (!J || !Array.isArray(J.sampleTail) || !Array.isArray(J.laps)) {
     throw new Error("This does not look like a session export (no sampleTail or laps).");
   }
-  const hasGps = (s: LiveSample) => !!s && Number.isFinite(s.lat) && Number.isFinite(s.lon) &&
-    Math.abs(s.lat) <= 90 && Math.abs(s.lon) <= 180 && (s.lat !== 0 || s.lon !== 0);
-  // The session tail is capped upstream; complete lap exports carry the older samples.
-  const byTime = new Map<number, LiveSample>();
-  for (const s of [...J.laps.flatMap((l) => Array.isArray(l.samples) ? l.samples : []),
-    ...(Array.isArray(J.currentLap?.lapSamples) ? J.currentLap.lapSamples : []), ...J.sampleTail]) {
-    if (!s || !Number.isFinite(s.t)) continue;
-    const old = byTime.get(s.t);
-    byTime.set(s.t, old ? {
-      ...old, ...s, values: { ...old.values, ...s.values },
-      lat: hasGps(s) ? s.lat : old.lat, lon: hasGps(s) ? s.lon : old.lon,
-      cellTemps: s.cellTemps?.length ? s.cellTemps : old.cellTemps,
-    } : s);
-  }
-  const st = [...byTime.values()].sort((a, b) => a.t - b.t);
+  const st = recordingSamples(J);
   const nGps = st.reduce((n, s) => n + (hasGps(s) ? 1 : 0), 0);
-  if (nGps < 30) {
+  if (nGps < 12) {
     throw new Error("This session has no usable GPS fixes (" + nGps + " of " + st.length + " samples), so there is no track to draw.");
   }
   // Keep intervening telemetry at its original timestamps, with a GPS position
@@ -281,6 +268,7 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
     if (hasGps(s) || s.t < fixes[0].t || s.t > fixes[fixes.length - 1].t) continue;
     while (fixIndex < fixes.length - 2 && fixes[fixIndex + 1].t < s.t) fixIndex++;
     const a = fixes[fixIndex], b = fixes[fixIndex + 1];
+    if (b.t - a.t > MAX_GPS_GAP_MS) continue;
     const f = (s.t - a.t) / (b.t - a.t);
     st[i] = { ...s, lat: a.lat + f * (b.lat - a.lat), lon: a.lon + f * (b.lon - a.lon) };
   }
@@ -294,8 +282,12 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
   const slice = (t0: number, t1: number) => st.filter((s) => s.t >= t0 && s.t <= t1 && hasGps(s));
 
   const lapSamples = timed.map((o) => ({ o, sm: slice(o.l.startMs, o.l.endMs) }));
-  const usable = lapSamples.filter((x) => x.sm.length >= 12);
-  if (!usable.length) throw new Error("No timed lap has enough GPS fixes to build a track.");
+  const usable = lapSamples.filter(x => !gpsProblem(x.sm, x.o.l.startMs, x.o.l.endMs));
+  for (const x of lapSamples) {
+    const problem = gpsProblem(x.sm, x.o.l.startMs, x.o.l.endMs);
+    if (problem) warn.push(`${x.o.l.label || "Lap " + (x.o.i + 1)}: ${problem} Excluded from GPS analysis.`);
+  }
+  if (!usable.length) throw new Error("No timed lap has a complete, moving GPS route. Telemetry can still be reviewed without GPS.");
 
   const allFixes = ([] as LiveSample[]).concat(...usable.map((x) => x.sm));
   const lat0All = allFixes.reduce((a, s) => a + s.lat, 0) / allFixes.length;
@@ -324,8 +316,8 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
     return { name: dateStr + " · " + eventStr + " · " + n, date: dateStr, event: eventStr, num: n };
   };
   const nm = info.name || J.name || (fileName || "Session").replace(/\.json$/i, "");
-  const firstT = timed[0].l.startMs;
-  const lastT = timed[timed.length - 1].l.endMs;
+  const firstT = bounds.start ?? timed[0].l.startMs;
+  const lastT = bounds.end ?? timed[timed.length - 1].l.endMs;
 
   const cellN = Math.max(0, ...st.map((s) => (Array.isArray(s.cellTemps) ? s.cellTemps.length : 0)));
   const cellIdx: number[] = [];
@@ -560,6 +552,7 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
     }
 
     const tk: Track = track;
+    if (!(tk.RL >= 30)) throw new Error("GPS reference is shorter than 30 m; no trustworthy track can be built.");
     const F = frame(tk.lat0, tk.lon0);
     const proj = projWith(F);
     const ref = tk.ref;
@@ -697,7 +690,7 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
       if (group[0].o.l.startMs === firstT) {
         const ps = st.filter((s) => s.t <= first.t0 && hasGps(s));
         let k = ps.length - 1;
-        while (k > 0 && spdAt(ps, k - 1) >= 3 && ps[k].t - ps[k - 1].t < 8000 && first.t0 - ps[k - 1].t < 180000) k--;
+        while (k > 0 && spdAt(ps, k - 1) >= 3 && ps[k].t - ps[k - 1].t <= MAX_GPS_GAP_MS && first.t0 - ps[k - 1].t < 180000) k--;
         const out = ps.slice(k);
         if (out.length >= 8) {
           const L = build(out, "Out lap", "out", out[0].t, first.t0, null, true);
@@ -706,9 +699,14 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
       }
       const last = group[group.length - 1].o;
       if (last.l.endMs === lastT) {
-        const tail = st.filter((s) => s.t >= last.l.endMs && hasGps(s));
+        const candidates = st.filter(s => s.t >= last.l.endMs && hasGps(s));
+        const tail: LiveSample[] = [];
+        for (const sample of candidates) {
+          if (sample.t - (tail.at(-1)?.t ?? last.l.endMs) > MAX_GPS_GAP_MS) break;
+          tail.push(sample);
+        }
         while (tail.length && spdAt(tail, tail.length - 1) < 1) tail.pop();
-        if (tail.length >= 8) {
+        if (tail.length >= 12 && !gpsProblem(tail, tail[0].t, tail[tail.length - 1].t)) {
           const L = build(tail, "In progress", "partial", tail[0].t, tail[tail.length - 1].t, null, false);
           laps.push(strip(L));
         }

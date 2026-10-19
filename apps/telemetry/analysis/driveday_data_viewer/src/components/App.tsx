@@ -8,7 +8,7 @@ import { Player, type Prefs } from "@/lib/player";
 import { rebuildRun } from "@/lib/rebuild";
 import { Session } from "@/lib/session";
 import { loadUserState, lsGet, lsSet, metaOf, runStore, storageProblem } from "@/lib/storage";
-import type { RunListEntry, SessionExport, Track } from "@/lib/types";
+import type { RunData, RunListEntry, SessionExport, Track } from "@/lib/types";
 import { defaultUnits } from "@/lib/units";
 import { Header, type Theme } from "./Header";
 import { Workspace } from "./Workspace";
@@ -28,6 +28,7 @@ function Shell() {
   const [runs, setRuns] = useState<RunListEntry[]>([]);
   const [layouts, setLayouts] = useState<Track[]>([]);
   const [layout, setLayout] = useState<Track | null>(null);
+  const [telemetry, setTelemetry] = useState<RunData | null>(null);
   const [current, setCurrent] = useState<string | null>(null);
   const [player, setPlayer] = useState<Player | null>(null);
   const [ready, setReady] = useState(false);
@@ -43,11 +44,18 @@ function Shell() {
       live.current = null;
       setPlayer(null);
       setLayout(null);
+      setTelemetry(null);
       setCurrent(id);
       if (!id) return;
       try {
         const D0 = await runStore.get(id);
         if (!D0) throw new Error("That run is no longer stored in this browser.");
+        if (D0.telemetryOnly) {
+          setTelemetry(D0);
+          lsSet("run", id); lsSet("view", { kind: "run", id });
+          return;
+        }
+        if (!(D0.RL >= 30)) throw new Error("This saved run has an invalid GPS reference. Reimport the original JSON to recover telemetry and check GPS quality.");
         // Old bundled matches are not user-approved layout imports.
         const bundled = (await runStore.tracks()).find(t => t.id === D0.meta.trackId)?.builtin || builtinTracks().some(t => t.id === D0.meta.trackId);
         const clean = bundled && D0.edges ? detachLayout(D0) : D0;
@@ -79,6 +87,7 @@ function Shell() {
     live.current = null;
     setPlayer(null);
     setCurrent(null);
+    setTelemetry(null);
     setLayout(track);
     lsSet("view", { kind: "layout", id: layoutId(track) });
   }, []);
@@ -137,7 +146,8 @@ function Shell() {
           }
           const n = courses.reduce((a, c) => a + c.D.laps.filter((l) => l.kind === "lap").length, 0);
           const note = courses[0].D.warnings.join(" ");
-          toast(f.name + ": " + n + " laps" + (courses.length > 1 ? " in " + courses.length + " courses" : "") + "." + (note ? " " + note : ""));
+          const retained = courses.reduce((n, c) => n + (c.D.telemetryOnly?.intervals.length ?? 0), 0);
+          toast(f.name + ": " + n + " GPS-supported laps" + (retained ? "; " + retained + " logged intervals retained as telemetry only" : "") + "." + (note ? " " + note : ""));
         } catch (e) {
           toast(f.name + ": " + (e as Error).message, "err");
         }
@@ -240,6 +250,7 @@ function Shell() {
             current={current}
             layouts={layouts}
             layout={layout}
+            telemetry={telemetry}
             onSelectLayout={id => { const selected = layouts.find(t => layoutId(t) === id); if (selected) openLayout(selected); }}
             onRemoveLayout={id => void removeLayout(id)}
             theme={theme}
@@ -249,10 +260,12 @@ function Shell() {
             onImportLayout={(f) => void importFiles(f, true)}
             onRemove={(id) => void remove(id)}
           />
+          {telemetry && <Workspace key={telemetry.meta.sessId} telemetry={telemetry} />}
+          {player?.session.D.gpsIssues?.length ? <details className="gps-warning"><summary>{player.session.D.gpsIssues.length} logged intervals had unusable GPS and were kept separately under “Telemetry only”.</summary><ul>{player.session.D.gpsIssues.map((issue, i) => <li key={i}>{issue}</li>)}</ul></details> : null}
           {layout && <Workspace key={layoutId(layout)} track={layout} />}
           {player && <Workspace key={player.session.D.meta.sessId} />}
         </div>
-        {ready && !player && !current && !layout && (
+        {ready && !player && !current && !layout && !telemetry && (
           <div className="welcome">
             <div>
               <h2>No runs or layouts loaded</h2>

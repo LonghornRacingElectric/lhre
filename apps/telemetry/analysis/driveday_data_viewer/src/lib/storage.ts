@@ -129,7 +129,7 @@ export function metaOf(D: RunData): RunListEntry {
     event: D.meta.event,
     track: D.meta.trackName || "",
     trackId: D.meta.trackId || "",
-    ts: D.laps.length ? Math.min(...D.laps.map((l) => l.t0)) : 0,
+    ts: D.laps.length ? Math.min(...D.laps.map((l) => l.t0)) : D.telemetryOnly?.intervals[0]?.start ?? 0,
     laps: runs.length,
     best,
     added: Date.now(),

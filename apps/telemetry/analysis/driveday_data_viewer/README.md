@@ -32,8 +32,10 @@ Grouping and sorting are derived from saved metadata on every import, including
 the first file; no manual folders, reimport or storage migration is needed.
 Dates use the run timestamp in the browser's local timezone, not upload time.
 Missing venues use the built-in layout location when available. Runs within a
-day are grouped Clockwise then Counter-clockwise, then by recorded time and
-session name. Different locations on
+day are sorted alphabetically by driver name, then session name, using natural
+number ordering (Session 2 before Session 10). Direction remains an optional
+filter, not the primary sort. Ties use newest recorded time, then stable ID.
+Grouping is O(n); sorting is O(n log n) overall for n saved entries. Different locations on
 the same date remain separate drive days.
 
 The picker supports Tab, Escape, arrow navigation between run buttons and
@@ -71,7 +73,7 @@ The real exports remain local and are not checked in.
 The JSON is the session export from the trackside-live page of
 [`viewer_tool`](../database/viewer_tool/README.md): `sampleTail`, `laps`,
 `sessionInfo`, `soeCutoffCellV` and `targetLaps`. `src/lib/types.ts` has the
-shape this app expects. A session needs at least 30 GPS fixes.
+shape this app expects. GPS-supported driver intervals need at least 12 distinct fixes; a layout recording needs at least 30.
 
 ## How it is laid out
 
@@ -96,6 +98,33 @@ tests/          vitest, with a synthetic stadium-shaped track in fixtures/
 - Stored data is under the `driveday:` prefix in localStorage, plus an
   IndexedDB database for runs and track layouts. If IndexedDB is blocked the
   app falls back to memory for the tab and says so.
+
+## Missing, frozen or interrupted GPS
+
+Driver imports assess each logged interval before course detection: at least 12
+valid fixes and distinct positions, at least 30 m of movement, no GPS gaps over
+2 seconds (including the interval endpoints), and no jumps implying over 80 m/s.
+A coordinate held over 5 seconds while throttle exceeds 10% and motor RPM exceeds
+1000 is also flagged. These conservative checks identify unusable routes, not
+sensor accuracy or official lap validity. Short gaps up to 2 seconds may be
+interpolated; longer gaps are never connected into a route. A partial trace stops
+at a long logging gap and does not absorb later rejected timed intervals.
+
+GPS-supported intervals alone determine courses and reference paths. Rejected
+intervals appear in a separate **Telemetry only** entry with their original
+logger labels, durations, recorded samples and explicit GPS issue. That entry
+uses the normal workspace but has no map, GPS speed, sectors, corners, ghost or
+distance comparison. **Laps** lists logged intervals (not validated driving laps);
+**Telemetry** plots recorded channels and cell temperatures against elapsed time.
+Logging gaps over 2 seconds remain disconnected in these charts. Raw zero values
+are displayed as recorded, not certified as working sensor measurements. Valid
+runs show a warning when other intervals from the file were retained separately.
+
+Reimport the original JSON to apply these checks to older browser imports.
+Saved references shorter than 30 m are blocked with a reimport message. Older
+course entries from a previous import may remain in the library; delete those
+obsolete entries separately. The source JSON is never rewritten, and missing
+GPS cannot be reconstructed from a layout or other driver's lap.
 
 ## Start and finish lines, and courses
 

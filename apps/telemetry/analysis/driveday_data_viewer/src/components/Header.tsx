@@ -5,7 +5,7 @@ import { layoutId, layoutName } from "@/lib/layouts";
 import { gpsStats } from "@/lib/analysis";
 import { fmt } from "@/lib/format";
 import type { Player } from "@/lib/player";
-import type { RunListEntry, Track } from "@/lib/types";
+import type { RunData, RunListEntry, Track } from "@/lib/types";
 import { RunPicker } from "./RunPicker";
 import { Menu } from "./Menu";
 import { PlayerCtx, useUi } from "./context";
@@ -17,6 +17,7 @@ interface Props {
   current: string | null;
   layouts: Track[];
   layout: Track | null;
+  telemetry?: RunData | null;
   onRemoveLayout: (id: string) => void;
   onSelectLayout: (id: string) => void;
   theme: Theme;
@@ -140,14 +141,14 @@ function RunSettings({ p, theme, onTheme }: Pick<Props, "theme" | "onTheme"> & {
   );
 }
 
-export function Header({ runs, current, layouts, layout, onSelectLayout, onRemoveLayout, theme, onTheme, onSelect, onImport, onImportLayout, onRemove }: Props) {
+export function Header({ runs, current, layouts, layout, onSelectLayout, onRemoveLayout, telemetry, theme, onTheme, onSelect, onImport, onImportLayout, onRemove }: Props) {
   const file = useRef<HTMLInputElement>(null);
   const layoutFile = useRef<HTMLInputElement>(null);
   const p = useContext(PlayerCtx);
   return (
     <header className="top">
       <div>
-        <Title run={runs.find((r) => r.id === current)} layout={layout} />
+        {telemetry ? <><h1>{telemetry.meta.name}</h1><div className="sub">{telemetry.meta.driver} · GPS unavailable · time-based telemetry retained</div></> : <Title run={runs.find((r) => r.id === current)} layout={layout} />}
         <div className="runbar">
           <RunPicker runs={runs} current={current} layouts={layouts} currentLayout={layout ? layoutId(layout) : null} onRemoveLayout={onRemoveLayout} onSelectLayout={onSelectLayout} onSelect={onSelect} onRemove={onRemove} />
           <button className="btn primary" type="button" title="Import one or more session JSON files" onClick={() => file.current?.click()}>Import</button>

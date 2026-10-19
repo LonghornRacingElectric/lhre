@@ -41,7 +41,7 @@ export function driveDayGroups<T extends BrowserEntry>(runs: T[]): DriveDayGroup
     }
     groups.get(id)!.runs.push(run);
   }
-  for (const group of groups.values()) group.runs.sort((a, b) => collator.compare(directionOf(a), directionOf(b)) || b.ts - a.ts || collator.compare(a.name, b.name) || collator.compare(driverOf(a), driverOf(b)) || collator.compare(a.id, b.id));
+  for (const group of groups.values()) group.runs.sort((a, b) => collator.compare(driverOf(a), driverOf(b)) || collator.compare(a.name, b.name) || b.ts - a.ts || collator.compare(a.id, b.id));
   return [...groups.values()].sort((a, b) => b.date.localeCompare(a.date) || collator.compare(a.location, b.location));
 }
 

@@ -144,6 +144,9 @@ export interface RunMeta {
 }
 
 export interface RunData {
+  /** Raw time-based data retained when GPS cannot establish a trustworthy route. */
+  telemetryOnly?: { samples: LiveSample[]; intervals: { label: string; start: number; end: number; reason: string }[] };
+  gpsIssues?: string[];
   /** Pre-layout processed run for exact detachment; source telemetry is shared until stored. */
   layoutOriginal?: RunData;
   /** Explicit per-run opt-out, also respected by later layout imports. */

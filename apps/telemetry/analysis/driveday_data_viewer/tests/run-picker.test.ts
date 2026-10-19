@@ -21,7 +21,7 @@ describe("run browsing", () => {
     const groups = driveDayGroups([old, a, b, elsewhere]);
     expect(groups).toHaveLength(3);
     expect(groups.map(g => g.date)).toEqual(["2026-10-12", "2026-10-12", "2026-10-11"]);
-    expect(groups.find(g => g.runs.some(r => r.id === "a"))!.runs.map(r => r.id)).toEqual(["b", "a"]);
+    expect(groups.find(g => g.runs.some(r => r.id === "a"))!.runs.map(r => r.id)).toEqual(["a", "b"]);
     expect([a, b, old, elsewhere].map(r => r.id)).toEqual(["a", "b", "old", "elsewhere"]);
   });
   it("uses built-in location labels and keeps missing metadata visible", () => {
@@ -43,8 +43,16 @@ describe("run browsing", () => {
     expect(filterRuns(runs, "Ben", "Counter-clockwise", "")).toEqual([]);
     expect(filterOptions(runs, driverOf)).toEqual(["Ben", "Shreyas"]);
   });
-  it("uses natural session-name ordering when timestamps tie", () => {
+  it("uses natural session-name ordering within a driver", () => {
     expect(driveDayGroups([run("10"), run("2")])[0].runs.map(r => r.id)).toEqual(["2", "10"]);
+  });
+  it("sorts by driver name then session name regardless of direction or recording time", () => {
+    const entries = [run("z", { driver: "Zoe", name: "Session 1", direction: "cw" }),
+      run("b", { driver: "Andrew", name: "Session 10", direction: "cw" }),
+      run("a", { driver: "andrew", name: "Session 2", direction: "ccw", ts: run("x").ts - 1000 })];
+    expect(driveDayGroups(entries)[0].runs.map(r => r.id)).toEqual(["a", "b", "z"]);
+    expect(filterRuns(driveDayGroups(entries)[0].runs, "", "Clockwise", "").map(r => r.id)).toEqual(["b", "z"]);
+    expect(entries.map(r => r.id)).toEqual(["z", "b", "a"]);
   });
   it("organizes metadata produced by the JSON importer without any migration", () => {
     const first = convertSession(synthSession({ sessionId: "one", laps: 3 }), "first.json")[0];

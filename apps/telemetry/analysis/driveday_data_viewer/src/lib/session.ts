@@ -89,6 +89,7 @@ export class Session {
   readonly bbox: { x: [number, number]; y: [number, number] };
 
   constructor(D: RunData) {
+    if (D.telemetryOnly || !(D.RL > 0) || !D.laps.some(l => l.kind === "lap")) throw new Error("No GPS-supported laps. Use the telemetry-only view or reimport the original JSON.");
     this.D = D;
     this.RL = D.RL;
     this.open = !!D.open;

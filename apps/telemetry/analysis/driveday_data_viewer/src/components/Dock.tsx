@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import type { RunData } from "@/lib/types";
+import { TelemetryOnlyPanel } from "./TelemetryOnlyPanel";
 import type { Player } from "@/lib/player";
 import { lsGet, lsSet } from "@/lib/storage";
 import { Menu } from "./Menu";
@@ -52,7 +54,7 @@ export function Dock() {
   return <PanelDock player={p} />;
 }
 
-export function PanelDock({ player: p = null }: { player?: Player | null }) {
+export function PanelDock({ player: p = null, telemetry }: { player?: Player | null; telemetry?: RunData }) {
   const [open, setOpen] = useState<string | null>(() => { const saved = lsGet<string | null>("panel", "laps"); return saved === "video" ? "laps" : saved; });
   const toggle = (id: string) => {
     const next = open === id ? null : id;
@@ -81,10 +83,10 @@ export function PanelDock({ player: p = null }: { player?: Player | null }) {
         {cur ? (
           <section className="pn panel" id={"pn-" + cur.id} key={cur.id}>
             <div className="pnh">
-              <h3>{cur.title}</h3>
+              <h3>{telemetry && cur.id === "trace" ? "Recorded telemetry by time" : telemetry && cur.id === "laps" ? "Logged intervals" : cur.title}</h3>
               <button className="x" type="button" aria-label={"Close " + cur.title} onClick={() => toggle(cur.id)}>×</button>
             </div>
-            <div className="pnb">{p ? cur.body : <div className="empty">Import or select a driver run to view {cur.chip.toLowerCase()} data.</div>}</div>
+            <div className="pnb">{p ? cur.body : telemetry ? <TelemetryOnlyPanel data={telemetry} panel={cur.id} /> : <div className="empty">Import or select a driver run to view {cur.chip.toLowerCase()} data.</div>}</div>
           </section>
         ) : (
           <div className="empty">No panels open. Pick one above.</div>

@@ -1,4 +1,5 @@
-import { alignShift, convertSession } from "./convert";
+import { gpsProblem, recordingSamples } from "./gps-quality";
+import { alignShift, convertSession, type ConvertResult } from "./convert";
 import { pathDirection } from "./direction";
 import { Geo } from "./geometry";
 import { builtinTracks, tracksFromLayout } from "./layouts";
@@ -35,7 +36,7 @@ export function layoutTracksFromSession(json: SessionExport, fileName: string): 
 
 /** Re-express existing GPS in the base layout's coordinate frame; all logged times and channels stay intact. */
 export function attachLayout(data: RunData, previous: Track, layouts: Track[]): RunData | null {
-  if (data.layoutDetached) return null;
+  if (data.layoutDetached || data.telemetryOnly) return null;
   const paths = data.laps.filter(l => l.kind === "lap").map(l => l.pts.map(p => [p[0], p[1]] as XY));
   const track = matchTrack(paths, !!data.open, previous, layouts);
   if (!track?.edges) return null;
@@ -86,9 +87,42 @@ export async function importLayoutRecording(json: SessionExport, fileName: strin
 
 /** Driver imports only adopt user-imported roads, while retaining their GPS-derived baseline. */
 export function convertDriverSession(json: SessionExport, fileName: string, saved: Track[]) {
-  const baseline = convertSession(json, fileName, saved.filter(t => !t.builtin && !t.edges));
+  if (!Array.isArray(json?.laps) || !Array.isArray(json?.sampleTail)) throw new Error("This does not look like a session export.");
+  const samples = recordingSamples(json);
+  const timed = json.laps.filter(l => Number.isFinite(l.startMs) && l.endMs > l.startMs);
+  const rejected = timed.flatMap(l => {
+    const reason = gpsProblem(samples.filter(s => s.t >= l.startMs && s.t <= l.endMs), l.startMs, l.endMs);
+    return reason ? [{ label: l.label || "Logged interval", start: l.startMs, end: l.endMs, reason }] : [];
+  });
+  const good = timed.filter(l => !rejected.some(r => r.start === l.startMs && r.end === l.endMs));
   const roads = saved.filter(t => t.edges && !t.builtin);
-  return baseline.map(c => ({ ...c, D: attachLayout(c.D, c.track, roads) ?? c.D }));
+  let baseline: ConvertResult[] = [];
+  if (good.length) {
+    try {
+      baseline = convertSession({ ...json, laps: good }, fileName, saved.filter(t => !t.builtin && !t.edges),
+        { start: Math.min(...timed.map(l => l.startMs)), end: Math.max(...timed.map(l => l.endMs)) });
+    } catch (error) {
+      // Unusable course geometry must not discard otherwise recorded sensor channels.
+      rejected.push(...good.map(l => ({ label: l.label || "Logged interval", start: l.startMs, end: l.endMs,
+        reason: "GPS analysis unavailable: " + (error as Error).message })));
+    }
+  }
+  rejected.sort((a, b) => a.start - b.start);
+  const issues = rejected.map(r => `${r.label}: ${r.reason}`);
+  const result: ConvertResult[] = baseline.map(c => ({ ...c, D: { ...(attachLayout(c.D, c.track, roads) ?? c.D), gpsIssues: issues } }));
+  if (rejected.length) {
+    const name = (json.sessionInfo?.name || fileName.replace(/\.json$/i, "")) + " · Telemetry only";
+    const id = (json.sessionInfo?.id || "file-" + fileName + "-" + (json.savedAt ?? "")) + "~telemetry";
+    const track: Track = { id: "", name: "GPS unavailable", date: "", event: "", num: 0, venue: json.sessionInfo?.venue || "",
+      lat0: 0, lon0: 0, ref: [], cum: [], RL: 0, gates: [], created: 0, from: fileName };
+    const D: RunData = { ref: [], cum: [], RL: 0, laps: [], warnings: issues, gpsIssues: issues,
+      telemetryOnly: { samples, intervals: rejected }, meta: { sessId: id, name, driver: json.sessionInfo?.driver || json.metadata?.driver || "",
+        venue: track.venue, event: json.sessionInfo?.eventType || "", trackId: "", trackName: "GPS unavailable", direction: "unknown",
+        cellIdx: [], cutoff: json.soeCutoffCellV || 2.8, planLaps: 0, planKwh: 0 } };
+    result.push({ D, track, isNew: false, renamed: false, label: "Telemetry only" });
+  }
+  if (!result.length) throw new Error("This session has no timed intervals.");
+  return result;
 }
 
 /** Detach from the analysis reference, not merely hide the road drawing. */

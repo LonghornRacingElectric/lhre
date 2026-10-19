@@ -4,7 +4,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { lsGet, lsSet } from "@/lib/storage";
 import { defaultWorkspace, movePane, resizePair, restoreWorkspace, PANE_IDS, type PaneId, type PaneState, type WorkspaceLayout } from "@/lib/workspace";
-import type { Track } from "@/lib/types";
+import type { RunData, Track } from "@/lib/types";
 import { LayoutView } from "./LayoutView";
 import { Dock, PanelDock } from "./Dock";
 import { MapTools } from "./MapTools";
@@ -16,7 +16,7 @@ import { Transport } from "./Transport";
 import { PlayerCtx } from "./context";
 
 /** Independent video, track and analysis windows share one playback clock. */
-export function Workspace({ track }: { track?: Track } = {}) {
+export function Workspace({ track, telemetry }: { track?: Track; telemetry?: RunData } = {}) {
   const p = useContext(PlayerCtx);
   const [layout, setLayout] = useState(() => restoreWorkspace(lsGet<WorkspaceLayout | null>("workspace", null)));
   const [timelineMode, setTimelineMode] = useState<"full" | "track">(() => lsGet<string>("timeline-layout", "full") === "track" ? "track" : "full");
@@ -107,7 +107,7 @@ export function Workspace({ track }: { track?: Track } = {}) {
   const transport = () => p ? <Transport height={timelineHeight} onHeight={resizeTimeline} docked={timelineMode === "track"} onPlacement={toggleTimelineDock} /> :
     <div className="transport panel empty-transport" aria-label="Playback unavailable without a driver run">
       <div className="trow"><button className="btn" disabled aria-label="Previous lap">⏮</button><button className="btn play" disabled>Play</button><button className="btn" disabled aria-label="Next lap">⏭</button><span className="time">— / —</span><span className="sp" /><button className="btn" disabled>Ghost: Off</button><button className="btn" disabled>+ Note</button><button className="btn" disabled>+ Cone</button></div>
-      <div className="empty-timeline" style={{ height: timelineHeight }} aria-label="Empty timeline">Import or select a driver run to see laps and telemetry.</div>
+      <div className="empty-timeline" style={{ height: timelineHeight }} aria-label="Empty timeline">{telemetry ? "GPS playback unavailable. Review recorded channels against time in Analysis." : "Import or select a driver run to see laps and telemetry."}</div>
     </div>;
 
   const toolbar = <div className="layout-toolbar" aria-label="Workspace layout">
@@ -125,7 +125,7 @@ export function Workspace({ track }: { track?: Track } = {}) {
           onPatch={changes => patch(id, changes)}
           onMove={direction => { const target = layout.order[layout.order.indexOf(id) + direction]; if (target) update(current => movePane(current, id, target)); }}
           onDrop={source => update(current => movePane(current, source, id))}>
-          {id === "video" ? p ? <VideoPanel visible={layout.panes.video.visible} /> : <div className="empty">No driver run selected.</div> : id === "analysis" ? p ? <Dock /> : <PanelDock /> : !p && track ? <><LayoutView track={track} />{timelineMode === "track" && layout.panes.track.visible && transport()}</> :
+          {id === "video" ? p ? <VideoPanel visible={layout.panes.video.visible} /> : <div className="empty">{telemetry ? "Synchronized replay is unavailable without a GPS-supported run." : "No driver run selected."}</div> : id === "analysis" ? p ? <Dock /> : <PanelDock telemetry={telemetry} /> : !p && telemetry ? <section className="empty gps-unavailable" aria-label="GPS unavailable"><h3>GPS route unavailable</h3><p>Missing, frozen or interrupted GPS cannot establish a trustworthy track.</p><p>Recorded telemetry and logged interval times remain available in Analysis. No map, speed estimate, sectors or distance comparison are invented.</p></section> : !p && track ? <><LayoutView track={track} />{timelineMode === "track" && layout.panes.track.visible && transport()}</> :
             <section className="stage" aria-label="Player"><MapTools /><MapView /><SegStrip />{timelineMode === "track" && layout.panes.track.visible && transport()}</section>}
         </WorkspacePane>)}
         {docked.slice(0, -1).map((id, i) => <PaneDivider key={id + docked[i + 1]} left={id} right={docked[i + 1]} order={layout.order.indexOf(id)} fraction={layout.panes[id].weight / (layout.panes[id].weight + layout.panes[docked[i + 1]].weight)} onResize={fraction => update(current => resizePair(current, id, docked[i + 1], fraction))} />)}
