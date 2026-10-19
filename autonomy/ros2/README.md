@@ -423,7 +423,7 @@ the `OdometryPublisher` plugin, bridged from `/model/fsae_vehicle/tf` to `/tf`.
 | `seed` | `1` | Random seed for track generation |
 | `frame_id` | `"map"` | TF frame |
 | `publish_hz` | `5.0` | Publishing rate (Hz) |
-| `track_style` | `"autocross"` | Generator: `autocross` (Catmull-Rom spline), `simple` (original oval), or `oval` (dedicated oval generator) |
+| `track_style` | `"autocross"` | Generator: `autocross`, `simple`, `oval`, or `acceleration` (fixed 2026 straight and orange entry/exit/timing markers) |
 | `num_waypoints` | `10` | Number of waypoints around the loop (autocross only) |
 | `radius_m` | `25.0` | Base radius of the track (autocross only) |
 | `jitter_m` | `10.0` | Radial jitter per waypoint (autocross only) |
@@ -431,6 +431,12 @@ the `OdometryPublisher` plugin, bridged from `/model/fsae_vehicle/tf` to `/tf`.
 | `cone_spacing_m` | `2.0` | Distance between cones along the track (autocross only) |
 
 Cone IDs: left cones use IDs `0..N-1`, right cones use IDs `10000..10000+N-1`. IDs identify markers but do not determine pairing.
+
+For the fixed acceleration layout, run `ros2 run lhr_trackgen publish_cones
+--ros-args -p track_style:=acceleration`. Loop-generation parameters are ignored.
+Orange markers use `orange_small_cones` and `orange_large_cones` namespaces,
+each with IDs starting at zero. See the [track generator reference](src/lhr_trackgen/README.md)
+for coordinates, rule sources, and Gazebo usage.
 
 ### lhr_sensor_sim (sensor_sim)
 
@@ -570,7 +576,8 @@ stateDiagram-v2
 Mission completion triggers:
 - **autocross**: lap detected by `lhr_metrics` (via `/lhr/metrics/lap_complete`)
 - **inspection**: 28 seconds elapsed
-- **acceleration, skidpad, ebs_test, manual**: not yet implemented
+- **acceleration**: planner confirms the configured exit-lane stop, measured speed < 0.1 m/s for 0.5 s, via `/lhr/acceleration/complete`
+- **skidpad, ebs_test, manual**: not yet implemented
 
 The control node (`pursuit_node`) subscribes to `/lhr/mission/status` and only sends drive commands when status is `DRIVING`. When the mission manager is not running, the control node operates freely for backward compatibility.
 
@@ -589,6 +596,28 @@ ros2 topic pub --once /lhr/mission/reset std_msgs/msg/Bool "{data: true}"
 # Monitor status:
 ros2 topic echo /lhr/mission/status
 ```
+
+### Acceleration planner
+
+`track_style:=acceleration` in the Gazebo launch selects `acceleration_planner`
+in place of the general track builder, selects the acceleration mission, and
+sets pure pursuit's `path_closed=false`. The planner consumes
+`/lhr/sensor/cones_detected` and odometry, interpolates each cone boundary
+independently, and averages them at common longitudinal positions. Orange exit
+cones and unclassified LiDAR cones are assigned geometrically in the initial
+vehicle frame. No ground-truth cone map enters the planner.
+
+| Launch/node parameter | Default | Meaning |
+| --- | --- | --- |
+| `acceleration_path_spacing_m` | `0.5` | Maximum spacing of mean-path samples |
+| `acceleration_stop_distance_m` | `20.0` | Planned nose stop distance after the 75 m finish; at least 1 m and less than 75 m |
+| `input_timeout_sec` | `1.0` | Planner/control input freshness limit in ROS time |
+
+The planner uses the known 0.30 m staging offset and configured vehicle nose
+offset to measure progress from initial odometry. It does not infer the finish
+from orange cones. Path extrapolation is limited to 3 m beyond either observed
+boundary; missing or invalid boundaries publish an empty path. Details and
+limitations: [Track Builder](src/lhr_track_builder/README.md).
 
 ### lhr_control (pursuit_node)
 
@@ -627,6 +656,13 @@ The Gazebo demo launch overrides some defaults for tuned physics behavior:
 - `lookahead_dist=5.0`, `lookahead_min=2.0`, `lookahead_curvature_gain=3.0`
 - `a_lat_max=3.0`, `v_min=1.0`, `v_max=5.0`
 - `max_accel=1.0`, `max_decel=2.0`
+
+For acceleration, open-path lookahead and curvature clamp at endpoints rather
+than wrapping. Speed can reach zero and is limited by both the remaining
+mission distance and observed path horizon, reserving 0.5 s for simulated
+actuation delay. Empty paths or stale path, odometry, remaining distance, or
+mission status command zero speed. Closed-loop behavior stays the default.
+See [control reference](src/lhr_control/README.md).
 
 Debug topics: `/lhr/debug/curvature` and `/lhr/debug/v_cmd` (both `std_msgs/Float32`).
 

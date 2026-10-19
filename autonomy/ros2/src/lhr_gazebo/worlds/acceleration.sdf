@@ -1,0 +1,413 @@
+<?xml version="1.0" ?>
+<sdf version="1.9">
+  <world name="fsae_world">
+
+    <!-- ===== Required world plugins ===== -->
+    <plugin filename="gz-sim-physics-system"
+            name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system"
+            name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system"
+            name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-imu-system"
+            name="gz::sim::systems::Imu"/>
+    <plugin filename="gz-sim-sensors-system"
+            name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+
+    <!-- ===== Scene ===== -->
+    <scene>
+      <ambient>1.0 1.0 1.0</ambient>
+      <background>0.7 0.8 0.9</background>
+    </scene>
+
+    <gravity>0 0 -9.81</gravity>
+
+    <physics name="default_physics" type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <!-- ===== Lighting ===== -->
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 50 0 0 0</pose>
+      <diffuse>0.9 0.9 0.9 1</diffuse>
+      <specular>0.3 0.3 0.3 1</specular>
+      <direction>-0.5 0.3 -1.0</direction>
+    </light>
+
+    <!-- ===== Ground plane ===== -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>200 200</size>
+            </plane>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>1.0</mu><mu2>1.0</mu2></ode>
+            </friction>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>200 200</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.4 0.4 0.4 1</ambient>
+            <diffuse>0.5 0.5 0.5 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ===== Vehicle ===== -->
+    <include>
+      <uri>model://fsae_vehicle</uri>
+      <name>fsae_vehicle</name>
+      <pose>-2.1747 0.0000 0.0000 0 0 0.0000</pose>
+    </include>
+
+    <!-- ===== Cones ===== -->
+    <include>
+  <uri>model://cone_blue</uri>
+  <name>cone_blue_0</name>
+  <pose>0.0000 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_blue</uri>
+  <name>cone_blue_1</name>
+  <pose>5.7692 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_blue</uri>
+  <name>cone_blue_2</name>
+  <pose>11.5385 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_blue</uri>
+  <name>cone_blue_3</name>
+  <pose>17.3077 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_blue</uri>
+  <name>cone_blue_4</name>
+  <pose>23.0769 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_blue</uri>
+  <name>cone_blue_5</name>
+  <pose>28.8462 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_blue</uri>
+  <name>cone_blue_6</name>
+  <pose>34.6154 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_blue</uri>
+  <name>cone_blue_7</name>
+  <pose>40.3846 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_blue</uri>
+  <name>cone_blue_8</name>
+  <pose>46.1538 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_blue</uri>
+  <name>cone_blue_9</name>
+  <pose>51.9231 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_blue</uri>
+  <name>cone_blue_10</name>
+  <pose>57.6923 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_blue</uri>
+  <name>cone_blue_11</name>
+  <pose>63.4615 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_blue</uri>
+  <name>cone_blue_12</name>
+  <pose>69.2308 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_blue</uri>
+  <name>cone_blue_13</name>
+  <pose>75.0000 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_yellow</uri>
+  <name>cone_yellow_0</name>
+  <pose>0.0000 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_yellow</uri>
+  <name>cone_yellow_1</name>
+  <pose>5.7692 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_yellow</uri>
+  <name>cone_yellow_2</name>
+  <pose>11.5385 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_yellow</uri>
+  <name>cone_yellow_3</name>
+  <pose>17.3077 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_yellow</uri>
+  <name>cone_yellow_4</name>
+  <pose>23.0769 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_yellow</uri>
+  <name>cone_yellow_5</name>
+  <pose>28.8462 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_yellow</uri>
+  <name>cone_yellow_6</name>
+  <pose>34.6154 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_yellow</uri>
+  <name>cone_yellow_7</name>
+  <pose>40.3846 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_yellow</uri>
+  <name>cone_yellow_8</name>
+  <pose>46.1538 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_yellow</uri>
+  <name>cone_yellow_9</name>
+  <pose>51.9231 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_yellow</uri>
+  <name>cone_yellow_10</name>
+  <pose>57.6923 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_yellow</uri>
+  <name>cone_yellow_11</name>
+  <pose>63.4615 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_yellow</uri>
+  <name>cone_yellow_12</name>
+  <pose>69.2308 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_yellow</uri>
+  <name>cone_yellow_13</name>
+  <pose>75.0000 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_0</name>
+  <pose>-12.0000 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_1</name>
+  <pose>-12.0000 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_2</name>
+  <pose>-6.0000 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_3</name>
+  <pose>-6.0000 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_4</name>
+  <pose>81.0000 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_5</name>
+  <pose>81.0000 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_6</name>
+  <pose>87.0000 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_7</name>
+  <pose>87.0000 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_8</name>
+  <pose>93.0000 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_9</name>
+  <pose>93.0000 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_10</name>
+  <pose>99.0000 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_11</name>
+  <pose>99.0000 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_12</name>
+  <pose>105.0000 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_13</name>
+  <pose>105.0000 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_14</name>
+  <pose>111.0000 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_15</name>
+  <pose>111.0000 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_16</name>
+  <pose>117.0000 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_17</name>
+  <pose>117.0000 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_18</name>
+  <pose>123.0000 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_19</name>
+  <pose>123.0000 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_20</name>
+  <pose>129.0000 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_21</name>
+  <pose>129.0000 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_22</name>
+  <pose>135.0000 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_23</name>
+  <pose>135.0000 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_24</name>
+  <pose>141.0000 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_25</name>
+  <pose>141.0000 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_26</name>
+  <pose>147.0000 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_27</name>
+  <pose>147.0000 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_28</name>
+  <pose>150.0000 2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_small</uri>
+  <name>cone_orange_small_29</name>
+  <pose>150.0000 -2.5640 0.1625 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_large</uri>
+  <name>cone_orange_large_0</name>
+  <pose>-1.0000 2.5925 0.2525 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_large</uri>
+  <name>cone_orange_large_1</name>
+  <pose>-1.0000 -2.5925 0.2525 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_large</uri>
+  <name>cone_orange_large_2</name>
+  <pose>1.0000 2.5925 0.2525 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_large</uri>
+  <name>cone_orange_large_3</name>
+  <pose>1.0000 -2.5925 0.2525 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_large</uri>
+  <name>cone_orange_large_4</name>
+  <pose>74.0000 2.5925 0.2525 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_large</uri>
+  <name>cone_orange_large_5</name>
+  <pose>74.0000 -2.5925 0.2525 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_large</uri>
+  <name>cone_orange_large_6</name>
+  <pose>76.0000 2.5925 0.2525 0 0 0</pose>
+</include>
+<include>
+  <uri>model://cone_orange_large</uri>
+  <name>cone_orange_large_7</name>
+  <pose>76.0000 -2.5925 0.2525 0 0 0</pose>
+</include>
+
+  </world>
+</sdf>

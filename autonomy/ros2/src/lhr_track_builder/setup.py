@@ -21,6 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'track_builder = lhr_track_builder.track_builder_node:main',
+            'acceleration_planner = lhr_track_builder.acceleration_planner:main',
         ],
     },
 )

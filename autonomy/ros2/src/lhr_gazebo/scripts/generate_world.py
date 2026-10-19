@@ -23,8 +23,11 @@ _trackgen_pkg = os.path.join(
     _this_dir, os.pardir, os.pardir, 'lhr_trackgen')
 if os.path.isdir(_trackgen_pkg):
     sys.path.insert(0, _trackgen_pkg)
+sys.path.insert(0, os.path.join(_this_dir, os.pardir, os.pardir, 'lhr_vehicle'))
 
+from lhr_trackgen.acceleration import generate_acceleration_track  # noqa: E402
 from lhr_trackgen.publish_cones import GENERATORS  # noqa: E402
+from lhr_vehicle import load_vehicle  # noqa: E402
 
 
 def _cone_include(model_name: str, instance_name: str,
@@ -80,6 +83,8 @@ def generate_world_sdf(
     vehicle_y: float = None,
     vehicle_yaw: float = None,
     model_dir: str = '',
+    orange_small_cones=(),
+    orange_large_cones=(),
 ) -> str:
     """Build a complete Gazebo world SDF string."""
     # Auto-compute spawn from track geometry if not explicitly set
@@ -104,6 +109,13 @@ def generate_world_sdf(
         cone_blocks.append(
             _cone_include('cone_yellow', f'cone_yellow_{i}',
                           cx, cy, yellow_half_h))
+
+    for model, cones, height in (
+        ('cone_orange_small', orange_small_cones, 0.325),
+        ('cone_orange_large', orange_large_cones, 0.505),
+    ):
+        for i, (cx, cy) in enumerate(cones):
+            cone_blocks.append(_cone_include(model, f'{model}_{i}', cx, cy, height / 2))
 
     cones_xml = '\n'.join(cone_blocks)
 
@@ -222,21 +234,34 @@ def main():
     parser.add_argument('--vehicle-yaw', type=float, default=None,
                         help='Vehicle initial yaw in radians (default: auto from track)')
     parser.add_argument('--style', type=str, default='autocross',
-                        choices=list(GENERATORS.keys()),
+                        choices=[*GENERATORS, 'acceleration'],
                         help='Track style (default: autocross)')
     parser.add_argument('--output', type=str, default=None,
                         help='Output SDF file path (default: worlds/<style>_seed<N>.sdf)')
     args = parser.parse_args()
 
-    gen = GENERATORS[args.style]
-    left, right = gen(
-        seed=args.seed,
-        num_waypoints=args.num_waypoints,
-        radius_m=args.radius,
-        jitter_m=args.jitter,
-        width_m=args.width,
-        cone_spacing_m=args.cone_spacing,
-    )
+    extra_cones = {}
+    if args.style == 'acceleration':
+        layout = generate_acceleration_track()
+        left, right = layout['left_cones'], layout['right_cones']
+        extra_cones = {key: layout[key] for key in ('orange_small_cones', 'orange_large_cones')}
+        vehicle = load_vehicle()
+        if args.vehicle_x is None:
+            args.vehicle_x = -0.30 - vehicle.chassis_center_x_m - vehicle.body_length_m / 2
+        if args.vehicle_y is None:
+            args.vehicle_y = 0.0
+        if args.vehicle_yaw is None:
+            args.vehicle_yaw = 0.0
+    else:
+        gen = GENERATORS[args.style]
+        left, right = gen(
+            seed=args.seed,
+            num_waypoints=args.num_waypoints,
+            radius_m=args.radius,
+            jitter_m=args.jitter,
+            width_m=args.width,
+            cone_spacing_m=args.cone_spacing,
+        )
 
     print(f'Generated track: {len(left)} left cones, {len(right)} right cones')
 
@@ -245,13 +270,16 @@ def main():
         vehicle_x=args.vehicle_x,
         vehicle_y=args.vehicle_y,
         vehicle_yaw=args.vehicle_yaw,
+        **extra_cones,
     )
 
     if args.output is None:
         # Default output path relative to this script's parent (lhr_gazebo/)
         worlds_dir = os.path.join(_this_dir, os.pardir, 'worlds')
         os.makedirs(worlds_dir, exist_ok=True)
-        out_path = os.path.join(worlds_dir, f'{args.style}_seed{args.seed}.sdf')
+        filename = ('acceleration.sdf' if args.style == 'acceleration'
+                    else f'{args.style}_seed{args.seed}.sdf')
+        out_path = os.path.join(worlds_dir, filename)
     else:
         out_path = args.output
         os.makedirs(os.path.dirname(out_path) or '.', exist_ok=True)

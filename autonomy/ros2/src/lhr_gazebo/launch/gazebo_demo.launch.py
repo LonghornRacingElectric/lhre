@@ -47,7 +47,8 @@ def _find_world(context: LaunchContext):
     if world_arg and os.path.isfile(world_arg):
         return world_arg
 
-    expected = f'{track_style}_seed{seed}.sdf'
+    expected = ('acceleration.sdf' if track_style == 'acceleration'
+                else f'{track_style}_seed{seed}.sdf')
 
     # Source tree (launch/ is one level below the package root)
     launch_dir = os.path.dirname(os.path.abspath(__file__))
@@ -64,6 +65,9 @@ def _find_world(context: LaunchContext):
             return share_path
     except Exception:
         pass
+
+    if track_style == 'acceleration':
+        return ''
 
     # Fallback: first SDF found in source worlds directory
     if os.path.isdir(src_worlds):
@@ -92,6 +96,7 @@ def _launch_setup(context: LaunchContext):
     config_dir = os.path.join(pkg_share, 'config')
 
     perception = context.launch_configurations.get('perception', 'sim')
+    acceleration = context.launch_configurations.get('track_style') == 'acceleration'
     classify_sides = context.launch_configurations.get(
         'lidar_classify_sides', 'false').lower() == 'true'
     use_ekf = context.launch_configurations.get(
@@ -222,7 +227,21 @@ def _launch_setup(context: LaunchContext):
         ))
 
     # ----- Track builder -----
-    if perception == 'lidar':
+    if acceleration:
+        centerline = Node(
+            package='lhr_track_builder', executable='acceleration_planner',
+            name='acceleration_planner',
+            parameters=[{
+                'use_sim_time': True,
+                'acceleration_path_spacing_m': ParameterValue(
+                    LaunchConfiguration('acceleration_path_spacing_m'), value_type=float),
+                'acceleration_stop_distance_m': ParameterValue(
+                    LaunchConfiguration('acceleration_stop_distance_m'), value_type=float),
+                'input_timeout_sec': ParameterValue(
+                    LaunchConfiguration('input_timeout_sec'), value_type=float),
+            }], output='screen',
+        )
+    elif perception == 'lidar':
         centerline = Node(
             package='lhr_track_builder',
             executable='track_builder',
@@ -295,6 +314,9 @@ def _launch_setup(context: LaunchContext):
             'v_max': LaunchConfiguration('v_max'),
             'max_accel': LaunchConfiguration('max_accel'),
             'max_decel': LaunchConfiguration('max_decel'),
+            'path_closed': not acceleration,
+            'input_timeout_sec': ParameterValue(
+                LaunchConfiguration('input_timeout_sec'), value_type=float),
             'use_sim_time': True,
         }],
         output='screen',
@@ -333,7 +355,7 @@ def _launch_setup(context: LaunchContext):
         executable='mission_manager',
         name='mission_manager',
         parameters=[{
-            'mission': LaunchConfiguration('mission'),
+            'mission': 'acceleration' if acceleration else LaunchConfiguration('mission'),
             'auto_go': LaunchConfiguration('auto_go'),
             'ready_hold_sec': LaunchConfiguration('ready_hold_sec'),
             'use_sim_time': True,
@@ -373,7 +395,7 @@ def generate_launch_description():
             description='Infer LiDAR cone sides (opt in; false publishes unlabeled cones)'),
         DeclareLaunchArgument(
             'track_style', default_value='autocross',
-            description='Track style: "autocross", "oval", or "simple"'),
+            description='Track style: "autocross", "oval", "simple", or "acceleration"'),
         DeclareLaunchArgument(
             'estimator', default_value='truth',
             description='Odometry source: "truth" (Gazebo) or "ekf"'),
@@ -406,6 +428,9 @@ def generate_launch_description():
         DeclareLaunchArgument('v_max', default_value='5.0'),
         DeclareLaunchArgument('max_accel', default_value='1.0'),
         DeclareLaunchArgument('max_decel', default_value='2.0'),
+        DeclareLaunchArgument('input_timeout_sec', default_value='1.0'),
+        DeclareLaunchArgument('acceleration_path_spacing_m', default_value='0.5'),
+        DeclareLaunchArgument('acceleration_stop_distance_m', default_value='20.0'),
         # RViz / metrics
         DeclareLaunchArgument('rviz', default_value='true'),
         DeclareLaunchArgument('enable_metrics', default_value='true'),

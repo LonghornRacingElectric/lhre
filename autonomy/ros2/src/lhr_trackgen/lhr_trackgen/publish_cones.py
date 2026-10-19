@@ -5,6 +5,9 @@ import math
 import random
 from typing import List, Tuple
 
+from lhr_trackgen.acceleration import (
+    generate_acceleration_track, LARGE_CONE_SIZE, SMALL_CONE_SIZE,
+)
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
@@ -352,20 +355,30 @@ class ConePublisher(Node):
         spacing = float(self.get_parameter('cone_spacing_m').value)
 
         # --- Generate track ---
-        gen = GENERATORS.get(style)
-        if gen is None:
-            self.get_logger().warn(
-                f"Unknown track_style '{style}', falling back to 'autocross'")
-            gen = generate_autocross_track
+        self._acceleration = style == 'acceleration'
+        self._orange_small = []
+        self._orange_large = []
+        if self._acceleration:
+            layout = generate_acceleration_track()
+            self.left = layout['left_cones']
+            self.right = layout['right_cones']
+            self._orange_small = layout['orange_small_cones']
+            self._orange_large = layout['orange_large_cones']
+        else:
+            gen = GENERATORS.get(style)
+            if gen is None:
+                self.get_logger().warn(
+                    f"Unknown track_style '{style}', falling back to 'autocross'")
+                gen = generate_autocross_track
 
-        self.left, self.right = gen(
-            seed=self.seed,
-            num_waypoints=num_wp,
-            radius_m=radius,
-            jitter_m=jitter,
-            width_m=width,
-            cone_spacing_m=spacing,
-        )
+            self.left, self.right = gen(
+                seed=self.seed,
+                num_waypoints=num_wp,
+                radius_m=radius,
+                jitter_m=jitter,
+                width_m=width,
+                cone_spacing_m=spacing,
+            )
 
         # --- Publisher ---
         qos = QoSProfile(depth=1)
@@ -386,6 +399,7 @@ class ConePublisher(Node):
         self, mid: int, ns: str,
         x: float, y: float,
         r: float, g: float, b: float,
+        size=None,
     ) -> Marker:
         """Create a single cone sphere marker."""
         m = Marker()
@@ -404,6 +418,10 @@ class ConePublisher(Node):
         m.scale.y = 0.35
         m.scale.z = 0.35
 
+        if size is not None:
+            m.scale.x, m.scale.y, m.scale.z = size
+            m.pose.position.z = size[2] / 2.0
+
         m.color.a = 1.0
         m.color.r = float(r)
         m.color.g = float(g)
@@ -413,17 +431,26 @@ class ConePublisher(Node):
     def on_timer(self):
         """Publish all cone markers."""
         arr = MarkerArray()
+        small_size = SMALL_CONE_SIZE if self._acceleration else None
 
         for i, (x, y) in enumerate(self.left):
             arr.markers.append(
                 self.make_cone_marker(i, 'left_cones', x, y,
-                                      0.0, 0.2, 1.0))
+                                      0.0, 0.2, 1.0, size=small_size))
 
         base = 10000
         for i, (x, y) in enumerate(self.right):
             arr.markers.append(
                 self.make_cone_marker(base + i, 'right_cones', x, y,
-                                      1.0, 1.0, 0.0))
+                                      1.0, 1.0, 0.0, size=small_size))
+
+        for namespace, cones, size in (
+            ('orange_small_cones', self._orange_small, SMALL_CONE_SIZE),
+            ('orange_large_cones', self._orange_large, LARGE_CONE_SIZE),
+        ):
+            for i, (x, y) in enumerate(cones):
+                arr.markers.append(self.make_cone_marker(
+                    i, namespace, x, y, 1.0, 0.5, 0.0, size=size))
 
         self.pub.publish(arr)
 

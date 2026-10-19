@@ -4,6 +4,45 @@
 `/lhr/track/centerline`. It also publishes green centerline visualization
 markers on `/lhr/track/centerline_markers`.
 
+## Acceleration planner
+
+`acceleration_planner` is a separate executable in this package, selected
+automatically by the Gazebo launch for `track_style:=acceleration`.
+Run it instead of `track_builder`, so only one node publishes the centerline.
+It subscribes to detected `/lhr/sensor/cones_detected` markers and
+`/lhr/vehicle/odom`, not the ground-truth cone map.
+
+The initial odometry defines a fixed forward/lateral frame. Cones within
+0.8 m of the expected boundary centers (y=+/-2.564 m) are split by lateral
+sign, so unknown LiDAR colors and orange exit markers are usable. Each side
+needs two distinct longitudinal positions spanning at least 2 m. Duplicate
+longitudinal samples are averaged; both boundaries are linearly interpolated
+at common distances and their lateral coordinates averaged. This produces
+the world-frame `nav_msgs/Path` for pure pursuit. A 4.0–6.5 m boundary-width
+check rejects implausible paths. Extrapolation is limited to 3 m beyond the
+shorter observed boundary; the path ends no later than the mission stop.
+
+Parameters (also exposed in Gazebo for both perception branches):
+
+| Parameter | Default | Meaning |
+| --- | --- | --- |
+| `acceleration_path_spacing_m` | `0.5` | Maximum distance between mean-path points |
+| `acceleration_stop_distance_m` | `20.0` | Planned nose stop after finish, at least 1 m and less than 75 m |
+| `input_timeout_sec` | `1.0` | Maximum time since received odometry/cone snapshot |
+
+The known 75 m event length, 0.30 m staging gap, and vehicle nose offset from
+`lhr_vehicle` define mission progress. This assumes correctly staged position
+and heading and sufficiently accurate odometry; it is not a general track
+classifier or a finish-gate detector. It publishes `/lhr/acceleration/remaining`
+for speed planning and `/lhr/acceleration/complete` after a stop near the target
+for 0.5 s while Driving. Speed is derived from timestamped poses because
+Gazebo's pose publisher leaves odometry twist zero. Empty/invalid boundaries,
+wrong frames, or stale input produce an empty path so the controller stops.
+The controller also checks freshness independently if this node disappears.
+
+This implements simulation navigation; command speed zero in the Gazebo joint
+adapter is not a hardware brake system or EBS implementation.
+
 ## Pairing
 
 The `pairing_strategy` parameter selects one of three algorithms:
