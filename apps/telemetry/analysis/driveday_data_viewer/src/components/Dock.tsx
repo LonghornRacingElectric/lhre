@@ -21,7 +21,7 @@ interface PanelDef {
   body: ReactNode;
 }
 
-const MAIN = ["laps", "trace", "corners", "compare", "debrief", "notes", "setup"];
+const MAIN = ["laps", "trace", "corners", "debrief"];
 
 const PANELS: PanelDef[] = [
   { id: "laps", chip: "Laps", title: "Laps and cones", body: <LapsPanel /> },
@@ -48,7 +48,7 @@ const PANELS: PanelDef[] = [
 export function Dock() {
   const p = usePlayer();
   useUi(p);
-  const [open, setOpen] = useState<string | null>(() => lsGet<string | null>("panel", "laps"));
+  const [open, setOpen] = useState<string | null>(() => { const saved = lsGet<string | null>("panel", "laps"); return saved === "video" ? "laps" : saved; });
   const toggle = (id: string) => {
     const next = open === id ? null : id;
     setOpen(next);

@@ -14,6 +14,30 @@ export function interp(xs: number[], ys: number[], x: number): number {
   return d > 0 ? ys[lo] + ((ys[hi] - ys[lo]) * (x - xs[lo])) / d : ys[lo];
 }
 
+/** Centred time average of a piecewise-linear signal; keeps every original timestamp. */
+export function timeAverage(times: number[], values: number[], halfWindowMs = 250): number[] {
+  if (times.length < 2) return [...values];
+  const area = [0];
+  for (let i = 1; i < times.length; i++) {
+    area.push(area[i - 1] + (times[i] - times[i - 1]) * (values[i - 1] + values[i]) / 2);
+  }
+  const integral = (t: number) => {
+    let lo = 0, hi = times.length - 1;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (times[mid] <= t) lo = mid; else hi = mid;
+    }
+    const dt = times[hi] - times[lo];
+    const elapsed = t - times[lo];
+    return area[lo] + values[lo] * elapsed + (dt > 0 ? (values[hi] - values[lo]) * elapsed ** 2 / (2 * dt) : 0);
+  };
+  return times.map((t, i) => {
+    const a = Math.max(times[0], t - halfWindowMs);
+    const b = Math.min(times[times.length - 1], t + halfWindowMs);
+    return b > a ? (integral(b) - integral(a)) / (b - a) : values[i];
+  });
+}
+
 export function med(a: number[]): number {
   const s = [...a].sort((x, y) => x - y);
   const n = s.length;

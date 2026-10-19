@@ -7,8 +7,12 @@ const body = IBM_Plex_Sans({ subsets: ["latin"], weight: ["400", "500", "600"], 
 const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-mono", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "Drive day viewer",
-  description: "Lap, sector, corner and battery analysis for a drive-day telemetry export.",
+  title: "LAPDOG",
+  description: "Lap Analysis & Playback for Drive-day Operations Group.",
+  icons: {
+    icon: { url: "/lapdoglogo2.png", type: "image/png" },
+    apple: "/lapdoglogo2.png",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

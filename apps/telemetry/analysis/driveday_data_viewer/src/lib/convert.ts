@@ -155,6 +155,26 @@ function planCourses(prep: Prepared[], pr: (s: LiveSample) => XY): { courses: Co
   let runs = legs.filter((l) => l.len >= 0.6 * Lref && l.speed >= 0.4 * Vref);
   if (!runs.length) runs = legs;
   const left = legs.filter((l) => !runs.includes(l));
+  // Manual presses can land far apart on the same loop. A genuine start/finish
+  // of an open course is not crossed in the middle of another comparable run.
+  const passes = (leg: Leg, point: XY): boolean => {
+    const margin = Math.min(20, Math.max(8, leg.len * 0.05));
+    let distance = 0;
+    for (let i = 1; i < leg.P.length; i++) {
+      const a = leg.P[i - 1], b = leg.P[i];
+      const dx = b[0] - a[0], dy = b[1] - a[1];
+      const length = Math.hypot(dx, dy);
+      const f = length ? Math.max(0, Math.min(1, ((point[0] - a[0]) * dx + (point[1] - a[1]) * dy) / (length * length))) : 0;
+      const along = distance + f * length;
+      if (along > margin && along < leg.len - margin && Math.hypot(point[0] - a[0] - f * dx, point[1] - a[1] - f * dy) < 3) return true;
+      distance += length;
+    }
+    return false;
+  };
+  runs.forEach((leg) => {
+    if (!leg.loop) leg.loop = runs.some((other) => other !== leg &&
+      other.len > leg.len * 0.75 && other.len < leg.len * 1.35 && (passes(other, leg.start) || passes(other, leg.end)));
+  });
   const open = runs.filter((l) => l.loop).length < runs.length / 2;
 
   const same = (a: Leg, b: Leg) => {
@@ -196,11 +216,36 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
   if (!J || !Array.isArray(J.sampleTail) || !Array.isArray(J.laps)) {
     throw new Error("This does not look like a session export (no sampleTail or laps).");
   }
-  const st = J.sampleTail.filter((s) => s && typeof s.t === "number").sort((a, b) => a.t - b.t);
-  const hasGps = (s: LiveSample) => !!(s && s.lat && s.lon);
+  const hasGps = (s: LiveSample) => !!s && Number.isFinite(s.lat) && Number.isFinite(s.lon) &&
+    Math.abs(s.lat) <= 90 && Math.abs(s.lon) <= 180 && (s.lat !== 0 || s.lon !== 0);
+  // The session tail is capped upstream; complete lap exports carry the older samples.
+  const byTime = new Map<number, LiveSample>();
+  for (const s of [...J.laps.flatMap((l) => Array.isArray(l.samples) ? l.samples : []),
+    ...(Array.isArray(J.currentLap?.lapSamples) ? J.currentLap.lapSamples : []), ...J.sampleTail]) {
+    if (!s || !Number.isFinite(s.t)) continue;
+    const old = byTime.get(s.t);
+    byTime.set(s.t, old ? {
+      ...old, ...s, values: { ...old.values, ...s.values },
+      lat: hasGps(s) ? s.lat : old.lat, lon: hasGps(s) ? s.lon : old.lon,
+      cellTemps: s.cellTemps?.length ? s.cellTemps : old.cellTemps,
+    } : s);
+  }
+  const st = [...byTime.values()].sort((a, b) => a.t - b.t);
   const nGps = st.reduce((n, s) => n + (hasGps(s) ? 1 : 0), 0);
   if (nGps < 30) {
     throw new Error("This session has no usable GPS fixes (" + nGps + " of " + st.length + " samples), so there is no track to draw.");
+  }
+  // Keep intervening telemetry at its original timestamps, with a GPS position
+  // interpolated only between valid fixes. Never invent positions outside that range.
+  const fixes = st.filter(hasGps);
+  let fixIndex = 0;
+  for (let i = 0; i < st.length; i++) {
+    const s = st[i];
+    if (hasGps(s) || s.t < fixes[0].t || s.t > fixes[fixes.length - 1].t) continue;
+    while (fixIndex < fixes.length - 2 && fixes[fixIndex + 1].t < s.t) fixIndex++;
+    const a = fixes[fixIndex], b = fixes[fixIndex + 1];
+    const f = (s.t - a.t) / (b.t - a.t);
+    st[i] = { ...s, lat: a.lat + f * (b.lat - a.lat), lon: a.lon + f * (b.lon - a.lon) };
   }
   const info = J.sessionInfo || {};
   const md = J.metadata || {};
@@ -271,17 +316,23 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
           - at least 90% of this run's fixes lie within 6 m of the saved line
           - at least 90% of the saved line lies within 6 m of one of this run's laps (a smaller course in the same lot does not match)
           - a typical lap is within 12% of the saved lap length, and progress runs the same direction
-          Open courses are never matched: their start and finish lines are part of what they are. */
+          Open courses must also match the ordered start and finish positions. */
     let track: Track | null = null;
     let isNew = false;
     let renamed = false;
 
     const sameTrack = (t: Track): number => {
-      if (t.open) return 0;
+      if (!!t.open !== !!course.open) return 0;
       const pr = projWith(frame(t.lat0, t.lon0));
       const near = probe.filter((s) => nearOn(t.ref, t.cum, pr(s))[1] <= TOL).length / probe.length;
       if (near < 0.9) return 0;
       const laps = group.map((x) => x.sm.map(pr));
+      if (course.open) {
+        const first = t.ref[0], last = t.ref[t.ref.length - 1];
+        const startError = medianOf(laps.map(P => Math.hypot(P[0][0] - first[0], P[0][1] - first[1])));
+        const endError = medianOf(laps.map(P => Math.hypot(P[P.length - 1][0] - last[0], P[P.length - 1][1] - last[1])));
+        if (startError > TOL || endError > TOL) return 0;
+      }
       const stepN = Math.max(2, Math.round(t.RL / 3));
       let cov = 0;
       for (let i = 0; i < stepN; i++) {
@@ -312,7 +363,7 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
           let d = 0;
           for (let k = 1; k < P.length; k++) {
             let ds = nearOn(t.ref, t.cum, P[k])[0] - nearOn(t.ref, t.cum, P[k - 1])[0];
-            ds -= t.RL * Math.round(ds / t.RL);
+            if (!course.open) ds -= t.RL * Math.round(ds / t.RL);
             d += ds;
           }
           return d;
@@ -322,7 +373,7 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
       return near * (cov / stepN);
     };
 
-    if (!course.open) {
+    {
       let bestScore = 0;
       for (const t of tracks) {
         const sc = sameTrack(t);
@@ -345,9 +396,32 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
       const f = frame(lat0, lon0);
       const pr = projWith(f);
       const cand = group.map((x) => {
-        const P = x.sm.map(pr);
+        let P = x.sm.map(pr);
         let len = 0;
         for (let k = 1; k < P.length; k++) len += Math.hypot(P[k][0] - P[k - 1][0], P[k][1] - P[k - 1][1]);
+        if (!course.open) {
+          // A late manual press may include the beginning of the next circuit.
+          // Use one observed return to the starting position for the layout only.
+          const direction = dirOf(P[0], P[Math.min(3, P.length - 1)]);
+          let along = 0, best = 3, cut = -1;
+          let end: XY | null = null;
+          for (let k = 1; k < P.length; k++) {
+            const a = P[k - 1], b = P[k];
+            const dx = b[0] - a[0], dy = b[1] - a[1], length = Math.hypot(dx, dy);
+            const fraction = length ? Math.max(0, Math.min(1, ((P[0][0] - a[0]) * dx + (P[0][1] - a[1]) * dy) / length ** 2)) : 0;
+            const point: XY = [a[0] + fraction * dx, a[1] + fraction * dy];
+            const distance = dist2d(point, P[0]);
+            if (along + fraction * length > len * 0.6 && distance < best &&
+                length > 0 && (direction[0] * dx + direction[1] * dy) / length > 0.2) {
+              best = distance; cut = k; end = point;
+            }
+            along += length;
+          }
+          if (end && cut > 0) {
+            P = P.slice(0, cut).concat([end]);
+            len = cumOf(P).at(-1)!;
+          }
+        }
         return { x, P, len, gap: Math.hypot(P[0][0] - P[P.length - 1][0], P[0][1] - P[P.length - 1][1]) };
       });
       let ref: XY[];
@@ -451,11 +525,6 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
     ): RawLap & { span: number } {
       const m = samples.length;
       const P = samples.map(proj);
-      const sm = P.map((p, k) =>
-        k === 0 || k === m - 1
-          ? p
-          : ([0.25 * P[k - 1][0] + 0.5 * p[0] + 0.25 * P[k + 1][0], 0.25 * P[k - 1][1] + 0.5 * p[1] + 0.25 * P[k + 1][1]] as XY),
-      );
       const spd = P.map((p, k) => {
         const a = Math.max(0, k - 1);
         const b = Math.min(m - 1, k + 1);
@@ -500,8 +569,8 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
       set("vavgC", (s) => V(s, "avg_cell_v_stat"), 3);
       ch.cells = samples.map((s) => cellIdx.map((i) => R2(num(s.cellTemps && s.cellTemps[i]), 1)));
       const pts: Pt[] = samples.map((_, k) => [
-        R2(sm[k][0], 2),
-        R2(sm[k][1], 2),
+        P[k][0],
+        P[k][1],
         R2(spd[k], 2),
         open ? R2(Math.min(RL - 0.05, sd[k][0]), 1) : R2(((sd[k][0] % RL) + RL) % RL, 1),
         R2(sd[k][1], 2),
@@ -515,15 +584,9 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
       };
       const c1 = cross(gates[0]);
       const c2 = cross(gates[1]);
-      let sec: number[] = [];
-      if (c1 != null) sec.push(c1);
-      if (c1 != null && c2 != null) {
-        sec.push(c2 - c1);
-        if (complete) sec.push(dur - c2);
-      } else if (complete) {
-        sec = [dur / 3, dur / 3, dur / 3];
-        oddStart.push(name);
-      }
+      const sec = [c1, c1 != null && c2 != null ? c2 - c1 : null,
+        complete && c2 != null ? dur - c2 : null];
+      if (complete && (c1 == null || c2 == null)) oddStart.push(name);
       let dist = 0;
       for (let k = 1; k < m; k++) dist += Math.hypot(P[k][0] - P[k - 1][0], P[k][1] - P[k - 1][1]);
       const vmax = Math.max(...spd);
@@ -553,14 +616,15 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
       return rest;
     };
     const noun = open ? "course" : "circuit";
-    group.forEach((o, gi) => {
+    group.forEach((o) => {
       const sm = slice(o.o.l.startMs, o.o.l.endMs);
-      const no = multi ? gi + 1 : o.o.i + 1;
+      const no = o.o.i + 1;
+      const label = o.o.l.label?.trim() || "Lap " + no;
       if (sm.length < 4) {
         cw.push("Lap " + no + " skipped: only " + sm.length + " GPS fixes");
         return;
       }
-      const L = build(sm, "Lap " + no, "lap", o.o.l.startMs, o.o.l.endMs, o.o.l, true);
+      const L = build(sm, label, "lap", o.o.l.startMs, o.o.l.endMs, o.o.l, true);
       if (L.span > 1.5 * RL) {
         cw.push("Lap " + no + " skipped: it covers " + (L.span / RL).toFixed(1) + " " + noun + "s of the track (" + L.dur / 1000 + " s), probably a missed lap press");
         return;
@@ -569,7 +633,7 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
       laps.push(strip(L));
     });
     if (!laps.length) throw new Error("No timed lap was a clean single " + noun + " of the track.");
-    if (oddStart.length) cw.push(oddStart.join(", ") + ": did not pass both standard sector gates, sectors split evenly by time");
+    if (oddStart.length) cw.push(oddStart.join(", ") + ": did not pass both initial sector gates; missing sector times are unavailable");
 
     const spdAt = (arr: LiveSample[], k: number) => {
       const a = arr[Math.max(0, k - 1)];
@@ -598,7 +662,7 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
         const tail = st.filter((s) => s.t >= last.l.endMs && hasGps(s));
         while (tail.length && spdAt(tail, tail.length - 1) < 1) tail.pop();
         if (tail.length >= 8) {
-          const L = build(tail, "Lap " + (multi ? group.length + 1 : last.i + 2) + " (in progress)", "partial", tail[0].t, tail[tail.length - 1].t, null, false);
+          const L = build(tail, "In progress", "partial", tail[0].t, tail[tail.length - 1].t, null, false);
           laps.push(strip(L));
         }
       }
@@ -610,6 +674,10 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
       RL,
       open: open || undefined,
       laps,
+      coneEvents: [...new Map((Array.isArray(J.flags) ? J.flags : [])
+        .filter((flag) => flag && typeof flag.label === "string" && /^(?:hit[\s_-]*)?cones?(?:[\s_-]*hit)?$/i.test(flag.label.trim()) && Number.isFinite(flag.t) &&
+          laps.some((lap) => lap.kind === "lap" && flag.t >= lap.t0 && flag.t < lap.t1))
+        .map((flag) => { const event = { id: "export:cone:" + (flag.id ?? flag.t), t: flag.t }; return [event.id, event] as const; })).values()],
       meta: {
         cellIdx,
         sessId: multi ? base + "~" + (ci + 1) : base,

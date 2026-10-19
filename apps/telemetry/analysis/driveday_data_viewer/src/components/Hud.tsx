@@ -3,6 +3,7 @@
 import { sectorClass } from "@/lib/analysis";
 import { clock, fmt } from "@/lib/format";
 import { interp } from "@/lib/math";
+import { elapsedAtDistance } from "@/lib/sectors";
 import { cvS, cvT, sU, tU } from "@/lib/units";
 import { usePlayer, useFrame, useUi } from "./context";
 
@@ -21,15 +22,15 @@ export function HudLeft() {
   const cones = a.conesOf(L);
 
   let secs = null;
-  if (L.sec && L.sec[0] != null) {
-    const e0 = L.sec[0] as number;
-    const e1 = e0 + (L.sec[1] as number);
+  if (R && L.sec) {
+    const e0 = L.sec[0] ?? Infinity;
+    const e1 = e0 + (L.sec[1] ?? Infinity);
     const act = rel < e0 ? 0 : rel < e1 ? 1 : 2;
     const starts = [0, e0, e1];
     secs = (
       <div className="secs">
         {[0, 1, 2].map((k) => {
-          const done = (k === 0 && rel >= e0) || (k === 1 && rel >= e1) || (k === 2 && L.sec[2] != null && rel >= L.dur - 1);
+          const done = L.sec[k] != null && ((k === 0 && rel >= e0) || (k === 1 && rel >= e1) || (k === 2 && rel >= L.dur - 1));
           const state = done ? "done" : k === act ? "act" : "fut";
           const val = done ? (L.sec[k] as number) : k === act ? rel - starts[k] : null;
           return (
@@ -44,10 +45,8 @@ export function HudLeft() {
   }
   let gap = null;
   if (R && R !== L) {
-    const tc0 = interp(L.ch.u, L.ch.t, 0);
-    const tr0 = interp(R.ch.u, R.ch.t, 0);
     const u = interp(L.ch.t, L.ch.u, rel);
-    const g = rel - tc0 - (interp(R.ch.u, R.ch.t, u) - tr0);
+    const g = rel <= 0 ? 0 : rel >= L.dur ? L.dur - R.dur : rel - elapsedAtDistance(R, u, p.RL);
     gap = (
       <div className={"gap " + (g > 0 ? "pos" : "neg")}>
         {g >= 0 ? "+" : "−"}{(Math.abs(g) / 1000).toFixed(2)}<small>vs {R.name}</small>
@@ -84,16 +83,20 @@ export function HudRight() {
   useUi(p);
   useFrame(p);
   const { L, rel } = p.curState();
-  const V = (k: "spd" | "thr" | "brkp" | "gacc" | "kw" | "rpm") => interp(L.ch.t, L.ch[k], rel);
+  const V = (k: "spd" | "thr" | "brkp" | "gacc" | "glat" | "kw" | "rpm") => interp(L.ch.t, L.ch[k], rel);
   const g = V("gacc");
+  const lat = V("glat");
   return (
     <div className="hud hud-r" id="hudr">
       <div className="big">{cvS(p.units, V("spd")).toFixed(0)}<small>{sU(p.units).toUpperCase()}</small></div>
-      <div className="bars">
-        <div>THR<em><i style={{ width: V("thr").toFixed(0) + "%", background: "var(--green)" }} /></em></div>
-        <div>BRK<em><i style={{ width: V("brkp").toFixed(0) + "%", background: "var(--red)" }} /></em></div>
-      </div>
-      <div className="mono">{g >= 0 ? "+" : "−"}{Math.abs(g).toFixed(2)} g · {V("kw").toFixed(0)} kW · {Math.round(V("rpm"))} rpm</div>
+      <div className="latg"><span>Lateral · GPS est.</span><b>{Number.isFinite(lat) ? Math.abs(lat).toFixed(2) + " g" + (Math.abs(lat) < 0.005 ? "" : lat > 0 ? " L" : " R") : "—"}</b></div>
+      {p.mode === "pedal" && (
+        <div className="bars">
+          <div>THR<em><i style={{ width: V("thr").toFixed(0) + "%", background: "var(--green)" }} /></em></div>
+          <div>BRK<em><i style={{ width: V("brkp").toFixed(0) + "%", background: "var(--red)" }} /></em></div>
+        </div>
+      )}
+      {p.mode === "acc" && <div className="mono">{g >= 0 ? "+" : "−"}{Math.abs(g).toFixed(2)} g · {V("kw").toFixed(0)} kW</div>}
     </div>
   );
 }
