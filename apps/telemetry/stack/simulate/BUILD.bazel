@@ -10,6 +10,7 @@ exports_files(["docker-compose.yml"])
 py_binary(
     name = "simulate_binary",
     srcs = ["main.py"],
+    data = ["data/autox_uta_2026-10-17.pb.gz"],
     imports = ["../..", "../../.."],
     main = "main.py",
     deps = [
