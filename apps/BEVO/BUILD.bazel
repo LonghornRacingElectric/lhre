@@ -28,8 +28,8 @@ alias(
 )
 
 # Runs build.rs to generate the prost bindings AND generated_mapping.rs into
-# OUT_DIR (lib.rs include!()s both) — same script the Cargo flow runs, but
-# pointed at the hermetic protoc and the Bazel-generated can.json.
+# OUT_DIR (lib.rs include!()s both) from the hermetic protoc and the shared
+# Bazel-generated protobuf and CAN JSON.
 cargo_build_script(
     name = "sensor_proto_build",
     srcs = ["build.rs"],
