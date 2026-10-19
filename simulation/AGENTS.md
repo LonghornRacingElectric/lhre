@@ -17,6 +17,13 @@ a Bazel package tree
 | Run a BobSim evaluation, envelope or sweep | [run-bobsim-target](docs/skills/run-bobsim-target/SKILL.md) |
 | Change a vehicle parameter | [edit-vehicle](docs/skills/edit-vehicle/SKILL.md) |
 | Move the BobSim pin | [bump-bobsim](docs/skills/bump-bobsim/SKILL.md) |
+| Use, patch or question BobSim from lhre code | [bobsim-boundary](docs/skills/bobsim-boundary/SKILL.md) |
+| Plan and run study work as a team of subagents | [orchestrate-subagents](docs/skills/orchestrate-subagents/SKILL.md) |
+
+Load every skill that matches your task before you start. An agent that you
+start does the same, and its brief says which skills to load. For a study,
+also load `study-design` and `vehicle-dynamics-first-principles` when your
+tool has them. They come from the LHRe knowledge base, not from this repo.
 
 ## Build, test, verify
 
