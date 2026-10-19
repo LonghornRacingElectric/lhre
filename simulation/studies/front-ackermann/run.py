@@ -27,6 +27,7 @@ from simulations.envelope.vehicle_yaml import project_vehicle_yaml
 from simulations.lap.core.qss import GGVMap, solve_qss_lap
 from simulations.lap.core.racing_line import optimize_racing_line
 from simulations.lap.core.track import RacingLine, TrackCorridor
+from tools.bundle import BUNDLE, REPO, file_sha256, load_bundle
 from tools.parallel import map_cases
 from tools.study_inputs import StudyInputsError, load_study_inputs, markdown_table, resolve, write_resolved
 from tools.support import Observation, SupportPolicy, cell_best, compare, gain_pct
@@ -95,6 +96,7 @@ LAP_RADIUS_BANDS_M = (6.0, 15.0)
 GGV_FIELDS = ("mass", "wheelbase", "cg_height", "track_front", "track_rear", "front_static_frac", "lltd", "max_drive_force")
 
 INPUTS_FILE = Path(__file__).with_name("inputs.yml")
+VEHICLE_BUNDLE = REPO / BUNDLE
 INPUT_SPEC = {
     "steering.rack_travel": "mm",
     "mass_properties.mass": "kg",
@@ -1769,6 +1771,23 @@ def check_alignment(study, vehicle):
                     "The corner model applies one value to every wheel. Make them the same.")
 
 
+def check_bundle_reference(study, vehicle_path, bundle_path=VEHICLE_BUNDLE):
+    want = study.bundle_id.value
+    if not Path(bundle_path).is_file():
+        raise StudyInputsError(f"{study.path.name} names bundle_id {want!r}, but {bundle_path} does not exist.")
+    bundle = load_bundle(bundle_path)
+    if want != bundle.bundle_id:
+        raise StudyInputsError(
+            f"{study.path.name} names bundle_id {want!r}, but {bundle.path.name} is {bundle.bundle_id!r}. "
+            "Set bundle_id in inputs.yml to the bundle that describes the vehicle.")
+    member, executed = bundle.member_hashes().get("vehicle"), file_sha256(vehicle_path)
+    if member != executed:
+        raise StudyInputsError(
+            f"Bundle {bundle.bundle_id} describes a vehicle file with SHA-256 {member}, but BOBSIM_VEHICLE "
+            f"{vehicle_path} has SHA-256 {executed}. Run the vehicle that the bundle describes, or update the bundle.")
+    return bundle
+
+
 def parse_inputs(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--inputs", type=Path, default=INPUTS_FILE, help="study inputs file, schema lhre.study-inputs.v1")
@@ -1797,6 +1816,7 @@ def main():
     inputs, study = parse_inputs()
     out = Path(os.environ["OUT_DIR"])
     vehicle_path = Path(os.environ["BOBSIM_VEHICLE"])
+    bundle = check_bundle_reference(study, vehicle_path)
     orion = load_yaml(vehicle_path)
     check_alignment(study, orion)
     front_geometry = study.geometry
@@ -1826,7 +1846,7 @@ def main():
     support = TireSupport.from_tir(tir_path)
     lap_config = repo_root() / LAP_CONFIG
     power_w = float(load_yaml(lap_config)["event"]["drive_power_limit_w"])
-    files = {"vehicle": vehicle_path, "tire": tir_path, "lap_config": lap_config, "run_py": Path(__file__)}
+    files = {"vehicle": vehicle_path, "bundle": bundle.path, "tire": tir_path, "lap_config": lap_config, "run_py": Path(__file__)}
     effective = {
         "mass_kg": ggv.mass, "cg_height_m": ggv.cg_height, "front_static_frac": ggv.front_static_frac,
         "wheelbase_m": ggv.wheelbase, "track_front_m": ggv.track_front, "track_rear_m": ggv.track_rear,

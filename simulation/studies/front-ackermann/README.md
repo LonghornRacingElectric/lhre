@@ -27,7 +27,7 @@ A change to any key makes a result stale. A change to this README does not.
 | `run.py` | not recorded. The run used the code before PR #66. | changed |
 | BobSim | `4da577a` | `fe03bab` |
 | BobLib | `2777aa5` | `1bd6d78` |
-| Vehicle bundle | none | none yet (`bundle_id` is unavailable in `inputs.yml`) |
+| Vehicle bundle | none | `orion-baseline-1` (`vehicle/bundle.yml`). The run checks that it describes the executed vehicle file. |
 
 ### Known defects that affected the published result
 
@@ -328,7 +328,9 @@ These actions come from the 2026-10-11 run. They are historical too. Check each 
 
 `inputs.yml` holds every vehicle and geometry number that `run.py` reads. Each value has a status (`measured`, `cad_export`, `declared`, `assumed`, `guessed` or `unavailable`) and a source. `tools/study_inputs.py` loads the file. It stops the run when a field, a unit, the axes, the origin or the mirror rule is missing. It also stops the run when a transcription claims an export status. A released front geometry must be a CAD export with a hash-checked file, and every point, rack and frame leaf must be measured, cad_export or declared. The run also stops when `alignment.static_camber` or `alignment.static_toe` differs from either axle in the vehicle file, because the corner model applies one value to every wheel. `--mu` and `--bias` override one value each, and the run records the override.
 
-Front V34 is a hand transcription of the `FRONT SUSPENSION` block of `2027_FrontV34.shk`, with release status `candidate`. It is not a released geometry. The `.shk` file is outside git, so the run cannot check its hash. The export axes and the vertical datum are not confirmed. No vehicle bundle exists yet.
+Front V34 is a hand transcription of the `FRONT SUSPENSION` block of `2027_FrontV34.shk`, with release status `candidate`. It is not a released geometry. The `.shk` file is outside git, so the run cannot check its hash. The export axes and the vertical datum are not confirmed.
+
+`inputs.yml` names the vehicle bundle `orion-baseline-1`. The run stops unless `vehicle/bundle.yml` has that `bundle_id` and its `members.vehicle.sha256` is the SHA-256 of the `BOBSIM_VEHICLE` file. So the study runs only on the vehicle file that the committed bundle describes. It does not run on a candidate copy. The run records the bundle hash in `inputs.resolved.json`.
 
 A run writes `inputs.resolved.json` with every effective value, its status and source, and the SHA-256 of each file it read. It also writes the table below from that file. The table below is from the 2026-10-11 run, when these values were literals in `run.py`.
 

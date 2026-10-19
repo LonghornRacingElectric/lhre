@@ -1,9 +1,9 @@
 schema: lhre.study-inputs.v1
 study: front-ackermann
 bundle_id:
-  value: null
-  status: unavailable
-  source: vehicle/bundle.yml does not exist at this commit. The vehicle bundle (contract C7) adds it.
+  value: orion-baseline-1
+  status: declared
+  source: bundle_id of vehicle/bundle.yml. run.py stops unless that bundle has this ID and describes the BOBSIM_VEHICLE bytes.
 front_geometry:
   label: Front V34
   kind: transcription

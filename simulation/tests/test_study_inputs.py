@@ -3,6 +3,7 @@ import copy
 import hashlib
 import json
 import math
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -13,6 +14,8 @@ from tools.study_inputs import StudyInputsError, load_study_inputs, markdown_tab
 
 SIM = Path(__file__).resolve().parents[1]
 STUDY = SIM / "studies" / "front-ackermann"
+VEHICLE = SIM.parent / "vehicle" / "vehicle.yml"
+BUNDLE = SIM.parent / "vehicle" / "bundle.yml"
 SHK_SHA256 = "95063c3b8a0ccaadfd9971088b65b395eb299acdcfb4ea31b8fe5b68ee254562"
 # The values run.py held as literals before they moved to inputs.yml.
 OLD_POINTS_MM = {
@@ -72,7 +75,7 @@ def test_committed_geometry_is_an_honest_unreleased_transcription(study):
     assert geometry.kind == "transcription" and geometry.release_status != "released"
     assert geometry.source_file["sha256"] == SHK_SHA256
     assert geometry.source_file["stored"] == "external" and geometry.source_file["verified"] is False
-    assert loaded.bundle_id.status == "unavailable" and loaded.bundle_id.value is None
+    assert loaded.bundle_id.status == "declared" and loaded.bundle_id.value == "orion-baseline-1"
     statuses = {f.status for f in loaded.fields.values()}
     assert "measured" not in statuses
     assert {geometry.points_field.status, geometry.rack_field.status} <= {"declared", "assumed", "guessed"}
@@ -287,7 +290,7 @@ def test_the_inputs_table_shows_every_value_with_its_status(study, inputs_copy):
     assert "580 lb" in text and "11 in" in text and "31.75 mm" in text
     assert "0.7 (override)" in next(r for r in rows if r.startswith("| brake.front_bias_nominal |"))
     assert "transcription, release status candidate" in text and "hash not checked by the run" in text
-    assert "| Vehicle bundle | unavailable | unavailable |" in text
+    assert "| Vehicle bundle | orion-baseline-1 | declared |" in text
 
 
 def test_the_design_front_matches_the_old_literals(study):
@@ -317,3 +320,56 @@ def test_alignment_must_match_the_vehicle_file(study, axle, name):
     del vehicle[axle]["wheel"][name]
     with pytest.raises(StudyInputsError, match=f"{axle}.wheel.{name}"):
         study.check_alignment(loaded, vehicle)
+
+
+def test_the_committed_inputs_name_the_bundle_of_the_committed_vehicle(study):
+    _, loaded = study.parse_inputs([])
+    assert study.check_bundle_reference(loaded, VEHICLE).bundle_id == "orion-baseline-1"
+
+
+@pytest.mark.parametrize(
+    "bundle_id",
+    [{"value": "orion-baseline-2", "status": "declared", "source": "x"}, {"value": None, "status": "unavailable", "source": "x"}],
+    ids=["another id", "unavailable"],
+)
+def test_a_bundle_id_that_is_not_the_bundle_fails(study, inputs_copy, bundle_id):
+    _, loaded = study.parse_inputs(["--inputs", str(inputs_copy(lambda d: d.update(bundle_id=bundle_id)))])
+    with pytest.raises(StudyInputsError, match="names bundle_id"):
+        study.check_bundle_reference(loaded, VEHICLE)
+
+
+def test_the_bundle_must_describe_the_executed_vehicle_bytes(study, tmp_path):
+    _, loaded = study.parse_inputs([])
+    changed = tmp_path / "vehicle.yml"
+    changed.write_bytes(VEHICLE.read_bytes() + b"# changed\n")
+    with pytest.raises(StudyInputsError, match="SHA-256"):
+        study.check_bundle_reference(loaded, changed)
+
+    data = yaml.safe_load(BUNDLE.read_text(encoding="utf-8"))
+    data["members"]["vehicle"]["sha256"] = hashlib.sha256(changed.read_bytes()).hexdigest()
+    describes_changed = tmp_path / "bundle.yml"
+    describes_changed.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    assert study.check_bundle_reference(loaded, changed, describes_changed).path == describes_changed
+    with pytest.raises(StudyInputsError, match="SHA-256"):
+        study.check_bundle_reference(loaded, VEHICLE, describes_changed)
+
+
+def test_a_missing_bundle_fails(study, tmp_path):
+    _, loaded = study.parse_inputs([])
+    with pytest.raises(StudyInputsError, match="does not exist"):
+        study.check_bundle_reference(loaded, VEHICLE, tmp_path / "bundle.yml")
+
+
+def test_main_checks_the_bundle_before_it_reads_the_vehicle(study, tmp_path, monkeypatch):
+    changed = tmp_path / "vehicle.yml"
+    changed.write_bytes(VEHICLE.read_bytes() + b"# changed\n")
+    monkeypatch.setenv("OUT_DIR", str(tmp_path))
+    monkeypatch.setenv("BOBSIM_VEHICLE", str(changed))
+    monkeypatch.setattr(sys, "argv", ["run.py"])
+
+    def past_the_check(*args):
+        raise AssertionError("main() read the vehicle before it checked the bundle reference.")
+
+    monkeypatch.setattr(study, "load_yaml", past_the_check)
+    with pytest.raises(StudyInputsError, match="SHA-256"):
+        study.main()

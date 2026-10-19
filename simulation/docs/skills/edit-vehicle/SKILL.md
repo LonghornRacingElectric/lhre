@@ -22,6 +22,9 @@ description: Change a parameter of the current car in vehicle/vehicle.yml, updat
    - Set `members.vehicle.sha256` to the new hash. From the repo root, run
      `sha256sum vehicle/vehicle.yml`.
    - Set a new `bundle_id`. A changed member always needs one.
+   - Find each `simulation/studies/*/inputs.yml` that names the old
+     `bundle_id`. Check that its inputs are still true for the new car.
+     Then set the new `bundle_id` in it. `make test` fails until you do.
    - Update each entry that the change affects. Give the evidence status
      and the source. For example, a new front hardpoint set changes
      `axles.front.revision`, `axles.front.source` and
