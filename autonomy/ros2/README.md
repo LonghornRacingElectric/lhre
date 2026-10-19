@@ -17,6 +17,7 @@ Colcon workspace for LHR driverless / autonomy nodes. This file is the **referen
 | `lhr_control` | Pure pursuit path-following controller with curvature-adaptive lookahead and speed planning |
 | `lhr_mission_manager` | FSAE driverless state machine (Off → Ready → Driving → Finished → Emergency) |
 | `lhr_metrics` | Cross-track error, off-track count, and lap detection (CSV output) |
+| `lhr_safety` | `safety_node`: odometry, EKF, command, LiDAR, geofence and steering checks, a heartbeat that stops on any fault, and a latched trip onto `/lhr/mission/emergency`. Off unless `safety:=true`. See [its README](src/lhr_safety/README.md) |
 | `lhr_gazebo` | Gazebo Harmonic physics simulation — vehicle with direct joint control, ground-truth odometry, LiDAR sensor, RViz integration |
 | `lhr_perception` | LiDAR pointcloud clustering, timestamp-aligned persistent mapping, and geometry-based track-side inference |
 | `lhr_state_estimation` | EKF fusing IMU and wheel speeds into `/lhr/vehicle/odom` + `map → base_link`, replacing ground-truth odometry. See [its README](src/lhr_state_estimation/README.md) |
@@ -254,6 +255,7 @@ Launch arguments work the same way:
 ./scripts/run_gazebo_demo.sh track_style:=oval   # oval track (also: autocross, simple)
 ./scripts/run_gazebo_demo.sh track_style:=oval perception:=lidar  # LiDAR on oval (best LiDAR experience)
 ./scripts/run_gazebo_demo.sh estimator:=ekf      # EKF odometry instead of Gazebo ground truth
+./scripts/run_gazebo_demo.sh perception:=lidar estimator:=ekf safety:=true  # trip the mission on stack faults (lhr_safety)
 ```
 
 The `track_style` argument selects the track generator (`oval`, `autocross`, or `simple`). The world SDF is auto-resolved from `track_style` + `seed` (e.g. `oval_seed1.sdf`). Pre-generated worlds are installed by colcon from `worlds/*.sdf`.
@@ -278,6 +280,33 @@ values. Launch forwarding and node startup are covered for both perception
 modes by `lhr_gazebo/test/test_chaining_parameters.py`.
 
 **Launch file architecture:** `gazebo_demo.launch.py` uses `OpaqueFunction` instead of `IfCondition`/`UnlessCondition` for perception mode and world selection. All launch args are declared in `generate_launch_description()`, and nodes are built in the `_launch_setup()` callback which runs at launch time with access to resolved argument values.
+
+### ZED 2i stereo camera
+
+The vehicle model includes one ZED 2i with the 2.1 mm wide lens and a 0.12 m
+baseline. Opt into its ROS streams and RViz image panels:
+
+```bash
+./scripts/run_gazebo_demo.sh enable_stereo_camera:=true
+```
+
+The option defaults to `false` and is independent of `perception` and
+`estimator`. It publishes left/right `image_rect` and `camera_info` under
+`/lhr/sensor/zed2i/`, with optical TF frames and preserved simulation timestamps.
+Use best-effort sensor-data QoS. Model optics are idealized, initially
+1280x720 at 30 simulation Hz with 110-degree horizontal FOV; the physical
+mount/calibration still need measurement. Change camera geometry/settings
+in `lhr_vehicle`'s YAML and regenerate/rebuild the model.
+See [Gazebo stereo usage](src/lhr_gazebo/README.md#stereo-images-in-rosrviz)
+for the topic and frame contract.
+
+To label blue/yellow/orange candidate regions in the left image, also pass
+`enable_camera_color_classifier:=true`. The stereo RViz configuration includes
+`/lhr/perception/cone_colors/debug_image` with Best Effort reliability; add an
+Image display for that topic if using a custom RViz configuration.
+This opt-in debug classifier does not yet attach colors to the LiDAR map.
+See [camera classification](src/lhr_perception/README.md#camera-color-classification)
+for HSV thresholds, area filtering, and launch overrides.
 
 ### Vehicle model
 
@@ -394,8 +423,10 @@ The bridge config (`config/ros_gz_bridge.yaml`) maps 11 topics:
 | `/lhr/control/lookahead` | `visualization_msgs/Marker` | Debug: lookahead target point |
 | `/lhr/mission/status` | `std_msgs/String` | Driverless system status (`OFF`, `READY`, `DRIVING`, `FINISHED`, `EMERGENCY`) |
 | `/lhr/mission/go` | `std_msgs/Bool` | Go signal — triggers Ready → Driving transition |
-| `/lhr/mission/emergency` | `std_msgs/Bool` | Emergency stop — triggers Driving → Emergency transition |
-| `/lhr/mission/reset` | `std_msgs/Bool` | Reset — triggers Emergency → Off transition |
+| `/lhr/mission/emergency` | `std_msgs/Bool` | Emergency stop: triggers Ready/Driving → Emergency. `safety_node` publishes it every tick while tripped |
+| `/lhr/safety/heartbeat` | `std_msgs/UInt32` | Counter that advances only while every safety check passes and no trip is latched |
+| `/lhr/safety/status` | `diagnostic_msgs/DiagnosticStatus` | Safety state: `OK` or the fault name, with code, latch and heartbeat |
+| `/lhr/mission/reset` | `std_msgs/Bool` | Reset: triggers Emergency → Off, and clears `safety_node`'s latch |
 | `/lhr/metrics/lap_complete` | `std_msgs/Bool` | Published by metrics node when a lap is completed |
 | `/lhr/debug/curvature` | `std_msgs/Float32` | Debug: estimated path curvature at lookahead |
 | `/lhr/debug/v_cmd` | `std_msgs/Float32` | Debug: commanded speed after accel limiting |
@@ -554,6 +585,7 @@ stateDiagram-v2
     OFF --> READY: centerline path available
     READY --> DRIVING: go signal, or auto_go timeout
     DRIVING --> FINISHED: mission complete + vehicle stopped
+    READY --> EMERGENCY: emergency signal
     DRIVING --> EMERGENCY: emergency signal
     EMERGENCY --> OFF: reset signal
     FINISHED --> [*]
@@ -564,8 +596,14 @@ stateDiagram-v2
 | Off → Ready | Centerline path becomes available |
 | Ready → Driving | Go signal received, or auto-go timer expires |
 | Driving → Finished | Mission complete + vehicle speed < 0.5 m/s |
+| Ready → Emergency | Emergency signal received (straight there, without a tick of Driving) |
 | Driving → Emergency | Emergency signal received |
 | Emergency → Off | Reset signal received |
+
+An emergency that arrives while Off is dropped, and a reset only counts in
+Emergency. That keeps the tail of a cleared trip from stopping the next run;
+a supervisor that is still tripped, like `safety_node`, keeps sending the
+emergency and trips Ready again.
 
 Mission completion triggers:
 - **autocross**: lap detected by `lhr_metrics` (via `/lhr/metrics/lap_complete`)
@@ -583,8 +621,8 @@ ros2 topic pub --once /lhr/mission/go std_msgs/msg/Bool "{data: true}"
 # Emergency stop:
 ros2 topic pub --once /lhr/mission/emergency std_msgs/msg/Bool "{data: true}"
 
-# Reset after emergency:
-ros2 topic pub --once /lhr/mission/reset std_msgs/msg/Bool "{data: true}"
+# Reset after emergency (-w 2: safety_node subscribes too, when running):
+ros2 topic pub --once -w 2 /lhr/mission/reset std_msgs/msg/Bool "{data: true}"
 
 # Monitor status:
 ros2 topic echo /lhr/mission/status
@@ -646,6 +684,22 @@ outer = atan(wheelbase / (R + track_width/2))
 ```
 
 **Wheel velocity differential:** Each wheel's angular velocity accounts for its distance from the instantaneous center of rotation. Outer wheels travel farther and spin faster than inner wheels in a turn.
+
+**Command timeout:** Gazebo's joint controllers hold their last target, so a dead controller would otherwise leave the car driving. With no command for `cmd_timeout_s` the adapter sets all four wheel speeds to 0 (steering holds), the way the real car's actuators stop when commands stop. It acts once per dropout and resumes on the next command; a sim clock that jumps backwards counts as a dropout.
+
+| Param | Default | Description |
+|-------|---------|-------------|
+| `cmd_timeout_s` | `0.3` | Command age (s) after which the wheels stop; `0` disables. Launch argument `adapter_cmd_timeout_s` |
+
+#### fault_injector
+
+Sim-only, started by `fault:=<kind>` on the Gazebo launch to test `lhr_safety` (#117). See [lhr_gazebo](src/lhr_gazebo/README.md#fault-injection).
+
+| Param | Default | Description |
+|-------|---------|-------------|
+| `fault` | `""` | Fault kind; launch argument `fault`, empty starts no injector |
+| `fault_after_s` | `30.0` | Seconds after the mission first reports `DRIVING` |
+| `fault_duration_s` | `0.0` | How long the fault lasts; `0` is until shutdown |
 
 ### lhr_perception (lidar_cone_detector)
 
@@ -720,3 +774,27 @@ The last three are the estimate-vs-truth error and are blank unless
 CSV data accumulates in `data/metrics.csv` across runs. Delete the file once
 after upgrading past the error columns, or new rows will not line up with the
 old header.
+
+### lhr_safety (safety_node)
+
+| Param | Default | Description |
+|-------|---------|-------------|
+| `rate_hz` | `20.0` | Check, heartbeat and status rate |
+| `lidar_topic` | `"/lhr/lidar/points"` | Cloud whose age is checked |
+| `monitor_lidar` | `true` | Check LiDAR age (the Gazebo launch sets it from `perception`) |
+| `lidar_timeout_s` | `0.3` | Cloud age (s) that counts as stale, about three missed frames |
+| `odom_timeout_s` | `0.25` | Odometry age (s) that counts as stale |
+| `cmd_timeout_s` | `0.25` | Control command age (s) that counts as stale; the controller publishes at 20 Hz once it has a mission status |
+| `max_position_std_m` | `0.0` | Largest pose standard deviation (m) before the EKF counts as diverged; 0 is off, the default until GNSS bounds the EKF's covariance |
+| `max_speed_factor` | `1.5` | Speed above this multiple of `vehicle.yaml`'s top speed counts as diverged |
+| `geofence_radius_m` | `150.0` | Distance (m) from where the car armed (entered Ready) that trips the geofence |
+| `steer_min_speed_mps` | `2.0` | Speed (m/s) below which the steering check is skipped |
+| `steer_yaw_rate_tol` | `0.15` | Smallest yaw-rate mismatch (rad/s) that counts |
+| `steer_rel_tol` | `0.5` | Mismatch allowed as a fraction of the expected yaw rate |
+| `steer_window_s` | `1.0` | How long (s) a mismatch must last before it trips |
+
+The Gazebo launch exposes every threshold as `safety_<param>` and starts
+the node only with `safety:=true`. `monitor_lidar` follows `perception`, and
+`rate_hz` and `lidar_topic` are not launch arguments; the package README says
+why. See [lhr_safety](src/lhr_safety/README.md)
+for what a trip does.

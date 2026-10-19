@@ -22,6 +22,7 @@ The code is organized so each lane owns whole packages. Lane ownership is tracke
 | Perception | `lhr_perception` (+ `lhr_sensor_sim` as its sim stand-in) | Autocross reliability: sparse LiDAR returns can cause incorrect track-side labels. See [known issues](docs/plans/gazebo-integration.md) |
 | State estimation | `lhr_state_estimation` (+ `lhr_sensor_sim`'s `inertial_sim` as its sensor stand-in) | GNSS: no sim model exists yet, and position drift is unbounded without it. Slip handling, IMU lever arm |
 | Planning & control | `lhr_track_builder`, `lhr_control`, `lhr_mission_manager` | Centerline ordering on tight corners. Unimplemented missions (acceleration, skidpad) |
+| Safety | `lhr_safety` | Hardware half of the loop (CAN heartbeat, BEVO timer, relay, valve) for the 12/2 bench rig. Sim brake model, threshold tuning by fault injection |
 | Sim & test infra | `lhr_gazebo`, `lhr_sim_kinematic`, `lhr_trackgen`, `lhr_metrics`, `lhr_demo`, `lhr_vehicle`, `scripts/` | Extend the generated-track tests to model real sensor visibility and vehicle feedback |
 
 ## How the pieces fit
@@ -69,5 +70,6 @@ flowchart LR
 - Timestamp-aligned LiDAR mapping avoided duplicates in the tested autocross
   run; geometry-only side inference still mislabels sparse cone fragments and
   the car leaves the course
-- Camera work not started
+- ZED 2i stereo inputs implemented; camera color-region classification is
+  available as an opt-in debug image. LiDAR color fusion remains future work
 - Retrofit hardware being ordered (details in Notion)
