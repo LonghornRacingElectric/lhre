@@ -423,7 +423,7 @@ the `OdometryPublisher` plugin, bridged from `/model/fsae_vehicle/tf` to `/tf`.
 | `seed` | `1` | Random seed for track generation |
 | `frame_id` | `"map"` | TF frame |
 | `publish_hz` | `5.0` | Publishing rate (Hz) |
-| `track_style` | `"autocross"` | Generator: `autocross` (Catmull-Rom spline), `simple` (original oval), `oval` (dedicated oval generator), or `skidpad` (fixed circular boundaries; visual preview only) |
+| `track_style` | `"autocross"` | Generator: `autocross` (Catmull-Rom spline), `simple` (original oval), `oval` (dedicated oval generator), or `skidpad` (fixed rules geometry with orange lanes/gates) |
 
 The `skidpad` generator uses the 2026 FSAE D.10.1 dimensions: centers
 18.25 m apart, inner diameter 15.25 m, outer diameter 21.25 m. Each circle
@@ -434,9 +434,10 @@ width, radius, spacing and jitter options do not alter this rules layout.
 Orange lanes/gates are generated separately from the circular boundaries.
 Their spacing and lengths are illustrative simulation choices.
 `mission:=skidpad track_style:=skidpad` selects the dedicated
-[acquisition planner](src/lhr_track_builder/README.md#skidpad-acquisition),
-with 15 m / 240-degree detection, optional bounded creep and a stationary
-`ACQUIRED` result. Event lap planning/completion is not implemented.
+[skidpad planner](src/lhr_track_builder/README.md#skidpad-planning),
+with 15 m / 240-degree detection and bounded creep to validate the colored
+entry and timing gates. It then follows two right/two left laps, exits, stops
+and signals mission completion through the existing pure-pursuit follower.
 | `num_waypoints` | `10` | Number of waypoints around the loop (autocross only) |
 | `radius_m` | `25.0` | Base radius of the track (autocross only) |
 | `jitter_m` | `10.0` | Radial jitter per waypoint (autocross only) |
@@ -584,7 +585,7 @@ stateDiagram-v2
 Mission completion triggers:
 - **autocross**: lap detected by `lhr_metrics` (via `/lhr/metrics/lap_complete`)
 - **inspection**: 28 seconds elapsed
-- **skidpad**: acquisition only; the car stops at `ACQUIRED`, without event laps or mission completion
+- **skidpad**: acquire geometry and colored gates, drive two right/two left laps, exit and stop; planner completion transitions the mission to `FINISHED`
 - **acceleration, ebs_test, manual**: not yet implemented
 
 The control node (`pursuit_node`) subscribes to `/lhr/mission/status` and only sends drive commands when status is `DRIVING`. When the mission manager is not running, the control node operates freely for backward compatibility.

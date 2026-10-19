@@ -2,7 +2,7 @@
 
 Pure pursuit follows `/lhr/track/centerline` using `/lhr/vehicle/odom` and
 publishes `/lhr/vehicle/cmd`. Steering and curvature-based speed planning are
-shared by the autocross and skidpad acquisition planners. Vehicle geometry
+shared by the autocross and skidpad planners. Vehicle geometry
 comes from `lhr_vehicle`.
 
 ## Acquisition mode
@@ -18,7 +18,7 @@ hardware brake maneuver.
 
 | Parameter | Node default | Description |
 | --- | --- | --- |
-| `path_closed` | `true` | Wrap path indices; false for acquisition |
+| `path_closed` | `true` | Wrap path indices; false for the skidpad planner's local route windows |
 | `require_planner_limit` | `false` | Require a fresh planner cap and input watchdogs |
 | `planner_timeout_sec` | `0.5` | Maximum receipt age for required inputs |
 

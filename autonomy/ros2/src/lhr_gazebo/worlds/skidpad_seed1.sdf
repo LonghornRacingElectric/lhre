@@ -591,22 +591,22 @@
 <include>
   <uri>model://cone_orange_large</uri>
   <name>cone_orange_large_0</name>
-  <pose>-1.5000 -7.0000 0.2525 0 0 0</pose>
+  <pose>-1.5000 -0.5000 0.2525 0 0 0</pose>
 </include>
 <include>
   <uri>model://cone_orange_large</uri>
   <name>cone_orange_large_1</name>
-  <pose>-1.5000 7.0000 0.2525 0 0 0</pose>
+  <pose>-1.5000 0.5000 0.2525 0 0 0</pose>
 </include>
 <include>
   <uri>model://cone_orange_large</uri>
   <name>cone_orange_large_2</name>
-  <pose>1.5000 -7.0000 0.2525 0 0 0</pose>
+  <pose>1.5000 -0.5000 0.2525 0 0 0</pose>
 </include>
 <include>
   <uri>model://cone_orange_large</uri>
   <name>cone_orange_large_3</name>
-  <pose>1.5000 7.0000 0.2525 0 0 0</pose>
+  <pose>1.5000 0.5000 0.2525 0 0 0</pose>
 </include>
 
   </world>

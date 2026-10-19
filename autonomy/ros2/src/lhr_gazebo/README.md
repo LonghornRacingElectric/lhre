@@ -55,7 +55,7 @@ illustrative sim choices. The spawn's foremost vehicle envelope is 15 m before
 the center line, using the current `lhr_vehicle` model footprint. Do not use
 the autocross planner to drive this world.
 
-## Skidpad acquisition
+## Skidpad event
 
 After building and sourcing the workspace:
 
@@ -64,13 +64,17 @@ ros2 launch lhr_gazebo gazebo_demo.launch.py mission:=skidpad track_style:=skidp
   perception:=sim estimator:=truth enable_metrics:=false
 ```
 
-This demonstrates acquisition, not a completed event. The view defaults to
-15 m / 240 degrees, sim cone accumulation is off, and only one planner owns
-the path. The default view can acquire while stationary. To exercise bounded
-creep before the fit is declared stable, use `fit_stable_frames:=40`; this
-extends stability checking for the demonstration, not the geometry fit.
-RViz shows the limited visible cones, FOV and fitted circles. Gazebo shows
-the physical car and cones. The car holds at `ACQUIRED` and never starts laps.
+The view defaults to 15 m / 240 degrees, sim cone accumulation is off, and
+only one planner owns the path. After Go, the car creeps until colored lane
+and timing-gate observations validate entry, stops for acquisition, then
+drives two clockwise right laps and two counterclockwise left laps. It exits
+and stops, then the mission reaches `FINISHED`. RViz shows the visible cones,
+fitted circles and the short active path sent to pure pursuit.
+
+The large orange pairs now bracket the shared center timing line at y=0.
+Their +/-0.5 m offsets and small-cone lane spacing are simulation placement
+choices; the center timing line itself comes from D.10.1.3. These pairs no
+longer mark illustrative gates at y=+/-7 m.
 The fitter now initializes from detected cone chords and the known center
 separation, rather than assuming a center from the staging distance. It uses
 the initial vehicle heading to resolve orientation. Acquisition reports include
@@ -78,10 +82,11 @@ the number of retained center candidates and refined pose hypotheses.
 
 `perception:=lidar` applies the same planner view filter and detector range;
 there is no orange classification in that pipeline, so acquisition cannot
-creep without an independently verified entry corridor. The demo above uses
+creep or authorize event laps without independently verified orange and
+blue/yellow classifications. The demo above uses
 ideal labelled detections and truth odometry; it is not the no-shortcuts gate.
 
-All [acquisition thresholds](../lhr_track_builder/README.md#skidpad-acquisition)
+All [acquisition thresholds](../lhr_track_builder/README.md#skidpad-planning)
 are launch arguments with matching defaults/types. `fov_deg` / `max_range_m`
 retain 200 / 20 defaults for other missions. `accumulate_detections` defaults
 to true elsewhere; skidpad defaults to false. `path_closed` and

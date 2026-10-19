@@ -1,9 +1,10 @@
-"""Acquire the skidpad layout from a bounded view; stop before any event laps."""
+"""Fit colored skidpad boundaries, acquire the entry, and execute a finite route."""
 
 import json
 import math
 
 from geometry_msgs.msg import Point, PoseStamped
+from lhr_track_builder.skidpad_route import ROUTE_DEFAULTS, SkidpadRoute
 from lhr_trackgen.skidpad_geometry import (
     CENTER_SEPARATION, INNER_RADIUS, MID_RADIUS, OUTER_RADIUS)
 from lhr_vehicle import load_vehicle
@@ -13,11 +14,12 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from scipy.optimize import least_squares
-from std_msgs.msg import Float32, String
+from std_msgs.msg import Bool, Float32, String
 from visualization_msgs.msg import Marker, MarkerArray
 
 
 ACQUISITION_DEFAULTS = {
+    **ROUTE_DEFAULTS,
     'acquisition_speed': 0.5,
     'acquisition_distance': 5.0,
     'acquisition_timeout': 0.5,
@@ -62,14 +64,20 @@ def _layout_residuals(pose, points, assignment):
     return distance - radii, jacobian
 
 
-def _fit_layout(points, origin, limits, previous=None):
+def _fit_layout(points, origin, limits, previous=None, colors=None):
     """Initialize from cone chords, then refine rigid poses with fixed assignments."""
     points = np.asarray(points, dtype=float).reshape(-1, 2)
-    unique = []
-    for point in np.unique(points[np.isfinite(points).all(axis=1)], axis=0):
-        if all(np.linalg.norm(point - other) >= 0.4 for other in unique):
+    colors = np.full(len(points), -1) if colors is None else np.asarray(colors)
+    unique, unique_colors = [], []
+    for index in np.lexsort((points[:, 1], points[:, 0])):
+        point = points[index]
+        if np.isfinite(point).all() and all(
+            np.linalg.norm(point - other) >= 0.4 for other in unique
+        ):
             unique.append(point)
+            unique_colors.append(colors[index])
     points = np.asarray(unique).reshape(-1, 2)
+    colors = np.asarray(unique_colors)
     if len(points) < 2 * limits['fit_min_cones_per_circle']:
         return None
     radii = np.array([INNER_RADIUS, OUTER_RADIUS])
@@ -84,7 +92,9 @@ def _fit_layout(points, origin, limits, previous=None):
     def errors(pose):
         distance = np.linalg.norm(points[:, None, :] - centers(pose), axis=2)
         residual = (distance[:, :, None] - radii).reshape(-1, 4)
-        assignment = np.argmin(np.abs(residual), axis=1)
+        compatible = ((colors[:, None] == -1)
+                      | (colors[:, None] == np.array([0, 1, 1, 0])))
+        assignment = np.argmin(np.where(compatible, np.abs(residual), np.inf), axis=1)
         return residual[np.arange(len(points)), assignment], assignment
 
     # Bound pair generation using spatially spread observations, rather than
@@ -215,7 +225,9 @@ def _fit_layout(points, origin, limits, previous=None):
             support.append(count)
         if len(support) == 2:
             fits.append({'pose': pose, 'rms': rms, 'support': support,
-                         'hypotheses': len(starts), 'center_candidates': len(distinct)})
+                         'hypotheses': len(starts), 'center_candidates': len(distinct),
+                         'colored_support': [int(np.count_nonzero(
+                             inliers & (updated == ring) & (colors >= 0))) for ring in range(4)]})
     if not fits:
         return None
     fits.sort(key=lambda fit: fit['rms'])
@@ -262,7 +274,7 @@ def _entry_corridor(points, pose, front_extent, half_width):
 
 
 class SkidpadAcquisition(Node):
-    """Acquire, optionally creep on an observed lane, then hold at ACQUIRED."""
+    """Acquire from observed cones, then follow the ordered skidpad route."""
 
     def __init__(self):
         super().__init__('skidpad_acquisition')
@@ -274,6 +286,9 @@ class SkidpadAcquisition(Node):
                         for name in ACQUISITION_DEFAULTS}
         self._range = float(self.get_parameter('max_range_m').value)
         self._fov = float(self.get_parameter('fov_deg').value)
+        vehicle = load_vehicle()
+        front = max(vehicle.chassis_center_x_m + vehicle.body_length_m / 2,
+                    vehicle.wheelbase_m + vehicle.wheel_radius_m)
         if (not 0 < self._range <= 15 or not 0 < self._fov <= 240
                 or any(not math.isfinite(value) or value <= 0
                        for value in self._limits.values())
@@ -284,9 +299,11 @@ class SkidpadAcquisition(Node):
                 or self._limits['fit_max_centers'] < 2
                 or self._limits['fit_min_cones_per_circle'] < 4
                 or self._limits['acquisition_speed'] > 0.5
-                or self._limits['acquisition_distance'] > 5):
+                or self._limits['acquisition_distance'] > 5
+                or self._limits['skidpad_speed'] > 5
+                or self._limits['skidpad_max_cte'] > 0.75
+                or self._limits['skidpad_exit_distance'] + front >= 25):
             raise ValueError('Invalid acquisition limits (view <=15m/240deg; creep <=0.5m/s/5m)')
-        vehicle = load_vehicle()
         self._front = max(vehicle.chassis_center_x_m + vehicle.body_length_m / 2,
                           vehicle.wheelbase_m + vehicle.wheel_radius_m)
         self._half_width = max(vehicle.body_width_m / 2,
@@ -302,7 +319,12 @@ class SkidpadAcquisition(Node):
         self._phase = 'ACQUIRE'
         self._reported_phase = None
         self._circular = []
+        self._circular_colors = []
         self._orange = []
+        self._gates = {}
+        self._lane_map = {}
+        self._route = None
+        self._route_time = None
         self._fit = None
         self._stable = 0
         self._frame = 0
@@ -318,6 +340,7 @@ class SkidpadAcquisition(Node):
         self._limit_pub = self.create_publisher(Float32, '/lhr/planning/speed_limit', 10)
         self._state_pub = self.create_publisher(String, '/lhr/skidpad/acquisition', 10)
         self._view_pub = self.create_publisher(MarkerArray, '/lhr/skidpad/visible_cones', 10)
+        self._complete_pub = self.create_publisher(Bool, '/lhr/skidpad/complete', 10)
         self._layout_pub = self.create_publisher(MarkerArray, '/lhr/skidpad/layout', 10)
         self.create_timer(0.2, self._tick)
 
@@ -352,7 +375,7 @@ class SkidpadAcquisition(Node):
             self._origin = np.r_[pose[:2], heading - math.pi / 2]
 
     def _cones_cb(self, msg):
-        self._circular, self._orange = [], []
+        self._circular, self._orange, self._circular_colors = [], [], []
         visible = MarkerArray()
         visible.markers.append(Marker(action=Marker.DELETEALL))
         if self._pose is None:
@@ -365,8 +388,13 @@ class SkidpadAcquisition(Node):
                 continue
             if marker.ns in ('left_cones', 'right_cones', 'cones'):
                 self._circular.append(point)
+                self._circular_colors.append(
+                    {'left_cones': 0, 'right_cones': 1, 'cones': -1}[marker.ns])
             elif marker.ns == 'orange_small':
                 self._orange.append(point)
+                self._lane_map[marker.id] = point
+            elif marker.ns == 'orange_large':
+                self._gates[marker.id] = point
             else:
                 continue
             visible.markers.append(marker)
@@ -385,21 +413,35 @@ class SkidpadAcquisition(Node):
                  and 0 <= now - self._odom_time <= self._limits['acquisition_timeout'])
         if fresh and not self._fault:
             # Refresh the view after motion even if the map message hasn't changed.
-            circular = _visible(self._circular, self._pose, self._range, self._fov)
+            keep = [bool(len(_visible([point], self._pose, self._range, self._fov)))
+                    for point in self._circular]
+            circular = np.asarray(self._circular).reshape(-1, 2)[keep]
+            colors = np.asarray(self._circular_colors)[keep]
             orange = _visible(self._orange, self._pose, self._range, self._fov)
-            if self._frame != self._last_frame and self._phase != 'ACQUIRED':
+            if self._frame != self._last_frame and self._route is None:
                 self._last_frame = self._frame
                 fit = _fit_layout(
                     circular, self._origin, self._limits,
-                    previous=self._fit['pose'] if self._fit is not None else None)
+                    previous=self._fit['pose'] if self._fit is not None else None, colors=colors)
                 consistent = (fit is not None and self._fit is not None
                               and np.linalg.norm(fit['pose'][:2] - self._fit['pose'][:2]) <= 0.1
                               and abs(fit['pose'][2] - self._fit['pose'][2]) <= math.radians(1))
                 self._stable = self._stable + 1 if consistent else int(fit is not None)
                 self._fit = fit
-            ready = self._stable >= self._limits['fit_stable_frames']
+            ready = (self._stable >= self._limits['fit_stable_frames']
+                     and self._fit is not None and min(self._fit['colored_support']) >= 2)
+            candidate_route = None
+            if ready and self._route is None:
+                try:
+                    candidate_route = SkidpadRoute(
+                        self._fit['pose'], self._pose, list(self._lane_map.values()),
+                        list(self._gates.values()), self._front, self._half_width, self._limits)
+                except ValueError:
+                    ready = False
             corridor = _entry_corridor(orange, self._pose, self._front, self._half_width)
-            if ready or self._acquired:
+            if self._route is not None:
+                pass  # The fitted layout stays fixed once route tracking starts.
+            elif ready or self._acquired:
                 self._phase = 'ACQUIRED' if self._acquired else 'HOLD'
                 if self._speed < 0.05:
                     if self._stopped_since is None:
@@ -407,6 +449,8 @@ class SkidpadAcquisition(Node):
                     if now - self._stopped_since >= 1.0:
                         self._phase = 'ACQUIRED'
                         self._acquired = True
+                        self._route = candidate_route
+                        self._route_time = now
                 else:
                     self._stopped_since = None
             elif corridor is not None and self._distance < self._limits['acquisition_distance']:
@@ -428,20 +472,49 @@ class SkidpadAcquisition(Node):
         else:
             self._phase = 'HOLD'
             self._stable = 0
-            self._fit = None
+            if self._route is not None:
+                self._fault = True
+            else:
+                self._fit = None
             self._stopped_since = None
-        if fresh and self._phase in ('HOLD', 'ACQUIRED') and self._fit is not None:
+        if self._route is not None and fresh and not self._fault:
+            route = self._route
+            if self._mission == 'DRIVING' and now > self._route_time:
+                speed = route.update(self._pose, self._speed, now - self._route_time, now,
+                                     list(self._lane_map.values()))
+                self._phase = route.labels[route.segment]
+                if route.fault:
+                    self._fault = True
+                    self._phase = 'HOLD'
+            else:
+                self._phase = 'STOPPED' if route.complete else 'ACQUIRED'
+            self._route_time = now
+            path.poses.clear()
+            for x, y in route.forward_path():
+                point = PoseStamped(header=path.header)
+                point.pose.position.x, point.pose.position.y = float(x), float(y)
+                point.pose.orientation.w = 1.0
+                path.poses.append(point)
+        if self._fault:
+            speed = 0.0
+            self._phase = 'HOLD'
+        if not path.poses and fresh and self._fit is not None:
             point = PoseStamped(header=path.header)
             point.pose.position.x, point.pose.position.y = map(float, self._pose[:2])
             point.pose.orientation.w = 1.0
             path.poses.append(point)
         if self._mission != 'DRIVING':
             speed = 0.0
+        self._complete_pub.publish(Bool(data=(
+            self._route is not None and self._route.complete and not self._fault)))
         self._path_pub.publish(path)
         self._limit_pub.publish(Float32(data=float(speed)))
         report = {'phase': self._phase, 'distance_m': float(self._distance),
                   'speed_limit': speed, 'stable_frames': self._stable,
                   'visible_cones': len(self._circular), 'fault': self._fault}
+        if self._route is not None:
+            report.update(progress_m=self._route.progress, laps=self._route.laps,
+                          crossings=self._route.crossings, cte_m=self._route.cte)
         if self._fit is not None:
             report.update(rms_m=self._fit['rms'], support=self._fit['support'],
                           layout_pose=self._fit['pose'].tolist(),
@@ -474,7 +547,7 @@ class SkidpadAcquisition(Node):
 
 
 def main():
-    """Run skidpad acquisition without authorizing any event laps."""
+    """Run skidpad layout acquisition and ordered event following."""
     rclpy.init()
     node = SkidpadAcquisition()
     try:

@@ -104,6 +104,16 @@ def test_radial_jacobian_matches_central_differences():
     assert jacobian == pytest.approx(numerical, abs=1e-7)
 
 
+def test_color_assignments_distinguish_inner_outer_on_each_circle():
+    left, right = generate_skidpad_track()
+    points = np.array(left + right)
+    colors = np.array([0] * len(left) + [1] * len(right))
+    fit = _fit_layout(points, [0, 0, 0], ACQUISITION_DEFAULTS, colors=colors)
+    assert fit is not None
+    assert min(fit['colored_support']) >= 13
+    assert _fit_layout(points, [0, 0, 0], ACQUISITION_DEFAULTS, colors=1 - colors) is None
+
+
 def test_entry_corridor_requires_both_sides_and_stops_before_last_cones():
     small, _ = generate_skidpad_lanes()
     pose = np.array([0, -16.8747, math.pi / 2])
@@ -122,12 +132,13 @@ def acquisition():
     node = SkidpadAcquisition()
     node._test_time = 10.0
     node.get_clock = lambda: Mock(now=lambda: Time(seconds=node._test_time))
-    for name in ('_path_pub', '_limit_pub', '_state_pub', '_view_pub', '_layout_pub'):
+    for name in ('_path_pub', '_limit_pub', '_state_pub', '_view_pub',
+                 '_layout_pub', '_complete_pub'):
         setattr(node, name, Mock())
     odom = Odometry()
     odom.header.frame_id = 'map'
     odom.header.stamp = Time(seconds=10).to_msg()
-    odom.pose.pose.position.y = -16.8747
+    odom.pose.pose.position.y = -13.5
     odom.pose.pose.orientation.z = math.sin(math.pi / 4)
     odom.pose.pose.orientation.w = math.cos(math.pi / 4)
     node._odom_cb(odom)
@@ -143,7 +154,8 @@ def _observations(include_circles=True):
     if include_circles:
         left, right = generate_skidpad_track()
         groups.extend([('left_cones', left), ('right_cones', right)])
-    groups.append(('orange_small', generate_skidpad_lanes()[0]))
+    small, large = generate_skidpad_lanes()
+    groups.extend([('orange_small', small), ('orange_large', large)])
     for ns, points in groups:
         for index, (x, y) in enumerate(points):
             marker = Marker(ns=ns, id=index)
@@ -169,7 +181,7 @@ def test_approach_requires_go_and_stops_on_stale_inputs(acquisition):
     assert node._limit_pub.publish.call_args.args[0].data == 0.0
 
 
-def test_fit_requires_new_frames_and_standstill_then_acquires(acquisition):
+def test_fit_requires_new_frames_and_standstill_then_hands_off(acquisition):
     node = acquisition
     node._cones_cb(_observations())
     node._tick()
@@ -183,21 +195,23 @@ def test_fit_requires_new_frames_and_standstill_then_acquires(acquisition):
     assert node._phase == 'HOLD'
     assert node._limit_pub.publish.call_args.args[0].data == 0.0
     node._speed = 0
-    for _ in range(7):
+    for _ in range(9):
         node._test_time += 0.2
         node._odom_time = node.get_clock().now().nanoseconds / 1e9
         node._cones_cb(_observations())
         node._tick()
-    assert node._phase == 'ACQUIRED'
-    assert len(node._path_pub.publish.call_args.args[0].poses) == 1
-    assert node._limit_pub.publish.call_args.args[0].data == 0.0
-    # Once acquired, reconnecting sparse inputs must never restart creep.
+    assert node._phase == 'ENTRY'
+    assert node._route is not None
+    assert len(node._path_pub.publish.call_args.args[0].poses) > 1
+    assert node._limit_pub.publish.call_args.args[0].data > 0.0
+    # Stale inputs during a run latch a hold rather than restarting acquisition.
     node._test_time += 1.0
     node._tick()
     node._odom_time = node.get_clock().now().nanoseconds / 1e9
     node._cones_cb(_observations(False))
     node._tick()
-    assert node._phase == 'ACQUIRED'
+    assert node._phase == 'HOLD'
+    assert node._fault
     assert node._limit_pub.publish.call_args.args[0].data == 0.0
 
 
@@ -215,6 +229,27 @@ def test_approach_budget_and_invalid_frame_prevent_motion(acquisition):
     node._distance = 0
     node._tick()
     assert node._limit_pub.publish.call_args.args[0].data == 0.0
+
+
+def test_ready_route_waits_for_go(acquisition):
+    node = acquisition
+    node._status_cb(String(data='READY'))
+    for _ in range(15):
+        node._test_time += 0.2
+        node._odom_time = node.get_clock().now().nanoseconds / 1e9
+        node._cones_cb(_observations())
+        node._tick()
+    assert node._route is not None
+    assert node._phase == 'ACQUIRED'
+    assert node._route.progress == 0
+    assert node._limit_pub.publish.call_args.args[0].data == 0
+    node._status_cb(String(data='DRIVING'))
+    node._test_time += 0.2
+    node._odom_time = node.get_clock().now().nanoseconds / 1e9
+    node._cones_cb(_observations())
+    node._tick()
+    assert node._phase == 'ENTRY'
+    assert node._limit_pub.publish.call_args.args[0].data > 0
 
 
 def test_frozen_odometry_does_not_refresh_watchdog(acquisition):
