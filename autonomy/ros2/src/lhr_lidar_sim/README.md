@@ -363,3 +363,8 @@ Terrain remains flat and the 3 DOF car stays level. Uneven ground, vehicle
 roll/pitch, sensor vibration, sunlight interference and calibrated material
 intensity remain future work. These scenarios test robustness without
 claiming the unavailable car has been physically validated.
+
+At shutdown, the ROS executor can dispose a subscription while taking its
+next message. The node ignores that runtime error only after ROS has shut
+down, and always destroys the node. Runtime errors while ROS is live still
+fail the run.
