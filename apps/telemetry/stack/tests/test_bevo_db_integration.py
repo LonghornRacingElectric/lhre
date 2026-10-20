@@ -26,43 +26,7 @@ class TestBevoAndDatabaseIntegration(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.config = TelemetryConfig.from_env()
-        cls._ensure_orion_schema()
 
-    @classmethod
-    def _ensure_orion_schema(cls):
-        try:
-            import psycopg2
-        except Exception:
-            return
-
-        schema_sql_path = Path(__file__).resolve().parents[1] / "ingest" / "orion_db_init.sql"
-        if not schema_sql_path.exists():
-            return
-
-        try:
-            conn = psycopg2.connect(
-                host=cls.config.db_host,
-                port=cls.config.db_port,
-                user=cls.config.db_user,
-                password=cls.config.db_password,
-                database="orion",
-            )
-            conn.autocommit = True
-            with conn.cursor() as cur:
-                cur.execute("SELECT to_regclass('public.packet')")
-                regclass = cur.fetchone()
-                if regclass and regclass[0] is not None:
-                    return
-            with conn.cursor() as cur:
-                with open(schema_sql_path, "r", encoding="utf-8") as f:
-                    cur.execute(f.read())
-        except Exception:
-            return
-        finally:
-            try:
-                conn.close()
-            except Exception:
-                pass
 
     def _orion_schema_ready(self) -> bool:
         try:

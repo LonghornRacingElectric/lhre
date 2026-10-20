@@ -1,5 +1,11 @@
 # Schema Driven Development (SDD) Overhaul
 
+The current implementation uses authoritative `lib/spec/*.textproto` and
+[Bazel schema generation](../../../../lib/codegen/telemetry/README.md).
+Orion protobuf bindings, ORM/DDL/Prisma and BEVO compiled CAN tables derive
+from that source. The older source-patching workflow discussed below has been
+removed and is not an alternative build path.
+
 ## 1. Motivation & Problem Statement
 
 Currently, adding a new sensor or configuring a new car in the LHR Telemetry Stack requires manual synchronization across 4 different languages:

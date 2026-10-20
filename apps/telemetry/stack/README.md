@@ -24,6 +24,14 @@ Before invoking the ingest Compose project, the devtool resolves
 `//apps/telemetry:current_schema_sql` and mounts that generated Orion DDL into
 Postgres. A `lib/spec` edit therefore reaches a newly initialized server
 database without rewriting `orion_db_init.sql` in the source tree.
+The DDL target is checked through Bazel each time; finding an old output does
+not skip dependency checking. An explicit `ORION_DB_INIT_SQL` admin override
+must exist or startup fails. Compose itself requires this path and has no
+checked-in Orion SQL fallback.
+
+Starting/rebuilding/reloading the viewer also builds the shared schema bundle
+and exports `ORION_PROTO_PATH`. Node/PM2 remains outside Bazel, but the viewer's
+Orion protobuf and optional Prisma definitions are Bazel outputs.
 
 Disk preflight uses Docker's data root on Linux. On macOS, that path exists
 inside Docker Desktop's VM, so the devtool reports free space on the host

@@ -1,0 +1,24 @@
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["contract.py"])
+
+py_library(
+    name = "contract",
+    srcs = ["contract.py"],
+    deps = ["@lhre_pypi//protobuf"],
+)
+
+py_test(
+    name = "contract_test",
+    srcs = ["contract_test.py"],
+    deps = [":contract", ":testing"],
+)
+
+py_library(
+    name = "testing",
+    testonly = True,
+    srcs = ["testing.py"],
+    deps = [":contract"],
+)

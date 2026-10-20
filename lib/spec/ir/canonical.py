@@ -37,7 +37,12 @@ def _sorted_copy(spec_file):
         entries = sorted(getattr(out, field), key=key)
         del getattr(out, field)[:]
         getattr(out, field).extend(entries)
+    for enum_type in out.enum_type:
+        enum_type.reserved_numbers[:] = sorted(enum_type.reserved_numbers)
+        enum_type.reserved_names[:] = sorted(enum_type.reserved_names)
     if out.HasField("groups"):  # touching the submessage would mark it set
+        out.groups.reserved_snapshot_ids[:] = sorted(out.groups.reserved_snapshot_ids)
+        out.groups.reserved_snapshot_names[:] = sorted(out.groups.reserved_snapshot_names)
         groups = sorted(out.groups.group, key=lambda g: g.name)
         del out.groups.group[:]
         out.groups.group.extend(groups)

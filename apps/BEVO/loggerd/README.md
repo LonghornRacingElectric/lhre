@@ -1,19 +1,16 @@
 # loggerd
 
-CSV logger. Subscribes to cand's IPC snapshot stream and appends one row
-per snapshot to a timestamped CSV in `logs/` (repo-relative under
-`bazel run`; override with `LOGGERD_CAN_JSON_PATH` / see `main.rs`).
+Logs every cand IPC snapshot to CSV, independently of the uplink. Override
+the output directory with `LOGGERD_LOG_DIR`.
 
-Column order is derived from the protobuf schema plus `can.json` (repeated
-fields like `pack.cells_v[N]` are sized from the schema, sorted numerically)
-— `:loggerd_test` locks that contract in, and runs on the host with no
-hardware.
+Bazel generates and compiles the CSV column names and array lengths from
+the shared textproto schema manifest, including GPS and external fields.
+Columns retain their natural numeric ordering. New groups/fields do not
+need a hand-written root-message template or hardcoded array sizes here.
 
-Bazel supplies the shared textproto-generated protobuf and CAN JSON for the
-executable and its tests. `//apps/BEVO:pi_core_binaries` cross-compiles the Pi
-logger alongside `cand` and `publishd`.
+There is no runtime `can.json` dependency or `LOGGERD_CAN_JSON_PATH` override.
+The serializer and compiled column layout rebuild together from `lib/spec`.
+The log stream, queue, file format and flush cadence remain unchanged.
 
-The generated CAN JSON is required at startup. Missing or invalid JSON stops
-`loggerd` with an error before it creates a log; there are no built-in schema
-sizes to substitute for a missing artifact. Set `LOGGERD_CAN_JSON_PATH` to the
-generated file's deployed location.
+Build with `bazel build //apps/BEVO:pi_core_binaries`; run the existing
+column-layout checks with `bazel test //apps/BEVO/loggerd:loggerd_test`.

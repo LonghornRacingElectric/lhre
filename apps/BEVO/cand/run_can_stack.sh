@@ -6,7 +6,6 @@ CAND_BIN="$RUNFILES_ROOT/_main/apps/BEVO/cand/cand"
 DASHD_BIN="$RUNFILES_ROOT/_main/apps/BEVO/dashd/dashd"
 PUBLISHD_BIN="$RUNFILES_ROOT/_main/apps/BEVO/publishd/publishd"
 LOGGERD_BIN="$RUNFILES_ROOT/_main/apps/BEVO/loggerd/loggerd"
-CAN_JSON_PATH="$RUNFILES_ROOT/_main/lib/codegen/telemetry/can.json"
 
 STARTUP_SEMAPHORE_PATH="/tmp/BEVO_publishd_ready"
 IPC_SOCKET_PATH="/tmp/BEVO_cand.sock"
@@ -18,11 +17,6 @@ for bin in "$CAND_BIN" "$DASHD_BIN" "$PUBLISHD_BIN" "$LOGGERD_BIN"; do
     exit 1
   fi
 done
-
-if [[ ! -f "$CAN_JSON_PATH" ]]; then
-  echo "Could not find CAN json: $CAN_JSON_PATH" >&2
-  exit 1
-fi
 
 cleanup() {
   kill "${CAND_PID:-}" "${DASHD_PID:-}" "${PUBLISHD_PID:-}" "${LOGGERD_PID:-}" >/dev/null 2>&1 || true
@@ -44,7 +38,7 @@ DASHD_PID=$!
 "$LOGGERD_BIN" &
 LOGGERD_PID=$!
 
-CAND_USE_MOCK=0 CAND_CAN_INTERFACE="$CAN_IFACE" CAND_CAN_JSON_PATH="$CAN_JSON_PATH" "$CAND_BIN" &
+CAND_USE_MOCK=0 CAND_CAN_INTERFACE="$CAN_IFACE" "$CAND_BIN" &
 CAND_PID=$!
 
 wait "$DASHD_PID"

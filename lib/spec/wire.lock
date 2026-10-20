@@ -9,6 +9,17 @@
 # encodings unless a deployed field has a compatibility override
 # (lib/spec/wire.py). Encoding edits can still change a non-overridden type.
 
+[Root]
+Root.time 1 int64
+Root.packet_id 2 int64
+Root.Dynamics 3 message Dynamics
+Root.Controls 4 message Controls
+Root.Pack 5 message Pack
+Root.DiagnosticsHigh 6 message DiagnosticsHigh
+Root.DiagnosticsLow 7 message DiagnosticsLow
+Root.Thermal 8 message Thermal
+Root.BoardStatus 9 message BoardStatus
+
 [BoardStatus] next_free_id=9
 BoardStatus.csm_last_seen_s 1 float
 BoardStatus.dui_last_seen_s 2 float
@@ -126,8 +137,8 @@ DiagnosticsLow.charger_enabled 16 bool
 DiagnosticsLow.imd_led 17 bool
 
 [Dynamics] next_free_id=36
-Dynamics.gps 1 repeated float
-Dynamics.gps_imu 2 repeated float
+Dynamics.gps 1 repeated float[2]
+Dynamics.gps_imu 2 repeated float[3]
 Dynamics.gps_speed 3 float
 Dynamics.bl_unsprung_accel 4 repeated float[3]
 Dynamics.br_unsprung_accel 5 repeated float[3]

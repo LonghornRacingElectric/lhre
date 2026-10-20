@@ -67,7 +67,7 @@ bazel run //apps/BEVO:deploy -- lhre@bevo.local /opt/bevo
 
 That cross-compiles every daemon as a **static aarch64-musl ELF**
 (`//platforms:pi` — no glibc version coupling with the Pi's OS image),
-bundles them with `can.json` and the runbook scripts into
+bundles them with the runbook scripts into
 `pi_bundle.tar.gz` (~8 MB), untars it over SSH, and restarts
 `bevo_telemetry.service` if it's installed. The bundled
 `nonhermetic/run_real_stack.sh` finds the binaries in `bin/` automatically
@@ -81,9 +81,9 @@ sudo sh -c "sed 's|__BEVO_REPO__/apps/BEVO|/opt/bevo|g; s|__BEVO_REPO__|/opt/bev
 
 The kiosk frontend is a separate flow (`dashd/deploy/`, needs npm). Build the
 core executables on the development machine with `:pi_core_binaries` and copy
-the paths reported by `bazel cquery` to the Pi. `cand` and `loggerd` also need
-the generated `can.json`; configure its deployed path with
-`CAND_CAN_JSON_PATH` and `LOGGERD_CAN_JSON_PATH`.
+the paths reported by `bazel cquery` to the Pi. CAN decode tables and logger
+columns are compiled into the executables from Bazel-generated artifacts;
+there is no runtime CAN JSON file to copy or override.
 
 ## The CAN schema
 
@@ -92,6 +92,40 @@ generates `can.json`, the deployed snapshot proto, prost bindings, dispatch
 code, and server database DDL; **no generated Bazel artifact is checked in**.
 BEVO carries no CSV or checked-in protobuf fallback; see
 [schema source](schema/README.md).
+
+## Schema release metadata
+
+The [schema metadata](../../lib/telemetry/README.md) identifies the textproto
+definitions used to build a release. Server artifacts and BEVO executables
+depend on the same generated protobuf. This adds no runtime handshake,
+envelope, filtering, MQTT topic, or change to CAN acquisition/local logging.
+
+```bash
+bazel build //apps/BEVO:pi_core_binaries //apps/BEVO:pi_core_manifest
+bazel test //apps/BEVO:pi_core_binary_test //apps/BEVO:release_metadata_test
+```
+
+`bazel-bin/apps/BEVO/pi_core_manifest.json` pins the three executable digests,
+the shared CAN JSON, descriptor and contract, source schema ID and
+`linux/arm64` platform. Its `format_version` versions only the metadata file,
+not the telemetry wire format. Core changes are limited to loading compiled
+schema tables/columns instead of runtime JSON; acquisition, logging queues,
+IPC framing and MQTT publishing retain their existing logic.
+
+Transfer matched executables together. The CAN JSON in registry metadata is
+an audit artifact, not a runtime input. The Pi needs no
+Bazel, Cargo, source tree, compiler, or build cache. The separate
+[updater](updater/README.md) checks the deployed server's authoritative schema,
+keeps compatible releases or installs a compatible registry release, and
+supports persistent local admin overrides. It never filters samples or alters
+MQTT/protobuf communication. Server/admin schema overrides are documented in
+the [schema authority](../telemetry/schema_registry/README.md).
+
+`//apps/BEVO:pi_core_image` packages the already-built executables and schema
+metadata in two OCI layers for GHCR. `//apps/BEVO:pi_core_push` publishes only
+when explicitly run. `//apps/BEVO/updater:standalone` creates the Python-stdlib
+updater archive to copy to the Pi. Automatic publishing and service restarts
+are deliberately not part of PR CI or the updater.
 
 ## Not built by Bazel (on purpose)
 

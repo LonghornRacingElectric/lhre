@@ -10,7 +10,6 @@ NOT_WINDOWS = select({
 rust_binary(
     name = "loggerd",
     srcs = ["main.rs"],
-    data = ["//apps/BEVO:can_json"],
     edition = "2021",
     target_compatible_with = NOT_WINDOWS,
     deps = [
@@ -24,7 +23,5 @@ rust_binary(
 rust_test(
     name = "loggerd_test",
     crate = ":loggerd",
-    data = ["//apps/BEVO:can_json"],
-    env = {"LOGGERD_CAN_JSON_PATH": "lib/codegen/telemetry/can.json"},
     target_compatible_with = NOT_WINDOWS,
 )

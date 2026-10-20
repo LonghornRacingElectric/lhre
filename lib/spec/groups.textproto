@@ -93,6 +93,9 @@ groups {
       type: PROTO_FLOAT
       repeated: true
       description: "NMEA latitude and longitude populated by the gateway."
+      unit: "deg"
+      element_names: "latitude"
+      element_names: "longitude"
     }
     external_field {
       name: "gps_imu"
@@ -100,12 +103,16 @@ groups {
       type: PROTO_FLOAT
       repeated: true
       description: "NMEA inertial vector populated by the gateway."
+      element_names: "x"
+      element_names: "y"
+      element_names: "z"
     }
     external_field {
       name: "gps_speed"
       id: 3
       type: PROTO_FLOAT
       description: "NMEA ground speed populated by the gateway."
+      unit: "knots"
     }
   }
   group {
@@ -120,4 +127,5 @@ groups {
     description: "Temperatures, cooling, and charger telemetry."
     snapshot_id: 8
   }
+  next_snapshot_id: 10
 }

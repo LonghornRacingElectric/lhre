@@ -6,6 +6,7 @@ on:
       - "apps/BEVO/**"
       - "lib/spec/**"
       - "lib/codegen/telemetry/**"
+      - "lib/telemetry/**"
       - "platforms/**"
       - "toolchains/**"
       - "MODULE.bazel"
@@ -31,7 +32,7 @@ jobs:
           echo "common --config=ci" >> .bazelrc.user
 
       - name: Cross-compile core daemons for Raspberry Pi OS
-        run: bazel build //apps/BEVO:pi_core_binaries
+        run: bazel build //apps/BEVO:pi_core_binaries //apps/BEVO:pi_core_manifest //apps/BEVO:pi_core_image //apps/BEVO/updater:standalone
 
       - name: Verify static AArch64 executables
-        run: bazel test //apps/BEVO:pi_core_binary_test --test_output=errors
+        run: bazel test //apps/BEVO:pi_core_binary_test //apps/BEVO:release_metadata_test //apps/BEVO/updater:updater_test //apps/BEVO/updater:package_test //apps/telemetry/schema_registry:registry_test //lib/telemetry:contract_test --test_output=errors

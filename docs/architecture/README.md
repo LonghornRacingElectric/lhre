@@ -22,6 +22,7 @@ three years after everyone who made the decision graduated.
 | [011](011-bazel-owned-telemetry-images.md) | Bazel owns every telemetry stack image; Compose only runs loaded tags | Accepted |
 | [012](012-simulation-outside-bazel.md) | Simulation runs BobSim in Docker, outside Bazel | Accepted |
 | [013](013-deployed-telemetry-schema.md) | Generate server artifacts while preserving the deployed telemetry schema | Accepted |
+| [014](014-schema-release-metadata.md) | Generate schema compatibility metadata without changing telemetry transport | Accepted |
 
 ## ADRs vs. READMEs
 

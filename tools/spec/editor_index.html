@@ -229,21 +229,15 @@ function allocId(groupName) {
   g.next_free_id = id + 1;
   return id;
 }
-// Newest unsaved id shrinks the high-water mark back. Anything else is
-// tombstoned, since ids are append-only.
 function releaseBinding(tel) {
   const g = findGroup(tel.group);
   if (!g || !tel.id) return;
   g.reserved_ids = g.reserved_ids || [];
   g.reserved_names = g.reserved_names || [];
-  if (tel.id === (g.next_free_id || 1) - 1 && !g.reserved_ids.includes(tel.id)) {
-    g.next_free_id -= 1;
-  } else {
-    if (!g.reserved_ids.includes(tel.id)) g.reserved_ids.push(tel.id);
-    if (tel.field && !g.reserved_names.includes(tel.field)) g.reserved_names.push(tel.field);
-    g.reserved_ids.sort((a, b) => a - b);
-    g.reserved_names.sort();
-  }
+  if (!g.reserved_ids.includes(tel.id)) g.reserved_ids.push(tel.id);
+  if (tel.field && !g.reserved_names.includes(tel.field)) g.reserved_names.push(tel.field);
+  g.reserved_ids.sort((left, right) => left - right);
+  g.reserved_names.sort();
 }
 function bitfieldByName(name) {
   return allOf("bitfield_type").find(b => b.item.name === name)?.item || null;
@@ -603,6 +597,8 @@ function renderGroups(main) {
   $("#delGroup").onclick = () => {
     if (users.length) return alert("Group still has fields bound to it.");
     if (!confirm(`Delete group ${g.name}?`)) return;
+    reg.reserved_snapshot_ids = [...(reg.reserved_snapshot_ids || []), g.snapshot_id];
+    reg.reserved_snapshot_names = [...(reg.reserved_snapshot_names || []), g.name];
     reg.group.splice(sel.idx, 1); sel = null; markDirty(); render();
   };
 }
@@ -717,11 +713,14 @@ function bindType(t) {
       markDirty(); render();
     });
     main.querySelectorAll("[data-delv]").forEach(el => el.onclick = () => {
+      const removed = t.value[+el.dataset.delv];
+      t.reserved_numbers = [...new Set([...(t.reserved_numbers || []), removed.number ?? 0])];
+      t.reserved_names = [...new Set([...(t.reserved_names || []), removed.name])];
       t.value.splice(+el.dataset.delv, 1); markDirty(); render();
     });
     $("#addVal").onclick = () => {
       t.value = t.value || [];
-      const next = t.value.reduce((m, v) => Math.max(m, v.number ?? 0), -1) + 1;
+      const next = Math.max(-1, ...t.value.map(value => value.number ?? 0), ...(t.reserved_numbers || [])) + 1;
       t.value.push({name: "NEW_VALUE", number: next, description: ""});
       markDirty(); render();
     };
@@ -835,7 +834,8 @@ function createNew(dlg) {
   } else {
     const reg = groupsEntry();
     if (!reg) return alert("No group registry file found.");
-    reg.group.push({name, description: "", next_free_id: 1});
+    if (!reg.next_snapshot_id) return alert("Set next_snapshot_id in the root group ledger first.");
+    reg.group.push({name, description: "", next_free_id: 1, snapshot_id: reg.next_snapshot_id++});
     sel = {idx: reg.group.length - 1};
   }
   dlg.close(); markDirty(); render();

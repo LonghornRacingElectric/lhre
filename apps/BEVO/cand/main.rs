@@ -5,7 +5,6 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, UdpSocket};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
-use std::fs;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -34,7 +33,6 @@ const CAN_INTERFACE_1: &str = "can1";
 const DEFAULT_PUBLISH_HZ: u64 = 100;
 const DEFAULT_NMEA_LISTEN_ADDR: &str = "0.0.0.0:2000";
 
-const DEFAULT_CAN_JSON_PATH: &str = "lib/codegen/telemetry/can.json";
 const TRACKED_BOARD_SOURCES: [&str; 8] = ["CSM", "DUI", "HVC", "Inverter", "PDU", "TSM", "USM", "VCU"];
 
 #[derive(Debug)]
@@ -67,8 +65,7 @@ fn main() -> Result<()> {
         .filter(|value| *value > 0)
         .unwrap_or(DEFAULT_PUBLISH_HZ);
 
-    let config_json = load_can_config_json()?;
-    let packets: Vec<PacketConfig> = serde_json::from_str(&config_json)?;
+    let packets = sensor_proto::config::packets();
     let packet_source_lookup = Arc::new(build_packet_source_lookup(&packets));
     let board_last_seen = Arc::new(Mutex::new(default_board_last_seen_map()));
     let initial_packet_id = 1;
@@ -177,12 +174,6 @@ fn main() -> Result<()> {
 fn main() -> Result<()> {
     eprintln!("[CAND] Linux is required for the real CAN reader; use mock_main on macOS.");
     Ok(())
-}
-
-fn load_can_config_json() -> Result<String> {
-    let configured_path = std::env::var("CAND_CAN_JSON_PATH").unwrap_or_else(|_| DEFAULT_CAN_JSON_PATH.to_string());
-    let config_json = fs::read_to_string(&configured_path)?;
-    Ok(config_json)
 }
 
 fn is_tracked_board_source(source: &str) -> bool {
