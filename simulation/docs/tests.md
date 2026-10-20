@@ -6,11 +6,10 @@ before you finish.
 | Target | What it checks | Time |
 | ------ | -------------- | ---- |
 | `make smoke` | BobSim loads `vehicle/vehicle.yml` and its tires. It checks loading only. It does not check physics. | about 6 s |
-| `make unit` | `pytest` runs the files in `tests/` and one BobSim test. Then the target checks that `bobsim/` has no local changes. | about 31 s |
+| `make unit` | `pytest` runs the files in `tests/`. Then the target checks that `bobsim/` has no local changes. | about 31 s |
 | `make test` | `make smoke`, then `make unit`. | about 40 s |
 
 The times are from a Windows laptop with Docker Desktop, BobSim `fe03bab`.
-The BobSim test takes about 6 s of `make unit`.
 
 ## What the tests check
 
