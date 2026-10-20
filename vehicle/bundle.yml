@@ -152,41 +152,27 @@ torque_topology:
   drive:
     front_share:
       value: 0.0
-      status: assumed
-      source: >-
-        vehicle.yml powertrain.implementation EVBatInvMotDiff names one motor and a differential.
-        BobSim fe03bab maps that driveline to Drivelines.RearFinalDriveDifferentialRecord
-        (app/modelica_generator.py line 249) and sets drive_distribution_front to 0.0
-        (engines/dynpy/parameters.py line 281). No LHRe record states the driven axle.
+      status: declared
+      source: Arjun Rao, 2026-10-20. One inboard motor drives the rear axle through a differential.
     rear_share:
       value: 1.0
-      status: assumed
-      source: >-
-        vehicle.yml powertrain.implementation EVBatInvMotDiff names one motor and a differential.
-        BobSim fe03bab maps that driveline to Drivelines.RearFinalDriveDifferentialRecord
-        (app/modelica_generator.py line 249) and sets drive_distribution_front to 0.0
-        (engines/dynpy/parameters.py line 281). No LHRe record states the driven axle.
+      status: declared
+      source: Arjun Rao, 2026-10-20. One inboard motor drives the rear axle through a differential.
     reaction:
-      value: null
-      status: unavailable
-      source: >-
-        No LHRe record states where the drive torque reacts. pDriveline lists halfshafts, which
-        suggests a differential on the chassis, but no drawing or decision states it.
+      value: chassis
+      status: declared
+      source: Arjun Rao, 2026-10-20. The motor and the differential are inboard, on the chassis.
   hydraulic_brake:
     front:
       reaction:
-        value: null
-        status: unavailable
-        source: >-
-          No LHRe record states the front caliper location. An unreviewed vault note of 2026-10-04
-          assumed outboard brakes because vehicle.yml does not say.
+        value: upright
+        status: declared
+        source: Will Schmitt, 2026-09-24 (LHRe agent search, 2026-10-20). Front calipers are outboard on the upright.
     rear:
       reaction:
-        value: null
-        status: unavailable
-        source: >-
-          No LHRe record states the rear caliper location. An unreviewed vault note of 2026-10-04
-          assumed outboard brakes because vehicle.yml does not say.
+        value: chassis
+        status: declared
+        source: Ella, 2026-10-13 (LHRe agent search, 2026-10-20). The rear caliper is inboard, beside the differential.
   regen:
     front_share:
       value: 0.0
