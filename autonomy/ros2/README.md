@@ -168,6 +168,13 @@ Launch arguments can be passed through `run_demo.sh`:
 ros2 topic pub --once /lhr/mission/go std_msgs/msg/Bool "{data: true}"
 ```
 
+To inspect the kinematic run in Foxglove, launch with `foxglove:=true` and
+connect the Foxglove app to `ws://localhost:8765`. To save an MCAP bag, use
+`record:=true`; its run ID links the bag to the metrics row. These options do
+not change the simulator or its simplified cone perception. See the
+[demo package](src/lhr_demo/README.md) for dependencies, bag contents, and
+arguments.
+
 ## Tests and CI
 
 ```bash
@@ -762,7 +769,8 @@ its limits.
 
 The metrics node publishes `/lhr/metrics/lap_complete` (`std_msgs/Bool`) when a lap is detected, which the mission manager uses to trigger the Driving → Finished transition.
 
-It also prints a summary and appends a CSV row on lap completion or Ctrl+C:
+It prints a summary on lap completion and writes one CSV row on lap
+completion or shutdown:
 
 ```
 run_id, duration_s, samples, mean_cte, max_cte, off_track_count, mean_speed, max_speed, lap_completed, mean_pos_error, max_pos_error, mean_yaw_error
