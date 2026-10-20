@@ -30,6 +30,9 @@ simulation. Other packages can use it too.
 - Entries under `paths:` resolve from the BobSim root (`simulation/bobsim`),
   not from this directory. That is why the tire path is
   `../../vehicle/tires`.
+- `modelica_initialization: legacy` sets how the Modelica model starts
+  after `make records`. See
+  [simulation/docs/bobsim.md](../simulation/docs/bobsim.md#modelica-initialization).
 - Autonomy has its own copy of some of these numbers in
   `autonomy/ros2/src/lhr_vehicle/config/vehicle.yaml`. It does not read this
   file yet. If you change wheelbase, track or mass, tell the autonomy team.

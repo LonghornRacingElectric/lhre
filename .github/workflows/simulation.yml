@@ -31,5 +31,5 @@ jobs:
       - name: Build the image
         run: make build
 
-      - name: Check that BobSim loads the vehicle
+      - name: Load the vehicle and run the tests
         run: make test

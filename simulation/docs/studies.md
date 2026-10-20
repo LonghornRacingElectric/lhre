@@ -32,7 +32,7 @@ Rules:
 - To test a parameter change, load the vehicle, change the value in memory
   or in a copy under `OUT_DIR`, and pass that to BobSim.
 - Import BobSim modules. For example:
-  `from _2_EnvelopeSim.vehicle_loader import load_active_envelope_inputs`.
+  `from simulations.envelope.vehicle_loader import load_active_envelope_inputs`.
 - Keep the script short. If you write a helper that other studies need, put
   it in `tools/` and import it as `tools.<module>`. Treat BobSim as a black
   box: do not change it for a study.
