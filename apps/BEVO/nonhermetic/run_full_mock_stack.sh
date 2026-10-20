@@ -4,7 +4,6 @@ set -euo pipefail
 SCRIPT_ROOT="$(cd "$(dirname "$0")" && pwd)"
 BEVO_ROOT="$(cd "$SCRIPT_ROOT/.." && pwd)"
 BIN_DIR="${BEVO_BIN_DIR:-$BEVO_ROOT/bin}"
-CAN_JSON_PATH="$BEVO_ROOT/nonhermetic/assets/can.json"
 
 # environment variables mirrored from run_real_stack.sh but for mock use
 CAN_IFACE="${CAND_CAN_INTERFACE:-can0}"
@@ -22,12 +21,6 @@ for bin in "$BIN_DIR/mock_main" "$BIN_DIR/dashd" "$BIN_DIR/loggerd" "$BIN_DIR/pu
     exit 1
   fi
 done
-
-if [[ ! -f "$CAN_JSON_PATH" ]]; then
-  echo "Missing CAN json: $CAN_JSON_PATH" >&2
-  echo "Install the Bazel-generated can.json first." >&2
-  exit 1
-fi
 
 # start the mock generator like run_mock_stack
 python3 "$BEVO_ROOT/cand/mock_can.py" &
@@ -50,7 +43,7 @@ DASHD_PID=$!
 LOGGERD_PID=$!
 
 # mock_main publishes directly to the cand IPC sockets
-CAND_CAN_JSON_PATH="$CAN_JSON_PATH" CAND_MOCK_PUBLISH_TARGETS="cand,publishd" "$BIN_DIR/mock_main" &
+CAND_MOCK_PUBLISH_TARGETS="cand,publishd" "$BIN_DIR/mock_main" &
 MOCK_MAIN_PID=$!
 
 # wait on dashd as the primary process

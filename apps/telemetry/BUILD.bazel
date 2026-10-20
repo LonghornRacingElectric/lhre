@@ -80,12 +80,26 @@ alias(
     visibility = ["//visibility:public"],
 )
 
+alias(
+    name = "current_schema_contract",
+    actual = "//lib/codegen/telemetry:schema_contract",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "current_schema_descriptor",
+    actual = "//lib/codegen/telemetry:schema_descriptor",
+    visibility = ["//visibility:public"],
+)
+
 filegroup(
     name = "current_schema_bundle",
     srcs = [
         ":current_schema_proto",
         ":current_schema_json",
         ":current_schema_sql",
+        ":current_schema_contract",
+        ":current_schema_descriptor",
     ],
     visibility = ["//visibility:public"],
 )

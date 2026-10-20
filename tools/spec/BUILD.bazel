@@ -1,5 +1,12 @@
 load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
 
+py_binary(
+    name = "check_wire_compat",
+    srcs = ["//lib/spec:ir/wire_compat.py"],
+    main = "//lib/spec:ir/wire_compat.py",
+    visibility = ["//visibility:public"],
+)
+
 # Canonical formatter for lib/spec/*.textproto:
 #   bazel run //tools/spec:fmt
 py_binary(

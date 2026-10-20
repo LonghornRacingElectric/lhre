@@ -30,14 +30,7 @@ from .models import (
     AngeliquePack,
     AngeliqueDiagnostics,
     AngeliqueThermal,
-    OrionPacket,
-    OrionDynamics,
-    OrionControls,
-    OrionPack,
-    OrionDiagnosticsHigh,
-    OrionDiagnosticsLow,
-    OrionThermal,
-    OrionBoardStatus,
+    ORION_MODELS,
     OrionGpsPrecise,
 )
 from sqlalchemy.dialects.postgresql import ARRAY
@@ -83,14 +76,7 @@ class QueryBuilder:
             self._models["Thermal"] = AngeliqueThermal
             self._models["Packet"] = AngeliquePacket
         elif car == "Orion":
-            self._models["Dynamics"] = OrionDynamics
-            self._models["Controls"] = OrionControls
-            self._models["Pack"] = OrionPack
-            self._models["DiagnosticsHigh"] = OrionDiagnosticsHigh
-            self._models["DiagnosticsLow"] = OrionDiagnosticsLow
-            self._models["Thermal"] = OrionThermal
-            self._models["BoardStatus"] = OrionBoardStatus
-            self._models["Packet"] = OrionPacket
+            self._models.update({name.removeprefix("Orion"): model for name, model in ORION_MODELS.items()})
             self._models["GpsPrecise"] = OrionGpsPrecise
         else:
             raise ValueError(f"Car {car} is not supported.")
@@ -351,7 +337,7 @@ class QueryBuilder:
         if car == "Angelique":
             return shared_models + [AngeliquePacket, AngeliqueDynamics, AngeliqueControls, AngeliquePack, AngeliqueDiagnostics, AngeliqueThermal]
         if car == "Orion":
-            return shared_models + [OrionPacket, OrionDynamics, OrionControls, OrionPack, OrionDiagnosticsHigh, OrionDiagnosticsLow, OrionThermal, OrionBoardStatus, OrionGpsPrecise]
+            return shared_models + list(ORION_MODELS.values()) + [OrionGpsPrecise]
         raise ValueError(f"Car {car} is not supported.")
 
     @staticmethod

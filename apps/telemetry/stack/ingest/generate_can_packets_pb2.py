@@ -2,7 +2,6 @@
 """Generates can_packets_pb2.py using protoc in a cross-platform way."""
 
 import os
-import shutil
 import subprocess
 import sys
 
@@ -22,20 +21,16 @@ def main() -> int:
 
     protoc_path = sys.argv[1]
     proto_src = sys.argv[2]
-    rule_dir = sys.argv[3]
     out_file = sys.argv[4]
 
     out_dir = os.path.dirname(out_file)
     os.makedirs(out_dir, exist_ok=True)
 
-    dest_proto = os.path.join(rule_dir, "can_packets.proto")
-    shutil.copyfile(proto_src, dest_proto)
-
     cmd = [
         protoc_path,
-        f"--proto_path={rule_dir}",
+        f"--proto_path={os.path.dirname(proto_src)}",
         f"--python_out={out_dir}",
-        dest_proto,
+        proto_src,
     ]
     res = subprocess.run(cmd)
     return res.returncode

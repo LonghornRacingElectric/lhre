@@ -12,6 +12,8 @@ validates, and serializes them; nothing else understands the format.
 
 load("@rules_python//python:defs.bzl", "py_library", "py_test")
 
+exports_files(["ir/wire_compat.py"])
+
 filegroup(
     name = "files",
     srcs = glob([
@@ -28,6 +30,7 @@ py_library(
         "ir/loader.py",
         "ir/validator.py",
         "ir/wire.py",
+        "ir/wire_compat.py",
     ],
     visibility = ["//visibility:public"],
     deps = ["//lib/spec/proto:can_spec_py_proto"],
@@ -90,5 +93,11 @@ py_test(
     size = "small",
     srcs = ["ir/wire_test.py"],
     main = "ir/wire_test.py",
+    deps = [":ir"],
+)
+
+py_test(
+    name = "wire_compat_test",
+    srcs = ["ir/wire_compat_test.py"],
     deps = [":ir"],
 )

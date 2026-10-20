@@ -1,0 +1,36 @@
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("//apps/telemetry:compatibility.bzl", "NOT_WINDOWS")
+load("//apps/telemetry:container.bzl", "telemetry_service_image")
+
+py_library(
+    name = "registry_lib",
+    srcs = ["server.py"],
+    data = ["//apps/telemetry:current_schema_contract", "//apps/telemetry:current_schema_descriptor"],
+    deps = ["//lib/telemetry:contract", "@lhre_pypi//bazel_runfiles"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_binary(
+    name = "registry_binary",
+    srcs = ["server.py"],
+    main = "server.py",
+    deps = [":registry_lib"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+telemetry_service_image(
+    name = "schema_registry",
+    binary = ":registry_binary",
+    base = "@python312_linux_amd64",
+    repository = "ghcr.io/longhornracingelectric/telemetry-schema-registry",
+    repo_tags = ["lhre/telemetry-schema-registry:dev"],
+    visibility = ["//visibility:public"],
+)
+
+py_test(
+    name = "registry_test",
+    srcs = ["server_test.py"],
+    main = "server_test.py",
+    deps = [":registry_lib", "//lib/telemetry:testing"],
+    target_compatible_with = NOT_WINDOWS,
+)

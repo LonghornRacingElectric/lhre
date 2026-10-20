@@ -65,9 +65,9 @@ jobs:
             area car '^(vehicle/|simulation/bobsim$|simulation/tools/|simulation/Makefile$|simulation/docker-compose\.yml$|\.github/workflows/ci\.yml$)'
           fi
           area autonomy '^(autonomy/|simulation/bobsim$|vehicle/|\.github/workflows/ci\.yml$)'
-          area bevo '^(apps/BEVO/|lib/spec/|lib/codegen/telemetry/|platforms/|toolchains/|MODULE\.bazel$|MODULE\.bazel\.lock$|\.github/workflows/ci\.yml$)'
+          area bevo '^(apps/BEVO/|lib/spec/|lib/codegen/telemetry/|lib/telemetry/|platforms/|toolchains/|MODULE\.bazel$|MODULE\.bazel\.lock$|\.github/workflows/ci\.yml$)'
           area docs '(\.md$|^docs/|^mkdocs\.yml$|^pyproject\.toml$|^uv\.lock$|^\.github/workflows/ci\.yml$)'
-          area telemetry '^(apps/telemetry/|apps/BEVO/|lib/spec/|lib/codegen/telemetry/|\.github/workflows/ci\.yml$)'
+          area telemetry '^(apps/telemetry/|apps/BEVO/|lib/spec/|lib/codegen/telemetry/|lib/telemetry/|\.github/workflows/ci\.yml$)'
 
   format:
     name: Format
@@ -366,10 +366,10 @@ jobs:
           echo "common --config=ci" >> .bazelrc.user
 
       - name: Cross-compile core daemons for Raspberry Pi OS
-        run: bazel build //apps/BEVO:pi_core_binaries
+        run: bazel build //apps/BEVO:pi_core_binaries //apps/BEVO:pi_core_manifest //apps/BEVO:pi_core_image //apps/BEVO/updater:standalone
 
       - name: Verify static AArch64 executables
-        run: bazel test //apps/BEVO:pi_core_binary_test --test_output=errors
+        run: bazel test //apps/BEVO:pi_core_binary_test //apps/BEVO:release_metadata_test //apps/BEVO/updater:updater_test //apps/BEVO/updater:package_test //apps/telemetry/schema_registry:registry_test //lib/telemetry:contract_test --test_output=errors
 
   # On main, docs.yml builds and publishes the site instead.
   docs:
@@ -402,6 +402,8 @@ jobs:
       HAVE_SECRETS: ${{ secrets.POSTGRES_USER != '' && secrets.POSTGRES_PASSWORD != '' && secrets.ELECTRIC_PWD != '' && secrets.GRAFANA_PWD != '' && secrets.ANALYSIS_PWD != '' }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Configure BuildBuddy
         env:
@@ -416,6 +418,15 @@ jobs:
 
       - name: Build all telemetry images
         run: bazel build //apps/telemetry:all_images //lib/codegen/telemetry:server_schema
+
+      - name: Check deployed wire compatibility
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git show "$BASE_SHA:lib/spec/wire.lock" > "$RUNNER_TEMP/baseline-wire.lock"
+          bazel run //tools/spec:check_wire_compat -- \
+            --baseline "$RUNNER_TEMP/baseline-wire.lock" --current "$GITHUB_WORKSPACE/lib/spec/wire.lock"
 
       - name: Load and smoke-test core images
         run: bazel test //apps/telemetry:core_smoke_tests --test_output=errors
