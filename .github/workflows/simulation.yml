@@ -17,9 +17,11 @@ on:
   workflow_dispatch:
 
 jobs:
-  simulation:
+  fast:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      LHRE_REQUIRE_GIT: "1"
     defaults:
       run:
         working-directory: simulation
@@ -28,8 +30,14 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Get the BobSim history for the pin check
+        run: test "$(git -C bobsim rev-parse --is-shallow-repository)" = false || git -C bobsim fetch --unshallow --no-recurse-submodules origin
+
       - name: Build the image
         run: make build
 
-      - name: Load the vehicle and run the tests
-        run: make test
+      - name: Check that BobSim loads the vehicle
+        run: make smoke
+
+      - name: Run the unit and contract tests
+        run: make unit
