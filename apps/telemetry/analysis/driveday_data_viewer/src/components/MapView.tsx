@@ -3,16 +3,18 @@
 import { useEffect, useRef } from "react";
 import { clock, MPH } from "@/lib/format";
 import { drawMap } from "@/lib/draw/map";
+import { lapCutJoin } from "@/lib/geometry";
 import { gradientCss, rampSpd } from "@/lib/draw/palette";
 import { cvS, sU } from "@/lib/units";
 import { Hud } from "./Hud";
-import { usePainter, usePlayer, useUi } from "./context";
+import { useFrame, usePainter, usePlayer, useUi } from "./context";
 
 /* The map stage: canvas, overlay, legend and zoom controls. */
 
 function Legend() {
   const p = usePlayer();
   useUi(p);
+  useFrame(p);
   const { mode, units } = p;
   const s = p.session;
   const sw = (c: string, n: string) => (
@@ -24,7 +26,8 @@ function Legend() {
   else if (mode === "gain") body = <><span>Gaining<span className="ramp" style={{ background: "linear-gradient(90deg,var(--green),var(--line),var(--red))" }} />Losing</span><span>against the ghost{p.refLap() ? "" : " (turn the ghost on)"}</span></>;
   else if (mode === "acc") body = <><span>Braking<span className="ramp" style={{ background: "linear-gradient(90deg,var(--red),var(--line),var(--green))" }} />Accelerating</span><span>±{s.accScale.toFixed(1)} m/s²</span></>;
   else body = <>{["--s1", "--s2", "--s3"].map((c, i) => sw(c, "S" + (i + 1)))}</>;
-  return <div className="maplegend" id="legend">{body}</div>;
+  const join = lapCutJoin(p.curState().L, s.geo);
+  return <div className="maplegend" id="legend">{body}{join && !p.layoutOnly && <span title="Manual lap presses were at different positions. The dashed continuation follows the known layout, without snapping recorded endpoints to it or inventing timing/colour data.">Dashed layout · untimed ({join.distance.toFixed(0)} m)</span>}</div>;
 }
 
 export function MapView() {
@@ -73,13 +76,16 @@ export function MapView() {
       const c = L.ch;
       const g = c.gacc[bi];
       tip.current.hidden = false;
-      tip.current.textContent = `${cvS(p.units, c.spd[bi]).toFixed(0)} ${sU(p.units)} · THR ${c.thr[bi].toFixed(0)} · BRK ${c.brkp[bi].toFixed(0)} · ${g >= 0 ? "+" : "−"}${Math.abs(g).toFixed(2)} g · ${clock(c.t[bi])}`;
-      tip.current.style.left = Math.max(4, Math.min(r.width - 250, mx + 14)) + "px";
+      const lat = c.glat[bi];
+      const lateral = Number.isFinite(lat) ? Math.abs(lat).toFixed(2) + " g" + (Math.abs(lat) < 0.005 ? "" : lat > 0 ? " L" : " R") : "—";
+      tip.current.textContent = `${cvS(p.units, c.spd[bi]).toFixed(0)} ${sU(p.units)} · THR ${c.thr[bi].toFixed(0)} · BRK ${c.brkp[bi].toFixed(0)} · LONG ${g >= 0 ? "+" : "−"}${Math.abs(g).toFixed(2)} g · LAT ${lateral} (GPS est.) · ${clock(c.t[bi])}`;
+      tip.current.style.left = Math.max(4, Math.min(r.width - tip.current.offsetWidth - 4, mx + 14)) + "px";
       tip.current.style.top = Math.max(4, my - 32) + "px";
     };
     const leave = () => {
       hideTip();
     };
+    const cancel = () => { drag = null; hideTip(); };
     const up = (e: PointerEvent) => {
       const was = drag;
       drag = null;
@@ -118,6 +124,7 @@ export function MapView() {
     cv.addEventListener("pointerdown", down);
     cv.addEventListener("pointermove", move);
     cv.addEventListener("pointerup", up);
+    cv.addEventListener("pointercancel", cancel);
     cv.addEventListener("pointerleave", leave);
     cv.addEventListener("wheel", wheel, { passive: false });
     cv.addEventListener("dblclick", dbl);
@@ -125,6 +132,7 @@ export function MapView() {
       cv.removeEventListener("pointerdown", down);
       cv.removeEventListener("pointermove", move);
       cv.removeEventListener("pointerup", up);
+      cv.removeEventListener("pointercancel", cancel);
       cv.removeEventListener("pointerleave", leave);
       cv.removeEventListener("wheel", wheel);
       cv.removeEventListener("dblclick", dbl);

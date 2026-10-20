@@ -52,7 +52,6 @@ RECORDED_TOPICS = (
     '/lhr/vehicle/cmd',
     '/lhr/mission/status',
     '/lhr/metrics/lap_complete',
-    '/lhr/imu/data',
 )
 
 # Launch arguments left out of a bag's provenance: they decide where
@@ -448,8 +447,9 @@ def generate_launch_description():
             'use_sim_time': _b('use_sim_time'),
             'pairing_strategy': ParameterValue(PythonExpression([
                 "('classified' if '", LaunchConfiguration('lidar_classify_sides'),
-                "' == 'true' else 'boundary') if '",
-                LaunchConfiguration('perception'), "' == 'lidar' else 'index'"]), value_type=str),
+                "' == 'true' else 'boundary_graph') if '",
+                LaunchConfiguration('perception'), "' == 'lidar' else 'nearest'"
+            ]), value_type=str),
         }],
         output='screen',
     )

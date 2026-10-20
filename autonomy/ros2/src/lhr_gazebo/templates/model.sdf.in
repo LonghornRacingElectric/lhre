@@ -92,6 +92,63 @@
       </sensor>
     </link>
 
+    <!-- One ZED 2i rig. Shared parent preserves Harmonic's stereo baseline
+         calculation when mount yaw/pitch changes. Inertia is sim bookkeeping. -->
+    <link name="zed2i_link">
+      <pose relative_to="chassis">${stereo_dx} ${stereo_dy} ${stereo_dz} ${stereo_roll} ${stereo_pitch} ${stereo_yaw}</pose>
+      <inertial>
+        <mass>0.001</mass>
+        <inertia><ixx>0.000001</ixx><iyy>0.000001</iyy><izz>0.000001</izz></inertia>
+      </inertial>
+      <sensor name="zed2i_left" type="camera">
+        <pose>0 ${stereo_half_baseline} 0 0 0 0</pose>
+        <always_on>true</always_on>
+        <update_rate>${stereo_rate}</update_rate>
+        <topic>/zed2i/left/image_rect</topic>
+        <camera>
+          <horizontal_fov>${stereo_hfov}</horizontal_fov>
+          <image>
+            <width>${stereo_width}</width><height>${stereo_height}</height>
+            <format>R8G8B8</format>
+          </image>
+          <clip><near>0.1</near><far>100</far></clip>
+          <camera_info_topic>/zed2i/left/camera_info</camera_info_topic>
+          <optical_frame_id>zed2i_left_camera_optical_frame</optical_frame_id>
+          <lens>
+            <intrinsics>
+              <fx>${stereo_fx}</fx><fy>${stereo_fy}</fy>
+              <cx>${stereo_cx}</cx><cy>${stereo_cy}</cy><s>0</s>
+            </intrinsics>
+          </lens>
+        </camera>
+      </sensor>
+      <sensor name="zed2i_right" type="camera">
+        <pose>0 -${stereo_half_baseline} 0 0 0 0</pose>
+        <always_on>true</always_on>
+        <update_rate>${stereo_rate}</update_rate>
+        <topic>/zed2i/right/image_rect</topic>
+        <camera>
+          <horizontal_fov>${stereo_hfov}</horizontal_fov>
+          <image>
+            <width>${stereo_width}</width><height>${stereo_height}</height>
+            <format>R8G8B8</format>
+          </image>
+          <clip><near>0.1</near><far>100</far></clip>
+          <camera_info_topic>/zed2i/right/camera_info</camera_info_topic>
+          <optical_frame_id>zed2i_right_camera_optical_frame</optical_frame_id>
+          <lens>
+            <intrinsics>
+              <fx>${stereo_fx}</fx><fy>${stereo_fy}</fy>
+              <cx>${stereo_cx}</cx><cy>${stereo_cy}</cy><s>0</s>
+            </intrinsics>
+          </lens>
+        </camera>
+      </sensor>
+    </link>
+    <joint name="zed2i_mount" type="fixed">
+      <parent>chassis</parent><child>zed2i_link</child>
+    </joint>
+
     <!-- ===== FRONT LEFT STEERING KNUCKLE ===== -->
     <link name="front_left_steering">
       <pose>${wheelbase} ${half_track} ${wheel_radius} 0 0 0</pose>
@@ -381,6 +438,8 @@
       filename="gz-sim-odometry-publisher-system"
       name="gz::sim::systems::OdometryPublisher">
       <odom_topic>/model/fsae_vehicle/odometry</odom_topic>
+      <!-- Harmonic defaults to /pose; the bridge explicitly consumes /tf. -->
+      <tf_topic>/model/fsae_vehicle/tf</tf_topic>
       <odom_frame>map</odom_frame>
       <robot_base_frame>base_link</robot_base_frame>
       <odom_publish_frequency>50</odom_publish_frequency>

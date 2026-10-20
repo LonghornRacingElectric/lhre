@@ -1,6 +1,6 @@
 # lhr_sim_bobsim
 
-Run BobSim's public `dyn_py` 3 DOF model as the ROS vehicle plant. The model
+Run BobSim's public `engines.dynpy` 3 DOF model as the ROS vehicle plant. The model
 imports the pinned submodule; no BobSim source is copied here. The existing
 kinematic model remains the default.
 
@@ -39,6 +39,8 @@ vehicle file's angle and rate limits. Reverse targets become zero.
 The plant brakes after commands stop arriving for `command_timeout_sec`
 (default 0.5 simulated seconds). The planar model has no parking brake;
 the adapter holds it at rest below 0.03 m/s when the target is zero.
+Once held, it skips integration until a forward speed is requested. This
+prevents numerical creep from the tire model at zero speed.
 Actuator delays, hydraulic braking and motor response remain uncalibrated.
 
 BobSim integrates at the center of mass. The adapter converts position and
@@ -63,3 +65,20 @@ Run `colcon test --packages-select lhr_sim_bobsim lhr_sim_kinematic lhr_demo`.
 Functional BobSim tests need the mounted checkout and vehicle file.
 
 Node cleanup tolerates an already-stopped ROS context after launch shutdown.
+
+## Upstream compatibility
+
+This adapter uses BobSim `22c5056` through its public `engines.dynpy` API.
+It imports the upstream MF5.2 tires, KinPy geometry, aero and algebraic
+load/torque closure unchanged. Solver failures end the run. Old benchmark
+and lap results at `4da577a` are historical; they do not validate this pin.
+The latest upstream model may reject commands outside its tire-force support.
+
+Autonomy CI runs when the BobSim pin or canonical vehicle changes. It marks
+the checked-out repository safe before initializing the dynamics submodule
+inside the ROS container.
+
+The MF5.2 model is slower than the old reduced model. Run time depends on
+commands and hardware. Use a larger `--wall-timeout` for driving studies;
+the fixed 20 ms simulation step stays unchanged. A short smoke run does not
+establish full-lap performance or real-car accuracy.

@@ -9,3 +9,4 @@ autonomy
 simulation
 external
 C
+apps/telemetry/analysis/driveday_data_viewer

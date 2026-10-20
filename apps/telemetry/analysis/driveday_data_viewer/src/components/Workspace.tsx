@@ -1,29 +1,63 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { lsGet } from "@/lib/storage";
+import { createPortal } from "react-dom";
+import { lsGet, lsSet } from "@/lib/storage";
+import { defaultWorkspace, movePane, resizePair, restoreWorkspace, PANE_IDS, type PaneId, type PaneState, type WorkspaceLayout } from "@/lib/workspace";
 import { Dock } from "./Dock";
 import { MapTools } from "./MapTools";
 import { MapView } from "./MapView";
 import { SegStrip } from "./SegStrip";
-import { DEFAULT_DOCK, Split } from "./Split";
+import { WorkspacePane, PaneDivider } from "./WorkspacePane";
+import { VideoPanel } from "./panels/VideoPanel";
 import { Transport } from "./Transport";
 import { usePlayer } from "./context";
 
-/** Map and transport on the left, panels on the right, and the keyboard shortcuts for all of it. */
+/** Independent video, track and analysis windows share one playback clock. */
 export function Workspace() {
   const p = usePlayer();
-  const main = useRef<HTMLDivElement>(null);
-  const [dockPx, setDockPx] = useState(() => lsGet<number>("dockpx", DEFAULT_DOCK));
-  const [hidden, setHidden] = useState(false);
+  const [layout, setLayout] = useState(() => restoreWorkspace(lsGet<WorkspaceLayout | null>("workspace", null)));
+  const [timelineMode, setTimelineMode] = useState<"full" | "track">(() => lsGet<string>("timeline-layout", "full") === "track" ? "track" : "full");
+  const [toolbarHost, setToolbarHost] = useState<HTMLElement | null>(null);
+  useEffect(() => { setToolbarHost(document.getElementById("workspace-actions")); }, []);
+  const [timelineHeight, setTimelineHeight] = useState(() => Math.max(48, Math.min(240, lsGet<number>("timeline-height", 108))));
+  const resizeTimeline = (height: number) => { setTimelineHeight(height); lsSet("timeline-height", height); };
+  const [z, setZ] = useState<Record<PaneId, number>>({ video: 100, track: 101, analysis: 102 });
+  const nextZ = useRef(102);
+  const update = (fn: (current: WorkspaceLayout) => WorkspaceLayout) => setLayout(current => {
+    const next = fn(current); lsSet("workspace", next); return next;
+  });
+  const patch = (id: PaneId, changes: Partial<PaneState>) => update(current => ({ ...current, panes: { ...current.panes, [id]: { ...current.panes[id], ...changes } } }));
+  const names: Record<PaneId, string> = { video: "Video", track: "Track", analysis: "Analysis" };
+  const docked = layout.order.filter(id => layout.panes[id].visible && !layout.panes[id].floating);
+  const toggleTimelineDock = () => { const next = timelineMode === "track" ? "full" : "track"; setTimelineMode(next); lsSet("timeline-layout", next); };
+
+  useEffect(() => {
+    const fit = () => setLayout(current => {
+      const panes = { ...current.panes }; let changed = false;
+      for (const id of PANE_IDS) {
+        const pane = panes[id];
+        if (!pane.floating) continue;
+        const width = Math.min(pane.width, window.innerWidth - 16), height = Math.min(pane.height, window.innerHeight - 16);
+        const x = Math.max(8, Math.min(pane.x, window.innerWidth - width - 8));
+        const y = Math.max(8, Math.min(pane.y, window.innerHeight - height - 8));
+        if (width !== pane.width || height !== pane.height || x !== pane.x || y !== pane.y) { panes[id] = { ...pane, width, height, x, y }; changed = true; }
+      }
+      if (!changed) return current;
+      const next = { ...current, panes }; lsSet("workspace", next); return next;
+    });
+    fit(); window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, []);
 
   useEffect(() => {
     p.schedule(true);
-  }, [p, dockPx, hidden]);
+  }, [p, layout, timelineMode, timelineHeight]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
+      if (t?.closest(".video-panel, .pane-header, .layout-toolbar, .pane-divider, .pane-resize, .timeline-resize")) return;
       if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && (t as HTMLInputElement).type !== "range" && (t as HTMLInputElement).type !== "checkbox") return;
       if (t && (t.tagName === "BUTTON" || t.tagName === "SUMMARY") && (e.key === " " || e.key === "Enter")) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -50,7 +84,7 @@ export function Workspace() {
       else if (k === "r" || k === "R") p.set("raceMode", !p.raceMode);
       else if (k === "Escape") {
         if (p.noteOpen) p.setNoteOpen(false);
-      } else if (k === "d" || k === "D") setHidden((h) => !h);
+      } else if (k === "d" || k === "D") setLayout(current => { const next = { ...current, panes: { ...current.panes, analysis: { ...current.panes.analysis, visible: !current.panes.analysis.visible } } }; lsSet("workspace", next); return next; });
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -62,16 +96,28 @@ export function Workspace() {
     return () => removeEventListener("pagehide", save);
   }, [p]);
 
+  const toolbar = <div className="layout-toolbar" aria-label="Workspace layout">
+        <span className="lab">Windows</span>
+        {PANE_IDS.map(id => <button className="chip" key={id} aria-pressed={layout.panes[id].visible} onClick={() => patch(id, { visible: !layout.panes[id].visible })}>{names[id]}</button>)}
+        <span className="sp" /><span className="layout-hint">Drag headers to move · dividers to resize</span>
+        <button className="btn" onClick={() => { update(() => defaultWorkspace()); setTimelineMode("full"); lsSet("timeline-layout", "full"); resizeTimeline(108); }}>Reset layout</button>
+      </div>;
   return (
-    <div className={"main" + (hidden ? " nodock" : "")} id="main" ref={main} style={{ ["--dock" as string]: dockPx + "px" }}>
-      <section className="stage" aria-label="Player">
-        <MapTools dockHidden={hidden} onToggleDock={() => setHidden((h) => !h)} />
-        <MapView />
-        <SegStrip />
-        <Transport />
-      </section>
-      <Split main={main} dock={dockPx} onDock={setDockPx} />
-      <Dock />
+    <div className="workspace" id="main">
+      {toolbarHost ? createPortal(toolbar, toolbarHost) : toolbar}
+      <div className="workspace-panes">
+        {PANE_IDS.map(id => <WorkspacePane key={id} id={id} title={names[id]} state={layout.panes[id]} order={layout.order.indexOf(id)} z={z[id]}
+          onRaise={() => setZ(current => ({ ...current, [id]: ++nextZ.current }))}
+          onPatch={changes => patch(id, changes)}
+          onMove={direction => { const target = layout.order[layout.order.indexOf(id) + direction]; if (target) update(current => movePane(current, id, target)); }}
+          onDrop={source => update(current => movePane(current, source, id))}>
+          {id === "video" ? <VideoPanel visible={layout.panes.video.visible} /> : id === "analysis" ? <Dock /> :
+            <section className="stage" aria-label="Player"><MapTools /><MapView /><SegStrip />{timelineMode === "track" && layout.panes.track.visible && <Transport height={timelineHeight} onHeight={resizeTimeline} docked onPlacement={toggleTimelineDock} />}</section>}
+        </WorkspacePane>)}
+        {docked.slice(0, -1).map((id, i) => <PaneDivider key={id + docked[i + 1]} left={id} right={docked[i + 1]} order={layout.order.indexOf(id)} fraction={layout.panes[id].weight / (layout.panes[id].weight + layout.panes[docked[i + 1]].weight)} onResize={fraction => update(current => resizePair(current, id, docked[i + 1], fraction))} />)}
+        {!docked.length && <div className="workspace-empty">All windows are hidden or floating. Use the buttons above to restore them.</div>}
+      </div>
+      {(timelineMode !== "track" || !layout.panes.track.visible) && <section className={"workspace-timeline" + (timelineHeight < 70 ? " is-compact" : "")} aria-label="Playback and full-width timeline"><Transport height={timelineHeight} onHeight={resizeTimeline} docked={timelineMode === "track"} onPlacement={toggleTimelineDock} /></section>}
     </div>
   );
 }

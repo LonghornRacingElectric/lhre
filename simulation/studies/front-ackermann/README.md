@@ -1,99 +1,176 @@
 # front-ackermann
 
+**Status: historical.** BobSim `4da577a` made these results. They are stale at BobSim `fe03bab`. BobSim changed the KinPy corner solver that the study uses (#83, #84), and other modules that it calls. See [the BobSim changes](../../docs/bobsim.md#what-changed-in-bobsim-from-4da577a-to-fe03bab). Run the study again before you use a result.
+
 ## Question
 
-Can the 2027 Front v20 steering reach the tightest hairpin? How much
-Ackermann should it have, given that packaging allows at most
-+<!-- out:readme.json#pack_pct -->42<!-- /out -->%?
-
-This is a screening study. It gives the direction and the sensitivities,
-not final numbers. See [Check before design freeze](#check-before-design-freeze).
+Is pro-Ackermann or anti-Ackermann steering better for the 2027 car, and which laws stay good when the inputs we do not trust change? The study compares constant steering laws from −50% to +100% against parallel steer on one car, one tire and one track. Front V34 is the current design point. It is a screening model. It gives the direction and the robust range, not an exact percentage.
 
 ## Answer
 
-- **Fix the steering lock first.** With 1.25 in of rack, Front v20 steers
-  <!-- out:readme.json#steer_at_travel_deg|.1f -->22.4<!-- /out -->°. A
-  minimum hairpin at the grip limit needs
-  <!-- out:readme.json#steer_needed_3p5_deg|.1f -->29.7<!-- /out -->°. This
-  costs more than any Ackermann choice.
-- **Use the packaging limit, +<!-- out:readme.json#pack_pct -->42<!-- /out -->%.**
-  At the 3.5 m hairpin apex it changes lateral g by
-  <!-- out:readme.json#pack_apex_3p5|+.1f -->+10.1<!-- /out -->% compared
-  with Front v20, which is
-  <!-- out:readme.json#pack_share_of_best_3p5|.0f -->80<!-- /out -->% of the
-  best apex gain. It saves <!-- out:readme.json#pack_lap_s -->0.27 to 0.53 s<!-- /out -->
-  per Michigan lap.
-- **More Ackermann would not help much.** The best per-lap setting is
-  <!-- out:readme.json#best_lap_s -->+50%<!-- /out -->, and the lap times
-  near it are almost equal. Under trail braking, every pro-Ackermann
-  setting loses grip, and the loss grows with Ackermann.
-- **Front v20 is slightly anti-Ackermann**
-  (<!-- out:readme.json#v20_ackermann_pct -->−6.3% to −7.8%<!-- /out -->). Any
-  pro-Ackermann linkage is better in tight corners.
-- **The tire grip scale moves the size of the gain the most.** See
-  [Sensitivity](#sensitivity). The direction stays the same.
+| | |
+| --- | --- |
+| Robust region (0.5 point tolerance) | <!-- out:readme.json#robust_laws -->+50%, +75%, Front V34<!-- /out --> |
+| Same, without the 3.5 m cells | <!-- out:readme.json#robust_laws_beyond_3p5 -->+50%, Front V34<!-- /out --> |
+| Front V34 Ackermann over the rack travel | <!-- out:readme.json#base_ackermann_pct -->+48.9% to +53.7%<!-- /out --> |
+| Mean steer at full rack / needed at 3.5 m | <!-- out:readme.json#steer_at_travel_deg|.1f -->23.4<!-- /out -->° / <!-- out:readme.json#steer_needed_3p5_powered_deg|.1f -->22.8<!-- /out -->° |
+| Tightest CG radius at any speed / rule-minimum hairpin | <!-- out:readme.json#min_radius_low_speed_m|.2f -->3.83<!-- /out --> m / <!-- out:readme.json#rule_hairpin_radius_m|.2f -->3.67<!-- /out --> m |
+| Endurance lap, laws tied with parallel steer | <!-- out:readme.json#lap_tied_laws -->-25%, +25%, +50%, Front V34<!-- /out --> |
 
-## Result
+- **Pro, not anti.** Every variant, rear model and brake bias keeps −50% out of the robust region. Its worst case is the 3.5 m steady cell, where it loses <!-- out:readme.json#anti50_apex_3p5|.1f -->−12.4<!-- /out -->% of grip against parallel steer and <!-- out:readme.json#lsd_anti50_apex_3p5|.1f -->−18.0<!-- /out -->% with the LSD.
+- **The top is flat.** The robust region holds the laws whose worst shortfall over every design condition is within 0.5 points of the best. Choosing inside it is a packaging and steering-feel decision, not a grip decision.
+- **Fast corners tie.** Every law is within 0.5% of parallel at 11 m and 15 m. The hairpins decide the direction.
+- **Lock is the real gate, at low speed.** At the powered grip limit Front V34 reaches a 3.5 m hairpin with 0.6° of steer to spare. Below the limit the rear does not slide, so the car needs more steer, and its tightest CG radius at walking pace is <!-- out:readme.json#min_radius_low_speed_m|.2f -->3.83<!-- /out --> m against <!-- out:readme.json#rule_hairpin_radius_m|.2f -->3.67<!-- /out --> m for a rule-minimum hairpin. Fix that before the Ackermann value.
+- **Lap time is a reference.** +25%, +50% and Front V34 tie parallel steer inside the <!-- out:readme.json#convergence_band_ms|.0f -->24<!-- /out --> ms lap grid band. +75% and +100% lose 25 to 46 ms, spread over the fast corners where they give up 0.2% to 0.3% of grip. −50% loses <!-- out:readme.json#anti50_lap_s|+.3f -->+0.064<!-- /out --> s.
 
-`make study` fills in the numbers between `out:` markers from the last
-run. "Change" means change in max lateral g compared with Front v20.
+**Why not copy other cars?** A video shows a law. It does not show the roll stiffness split, the tire's load sensitivity, the toe or the rack geometry, and each of those moves the answer here. Another team's law is a data point about their car. It is not evidence about ours. Formula 1 runs anti because downforce gives its outer front tire 5 to 10 times the inner's load at 50 m radii, so the load term wins there. We corner at 3.5 to 15 m with a 2:1 load split and no downforce in this model, so the geometry term wins here.
 
-### Steering lock and linkage
+## Definitions and gates
 
-![Steering geometry](ackermann_curves.png)
+- Ackermann % is `100 · (cot δ_outer − cot δ_inner) · L / t`, with roadwheel steer δ, wheelbase L = 1.5494 m and front track t = 1.270 m. Positive is pro, zero is parallel steer, negative is anti.
+- A design condition is one car, one rear model, one corner radius and one longitudinal level. The cars are nominal, grip scale <!-- out:readme.json#mu_sensitivity -->0.75<!-- /out -->, and <!-- out:readme.json#variants -->LLTD -0.10, LLTD +0.10, LKY 0.62<!-- /out -->. The rear models are an open differential (the baseline), the planned LSD, and hydraulic brakes at 65% and 84% front bias. The levels run from 0.6 g braking to 0.6 g drive.
+- Shortfall is `100 · (1 − ay / ay_best)` in a condition, with `ay_best` the best law there. A law with no trim in a condition scores 100%.
+- The robust region is every law whose worst shortfall is within 0.5 points of the smallest worst shortfall. The 0.5 points equals the measured gap between the two combined-slip tire models (<!-- out:readme.json#brake_model_gap_pts|.1f -->0.5<!-- /out --> points). The table also shows the 1 point region.
+- Grip reserve is the limit lateral g of a law against parallel steer at the same condition. Steering authority is the yaw moment per degree of mean roadwheel steer at 90% of the limit.
+- Lock gate: the mean roadwheel steer at full rack must reach the steer a rule-minimum hairpin needs. The hairpin is 9 m outside diameter (FSAE rules, course specification). With the outside tire on the edge, the CG radius is <!-- out:readme.json#rule_hairpin_radius_m|.2f -->3.67<!-- /out --> m (hand calculation from t, the tire width and the CG position). 3.5 m is that radius with a margin.
 
-- The tightest CG radius at the grip limit is
-  <!-- out:readme.json#tightest_radius_m|.1f -->4.3<!-- /out --> m. The
-  tightest legal CG path is near 3.5 m.
-- The tie rod outer point is
-  <!-- out:readme.json#arm_offset_mm|.0f -->82<!-- /out --> mm from the
-  kingpin axis. With this arm, R = 3.5 m needs
-  <!-- out:readme.json#rack_needed_mm|.1f -->41.2<!-- /out --> mm of rack.
+## Robust region
 
-Each option below reaches its own hairpin steer at 90% of rack travel and
-keeps bump steer at zero at center. With a front rack, more Ackermann
-moves the tie rod point toward the wheel.
+<!-- out:robust.md -->
+
+| Option | Worst shortfall | Binding condition | In region, 0.5 pt | In region, 1 pt | Worst beyond 3.5 m | In region beyond 3.5 m, 0.5 pt |
+| ------ | --------------- | ----------------- | ----------------- | --------------- | ------------------ | ------------------------------ |
+| +50% | 4.5% | grip 0.75, brakes 0.65, 3.5 m, 0.6 g braking | yes | yes | 2.9% | yes |
+| Front V34 | 4.6% | grip 0.75, brakes 0.65, 3.5 m, 0.6 g braking | yes | yes | 2.9% | yes |
+| +75% | 5.0% | LKY 0.62, brakes 0.65, 3.5 m, 0.6 g braking | yes | yes | 3.9% | no |
+| +100% | 6.0% | LKY 0.62, brakes 0.65, 3.5 m, 0.6 g braking | no | no | 4.7% | no |
+| +25% | 8.1% | LLTD -0.10, open, 3.5 m, 0.6 g drive | no | no | 3.6% | no |
+| +0% | 12.3% | grip 0.623, open, 3.5 m, 0.6 g drive | no | no | 5.8% | no |
+| -25% | 18.5% | grip 0.623, LSD, 3.5 m, steady | no | no | 9.8% | no |
+| -50% | 27.7% | grip 0.623, LSD, 3.5 m, steady | no | no | 14.7% | no |
+
+<!-- /out -->
+
+The binding condition names the cell that sets each law's worst case. The second pair of columns drops the 3.5 m cells, because one 3.5 m cell can set the whole region. A smaller worst shortfall is better. The smallest is <!-- out:readme.json#robust_floor_pct|.1f -->4.5<!-- /out -->%.
+
+## Operating map
+
+![Left: coasting apex sweep, grip change by Ackermann and corner radius, band = range over 12 input cases, diamond = Front V34. Right: best constant law at each corner radius and braking or drive level, open differential, red = anti, blue = pro](grip_vs_ackermann.png)
+
+The table gives the best law at each operating point for the nominal car, open differential and 65% front bias, at grip scale <!-- out:readme.json#mu_nominal -->0.623<!-- /out -->. "parallel" means that no law beats parallel steer by more than 0.1%. "only +50% and up" means that parallel steer holds no grip there and those laws do. F or R names the axle that limits the parallel car.
+
+<!-- out:map.md -->
+
+| Longitudinal | 3.5 m | 4.5 m | 6 m | 8 m | 11 m | 15 m |
+| ------------ | ----- | ----- | --- | --- | ---- | ---- |
+| 1.2 g braking | -25% (+2.6%) F | -50% (+3.1%) F | -50% (+2.1%) R | -50% (+0.9%) R | -50% (+0.3%) R | parallel R |
+| 0.9 g braking | -25% (+1.7%) R | -50% (+2.1%) R | -50% (+1.0%) R | -50% (+0.3%) R | parallel R | parallel R |
+| 0.6 g braking | -25% (+0.5%) R | -50% (+1.2%) R | -50% (+0.8%) R | -50% (+0.3%) R | parallel R | parallel R |
+| 0.3 g braking | parallel R | -50% (+0.8%) R | -50% (+0.6%) R | -50% (+0.2%) R | parallel R | parallel R |
+| steady | +75% (+7.9%) F | +25% (+1.0%) F | parallel R | -50% (+0.1%) R | parallel R | parallel R |
+| 0.15 g drive | +75% (+10.4%) F | +75% (+3.2%) F | +50% (+0.1%) R | parallel R | parallel R | parallel R |
+| 0.3 g drive | +100% (+5.4%) F | +75% (+1.4%) F | +75% (+0.2%) R | parallel R | parallel R | parallel R |
+| 0.6 g drive | +100% (+14.0%) R | +100% (+5.8%) F | +100% (+1.6%) F | +100% (+0.4%) F | parallel F | parallel F |
+| 0.9 g drive | +100% (+134.6%) R | +100% (+30.0%) R | +100% (+7.7%) F | +100% (+2.1%) F | +100% (+0.5%) F | +100% (+0.1%) F |
+
+<!-- /out -->
+
+Pro wins <!-- out:readme.json#pro_cells -->18<!-- /out --> of <!-- out:readme.json#map_cells -->54<!-- /out --> cells, anti <!-- out:readme.json#anti_cells -->17<!-- /out --> and parallel <!-- out:readme.json#parallel_cells -->19<!-- /out -->. The best law at the 3.5 m steady cell is <!-- out:readme.json#best_3p5_steady -->+75%<!-- /out --> at <!-- out:readme.json#best_3p5_steady_gain_pct|+.1f -->+7.9<!-- /out -->%. Under the hardest braking at 3.5 m it is <!-- out:readme.json#best_3p5_hard_brake -->-25%<!-- /out -->. Which side of the map anti wins depends on the brake bias, because the bias sets the axle that locks first (bias table). The rear model moves the 3.5 m steady gain of +50% from <!-- out:readme.json#pro50_apex_3p5|+.1f -->+7.8<!-- /out -->% with the open differential to <!-- out:readme.json#lsd_pro50_apex_3p5|+.1f -->+12.5<!-- /out -->% with the LSD. That is why both are design conditions.
+
+Per 180° hairpin at the open-differential steady limit, grip scale <!-- out:readme.json#mu_nominal -->0.623<!-- /out -->:
+
+<!-- out:hairpin.md -->
+
+| Option | 3.5 m | 4.5 m |
+| ------ | ----- | ----- |
+| -50% | +116 ms | +71 ms |
+| -25% | +52 ms | +30 ms |
+| +25% | −41 ms | −9 ms |
+| +50% | −63 ms | −9 ms |
+| +75% | −63 ms | −7 ms |
+| +100% | −59 ms | −4 ms |
+| Front V34 | −63 ms | −9 ms |
+
+<!-- /out -->
+
+Why the fast corners tie, from first principles: at the limit the outer front carries about twice the load of the inner, and this tire peaks about 0.4° later at the higher load. That is anti's whole case, and it is the same at every radius. The inner wheel runs a tighter arc and needs more steer: 8.1° more at 3.5 m, 5.2° at 4.5 m, 1.7° at 8 m and 0.5° at 15 m (kinematic hand calculation about the rear axle; the sideslip at the limit trims the 3.5 m value to about 6° to 7°). In fast corners you steer about 3°, a constant law's inner-outer difference scales with the steer angle squared, so it moves the wheels by under 0.3°, and missing the peak by 0.4° costs 0.2% of that tire's force.
+
+## Steering lock and linkage
+
+![Ackermann against mean roadwheel steer for Front V34 and Orion, from hardpoints. Grey band = mean steer at the grip limit for R = 3.5 to 8 m](ackermann_curves.png)
+
+Only this section uses the Front V34 hardpoints, through BobSim `kin_py`. Front V34 has <!-- out:readme.json#base_ackermann_pct -->+48.9% to +53.7%<!-- /out --> Ackermann from 10 mm to the full 31.75 mm of rack and reaches <!-- out:readme.json#steer_at_travel_deg|.1f -->23.4<!-- /out -->° of mean roadwheel steer there. At walking pace that is a <!-- out:readme.json#min_radius_low_speed_m|.2f -->3.83<!-- /out --> m CG radius, so the car does not reach the rule-minimum hairpin below the grip limit. At the limit the rear slides and less steer is needed: a 3.5 m hairpin needs <!-- out:readme.json#steer_needed_3p5_powered_deg|.1f -->22.8<!-- /out -->° with the open differential, which fits, or <!-- out:readme.json#steer_needed_3p5_deg|.1f -->25.0<!-- /out -->° in the coasting apex solve, which is <!-- out:readme.json#rack_needed_mm|.1f -->33.8<!-- /out --> mm of rack with the <!-- out:readme.json#arm_offset_mm|.0f -->84<!-- /out --> mm arm. The inner wheel scrub of a +50% law widens the turn, so the fix is rack travel or a shorter arm, not less Ackermann. The gate does not bind on the Michigan line, whose tightest corner is <!-- out:readme.json#tightest_corner_m|.2f -->4.47<!-- /out --> m. The 31.75 mm rack stop comes from the `.shk` file and needs a part number.
+
+<!-- out:lock.md -->
+
+| Option | Mean steer at the 3.5 m limit | Inner / outer |
+| ------ | ----------------------------- | ------------- |
+| +0% | 28.6° | 28.6° / 28.6° |
+| -50% | 33.6° | 30.0° / 37.1° |
+| -25% | 31.0° | 29.4° / 32.5° |
+| +25% | 26.2° | 27.4° / 25.1° |
+| +50% | 23.0° | 24.7° / 21.2° |
+| +75% | 22.0° | 24.4° / 19.6° |
+| +100% | 21.7° | 24.8° / 18.5° |
+| Front V34 | 22.8° | 24.7° / 20.9° |
+
+<!-- /out -->
+
+An anti law needs more lock than a pro law for the same hairpin. The solver bounds the outer wheel at the end of the Front V34 `kin_py` table, a table property, not a physical lock. The minimum margin to it is <!-- out:readme.json#lock_margin_min_deg|.2f -->0.01<!-- /out -->°, for −50%. Lock-limited cells: <!-- out:readme.json#lock_limited_nominal_count -->2<!-- /out --> in the nominal map, <!-- out:readme.json#lock_limited_count -->2<!-- /out --> in all.
+
+The linkage table shows linkages solved from the Front V34 hardpoints. Each moves the tie rod outer point and the rack pickup, reaches its hairpin steer at <!-- out:readme.json#fix_rack_mm|.1f -->28.6<!-- /out --> mm of rack and keeps bump steer at zero at center. Toggle margin is how far the arm and the tie rod are from lining up. Bump toe is kinematic, with rigid links. Articulation, clearance, strength, steering effort, loaded bump steer and compliance steer are not computed.
 
 <!-- out:linkage.md -->
 
 | Option | Tie rod outer move | To wheel center plane | Arm to kingpin | Rack pickup move | Toggle margin at inner lock | Bump toe at inner lock, ±25 mm |
 | ------ | ------------------ | --------------------- | -------------- | ---------------- | --------------------------- | ------------------------------ |
-| Front v20 | – | 51 mm | 82 mm | – | 70° | +0.2° / −0.3° |
-| 0% | 24 mm rearward, 9 mm outboard | 42 mm | 58 mm | 5 mm outboard, 1 mm down | 58° | +0.4° / −0.5° |
-| +42% | 18 mm rearward, 28 mm outboard | 23 mm | 68 mm | 12 mm outboard, 2 mm down | 44° | +0.5° / −0.6° |
-| +50% | 16 mm rearward, 33 mm outboard | 18 mm | 71 mm | 14 mm outboard, 2 mm down | 41° | +0.5° / −0.6° |
-| +70% | 13 mm rearward, 46 mm outboard | 6 mm | 80 mm | 19 mm outboard, 2 mm down | 34° | +0.5° / −0.7° |
+| Front V34 | – | 30 mm | 84 mm | – | 45° | +0.2° / −0.4° |
+| -40% | 30 mm rearward, 35 mm inboard | 65 mm | 54 mm | 35 mm inboard, 3 mm down | 68° | +0.4° / −0.5° |
+| 0% | 25 mm rearward, 24 mm inboard | 54 mm | 57 mm | 33 mm inboard, 4 mm down | 58° | +0.4° / −0.5° |
+| +70% | 9 mm rearward, 9 mm outboard | 21 mm | 78 mm | 26 mm inboard, 7 mm down | 35° | +0.4° / −0.5° |
 
 <!-- /out -->
 
-### Apex
+## Limit behavior and apex sweep
 
-![Apex grip and trail-braking grip against Ackermann](grip_vs_ackermann.png)
+<!-- out:limit.md -->
 
-Nominal value, then the range over 12 cases (two tire stiffness scales,
-both slip signs, three LLTDs).
+| R | -50% | +0% | +50% | Front V34 |
+| - | ---- | --- | ---- | --------- |
+| 3.5 m | +28.9 / 29.4 | +8.0 / 38.2 | −9.2 / 48.4 | −10.4 / 50.6 |
+| 4.5 m | +10.1 / 30.9 | −4.1 / 38.1 | −13.8 / 50.0 | −13.9 / 50.4 |
+| 8 m | −12.1 / 44.4 | −14.0 / 48.6 | −14.4 / 49.4 | −14.4 / 49.4 |
+
+<!-- /out -->
+
+Each cell gives stability / steering authority, both yaw-moment derivatives ×1000 per roadwheel degree divided by weight times wheelbase, at 90% of each law's own limit. Pro lowers the static stability near the limit and raises the authority: +50% has <!-- out:readme.json#pro50_authority_ratio_3p5|.2f -->1.27<!-- /out --> times the steering authority of parallel steer at 3.5 m. The derivatives exclude yaw damping and tire lag, so a slightly negative stability is not instability. This is not tested.
 
 <!-- out:apex.md -->
 
-| R | +42% | +50% | +75% | +100% | Time per 180° turn, +42% |
-| - | ---- | ---- | ---- | ----- | ------------------------ |
-| 3.5 m | +10.1% (+5.8 to +11.9) | +11.0% (+5.7 to +13.2) | +12.6% (+5.1 to +15.5) | +12.6% (+4.1 to +15.4) | −107 ms |
-| 4.5 m | +3.9% (−0.6 to +5.5) | +4.1% (−0.7 to +5.9) | +4.5% (−1.1 to +6.7) | +4.4% (−1.6 to +6.7) | −47 ms |
-| 6 m | +0.7% (−0.4 to +1.6) | +0.7% (−0.5 to +1.8) | +0.8% (−0.7 to +2.0) | +0.4% (−0.9 to +2.1) | −10 ms |
-| 8 m | 0.0% (−0.2 to +0.5) | −0.1% (−0.2 to +0.6) | −0.2% (−0.3 to +0.7) | −0.3% (−0.4 to +0.7) | +1 ms |
-| 15 m | 0.0% (0.0 to +0.1) | 0.0% (−0.1 to +0.1) | 0.0% (−0.1 to +0.2) | −0.2% (−0.2 to +0.2) | 0 ms |
+| R | -50% | -25% | +25% | +50% | +75% | +100% |
+| - | ---- | ---- | ---- | ---- | ---- | ----- |
+| 3.5 m | −12.5% (−13.8 to −11.6) | −6.0% (−6.4 to −5.0) | +5.2% (+3.1 to +5.9) | +8.8% (+4.0 to +10.6) | +10.5% (+3.4 to +13.0) | +10.4% (+2.4 to +13.0) |
+| 4.5 m | −7.3% (−8.3 to −3.8) | −3.3% (−3.9 to −0.3) | +2.2% (−0.3 to +3.0) | +3.4% (−0.7 to +4.9) | +3.8% (−1.1 to +5.7) | +3.6% (−1.6 to +5.7) |
+| 6 m | −2.2% (−3.4 to +0.4) | −0.8% (−1.4 to +0.2) | +0.4% (−0.2 to +1.0) | +0.6% (−0.5 to +1.5) | +0.4% (−0.7 to +1.8) | +0.5% (−0.9 to +1.9) |
+| 8 m | −0.3% (−1.0 to +0.2) | −0.1% (−0.4 to +0.1) | +0.1% (−0.1 to +0.3) | +0.1% (−0.2 to +0.5) | −0.2% (−0.3 to +0.6) | −0.3% (−0.4 to +0.7) |
+| 15 m | 0.0% (−0.1 to +0.1) | 0.0% (−0.1 to 0.0) | −0.1% (−0.1 to +0.1) | −0.1% (−0.1 to +0.1) | −0.2% (−0.2 to +0.2) | −0.2% (−0.2 to +0.2) |
 
 <!-- /out -->
 
-- Ackermann matters only in tight corners. Above 6 m, the change is under
-  1%.
-- Once the rear axle limits, more Ackermann stops paying.
+The apex sweep coasts, so its gains differ from the powered map. Each cell gives the nominal value and the range over 12 cases: two tire cornering-stiffness scales, both slip signs and three LLTD values. At 3.5 m every pro law gains and every anti law loses in all 12 cases. The closed form for a front-limited car agrees with the solver at 3.5 m:
 
-### Braking
+<!-- out:optimum.md -->
 
-`vehicle.yml` has 84% front brake bias, with no source. The study uses
-65%. The straight-line limit is highest at
-<!-- out:readme.json#ideal_bias_pct|.0f -->68<!-- /out -->% front.
+| R | Front-limited optimum | Solver optimum (10% steps) | +75% limited by |
+| - | --------------------- | -------------------------- | --------------- |
+| 3.5 m | 87% | +90% | front |
+| 4.5 m | 86% | +80% | rear |
+
+<!-- /out -->
+
+## Brake bias and toe
+
+`vehicle.yml` sets 84% front bias with no source. The study runs 65% as nominal and 84% as a second brake model. The best straight-line bias is <!-- out:readme.json#ideal_bias_pct|.0f -->68<!-- /out -->% front.
 
 <!-- out:bias.md -->
 
@@ -103,63 +180,6 @@ both slip signs, three LLTDs).
 | 84% | front | 1.18 g |
 
 <!-- /out -->
-
-Trail braking at 65%, normalized-slip / ellipse tire:
-
-<!-- out:braking.md -->
-
-| R, braking | +25% | +42% | +75% | +100% |
-| ---------- | ---- | ---- | ---- | ----- |
-| 3.5 m, 0.3 g | −0.4 / −0.3% | −0.8 / −0.7% | −2.1 / −2.0% | −3.5 / −3.4% |
-| 3.5 m, 0.5 g | −0.9 / −0.6% | −1.5 / −1.1% | −3.1 / −2.7% | −4.7 / −4.2% |
-| 4.5 m, 0.3 g | −0.7 / −0.7% | −1.1 / −1.1% | −2.1 / −2.0% | −2.8 / −2.7% |
-| 4.5 m, 0.5 g | −0.9 / −0.9% | −1.5 / −1.4% | −2.6 / −2.5% | −3.5 / −3.3% |
-
-<!-- /out -->
-
-Braking moves load to the front, so the rear limits. More Ackermann then
-costs grip.
-
-### Throttle and regen
-
-Throttle, each cell +50% / +75% / +100%. "Spin" means a rear wheel sets
-the limit.
-
-<!-- out:throttle.md -->
-
-| R, drive | Open diff | Orion LSD | Planned LSD |
-| -------- | --------- | --------- | ----------- |
-| 3.5 m, 0 g | +9.9 / +10.0 / +9.4% | +13.2 / +15.2 / +15.0% | +13.4 / +15.4 / +15.2% |
-| 4.5 m, 0 g | +1.6 / +1.4 / +1.1% | +5.3 / +5.9 / +5.7% | +5.2 / +5.7 / +5.5% |
-| 3.5 m, 0.2 g | +11.7 / +12.6 / +12.6% | spin | spin |
-| 4.5 m, 0.2 g | +3.5 / +3.6 / +3.5% | spin | spin |
-
-<!-- /out -->
-
-Regen through the diff, each cell the +50% change, the best Ackermann and
-the axle that limits Front v20:
-
-<!-- out:regen.md -->
-
-| Diff, front share, braking | 3.5 m | 4.5 m |
-| -------------------------- | ----- | ----- |
-| orion, 65%, 0.3 g | +6.9%, best +25%, front-limited | −0.9%, best +0%, rear-limited |
-| orion, 65%, 0.5 g | +7.8%, best +25%, front-limited | −1.2%, best +0%, rear-limited |
-| orion, 55%, 0.3 g | +5.8%, best +25%, front-limited | −1.0%, best +0%, rear-limited |
-| orion, 55%, 0.5 g | +2.4%, best +0%, front-limited | −1.5%, best +0%, rear-limited |
-| planned, 65%, 0.3 g | +1.4%, best +0%, front-limited | −1.1%, best +0%, rear-limited |
-| planned, 65%, 0.5 g | +3.2%, best +0%, front-limited | −1.3%, best +0%, rear-limited |
-| planned, 55%, 0.3 g | −0.5%, best +0%, front-limited | −1.1%, best +0%, rear-limited |
-| planned, 55%, 0.5 g | −1.1%, best +0%, rear-limited | −1.5%, best +0%, rear-limited |
-
-<!-- /out -->
-
-An LSD that locks hard on drive makes Ackermann worth more on exit. A
-high coast lock or more regen on the rear makes it worth less.
-
-### Toe
-
-Best Ackermann at each static toe:
 
 <!-- out:toe.md -->
 
@@ -173,109 +193,65 @@ Best Ackermann at each static toe:
 
 <!-- /out -->
 
-1° of toe-out replaces about
-<!-- out:readme.json#points_per_deg_toe_3p5|.0f -->10<!-- /out --> Ackermann
-points at 3.5 m. Toe does not add grip, and it costs straight-line scrub.
+One degree of toe-out replaces about <!-- out:readme.json#points_per_deg_toe_3p5|.0f -->10<!-- /out --> points of Ackermann at 3.5 m. A toe-only test therefore does not isolate Ackermann.
 
-### Lap time
+## Lap reference
 
-Michigan 2019 endurance, minimum-curvature line. The range comes from the
-exit and entry acceleration assumed after each corner.
+BobSim's quasi-steady-state (QSS) lap solver runs each law's open-differential envelope on the Michigan 2019 endurance line (<!-- out:readme.json#track_length_m|.0f -->1989<!-- /out --> m, <!-- out:readme.json#corners_under_15m -->42<!-- /out --> corners under 15 m, 32 kW). Laws with |Δt| inside the lap grid band tie. The band is twice the largest move when the QSS speed and lateral-g grid is refined, at grip scale <!-- out:readme.json#mu_nominal -->0.623<!-- /out --> for five laws. It covers that grid only, not the map radius grid, the tire, the LLTD or the rear model. At grip scale <!-- out:readme.json#mu_sensitivity -->0.75<!-- /out --> the tied laws are <!-- out:readme.json#lap_tied_laws_sensitivity -->-50%, -25%, +25%, +50%, +75%, +100%, Front V34<!-- /out -->.
 
 <!-- out:lap.md -->
 
-| Linkage | Time saved per lap vs Front v20 |
-| ------- | ------------------------------- |
-| +25% | 0.23 to 0.48 s |
-| +42% | 0.27 to 0.53 s |
-| +50% | 0.27 to 0.54 s |
-| +75% | 0.27 to 0.52 s |
-| +100% | 0.20 to 0.36 s |
+| Option | Endurance lap, grip 0.623 | Endurance lap, grip 0.75 | Skidpad lap, grip 0.623 | Skidpad lap, grip 0.75 |
+| ------ | ------------------------- | ------------------------ | ----------------------- | ---------------------- |
+| -50% | +0.06 s | −0.01 s | −0.002 s | −0.001 s |
+| -25% | +0.01 s | 0.00 s | −0.001 s | 0.000 s |
+| +25% | −0.01 s | −0.01 s | +0.001 s | 0.000 s |
+| +50% | +0.01 s | 0.00 s | +0.002 s | +0.001 s |
+| +75% | +0.03 s | 0.00 s | +0.004 s | +0.001 s |
+| +100% | +0.04 s | +0.01 s | +0.005 s | +0.002 s |
+| Front V34 | +0.01 s | 0.00 s | +0.002 s | +0.001 s |
 
 <!-- /out -->
 
-### Sensitivity
+## Confidence
 
-- **Mass, CG, weight split and camber** change the gains by at most
-  <!-- out:readme.json#mass_gap_pts|.1f -->0.4<!-- /out --> points.
-- **Tire grip scale.** The 0.623 scale is not validated. A variant at 0.75
-  (`ARGS="--mu 0.75" V=mu075`, run 2026-10-03) raises the grip by about
-  17%. The car then becomes rear-limited in more corners, so Ackermann
-  helps less. +42% then saves 0.04 to 0.06 s per lap, and +75% loses up to
-  0.07 s. +42% stays within 0.02 s of the best setting at both scales.
-
-### Confidence
-
-- **Math.** The solves converge to a residual under 1e-7. A closed-form
-  optimum matches the solver where the front limits.
-- **Scope.** The model is quasi-steady. It has no transient yaw, steer
-  camber, compliance steer or aligning moment.
-- **Inputs.** The tire grip scale, the balanced-car LLTD, the 65% bias and
-  the diff values are assumptions.
+- **Direction: medium.** The closed form and the solver agree at 3.5 m. The −50% loss holds in every car, rear model and bias. Against this: no transient, steer camber, compliance steer or aligning moment, and the inner-rear tire in the LSD cells runs past its peak slip ratio where the ellipse tire model is not valid.
+- **Size: low.** The grip scale, the LLTD and the rear model are not validated, and together they move the 3.5 m pro gain from large to near zero. The robust region, not a single percentage, is the result.
 
 ## Method
 
-The BobSim lap sim gives both front wheels one steer angle, so it cannot
-see Ackermann. `run.py` instead solves a quasi-steady corner at constant
-radius with four wheels:
+`run.py` solves a quasi-steady corner at constant radius with four MF52 tires from BobSim, LLTD-split load transfer, a yaw moment balance and a stability check. Each map cell is a bisection on lateral g to the last stable trim. Drive force goes through the rear model. The open differential sends half the axle force to each wheel. The LSD follows the BobLib `Differential1D` convention: the clutch holds up to `2 · preload + lock · |T|` of left-right torque difference and slips at 0.85 of that toward the slower wheel. Hydraulic brakes split by bias and never pass through the differential, so braking cells do not depend on the rear model. For feasibility only, `kin_py` gives the Front V34 steering curve. The lap envelopes use the open-differential rows. Lap time is a reference.
 
-- Each wheel has its own path angle and an MF52 tire from BobSim
-  `_5_App/tire_eval.py`.
-- Load transfer uses the body-frame acceleration. LLTD splits the lateral
-  transfer.
-- The solve balances forces and yaw moment, and keeps only stable states.
-- Braking, regen and throttle add a longitudinal force. The LSD uses the
-  BobLib `Differential1D` law.
-- BobSim `kin_py` gives the steering curve from the Front v20 hardpoints.
-  A least-squares solve moves the tie rod outer point and the rack pickup
-  for each linkage option.
-- The lap estimate uses BobSim's minimum-curvature line for Michigan 2019.
+Solver checks in every run: each trim residual under 1e-7 with a stability check, a four-tire trim at <!-- out:readme.json#coverage_demand_pct|.0f -->98<!-- /out -->% of the lap's demand exists for <!-- out:readme.json#coverage_pct|.1f -->98.1<!-- /out -->% of the cornering time inside <!-- out:readme.json#coverage_radius_max_m|.0f -->15<!-- /out --> m, an envelope gap stops the run, <!-- out:readme.json#caps_count -->1<!-- /out --> envelope caps and a cap check that changes the lap by <!-- out:readme.json#cap_check_max_ms|.1f -->0.0<!-- /out --> ms, the braking clip binds in <!-- out:readme.json#clip_cells -->14<!-- /out --> of <!-- out:readme.json#clip_of -->384<!-- /out --> solves (up to <!-- out:readme.json#clip_anti50_g|.2f -->0.21<!-- /out --> g for −50%), every QSS lap converges, and a QSS lap on an 8 m circle differs from 2πR/v by <!-- out:readme.json#circle_check_error_pct|+.3f -->+0.008<!-- /out -->%.
 
-Ackermann % is `100 · (cot δ_outer − cot δ_inner) · L / t`.
+Before a full run: `make study S=front-ackermann ARGS="--quick" V=smoke`.
 
-**Inputs.**
+## Before design freeze
+
+1. **Lock.** Add rack travel or shorten the arm until the rule-minimum hairpin fits. Confirm the rack stop and measure the steering curves on turn plates.
+2. **Roll stiffness split.** Measure the installed bar rates and rerun at that LLTD. It moves the result the most.
+3. **Brake bias and differential.** Get the 2027 hydraulic bias and the diff preload and ramps. Log rear wheel speeds in 3.5 to 8 m corners to see whether the axle locks.
+4. **A/B on track.** Compare two linkages with the same static toe at 3.5 and 4.5 m: steer gradient, yaw rate, lateral g and wheel speeds, A-B-A order, several runs, accept only differences above the run-to-run scatter.
+5. **Geometry.** `run.py` holds a copy of the Front V34 hardpoints. Copy any `.shk` change into it.
+
+## Inputs
 
 | Input | Value | Source |
 | ----- | ----- | ------ |
-| Mass with driver | 263.1 kg (430 + 150 lb) | team 2027 estimate |
-| CG height | 0.279 m (11 in) | team 2027 estimate |
-| Front static weight | 45% | team 2027 estimate |
-| LLTD, front | <!-- out:readme.json#lltd_front_pct|.1f -->34.2<!-- /out -->% | max lateral g at 15 m |
-| Rack travel | 31.75 mm (1.25 in) each way | team |
-| Ackermann limit | +<!-- out:readme.json#pack_pct -->42<!-- /out -->% | suspension lead, packaging |
-| Brake bias, front | 65% | first principles |
-| Tire | `16x7p5_10_12psi`, grip scale 0.623 | Orion carryover |
-| Front hardpoints | Front v20 | team sheet, 2026-09-24 |
+| Mass with driver, CG height, front weight | 263.1 kg (430 + 150 lb), 0.279 m (11 in), 45% | team 2027 estimate |
+| Front hardpoints and rack, feasibility only | `2027_FrontV34.shk`, `FRONT SUSPENSION`, SHA-256 `95063c3b…`, front track 1270 mm, rack travel 31.75 mm each way | Front V34 |
+| Wheelbase, rear track, rear suspension | 1.5494 m, 1.2122 m, Orion rear | Orion carryover |
+| Tire | `16x7p5_10_12psi`, SHA-256 <!-- out:readme.json#tire_sha256 -->f38da74e929e4a1a<!-- /out -->… | Orion carryover |
+| Grip scale | <!-- out:readme.json#mu_nominal -->0.623<!-- /out --> nominal, <!-- out:readme.json#mu_sensitivity -->0.75<!-- /out --> variant | 0.6225 correlated by Abishek Rathnakumar (unreviewed), not validated |
+| LLTD | <!-- out:readme.json#lltd_front_pct|.1f -->34.4<!-- /out -->% front, balanced at 15 m with parallel steer, held at both grip scales | assumption, not measured |
+| Brake bias | 65% front nominal, 84% second model (`vehicle.yml`, no source) | assumption |
+| Differential | open (baseline) and planned LSD: preload 5 Nm per side, lock 0.60, kinetic 0.85 (`vehicle.yml` differs) | assumption |
+| Static toe and camber, aero | 0, 0, none | assumption |
+| Track, power limit | Michigan 2019 endurance, 32 kW | BobSim lap config |
 
-The v20 sheet gives x without a sign. The signs follow Front v19, which has
-the same magnitudes. The sheet has no wheel center, so the study keeps the
-v19 wheel center.
-
-**Variants.** `run.py` takes `--mu`, `--ackermann` and `--bias`. For
-example:
-
-```bash
-make study S=front-ackermann ARGS="--mu 0.75" V=mu075
-```
-
-## Check before design freeze
-
-1. **Geometry.** Confirm the v20 x signs, the wheel center and the −4.85°
-   caster.
-2. **Steering lock.** Pick more rack travel or a shorter steering arm.
-   Check clearance and the inner-wheel toggle margin at full lock.
-3. **Linkage packaging.** Check the tie rod outer point against the wheel
-   and brake in CAD. Move the rack pickup to keep bump steer at zero.
-4. **Tire grip scale.** Validate it on track. It moves the gains the most.
-5. **Brake bias, regen and diff.** Get the 2027 hydraulic bias, the regen
-   torque and the Drexler ramps and preload.
-6. **Toe and compliance.** Set static toe with the Ackermann. Measure toe
-   change under load.
+`out/front-ackermann/vehicle_front.yml` holds the front geometry only. `summary.json` `effective_inputs` holds every value the run used. BobSim interfaces: public `solve_qss_lap`, `GGVMap.from_arrays`, `optimize_racing_line`, `CornerKinematics`, `project_vehicle_yaml` and the loaders, plus private `_mf52_fx_pure` and `_mf52_fy_pure` from `app.tire_eval` (see the [bobsim-boundary skill](../../docs/skills/bobsim-boundary/SKILL.md)).
 
 ## Provenance
-
-Front v20 steering hardpoints, team 2027 mass and CG, balanced LLTD, Orion
-rear and tire.
 
 <!-- out:provenance.json -->
 
@@ -284,7 +260,7 @@ rear and tire.
   "study": "front-ackermann",
   "bobsim_sha": "4da577af1b04d86c53706eb6e80fb0064f71cee6",
   "vehicle_sha256": "3ab02bbf3e573aad0330bc37ce40fd254090d33dabd3760462c51da74e30afe8",
-  "utc": "2026-10-03T21:04:58+00:00"
+  "utc": "2026-10-11T20:15:27+00:00"
 }
 ```
 

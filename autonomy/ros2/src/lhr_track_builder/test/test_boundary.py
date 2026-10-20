@@ -12,7 +12,7 @@ import rclpy
 def builder():
     rclpy.init()
     node = TrackBuilder()
-    node._pairing_strategy = 'boundary'
+    node._pairing_strategy = 'boundary_graph'
     node._have_odom = True
     yield node
     node.destroy_node()
@@ -24,12 +24,12 @@ def corridor():
 
 
 def set_cones(builder, cones):
-    builder._all_cones = dict(enumerate(cones))
+    builder._unknown_cones = dict(enumerate(cones))
 
 
 def test_boundary_path_stays_between_cones_and_advances_forward(builder):
     set_cones(builder, corridor())
-    path = np.array(builder._pair_boundary())
+    path = np.array(builder._pair_boundary_graph())
     assert len(path) >= 10
     assert np.max(np.abs(path[:, 1])) < 1e-6
     assert np.all(np.diff(path[:, 0]) > 0.)
@@ -39,16 +39,16 @@ def test_boundary_path_stays_between_cones_and_advances_forward(builder):
 def test_shuffle_of_unclassified_ids_does_not_change_path(builder):
     points = corridor()
     set_cones(builder, points)
-    original = builder._pair_boundary()
+    original = builder._pair_boundary_graph()
     np.random.default_rng(1).shuffle(points)
     set_cones(builder, points)
-    assert np.allclose(original, builder._pair_boundary())
+    assert np.allclose(original, builder._pair_boundary_graph())
 
 
 def test_disconnected_track_section_is_not_joined_by_a_long_jump(builder):
     points = [(x, y) for x in (0., 2., 4., 20., 22., 24.) for y in (-1.75, 1.75)]
     set_cones(builder, points)
-    path = np.array(builder._pair_boundary())
+    path = np.array(builder._pair_boundary_graph())
     assert len(path) >= 2
     assert path[:, 0].max() <= 4.
 
@@ -58,7 +58,7 @@ def test_curved_corridor_follows_forward_without_a_return_tour(builder):
               for a in np.arange(-0.4, 1.61, 0.15) for r in (10.25, 13.75)]
     set_cones(builder, points)
     builder._veh_x, builder._veh_y, builder._veh_yaw = 12., 0., math.pi / 2
-    path = np.array(builder._pair_boundary())
+    path = np.array(builder._pair_boundary_graph())
     assert len(path) >= 5
     assert np.max(np.abs(np.linalg.norm(path, axis=1) - 12.)) < 0.2
     assert np.all(np.diff(np.unwrap(np.arctan2(path[:, 1], path[:, 0]))) > 0.)

@@ -48,4 +48,32 @@ describe("convertSession", () => {
   it("records which cell temperature sensors report", () => {
     expect(D.meta.cellIdx).toEqual([0, 1, 3, 4, 6, 7]);
   });
+
+  it("recovers all 20 Hz lap samples when the session tail is truncated", () => {
+    const full = synthSession({ laps: 2, sampleMs: 50 });
+    full.laps.forEach((l) => { l.samples = full.sampleTail.filter((s) => s.t >= l.startMs && s.t <= l.endMs); });
+    const tailSamples = full.sampleTail.filter((s) => s.t >= full.laps[1].endMs);
+    const exported = { ...full, currentLap: { lapSamples: tailSamples }, sampleTail: full.sampleTail.slice(-100) };
+    const recovered = convertSession(exported, "20hz.json")[0].D.laps.filter((l) => l.kind === "lap");
+    expect(recovered).toHaveLength(2);
+    recovered.forEach((l, i) => {
+      expect(l.ch.t.map((t) => t + l.t0)).toEqual(full.laps[i].samples.map((s) => s.t));
+      expect(l.dur).toBe(full.laps[i].durationMs);
+    });
+    const partial = convertSession(exported, "20hz.json")[0].D.laps.find((l) => l.kind === "partial")!;
+    expect(partial.ch.t.map((t) => t + partial.t0)).toEqual(tailSamples.map((s) => s.t));
+  });
+
+  it("keeps telemetry timestamps between GPS fixes and merges overlap", () => {
+    const full = synthSession({ laps: 2, sampleMs: 50 });
+    const expected = full.laps.map((l) => full.sampleTail.filter((s) => s.t >= l.startMs && s.t <= l.endMs));
+    const sparse = full.sampleTail.map((s, i) => i % 2 ? { ...s, lat: 0, lon: 0 } : s);
+    const exported = { ...full, sampleTail: sparse };
+    exported.laps.forEach((l) => { l.samples = sparse.filter((s) => s.t >= l.startMs && s.t <= l.endMs); });
+    const converted = convertSession(exported, "sparse-gps.json")[0].D.laps.filter((l) => l.kind === "lap");
+    converted.forEach((l, i) => {
+      expect(l.ch.t.map((t) => t + l.t0)).toEqual(expected[i].map((s) => s.t));
+      expect(l.ch.thr).toEqual(expected[i].map((s) => Math.round(s.values!.accel_pedal_travel * 1000) / 10));
+    });
+  });
 });

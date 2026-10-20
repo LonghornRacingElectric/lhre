@@ -154,7 +154,7 @@ class SensorSim(Node):
     # ------------------------------------------------------------------
     def _publish_accumulated(self):
         msg = MarkerArray()
-        # sort by namespace then id for stable index-based pairing
+        # Sort by namespace then ID for deterministic output.
         sorted_markers = sorted(
             self._accumulated.values(), key=lambda m: (m.ns, m.id))
         msg.markers = sorted_markers

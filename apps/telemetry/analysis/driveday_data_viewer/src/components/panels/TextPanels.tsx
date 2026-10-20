@@ -159,11 +159,13 @@ export function AboutPanel() {
     <div className="note2" style={{ paddingTop: 12 }}>
       <b>Timeline.</b> Everything follows the playhead along the whole run, out lap first. Click or drag the timeline, press Play, or click the track or any chart to jump. Laps are the chapters, with sector marks inside them and an orange marker for every cone hit.
       <br /><br />
-      <b>Sectors.</b> The base overlay lap&apos;s GPS path is split into three equal-distance sectors, and every other lap is projected onto it so each is timed through the same two gates. Crossings are interpolated between GPS fixes. The sectors add up to the lap time: the first one starts at the logged lap start and the last one ends at the logged lap end.
+      <b>Sectors.</b> Automatic boundaries aim for balanced driving time and snap to nearby corner/straight transitions. Use the Sectors menu to set S1 and S2 at the playhead or reset the suggestion. Every lap uses the same saved gates; crossings are interpolated between GPS fixes. Measured sectors add up to the logged lap time, and missing crossings show a dash.
       <br /><br />
       <b>Colours.</b> Purple is the session best, green is faster than the base lap, yellow is slower. Adjusted time adds the cone penalty to real time.
       <br /><br />
-      <b>Limits.</b> GPS runs at about 1.8 Hz with roughly 1 m resolution, so expect a tenth or two of noise in sector times and treat speeds as approximate.
+      <b>Ghost.</b> Best is the fastest unskipped logged lap. Replay starts both laps at logged time zero and stops each at its logged finish; a faster lap can still be behind in an individual section. Best sectors stitches the fastest measured sectors using the same boundaries.
+      <br /><br />
+      <b>Samples and smoothing.</b> Imports combine the session tail and full lap samples at their original timestamps, including 20 Hz exports. Playback positions and derived speed/acceleration use a centred 0.5 s average; imported fixes, telemetry channels and logged lap times are retained. Lateral g is a GPS curvature estimate, not an IMU reading. GPS noise and gaps affect its accuracy.
       <br /><br />
       <b>Start and finish lines.</b> They are set for you: the start line is where the car was when the timed laps began, and the finish line is where it was when they ended. Lap times are always the ones the logger recorded.
       <br /><br />

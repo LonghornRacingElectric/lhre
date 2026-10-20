@@ -67,7 +67,7 @@ if ! docker exec "$CONTAINER" \
 fi
 
 if [[ "$*" == *plant:=bobsim* ]]; then
-    if ! docker exec "$CONTAINER" test -d /opt/lhr/simulation/bobsim/_0_Utils/dyn_py; then
+    if ! docker exec "$CONTAINER" test -d /opt/lhr/simulation/bobsim/engines/dynpy; then
         echo "BobSim is not mounted. Initialize simulation/bobsim and recreate the container:" >&2
         rebuild
     fi

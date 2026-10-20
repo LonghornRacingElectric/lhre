@@ -56,7 +56,7 @@ def test_launch_selects_exactly_one_cone_source(mode, cloud_only):
     assert ('lidar_cone_detector' in active) == (mode == 'lidar')
     assert ('lidar_sim' in active) == (mode == 'lidar' or cloud_only == 'true')
     params = evaluate_parameters(context, active['track_builder']._Node__parameters)
-    expected = 'boundary' if mode == 'lidar' else 'index'
+    expected = 'boundary_graph' if mode == 'lidar' else 'nearest'
     assert params[0]['pairing_strategy'] == expected
     control_params = evaluate_parameters(context, active['pursuit_node']._Node__parameters)
     assert control_params[0]['closed_path'] == (mode == 'sim')
@@ -70,7 +70,8 @@ def test_imported_cloud_drives_boundary_path_and_command_without_cone_ids():
     control = PurePursuit()
     control._closed_path = False
     try:
-        builder._pairing_strategy = 'boundary'
+        builder._pairing_strategy = 'boundary_graph'
+        builder._pairing_algorithm = builder._get_pairing_algorithm()
         detections, paths, commands = Capture(), Capture(), Capture()
         detector._det_pub, builder._path_pub, control._cmd_pub = detections, paths, commands
         mount = MountPose(*load_vehicle().lidar_position_m, pitch_rad=0.25)

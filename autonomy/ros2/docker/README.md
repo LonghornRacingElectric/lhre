@@ -105,7 +105,10 @@ pull), `docker start` resumes the stale image, so run `docker compose up -d
   build again. Leave `ros2/data` alone, which is where bags and metrics live.
 - Gazebo renders on CPU (llvmpipe), so expect 0.7-0.8x real-time factor. Fine for
   development; use a native Ubuntu box for anything performance-sensitive.
-- The image layers a scipy fix over `tiryoh/ros2-desktop-vnc:jazzy` (see Dockerfile).
+- The image layers compatible scipy and OpenCV wheels over the base image's
+  pip NumPy. Apt's NumPy-1-built extensions cannot use the shadowing NumPy 2.x.
+  OpenCV supplies the camera color classifier; rebuild with
+  `docker compose up -d --build` after pulling this dependency change.
 
 The container also mounts the repository read-only at `/opt/lhr` for the optional [BobSim plant](../src/lhr_sim_bobsim/README.md).
 Initialize the BobSim submodule before selecting `plant:=bobsim`. Recreate

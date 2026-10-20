@@ -13,18 +13,19 @@ on:
     paths:
       - "autonomy/**"
       - ".github/workflows/autonomy.yml"
+      - "simulation/bobsim"
+      - "vehicle/**"
   pull_request:
     paths:
       - "autonomy/**"
       - ".github/workflows/autonomy.yml"
+      - "simulation/bobsim"
+      - "vehicle/**"
 
 jobs:
   colcon:
     runs-on: ubuntu-latest
     container: ros:jazzy-ros-base
-    env:
-      BOBSIM_ROOT: ${{ github.workspace }}/simulation/bobsim
-      BOBSIM_VEHICLE: ${{ github.workspace }}/vehicle/vehicle.yml
     defaults:
       run:
         shell: bash
@@ -33,7 +34,11 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Initialize dynamics dependency
-        run: git -C ../.. submodule update --init --recursive simulation/bobsim
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive simulation/bobsim
+          echo "BOBSIM_ROOT=$GITHUB_WORKSPACE/simulation/bobsim" >> "$GITHUB_ENV"
+          echo "BOBSIM_VEHICLE=$GITHUB_WORKSPACE/vehicle/vehicle.yml" >> "$GITHUB_ENV"
 
       # Dependencies come from each package.xml, so declaring one there is
       # enough. ros_gz is skipped: it pulls in all of Gazebo Harmonic and

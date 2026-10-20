@@ -120,7 +120,9 @@ class MissionManager(Node):
             self._emergency_received = True
 
     def _reset_cb(self, msg: Bool):
-        if msg.data:
+        # A reset only means something in EMERGENCY. Latching one sent in
+        # any other state would end the next emergency the moment it began.
+        if msg.data and self._state == STATE_EMERGENCY:
             self._reset_received = True
 
     def _centerline_cb(self, msg: Path):
@@ -156,12 +158,21 @@ class MissionManager(Node):
 
     def _tick_off(self):
         """OFF -> READY when centerline path is available."""
+        # An e-stop that arrived before READY (including the tail of the
+        # one just reset) is stale. A supervisor that is still tripped,
+        # like safety_node, keeps sending it and trips READY again.
+        self._emergency_received = False
         if self._path_available:
             self._transition(STATE_READY)
             self._ready_enter_time = self.get_clock().now()
 
     def _tick_ready(self):
-        """READY -> DRIVING on go signal or auto-go timeout."""
+        """READY -> EMERGENCY on e-stop, else DRIVING on go or auto-go."""
+        if self._emergency_received:
+            # Going via DRIVING would command one tick of motion first.
+            self._emergency_received = False
+            self._transition(STATE_EMERGENCY)
+            return
         if self._go_received:
             self._go_received = False
             self._transition(STATE_DRIVING)
@@ -190,6 +201,7 @@ class MissionManager(Node):
         """EMERGENCY -> OFF on reset signal."""
         if self._reset_received:
             self._reset_received = False
+            self._emergency_received = False
             self._lap_complete = False
             self._path_available = False
             self._transition(STATE_OFF)

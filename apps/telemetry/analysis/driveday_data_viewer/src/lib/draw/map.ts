@@ -1,5 +1,5 @@
-import { posAt, roadOf } from "../geometry";
-import { interp } from "../math";
+import { lapCutJoin, roadOf } from "../geometry";
+import { MPH } from "../format";
 import { Player } from "../player";
 import type { Lap, XY } from "../types";
 import { palette, ramp, rampSpd, type Palette } from "./palette";
@@ -9,28 +9,28 @@ import { palette, ramp, rampSpd, type Palette } from "./palette";
 /** Colour and opacity for the stretch of a lap between fix i and i+1. */
 export function segPaint(p: Player, L: Lap, i: number, pal: Palette): [string, number] {
   const { session: s, mode } = p;
-  const pts = L.pts;
   const c = L.ch;
-  if (mode === "speed") return [rampSpd(((pts[i][2] + pts[i + 1][2]) / 2 - s.vlo) / (s.vhi - s.vlo)), 1];
+  if (mode === "speed") return [rampSpd(((c.spd[i] + c.spd[i + 1]) / (2 * MPH) - s.vlo) / (s.vhi - s.vlo)), 1];
   if (mode === "gain") {
     const g = p.analysis.gainFor(L, p.refLap(), p.refKey());
-    if (!g) return [pal.mute, 0.5];
+    if (!g) return [pal.mute, 0.85];
     const v = g[i];
     const m = Math.min(1, Math.abs(v) / (L.gainScale ?? 1));
-    return [v > 0 ? pal.red : pal.green, 0.25 + 0.75 * m];
+    return [v > 0 ? pal.red : pal.green, 0.7 + 0.3 * m];
   }
   if (mode === "pedal") {
     const b = (c.brkp[i] + c.brkp[i + 1]) / 2;
     const t = (c.thr[i] + c.thr[i + 1]) / 2;
-    if (b > 8) return [pal.red, 0.6 + 0.4 * Math.min(1, b / 60)];
-    if (t > 3) return [pal.green, 0.4 + 0.6 * t / 100];
-    return [pal.mute, 0.55];
+    if (b > 8) return [pal.red, 0.8 + 0.2 * Math.min(1, b / 60)];
+    if (t > 3) return [pal.green, 0.75 + 0.25 * t / 100];
+    return [pal.mute, 0.9];
   }
   if (mode === "acc") {
     const a = (c.acc[i] + c.acc[i + 1]) / 2 / s.accScale;
-    return [a < 0 ? pal.red : pal.green, 0.2 + 0.8 * Math.min(1, Math.abs(a))];
+    return [a < 0 ? pal.red : pal.green, 0.7 + 0.3 * Math.min(1, Math.abs(a))];
   }
-  return [pal.sector[Math.min(2, Math.max(0, Math.floor((pts[i][3] + pts[i + 1][3]) / 2 / (s.RL / 3))))], 1];
+  const distance = (c.u[i] + c.u[i + 1]) / 2;
+  return [pal.sector[s.sectorAt(s.open ? distance : ((distance % s.RL) + s.RL) % s.RL)], 1];
 }
 
 export function drawMap(p: Player, canvas: HTMLCanvasElement) {
@@ -68,7 +68,7 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
   ctx.lineJoin = "round";
 
   const gates = (): void => {
-    ([[0, s.open ? "Start" : "S/F", pal.ink], [RL / 3, "S1|S2", pal.s1], [(2 * RL) / 3, "S2|S3", pal.s2]].concat(s.open ? [[RL, "Finish", pal.ink]] : []) as [number, string, string][]).forEach((g) => {
+    ([[0, s.open ? "Start" : "S/F", pal.ink], [s.gates[0], "S1|S2", pal.s1], [s.gates[1], "S2|S3", pal.s2]].concat(s.open ? [[RL, "Finish", pal.ink]] : []) as [number, string, string][]).forEach((g) => {
       const a3 = s.geo.at(g[0]);
       const nx = -Math.sin(a3[2]);
       const ny = Math.cos(a3[2]);
@@ -96,7 +96,7 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
     ctx.stroke();
     ctx.lineWidth = 7 * wS;
     for (let i = 0; i < ref.length - 1; i++) {
-      const k = Math.min(2, Math.max(0, Math.floor((cum[i] + cum[i + 1]) / 2 / (RL / 3))));
+      const k = s.sectorAt((cum[i] + cum[i + 1]) / 2);
       ctx.strokeStyle = pal.sector[k];
       ctx.beginPath();
       ctx.moveTo(X(ref[i][0]), Y(ref[i][1]));
@@ -115,24 +115,25 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
       ctx.fillStyle = pal.sector[k];
       ctx.fillRect(x, y - 5, 14, 10);
       ctx.fillStyle = pal.ink;
-      ctx.fillText("S" + (k + 1) + " " + (RL / 3).toFixed(0) + " m", x + 20, y);
+      const edges = [0, ...s.gates, RL];
+      ctx.fillText("S" + (k + 1) + " " + (edges[k + 1] - edges[k]).toFixed(0) + " m", x + 20, y);
     });
     return;
   }
 
-  /* base overlay: the road, tinted by sector */
+  /* Shared layout stays continuous; a measured overlay may begin/end at different manual presses. */
   ctx.strokeStyle = pal.track;
   ctx.lineWidth = 15 * wS;
-  path(BL);
+  path(s.D.ref);
   ctx.stroke();
   ctx.lineWidth = 5 * wS;
-  for (let i = 0; i < BL.length - 1; i++) {
-    const k = Math.min(2, Math.max(0, Math.floor(BL[i][3] / (RL / 3))));
+  for (let i = 0; i < s.D.ref.length - 1; i++) {
+    const k = s.sectorAt(s.D.cum[i]);
     ctx.strokeStyle = pal.sector[k];
-    ctx.globalAlpha = p.mode === "sec" ? 0.9 : 0.38;
+    ctx.globalAlpha = p.mode === "sec" ? 0.9 : 0.18;
     ctx.beginPath();
-    ctx.moveTo(X(BL[i][0]), Y(BL[i][1]));
-    ctx.lineTo(X(BL[i + 1][0]), Y(BL[i + 1][1]));
+    ctx.moveTo(X(s.D.ref[i][0]), Y(s.D.ref[i][1]));
+    ctx.lineTo(X(s.D.ref[i + 1][0]), Y(s.D.ref[i + 1][1]));
     ctx.stroke();
   }
   ctx.globalAlpha = 1;
@@ -191,15 +192,29 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
     ctx.globalAlpha = 1;
   }
   if (L.kind === "out") ctx.setLineDash([6, 4]);
+  // A solid casing separates the selected lap from the road, ghosts and zone bands.
+  ctx.strokeStyle = pal.panel;
+  ctx.lineWidth = 10 * tw;
+  for (const curve of L.curve) segCurve(curve);
   for (let i = 0; i < pts.length - 1; i++) {
     const pp = segPaint(p, L, i, pal);
-    ctx.globalAlpha = pp[1] * (ct[i + 1] <= rel ? 1 : 0.3);
+    ctx.globalAlpha = pp[1] * (ct[i + 1] <= rel ? 1 : 0.8);
     ctx.strokeStyle = pp[0];
-    ctx.lineWidth = (paint ? 6 : 3.4) * tw;
+    ctx.lineWidth = 6.5 * tw;
     segCurve(L.curve[i]);
   }
   ctx.globalAlpha = 1;
   ctx.setLineDash([]);
+
+  const join = lapCutJoin(L, s.geo);
+  if (join) {
+    ctx.strokeStyle = pal.mute;
+    ctx.lineWidth = 2.5 * tw;
+    ctx.setLineDash([4, 4]);
+    path(join.points);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
 
   /* cones hit on the lap being watched, as plain orange dots */
   if (p.showCones && p.user.ce.length) {
@@ -221,11 +236,8 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
   }
   /* race replay: every clean lap at the same time since the start/finish line */
   if (p.raceMode) {
-    const tc0 = interp(L.ch.u, L.ch.t, 0);
-    const el = rel - tc0;
     s.runs.filter((l) => a.valid(l)).forEach((l) => {
-      const tl = Math.max(0, Math.min(l.dur, interp(l.ch.u, l.ch.t, 0) + el));
-      const q = posAt(l, tl);
+      const q = p.replayPosition(l, rel);
       const isSel = l === L;
       const x = X(q[0]);
       const y = Y(q[1]);
@@ -243,7 +255,7 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
         ctx.font = "600 10px " + pal.fMono;
         ctx.textAlign = "center";
         ctx.textBaseline = "bottom";
-        ctx.fillText(String(s.runs.indexOf(l) + 1), x, y - 8);
+        ctx.fillText(l.name, x, y - 8);
       }
     });
   }
@@ -272,13 +284,19 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
     dots(a.cons.apex, pal.blue);
     ctx.globalAlpha = 1;
   }
-  /* a dot on every fix */
-  ctx.fillStyle = pal.ink;
-  pts.forEach((q) => {
-    ctx.beginPath();
-    ctx.arc(X(q[0]), Y(q[1]), 1.8 * Math.min(1.6, tw), 0, 7);
-    ctx.fill();
-  });
+  // Dense 20 Hz fixes must not cover the colour trace; reveal spaced dots when zoomed in.
+  if (zr > 2) {
+    ctx.fillStyle = pal.ink;
+    let last: XY | null = null;
+    pts.forEach((q) => {
+      const x = X(q[0]), y = Y(q[1]);
+      if (last && Math.hypot(x - last[0], y - last[1]) < 8) return;
+      last = [x, y];
+      ctx.beginPath();
+      ctx.arc(x, y, 1.4, 0, 7);
+      ctx.fill();
+    });
+  }
   gates();
 
   /* corner labels and brake zone badges */
@@ -344,9 +362,7 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
   /* ghost and the car */
   const R = p.refLap();
   if (R && R !== L) {
-    const tc0 = interp(L.ch.u, L.ch.t, 0);
-    const tr0 = interp(R.ch.u, R.ch.t, 0);
-    const gp = posAt(R, Math.max(0, tr0 + (rel - tc0)));
+    const gp = p.replayPosition(R, rel);
     ctx.strokeStyle = pal.mute;
     ctx.lineWidth = 2;
     ctx.fillStyle = pal.panel;
@@ -354,8 +370,15 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
     ctx.arc(X(gp[0]), Y(gp[1]), 6, 0, 7);
     ctx.fill();
     ctx.stroke();
+    if (rel >= R.dur) {
+      ctx.fillStyle = pal.ink;
+      ctx.font = "600 10px " + pal.fMono;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "bottom";
+      ctx.fillText("Finished · " + R.name, X(gp[0]), Y(gp[1]) - 10);
+    }
   }
-  const mp = posAt(L, rel);
+  const mp = p.replayPosition(L, rel);
   const mx = X(mp[0]);
   const my = Y(mp[1]);
   ctx.fillStyle = pal.panel;

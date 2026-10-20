@@ -194,7 +194,7 @@ def run_case(case, output, sim_seconds, wall_timeout):
                     writer.writerows(probe.samples)
         finally:
             if process.poll() is None:
-                os.killpg(process.pid, signal.SIGINT)
+                process.send_signal(signal.SIGINT)
                 try:
                     process.wait(timeout=10)
                 except subprocess.TimeoutExpired:

@@ -209,10 +209,10 @@ only when launch itself raises. Gates go through
 
 ## LiDAR perception
 
-`perception:=sim` keeps the simplified cone detector and indexed complete
+`perception:=sim` keeps the simplified cone detector and nearest-paired
 track. `lidar:=true` alone previews the cloud without changing perception.
 `perception:=lidar` enables the Mid-360 cloud simulator, disables simplified
-detections and selects the cloud detector, geometric boundary planning and
+detections and selects the cloud detector, local `boundary_graph` planning and
 open-path control. That mode defaults to `v_max:=4.0` rather than 12 m/s.
 
 `start_on_track:=true` aligns the LiDAR-mode initial pose with the nearest
@@ -311,3 +311,6 @@ track side from geometry and can lock an incorrect early label.
 Docker mounts autonomy separately from the repository. Code provenance falls
 back to `/opt/lhr` (or `LHRE_ROOT`) when the launch file has no Git metadata
 above it. A dirty repository adds `-dirty` to the commit ID.
+
+The study runner asks ROS launch to stop its children once. It kills the
+process group only if launch does not finish within the cleanup timeout.

@@ -37,12 +37,13 @@ export interface SynthOptions {
   laps?: number;
   sessionId?: string;
   startMs?: number;
+  sampleMs?: number;
 }
 
 export function synthSession(opts: SynthOptions = {}): SessionExport {
   const N = opts.laps ?? 8;
   const t0 = opts.startMs ?? 1_700_000_000_000;
-  const dtSample = 555;
+  const dtSample = opts.sampleMs ?? 555;
   const samples: LiveSample[] = [];
   const marks: number[] = []; // crossing times of the start/finish line
   const mk = (t: number, s: number, speed: number, braking: boolean, throttle: number, soc: number, energy: number): LiveSample => {

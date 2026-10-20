@@ -41,6 +41,7 @@ export interface SessionInfoExport {
 }
 
 export interface SessionExport {
+  flags?: { id?: string | number; t: number; label: string; saved?: boolean }[];
   version?: number;
   savedAt?: number;
   source?: string;
@@ -53,6 +54,7 @@ export interface SessionExport {
   laps: LiveLapExport[];
   selectedLapIds?: string[];
   sampleTail: LiveSample[];
+  currentLap?: { lapSamples?: LiveSample[] } | null;
   hasSectors?: boolean;
   sessionInfo?: SessionInfoExport | null;
   metadata?: Record<string, string>;
@@ -82,6 +84,7 @@ export type Channels = BaseChannels & {
   brkrp: number[];
   acc: number[]; // m/s², from GPS speed
   gacc: number[];
+  glat: number[]; // signed GPS lateral g; positive left, NaN when unavailable
   cellCols: number[][];
   cellAvg: number[];
 };
@@ -112,6 +115,8 @@ export interface Lap extends Omit<RawLap, "ch" | "sec"> {
   sec: (number | null)[];
   /** Smoothed curve through the fixes, four short steps per fix interval. */
   curve: XY[][];
+  /** Smoothed positions used only for drawing and playback; pts keeps imported fixes. */
+  playbackPts?: Pt[];
   theo?: boolean;
   /** Cached gain-against-ghost, keyed by the ghost it was built for. */
   gainKey?: string;
@@ -135,6 +140,8 @@ export interface RunMeta {
 }
 
 export interface RunData {
+  /** Exported cone hits assigned to completed laps; t is absolute logger time. */
+  coneEvents?: ConeEvent[];
   ref: XY[];
   cum: number[];
   /** Length of the loop, or of the course between the start line and the finish line when `open`. */
@@ -196,6 +203,8 @@ export interface ConeEvent {
   t: number;
 }
 export interface UserState {
+  /** Imported hits explicitly removed by the user, so reopening does not restore them. */
+  dismissedCones?: string[];
   setup: Record<string, string | number>;
   /** Cone counts that were entered without a time, keyed by lap number. */
   cones: Record<string, number>;

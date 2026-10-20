@@ -20,11 +20,11 @@ class BobSimPlant:
 
     def __init__(self, geometry, pose, *, max_accel=2., max_decel=3., speed_gain=2.):
         root, vehicle_file = dependency_paths()
-        if not (root / '_0_Utils/dyn_py').is_dir() or not vehicle_file.is_file():
+        if not (root / 'engines/dynpy').is_dir() or not vehicle_file.is_file():
             raise RuntimeError('BobSim unavailable: initialize simulation/bobsim and set '
                                'BOBSIM_ROOT and BOBSIM_VEHICLE (see lhr_sim_bobsim README)')
         sys.path.insert(0, str(root))
-        from _0_Utils.dyn_py import ModelInputs, Vehicle
+        from engines.dynpy import ModelInputs, Vehicle
         self.inputs_type = ModelInputs
         vehicle = Vehicle.from_yaml(vehicle_file)
         self.model = vehicle.model(3)
@@ -59,6 +59,10 @@ class BobSimPlant:
         self.steering += float(np.clip(target_steer - self.steering,
                                        -g.max_steer_rate_rad_s * dt,
                                        g.max_steer_rate_rad_s * dt))
+        if target_speed == 0. and np.all(self.state[3:] == 0.):
+            self.last_torques = (0., 0., 0., 0.)
+            self.time += dt
+            return self.rear_state()
         u = float(self.state[3])
         acceleration = float(np.clip(self.speed_gain * (target_speed - u),
                                      -self.max_decel, self.max_accel))

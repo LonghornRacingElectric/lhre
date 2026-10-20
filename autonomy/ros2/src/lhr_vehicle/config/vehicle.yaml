@@ -56,3 +56,17 @@ sensors:
   # height is the best one, not the safest one.
   lidar:
     position_m: [1.8, 0.0, 0.62]     # x,y ASSUMED; z clears the CAD nose
+
+
+  # One ZED 2i, 2.1 mm wide lens (confirmed 2026-10-11).
+  # Ideal rectified pinhole optics; replace with measured calibration later.
+  stereo_camera:
+    model: zed2i
+    lens_focal_length_mm: 2.1
+    baseline_m: 0.12             # Stereolabs
+    position_m: [1.8, 0.0, 0.65] # ASSUMED (rig center)
+    rpy_rad: [0.0, 0.0, 0.0]     # ASSUMED (forward-facing)
+    image_width: 1280
+    image_height: 720
+    update_rate_hz: 30.0
+    horizontal_fov_deg: 110.0    # ASSUMED rectified wide-lens approximation
