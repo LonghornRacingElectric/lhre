@@ -44,6 +44,16 @@ rear:
     template: fake_tire
 """
 BOBSIM_VEHICLE = OUR_VEHICLE.replace("mass_kg: 160.0", "mass_kg: 999.0")
+FOUR_POST_CONFIG = "simulations/response/mbd/four_post/four_post_eval_config.yml"
+BUNDLE = """\
+schema: lhre.vehicle-bundle.v1
+bundle_id: test-car-1
+status: candidate
+members:
+  vehicle:
+    path: vehicle/vehicle.yml
+    sha256: {sha256}
+"""
 
 FAKE_GENERATOR = '''\
 import hashlib
@@ -179,6 +189,7 @@ def _write(path, text):
 def lhre(tmp_path):
     root = tmp_path / "lhre"
     _write(root / "vehicle" / "vehicle.yml", OUR_VEHICLE)
+    _write(root / "vehicle" / "bundle.yml", BUNDLE.format(sha256=hashlib.sha256(OUR_VEHICLE.encode()).hexdigest()))
     _write(root / "vehicle" / "tires" / "fake_tire.tir", "FAKE TIRE\n")
     sim = root / "simulation"
     for name in ("Makefile", "tools/car.sh", "tools/car_identity.py"):
@@ -196,6 +207,7 @@ def lhre(tmp_path):
     _write(bobsim / BOBLIB / "Records/VehicleDefn/package.order", f"{NAME}Record\n")
     _write(bobsim / BOBLIB / "Experiments/Standards/Templates/FourPost/package.order", "")
     _write(bobsim / "simulations/mbd/generated_results/old_car_metrics.csv", "metric,value\nold,1\n")
+    _write(bobsim / FOUR_POST_CONFIG, "procedure:\n  heaveMagnitude: 0.03\n")
     _git(bobsim, "init", "-q")
     _git(bobsim, "add", "-A")
     _git(bobsim, "commit", "-q", "-m", "fake BobSim")
@@ -272,9 +284,38 @@ def test_make_car_runs_the_target_on_our_vehicle_and_restores_bobsim(lhre):
     assert identity["tires"] == [
         {"template": "fake_tire", "axles": ["front", "rear"], "sha256": _sha256(lhre / "vehicle/tires/fake_tire.tir")}
     ]
+    assert identity["bundle"] == {
+        "path": "vehicle/bundle.yml",
+        "sha256": _sha256(lhre / "vehicle" / "bundle.yml"),
+        "bundle_id": "test-car-1",
+        "status": "candidate",
+        "describes_vehicle": True,
+    }
     outputs = {item["path"]: item["sha256"] for item in identity["outputs"]}
     metrics = out / "generated_results" / "four_post_eval_report_metrics.csv"
     assert outputs["generated_results/four_post_eval_report_metrics.csv"] == _sha256(metrics)
+    assert outputs["four_post_eval_config.yml"] == _sha256(bobsim / FOUR_POST_CONFIG)
+
+
+def test_make_car_fails_without_a_vehicle_bundle(lhre):
+    (lhre / "vehicle" / "bundle.yml").unlink()
+    _git(lhre, "commit", "-q", "-am", "no bundle")
+    result = _make_car(lhre, "ok")
+    assert result.returncode != 0
+    assert "bundle" in result.stdout + result.stderr
+    identity = _identity(lhre, "ok")
+    assert identity["status"] == "failed"
+    assert identity["bundle"] is None
+    assert _bobsim_status(lhre) == ""
+
+
+def test_make_car_records_a_bundle_that_does_not_describe_the_vehicle(lhre):
+    (lhre / "vehicle" / "bundle.yml").write_text(BUNDLE.format(sha256="0" * 64), encoding="utf-8")
+    _git(lhre, "commit", "-q", "-am", "stale bundle")
+    result = _make_car(lhre, "ok")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "does not describe" in result.stdout
+    assert _identity(lhre, "ok")["bundle"]["describes_vehicle"] is False
 
 
 def test_make_car_restores_bobsim_when_the_target_fails(lhre):

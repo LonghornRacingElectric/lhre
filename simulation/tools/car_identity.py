@@ -5,6 +5,7 @@ import os
 import sys
 from pathlib import Path
 
+import yaml
 from common.vehicle_io import load_yaml, require_side, tire_template_name, tire_templates_root
 
 SCHEMA = "lhre.car-run.v1"
@@ -44,6 +45,23 @@ def _tires(vehicle):
     ]
 
 
+def _bundle(vehicle, vehicle_sha256):
+    path = vehicle.parent / "bundle.yml"
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"{_display(path)} is not a YAML mapping.")
+    if not data.get("bundle_id"):
+        raise ValueError(f"{_display(path)} has no bundle_id.")
+    member = ((data.get("members") or {}).get("vehicle") or {}).get("sha256")
+    return {
+        "path": _display(path),
+        "sha256": _sha256(path),
+        "bundle_id": data["bundle_id"],
+        "status": data.get("status"),
+        "describes_vehicle": None if member is None else member == vehicle_sha256,
+    }
+
+
 def _display(path):
     try:
         return path.resolve().relative_to(Path.cwd().resolve().parent).as_posix()
@@ -64,6 +82,11 @@ def build_identity(out, vehicle):
     except (OSError, KeyError, TypeError, ValueError) as error:
         tires = None
         failures.append(f"Cannot hash the tire files: {error}")
+    try:
+        bundle = _bundle(vehicle, vehicle_sha256)
+    except (OSError, ValueError, yaml.YAMLError) as error:
+        bundle = None
+        failures.append(f"Cannot read the vehicle bundle: {error}")
 
     target_status = facts.get("target_status", "not_run")
     exit_status = None if target_status in ("", "not_run") else int(target_status)
@@ -101,6 +124,7 @@ def build_identity(out, vehicle):
             "sha256": vehicle_sha256,
             "executed_sha256": executed_sha256,
         },
+        "bundle": bundle,
         "tires": tires,
         "records": {"state": facts.get("records_state"), "executables": executables},
         "outputs": outputs,
@@ -115,6 +139,9 @@ def main(argv):
     print(f"{out / 'identity.json'}: status {identity['status']}")
     for failure in identity["failures"]:
         print(f"  {failure}")
+    bundle = identity["bundle"]
+    if bundle and bundle["describes_vehicle"] is not True:
+        print(f"  Warning: bundle {bundle['bundle_id']} does not describe {identity['vehicle']['path']}.")
     return 0 if identity["status"] == "ok" else 1
 
 

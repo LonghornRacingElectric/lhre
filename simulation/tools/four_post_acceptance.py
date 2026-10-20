@@ -9,11 +9,14 @@ from pathlib import Path
 
 import yaml
 
-SCHEMA = "lhre.four-post-acceptance.v1"
+SCHEMA = "lhre.four-post-acceptance.v2"
 METRICS = "generated_results/four_post_eval_report_metrics.csv"
 MANIFESTS = "runs/FourPostSim/*/manifest.json"
+FOUR_POST_CONFIG = "four_post_eval_config.yml"
 AXLES = {"front": "Fr", "rear": "Rr"}
-SETUP_KEY = re.compile(r"(pVehicle\.)?p(Fr|Rr)Stabar\.barRate|pVehicle\.p(Fr|Rr)AxleDW\.springTable\[\d+,\d+\]")
+BAR_RATE_KEY = re.compile(r"(?:pVehicle\.)?p(Fr|Rr)Stabar\.barRate")
+SPRING_TABLE_KEY = re.compile(r"pVehicle\.p(Fr|Rr)AxleDW\.springTable\[\d+,\d+\]")
+CONFIG_BAR_RATE_KEYS = ("stabar_rate_n_m_per_rad", "bar_rate_n_m_per_rad", "arb_rate")
 TARGETS = ("standard-eval-four-post", "standard-eval-all")
 REQUIRED_METRICS = (
     "avg_motion_ratio_front",
@@ -34,28 +37,60 @@ REQUIRED_METRICS = (
     "minimum_roll_pulse_contact_fz_n",
     "roll_contact_valid_points",
 )
-MEASURED_BALANCE = "static_equilibrium_pass"
+BALANCE_STATUS = "static_balance_status"
 LEGACY_BALANCE = "static_balance_pass"
-PASS, FAIL, UNAVAILABLE = "PASS", "FAIL", "UNAVAILABLE"
+BALANCE_METRICS = (
+    BALANCE_STATUS,
+    "static_balance_reason",
+    LEGACY_BALANCE,
+    "static_balance_max_abs_fz_error_n",
+    "static_balance_max_abs_fz_error_pct",
+    "static_equilibrium_pass",
+    "static_equilibrium_max_force_residual_n",
+    "static_equilibrium_max_moment_residual_nm",
+    "static_equilibrium_max_relative_residual",
+    "static_equilibrium_worst_time_s",
+    "static_spring_max_residual_n",
+)
+VEHICLE_STAMP = "vehicle_sha256"
+CHECKED_METRICS = (*REQUIRED_METRICS, *BALANCE_METRICS, VEHICLE_STAMP)
+BALANCE_CLAUSES = {"closure": "closure", "corner": "corner load", "spring": "spring force"}
+BOBSIM_117 = "BobSim #117 (https://github.com/BobDyn/BobSim/pull/117)"
+CLOSURE_DRIFT = "BobLib issue 'FourPostSim: axle force closure residual grows with simulated time at a fixed pose'"
+PASS, FAIL, UNAVAILABLE, KNOWN_UPSTREAM = "PASS", "FAIL", "UNAVAILABLE", "KNOWN-UPSTREAM"
 
 
 def _sha256(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def _finite(text):
+def _number(text):
     try:
-        return math.isfinite(float(text))
+        return float(text)
     except (TypeError, ValueError):
-        return False
+        return math.nan
+
+
+def _finite(text):
+    return math.isfinite(_number(text))
 
 
 def _flag(text):
     return {"true": True, "1": True, "false": False, "0": False}.get(str(text).strip().lower())
 
 
+def _same(a, b):
+    return math.isclose(_number(a), _number(b), rel_tol=1e-9, abs_tol=1e-12)
+
+
 def _check(name, result, detail):
     return {"name": name, "result": result, "detail": detail}
+
+
+def _mapping(node, *keys):
+    for key in keys:
+        node = node.get(key) if isinstance(node, dict) else None
+    return node if isinstance(node, dict) else {}
 
 
 def _identity_checks(run, vehicle):
@@ -81,7 +116,23 @@ def _identity_checks(run, vehicle):
         vehicle_check = _check("vehicle", PASS, f"The run used {vehicle} with sha256 {current}.")
     else:
         vehicle_check = _check("vehicle", FAIL, f"The run used vehicle sha256 {executed}. {vehicle} is now {current}.")
-    return identity, [run_check, vehicle_check]
+    return identity, [run_check, vehicle_check, _bundle_check(identity)]
+
+
+def _bundle_check(identity):
+    if "bundle" not in identity:
+        return _check("bundle", UNAVAILABLE, "identity.json names no vehicle bundle. make car wrote it before bundles.")
+    bundle = identity["bundle"] or {}
+    name = bundle.get("bundle_id")
+    if not name:
+        return _check("bundle", FAIL, "identity.json names no bundle_id. The run cannot be traced to a bundle.")
+    if bundle.get("describes_vehicle") is not True:
+        return _check(
+            "bundle",
+            FAIL,
+            f"Bundle {name} does not describe the vehicle that ran. Its members.vehicle.sha256 is not that file.",
+        )
+    return _check("bundle", PASS, f"The run used bundle {name} (status {bundle.get('status')}).")
 
 
 def _read_metrics(path):
@@ -105,44 +156,112 @@ def _vehicle_setup(vehicle):
     data = yaml.safe_load(Path(vehicle).read_text(encoding="utf-8")) or {}
     setup = {}
     for axle, tag in AXLES.items():
-        actuation = (data.get(axle) or {}).get("actuation") or {}
+        actuation = _mapping(data, axle, "actuation")
         stabar = actuation.get("stabar")
         rate = stabar.get("rate_n_m_per_rad") if isinstance(stabar, dict) else None
         setup[f"p{tag}Stabar.barRate"] = setup[f"pVehicle.p{tag}Stabar.barRate"] = rate
-        table = ((actuation.get("shock") or {}).get("spring_table") or {}).get("table") or []
+        table = _mapping(actuation, "shock", "spring_table").get("table") or []
         for i, row in enumerate(table, 1):
             for j, value in enumerate(row, 1):
                 setup[f"pVehicle.p{tag}AxleDW.springTable[{i},{j}]"] = value
     return setup
 
 
-def _setup_check(run, identity, vehicle):
-    manifests = sorted(run.glob(MANIFESTS))
-    if not manifests:
-        return _check("executed setup", FAIL, f"{run} has no FourPost run manifest. The setup that ran is unknown.")
+def _config_bar_rates(run, identity):
+    """Bar rates that the FourPost config of the run sets in model_overrides, by axle tag."""
+    path = run / FOUR_POST_CONFIG
+    if not path.is_file():
+        return {}, f"The run did not record the BobSim {FOUR_POST_CONFIG}."
+    if _recorded(identity).get(FOUR_POST_CONFIG) != _sha256(path):
+        return {}, f"{FOUR_POST_CONFIG} is not the file this run recorded."
+    suspension = _mapping(yaml.safe_load(path.read_text(encoding="utf-8")), "model_overrides", "suspension")
+    rates = {}
+    for axle, tag in AXLES.items():
+        settings = _mapping(suspension, axle)
+        rate = next((settings[key] for key in CONFIG_BAR_RATE_KEYS if settings.get(key) is not None), None)
+        if rate is not None:
+            rates[tag] = float(rate)
+    return rates, None
+
+
+def _manifest_cases(run, identity):
     recorded = _recorded(identity)
-    expected = _vehicle_setup(vehicle)
-    problems, compared = {}, set()
-    for manifest in manifests:
+    cases, changed = [], []
+    for manifest in sorted(run.glob(MANIFESTS)):
         name = manifest.relative_to(run).as_posix()
         if recorded.get(name) != _sha256(manifest):
-            problems[f"{name} is not the manifest this run wrote"] = None
-            continue
-        case = json.loads(manifest.read_text(encoding="utf-8")).get("case") or {}
+            changed.append(name)
+        else:
+            cases.append(json.loads(manifest.read_text(encoding="utf-8")).get("case") or {})
+    return cases, changed
+
+
+def _manifest_problem(run, cases, changed):
+    if changed:
+        return f"{', '.join(changed)} is not the manifest this run wrote."
+    if not cases:
+        return f"{run} has no FourPost run manifest. The setup that ran is unknown."
+    return None
+
+
+def _compare(cases, pattern, expected):
+    compared, mismatches = set(), {}
+    for case in cases:
         for key, value in sorted(case.items()):
-            if not SETUP_KEY.fullmatch(key):
+            match = pattern.fullmatch(key)
+            if not match:
                 continue
-            compared.add(key)
+            compared.add(match.group(1))
             want = expected.get(key)
-            if want is None or not math.isclose(float(value), float(want), rel_tol=1e-9, abs_tol=1e-12):
-                problems[f"{key} ran at {value}, {vehicle.name} has {'none' if want is None else want}"] = None
-    if problems:
-        return _check("executed setup", FAIL, f"The FourPost runs did not use the vehicle file: {'. '.join(problems)}.")
-    return _check(
-        "executed setup",
-        PASS,
-        f"{len(manifests)} FourPost runs use the {len(compared)} spring table and bar rate values of {vehicle.name}.",
+            if want is None or not _same(value, want):
+                mismatches[key] = (_number(value), match.group(1), want)
+    return compared, mismatches
+
+
+def _describe(mismatches, vehicle):
+    return ". ".join(
+        f"{key} ran at {ran}, {vehicle.name} has {'none' if want is None else want}"
+        for key, (ran, _, want) in mismatches.items()
     )
+
+
+def _spring_table_check(run, cases, changed, expected, vehicle):
+    name = "executed spring tables"
+    problem = _manifest_problem(run, cases, changed)
+    if problem:
+        return _check(name, FAIL, problem)
+    compared, mismatches = _compare(cases, SPRING_TABLE_KEY, expected)
+    if mismatches:
+        detail = _describe(mismatches, vehicle)
+        return _check(name, FAIL, f"FourPost did not run the spring tables of the vehicle: {detail}.")
+    if compared != set(AXLES.values()):
+        return _check(name, UNAVAILABLE, "The FourPost manifests do not set both spring tables. What ran is unknown.")
+    return _check(name, PASS, f"{len(cases)} FourPost runs use the spring tables of {vehicle.name}.")
+
+
+def _bar_rate_check(run, identity, cases, changed, expected, vehicle):
+    name = "executed bar rates"
+    problem = _manifest_problem(run, cases, changed)
+    if problem:
+        return _check(name, FAIL, problem)
+    compared, mismatches = _compare(cases, BAR_RATE_KEY, expected)
+    config_rates, config_problem = _config_bar_rates(run, identity)
+    upstream = [ran for ran, tag, _ in mismatches.values() if tag in config_rates and _same(ran, config_rates[tag])]
+    if mismatches and len(upstream) == len(mismatches):
+        return _check(
+            name,
+            KNOWN_UPSTREAM,
+            f"FourPost ran the bar rates of model_overrides in its own {FOUR_POST_CONFIG}, not of the vehicle: "
+            f"{_describe(mismatches, vehicle)}. {BOBSIM_117} removes these overrides. Until the pin has it, the "
+            "FourPost bar roll stiffness and load transfer values are not for our bars.",
+        )
+    if mismatches:
+        detail = _describe(mismatches, vehicle) + (f". {config_problem}" if config_problem else ".")
+        return _check(name, FAIL, f"FourPost did not run the bar rates of the vehicle: {detail}")
+    with_bar = {tag for tag in AXLES.values() if expected.get(f"p{tag}Stabar.barRate") is not None}
+    if not with_bar <= compared:
+        return _check(name, UNAVAILABLE, "The FourPost manifests do not set the rate of each bar. What ran is unknown.")
+    return _check(name, PASS, f"{len(cases)} FourPost runs use the bar rates of {vehicle.name}.")
 
 
 def _file_check(run, identity):
@@ -155,6 +274,124 @@ def _file_check(run, identity):
     if recorded != _sha256(path):
         return _check("metrics file", FAIL, f"{METRICS} changed after the run. Its sha256 differs from identity.json.")
     return _check("metrics file", PASS, f"{METRICS} is the file this run wrote.")
+
+
+def _status_check(fields, rows):
+    if "status" not in fields:
+        return _check("metric statuses", UNAVAILABLE, "The CSV has no status column at this BobSim pin.")
+
+    def not_ok(names):
+        return [f"{name}={rows[name].get('status')}" for name in names if rows[name].get("status") != "ok"]
+
+    checked = [name for name in CHECKED_METRICS if name in rows]
+    bad = not_ok(checked)
+    others = not_ok(name for name in rows if name not in CHECKED_METRICS)
+    note = f" Rows the acceptance does not check, without status ok: {', '.join(others)}." if others else ""
+    if bad:
+        return _check("metric statuses", FAIL, f"Checked metrics without status ok: {', '.join(bad)}.{note}")
+    return _check("metric statuses", PASS, f"The {len(checked)} checked metrics have status ok.{note}")
+
+
+def _legacy_balance_check(rows):
+    if LEGACY_BALANCE not in rows:
+        return _check("static balance", UNAVAILABLE, "The pin reports no static balance.")
+    value = rows[LEGACY_BALANCE].get("value")
+    if _flag(value) is True:
+        return _check(
+            "static balance",
+            UNAVAILABLE,
+            f"unavailable: legacy tautology. The pin reports {LEGACY_BALANCE}={value}, but it compares the target "
+            "loads with themselves. It measures nothing.",
+        )
+    return _check(
+        "static balance",
+        FAIL,
+        f"The pin reports {LEGACY_BALANCE}={value}. The legacy check compares the target loads with themselves, "
+        "so a failure means that its inputs had no finite value.",
+    )
+
+
+def _measured_check(name, failed, number, detail):
+    if not math.isfinite(number):
+        return _check(name, FAIL, "BobSim gives no finite value.")
+    if failed:
+        return _check(name, FAIL, f"{detail} BobSim reports it outside its tolerance.")
+    return _check(name, PASS, f"{detail} BobSim reports it within its tolerance.")
+
+
+def _measured_balance_checks(rows):
+    def value(key):
+        return (rows.get(key) or {}).get("value")
+
+    status = (value(BALANCE_STATUS) or "").strip().lower()
+    reason = (value("static_balance_reason") or "").strip()
+    if status not in ("pass", "fail"):
+        return [_check(
+            "static balance",
+            FAIL,
+            f"The pin measures static balance, but this run reports {BALANCE_STATUS}={status or 'empty'}: "
+            f"{reason or 'no reason given'}.",
+        )]
+
+    clauses = [clause.strip() for clause in reason.split(";") if clause.strip()] if status == "fail" else []
+    failed = {kind for kind, prefix in BALANCE_CLAUSES.items() if any(c.startswith(prefix) for c in clauses)}
+    unknown = [c for c in clauses if not c.startswith(tuple(BALANCE_CLAUSES.values()))]
+    checks = []
+    if unknown or (status == "fail" and not clauses):
+        listed = "; ".join(unknown) or "no reason given"
+        checks.append(_check("static balance", FAIL, f"BobSim reports a static balance failure: {listed}."))
+
+    error_n = _number(value("static_balance_max_abs_fz_error_n"))
+    error_pct = _number(value("static_balance_max_abs_fz_error_pct"))
+    checks.append(_measured_check(
+        "static balance: corner loads",
+        "corner" in failed,
+        error_n,
+        f"The largest corner contact Fz differs from its target load by {error_n:.3g} N ({error_pct:.3g} %).",
+    ))
+    spring = _number(value("static_spring_max_residual_n"))
+    checks.append(_measured_check(
+        "static balance: springs",
+        "spring" in failed,
+        spring,
+        f"The largest spring force differs from the executed spring table by {spring:.3g} N.",
+    ))
+
+    closure_pass = _flag(value("static_equilibrium_pass"))
+    closure = (
+        f"largest relative residual {_number(value('static_equilibrium_max_relative_residual')):.3g} "
+        f"(force {_number(value('static_equilibrium_max_force_residual_n')):.3g} N, "
+        f"moment {_number(value('static_equilibrium_max_moment_residual_nm')):.3g} N m) "
+        f"at t = {_number(value('static_equilibrium_worst_time_s')):g} s"
+    )
+    if closure_pass is None:
+        checks.append(_check("static balance: closure", FAIL, "BobSim gives no static_equilibrium_pass value."))
+    elif closure_pass == ("closure" in failed):
+        checks.append(_check(
+            "static balance: closure",
+            FAIL,
+            f"BobSim reports static_equilibrium_pass={closure_pass} and the reason '{reason}'. They disagree.",
+        ))
+    elif closure_pass:
+        checks.append(_check(
+            "static balance: closure",
+            PASS,
+            f"Every zero-command row closes within the BobSim tolerance, the design pose too: {closure}.",
+        ))
+    else:
+        checks.append(_check(
+            "static balance: design-pose closure",
+            UNAVAILABLE,
+            "The metrics CSV gives only the largest closure residual over all zero-command rows. It does not give "
+            "the closure at the design pose apart from the time drift.",
+        ))
+        checks.append(_check(
+            "static balance: closure drift",
+            KNOWN_UPSTREAM,
+            f"BobSim reports a closure failure: {closure}. Known defect: {CLOSURE_DRIFT}. It makes this residual "
+            "grow with simulated time. The CSV cannot show that the drift is the only cause.",
+        ))
+    return checks
 
 
 def _metric_checks(fields, rows, duplicates, vehicle):
@@ -177,33 +414,14 @@ def _metric_checks(fields, rows, duplicates, vehicle):
     else:
         checks.append(_check("required metrics", PASS, f"{len(REQUIRED_METRICS)} metrics have finite values."))
 
-    if "status" in fields:
-        bad = [f"{name}={row.get('status')}" for name, row in rows.items() if row.get("status") != "ok"]
-        if bad:
-            checks.append(_check("metric statuses", FAIL, f"Rows without status ok: {', '.join(bad)}."))
-        else:
-            checks.append(_check("metric statuses", PASS, f"All {len(rows)} rows have status ok."))
+    checks.append(_status_check(fields, rows))
+    if BALANCE_STATUS in rows:
+        checks.extend(_measured_balance_checks(rows))
     else:
-        checks.append(_check("metric statuses", UNAVAILABLE, "The CSV has no status column at this BobSim pin."))
+        checks.append(_legacy_balance_check(rows))
 
-    reported = {name: _flag(rows[name].get("value")) for name in (MEASURED_BALANCE, LEGACY_BALANCE) if name in rows}
-    not_true = [f"{name}={rows[name].get('value')}" for name, value in reported.items() if value is not True]
-    if not_true:
-        checks.append(_check("static equilibrium", FAIL, f"The pin reports {', '.join(not_true)}."))
-    elif MEASURED_BALANCE in reported:
-        checks.append(_check("static equilibrium", PASS, f"The pin reports {MEASURED_BALANCE}=True."))
-    elif LEGACY_BALANCE in reported:
-        checks.append(_check(
-            "static equilibrium",
-            UNAVAILABLE,
-            f"The pin reports only {LEGACY_BALANCE}. It compares target loads with themselves. "
-            "It is not a measurement.",
-        ))
-    else:
-        checks.append(_check("static equilibrium", UNAVAILABLE, "The pin reports no static balance."))
-
-    if "vehicle_sha256" in rows:
-        stamped = rows["vehicle_sha256"].get("value")
+    if VEHICLE_STAMP in rows:
+        stamped = rows[VEHICLE_STAMP].get("value")
         current = _sha256(vehicle)
         result = PASS if stamped == current else FAIL
         detail = f"The CSV names vehicle sha256 {stamped}. {vehicle} is {current}."
@@ -219,11 +437,13 @@ def _metric_checks(fields, rows, duplicates, vehicle):
 
 def evaluate(run, vehicle):
     identity, checks = _identity_checks(run, vehicle)
-    file_check = _file_check(run, identity)
-    checks.append(file_check)
+    checks.append(_file_check(run, identity))
     if (run / METRICS).is_file():
         checks.extend(_metric_checks(*_read_metrics(run / METRICS), vehicle))
-    checks.append(_setup_check(run, identity, vehicle))
+    cases, changed = _manifest_cases(run, identity)
+    expected = _vehicle_setup(vehicle)
+    checks.append(_spring_table_check(run, cases, changed, expected, vehicle))
+    checks.append(_bar_rate_check(run, identity, cases, changed, expected, vehicle))
     failed = [check for check in checks if check["result"] == FAIL]
     return {
         "schema": SCHEMA,
@@ -239,11 +459,18 @@ def main(argv):
     (run / "four_post_acceptance.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(f"FourPost acceptance for {run}")
     for check in report["checks"]:
-        print(f"  {check['result']:<12} {check['name']}: {check['detail']}")
+        print(f"  {check['result']:<14} {check['name']}: {check['detail']}")
     total = len(report["checks"])
-    counts = {result: sum(check["result"] == result for check in report["checks"]) for result in (FAIL, UNAVAILABLE)}
-    print(f"Failed checks: {counts[FAIL]} of {total}. Unavailable checks: {counts[UNAVAILABLE]} of {total}.")
-    print("An unavailable check is not a pass. This is a software check. It is not a physical validation.")
+    counts = {
+        result: sum(check["result"] == result for check in report["checks"])
+        for result in (FAIL, KNOWN_UPSTREAM, UNAVAILABLE)
+    }
+    print(
+        f"Failed checks: {counts[FAIL]} of {total}. Known upstream defects: {counts[KNOWN_UPSTREAM]} of {total}. "
+        f"Unavailable checks: {counts[UNAVAILABLE]} of {total}."
+    )
+    print("An unavailable or known-upstream check is not a pass. A known-upstream check names a BobSim or BobLib")
+    print("defect that the pin still has. This is a software check. It is not a physical validation.")
     if counts[FAIL]:
         print("Result: rejected.")
         return 1

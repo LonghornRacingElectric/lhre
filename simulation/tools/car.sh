@@ -12,6 +12,7 @@ esac
 out=out/car/$target
 vehicle=../vehicle/vehicle.yml
 results=bobsim/simulations/mbd/generated_results
+four_post_config=bobsim/simulations/response/mbd/four_post/four_post_eval_config.yml
 builds=bobsim/simulations/mbd/BuildBobLib
 boblib_rel=${CAR_BOBLIB#bobsim/}
 
@@ -156,6 +157,9 @@ target_status=$(cat "$out/.target-status")
 fact target_status "$target_status"
 
 say "Copy the outputs to $out"
+if [ -f "$four_post_config" ]; then
+    cp "$four_post_config" "$out/"
+fi
 if [ -d "$results" ]; then
     mkdir -p "$out/generated_results"
     find "$results" -mindepth 1 -maxdepth 1 -type f ! -name .gitkeep ! -name '*.tir' -exec cp {} "$out/generated_results/" \;
