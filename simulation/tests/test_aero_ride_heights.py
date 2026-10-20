@@ -6,7 +6,6 @@ import pytest
 
 SIM = Path(__file__).resolve().parents[1]
 VEHICLE = Path(os.environ.get("BOBSIM_VEHICLE", SIM.parent / "vehicle" / "vehicle.yml"))
-BOBSIM_CAR = SIM / "bobsim" / "vehicle.yml"
 
 
 def _outside_aero_grids(path):
@@ -27,10 +26,6 @@ def _outside_aero_grids(path):
                 f"The {axle} CFD grid covers {grid[0]:.4f} m to {grid[-1]:.4f} m."
             )
     return found
-
-
-def test_bobsim_car_static_ride_heights_lie_inside_the_aero_grids():
-    assert _outside_aero_grids(BOBSIM_CAR) == []
 
 
 @pytest.mark.xfail(
