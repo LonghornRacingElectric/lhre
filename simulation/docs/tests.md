@@ -64,7 +64,11 @@ workflow. It also runs on pushes to `main`. The steps are:
    at depth 1, which does not include `739143a`.
 2. Build the image.
 3. Check that BobSim loads the vehicle: `make smoke`.
-4. Run the unit and contract tests: `make unit`.
+4. On a pull request only, check that a changed bundle member has a new
+   `bundle_id`. The step fetches the base branch, then runs
+   `make check-vehicle BASE=origin/<base branch>`.
+5. Run the unit and contract tests: `make unit`.
 
 The job runs no Modelica target and no study. `test_ci_contract.py` fails
-if the job runs a `make` target other than `build`, `smoke` or `unit`.
+if the job runs a `make` target other than `build`, `smoke`, `unit` or
+`check-vehicle`. It also fails if pull requests do not run the step 4 check.

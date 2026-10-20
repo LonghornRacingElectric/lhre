@@ -92,3 +92,7 @@ bump-bobsim:
 
 clean:
 	rm -rf out
+
+.PHONY: check-vehicle
+check-vehicle:
+	$(RUN) sim python tools/bundle.py check $(if $(BUNDLE),--bundle $(BUNDLE)) $(if $(VEHICLE),--vehicle $(VEHICLE)) $(if $(BASE),--base $(BASE))
