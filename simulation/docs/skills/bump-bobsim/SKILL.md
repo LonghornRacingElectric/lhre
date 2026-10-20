@@ -72,7 +72,8 @@ description: Move the simulation/bobsim submodule to a newer BobSim commit and f
 7. For each study that uses a BobSim module that changed, fix its imports
    in the same PR. Then run it again with `make study S=<name>`. If you do
    not run it again, add a status line to its README: the result is
-   historical at the old SHA and stale at the new one.
+   historical at the old SHA and stale at the new one. `make stale` lists
+   the stale studies.
 8. If `simulation/bobsim/vehicle.yml` gained new keys, add them to
    `vehicle/vehicle.yml` with values for our car. Each value needs a named
    source. If there is no source, ask.

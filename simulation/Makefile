@@ -10,7 +10,7 @@ STUDY_OUT = $(S)$(if $(V),--$(V))
 
 GIT_LF := git -c core.autocrlf=false -c core.longpaths=true
 
-.PHONY: help init build shell test smoke unit records records-undo bobsim study bump-bobsim clean
+.PHONY: help init build shell test smoke unit records records-undo bobsim study stale bump-bobsim clean
 
 help:
 	@echo "make init                  Get submodules and build the image"
@@ -23,6 +23,7 @@ help:
 	@echo "make records-undo          Put back only the files make records wrote"
 	@echo "make bobsim T=<target>     Run a BobSim make target"
 	@echo "make study S=<name>        Run studies/<name>/run.py (STUDY_WORKERS=n limits CPUs)"
+	@echo "make stale [S=<name>]      Check if a committed study result is stale (no S: every study)"
 	@echo "make bump-bobsim REF=<ref> Move the BobSim pin"
 	@echo "make clean                 Delete out/"
 
@@ -75,10 +76,15 @@ study:
 	@test -n "$(S)" || { echo "Set S=<study name>."; exit 1; }
 	@test -f studies/$(S)/run.py || { echo "studies/$(S)/run.py does not exist."; exit 1; }
 	@test -z "$(ARGS)" || test -n "$(V)" || { echo "Set V=<variant name> with ARGS."; exit 1; }
-	$(RUN) -e STUDY=$(S) -e OUT_DIR=out/.staging/$(STUDY_OUT) -e BOBSIM_SHA=$(BOBSIM_SHA) -e STUDY_WORKERS=$(STUDY_WORKERS) sim \
-		sh -c 'rm -rf out/.staging/$(STUDY_OUT) && python tools/provenance.py && python studies/$(S)/run.py $(ARGS) \
+	$(RUN) -e STUDY=$(S) -e STUDY_VARIANT=$(V) -e OUT_DIR=out/.staging/$(STUDY_OUT) -e STUDY_WORKERS=$(STUDY_WORKERS) \
+		-e BOBSIM_SHA=$(BOBSIM_SHA) -e LHRE_SHA=$$(git -C .. rev-parse HEAD 2>/dev/null) -e LHRE_REQUIRE_GIT=$(LHRE_REQUIRE_GIT) \
+		-e LHRE_IMAGE_ID=$$(docker image inspect --format '{{.Id}}' $$($(COMPOSE) config --images sim 2>/dev/null) 2>/dev/null) sim \
+		sh -c 'rm -rf out/.staging/$(STUDY_OUT) && python tools/provenance.py studies/$(S)/run.py $(ARGS) && python studies/$(S)/run.py $(ARGS) \
 			&& rm -rf out/$(STUDY_OUT) && mv out/.staging/$(STUDY_OUT) out/$(STUDY_OUT) \
 			$(if $(V),,&& python tools/readme.py studies/$(S)/README.md out/$(S))'
+
+stale:
+	$(RUN) sim python tools/invalidation.py stale $(S)
 
 bump-bobsim:
 	@test -n "$(REF)" || { echo "Set REF=<BobSim commit, tag or branch>."; exit 1; }

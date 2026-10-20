@@ -39,11 +39,14 @@ description: Change a parameter of the current car in vehicle/vehicle.yml, updat
    worktree, leave out `BASE=`. CI runs that part on a pull request.
 4. If the change affects the Modelica tier, run `make records`, then
    `make bobsim T=standard-build`. The build must pass.
-5. If you changed wheelbase, track, mass or CG, find the same number in
+5. Run `make stale`. For each study that prints `STALE`, run it again with
+   `make study S=<name>`, or mark its README historical. See
+   [studies.md](../../studies.md#status). `make unit` fails until you do.
+6. If you changed wheelbase, track, mass or CG, find the same number in
    `autonomy/ros2/src/lhr_vehicle/config/vehicle.yaml`. That file is a
    separate copy. Tell the user. Do not change it unless they ask. The
    autonomy team owns it.
-6. In the PR, give the old value, the new value, the unit and the source.
+7. In the PR, give the old value, the new value, the unit and the source.
    Give the old and the new `bundle_id`.
 
 ## Check a candidate
