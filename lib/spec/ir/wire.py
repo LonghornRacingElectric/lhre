@@ -102,7 +102,7 @@ def field_types(spec):
             ptype = scalar_type(field.type)
             out[(group.name, field.name)] = (
                 f"repeated {ptype}" if field.repeated else ptype,
-                None,
+                len(field.element_names) if field.element_names else None,
             )
     return out
 
@@ -160,6 +160,15 @@ def manifest(spec):
         by_group.setdefault(group, []).append((ids[(group, field)], field, rendered))
 
     lines = [HEADER]
+    lines.extend(["[Root]", "Root.time 1 int64", "Root.packet_id 2 int64"])
+    for _, group in sorted(spec.groups(), key=lambda item: item[1].snapshot_id):
+        lines.append(f"Root.{group.name} {group.snapshot_id} message {group.name}")
+    for spec_file in spec.files.values():
+        for reserved in sorted(spec_file.groups.reserved_snapshot_ids):
+            lines.append(f"Root RESERVED_ID {reserved}")
+        for reserved in sorted(spec_file.groups.reserved_snapshot_names):
+            lines.append(f"Root RESERVED_NAME {reserved}")
+    lines.append("")
     for _, group in sorted(spec.groups(), key=lambda g: g[1].name):
         entries = sorted(by_group.get(group.name, []))
         lines.append(f"[{group.name}] snapshot_id={group.snapshot_id} next_free_id={group.next_free_id}")
@@ -169,5 +178,15 @@ def manifest(spec):
             lines.append(f"{group.name} RESERVED_ID {reserved}")
         for reserved in sorted(group.reserved_names):
             lines.append(f"{group.name} RESERVED_NAME {reserved}")
+        lines.append("")
+    for _, enum_type in sorted(spec.enum_types(), key=lambda item: item[1].name):
+        prefix = f"Enum:{enum_type.name}"
+        lines.append(f"[{prefix}]")
+        for value in sorted(enum_type.value, key=lambda item: item.number):
+            lines.append(f"{prefix}.{value.name} {value.number} enum")
+        for reserved in sorted(enum_type.reserved_numbers):
+            lines.append(f"{prefix} RESERVED_ID {reserved}")
+        for reserved in sorted(enum_type.reserved_names):
+            lines.append(f"{prefix} RESERVED_NAME {reserved}")
         lines.append("")
     return "\n".join(lines)

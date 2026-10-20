@@ -4,6 +4,8 @@ Code shared across boards and hosts, plus the CAN spec it is generated
 from:
 
 - [spec/](spec/README.md): the CAN spec. Data and Python, no C++.
+- [telemetry/](telemetry/README.md): build-time schema identities and
+  definition-level compatibility metadata for releases.
 - [codegen/](codegen/README.md): generators over the spec and their
   output. [codegen/cpp](codegen/cpp/README.md) is the firmware
   pack/unpack library.

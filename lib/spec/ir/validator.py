@@ -183,6 +183,19 @@ def _check_registries(spec, report):
                 report.error(where, 5, f"duplicate enum value number {value.number} (also {seen_numbers[value.number]})")
             seen_names[value.name] = value
             seen_numbers[value.number] = value.name
+            if value.number in enum_type.reserved_numbers or value.name in enum_type.reserved_names:
+                report.error(where, 1, "enum value is tombstoned")
+
+    for filename, spec_file in spec.files.items():
+        registry = spec_file.groups
+        for group in registry.group:
+            if group.snapshot_id in registry.reserved_snapshot_ids or group.name in registry.reserved_snapshot_names:
+                report.error(filename, 1, "snapshot group is tombstoned")
+        if registry.next_snapshot_id:
+            live_ids = {1, 2} | {group.snapshot_id for group in registry.group}
+            reserved = set(registry.reserved_snapshot_ids)
+            if live_ids & reserved or live_ids | reserved != set(range(1, registry.next_snapshot_id)):
+                report.error(filename, 1, "root snapshot ids must partition the append-only ledger")
 
     for filename, bitfield_type in spec.bitfield_types():
         seen_bits = set()
@@ -387,6 +400,10 @@ def _check_ledgers(spec, report):
             where = f"{filename}: {group.name}.{field.name}"
             if field.type == can_spec_pb2.PROTO_SCALAR_TYPE_UNSPECIFIED:
                 report.error(where, 5, "external snapshot field type is required")
+            if field.element_names and not field.repeated:
+                report.error(where, 5, "element_names requires a repeated field")
+            if len(set(field.element_names)) != len(field.element_names):
+                report.error(where, 5, "array element names must be unique")
             record(group.name, field.name, field.id, field.repeated, 0, where)
 
     for group_name, (filename, group) in groups.items():

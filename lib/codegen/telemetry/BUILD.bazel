@@ -1,12 +1,18 @@
 """Server-side artifacts generated from //lib/spec."""
 
 load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("@protobuf//bazel:proto_library.bzl", "proto_library")
+load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
 load(":telemetry_artifact.bzl", "telemetry_artifact")
 
 py_library(
     name = "gen_telemetry_lib",
     srcs = ["gen_telemetry.py"],
-    deps = ["//lib/spec:ir"],
+    deps = [
+        "//lib/spec:ir",
+        "//lib/telemetry:contract",
+        "//apps/telemetry/scripts:schema_helpers",
+    ],
 )
 
 py_binary(
@@ -47,7 +53,57 @@ filegroup(
         ":can_json",
         ":can_packets_proto",
         ":orion_db_init",
+        ":schema_contract",
+        ":schema_descriptor",
+        ":orm_source",
+        ":orion_prisma",
     ],
+    visibility = ["//visibility:public"],
+)
+
+telemetry_artifact(
+    name = "schema_contract",
+    kind = "contract",
+    out = "schema_contract.json",
+    spec = "//lib/spec:files",
+    visibility = ["//visibility:public"],
+)
+
+genrule(
+    name = "schema_descriptor",
+    srcs = [":can_packets_proto"],
+    outs = ["schema_descriptor.pb"],
+    cmd = "$(location //tools/protoc) --descriptor_set_out=$@ --proto_path=$$(dirname $(location :can_packets_proto)) $(location :can_packets_proto)",
+    tools = ["//tools/protoc"],
+    visibility = ["//visibility:public"],
+)
+
+proto_library(
+    name = "orion_proto",
+    srcs = [":can_packets_proto"],
+    visibility = ["//visibility:public"],
+)
+
+telemetry_artifact(
+    name = "orm_source",
+    kind = "orm",
+    out = "orion_models.py",
+    spec = "//lib/spec:files",
+)
+
+py_library(
+    name = "orion_models",
+    srcs = [":orm_source"],
+    deps = [requirement("SQLAlchemy")],
+    visibility = ["//visibility:public"],
+)
+
+telemetry_artifact(
+    name = "orion_prisma",
+    kind = "prisma",
+    out = "orion.prisma",
+    common_sql = "//apps/telemetry/stack/ingest:common_schema.sql",
+    spec = "//lib/spec:files",
     visibility = ["//visibility:public"],
 )
 

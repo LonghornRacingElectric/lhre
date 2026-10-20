@@ -1,5 +1,7 @@
 use serde::Deserialize;
 
+include!(concat!(env!("OUT_DIR"), "/generated_config.rs"));
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct PacketConfig {
     pub packet_id: u32,

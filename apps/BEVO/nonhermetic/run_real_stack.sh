@@ -4,14 +4,19 @@ set -euo pipefail
 SCRIPT_ROOT="$(cd "$(dirname "$0")" && pwd)"
 BEVO_ROOT="$(cd "$SCRIPT_ROOT/.." && pwd)"
 BIN_DIR="${BEVO_BIN_DIR:-$BEVO_ROOT/bin}"
-CAN_JSON_PATH="$BEVO_ROOT/nonhermetic/assets/can.json"
+CORE_BIN_DIR="$BIN_DIR"
+CORE_RELEASE="${BEVO_CORE_RELEASE:-}"
+if [[ -z "$CORE_RELEASE" && -n "${BEVO_CORE_ROOT:-}" ]]; then
+  CORE_RELEASE="$BEVO_CORE_ROOT/current"
+fi
+if [[ -n "$CORE_RELEASE" ]]; then
+  CORE_RELEASE="$(cd "$CORE_RELEASE" && pwd -P)"
+  CORE_BIN_DIR="$CORE_RELEASE/bin"
+fi
 CAN_IFACE_0="${CAND_CAN_INTERFACE_0:-can0}"
 CAN_IFACE_1="${CAND_CAN_INTERFACE_1:-can1}"
 LOGGERD_ENABLED="${LOGGERD_ENABLED:-1}"
 
-# loggerd's defaults resolve relative to a repo checkout; point it at this
-# tree explicitly so the same script works from a deployed bundle.
-export LOGGERD_CAN_JSON_PATH="${LOGGERD_CAN_JSON_PATH:-$CAN_JSON_PATH}"
 export LOGGERD_LOG_DIR="${LOGGERD_LOG_DIR:-$BEVO_ROOT/loggerd/logs}"
 
 cleanup() {
@@ -20,7 +25,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-for bin in "$BIN_DIR/cand" "$BIN_DIR/dashd" "$BIN_DIR/loggerd" "$BIN_DIR/publishd"; do
+for bin in "$CORE_BIN_DIR/cand" "$BIN_DIR/dashd" "$CORE_BIN_DIR/loggerd" "$CORE_BIN_DIR/publishd"; do
   if [[ ! -x "$bin" ]]; then
     echo "Missing binary: $bin" >&2
     echo "Install the Bazel-built executables in $BIN_DIR first." >&2
@@ -28,27 +33,21 @@ for bin in "$BIN_DIR/cand" "$BIN_DIR/dashd" "$BIN_DIR/loggerd" "$BIN_DIR/publish
   fi
 done
 
-if [[ ! -f "$CAN_JSON_PATH" ]]; then
-  echo "Missing CAN json: $CAN_JSON_PATH" >&2
-  echo "Install the Bazel-generated can.json first." >&2
-  exit 1
-fi
-
-PUBLISHD_REQUIRE_SERVER_PACKET_ID="${PUBLISHD_REQUIRE_SERVER_PACKET_ID:-1}" "$BIN_DIR/publishd" &
+PUBLISHD_REQUIRE_SERVER_PACKET_ID="${PUBLISHD_REQUIRE_SERVER_PACKET_ID:-1}" "$CORE_BIN_DIR/publishd" &
 PUBLISHD_PID=$!
 
 "$BIN_DIR/dashd" &
 DASHD_PID=$!
 
 if [[ "$LOGGERD_ENABLED" == "1" ]]; then
-  "$BIN_DIR/loggerd" &
+  "$CORE_BIN_DIR/loggerd" &
   LOGGERD_PID=$!
 fi
 
 CAND_USE_MOCK=0 \
 CAND_CAN_INTERFACE_0="$CAN_IFACE_0" \
 CAND_CAN_INTERFACE_1="$CAN_IFACE_1" \
-CAND_CAN_JSON_PATH="$CAN_JSON_PATH" "$BIN_DIR/cand" &
+"$CORE_BIN_DIR/cand" &
 CAND_PID=$!
 
 wait "$DASHD_PID"

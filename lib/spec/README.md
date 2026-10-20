@@ -136,6 +136,21 @@ It is generated, committed, and checked by
 Regenerate with `bazel run //tools/spec:lock` and read the diff: those
 lines are what deployed consumers and archived data can see.
 
+The lock also records root group numbers and enum mappings/tombstones.
+`GroupRegistry.next_snapshot_id` and its `reserved_snapshot_ids` /
+`reserved_snapshot_names` protect removed root groups; enum definitions use
+`reserved_numbers` and `reserved_names`. Generated protobuf emits these
+reservations. CI compares the PR-base lock with the current lock using
+`//tools/spec:check_wire_compat`; changing a deployed number, type or known
+array layout requires a new field rather than editing the old entry.
+
+External snapshot fields declare `unit` and, for arrays, ordered
+`element_names`. GPS is latitude/longitude in degrees; GPS IMU has x/y/z
+positions without an asserted physical unit. This metadata describes existing
+gateway behavior and does not renumber or retype deployed fields. The first
+registry version adds previously undocumented GPS array bounds to the lock.
+See [telemetry compatibility](../telemetry/README.md).
+
 The generated `.proto`, runtime `can.json`, and Orion database DDL stay Bazel
 outputs under `//lib/codegen/telemetry` and are never committed.
 
