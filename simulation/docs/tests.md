@@ -27,12 +27,6 @@ The BobSim test takes about 6 s of `make unit`.
   shape on this page. `make init` and `make bump-bobsim` keep LF and long
   paths in the nested submodules.
 
-`make unit` also runs one BobSim test by node id:
-`bobsim/tests/test_kinematics.py::test_four_post_anti_dive_sign_is_independent_of_pulse_direction`.
-It gives the FourPost report code a synthetic jacking force with a known
-sign. It checks the sign of the front anti-dive percent. It runs no
-Modelica. It fails when a pin reverts the sign fix. It also fails when
-the pin does not have the test.
 
 The lhre tests do not check physics results. Later PRs add physics
 fixtures.

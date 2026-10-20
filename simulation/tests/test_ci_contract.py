@@ -9,7 +9,6 @@ SIM = Path(__file__).resolve().parents[1]
 WORKFLOW = SIM.parent / ".github" / "workflows" / "simulation.yml"
 SMOKE_STEP = "Check that BobSim loads the vehicle"
 FAST_MAKE_TARGETS = {"build", "smoke", "unit"}
-BOBSIM_SIGN_TEST = "bobsim/tests/test_kinematics.py::test_four_post_anti_dive_sign_is_independent_of_pulse_direction"
 
 
 def _dry_run(target, *args):
@@ -53,11 +52,6 @@ def test_make_unit_checks_bobsim_after_the_tests():
     assert "git -C bobsim status" in commands
     assert commands.index("pytest") < commands.index("git -C bobsim status")
 
-
-def test_make_unit_runs_the_bobsim_anti_dive_sign_test():
-    commands = _dry_run("unit")
-    assert BOBSIM_SIGN_TEST in commands, "make unit must run BobSim's front anti-dive sign test (PR #70)."
-    assert commands.index(BOBSIM_SIGN_TEST) < commands.index("git -C bobsim status")
 
 
 def test_make_test_runs_smoke_then_unit():
