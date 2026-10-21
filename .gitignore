@@ -34,3 +34,6 @@ boards/**/CMakePresets.json
 apps/BEVO/nonhermetic/assets/
 apps/BEVO/target/
 apps/BEVO/loggerd/logs/*.csv
+
+# Finder metadata
+.DS_Store
