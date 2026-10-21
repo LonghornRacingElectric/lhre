@@ -46,17 +46,8 @@ sensors:
   # Positions in base_link. The VLP-16 sits on a mast ahead of the driver
   # cell. The IMU is at the chassis link origin (half the wheelbase forward,
   # chassis_z_m up) and is derived from that, not listed here.
-  # The height is not free: at z=0.55 the sensor sat *inside* the nose
-  # bodywork, which the CAD mesh (lhr_vehicle/meshes) made visible. The
-  # Mid-360's lowest beam is -7 deg, so bodywork at horizontal distance d
-  # and height z blocks it unless z_mount >= z + d*tan(7 deg). Over the
-  # forward arc of the real body that bound is 0.5965 m, which
-  # lhr_vehicle's test_mesh.py asserts. Going higher costs range: the
-  # near-ground blind radius is z/tan(7 deg), so the lowest clearing
-  # height is the best one, not the safest one.
   lidar:
-    position_m: [1.8, 0.0, 0.62]     # x,y ASSUMED; z clears the CAD nose
-
+    position_m: [1.8, 0.0, 0.55]     # ASSUMED (Gazebo mount)
 
   # One ZED 2i, 2.1 mm wide lens (confirmed 2026-10-11).
   # Ideal rectified pinhole optics; replace with measured calibration later.

@@ -109,7 +109,7 @@ class MetricsNode(Node):
         # crash over what is only an identifier.
         self.declare_parameter(
             'run_id', '', ParameterDescriptor(dynamic_typing=True))
-        self.declare_parameter('timeout_sec', 120.0)
+        self.declare_parameter('timeout_sec', 0.0)
         self.declare_parameter('truth_odom_topic', '')
 
         self._off_track_thresh = self.get_parameter(
@@ -176,6 +176,7 @@ class MetricsNode(Node):
         self._near_start = False
         self._left_start = False
         self._lap_start_time: float = 0.0
+        self._lap_origin: Optional[Tuple[float, float]] = None
 
         # --- Publisher ---
         self._lap_pub = self.create_publisher(
@@ -228,6 +229,7 @@ class MetricsNode(Node):
         if self._cte.samples == 0:
             self._start_time = now
             self._lap_start_time = now
+            self._lap_origin = (px, py)
         self._last_time = now
 
         # --- CTE ---
@@ -304,7 +306,9 @@ class MetricsNode(Node):
     # Lap detection
     # ------------------------------------------------------------------
     def _update_lap_detection(self, px: float, py: float, now: float):
-        sx, sy = self._path[0]
+        if self._lap_origin is None:
+            return
+        sx, sy = self._lap_origin
         dist = math.hypot(px - sx, py - sy)
 
         in_zone = dist < self._start_radius

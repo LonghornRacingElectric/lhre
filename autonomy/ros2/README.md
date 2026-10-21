@@ -833,7 +833,7 @@ its limits.
 | `min_lap_time` | `5.0` | Minimum seconds before a lap return is accepted |
 | `output_csv` | `"data/metrics.csv"` | Path for CSV output (relative to cwd) |
 | `run_id` | `""` | Run identifier; auto-generates timestamp if empty |
-| `timeout_sec` | `120.0` | Wall-clock watchdog; ends the run non-zero rather than hanging (0 = off) |
+| `timeout_sec` | `0.0` | Optional wall-clock watchdog (0 = off); `run_headless.sh` sets 120 s |
 | `output_csv` | `"data/metrics.csv"` | Also an `mvs_demo.launch.py` argument, so a runner can redirect it |
 | `truth_odom_topic` | `""` | Ground-truth odometry to score `/lhr/vehicle/odom` against; empty leaves the error columns blank |
 

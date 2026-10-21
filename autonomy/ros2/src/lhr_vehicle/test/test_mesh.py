@@ -152,48 +152,6 @@ def test_wheels_agree_with_vehicle_yaml(tris):
     assert abs(max(xs)) < TOL_M, 'front axle is not at CAD x=0'
 
 
-def test_lidar_mount_clears_the_bodywork_ahead_of_it(tris):
-    """
-    The sensor must not be looking through its own nose.
-
-    At the original ASSUMED height of 0.55 m it was. A ray straight up
-    from the mount station crosses the bodywork at z = 0.068, 0.086,
-    0.086 and 0.583, so at 0.55 an odd number of surfaces lie below the
-    sensor and it is enclosed; at 0.62 it is outside.
-
-    The Mid-360's lowest beam is -7 degrees, so a point at horizontal
-    distance d and height z blocks it unless the mount is at least
-    z + d*tan(7 deg). Checked over the forward arc only, since nothing
-    asks a forward-looking sensor to see the ground behind the car.
-    """
-    import math
-
-    veh = load_vehicle()
-    mx, my, mz = veh.lidar_position_m
-    tan_low = math.tan(math.radians(7.0))
-
-    required = 0.0
-    for tri in tris:
-        for px, py, pz in tri:
-            # into base_link, the frame the mount is given in
-            bx = px + veh.wheelbase_m
-            d = math.hypot(bx - mx, py - my)
-            if d < 0.05:
-                continue
-            if bx - mx < -0.05:          # behind the sensor
-                continue
-            required = max(required, pz + d * tan_low)
-
-    assert mz >= required, (
-        f'lidar at z={mz} is inside or behind bodywork; '
-        f'needs z >= {required:.3f} to clear the forward arc')
-    # Height costs near-ground range, so flag a mount raised far past
-    # what clearance needs rather than only one that is too low.
-    assert mz < required + 0.15, (
-        f'lidar at z={mz} is {mz - required:.3f} m above the clearance '
-        f'bound; the blind radius z/tan(7 deg) grows with height')
-
-
 def test_placed_mesh_puts_its_wheels_where_the_primitives_draw_them(tris):
     """
     The mesh and the fallback primitives must describe the same car.

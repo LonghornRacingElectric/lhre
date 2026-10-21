@@ -199,9 +199,9 @@ def generate_launch_description():
         description='Drive every node off the simulator clock. Off '
                     'means wall time, and averaged metrics wander')
     timeout_arg = DeclareLaunchArgument(
-        'timeout_sec', default_value='120.0',
+        'timeout_sec', default_value='0.0',
         description='Wall-clock watchdog. Ends the run non-zero rather '
-                    'than hanging when the sim stops')
+                    'than hanging when the sim stops (0 disables it)')
     csv_arg = DeclareLaunchArgument(
         'output_csv', default_value='data/metrics.csv',
         description='Where the metrics row goes, relative to the '
@@ -448,7 +448,7 @@ def generate_launch_description():
             'pairing_strategy': ParameterValue(PythonExpression([
                 "('classified' if '", LaunchConfiguration('lidar_classify_sides'),
                 "' == 'true' else 'boundary_graph') if '",
-                LaunchConfiguration('perception'), "' == 'lidar' else 'nearest'"
+                LaunchConfiguration('perception'), "' == 'lidar' else 'boundary'"
             ]), value_type=str),
         }],
         output='screen',

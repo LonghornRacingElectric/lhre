@@ -26,7 +26,6 @@ from launch.actions import (
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
-from lhr_vehicle import load_vehicle
 import yaml
 
 
@@ -142,6 +141,7 @@ def _launch_setup(context: LaunchContext):
         raise RuntimeError('Camera classification requires enable_stereo_camera:=true')
     if enable_stereo:
         from lhr_gazebo.stereo_camera import stereo_actions
+        from lhr_vehicle import load_vehicle
         camera_nodes = stereo_actions(load_vehicle().stereo_camera, config_dir)
     if enable_color:
         from lhr_perception.cone_color import DEFAULT_THRESHOLDS, validate_config
@@ -284,31 +284,31 @@ def _launch_setup(context: LaunchContext):
                 'use_sim_time': True,
                 'max_range': 20.0,
                 'min_range': 0.8,
-                'ground_z_min': 0.05,
-                'ground_z_max': 0.55,
                 'cluster_radius': 0.5,
-                'min_cluster_points': 3,
-                'dedup_radius': 0.6,
+                'ground_z_min': ParameterValue(
+                    LaunchConfiguration('lidar_ground_z_min'), value_type=float),
+                'ground_z_max': ParameterValue(
+                    LaunchConfiguration('lidar_ground_z_max'), value_type=float),
+                'min_cluster_points': ParameterValue(
+                    LaunchConfiguration('lidar_min_cluster_points'), value_type=int),
+                'dedup_radius': ParameterValue(
+                    LaunchConfiguration('lidar_dedup_radius'), value_type=float),
+                'max_cluster_points': ParameterValue(
+                    LaunchConfiguration('lidar_max_cluster_points'), value_type=int),
+                'stack_window_sec': ParameterValue(
+                    LaunchConfiguration('lidar_stack_window_sec'), value_type=float),
+                'stack_max_frames': ParameterValue(
+                    LaunchConfiguration('lidar_stack_max_frames'), value_type=int),
+                'transform_wait_sec': ParameterValue(
+                    LaunchConfiguration('lidar_transform_wait_sec'), value_type=float),
+                'sensor_transform_source': ParameterValue(
+                    LaunchConfiguration('lidar_sensor_transform_source'), value_type=str),
+                'height_filter_frame': ParameterValue(
+                    LaunchConfiguration('lidar_height_filter_frame'), value_type=str),
                 'classify_sides': classify_sides,
             }],
             output='screen',
         ))
-
-    # The cloud uses an explicit sensor frame. The mount comes from the same
-    # vehicle YAML that generates its pose in the SDF.
-    lidar_position = load_vehicle().lidar_position_m
-    lidar_tf = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='lidar_mount_tf',
-        arguments=[
-            '--x', str(lidar_position[0]), '--y', str(lidar_position[1]),
-            '--z', str(lidar_position[2]), '--frame-id', 'base_link',
-            '--child-frame-id', 'lidar',
-        ],
-        parameters=[{'use_sim_time': True}],
-        output='screen',
-    )
 
     # ----- Track builder -----
     if perception == 'lidar':
@@ -490,7 +490,6 @@ def _launch_setup(context: LaunchContext):
         *camera_nodes,
         *estimation_nodes,
         *perception_nodes,
-        lidar_tf,
         centerline,
         mission_mgr,
         control,
@@ -553,6 +552,17 @@ def generate_launch_description():
         # Sensor sim
         DeclareLaunchArgument('fov_deg', default_value='200.0'),
         DeclareLaunchArgument('max_range_m', default_value='20.0'),
+        # Gazebo keeps its sensor-frame detector defaults.
+        DeclareLaunchArgument('lidar_ground_z_min', default_value='-0.40'),
+        DeclareLaunchArgument('lidar_ground_z_max', default_value='0.5'),
+        DeclareLaunchArgument('lidar_min_cluster_points', default_value='1'),
+        DeclareLaunchArgument('lidar_dedup_radius', default_value='1.5'),
+        DeclareLaunchArgument('lidar_max_cluster_points', default_value='50'),
+        DeclareLaunchArgument('lidar_stack_window_sec', default_value='0.0'),
+        DeclareLaunchArgument('lidar_stack_max_frames', default_value='10'),
+        DeclareLaunchArgument('lidar_transform_wait_sec', default_value='0.5'),
+        DeclareLaunchArgument('lidar_sensor_transform_source', default_value='vehicle_config'),
+        DeclareLaunchArgument('lidar_height_filter_frame', default_value='sensor'),
         # Track builder chaining (both perception modes)
         DeclareLaunchArgument('chaining_alg', default_value='constrained_greedy'),
         DeclareLaunchArgument('min_step_m', default_value='0.3'),

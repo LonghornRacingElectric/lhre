@@ -166,8 +166,11 @@ every viewer draws stays where it started. A transform that can change
 is not static.
 
 ```
-map -> base_link -> lidar     (1.80, 0.00, 0.62), pitch as parameterised
+map -> base_link -> lidar     (1.80, 0.00, 0.55), pitch as parameterised
 ```
+
+Both the ROS node and offline `MountPose()` read their default position
+from vehicle YAML. The coordinates above remain assumed mount values.
 
 ### In the `lidar` frame, `z` is not height
 

@@ -26,6 +26,10 @@ in four places with four different steering values (0.45, 0.55, 0.69 and
 `base_link` is the rear-axle center at ground level, x forward, y left,
 z up. Sensor positions are given in that frame.
 
+The LiDAR mount remains main's assumed z=0.55 m pending Gazebo validation.
+The CAD nose clearance check suggests a higher mount; that geometry alone
+does not validate a new detector configuration.
+
 ## Fingerprinting the file
 
 `vehicle_sha256()` hashes the file's bytes. Anything derived from these

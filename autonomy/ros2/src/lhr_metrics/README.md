@@ -89,8 +89,13 @@ Beyond `RUN_PARAMS`, which only ever reach the CSV:
 | `start_radius` | 2.0 | Lap detection: radius of the start zone |
 | `start_hysteresis` | 1.0 | How far out counts as having left the start |
 | `min_lap_time` | 5.0 | Reject a lap shorter than this |
+| `timeout_sec` | 0.0 | Optional wall-clock watchdog; zero disables it |
 | `output_csv` | `data/metrics.csv` | Where the row goes |
 | `run_id` | wall clock | Row identifier |
+
+Lap detection fixes its origin at the first scored odometry position. A
+rolling planner path can change without moving that origin: the car must
+leave the start zone and return after `min_lap_time`.
 
 ## How a run ends
 
@@ -108,6 +113,10 @@ still exiting zero.
 
 `timeout_sec` is deliberately **wall** time, not sim time: its job is to
 stop a headless run hanging when the simulator dies and sim time freezes.
+It is disabled by default so a slow Gazebo run can finish.
+`scripts/run_headless.sh` explicitly enables a 120 s deadline; a later
+`timeout_sec:=...` launch argument overrides that deadline. The driving study
+runner disables metrics and enforces its own `--wall-timeout`.
 
 `mission_finished` is what lets missions with no lap record a row, which
 the 75 m acceleration run needs.

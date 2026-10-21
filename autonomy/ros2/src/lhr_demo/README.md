@@ -26,7 +26,7 @@ Beyond the node parameters listed in
 | Argument | Default | What it does |
 | --- | --- | --- |
 | `use_sim_time` | `true` | Every node but `sim_kinematic` follows `/clock`. Off means wall time, and averaged metrics wander |
-| `timeout_sec` | `120.0` | Wall-clock watchdog, so a dead sim ends the run instead of hanging |
+| `timeout_sec` | `0.0` | Optional wall-clock watchdog; disabled by default. `run_headless.sh` sets 120 s |
 | `output_csv` | `data/metrics.csv` | Where the metrics row goes |
 | `run_id` | timestamp | Shared by the metrics row and the bag directory |
 | `record` | `false` | Record an MCAP bag of the contract topics |
@@ -209,7 +209,7 @@ only when launch itself raises. Gates go through
 
 ## LiDAR perception
 
-`perception:=sim` keeps the simplified cone detector and nearest-paired
+`perception:=sim` keeps the simplified cone detector and boundary-paired
 track. `lidar:=true` alone previews the cloud without changing perception.
 `perception:=lidar` enables the Mid-360 cloud simulator, disables simplified
 detections and selects the cloud detector, local `boundary_graph` planning and

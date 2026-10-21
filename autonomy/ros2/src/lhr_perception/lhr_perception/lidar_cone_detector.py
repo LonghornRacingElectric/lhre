@@ -76,7 +76,7 @@ def _quat_to_yaw(q) -> float:
 
 
 class LidarConeDetector(Node):
-    """Detect cone clusters using scan-time transforms and base-frame heights."""
+    """Detect cone clusters with explicit mount and height-frame conventions."""
 
     def __init__(self):
         super().__init__('lidar_cone_detector')
@@ -90,6 +90,8 @@ class LidarConeDetector(Node):
                                 + 0.12)
 
         # --- Parameters ---
+        self.declare_parameter('sensor_transform_source', 'tf')
+        self.declare_parameter('height_filter_frame', 'base_link')
         self.declare_parameter('max_range', 20.0)
         self.declare_parameter('min_range', 0.9)
         # base_link is at ground level; sensor pitch cannot change this band.
@@ -116,6 +118,16 @@ class LidarConeDetector(Node):
         self.declare_parameter('boundary_gap_distance', 3.3)
         self.declare_parameter('boundary_gap_angle_deg', 40.0)
 
+        self._sensor_transform_source = self.get_parameter('sensor_transform_source').value
+        self._height_filter_frame = self.get_parameter('height_filter_frame').value
+        if self._sensor_transform_source not in ('tf', 'vehicle_config'):
+            raise ValueError('sensor_transform_source must be tf or vehicle_config')
+        if self._height_filter_frame not in ('base_link', 'sensor'):
+            raise ValueError('height_filter_frame must be base_link or sensor')
+        self._configured_mount = TransformStamped()
+        position = self._configured_mount.transform.translation
+        position.x, position.y, position.z = veh.lidar_position_m
+        self._configured_mount.transform.rotation.w = 1.0
         self._max_range = self.get_parameter('max_range').value
         self._min_range = self.get_parameter('min_range').value
         self._ground_z_min = self.get_parameter('ground_z_min').value
@@ -230,8 +242,11 @@ class LidarConeDetector(Node):
             return
         stamp = Time.from_msg(cloud.header.stamp)
         try:
-            sensor_to_base = self._tf_buffer.lookup_transform(
-                'base_link', cloud.header.frame_id, stamp)
+            if self._sensor_transform_source == 'vehicle_config':
+                sensor_to_base = self._configured_mount
+            else:
+                sensor_to_base = self._tf_buffer.lookup_transform(
+                    'base_link', cloud.header.frame_id, stamp)
             base_to_map = self._tf_buffer.lookup_transform('map', 'base_link', stamp)
         except TransformException as error:
             self.get_logger().warning(
@@ -249,11 +264,15 @@ class LidarConeDetector(Node):
             cloud, field_names=('x', 'y', 'z'), skip_nans=True).reshape(-1, 3)
         points = points[np.isfinite(points).all(axis=1)]
 
-        # Height and body filters belong in the ground-level vehicle frame.
+        # Gazebo retains its sensor-frame band; pitched Mid-360 scans use
+        # ground-level base_link so changing the mount cannot move the cutoff.
+        if self._height_filter_frame == 'sensor':
+            z = points[:, 2]
+            points = points[(z > self._ground_z_min) & (z < self._ground_z_max)]
         points = transform_points(points, sensor_to_base.transform)
-        z = points[:, 2]
-        height_mask = (z > self._ground_z_min) & (z < self._ground_z_max)
-        points = points[height_mask]
+        if self._height_filter_frame == 'base_link':
+            z = points[:, 2]
+            points = points[(z > self._ground_z_min) & (z < self._ground_z_max)]
 
         # Step 3: Vehicle exclusion zone (filter out the car's own body)
         car_mask = ~(

@@ -10,13 +10,33 @@ for launch arguments and vehicle physics.
 
 ## LiDAR coordinates
 
-The generated sensor SDF explicitly names its cloud frame `lidar`. The launch
-publishes a static `base_link -> lidar` transform from
-[lhr_vehicle](../lhr_vehicle/README.md)'s mount position. The sensor in this
-model is level; changing its orientation requires updating both its generated
-pose and transform. Detector height thresholds are in the ground-level
-`base_link` frame: the launch uses `ground_z_min=0.05`, not a negative
-sensor-frame ground threshold.
+Gazebo preserves main's level LiDAR mount at z=0.55 m and its generated
+cloud frame. The detector reads that mount from vehicle YAML rather than
+requiring a new static TF. Its height band stays in the sensor frame.
+The Mid-360 path uses scan-time TF and base-frame heights instead; do not
+copy its detector thresholds into Gazebo without running a Gazebo gate.
+
+These LiDAR-only arguments preserve Gazebo's existing values and are typed
+before node startup. They have no effect in `perception:=sim`.
+
+| Argument | Default |
+| --- | --- |
+| `lidar_ground_z_min` | `-0.40` |
+| `lidar_ground_z_max` | `0.5` |
+| `lidar_min_cluster_points` | `1` |
+| `lidar_dedup_radius` | `1.5` |
+| `lidar_max_cluster_points` | `50` |
+| `lidar_stack_window_sec` | `0.0` |
+| `lidar_stack_max_frames` | `10` |
+| `lidar_transform_wait_sec` | `0.5` |
+| `lidar_sensor_transform_source` | `vehicle_config` |
+| `lidar_height_filter_frame` | `sensor` |
+
+For example, `perception:=lidar lidar_min_cluster_points:=2` overrides the
+cluster threshold. A pitched mount requires `lidar_sensor_transform_source:=tf`
+and a published scan-time mount transform; select `lidar_height_filter_frame:=base_link`
+when using ground-relative thresholds. These opt-in configurations need
+Gazebo acceptance testing before changing defaults.
 
 Gazebo still uses its existing uniform-grid VLP-16 model. The imported Livox
 pattern belongs to the kinematic [Mid-360 simulator](../lhr_lidar_sim/README.md).

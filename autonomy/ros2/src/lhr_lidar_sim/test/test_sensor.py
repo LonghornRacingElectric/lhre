@@ -121,7 +121,8 @@ def test_returns_per_cone_fall_off_with_range():
 
 
 def test_single_frame_scan_gap_does_not_imply_an_invisible_cone():
-    sensor = Mid360Sensor(config=NO_NOISE, mount=MountPose(), seed=1)
+    # Fix the study mount: changing vehicle YAML must not change this scan-gap fixture.
+    sensor = Mid360Sensor(config=NO_NOISE, mount=MountPose(z_m=0.62), seed=1)
     assert points_on_cone(sensor, 0.0, 6.0) == 0
     assert points_on_cone(sensor, 0.1, 6.0) > 0
     assert points_on_cone(sensor, 0.0, 6.0, frames=40) > 0
@@ -148,3 +149,10 @@ def test_motion_scan_uses_acquisition_pose_without_end_frame_deskew():
                   & (moving[:, 2] > -.5) & (moving[:, 2] < 2.)]
     assert len(wall) > 10
     assert np.ptp(wall[:, 0]) > .5
+
+
+def test_default_mount_uses_vehicle_config():
+    from lhr_vehicle import load_vehicle
+
+    mount = MountPose()
+    assert (mount.x_m, mount.y_m, mount.z_m) == load_vehicle().lidar_position_m

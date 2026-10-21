@@ -56,8 +56,17 @@ def test_launch_selects_exactly_one_cone_source(mode, cloud_only):
     assert ('lidar_cone_detector' in active) == (mode == 'lidar')
     assert ('lidar_sim' in active) == (mode == 'lidar' or cloud_only == 'true')
     params = evaluate_parameters(context, active['track_builder']._Node__parameters)
-    expected = 'boundary_graph' if mode == 'lidar' else 'nearest'
+    expected = 'boundary_graph' if mode == 'lidar' else 'boundary'
     assert params[0]['pairing_strategy'] == expected
+    metrics = evaluate_parameters(context, active['metrics_node']._Node__parameters)[0]
+    assert metrics['timeout_sec'] == 0.0
+    context.launch_configurations['timeout_sec'] = '60'
+    fresh = module.generate_launch_description()
+    metrics_node = next(node for node in fresh.entities
+                        if isinstance(node, Node) and node.node_executable == 'metrics_node')
+    metrics = evaluate_parameters(context, metrics_node._Node__parameters)[0]
+    assert metrics['timeout_sec'] == 60.0
+    assert type(metrics['timeout_sec']) is float
     control_params = evaluate_parameters(context, active['pursuit_node']._Node__parameters)
     assert control_params[0]['closed_path'] == (mode == 'sim')
     assert control_params[0]['v_max'] == (4.0 if mode == 'lidar' else 12.0)

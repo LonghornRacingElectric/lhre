@@ -11,11 +11,16 @@ up `base_link <- cloud frame` and `map <- base_link` at that timestamp.
 The full stamped odometry pose is also inserted into the TF buffer, so
 Gazebo's odometry bridge does not need to provide a duplicate map transform.
 The sensor mount must be published through TF; no mount position or
-orientation is guessed inside the detector.
+orientation is guessed in the default `sensor_transform_source=tf` mode.
+Gazebo explicitly selects `vehicle_config` for its existing level mount;
+that mode reads the translation from vehicle YAML and does not require a
+sensor TF or a renamed cloud frame. It must not be used for a pitched mount.
 
 Ground removal and vehicle exclusion operate in `base_link`, whose origin
 is at ground level. `ground_z_min` now means height above that origin,
-**not sensor-frame z**. Existing sensor-frame overrides must be updated.
+**not sensor-frame z**. Gazebo preserves its sensor-frame band by selecting
+`height_filter_frame=sensor`; its thresholds are not interchangeable with
+base-frame values.
 Changing sensor roll, pitch, yaw, or height therefore changes visibility
 without changing the ground threshold. Each filtered scan is transformed into `map` at its own timestamp, including
 all three rotation axes, before clustering the accumulated points.
@@ -43,8 +48,10 @@ They have no colour or left/right classification. Use the track builder's
 
 | Parameter | Default | Meaning |
 | --- | --- | --- |
-| `ground_z_min` | `0.05` | Minimum height in base_link, metres |
-| `ground_z_max` | `0.55` | Maximum height in base_link, metres |
+| `sensor_transform_source` | `tf` | Scan-time mount TF; `vehicle_config` selects the level YAML mount |
+| `height_filter_frame` | `base_link` | Frame for the height band: `base_link` or `sensor` |
+| `ground_z_min` | `0.05` | Minimum height in the selected filter frame, metres |
+| `ground_z_max` | `0.55` | Maximum height in the selected filter frame, metres |
 | `min_range` | `0.9` | Minimum horizontal distance from sensor, metres |
 | `max_range` | `20.0` | Maximum horizontal distance from sensor, metres |
 | `cluster_radius` | `0.35` | XY neighbourhood radius, metres |

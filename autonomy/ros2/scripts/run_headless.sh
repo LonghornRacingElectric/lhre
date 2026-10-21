@@ -20,7 +20,7 @@ rm -f "$CSV"
 
 # output_csv has to reach the node too, or this reads one path while the
 # node writes another.
-ros2 launch lhr_demo mvs_demo.launch.py output_csv:="$CSV" "$@" || true
+ros2 launch lhr_demo mvs_demo.launch.py output_csv:="$CSV" timeout_sec:=120.0 "$@" || true
 
 if [ ! -f "$CSV" ]; then
     echo "FAIL: the run wrote no metrics row to $CSV" >&2

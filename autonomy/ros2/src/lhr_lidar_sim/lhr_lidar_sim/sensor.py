@@ -16,6 +16,7 @@ from lhr_lidar_sim.mid360 import (
     apply_range_model, beam_angles, Mid360Config, unit_directions)
 from lhr_lidar_sim.return_profile import thin_small_cones
 from lhr_lidar_sim.scene import cast
+from lhr_vehicle import load_vehicle
 import numpy as np
 
 
@@ -43,12 +44,9 @@ def rotation_zyx(roll: float, pitch: float, yaw: float) -> np.ndarray:
 class MountPose:
     """Where the sensor sits on the car, in base_link."""
 
-    # Only for using this library directly. lidar_sim_node overrides all
-    # three from vehicle.yaml, which is the source of truth; these are
-    # kept in step with it so an offline scene is not a different car.
-    x_m: float = 1.8
-    y_m: float = 0.0
-    z_m: float = 0.62
+    x_m: float = field(default_factory=lambda: load_vehicle().lidar_position_m[0])
+    y_m: float = field(default_factory=lambda: load_vehicle().lidar_position_m[1])
+    z_m: float = field(default_factory=lambda: load_vehicle().lidar_position_m[2])
     roll_rad: float = 0.0
     pitch_rad: float = 0.0
     yaw_rad: float = 0.0
