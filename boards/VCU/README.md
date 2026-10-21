@@ -295,9 +295,11 @@ matches the port by VID:PID).
    - drop the unused AWD3.
 3. DAC1 CH1 triggered by TIM7 TRGO, with DMA on DMA1_Ch3. TIM6/TIM7 as
    basic timers with TRGO on update.
-4. FDCAN2 (Critical):
-   - automatic retransmission on;
-   - FDCAN2_IT0/IT1 at priority 5.
+4. Resolved: FDCAN2 (Critical) automatic retransmission and IT0/IT1 at
+   priority 5 are now in `VCU.ioc`. CubeMX regenerated `Core/Src/fdcan.c`,
+   `Core/Src/stm32g4xx_it.c` and `Core/Inc/stm32g4xx_it.h`; the Board
+   register/NVIC fallback and duplicate handlers were removed together.
+   No pending regeneration is needed for this item.
 5. IWDG. Today the LHAL adapter drives it at register level.
 6. USART3 on PC10/PC11 for the STDC14 VCP. Today `comms_setup.cpp` sets it
    up, and `BUILD.bazel` defines `HAL_UART_MODULE_ENABLED`.

@@ -1,8 +1,7 @@
-// FDCAN and debug UART details VCU.ioc doesn't express yet (see "IOC gaps"
+// Debug UART details VCU.ioc doesn't express yet (see "IOC gaps"
 // in the board README).
 
 #include "board.hpp"
-#include "fdcan.h"
 
 namespace vcu_board {
 
@@ -13,16 +12,6 @@ namespace {
 constexpr uint32_t kDebugUartBaud = 115200;
 
 }  // namespace
-
-void ConfigureCan() {
-  // Use the default accept-all RX filter. Enable Critical-bus retransmission.
-  CLEAR_BIT(hfdcan2.Instance->CCCR, FDCAN_CCCR_DAR);
-  // CubeMX only enables FDCAN1 IRQs. Priority 5 permits FreeRTOS calls.
-  HAL_NVIC_SetPriority(FDCAN2_IT0_IRQn, 5, 0);
-  HAL_NVIC_EnableIRQ(FDCAN2_IT0_IRQn);
-  HAL_NVIC_SetPriority(FDCAN2_IT1_IRQn, 5, 0);
-  HAL_NVIC_EnableIRQ(FDCAN2_IT1_IRQn);
-}
 
 void ConfigureDebugUart() {
   __HAL_RCC_GPIOC_CLK_ENABLE();

@@ -24,7 +24,6 @@
 #include "task.h"
 #include "tim.h"
 #include "usb_device.h"
-#include "usbd_desc.h"
 #include "vcu_io.hpp"
 #ifdef VCU_TEST_IMAGE
 #include "vcu_test_app.hpp"
@@ -73,7 +72,6 @@ int main() {
   MX_TIM2_Init();
   MX_DAC1_Init();
   vcu_board::ConfigureAnalog();
-  vcu_board::ConfigureCan();
   vcu_board::ConfigureDebugUart();
 
   // Everything the tasks touch must be static: the Cortex-M port reclaims
