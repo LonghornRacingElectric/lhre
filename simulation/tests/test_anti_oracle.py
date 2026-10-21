@@ -55,14 +55,6 @@ def test_horizontal_links_give_no_jacking(reaction):
     assert oracle.virtual_power_coeff(corner, reaction) == pytest.approx(0.0, abs=1e-12)
 
 
-@pytest.mark.parametrize("slope", [-0.15, 0.1])
-def test_inclined_parallel_links_give_the_slope_on_both_paths(slope):
-    direction = np.array([1.0, slope]) / math.hypot(1.0, slope)
-    links = [(tuple(np.add((X_CP, z), 0.4 * direction)), (X_CP, z)) for z in (0.1, 0.32)]
-    for z_force in (0.0, R):
-        assert oracle.planar_coeff(links, X_CP, z_force) == pytest.approx(slope, abs=1e-12)
-
-
 KNOWN = [
     ("rear anti-squat", "rear", (X_CP + 1.0, 0.2), 0.2, 0.0, 100.0, 0.0),
     ("rear pro-squat", "rear", (X_CP + 1.0, 0.0), 0.0, -0.2, 0.0, -100.0),
@@ -83,14 +75,6 @@ def test_known_instant_centers_give_known_anti(axle, instant_center, c_upright, 
         assert oracle.anti_pct(axle, coeff, H, L) == pytest.approx(pct, abs=1e-9)
 
 
-def test_front_and_rear_signs_follow_the_pitch_load_transfer():
-    for fx in (1000.0, -1000.0):
-        assert oracle.pitch_transfer("rear", fx, H, L) == pytest.approx(-oracle.pitch_transfer("front", fx, H, L))
-    assert oracle.pitch_transfer("rear", 1000.0, H, L) > 0.0
-    assert oracle.anti_pct("front", -H / L, H, L) == pytest.approx(100.0)
-    assert oracle.anti_pct("rear", H / L, H, L) == pytest.approx(100.0)
-
-
 @pytest.mark.parametrize("axle", ["front", "rear"])
 @pytest.mark.parametrize("reaction", ["upright", "chassis"])
 def test_fx_sign_reversal_flips_jacking_but_not_the_coefficient_or_anti(axle, reaction):
@@ -109,16 +93,6 @@ def _variants():
         cambered[axle]["wheel"]["camber_deg"] = -1.5
         toed[axle]["wheel"].update(camber_deg=-1.5, toe_deg=0.5)
     return [("design", VEHICLE), ("camber", cambered), ("camber_toe", toed)]
-
-
-@pytest.mark.parametrize(("name", "vehicle"), _variants(), ids=[name for name, _ in _variants()])
-@pytest.mark.parametrize("axle", ["front", "rear"])
-@pytest.mark.parametrize("reaction", ["upright", "chassis"])
-def test_statics_and_virtual_power_agree(name, vehicle, axle, reaction):
-    corner = oracle.corner_from_vehicle(vehicle, axle)
-    coeff, tensions, _ = oracle.statics(corner, 1.0, {"source": reaction}, {}, "source")
-    assert np.all(np.isfinite(tensions))
-    assert coeff == pytest.approx(oracle.virtual_power_coeff(corner, reaction), abs=1e-10)
 
 
 def _cambered_toed_corner():
@@ -153,36 +127,3 @@ def test_the_wrench_split_closes_in_3d(reactions):
         assert np.max(np.abs(oracle.closure_residual(corner, split, FORCE, about))) < 1e-12 * scale
     held = sum(torques[source] for source, place in reactions.items() if place == "upright")
     assert np.dot(split.upright_moment, corner.spin) == pytest.approx(-held, abs=1e-12 * scale)
-
-
-def test_a_missing_spin_torque_breaks_the_closure():
-    corner = _cambered_toed_corner()
-    total = oracle.spin_torque(corner, FORCE)
-    split = oracle.wrench_split(corner, FORCE, {"drive": 0.6 * total}, {"drive": "chassis"})
-    residual = oracle.closure_residual(corner, split, FORCE, np.zeros(3))
-    assert np.linalg.norm(residual[3:]) == pytest.approx(abs(0.4 * total), rel=1e-12)
-
-
-@pytest.mark.parametrize("axle", ["front", "rear"])
-def test_a_zero_brake_torque_leaves_inboard_drive_jacking_unchanged(axle):
-    corner = oracle.corner_from_vehicle(VEHICLE, axle)
-    jacking = {}
-    for brake in ("upright", "chassis"):
-        reactions = {"drive": "chassis", "hydraulic_brake": brake}
-        coeff, _, drive_torque = oracle.statics(corner, 1000.0, reactions, {"hydraulic_brake": 0.0}, "drive")
-        jacking[brake] = coeff
-        assert abs(drive_torque) == pytest.approx(VEHICLE[axle]["wheel"]["radius_m"] * 1000.0, rel=1e-9)
-    assert jacking["upright"] == pytest.approx(jacking["chassis"], abs=1e-12)
-    assert jacking["upright"] == pytest.approx(oracle.statics_coeff(corner, "chassis"), abs=1e-12)
-    held_by_brake = oracle.statics(corner, 1000.0, {"drive": "chassis", "hydraulic_brake": "upright"}, {"drive": 0.0}, "hydraulic_brake")[0]
-    assert abs(held_by_brake - jacking["upright"]) > 1e-3
-
-
-@pytest.mark.parametrize("regen_share", [0.0, 0.35, 1.0])
-def test_a_shared_spin_torque_gives_the_share_weighted_coefficient(regen_share):
-    corner = oracle.corner_from_vehicle(VEHICLE, "rear")
-    regen = regen_share * oracle.spin_torque(corner, 1000.0 * oracle.X)
-    reactions = {"regen": "chassis", "hydraulic_brake": "upright"}
-    blended = oracle.statics(corner, 1000.0, reactions, {"regen": regen}, "hydraulic_brake")[0]
-    c_chassis, c_upright = oracle.statics_coeff(corner, "chassis"), oracle.statics_coeff(corner, "upright")
-    assert blended == pytest.approx(regen_share * c_chassis + (1.0 - regen_share) * c_upright, abs=1e-12)

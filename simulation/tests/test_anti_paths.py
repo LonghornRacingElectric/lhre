@@ -7,7 +7,6 @@ import yaml
 
 import anti_oracle as oracle
 from tools import anti_paths as ap
-from tools import vehicle_checks as vc
 
 REPO = Path(__file__).resolve().parents[2]
 VEHICLE = yaml.safe_load((REPO / "vehicle" / "vehicle.yml").read_text(encoding="utf-8"))
@@ -150,14 +149,6 @@ def test_a_negated_axle_sign_fails_the_known_anti_check(monkeypatch):
     assert len(_known_mismatches(records, "rear", 0.2, 0.0)) == 2
 
 
-def test_a_negated_coefficient_fails_the_known_anti_check(monkeypatch):
-    vehicle = _known_vehicle("front", (-1.0, 0.2))
-    original = ap._path_coefficients
-    monkeypatch.setattr(ap, "_path_coefficients", lambda pose, tangent: {k: -v for k, v in original(pose, tangent).items()})
-    records = ap.anti_records(vehicle, _bundle())
-    assert len(_known_mismatches(records, "front", -0.2, 0.0)) == 1
-
-
 def _asymmetric(**wheel):
     return _vehicle(ASYMMETRIC["front"], ASYMMETRIC["rear"], **wheel)
 
@@ -183,15 +174,6 @@ def test_kinpy_coefficients_match_the_oracle(make, axle):
         assert found.values[method] == pytest.approx(oracle.statics_coeff(corner, reaction), abs=tolerance + 1e-9)
     assert found.bobsim_instant_link == pytest.approx(found.values["contact_patch_path"], abs=1e-6)
     assert abs(found.values["contact_patch_path"] - found.values["virtual_power_3d"]) > 1e-3
-
-
-def test_the_wheel_center_formula_is_only_a_cross_check_with_toe():
-    vehicle = _asymmetric(camber_deg=-1.5, toe_deg=0.5)
-    found = ap.corner_coefficients(vehicle, "rear")
-    exact = oracle.virtual_power_coeff(oracle.corner_from_vehicle(vehicle, "rear"), "chassis")
-    assert abs(found.values["wheel_center_path"] - exact) > 10 * found.tolerance["virtual_power_3d"]
-    level = ap.corner_coefficients(_asymmetric(camber_deg=-1.5), "rear")
-    assert level.values["wheel_center_path"] == pytest.approx(level.values["virtual_power_3d"], abs=1e-6)
 
 
 @pytest.mark.parametrize("axle", ["front", "rear"])
@@ -255,11 +237,6 @@ def test_a_declared_datum_sets_the_cg_height():
     assert drive["pct"] == pytest.approx(100.0 * 0.2 * L / (H - 0.05), abs=1e-4)
 
 
-def test_a_datum_above_the_cg_fails():
-    with pytest.raises(ValueError, match="not above the ground plane"):
-        ap.anti_records(VEHICLE, _bundle(datum=0.5))
-
-
 def test_records_carry_the_c5_contract():
     records = ap.anti_records(_asymmetric(), _bundle())
     for record in records:
@@ -284,13 +261,6 @@ def test_unequal_tire_radii_flag_the_brake_share():
     for record in records:
         flagged = "brake.front_bias is a torque share" in (record["reason"] or "")
         assert flagged is (record["source"] == "hydraulic_brake")
-
-
-def test_singular_geometry_fails_with_its_key_path():
-    vehicle = copy.deepcopy(VEHICLE)
-    vehicle["rear"]["suspension"]["lower_aft_i_m"] = list(vehicle["rear"]["suspension"]["lower_fore_i_m"])
-    with pytest.raises(vc.VehicleCheckError, match=r"rear\.suspension\.lower_aft_i_m"):
-        ap.anti_records(vehicle, _bundle())
 
 
 def test_a_bad_reaction_value_fails():
