@@ -6,7 +6,7 @@
 #include "lhre_can_bench.hpp"
 #include "lhre_can_vcu.hpp"
 #include "lookup.hpp"
-#include "rtos_lock.hpp"
+#include "longhorn/rtos_lock.hpp"
 #include "steering.hpp"
 
 namespace vcu {
@@ -162,12 +162,12 @@ void TestApp::Step() {
 }
 
 DigitalOutputs TestApp::outputs() {
-  SchedulerLock lock(state_mutex_, pdMS_TO_TICKS(5));
+  longhorn::SchedulerLock lock(state_mutex_, pdMS_TO_TICKS(5));
   return shared_.outputs;
 }
 
 bool TestApp::tone_playing() {
-  SchedulerLock lock(state_mutex_, pdMS_TO_TICKS(5));
+  longhorn::SchedulerLock lock(state_mutex_, pdMS_TO_TICKS(5));
   return shared_.tone_playing;
 }
 
@@ -177,7 +177,7 @@ void TestApp::IoTick(uint32_t now) {
     last_diag_ms_ = now - kDiagPeriodMs;
   }
   // Not hard real time: wait a tick for a shell handler to finish.
-  SchedulerLock lock(state_mutex_, 1);
+  longhorn::SchedulerLock lock(state_mutex_, 1);
   if (!lock.locked()) {
     return;
   }
@@ -243,9 +243,9 @@ void TestApp::IoTick(uint32_t now) {
 }
 
 void TestApp::HandleCan(uint32_t now, Shared& s) {
-  RxSlot<bench::BenchEchoRequestCritical> crit_echo;
-  RxSlot<bench::BenchEchoRequestData> data_echo;
-  RxSlot<bench::BenchTestCommand> command;
+  longhorn::RxSlot<bench::BenchEchoRequestCritical> crit_echo;
+  longhorn::RxSlot<bench::BenchEchoRequestData> data_echo;
+  longhorn::RxSlot<bench::BenchTestCommand> command;
   lhal::CanFrame frame;
   while (critical_inbox_.Pop(&frame)) {
     if (crit_echo.TryDecode(frame, now)) {
@@ -411,7 +411,7 @@ void TestApp::RegisterShellCommands(longhorn::Shell& shell) {
 
 void TestApp::AdcCommand(void* ctx, longhorn::Console& out, const char*) {
   auto* app = static_cast<TestApp*>(ctx);
-  SchedulerLock lock(app->state_mutex_, pdMS_TO_TICKS(20));
+  longhorn::SchedulerLock lock(app->state_mutex_, pdMS_TO_TICKS(20));
   const AnalogReadings& a = app->shared_.analog;
   const CalibratedValues& c = app->shared_.cal;
   out.Printf("vdda=%dmV (%s) vrefint=%u", Mv(a.vdda),
@@ -430,7 +430,7 @@ void TestApp::AdcCommand(void* ctx, longhorn::Console& out, const char*) {
 
 void TestApp::IoCommand(void* ctx, longhorn::Console& out, const char*) {
   auto* app = static_cast<TestApp*>(ctx);
-  SchedulerLock lock(app->state_mutex_, pdMS_TO_TICKS(20));
+  longhorn::SchedulerLock lock(app->state_mutex_, pdMS_TO_TICKS(20));
   const DigitalInputs& i = app->shared_.inputs;
   const DigitalOutputs& o = app->shared_.outputs;
   out.Printf(
@@ -457,7 +457,7 @@ void TestApp::OutCommand(void* ctx, longhorn::Console& out, const char* args) {
     const size_t len = static_cast<size_t>(space - args);
     for (const OutputName& o : kOutputs) {
       if (std::strlen(o.name) == len && std::strncmp(o.name, args, len) == 0) {
-        SchedulerLock lock(app->state_mutex_, pdMS_TO_TICKS(20));
+        longhorn::SchedulerLock lock(app->state_mutex_, pdMS_TO_TICKS(20));
         app->shared_.outputs.*o.field = space[1] == '1';
         out.Printf("%s=%c", o.name, space[1]);
         return;
@@ -469,7 +469,7 @@ void TestApp::OutCommand(void* ctx, longhorn::Console& out, const char* args) {
 
 void TestApp::ReleaseCommand(void* ctx, longhorn::Console& out, const char*) {
   auto* app = static_cast<TestApp*>(ctx);
-  SchedulerLock lock(app->state_mutex_, pdMS_TO_TICKS(20));
+  longhorn::SchedulerLock lock(app->state_mutex_, pdMS_TO_TICKS(20));
   app->shared_.outputs = SafeOutputs();
   app->shared_.tone = ToneRequest{true, true, 0.0f, 0.0f, 0};
   app->shared_.led_override = false;
@@ -478,7 +478,7 @@ void TestApp::ReleaseCommand(void* ctx, longhorn::Console& out, const char*) {
 
 void TestApp::ToneCommand(void* ctx, longhorn::Console& out, const char* args) {
   auto* app = static_cast<TestApp*>(ctx);
-  SchedulerLock lock(app->state_mutex_, pdMS_TO_TICKS(20));
+  longhorn::SchedulerLock lock(app->state_mutex_, pdMS_TO_TICKS(20));
   if (std::strcmp(args, "off") == 0) {
     app->shared_.tone = ToneRequest{true, true, 0.0f, 0.0f, 0};
     out.Println("tone off");
@@ -501,7 +501,7 @@ void TestApp::ToneCommand(void* ctx, longhorn::Console& out, const char* args) {
 
 void TestApp::LedCommand(void* ctx, longhorn::Console& out, const char* args) {
   auto* app = static_cast<TestApp*>(ctx);
-  SchedulerLock lock(app->state_mutex_, pdMS_TO_TICKS(20));
+  longhorn::SchedulerLock lock(app->state_mutex_, pdMS_TO_TICKS(20));
   if (std::strcmp(args, "auto") == 0) {
     app->shared_.led_override = false;
     out.Println("led auto");
@@ -527,7 +527,7 @@ void TestApp::StreamCommand(void* ctx, longhorn::Console& out,
   if (period != 0 && period < static_cast<long>(kIoPeriodMs)) {
     period = kIoPeriodMs;
   }
-  SchedulerLock lock(app->state_mutex_, pdMS_TO_TICKS(20));
+  longhorn::SchedulerLock lock(app->state_mutex_, pdMS_TO_TICKS(20));
   app->shared_.stream_period_ms = static_cast<uint32_t>(period);
   out.Printf("stream %ld ms (VCP log: counts x7, source mV x7, vdda, din)",
              period);
@@ -535,7 +535,7 @@ void TestApp::StreamCommand(void* ctx, longhorn::Console& out,
 
 void TestApp::CalCommand(void* ctx, longhorn::Console& out, const char* args) {
   auto* app = static_cast<TestApp*>(ctx);
-  SchedulerLock lock(app->state_mutex_, pdMS_TO_TICKS(20));
+  longhorn::SchedulerLock lock(app->state_mutex_, pdMS_TO_TICKS(20));
   Shared& s = app->shared_;
   if (std::strcmp(args, "start") == 0) {
     s.capturing = true;

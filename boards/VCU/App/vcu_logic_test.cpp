@@ -6,7 +6,7 @@
 #include "analog.hpp"
 #include "battery.hpp"
 #include "buzzer.hpp"
-#include "debounce.hpp"
+#include "longhorn/debounce.hpp"
 #include "faults.hpp"
 #include "host_adc.hpp"
 #include "lookup.hpp"
@@ -75,8 +75,8 @@ TEST(Lookup, InterpolatesAndClamps) {
 }
 
 // Debounce
-TEST(Debouncer, NeedsStableLevelForTheWholeWindow) {
-  vcu::Debouncer d;
+TEST(longhorn::Debouncer, NeedsStableLevelForTheWholeWindow) {
+  longhorn::Debouncer d;
   EXPECT_FALSE(d.Update(true, 0, 10));
   EXPECT_FALSE(d.Update(true, 9, 10));
   EXPECT_TRUE(d.Update(true, 10, 10));
@@ -86,8 +86,8 @@ TEST(Debouncer, NeedsStableLevelForTheWholeWindow) {
   EXPECT_FALSE(d.Update(false, 23, 10));
 }
 
-TEST(EdgeButton, HeldAtBootNeedsAReleaseFirst) {
-  vcu::EdgeButton b;
+TEST(longhorn::EdgeButton, HeldAtBootNeedsAReleaseFirst) {
+  longhorn::EdgeButton b;
   uint32_t t = 0;
   for (; t < 100; ++t) {
     EXPECT_FALSE(b.Update(true, t, 20));
@@ -106,8 +106,8 @@ TEST(EdgeButton, HeldAtBootNeedsAReleaseFirst) {
   }
 }
 
-TEST(PersistenceTimer, HoldsAfterDurationAndDropsAtOnce) {
-  vcu::PersistenceTimer p;
+TEST(longhorn::PersistenceTimer, HoldsAfterDurationAndDropsAtOnce) {
+  longhorn::PersistenceTimer p;
   EXPECT_FALSE(p.Update(true, 0, 100));
   EXPECT_FALSE(p.Update(true, 99, 100));
   EXPECT_TRUE(p.Update(true, 100, 100));

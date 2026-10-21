@@ -8,7 +8,7 @@
 #include "battery.hpp"
 #include "buzzer.hpp"
 #include "control_features.hpp"
-#include "debounce.hpp"
+#include "longhorn/debounce.hpp"
 #include "dfu.hpp"
 #include "digital_io.hpp"
 #include "faults.hpp"
@@ -177,8 +177,8 @@ class App {
 
   // Control state (control task only)
   const Params* params_;
-  CanInbox critical_inbox_;
-  CanInbox data_inbox_;
+  longhorn::CanInbox critical_inbox_;
+  longhorn::CanInbox data_inbox_;
   VehicleRx rx_;
   WheelRx wheels_;
   PedalProcessor pedals_;
@@ -186,13 +186,13 @@ class App {
   AdcProgress adc2_progress_;
   BrakeBias brake_bias_;
   ShutdownLoop shutdown_loop_;
-  Debouncer b1_disconnect_;
-  Debouncer b1_overvoltage_;
-  Debouncer b2_disconnect_;
-  Debouncer b2_overvoltage_;
-  Debouncer motor_power_;
-  Debouncer motor_disconnect_;
-  EdgeButton rtd_switch_;
+  longhorn::Debouncer b1_disconnect_;
+  longhorn::Debouncer b1_overvoltage_;
+  longhorn::Debouncer b2_disconnect_;
+  longhorn::Debouncer b2_overvoltage_;
+  longhorn::Debouncer motor_power_;
+  longhorn::Debouncer motor_disconnect_;
+  longhorn::EdgeButton rtd_switch_;
   BrakeFlagLatch brake_latch_;
   ErrorLeds error_leds_;
   StateMachine sm_;

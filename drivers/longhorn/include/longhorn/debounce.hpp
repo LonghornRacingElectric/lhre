@@ -4,7 +4,7 @@
 
 #include "lhal/system.hpp"
 
-namespace vcu {
+namespace longhorn {
 
 // Reports a new level only after the raw input has held it for
 // `debounce_ms`. Starts at `initial` until the first stable reading.
@@ -102,4 +102,4 @@ class Ema {
   float y_ = 0.0f;
 };
 
-}  // namespace vcu
+}  // namespace longhorn

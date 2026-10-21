@@ -6,7 +6,7 @@
 #include "lhre_can_vcu.hpp"
 #include "longhorn/console.hpp"
 #include "lookup.hpp"
-#include "rtos_lock.hpp"
+#include "longhorn/rtos_lock.hpp"
 #include "status_led.hpp"
 
 namespace vcu {
@@ -652,14 +652,14 @@ void App::Publish(uint32_t now) {
   live_.brake_flags_latched = brake_latch_.latched();
   live_.fault_resets = brake_latch_.resets();
   // Never block the control loop: skip a publish if a reader holds it.
-  SchedulerLock lock(snapshot_mutex_, 0);
+  longhorn::SchedulerLock lock(snapshot_mutex_, 0);
   if (lock.locked()) {
     published_ = live_;
   }
 }
 
 ControlSnapshot App::snapshot() {
-  SchedulerLock lock(snapshot_mutex_, pdMS_TO_TICKS(5));
+  longhorn::SchedulerLock lock(snapshot_mutex_, pdMS_TO_TICKS(5));
   return lock.locked() ? published_ : ControlSnapshot{};
 }
 

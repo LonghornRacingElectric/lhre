@@ -4,7 +4,7 @@
 #include "semphr.h"
 #include "task.h"
 
-namespace vcu {
+namespace longhorn {
 
 // Scheduler-less tests are single-threaded and skip the mutex.
 // Check locked() when a timed lock can fail.
@@ -30,4 +30,4 @@ class SchedulerLock {
   bool locked_ = false;
 };
 
-}  // namespace vcu
+}  // namespace longhorn

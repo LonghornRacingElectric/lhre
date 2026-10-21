@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include "debounce.hpp"
+#include "longhorn/debounce.hpp"
 #include "lhre_can_types.hpp"
 #include "vcu_config.hpp"
 
@@ -42,8 +42,8 @@ class ShutdownLoop {
 
   bool in_high_ = false;
   bool out_high_ = false;
-  Debouncer in_debounce_;
-  Debouncer out_debounce_;
+  longhorn::Debouncer in_debounce_;
+  longhorn::Debouncer out_debounce_;
   bool sampled_ = false;
   uint32_t first_ms_ = 0;
   lhre::can::ShutdownLoopState state_ = lhre::can::ShutdownLoopState::kUnknown;

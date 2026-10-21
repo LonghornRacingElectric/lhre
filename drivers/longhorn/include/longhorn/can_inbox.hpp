@@ -8,7 +8,7 @@
 #include "lhal/can.hpp"
 #include "lhal/system.hpp"
 
-namespace vcu {
+namespace longhorn {
 
 // ISR-to-control SPSC queue for classic CAN frames.
 class CanInbox {
@@ -106,4 +106,4 @@ struct RxSlot {
   }
 };
 
-}  // namespace vcu
+}  // namespace longhorn

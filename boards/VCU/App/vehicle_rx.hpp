@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include "can_inbox.hpp"
+#include "longhorn/can_inbox.hpp"
 #include "lhre_can_dui.hpp"
 #include "lhre_can_hvc.hpp"
 #include "lhre_can_inverter.hpp"
@@ -14,18 +14,18 @@ namespace vcu {
 
 // Vehicle feedback on the Critical bus.
 struct VehicleRx {
-  RxSlot<lhre::can::inverter::InverterMotorPosition> motor_position;
-  RxSlot<lhre::can::inverter::InverterCurrent> inverter_current;
-  RxSlot<lhre::can::inverter::InverterVoltage> inverter_voltage;
-  RxSlot<lhre::can::inverter::InverterInternalStates> inverter_states;
-  RxSlot<lhre::can::inverter::InverterFaults> inverter_faults;
-  RxSlot<lhre::can::inverter::InverterHighSpeed> inverter_high_speed;
-  RxSlot<lhre::can::hvc::HvcContactorStatus> hvc_contactors;
-  RxSlot<lhre::can::hvc::HvcIndicators> hvc_indicators;
-  RxSlot<lhre::can::hvc::HvcCellLimits> hvc_cell_limits;
-  RxSlot<lhre::can::pdu::PduBse3> pdu_bse3;
-  RxSlot<lhre::can::dui::DuiDriverInputs> dui_inputs;
-  RxSlot<lhre::can::pi::VcuModeCommand> mode_command;  // aperiodic
+  longhorn::RxSlot<lhre::can::inverter::InverterMotorPosition> motor_position;
+  longhorn::RxSlot<lhre::can::inverter::InverterCurrent> inverter_current;
+  longhorn::RxSlot<lhre::can::inverter::InverterVoltage> inverter_voltage;
+  longhorn::RxSlot<lhre::can::inverter::InverterInternalStates> inverter_states;
+  longhorn::RxSlot<lhre::can::inverter::InverterFaults> inverter_faults;
+  longhorn::RxSlot<lhre::can::inverter::InverterHighSpeed> inverter_high_speed;
+  longhorn::RxSlot<lhre::can::hvc::HvcContactorStatus> hvc_contactors;
+  longhorn::RxSlot<lhre::can::hvc::HvcIndicators> hvc_indicators;
+  longhorn::RxSlot<lhre::can::hvc::HvcCellLimits> hvc_cell_limits;
+  longhorn::RxSlot<lhre::can::pdu::PduBse3> pdu_bse3;
+  longhorn::RxSlot<lhre::can::dui::DuiDriverInputs> dui_inputs;
+  longhorn::RxSlot<lhre::can::pi::VcuModeCommand> mode_command;  // aperiodic
 
   // Returns true if the frame was one of ours.
   bool Dispatch(const lhal::CanFrame& f, uint32_t now_ms) {
@@ -73,10 +73,10 @@ struct VehicleRx {
 
 // Wheel measurements arrive on Data, not Critical.
 struct WheelRx {
-  RxSlot<lhre::can::usm::AccelerationVectorUnsprungWheelSpeedFl> fl;
-  RxSlot<lhre::can::usm::AccelerationVectorUnsprungWheelSpeedFr> fr;
-  RxSlot<lhre::can::usm::AccelerationVectorUnsprungWheelSpeedRl> rl;
-  RxSlot<lhre::can::usm::AccelerationVectorUnsprungWheelSpeedRr> rr;
+  longhorn::RxSlot<lhre::can::usm::AccelerationVectorUnsprungWheelSpeedFl> fl;
+  longhorn::RxSlot<lhre::can::usm::AccelerationVectorUnsprungWheelSpeedFr> fr;
+  longhorn::RxSlot<lhre::can::usm::AccelerationVectorUnsprungWheelSpeedRl> rl;
+  longhorn::RxSlot<lhre::can::usm::AccelerationVectorUnsprungWheelSpeedRr> rr;
 
   bool Dispatch(const lhal::CanFrame& f, uint32_t now) {
     return fl.TryDecode(f, now) || fr.TryDecode(f, now) ||

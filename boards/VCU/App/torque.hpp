@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include "debounce.hpp"
+#include "longhorn/debounce.hpp"
 #include "vcu_config.hpp"
 
 namespace vcu {
@@ -41,7 +41,7 @@ class TorquePath {
   uint32_t tc_prev_sample_ms_ = 0;
   float tc_trim_ = 0.0f;
   bool tc_seeded_ = false;
-  Ema tc_alpha_filter_;
+  longhorn::Ema tc_alpha_filter_;
 };
 
 }  // namespace vcu

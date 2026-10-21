@@ -56,3 +56,12 @@ LHAL-free logic (CRC, pack/unpack, ring buffers) belongs in `lib/`, not here.
 `Shell::SetByteHandler` observes each byte before line parsing. Returning
 true consumes the byte and clears the partial line, supporting newline-free
 recovery tokens across polls. The hook runs in the polling task.
+
+Shared input and concurrency helpers are header-only targets:
+`debounce` provides `Debouncer`, boot-safe `EdgeButton`, `PersistenceTimer`
+and `Ema`; `rtos_lock` provides `SchedulerLock` with the consumer's FreeRTOS
+kernel; `can_inbox` provides the single-producer/single-consumer classic-CAN
+queue and `RxSlot<Message>`. RX slots live here because arrival timestamps,
+freshness policy and LHAL frame validation are board services rather than
+wire packing. A slot times out after twice the message period; aperiodic
+messages can be seen but are never fresh by age.

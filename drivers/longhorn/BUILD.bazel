@@ -98,3 +98,27 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
+
+cc_library(
+    name = "debounce",
+    hdrs = ["include/longhorn/debounce.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+    deps = ["//drivers/lhal"],
+)
+
+cc_library(
+    name = "rtos_lock",
+    hdrs = ["include/longhorn/rtos_lock.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+    deps = ["//drivers/lhal"],
+)
+
+cc_library(
+    name = "can_inbox",
+    hdrs = ["include/longhorn/can_inbox.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+    deps = ["//drivers/lhal"],
+)

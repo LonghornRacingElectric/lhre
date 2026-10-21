@@ -6,7 +6,7 @@
 #include "FreeRTOS.h"
 #include "analog.hpp"
 #include "buzzer.hpp"
-#include "can_inbox.hpp"
+#include "longhorn/can_inbox.hpp"
 #include "dfu.hpp"
 #include "diag_frames.hpp"
 #include "digital_io.hpp"
@@ -133,8 +133,8 @@ class TestApp {
   SemaphoreHandle_t state_mutex_ = nullptr;
   Shared shared_;
 
-  CanInbox critical_inbox_;
-  CanInbox data_inbox_;
+  longhorn::CanInbox critical_inbox_;
+  longhorn::CanInbox data_inbox_;
   Buzzer tone_;
   uint16_t sine_[kSineSamples] = {};
   bool dac_playing_ = false;

@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include "debounce.hpp"
+#include "longhorn/debounce.hpp"
 #include "vcu_config.hpp"
 
 namespace vcu {
@@ -31,8 +31,8 @@ class BatteryEstimator {
 
  private:
   uint32_t rest_ms_ = 0;
-  Ema ocv_min_;
-  Ema ocv_max_;
+  longhorn::Ema ocv_min_;
+  longhorn::Ema ocv_max_;
   BatteryOutputs out_;
 };
 

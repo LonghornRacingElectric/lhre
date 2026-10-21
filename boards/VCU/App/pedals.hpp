@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include "debounce.hpp"
+#include "longhorn/debounce.hpp"
 #include "vcu_config.hpp"
 
 namespace vcu {
@@ -61,12 +61,12 @@ class PedalProcessor {
                       const AppsParams& apps, const BseParams& bse);
 
  private:
-  PersistenceTimer apps_implausible_timer_;
-  PersistenceTimer bse1_fault_timer_;
-  PersistenceTimer bse2_fault_timer_;
-  PersistenceTimer hard_brake_mismatch_timer_;
-  Ema pedal_filter_;
-  Ema bse_filter_;
+  longhorn::PersistenceTimer apps_implausible_timer_;
+  longhorn::PersistenceTimer bse1_fault_timer_;
+  longhorn::PersistenceTimer bse2_fault_timer_;
+  longhorn::PersistenceTimer hard_brake_mismatch_timer_;
+  longhorn::Ema pedal_filter_;
+  longhorn::Ema bse_filter_;
   bool brake_pressed_ = false;
   bool bot_latched_ = false;
 };
