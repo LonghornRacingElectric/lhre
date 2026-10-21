@@ -22,7 +22,7 @@
 #include "lhal/stm32/watchdog.hpp"
 #include "task.h"
 #include "tim.h"
-#include "usb_cdc.hpp"
+#include "lhal/stm32/usb_cdc.hpp"
 #include "usb_device.h"
 #include "usbd_desc.h"
 #include "vcu_io.hpp"
@@ -116,15 +116,8 @@ int main() {
                                 125.0f / (htim2.Init.Period + 1));
 
   static lhal::stm32::Uart debug_uart(&vcu_board::huart3);
-  static vcu_board::UsbCdc usb(&hUsbDeviceFS);
-  // Same startup as CubeMX, with the VCU receive callbacks installed before USB
-  // starts.
-  if (USBD_Init(&hUsbDeviceFS, &CDC_Desc, DEVICE_FS) != USBD_OK ||
-      USBD_RegisterClass(&hUsbDeviceFS, &USBD_CDC) != USBD_OK ||
-      USBD_CDC_RegisterInterface(&hUsbDeviceFS, &VcuUsbInterface) != USBD_OK ||
-      USBD_Start(&hUsbDeviceFS) != USBD_OK) {
-    Error_Handler();
-  }
+  static lhal::stm32::UsbCdc usb(&hUsbDeviceFS);
+  MX_USB_Device_Init();
   static lhal::stm32::Iwdg watchdog;
 
   static lhal::stm32::Gpio b1_disconnect(GPIOD, GPIO_PIN_13);

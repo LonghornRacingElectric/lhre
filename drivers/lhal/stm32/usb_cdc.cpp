@@ -69,6 +69,15 @@ bool UsbCdc::TxBusy() const {
 
 bool UsbCdc::connected() const { return Configured() && dtr_; }
 
+bool UsbCdc::SetRxObserver(RxObserver observer, void* context) {
+  const uint32_t primask = __get_PRIMASK();
+  __disable_irq();
+  rx_observer_context_ = context;
+  rx_observer_ = observer;
+  __set_PRIMASK(primask);
+  return true;
+}
+
 Status UsbCdc::Write(const uint8_t* data, size_t len, uint32_t timeout_ms) {
   if (!Configured()) {
     return Status::kError;
@@ -166,6 +175,7 @@ void UsbCdc::HandleInit() {
 }
 
 void UsbCdc::HandleReceive(uint8_t* data, uint32_t len) {
+  if (rx_observer_ != nullptr) rx_observer_(rx_observer_context_, data, len);
   size_t i = 0;
   // A pending ReadAsync consumes directly.
   if (rx_async_len_ != 0) {

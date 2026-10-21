@@ -326,12 +326,12 @@ FDCAN on PCLK1, ADC on HCLK/2 = 48 MHz, USB on PLLQ.
 - Rule text for every threshold marked `TODO(verify rule)`. The RTD sound
   needs measuring against its 80-90 dBA band.
 
-### Board-local compatibility support
+### Shared services and board adapters
 
-The VCU keeps its ADC progress interface, host ADC/UART fakes, RGB animation and rainbow task in `App/`. `Board/dma_adc.hpp` and
-`Board/usb_cdc.*` provide the hardware adapters. These are VCU-local versions
-of the existing shared implementations, extended for completed-scan monitoring,
-legacy brightness and newline-free DFU recovery. Shared drivers remain unchanged.
-Board startup follows CubeMX’s initialization sequence but registers the
-VCU USB callbacks before starting USB; generated files are unchanged.
-CAN message definitions and generated-code target declarations remain shared.
+The shell, debounce/filter helpers, scheduler lock and CAN inbox/RX slots
+come from [longhorn](../../drivers/longhorn/README.md). USB uses
+`lhal::stm32::UsbCdc` and its receive-path observer for recovery detection;
+the generated CDC interface source remains excluded by `firmware_project`.
+`Board/main.cpp` constructs the adapter before `MX_USB_Device_Init`.
+The VCU retains its ADC progress interface, host ADC/UART fakes, legacy RGB
+brightness and rainbow task. `Board/dma_adc.hpp` supplies the ADC adapter.

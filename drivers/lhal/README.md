@@ -137,3 +137,9 @@ be run with `--config=local`.
    callback dispatch), guarded by its `HAL_*_MODULE_ENABLED`.
 3. Host fake in `include/lhal/host/` with test helpers (inject/inspect).
 4. Tests in `test/lhal_host_test.cpp`.
+
+`Uart::SetRxObserver` is an optional receive-path hook (false by default).
+`stm32::UsbCdc` invokes it in USB interrupt context before async delivery or
+ring buffering, even when the ring is full. Keep callbacks bounded and
+non-blocking; register before starting USB and keep the context alive.
+Registration preserves the interrupt mask while replacing callback/context.

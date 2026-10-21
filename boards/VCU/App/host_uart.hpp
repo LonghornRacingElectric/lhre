@@ -4,14 +4,14 @@
 #include <deque>
 #include <vector>
 
-#include "vcu_uart.hpp"
+#include "lhal/uart.hpp"
 
 namespace vcu::host {
 using namespace lhal;
 
 // In-memory UART for tests and sims. Writes accumulate in tx_data(); feed
 // the receive side with InjectRx(). Async transfers complete immediately.
-class Uart final : public vcu::RecoveryUart {
+class Uart final : public lhal::Uart {
  public:
   Status Write(const uint8_t* data, size_t len,
                uint32_t /*timeout_ms*/) override {
