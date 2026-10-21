@@ -57,12 +57,12 @@ msg::VcuAccelPedal MakeVcuAccelPedal(const ControlSnapshot& s, const Params& /*P
   const auto& ped = s.pedals;
   msg::VcuAccelPedal ap;
   ap.set_accel_pedal_travel(ClampPhys(ped.pedal_travel, 0.0f, kU16Fraction));
-  ap.apps_s.faultsapps1_disconnect = ped.apps1_disconnect;
-  ap.apps_s.faultsapps2_disconnect = ped.apps2_disconnect;
-  ap.apps_s.faultsapps1_out_of_range = ped.apps1_out_of_range;
-  ap.apps_s.faultsapps2_out_of_range = ped.apps2_out_of_range;
-  ap.apps_s.faultsapps_mismatch = ped.apps_mismatch;
-  ap.apps_s.faultsapps_implausible = ped.apps_implausible;
+  ap.apps_faults_apps1_disconnect = ped.apps1_disconnect;
+  ap.apps_faults_apps2_disconnect = ped.apps2_disconnect;
+  ap.apps_faults_apps1_out_of_range = ped.apps1_out_of_range;
+  ap.apps_faults_apps2_out_of_range = ped.apps2_out_of_range;
+  ap.apps_faults_apps_mismatch = ped.apps_mismatch;
+  ap.apps_faults_apps_implausible = ped.apps_implausible;
   return ap;
 }
 
@@ -89,10 +89,10 @@ msg::VcuBrakes MakeVcuBrakes(const ControlSnapshot& s, const Params& /*P*/) {
   br.set_brake_pressure_rear_post_lock(
       ClampPhys(s.bse3_psi, 0.0f, kU16Psi));
   br.set_brake_bias(ClampPhys(s.brake_bias, 0.0f, 1.0f));
-  br.bse_s.faultsbse1_disconnect = ped.bse1_disconnect;
-  br.bse_s.faultsbse2_disconnect = ped.bse2_disconnect;
-  br.bse_s.faultsbse1_out_of_range = ped.bse1_out_of_range;
-  br.bse_s.faultsbse2_out_of_range = ped.bse2_out_of_range;
+  br.bse_faults_bse1_disconnect = ped.bse1_disconnect;
+  br.bse_faults_bse2_disconnect = ped.bse2_disconnect;
+  br.bse_faults_bse1_out_of_range = ped.bse1_out_of_range;
+  br.bse_faults_bse2_out_of_range = ped.bse2_out_of_range;
   return br;
 }
 
@@ -118,7 +118,7 @@ msg::VcuDriveState MakeVcuDriveState(const ControlSnapshot& s, const Params& /*P
 msg::VcuStatus MakeVcuStatus(const ControlSnapshot& s, const Params& /*P*/) {
   msg::VcuStatus hb;
     hb.state = s.state;
-    hb.s.faultssensor_loss =
+    hb.faults_sensor_loss =
         (s.faults & (kFaultAppsImplausible | kFaultBse1Range | kFaultBse2Range |
                     kFaultBrakeFlagLatched)) != 0;
     hb.set_torque_request(ClampPhys(s.torque_command, -300.0f, 300.0f));
@@ -130,28 +130,28 @@ msg::VcuStatus MakeVcuStatus(const ControlSnapshot& s, const Params& /*P*/) {
 msg::VcuFaults MakeVcuFaults(const ControlSnapshot& s, const Params& /*P*/) {
   msg::VcuFaults vf;
     const uint32_t f = s.faults;
-    vf.active_s.faultsapps_implausible = (f & kFaultAppsImplausible) != 0;
-    vf.active_s.faultsapps1_range = (f & kFaultApps1Range) != 0;
-    vf.active_s.faultsapps2_range = (f & kFaultApps2Range) != 0;
-    vf.active_s.faultsbse1_range = (f & kFaultBse1Range) != 0;
-    vf.active_s.faultsbse2_range = (f & kFaultBse2Range) != 0;
-    vf.active_s.faultssteering_range = (f & kFaultSteeringRange) != 0;
-    vf.active_s.faultsbrake_flag_latched = (f & kFaultBrakeFlagLatched) != 0;
-    vf.active_s.faultsbrake_over_throttle = (f & kFaultBrakeOverThrottle) != 0;
-    vf.active_s.faultsshutdown_open = (f & kFaultShutdownOpen) != 0;
-    vf.active_s.faultshvc_timeout = (f & kFaultHvcTimeout) != 0;
-    vf.active_s.faultsinverter_timeout = (f & kFaultInverterTimeout) != 0;
-    vf.active_s.faultspdu_timeout = (f & kFaultPduTimeout) != 0;
-    vf.active_s.faultsinverter_fault = (f & kFaultInverterFault) != 0;
-    vf.active_s.faultsbspd_tripped = (f & kFaultBspdTripped) != 0;
-    vf.active_s.faultshard_brake_mismatch = (f & kFaultHardBrakeMismatch) != 0;
-    vf.active_s.faultsdui_timeout = (f & kFaultDuiTimeout) != 0;
-    vf.active_s.faultsbse3_unavailable = (f & kFaultBse3Unavailable) != 0;
-    vf.active_s.faultscontactors_open = (f & kFaultContactorsOpen) != 0;
-    vf.active_s.faultsmotor_disconnect = (f & kFaultMotorDisconnect) != 0;
-    vf.active_s.faultsshutdown_sense_implausible =
+    vf.active_faults_apps_implausible = (f & kFaultAppsImplausible) != 0;
+    vf.active_faults_apps1_range = (f & kFaultApps1Range) != 0;
+    vf.active_faults_apps2_range = (f & kFaultApps2Range) != 0;
+    vf.active_faults_bse1_range = (f & kFaultBse1Range) != 0;
+    vf.active_faults_bse2_range = (f & kFaultBse2Range) != 0;
+    vf.active_faults_steering_range = (f & kFaultSteeringRange) != 0;
+    vf.active_faults_brake_flag_latched = (f & kFaultBrakeFlagLatched) != 0;
+    vf.active_faults_brake_over_throttle = (f & kFaultBrakeOverThrottle) != 0;
+    vf.active_faults_shutdown_open = (f & kFaultShutdownOpen) != 0;
+    vf.active_faults_hvc_timeout = (f & kFaultHvcTimeout) != 0;
+    vf.active_faults_inverter_timeout = (f & kFaultInverterTimeout) != 0;
+    vf.active_faults_pdu_timeout = (f & kFaultPduTimeout) != 0;
+    vf.active_faults_inverter_fault = (f & kFaultInverterFault) != 0;
+    vf.active_faults_bspd_tripped = (f & kFaultBspdTripped) != 0;
+    vf.active_faults_hard_brake_mismatch = (f & kFaultHardBrakeMismatch) != 0;
+    vf.active_faults_dui_timeout = (f & kFaultDuiTimeout) != 0;
+    vf.active_faults_bse3_unavailable = (f & kFaultBse3Unavailable) != 0;
+    vf.active_faults_contactors_open = (f & kFaultContactorsOpen) != 0;
+    vf.active_faults_motor_disconnect = (f & kFaultMotorDisconnect) != 0;
+    vf.active_faults_shutdown_sense_implausible =
         (f & kFaultShutdownSenseImplausible) != 0;
-    vf.active_s.faultsadc_stale = (f & kFaultAdcStale) != 0;
+    vf.active_faults_adc_stale = (f & kFaultAdcStale) != 0;
     vf.primary_fault = PrimaryFault(f);
     vf.state = s.state;
     vf.brake_flags_latched = s.brake_flags_latched;

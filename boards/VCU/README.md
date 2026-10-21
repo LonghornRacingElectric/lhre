@@ -342,3 +342,7 @@ message builders in `vcu_critical_tx.cpp`, diagnostics in `vcu_telemetry.cpp`,
 watchdog/recovery in `vcu_supervisor.cpp`, and console commands in
 `vcu_shell.cpp`. These remain private `App` operations with the same task
 ownership and send ordering. Rate gates use longhorn's checked `PeriodMs`.
+
+`VehicleRx` and `WheelRx` extend the generated VCU Critical/Data subscription
+structs from `:can_rx_vcu`; only vehicle freshness/fault policy stays local.
+Subscriptions come from the existing spec `to_boards` fields.

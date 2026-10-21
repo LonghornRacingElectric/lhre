@@ -92,3 +92,14 @@ name.
 Indexed array blocks (`quantity` > 1, e.g. `HVC_CELL_TEMPS`) are plain
 structs: fill the slots and call `ToFrame(i)` per frame. Element index
 math lives with [lib/spec](../../spec/README.md) and the gateway.
+
+## Recipient dispatch
+
+`:can_rx_<board>` exports `lhre_can_rx_<board>.hpp`. For each bus subscribed
+through `CanMessage.to_boards` (including `*`), it generates
+`lhre::can::rx::<Board><Bus>Rx`, containing one longhorn `RxSlot` per message
+(named with the lower-case spec name) and `Dispatch(frame, now_ms)`.
+Separate bus structs prevent cross-bus decoding. Board policy can derive
+from them to add freshness predicates without maintaining a decode chain.
+The RX target depends on source libraries and longhorn; existing packer
+libraries keep their original dependencies. No generated files are committed.

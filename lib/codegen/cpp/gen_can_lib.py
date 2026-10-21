@@ -70,6 +70,25 @@ class Generator:
         return sorted((m for msgs in self.boards.values() for m in msgs),
                       key=lambda m: m.can_id)
 
+    def rx_header(self, stamp, board):
+        messages = [m for m in self.all_messages()
+                    if board.upper() in m.to_boards or "*" in m.to_boards]
+        out = [stamp, "#pragma once", '#include "longhorn/can_inbox.hpp"']
+        for source in sorted({m.from_board.lower() for m in messages}):
+            out.append(f'#include "lhre_can_{source}.hpp"')
+        out += ["", "namespace lhre::can::rx {"]
+        for bus in sorted({m.bus for m in messages}):
+            members = [m for m in messages if m.bus == bus]
+            out.append(f"struct {camel(board)}{camel(bus)}Rx {{")
+            for m in members:
+                out.append(f"  longhorn::RxSlot<lhre::can::{m.from_board.lower()}::{camel(m.name)}> {m.name.lower()};")
+            out.append("  bool Dispatch(const lhal::CanFrame& frame, uint32_t now_ms) {")
+            out.append("    return " + " ||\n           ".join(
+                f"{m.name.lower()}.TryDecode(frame, now_ms)" for m in members) + ";")
+            out += ["  }", "};", ""]
+        out.append("}  // namespace lhre::can::rx")
+        return "\n".join(out) + "\n"
+
     # ---- shared pieces ---------------------------------------------------
 
     def struct_name(self, message):
@@ -462,6 +481,8 @@ def main():
     umbrella.append("// (//lib/codegen/cpp:can_<board>) so firmware pulls in only what it uses.")
     umbrella.append('#include "lhre_can_types.hpp"  // IWYU pragma: export')
     for board in gen.boards:
+        out.joinpath(f"lhre_can_rx_{board}.hpp").write_text(
+            gen.rx_header(stamp, board), encoding="utf-8")
         gen_header = f"lhre_can_{board}.hpp"
         umbrella.append(f'#include "{gen_header}"  // IWYU pragma: export')
         out.joinpath(gen_header).write_text(

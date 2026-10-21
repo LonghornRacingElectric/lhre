@@ -80,3 +80,15 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
+
+# RX headers include the source libraries named by recipient subscriptions.
+[
+    cc_library(
+        name = "can_rx_" + board,
+        hdrs = ["lhre_can_rx_{}.hpp".format(board)],
+        includes = ["."],
+        visibility = ["//visibility:public"],
+        deps = [":can_" + source for source in CAN_BOARDS] + ["//drivers/longhorn:can_inbox"],
+    )
+    for board in CAN_BOARDS
+]

@@ -129,3 +129,10 @@ cc_library(
     includes = ["include"],
     visibility = ["//visibility:public"],
 )
+
+cc_test(
+    name = "debounce_test",
+    size = "small",
+    srcs = ["test/debounce_test.cpp"],
+    deps = [":debounce", "@googletest//:gtest_main"],
+)

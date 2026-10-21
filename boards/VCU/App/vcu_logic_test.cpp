@@ -74,47 +74,6 @@ TEST(Lookup, InterpolatesAndClamps) {
   EXPECT_FLOAT_EQ(vcu::Lookup1D(y, 3, 0.0f, 2.0f, 9.0f), 20.0f);
 }
 
-// Debounce
-TEST(longhorn::Debouncer, NeedsStableLevelForTheWholeWindow) {
-  longhorn::Debouncer d;
-  EXPECT_FALSE(d.Update(true, 0, 10));
-  EXPECT_FALSE(d.Update(true, 9, 10));
-  EXPECT_TRUE(d.Update(true, 10, 10));
-  EXPECT_TRUE(d.Update(false, 11, 10));  // glitch
-  EXPECT_TRUE(d.Update(true, 12, 10));
-  EXPECT_TRUE(d.Update(false, 13, 10));
-  EXPECT_FALSE(d.Update(false, 23, 10));
-}
-
-TEST(longhorn::EdgeButton, HeldAtBootNeedsAReleaseFirst) {
-  longhorn::EdgeButton b;
-  uint32_t t = 0;
-  for (; t < 100; ++t) {
-    EXPECT_FALSE(b.Update(true, t, 20));
-  }
-  for (; t < 130; ++t) {
-    EXPECT_FALSE(b.Update(false, t, 20));
-  }
-  bool edge = false;
-  for (; t < 160; ++t) {
-    edge = edge || b.Update(true, t, 20);
-  }
-  EXPECT_TRUE(edge);
-  // One edge per press.
-  for (; t < 300; ++t) {
-    EXPECT_FALSE(b.Update(true, t, 20));
-  }
-}
-
-TEST(longhorn::PersistenceTimer, HoldsAfterDurationAndDropsAtOnce) {
-  longhorn::PersistenceTimer p;
-  EXPECT_FALSE(p.Update(true, 0, 100));
-  EXPECT_FALSE(p.Update(true, 99, 100));
-  EXPECT_TRUE(p.Update(true, 100, 100));
-  EXPECT_FALSE(p.Update(false, 101, 100));
-  EXPECT_FALSE(p.Update(true, 102, 100));  // restarts
-}
-
 // Pedals
 vcu::PedalInputs Pedal(float travel, float brake_psi = 0.0f) {
   const auto& a = P().apps;
