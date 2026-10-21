@@ -118,3 +118,17 @@ py_test(
         "@lhre_pypi//bazel_runfiles",
     ],
 )
+
+py_test(
+    name = "generated_contract_test",
+    size = "small",
+    srcs = ["generated_contract_test.py"],
+    args = ["$(rootpath :schema_contract)", "$(rootpath //lib/spec:wire.lock)"],
+    data = [":schema_contract", ":server_schema", "//lib/spec:wire.lock"],
+    deps = [
+        "//lib/spec:ir",
+        "//lib/telemetry:contract",
+        ":orion_models",
+        "//apps/telemetry/scripts:schema_helpers",
+    ],
+)
