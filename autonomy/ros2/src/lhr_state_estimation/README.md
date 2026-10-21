@@ -132,3 +132,5 @@ cd src/lhr_state_estimation && PYTHONPATH=. python3 -m pytest test -q
 - **Front wheels and differential yaw rate.** Both are on the wire and unused.
 - **Slip.** Wheel speed is trusted as ground speed. It will not be under
   braking or launch.
+
+Node cleanup tolerates an already-stopped ROS context after launch shutdown.

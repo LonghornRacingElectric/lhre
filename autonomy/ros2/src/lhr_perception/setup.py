@@ -22,6 +22,7 @@ setup(
         'console_scripts': [
             'camera_color_classifier = lhr_perception.camera_color_classifier:main',
             'lidar_cone_detector = lhr_perception.lidar_cone_detector:main',
+            'evaluate_recordings = lhr_perception.evaluate_recordings:main',
         ],
     },
 )

@@ -2,7 +2,7 @@
 <sdf version="1.9">
   <model name="fsae_vehicle">
     <!--
-      GENERATED FILE — do not edit model.sdf by hand.
+      GENERATED FILE: do not edit model.sdf by hand.
       Source: lhr_vehicle/config/vehicle.yaml rendered through
       lhr_gazebo/templates/model.sdf.in by lhr_gazebo/scripts/generate_vehicle_model.py.
 

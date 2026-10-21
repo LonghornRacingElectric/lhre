@@ -284,11 +284,27 @@ def _launch_setup(context: LaunchContext):
                 'use_sim_time': True,
                 'max_range': 20.0,
                 'min_range': 0.8,
-                'ground_z_min': -0.40,
-                'ground_z_max': 0.5,
                 'cluster_radius': 0.5,
-                'min_cluster_points': 1,
-                'dedup_radius': 1.5,
+                'ground_z_min': ParameterValue(
+                    LaunchConfiguration('lidar_ground_z_min'), value_type=float),
+                'ground_z_max': ParameterValue(
+                    LaunchConfiguration('lidar_ground_z_max'), value_type=float),
+                'min_cluster_points': ParameterValue(
+                    LaunchConfiguration('lidar_min_cluster_points'), value_type=int),
+                'dedup_radius': ParameterValue(
+                    LaunchConfiguration('lidar_dedup_radius'), value_type=float),
+                'max_cluster_points': ParameterValue(
+                    LaunchConfiguration('lidar_max_cluster_points'), value_type=int),
+                'stack_window_sec': ParameterValue(
+                    LaunchConfiguration('lidar_stack_window_sec'), value_type=float),
+                'stack_max_frames': ParameterValue(
+                    LaunchConfiguration('lidar_stack_max_frames'), value_type=int),
+                'transform_wait_sec': ParameterValue(
+                    LaunchConfiguration('lidar_transform_wait_sec'), value_type=float),
+                'sensor_transform_source': ParameterValue(
+                    LaunchConfiguration('lidar_sensor_transform_source'), value_type=str),
+                'height_filter_frame': ParameterValue(
+                    LaunchConfiguration('lidar_height_filter_frame'), value_type=str),
                 'classify_sides': classify_sides,
             }],
             output='screen',
@@ -369,6 +385,7 @@ def _launch_setup(context: LaunchContext):
             'max_accel': LaunchConfiguration('max_accel'),
             'max_decel': LaunchConfiguration('max_decel'),
             'use_sim_time': True,
+            'closed_path': perception != 'lidar',
         }],
         remappings=fault_remaps.get('pure_pursuit', []),
         output='screen',
@@ -535,6 +552,17 @@ def generate_launch_description():
         # Sensor sim
         DeclareLaunchArgument('fov_deg', default_value='200.0'),
         DeclareLaunchArgument('max_range_m', default_value='20.0'),
+        # Gazebo keeps its sensor-frame detector defaults.
+        DeclareLaunchArgument('lidar_ground_z_min', default_value='-0.40'),
+        DeclareLaunchArgument('lidar_ground_z_max', default_value='0.5'),
+        DeclareLaunchArgument('lidar_min_cluster_points', default_value='1'),
+        DeclareLaunchArgument('lidar_dedup_radius', default_value='1.5'),
+        DeclareLaunchArgument('lidar_max_cluster_points', default_value='50'),
+        DeclareLaunchArgument('lidar_stack_window_sec', default_value='0.0'),
+        DeclareLaunchArgument('lidar_stack_max_frames', default_value='10'),
+        DeclareLaunchArgument('lidar_transform_wait_sec', default_value='0.5'),
+        DeclareLaunchArgument('lidar_sensor_transform_source', default_value='vehicle_config'),
+        DeclareLaunchArgument('lidar_height_filter_frame', default_value='sensor'),
         # Track builder chaining (both perception modes)
         DeclareLaunchArgument('chaining_alg', default_value='constrained_greedy'),
         DeclareLaunchArgument('min_step_m', default_value='0.3'),

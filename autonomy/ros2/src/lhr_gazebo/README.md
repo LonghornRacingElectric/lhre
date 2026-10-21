@@ -1,8 +1,73 @@
 # lhr_gazebo
 
-Gazebo Harmonic vehicle, world, bridge, and launch integration for the ROS 2
-autonomy stack. Vehicle dimensions come from `lhr_vehicle`; the generated SDF
-test fails when the committed model no longer matches that configuration.
+Gazebo Harmonic vehicle physics, sensor bridging, and demo launch. Run
+`ros2 launch lhr_gazebo gazebo_demo.launch.py` in a supported ROS environment.
+`perception:=sim` uses simplified cone detections; `perception:=lidar` uses
+[lhr_perception](../lhr_perception/README.md) and boundary planning.
+LiDAR mode also selects open-path control so a partial corridor is not
+treated as a complete circuit. See [the workspace reference](../../README.md)
+for launch arguments and vehicle physics.
+
+## LiDAR coordinates
+
+Gazebo preserves main's level LiDAR mount at z=0.55 m and its generated
+cloud frame. The detector reads that mount from vehicle YAML rather than
+requiring a new static TF. Its height band stays in the sensor frame.
+The Mid-360 path uses scan-time TF and base-frame heights instead; do not
+copy its detector thresholds into Gazebo without running a Gazebo gate.
+
+These LiDAR-only arguments preserve Gazebo's existing values and are typed
+before node startup. They have no effect in `perception:=sim`.
+
+| Argument | Default |
+| --- | --- |
+| `lidar_ground_z_min` | `-0.40` |
+| `lidar_ground_z_max` | `0.5` |
+| `lidar_min_cluster_points` | `1` |
+| `lidar_dedup_radius` | `1.5` |
+| `lidar_max_cluster_points` | `50` |
+| `lidar_stack_window_sec` | `0.0` |
+| `lidar_stack_max_frames` | `10` |
+| `lidar_transform_wait_sec` | `0.5` |
+| `lidar_sensor_transform_source` | `vehicle_config` |
+| `lidar_height_filter_frame` | `sensor` |
+
+For example, `perception:=lidar lidar_min_cluster_points:=2` overrides the
+cluster threshold. A pitched mount requires `lidar_sensor_transform_source:=tf`
+and a published scan-time mount transform; select `lidar_height_filter_frame:=base_link`
+when using ground-relative thresholds. These opt-in configurations need
+Gazebo acceptance testing before changing defaults.
+
+Gazebo still uses its existing uniform-grid VLP-16 model. The imported Livox
+pattern belongs to the kinematic [Mid-360 simulator](../lhr_lidar_sim/README.md).
+
+## Generated model
+
+Edit the template or vehicle YAML, then run
+`python3 src/lhr_gazebo/scripts/generate_vehicle_model.py` from the ROS workspace.
+Commit the regenerated model alongside the source. The model consistency tests
+run with `colcon test --packages-select lhr_gazebo` and need no GUI.
+
+## Competition cone assets
+
+The four cone models are generated from
+[lhr_trackgen](../lhr_trackgen/README.md)'s shared nominal dimensions and
+profile. They include square feet, colored stripe meshes and enabled
+collision meshes. Regenerate from the ROS workspace with
+`python3 src/lhr_gazebo/scripts/generate_cone_models.py`, then commit the
+SDF and all three meshes per cone. Tests compare every generated asset.
+
+Cones are static: a vehicle can collide with them, but they do not tip or
+move. The stored masses describe the nominal assets and are not dynamic
+physics parameters. Existing world origins remain at half cone height;
+the generated mesh offsets place their feet at ground level. The MVS
+optional gate layout is not added to existing generated Gazebo worlds.
+
+The seed-1 autocross and oval fixtures use the corrected closed-boundary
+spacing from [trackgen](../lhr_trackgen/README.md). Regenerate worlds after
+changing track generation so the Gazebo scene matches MVS track truth.
+
+## State estimation and optional side inference
 
 ## Run
 
@@ -98,6 +163,8 @@ cd autonomy/ros2
 colcon test --packages-select lhr_gazebo
 colcon test-result --verbose
 ```
+
+Node cleanup tolerates an already-stopped ROS context after launch shutdown.
 
 Camera classifier launch tests cover defaults and overrides in both perception
 and estimator modes. Evaluated parameters use JSON encoding for ROS CLI startup

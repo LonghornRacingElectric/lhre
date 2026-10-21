@@ -87,6 +87,31 @@ it, a nested submodule that BobSim moved stays as an untracked folder.
 tag does not change with the pin, so an old image stays in use until you
 build again.
 
+### Current autonomy pin
+
+PR #91 advances `fe03bab` to `22c5056` (BobSim main). BobLib remains at
+`1bd6d78`. No vehicle numbers change. The autonomy adapter now imports
+the public `engines.dynpy` package.
+
+The following commits change physics or numerics since `fe03bab`:
+
+| Commit | Class | Effect |
+| ------ | ----- | ------ |
+| `9d36539` (#121) | Physics/numerics | Close transient wheel torque and normal loads together; reject unresolved balance. |
+| `9ebc220` (#122) | Physics | Balance planar corner loads for an off-center CG. |
+| `61a5561` (#123) | Numerics | Preserve GGV feasibility during interpolation. |
+| `22c9d66` (#124) | Physics/model input | Solve separate signed GGV branches. |
+| `a765657` (#136) | Physics | Close planar roll/pitch moments at KinPy contact positions. |
+| `304cb6e` (#142) | Model input | Require linked QSS inputs and retain envelope parameters. |
+| `8c39a1a` (#143) | Model input | Preserve imported track widths and resample racing-line gates. |
+| `e76475b` (#144) | Numerics | Use sparse analytic racing-line gradients. |
+
+Other commits change packaging, replay, identity, reports and the analysis
+workspace. `1acfe2d` (#139) changes the default lap reference to a fixed
+minimum-curvature line. Old lap, envelope and autonomy study results are
+historical until rerun at this pin. The ROS plant uses direct transient
+stepping; it does not use BobSim's QSS lap planner.
+
 ### Old to new names
 
 BobSim `6629ab8` (#82) and `6329270` (#97) moved its source. The pin moved

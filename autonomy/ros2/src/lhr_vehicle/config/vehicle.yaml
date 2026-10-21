@@ -1,4 +1,4 @@
-# Orion (2025-26 EV) physical parameters — the single source of truth for the
+# Orion (2025-26 EV) physical parameters: the single source of truth for the
 # autonomy stack. Nodes read their vehicle defaults from here, and the Gazebo
 # model (lhr_gazebo/models/fsae_vehicle/model.sdf) is generated from it.
 #
@@ -7,9 +7,9 @@
 # transforms).
 #
 # Provenance tags:
-#   BobSim   — derived from VMOD's BobDyn/BobSim vehicle.yml for Orion
+#   BobSim:    derived from VMOD's BobDyn/BobSim vehicle.yml for Orion
 #              (schema boblib.vehicle.v1), via dyn_py's parameter helpers
-#   ASSUMED  — sim placeholder; measure on the car and replace
+#   ASSUMED:   sim placeholder; measure on the car and replace
 schema: lhr.vehicle.v1
 vehicle:
   name: orion

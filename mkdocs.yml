@@ -55,11 +55,22 @@ nav:
       - ROS 2 Workspace: autonomy/ros2/README.md
       - Docker (macOS): autonomy/ros2/docker/README.md
       - Vehicle Parameters: autonomy/ros2/src/lhr_vehicle/README.md
-      - State Estimation: autonomy/ros2/src/lhr_state_estimation/README.md
-      - LiDAR Perception: autonomy/ros2/src/lhr_perception/README.md
+      - Vehicle Mesh: autonomy/ros2/src/lhr_vehicle/meshes/README.md
+      - Sensor Simulation: autonomy/ros2/src/lhr_sensor_sim/README.md
+      - Metrics: autonomy/ros2/src/lhr_metrics/README.md
+      - Kinematic Sim: autonomy/ros2/src/lhr_sim_kinematic/README.md
+      - BobSim Plant: autonomy/ros2/src/lhr_sim_bobsim/README.md
+      - Demo Launch: autonomy/ros2/src/lhr_demo/README.md
+      - Track Generation: autonomy/ros2/src/lhr_trackgen/README.md
       - Track Builder: autonomy/ros2/src/lhr_track_builder/README.md
+      - Control: autonomy/ros2/src/lhr_control/README.md
+      - Mission Manager: autonomy/ros2/src/lhr_mission_manager/README.md
+      - LiDAR Perception: autonomy/ros2/src/lhr_perception/README.md
+      - Perception Tests: autonomy/ros2/src/lhr_perception/test/README.md
+      - Gazebo: autonomy/ros2/src/lhr_gazebo/README.md
+      - Mid-360 Lidar Sim: autonomy/ros2/src/lhr_lidar_sim/README.md
+      - State Estimation: autonomy/ros2/src/lhr_state_estimation/README.md
       - Safety Monitor: autonomy/ros2/src/lhr_safety/README.md
-      - Gazebo Simulation: autonomy/ros2/src/lhr_gazebo/README.md
       - Plans:
           - Overview: autonomy/docs/plans/README.md
           - Retrofit Roadmap 2026-27: autonomy/docs/plans/retrofit-roadmap-2026-27.md
@@ -138,7 +149,7 @@ hooks:
 
 # Docs live next to the code: any *.md in the tree becomes a page at the
 # same path (README.md renders as the directory index). The simple plugin
-# also extracts fenced doc-comment blocks from source files — see
+# also extracts fenced doc-comment blocks from source files, see
 # https://athackst.github.io/mkdocs-simple-plugin/ ("semiliterate").
 plugins:
   - search

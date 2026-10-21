@@ -24,6 +24,7 @@ _trackgen_pkg = os.path.join(
 if os.path.isdir(_trackgen_pkg):
     sys.path.insert(0, _trackgen_pkg)
 
+from lhr_trackgen.cone_geometry import CONE_SPECS  # noqa: E402
 from lhr_trackgen.publish_cones import GENERATORS  # noqa: E402
 
 
@@ -92,14 +93,14 @@ def generate_world_sdf(
     cone_blocks = []
 
     # Blue cones on the left boundary
-    blue_half_h = 0.325 / 2.0
+    blue_half_h = CONE_SPECS['blue'].height_m / 2.0
     for i, (cx, cy) in enumerate(left_cones):
         cone_blocks.append(
             _cone_include('cone_blue', f'cone_blue_{i}',
                           cx, cy, blue_half_h))
 
     # Yellow cones on the right boundary
-    yellow_half_h = 0.325 / 2.0
+    yellow_half_h = CONE_SPECS['yellow'].height_m / 2.0
     for i, (cx, cy) in enumerate(right_cones):
         cone_blocks.append(
             _cone_include('cone_yellow', f'cone_yellow_{i}',

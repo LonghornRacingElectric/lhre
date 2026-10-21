@@ -150,3 +150,15 @@ Run them in the ROS environment with
 
 See the [ROS 2 workspace reference](../../README.md#lhr_track_builder-track_builder)
 for topics and all parameters.
+
+## Local unclassified corridor
+
+`pairing_strategy:=boundary_graph` selects the harness's geometry-only local
+corridor. It connects Delaunay edge midpoints through shared triangles, limits
+gaps to `max_path_gap_m` (4 m), turns to `max_path_turn_deg` (60 degrees), and
+length to `planning_horizon_m` (30 m). It needs odometry and publishes an empty
+path when no forward corridor exists. The controller then stops. This option
+does not replace the default color-aware `boundary` pairing or its configurable
+chaining algorithms.
+
+Node cleanup tolerates an already-stopped ROS context after launch shutdown.
