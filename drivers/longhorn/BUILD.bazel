@@ -122,3 +122,10 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = ["//drivers/lhal"],
 )
+
+cc_library(
+    name = "period",
+    hdrs = ["include/longhorn/period.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+)

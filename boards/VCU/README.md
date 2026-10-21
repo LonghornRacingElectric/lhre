@@ -335,3 +335,10 @@ the generated CDC interface source remains excluded by `firmware_project`.
 `Board/main.cpp` constructs the adapter before `MX_USB_Device_Init`.
 The VCU retains its ADC progress interface, host ADC/UART fakes, legacy RGB
 brightness and rainbow task. `Board/dma_adc.hpp` supplies the ADC adapter.
+
+Vehicle task creation and host scheduling stay in `vcu_app.cpp`. Control and
+snapshot publication live in `vcu_control.cpp`, Critical-bus TX and pure
+message builders in `vcu_critical_tx.cpp`, diagnostics in `vcu_telemetry.cpp`,
+watchdog/recovery in `vcu_supervisor.cpp`, and console commands in
+`vcu_shell.cpp`. These remain private `App` operations with the same task
+ownership and send ordering. Rate gates use longhorn's checked `PeriodMs`.

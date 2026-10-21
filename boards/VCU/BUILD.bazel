@@ -6,6 +6,7 @@ firmware_project(
         "//drivers/longhorn:logger",
         "//drivers/longhorn:console",
         "//drivers/longhorn:shell",
+        "//drivers/longhorn:period",
         "//drivers/longhorn:debounce",
         "//drivers/longhorn:rtos_lock",
         "//drivers/longhorn:can_inbox",

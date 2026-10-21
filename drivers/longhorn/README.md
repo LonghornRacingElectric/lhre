@@ -65,3 +65,7 @@ queue and `RxSlot<Message>`. RX slots live here because arrival timestamps,
 freshness policy and LHAL frame validation are board services rather than
 wire packing. A slot times out after twice the message period; aperiodic
 messages can be seen but are never fresh by age.
+
+`period` provides `PeriodMs<Message>()`: fractional Hz are converted before
+truncation, periods are at least 1 ms, and aperiodic or unrepresentable
+periods fail at compile time instead of dividing by zero.
