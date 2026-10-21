@@ -77,6 +77,8 @@ cc_test(
     srcs = ["test/can_lib_test.cpp"],
     deps = [
         ":can_lib",
+        ":can_rx_vcu",
+        ":can_rx_pi",
         "@googletest//:gtest_main",
     ],
 )

@@ -2,19 +2,10 @@
 
 #include <cstring>
 
-#include "diag_frames.hpp"
-#include "lhre_can_vcu.hpp"
 #include "longhorn/console.hpp"
-#include "lookup.hpp"
-#include "longhorn/rtos_lock.hpp"
-#include "status_led.hpp"
-#include "longhorn/period.hpp"
 
 namespace vcu {
-using lhre::can::EventMode;
-using lhre::can::ShutdownLoopState;
 using lhre::can::VcuFaultCode;
-namespace msg = lhre::can::vcu;
 // Shell
 
 void App::RegisterShellCommands(longhorn::Shell& shell) {
@@ -158,6 +149,5 @@ void App::LaunchCommand(void* ctx, longhorn::Console& out, const char* args) {
   out.Println(
       "launch request queued (requires enabled acceleration configuration)");
 }
-
 
 }  // namespace vcu

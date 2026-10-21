@@ -72,7 +72,8 @@ class Generator:
 
     def rx_header(self, stamp, board):
         messages = [m for m in self.all_messages()
-                    if board.upper() in m.to_boards or "*" in m.to_boards]
+                    if board.casefold() in {node.casefold() for node in m.to_boards}
+                    or "*" in m.to_boards]
         out = [stamp, "#pragma once", '#include "longhorn/can_inbox.hpp"']
         for source in sorted({m.from_board.lower() for m in messages}):
             out.append(f'#include "lhre_can_{source}.hpp"')

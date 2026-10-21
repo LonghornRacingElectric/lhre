@@ -1,5 +1,5 @@
-#include <gtest/gtest.h>
 #include "longhorn/debounce.hpp"
+#include <gtest/gtest.h>
 // Debounce
 TEST(Debouncer, NeedsStableLevelForTheWholeWindow) {
   longhorn::Debouncer d;
@@ -40,4 +40,3 @@ TEST(PersistenceTimer, HoldsAfterDurationAndDropsAtOnce) {
   EXPECT_FALSE(p.Update(false, 101, 100));
   EXPECT_FALSE(p.Update(true, 102, 100));  // restarts
 }
-

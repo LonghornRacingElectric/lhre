@@ -2,8 +2,8 @@
 
 #include <cstdint>
 
-#include "longhorn/debounce.hpp"
 #include "lhre_can_types.hpp"
+#include "longhorn/debounce.hpp"
 #include "vcu_config.hpp"
 
 namespace vcu {

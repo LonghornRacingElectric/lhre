@@ -7,6 +7,8 @@
 #include <gtest/gtest.h>
 
 #include "lhre_can.hpp"
+#include "lhre_can_rx_pi.hpp"
+#include "lhre_can_rx_vcu.hpp"
 
 namespace lhre::can {
 namespace {
@@ -190,3 +192,37 @@ TEST(CanLib, CellTempArrayBlock) {
 
 }  // namespace
 }  // namespace lhre::can
+
+TEST(CanRx, DispatchChecksFrameAndPreservesArrivalTime) {
+  lhre::can::rx::VcuCriticalRx rx;
+  lhre::can::inverter::InverterCurrent message;
+  message.set_dc_bus_current(12.5f);
+  auto frame = message.ToFrame();
+  frame.extended_id = true;
+  EXPECT_FALSE(rx.Dispatch(frame, 10));
+  frame.extended_id = false;
+  --frame.len;
+  EXPECT_FALSE(rx.Dispatch(frame, 20));
+  ++frame.len;
+  EXPECT_TRUE(rx.Dispatch(frame, 30));
+  EXPECT_EQ(rx.inverter_current.count, 1u);
+  EXPECT_EQ(rx.inverter_current.last_ms, 30u);
+  EXPECT_FLOAT_EQ(rx.inverter_current.msg.dc_bus_current(), 12.5f);
+  EXPECT_TRUE(rx.inverter_current.Fresh(229));
+  EXPECT_FALSE(rx.inverter_current.Fresh(230));
+  lhre::can::rx::VcuDataRx data;
+  EXPECT_FALSE(data.Dispatch(frame, 30));
+}
+
+TEST(CanRx, MixedCaseRecipientAndAperiodicMessage) {
+  lhre::can::rx::PiDataRx pi;
+  lhre::can::rx::VcuDataRx vcu;
+  lhre::can::usm::AccelerationVectorUnsprungWheelSpeedFl wheel;
+  EXPECT_TRUE(pi.Dispatch(wheel.ToFrame(), 0));
+  EXPECT_TRUE(vcu.Dispatch(wheel.ToFrame(), 0));
+  lhre::can::rx::VcuCriticalRx critical;
+  lhre::can::pi::VcuModeCommand mode;
+  EXPECT_TRUE(critical.Dispatch(mode.ToFrame(), 100));
+  EXPECT_TRUE(critical.vcu_mode_command.seen());
+  EXPECT_FALSE(critical.vcu_mode_command.Fresh(100));
+}

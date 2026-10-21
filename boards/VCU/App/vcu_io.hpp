@@ -7,9 +7,9 @@
 #include <cstdint>
 
 #include "lhal/lhal.hpp"
+#include "lhal/uart.hpp"
 #include "rgb_led.hpp"
 #include "vcu_adc.hpp"
-#include "lhal/uart.hpp"
 
 namespace vcu {
 
@@ -73,12 +73,12 @@ class BoardServices {
 // Board-provided peripherals; clock is required, optional devices may be null.
 struct Peripherals {
   lhal::Clock* clock = nullptr;
-  lhal::CanBus* critical_can = nullptr;   // FDCAN2 (PB12/PB13)
-  lhal::CanBus* data_can = nullptr;       // FDCAN1 (PD0/PD1)
-  lhal::Uart* debug_uart = nullptr;       // STDC14 VCP (USART3, PC10/PC11)
-  lhal::Uart* usb_uart = nullptr;  // USB CDC
-  vcu::AdcScan* adc1 = nullptr;           // ranks per Adc1Rank
-  vcu::AdcScan* adc2 = nullptr;           // ranks per Adc2Rank
+  lhal::CanBus* critical_can = nullptr;  // FDCAN2 (PB12/PB13)
+  lhal::CanBus* data_can = nullptr;      // FDCAN1 (PD0/PD1)
+  lhal::Uart* debug_uart = nullptr;      // STDC14 VCP (USART3, PC10/PC11)
+  lhal::Uart* usb_uart = nullptr;        // USB CDC
+  vcu::AdcScan* adc1 = nullptr;          // ranks per Adc1Rank
+  vcu::AdcScan* adc2 = nullptr;          // ranks per Adc2Rank
   lhal::WaveformDac* audio_dac = nullptr;
   lhal::Watchdog* watchdog = nullptr;
   lhal::Pwm* led_r = nullptr;  // status RGB, duty = brightness

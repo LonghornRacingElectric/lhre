@@ -232,11 +232,13 @@ TEST(ShellRtos, VersionUnderSchedulerWithMutexDoesNotDeadlock) {
 TEST(Shell, ByteHookConsumesAndClearsPartialLine) {
   ShellFixture f;
   int consumed = 0;
-  f.shell.SetByteHandler([](void* ctx, uint8_t byte) {
-    if (byte != '!') return false;
-    ++*static_cast<int*>(ctx);
-    return true;
-  }, &consumed);
+  f.shell.SetByteHandler(
+      [](void* ctx, uint8_t byte) {
+        if (byte != '!') return false;
+        ++*static_cast<int*>(ctx);
+        return true;
+      },
+      &consumed);
   Type(f.uart, f.shell, "/bad");
   Type(f.uart, f.shell, "!");
   EXPECT_EQ(consumed, 1);

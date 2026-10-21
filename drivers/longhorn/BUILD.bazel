@@ -136,3 +136,10 @@ cc_test(
     srcs = ["test/debounce_test.cpp"],
     deps = [":debounce", "@googletest//:gtest_main"],
 )
+
+cc_test(
+    name = "period_test",
+    size = "small",
+    srcs = ["test/period_test.cpp"],
+    deps = [":period", "@googletest//:gtest_main"],
+)

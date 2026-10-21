@@ -2,12 +2,12 @@
 
 #include <cstdint>
 
-#include "lhre_can_rx_vcu.hpp"
 #include "lhre_can_dui.hpp"
 #include "lhre_can_hvc.hpp"
 #include "lhre_can_inverter.hpp"
 #include "lhre_can_pdu.hpp"
 #include "lhre_can_pi.hpp"
+#include "lhre_can_rx_vcu.hpp"
 #include "lhre_can_usm.hpp"
 
 namespace vcu {
@@ -17,9 +17,11 @@ struct VehicleRx : lhre::can::rx::VcuCriticalRx {
   // Require measurement feedback as well as status. TODO(verify): inverter VSM
   // states.
   bool InverterFresh(uint32_t now_ms) const {
-    return inverter_faults.Fresh(now_ms) && inverter_internal_states.Fresh(now_ms) &&
+    return inverter_faults.Fresh(now_ms) &&
+           inverter_internal_states.Fresh(now_ms) &&
            inverter_current.Fresh(now_ms) && inverter_voltage.Fresh(now_ms) &&
-           (inverter_high_speed.Fresh(now_ms) || inverter_motor_position.Fresh(now_ms));
+           (inverter_high_speed.Fresh(now_ms) ||
+            inverter_motor_position.Fresh(now_ms));
   }
   bool InverterFaulted(uint32_t now_ms) const {
     return inverter_faults.Fresh(now_ms) &&
@@ -46,7 +48,10 @@ struct VehicleRx : lhre::can::rx::VcuCriticalRx {
 // Wheel measurements arrive on Data, not Critical.
 struct WheelRx : lhre::can::rx::VcuDataRx {
   bool Fresh(uint32_t now) const {
-    return acceleration_vector_unsprung_wheel_speed_fl.Fresh(now) && acceleration_vector_unsprung_wheel_speed_fr.Fresh(now) && acceleration_vector_unsprung_wheel_speed_rl.Fresh(now) && acceleration_vector_unsprung_wheel_speed_rr.Fresh(now);
+    return acceleration_vector_unsprung_wheel_speed_fl.Fresh(now) &&
+           acceleration_vector_unsprung_wheel_speed_fr.Fresh(now) &&
+           acceleration_vector_unsprung_wheel_speed_rl.Fresh(now) &&
+           acceleration_vector_unsprung_wheel_speed_rr.Fresh(now);
   }
 };
 

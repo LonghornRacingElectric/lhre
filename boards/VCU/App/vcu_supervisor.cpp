@@ -1,19 +1,8 @@
 #include "vcu_app.hpp"
 
-#include <cstring>
-
-#include "diag_frames.hpp"
 #include "lhre_can_vcu.hpp"
-#include "longhorn/console.hpp"
-#include "lookup.hpp"
-#include "longhorn/rtos_lock.hpp"
-#include "status_led.hpp"
-#include "longhorn/period.hpp"
 
 namespace vcu {
-using lhre::can::EventMode;
-using lhre::can::ShutdownLoopState;
-using lhre::can::VcuFaultCode;
 namespace msg = lhre::can::vcu;
 namespace {
 int Send(lhal::CanBus* bus, const lhal::CanFrame& frame) {
@@ -66,6 +55,5 @@ void App::SupervisorTick(uint32_t now) {
     WriteDigitalOutputs(p_.outputs, SafeOutputs());
   }
 }
-
 
 }  // namespace vcu

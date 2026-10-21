@@ -5,8 +5,8 @@
 
 #include "lhre_can_bench.hpp"
 #include "lhre_can_vcu.hpp"
-#include "lookup.hpp"
 #include "longhorn/rtos_lock.hpp"
+#include "lookup.hpp"
 #include "steering.hpp"
 
 namespace vcu {

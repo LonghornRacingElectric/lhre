@@ -1,20 +1,9 @@
 #include "vcu_app.hpp"
 
-#include <cstring>
-
-#include "diag_frames.hpp"
-#include "lhre_can_vcu.hpp"
-#include "longhorn/console.hpp"
-#include "lookup.hpp"
-#include "longhorn/rtos_lock.hpp"
 #include "status_led.hpp"
-#include "longhorn/period.hpp"
 
 namespace vcu {
 using lhre::can::EventMode;
-using lhre::can::ShutdownLoopState;
-using lhre::can::VcuFaultCode;
-namespace msg = lhre::can::vcu;
 App::App(const Peripherals& peripherals, const Params* initial_params)
     : p_(peripherals),
       vcp_mutex_(xSemaphoreCreateMutexStatic(&vcp_mutex_control_)),
@@ -141,6 +130,5 @@ void App::Step() {
     SupervisorTick(now);
   }
 }
-
 
 }  // namespace vcu

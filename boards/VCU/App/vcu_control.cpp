@@ -1,20 +1,11 @@
 #include "vcu_app.hpp"
 
-#include <cstring>
-
-#include "diag_frames.hpp"
-#include "lhre_can_vcu.hpp"
-#include "longhorn/console.hpp"
-#include "lookup.hpp"
 #include "longhorn/rtos_lock.hpp"
-#include "status_led.hpp"
-#include "longhorn/period.hpp"
+#include "lookup.hpp"
 
 namespace vcu {
 using lhre::can::EventMode;
 using lhre::can::ShutdownLoopState;
-using lhre::can::VcuFaultCode;
-namespace msg = lhre::can::vcu;
 // Control loop
 
 void App::ControlTick(uint32_t now) {
@@ -100,8 +91,9 @@ void App::ControlTick(uint32_t now) {
   si.bspd_latched = in.latch_state;
   si.hvc_fresh = rx_.hvc_contactor_status.Fresh(now);
   si.hvc_state = rx_.hvc_contactor_status.msg.hvc_state;
-  si.contactors_closed = rx_.hvc_contactor_status.msg.positive_contactor_closed &&
-                         rx_.hvc_contactor_status.msg.negative_contactor_closed;
+  si.contactors_closed =
+      rx_.hvc_contactor_status.msg.positive_contactor_closed &&
+      rx_.hvc_contactor_status.msg.negative_contactor_closed;
   si.loop_closed = shutdown_loop_.closed();
   si.torque_cut_fault = (faults_ & kTorqueCutFaults) != 0;
   si.inverter_ready = inverter_fresh && !inverter_faulted;
@@ -178,10 +170,14 @@ void App::ControlTick(uint32_t now) {
       !bootloader_request_.load();
   WheelInputs win;
   win.fresh = wheels_.Fresh(now);
-  win.rad_s[0] = wheels_.acceleration_vector_unsprung_wheel_speed_fl.msg.wheel_speed();
-  win.rad_s[1] = wheels_.acceleration_vector_unsprung_wheel_speed_fr.msg.wheel_speed();
-  win.rad_s[2] = wheels_.acceleration_vector_unsprung_wheel_speed_rl.msg.wheel_speed();
-  win.rad_s[3] = wheels_.acceleration_vector_unsprung_wheel_speed_rr.msg.wheel_speed();
+  win.rad_s[0] =
+      wheels_.acceleration_vector_unsprung_wheel_speed_fl.msg.wheel_speed();
+  win.rad_s[1] =
+      wheels_.acceleration_vector_unsprung_wheel_speed_fr.msg.wheel_speed();
+  win.rad_s[2] =
+      wheels_.acceleration_vector_unsprung_wheel_speed_rl.msg.wheel_speed();
+  win.rad_s[3] =
+      wheels_.acceleration_vector_unsprung_wheel_speed_rr.msg.wheel_speed();
   live_.wheel_control = wheel_control_.Update(
       win, torque_allowed ? live_.torque.traction : 0, dt_ms, P.wheel_control);
   if (launch_request_.exchange(false)) {
@@ -309,8 +305,9 @@ uint32_t App::ComputeFaults(uint32_t now, bool inverter_fresh,
   StateInputs hvc;
   hvc.hvc_fresh = rx_.hvc_contactor_status.Fresh(now);
   hvc.hvc_state = rx_.hvc_contactor_status.msg.hvc_state;
-  hvc.contactors_closed = rx_.hvc_contactor_status.msg.positive_contactor_closed &&
-                          rx_.hvc_contactor_status.msg.negative_contactor_closed;
+  hvc.contactors_closed =
+      rx_.hvc_contactor_status.msg.positive_contactor_closed &&
+      rx_.hvc_contactor_status.msg.negative_contactor_closed;
   if (sm_.state() == VcuState::kDrive && !StateConditions::Energized(hvc)) {
     f |= kFaultContactorsOpen;
   }
@@ -370,6 +367,5 @@ ControlSnapshot App::snapshot() {
   longhorn::SchedulerLock lock(snapshot_mutex_, pdMS_TO_TICKS(5));
   return lock.locked() ? published_ : ControlSnapshot{};
 }
-
 
 }  // namespace vcu

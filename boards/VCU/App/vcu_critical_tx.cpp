@@ -1,19 +1,11 @@
 #include "vcu_app.hpp"
 
-#include <cstring>
-
 #include "diag_frames.hpp"
 #include "lhre_can_vcu.hpp"
-#include "longhorn/console.hpp"
-#include "lookup.hpp"
-#include "longhorn/rtos_lock.hpp"
-#include "status_led.hpp"
 #include "longhorn/period.hpp"
+#include "lookup.hpp"
 
 namespace vcu {
-using lhre::can::EventMode;
-using lhre::can::ShutdownLoopState;
-using lhre::can::VcuFaultCode;
 namespace msg = lhre::can::vcu;
 namespace {
 // Representable ranges of the Critical-bus fields (spec bit width x scale).
@@ -25,14 +17,12 @@ constexpr float kS16Nm = 3276.7f;        // s16 x 0.1 Nm
 constexpr float kS16Deg = 131.068f;      // s16 x 0.004 deg
 constexpr float kU32Wh = 4294967.0f;     // u32 x 0.001 Wh
 
-}
-namespace {
 int Send(lhal::CanBus* bus, const lhal::CanFrame& frame) {
   return bus != nullptr && lhal::IsOk(bus->Send(frame)) ? 1 : 0;
 }
-}  // namespace
-namespace {
-msg::InverterTorqueCommand MakeInverterTorqueCommand(const ControlSnapshot& s, const Params& P) {
+
+msg::InverterTorqueCommand MakeInverterTorqueCommand(const ControlSnapshot& s,
+                                                     const Params& P) {
   msg::InverterTorqueCommand cmd;
   cmd.set_torque_request(ClampPhys(s.torque_command, -kS16Nm, kS16Nm));
   cmd.rpm_request = 0;
@@ -42,7 +32,8 @@ msg::InverterTorqueCommand MakeInverterTorqueCommand(const ControlSnapshot& s, c
   return cmd;
 }
 
-msg::VcuAppsVoltages MakeVcuAppsVoltages(const ControlSnapshot& s, const Params& /*P*/) {
+msg::VcuAppsVoltages MakeVcuAppsVoltages(const ControlSnapshot& s,
+                                         const Params& /*P*/) {
   const auto& ped = s.pedals;
   const auto& a = s.analog;
   msg::VcuAppsVoltages av;
@@ -53,7 +44,8 @@ msg::VcuAppsVoltages MakeVcuAppsVoltages(const ControlSnapshot& s, const Params&
   return av;
 }
 
-msg::VcuAccelPedal MakeVcuAccelPedal(const ControlSnapshot& s, const Params& /*P*/) {
+msg::VcuAccelPedal MakeVcuAccelPedal(const ControlSnapshot& s,
+                                     const Params& /*P*/) {
   const auto& ped = s.pedals;
   msg::VcuAccelPedal ap;
   ap.set_accel_pedal_travel(ClampPhys(ped.pedal_travel, 0.0f, kU16Fraction));
@@ -66,14 +58,16 @@ msg::VcuAccelPedal MakeVcuAccelPedal(const ControlSnapshot& s, const Params& /*P
   return ap;
 }
 
-msg::VcuBrakePedal MakeVcuBrakePedal(const ControlSnapshot& s, const Params& /*P*/) {
+msg::VcuBrakePedal MakeVcuBrakePedal(const ControlSnapshot& s,
+                                     const Params& /*P*/) {
   const auto& ped = s.pedals;
   msg::VcuBrakePedal bp;
   bp.set_brake_light(ped.brake_light);
   return bp;
 }
 
-msg::VcuBseVoltages MakeVcuBseVoltages(const ControlSnapshot& s, const Params& /*P*/) {
+msg::VcuBseVoltages MakeVcuBseVoltages(const ControlSnapshot& s,
+                                       const Params& /*P*/) {
   const auto& a = s.analog;
   msg::VcuBseVoltages bv;
   bv.set_bse_front_voltage(ClampPhys(a.bse1.source_v, 0.0f, kU16Volts));
@@ -86,8 +80,7 @@ msg::VcuBrakes MakeVcuBrakes(const ControlSnapshot& s, const Params& /*P*/) {
   msg::VcuBrakes br;
   br.set_brake_pressure_front(ClampPhys(ped.bse1_psi, 0.0f, kU16Psi));
   br.set_brake_pressure_rear_pre_lock(ClampPhys(ped.bse2_psi, 0.0f, kU16Psi));
-  br.set_brake_pressure_rear_post_lock(
-      ClampPhys(s.bse3_psi, 0.0f, kU16Psi));
+  br.set_brake_pressure_rear_post_lock(ClampPhys(s.bse3_psi, 0.0f, kU16Psi));
   br.set_brake_bias(ClampPhys(s.brake_bias, 0.0f, 1.0f));
   br.bse_faults_bse1_disconnect = ped.bse1_disconnect;
   br.bse_faults_bse2_disconnect = ped.bse2_disconnect;
@@ -96,13 +89,15 @@ msg::VcuBrakes MakeVcuBrakes(const ControlSnapshot& s, const Params& /*P*/) {
   return br;
 }
 
-msg::VcuSteering MakeVcuSteering(const ControlSnapshot& s, const Params& /*P*/) {
+msg::VcuSteering MakeVcuSteering(const ControlSnapshot& s,
+                                 const Params& /*P*/) {
   msg::VcuSteering st;
   st.set_steering_angle(ClampPhys(s.steering.angle_deg, -kS16Deg, kS16Deg));
   return st;
 }
 
-msg::VcuDriveState MakeVcuDriveState(const ControlSnapshot& s, const Params& /*P*/) {
+msg::VcuDriveState MakeVcuDriveState(const ControlSnapshot& s,
+                                     const Params& /*P*/) {
   const auto& ped = s.pedals;
   msg::VcuDriveState ds;
   ds.prndl_state = s.state == VcuState::kDrive ? 1 : 0;
@@ -117,67 +112,66 @@ msg::VcuDriveState MakeVcuDriveState(const ControlSnapshot& s, const Params& /*P
 
 msg::VcuStatus MakeVcuStatus(const ControlSnapshot& s, const Params& /*P*/) {
   msg::VcuStatus hb;
-    hb.state = s.state;
-    hb.faults_sensor_loss =
-        (s.faults & (kFaultAppsImplausible | kFaultBse1Range | kFaultBse2Range |
-                    kFaultBrakeFlagLatched)) != 0;
-    hb.set_torque_request(ClampPhys(s.torque_command, -300.0f, 300.0f));
-    hb.set_steering_angle(
-        ClampPhys(s.steering.angle_deg, -3276.0f, 3276.0f));
+  hb.state = s.state;
+  hb.faults_sensor_loss =
+      (s.faults & (kFaultAppsImplausible | kFaultBse1Range | kFaultBse2Range |
+                   kFaultBrakeFlagLatched)) != 0;
+  hb.set_torque_request(ClampPhys(s.torque_command, -300.0f, 300.0f));
+  hb.set_steering_angle(ClampPhys(s.steering.angle_deg, -3276.0f, 3276.0f));
   return hb;
 }
 
 msg::VcuFaults MakeVcuFaults(const ControlSnapshot& s, const Params& /*P*/) {
   msg::VcuFaults vf;
-    const uint32_t f = s.faults;
-    vf.active_faults_apps_implausible = (f & kFaultAppsImplausible) != 0;
-    vf.active_faults_apps1_range = (f & kFaultApps1Range) != 0;
-    vf.active_faults_apps2_range = (f & kFaultApps2Range) != 0;
-    vf.active_faults_bse1_range = (f & kFaultBse1Range) != 0;
-    vf.active_faults_bse2_range = (f & kFaultBse2Range) != 0;
-    vf.active_faults_steering_range = (f & kFaultSteeringRange) != 0;
-    vf.active_faults_brake_flag_latched = (f & kFaultBrakeFlagLatched) != 0;
-    vf.active_faults_brake_over_throttle = (f & kFaultBrakeOverThrottle) != 0;
-    vf.active_faults_shutdown_open = (f & kFaultShutdownOpen) != 0;
-    vf.active_faults_hvc_timeout = (f & kFaultHvcTimeout) != 0;
-    vf.active_faults_inverter_timeout = (f & kFaultInverterTimeout) != 0;
-    vf.active_faults_pdu_timeout = (f & kFaultPduTimeout) != 0;
-    vf.active_faults_inverter_fault = (f & kFaultInverterFault) != 0;
-    vf.active_faults_bspd_tripped = (f & kFaultBspdTripped) != 0;
-    vf.active_faults_hard_brake_mismatch = (f & kFaultHardBrakeMismatch) != 0;
-    vf.active_faults_dui_timeout = (f & kFaultDuiTimeout) != 0;
-    vf.active_faults_bse3_unavailable = (f & kFaultBse3Unavailable) != 0;
-    vf.active_faults_contactors_open = (f & kFaultContactorsOpen) != 0;
-    vf.active_faults_motor_disconnect = (f & kFaultMotorDisconnect) != 0;
-    vf.active_faults_shutdown_sense_implausible =
-        (f & kFaultShutdownSenseImplausible) != 0;
-    vf.active_faults_adc_stale = (f & kFaultAdcStale) != 0;
-    vf.primary_fault = PrimaryFault(f);
-    vf.state = s.state;
-    vf.brake_flags_latched = s.brake_flags_latched;
-    vf.fault_resets = s.fault_resets;
+  const uint32_t f = s.faults;
+  vf.active_faults_apps_implausible = (f & kFaultAppsImplausible) != 0;
+  vf.active_faults_apps1_range = (f & kFaultApps1Range) != 0;
+  vf.active_faults_apps2_range = (f & kFaultApps2Range) != 0;
+  vf.active_faults_bse1_range = (f & kFaultBse1Range) != 0;
+  vf.active_faults_bse2_range = (f & kFaultBse2Range) != 0;
+  vf.active_faults_steering_range = (f & kFaultSteeringRange) != 0;
+  vf.active_faults_brake_flag_latched = (f & kFaultBrakeFlagLatched) != 0;
+  vf.active_faults_brake_over_throttle = (f & kFaultBrakeOverThrottle) != 0;
+  vf.active_faults_shutdown_open = (f & kFaultShutdownOpen) != 0;
+  vf.active_faults_hvc_timeout = (f & kFaultHvcTimeout) != 0;
+  vf.active_faults_inverter_timeout = (f & kFaultInverterTimeout) != 0;
+  vf.active_faults_pdu_timeout = (f & kFaultPduTimeout) != 0;
+  vf.active_faults_inverter_fault = (f & kFaultInverterFault) != 0;
+  vf.active_faults_bspd_tripped = (f & kFaultBspdTripped) != 0;
+  vf.active_faults_hard_brake_mismatch = (f & kFaultHardBrakeMismatch) != 0;
+  vf.active_faults_dui_timeout = (f & kFaultDuiTimeout) != 0;
+  vf.active_faults_bse3_unavailable = (f & kFaultBse3Unavailable) != 0;
+  vf.active_faults_contactors_open = (f & kFaultContactorsOpen) != 0;
+  vf.active_faults_motor_disconnect = (f & kFaultMotorDisconnect) != 0;
+  vf.active_faults_shutdown_sense_implausible =
+      (f & kFaultShutdownSenseImplausible) != 0;
+  vf.active_faults_adc_stale = (f & kFaultAdcStale) != 0;
+  vf.primary_fault = PrimaryFault(f);
+  vf.state = s.state;
+  vf.brake_flags_latched = s.brake_flags_latched;
+  vf.fault_resets = s.fault_resets;
   return vf;
 }
 
 msg::VcuEnergy MakeVcuEnergy(const ControlSnapshot& s, const Params& /*P*/) {
   msg::VcuEnergy en;
-    en.set_net_energy(ClampPhys(static_cast<float>(s.battery.net_energy_wh),
-                                0.0f, kU32Wh));
-    en.set_regen_energy(ClampPhys(
-        static_cast<float>(s.battery.regen_energy_wh), 0.0f, kU32Wh));
+  en.set_net_energy(
+      ClampPhys(static_cast<float>(s.battery.net_energy_wh), 0.0f, kU32Wh));
+  en.set_regen_energy(
+      ClampPhys(static_cast<float>(s.battery.regen_energy_wh), 0.0f, kU32Wh));
   return en;
 }
 
-msg::VcuTorquePath MakeVcuTorquePath(const ControlSnapshot& s, const Params& /*P*/) {
+msg::VcuTorquePath MakeVcuTorquePath(const ControlSnapshot& s,
+                                     const Params& /*P*/) {
   msg::VcuTorquePath tp;
-    tp.set_torque_lookup(ClampPhys(s.torque.lookup, 0.0f, kU16Nm));
-    tp.set_torque_derated(ClampPhys(s.torque.derated, 0.0f, kU16Nm));
-    tp.set_torque_power_limited(
-        ClampPhys(s.torque.power_limited, 0.0f, kU16Nm));
-    tp.set_torque_final(ClampPhys(s.torque_command, 0.0f, kU16Nm));
+  tp.set_torque_lookup(ClampPhys(s.torque.lookup, 0.0f, kU16Nm));
+  tp.set_torque_derated(ClampPhys(s.torque.derated, 0.0f, kU16Nm));
+  tp.set_torque_power_limited(ClampPhys(s.torque.power_limited, 0.0f, kU16Nm));
+  tp.set_torque_final(ClampPhys(s.torque_command, 0.0f, kU16Nm));
   return tp;
 }
-}
+}  // namespace
 void App::SendCritical(uint32_t now) {
   const Params& P = *params_;
   ControlSnapshot tx = live_;
@@ -221,23 +215,19 @@ void App::SendCritical(uint32_t now) {
   Send(bus, MakeVcuDriveState(tx, P).ToFrame());
 
   // 100 Hz heartbeat.
-  if (status_gate_.Due(
-          now, longhorn::PeriodMs<msg::VcuStatus>())) {
+  if (status_gate_.Due(now, longhorn::PeriodMs<msg::VcuStatus>())) {
     Send(bus, MakeVcuStatus(tx, P).ToFrame());
   }
 
   // 10 Hz: faults to the dash, energy, torque path.
-  if (faults_gate_.Due(
-          now, longhorn::PeriodMs<msg::VcuFaults>())) {
+  if (faults_gate_.Due(now, longhorn::PeriodMs<msg::VcuFaults>())) {
     Send(bus, MakeVcuFaults(tx, P).ToFrame());
   }
-  if (energy_gate_.Due(
-          now, longhorn::PeriodMs<msg::VcuEnergy>())) {
+  if (energy_gate_.Due(now, longhorn::PeriodMs<msg::VcuEnergy>())) {
     Send(bus, MakeVcuEnergy(tx, P).ToFrame());
 
     Send(bus, MakeVcuTorquePath(tx, P).ToFrame());
   }
 }
-
 
 }  // namespace vcu

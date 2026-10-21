@@ -1,19 +1,10 @@
 #include "vcu_app.hpp"
 
-#include <cstring>
-
 #include "diag_frames.hpp"
 #include "lhre_can_vcu.hpp"
-#include "longhorn/console.hpp"
-#include "lookup.hpp"
-#include "longhorn/rtos_lock.hpp"
-#include "status_led.hpp"
 #include "longhorn/period.hpp"
 
 namespace vcu {
-using lhre::can::EventMode;
-using lhre::can::ShutdownLoopState;
-using lhre::can::VcuFaultCode;
 namespace msg = lhre::can::vcu;
 // Telemetry
 
@@ -32,8 +23,7 @@ void App::TelemetryTick(uint32_t now) {
     SendDigitalDiag(p_.data_can, s.inputs, s.outputs, s.loop,
                     s.pedals.firmware_hard_brake, s.pedals.hard_brake_mismatch);
   }
-  if (diag_slow_gate_.Due(
-          now, longhorn::PeriodMs<msg::VcuDiag>())) {
+  if (diag_slow_gate_.Due(now, longhorn::PeriodMs<msg::VcuDiag>())) {
     const lhal::CanStats crit = p_.critical_can != nullptr
                                     ? p_.critical_can->stats()
                                     : lhal::CanStats{};
@@ -48,6 +38,5 @@ void App::TelemetryTick(uint32_t now) {
   }
   telemetry_beats_.fetch_add(1);
 }
-
 
 }  // namespace vcu
