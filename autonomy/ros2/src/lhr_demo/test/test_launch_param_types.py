@@ -163,6 +163,30 @@ def test_every_forwarded_argument_is_typed(config):
     # Per node, not per executable, so no node can hide behind another.
     untyped = [(n.node_executable, _untyped(n)) for n in nodes]
     assert [(exe, names) for exe, names in untyped if names] == []
+    # _launch_sim reads its arguments with perform() and hands over plain
+    # values, which the check above cannot see. None of them is text, and
+    # the plant really is the one asked for.
+    plant = context.launch_configurations['plant']
+    for node in nodes:
+        if node.node_executable not in PLANT[estimator]:
+            continue
+        if node.node_executable == 'sim_node':
+            assert node.node_package == 'lhr_sim_' + plant
+        params = evaluate_parameters(context, node._Node__parameters)[0]
+        text = [name for name, value in params.items() if isinstance(value, str)]
+        assert text == [], node.node_executable
+
+
+@pytest.mark.parametrize('spelling', ['True', '1'])
+def test_sim_time_reaches_the_plant_as_the_other_nodes_read_it(spelling):
+    # Compared against 'true', these left the plant off /clock while every
+    # node typed through _b waited on it.
+    context, nodes = _launch(use_sim_time=spelling, estimator='ekf')
+    (sim,) = _evaluate(context, nodes, 'sim_node')
+    assert sim['publish_clock'] is True
+    for exe in ('inertial_sim', 'ekf_node'):
+        (params,) = _evaluate(context, nodes, exe)
+        assert params['use_sim_time'] is True, exe
 
 
 def test_defaults_are_unchanged():
