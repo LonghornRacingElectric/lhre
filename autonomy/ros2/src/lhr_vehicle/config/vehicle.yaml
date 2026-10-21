@@ -43,7 +43,7 @@ limits:
   max_speed_mps: 15.0       # ASSUMED (kinematic sim command clamp)
 
 sensors:
-  # Positions in base_link. The VLP-16 sits on a mast ahead of the driver
+  # Positions in base_link. The Mid-360 sits on a mast ahead of the driver
   # cell. The IMU is at the chassis link origin (half the wheelbase forward,
   # chassis_z_m up) and is derived from that, not listed here.
   lidar:

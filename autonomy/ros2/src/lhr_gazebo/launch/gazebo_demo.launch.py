@@ -95,10 +95,11 @@ def _fault_remaps(fault: str, use_ekf: bool, configs: dict) -> dict:
     odom_raw = [('/lhr/vehicle/odom', '/lhr/vehicle/odom_raw')]
     # Under ekf the bridge's odom is already truth; corrupt the estimate.
     odom_owner = 'ekf_node' if use_ekf else 'ros_gz_bridge'
+    cloud_owner = 'lidar_sim' if configs.get('lidar_source') == 'mid360' else 'ros_gz_bridge'
     return {
         'odom_nan': {odom_owner: odom_raw},
         'odom_spike': {odom_owner: odom_raw},
-        'lidar_drop': {'ros_gz_bridge': [
+        'lidar_drop': {cloud_owner: [
             ('/lhr/lidar/points', '/lhr/lidar/points_raw')]},
         'cmd_nan': {'pure_pursuit': [
             ('/lhr/vehicle/cmd', '/lhr/vehicle/cmd_raw')]},
@@ -125,6 +126,11 @@ def _launch_setup(context: LaunchContext):
     config_dir = os.path.join(pkg_share, 'config')
 
     perception = context.launch_configurations.get('perception', 'sim')
+    lidar_source = context.launch_configurations.get('lidar_source', 'gazebo')
+    if lidar_source not in ('gazebo', 'mid360'):
+        raise ValueError('lidar_source must be gazebo or mid360')
+    if lidar_source == 'mid360' and perception != 'lidar':
+        raise ValueError('lidar_source:=mid360 requires perception:=lidar')
     classify_sides = context.launch_configurations.get(
         'lidar_classify_sides', 'false').lower() == 'true'
     use_ekf = context.launch_configurations.get(
@@ -164,8 +170,18 @@ def _launch_setup(context: LaunchContext):
             output='screen',
         ))
 
+    qt_platform = os.environ.get('QT_QPA_PLATFORM', '')
+    qt_env = {}
+    if (os.environ.get('WAYLAND_DISPLAY') and os.environ.get('DISPLAY')
+            and (not qt_platform or qt_platform.split(';', 1)[0] == 'wayland')):
+        # Ogre's GLX windows need XWayland even when Qt prefers Wayland.
+        qt_env['QT_QPA_PLATFORM'] = 'xcb'
+
     _gz_env = {
         'GZ_SIM_RESOURCE_PATH': models_dir,
+        'FONTCONFIG_FILE': os.environ.get('FONTCONFIG_FILE') or os.path.join(
+            config_dir, 'gazebo-fontconfig.conf'),
+        **qt_env,
     }
 
     # ----- Gazebo server -----
@@ -190,6 +206,9 @@ def _launch_setup(context: LaunchContext):
             ('/lhr/vehicle/odom', '/lhr/vehicle/odom_truth'),
             ('/tf', '/tf_truth'),
         ]
+
+    if lidar_source == 'mid360':
+        bridge_remaps.append(('/lhr/lidar/points', '/lhr/lidar/gazebo_points'))
 
     bridge = Node(
         package='ros_gz_bridge',
@@ -276,6 +295,22 @@ def _launch_setup(context: LaunchContext):
             output='screen',
         ))
     elif perception == 'lidar':
+        if lidar_source == 'mid360':
+            perception_nodes.append(Node(
+                package='lhr_lidar_sim',
+                executable='lidar_sim',
+                name='lidar_sim',
+                parameters=[{
+                    'world_sdf': ParameterValue(world_path, value_type=str),
+                    'seed': ParameterValue(LaunchConfiguration('seed'), value_type=int),
+                    'use_sim_time': True,
+                }],
+                remappings=[('/lhr/vehicle/odom',
+                             '/lhr/vehicle/odom_truth' if use_ekf
+                             else '/lhr/vehicle/odom'),
+                            *fault_remaps.get('lidar_sim', [])],
+                output='screen',
+            ))
         perception_nodes.append(Node(
             package='lhr_perception',
             executable='lidar_cone_detector',
@@ -413,6 +448,7 @@ def _launch_setup(context: LaunchContext):
             package='rviz2',
             executable='rviz2',
             name='rviz2',
+            additional_env=qt_env,
             arguments=['-d', os.path.join(
                 config_dir, 'stereo.rviz' if enable_stereo else 'default.rviz')],
             parameters=[{'use_sim_time': True}],
@@ -482,6 +518,27 @@ def _launch_setup(context: LaunchContext):
             output='screen',
         ))
 
+    # ----- Optional Foxglove viewer -----
+    viewer_nodes = []
+    if context.launch_configurations.get('foxglove', 'false').lower() == 'true':
+        viewer_nodes.append(Node(
+            package='foxglove_bridge',
+            executable='foxglove_bridge',
+            name='foxglove_bridge',
+            parameters=[{
+                'port': ParameterValue(LaunchConfiguration('foxglove_port'), value_type=int),
+                'use_sim_time': True,
+            }],
+            output='screen',
+        ))
+        viewer_nodes.append(Node(
+            package='lhr_vehicle',
+            executable='vehicle_viz',
+            name='vehicle_viz',
+            parameters=[{'use_mesh': False, 'use_sim_time': True}],
+            output='screen',
+        ))
+
     return [
         SetEnvironmentVariable('GZ_SIM_RESOURCE_PATH', models_dir),
         gz_sim,
@@ -497,6 +554,7 @@ def _launch_setup(context: LaunchContext):
         *safety_nodes,
         *fault_nodes,
         *rviz_nodes,
+        *viewer_nodes,
     ]
 
 
@@ -512,6 +570,11 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'perception', default_value='sim',
             description='Perception mode: "sim" or "lidar"'),
+        DeclareLaunchArgument(
+            'lidar_source', default_value='gazebo', choices=['gazebo', 'mid360'],
+            description='Raw cloud source; mid360 requires perception:=lidar'),
+        DeclareLaunchArgument('foxglove', default_value='false'),
+        DeclareLaunchArgument('foxglove_port', default_value='8765'),
         DeclareLaunchArgument(
             'lidar_classify_sides', default_value='false',
             description='Infer LiDAR cone sides (opt in; false publishes unlabeled cones)'),

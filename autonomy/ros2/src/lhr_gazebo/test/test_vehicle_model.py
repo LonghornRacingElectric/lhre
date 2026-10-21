@@ -97,3 +97,27 @@ def test_odometry_tf_publisher_matches_bridge():
     bridge = next(m for m in mappings if m['ros_topic_name'] == '/tf')
     published = plugin.findtext('tf_topic', default='/model/fsae_vehicle/pose')
     assert published == bridge['gz_topic_name']
+
+
+def test_generated_lidar_matches_mid360_scan_budget_and_field_of_view():
+    """Catch a stale VLP-16 scan or malformed SDF noise block."""
+    gen = _generator()
+    root = ET.fromstring(gen.OUTPUT.read_text(encoding='utf-8'))
+    sensor = root.find('.//sensor[@name="lidar"]')
+    assert sensor is not None
+    assert sensor.attrib['type'] == 'gpu_lidar'
+    assert float(sensor.findtext('update_rate')) == 10.0
+    lidar = sensor.find('lidar')
+    horizontal = lidar.find('scan/horizontal')
+    vertical = lidar.find('scan/vertical')
+    assert int(horizontal.findtext('samples')) == 500
+    assert int(vertical.findtext('samples')) == 40
+    for tag, angle in [('min_angle', -math.pi), ('max_angle', math.pi)]:
+        assert math.isclose(float(horizontal.findtext(tag)), angle, abs_tol=1e-5)
+    for tag, angle in [('min_angle', -7), ('max_angle', 52)]:
+        assert math.isclose(
+            float(vertical.findtext(tag)), math.radians(angle), abs_tol=1e-5)
+    assert float(lidar.findtext('range/min')) == 0.1
+    assert float(lidar.findtext('range/max')) == 40.0
+    assert lidar.findtext('noise/type') == 'gaussian'
+    assert float(lidar.findtext('noise/stddev')) == 0.02
