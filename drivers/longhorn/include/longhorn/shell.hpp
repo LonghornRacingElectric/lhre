@@ -72,6 +72,13 @@ class Shell {
     plain_context_ = context;
   }
 
+  // Raw byte hook, before line parsing. Returning true consumes the byte
+  // and clears the current line (e.g. a newline-free bootloader request).
+  void SetByteHandler(bool (*handler)(void*, uint8_t), void* context) {
+    byte_handler_ = handler;
+    byte_context_ = context;
+  }
+
   // False when the command table is full.
   bool AddCommand(const ShellCommand& command) {
     if (num_commands_ >= kMaxCommands) {
@@ -88,7 +95,11 @@ class Shell {
     }
     uint8_t byte;
     while (stream_->Read(&byte, 1, 0) == lhal::Status::kOk) {
-      HandleByte(static_cast<char>(byte));
+      if (byte_handler_ != nullptr && byte_handler_(byte_context_, byte)) {
+        line_len_ = 0;
+      } else {
+        HandleByte(static_cast<char>(byte));
+      }
     }
   }
 
@@ -236,6 +247,8 @@ class Shell {
   void (*plain_handler_)(void* context, Console& out,
                          const char* line) = nullptr;
   void* plain_context_ = nullptr;
+  bool (*byte_handler_)(void*, uint8_t) = nullptr;
+  void* byte_context_ = nullptr;
 
   ShellCommand commands_[kMaxCommands];
   size_t num_commands_ = 0;

@@ -52,3 +52,7 @@ In tests, construct the same driver with `lhal::host::*` fakes instead.
 Task/RTOS wiring stays in the board app (see `boards/VCU/App`): drive
 `RgbLed::Rainbow(dt)` from a periodic task or a `Step()` loop. Pure,
 LHAL-free logic (CRC, pack/unpack, ring buffers) belongs in `lib/`, not here.
+
+`Shell::SetByteHandler` observes each byte before line parsing. Returning
+true consumes the byte and clears the partial line, supporting newline-free
+recovery tokens across polls. The hook runs in the polling task.

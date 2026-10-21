@@ -385,7 +385,7 @@ void TestApp::SupervisorTick(uint32_t now) {
 
 // Shell
 
-void TestApp::RegisterShellCommands(vcu::Shell& shell) {
+void TestApp::RegisterShellCommands(longhorn::Shell& shell) {
   shell.AddCommand({"adc", "every analog channel: counts, mV pin/source, cal",
                     &TestApp::AdcCommand, this});
   shell.AddCommand(

@@ -18,7 +18,7 @@
 #include "pedals.hpp"
 #include "rainbow_task.hpp"
 #include "semphr.h"
-#include "shell.hpp"
+#include "longhorn/shell.hpp"
 #include "shutdown_loop.hpp"
 #include "state_machine.hpp"
 #include "steering.hpp"
@@ -148,7 +148,7 @@ class App {
   void SendCritical(uint32_t now_ms);
   void Publish(uint32_t now_ms);
 
-  void RegisterShellCommands(vcu::Shell& shell);
+  void RegisterShellCommands(longhorn::Shell& shell);
   static void StateCommand(void* ctx, longhorn::Console& out, const char*);
   static void FaultsCommand(void* ctx, longhorn::Console& out, const char*);
   static void IoCommand(void* ctx, longhorn::Console& out, const char*);
@@ -168,8 +168,8 @@ class App {
   SemaphoreHandle_t vcp_mutex_ = nullptr;
   StaticSemaphore_t usb_mutex_control_;
   SemaphoreHandle_t usb_mutex_ = nullptr;
-  vcu::Shell vcp_shell_;
-  vcu::Shell usb_shell_;
+  longhorn::Shell vcp_shell_;
+  longhorn::Shell usb_shell_;
   longhorn::Logger logger_;
   vcu::RainbowTask rainbow_;
   vcu::DfuCommand usb_dfu_;

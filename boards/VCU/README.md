@@ -328,8 +328,7 @@ FDCAN on PCLK1, ADC on HCLK/2 = 48 MHz, USB on PLLQ.
 
 ### Board-local compatibility support
 
-The VCU keeps its ADC progress interface, host ADC/UART fakes, raw-command
-shell, RGB animation and rainbow task in `App/`. `Board/dma_adc.hpp` and
+The VCU keeps its ADC progress interface, host ADC/UART fakes, RGB animation and rainbow task in `App/`. `Board/dma_adc.hpp` and
 `Board/usb_cdc.*` provide the hardware adapters. These are VCU-local versions
 of the existing shared implementations, extended for completed-scan monitoring,
 legacy brightness and newline-free DFU recovery. Shared drivers remain unchanged.

@@ -5,6 +5,7 @@ firmware_project(
     app_deps = [
         "//drivers/longhorn:logger",
         "//drivers/longhorn:console",
+        "//drivers/longhorn:shell",
         "//tools/firmware:build_info",
         "//lib/codegen/cpp:can_bench",
         "//lib/codegen/cpp:can_dui",

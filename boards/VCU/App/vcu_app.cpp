@@ -747,7 +747,7 @@ void App::SupervisorTick(uint32_t now) {
 
 // Shell
 
-void App::RegisterShellCommands(vcu::Shell& shell) {
+void App::RegisterShellCommands(longhorn::Shell& shell) {
   shell.AddCommand(
       {"state", "state, faults, mode, torque", &App::StateCommand, this});
   shell.AddCommand({"faults", "active fault list", &App::FaultsCommand, this});
