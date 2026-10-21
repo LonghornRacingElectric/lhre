@@ -57,6 +57,11 @@ BEVO's prost bindings and CAN decode JSON come from the same
 the telemetry server. Both sides therefore rebuild from `lib/spec` together;
 there is no separately generated BEVO wire schema in the Bazel path.
 
+`sensor_proto_library` in `sensor_proto.bzl` declares the protobuf, CAN JSON
+and schema contract inputs for that Rust generation action. The isolated
+[schema propagation regression](schema_tests/README.md) uses the same macro
+with append-only test fixtures, so it needs no registry or running stack.
+
 ## Deploying to the Pi
 
 The repo never goes on the Pi — deploys ship binaries:

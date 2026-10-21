@@ -12,7 +12,7 @@ validates, and serializes them; nothing else understands the format.
 
 load("@rules_python//python:defs.bzl", "py_library", "py_test")
 
-exports_files(["ir/wire_compat.py"])
+exports_files(["ir/wire_compat.py", "wire.lock"])
 
 filegroup(
     name = "files",

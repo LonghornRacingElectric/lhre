@@ -100,6 +100,46 @@ class UpdaterTest(unittest.TestCase):
             updater.activate(tampered)
         self.assertEqual((self.root / "current").resolve(), original)
 
+    def test_interrupted_executable_download_preserves_the_active_release(self):
+        registry = FakeRegistry({"next": release(self.schema, b"next")})
+        updater = Updater(self.root, registry)
+        original = updater.activate(release(self.schema))
+        selection = updater.choose({"format_version": 1, "schema": self.schema.manifest, "releases": ["next"]}, upgrade=True)
+        with patch.object(registry, "blob", side_effect=urllib.error.URLError("download interrupted")):
+            with self.assertRaises(urllib.error.URLError):
+                updater.install(selection)
+        self.assert_active_release_unchanged(updater, original)
+        self.assertEqual(set((self.root / "releases").iterdir()), {original})
+
+    def test_staging_write_failure_preserves_the_active_release_and_cleans_staging(self):
+        updater = Updater(self.root, FakeRegistry({}))
+        original = updater.activate(release(self.schema))
+        with patch("apps.BEVO.updater.updater.os.fsync", side_effect=OSError("disk full")):
+            with self.assertRaises(OSError):
+                updater.activate(release(self.schema, b"next"))
+        self.assert_active_release_unchanged(updater, original)
+        self.assertEqual(set((self.root / "releases").iterdir()), {original})
+
+    def test_failed_activation_preserves_the_active_release_and_can_be_retried(self):
+        updater = Updater(self.root, FakeRegistry({}))
+        original = updater.activate(release(self.schema))
+        with patch("apps.BEVO.updater.updater.os.replace", side_effect=PermissionError("activation denied")):
+            with self.assertRaises(PermissionError):
+                updater.activate(release(self.schema, b"next"))
+        self.assert_active_release_unchanged(updater, original)
+        self.assertFalse(any(path.name.startswith(".staging-") for path in (self.root / "releases").iterdir()))
+        destination = updater.activate(release(self.schema, b"next"))
+        self.assertEqual((self.root / "current").resolve(), destination)
+        self.assertNotEqual(destination, original)
+        for name in EXECUTABLES:
+            self.assertEqual((self.root / "current" / "bin" / name).read_bytes(), release(self.schema, b"next")["bin/" + name])
+
+    def assert_active_release_unchanged(self, updater, original):
+        self.assertEqual((self.root / "current").resolve(), original)
+        self.assertEqual(updater.installed().schema_id, self.schema.schema_id)
+        for name in EXECUTABLES:
+            self.assertEqual((self.root / "current" / "bin" / name).read_bytes(), release(self.schema)["bin/" + name])
+
     def test_storage_retains_only_current_and_previous_release(self):
         updater = Updater(self.root, FakeRegistry({}))
         paths = [updater.activate(release(self.schema, str(version).encode())) for version in range(4)]
