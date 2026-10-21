@@ -5,6 +5,7 @@ import importlib
 import importlib.util
 import math
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
 from lhr_vehicle import load_vehicle
 import numpy as np
@@ -64,6 +65,22 @@ def test_bridge_topics_match_rendered_sensors():
             assert mapping['lazy'] is True
 
 
+def test_stereo_resource_overlay_preserves_model_and_mesh_lookup():
+    """Select the stereo SDF without editing worlds or the installed default."""
+    models = PKG / 'models'
+    default = (models / 'fsae_vehicle' / 'model.sdf').read_bytes()
+    with _camera_module().stereo_model_resources(models) as resource_path:
+        model = Path(resource_path) / 'fsae_vehicle'
+        config = ET.parse(model / 'model.config')
+        sdf = ET.parse(model / config.findtext('sdf'))
+        assert len(sdf.findall(".//sensor[@type='camera']")) == 2
+        for mesh in sdf.findall('.//mesh/uri'):
+            assert mesh.text.startswith('model://fsae_vehicle/')
+            assert (Path(resource_path) / mesh.text.removeprefix('model://')).is_file()
+        assert (models / 'fsae_vehicle' / 'model.sdf').read_bytes() == default
+    assert not Path(resource_path).exists()
+
+
 @pytest.mark.parametrize('perception', ['sim', 'lidar'])
 @pytest.mark.parametrize('estimator', ['truth', 'ekf'])
 @pytest.mark.parametrize('enabled', [None, 'false', 'true'])
@@ -71,7 +88,8 @@ def test_launch_camera_actions_and_rviz(perception, estimator, enabled, monkeypa
     """Stereo is independently opt-in and never redirects its TF to truth TF."""
     pytest.importorskip('launch_ros')
     launch = pytest.importorskip('launch')
-    from launch.actions import DeclareLaunchArgument
+    from launch.actions import DeclareLaunchArgument, RegisterEventHandler, SetEnvironmentVariable
+    from launch.events import Shutdown
     from launch.utilities import normalize_to_list_of_substitutions, perform_substitutions
     from launch_ros.actions import Node
     from launch_ros.utilities import evaluate_parameters
@@ -89,6 +107,12 @@ def test_launch_camera_actions_and_rviz(perception, estimator, enabled, monkeypa
     if enabled is not None:
         context.launch_configurations['enable_stereo_camera'] = enabled
     actions = module._launch_setup(context)
+    for action in actions:
+        if isinstance(action, SetEnvironmentVariable):
+            action.execute(context)
+    resource_path = context.environment['GZ_SIM_RESOURCE_PATH'].split(':')[0]
+    model = ET.parse(Path(resource_path) / 'fsae_vehicle' / 'model.sdf')
+    assert len(model.findall(".//sensor[@type='camera']")) == (2 if enabled == 'true' else 0)
     nodes = [a for a in actions if isinstance(a, Node)]
     camera_nodes = [n for n in nodes if n._Node__node_name.startswith('zed2i_')]
     assert len(camera_nodes) == (6 if enabled == 'true' else 0)
@@ -108,6 +132,10 @@ def test_launch_camera_actions_and_rviz(perception, estimator, enabled, monkeypa
     ]
     assert arguments[-1] == str(PKG / 'config' / (
         'stereo.rviz' if enabled == 'true' else 'default.rviz'))
+    for action in actions:
+        if isinstance(action, RegisterEventHandler):
+            action.event_handler.handle(Shutdown(reason='test complete'), context)
+    assert Path(resource_path).exists() == (enabled != 'true')
 
 
 def test_stereo_rviz_preserves_existing_displays():

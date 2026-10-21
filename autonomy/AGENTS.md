@@ -46,10 +46,12 @@ here. Do not add `BUILD.bazel` files.
 - Vehicle numbers (wheelbase, track, steering limit, masses, sensor
   mounts) live only in `ros2/src/lhr_vehicle/config/vehicle.yaml`; nodes
   read them through `lhr_vehicle.load_vehicle()`. Never hardcode them.
-  `lhr_gazebo/models/fsae_vehicle/model.sdf` is generated from that file
+  `lhr_gazebo/models/fsae_vehicle/model.sdf` (no cameras) and
+  `model_stereo.sdf` (with cameras) are generated from that file
   by `lhr_gazebo/scripts/generate_vehicle_model.py` — edit the YAML or
-  `lhr_gazebo/templates/model.sdf.in`, rerun the generator, and commit
-  both. `lhr_gazebo`'s tests fail if the committed `model.sdf` is stale.
+  the templates in `lhr_gazebo/templates/`, rerun the generator, and commit
+  the YAML and both generated SDFs. `lhr_gazebo`'s tests fail if either
+  committed model is stale.
 - Packages map to software lanes (table in [README.md](README.md)). Keep a
   change inside the owning lane's packages where possible.
 - Docs next to code, same as the root rule: change behavior, change the
