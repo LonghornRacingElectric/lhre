@@ -1,9 +1,8 @@
 load("@aspect_bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@rules_python//python:defs.bzl", "py_binary", "py_test")
-load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
-load("@rules_rust//rust:defs.bzl", "rust_library")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("@rules_oci//oci:defs.bzl", "oci_image", "oci_push")
+load(":sensor_proto.bzl", "sensor_proto_library")
 
 package(default_visibility = ["//apps/BEVO:__subpackages__"])
 
@@ -21,6 +20,11 @@ exports_files([
     "Cargo.lock",
 ])
 
+exports_files(
+    ["build.rs", "config.rs", "lib.rs"],
+    visibility = ["//apps/BEVO:__subpackages__"],
+)
+
 alias(
     name = "can_json",
     actual = "//lib/codegen/telemetry:can_json",
@@ -29,44 +33,11 @@ alias(
 # Runs build.rs to generate the prost bindings AND generated_mapping.rs into
 # OUT_DIR (lib.rs include!()s both) from the hermetic protoc and the shared
 # Bazel-generated protobuf and CAN JSON.
-cargo_build_script(
-    name = "sensor_proto_build",
-    srcs = ["build.rs"],
-    build_script_env = {
-        "CAN_JSON": "$(execpath //lib/codegen/telemetry:can_json)",
-        "PROTO_FILE": "$(execpath //lib/codegen/telemetry:can_packets_proto)",
-        "PROTOC": "$(execpath //tools/protoc)",
-        "SCHEMA_CONTRACT": "$(execpath //lib/codegen/telemetry:schema_contract)",
-    },
-    data = [
-        "//lib/codegen/telemetry:can_json",
-        "//lib/codegen/telemetry:can_packets_proto",
-        "//lib/codegen/telemetry:schema_contract",
-    ],
-    edition = "2021",
-    target_compatible_with = NOT_WINDOWS,
-    tools = ["//tools/protoc"],
-    deps = [
-        "@crates//:prost",
-        "@crates//:prost-build",
-        "@crates//:prost-types",
-        "@crates//:serde_json",
-    ],
-)
-
-rust_library(
+sensor_proto_library(
     name = "sensor_proto",
-    srcs = [
-        "config.rs",
-        "lib.rs",
-    ],
-    edition = "2021",
-    target_compatible_with = NOT_WINDOWS,
-    deps = [
-        ":sensor_proto_build",
-        "@crates//:prost",
-        "@crates//:serde",
-    ],
+    proto = "//lib/codegen/telemetry:can_packets_proto",
+    can_json = "//lib/codegen/telemetry:can_json",
+    contract = "//lib/codegen/telemetry:schema_contract",
 )
 
 # ---- Pi deployment ---------------------------------------------------------

@@ -90,3 +90,17 @@ rollback source.
 For unmanaged deployment, `BEVO_CORE_RELEASE=/absolute/release` directly pins
 the launcher, taking precedence over `BEVO_CORE_ROOT`. Explicit overrides are
 not automatic fallbacks and do not make incompatible schemas compatible.
+
+## Local regression tests
+
+```bash
+bazel test --config=local //apps/BEVO/updater:updater_test //apps/BEVO/updater:package_test
+```
+
+The updater tests inject registry responses and download, staging-write and
+activation failures. They require the active release to remain intact and a
+failed activation to be retryable. The package test reads the Bazel-built OCI
+layout directly from runfiles; it never pulls/pushes an image or contacts GHCR.
+All installation roots are temporary. These tests run in normal presubmit
+and postsubmit without credentials, Docker or a Pi. Real GHCR authentication
+and running the ARM executables remain a manual deployment check.

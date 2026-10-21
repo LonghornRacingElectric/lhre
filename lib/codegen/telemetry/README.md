@@ -57,3 +57,22 @@ migrations; initialization SQL and ORM generation do not migrate stored data.
 Shared drive-day/event/track tables come from `common_schema.sql`, not CAN
 telemetry fields. Historical Nightwatch/Angelique schemas are separate from
 the current Orion textproto source and are not rewritten by this generator.
+
+## Regression checks
+
+```bash
+bazel test --config=local //lib/codegen/telemetry:generated_contract_test //apps/BEVO/schema_tests:schema_propagation_test
+```
+
+The contract test compares the emitted descriptor with the reviewed wire lock,
+including tombstones, and checks generated DDL/ORM column names and types.
+It follows the lock rather than pinning packet counts. This is an offline
+consistency check, not a comparison with a production database or a migration
+test; database constraints and deployed drift still need operator review.
+
+The [propagation regression](../../../apps/BEVO/schema_tests/README.md) builds
+baseline and appended fixture schemas through the production generators and
+BEVO Rust macro. It checks database artifacts and decodes a compiled BEVO
+packet using the generated server descriptor. Both targets are part of normal
+`bazel test //...`; no GitHub, registry, image pull or service is needed.
+Test fixtures and generated outputs never replace the deployed schema.
