@@ -13,8 +13,8 @@ for launch arguments and vehicle physics.
 Gazebo preserves main's level LiDAR mount at z=0.55 m and its generated
 cloud frame. The detector reads that mount from vehicle YAML rather than
 requiring a new static TF. Its height band stays in the sensor frame.
-The Mid-360 path uses scan-time TF and base-frame heights instead; do not
-copy its detector thresholds into Gazebo without running a Gazebo gate.
+The kinematic demo uses scan-time TF and base-frame heights by default;
+Gazebo keeps the values below for either cloud source.
 
 These LiDAR-only arguments preserve Gazebo's existing values and are typed
 before node startup. They have no effect in `perception:=sim`.
@@ -38,8 +38,9 @@ and a published scan-time mount transform; select `lidar_height_filter_frame:=ba
 when using ground-relative thresholds. These opt-in configurations need
 Gazebo acceptance testing before changing defaults.
 
-Gazebo still uses its existing uniform-grid VLP-16 model. The imported Livox
-pattern belongs to the kinematic [Mid-360 simulator](../lhr_lidar_sim/README.md).
+The GPU sensor approximates Mid-360 with a repeating 500 × 40 grid at 10 Hz,
+360° horizontal and −7° to +52° vertical coverage, 0.1–40 m range and 0.02 m
+Gaussian range noise. Select the caster below for imported Livox scan directions.
 
 ## Generated model
 
@@ -104,6 +105,37 @@ The launch starts graphical Gazebo and RViz by default. Use `gui:=false` or
 `rviz:=false` for a headless run. See the workspace
 [README](../../README.md) for all launch arguments and topic diagrams.
 
+## Mid-360 cloud source and Foxglove
+
+`lidar_source:=gazebo` selects the GPU sensor by default. To use the loaded
+world with vendor-pattern casting and an optional viewer:
+
+```bash
+ros2 launch lhr_gazebo gazebo_demo.launch.py \
+  track_style:=autocross perception:=lidar estimator:=ekf \
+  lidar_source:=mid360 gui:=false rviz:=false foxglove:=true foxglove_port:=8767
+```
+
+Connect to `ws://localhost:8767` and import `autonomy/ros2/foxglove/lhr_sim.json`.
+The viewer includes primitive car markers; no mesh server is needed.
+`/lhr/track/cones` is absent in LiDAR mode. Foxglove works in either perception
+mode and defaults to `foxglove:=false foxglove_port:=8765`.
+
+`mid360` requires `perception:=lidar`. The caster reads the resolved SDF and
+Gazebo truth pose; perception still receives estimated odometry under EKF.
+Only the selected cloud owns `/lhr/lidar/points`; the GPU comparison moves to
+`/lhr/lidar/gazebo_points`. The existing driving nodes and defaults are retained.
+`lidar_drop` intercepts the selected producer, including Mid-360.
+
+The internal read-only `world_sdf` is bound to launch's `world`, and `seed`
+reaches the caster as an integer. Mount, motion and clutter study settings are
+fixed in world mode; see [sensor limits](../lhr_lidar_sim/README.md#gazebo-world-input).
+
+On Wayland with X11 available, Gazebo/RViz select `xcb` unless another backend
+is explicitly chosen. Gazebo uses the packaged Fontconfig configuration;
+an explicit `FONTCONFIG_FILE` takes precedence. These overrides are scoped
+to the launched processes.
+
 ## Command timeout
 
 `joint_cmd_adapter` stops the wheels when `/lhr/vehicle/cmd` has been silent
@@ -125,7 +157,7 @@ driving.
 | `ekf_kill`, `controller_kill` | `pkill -9` the node |
 | `controller_pause` | `SIGSTOP` the controller, `SIGCONT` after `fault_duration_s` (with the default 0 it stays frozen) |
 | `odom_nan`, `odom_spike` | The odometry producer (the EKF, or the bridge under `estimator:=truth`) publishes `/lhr/vehicle/odom_raw`; the injector relays it, corrupted |
-| `lidar_drop` | The bridge publishes `/lhr/lidar/points_raw`; the injector stops relaying |
+| `lidar_drop` | The selected source publishes `/lhr/lidar/points_raw`; the injector stops relaying |
 | `cmd_nan` | `pure_pursuit` publishes `/lhr/vehicle/cmd_raw`; the injector relays it with NaN steering |
 | `steer_freeze` | `joint_cmd_adapter` reads `/lhr/vehicle/cmd_actuated`, which the injector holds at the fault's steering angle |
 
@@ -164,7 +196,15 @@ colcon test --packages-select lhr_gazebo
 colcon test-result --verbose
 ```
 
+Source tests cover typed startup, truth/EKF wiring, unique TF ownership,
+cloud-to-detector output, supported geometry and active-source fault injection.
+Culling tests match unculled intersections exactly. Live checks cover motion,
+Foxglove and emergency stops; they do not establish full-lap acceptance.
+Reported scan rates use simulation time; wall-time rates depend on Gazebo speed.
+
 Node cleanup tolerates an already-stopped ROS context after launch shutdown.
+Interrupt-time callback tracebacks remain observable in unchanged main-branch
+nodes, including the default GPU source configuration.
 
 Camera classifier launch tests cover defaults and overrides in both perception
 and estimator modes. Evaluated parameters use JSON encoding for ROS CLI startup

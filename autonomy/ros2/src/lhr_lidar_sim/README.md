@@ -102,9 +102,29 @@ print(points_on_cone(sensor, 0.0, distance_m=10.0, frames=10))
 
 The table is decoded once on first use and cached for subsequent frames.
 
+## Gazebo world input
+
+Use `perception:=lidar lidar_source:=mid360` in the
+[Gazebo launch](../lhr_gazebo/README.md#mid-360-cloud-source-and-foxglove).
+Its internal read-only `world_sdf` selects the actual loaded world; empty
+`world_sdf` retains scene-marker studies.
+
+World mode accepts flat ground and upright nominal cone includes. Unsupported
+obstacles, frames, transforms and scaling fail explicitly. Cone envelopes are
+ideal surfaces; terrain, self-occlusion and real reflectivity are not modeled.
+Conservative azimuth culling speeds up casting without changing geometric hits.
+
+Cloud and mount TF share the truth acquisition stamp. Duplicate stamps suppress
+extra scans; a backward-time reset resumes scanning. Vehicle height/attitude and
+the shared mount are applied, although current Gazebo odometry is planar.
+
+World mode fixes the mount to `vehicle.yaml` with zero rotation and requires
+snapshot scans without synthetic clutter. Incompatible startup values and runtime
+edits are rejected. Mount/motion/clutter studies remain available in marker mode.
+
 ## Moving the sensor without restarting
 
-All six mount degrees of freedom accept a new value while the node runs,
+In marker mode, all six mount degrees of freedom accept a new value while the node runs,
 so the mount study is a slider and a look rather than a rebuild per
 guess:
 
