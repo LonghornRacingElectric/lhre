@@ -320,6 +320,12 @@ def _launch_setup(context: LaunchContext):
                 'use_sim_time': True,
                 'pairing_strategy': (
                     'classified' if classify_sides else 'boundary'),
+                'planning_horizon_m': ParameterValue(
+                    LaunchConfiguration('planning_horizon_m'), value_type=float),
+                'max_path_gap_m': ParameterValue(
+                    LaunchConfiguration('max_path_gap_m'), value_type=float),
+                'max_path_turn_deg': ParameterValue(
+                    LaunchConfiguration('max_path_turn_deg'), value_type=float),
                 'chaining_alg': ParameterValue(
                     LaunchConfiguration('chaining_alg'), value_type=str),
                 'min_step_m': ParameterValue(
@@ -349,6 +355,12 @@ def _launch_setup(context: LaunchContext):
             parameters=[{
                 'use_sim_time': True,
                 'pairing_strategy': 'boundary',
+                'planning_horizon_m': ParameterValue(
+                    LaunchConfiguration('planning_horizon_m'), value_type=float),
+                'max_path_gap_m': ParameterValue(
+                    LaunchConfiguration('max_path_gap_m'), value_type=float),
+                'max_path_turn_deg': ParameterValue(
+                    LaunchConfiguration('max_path_turn_deg'), value_type=float),
                 'chaining_alg': ParameterValue(
                     LaunchConfiguration('chaining_alg'), value_type=str),
                 'min_step_m': ParameterValue(
@@ -385,7 +397,10 @@ def _launch_setup(context: LaunchContext):
             'max_accel': LaunchConfiguration('max_accel'),
             'max_decel': LaunchConfiguration('max_decel'),
             'use_sim_time': True,
-            'closed_path': perception != 'lidar',
+            # Both planners publish a forward prefix, not a complete circuit.
+            'closed_path': False,
+            'path_timeout_sec': ParameterValue(
+                LaunchConfiguration('path_timeout_sec'), value_type=float),
         }],
         remappings=fault_remaps.get('pure_pursuit', []),
         output='screen',
@@ -564,6 +579,9 @@ def generate_launch_description():
         DeclareLaunchArgument('lidar_sensor_transform_source', default_value='vehicle_config'),
         DeclareLaunchArgument('lidar_height_filter_frame', default_value='sensor'),
         # Track builder chaining (both perception modes)
+        DeclareLaunchArgument('planning_horizon_m', default_value='30.0'),
+        DeclareLaunchArgument('max_path_gap_m', default_value='4.0'),
+        DeclareLaunchArgument('max_path_turn_deg', default_value='60.0'),
         DeclareLaunchArgument('chaining_alg', default_value='constrained_greedy'),
         DeclareLaunchArgument('min_step_m', default_value='0.3'),
         DeclareLaunchArgument('max_step_m', default_value='4.0'),
@@ -573,6 +591,7 @@ def generate_launch_description():
         DeclareLaunchArgument('beam_width', default_value='3'),
         DeclareLaunchArgument('beam_depth', default_value='10'),
         # Control
+        DeclareLaunchArgument('path_timeout_sec', default_value='1.0'),
         DeclareLaunchArgument('lookahead_dist', default_value='5.0'),
         DeclareLaunchArgument('lookahead_min', default_value='2.0'),
         DeclareLaunchArgument('lookahead_curvature_gain', default_value='3.0'),

@@ -4,9 +4,10 @@ Gazebo Harmonic vehicle physics, sensor bridging, and demo launch. Run
 `ros2 launch lhr_gazebo gazebo_demo.launch.py` in a supported ROS environment.
 `perception:=sim` uses simplified cone detections; `perception:=lidar` uses
 [lhr_perception](../lhr_perception/README.md) and boundary planning.
-LiDAR mode also selects open-path control so a partial corridor is not
-treated as a complete circuit. See [the workspace reference](../../README.md)
-for launch arguments and vehicle physics.
+Both perception modes select open-path control: the track builder publishes
+a forward prefix, so lookahead and curvature must not connect its ends.
+See [the workspace reference](../../README.md) for launch arguments and
+vehicle physics.
 
 ## LiDAR coordinates
 
@@ -103,6 +104,36 @@ occlusion and sparse returns.
 The launch starts graphical Gazebo and RViz by default. Use `gui:=false` or
 `rviz:=false` for a headless run. See the workspace
 [README](../../README.md) for all launch arguments and topic diagrams.
+
+## Local path limits
+
+These arguments are typed doubles and reach their nodes in both perception
+modes, including `lidar_classify_sides:=true`. Defaults match the nodes.
+
+| Argument | Default | Meaning |
+| --- | --- | --- |
+| `planning_horizon_m` | `30.0` | Maximum arc length of the forward path |
+| `max_path_gap_m` | `4.0` | Split the path at a larger gap |
+| `max_path_turn_deg` | `60.0` | Split the path at a sharper turn |
+| `path_timeout_sec` | `1.0` | Stop pursuit when its local path expires |
+
+For example:
+
+```bash
+ros2 launch lhr_gazebo gazebo_demo.launch.py perception:=sim \
+  planning_horizon_m:=20 max_path_gap_m:=3 max_path_turn_deg:=45 path_timeout_sec:=2
+```
+
+`closed_path` is deliberately fixed to `false` in both branches rather than
+exposed as a launch argument: each branch publishes a car-anchored prefix,
+not a complete circuit. The controller uses one-sided curvature near the
+endpoints, stops at the end of a short path, and stops on a stale path. A
+complete closed route would need an explicit producer contract before
+changing this setting.
+
+Launch tests evaluate defaults and overrides, check ROS parameter types,
+start both owning nodes, and exercise the configured controller's endpoint
+and stale-path behavior. They do not establish Gazebo driving performance.
 
 ## Command timeout
 

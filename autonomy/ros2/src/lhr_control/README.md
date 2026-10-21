@@ -7,10 +7,12 @@ Pure pursuit steering and curvature-based speed planning. Consumes
 
 ## Closed tracks and local paths
 
-`closed_path=true` retains the existing simplified-mode closed-loop path
-behavior. LiDAR perception launches set `closed_path=false`: lookahead and
-curvature estimates do not wrap between the two ends of a partial scan-derived
-path. Targets behind the vehicle are rejected. Empty paths, expired local
+`closed_path=true` supports a complete closed circuit and remains the node
+default. Gazebo sets `closed_path=false` for both simplified and LiDAR
+perception because both publish a car-anchored forward prefix. MVS LiDAR
+mode also selects open paths; its simplified mode retains the closed-path
+setting. Open-path lookahead and curvature estimates do not wrap between
+the two endpoints. Targets behind the vehicle are rejected. Empty paths, expired local
 paths, or paths with no forward target produce a zero-speed command.
 
 Open-path speeds respect acceleration limits from zero and decrease with the

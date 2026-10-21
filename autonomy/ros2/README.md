@@ -899,8 +899,12 @@ provenance fields mean and how to add a column. CSV data accumulates in
 `data/metrics.csv` across runs; a file written under an older column set
 is moved aside rather than having its fields dropped.
 
-LiDAR launch modes set `closed_path=false`; local paths do not wrap at their
-ends and expire after `path_timeout_sec=1.0`. See [control](src/lhr_control/README.md).
+Both Gazebo perception modes and MVS LiDAR mode set `closed_path=false`;
+local paths do not wrap at their ends and expire after `path_timeout_sec=1.0`.
+Gazebo exposes this timeout plus `planning_horizon_m`, `max_path_gap_m`, and
+`max_path_turn_deg` as typed launch arguments in both perception modes. See
+[Gazebo](src/lhr_gazebo/README.md#local-path-limits) and
+[control](src/lhr_control/README.md).
 
 The MVS launcher also accepts `plant:=bobsim` for the optional
 [BobSim 3 DOF plant](src/lhr_sim_bobsim/README.md). CI initializes the pinned
