@@ -199,6 +199,21 @@ the box and four cylinders instead. The argument is in the bag's
 provenance either way, so an empty-looking recording can be explained
 from the bag rather than from memory.
 
+## Fixed-reference scoring
+
+Metrics latches the complete scene truth on `/lhr/track/cones`, never the
+planner's moving path. Only the scorer receives this reference; LiDAR
+perception and control still use their existing inputs. An empty
+`reference_world` uses this topic; a file override must match the scene.
+
+The launch exposes `reference_closed` (true), `off_track_threshold` (2.0 m),
+`start_radius` (2.0 m gate half-width), `min_lap_time` (5.0 s),
+`min_progress_fraction` (0.98), `lap_start_speed` (0.1 m/s), and
+`max_odom_gap_sec` (1.0 s). All numeric overrides are explicitly typed doubles.
+The CSV records the latched geometry hash, scoring settings, circuit progress,
+interpolated lap time, and any reason that disqualified the run.
+See [metrics](../lhr_metrics/README.md#reference-and-lap-contract).
+
 ## Ending a run
 
 The metrics process exiting emits a launch `Shutdown`, so the whole graph

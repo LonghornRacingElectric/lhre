@@ -29,7 +29,7 @@ for i in $(seq 1 "$RUNS"); do
     echo "--- run $i/$RUNS (seed=$SEED) ---"
     # Appends to the same CSV, so the comparison below sees every run.
     ros2 launch lhr_demo mvs_demo.launch.py \
-        output_csv:="$CSV" seed:="$SEED" "$@" >/dev/null 2>&1 || true
+        output_csv:="$CSV" seed:="$SEED" timeout_sec:=120.0 "$@" >/dev/null 2>&1 || true
 done
 
 if [ ! -f "$CSV" ]; then

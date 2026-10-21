@@ -297,3 +297,28 @@ geometry requires recomputing the measured target distance.
 Camera extrinsics are fixed relative to `base_link`. The existing vehicle
 state/TF is planar, so the map-frame camera pose does not fully represent
 physics roll/pitch. Future 3D projection/fusion needs a 6-DoF vehicle pose.
+
+## Reference scoring
+
+Metrics uses the actual selected world file, including an explicit `world:=...`
+override, as its fixed truth source. The supported generated worlds contain
+ordered `cone_blue_N` and `cone_yellow_N` includes. Metrics never uses the
+planner's path or feeds this reference back to perception/control.
+
+| Argument | Default | Meaning |
+| --- | --- | --- |
+| `reference_world` | empty | Empty resolves to the selected world; override only for a matching reference file |
+| `reference_closed` | `true` | Include loop closure and enable circuit detection |
+| `off_track_threshold` | `2.0` | Scoring corridor half-width, metres |
+| `start_radius` | `2.0` | Fixed crossing-gate half-width, metres |
+| `min_lap_time` | `5.0` | Minimum simulation seconds after driving onset |
+| `min_progress_fraction` | `0.98` | Required signed circuit progress |
+| `lap_start_speed` | `0.1` | Speed at which driving timing starts, m/s |
+| `max_odom_gap_sec` | `1.0` | Maximum gap during a scored circuit |
+| `output_csv` | `data/metrics.csv` | Run row, including reference hash and invalidation reason |
+
+Scoring arguments are typed and forwarded in both perception branches and
+with truth or EKF estimation. `reference_closed:=false` scores an open course
+without inventing a return segment or a circuit lap. Missing or invalid world
+geometry fails rather than silently using a different course. See the
+[metrics contract](../lhr_metrics/README.md#reference-and-lap-contract).
