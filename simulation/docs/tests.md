@@ -65,7 +65,10 @@ workflow. It also runs on pushes to `main`. The steps are:
 
 1. Get the BobSim history for the pin check. The checkout gets submodules
    at depth 1, which does not include `739143a`.
-2. Build the image.
+2. Build the image with the GitHub Actions layer cache. A layer is built
+   again only when the BobSim `Dockerfile` or `requirements.txt` changes.
+   Only then does CI download from the OpenModelica servers, so an
+   OpenModelica outage blocks only a run that changes the image.
 3. Check that BobSim loads the vehicle: `make smoke`.
 4. On a pull request only, check that a changed bundle member has a new
    `bundle_id`. The step fetches the base branch, then runs
