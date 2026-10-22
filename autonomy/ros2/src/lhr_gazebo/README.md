@@ -4,9 +4,10 @@ Gazebo Harmonic vehicle physics, sensor bridging, and demo launch. Run
 `ros2 launch lhr_gazebo gazebo_demo.launch.py` in a supported ROS environment.
 `perception:=sim` uses simplified cone detections; `perception:=lidar` uses
 [lhr_perception](../lhr_perception/README.md) and boundary planning.
-LiDAR mode also selects open-path control so a partial corridor is not
-treated as a complete circuit. See [the workspace reference](../../README.md)
-for launch arguments and vehicle physics.
+Both perception modes select open-path control: the track builder publishes
+a forward prefix, so lookahead and curvature must not connect its ends.
+See [the workspace reference](../../README.md) for launch arguments and
+vehicle physics.
 
 ## LiDAR coordinates
 
@@ -112,6 +113,22 @@ node the launch can start for a parameter fed by a bare `LaunchConfiguration`.
 It does not see values the launch reads from `context.launch_configurations`
 itself or wraps in another substitution such as `PythonExpression`; type
 those by hand.
+
+## Local path control
+
+`path_timeout_sec` is a typed double launch argument (default `1.0`, matching
+pursuit) in both perception modes, including `lidar_classify_sides:=true`.
+For example, `path_timeout_sec:=2` changes the local-path expiry deadline.
+
+`closed_path` is fixed to `false` in both Gazebo branches: each publishes a
+car-anchored prefix, not a complete circuit. Lookahead and curvature do not
+connect the endpoints. Tests check default/override startup, endpoint stopping,
+and stale-path stopping; they do not establish Gazebo driving performance.
+
+`planning_horizon_m`, `max_path_gap_m`, and `max_path_turn_deg` only affect
+`boundary_graph`, which Gazebo does not select. They are intentionally not
+Gazebo launch arguments. The current `boundary` / `classified` modes use
+their chaining arguments documented above instead.
 
 ## Command timeout
 

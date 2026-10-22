@@ -734,6 +734,8 @@ Speed is planned from path curvature:
 | `lookahead_curvature_gain` | `3.0` | How aggressively lookahead shortens with curvature |
 | `max_steer` | from `vehicle.yaml` | Max steering angle (rad) (default: `lhr_vehicle`) |
 | `wheelbase` | from `vehicle.yaml` | Wheelbase for steering calc (m) (default: `lhr_vehicle`) |
+| `closed_path` | `true` | Wrap only a complete circuit; Gazebo and MVS LiDAR override to false |
+| `path_timeout_sec` | `1.0` | Stop when an open path expires (s) |
 | `control_hz` | `20.0` | Control loop rate (Hz) |
 | `a_lat_max` | `6.0` | Max lateral acceleration for speed law (m/s^2) |
 | `v_min` | `2.0` | Minimum commanded speed (m/s) |
@@ -902,8 +904,12 @@ provenance fields mean and how to add a column. CSV data accumulates in
 `data/metrics.csv` across runs; a file written under an older column set
 is moved aside rather than having its fields dropped.
 
-LiDAR launch modes set `closed_path=false`; local paths do not wrap at their
-ends and expire after `path_timeout_sec=1.0`. See [control](src/lhr_control/README.md).
+Both Gazebo perception modes and MVS LiDAR mode set `closed_path=false`;
+local paths do not wrap at their ends and expire after `path_timeout_sec=1.0`.
+Gazebo exposes `path_timeout_sec` as a typed launch argument in both modes.
+The three `boundary_graph` path limits do not apply to its current planners. See
+[Gazebo](src/lhr_gazebo/README.md#local-path-control) and
+[control](src/lhr_control/README.md).
 
 The MVS launcher also accepts `plant:=bobsim` for the optional
 [BobSim 3 DOF plant](src/lhr_sim_bobsim/README.md). CI initializes the pinned

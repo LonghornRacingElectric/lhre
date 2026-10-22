@@ -390,7 +390,10 @@ def _launch_setup(context: LaunchContext):
             'max_accel': _float('max_accel'),
             'max_decel': _float('max_decel'),
             'use_sim_time': True,
-            'closed_path': perception != 'lidar',
+            # Both planners publish a forward prefix, not a complete circuit.
+            'closed_path': False,
+            'path_timeout_sec': ParameterValue(
+                LaunchConfiguration('path_timeout_sec'), value_type=float),
         }],
         remappings=fault_remaps.get('pure_pursuit', []),
         output='screen',
@@ -577,6 +580,7 @@ def generate_launch_description():
         DeclareLaunchArgument('beam_width', default_value='3'),
         DeclareLaunchArgument('beam_depth', default_value='10'),
         # Control
+        DeclareLaunchArgument('path_timeout_sec', default_value='1.0'),
         DeclareLaunchArgument('lookahead_dist', default_value='5.0'),
         DeclareLaunchArgument('lookahead_min', default_value='2.0'),
         DeclareLaunchArgument('lookahead_curvature_gain', default_value='3.0'),
