@@ -22,6 +22,7 @@ three years after everyone who made the decision graduated.
 | [011](011-bazel-owned-telemetry-images.md) | Bazel owns every telemetry stack image; Compose only runs loaded tags | Accepted |
 | [012](012-simulation-outside-bazel.md) | Simulation runs BobSim in Docker, outside Bazel | Accepted |
 | [013](013-driveday-viewer-outside-bazel.md) | The drive day viewer is a local Next.js app, outside Bazel | Accepted |
+| [014](014-simulation-consumes-bazel-built-vcu.md) | Simulation runs the Bazel-built VCU firmware as a shared library | Accepted |
 
 ## ADRs vs. READMEs
 

@@ -42,6 +42,9 @@ make test    # check that BobSim loads //vehicle, then run the fast tests
 | `make study S=<name>` | Run `studies/<name>/run.py`. If it succeeds, write outputs to `out/<name>/`. `STUDY_WORKERS=n` limits the CPUs for parallel cases. `ARGS=... V=<name>` runs a variant to `out/<name>--<V>/`. |
 | `make stale S=<name>` | Check if the result in `studies/<name>/README.md` is current, stale or unknown. Without `S`, check every study. See [docs/studies.md](docs/studies.md#check-a-result). |
 | `make bump-bobsim REF=<ref>` | Move the BobSim pin to a commit, tag or branch |
+| `make vcu-sil` | Build `//boards/VCU:libvcu_sil.so` with Bazel on the host. Copy it into `modelica/LhreVcu/Resources/Library/`. `BAZEL_ARGS=--config=local` builds without BuildBuddy. |
+| `make bobsim-fw` | Build `LhreVcu.VehicleSimFw` with OMC: BobLib `VehicleSim` with the VCU firmware as its VCU. It runs `make records` first and puts the BobLib files back after. |
+| `make sil` | Run `VehicleSimFw` in a 5 s straight line and check the result. See [modelica/LhreVcu](modelica/LhreVcu/README.md). |
 | `make clean` | Delete `out/` |
 
 ## Layout
@@ -53,6 +56,7 @@ simulation/
   bobsim/             # submodule, pinned SHA
   studies/<name>/     # README.md + run.py
   tools/              # make smoke, study provenance, README fill and shared study helpers
+  modelica/LhreVcu/   # Modelica package that runs the VCU firmware in VehicleSim
   tests/              # make unit: fast unit and contract tests
   docs/               # detail and agent skills
   out/                # gitignored outputs
@@ -78,5 +82,14 @@ simulation/
   them. `make records-undo` puts them back.
 - BobSim targets write results inside `bobsim/`. BobSim's `.gitignore`
   covers them.
+
+## VCU firmware in the vehicle model
+
+`make vcu-sil bobsim-fw sil` runs the VCU firmware from `boards/VCU` as the
+VCU of BobLib `VehicleSim`. Bazel builds the firmware as a shared library.
+The OMC executable loads it at run time. After a firmware change, run
+`make vcu-sil sil`. You do not need to build the model again. See
+[modelica/LhreVcu](modelica/LhreVcu/README.md) and
+[ADR-014](../docs/architecture/014-simulation-consumes-bazel-built-vcu.md).
 
 More detail is in [docs/](docs/README.md).

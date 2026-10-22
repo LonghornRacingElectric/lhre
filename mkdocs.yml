@@ -21,6 +21,7 @@ nav:
       - ADR-010 Telemetry Stack in Bazel: docs/architecture/010-telemetry-stack-in-bazel.md
       - ADR-012 Simulation Outside Bazel: docs/architecture/012-simulation-outside-bazel.md
       - ADR-013 Drive Day Viewer Outside Bazel: docs/architecture/013-driveday-viewer-outside-bazel.md
+      - ADR-014 Simulation Runs VCU Firmware: docs/architecture/014-simulation-consumes-bazel-built-vcu.md
       - Build System: docs/build-system.md
       - Cookbook: docs/cookbook.md
   - Boards:
@@ -98,6 +99,7 @@ nav:
       - Docs: simulation/docs/README.md
       - Studies: simulation/docs/studies.md
       - BobSim: simulation/docs/bobsim.md
+      - VCU Firmware in VehicleSim: simulation/modelica/LhreVcu/README.md
       - Skills:
           - Add a Study: simulation/docs/skills/add-study/SKILL.md
           - Run a BobSim Target: simulation/docs/skills/run-bobsim-target/SKILL.md

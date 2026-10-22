@@ -10,7 +10,7 @@ STUDY_OUT = $(S)$(if $(V),--$(V))
 
 GIT_LF := git -c core.autocrlf=false -c core.longpaths=true
 
-.PHONY: help init build shell test smoke unit records records-undo bobsim study stale bump-bobsim clean
+.PHONY: help init build shell test smoke unit records records-undo bobsim study stale bump-bobsim clean vcu-sil bobsim-fw sil
 
 help:
 	@echo "make init                  Get submodules and build the image"
@@ -25,6 +25,9 @@ help:
 	@echo "make study S=<name>        Run studies/<name>/run.py (STUDY_WORKERS=n limits CPUs)"
 	@echo "make stale [S=<name>]      Check if a committed study result is stale (no S: every study)"
 	@echo "make bump-bobsim REF=<ref> Move the BobSim pin"
+	@echo "make vcu-sil                Build the VCU firmware library with Bazel on the host and install it"
+	@echo "make bobsim-fw              Build BobLib VehicleSim with the firmware VCU"
+	@echo "make sil                    Run the firmware VCU in a straight-line VehicleSim and check it"
 	@echo "make clean                 Delete out/"
 
 init:
@@ -62,11 +65,14 @@ RECORD_FILES = \
 	BobLib/Experiments/Standards/VehicleSim.mo \
 	BobLib/Experiments/Standards/FourPostSim.mo
 
+RECORDS_WRITE = $(RUN) sim sh -c 'cd bobsim && python -m app.modelica_generator "$$BOBSIM_VEHICLE" --write'
+RECORDS_UNDO = cd $(BOBLIB) && git checkout -- $$(git ls-files -- $(RECORD_FILES)) && git clean -f -- $(RECORD_FILES)
+
 records:
-	$(RUN) sim sh -c 'cd bobsim && python -m app.modelica_generator "$$BOBSIM_VEHICLE" --write'
+	$(RECORDS_WRITE)
 
 records-undo:
-	cd $(BOBLIB) && git checkout -- $$(git ls-files -- $(RECORD_FILES)) && git clean -f -- $(RECORD_FILES)
+	$(RECORDS_UNDO)
 
 bobsim:
 	@test -n "$(T)" || { echo "Set T=<bobsim target>. Run 'make bobsim T=help' to list them."; exit 1; }
@@ -98,6 +104,21 @@ bump-bobsim:
 
 clean:
 	rm -rf out
+
+BAZEL ?= bazel
+BAZEL_ARGS ?=
+VCU_SIL_LIB := modelica/LhreVcu/Resources/Library/libvcu_sil.so
+
+vcu-sil:
+	cd .. && $(BAZEL) build $(BAZEL_ARGS) //boards/VCU:libvcu_sil.so
+	install -D -m 0644 ../bazel-bin/boards/VCU/libvcu_sil.so $(VCU_SIL_LIB)
+
+bobsim-fw:
+	@test -f $(VCU_SIL_LIB) || { echo "$(VCU_SIL_LIB) does not exist. Run make vcu-sil first."; exit 1; }
+	$(RECORDS_WRITE) && $(RUN) sim omc tools/build_vehicle_sim_fw.mos; status=$$?; ($(RECORDS_UNDO)) || exit 1; exit $$status
+
+sil:
+	$(RUN) sim python tools/vcu_sil.py
 
 .PHONY: check-vehicle
 check-vehicle:

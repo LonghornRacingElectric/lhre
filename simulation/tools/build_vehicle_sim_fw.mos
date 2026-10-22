@@ -1,0 +1,28 @@
+root := cd();
+buildDir := root + "/out/build/VehicleSimFw";
+
+setCommandLineOptions("--matchingAlgorithm=PFPlusExt --indexReductionMethod=dynamicStateSelection -d=initialization,NLSanalyticJacobian --maxSizeLinearTearing=5000 --generateDynamicJacobian=none");
+
+loadModel(Modelica, {"4.1.0"});
+loadModel(VehicleInterfaces, {"2.0.2"});
+loadFile(root + "/bobsim/engines/boblib/BobLib/package.mo");
+loadFile(root + "/modelica/LhreVcu/package.mo");
+getErrorString();
+
+mkdir(buildDir);
+cd(buildDir);
+
+res := buildModel(
+  LhreVcu.VehicleSimFw,
+  startTime = 0,
+  stopTime = 10,
+  numberOfIntervals = 5000,
+  tolerance = 1e-6,
+  outputFormat = "csv",
+  variableFilter = "time|velX|accX|vcu.(tau_fw|regen_fw|acceleratorPedalCmd|brakePedalCmd|tau_cmd_limited)");
+res;
+getErrorString();
+
+if res[1] == "" then
+  exit(1);
+end if;
