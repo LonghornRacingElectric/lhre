@@ -319,3 +319,27 @@ remain available. Overlay and calibration controls start collapsed under
 
   THIS IS A TEST FOR PUSHING
  
+
+## Vercel deployment filter
+
+The app-local `vercel.json` configures `node ignored-build.mjs` as Vercel's
+Ignored Build Step. Keep Root Directory set to
+`apps/telemetry/analysis/driveday_data_viewer`. No dashboard command is needed;
+the checked-in command overrides the project setting.
+
+The check compares this directory with `VERCEL_GIT_PREVIOUS_SHA`, the last
+successful deployment on the same branch. Changes elsewhere in LHRe skip the
+build; changes anywhere in LAPDOG (including config, assets and deletions)
+build normally. Comparing the full range preserves app changes earlier in a
+multi-commit push. This app has no build dependencies outside its directory;
+expand the filter if that changes.
+
+Enable **Automatically expose System Environment Variables** in Vercel so the
+previous SHA is available. First deployments, missing or shallow Git history,
+and Git errors allow a build rather than risk suppressing an update. Branches
+must contain this configuration before it can take effect. Canceled deployment
+records may still trigger Discord integrations; notification filtering is
+separate from this build filter.
+
+Run `node --test tests/ignored-build.test.mjs` to verify the filter with a
+throwaway Git repository. Exit 0 means skip; exit 1 means build.
