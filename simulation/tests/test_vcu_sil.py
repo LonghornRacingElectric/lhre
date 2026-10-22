@@ -1,6 +1,9 @@
+import hashlib
 from pathlib import Path
 
-from tools.vcu_sil import check_run, read_result, simulation_command
+from tools.invalidation import Layout
+from tools.vcu_sil import check_run, missing_variables, read_result, run_provenance, simulation_command
+from tools.vcu_sil_report import VARIABLES, variable_filter
 
 STOP = 5.0
 
@@ -52,3 +55,34 @@ def test_stop_time_goes_to_its_own_flag_because_omc_ignores_it_as_an_override():
     override = next(argument for argument in command if argument.startswith("-override="))
     assert "-stopTime=5.0" in command
     assert "stopTime" not in override
+
+
+def test_simulation_command_writes_every_report_variable_including_protected_ones():
+    command = simulation_command(Path("result.csv"), STOP)
+    assert f"-variableFilter={variable_filter()}" in command
+    assert "-emit_protected" in command
+
+
+def test_check_run_reads_only_columns_that_the_report_filter_writes():
+    rows = [{**dict.fromkeys(VARIABLES, 0.0), "time": time, "velX": 15.0} for time in (0.0, STOP)]
+    assert check_run(rows, STOP) == []
+
+
+def test_run_provenance_hashes_the_firmware_library(tmp_path):
+    library = tmp_path / "libvcu_sil.so"
+    library.write_bytes(b"firmware")
+    provenance = run_provenance(Layout.default(), library)
+    assert provenance["libvcu_sil.so sha256"] == hashlib.sha256(b"firmware").hexdigest()[:12]
+
+
+def test_run_provenance_says_when_git_cannot_read_a_repo(tmp_path):
+    library = tmp_path / "libvcu_sil.so"
+    library.write_bytes(b"firmware")
+    provenance = run_provenance(Layout(tmp_path), library)
+    assert provenance["lhre"].startswith("unknown")
+    assert provenance["BobLib"].startswith("unknown")
+
+
+def test_missing_variables_names_each_report_variable_that_the_result_does_not_have():
+    rows = [{name: 0.0 for name in VARIABLES if name != "vcu.tau_fw"}]
+    assert missing_variables(rows) == ["vcu.tau_fw"]

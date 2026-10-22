@@ -5,6 +5,9 @@ import sys
 import time
 from pathlib import Path
 
+from tools.invalidation import GitUnavailable, Layout, git, git_root, sha256_file
+from tools.vcu_sil_report import VARIABLES, variable_filter, write_report
+
 SIM = Path(__file__).resolve().parents[1]
 BUILD_DIR = SIM / "out/build/VehicleSimFw"
 EXECUTABLE = "LhreVcu.VehicleSimFw"
@@ -12,6 +15,7 @@ LIBRARY_DIR = SIM / "modelica/LhreVcu/Resources/Library"
 OUT_DIR = SIM / "out/vcu-sil"
 STOP_TIME_S = 5.0
 STRAIGHT_LINE = {"vcu.useMode": 1, "vcu.steerAmp": 0}
+CASE = "vcu.useMode=1, vcu.steerAmp=0, 5 s from 15 m/s"
 TORQUE_TOLERANCE_NM = 1e-6
 SPEED_TOLERANCE_M_S = 1e-3
 REJECTED_OVERRIDE_TEXT = ("not possible to override", "not found in model")
@@ -20,6 +24,10 @@ REJECTED_OVERRIDE_TEXT = ("not possible to override", "not found in model")
 def read_result(path: Path) -> list[dict[str, float]]:
     with path.open(newline="") as result_file:
         return [{name: float(value) for name, value in row.items()} for row in csv.DictReader(result_file)]
+
+
+def missing_variables(rows: list[dict[str, float]]) -> list[str]:
+    return [name for name in VARIABLES if name not in rows[0]]
 
 
 def check_run(rows: list[dict[str, float]], stop_time_s: float) -> list[str]:
@@ -57,7 +65,30 @@ def simulation_command(result_path: Path, stop_time_s: float) -> list[str]:
         "-jacobian=internalNumerical",
         "-noEventEmit",
         "-lv=LOG_STATS",
+        "-emit_protected",
+        f"-variableFilter={variable_filter()}",
     ]
+
+
+def _commit(repo: Path | None) -> str:
+    if repo is None:
+        return "unknown (bobsim/.gitmodules names no BobLib submodule)"
+    try:
+        root = git_root(repo)
+        sha = git(root, "rev-parse", "--short", "HEAD").strip()
+        changes = git(root, "status", "--porcelain", "--ignore-submodules=dirty").strip()
+    except GitUnavailable as error:
+        return f"unknown ({error})"
+    return f"{sha}+dirty" if changes else sha
+
+
+def run_provenance(layout: Layout, library: Path) -> dict[str, str]:
+    return {
+        "lhre": _commit(layout.repo),
+        "BobSim": _commit(layout.bobsim),
+        "BobLib": _commit(layout.boblib),
+        "libvcu_sil.so sha256": sha256_file(library)[:12],
+    }
 
 
 def run_simulation(stop_time_s: float) -> Path:
@@ -100,9 +131,17 @@ def main() -> int:
         return 1
 
     rows = read_result(result_path)
+    missing = missing_variables(rows) if rows else []
+    if missing:
+        print(f"FAIL: The result has no {', '.join(missing)}. A BobLib name may have changed.")
+        return 1
     failures = check_run(rows, STOP_TIME_S)
     for failure in failures:
         print(f"FAIL: {failure}")
+    report_path = OUT_DIR / "report.pdf"
+    run_details = {"Case": CASE, **run_provenance(Layout.default(), LIBRARY_DIR / "libvcu_sil.so")}
+    write_report(report_path, rows, failures, run_details)
+    print(f"Report: {report_path}")
     if failures:
         return 1
     print(

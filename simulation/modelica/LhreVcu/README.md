@@ -85,11 +85,21 @@ monitor stops a run with no steer early.
 The stop time is the `-stopTime` flag, not an override. OMC 1.27 does not
 find `stopTime` in `-override`, so it runs to the build's stop time (10 s).
 
-It writes `out/vcu-sil/VehicleSimFw.csv` and `out/vcu-sil/run.log`. It
-fails when:
+The run also gets `-emit_protected` and `-variableFilter`. The filter
+lists `VARIABLES` in
+[`tools/vcu_sil_report.py`](https://github.com/LonghornRacingElectric/lhre/blob/main/simulation/tools/vcu_sil_report.py).
+BobLib marks the tire, motor and `vcu.sens_*` variables as protected, so
+OMC does not write them without `-emit_protected`. The filter in
+`tools/build_vehicle_sim_fw.mos` is only the default for a run without
+these flags. When you change `VARIABLES`, you do not run `make bobsim-fw`
+again.
+
+It writes `out/vcu-sil/VehicleSimFw.csv`, `out/vcu-sil/run.log` and
+`out/vcu-sil/report.pdf`. It fails when:
 
 - the executable exits with an error, or `run.log` shows an override that
   the model did not use;
+- the result does not have a variable in `VARIABLES`;
 - the run stops before 5 s;
 - the torque that reaches `VCUCore` is more than the firmware command. This
   means BobLib's own torque request still reaches the inverter;
@@ -99,6 +109,35 @@ fails when:
 The last two checks are true only while the App has no control law
 (`App::SendStatus` sends zero torque). Change them when the control law
 lands.
+
+### `report.pdf`
+
+The report shows what the sim sent to the firmware, what the firmware
+did and what the car did. It has one Letter page for each section below.
+`make sil` writes it also when a check fails. It does not write it when
+the executable fails or a variable is missing.
+
+The top of page 1 gives OK or FAIL and each failure. Below that are the
+case, the lhre, BobSim and BobLib commits and the first 12 hex digits of
+the SHA-256 of `libvcu_sil.so`. A commit gets `+dirty` when its checkout
+has changes. Each section has a table and plots against time:
+
+| Section | Shows |
+| ------- | ----- |
+| Sim to VCU | The firmware inputs: the accelerator and brake pedal commands, the motor speed (rpm) and the pack voltage and current. Also the steer command, which does not go to the firmware. |
+| VCU to plant | The motor torque at three points: the firmware command (`vcu.tau_fw`), after the `VCUCore` limits (`vcu.tau_cmd_limited`) and at the motor (`motor.motor.tau_act`, a first-order lag). Also the firmware regen limit. |
+| Tire slip | For each tire: κ, R0·ω − Vx, Fx and Fz. The table gives these values at the time of the largest \|κ\| of each tire. |
+| Vehicle | The speed, the longitudinal acceleration and the yaw rate. |
+
+Gotchas:
+
+- The commits come from the checkout at run time. They do not prove that
+  `out/build/VehicleSimFw/` was built from that checkout.
+- A plot of a signal that changes by less than 1 % of its magnitude shows
+  a flat line. The table gives the exact start, end, minimum and maximum.
+- The report reads BobLib variable names, for example
+  `chassis.detailedChassis.rrAxleDW.leftTire.kappa`. If a BobSim pin bump
+  renames one, `make sil` names it. Then change `TIRES` or `VARIABLES`.
 
 ## Limits
 
