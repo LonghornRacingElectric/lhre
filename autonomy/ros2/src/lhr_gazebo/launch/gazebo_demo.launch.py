@@ -421,7 +421,9 @@ def _launch_setup(context: LaunchContext):
                 'reference_world': ParameterValue(
                     context.launch_configurations.get('reference_world', '') or world_path,
                     value_type=str),
-                'mission': ParameterValue(LaunchConfiguration('mission'), value_type=str),
+                # The forced mission, so a finished acceleration run is not
+                # scored as an autocross that never lapped.
+                'mission': mission,
                 'output_csv': ParameterValue(LaunchConfiguration('output_csv'), value_type=str),
                 'off_track_threshold': ParameterValue(
                     LaunchConfiguration('off_track_threshold'), value_type=float),

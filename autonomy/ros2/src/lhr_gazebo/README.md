@@ -370,7 +370,8 @@ planner's path or feeds this reference back to perception/control.
 Scoring arguments are typed and forwarded in both perception branches and
 with truth or EKF estimation. EKF mode scores `/lhr/vehicle/odom_truth`; truth
 mode scores the plant-owned `/lhr/vehicle/odom`. Estimates only feed error
-measurements. Rows also record Gazebo's scenario, plant, seed, track style,
+measurements. Rows also record the mission the launch actually runs (always
+acceleration on the acceleration track), Gazebo's scenario, plant, seed, track style,
 waypoints, perception, estimator, and selected estimator perturbations. `reference_closed:=false` scores an open course
 without inventing a return segment or a circuit lap. Missing or invalid world
 geometry fails rather than silently using a different course. See the
