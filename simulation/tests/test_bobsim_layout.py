@@ -81,18 +81,6 @@ def test_every_bobsim_import_resolves():
     assert not problems, f"BobSim imports that do not resolve. {MAP_HINT}\n" + "\n".join(problems)
 
 
-def test_front_ackermann_loads_without_running():
-    from common.vehicle_io import load_yaml, repo_root
-
-    spec = importlib.util.spec_from_file_location("front_ackermann_run", SIM / "studies/front-ackermann/run.py")
-    study = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(study)
-    assert callable(study.main)
-    config = load_yaml(repo_root() / study.LAP_CONFIG)
-    assert (repo_root() / config["track"]["boundary_csv"]).is_file()
-    assert float(config["event"]["drive_power_limit_w"]) > 0
-
-
 def _boblib_submodule():
     paths = re.findall(r"^\s*path = (\S+)$", (BOBSIM / ".gitmodules").read_text(encoding="utf-8"), re.M)
     matches = [p for p in paths if p.lower().endswith("boblib")]

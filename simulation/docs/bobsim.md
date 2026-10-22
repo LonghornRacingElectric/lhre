@@ -264,9 +264,7 @@ Our `vehicle/vehicle.yml` did not take the ride-height references from
   map. A vehicle change that uses them for our car needs a named source
   that says they fit our chassis.
 
-`tests/test_aero_ride_heights.py` marks this state as an expected failure
-(xfail). When the points move inside the grids, the test reports XPASS
-and `make test` fails. Then remove the mark and this section.
+When the points move inside the grids, remove this section.
 
 ## Windows
 

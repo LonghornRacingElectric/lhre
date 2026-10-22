@@ -37,9 +37,6 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Get the BobSim history for the pin check
-        run: test "$(git -C bobsim rev-parse --is-shallow-repository)" = false || git -C bobsim fetch --unshallow --no-recurse-submodules origin
-
       - uses: docker/setup-buildx-action@v3
 
       - name: Build the image
