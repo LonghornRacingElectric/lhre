@@ -80,8 +80,9 @@ the hardware half of the loop exists.
   footprint from `lhr_vehicle` checked against trackgen cone positions;
   that belongs in #94's rework.
 - Distance to stop after the finish line is not recorded.
-- Off `DRIVING`, the controller commands speed 0 at once, so sim stop
-  distances are optimistic until #116 adds a regen and spring-brake model.
+- Once the mission completes (and off `DRIVING`), the controller commands
+  speed 0 at once, so sim stop distances are optimistic until #116 adds a
+  regen and spring-brake model.
 - [#91](https://github.com/LonghornRacingElectric/lhre/pull/91) already
   moves timing to sim time, weights CTE by distance, and adds an `outcome`
   column, so it lands first.

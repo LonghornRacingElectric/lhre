@@ -8,6 +8,10 @@ States (per FSAE Driverless Supplement 2026, DO.1.1):
     DRIVING   – executing selected mission
     FINISHED  – mission complete, vehicle stopped
     EMERGENCY – shutdown circuit opened
+
+Between the mission completing and the car standing still the state stays
+DRIVING (FINISHED means stopped) and /lhr/mission/complete tells the
+controller to brake.
 """
 
 import math
@@ -30,6 +34,11 @@ MISSIONS = [
     'inspection', 'manual', 'ebs_test',
     'acceleration', 'skidpad', 'autocross',
 ]
+
+# Acceleration finishes when the nose crosses the finish line: 75 m from the
+# start line (FSAE D.9.1) plus the 0.30 m the nose is staged behind it
+# (DD.4.2.2). That is also how far base_link travels, whatever the overhang.
+ACCEL_FINISH_M = 75.0 + 0.30
 
 # Numeric mapping for PlotJuggler (plot /lhr/debug/mission_state)
 STATE_NUM = {
@@ -78,7 +87,10 @@ class MissionManager(Node):
         self._emergency_received = False
         self._reset_received = False
         self._lap_complete = False
+        self._complete = False
         self._current_speed = 0.0
+        self._pose = None        # (x, y, yaw) from odometry
+        self._start_pose = None  # pose on entering DRIVING
 
         # --- Subscribers ---
         self.create_subscription(
@@ -97,6 +109,8 @@ class MissionManager(Node):
         # --- Publishers ---
         self._status_pub = self.create_publisher(
             String, '/lhr/mission/status', 10)
+        self._complete_pub = self.create_publisher(
+            Bool, '/lhr/mission/complete', 10)
         self._state_num_pub = self.create_publisher(
             Float32, '/lhr/debug/mission_state', 10)
 
@@ -132,6 +146,10 @@ class MissionManager(Node):
         vx = msg.twist.twist.linear.x
         vy = msg.twist.twist.linear.y
         self._current_speed = math.hypot(vx, vy)
+        p, q = msg.pose.pose.position, msg.pose.pose.orientation
+        yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y),
+                         1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+        self._pose = (p.x, p.y, yaw)
 
     def _lap_complete_cb(self, msg: Bool):
         if msg.data:
@@ -153,6 +171,7 @@ class MissionManager(Node):
         # FINISHED is terminal (no automatic transitions out)
 
         self._status_pub.publish(String(data=self._state))
+        self._complete_pub.publish(Bool(data=self._complete))
         self._state_num_pub.publish(
             Float32(data=STATE_NUM.get(self._state, -1.0)))
 
@@ -175,27 +194,34 @@ class MissionManager(Node):
             return
         if self._go_received:
             self._go_received = False
-            self._transition(STATE_DRIVING)
-            self._driving_enter_time = self.get_clock().now()
+            self._start_driving()
             return
 
         if self._auto_go and self._ready_enter_time is not None:
             elapsed = (self.get_clock().now()
                        - self._ready_enter_time).nanoseconds / 1e9
             if elapsed >= self._ready_hold_sec:
-                self._transition(STATE_DRIVING)
-                self._driving_enter_time = self.get_clock().now()
+                self._start_driving()
+
+    def _start_driving(self):
+        self._transition(STATE_DRIVING)
+        self._driving_enter_time = self.get_clock().now()
+        self._start_pose = self._pose
 
     def _tick_driving(self):
-        """DRIVING -> EMERGENCY on e-stop, or FINISHED on mission complete."""
+        """DRIVING -> EMERGENCY on e-stop, or FINISHED once complete and stopped."""
         if self._emergency_received:
             self._emergency_received = False
             self._transition(STATE_EMERGENCY)
             return
 
-        if self._check_mission_complete():
-            if self._current_speed < 0.5:
-                self._transition(STATE_FINISHED)
+        if self._start_pose is None:
+            self._start_pose = self._pose  # odometry arrived after the go
+        if not self._complete and self._check_mission_complete():
+            self._complete = True
+            self.get_logger().info('Mission complete, braking')
+        if self._complete and self._current_speed < 0.5:
+            self._transition(STATE_FINISHED)
 
     def _tick_emergency(self):
         """EMERGENCY -> OFF on reset signal."""
@@ -203,6 +229,7 @@ class MissionManager(Node):
             self._reset_received = False
             self._emergency_received = False
             self._lap_complete = False
+            self._complete = False
             self._path_available = False
             self._transition(STATE_OFF)
 
@@ -221,8 +248,19 @@ class MissionManager(Node):
                        - self._driving_enter_time).nanoseconds / 1e9
             return elapsed >= 28.0  # 25-30 sec per FSAE rules
 
-        # acceleration, skidpad, ebs_test, manual: not yet implemented
+        if self._mission == 'acceleration':
+            return self._distance_driven() >= ACCEL_FINISH_M
+
+        # skidpad, ebs_test, manual: not yet implemented
         return False
+
+    def _distance_driven(self) -> float:
+        """Distance along the heading the car had when DRIVING began."""
+        if self._start_pose is None or self._pose is None:
+            return 0.0
+        x0, y0, yaw0 = self._start_pose
+        x, y, _ = self._pose
+        return (x - x0) * math.cos(yaw0) + (y - y0) * math.sin(yaw0)
 
     # ------------------------------------------------------------------
     # Helpers

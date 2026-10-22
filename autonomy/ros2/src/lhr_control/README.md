@@ -22,6 +22,11 @@ available stopping distance to the path end, even below `v_min`. A missing
 forward corridor therefore causes a stop rather than a turn back toward the
 start of the path. These checks use only the perceived path, not track truth.
 
+Past the finish, `/lhr/mission/complete` brakes to zero while the mission
+is still Driving (Finished means stopped). Steering keeps following the
+path so the car stops in its lane, and with no path or target it still
+commands the stop rather than going quiet.
+
 | Parameter | Default | Meaning |
 | --- | --- | --- |
 | `closed_path` | `true` | Wrap lookahead and curvature for a complete circuit |
