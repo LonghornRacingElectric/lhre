@@ -833,8 +833,12 @@ its limits.
 | Param | Default | Description |
 |-------|---------|-------------|
 | `off_track_threshold` | `2.0` | CTE above this (m) counts as off-track |
-| `start_radius` | `2.0` | Distance (m) to centerline[0] to trigger lap zone |
-| `start_hysteresis` | `1.0` | Extra distance (m) vehicle must exceed before lap can complete |
+| `start_radius` | `2.0` | Fixed crossing-gate half-width (m) |
+| `reference_world` | empty | Generated SDF truth source; MVS otherwise latches complete scene cones, Gazebo selects its actual world |
+| `reference_closed` | mission/style dependent in launch | False for acceleration, true for circuits; explicit overrides supported |
+| `min_progress_fraction` | `0.98` | Minimum signed reference progress before a crossing |
+| `lap_start_speed` | `0.1` | Minimum driving speed to start timing (m/s) |
+| `max_odom_gap_sec` | `1.0` | Maximum scored odometry gap (s) |
 | `min_lap_time` | `5.0` | Minimum seconds before a lap return is accepted |
 | `output_csv` | `"data/metrics.csv"` | Path for CSV output (relative to cwd) |
 | `run_id` | `""` | Run identifier; auto-generates timestamp if empty |
@@ -845,6 +849,14 @@ its limits.
 ### Metrics output
 
 The metrics node publishes `/lhr/metrics/lap_complete` (`std_msgs/Bool`) when a lap is detected, which the mission manager uses to trigger the Driving → Finished transition.
+
+Metrics scores distance to fixed truth segments and accepts a lap only after
+continuous course progress and a forward crossing of its fixed gate. When
+a separate truth odometry topic exists, it alone supplies the scored pose;
+estimates only supply estimator-error measurements. Missing
+truth, shortcuts, odometry gaps and clock resets cannot produce an accepted
+lap. Invalidated runs terminate with `invalid_lap` rather than waiting for
+a timeout. See the [scoring contract](src/lhr_metrics/README.md#reference-and-lap-contract).
 
 A run now ends by itself. Metrics finishes on a completed lap, on the
 mission reaching `FINISHED` (so missions with no lap, such as
@@ -861,8 +873,10 @@ metrics exit code does not reach the shell. Use
 `outcome` from the row and exits on that. Anything wiring this into CI
 must go through that script, not `ros2 launch` directly.
 
-The CSV is 39 columns in six groups, because a row of results alone
-cannot be compared with another row:
+The CSV records run configuration and outcomes. The following is a subset;
+the full schema is in [metrics](src/lhr_metrics/README.md). Fixed reference
+identity and scoring settings distinguish rows from historical planner-relative
+measurements:
 
 ```
 run_id, vehicle_sha256, scenario, git_sha,
@@ -871,7 +885,8 @@ stack_window_sec, min_cluster_points, ground_z_min, start_on_track,
 lidar, mount_pitch_rad, elevation_profile, return_profile, fov_deg, max_range_m, noise_std_m, false_negative_rate,
 lookahead_dist, a_lat_max, v_min, v_max, max_accel, max_decel,
 outcome, duration_s, samples, path_length_m, mean_cte, max_cte,
-off_track_count, off_track_dist_m, mean_speed, max_speed, lap_completed
+off_track_count, off_track_dist_m, mean_speed, max_speed, lap_completed,
+reference_sha256, reference_source, reference_length_m, lap_progress_m, lap_time_s, lap_invalid_reason
 ```
 
 `mean_cte` and `off_track_dist_m` are weighted by distance travelled, not
@@ -885,7 +900,9 @@ while barely moving.
 
 Repeat runs are close but never identical: each node is its own process
 with its own executor, so callback interleaving is the scheduler's call.
-Gate on a band, never on equality. Measured over 8 runs at one seed:
+Gate on a band, never on equality. Historical planner-relative measurements
+over 8 runs at one seed gave the following bands; rebaseline them before
+claiming fixed-reference repeatability:
 
 | Metric | Spread | Band |
 |--------|--------|------|

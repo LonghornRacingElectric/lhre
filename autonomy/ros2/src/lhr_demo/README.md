@@ -206,6 +206,27 @@ the box and four cylinders instead. The argument is in the bag's
 provenance either way, so an empty-looking recording can be explained
 from the bag rather than from memory.
 
+## Fixed-reference scoring
+
+Metrics latches the complete scene truth on `/lhr/track/cones`, never the
+planner's moving path. Only the scorer receives this reference; LiDAR
+perception and control still use their existing inputs. An empty
+`reference_world` uses this topic; a file override must match the scene.
+
+Closed-course spawn snapping applies to both simplified and LiDAR perception;
+`start_on_track:=false` preserves the exact supplied pose. Open acceleration
+poses remain explicit rather than snapping the default guess into the course.
+
+The launch exposes `reference_closed` (true for circuits, false for acceleration), `off_track_threshold` (2.0 m),
+`start_radius` (2.0 m gate half-width), `min_lap_time` (5.0 s),
+`min_progress_fraction` (0.98), `lap_start_speed` (0.1 m/s), and
+`max_odom_gap_sec` (1.0 s). All numeric overrides are explicitly typed doubles.
+The CSV records the latched geometry hash, scoring settings, circuit progress,
+interpolated lap time, actual scoring odometry topic, and any reason that
+disqualified the run. EKF mode scores truth and uses estimates only for error
+measurements. Invalidated runs terminate with a failure.
+See [metrics](../lhr_metrics/README.md#reference-and-lap-contract).
+
 ## Ending a run
 
 The metrics process exiting emits a launch `Shutdown`, so the whole graph
@@ -222,7 +243,7 @@ track. `lidar:=true` alone previews the cloud without changing perception.
 detections and selects the cloud detector, local `boundary_graph` planning and
 open-path control. That mode defaults to `v_max:=4.0` rather than 12 m/s.
 
-`start_on_track:=true` aligns the LiDAR-mode initial pose with the nearest
+`start_on_track:=true` aligns both closed-course perception modes' initial pose with the nearest
 generated centerline and its forward tangent; `false` preserves explicit
 `init_x`, `init_y`, `init_yaw`. Scene geometry sets only the starting pose;
 cone IDs and ground-truth centerlines do not reach the LiDAR planner.

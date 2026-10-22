@@ -140,7 +140,9 @@ def test_imported_cloud_drives_boundary_path_and_command_without_cone_ids():
         rclpy.shutdown()
 
 
-def test_lidar_start_is_on_generated_track_and_manual_start_is_preserved():
+@pytest.mark.parametrize('perception', ['sim', 'lidar'])
+@pytest.mark.parametrize('seed', [1, 4])
+def test_start_is_on_generated_track_and_manual_start_is_preserved(perception, seed):
     path = Path(__file__).parents[1] / 'launch' / 'mvs_demo.launch.py'
     spec = importlib.util.spec_from_file_location('mvs_spawn_launch', path)
     module = importlib.util.module_from_spec(spec)
@@ -149,9 +151,9 @@ def test_lidar_start_is_on_generated_track_and_manual_start_is_preserved():
     for action in module.generate_launch_description().entities:
         if isinstance(action, DeclareLaunchArgument):
             action.execute(context)
-    context.launch_configurations['perception'] = 'lidar'
+    context.launch_configurations.update(perception=perception, seed=str(seed))
     params = evaluate_parameters(context, module._launch_sim(context)[0]._Node__parameters)[0]
-    left, right = generate_autocross_track(seed=1)
+    left, right = generate_autocross_track(seed=seed)
     centers = (np.asarray(left) + np.asarray(right)) / 2.
     position = np.array([params['init_x'], params['init_y']])
     assert np.linalg.norm(centers - position, axis=1).min() < 1e-9
