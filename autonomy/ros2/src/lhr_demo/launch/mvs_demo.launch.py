@@ -13,6 +13,7 @@ from launch.conditions import IfCondition, UnlessCondition
 from launch.event_handlers import OnProcessExit
 from launch.events import Shutdown
 from launch.substitutions import LaunchConfiguration, PythonExpression
+from launch.utilities.type_utils import coerce_to_type
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from lhr_trackgen.publish_cones import GENERATORS
@@ -162,9 +163,12 @@ def _launch_sim(context):
         raise ValueError('estimator must be truth or ekf')
     remappings = ([('/lhr/vehicle/odom', '/lhr/vehicle/odom_truth'),
                    ('/tf', '/tf_truth')] if use_ekf else [])
+    # Read the way _b reads it for every other node: comparing to 'true'
+    # left the plant off /clock on use_sim_time:=True while the rest waited.
+    sim_time = coerce_to_type(value('use_sim_time'), bool)
     simulator = Node(
         package='lhr_sim_' + plant, executable='sim_node', name='sim_' + plant,
-        parameters=[{'publish_clock': value('use_sim_time') == 'true',
+        parameters=[{'publish_clock': sim_time,
                      'init_x': x, 'init_y': y, 'init_yaw': yaw, **extra}],
         remappings=remappings, output='screen')
     estimators = []
@@ -172,13 +176,13 @@ def _launch_sim(context):
         estimators = [
             Node(package='lhr_sensor_sim', executable='inertial_sim',
                  name='inertial_sim', parameters=[{
-                     'use_sim_time': value('use_sim_time') == 'true',
+                     'use_sim_time': sim_time,
                      'gyro_bias': float(value('gyro_bias')),
                      'wheel_scale_error': float(value('wheel_scale_error'))}],
                  output='screen'),
             Node(package='lhr_state_estimation', executable='ekf_node',
                  name='ekf_node', parameters=[{
-                     'use_sim_time': value('use_sim_time') == 'true',
+                     'use_sim_time': sim_time,
                      'init_x': x, 'init_y': y, 'init_yaw': yaw}], output='screen'),
         ]
     return [simulator, *estimators, RegisterEventHandler(OnProcessExit(

@@ -104,6 +104,15 @@ The launch starts graphical Gazebo and RViz by default. Use `gui:=false` or
 `rviz:=false` for a headless run. See the workspace
 [README](../../README.md) for all launch arguments and topic diagrams.
 
+Every argument the launch forwards to a node carries the node's declared
+type, so a whole number like `v_max:=8` still reaches `pure_pursuit` as a
+double. Untyped, launch_ros would guess from the text and hand the node an
+integer, which kills it at startup. `test_launch_param_types.py` checks every
+node the launch can start for a parameter fed by a bare `LaunchConfiguration`.
+It does not see values the launch reads from `context.launch_configurations`
+itself or wraps in another substitution such as `PythonExpression`; type
+those by hand.
+
 ## Command timeout
 
 `joint_cmd_adapter` stops the wheels when `/lhr/vehicle/cmd` has been silent

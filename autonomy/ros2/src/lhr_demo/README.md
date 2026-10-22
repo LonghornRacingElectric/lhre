@@ -116,6 +116,13 @@ Every parameter taken from a launch argument is therefore wrapped in
 and a numeric-looking string stays a string. **A new parameter added to
 a node needs the matching helper**, or it reintroduces this.
 
+The plant and estimator nodes are the exception: `_launch_sim` reads its
+arguments with `perform()` and passes plain values, so convert each one
+there (`float()`, `int()`, `coerce_to_type(..., bool)`), never by
+comparing text. `test/test_launch_param_types.py` fails on a node
+parameter fed a bare `LaunchConfiguration`, and on any text value
+reaching a plant or estimator node.
+
 `run_id` still defaults to `%Y%m%dT%H%M%S` with a `T` rather than an
 underscore, which is now belt as well as braces. The metrics node also
 accepts a numerically-typed `run_id` and coerces it, so running that
