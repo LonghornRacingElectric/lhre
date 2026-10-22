@@ -93,7 +93,8 @@ CSV_HEADER = (
     + list(OUTCOMES)
     + ['mean_pos_error', 'max_pos_error', 'mean_yaw_error']
     + ['reference_sha256', 'reference_source', 'reference_length_m',
-       'lap_progress_m', 'lap_time_s', 'lap_invalid_reason', 'lap_start_stamp_s']
+       'lap_progress_m', 'lap_time_s', 'lap_invalid_reason', 'lap_start_stamp_s',
+       'scoring_odom_topic']
     + list(GATE_FIELDS)
 )
 
@@ -200,9 +201,12 @@ class MetricsNode(Node):
             Bool, '/lhr/metrics/lap_complete', 10)
 
         # --- Subscribers ---
+        self._truth_topic = self.get_parameter('truth_odom_topic').value
         reference_world = self.get_parameter('reference_world').value
         if reference_world:
-            self._set_reference(world_centerline(reference_world), reference_world)
+            self._set_reference(world_centerline(
+                reference_world, acceleration=self._run_params['mission'] == 'acceleration'
+                or self._run_params['track_style'] == 'acceleration'), reference_world)
         else:
             qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                              durability=DurabilityPolicy.TRANSIENT_LOCAL)
@@ -213,8 +217,7 @@ class MetricsNode(Node):
         self.create_subscription(
             String, '/lhr/mission/status', self._status_cb, 10)
 
-        truth_topic = self.get_parameter(
-            'truth_odom_topic').get_parameter_value().string_value
+        truth_topic = self._truth_topic
         if truth_topic:
             self.create_subscription(
                 Odometry, truth_topic, self._truth_cb, 10)
@@ -266,6 +269,16 @@ class MetricsNode(Node):
             self.get_logger().warning(f'Waiting for complete reference truth: {error}')
 
     def _odom_cb(self, msg: Odometry):
+        if self._truth_topic:
+            # With an estimator, only truth can earn progress or a pass.
+            # Estimates remain an error measurement, never a fallback plant pose.
+            if self._truth is not None and not self.finished:
+                self._accumulate_error(msg.pose.pose.position.x, msg.pose.pose.position.y,
+                                       msg.pose.pose.orientation)
+        else:
+            self._score_odom(msg)
+
+    def _score_odom(self, msg: Odometry):
         if self._reference is None or self.finished:
             return
         if msg.header.frame_id != 'map':
@@ -282,12 +295,14 @@ class MetricsNode(Node):
         speed = math.hypot(vx, vy)
         if not all(map(math.isfinite, (px, py, speed))):
             self._lap.invalid_reason = 'nonfinite_odometry'
+            self.finish('invalid_lap')
             return
         previous_reason = self._lap.invalid_reason
         completed = self._lap.observe(
             px, py, now, speed, self._mission_state in ('', 'DRIVING'))
         if self._lap.invalid_reason and not previous_reason:
             self.get_logger().warning(f'Circuit invalidated: {self._lap.invalid_reason}')
+            self.finish('invalid_lap')
         if self._lap.started_at is None:
             return
         if self._last_stamp is not None and now <= self._last_stamp:
@@ -304,10 +319,6 @@ class MetricsNode(Node):
         if speed > self._speed_max:
             self._speed_max = speed
 
-        # --- Estimate vs truth ---
-        if self._truth is not None:
-            self._accumulate_error(px, py, msg.pose.pose.orientation)
-
         # --- Lap detection ---
         if completed:
             self._lap_completed = True
@@ -320,6 +331,7 @@ class MetricsNode(Node):
             msg.pose.pose.position.x,
             msg.pose.pose.position.y,
             quat_to_yaw(msg.pose.pose.orientation))
+        self._score_odom(msg)
 
     # ------------------------------------------------------------------
     # Clock
@@ -392,6 +404,7 @@ class MetricsNode(Node):
             'lap_completed': str(self._lap_completed).lower(),
             'reference_sha256': self._reference.sha256 if self._reference else '',
             'reference_source': self._reference_source,
+            'scoring_odom_topic': self._truth_topic or '/lhr/vehicle/odom',
             'reference_length_m': f'{self._reference.length:.4f}' if self._reference else '',
             'lap_progress_m': f'{self._lap.progress:.4f}' if self._lap else '',
             'lap_time_s': (f'{self._lap.completed_at - self._lap.started_at:.4f}'

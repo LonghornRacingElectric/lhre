@@ -45,9 +45,12 @@ def circuit():
 
 
 @pytest.fixture
-def metrics(tmp_path):
+def metrics(tmp_path, request):
+    extra = []
+    for name, value in getattr(request, 'param', {}).items():
+        extra += ['-p', f'{name}:={value}']
     rclpy.init(args=['--ros-args', '-p', f'output_csv:={tmp_path}/metrics.csv',
-                     '-p', 'mission:=autocross'])
+                     '-p', 'mission:=autocross', *extra])
     node = MetricsNode()
     yield node
     node.destroy_node()
@@ -156,4 +159,41 @@ def test_external_finished_without_a_verified_autocross_lap_is_failure(metrics):
     metrics._odom_cb(odom(0., 0., 10.))
     metrics._status_cb(String(data='FINISHED'))
     assert metrics._outcome == 'invalid_completion'
+    assert metrics.finalize() == 1
+
+
+@pytest.mark.parametrize('metrics', [{'truth_odom_topic': '/test/truth'}], indirect=True)
+def test_biased_estimate_does_not_change_truth_cte_or_lap(metrics):
+    metrics._reference_cb(reference())
+    for index, (x, y) in enumerate(circuit()):
+        metrics._truth_cb(odom(x, y, 10.+index*.2))
+        metrics._odom_cb(odom(x+100., y+100., 10.+index*.2))
+    assert metrics._lap_completed
+    assert metrics._cte.max_cte == pytest.approx(0.)
+    assert float(metrics._build_row()['mean_pos_error']) > 100.
+    assert metrics._build_row()['scoring_odom_topic'] == '/test/truth'
+
+
+@pytest.mark.parametrize('metrics', [{'truth_odom_topic': '/test/truth'}], indirect=True)
+def test_estimate_cannot_hide_truth_off_course_or_replace_missing_truth(metrics):
+    metrics._reference_cb(reference())
+    metrics._odom_cb(odom(0., 0., 10.))
+    assert metrics._cte.samples == 0
+    metrics._truth_cb(odom(0., 0., 10.))
+    metrics._odom_cb(odom(1., 0., 10.2))
+    metrics._truth_cb(odom(100., 100., 10.2))
+    assert metrics.finished
+    assert metrics._outcome == 'invalid_lap'
+    assert metrics._cte.max_cte > 100.
+    assert not metrics._lap_completed
+    assert metrics.finalize() == 1
+
+
+def test_telemetry_gap_ends_the_run_with_a_failure(metrics):
+    metrics._reference_cb(reference())
+    metrics._odom_cb(odom(0., 0., 10.))
+    metrics._odom_cb(odom(1., 0., 12.))
+    assert metrics.finished
+    assert metrics._outcome == 'invalid_lap'
+    assert metrics._lap.invalid_reason == 'odometry_gap'
     assert metrics.finalize() == 1

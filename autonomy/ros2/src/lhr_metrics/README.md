@@ -19,7 +19,7 @@ runs can be compared without guessing which geometry or gate was used.
 | Control | `lookahead_dist`, `a_lat_max`, `v_min`, `v_max`, `max_accel`, `max_decel` |
 | Reference | `reference_sha256`, `reference_source`, `reference_length_m`, `reference_world`, `reference_closed` |
 | Scoring | `off_track_threshold`, `start_radius`, `min_lap_time`, `min_progress_fraction`, `lap_start_speed`, `max_odom_gap_sec` |
-| Circuit | `lap_progress_m`, `lap_time_s`, `lap_invalid_reason`, `lap_start_stamp_s`, `lap_gate_x_m`, `lap_gate_y_m`, `lap_gate_tangent_x`, `lap_gate_tangent_y` |
+| Circuit | `lap_progress_m`, `lap_time_s`, `lap_invalid_reason`, `scoring_odom_topic`, `lap_start_stamp_s`, `lap_gate_x_m`, `lap_gate_y_m`, `lap_gate_tangent_x`, `lap_gate_tangent_y` |
 | Outcomes | `outcome`, `duration_s`, `samples`, `path_length_m`, `mean_cte`, `max_cte`, `off_track_count`, `off_track_dist_m`, `mean_speed`, `max_speed`, `lap_completed` |
 
 `git_sha` comes from the launch file and carries a `-dirty` suffix when the
@@ -46,8 +46,17 @@ make the reference polyline. These scene markers must describe the whole
 course, not the observed cone map. Changes after the first valid reference
 are ignored. Gazebo passes the actual selected SDF as `reference_world`;
 indexed `cone_blue_N` / `cone_yellow_N` includes provide the same ordered
-geometry, including the file's rounded coordinates. It does not regenerate
+geometry, including the file's rounded coordinates. Matching indices may
+have gaps; missing partners still fail. For the generated straight acceleration
+layout, all blue/yellow/orange boundary cones are paired by x position and
+side of y=0, retaining the orange start/finish and stopping lane. It does not regenerate
 a potentially different seed or use the perception map.
+
+With `truth_odom_topic` configured, only its truth samples can update CTE,
+progress, off-course checks or lap acceptance. `/lhr/vehicle/odom` is then
+used only to measure estimator error. Missing truth never falls back to the
+estimate. Without a separate truth topic, the plant-owned vehicle odometry
+is scored directly. The CSV records `scoring_odom_topic`.
 
 CTE is distance to the reference's **segments**, including the closing
 segment only when `reference_closed=true`. There is no midpoint-spacing
@@ -76,8 +85,9 @@ Missing reference truth or missing stamps produce no scoring samples and
 cannot pass. Late initial observations receive no credit for unseen travel.
 An odometry gap, a backward clock, an off-course chord between observations,
 or a discontinuous jump invalidates lap acceptance for the rest of that run.
-CTE collection continues for diagnosis; `lap_invalid_reason` explains why
-no lap may be awarded. Start a new run to reset it. Chord sampling uses
+The node terminates with `outcome=invalid_lap` and exit code 1; the final
+row records the last scoring sample and `lap_invalid_reason`. Start a new
+run to reset it. Chord sampling uses
 half the allowed corridor width; this is a bounded simulation check, not
 proof of motion between arbitrarily sparse real sensor observations.
 Closed references must enclose nonzero area; collinear or degenerate loops
@@ -144,7 +154,7 @@ Beyond `RUN_PARAMS`, which only ever reach the CSV:
 | `off_track_threshold` | 2.0 | CTE above this counts as off track |
 | `start_radius` | 2.0 | Half-width of the fixed crossing gate, metres |
 | `reference_world` | empty | Generated SDF truth source; empty waits for scene markers |
-| `reference_closed` | true | Include the closing segment and enable circuit laps |
+| `reference_closed` | true | Include closure and circuit laps; launch defaults false for acceleration |
 | `min_progress_fraction` | 0.98 | Minimum signed course progress before a gate crossing |
 | `lap_start_speed` | 0.1 | Minimum speed to start the simulation-time timer, m/s |
 | `max_odom_gap_sec` | 1.0 | Largest gap allowed during a scored circuit |
@@ -156,7 +166,9 @@ Beyond `RUN_PARAMS`, which only ever reach the CSV:
 `start_hysteresis` is removed: gate direction and circuit progress replace
 start-zone arming. Both launchers expose the scoring arguments with explicit
 ROS types. Gazebo resolves an empty `reference_world` argument to its selected
-world; MVS keeps the node's empty default and waits for scene truth.
+world; MVS keeps the node's empty default and waits for scene truth. Both
+launchers default `reference_closed=false` when mission or track style is
+`acceleration`; an explicit override is still honored.
 
 ## How a run ends
 
@@ -172,6 +184,7 @@ still exiting zero.
 | `timeout` | `timeout_sec` watchdog fired | 1 |
 | `interrupted` | Ctrl+C | 1 |
 | `invalid_completion` | Autocross finished without a verified circuit | 1 |
+| `invalid_lap` | Scoring continuity or course check invalidated the run | 1 |
 
 `timeout_sec` is deliberately **wall** time, not sim time: its job is to
 stop a headless run hanging when the simulator dies and sim time freezes.
@@ -235,7 +248,8 @@ adds truth-based circuit progress, halt observations and map consistency.
 
 ## Estimator comparisons
 
-`truth_odom_topic` enables the upstream position and yaw error columns.
+`truth_odom_topic` selects truth for all course scoring and enables the
+position and yaw error columns for the separate estimate.
 They remain blank without a truth stream. The CSV includes `estimator`,
 `gyro_bias`, `wheel_scale_error`, and `lidar_classify_sides` alongside the
 existing run parameters. Distance-weighted CTE and run outcome checks remain
@@ -243,3 +257,7 @@ active. Estimator errors compare to the latest truth sample, so callback
 timing can affect them; they are not a timestamp-aligned accuracy guarantee.
 
 Node cleanup tolerates an already-stopped ROS context after launch shutdown.
+
+Course validity currently uses the configured centerline corridor, not the
+cone boundaries expanded by the vehicle footprint. Cone contacts are not
+counted. Those checks remain separate from this circuit/CTE scorer.

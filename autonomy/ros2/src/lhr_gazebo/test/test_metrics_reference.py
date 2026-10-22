@@ -63,11 +63,66 @@ def test_reference_source_and_scoring_overrides(perception, estimator, override,
         assert metrics._reference.sha256 == reference.sha256
         assert metrics._reference_source == str(selected)
         assert metrics._run_params['mission'] == 'autocross'
+        assert metrics._run_params['seed'] == '1'
+        assert metrics._run_params['perception'] == perception
+        assert metrics._run_params['estimator'] == estimator
+        assert metrics._run_params['plant'] == 'gazebo'
+        assert metrics._truth_topic == ('/lhr/vehicle/odom_truth' if estimator == 'ekf' else '')
         for name, value in expected.items():
             parameter = metrics.get_parameter(name)
             assert parameter.value == value
             assert parameter.type_ == (Parameter.Type.BOOL if isinstance(value, bool)
                                        else Parameter.Type.DOUBLE)
+    finally:
+        if metrics is not None:
+            metrics.destroy_node()
+        rclpy.shutdown()
+
+
+@pytest.mark.parametrize('perception', ['sim', 'lidar'])
+@pytest.mark.parametrize('estimator', ['truth', 'ekf'])
+def test_acceleration_world_is_open_and_includes_stopping_lane(
+    perception, estimator, monkeypatch, tmp_path,
+):
+    world = tmp_path / 'acceleration.sdf'
+    includes = []
+    for side in (-1., 1.):
+        for index, x in enumerate((-7., -1., 1., 74., 76., 150.)):
+            color = 'blue' if side > 0 else 'yellow'
+            if index in (1, 2, 3, 4):
+                color = 'orange_large'
+            if index == 5:
+                color = 'orange_small'
+            marker_index = index + (100 if side > 0 else 0)
+            includes.append(f'<include><name>cone_{color}_{marker_index}</name>'
+                            f'<pose>{x} {side*2.6} 0 0 0 0</pose></include>')
+    world.write_text('<sdf><world>' + ''.join(includes) + '</world></sdf>')
+    spec = importlib.util.spec_from_file_location(
+        'gazebo_acceleration_metrics', Path(__file__).parents[1] / 'launch/gazebo_demo.launch.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module, '_find_world', lambda _: str(world))
+    monkeypatch.setattr(module, 'get_package_share_directory', lambda _: '/tmp/lhr_gazebo')
+    context = LaunchContext()
+    context.launch_configurations.update(perception=perception, estimator=estimator,
+                                         mission='acceleration', track_style='acceleration')
+    for action in module.generate_launch_description().entities:
+        if isinstance(action, DeclareLaunchArgument):
+            action.execute(context)
+    node = next(action for action in module._launch_setup(context)
+                if isinstance(action, Node) and action.node_executable == 'metrics_node')
+    params = evaluate_parameters(context, node._Node__parameters)[0]
+    assert params['reference_closed'] is False
+    args = ['--ros-args']
+    for name, value in params.items():
+        args += ['-p', f'{name}:={json.dumps(value)}']
+    rclpy.init(args=args)
+    metrics = None
+    try:
+        metrics = MetricsNode()
+        assert not metrics._reference.closed
+        assert metrics._reference.length == 157.
+        assert metrics._reference.project(110., 0.)[0] == 0.
     finally:
         if metrics is not None:
             metrics.destroy_node()

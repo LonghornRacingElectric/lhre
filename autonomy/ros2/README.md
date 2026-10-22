@@ -833,7 +833,7 @@ its limits.
 | `off_track_threshold` | `2.0` | CTE above this (m) counts as off-track |
 | `start_radius` | `2.0` | Fixed crossing-gate half-width (m) |
 | `reference_world` | empty | Generated SDF truth source; MVS otherwise latches complete scene cones, Gazebo selects its actual world |
-| `reference_closed` | `true` | Enable loop closure and circuit laps |
+| `reference_closed` | mission/style dependent in launch | False for acceleration, true for circuits; explicit overrides supported |
 | `min_progress_fraction` | `0.98` | Minimum signed reference progress before a crossing |
 | `lap_start_speed` | `0.1` | Minimum driving speed to start timing (m/s) |
 | `max_odom_gap_sec` | `1.0` | Maximum scored odometry gap (s) |
@@ -849,9 +849,12 @@ its limits.
 The metrics node publishes `/lhr/metrics/lap_complete` (`std_msgs/Bool`) when a lap is detected, which the mission manager uses to trigger the Driving → Finished transition.
 
 Metrics scores distance to fixed truth segments and accepts a lap only after
-continuous course progress and a forward crossing of its fixed gate. Missing
+continuous course progress and a forward crossing of its fixed gate. When
+a separate truth odometry topic exists, it alone supplies the scored pose;
+estimates only supply estimator-error measurements. Missing
 truth, shortcuts, odometry gaps and clock resets cannot produce an accepted
-lap. See the [scoring contract](src/lhr_metrics/README.md#reference-and-lap-contract).
+lap. Invalidated runs terminate with `invalid_lap` rather than waiting for
+a timeout. See the [scoring contract](src/lhr_metrics/README.md#reference-and-lap-contract).
 
 A run now ends by itself. Metrics finishes on a completed lap, on the
 mission reaching `FINISHED` (so missions with no lap, such as

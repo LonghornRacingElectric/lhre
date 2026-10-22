@@ -160,3 +160,32 @@ def test_progress_after_the_crossing_cannot_make_an_incomplete_lap_pass():
     assert not lap.observe(6., 0., stamp+.4, 5.)
     assert lap.progress > 40.
     assert lap.completed_at is None
+
+
+def test_matching_noncontiguous_world_indices_are_supported(tmp_path):
+    world = tmp_path / 'gaps.sdf'
+    includes = []
+    for color, shift in [('blue', -1.), ('yellow', 1.)]:
+        for index, (x, y) in zip((0, 2, 7, 10), SQUARE):
+            includes.append(f'<include><name>cone_{color}_{index}</name>'
+                            f'<pose>{x} {y+shift} 0 0 0 0</pose></include>')
+    world.write_text('<sdf><world>' + ''.join(includes) + '</world></sdf>')
+    assert world_centerline(world) == SQUARE
+
+
+def test_acceleration_reference_includes_orange_gates_and_stopping_lane(tmp_path):
+    world = tmp_path / 'acceleration.sdf'
+    includes = []
+    for side in (-1., 1.):
+        positions = [(-7., 'blue' if side > 0 else 'yellow'),
+                     (-1., 'orange_large'), (1., 'orange_large'),
+                     (74., 'orange_large'), (76., 'orange_large'), (150., 'orange_small')]
+        for index, (x, color) in enumerate(positions):
+            marker_index = index + (100 if side > 0 else 0)
+            includes.append(f'<include><name>cone_{color}_{marker_index}</name>'
+                            f'<pose>{x} {side*2.6} 0 0 0 0</pose></include>')
+    world.write_text('<sdf><world>' + ''.join(includes) + '</world></sdf>')
+    track = ReferenceTrack(world_centerline(world, acceleration=True), closed=False)
+    assert track.length == 157.
+    assert track.project(110., 0.)[0] == 0.
+    assert track.points[-1] == (150., 0.)

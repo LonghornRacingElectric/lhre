@@ -192,7 +192,8 @@ def test_sim_time_reaches_the_plant_as_the_other_nodes_read_it(spelling):
 def test_defaults_are_unchanged():
     # Untyped, launch_ros YAML-parsed each default; the types must agree.
     # The EKF branch is the one that starts every node class below.
-    context, nodes = _launch(estimator='ekf')
+    # Raw init arguments are forwarded only in explicit manual-spawn mode.
+    context, nodes = _launch(estimator='ekf', start_on_track='false')
     for exe, (_, args) in NODES.items():
         for params in _evaluate(context, nodes, exe):
             for arg in args:
@@ -206,7 +207,8 @@ def test_defaults_are_unchanged():
 @pytest.mark.parametrize('exe', sorted(NODES))
 def test_overrides_start_the_node_with_their_types(exe):
     context, nodes = _launch(
-        estimator='ekf', **{arg: text for arg, (text, _) in OVERRIDES.items()})
+        estimator='ekf', start_on_track='false',
+        **{arg: text for arg, (text, _) in OVERRIDES.items()})
     node_class, args = NODES[exe]
     defaults = _start(node_class, {}, args)
     for params in _evaluate(context, nodes, exe):

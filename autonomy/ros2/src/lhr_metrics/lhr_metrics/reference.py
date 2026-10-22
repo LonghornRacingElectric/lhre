@@ -13,26 +13,38 @@ def paired_centerline(left, right):
     return [((a[0] + b[0]) / 2, (a[1] + b[1]) / 2) for a, b in zip(left, right)]
 
 
-def world_centerline(filename):
-    """Read the generated world's indexed blue/yellow includes, including overrides."""
+def world_centerline(filename, *, acceleration=False):
+    """Read generated-world truth; acceleration includes both orange exit boundaries."""
     root = ET.parse(filename).getroot()
-    sides = []
-    for color in ('blue', 'yellow'):
-        cones = {}
-        prefix = f'cone_{color}_'
-        for item in root.findall('./world/include'):
-            name = item.findtext('name', '')
-            if not name.startswith(prefix):
+    sides = [{}, {}]
+    for item in root.findall('./world/include'):
+        name = item.findtext('name', '')
+        if not name.startswith(('cone_blue_', 'cone_yellow_', 'cone_orange_')):
+            continue
+        pose = [float(value) for value in item.findtext('pose', '').split()]
+        if len(pose) != 6 or not all(map(math.isfinite, pose)):
+            raise ValueError('invalid world cone pose')
+        if acceleration:
+            # This generator's straight is along +x, centered at y=0. Color
+            # does not encode the side of orange start/finish/exit cones.
+            if pose[1] == 0:
+                raise ValueError('acceleration boundary cone lies on the centerline')
+            side, key = (0 if pose[1] > 0 else 1), pose[0]
+        else:
+            if name.startswith('cone_orange_'):
                 continue
-            index = int(name[len(prefix):])
-            pose = [float(value) for value in item.findtext('pose', '').split()]
-            if len(pose) != 6 or index in cones:
-                raise ValueError('invalid or duplicate world cone pose')
-            cones[index] = pose[:2]
-        if sorted(cones) != list(range(len(cones))):
-            raise ValueError('world reference cone indices must be contiguous')
-        sides.append([cones[index] for index in sorted(cones)])
-    return paired_centerline(*sides)
+            side = 0 if name.startswith('cone_blue_') else 1
+            key = int(name.rsplit('_', 1)[1])
+        if key in sides[side]:
+            raise ValueError('duplicate world boundary position or cone index')
+        sides[side][key] = pose[:2]
+    # Indices may have gaps where another model replaced a cone. Missing
+    # partners must still fail, rather than zip unrelated boundary vertices.
+    keys = sorted(sides[0])
+    if keys != sorted(sides[1]):
+        raise ValueError('world reference boundaries have mismatched partners')
+    return paired_centerline([sides[0][key] for key in keys],
+                             [sides[1][key] for key in keys])
 
 
 class ReferenceTrack:

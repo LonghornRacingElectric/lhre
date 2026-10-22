@@ -317,7 +317,7 @@ planner's path or feeds this reference back to perception/control.
 | Argument | Default | Meaning |
 | --- | --- | --- |
 | `reference_world` | empty | Empty resolves to the selected world; override only for a matching reference file |
-| `reference_closed` | `true` | Include loop closure and enable circuit detection |
+| `reference_closed` | mission/style dependent | False for acceleration, true for circuits; explicit overrides remain supported |
 | `off_track_threshold` | `2.0` | Scoring corridor half-width, metres |
 | `start_radius` | `2.0` | Fixed crossing-gate half-width, metres |
 | `min_lap_time` | `5.0` | Minimum simulation seconds after driving onset |
@@ -327,7 +327,10 @@ planner's path or feeds this reference back to perception/control.
 | `output_csv` | `data/metrics.csv` | Run row, including reference hash and invalidation reason |
 
 Scoring arguments are typed and forwarded in both perception branches and
-with truth or EKF estimation. `reference_closed:=false` scores an open course
+with truth or EKF estimation. EKF mode scores `/lhr/vehicle/odom_truth`; truth
+mode scores the plant-owned `/lhr/vehicle/odom`. Estimates only feed error
+measurements. Rows also record Gazebo's scenario, plant, seed, track style,
+waypoints, perception, estimator, and selected estimator perturbations. `reference_closed:=false` scores an open course
 without inventing a return segment or a circuit lap. Missing or invalid world
 geometry fails rather than silently using a different course. See the
 [metrics contract](../lhr_metrics/README.md#reference-and-lap-contract).

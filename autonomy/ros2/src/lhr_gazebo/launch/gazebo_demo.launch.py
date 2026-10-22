@@ -23,7 +23,7 @@ from launch.actions import (
     OpaqueFunction,
     SetEnvironmentVariable,
 )
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 import yaml
@@ -424,7 +424,20 @@ def _launch_setup(context: LaunchContext):
                     LaunchConfiguration('lap_start_speed'), value_type=float),
                 'max_odom_gap_sec': ParameterValue(
                     LaunchConfiguration('max_odom_gap_sec'), value_type=float),
-                'truth_odom_topic': '/lhr/vehicle/odom_truth',
+                'truth_odom_topic': '/lhr/vehicle/odom_truth' if use_ekf else '',
+                'scenario': 'gazebo_demo',
+                'plant': 'gazebo',
+                'seed': ParameterValue(LaunchConfiguration('seed'), value_type=int),
+                'num_waypoints': ParameterValue(
+                    LaunchConfiguration('num_waypoints'), value_type=int),
+                'track_style': ParameterValue(
+                    LaunchConfiguration('track_style'), value_type=str),
+                'perception': perception,
+                'estimator': 'ekf' if use_ekf else 'truth',
+                'gyro_bias': ParameterValue(LaunchConfiguration('gyro_bias'), value_type=float),
+                'wheel_scale_error': ParameterValue(
+                    LaunchConfiguration('wheel_scale_error'), value_type=float),
+                'lidar_classify_sides': classify_sides,
                 'use_sim_time': True,
             }],
             output='screen',
@@ -612,13 +625,18 @@ def generate_launch_description():
         DeclareLaunchArgument('off_track_threshold', default_value='2.0'),
         DeclareLaunchArgument('start_radius', default_value='2.0'),
         DeclareLaunchArgument('min_lap_time', default_value='5.0'),
-        DeclareLaunchArgument('reference_closed', default_value='true'),
         DeclareLaunchArgument('min_progress_fraction', default_value='0.98'),
         DeclareLaunchArgument('lap_start_speed', default_value='0.1'),
         DeclareLaunchArgument('max_odom_gap_sec', default_value='1.0'),
 
         # Mission
         DeclareLaunchArgument('mission', default_value='autocross'),
+        DeclareLaunchArgument(
+            'reference_closed', default_value=PythonExpression([
+                "'false' if '", LaunchConfiguration('mission'),
+                "' == 'acceleration' or '", LaunchConfiguration('track_style'),
+                "' == 'acceleration' else 'true'"
+            ])),
         DeclareLaunchArgument('auto_go', default_value='true'),
         DeclareLaunchArgument('ready_hold_sec', default_value='5.0'),
         # Joint adapter: stop the wheels when commands stop (0 disables)

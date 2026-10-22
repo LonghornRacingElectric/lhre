@@ -139,12 +139,12 @@ def _b(name: str):
 
 
 def _launch_sim(context):
-    """Spawn the LiDAR-mode car on the generated track, respecting manual mode."""
+    """Spawn closed-course runs on scene truth, respecting manual and open-course poses."""
     def value(name):
         return LaunchConfiguration(name).perform(context)
 
     x, y, yaw = (float(value(name)) for name in ('init_x', 'init_y', 'init_yaw'))
-    if value('perception') == 'lidar' and value('start_on_track') == 'true':
+    if value('start_on_track') == 'true' and value('track_style') != 'acceleration':
         left, right = GENERATORS.get(value('track_style'), GENERATORS['autocross'])(
             seed=int(value('seed')), num_waypoints=int(value('num_waypoints')),
             radius_m=25.0, jitter_m=10.0, width_m=3.5, cone_spacing_m=2.0)
@@ -249,7 +249,7 @@ def generate_launch_description():
     init_yaw_arg = DeclareLaunchArgument('init_yaw', default_value='1.5708')
     start_on_track_arg = DeclareLaunchArgument(
         'start_on_track', default_value='true', choices=['true', 'false'],
-        description='In LiDAR mode, spawn at the nearest generated-track '
+        description='On closed courses, spawn at the nearest generated-track '
                     'center and tangent; false uses the exact init pose')
 
     # Recording and viewing
@@ -364,7 +364,6 @@ def generate_launch_description():
         DeclareLaunchArgument('off_track_threshold', default_value='2.0'),
         DeclareLaunchArgument('start_radius', default_value='2.0'),
         DeclareLaunchArgument('min_lap_time', default_value='5.0'),
-        DeclareLaunchArgument('reference_closed', default_value='true'),
         DeclareLaunchArgument('min_progress_fraction', default_value='0.98'),
         DeclareLaunchArgument('lap_start_speed', default_value='0.1'),
         DeclareLaunchArgument('max_odom_gap_sec', default_value='1.0'),
@@ -389,6 +388,12 @@ def generate_launch_description():
         init_yaw_arg,
         start_on_track_arg,
         mission_arg,
+        DeclareLaunchArgument(
+            'reference_closed', default_value=PythonExpression([
+                "'false' if '", LaunchConfiguration('mission'),
+                "' == 'acceleration' or '", LaunchConfiguration('track_style'),
+                "' == 'acceleration' else 'true'"
+            ])),
         auto_go_arg,
         ready_hold_arg,
         run_id_arg,
