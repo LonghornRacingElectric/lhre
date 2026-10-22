@@ -908,7 +908,7 @@ Both Gazebo perception modes and MVS LiDAR mode set `closed_path=false`;
 local paths do not wrap at their ends and expire after `path_timeout_sec=1.0`.
 Gazebo exposes `path_timeout_sec` as a typed launch argument in both modes.
 The three `boundary_graph` path limits do not apply to its current planners. See
-[Gazebo](src/lhr_gazebo/README.md#local-path-limits) and
+[Gazebo](src/lhr_gazebo/README.md#local-path-control) and
 [control](src/lhr_control/README.md).
 
 The MVS launcher also accepts `plant:=bobsim` for the optional
