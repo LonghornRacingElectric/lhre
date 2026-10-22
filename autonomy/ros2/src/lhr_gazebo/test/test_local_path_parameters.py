@@ -3,7 +3,6 @@
 from contextlib import contextmanager
 import importlib.util
 import json
-import math
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -13,7 +12,6 @@ from launch.actions import DeclareLaunchArgument
 from launch_ros.actions import Node
 from launch_ros.utilities import evaluate_parameters
 from lhr_control.pursuit_node import PurePursuit
-from lhr_track_builder.track_builder_node import TrackBuilder
 from nav_msgs.msg import Path as PathMessage
 import pytest
 import rclpy
@@ -70,57 +68,45 @@ def test_local_path_launch_parameters(
     context.launch_configurations.update(
         perception=perception, lidar_classify_sides=str(classify_sides).lower(),
         estimator=estimator)
-    limits = ('planning_horizon_m', 'max_path_gap_m', 'max_path_turn_deg')
-    with _node(TrackBuilder, {}) as baseline:
-        expected = {name: baseline.get_parameter(name).value for name in limits}
+    expected = {}
     with _node(PurePursuit, {}) as baseline:
         expected['path_timeout_sec'] = baseline.get_parameter('path_timeout_sec').value
         # Complete circuits still have a supported node-level closed mode.
         assert baseline.get_parameter('closed_path').value is True
     if override:
         # Whole-number CLI strings must reach double-declaring nodes as doubles.
-        values = {'planning_horizon_m': '20', 'max_path_gap_m': '3',
-                  'max_path_turn_deg': '45', 'path_timeout_sec': '2'}
+        values = {'path_timeout_sec': '2'}
         context.launch_configurations.update(values)
         expected = {name: float(value) for name, value in values.items()}
     nodes = {node.node_executable: node for node in module._launch_setup(context)
              if isinstance(node, Node)}
-    for executable, node_type, names in (
-        ('track_builder', TrackBuilder, limits),
-        ('pursuit_node', PurePursuit, ('path_timeout_sec',)),
-    ):
-        params = evaluate_parameters(context, nodes[executable]._Node__parameters)[0]
-        for name in names:
-            assert params[name] == expected[name]
-            assert type(params[name]) is float
-        with _node(node_type, params) as node:
-            for name in names:
-                assert node.get_parameter(name).value == expected[name]
-                assert node.get_parameter(name).type_ == Parameter.Type.DOUBLE
-            if node_type is TrackBuilder:
-                assert node._planning_horizon == expected['planning_horizon_m']
-                assert node._max_path_gap == expected['max_path_gap_m']
-                assert node._min_turn_cos == pytest.approx(
-                    math.cos(math.radians(expected['max_path_turn_deg'])))
-                continue
-            assert params['closed_path'] is False
-            assert node._closed_path is False
-            assert node._path_timeout == expected['path_timeout_sec']
-            # #92's straight prefix followed by a bend must not borrow the far end.
-            node._path_cb(_path([(0, 0), (2, 0), (4, 0), (6, 0), (8, 0), (10, 0),
-                                 (12, 2), (12, 4), (10, 6), (8, 6), (6, 6)]))
-            assert node._estimate_curvature(0) == 0.0
-            node._cmd_pub = Mock()
-            node._have_odom = True
-            node._path_cb(_path([(0, 0), (2, 0), (4, 0)]))
-            node._x = 5.0
-            assert node._find_lookahead() is None
-            node._control_loop()
-            assert node._cmd_pub.publish.call_args.args[0].drive.speed == 0.0
-            node._x = 0.0
-            node._path_cb(_path([(0, 0), (5, 0), (10, 0)]))
-            node._path_received_at -= Duration(seconds=node._path_timeout + 0.1)
-            node._v_prev = 3.0
-            node._control_loop()
-            assert node._cmd_pub.publish.call_args.args[0].drive.speed == 0.0
-            assert node._v_prev == 0.0
+    planner = evaluate_parameters(context, nodes['track_builder']._Node__parameters)[0]
+    for name in ('planning_horizon_m', 'max_path_gap_m', 'max_path_turn_deg'):
+        assert name not in context.launch_configurations
+        assert name not in planner
+    params = evaluate_parameters(context, nodes['pursuit_node']._Node__parameters)[0]
+    assert params['path_timeout_sec'] == expected['path_timeout_sec']
+    assert type(params['path_timeout_sec']) is float
+    with _node(PurePursuit, params) as node:
+        assert node.get_parameter('path_timeout_sec').type_ == Parameter.Type.DOUBLE
+        assert params['closed_path'] is False
+        assert node._closed_path is False
+        assert node._path_timeout == expected['path_timeout_sec']
+        # #92's straight prefix followed by a bend must not borrow the far end.
+        node._path_cb(_path([(0, 0), (2, 0), (4, 0), (6, 0), (8, 0), (10, 0),
+                             (12, 2), (12, 4), (10, 6), (8, 6), (6, 6)]))
+        assert node._estimate_curvature(0) == 0.0
+        node._cmd_pub = Mock()
+        node._have_odom = True
+        node._path_cb(_path([(0, 0), (2, 0), (4, 0)]))
+        node._x = 5.0
+        assert node._find_lookahead() is None
+        node._control_loop()
+        assert node._cmd_pub.publish.call_args.args[0].drive.speed == 0.0
+        node._x = 0.0
+        node._path_cb(_path([(0, 0), (5, 0), (10, 0)]))
+        node._path_received_at -= Duration(seconds=node._path_timeout + 0.1)
+        node._v_prev = 3.0
+        node._control_loop()
+        assert node._cmd_pub.publish.call_args.args[0].drive.speed == 0.0
+        assert node._v_prev == 0.0

@@ -155,7 +155,10 @@ Machine setup lives in [GETTING-STARTED.md](GETTING-STARTED.md): Ubuntu 24.04 na
 
 In PlotJuggler: click **Streaming** → **ROS2 Topic Subscriber** → **Start**, select topics, then drag them onto the plot area. Useful topics: `/lhr/debug/curvature`, `/lhr/debug/v_cmd`, `/lhr/debug/mission_state`, `/lhr/vehicle/cmd`.
 
-Launch arguments can be passed through `run_demo.sh`:
+Launch arguments can be passed through `run_demo.sh`. Both demo launches
+give every argument they forward the receiving node's declared type, so a
+whole number like `v_max:=8` or `init_yaw:=0` still arrives as a double
+(each package's `test_launch_param_types.py` checks it):
 
 ```bash
 ./scripts/run_demo.sh lookahead_dist:=6.0 seed:=42
@@ -255,7 +258,7 @@ The `lhr_gazebo` package provides an alternative simulation backend using Gazebo
 
 RViz launches automatically alongside Gazebo (disable with `rviz:=false`). The RViz config shows centerline, cones, odometry trail, lookahead point, and FOV visualization.
 
-Launch arguments work the same way:
+Launch arguments work the same way as `run_demo.sh`'s, typed the same way:
 ```bash
 ./scripts/run_gazebo_demo.sh seed:=42 lookahead_dist:=6.0
 ./scripts/run_gazebo_demo.sh gui:=false          # headless Gazebo (no Gazebo GUI)
@@ -731,6 +734,8 @@ Speed is planned from path curvature:
 | `lookahead_curvature_gain` | `3.0` | How aggressively lookahead shortens with curvature |
 | `max_steer` | from `vehicle.yaml` | Max steering angle (rad) (default: `lhr_vehicle`) |
 | `wheelbase` | from `vehicle.yaml` | Wheelbase for steering calc (m) (default: `lhr_vehicle`) |
+| `closed_path` | `true` | Wrap only a complete circuit; Gazebo and MVS LiDAR override to false |
+| `path_timeout_sec` | `1.0` | Stop when an open path expires (s) |
 | `control_hz` | `20.0` | Control loop rate (Hz) |
 | `a_lat_max` | `6.0` | Max lateral acceleration for speed law (m/s^2) |
 | `v_min` | `2.0` | Minimum commanded speed (m/s) |
@@ -901,8 +906,8 @@ is moved aside rather than having its fields dropped.
 
 Both Gazebo perception modes and MVS LiDAR mode set `closed_path=false`;
 local paths do not wrap at their ends and expire after `path_timeout_sec=1.0`.
-Gazebo exposes this timeout plus `planning_horizon_m`, `max_path_gap_m`, and
-`max_path_turn_deg` as typed launch arguments in both perception modes. See
+Gazebo exposes `path_timeout_sec` as a typed launch argument in both modes.
+The three `boundary_graph` path limits do not apply to its current planners. See
 [Gazebo](src/lhr_gazebo/README.md#local-path-limits) and
 [control](src/lhr_control/README.md).
 

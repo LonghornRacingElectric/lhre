@@ -11,7 +11,9 @@ Pure pursuit steering and curvature-based speed planning. Consumes
 default. Gazebo sets `closed_path=false` for both simplified and LiDAR
 perception because both publish a car-anchored forward prefix. MVS LiDAR
 mode also selects open paths; its simplified mode retains the closed-path
-setting. Open-path lookahead and curvature estimates do not wrap between
+setting despite the same forward-prefix producer; that remaining topology
+issue is tracked in [#92](https://github.com/LonghornRacingElectric/lhre/issues/92).
+Open-path lookahead and curvature estimates do not wrap between
 the two endpoints. Targets behind the vehicle are rejected. Empty paths, expired local
 paths, or paths with no forward target produce a zero-speed command.
 

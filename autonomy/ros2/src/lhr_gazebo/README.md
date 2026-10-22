@@ -105,35 +105,25 @@ The launch starts graphical Gazebo and RViz by default. Use `gui:=false` or
 `rviz:=false` for a headless run. See the workspace
 [README](../../README.md) for all launch arguments and topic diagrams.
 
-## Local path limits
+Every argument the launch forwards to a node carries the node's declared
+type, so a whole number like `v_max:=8` still reaches `pure_pursuit` as a
+double. `test_launch_param_types.py` checks forwarded launch parameter types.
 
-These arguments are typed doubles and reach their nodes in both perception
-modes, including `lidar_classify_sides:=true`. Defaults match the nodes.
+## Local path control
 
-| Argument | Default | Meaning |
-| --- | --- | --- |
-| `planning_horizon_m` | `30.0` | Maximum arc length of the forward path |
-| `max_path_gap_m` | `4.0` | Split the path at a larger gap |
-| `max_path_turn_deg` | `60.0` | Split the path at a sharper turn |
-| `path_timeout_sec` | `1.0` | Stop pursuit when its local path expires |
+`path_timeout_sec` is a typed double launch argument (default `1.0`, matching
+pursuit) in both perception modes, including `lidar_classify_sides:=true`.
+For example, `path_timeout_sec:=2` changes the local-path expiry deadline.
 
-For example:
+`closed_path` is fixed to `false` in both Gazebo branches: each publishes a
+car-anchored prefix, not a complete circuit. Lookahead and curvature do not
+connect the endpoints. Tests check default/override startup, endpoint stopping,
+and stale-path stopping; they do not establish Gazebo driving performance.
 
-```bash
-ros2 launch lhr_gazebo gazebo_demo.launch.py perception:=sim \
-  planning_horizon_m:=20 max_path_gap_m:=3 max_path_turn_deg:=45 path_timeout_sec:=2
-```
-
-`closed_path` is deliberately fixed to `false` in both branches rather than
-exposed as a launch argument: each branch publishes a car-anchored prefix,
-not a complete circuit. The controller uses one-sided curvature near the
-endpoints, stops at the end of a short path, and stops on a stale path. A
-complete closed route would need an explicit producer contract before
-changing this setting.
-
-Launch tests evaluate defaults and overrides, check ROS parameter types,
-start both owning nodes, and exercise the configured controller's endpoint
-and stale-path behavior. They do not establish Gazebo driving performance.
+`planning_horizon_m`, `max_path_gap_m`, and `max_path_turn_deg` only affect
+`boundary_graph`, which Gazebo does not select. They are intentionally not
+Gazebo launch arguments. The current `boundary` / `classified` modes use
+their chaining arguments documented above instead.
 
 ## Command timeout
 
