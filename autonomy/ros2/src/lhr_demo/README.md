@@ -217,7 +217,7 @@ Closed-course spawn snapping applies to both simplified and LiDAR perception;
 `start_on_track:=false` preserves the exact supplied pose. Open acceleration
 poses remain explicit rather than snapping the default guess into the course.
 
-The launch exposes `reference_closed` (true for circuits, false for acceleration), `off_track_threshold` (2.0 m),
+The launch exposes `reference_closed` (true for circuits, false for acceleration), `off_track_threshold` (2.0 m legacy progress-continuity scale),
 `start_radius` (2.0 m gate half-width), `min_lap_time` (5.0 s),
 `min_progress_fraction` (0.98), `lap_start_speed` (0.1 m/s), and
 `max_odom_gap_sec` (1.0 s). All numeric overrides are explicitly typed doubles.
@@ -342,3 +342,10 @@ above it. A dirty repository adds `-dirty` to the commit ID.
 
 The study runner asks ROS launch to stop its children once. It kills the
 process group only if launch does not finish within the cleanup timeout.
+
+The metrics node separately checks the whole YAML vehicle envelope against
+latched scene boundaries and nominal cone bases. `cones_hit` counts unique
+geometric contacts, and either a contact or excursion fails the run. See
+[footprint scoring](../lhr_metrics/README.md#footprint-boundaries-and-contacts)
+for sweep padding and limitations; the separate driving study runner still
+uses its existing point-based diagnostics.

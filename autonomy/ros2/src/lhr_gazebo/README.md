@@ -335,7 +335,7 @@ planner's path or feeds this reference back to perception/control.
 | --- | --- | --- |
 | `reference_world` | empty | Empty resolves to the selected world; override only for a matching reference file |
 | `reference_closed` | mission/style dependent | False for acceleration, true for circuits; explicit overrides remain supported |
-| `off_track_threshold` | `2.0` | Scoring corridor half-width, metres |
+| `off_track_threshold` | `2.0` | Legacy progress-continuity scale, metres; validity uses truth boundaries and the vehicle envelope |
 | `start_radius` | `2.0` | Fixed crossing-gate half-width, metres |
 | `min_lap_time` | `5.0` | Minimum simulation seconds after driving onset |
 | `min_progress_fraction` | `0.98` | Required signed circuit progress |
@@ -351,3 +351,8 @@ waypoints, perception, estimator, and selected estimator perturbations. `referen
 without inventing a return segment or a circuit lap. Missing or invalid world
 geometry fails rather than silently using a different course. See the
 [metrics contract](../lhr_metrics/README.md#reference-and-lap-contract).
+
+Metrics counts conservative geometric contacts against nominal cone bases,
+including orange cones, and checks the whole YAML vehicle envelope against the
+selected world boundaries. This uses truth poses, not Gazebo contact forces;
+see the [scoring model](../lhr_metrics/README.md#footprint-boundaries-and-contacts).
