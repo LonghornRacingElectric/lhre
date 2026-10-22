@@ -1,3 +1,6 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
 load("//tools/firmware:firmware_project.bzl", "firmware_project")
 
 # The whole board: firmware image, flash targets, and — synthesized
@@ -23,4 +26,49 @@ firmware_project(
     enable_freertos = True,
     enable_usb = True,
     mcu = "stm32g474xx",
+)
+
+# Software-in-the-loop: the unmodified :vcu_app behind a C ABI, built as a
+# shared library that simulation/ loads into the BobLib vehicle model
+# (Sil/README.md, ADR 014). Here rather than in the macro because no other
+# board has one. Linux-only: the simulation container is Linux.
+cc_library(
+    name = "vcu_sil_api",
+    hdrs = ["Sil/vcu_sil.h"],
+    strip_include_prefix = "Sil",
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+cc_binary(
+    name = "libvcu_sil.so",
+    srcs = ["Sil/vcu_sil.cpp"],
+    additional_linker_inputs = ["Sil/vcu_sil.lds"],
+    linkopts = [
+        # Export only vcu_sil_*: the statically linked libc++ and FreeRTOS
+        # must not clash with symbols already in the simulator process.
+        "-Wl,--version-script=$(location Sil/vcu_sil.lds)",
+        # Fail the link, not the simulation, on an unresolved symbol.
+        "-Wl,-z,defs",
+    ],
+    linkshared = True,
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":vcu_app",
+        ":vcu_sil_api",
+        "//drivers/lhal:host",
+    ],
+)
+
+cc_test(
+    name = "vcu_sil_test",
+    size = "small",
+    srcs = [
+        "Sil/vcu_sil_test.cpp",
+        ":libvcu_sil.so",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":vcu_sil_api",
+        "@googletest//:gtest_main",
+    ],
 )

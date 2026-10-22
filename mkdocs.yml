@@ -26,6 +26,7 @@ nav:
   - Boards:
       - Overview: boards/README.md
       - VCU (Reference): boards/VCU/README.md
+      - VCU SIL Library: boards/VCU/Sil/README.md
   - Drivers:
       - Overview: drivers/README.md
       - LHAL: drivers/lhal/README.md

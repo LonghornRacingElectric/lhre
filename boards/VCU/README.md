@@ -13,6 +13,8 @@ for the repo.
 | `:vcu_app_test`  | Deterministic app-logic test: scheduler-less `Step()` path, TestClock-driven, exact timing asserts. |
 | `:vcu_rtos_test` | The real FreeRTOS tasks under the simulator-port scheduler; lower-bound asserts only. |
 | `:vcu_sim`       | Interactive host sim running the real tasks (`bazel run --config=local`). |
+| `:libvcu_sil.so` | The app as a host shared library that the BobSim vehicle model loads as its VCU ([Sil/](Sil/README.md)). |
+| `:vcu_sil_test`  | Tests for that library's C ABI.                             |
 | `:release`       | elf/bin/hex bundle for CI artifacts.                        |
 
 ## Layout
@@ -34,6 +36,10 @@ for the repo.
   `Error_Handler()`, which the firmware compiles and uses (clock changes
   made in CubeMX apply automatically; `lhal::stm32::InitCore()` calls the
   generated clock config). Hand-edit only inside `USER CODE` sections.
+- `Sil/` — software-in-the-loop: a C ABI over `vcu::App` that simulation/
+  loads into the vehicle model. Its targets are declared after the
+  `firmware_project` call, because no other board has them. See
+  [Sil/README.md](Sil/README.md).
 - `STM32G474XX_FLASH.ld` / `startup_stm32g474xx.s` — linker script and
   startup for the G474. Named by ST's convention, so `firmware_project`
   finds them from `mcu = "stm32g474xx"` without being told.
