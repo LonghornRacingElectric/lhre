@@ -107,7 +107,12 @@ The launch starts graphical Gazebo and RViz by default. Use `gui:=false` or
 
 Every argument the launch forwards to a node carries the node's declared
 type, so a whole number like `v_max:=8` still reaches `pure_pursuit` as a
-double. `test_launch_param_types.py` checks forwarded launch parameter types.
+double. Untyped, launch_ros would guess from the text and hand the node an
+integer, which kills it at startup. `test_launch_param_types.py` checks every
+node the launch can start for a parameter fed by a bare `LaunchConfiguration`.
+It does not see values the launch reads from `context.launch_configurations`
+itself or wraps in another substitution such as `PythonExpression`; type
+those by hand.
 
 ## Local path control
 
