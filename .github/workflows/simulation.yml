@@ -40,8 +40,17 @@ jobs:
       - name: Get the BobSim history for the pin check
         run: test "$(git -C bobsim rev-parse --is-shallow-repository)" = false || git -C bobsim fetch --unshallow --no-recurse-submodules origin
 
+      - uses: docker/setup-buildx-action@v3
+
       - name: Build the image
-        run: make build
+        uses: docker/build-push-action@v6
+        with:
+          context: simulation/bobsim
+          file: simulation/bobsim/Dockerfile
+          tags: lhre-simulation:local
+          load: true
+          cache-from: type=gha,scope=lhre-simulation
+          cache-to: type=gha,mode=max,scope=lhre-simulation
 
       - name: Check that BobSim loads the vehicle
         run: make smoke
