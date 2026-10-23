@@ -156,7 +156,14 @@ fact target_status not_run
 target_status=$(cat "$out/.target-status")
 fact target_status "$target_status"
 
+say "Let the host read the BobSim outputs"
+$RUN sim sh -c 'if [ -d bobsim/simulations/mbd ]; then chmod -R a+rwX bobsim/simulations/mbd; fi' \
+    || fail "Could not make bobsim/simulations/mbd readable on the host."
+
 say "Copy the outputs to $out"
+if [ -d "$results" ] && { ! [ -r "$results" ] || ! [ -x "$results" ]; }; then
+    fail "The host cannot read $results."
+fi
 if [ -f "$four_post_config" ]; then
     cp "$four_post_config" "$out/"
 fi
