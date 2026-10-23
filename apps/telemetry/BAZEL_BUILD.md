@@ -21,9 +21,11 @@ display telemetry:
 | field_enricher | configured derived fields | this repo |
 
 The optional set contains `gps_classifier`, `lap_timer`, `track_mapper`,
-`kafka_test`, `gg_plot`, and `car_status`. They consume or derive telemetry;
-none is required to preserve the raw stream. `kafka_base` remains a developer
-template and is deliberately not a runnable stack image.
+`kafka_test`, `gg_plot`, `car_status`, `board_health`, `events_faults`, and
+`simulate`. Most consume or derive telemetry; `simulate` instead publishes
+fake frames for exercising the others without a real car. None is required to
+preserve the raw stream. `kafka_base` remains a developer template and is
+deliberately not a runnable stack image.
 
 The viewer, logsync worker, and Grafana plugin build are outside this port.
 Their existing npm, PM2, or legacy Docker workflows remain in place.

@@ -1,0 +1,19 @@
+services:
+  board_health:
+    image: ${TELEMETRY_BOARD_HEALTH_IMAGE:-lhre/telemetry-board-health:dev}
+    container_name: board_health_processor
+    restart: unless-stopped
+    environment:
+      PYTHONUNBUFFERED: 1
+      IN_DOCKER: 1
+      LOGLEVEL: INFO
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_INPUT_TOPIC: sensor_data
+      KAFKA_OUTPUT_TOPIC: board_health
+      KAFKA_GROUP_ID: board-health-group
+    networks:
+      - telemetry_network
+
+networks:
+  telemetry_network:
+    external: true

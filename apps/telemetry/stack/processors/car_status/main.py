@@ -26,6 +26,7 @@ import time
 
 from google.protobuf.json_format import MessageToDict
 from kafka import KafkaConsumer, KafkaProducer
+from stack.ingest.protobuf import can_packets_pb2
 from stack.ingest.protobuf import angelique_pb2, can_packets_pb2, template_pb2
 
 from classifier import CarStateMachine, Thresholds
@@ -252,6 +253,8 @@ try:
         if batch:
             for _partition, records in batch.items():
                 for record in records:
+                    data = can_packets_pb2.OrionSenesterData()
+                    data.ParseFromString(record.value)
                     if record.topic == CONFIG_TOPIC:
                         try:
                             payload = record.value.decode("utf-8") if isinstance(record.value, bytes) else record.value

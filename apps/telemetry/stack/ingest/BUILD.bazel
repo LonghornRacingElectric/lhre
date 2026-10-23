@@ -1,4 +1,4 @@
-# telemetry/stack/ingest/BUILD.bazel
+# apps/telemetry/stack/ingest/BUILD.bazel
 # BUILD file for the MQTT ingest service
 # This service receives MQTT messages, stores them in PostgreSQL, and forwards to Kafka
 
@@ -16,7 +16,7 @@ package(default_visibility = ["//apps/telemetry:__subpackages__"])
 # Generates a Python `_pb2.py` module from the generated CAN schema.
 #
 # Build output path:
-# - bazel-bin/telemetry/stack/ingest/protobuf/can_packets_pb2.py
+# - bazel-bin/apps/telemetry/stack/ingest/protobuf/can_packets_pb2.py
 #
 # Input chain:
 # - the selected //apps/telemetry:current_schema_proto -> this genrule
@@ -131,11 +131,11 @@ py_binary(
     target_compatible_with = NOT_WINDOWS,
 )
 
-# Writes telemetry/stack/ingest/protobuf/can_packets_pb2.py into the workspace.
-# Use: bazel run //telemetry/stack/ingest:update_can_packets_pb2
+# Writes apps/telemetry/stack/ingest/protobuf/can_packets_pb2.py into the workspace.
+# Use: bazel run --config=local //apps/telemetry/stack/ingest:update_can_packets_pb2
 py_binary(
     name = "update_can_packets_pb2",
-    target_compatible_with = ["@platforms//os:linux"],
+    target_compatible_with = NOT_WINDOWS,
     imports = ["../..", "../../.."],
     srcs = [
         "update_can_packets_pb2.py",

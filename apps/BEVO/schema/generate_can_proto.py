@@ -538,7 +538,7 @@ def parse_existing_proto_ids(path: Optional[str]) -> Dict[str, Dict[str, int]]:
     return result
 
 
-_TRAILING_ID_RE = re.compile(r"#\s*(\d+)\s*$")
+_INLINE_ID_RE = re.compile(r"#\s*(\d+)\b")
 
 
 def _unique_name_to_id(id_map: Dict[str, Dict[str, int]]) -> Dict[str, int]:
@@ -554,7 +554,8 @@ def _unique_name_to_id(id_map: Dict[str, Dict[str, int]]) -> Dict[str, int]:
 def _splice_id(raw_line: str, old_cell: str, target_id: int, search: int) -> Tuple[str, int]:
     """Append ` #target_id` to the first occurrence of old_cell at/after `search` in
     raw_line. Returns (new_line, next_search_offset). No-op if not found."""
-    if _TRAILING_ID_RE.search(old_cell.rstrip()):
+    # Rate annotations may follow the persistent id.
+    if _INLINE_ID_RE.search(old_cell.split(";", 1)[-1]):
         return raw_line, search  # already annotated
     idx = raw_line.find(old_cell, search)
     if idx == -1:
@@ -588,6 +589,7 @@ def write_back_bitfield_ids(bitfield_csv_path: str, id_map: Dict[str, Dict[str, 
     """
     if not os.path.exists(bitfield_csv_path):
         return 0
+    gen_json = _load_generate_can_json_module()
     name_to_id = _unique_name_to_id(id_map)
     lines, newline, has_bom = _read_csv_text(bitfield_csv_path)
 
@@ -610,7 +612,9 @@ def write_back_bitfield_ids(bitfield_csv_path: str, id_map: Dict[str, Dict[str, 
         for cell in cells:
             if ";" not in cell:
                 continue
-            proto_field = cell.split(";", 1)[1].strip()
+            cleaned_cell, _ = gen_json.parse_rate_metadata(cell)
+            proto_field = cleaned_cell.split(";", 1)[1].strip()
+            proto_field = gen_json.proto_id_pattern.split(proto_field, maxsplit=1)[0].strip()
             if not proto_field:
                 continue
             proto_name = _to_snake_case(proto_field.split(".")[-1])

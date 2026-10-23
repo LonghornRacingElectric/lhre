@@ -166,6 +166,7 @@ message DiagnosticsHigh {
     bool neg_hv_contactor = 36;
     bool pos_hv_contactor = 37;
     bool precharge_contactor = 38;
+    bool shutdown_msd_status = 39;
 }
 
 message DiagnosticsLow {
