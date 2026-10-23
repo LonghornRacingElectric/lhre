@@ -29,8 +29,27 @@ start of the path. These checks use only the perceived path, not track truth.
 
 Other steering and speed parameters are listed in the
 [workspace reference](../../README.md#lhr_control-pursuit_node).
-Tests cover path endpoints, short horizons, stale/empty routes, open curvature,
-and acceleration from rest. The controller still assumes ideal vehicle state
-and actuation; closed-loop simulation does not validate hardware behavior.
+The controller still assumes ideal vehicle state and actuation; closed-loop
+simulation does not validate hardware behavior.
 
 Node cleanup tolerates an already-stopped ROS context after launch shutdown.
+
+## Tests
+
+From the built ROS workspace, run `colcon test --packages-select lhr_control
+--return-code-on-test-failure` and `colcon test-result --verbose`. The autonomy
+CI workflow discovers the same tests without launching a simulator.
+
+Analytic cases check zero steering on straight paths in different map headings,
+signed circle curvature and steering, steering saturation, closed-path wrap,
+and degenerate geometry. Speed checks cover the lateral acceleration budget,
+speed clamps, acceleration/deceleration limits, adaptive lookahead, endpoint
+stopping and mission gating. Translated and rotated circles check that steering
+uses the vehicle frame. Existing local-path cases cover short horizons,
+stale/empty paths, forward targets and acceleration from rest.
+
+These tests exercise callbacks directly with ROS messages and captured commands;
+they do not measure DDS delivery or physical tracking. The closed-path speed
+floor remains `v_min`, including startup and curves whose lateral budget would
+otherwise demand a lower speed. Open paths can command below that floor to
+accelerate from rest or stop at their endpoint.
