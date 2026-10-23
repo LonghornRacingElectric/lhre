@@ -17,12 +17,6 @@ The BobSim test takes about 6 s of `make unit`.
 - `test_bobsim_layout.py`: lhre code and docs use the BobSim names at the
   pin. Every import resolves. `make records` writes only into the BobLib of
   BobSim.
-- `test_bobsim_pin.py`: the checked-out BobSim contains `739143a`, the
-  front anti-dive sign fix (BobSim PR #70). BobSim has no local changes.
-- `test_aero_ride_heights.py`: the static aero ride heights lie inside the
-  CFD grids. BobSim's car passes. Our car does not, so its test is a
-  strict xfail. See
-  [bobsim.md](bobsim.md#aero-ride-height-references).
 - `test_ci_contract.py`: the `make` targets and the CI jobs keep the
   shape on this page. `make init` and `make bump-bobsim` keep LF and long
   paths in the nested submodules.
@@ -57,8 +51,6 @@ car. See [anti-paths.md](anti-paths.md).
 
 - Put the file in `tests/` and name it `test_<topic>.py`. Do not put tests
   in a study folder or in `tools/`.
-- To test a study, load its `run.py` with `importlib`. See
-  `test_front_ackermann_loads_without_running`.
 - Keep each test fast. Do not compile or run Modelica. Do not run a study.
 - Use small synthetic inputs. Do not put restricted tire data in a test.
 - Write files only under the pytest `tmp_path`. `make unit` fails when
@@ -67,9 +59,9 @@ car. See [anti-paths.md](anti-paths.md).
 
 ## Git in the container
 
-`test_bobsim_pin.py` runs git in the container. In a git worktree, the
-`.git` file of the submodule points to a host path. The container cannot
-see that path. The two tests then skip and show the reason.
+Some tests and `tools/provenance.py` run git in the container. In a git
+worktree, the `.git` file of the submodule points to a host path. The
+container cannot see that path. Those checks then skip and show the reason.
 
 `LHRE_REQUIRE_GIT=1` changes that skip into a failure. CI sets it.
 
@@ -84,17 +76,15 @@ pushes to `main`, every Monday and by hand. It has these jobs.
 
 ### fast
 
-1. Get the BobSim history for the pin check. The checkout gets submodules
-   at depth 1, which does not include `739143a`.
-2. Build the image with the GitHub Actions layer cache. A layer is built
+1. Build the image with the GitHub Actions layer cache. A layer is built
    again only when the BobSim `Dockerfile` or `requirements.txt` changes.
    Only then does CI download from the OpenModelica servers, so an
    OpenModelica outage blocks only a run that changes the image.
-3. Check that BobSim loads the vehicle: `make smoke`.
-4. On a pull request only, check that a changed bundle member has a new
+2. Check that BobSim loads the vehicle: `make smoke`.
+3. On a pull request only, check that a changed bundle member has a new
    `bundle_id`. The step fetches the base branch, then runs
    `make check-vehicle BASE=origin/<base branch>`.
-5. Run the unit and contract tests: `make unit`.
+4. Run the unit and contract tests: `make unit`.
 
 The job runs no Modelica target and no study. `test_ci_contract.py` fails
 if the job runs a `make` target other than `build`, `smoke`, `unit` or
