@@ -25,8 +25,8 @@ VARIABLES = (
     "velX",
     "accX",
     "yawVel",
-    "vcu.acceleratorPedalCmd",
-    "vcu.brakePedalCmd",
+    "vcu.accel_trace",
+    "vcu.brake_trace",
     "vcu.frSteerCmd",
     "vcu.sens_motor_speed",
     "vcu.sens_hv_bus_voltage",
@@ -87,12 +87,12 @@ def _per_tire(name: str, unit: str, variable: str, scale: float = 1.0) -> Panel:
 SECTIONS = (
     Section(
         "Sim to VCU",
-        "BobLib's driver model and plant make these. They are the firmware inputs, except the steer.",
+        "The driver trace, BobLib's steer maneuver and BobLib's plant make these. They are the firmware inputs, except the steer.",
         (
             Panel(
                 "Pedal command",
                 "0 to 1",
-                (("Accelerator", _column("vcu.acceleratorPedalCmd")), ("Brake", _column("vcu.brakePedalCmd"))),
+                (("Accelerator", _column("vcu.accel_trace")), ("Brake", _column("vcu.brake_trace"))),
             ),
             _single("Steer command", "deg", "vcu.frSteerCmd", RAD_TO_DEG),
             _single("Motor speed", "rpm", "vcu.sens_motor_speed", RAD_S_TO_RPM),

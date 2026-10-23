@@ -12,9 +12,10 @@ Run these from `simulation/`. `make vcu-sil` runs Bazel on the host. The
 other two targets run in the container.
 
 ```bash
-make vcu-sil      # build //boards/VCU:libvcu_sil.so and copy it into Resources/Library/
-make bobsim-fw    # build LhreVcu.VehicleSimFw with OMC into out/build/VehicleSimFw/
-make sil          # run a 5 s straight-line case and check it
+make vcu-sil              # build //boards/VCU:libvcu_sil.so and copy it into Resources/Library/
+make bobsim-fw            # build LhreVcu.VehicleSimFw with OMC into out/build/VehicleSimFw/
+make sil                  # run the coast track and check it
+make sil TRACK=launch     # run another track
 ```
 
 Set `BAZEL_ARGS=--config=local` when you have no BuildBuddy key.
@@ -22,7 +23,9 @@ Set `BAZEL_ARGS=--config=local` when you have no BuildBuddy key.
 After a firmware change, run `make vcu-sil sil`. The OMC executable loads
 the library when it starts, so you do not run `make bobsim-fw` again. Run
 `make bobsim-fw` again when `package.mo`, `vehicle/vehicle.yml`, the
-BobSim pin or `tools/build_vehicle_sim_fw.mos` changes.
+BobSim pin or `tools/build_vehicle_sim_fw.mos` changes. A new or changed
+track does not need `make bobsim-fw`, because `make sil` writes the trace
+file at run time.
 
 ## What is in `package.mo`
 
@@ -30,24 +33,34 @@ BobSim pin or `tools/build_vehicle_sim_fw.mos` changes.
 | ----- | ------------ |
 | `VcuSil` | An `ExternalObject`. It holds one firmware instance from `vcu_sil_create` and frees it with `vcu_sil_destroy`. |
 | `vcuSilStep` | An `impure` external C function that calls `vcu_sil_step`. |
-| `FwVCU` | Extends `BobLib.Controllers.StandardVCU`. It sets the drive torque request and the regen limit request from the firmware. |
+| `FwVCU` | Extends `BobLib.Controllers.StandardVCU`. It reads the pedals from a driver trace file. It sets the drive torque request and the regen limit request from the firmware. |
 | `VehicleSimFw` | Extends `BobLib.Experiments.Standards.VehicleSim` and replaces its `vcu` with `FwVCU`. |
 
 ### `FwVCU`
 
-`StandardVCU` has three parts. `FwVCU` replaces only the second:
+`StandardVCU` has three parts:
 
-1. The driver: a speed PI controller and a steer maneuver. It makes the
-   accelerator and brake pedal commands. `FwVCU` keeps it.
+1. The driver: a steer maneuver, and a speed PI controller that makes the
+   pedal commands. `FwVCU` keeps the steer maneuver. It replaces the pedal
+   commands with a driver trace. The speed PI still runs, but its output
+   goes only to `VCUCore` inputs that `VCUCore` does not use.
 2. The torque request from the pedals. `FwVCU` replaces it with the
    firmware output.
 3. `VCUCore`: it applies the torque, power and regen limits and sends the
    command to the inverter. `FwVCU` keeps it.
 
+The driver trace is a `CombiTimeTable` that reads the file
+`driverTraceFile` (default `driver.csv`). The file has a header row and
+three columns: the time (s), the accelerator and the brake (0 to 1). The
+table interpolates linearly and holds the last row after the last time.
+The accelerator and the brake go to the firmware. The brake also goes to
+the mechanical brakes as brake × `mechanicalBrakeTorqueLimit`, because
+`vcu_sil_step` has no brake output.
+
 At each `sample(0, Ts)` event, `FwVCU` sends these values to the firmware:
 
 - the time;
-- the accelerator and brake pedal commands;
+- the accelerator and the brake from the driver trace;
 - the motor speed, with `motorSpeedSign` applied;
 - the HV bus voltage and current.
 
@@ -75,12 +88,52 @@ too. Do this check after each BobSim pin bump.
 
 ## `make sil`
 
+`make sil TRACK=<name>` runs one track. The default is `coast`. The tracks
+are in
+[`tools/vcu_sil_tracks.py`](https://github.com/LonghornRacingElectric/lhre/blob/main/simulation/tools/vcu_sil_tracks.py).
+An unknown name fails and lists the names.
+
+| Track | Start | Stop | Steer | Accelerator |
+| ----- | ----- | ---- | ----- | ----------- |
+| `coast` | 15 m/s | 5 s | Straight | 0 |
+| `launch` | 0 m/s | 3 s | Straight | 0 to 100 % from 0.5 to 0.6 s |
+| `corner-exit` | 10 m/s | 5 s | Sine, 20° handwheel, 0.1 Hz from 0.5 s, peak at 3 s | 0 to 100 % from 3.0 to 3.1 s |
+
+No track uses the brake yet. Until the App has a control law, the
+firmware commands 0 Nm, so the car coasts on every track. With BobSim
+`22c5056`, BobLib `1bd6d78` and vehicle `orion-baseline-1`:
+
+- `coast` goes from 15.000 to 12.227 m/s. This is the same result as
+  before the driver trace, to 5e-8 in every reported variable.
+- `corner-exit` has a peak lateral acceleration (yaw rate × speed) of
+  about 4.4 m/s² at 3 s.
+- On `launch`, the car rolls back to −0.008 m/s in 3 s with no torque and
+  no brake.
+
+### Add a track
+
+Add an entry to `TRACKS`. A track has:
+
+- a start speed, which sets `initialVel`;
+- a stop time;
+- overrides for the `StandardVCU` steer maneuver. Use mode 1, the sine
+  steer. `vcu.steerAmp=0` makes it straight. Modes 0 and 2 have
+  termination monitors that can stop a run early. Mode 3 assumes that the
+  speed PI holds the speed, and in `FwVCU` the PI does not drive the car;
+- pedal points: the time (s), the accelerator and the brake. The times
+  start at 0 s and increase. The pedals are from 0 to 1. For a step, put
+  two points 0.1 s apart.
+
+`make sil` checks the pedal points before it runs. `make unit` checks
+every track.
+
+### What it runs
+
 [`tools/vcu_sil.py`](https://github.com/LonghornRacingElectric/lhre/blob/main/simulation/tools/vcu_sil.py)
-runs the executable in `out/build/VehicleSimFw/` for 5 s with these
-overrides: `vcu.useMode=1` and `vcu.steerAmp=0`. The car then goes
-straight from 15 m/s. Mode 1 is a sine steer, and an amplitude of 0 makes
-it straight. The step mode (2) is not used, because its termination
-monitor stops a run with no steer early.
+writes the pedal points to `out/vcu-sil/<track>/driver.csv`. It then runs
+the executable in `out/build/VehicleSimFw/` with these overrides:
+`initialVel`, the steer overrides of the track and
+`vcu.driverTraceFile`.
 
 The stop time is the `-stopTime` flag, not an override. OMC 1.27 does not
 find `stopTime` in `-override`, so it runs to the build's stop time (10 s).
@@ -94,13 +147,14 @@ OMC does not write them without `-emit_protected`. The filter in
 these flags. When you change `VARIABLES`, you do not run `make bobsim-fw`
 again.
 
-It writes `out/vcu-sil/VehicleSimFw.csv`, `out/vcu-sil/run.log` and
-`out/vcu-sil/report.pdf`. It fails when:
+It writes `driver.csv`, `VehicleSimFw.csv`, `run.log` and `report.pdf`
+into `out/vcu-sil/<track>/`. It fails when:
 
+- the pedal points of the track break a rule in [Add a track](#add-a-track);
 - the executable exits with an error, or `run.log` shows an override that
   the model did not use;
 - the result does not have a variable in `VARIABLES`;
-- the run stops before 5 s;
+- the run stops before the stop time of the track;
 - the torque that reaches `VCUCore` is more than the firmware command. This
   means BobLib's own torque request still reaches the inverter;
 - the firmware commands a torque that is not 0;
@@ -118,13 +172,13 @@ did and what the car did. It has one Letter page for each section below.
 the executable fails or a variable is missing.
 
 The top of page 1 gives OK or FAIL and each failure. Below that are the
-case, the lhre, BobSim and BobLib commits and the first 12 hex digits of
+track and its description, the lhre, BobSim and BobLib commits and the first 12 hex digits of
 the SHA-256 of `libvcu_sil.so`. A commit gets `+dirty` when its checkout
 has changes. Each section has a table and plots against time:
 
 | Section | Shows |
 | ------- | ----- |
-| Sim to VCU | The firmware inputs: the accelerator and brake pedal commands, the motor speed (rpm) and the pack voltage and current. Also the steer command, which does not go to the firmware. |
+| Sim to VCU | The firmware inputs: the accelerator and the brake from the driver trace, the motor speed (rpm) and the pack voltage and current. Also the steer command, which does not go to the firmware. |
 | VCU to plant | The motor torque at three points: the firmware command (`vcu.tau_fw`), after the `VCUCore` limits (`vcu.tau_cmd_limited`) and at the motor (`motor.motor.tau_act`, a first-order lag). Also the firmware regen limit. |
 | Tire slip | For each tire: κ, R0·ω − Vx, Fx and Fz. The table gives these values at the time of the largest \|κ\| of each tire. |
 | Vehicle | The speed, the longitudinal acceleration and the yaw rate. |

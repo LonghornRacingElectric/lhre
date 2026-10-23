@@ -44,7 +44,7 @@ make test    # check that BobSim loads //vehicle, then run the fast tests
 | `make bump-bobsim REF=<ref>` | Move the BobSim pin to a commit, tag or branch |
 | `make vcu-sil` | Build `//boards/VCU:libvcu_sil.so` with Bazel on the host. Copy it into `modelica/LhreVcu/Resources/Library/`. `BAZEL_ARGS=--config=local` builds without BuildBuddy. |
 | `make bobsim-fw` | Build `LhreVcu.VehicleSimFw` with OMC: BobLib `VehicleSim` with the VCU firmware as its VCU. It runs `make records` first and puts the BobLib files back after. |
-| `make sil` | Run `VehicleSimFw` in a 5 s straight line, check the result and write `out/vcu-sil/report.pdf`. See [modelica/LhreVcu](modelica/LhreVcu/README.md). |
+| `make sil TRACK=<name>` | Run `VehicleSimFw` on a driver trace, check the result and write `out/vcu-sil/<name>/report.pdf`. The default track is `coast`, 5 s from 15 m/s with no pedals. See [modelica/LhreVcu](modelica/LhreVcu/README.md#make-sil). |
 | `make clean` | Delete `out/` |
 
 ## Layout

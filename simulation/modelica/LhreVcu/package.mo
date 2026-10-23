@@ -33,17 +33,28 @@ package LhreVcu
   model FwVCU
     extends BobLib.Controllers.StandardVCU(
       motorTorqueRequest(y = tau_fw),
-      regenLimitRequest(y = regen_fw));
+      regenLimitRequest(y = regen_fw),
+      mechanicalBrakeTorqueBusSignal(y = brake_trace*mechanicalBrakeTorqueLimit));
 
     parameter Modelica.Units.SI.Time Ts = 0.1;
+    parameter String driverTraceFile = "driver.csv";
     parameter VcuSil sil = VcuSil();
+    Modelica.Blocks.Sources.CombiTimeTable driverTrace(
+      tableOnFile = true,
+      fileName = driverTraceFile,
+      delimiter = ",",
+      nHeaderLines = 1,
+      columns = {2, 3},
+      extrapolation = Modelica.Blocks.Types.Extrapolation.HoldLastPoint);
+    output Real accel_trace(unit = "1") = driverTrace.y[1];
+    output Real brake_trace(unit = "1") = driverTrace.y[2];
     discrete output Modelica.Units.SI.Torque tau_fw(start = 0, fixed = true);
     discrete output Modelica.Units.SI.Torque regen_fw(start = 0, fixed = true);
   protected
     discrete Integer rc(start = 0, fixed = true);
   algorithm
     when sample(0, Ts) then
-      (tau_fw, regen_fw, rc) := vcuSilStep(sil, time, acceleratorPedalCmd, brakePedalCmd,
+      (tau_fw, regen_fw, rc) := vcuSilStep(sil, time, accel_trace, brake_trace,
         motorSpeedSign*sens_motor_speed, sens_hv_bus_voltage, sens_hv_bus_current);
       assert(rc == 0, "vcu_sil_step returned " + String(rc) + ". See boards/VCU/Sil/README.md for the codes.");
     end when;

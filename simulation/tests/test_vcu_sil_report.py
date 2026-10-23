@@ -105,3 +105,9 @@ def test_write_report_writes_a_pdf_with_one_page_per_section(tmp_path):
     content = report_path.read_bytes()
     assert content.startswith(b"%PDF")
     assert len(re.findall(rb"/Type /Page\b", content)) == len(SECTIONS)
+
+
+def test_pedal_panel_plots_the_driver_trace_that_reaches_the_firmware():
+    pedal_panel = next(panel for panel in SECTIONS[0].panels if panel.name == "Pedal command")
+    row = {"vcu.accel_trace": 0.7, "vcu.brake_trace": 0.2}
+    assert [(label, value(row)) for label, value in pedal_panel.signals] == [("Accelerator", 0.7), ("Brake", 0.2)]

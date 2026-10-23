@@ -29,9 +29,13 @@ The BobSim test takes about 6 s of `make unit`.
 - `test_committed_results.py`: each committed study result is current, or
   its README marks it historical or stale. See
   [studies.md](studies.md#status).
-- `test_vcu_sil.py`: the pass checks, run flags and run details of
-  `make sil` on small synthetic results. They do not run OMC. See
-  [modelica/LhreVcu](../modelica/LhreVcu/README.md#make-sil).
+- `test_vcu_sil.py`: the pass checks, track selection, run flags and run
+  details of `make sil` on small synthetic results. They do not run OMC.
+  See [modelica/LhreVcu](../modelica/LhreVcu/README.md#make-sil).
+- `test_vcu_sil_tracks.py`: every `make sil` track keeps the pedal point
+  rules. `coast` stays the reference run. The trace file has the header
+  row that `FwVCU` skips. See
+  [modelica/LhreVcu](../modelica/LhreVcu/README.md#add-a-track).
 - `test_vcu_sil_report.py`: the variable filter, tables and plots of the
   `make sil` report. See
   [modelica/LhreVcu](../modelica/LhreVcu/README.md#reportpdf).

@@ -1,11 +1,15 @@
 import hashlib
 from pathlib import Path
 
+import pytest
+
 from tools.invalidation import Layout
-from tools.vcu_sil import check_run, missing_variables, read_result, run_provenance, simulation_command
+from tools.vcu_sil import check_run, main, missing_variables, read_result, run_provenance, simulation_command
 from tools.vcu_sil_report import VARIABLES, variable_filter
+from tools.vcu_sil_tracks import TRACKS
 
 STOP = 5.0
+TRACE = Path("/out/driver.csv")
 
 
 def _row(time, tau_fw=0.0, tau_plant=0.0, vel_x=15.0):
@@ -51,14 +55,34 @@ def test_read_result_parses_omc_csv(tmp_path):
 
 
 def test_stop_time_goes_to_its_own_flag_because_omc_ignores_it_as_an_override():
-    command = simulation_command(Path("result.csv"), STOP)
+    command = simulation_command(Path("result.csv"), TRACKS["coast"], TRACE)
     override = next(argument for argument in command if argument.startswith("-override="))
     assert "-stopTime=5.0" in command
     assert "stopTime" not in override
 
 
+def test_simulation_command_overrides_the_start_speed_steer_and_trace_file_of_the_track():
+    command = simulation_command(Path("result.csv"), TRACKS["corner-exit"], TRACE)
+    override = next(argument for argument in command if argument.startswith("-override="))
+    assert override.split("=", 1)[1].split(",") == [
+        "initialVel=10.0",
+        "vcu.useMode=1",
+        "vcu.steerStart=0.5",
+        "vcu.steerFreq=0.1",
+        f"vcu.steerAmp={TRACKS['corner-exit'].steer['vcu.steerAmp']}",
+        "vcu.driverTraceFile=/out/driver.csv",
+    ]
+
+
+def test_unknown_track_fails_and_lists_the_track_names(capsys):
+    with pytest.raises(SystemExit):
+        main(["no-such-track"])
+    error = capsys.readouterr().err
+    assert all(name in error for name in TRACKS)
+
+
 def test_simulation_command_writes_every_report_variable_including_protected_ones():
-    command = simulation_command(Path("result.csv"), STOP)
+    command = simulation_command(Path("result.csv"), TRACKS["coast"], TRACE)
     assert f"-variableFilter={variable_filter()}" in command
     assert "-emit_protected" in command
 

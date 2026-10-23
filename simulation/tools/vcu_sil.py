@@ -1,3 +1,4 @@
+import argparse
 import csv
 import os
 import subprocess
@@ -7,15 +8,13 @@ from pathlib import Path
 
 from tools.invalidation import GitUnavailable, Layout, git, git_root, sha256_file
 from tools.vcu_sil_report import VARIABLES, variable_filter, write_report
+from tools.vcu_sil_tracks import TRACKS, Track, track_errors, write_driver_trace
 
 SIM = Path(__file__).resolve().parents[1]
 BUILD_DIR = SIM / "out/build/VehicleSimFw"
 EXECUTABLE = "LhreVcu.VehicleSimFw"
 LIBRARY_DIR = SIM / "modelica/LhreVcu/Resources/Library"
 OUT_DIR = SIM / "out/vcu-sil"
-STOP_TIME_S = 5.0
-STRAIGHT_LINE = {"vcu.useMode": 1, "vcu.steerAmp": 0}
-CASE = "vcu.useMode=1, vcu.steerAmp=0, 5 s from 15 m/s"
 TORQUE_TOLERANCE_NM = 1e-6
 SPEED_TOLERANCE_M_S = 1e-3
 REJECTED_OVERRIDE_TEXT = ("not possible to override", "not found in model")
@@ -54,12 +53,13 @@ def check_run(rows: list[dict[str, float]], stop_time_s: float) -> list[str]:
     return failures
 
 
-def simulation_command(result_path: Path, stop_time_s: float) -> list[str]:
-    overrides = ",".join(f"{name}={value}" for name, value in STRAIGHT_LINE.items())
+def simulation_command(result_path: Path, track: Track, trace_path: Path) -> list[str]:
+    overrides = {"initialVel": track.initial_speed_m_s, **track.steer, "vcu.driverTraceFile": trace_path}
+    override = ",".join(f"{name}={value}" for name, value in overrides.items())
     return [
         f"./{EXECUTABLE}",
-        f"-override={overrides}",
-        f"-stopTime={stop_time_s}",
+        f"-override={override}",
+        f"-stopTime={track.stop_time_s}",
         f"-r={result_path}",
         "-s=dassl",
         "-jacobian=internalNumerical",
@@ -91,19 +91,21 @@ def run_provenance(layout: Layout, library: Path) -> dict[str, str]:
     }
 
 
-def run_simulation(stop_time_s: float) -> Path:
+def run_simulation(out_dir: Path, track: Track) -> Path:
     executable = BUILD_DIR / EXECUTABLE
     if not executable.is_file():
         raise FileNotFoundError(f"{executable} does not exist. Run make bobsim-fw.")
     if not (LIBRARY_DIR / "libvcu_sil.so").is_file():
         raise FileNotFoundError(f"{LIBRARY_DIR}/libvcu_sil.so does not exist. Run make vcu-sil.")
 
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    result_path = OUT_DIR / "VehicleSimFw.csv"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    trace_path = out_dir / "driver.csv"
+    write_driver_trace(trace_path, track)
+    result_path = out_dir / "VehicleSimFw.csv"
     result_path.unlink(missing_ok=True)
     started = time.monotonic()
     completed = subprocess.run(
-        simulation_command(result_path, stop_time_s),
+        simulation_command(result_path, track, trace_path),
         cwd=BUILD_DIR,
         env={**os.environ, "LD_LIBRARY_PATH": str(LIBRARY_DIR)},
         capture_output=True,
@@ -112,20 +114,31 @@ def run_simulation(stop_time_s: float) -> Path:
     )
     wall_time_s = time.monotonic() - started
     log = completed.stdout + completed.stderr
-    (OUT_DIR / "run.log").write_text(log)
-    print(f"Simulated {stop_time_s:g} s in {wall_time_s:.1f} s wall time. Log: {OUT_DIR / 'run.log'}")
+    (out_dir / "run.log").write_text(log)
+    print(f"Simulated {track.stop_time_s:g} s in {wall_time_s:.1f} s wall time. Log: {out_dir / 'run.log'}")
 
     if completed.returncode != 0:
-        raise RuntimeError(f"{EXECUTABLE} exited with {completed.returncode}. See {OUT_DIR / 'run.log'}.")
+        raise RuntimeError(f"{EXECUTABLE} exited with {completed.returncode}. See {out_dir / 'run.log'}.")
     rejected = [line for line in log.splitlines() if any(text in line for text in REJECTED_OVERRIDE_TEXT)]
     if rejected:
         raise RuntimeError(f"The simulation ignored an override: {rejected[0]}")
     return result_path
 
 
-def main() -> int:
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("track", choices=TRACKS)
+    track_name = parser.parse_args(argv).track
+    track = TRACKS[track_name]
+    errors = track_errors(track)
+    for error in errors:
+        print(f"FAIL: {track_name}: {error}")
+    if errors:
+        return 1
+
+    out_dir = OUT_DIR / track_name
     try:
-        result_path = run_simulation(STOP_TIME_S)
+        result_path = run_simulation(out_dir, track)
     except (FileNotFoundError, RuntimeError) as error:
         print(f"FAIL: {error}")
         return 1
@@ -135,11 +148,14 @@ def main() -> int:
     if missing:
         print(f"FAIL: The result has no {', '.join(missing)}. A BobLib name may have changed.")
         return 1
-    failures = check_run(rows, STOP_TIME_S)
+    failures = check_run(rows, track.stop_time_s)
     for failure in failures:
         print(f"FAIL: {failure}")
-    report_path = OUT_DIR / "report.pdf"
-    run_details = {"Case": CASE, **run_provenance(Layout.default(), LIBRARY_DIR / "libvcu_sil.so")}
+    report_path = out_dir / "report.pdf"
+    run_details = {
+        "Track": f"{track_name}: {track.description}",
+        **run_provenance(Layout.default(), LIBRARY_DIR / "libvcu_sil.so"),
+    }
     write_report(report_path, rows, failures, run_details)
     print(f"Report: {report_path}")
     if failures:
@@ -152,4 +168,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))
