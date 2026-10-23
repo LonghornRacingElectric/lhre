@@ -1,5 +1,6 @@
 """Scoring and the mission's lap latch must agree with an analytic fixed gate."""
 
+import math
 import time
 
 from geometry_msgs.msg import PoseStamped
@@ -16,12 +17,16 @@ SQUARE = [(0., 0.), (10., 0.), (10., 10.), (0., 10.)]
 
 def reference(points=SQUARE):
     result = MarkerArray()
-    for namespace, shift, base in [('left_cones', -.5, 0), ('right_cones', .5, 10000)]:
+    for namespace, shift, base in [('left_cones', 4., 0), ('right_cones', -4., 10000)]:
         for index, (x, y) in enumerate(points):
+            before, after = points[index-1], points[(index+1) % len(points)]
+            dx, dy = after[0]-before[0], after[1]-before[1]
+            length = math.hypot(dx, dy) or 1.
             marker = Marker()
             marker.header.frame_id = 'map'
             marker.ns, marker.id = namespace, base + index
-            marker.pose.position.x, marker.pose.position.y = x, y + shift
+            marker.pose.position.x = x - shift*dy/length
+            marker.pose.position.y = y + shift*dx/length
             result.markers.append(marker)
     return result
 
@@ -196,4 +201,67 @@ def test_telemetry_gap_ends_the_run_with_a_failure(metrics):
     assert metrics.finished
     assert metrics._outcome == 'invalid_lap'
     assert metrics._lap.invalid_reason == 'odometry_gap'
+    assert metrics.finalize() == 1
+
+
+@pytest.mark.parametrize('metrics', [{'truth_odom_topic': '/test/truth'}], indirect=True)
+def test_ready_estimates_do_not_dilute_driving_error(metrics):
+    metrics._reference_cb(reference())
+    metrics._status_cb(String(data='READY'))
+    for stamp in (1., 2., 3.):
+        metrics._truth_cb(odom(0., 0., stamp, speed=0.))
+        metrics._odom_cb(odom(0., 0., stamp, speed=0.))
+    assert metrics._err_samples == 0
+    metrics._status_cb(String(data='DRIVING'))
+    metrics._truth_cb(odom(0., 0., 4.))
+    metrics._odom_cb(odom(1., 0., 4.))
+    assert metrics._err_samples == 1
+    assert metrics._build_row()['mean_pos_error'] == '1.0000'
+
+
+def lane_reference(half_width=1.75):
+    message = MarkerArray()
+    for namespace, side in [('left_cones', 1), ('right_cones', -1)]:
+        for index, x in enumerate((-10., 1., 20.)):
+            marker = Marker()
+            marker.header.frame_id = 'map'
+            marker.ns, marker.id = namespace, index
+            marker.pose.position.x, marker.pose.position.y = x, side*half_width
+            message.markers.append(marker)
+    return message
+
+
+@pytest.mark.parametrize('metrics', [{'reference_closed': 'false', 'mission': 'acceleration'}],
+                         indirect=True)
+def test_low_cte_cannot_hide_vehicle_crossing_boundary_or_hitting_a_cone(metrics):
+    metrics._reference_cb(lane_reference())
+    metrics._odom_cb(odom(0., 1., 10.))
+    assert metrics.finished and not metrics._lap_completed
+    row = metrics._build_row()
+    assert row['lap_invalid_reason'] == 'vehicle_off_course'
+    assert float(row['max_cte']) == 1.  # Below the former 2 m point threshold.
+    assert row['off_track_count'] == row['cones_hit'] == '1'
+    assert row['cone_hit_ids'] == 'left_cones/1'
+    assert row['course_sha256']
+    assert metrics.finalize() == 1
+
+
+@pytest.mark.parametrize('metrics', [{'reference_closed': 'false', 'mission': 'acceleration'}],
+                         indirect=True)
+def test_orange_contact_between_samples_prevents_a_clean_finish(metrics):
+    message = lane_reference(half_width=4.)
+    marker = Marker()
+    marker.header.frame_id = 'map'
+    marker.ns, marker.id, marker.text = 'start_finish', 42, 'orange_large'
+    marker.pose.position.x = 2.
+    message.markers.append(marker)
+    metrics._reference_cb(message)
+    metrics._odom_cb(odom(-2., 0., 10.))
+    metrics._odom_cb(odom(5., 0., 10.5))
+    metrics._status_cb(String(data='FINISHED'))
+    row = metrics._build_row()
+    assert row['outcome'] == 'invalid_lap'
+    assert row['lap_invalid_reason'] == 'cone_contact'
+    assert row['cones_hit'] == '1'
+    assert row['off_track_count'] == '0'
     assert metrics.finalize() == 1

@@ -832,7 +832,7 @@ its limits.
 
 | Param | Default | Description |
 |-------|---------|-------------|
-| `off_track_threshold` | `2.0` | CTE above this (m) counts as off-track |
+| `off_track_threshold` | `2.0` | Legacy progress-continuity scale (m); whole-vehicle validity uses truth cone boundaries |
 | `start_radius` | `2.0` | Fixed crossing-gate half-width (m) |
 | `reference_world` | empty | Generated SDF truth source; MVS otherwise latches complete scene cones, Gazebo selects its actual world |
 | `reference_closed` | mission/style dependent in launch | False for acceleration, true for circuits; explicit overrides supported |
@@ -936,7 +936,13 @@ Use the [driving study runner](src/lhr_demo/README.md#repeatable-driving-studies
 to compare vehicle plants and perception conditions across seeds and speeds.
 Motion distortion and solid trackside clutter are opt-in MVS launch settings.
 
-Estimator error columns (`mean_pos_error`, `max_pos_error`, `mean_yaw_error`) are appended and stay blank without a truth topic.
+Estimator error columns (`mean_pos_error`, `max_pos_error`, `mean_yaw_error`)
+exclude the READY hold and stay blank without a truth topic. Course validity
+checks a conservative YAML vehicle envelope against truth boundaries and nominal
+cone bases, including a padded translation/yaw sweep between continuous samples.
+Rows include `course_sha256`, `footprint_model`, `sweep_step_m`, `cones_hit` and
+`cone_hit_ids`; see [metrics](src/lhr_metrics/README.md#footprint-boundaries-and-contacts)
+for the contact model and off-track-distance uncertainty.
 
 ### lhr_safety (safety_node)
 

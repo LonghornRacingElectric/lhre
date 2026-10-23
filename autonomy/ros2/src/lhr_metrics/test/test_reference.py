@@ -81,7 +81,7 @@ def test_diagonal_shortcut_is_rejected_even_when_endpoints_are_on_course():
     lap = CircuitProgress(ReferenceTrack(SQUARE))
     lap.observe(10., 0., 10., 5.)
     assert not lap.observe(0., 10., 10.5, 5.)
-    assert lap.invalid_reason == 'off_course_or_discontinuous_progress'
+    assert lap.invalid_reason == 'off_course'
 
 
 def test_waiting_and_paused_time_cannot_complete_a_lap():
@@ -140,7 +140,7 @@ def test_jump_to_a_nearby_but_distant_course_section_is_rejected():
     lap = CircuitProgress(track)
     lap.observe(5., 0., 10., 5.)
     lap.observe(5., .5, 10.1, 5.)
-    assert lap.invalid_reason == 'off_course_or_discontinuous_progress'
+    assert lap.invalid_reason == 'discontinuous_progress'
 
 
 def test_progress_after_the_crossing_cannot_make_an_incomplete_lap_pass():
@@ -189,3 +189,20 @@ def test_acceleration_reference_includes_orange_gates_and_stopping_lane(tmp_path
     assert track.length == 157.
     assert track.project(110., 0.)[0] == 0.
     assert track.points[-1] == (150., 0.)
+
+
+def test_world_contact_geometry_keeps_orange_cones_and_yaw_outside_circuit_reference(tmp_path):
+    from lhr_metrics.reference import world_geometry
+    world = tmp_path / 'contact.sdf'
+    includes = []
+    for color, side in (('blue', 1.), ('yellow', -1.)):
+        for index, (x, y) in enumerate(SQUARE):
+            includes.append(f'<include><name>cone_{color}_{index}</name>'
+                            f'<pose>{x} {y+side} 0 0 0 0</pose></include>')
+    includes.append('<include><name>cone_orange_large_42</name>'
+                    '<pose>99 99 0 0 0 0.7</pose></include>')
+    world.write_text('<sdf><world>' + ''.join(includes) + '</world></sdf>')
+    left, right, cones = world_geometry(world)
+    assert paired_centerline(left, right) == SQUARE
+    assert len(cones) == 9
+    assert cones[-1] == ('cone_orange_large_42', 99., 99., .7, 'orange_large')
