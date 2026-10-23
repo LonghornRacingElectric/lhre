@@ -154,10 +154,13 @@ def _launch_sim(context):
         tangent = centers[(index + 1) % len(centers)] - centers[index - 1]
         yaw = math.atan2(float(tangent[1]), float(tangent[0]))
     plant = value('plant')
-    if plant not in ('kinematic', 'bobsim'):
-        raise ValueError('plant must be kinematic or bobsim')
+    if plant not in ('kinematic', 'bobsim', 'fmu'):
+        raise ValueError('plant must be kinematic, bobsim or fmu')
     extra = ({'max_accel': float(value('max_accel')),
               'max_decel': float(value('max_decel'))} if plant == 'bobsim' else {})
+    if plant == 'fmu':
+        extra = {'fmu_path': ParameterValue(value('fmu_path'), value_type=str),
+                 'pedal_gain': float(value('fmu_pedal_gain'))}
     use_ekf = value('estimator') == 'ekf'
     if value('estimator') not in ('truth', 'ekf'):
         raise ValueError('estimator must be truth or ekf')
@@ -351,7 +354,9 @@ def generate_launch_description():
         DeclareLaunchArgument('clutter_profile', default_value='none',
                               choices=['none', 'trackside']),
         DeclareLaunchArgument(
-            'plant', default_value='kinematic', choices=['kinematic', 'bobsim']),
+            'plant', default_value='kinematic', choices=['kinematic', 'bobsim', 'fmu']),
+        DeclareLaunchArgument('fmu_path', default_value=''),
+        DeclareLaunchArgument('fmu_pedal_gain', default_value='0.1'),
         perception_arg,
         gates_arg,
         stack_arg,
@@ -537,6 +542,7 @@ def generate_launch_description():
             'motion_distortion': _b('motion_distortion'),
             'clutter_profile': _s('clutter_profile'),
             'plant': _s('plant'),
+            'fmu_pedal_gain': _f('fmu_pedal_gain'),
             'fov_deg': _f('fov_deg'),
             'max_range_m': _f('max_range_m'),
             'noise_std_m': _f('noise_std_m'),

@@ -22,6 +22,7 @@ three years after everyone who made the decision graduated.
 | [011](011-bazel-owned-telemetry-images.md) | Bazel owns every telemetry stack image; Compose only runs loaded tags | Accepted |
 | [012](012-simulation-outside-bazel.md) | Simulation runs BobSim in Docker, outside Bazel | Accepted |
 | [013](013-driveday-viewer-outside-bazel.md) | The drive day viewer is a local Next.js app, outside Bazel | Accepted |
+| [014](014-fmu-artifact-boundary.md) | Identified full-vehicle FMU artifact for autonomy | Accepted |
 
 ## ADRs vs. READMEs
 
