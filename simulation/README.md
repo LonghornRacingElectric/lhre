@@ -55,6 +55,7 @@ simulation/
   bobsim/             # submodule, pinned SHA
   studies/<name>/     # README.md + run.py
   tools/              # make smoke, make car, study provenance, README fill and shared study helpers
+  tools/              # make smoke, vehicle and bundle checks, anti records, study helpers
   tests/              # make unit: fast unit and contract tests
   docs/               # detail and agent skills
   out/                # gitignored outputs

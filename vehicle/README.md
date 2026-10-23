@@ -55,18 +55,24 @@ container.
    committed, with LF line ends. A source file outside git records the
    hash of its own bytes and `stored: external`. The check cannot read it.
 2. The tires that `vehicle.yml` loads are the bundle tires, byte for byte.
-3. BobSim loads `vehicle.yml`. BobSim at this pin has no vehicle validator.
-   The check says so in its output. It runs the validator when a later pin
-   has `common.vehicle_schema`.
-4. A `draft` or `candidate` bundle can hold `assumed`, `guessed` and
+3. `tools/vehicle_checks.py` checks `vehicle.yml` against the bundle
+   `frame`. It checks units (key suffix and plausible range), that every
+   hardpoint exists, that every stored point is on the left side (y > 0),
+   the mirror rule, the datum declaration and singular geometry: a
+   zero-length member, a ball joint on its hinge axis, a tie rod with no
+   steering arm and wishbones that do not locate the upright. Each failure
+   names the key path, for example `vehicle:rear.suspension.lower_aft_i_m`.
+   The output also gives the datum status of each axle.
+4. BobSim loads `vehicle.yml`.
+5. A `draft` or `candidate` bundle can hold `assumed`, `guessed` and
    `unavailable` entries. The check lists them. A pass ends with
    `candidate: software checks passed. Not hardware approval.`
-5. A `released` bundle needs `release.approved_by`, `release.decision_ref`
+6. A `released` bundle needs `release.approved_by`, `release.decision_ref`
    and `release.date`. Every entry must be `measured`, `cad_export` or
    `declared`. Only `vehicle/vehicle.yml` can be released.
-6. An axle source of kind `hand-entered` must be `guessed`. A hand
+7. An axle source of kind `hand-entered` must be `guessed`. A hand
    transcription of hardpoints therefore cannot be released.
-7. With `BASE=<git ref>`, the check fails when a member hash changed and the
+8. With `BASE=<git ref>`, the check fails when a member hash changed and the
    `bundle_id` did not. A released bundle can only change to `superseded`.
    In a git worktree, the container cannot read the `.git` link. Run a
    `BASE=` check in a normal clone. CI runs it on a pull request, against
