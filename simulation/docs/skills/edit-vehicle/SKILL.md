@@ -34,6 +34,9 @@ description: Change a parameter of the current car in vehicle/vehicle.yml, updat
    make check-vehicle BASE=origin/main
    ```
 
+   `make check-vehicle` checks units, hardpoints, the stored side and
+   singular geometry. A failure names the key path. Fix the value. Do not
+   remove the check.
    `make test` must print `OK`. `make check-vehicle` must end with
    `candidate: software checks passed. Not hardware approval.` In a git
    worktree, leave out `BASE=`. CI runs that part on a pull request.
@@ -43,6 +46,10 @@ description: Change a parameter of the current car in vehicle/vehicle.yml, updat
    `make study S=<name>`, or mark its README historical. See
    [studies.md](../../studies.md#status). `make unit` fails until you do.
 6. If you changed wheelbase, track, mass or CG, find the same number in
+4. If the change affects the Modelica tier, run
+   `make car T=standard-build`. The build must pass. `make car` restores
+   `bobsim/` after the build.
+5. If you changed wheelbase, track, mass or CG, find the same number in
    `autonomy/ros2/src/lhr_vehicle/config/vehicle.yaml`. That file is a
    separate copy. Tell the user. Do not change it unless they ask. The
    autonomy team owns it.

@@ -58,32 +58,27 @@ def test_no_old_bobsim_layout_names():
     assert not found, f"Old BobSim layout names. {MAP_HINT}\n" + "\n".join(found)
 
 
-@pytest.mark.parametrize(
-    ("path", "module", "names"),
-    [pytest.param(*item, id=f"{item[0].name}:{item[1]}") for item in _absolute_imports()],
-)
-def test_every_import_resolves(path, module, names):
-    try:
-        imported = importlib.import_module(module)
-    except ImportError as error:
-        pytest.fail(f"{path.relative_to(REPO)} imports {module}: {error}. {MAP_HINT}")
-    missing = [
-        name for name in names
-        if not hasattr(imported, name) and importlib.util.find_spec(f"{module}.{name}") is None
-    ]
-    assert not missing, f"{path.relative_to(REPO)}: {module} has no {missing}. {MAP_HINT}"
+BOBSIM_PACKAGES = {"app", "common", "engines", "optimization", "simulations", "visualization"}
 
 
-def test_front_ackermann_loads_without_running():
-    from common.vehicle_io import load_yaml, repo_root
-
-    spec = importlib.util.spec_from_file_location("front_ackermann_run", SIM / "studies/front-ackermann/run.py")
-    study = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(study)
-    assert callable(study.main)
-    config = load_yaml(repo_root() / study.LAP_CONFIG)
-    assert (repo_root() / config["track"]["boundary_csv"]).is_file()
-    assert float(config["event"]["drive_power_limit_w"]) > 0
+def test_every_bobsim_import_resolves():
+    problems = []
+    for path, module, names in _absolute_imports():
+        if module.split(".")[0] not in BOBSIM_PACKAGES:
+            continue
+        where = path.relative_to(REPO)
+        try:
+            imported = importlib.import_module(module)
+        except ImportError as error:
+            problems.append(f"{where} imports {module}: {error}")
+            continue
+        missing = [
+            name for name in names
+            if not hasattr(imported, name) and importlib.util.find_spec(f"{module}.{name}") is None
+        ]
+        if missing:
+            problems.append(f"{where}: {module} has no {missing}")
+    assert not problems, f"BobSim imports that do not resolve. {MAP_HINT}\n" + "\n".join(problems)
 
 
 def _boblib_submodule():

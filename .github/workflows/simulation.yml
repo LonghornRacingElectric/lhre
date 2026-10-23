@@ -14,7 +14,14 @@ on:
       - "vehicle/**"
       - ".gitmodules"
       - ".github/workflows/simulation.yml"
+  schedule:
+    - cron: "23 7 * * 1"
   workflow_dispatch:
+    inputs:
+      full_regeneration:
+        description: Also run every standard evaluation on our car
+        type: boolean
+        default: false
 
 jobs:
   fast:
@@ -30,11 +37,17 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Get the BobSim history for the pin check
-        run: test "$(git -C bobsim rev-parse --is-shallow-repository)" = false || git -C bobsim fetch --unshallow --no-recurse-submodules origin
+      - uses: docker/setup-buildx-action@v3
 
       - name: Build the image
-        run: make build
+        uses: docker/build-push-action@v6
+        with:
+          context: simulation/bobsim
+          file: simulation/bobsim/Dockerfile
+          tags: lhre-simulation:local
+          load: true
+          cache-from: type=gha,scope=lhre-simulation
+          cache-to: type=gha,mode=max,scope=lhre-simulation
 
       - name: Check that BobSim loads the vehicle
         run: make smoke
@@ -47,3 +60,108 @@ jobs:
 
       - name: Run the unit and contract tests
         run: make unit
+
+  changes:
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    outputs:
+      car: ${{ steps.check.outputs.car }}
+    steps:
+      - name: Look for changes to the car, the BobSim pin or the wrapper
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[].filename')
+          else
+            files=$(gh api "repos/$GITHUB_REPOSITORY/compare/$BEFORE...$GITHUB_SHA" --jq '.files[].filename')
+          fi
+          paths='^(vehicle/|simulation/bobsim$|simulation/tools/|simulation/Makefile$|simulation/docker-compose\.yml$|\.github/workflows/simulation\.yml$)'
+          if grep -qE "$paths" <<< "$files"; then
+            echo "car=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "car=false" >> "$GITHUB_OUTPUT"
+            echo "No change to the car, the BobSim pin or the wrapper. Skipping the FourPost check."
+          fi
+
+  four-post:
+    needs: changes
+    if: ${{ !cancelled() && github.event_name != 'schedule' && needs.changes.outputs.car != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: simulation
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Build the image
+        run: make build
+
+      - name: Run FourPost on our car
+        run: make car T=standard-eval-four-post
+
+      - name: Check the FourPost acceptance
+        run: make four-post-acceptance T=standard-eval-four-post
+
+      - name: Upload the run record
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: four-post-${{ github.run_id }}
+          if-no-files-found: warn
+          path: |
+            simulation/out/car/*/identity.json
+            simulation/out/car/*/four_post_acceptance.json
+            simulation/out/car/*/vehicle.yml
+            simulation/out/car/*/*.log
+            simulation/out/car/*/generated_results/*metrics*
+            simulation/out/car/*/runs/*/*/manifest.json
+            simulation/out/car/*/runs/*/*/overrides.txt
+            simulation/out/car/*/runs/*/*/run.log
+            simulation/out/car/*/runs/*/*/*_res.csv
+            !simulation/out/car/**/*.tir
+
+  full-regeneration:
+    if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_regeneration) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    defaults:
+      run:
+        working-directory: simulation
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Build the image
+        run: make build
+
+      - name: Run every standard evaluation on our car
+        run: make car T=standard-eval-all
+
+      - name: Check the FourPost acceptance
+        run: make four-post-acceptance T=standard-eval-all
+
+      - name: Upload the run record
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: full-regeneration-${{ github.run_id }}
+          if-no-files-found: warn
+          path: |
+            simulation/out/car/*/identity.json
+            simulation/out/car/*/four_post_acceptance.json
+            simulation/out/car/*/vehicle.yml
+            simulation/out/car/*/*.log
+            simulation/out/car/*/generated_results/*metrics*
+            simulation/out/car/*/runs/*/*/manifest.json
+            simulation/out/car/*/runs/*/*/overrides.txt
+            simulation/out/car/*/runs/*/*/run.log
+            !simulation/out/car/**/*.tir

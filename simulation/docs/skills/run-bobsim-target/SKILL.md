@@ -14,31 +14,31 @@ description: Run a BobSim make target (standard evaluation, envelope, lap sim, s
    ```
 
 2. Pick the target. See the tier table in [bobsim.md](../../bobsim.md#tiers).
-3. If the target is in the high-fidelity tier, write our vehicle into the
-   Modelica records, then build:
+3. Run the target on our car:
 
    ```bash
-   make records
-   make bobsim T=standard-build
+   make car T=<target>
    ```
 
-4. Run the target:
+   `make car` writes our records, installs `vehicle/vehicle.yml` as
+   `bobsim/vehicle.yml`, runs the target and restores `bobsim/`. See
+   [bobsim.md](../../bobsim.md#run-a-bobsim-target-on-our-car). Some
+   targets take up to two hours. Run them in the background.
+4. For FourPost, check the outputs:
 
    ```bash
-   make bobsim T=<target>
+   make four-post-acceptance T=standard-eval-four-post
    ```
 
-   Some targets take up to two hours. Run them in the background.
-5. Find the outputs. BobSim writes them inside `bobsim/`, for example
-   `bobsim/simulations/mbd/generated_results/`. Copy what you need to
-   `out/`. Do not commit them.
+   Report each `UNAVAILABLE` check with the result. It is not a pass.
+5. Find the outputs in `out/car/<target>/`. `identity.json` names the
+   commits, the vehicle sha256 and the image. Do not commit them.
 
 ## Limits
 
-- BobSim targets use `bobsim/vehicle.yml`, not `vehicle/vehicle.yml`, until
-  BobSim reads `BOBSIM_VEHICLE`. Tell the user this when you give a result.
-  For a result on our vehicle, write a study instead. See
-  [add-study](../add-study/SKILL.md).
-- `make records` changes files inside the submodule. Run
-  `make records-undo` before a BobSim bump.
-- Say which BobSim SHA gave the result: `git -C bobsim rev-parse --short HEAD`.
+- `make bobsim T=<target>` runs BobSim's own car, not ours. Use it only
+  for BobSim's car. Tell the user which car gave a result.
+- `make car` fails if `bobsim/` has local changes. If an earlier run
+  stopped early, run `git -C bobsim checkout -- vehicle.yml` and
+  `make records-undo`.
+- Say which BobSim SHA gave the result. It is in `identity.json`.
