@@ -200,24 +200,35 @@ def test_a_hub_motor_uses_the_contact_patch_path():
     assert (drive["coeff_method"], drive["coeff_n_per_n"]) == ("contact_patch_path", rear.values["contact_patch_path"])
 
 
-def test_the_committed_bundle_gives_unavailable_records():
+def test_the_committed_bundle_records():
     records = ap.anti_records(VEHICLE, BUNDLE)
     assert [(record["axle"], record["source"]) for record in records] == [
         (axle, source) for axle in ("front", "rear") for source in ("drive", "hydraulic_brake", "regen")
     ]
     parts = [VEHICLE["sprung_mass"], VEHICLE["driver_mass"]]
     h_m = sum(p["mass_kg"] * p["cg_m"][2] for p in parts) / sum(p["mass_kg"] for p in parts)
+    reactions = {("front", "drive"): "chassis", ("rear", "drive"): "chassis",
+                 ("front", "hydraulic_brake"): "upright", ("rear", "hydraulic_brake"): "chassis"}
     for record in records:
         assert tuple(record) == C5_KEYS
-        assert (record["status"], record["reaction"]) == ("unavailable", "unknown")
-        assert record["coeff_n_per_n"] is None and record["pct"] is None and record["coeff_method"] is None
-        assert "is unavailable in the bundle" in record["reason"]
         assert record["h_basis"] == "sprung_and_driver_cg_z"
         assert record["h_m"] == pytest.approx(h_m)
         assert record["wheelbase_m"] == pytest.approx(1.5494)
         assert record["normalization"] == "per_axle_force"
+        key = (record["axle"], record["source"])
+        if record["source"] == "regen":
+            assert (record["status"], record["reaction"]) == ("unavailable", "unknown")
+            assert record["coeff_n_per_n"] is None and record["pct"] is None
+            continue
+        assert (record["status"], record["reaction"]) == ("partial", reactions[key])
+        assert record["coeff_n_per_n"] is not None and record["pct"] is None
+        assert "pct is withheld" in record["reason"]
+    rear_drive = _record(records, "rear", "drive")
+    rear_brake = _record(records, "rear", "hydraulic_brake")
+    assert rear_brake["coeff_n_per_n"] == pytest.approx(rear_drive["coeff_n_per_n"])
+    assert _record(records, "front", "hydraulic_brake")["coeff_method"] == "contact_patch_path"
     assert _record(records, "front", "hydraulic_brake")["axle_force_share"] == pytest.approx(0.84)
-    assert _record(records, "rear", "drive")["axle_force_share"] == 1.0
+    assert rear_drive["axle_force_share"] == 1.0
 
 
 def test_an_unavailable_datum_withholds_pct_but_not_the_coefficient():
@@ -249,7 +260,7 @@ def test_records_carry_the_c5_contract():
         assert "Jacking +Fz lifts the body" in record["sign_convention"]
         assert record["pct"] == pytest.approx(ap.anti_percent(record["axle"], record["coeff_n_per_n"], H, L))
     assert _record(records, "front", "drive")["reason"] == (
-        "torque_topology.drive.front_share is assumed. The axle force share is 0. The value is geometric only."
+        "The axle force share is 0. The value is geometric only."
     )
     assert _record(records, "rear", "hydraulic_brake")["axle_force_share"] == pytest.approx(0.16)
 

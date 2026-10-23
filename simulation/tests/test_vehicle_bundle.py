@@ -152,7 +152,7 @@ def test_released_needs_the_approval_record(root):
     assert ("axles.front.revision", "release_blocked") in codes
     assert ("frame.datum_z.rear", "release_blocked") in codes
     assert ("members.tires[0].license", "release_blocked") in codes
-    assert ("torque_topology.drive.reaction", "release_blocked") in codes
+    assert ("torque_topology.regen.reaction", "release_blocked") in codes
 
 
 def test_released_passes_when_every_leaf_is_release_grade(root):
