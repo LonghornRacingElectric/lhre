@@ -5,6 +5,7 @@ import pytest
 from matplotlib.text import Text
 
 from tools.vcu_sil_report import (
+    MAX_DRIVE_TORQUE_NM,
     SECTIONS,
     TIRES,
     VARIABLES,
@@ -105,6 +106,12 @@ def test_write_report_writes_a_pdf_with_one_page_per_section(tmp_path):
     content = report_path.read_bytes()
     assert content.startswith(b"%PDF")
     assert len(re.findall(rb"/Type /Page\b", content)) == len(SECTIONS)
+
+
+def test_motor_torque_panel_plots_the_driver_demand_from_the_accelerator_the_firmware_got():
+    torque_panel = next(panel for section in SECTIONS for panel in section.panels if panel.name == "Motor torque")
+    demand = dict(torque_panel.signals)["Driver demand"]
+    assert demand({"vcu.accel_fw": 0.5}) == pytest.approx(0.5 * MAX_DRIVE_TORQUE_NM)
 
 
 def test_pedal_panel_plots_the_driver_trace_that_reaches_the_firmware():

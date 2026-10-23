@@ -16,6 +16,7 @@ make vcu-sil              # build //boards/VCU:libvcu_sil.so and copy it into Re
 make bobsim-fw            # build LhreVcu.VehicleSimFw with OMC into out/build/VehicleSimFw/
 make sil                  # run the coast track and check it
 make sil TRACK=launch     # run another track
+make sil TRACK=launch TC=off  # the same track with traction control off
 ```
 
 Set `BAZEL_ARGS=--config=local` when you have no BuildBuddy key.
@@ -31,7 +32,7 @@ file at run time.
 
 | Class | What it does |
 | ----- | ------------ |
-| `VcuSil` | An `ExternalObject`. It holds one firmware instance from `vcu_sil_create` and frees it with `vcu_sil_destroy`. |
+| `VcuSil` | An `ExternalObject`. It holds one firmware instance from `vcu_sil_create(tractionControl)` and frees it with `vcu_sil_destroy`. |
 | `vcuSilStep` | An `impure` external C function that calls `vcu_sil_step`. |
 | `FwVCU` | Extends `BobLib.Controllers.StandardVCU`. It reads the pedals from a driver trace file. It sets the drive torque request and the regen limit request from the firmware. |
 | `VehicleSimFw` | Extends `BobLib.Experiments.Standards.VehicleSim` and replaces its `vcu` with `FwVCU`. |
@@ -60,7 +61,8 @@ the mechanical brakes as brake × `mechanicalBrakeTorqueLimit`, because
 At each `sample(0, Ts)` event, `FwVCU` sends these values to the firmware:
 
 - the time;
-- the accelerator and the brake from the driver trace;
+- the accelerator and the brake from the driver trace. `accel_fw` holds
+  the accelerator that the firmware got;
 - the motor speed, with `motorSpeedSign` applied;
 - the HV bus voltage and current.
 
@@ -73,11 +75,16 @@ The firmware is called only at sample events, because its clock cannot go
 back. DASSL evaluates continuous equations at trial times and then goes
 back.
 
-`Ts` is 0.1 s. That is the period of the App's `VcuStatus`, so a smaller
-`Ts` does not change the command today. Each sample event restarts DASSL
-and costs time. In a 5 s run, `Ts = 0.01` s took 232 s and `Ts = 0.1` s
-took 48 s. The final speeds were the same to 4e-8 m/s. Make `Ts` smaller
-when the App sends its command faster.
+`Ts` is 0.01 s. The App runs its control step on each call, over the
+measured time since the last call. Traction control differentiates the
+motor speed over that step, so `Ts` sets what it sees. The car runs the
+control step every 3 ms. Each sample event restarts DASSL and costs time.
+With zero torque on `coast` (5 s), `Ts = 0.01` s took 232 s and
+`Ts = 0.1` s took 48 s. A `Ts` of 0.003 s would match the car but cost
+more again.
+
+`tractionControl` (default `true`) goes to `vcu_sil_create`. `false` runs
+the App with traction control off, for a baseline.
 
 ### `VehicleSimFw`
 
@@ -88,8 +95,8 @@ too. Do this check after each BobSim pin bump.
 
 ## `make sil`
 
-`make sil TRACK=<name>` runs one track. The default is `coast`. The tracks
-are in
+`make sil TRACK=<name>` runs one track. The default is `coast`.
+`TC=off` runs it with traction control off. The tracks are in
 [`tools/vcu_sil_tracks.py`](https://github.com/LonghornRacingElectric/lhre/blob/main/simulation/tools/vcu_sil_tracks.py).
 An unknown name fails and lists the names.
 
@@ -99,16 +106,37 @@ An unknown name fails and lists the names.
 | `launch` | 0 m/s | 3 s | Straight | 0 to 100 % from 0.5 to 0.6 s |
 | `corner-exit` | 10 m/s | 5 s | Sine, 20° handwheel, 0.1 Hz from 0.5 s, peak at 3 s | 0 to 100 % from 3.0 to 3.1 s |
 
-No track uses the brake yet. Until the App has a control law, the
-firmware commands 0 Nm, so the car coasts on every track. With BobSim
-`22c5056`, BobLib `1bd6d78` and vehicle `orion-baseline-1`:
+No track uses the brake yet. Results with BobSim `22c5056`, BobLib
+`1bd6d78`, vehicle `orion-baseline-1` and `Ts = 0.01` s:
 
-- `coast` goes from 15.000 to 12.227 m/s. This is the same result as
-  before the driver trace, to 5e-8 in every reported variable.
-- `corner-exit` has a peak lateral acceleration (yaw rate × speed) of
-  about 4.4 m/s² at 3 s.
-- On `launch`, the car rolls back to −0.008 m/s in 3 s with no torque and
-  no brake.
+| Track | TC | Speed at stop | Peak rear κ | Cut rows |
+| ----- | -- | ------------- | ----------- | -------- |
+| `coast` | on | 12.227 m/s | 0.000 | — |
+| `launch` | on | 25.84 m/s | 0.046 | 202 of 407 |
+| `launch` | off | 27.82 m/s | 0.055 | 0 of 407 |
+| `corner-exit` | on | 27.70 m/s | 0.065 | 113 of 193 |
+| `corner-exit` | off | 28.95 m/s | 0.073 | 0 of 193 |
+
+Cut rows are the result rows at full accelerator where the firmware
+commands less than 230 Nm.
+
+- `coast` commands 0 Nm. Its speed is the same as before traction
+  control.
+- With TC off, the peak rear Fx/Fz is 2.0 on `launch` and 2.3 on
+  `corner-exit`. Fx/Fz still increases with κ, so the rear tires may
+  still be below their peak slip.
+- TC cuts torque on these runs anyway. The #298 threshold is 30 rad/s²
+  at the motor shaft. With no slip, this is 30 × 0.2045 m / 3.31 =
+  1.85 m/s² of vehicle acceleration. At full accelerator, the shaft
+  accelerates at 150 to 185 rad/s² on average.
+- The trim gets to its 50 Nm limit in one control step. It resets when
+  one step measures less than 30 rad/s². The motor speed oscillates, so
+  the command switches between 180 and 230 Nm. Page 2 of the report
+  shows this.
+- TC lowers the speed at the stop time by 1.98 m/s on `launch` and by
+  1.25 m/s on `corner-exit`.
+
+Retune traction control before you use these results for the car.
 
 ### Add a track
 
@@ -132,8 +160,10 @@ every track.
 [`tools/vcu_sil.py`](https://github.com/LonghornRacingElectric/lhre/blob/main/simulation/tools/vcu_sil.py)
 writes the pedal points to `out/vcu-sil/<track>/driver.csv`. It then runs
 the executable in `out/build/VehicleSimFw/` with these overrides:
-`initialVel`, the steer overrides of the track and
-`vcu.driverTraceFile`.
+`initialVel`, the steer overrides of the track, `vcu.driverTraceFile` and
+`vcu.tractionControl`. With `TC=off`, the folder is
+`out/vcu-sil/<track>--tc-off/`, so a baseline does not replace the run
+with traction control.
 
 The stop time is the `-stopTime` flag, not an override. OMC 1.27 does not
 find `stopTime` in `-override`, so it runs to the build's stop time (10 s).
@@ -148,7 +178,7 @@ these flags. When you change `VARIABLES`, you do not run `make bobsim-fw`
 again.
 
 It writes `driver.csv`, `VehicleSimFw.csv`, `run.log` and `report.pdf`
-into `out/vcu-sil/<track>/`. It fails when:
+into that folder. It fails when:
 
 - the pedal points of the track break a rule in [Add a track](#add-a-track);
 - the executable exits with an error, or `run.log` shows an override that
@@ -157,12 +187,12 @@ into `out/vcu-sil/<track>/`. It fails when:
 - the run stops before the stop time of the track;
 - the torque that reaches `VCUCore` is more than the firmware command. This
   means BobLib's own torque request still reaches the inverter;
-- the firmware commands a torque that is not 0;
-- the car speeds up.
+- the firmware command is less than 0 or more than the driver demand,
+  `vcu.accel_fw` × 230 Nm. Traction control must only remove torque
+  (TC-01 in the ELC traction control requirements).
 
-The last two checks are true only while the App has no control law
-(`App::SendStatus` sends zero torque). Change them when the control law
-lands.
+`MAX_DRIVE_TORQUE_NM` in `tools/vcu_sil_report.py` is the 230 Nm. Keep it
+equal to `App::kMaxDriveTorqueNm` in `boards/VCU/App/vcu_app.hpp`.
 
 ### `report.pdf`
 
@@ -172,14 +202,14 @@ did and what the car did. It has one Letter page for each section below.
 the executable fails or a variable is missing.
 
 The top of page 1 gives OK or FAIL and each failure. Below that are the
-track and its description, the lhre, BobSim and BobLib commits and the first 12 hex digits of
+track and its description, traction control on or off, the lhre, BobSim and BobLib commits and the first 12 hex digits of
 the SHA-256 of `libvcu_sil.so`. A commit gets `+dirty` when its checkout
 has changes. Each section has a table and plots against time:
 
 | Section | Shows |
 | ------- | ----- |
 | Sim to VCU | The firmware inputs: the accelerator and the brake from the driver trace, the motor speed (rpm) and the pack voltage and current. Also the steer command, which does not go to the firmware. |
-| VCU to plant | The motor torque at three points: the firmware command (`vcu.tau_fw`), after the `VCUCore` limits (`vcu.tau_cmd_limited`) and at the motor (`motor.motor.tau_act`, a first-order lag). Also the firmware regen limit. |
+| VCU to plant | The motor torque at four points: the driver demand (`vcu.accel_fw` × 230 Nm), the firmware command after traction control (`vcu.tau_fw`), after the `VCUCore` limits (`vcu.tau_cmd_limited`) and at the motor (`motor.motor.tau_act`, a first-order lag). Also the firmware regen limit. |
 | Tire slip | For each tire: κ, R0·ω − Vx, Fx and Fz. The table gives these values at the time of the largest \|κ\| of each tire. |
 | Vehicle | The speed, the longitudinal acceleration and the yaw rate. |
 
@@ -205,6 +235,6 @@ Gotchas:
   back after, also when the build fails.
 - The executable links code that OMC generates from BobLib (GPL-3.0). Do
   not distribute it or the `out/build/` folder. Distribute the source.
-- The firmware command updates at the App's send rate, which is 10 Hz
-  today, not at `Ts`. See the
+- The firmware command updates once per `Ts` (100 Hz), not at the car's
+  333 Hz. See the
   [SIL README](../../../boards/VCU/Sil/README.md#gotchas).

@@ -28,6 +28,7 @@ help:
 	@echo "make vcu-sil                Build the VCU firmware library with Bazel on the host and install it"
 	@echo "make bobsim-fw              Build BobLib VehicleSim with the firmware VCU"
 	@echo "make sil TRACK=<name>       Run the firmware VCU in VehicleSim on a driver trace (default coast) and check it"
+	@echo "                            TC=off turns traction control off and writes out/vcu-sil/<name>--tc-off/"
 	@echo "make clean                 Delete out/"
 
 init:
@@ -109,6 +110,7 @@ BAZEL ?= bazel
 BAZEL_ARGS ?=
 VCU_SIL_LIB := modelica/LhreVcu/Resources/Library/libvcu_sil.so
 TRACK ?= coast
+TC ?= on
 
 vcu-sil:
 	cd .. && $(BAZEL) build $(BAZEL_ARGS) //boards/VCU:libvcu_sil.so
@@ -119,7 +121,7 @@ bobsim-fw:
 	$(RECORDS_WRITE) && $(RUN) sim omc tools/build_vehicle_sim_fw.mos; status=$$?; ($(RECORDS_UNDO)) || exit 1; exit $$status
 
 sil:
-	$(RUN) sim python tools/vcu_sil.py $(TRACK)
+	$(RUN) sim python tools/vcu_sil.py $(TRACK) --tc $(TC)
 
 .PHONY: check-vehicle
 check-vehicle:

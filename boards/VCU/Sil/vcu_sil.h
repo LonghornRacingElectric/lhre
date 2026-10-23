@@ -15,17 +15,17 @@ enum {
   /* Also returned for negative time: the App's clock starts at 0 s. */
   VCU_SIL_ERR_TIME_WENT_BACKWARDS = -2,
   VCU_SIL_ERR_NON_FINITE_INPUT = -3,
-  /* The App sent no VcuStatus, so there is no torque command to report. */
-  VCU_SIL_ERR_NO_STATUS_FROM_APP = -4,
 };
 
-/* Returns NULL if allocation fails. */
-void* vcu_sil_create(void);
+/* Non-zero traction_control runs the App with traction control on, as on
+ * the car; zero turns it off for a baseline run. Returns NULL if
+ * allocation fails. */
+void* vcu_sil_create(int traction_control);
 /* NULL is a no-op. */
 void vcu_sil_destroy(void* handle);
 
 /* Advances the App's clock to time_s, feeds it the plant state, runs one
- * App::Step(), and reports the latest command it put on the bus.
+ * App::Step(), and reports the torque command of its latest control step.
  * Pedals are fractions 0..1. Torque is at the motor shaft; regen_limit_nm
  * is a positive magnitude. Returns VCU_SIL_OK or a negative error code;
  * outputs are written only on VCU_SIL_OK. */

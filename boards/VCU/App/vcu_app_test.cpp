@@ -10,6 +10,7 @@
 #include "lhal/host/uart.hpp"
 #include "lhre_can_hvc.hpp"
 #include "lhre_can_vcu.hpp"
+#include "traction_control.hpp"
 #include "vcu_app.hpp"
 
 namespace {
@@ -158,6 +159,99 @@ TEST(VcuApp, ShellReportsStateOverDebugUart) {
   EXPECT_NE(out.find("state=fault"), std::string::npos) << out;
   EXPECT_NE(out.find("overtemp_latched=1"), std::string::npos) << out;
   EXPECT_NE(out.find("coolant 60 degC"), std::string::npos) << out;
+}
+
+TEST(VcuApp, CommandsDriverDemandFromTheAccelerator) {
+  lhal::host::TestClock clock;
+  vcu::Peripherals p;
+  p.clock = &clock;
+  vcu::App app(p);
+
+  app.SetDriveInputs(0.5f, 0.0f);
+  app.Step();
+  EXPECT_FLOAT_EQ(app.torque_command_nm(), 0.5f * vcu::App::kMaxDriveTorqueNm);
+}
+
+TEST(VcuApp, DemandSaturatesOutsideTheAcceleratorRange) {
+  lhal::host::TestClock clock;
+  vcu::Peripherals p;
+  p.clock = &clock;
+  vcu::App app(p);
+
+  app.SetDriveInputs(1.5f, 0.0f);
+  app.Step();
+  EXPECT_FLOAT_EQ(app.torque_command_nm(), vcu::App::kMaxDriveTorqueNm);
+
+  app.SetDriveInputs(-0.5f, 0.0f);
+  clock.Advance(vcu::App::kControlPeriodMs);
+  app.Step();
+  EXPECT_FLOAT_EQ(app.torque_command_nm(), 0.0f);
+}
+
+TEST(VcuApp, UpdatesTheCommandOncePerControlPeriod) {
+  lhal::host::TestClock clock;
+  vcu::Peripherals p;
+  p.clock = &clock;
+  vcu::App app(p);
+
+  app.SetDriveInputs(0.5f, 0.0f);
+  app.Step();
+  app.SetDriveInputs(1.0f, 0.0f);
+  clock.Advance(vcu::App::kControlPeriodMs - 1);
+  app.Step();
+  EXPECT_FLOAT_EQ(app.torque_command_nm(), 0.5f * vcu::App::kMaxDriveTorqueNm);
+
+  clock.Advance(1);
+  app.Step();
+  EXPECT_FLOAT_EQ(app.torque_command_nm(), vcu::App::kMaxDriveTorqueNm);
+}
+
+// Full accelerator while the motor shaft gains 1000 rad/s², far past the
+// traction control threshold.
+float CommandWhileShaftSpinsUp(bool traction_control_enabled) {
+  lhal::host::TestClock clock;
+  vcu::Peripherals p;
+  p.clock = &clock;
+  vcu::App app(p, traction_control_enabled);
+
+  app.SetDriveInputs(1.0f, 0.0f);
+  app.Step();
+  clock.Advance(vcu::App::kControlPeriodMs);
+  app.SetDriveInputs(1.0f, 1000.0f * vcu::App::kControlPeriodMs / 1000.0f);
+  app.Step();
+  return app.torque_command_nm();
+}
+
+TEST(VcuApp, TractionControlTrimsTheCommandWhileTheShaftSpinsUp) {
+  EXPECT_FLOAT_EQ(
+      CommandWhileShaftSpinsUp(true),
+      vcu::App::kMaxDriveTorqueNm - vcu::TractionControl::kMaxTrimNm);
+}
+
+TEST(VcuApp, TractionControlOffPassesDriverDemandThrough) {
+  EXPECT_FLOAT_EQ(CommandWhileShaftSpinsUp(false), vcu::App::kMaxDriveTorqueNm);
+}
+
+TEST(VcuApp, BroadcastsTheTorqueCommandInStatus) {
+  lhal::host::TestClock clock;
+  lhal::host::CanNetwork network;
+  lhal::host::Can vcu_can(&network);
+  lhal::host::Can dash(&network);
+
+  vcu::Peripherals p;
+  p.clock = &clock;
+  p.can = &vcu_can;
+  vcu::App app(p);
+
+  app.SetDriveInputs(0.5f, 0.0f);
+  app.Step();
+
+  lhal::CanFrame frame;
+  ASSERT_TRUE(dash.Receive(&frame));
+  ASSERT_TRUE(VcuStatus::Matches(frame.id));
+  // The frame encodes torque in 0.1 N·m steps.
+  EXPECT_NEAR(VcuStatus::FromFrame(frame).torque_request(),
+              0.5f * vcu::App::kMaxDriveTorqueNm, 0.05f);
 }
 
 TEST(VcuApp, LoggerOutputsTimestampedLogsOverDebugUart) {

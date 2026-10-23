@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 
 #include "FreeRTOS.h"
@@ -9,6 +10,7 @@
 #include "longhorn/logger.hpp"
 #include "longhorn/shell.hpp"
 #include "task.h"
+#include "traction_control.hpp"
 
 namespace vcu {
 
@@ -37,8 +39,8 @@ struct Peripherals {
 //     per periodic activity. Firmware, :vcu_sim, and :vcu_rtos_test do this.
 //   - Step() in a plain loop: no scheduler; timing from `clock`. Kept for
 //     deterministic unit tests (:vcu_app_test drives a TestClock).
-// Both paths call the same underlying logic (ProcessCanRx, SendStatus,
-// LED toggle).
+// Both paths call the same underlying logic (ProcessCanRx, ControlStep,
+// SendStatus, LED toggle).
 class App {
  public:
   static constexpr uint32_t kBlinkPeriodMs = 100;
@@ -49,8 +51,14 @@ class App {
   static constexpr uint32_t kShellPollMs = 2;
   // Latch an overtemp fault when the HVC reports coolant at or above this.
   static constexpr int8_t kCoolantOvertempDegC = 60;
+  // The lhre-2026 VCU control loop period, which TractionControl's tuning
+  // came from.
+  static constexpr uint32_t kControlPeriodMs = 3;
+  // Linear pedal map: full accelerator asks for the motor's peak torque.
+  static constexpr float kMaxDriveTorqueNm = 230.0f;
 
-  explicit App(const Peripherals& peripherals);
+  explicit App(const Peripherals& peripherals,
+               bool traction_control_enabled = true);
 
   // Creates the app's FreeRTOS tasks (statically allocated — no heap use).
   // Call once, before vTaskStartScheduler(). The App must outlive the
@@ -60,6 +68,14 @@ class App {
 
   // One iteration of the scheduler-less main loop. Non-blocking.
   void Step();
+
+  // Accelerator (0..1) and motor shaft speed. The car has no path for
+  // these yet (no pedal ADC interface, no inverter feedback in lib/spec),
+  // so only the SIL calls this and the car commands 0 N·m.
+  void SetDriveInputs(float accel_pedal, float motor_speed_rad_s);
+  // Motor shaft torque from the latest control step, after traction
+  // control.
+  float torque_command_nm() const { return torque_command_nm_.load(); }
 
   uint32_t statuses_sent() const { return statuses_sent_; }
   // Last accumulator state received from the HVC; meaningful only once
@@ -80,9 +96,11 @@ class App {
       2 * configMINIMAL_STACK_SIZE;
 
   static void BlinkTaskEntry(void* self);
+  static void ControlTaskEntry(void* self);
   static void StatusTaskEntry(void* self);
   static void ShellTaskEntry(void* self);
   [[noreturn]] void BlinkTaskLoop();
+  [[noreturn]] void ControlTaskLoop();
   [[noreturn]] void StatusTaskLoop();
   [[noreturn]] void ShellTaskLoop();
 
@@ -92,6 +110,8 @@ class App {
 
   // Drains the CAN RX queue into the app's view of the world.
   void ProcessCanRx();
+  // Driver demand from the accelerator, then traction control.
+  void ControlStep(float dt_s);
   void SendStatus();
 
   Peripherals p_;
@@ -106,7 +126,15 @@ class App {
   bool started_ = false;
   uint32_t last_blink_ms_ = 0;
   uint32_t last_status_ms_ = 0;
+  uint32_t last_control_ms_ = 0;
   uint32_t statuses_sent_ = 0;
+
+  bool traction_control_enabled_;
+  TractionControl traction_control_;
+  float accel_pedal_ = 0.0f;
+  float motor_speed_rad_s_ = 0.0f;
+  // Written by the control task, read by the status task.
+  std::atomic<float> torque_command_nm_{0.0f};
 
   lhre::can::VcuState state_ = lhre::can::VcuState::kIdle;
   lhre::can::hvc::HvcPackStatus pack_status_;
@@ -115,6 +143,8 @@ class App {
 
   StaticTask_t blink_tcb_;
   StackType_t blink_stack_[kTaskStackDepth];
+  StaticTask_t control_tcb_;
+  StackType_t control_stack_[kTaskStackDepth];
   StaticTask_t status_tcb_;
   StackType_t status_stack_[kTaskStackDepth];
   StaticTask_t shell_tcb_;

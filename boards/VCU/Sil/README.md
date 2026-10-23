@@ -31,33 +31,43 @@ skips them on other hosts. On Windows, use WSL.
 
 `vcu_sil_step` drives the App the way
 [`App/vcu_app_test.cpp`](https://github.com/LonghornRacingElectric/lhre/blob/main/boards/VCU/App/vcu_app_test.cpp)
-does: through the car's own LHAL and CAN interfaces, so the App cannot tell
-it is in a simulation.
+does. The pack state goes in through the car's own CAN interface. The
+accelerator and motor speed have no LHAL or CAN path into the App yet, so
+they go in through `App::SetDriveInputs`, a seam that only the SIL calls.
+For those two inputs this departs from ADR-014's "same LHAL and CAN
+boundary as on the car" until the car has them.
 
 1. Advance an `lhal::host::TestClock` to `round(time_s × 1000)` ms. This is
    virtual time with no scheduler, so runs are deterministic and as fast as
    the simulator calls it.
-2. Put the plant state on a fake bus (`lhal::host::CanNetwork`) as the
-   frames the other boards would send. Today that is `HvcPackStatus` from a
-   stand-in HVC, at its spec rate.
-3. Call `App::Step()` once.
-4. Decode what the App sent with the generated `lib/spec` bindings. The last
-   value is held until the App sends the next frame.
+2. Put the pack state on a fake bus (`lhal::host::CanNetwork`) as the
+   `HvcPackStatus` frames that a stand-in HVC sends at its spec rate.
+3. Give the accelerator and motor speed to `App::SetDriveInputs`.
+4. Call `App::Step()` once. It runs the control step (driver demand, then
+   traction control) if at least `App::kControlPeriodMs` has passed.
+5. Report `App::torque_command_nm()`, the command of the latest control
+   step.
 
 ## What the ABI carries today
 
 | Signal                                 | Dir | Mapping                                         |
 | -------------------------------------- | --- | ----------------------------------------------- |
 | `pack_voltage_v`, `pack_current_a`     | in  | `HvcPackStatus`, saturated to what the frame can encode |
-| `accel_pedal`, `brake_pedal`, `motor_speed_rad_s` | in | Checked, then unused: the App has no pedal or motor-speed input yet |
-| `motor_torque_nm`                      | out | `VcuStatus.torque_request`, a stand-in until `lib/spec` has an inverter command |
+| `accel_pedal`, `motor_speed_rad_s`     | in  | `App::SetDriveInputs`. The App clamps the accelerator to 0..1 |
+| `brake_pedal`                          | in  | Checked, then unused: the App has no brake input yet |
+| `motor_torque_nm`                      | out | `App::torque_command_nm()`                      |
 | `regen_limit_nm`                       | out | Always 0: there is no regen signal yet          |
 
-`App::SendStatus` hard-codes zero torque, so today the simulated car does
-not move. `CommandsZeroTorqueWhileAppHasNoControlLaw` pins that. When the
-control law lands (pedals through an LHAL ADC interface, an inverter command
-in `lib/spec`), only the mapping in `vcu_sil.cpp` and that test change. The
-ABI and the Modelica wrapper stay as they are.
+The App's control law is a linear pedal map (full accelerator asks for
+`App::kMaxDriveTorqueNm`, 230 N·m) and then
+[traction control](../README.md#traction-control), which only removes
+torque. `vcu_sil_create(0)` turns traction control off for a baseline run.
+`CommandsDriverDemandFromTheAccelerator` and the two `TractionControl…`
+tests in `:vcu_sil_test` pin the mapping. On the car nothing calls
+`SetDriveInputs` yet, so the car commands 0 N·m. When the pedals get an
+LHAL ADC interface and `lib/spec` gets inverter feedback, those inputs move
+to LHAL fakes and CAN frames here and the seam goes away. The ABI and the
+Modelica wrapper need not change.
 
 ## Errors
 
@@ -71,7 +81,6 @@ stale command.
 | `VCU_SIL_ERR_NULL_ARGUMENT`       | Null handle or output pointer                 |
 | `VCU_SIL_ERR_TIME_WENT_BACKWARDS` | `time_s` earlier than the last call, or negative |
 | `VCU_SIL_ERR_NON_FINITE_INPUT`    | Any input is NaN or ±inf                      |
-| `VCU_SIL_ERR_NO_STATUS_FROM_APP`  | The App has not sent a `VcuStatus` yet, so there is no command to report |
 
 ## Gotchas
 
@@ -79,14 +88,17 @@ stale command.
   continuous equations at trial times and then rolls back. The App's clock
   cannot go back, which is why the wrapper calls it from
   `when sample(0, Ts)`.
-- **The command updates at the App's send rate.** `VcuStatus` goes out every
-  100 ms, so the torque is a 10 Hz staircase, however small the simulator's
-  `Ts` is.
+- **The command updates once per control step.** `Step()` runs the control
+  step over the measured time since the last one, at most every 3 ms. With
+  the wrapper's `Ts` of 10 ms that is once per call: 100 Hz, not the car's
+  333 Hz. Traction control differentiates the motor speed over that step,
+  so a smaller `Ts` changes what it sees.
 - **Time is quantized to 1 ms**, because the App only sees `Millis()`.
 - **`Step()` is not the RTOS task path.** On the car the App runs as
   FreeRTOS tasks. Here, as in `:vcu_app_test`, it runs the scheduler-less
-  `Step()`, which drains CAN on a different cadence. Logic that lives only
-  in a task body is invisible to the simulation.
+  `Step()`, which drains CAN and runs the control step on a different
+  cadence. Logic that lives only in a task body is invisible to the
+  simulation.
 - **One thread.** Handles are independent of each other (tested), but none
   is thread-safe. OMC simulations are single-threaded.
 - **Changing the ABI** means changing `simulation/modelica/LhreVcu/package.mo`

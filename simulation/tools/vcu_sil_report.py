@@ -31,12 +31,15 @@ VARIABLES = (
     "vcu.sens_motor_speed",
     "vcu.sens_hv_bus_voltage",
     "vcu.sens_hv_bus_current",
+    "vcu.accel_fw",
     "vcu.tau_fw",
     "vcu.regen_fw",
     "vcu.tau_cmd_limited",
     "motor.motor.tau_act",
 ) + tuple(f"{prefix}.{name}" for prefix in TIRES.values() for name in TIRE_VARIABLES)
 
+# kMaxDriveTorqueNm in boards/VCU/App/vcu_app.hpp.
+MAX_DRIVE_TORQUE_NM = 230.0
 RAD_S_TO_RPM = 60 / (2 * math.pi)
 RAD_TO_DEG = 180 / math.pi
 INK = "#0b0b0b"
@@ -76,6 +79,10 @@ def _column(name: str, scale: float = 1.0) -> Callable[[Row], float]:
     return lambda row: row[name] * scale
 
 
+def driver_demand_nm(row: Row) -> float:
+    return row["vcu.accel_fw"] * MAX_DRIVE_TORQUE_NM
+
+
 def _single(name: str, unit: str, column: str, scale: float = 1.0) -> Panel:
     return Panel(name, unit, ((name, _column(column, scale)),))
 
@@ -102,12 +109,14 @@ SECTIONS = (
     ),
     Section(
         "VCU to plant",
-        "The firmware command, then BobLib's VCUCore limits, then the motor's torque lag.",
+        f"The driver demand (accelerator × {MAX_DRIVE_TORQUE_NM:g} Nm), the firmware command after traction control, "
+        "then BobLib's VCUCore limits, then the motor's torque lag.",
         (
             Panel(
                 "Motor torque",
                 "Nm",
                 (
+                    ("Driver demand", driver_demand_nm),
                     ("Firmware command", _column("vcu.tau_fw")),
                     ("After VCUCore limits", _column("vcu.tau_cmd_limited")),
                     ("Motor", _column("motor.motor.tau_act")),

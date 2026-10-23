@@ -3,8 +3,9 @@ package LhreVcu
     extends ExternalObject;
 
     function constructor
+      input Boolean tractionControl;
       output VcuSil sil;
-      external "C" sil = vcu_sil_create()
+      external "C" sil = vcu_sil_create(tractionControl)
         annotation(Library = "vcu_sil", LibraryDirectory = "modelica://LhreVcu/Resources/Library");
     end constructor;
 
@@ -36,9 +37,10 @@ package LhreVcu
       regenLimitRequest(y = regen_fw),
       mechanicalBrakeTorqueBusSignal(y = brake_trace*mechanicalBrakeTorqueLimit));
 
-    parameter Modelica.Units.SI.Time Ts = 0.1;
+    parameter Modelica.Units.SI.Time Ts = 0.01;
     parameter String driverTraceFile = "driver.csv";
-    parameter VcuSil sil = VcuSil();
+    parameter Boolean tractionControl = true;
+    parameter VcuSil sil = VcuSil(tractionControl);
     Modelica.Blocks.Sources.CombiTimeTable driverTrace(
       tableOnFile = true,
       fileName = driverTraceFile,
@@ -48,13 +50,15 @@ package LhreVcu
       extrapolation = Modelica.Blocks.Types.Extrapolation.HoldLastPoint);
     output Real accel_trace(unit = "1") = driverTrace.y[1];
     output Real brake_trace(unit = "1") = driverTrace.y[2];
+    discrete output Real accel_fw(unit = "1", start = 0, fixed = true);
     discrete output Modelica.Units.SI.Torque tau_fw(start = 0, fixed = true);
     discrete output Modelica.Units.SI.Torque regen_fw(start = 0, fixed = true);
   protected
     discrete Integer rc(start = 0, fixed = true);
   algorithm
     when sample(0, Ts) then
-      (tau_fw, regen_fw, rc) := vcuSilStep(sil, time, accel_trace, brake_trace,
+      accel_fw := accel_trace;
+      (tau_fw, regen_fw, rc) := vcuSilStep(sil, time, accel_fw, brake_trace,
         motorSpeedSign*sens_motor_speed, sens_hv_bus_voltage, sens_hv_bus_current);
       assert(rc == 0, "vcu_sil_step returned " + String(rc) + ". See boards/VCU/Sil/README.md for the codes.");
     end when;

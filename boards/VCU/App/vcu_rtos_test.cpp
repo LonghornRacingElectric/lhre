@@ -44,6 +44,7 @@ TEST(VcuRtos, StatusTaskRunsUnderScheduler) {
   p.status_led = &led;
   p.can = &vcu_can;
   vcu::App app(p);
+  app.SetDriveInputs(0.5f, 0.0f);
 
   app.StartTasks();
 
@@ -71,6 +72,9 @@ TEST(VcuRtos, StatusTaskRunsUnderScheduler) {
     ++received;
   }
   EXPECT_EQ(received, app.statuses_sent());
+
+  // The control task ran: the command follows the accelerator.
+  EXPECT_FLOAT_EQ(app.torque_command_nm(), 0.5f * vcu::App::kMaxDriveTorqueNm);
 }
 
 }  // namespace

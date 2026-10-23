@@ -12,6 +12,7 @@ for the repo.
 | `:dfu`           | `bazel run` — flash over USB DFU.                           |
 | `:vcu_app_test`  | Deterministic app-logic test: scheduler-less `Step()` path, TestClock-driven, exact timing asserts. |
 | `:vcu_rtos_test` | The real FreeRTOS tasks under the simulator-port scheduler; lower-bound asserts only. |
+| `:traction_control_test` | The traction control law alone, against #298's tuning. |
 | `:vcu_sim`       | Interactive host sim running the real tasks (`bazel run --config=local`). |
 | `:libvcu_sil.so` | The app as a host shared library that the BobSim vehicle model loads as its VCU ([Sil/](Sil/README.md)). |
 | `:vcu_sil_test`  | Tests for that library's C ABI.                             |
@@ -47,6 +48,34 @@ for the repo.
 The `BUILD.bazel` here is the canonical example of a `firmware_project`
 call — what it generates and every option is documented in
 [tools/firmware](../../tools/firmware/README.md).
+
+## Traction control
+
+The control task runs every `App::kControlPeriodMs` (3 ms, as in the
+lhre-2026 VCU) at the highest task priority. It turns the accelerator into a
+motor shaft torque command:
+
+1. Driver demand: the accelerator, clamped to 0..1, × `kMaxDriveTorqueNm`
+   (230 N·m).
+2. [`TractionControl`](https://github.com/LonghornRacingElectric/lhre/blob/main/boards/VCU/App/traction_control.hpp)
+   subtracts a PI trim while the motor shaft accelerates faster than
+   30 rad/s². The trim resets as soon as the shaft does not. It is at most
+   50 N·m and at most the demand, so it only removes torque.
+3. `VcuStatus.torque_request` carries the command.
+
+The law and its tuning come from lhre-2026 PR #298
+(`VCU/model/components/TractionControl.c` and `acceleration_params.h`). The
+header lists the two deliberate changes. Nobody has tuned it for this car
+yet. In the SIL, a full-accelerator launch exceeds the 30 rad/s² threshold
+with no wheelspin, so the command switches between 180 and 230 N·m (see the
+[LhreVcu results](../../simulation/modelica/LhreVcu/README.md#make-sil)).
+Tune it with `make -C simulation sil TRACK=launch`.
+
+The car has no accelerator or motor speed input yet: LHAL has no pedal ADC
+interface and `lib/spec` has no inverter feedback. Until it does, only the
+[SIL](Sil/README.md) gives the App these inputs, through
+`App::SetDriveInputs`, and the car commands 0 N·m. `App(peripherals, false)`
+turns traction control off for a baseline run.
 
 ## Debug console & Logging
 

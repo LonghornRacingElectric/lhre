@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 from tools.invalidation import GitUnavailable, Layout, git, git_root, sha256_file
-from tools.vcu_sil_report import VARIABLES, variable_filter, write_report
+from tools.vcu_sil_report import VARIABLES, driver_demand_nm, variable_filter, write_report
 from tools.vcu_sil_tracks import TRACKS, Track, track_errors, write_driver_trace
 
 SIM = Path(__file__).resolve().parents[1]
@@ -16,7 +16,6 @@ EXECUTABLE = "LhreVcu.VehicleSimFw"
 LIBRARY_DIR = SIM / "modelica/LhreVcu/Resources/Library"
 OUT_DIR = SIM / "out/vcu-sil"
 TORQUE_TOLERANCE_NM = 1e-6
-SPEED_TOLERANCE_M_S = 1e-3
 REJECTED_OVERRIDE_TEXT = ("not possible to override", "not found in model")
 
 
@@ -42,19 +41,31 @@ def check_run(rows: list[dict[str, float]], stop_time_s: float) -> list[str]:
             f"The plant got more torque than the firmware commanded, first at {over_command[0]:g} s. "
             "BobLib's own torque command may still reach the inverter."
         )
-    # Update these two checks when boards/VCU/App gets a control law (boards/VCU/Sil/README.md).
-    peak_firmware_torque = max(abs(row["vcu.tau_fw"]) for row in rows)
-    if peak_firmware_torque > TORQUE_TOLERANCE_NM:
+    outside_demand = [
+        row
+        for row in rows
+        if not -TORQUE_TOLERANCE_NM <= row["vcu.tau_fw"] <= driver_demand_nm(row) + TORQUE_TOLERANCE_NM
+    ]
+    if outside_demand:
+        first = outside_demand[0]
         failures.append(
-            f"The firmware commanded {peak_firmware_torque:g} Nm. The App has no control law yet, so expected 0 Nm."
+            f"The firmware commanded {first['vcu.tau_fw']:g} Nm at {first['time']:g} s, outside 0 to the driver demand "
+            f"{driver_demand_nm(first):g} Nm. Traction control must only remove torque."
         )
-    if rows[-1]["velX"] > rows[0]["velX"] + SPEED_TOLERANCE_M_S:
-        failures.append(f"The car sped up from {rows[0]['velX']:g} to {rows[-1]['velX']:g} m/s with no drive torque.")
     return failures
 
 
-def simulation_command(result_path: Path, track: Track, trace_path: Path) -> list[str]:
-    overrides = {"initialVel": track.initial_speed_m_s, **track.steer, "vcu.driverTraceFile": trace_path}
+def run_dir(track_name: str, traction_control: bool) -> Path:
+    return OUT_DIR / (track_name if traction_control else f"{track_name}--tc-off")
+
+
+def simulation_command(result_path: Path, track: Track, trace_path: Path, traction_control: bool) -> list[str]:
+    overrides = {
+        "initialVel": track.initial_speed_m_s,
+        **track.steer,
+        "vcu.driverTraceFile": trace_path,
+        "vcu.tractionControl": str(traction_control).lower(),
+    }
     override = ",".join(f"{name}={value}" for name, value in overrides.items())
     return [
         f"./{EXECUTABLE}",
@@ -91,7 +102,7 @@ def run_provenance(layout: Layout, library: Path) -> dict[str, str]:
     }
 
 
-def run_simulation(out_dir: Path, track: Track) -> Path:
+def run_simulation(out_dir: Path, track: Track, traction_control: bool) -> Path:
     executable = BUILD_DIR / EXECUTABLE
     if not executable.is_file():
         raise FileNotFoundError(f"{executable} does not exist. Run make bobsim-fw.")
@@ -105,7 +116,7 @@ def run_simulation(out_dir: Path, track: Track) -> Path:
     result_path.unlink(missing_ok=True)
     started = time.monotonic()
     completed = subprocess.run(
-        simulation_command(result_path, track, trace_path),
+        simulation_command(result_path, track, trace_path, traction_control),
         cwd=BUILD_DIR,
         env={**os.environ, "LD_LIBRARY_PATH": str(LIBRARY_DIR)},
         capture_output=True,
@@ -128,7 +139,10 @@ def run_simulation(out_dir: Path, track: Track) -> Path:
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("track", choices=TRACKS)
-    track_name = parser.parse_args(argv).track
+    parser.add_argument("--tc", choices=("on", "off"), default="on")
+    arguments = parser.parse_args(argv)
+    track_name = arguments.track
+    traction_control = arguments.tc == "on"
     track = TRACKS[track_name]
     errors = track_errors(track)
     for error in errors:
@@ -136,9 +150,9 @@ def main(argv: list[str]) -> int:
     if errors:
         return 1
 
-    out_dir = OUT_DIR / track_name
+    out_dir = run_dir(track_name, traction_control)
     try:
-        result_path = run_simulation(out_dir, track)
+        result_path = run_simulation(out_dir, track, traction_control)
     except (FileNotFoundError, RuntimeError) as error:
         print(f"FAIL: {error}")
         return 1
@@ -154,6 +168,7 @@ def main(argv: list[str]) -> int:
     report_path = out_dir / "report.pdf"
     run_details = {
         "Track": f"{track_name}: {track.description}",
+        "Traction control": arguments.tc,
         **run_provenance(Layout.default(), LIBRARY_DIR / "libvcu_sil.so"),
     }
     write_report(report_path, rows, failures, run_details)

@@ -1,7 +1,9 @@
 // Software-in-the-loop shim: the unmodified vcu::App on LHAL host fakes and
 // a virtual clock, behind the C ABI in vcu_sil.h. The App is driven the way
-// App/vcu_app_test.cpp drives it: plant state goes in as the CAN frames the
-// other boards send, and the command comes out of the frames the App sends.
+// App/vcu_app_test.cpp drives it: the pack state goes in as the CAN frames
+// the HVC sends. The accelerator and motor speed have no CAN or LHAL path
+// into the App yet, so they go in through App::SetDriveInputs, and the
+// command comes out of App::torque_command_nm().
 
 #include "vcu_sil.h"
 
@@ -15,13 +17,11 @@
 #include "lhal/host/can.hpp"
 #include "lhal/host/system.hpp"
 #include "lhre_can_hvc.hpp"
-#include "lhre_can_vcu.hpp"
 #include "vcu_app.hpp"
 
 namespace {
 
 using lhre::can::hvc::HvcPackStatus;
-using lhre::can::vcu::VcuStatus;
 
 constexpr uint32_t kPackStatusPeriodMs =
     static_cast<uint32_t>(1000.0f / HvcPackStatus::kFrequencyHz);
@@ -59,25 +59,25 @@ HvcPackStatus PackStatusFrom(double pack_voltage_v, double pack_current_a) {
 }
 
 struct Sil {
+  explicit Sil(bool traction_control)
+      : app(MakePeripherals(&clock, &vcu_can), traction_control) {}
+
   lhal::host::TestClock clock;
   lhal::host::CanNetwork network;
   lhal::host::Can vcu_can{&network};
   // Stands in for the HVC, which reports the pack.
   lhal::host::Can hvc_can{&network};
-  // Listens where the inverter would. Until lib/spec has an inverter
-  // command, the torque request is read from VcuStatus.
-  lhal::host::Can inverter_can{&network};
-  vcu::App app{MakePeripherals(&clock, &vcu_can)};
+  vcu::App app;
 
   bool pack_status_sent = false;
   uint32_t last_pack_status_ms = 0;
-  bool status_seen = false;
-  float motor_torque_nm = 0.0f;
 };
 
 }  // namespace
 
-void* vcu_sil_create(void) { return new (std::nothrow) Sil(); }
+void* vcu_sil_create(int traction_control) {
+  return new (std::nothrow) Sil(traction_control != 0);
+}
 
 void vcu_sil_destroy(void* handle) { delete static_cast<Sil*>(handle); }
 
@@ -89,10 +89,11 @@ int vcu_sil_step(void* handle, double time_s, double accel_pedal,
       regen_limit_nm == nullptr) {
     return VCU_SIL_ERR_NULL_ARGUMENT;
   }
-  // The pedals and motor speed are checked but reach nothing yet: the App
-  // has no pedal or motor-speed input (Sil/README.md).
-  const double inputs[] = {time_s,         accel_pedal,      brake_pedal,
-                           motor_speed_rad_s, pack_voltage_v, pack_current_a};
+  // The brake is checked but reaches nothing yet: the App has no brake
+  // input (Sil/README.md).
+  const double inputs[] = {time_s,         accel_pedal,
+                           brake_pedal,    motor_speed_rad_s,
+                           pack_voltage_v, pack_current_a};
   if (!std::all_of(std::begin(inputs), std::end(inputs),
                    [](double input) { return std::isfinite(input); })) {
     return VCU_SIL_ERR_NON_FINITE_INPUT;
@@ -113,23 +114,20 @@ int vcu_sil_step(void* handle, double time_s, double accel_pedal,
     sil->last_pack_status_ms = now_ms;
   }
 
+  sil->app.SetDriveInputs(static_cast<float>(accel_pedal),
+                          static_cast<float>(motor_speed_rad_s));
   sil->app.Step();
 
+  // The stand-in HVC ignores the VcuStatus frames it hears; drain them so
+  // its queue does not grow over a long run.
   lhal::CanFrame frame;
-  while (sil->inverter_can.Receive(&frame)) {
-    if (VcuStatus::Matches(frame.id) && frame.len >= VcuStatus::kDlc) {
-      sil->motor_torque_nm = VcuStatus::FromFrame(frame).torque_request();
-      sil->status_seen = true;
-    }
+  while (sil->hvc_can.Receive(&frame)) {
   }
   // The fakes keep a log of every frame sent; nothing here reads it.
   sil->vcu_can.ClearSent();
   sil->hvc_can.ClearSent();
 
-  if (!sil->status_seen) {
-    return VCU_SIL_ERR_NO_STATUS_FROM_APP;
-  }
-  *motor_torque_nm = sil->motor_torque_nm;
+  *motor_torque_nm = sil->app.torque_command_nm();
   // lib/spec has no regen command yet, so the App allows none.
   *regen_limit_nm = 0.0;
   return VCU_SIL_OK;
