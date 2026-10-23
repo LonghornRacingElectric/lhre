@@ -43,6 +43,10 @@ description: Change a parameter of the current car in vehicle/vehicle.yml, updat
    `make study S=<name>`, or mark its README historical. See
    [studies.md](../../studies.md#status). `make unit` fails until you do.
 6. If you changed wheelbase, track, mass or CG, find the same number in
+4. If the change affects the Modelica tier, run
+   `make car T=standard-build`. The build must pass. `make car` restores
+   `bobsim/` after the build.
+5. If you changed wheelbase, track, mass or CG, find the same number in
    `autonomy/ros2/src/lhr_vehicle/config/vehicle.yaml`. That file is a
    separate copy. Tell the user. Do not change it unless they ask. The
    autonomy team owns it.

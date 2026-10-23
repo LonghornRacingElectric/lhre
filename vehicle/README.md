@@ -13,8 +13,8 @@ simulation. Other packages can use it too.
 
 - **Simulation:** `make test`, `make records` and studies read this file
   through the `BOBSIM_VEHICLE` environment variable. BobSim targets
-  (`make bobsim T=...`) do not read that variable yet. For a Modelica
-  target to use this file, run `make records` first. See
+  (`make bobsim T=...`) do not read that variable yet. To run a BobSim
+  target on this file, use `make car T=...`. See
   [simulation/README.md](../simulation/README.md).
 - **Bazel:** depend on `//vehicle:vehicle.yml`, `//vehicle:bundle.yml` or
   `//vehicle:tires`. All are public.

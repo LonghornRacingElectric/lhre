@@ -61,7 +61,8 @@ BobSim only through imports and `make` targets.
    study reads it from `BOBSIM_VEHICLE`. To test a change, change the
    value in memory or in a copy under `OUT_DIR`. `make bobsim T=...`
    targets read `simulation/bobsim/vehicle.yml` until BobSim reads
-   `BOBSIM_VEHICLE`. See [bobsim.md](../../bobsim.md#our-vehicle-and-bobsim).
+   `BOBSIM_VEHICLE`. To run one on our car, use `make car T=...`. See
+   [bobsim.md](../../bobsim.md#our-vehicle-and-bobsim).
 8. **Run BobSim through `make`.** Run each `make` target from
    `simulation/`. Every target runs in Docker. Do not run BobSim with a
    host Python.

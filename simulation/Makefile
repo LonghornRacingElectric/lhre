@@ -10,7 +10,7 @@ STUDY_OUT = $(S)$(if $(V),--$(V))
 
 GIT_LF := git -c core.autocrlf=false -c core.longpaths=true
 
-.PHONY: help init build shell test smoke unit records records-undo bobsim study stale bump-bobsim clean
+.PHONY: help init build shell test smoke unit records records-undo bobsim car four-post-acceptance study stale bump-bobsim clean
 
 help:
 	@echo "make init                  Get submodules and build the image"
@@ -22,6 +22,8 @@ help:
 	@echo "make records               Write //vehicle into BobLib's Modelica records"
 	@echo "make records-undo          Put back only the files make records wrote"
 	@echo "make bobsim T=<target>     Run a BobSim make target"
+	@echo "make car T=<target>        Run a BobSim target on //vehicle, then restore bobsim/"
+	@echo "make four-post-acceptance  Check the FourPost outputs of make car (T=<target>)"
 	@echo "make study S=<name>        Run studies/<name>/run.py (STUDY_WORKERS=n limits CPUs)"
 	@echo "make stale [S=<name>]      Check if a committed study result is stale (no S: every study)"
 	@echo "make bump-bobsim REF=<ref> Move the BobSim pin"
@@ -71,6 +73,13 @@ records-undo:
 bobsim:
 	@test -n "$(T)" || { echo "Set T=<bobsim target>. Run 'make bobsim T=help' to list them."; exit 1; }
 	$(RUN) sim make -C bobsim $(T)
+
+car:
+	@test -n "$(T)" || { echo "Set T=<bobsim target>, for example T=standard-eval-four-post."; exit 1; }
+	COMPOSE='$(COMPOSE)' RUN='$(RUN)' CAR_BOBLIB='$(BOBLIB)' CAR_VEHICLE_NAME='$(VEHICLE_NAME)' CAR_RECORD_FILES='$(RECORD_FILES)' sh tools/car.sh '$(T)'
+
+four-post-acceptance:
+	$(RUN) sim python tools/four_post_acceptance.py out/car/$(or $(T),standard-eval-four-post)
 
 study:
 	@test -n "$(S)" || { echo "Set S=<study name>."; exit 1; }
