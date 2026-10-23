@@ -2,6 +2,161 @@
 # proto-message: lhre.canspec.SpecFile
 
 message {
+  name: "HVC_CONTACTOR_STATUS"
+  can_id: 305
+  from_board: "HVC"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 3
+  frequency_hz: 100.0
+  description: "HVC state and AIR feedback. ENERGIZED means precharge complete and AIRs closed."
+  signal {
+    name: "hvc_state"
+    encoding {
+      bit_length: 8
+    }
+    logical {
+      enum_type: "HvcState"
+    }
+    description: "HVC state machine state"
+  }
+  signal {
+    name: "positive_contactor_closed"
+    encoding {
+      start_bit: 8
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    description: "AIR+ feedback closed"
+  }
+  signal {
+    name: "negative_contactor_closed"
+    encoding {
+      start_bit: 16
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    description: "AIR- feedback closed"
+  }
+}
+message {
+  name: "HVC_INDICATORS"
+  can_id: 308
+  from_board: "HVC"
+  to_boards: "VCU"
+  to_boards: "PDU"
+  bus: "Critical"
+  dlc: 6
+  frequency_hz: 10.0
+  description: "Latched BMS/IMD error flags and shutdown leg sense."
+  signal {
+    name: "bms_error"
+    encoding {
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    description: "BMS (AMS) error, latched by the HVC"
+  }
+  signal {
+    name: "imd_error"
+    encoding {
+      start_bit: 8
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    description: "IMD error, latched by the HVC"
+  }
+  signal {
+    name: "shutdown_leg1"
+    encoding {
+      start_bit: 16
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    description: "Shutdown leg 1 closed"
+  }
+  signal {
+    name: "shutdown_leg2"
+    encoding {
+      start_bit: 24
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    description: "Shutdown leg 2 closed"
+  }
+  signal {
+    name: "shutdown_leg3"
+    encoding {
+      start_bit: 32
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    description: "Shutdown leg 3 closed"
+  }
+  signal {
+    name: "shutdown_leg4"
+    encoding {
+      start_bit: 40
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    description: "Shutdown leg 4 closed"
+  }
+}
+message {
+  name: "HVC_CELL_LIMITS"
+  can_id: 310
+  from_board: "HVC"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 4
+  frequency_hz: 10.0
+  description: "Minimum and maximum cell voltage."
+  signal {
+    name: "min_cell_voltage"
+    encoding {
+      bit_length: 16
+      scale: 0.0001
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    description: "Minimum cell voltage"
+  }
+  signal {
+    name: "max_cell_voltage"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      scale: 0.0001
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    description: "Maximum cell voltage"
+  }
+}
+message {
   name: "HVC_PACK_STATUS"
   can_id: 1024
   from_board: "HVC"

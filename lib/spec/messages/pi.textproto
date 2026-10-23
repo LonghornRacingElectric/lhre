@@ -1,0 +1,22 @@
+# proto-file: lib/spec/proto/can_spec.proto
+# proto-message: lhre.canspec.SpecFile
+
+message {
+  name: "VCU_MODE_COMMAND"
+  can_id: 41
+  from_board: "Pi"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 8
+  description: "Selects the VCU event parameter set; applied only outside DRIVE. Echoed in VCU_DRIVE_STATE.event_mode."
+  signal {
+    name: "event_mode"
+    encoding {
+      bit_length: 8
+    }
+    logical {
+      enum_type: "EventMode"
+    }
+    description: "Requested event mode"
+  }
+}

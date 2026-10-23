@@ -1,59 +1,45 @@
-// Host simulation of the VCU: runs the app's real FreeRTOS tasks under the
-// kernel's simulator port (real time), against LHAL host fakes, and prints
-// what an observer on the CAN bus sees.
+// Host simulation of the VCU: the app's real FreeRTOS tasks under the
+// kernel's simulator port (real time), against LHAL host fakes, with a
+// scripted car driving it through precharge, RTD, a pedal press, and a
+// shutdown-loop opening. Prints state changes and the inverter command.
 //
 //   bazel run --config=local //boards/VCU:vcu_sim
 
 #include <cstdio>
 
 #include "FreeRTOS.h"
-#include "lhal/host/can.hpp"
-#include "lhal/host/gpio.hpp"
-#include "lhal/host/system.hpp"
-#include "lhre_can_vcu.hpp"
 #include "task.h"
 #include "vcu_app.hpp"
+#include "vcu_test_bench.hpp"
 
 namespace {
 
-constexpr uint32_t kSimDurationMs = 3000;
+constexpr uint32_t kSimDurationMs = 4000;
 
-struct SimWorld {
-  lhal::host::SystemClock clock;
-  lhal::host::Gpio led;
-  lhal::host::CanNetwork network;
-  lhal::host::Can vcu_can{&network};
-  lhal::host::Can observer{&network};
-};
+// The bench's TestClock, advanced by a 1 ms task so the app sees sim time.
+vcu::bench::Bench* g_bench = nullptr;
+vcu::App* g_app = nullptr;
 
-// Watches the LED and the observer CAN node, prints changes, and ends the
-// scheduler (which returns control to main) when the sim time is up.
-void ObserverTaskLoop(void* arg) {
-  SimWorld& world = *static_cast<SimWorld*>(arg);
-  bool last_led = world.led.Read();
-  uint32_t statuses_seen = 0;
-
-  while (world.clock.Millis() < kSimDurationMs) {
-    if (world.led.Read() != last_led) {
-      last_led = world.led.Read();
-      std::printf("[%4u ms] LED %s\n", world.clock.Millis(),
-                  last_led ? "on" : "off");
+void CarTaskLoop(void*) {
+  vcu::bench::Bench& b = *g_bench;
+  lhre::can::VcuState last = lhre::can::VcuState::kInit;
+  for (uint32_t t = 0; t < kSimDurationMs; ++t) {
+    if (t == 200) b.hvc_state = lhre::can::HvcState::kPrecharging;
+    if (t == 700) b.Energize();
+    if (t == 900) b.SetBrakePsi(500.0f);
+    if (t == 1100) b.PressRtd(true);
+    if (t == 1300) b.SetBrakePsi(0.0f);
+    if (t == 1500) b.SetPedalTravel(0.5f);
+    if (t == 3000) b.SetLoop(24.0f, 0.0f);
+    if (t % 5 == 0) b.SendCarFrames();
+    b.clock.Advance(1);
+    const lhre::can::VcuState s = g_app->state();
+    if (s != last || t % 500 == 0) {
+      std::printf("[%4u ms] state=%-12s torque=%6.1f Nm faults=0x%05x\n", t,
+                  lhre::can::ToString(s), g_app->torque_command(),
+                  static_cast<unsigned>(g_app->faults()));
+      last = s;
     }
-
-    lhal::CanFrame frame;
-    while (world.observer.Receive(&frame)) {
-      if (!lhre::can::vcu::VcuStatus::Matches(frame.id)) {
-        continue;
-      }
-      auto status = lhre::can::vcu::VcuStatus::FromFrame(frame);
-      ++statuses_seen;
-      if (statuses_seen % 10 == 1) {
-        std::printf("[%4u ms] CAN 0x%03X VcuStatus state=%s\n",
-                    world.clock.Millis(), frame.id,
-                    lhre::can::ToString(status.state));
-      }
-    }
-
     vTaskDelay(pdMS_TO_TICKS(1));
   }
   vTaskEndScheduler();
@@ -62,25 +48,20 @@ void ObserverTaskLoop(void* arg) {
 }  // namespace
 
 int main() {
-  static SimWorld world;
-
-  vcu::Peripherals p;
-  p.clock = &world.clock;
-  p.status_led = &world.led;
-  p.can = &world.vcu_can;
-  static vcu::App app(p);
+  static vcu::bench::Bench bench;
+  g_bench = &bench;
+  static vcu::App app(bench.peripherals());
+  g_app = &app;
 
   std::printf("VCU sim: running for %u ms...\n", kSimDurationMs);
   app.StartTasks();
 
-  static StaticTask_t observer_tcb;
-  static StackType_t observer_stack[configMINIMAL_STACK_SIZE];
-  xTaskCreateStatic(ObserverTaskLoop, "observer", configMINIMAL_STACK_SIZE,
-                    &world, tskIDLE_PRIORITY + 3, observer_stack,
-                    &observer_tcb);
+  static StaticTask_t car_tcb;
+  static StackType_t car_stack[4 * configMINIMAL_STACK_SIZE];
+  xTaskCreateStatic(CarTaskLoop, "car", 4 * configMINIMAL_STACK_SIZE, nullptr,
+                    tskIDLE_PRIORITY + 7, car_stack, &car_tcb);
 
-  vTaskStartScheduler();  // returns when the observer task ends the sim
-
-  std::printf("VCU sim: done (%u statuses sent)\n", app.statuses_sent());
+  vTaskStartScheduler();
+  std::printf("VCU sim: done in state %s\n", lhre::can::ToString(app.state()));
   return 0;
 }

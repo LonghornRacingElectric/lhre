@@ -57,6 +57,19 @@ uint8_t DlcToLen(uint32_t dlc) {
   return 0;
 }
 
+// Interrupts off for the duration of a scope; restores the previous state
+// so it nests inside ISRs and other critical sections.
+class IrqGuard {
+ public:
+  IrqGuard() : primask_(__get_PRIMASK()) { __disable_irq(); }
+  ~IrqGuard() { __set_PRIMASK(primask_); }
+  IrqGuard(const IrqGuard&) = delete;
+  IrqGuard& operator=(const IrqGuard&) = delete;
+
+ private:
+  uint32_t primask_;
+};
+
 }  // namespace
 
 Can::Can(FDCAN_HandleTypeDef* hfdcan) : hfdcan_(hfdcan) {
@@ -82,10 +95,39 @@ Status Can::Start() {
     return ToStatus(s);
   }
   return ToStatus(HAL_FDCAN_ActivateNotification(
-      hfdcan_, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0));
+      hfdcan_,
+      FDCAN_IT_RX_FIFO0_NEW_MESSAGE | FDCAN_IT_RX_FIFO0_MESSAGE_LOST |
+          FDCAN_IT_TX_FIFO_EMPTY | FDCAN_IT_BUS_OFF,
+      0));
 }
 
 Status Can::Send(const CanFrame& frame) {
+  IrqGuard guard;
+  // Queue behind anything already waiting so frames leave in order.
+  if (tx_count_ == 0 && AddToHardware(frame)) {
+    return Status::kOk;
+  }
+  if (tx_count_ == kTxQueueDepth) {
+    tx_dropped_ = tx_dropped_ + 1;
+    return Status::kBusy;
+  }
+  tx_queue_[(tx_head_ + tx_count_) % kTxQueueDepth] = frame;
+  ++tx_count_;
+  DrainTxQueue();
+  return Status::kOk;
+}
+
+void Can::DrainTxQueue() {
+  while (tx_count_ > 0 && AddToHardware(tx_queue_[tx_head_])) {
+    tx_head_ = (tx_head_ + 1) % kTxQueueDepth;
+    --tx_count_;
+  }
+}
+
+bool Can::AddToHardware(const CanFrame& frame) {
+  if (HAL_FDCAN_GetTxFifoFreeLevel(hfdcan_) == 0) {
+    return false;
+  }
   FDCAN_TxHeaderTypeDef header = {};
   header.Identifier = frame.id;
   header.IdType = frame.extended_id ? FDCAN_EXTENDED_ID : FDCAN_STANDARD_ID;
@@ -96,8 +138,8 @@ Status Can::Send(const CanFrame& frame) {
   header.FDFormat = frame.fd ? FDCAN_FD_CAN : FDCAN_CLASSIC_CAN;
   header.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
   header.MessageMarker = 0;
-  return ToStatus(HAL_FDCAN_AddMessageToTxFifoQ(
-      hfdcan_, &header, const_cast<uint8_t*>(frame.data)));
+  return HAL_FDCAN_AddMessageToTxFifoQ(
+             hfdcan_, &header, const_cast<uint8_t*>(frame.data)) == HAL_OK;
 }
 
 bool Can::Receive(CanFrame* out) { return ReadFifo0(out); }
@@ -105,6 +147,35 @@ bool Can::Receive(CanFrame* out) { return ReadFifo0(out); }
 void Can::SetRxCallback(RxCallback callback, void* context) {
   rx_callback_ = callback;
   rx_context_ = context;
+}
+
+CanStats Can::stats() const {
+  CanStats out;
+  out.bus_off_count = bus_off_count_;
+  out.tx_dropped = tx_dropped_;
+  out.rx_lost = rx_lost_;
+  FDCAN_ErrorCountersTypeDef counters = {};
+  if (HAL_FDCAN_GetErrorCounters(hfdcan_, &counters) == HAL_OK) {
+    out.tx_error_count = static_cast<uint8_t>(counters.TxErrorCnt);
+    out.rx_error_count = static_cast<uint8_t>(counters.RxErrorCnt);
+  }
+  out.bus_off = (hfdcan_->Instance->PSR & FDCAN_PSR_BO) != 0;
+  out.error_passive = (hfdcan_->Instance->PSR & FDCAN_PSR_EP) != 0;
+  return out;
+}
+
+void Can::HandleRxFifo0Lost() { rx_lost_ = rx_lost_ + 1; }
+
+void Can::HandleTxFifoEmpty() {
+  IrqGuard guard;
+  DrainTxQueue();
+}
+
+void Can::HandleBusOff() {
+  bus_off_count_ = bus_off_count_ + 1;
+  // Bus-off sets CCCR.INIT; clearing it starts the recovery sequence (the
+  // controller rejoins after 128 occurrences of 11 recessive bits).
+  CLEAR_BIT(hfdcan_->Instance->CCCR, FDCAN_CCCR_INIT);
 }
 
 void Can::HandleRxFifo0() {
@@ -139,9 +210,29 @@ bool Can::ReadFifo0(CanFrame* out) {
 
 extern "C" void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef* hfdcan,
                                           uint32_t interrupts) {
+  auto* c = lhal::stm32::Find(hfdcan);
+  if (c == nullptr) {
+    return;
+  }
+  if ((interrupts & FDCAN_IT_RX_FIFO0_MESSAGE_LOST) != 0) {
+    c->HandleRxFifo0Lost();
+  }
   if ((interrupts & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != 0) {
+    c->HandleRxFifo0();
+  }
+}
+
+extern "C" void HAL_FDCAN_TxFifoEmptyCallback(FDCAN_HandleTypeDef* hfdcan) {
+  if (auto* c = lhal::stm32::Find(hfdcan)) {
+    c->HandleTxFifoEmpty();
+  }
+}
+
+extern "C" void HAL_FDCAN_ErrorStatusCallback(FDCAN_HandleTypeDef* hfdcan,
+                                              uint32_t interrupts) {
+  if ((interrupts & FDCAN_IT_BUS_OFF) != 0) {
     if (auto* c = lhal::stm32::Find(hfdcan)) {
-      c->HandleRxFifo0();
+      c->HandleBusOff();
     }
   }
 }

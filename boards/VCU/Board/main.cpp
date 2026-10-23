@@ -1,121 +1,194 @@
-// VCU firmware entry point — hand-written, not CubeMX-generated. Everything
-// under Core/ is CubeMX-owned and safe to regenerate; everything under
-// Board/ is ours and CubeMX never touches it.
-//
-// Structure: clock config, Error_Handler(), and (once peripherals are added
-// in the .ioc) the MX_*_Init() functions come from the CubeMX-generated
-// Core/ sources — lhal::stm32::InitCore() runs the clock config. Pin mux
-// and handles not yet in the .ioc are configured at the ST HAL level here.
-// Application logic lives in App/vcu_app.* against LHAL interfaces only, so
-// it also runs on the host (see :vcu_app_test and :vcu_sim).
+// VCU Rev A startup, shared by the vehicle and test images.
 
 #include "main.h"
 
-#include <cstring>
-
 #include "FreeRTOS.h"
+#include "adc.h"
+#include "board.hpp"
+#include "board_safe_state.hpp"
+#include "dac.h"
+#include "dma.h"
+#include "dma_adc.hpp"
+#include "fdcan.h"
+#include "gpio.h"
+#include "lhal/stm32/can.hpp"
+#include "lhal/stm32/dac.hpp"
 #include "lhal/stm32/gpio.hpp"
 #include "lhal/stm32/init.hpp"
+#include "lhal/stm32/pwm.hpp"
+#include "lhal/stm32/reset.hpp"
 #include "lhal/stm32/system.hpp"
 #include "lhal/stm32/uart.hpp"
-#include "lhre/build_info.hpp"
+#include "lhal/stm32/watchdog.hpp"
 #include "task.h"
+#include "tim.h"
+#include "usb_cdc.hpp"
+#include "usb_device.h"
+#include "usbd_desc.h"
+#include "vcu_io.hpp"
+#ifdef VCU_TEST_IMAGE
+#include "vcu_test_app.hpp"
+#else
 #include "vcu_app.hpp"
+#endif
+
+// Defined in the CubeMX-generated USB_Device/App/usb_device.c.
+extern USBD_HandleTypeDef hUsbDeviceFS;
 
 namespace {
 
-// TODO(vcu): point this at the real status LED once the board pinout is
-// final. PA5 is the usual Nucleo dev-board LED.
-GPIO_TypeDef* const kStatusLedPort = GPIOA;
-constexpr uint16_t kStatusLedPin = GPIO_PIN_5;
+// RM0440: VREFINT calibration, measured at 3.0 V / 30 degC (12-bit).
+const volatile uint16_t* const kVrefintCal =
+    reinterpret_cast<const volatile uint16_t*>(0x1FFF75AAu);
 
-// Debug UART on PA2/PA3, the ST-LINK virtual COM port pins on the Nucleo
-// dev board (tools/monitor's counterpart). HAL_UART_MODULE_ENABLED comes
-// from this board's BUILD.bazel for now: LPUART1 isn't in VCU.ioc yet, so
-// the CubeMX-owned hal_conf.h can't supply it. TODO(vcu): add LPUART1 to
-// VCU.ioc — regeneration then emits MX_LPUART1_UART_Init() + the hlpuart1
-// handle and flips hal_conf.h, replacing this hand-rolled init and the
-// BUILD define.
-void ConfigureGpio() {
-  __HAL_RCC_GPIOA_CLK_ENABLE();
-
-  GPIO_InitTypeDef init = {};
-  init.Pin = kStatusLedPin;
-  init.Mode = GPIO_MODE_OUTPUT_PP;
-  init.Pull = GPIO_NOPULL;
-  init.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(kStatusLedPort, &init);
-}
-
-#ifdef HAL_UART_MODULE_ENABLED
-UART_HandleTypeDef g_debug_uart_handle;
-constexpr uint32_t kDebugUartBaud = 115200;
-
-void ConfigureDebugUart() {
-  __HAL_RCC_GPIOA_CLK_ENABLE();
-  __HAL_RCC_LPUART1_CLK_ENABLE();
-
-  GPIO_InitTypeDef init = {};
-  init.Pin = GPIO_PIN_2 | GPIO_PIN_3;
-  init.Mode = GPIO_MODE_AF_PP;
-  init.Pull = GPIO_NOPULL;
-  init.Speed = GPIO_SPEED_FREQ_LOW;
-  init.Alternate = GPIO_AF12_LPUART1;
-  HAL_GPIO_Init(GPIOA, &init);
-
-  g_debug_uart_handle.Instance = LPUART1;
-  g_debug_uart_handle.Init.BaudRate = kDebugUartBaud;
-  g_debug_uart_handle.Init.WordLength = UART_WORDLENGTH_8B;
-  g_debug_uart_handle.Init.StopBits = UART_STOPBITS_1;
-  g_debug_uart_handle.Init.Parity = UART_PARITY_NONE;
-  g_debug_uart_handle.Init.Mode = UART_MODE_TX_RX;
-  g_debug_uart_handle.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  g_debug_uart_handle.Init.ClockPrescaler = UART_PRESCALER_DIV1;
-  if (HAL_UART_Init(&g_debug_uart_handle) != HAL_OK) {
-    Error_Handler();
+class Board final : public vcu::BoardServices {
+ public:
+  void EnterBootloader() override { vcu_board::EnterBootloader(); }
+  uint32_t LoadFaultLatch() override { return vcu_board::LoadFaultLatch(); }
+  void SaveFaultLatch(uint32_t value) override {
+    vcu_board::SaveFaultLatch(value);
   }
-  // 8-deep RX FIFO: headroom for input bursts between shell polls (the
-  // shell task wakes every App::kShellPollMs, not per byte).
-  HAL_UARTEx_EnableFifoMode(&g_debug_uart_handle);
-}
-#endif  // HAL_UART_MODULE_ENABLED
-
-// Hook for the future "build info" CAN response frame: 7 ASCII bytes of the
-// commit SHA plus a dirty flag. Wire this as the reply payload once the CAN
-// request dispatcher lands; when a CAN spec hash is added to lhre::BuildInfo,
-// it belongs in (a second frame of) this response too.
-[[maybe_unused]] void FillBuildInfoFrame(uint8_t out[8]) {
-  std::memcpy(out, lhre::kBuildInfo.git_sha, 7);
-  out[7] = lhre::kBuildInfo.dirty ? 1 : 0;
-}
+};
 
 }  // namespace
 
 int main() {
+  // Before HAL_Init: nothing may clear RCC->CSR's reset flags first.
+  const lhal::ResetCause reset_cause = lhal::stm32::ReadAndClearResetCause();
+
   lhal::stm32::InitCore();  // HAL_Init + CubeMX-generated SystemClock_Config
-  ConfigureGpio();
+
+  // Restore the lamp-on defaults after CubeMX initializes the GPIOs.
+  MX_GPIO_Init();
+  vcu_board::ForceSafeOutputs();
+
+  // Keep the IWDG frozen while a debugger halts the core.
+  DBGMCU->APB1FZR1 |= DBGMCU_APB1FZR1_DBG_IWDG_STOP;
+
+  MX_DMA_Init();
+  MX_ADC1_Init();
+  MX_ADC2_Init();
+  MX_FDCAN1_Init();
+  MX_FDCAN2_Init();
+  MX_TIM2_Init();
+  MX_DAC1_Init();
+  vcu_board::ConfigureAnalog();
+  vcu_board::ConfigureCan();
+  vcu_board::ConfigureDebugUart();
 
   // Everything the tasks touch must be static: the Cortex-M port reclaims
   // main()'s stack for interrupts when the scheduler starts.
   static lhal::stm32::Clock clock;
-  static lhal::stm32::Gpio status_led(kStatusLedPort, kStatusLedPin);
+  static Board board;
 
-  vcu::Peripherals peripherals;
-  peripherals.clock = &clock;
-  peripherals.status_led = &status_led;
+  static vcu_board::DmaAdc adc1(&hadc1, vcu_board::g_adc1_buffer,
+                                vcu::kAdc1Channels, 4095,
+                                &vcu_board::g_adc1_scans);
+  static vcu_board::DmaAdc adc2(&hadc2, vcu_board::g_adc2_buffer,
+                                vcu::kAdc2Channels, 4095,
+                                &vcu_board::g_adc2_scans);
+  if (!lhal::IsOk(adc1.Start()) || !lhal::IsOk(adc2.Start())) {
+    Error_Handler();
+  }
+  vcu_board::StartAdcTrigger();
 
-#ifdef HAL_UART_MODULE_ENABLED
-  ConfigureDebugUart();
-  static lhal::stm32::Uart debug_uart(&g_debug_uart_handle);
-  peripherals.debug_uart = &debug_uart;  // App's shell prints the banner
+  static lhal::stm32::DmaDac audio_dac(&hdac1, DAC_CHANNEL_1,
+                                       &vcu_board::htim7);
+
+  // Critical = FDCAN2 (PB12/PB13), Data = FDCAN1 (PD0/PD1) on Rev A.
+  static lhal::stm32::Can critical_can(&hfdcan2);
+  static lhal::stm32::Can data_can(&hfdcan1);
+  if (!lhal::IsOk(critical_can.Start()) || !lhal::IsOk(data_can.Start())) {
+    Error_Handler();
+  }
+
+  // Status RGB on TIM2 CH1-3, OC polarity low (common anode): duty is
+  // brightness. TODO(verify) D35's pinout and colour order on the bench.
+  static lhal::stm32::Pwm led_g(&htim2, TIM_CHANNEL_1);  // PA0 LED_G
+  static lhal::stm32::Pwm led_r(&htim2, TIM_CHANNEL_2);  // PA1 LED_R
+  static lhal::stm32::Pwm led_b(&htim2, TIM_CHANNEL_3);  // PA2 LED_B
+  led_r.Start();
+  led_g.Start();
+  led_b.Start();
+  // Match the old CCR brightness: boot 125, rainbow peak 127 (ARR=1000).
+  static vcu::RgbLed status_led(&led_r, &led_g, &led_b,
+                                127.0f / (htim2.Init.Period + 1),
+                                125.0f / (htim2.Init.Period + 1));
+
+  static lhal::stm32::Uart debug_uart(&vcu_board::huart3);
+  static vcu_board::UsbCdc usb(&hUsbDeviceFS);
+  // Same startup as CubeMX, with the VCU receive callbacks installed before USB
+  // starts.
+  if (USBD_Init(&hUsbDeviceFS, &CDC_Desc, DEVICE_FS) != USBD_OK ||
+      USBD_RegisterClass(&hUsbDeviceFS, &USBD_CDC) != USBD_OK ||
+      USBD_CDC_RegisterInterface(&hUsbDeviceFS, &VcuUsbInterface) != USBD_OK ||
+      USBD_Start(&hUsbDeviceFS) != USBD_OK) {
+    Error_Handler();
+  }
+  static lhal::stm32::Iwdg watchdog;
+
+  static lhal::stm32::Gpio b1_disconnect(GPIOD, GPIO_PIN_13);
+  static lhal::stm32::Gpio b1_overvoltage(GPIOD, GPIO_PIN_11);
+  static lhal::stm32::Gpio b2_disconnect(GPIOD, GPIO_PIN_14);
+  static lhal::stm32::Gpio b2_overvoltage(GPIOD, GPIO_PIN_15);
+  static lhal::stm32::Gpio hard_braking(GPIOE, GPIO_PIN_7);
+  static lhal::stm32::Gpio combined_condition(GPIOE, GPIO_PIN_8);
+  static lhal::stm32::Gpio fault_confirmed(GPIOE, GPIO_PIN_9);
+  static lhal::stm32::Gpio latch_state(GPIOE, GPIO_PIN_10);
+  static lhal::stm32::Gpio linelock_out(GPIOD, GPIO_PIN_10);
+  static lhal::stm32::Gpio motor_power(GPIOD, GPIO_PIN_12);
+  static lhal::stm32::Gpio motor_disconnect(GPIOE, GPIO_PIN_6);
+  static lhal::stm32::Gpio rtd_switch(GPIOE, GPIO_PIN_11);
+  static lhal::stm32::Gpio linelock_ctrl(GPIOE, GPIO_PIN_15);
+  static lhal::stm32::Gpio amp_shutdown(GPIOE, GPIO_PIN_14);
+  static lhal::stm32::Gpio bms_error(GPIOE, GPIO_PIN_12);
+  static lhal::stm32::Gpio imd_error(GPIOE, GPIO_PIN_13);
+  static lhal::stm32::Gpio crit_stb(GPIOD, GPIO_PIN_9);
+  static lhal::stm32::Gpio data_stb(GPIOD, GPIO_PIN_8);
+
+  vcu::Peripherals p;
+  p.clock = &clock;
+  p.critical_can = &critical_can;
+  p.data_can = &data_can;
+  p.debug_uart = &debug_uart;
+  p.usb_uart = &usb;
+  p.adc1 = &adc1;
+  p.adc2 = &adc2;
+  p.audio_dac = &audio_dac;
+  p.watchdog = &watchdog;
+  p.led_r = &led_r;
+  p.led_g = &led_g;
+  p.led_b = &led_b;
+  p.status_led = &status_led;
+  p.inputs.b1_disconnect = &b1_disconnect;
+  p.inputs.b1_overvoltage = &b1_overvoltage;
+  p.inputs.b2_disconnect = &b2_disconnect;
+  p.inputs.b2_overvoltage = &b2_overvoltage;
+  p.inputs.hard_braking = &hard_braking;
+  p.inputs.combined_condition = &combined_condition;
+  p.inputs.fault_confirmed = &fault_confirmed;
+  p.inputs.latch_state = &latch_state;
+  p.inputs.linelock_out = &linelock_out;
+  p.inputs.motor_power = &motor_power;
+  p.inputs.motor_disconnect = &motor_disconnect;
+  p.inputs.ready_to_drive_switch = &rtd_switch;
+  p.outputs.linelock_ctrl = &linelock_ctrl;
+  p.outputs.amp_shutdown = &amp_shutdown;
+  p.outputs.bms_error_led = &bms_error;
+  p.outputs.imd_error_led = &imd_error;
+  p.outputs.crit_stb = &crit_stb;
+  p.outputs.data_stb = &data_stb;
+  p.board = &board;
+  p.reset_cause = reset_cause;
+  p.vrefint_cal = *kVrefintCal;
+
+#ifdef VCU_TEST_IMAGE
+  static vcu::TestApp app(p);
+#else
+  static vcu::App app(p);
 #endif
-
-  static vcu::App app(peripherals);
   app.StartTasks();
   vTaskStartScheduler();
 
   Error_Handler();  // the scheduler only returns if it failed to start
 }
-
-// Error_Handler() and assert_failed() come from the CubeMX-generated
-// Core/Src/main.c; customize them there inside USER CODE sections.

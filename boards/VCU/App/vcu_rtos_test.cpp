@@ -1,30 +1,26 @@
 // Runs the VCU's real FreeRTOS tasks under the kernel's simulator port
 // (POSIX/Windows — see drivers/freertos) against LHAL host fakes.
 //
-// This complements vcu_app_test: that one drives the scheduler-less Step()
-// path with a TestClock for exact, deterministic timing; this one checks the
-// actual task wiring (StartTasks, priorities, vTaskDelayUntil cadence). The
-// simulator ports tick in real time, so all assertions are lower bounds —
-// a stalled CI machine can only make the tasks catch up and produce *more*
-// iterations, never fewer.
+// vcu_app_test drives the scheduler-less Step() path with a TestClock for
+// exact timing; this one checks the task wiring (StartTasks, priorities,
+// vTaskDelayUntil cadence, the supervisor feeding the watchdog). The
+// simulator ticks in real time, so all assertions are lower bounds.
 //
-// One scheduler run per process: the kernel's static state isn't reusable
-// after vTaskEndScheduler(), so keep everything in this single test.
+// One scheduler run per process: keep everything in this single test.
 
 #include <gtest/gtest.h>
 
 #include "FreeRTOS.h"
 #include "lhal/host/can.hpp"
-#include "lhal/host/gpio.hpp"
+#include "lhal/host/pwm.hpp"
 #include "lhal/host/system.hpp"
+#include "lhal/host/watchdog.hpp"
 #include "lhre_can_vcu.hpp"
 #include "task.h"
 #include "vcu_app.hpp"
 
 namespace {
 
-// Long enough for a handful of 100 ms status broadcasts, short enough to keep
-// the test snappy.
 constexpr uint32_t kRunMs = 350;
 
 void StopTaskEntry(void* /*unused*/) {
@@ -32,18 +28,21 @@ void StopTaskEntry(void* /*unused*/) {
   vTaskEndScheduler();
 }
 
-TEST(VcuRtos, StatusTaskRunsUnderScheduler) {
-  lhal::host::SystemClock clock;
-  lhal::host::Gpio led;
-  lhal::host::CanNetwork network;
-  lhal::host::Can vcu_can(&network);
-  lhal::host::Can dash(&network);  // observer node, e.g. the dashboard
+TEST(VcuRtos, TasksRunUnderScheduler) {
+  static lhal::host::SystemClock clock;
+  static lhal::host::CanNetwork network;
+  static lhal::host::Can vcu_can(&network);
+  static lhal::host::Can observer(&network);
+  static lhal::host::Watchdog watchdog;
+  static lhal::host::Pwm red, green, blue;
+  static vcu::RgbLed led(&red, &green, &blue);
 
   vcu::Peripherals p;
   p.clock = &clock;
+  p.critical_can = &vcu_can;
+  p.watchdog = &watchdog;
   p.status_led = &led;
-  p.can = &vcu_can;
-  vcu::App app(p);
+  static vcu::App app(p);
 
   app.StartTasks();
 
@@ -55,22 +54,27 @@ TEST(VcuRtos, StatusTaskRunsUnderScheduler) {
 
   vTaskStartScheduler();  // returns when StopTaskEntry ends the scheduler
 
-  // 350 ms at a 100 ms period, first broadcast immediate: expect ~4; ≥2
-  // allows heavy scheduler-start jitter.
-  EXPECT_GE(app.statuses_sent(), 2u);
-
-  // The observer saw exactly what was sent, decodable with the generated
-  // bindings.
+  uint32_t inverter = 0;
+  uint32_t heartbeats = 0;
   lhal::CanFrame frame;
-  uint32_t received = 0;
-  while (dash.Receive(&frame)) {
-    ASSERT_TRUE(lhre::can::vcu::VcuStatus::Matches(frame.id));
-    ASSERT_EQ(frame.len, lhre::can::vcu::VcuStatus::kDlc);
-    EXPECT_EQ(lhre::can::vcu::VcuStatus::FromFrame(frame).state,
-              lhre::can::VcuState::kIdle);
-    ++received;
+  while (observer.Receive(&frame)) {
+    if (lhre::can::vcu::InverterTorqueCommand::Matches(frame.id)) {
+      ++inverter;
+      EXPECT_FALSE(
+          lhre::can::vcu::InverterTorqueCommand::FromFrame(frame).enable);
+    }
+    if (lhre::can::vcu::VcuStatus::Matches(frame.id)) {
+      ++heartbeats;
+    }
   }
-  EXPECT_EQ(received, app.statuses_sent());
+  // 350 ms at 3 ms (~116) and 10 ms (~35); generous for scheduler jitter.
+  EXPECT_GE(inverter, 30u);
+  EXPECT_GE(heartbeats, 10u);
+  EXPECT_TRUE(watchdog.started());
+  EXPECT_GE(watchdog.refresh_count(), 5u);
+  EXPECT_EQ(app.state(), vcu::VcuState::kIdle);
+  EXPECT_GT(green.duty(), 0);
+  EXPECT_LT(red.duty(), 0.5f) << "independent rainbow task must advance";
 }
 
 }  // namespace

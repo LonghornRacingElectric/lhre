@@ -411,6 +411,7 @@ def firmware_project(
         enable_usb = False,
         enable_dfu = False,
         locations = [],
+        variants = {},
         enable_printf_float = False,
         linker_script = None,
         startup_script = None,
@@ -472,6 +473,13 @@ def firmware_project(
             USB_DEVICE/ directory exists. Defaults to False.
         enable_dfu (bool, optional): Whether or not to accept strings to go into DFU. Defaults to False.
         locations (list, optional): A list of location identifiers (e.g., ["FR", "FL"]).
+        variants (dict, optional): Extra firmware images built from the same
+            sources, as {"suffix": ["DEFINE", ...]}. Each variant adds
+            :{name}_{suffix} (+ .elf/.bin/.hex), :openocd_{suffix} and
+            :dfu_{suffix}, compiled with the extra defines, alongside the
+            plain image (and per location, if any). For build-time image
+            selection in Board/ code, e.g. a bring-up test image. Defaults
+            to {}.
         enable_printf_float (bool, optional): Whether to link -u _printf_float (adds ~10KB). Defaults to False.
         linker_script (path, optional): Override for the mcu-derived linker script.
         startup_script (path, optional): Override for the mcu-derived startup file.
@@ -640,12 +648,22 @@ def firmware_project(
     else:
         locations_to_build = locations
 
-    for location in locations_to_build:
-        target_name = name
-        location_defines = []
+    # (suffix, defines) per image: the plain image plus one per variant.
+    images = [(None, [])] + sorted(variants.items())
 
+    for location, (variant, variant_defines) in [
+        (loc, image)
+        for loc in locations_to_build
+        for image in images
+    ]:
+        target_name = name
+        location_defines = list(variant_defines)
+        flash_suffix = "_".join([part for part in [variant, location] if part])
+
+        if variant:
+            target_name = "{}_{}".format(target_name, variant)
         if location:
-            target_name = "{}_{}".format(name, location)
+            target_name = "{}_{}".format(target_name, location)
             location_defines.append("BOARD_{}".format(location))
 
         _firmware_binary(
@@ -686,14 +704,14 @@ def firmware_project(
         release_srcs.append("{}.hex".format(target_name))
 
         openocd_flash_target(
-            name = "openocd_{}".format(location) if location else "openocd",
+            name = "openocd_{}".format(flash_suffix) if flash_suffix else "openocd",
             elf = ":{}.elf".format(target_name),
             cfg = "//drivers/stm32/{}:openocd_cfg".format(family),
             tags = ["local", "flasher"],
         )
 
         dfu_flash_target(
-            name = "dfu_{}".format(location) if location else "dfu",
+            name = "dfu_{}".format(flash_suffix) if flash_suffix else "dfu",
             bin_file = ":{}.bin".format(target_name),
             tags = ["local", "flasher"],
         )

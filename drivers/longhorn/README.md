@@ -18,7 +18,10 @@ Each module is its own target so boards pull in only what they use:
 - `//drivers/longhorn:shell` — `longhorn::Shell`, a line-oriented debug
   shell on top of `Console`: type `/help`, `/version` (build provenance,
   the same banner boards print at boot), `/uptime`, plus whatever the
-  board registers with `AddCommand`. Poll it from one loop or task.
+  board registers with `AddCommand`. Poll it from one loop or task. Lines
+  without the leading `/` go to an optional `SetPlainLineHandler` hook —
+  that's how a board answers [tools/dfu](../../tools/dfu/README.md)'s
+  `update.` bootloader request.
   [tools/monitor](../../tools/monitor/README.md) is the laptop-side
   counterpart, and parses `/version` to catch stale firmware.
 - `//drivers/longhorn:logger` — `longhorn::Logger`, thread-safe non-blocking
