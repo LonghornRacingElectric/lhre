@@ -264,6 +264,75 @@ def generate_autocross_track(
 
 
 # ---------------------------------------------------------------------------
+# Acceleration generator (DD.4.2): a fixed rules layout, the seed does nothing
+# ---------------------------------------------------------------------------
+
+# Start line at x = 0, driving along +x. Length and width are D.9.1 of the
+# main FSAE rules, which the Driverless Supplement points to; check them
+# against the 2026 rules. The rules' cone interval is looser than
+# cone_spacing_m, which keeps gaps inside track_builder's max_step_m.
+ACCEL_LENGTH_M = 75.0     # start line to finish line
+ACCEL_WIDTH_M = 4.9       # minimum clear width, between the cone bases
+ACCEL_STAGING_M = 0.30    # nose to start line (DD.4.2.2)
+ACCEL_EXIT_M = 75.0       # full stop within this far past the finish (DD.4.2.4)
+ACCEL_ENTRY_M = 7.0       # lane behind the start, so the staged car sees one
+# Large orange cones stand this far before and after each line, 2 m apart:
+# closer, and the LiDAR detector's 1.5 m dedup_radius merges them.
+ACCEL_GATE_M = 1.0
+
+
+def _evenly(x0: float, x1: float, spacing: float) -> List[float]:
+    """Positions from x0 to x1 inclusive, no further apart than spacing."""
+    n = max(1, math.ceil((x1 - x0) / spacing))
+    return [x0 + (x1 - x0) * i / n for i in range(n + 1)]
+
+
+def acceleration_layout(cone_spacing_m: float = 2.0) -> List[Tuple[float, str]]:
+    """
+    Return (x, kind) for each cone along one side of the acceleration course.
+
+    Both sides are mirror images. Large orange cones flank the start and
+    finish lines (DD.1.1.d), small orange marks the exit lane (DD.1.1.c),
+    and 'side' is that side's own color.
+    """
+    g, finish = ACCEL_GATE_M, ACCEL_LENGTH_M
+    cones = [(x, 'side')
+             for x in _evenly(-ACCEL_ENTRY_M, -g, cone_spacing_m)[:-1]]
+    cones += [(-g, 'orange_large'), (g, 'orange_large')]
+    cones += [(x, 'side')
+              for x in _evenly(g, finish - g, cone_spacing_m)[1:-1]]
+    cones += [(finish - g, 'orange_large'), (finish + g, 'orange_large')]
+    cones += [(x, 'orange_small')
+              for x in _evenly(finish + g, finish + ACCEL_EXIT_M,
+                               cone_spacing_m)[1:]]
+    return cones
+
+
+def generate_acceleration_track(
+    cone_spacing_m: float = 2.0,
+    **_kw,
+) -> Tuple[ConeList, ConeList]:
+    """Straight acceleration course along +x, start line at x = 0."""
+    left: ConeList = []
+    right: ConeList = []
+    for x, kind in acceleration_layout(cone_spacing_m):
+        # The clear width is between bases, so each center sits half its
+        # own base further out; large cones are wider than small ones.
+        spec = CONE_SPECS['blue' if kind == 'side' else kind]
+        y = ACCEL_WIDTH_M / 2.0 + spec.base_width_m / 2.0
+        left.append((x, y))
+        right.append((x, -y))
+    return left, right
+
+
+def pairing_width_m(style: str, width_m: float = 3.5) -> float:
+    """Return the center-to-center width track_builder should pair at."""
+    if style == 'acceleration':
+        return ACCEL_WIDTH_M + CONE_SPECS['blue'].base_width_m
+    return width_m
+
+
+# ---------------------------------------------------------------------------
 # Dispatcher
 # ---------------------------------------------------------------------------
 
@@ -271,7 +340,23 @@ GENERATORS = {
     'simple': generate_simple_track,
     'autocross': generate_autocross_track,
     'oval': generate_oval_track,
+    'acceleration': generate_acceleration_track,
 }
+
+
+def cone_kinds(style: str, left: ConeList, right: ConeList,
+               cone_spacing_m: float = 2.0) -> Tuple[List[str], List[str]]:
+    """
+    Return the kind (a CONE_SPECS key) of every left and right cone.
+
+    Consumers read the side from the marker namespace, never the kind, so
+    orange gate and lane cones stay in the left/right lists.
+    """
+    if style == 'acceleration':
+        kinds = [k for _, k in acceleration_layout(cone_spacing_m)]
+        return ([('blue' if k == 'side' else k) for k in kinds],
+                [('yellow' if k == 'side' else k) for k in kinds])
+    return ['blue'] * len(left), ['yellow'] * len(right)
 
 
 # ---------------------------------------------------------------------------
@@ -300,7 +385,7 @@ class ConePublisher(Node):
         self.start_finish_cones = bool(self.get_parameter('start_finish_cones').value)
         self.frame_id = str(self.get_parameter('frame_id').value)
         hz = float(self.get_parameter('publish_hz').value)
-        style = str(self.get_parameter('track_style').value)
+        style = self.style = str(self.get_parameter('track_style').value)
         num_wp = int(self.get_parameter('num_waypoints').value)
         radius = float(self.get_parameter('radius_m').value)
         jitter = float(self.get_parameter('jitter_m').value)
@@ -322,6 +407,8 @@ class ConePublisher(Node):
             width_m=width,
             cone_spacing_m=spacing,
         )
+        self.left_kinds, self.right_kinds = cone_kinds(
+            style, self.left, self.right, spacing)
 
         # --- Publisher ---
         qos = QoSProfile(depth=1)
@@ -373,18 +460,18 @@ class ConePublisher(Node):
         """Publish all cone markers."""
         arr = MarkerArray()
 
-        for i, (x, y) in enumerate(self.left):
-            arr.markers.append(
-                self.make_cone_marker(i, 'left_cones', x, y,
-                                      0.0, 0.2, 1.0))
+        for i, ((x, y), kind) in enumerate(zip(self.left, self.left_kinds)):
+            arr.markers.append(self.make_cone_marker(
+                i, 'left_cones', x, y, *CONE_SPECS[kind].color, kind=kind))
 
         base = 10000
-        for i, (x, y) in enumerate(self.right):
-            arr.markers.append(
-                self.make_cone_marker(base + i, 'right_cones', x, y,
-                                      1.0, 1.0, 0.0))
+        for i, ((x, y), kind) in enumerate(zip(self.right, self.right_kinds)):
+            arr.markers.append(self.make_cone_marker(
+                base + i, 'right_cones', x, y, *CONE_SPECS[kind].color,
+                kind=kind))
 
-        if self.start_finish_cones:
+        # The acceleration layout already has its gates.
+        if self.start_finish_cones and self.style != 'acceleration':
             for i, (x, y) in enumerate(start_finish_gates(self.left, self.right)):
                 arr.markers.append(self.make_cone_marker(
                     20000 + i, 'start_finish', x, y, 1., .35, 0., kind='orange_large'))

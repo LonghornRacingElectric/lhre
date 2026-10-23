@@ -42,7 +42,9 @@ def _find_world(context: LaunchContext):
       1. Explicit ``world`` argument (if the user overrode it)
       2. ``<worlds_dir>/<track_style>_seed<seed>.sdf`` in the source tree
       3. Same pattern in the installed share directory
-      4. Fall back to any SDF in the source worlds directory
+
+    Nothing else: any other world would disagree with the cones
+    publish_cones generates for this track_style and seed.
     """
     world_arg = context.launch_configurations.get('world', '')
     track_style = context.launch_configurations.get('track_style', 'autocross')
@@ -69,12 +71,6 @@ def _find_world(context: LaunchContext):
             return share_path
     except Exception:
         pass
-
-    # Fallback: first SDF found in source worlds directory
-    if os.path.isdir(src_worlds):
-        for f in sorted(os.listdir(src_worlds)):
-            if f.endswith('.sdf'):
-                return os.path.abspath(os.path.join(src_worlds, f))
 
     return ''
 
@@ -119,11 +115,24 @@ def _launch_setup(context: LaunchContext):
     Called via OpaqueFunction so we can resolve the world path from
     track_style + seed at launch time.
     """
+    track_style = context.launch_configurations.get('track_style', 'autocross')
     world_path = _find_world(context)
     if not world_path:
+        seed = context.launch_configurations.get('seed', '1')
         raise RuntimeError(
-            'No world SDF found. Generate one with: '
-            'python3 scripts/generate_world.py --style <style> --seed <seed>')
+            f'No world for track_style:={track_style} seed:={seed}. Generate it '
+            f'with: python3 scripts/generate_world.py --style {track_style} '
+            f'--seed {seed} --output worlds/{track_style}_seed{seed}.sdf')
+
+    # The event follows the track: the acceleration course only completes
+    # under the acceleration mission, which means nothing on a loop.
+    mission = context.launch_configurations.get('mission', 'autocross')
+    if track_style == 'acceleration':
+        mission = 'acceleration'
+    elif mission == 'acceleration':
+        raise RuntimeError('mission:=acceleration needs track_style:=acceleration')
+    from lhr_trackgen.publish_cones import pairing_width_m
+    track_width = pairing_width_m(track_style)
 
     pkg_share = get_package_share_directory('lhr_gazebo')
     models_dir = os.path.join(pkg_share, 'models')
@@ -342,7 +351,7 @@ def _launch_setup(context: LaunchContext):
                     LaunchConfiguration('beam_width'), value_type=int),
                 'beam_depth': ParameterValue(
                     LaunchConfiguration('beam_depth'), value_type=int),
-                'track_width': 3.5,
+                'track_width': track_width,
                 'track_width_tolerance': 1.0,
             }],
             output='screen',
@@ -371,6 +380,7 @@ def _launch_setup(context: LaunchContext):
                     LaunchConfiguration('beam_width'), value_type=int),
                 'beam_depth': ParameterValue(
                     LaunchConfiguration('beam_depth'), value_type=int),
+                'track_width': track_width,
             }],
             output='screen',
         )
@@ -411,7 +421,9 @@ def _launch_setup(context: LaunchContext):
                 'reference_world': ParameterValue(
                     context.launch_configurations.get('reference_world', '') or world_path,
                     value_type=str),
-                'mission': ParameterValue(LaunchConfiguration('mission'), value_type=str),
+                # The forced mission, so a finished acceleration run is not
+                # scored as an autocross that never lapped.
+                'mission': mission,
                 'output_csv': ParameterValue(LaunchConfiguration('output_csv'), value_type=str),
                 'off_track_threshold': ParameterValue(
                     LaunchConfiguration('off_track_threshold'), value_type=float),
@@ -465,8 +477,7 @@ def _launch_setup(context: LaunchContext):
         executable='mission_manager',
         name='mission_manager',
         parameters=[{
-            'mission': ParameterValue(
-                LaunchConfiguration('mission'), value_type=str),
+            'mission': mission,
             'auto_go': ParameterValue(
                 LaunchConfiguration('auto_go'), value_type=bool),
             'ready_hold_sec': _float('ready_hold_sec'),
