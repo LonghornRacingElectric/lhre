@@ -21,6 +21,7 @@ nav:
       - ADR-010 Telemetry Stack in Bazel: docs/architecture/010-telemetry-stack-in-bazel.md
       - ADR-012 Simulation Outside Bazel: docs/architecture/012-simulation-outside-bazel.md
       - ADR-013 Drive Day Viewer Outside Bazel: docs/architecture/013-driveday-viewer-outside-bazel.md
+      - ADR-014 FMU Artifact Boundary: docs/architecture/014-fmu-artifact-boundary.md
       - Build System: docs/build-system.md
       - Cookbook: docs/cookbook.md
   - Boards:
@@ -60,6 +61,9 @@ nav:
       - Metrics: autonomy/ros2/src/lhr_metrics/README.md
       - Kinematic Sim: autonomy/ros2/src/lhr_sim_kinematic/README.md
       - BobSim Plant: autonomy/ros2/src/lhr_sim_bobsim/README.md
+      - Full Vehicle FMU Plant: autonomy/ros2/src/lhr_sim_fmu/README.md
+      - FMU Runtime: autonomy/ros2/src/lhr_sim_fmu/lhr_sim_fmu/README.md
+      - FMU Tests: autonomy/ros2/src/lhr_sim_fmu/test/README.md
       - Demo Launch: autonomy/ros2/src/lhr_demo/README.md
       - Track Generation: autonomy/ros2/src/lhr_trackgen/README.md
       - Track Builder: autonomy/ros2/src/lhr_track_builder/README.md
@@ -97,6 +101,8 @@ nav:
       - Docs: simulation/docs/README.md
       - Studies: simulation/docs/studies.md
       - BobSim: simulation/docs/bobsim.md
+      - FMU Artifact: simulation/docs/fmu.md
+      - Simulation Tools: simulation/tools/README.md
       - Skills:
           - Add a Study: simulation/docs/skills/add-study/SKILL.md
           - Run a BobSim Target: simulation/docs/skills/run-bobsim-target/SKILL.md

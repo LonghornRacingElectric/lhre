@@ -35,6 +35,7 @@ RUN_PARAMS = (
     ('mission', ''),
     ('perception', 'sim'),
     ('plant', 'kinematic'),
+    ('fmu_pedal_gain', .1),
     ('estimator', 'truth'),
     ('gyro_bias', 0.0),
     ('wheel_scale_error', 1.0),

@@ -38,6 +38,8 @@ make test    # check that BobSim loads //vehicle, then run the fast tests
 | `make unit` | Run the fast unit and contract tests in `tests/`. Then check that `bobsim/` has no local changes. See [docs/tests.md](docs/tests.md). |
 | `make records` | Write `vehicle/vehicle.yml` into BobLib's Modelica records |
 | `make records-undo` | Put back only the files `make records` wrote |
+| `make fmu` | Build the identified Orion FMU with the merged upstream exporter; see [FMU](docs/fmu.md) |
+| `make fmu-source` | Fetch the separately pinned exporter source into ignored build space |
 | `make bobsim T=<target>` | Run a BobSim make target. `T=help` lists them. |
 | `make study S=<name>` | Run `studies/<name>/run.py`. If it succeeds, write outputs to `out/<name>/`. `STUDY_WORKERS=n` limits the CPUs for parallel cases. `ARGS=... V=<name>` runs a variant to `out/<name>--<V>/`. |
 | `make stale S=<name>` | Check if the result in `studies/<name>/README.md` is current, stale or unknown. Without `S`, check every study. See [docs/studies.md](docs/studies.md#check-a-result). |

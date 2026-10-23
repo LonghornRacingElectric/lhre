@@ -114,3 +114,9 @@ The container also mounts the repository read-only at `/opt/lhr` for the optiona
 Initialize the BobSim submodule before selecting `plant:=bobsim`. Recreate
 an existing container to pick up these mounts. BobSim needs pandas alongside
 the image's existing NumPy, SciPy and PyYAML runtime dependencies.
+
+The image includes `fmpy==0.3.32` for the optional full-vehicle FMU plant.
+Rebuild the image after taking that dependency change. Build the native
+artifact with the simulation image, as described in the
+[FMU plant README](../src/lhr_sim_fmu/README.md); OpenModelica is not needed
+in the ROS runtime.

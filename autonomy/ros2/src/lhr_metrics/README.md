@@ -238,7 +238,10 @@ separated from the simplified baseline. Existing CSV files with an older
 header use the existing schema-mismatch handling; do not compare modes using
 only the outcome columns.
 
-The `plant` field distinguishes `kinematic` and `bobsim` runs. BobSim's
+The `plant` field distinguishes `kinematic`, `bobsim` and `fmu` runs.
+`fmu_pedal_gain` records the FMU driver gain. The FMU manifest and latched
+`/lhr/sim/provenance` message carry its artifact/vehicle/tire hashes and
+exporter commit; retain them with results because CSV alone lacks that identity. BobSim's
 commit and dynamics vehicle hash are in the recorded `/lhr/sim/provenance`
 message; the existing `vehicle_sha256` column still hashes the autonomy YAML.
 

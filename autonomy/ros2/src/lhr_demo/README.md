@@ -342,3 +342,19 @@ above it. A dirty repository adds `-dirty` to the commit ID.
 
 The study runner asks ROS launch to stop its children once. It kills the
 process group only if launch does not finish within the cleanup timeout.
+
+## Full-vehicle FMU plant
+
+Select `plant:=fmu` for the [BobLib co-simulation plant](../lhr_sim_fmu/README.md).
+It shares the snapped spawn, clock and truth/EKF remappings of the other
+plants. `fmu_path` is a typed string (empty resolves the standard build
+artifact). `fmu_pedal_gain` is a typed double (0.1), recorded in metrics.
+It maps speed error to driver pedals; it does not impose the DynPy plant
+acceleration clamps. The handwheel command follows the canonical KinPy rack
+calibration. Build the artifact before launching. A missing, stale or failed
+FMU stops the plant and shuts down the launch. Gazebo remains a separate plant.
+
+The study matrix accepts `--plants fmu` after building the standard artifact.
+Its default plant list stays `kinematic bobsim`. Each case retains the FMU
+manifest from `/lhr/sim/provenance` in `result.json`. The study probe remains
+a separate point-based diagnostic, not the MVP acceptance scorer.
