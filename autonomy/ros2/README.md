@@ -661,13 +661,15 @@ Implements the FSAE driverless state machine (DO.1.1). Controls when the vehicle
 | `auto_go` | `true` | Auto-transition Ready → Driving after `ready_hold_sec` (convenient for sim) |
 | `ready_hold_sec` | `5.0` | Seconds to wait in Ready before auto-go |
 | `status_hz` | `10.0` | Status publish rate (Hz) |
+| `require_safety_heartbeat` | `false` | Also wait for a steady `/lhr/safety/heartbeat` before Ready (Gazebo sets it with `safety:=true`) |
+| `safety_settle_s` | `2.0` | Seconds the heartbeat must arrive without a gap |
 
 #### State machine
 
 ```mermaid
 stateDiagram-v2
     [*] --> OFF
-    OFF --> READY: centerline path available
+    OFF --> READY: centerline path available (and safety settled)
     READY --> DRIVING: go signal, or auto_go timeout
     DRIVING --> FINISHED: mission complete + vehicle stopped
     READY --> EMERGENCY: emergency signal

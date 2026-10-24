@@ -19,7 +19,7 @@ import math
 from nav_msgs.msg import Odometry, Path
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Bool, Float32, String
+from std_msgs.msg import Bool, Float32, String, UInt32
 
 # ---------------------------------------------------------------------------
 # State constants
@@ -39,6 +39,10 @@ MISSIONS = [
 # start line (FSAE D.9.1) plus the 0.30 m the nose is staged behind it
 # (DD.4.2.2). That is also how far base_link travels, whatever the overhang.
 ACCEL_FINISH_M = 75.0 + 0.30
+
+# safety_node beats at 20 Hz while its checks pass. Silence longer than this
+# means a check failed, so the settle period starts over.
+HEARTBEAT_GAP_S = 0.25
 
 # Numeric mapping for PlotJuggler (plot /lhr/debug/mission_state)
 STATE_NUM = {
@@ -61,6 +65,12 @@ class MissionManager(Node):
         self.declare_parameter('auto_go', True)
         self.declare_parameter('ready_hold_sec', 5.0)
         self.declare_parameter('status_hz', 10.0)
+        # With safety_node running, READY waits for its heartbeat to have
+        # been steady this long. Arming on the first centerline would arm
+        # in the busiest moment of startup, when a sensor that is merely
+        # late reads as stale and latches an emergency.
+        self.declare_parameter('require_safety_heartbeat', False)
+        self.declare_parameter('safety_settle_s', 2.0)
 
         self._mission = self.get_parameter(
             'mission').get_parameter_value().string_value
@@ -70,6 +80,10 @@ class MissionManager(Node):
             'ready_hold_sec').get_parameter_value().double_value
         status_hz = self.get_parameter(
             'status_hz').get_parameter_value().double_value
+        self._require_safety = self.get_parameter(
+            'require_safety_heartbeat').get_parameter_value().bool_value
+        self._safety_settle_s = self.get_parameter(
+            'safety_settle_s').get_parameter_value().double_value
 
         if self._mission not in MISSIONS:
             self.get_logger().warn(
@@ -91,6 +105,9 @@ class MissionManager(Node):
         self._current_speed = 0.0
         self._pose = None        # (x, y, yaw) from odometry
         self._start_pose = None  # pose on entering DRIVING
+        self._last_heartbeat = None   # seconds, from _now()
+        self._healthy_since = None    # start of the current unbroken run
+        self._waiting_logged = False
 
         # --- Subscribers ---
         self.create_subscription(
@@ -105,6 +122,9 @@ class MissionManager(Node):
             Odometry, '/lhr/vehicle/odom', self._odom_cb, 10)
         self.create_subscription(
             Bool, '/lhr/metrics/lap_complete', self._lap_complete_cb, 10)
+        if self._require_safety:
+            self.create_subscription(
+                UInt32, '/lhr/safety/heartbeat', self._heartbeat_cb, 10)
 
         # --- Publishers ---
         self._status_pub = self.create_publisher(
@@ -155,6 +175,24 @@ class MissionManager(Node):
         if msg.data:
             self._lap_complete = True
 
+    def _heartbeat_cb(self, _msg: UInt32):
+        now = self._now()
+        if self._last_heartbeat is None or now - self._last_heartbeat > HEARTBEAT_GAP_S:
+            self._healthy_since = now
+        self._last_heartbeat = now
+
+    def _now(self) -> float:
+        return self.get_clock().now().nanoseconds * 1e-9
+
+    def _safety_settled(self) -> bool:
+        """Return whether safety_node has said all is well, unbroken, for the settle time."""
+        if not self._require_safety:
+            return True
+        now = self._now()
+        return (self._last_heartbeat is not None
+                and now - self._last_heartbeat <= HEARTBEAT_GAP_S
+                and now - self._healthy_since >= self._safety_settle_s)
+
     # ------------------------------------------------------------------
     # State machine tick
     # ------------------------------------------------------------------
@@ -176,14 +214,23 @@ class MissionManager(Node):
             Float32(data=STATE_NUM.get(self._state, -1.0)))
 
     def _tick_off(self):
-        """OFF -> READY when centerline path is available."""
+        """OFF -> READY when centerline path is available and safety has settled."""
         # An e-stop that arrived before READY (including the tail of the
         # one just reset) is stale. A supervisor that is still tripped,
         # like safety_node, keeps sending it and trips READY again.
         self._emergency_received = False
-        if self._path_available:
-            self._transition(STATE_READY)
-            self._ready_enter_time = self.get_clock().now()
+        if not self._path_available:
+            return
+        if not self._safety_settled():
+            # A sensor that never comes up keeps the car here, in OFF,
+            # rather than arming safety and latching an emergency.
+            if not self._waiting_logged:
+                self.get_logger().info('Waiting for a steady safety heartbeat before READY')
+                self._waiting_logged = True
+            return
+        self._waiting_logged = False
+        self._transition(STATE_READY)
+        self._ready_enter_time = self.get_clock().now()
 
     def _tick_ready(self):
         """READY -> EMERGENCY on e-stop, else DRIVING on go or auto-go."""
