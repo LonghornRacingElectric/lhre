@@ -21,8 +21,10 @@ from launch.actions import (
     DeclareLaunchArgument,
     ExecuteProcess,
     OpaqueFunction,
+    RegisterEventHandler,
     SetEnvironmentVariable,
 )
+from launch.event_handlers import OnShutdown
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
@@ -169,9 +171,17 @@ def _launch_setup(context: LaunchContext):
             output='screen',
         ))
 
-    _gz_env = {
-        'GZ_SIM_RESOURCE_PATH': models_dir,
-    }
+    resource_path = models_dir
+    resource_cleanup = []
+    if enable_stereo:
+        from lhr_gazebo.stereo_camera import stereo_model_resources
+        # Keep world URIs and mesh paths identical in both modes. The overlay
+        # lives for this launch only; concurrent runs never edit shared models.
+        resources = stereo_model_resources(models_dir)
+        resource_path = os.pathsep.join((resources.name, models_dir))
+        resource_cleanup.append(RegisterEventHandler(OnShutdown(
+            on_shutdown=lambda event, context: resources.cleanup())))
+    _gz_env = {'GZ_SIM_RESOURCE_PATH': resource_path}
 
     # ----- Gazebo server -----
     gui = context.launch_configurations.get('gui', 'true').lower()
@@ -522,7 +532,8 @@ def _launch_setup(context: LaunchContext):
         ))
 
     return [
-        SetEnvironmentVariable('GZ_SIM_RESOURCE_PATH', models_dir),
+        SetEnvironmentVariable('GZ_SIM_RESOURCE_PATH', resource_path),
+        *resource_cleanup,
         gz_sim,
         bridge,
         cmd_adapter,
@@ -571,7 +582,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'enable_stereo_camera', default_value='false',
             choices=['true', 'false'],
-            description='Bridge ZED 2i stereo images/calibration and camera TF'),
+            description='Spawn ZED 2i sensors and bridge stereo images/calibration and TF'),
         DeclareLaunchArgument(
             'enable_camera_color_classifier', default_value='false',
             choices=['true', 'false'],
