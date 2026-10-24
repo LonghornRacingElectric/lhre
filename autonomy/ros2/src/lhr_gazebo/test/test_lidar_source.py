@@ -12,6 +12,8 @@ from lhr_lidar_sim.lidar_sim_node import LidarSimNode
 import pytest
 import rclpy
 
+WORLD = Path(__file__).parents[1] / 'worlds/autocross_seed1.sdf'
+
 
 class NodeConfig:
     """Capture launch wiring without launching processes."""
@@ -29,7 +31,7 @@ def launch_nodes(monkeypatch, **overrides):
     monkeypatch.setattr(module, 'Node', NodeConfig)
     monkeypatch.setattr(
         module, '_find_world', lambda context: context.launch_configurations.get('world')
-        or '/tmp/actual_loaded_world.sdf')
+        or str(WORLD))
     monkeypatch.setattr(module, 'get_package_share_directory', lambda _: '/tmp/share')
     context = LaunchContext()
     for action in module.generate_launch_description().entities:
@@ -66,7 +68,7 @@ def test_source_changes_only_cloud_wiring(monkeypatch, estimator, classified):
     assert bridge['remappings'] == baseline['ros_gz_bridge']['remappings'] + [
         ('/lhr/lidar/points', '/lhr/lidar/gazebo_points')]
     sensor = selected['lidar_sim']
-    assert sensor['parameters'][0]['world_sdf'] == '/tmp/actual_loaded_world.sdf'
+    assert sensor['parameters'][0]['world_sdf'] == str(WORLD)
     assert sensor['parameters'][0]['seed'] == 1
     assert sensor['parameters'][0]['use_sim_time'] is True
     assert sensor['remappings'] == [('/lhr/vehicle/odom',
@@ -93,6 +95,55 @@ def test_viewer_port_and_seed_retain_integer_types(monkeypatch, port):
 def test_rejects_invalid_source_modes(monkeypatch, overrides):
     with pytest.raises(ValueError):
         launch_nodes(monkeypatch, **overrides)
+
+
+@pytest.mark.parametrize('change', [
+    lambda s: s.replace('</world>', '<model name="wall"/></world>'),
+    lambda s: s.replace('model://cone_blue', 'model://unknown_obstacle'),
+    lambda s: '<sdf>',
+])
+def test_unsupported_world_fails_before_any_node_is_constructed(monkeypatch, tmp_path, change):
+    world = tmp_path / 'unsupported.sdf'
+    world.write_text(change(WORLD.read_text()))
+    constructed = []
+    monkeypatch.setattr(NodeConfig, '__init__', lambda self, **kw: constructed.append(kw))
+    with pytest.raises(ValueError, match='Unsupported Mid-360 world'):
+        launch_nodes(monkeypatch, perception='lidar', lidar_source='mid360', world=str(world))
+    assert not constructed
+
+
+def test_caster_world_validation_does_not_restrict_gpu_worlds(monkeypatch, tmp_path):
+    world = tmp_path / 'with_wall.sdf'
+    world.write_text(WORLD.read_text().replace('</world>', '<model name="wall"/></world>'))
+    nodes = launch_nodes(monkeypatch, perception='lidar', world=str(world))
+    assert 'lidar_cone_detector' in nodes
+    with pytest.raises(ValueError, match='Unsupported Mid-360 world'):
+        launch_nodes(monkeypatch, perception='lidar', lidar_source='mid360',
+                     world=str(tmp_path / 'missing.sdf'))
+
+
+def test_explicit_missing_world_does_not_fall_back(tmp_path):
+    path = Path(__file__).parents[1] / 'launch/gazebo_demo.launch.py'
+    spec = importlib.util.spec_from_file_location('world_resolution', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    context = LaunchContext()
+    context.launch_configurations['world'] = str(tmp_path / 'missing.sdf')
+    with pytest.raises(ValueError, match='World file does not exist'):
+        module._find_world(context)
+
+
+@pytest.mark.parametrize('estimator', ['truth', 'ekf'])
+@pytest.mark.parametrize('fault', ['odom_nan', 'odom_spike'])
+def test_odometry_faults_leave_caster_on_clean_plant_pose(monkeypatch, estimator, fault):
+    nodes = launch_nodes(monkeypatch, perception='lidar', lidar_source='mid360',
+                         estimator=estimator, fault=fault)
+    clean = '/lhr/vehicle/odom_truth' if estimator == 'ekf' else '/lhr/vehicle/odom_raw'
+    assert ('/lhr/vehicle/odom', clean) in nodes['lidar_sim']['remappings']
+    owner = 'ekf_node' if estimator == 'ekf' else 'ros_gz_bridge'
+    assert ('/lhr/vehicle/odom', '/lhr/vehicle/odom_raw') in nodes[owner]['remappings']
+    assert nodes['fault_injector']['parameters'][0]['fault'] == fault
+    assert nodes['lidar_cone_detector'].get('remappings', []) == []
 
 
 @pytest.mark.parametrize('estimator', ['truth', 'ekf'])

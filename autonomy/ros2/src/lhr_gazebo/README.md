@@ -164,6 +164,14 @@ mode and defaults to `foxglove:=false foxglove_port:=8765`.
 
 `mid360` requires `perception:=lidar`. The caster reads the resolved SDF and
 Gazebo truth pose; perception still receives estimated odometry under EKF.
+Unsupported caster worlds fail in launch setup before processes start; the
+standalone sensor also validates them. Flat ground and nominal upright cone
+includes are supported, not arbitrary obstacles or terrain.
+An explicit missing `world:=...` fails instead of falling back to another track.
+With truth-mode odometry faults the caster reads the bridge's clean
+`/lhr/vehicle/odom_raw`; with EKF it reads `/lhr/vehicle/odom_truth`.
+Only the driving odometry passes through the fault injector, so an odometry
+fault cannot remove cones from the synthetic sensor's input scene.
 Only the selected cloud owns `/lhr/lidar/points`; the GPU comparison moves to
 `/lhr/lidar/gazebo_points`. The existing driving nodes and defaults are retained.
 `lidar_drop` intercepts the selected producer, including Mid-360.

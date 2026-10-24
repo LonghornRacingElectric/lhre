@@ -112,6 +112,8 @@ Its internal read-only `world_sdf` selects the actual loaded world; empty
 World mode accepts flat ground and upright nominal cone includes. Unsupported
 obstacles, frames, transforms and scaling fail explicitly. Cone envelopes are
 ideal surfaces; terrain, self-occlusion and real reflectivity are not modeled.
+Gazebo launch preflights the same loader before starting processes. The caster
+always receives clean plant pose, including under injected driving-odometry faults.
 Conservative azimuth culling speeds up casting without changing geometric hits.
 
 Cloud and mount TF share the truth acquisition stamp. Duplicate stamps suppress

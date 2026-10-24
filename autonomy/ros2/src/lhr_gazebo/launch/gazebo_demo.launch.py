@@ -14,6 +14,7 @@ Usage:
 """
 
 import os
+import xml.etree.ElementTree as ET
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchContext, LaunchDescription
@@ -48,8 +49,10 @@ def _find_world(context: LaunchContext):
     track_style = context.launch_configurations.get('track_style', 'autocross')
     seed = context.launch_configurations.get('seed', '1')
 
-    # If the user explicitly passed a valid world path, use it
-    if world_arg and os.path.isfile(world_arg):
+    # An explicit typo must not silently select a different scene.
+    if world_arg:
+        if not os.path.isfile(world_arg):
+            raise ValueError(f'World file does not exist: {world_arg!r}')
         return world_arg
 
     expected = f'{track_style}_seed{seed}.sdf'
@@ -136,12 +139,22 @@ def _launch_setup(context: LaunchContext):
         raise ValueError('lidar_source must be gazebo or mid360')
     if lidar_source == 'mid360' and perception != 'lidar':
         raise ValueError('lidar_source:=mid360 requires perception:=lidar')
+    if lidar_source == 'mid360':
+        from lhr_lidar_sim.world import load_world_cones
+        try:
+            load_world_cones(world_path)
+        except (OSError, ET.ParseError, ValueError) as error:
+            raise ValueError(f'Unsupported Mid-360 world {world_path!r}: {error}') from error
     classify_sides = context.launch_configurations.get(
         'lidar_classify_sides', 'false').lower() == 'true'
     use_ekf = context.launch_configurations.get(
         'estimator', 'truth').lower() == 'ekf'
     fault = context.launch_configurations.get('fault', '')
     fault_remaps = _fault_remaps(fault, use_ekf, context.launch_configurations)
+    # The sensor sim observes the plant, never the injected driving estimate.
+    caster_odom = '/lhr/vehicle/odom_truth' if use_ekf else (
+        '/lhr/vehicle/odom_raw' if fault in ('odom_nan', 'odom_spike')
+        else '/lhr/vehicle/odom')
 
     enable_stereo = context.launch_configurations.get(
         'enable_stereo_camera', 'false').lower() == 'true'
@@ -311,9 +324,7 @@ def _launch_setup(context: LaunchContext):
                     'seed': ParameterValue(LaunchConfiguration('seed'), value_type=int),
                     'use_sim_time': True,
                 }],
-                remappings=[('/lhr/vehicle/odom',
-                             '/lhr/vehicle/odom_truth' if use_ekf
-                             else '/lhr/vehicle/odom'),
+                remappings=[('/lhr/vehicle/odom', caster_odom),
                             *fault_remaps.get('lidar_sim', [])],
                 output='screen',
             ))
