@@ -405,6 +405,9 @@ def _launch_setup(context: LaunchContext):
             'closed_path': False,
             'path_timeout_sec': ParameterValue(
                 LaunchConfiguration('path_timeout_sec'), value_type=float),
+            # Not an argument: this launch always starts the mission manager,
+            # so the car must never move before it says DRIVING.
+            'wait_for_mission': True,
         }],
         remappings=fault_remaps.get('pure_pursuit', []),
         output='screen',
