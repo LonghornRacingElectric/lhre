@@ -76,6 +76,7 @@ class Vehicle:
     max_steer_rate_rad_s: float
     max_speed_mps: float
     lidar_position_m: Vec3
+    lidar_range_noise_std_m: float
     stereo_camera: StereoCamera
 
     @property
@@ -204,6 +205,10 @@ def load_vehicle(path: Optional[Path] = None) -> Vehicle:
     steering = raw['steering']
     limits = raw['limits']
     sensors = raw['sensors']
+    range_noise_std = sensors['lidar'].get('range_noise_std_m')
+    if (type(range_noise_std) not in (int, float)
+            or not math.isfinite(range_noise_std) or range_noise_std < 0):
+        raise ValueError('lidar.range_noise_std_m: require a finite non-negative number')
 
     return Vehicle(
         name=str(raw['vehicle']['name']),
@@ -221,5 +226,6 @@ def load_vehicle(path: Optional[Path] = None) -> Vehicle:
         max_steer_rate_rad_s=float(steering['max_rate_rad_s']),
         max_speed_mps=float(limits['max_speed_mps']),
         lidar_position_m=_vec3(sensors['lidar']['position_m']),
+        lidar_range_noise_std_m=float(range_noise_std),
         stereo_camera=_load_stereo_camera(sensors.get('stereo_camera')),
     )
