@@ -48,6 +48,9 @@ sensors:
   # chassis_z_m up) and is derived from that, not listed here.
   lidar:
     position_m: [1.8, 0.0, 0.55]     # ASSUMED (Gazebo mount)
+    # Provisional along-beam sigma, matching lhr_lidar_sim's Mid-360 model.
+    # 10/4 acceptance floor-patch RMS was 0.9-1.9 cm; not a range calibration.
+    range_noise_std_m: 0.02
 
   # One ZED 2i, 2.1 mm wide lens (confirmed 2026-10-11).
   # Ideal rectified pinhole optics; replace with measured calibration later.

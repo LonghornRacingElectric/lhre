@@ -87,7 +87,7 @@
           <noise>
             <type>gaussian</type>
             <mean>0</mean>
-            <stddev>0.02</stddev>
+            <stddev>${lidar_range_noise_std_m}</stddev>
           </noise>
         </lidar>
       </sensor>

@@ -155,7 +155,10 @@ Machine setup lives in [GETTING-STARTED.md](GETTING-STARTED.md): Ubuntu 24.04 na
 
 In PlotJuggler: click **Streaming** → **ROS2 Topic Subscriber** → **Start**, select topics, then drag them onto the plot area. Useful topics: `/lhr/debug/curvature`, `/lhr/debug/v_cmd`, `/lhr/debug/mission_state`, `/lhr/vehicle/cmd`.
 
-Launch arguments can be passed through `run_demo.sh`:
+Launch arguments can be passed through `run_demo.sh`. Both demo launches
+give every argument they forward the receiving node's declared type, so a
+whole number like `v_max:=8` or `init_yaw:=0` still arrives as a double
+(each package's `test_launch_param_types.py` checks it):
 
 ```bash
 ./scripts/run_demo.sh lookahead_dist:=6.0 seed:=42
@@ -259,7 +262,7 @@ Gazebo also supports `perception:=lidar lidar_source:=mid360` and optional
 `foxglove:=true`. See [source selection and viewer setup](src/lhr_gazebo/README.md#mid-360-cloud-source-and-foxglove)
 for defaults, headless usage and model limits.
 
-Launch arguments work the same way:
+Launch arguments work the same way as `run_demo.sh`'s, typed the same way:
 ```bash
 ./scripts/run_gazebo_demo.sh seed:=42 lookahead_dist:=6.0
 ./scripts/run_gazebo_demo.sh gui:=false          # headless Gazebo (no Gazebo GUI)
@@ -735,6 +738,8 @@ Speed is planned from path curvature:
 | `lookahead_curvature_gain` | `3.0` | How aggressively lookahead shortens with curvature |
 | `max_steer` | from `vehicle.yaml` | Max steering angle (rad) (default: `lhr_vehicle`) |
 | `wheelbase` | from `vehicle.yaml` | Wheelbase for steering calc (m) (default: `lhr_vehicle`) |
+| `closed_path` | `true` | Wrap only a complete circuit; Gazebo and MVS LiDAR override to false |
+| `path_timeout_sec` | `1.0` | Stop when an open path expires (s) |
 | `control_hz` | `20.0` | Control loop rate (Hz) |
 | `a_lat_max` | `6.0` | Max lateral acceleration for speed law (m/s^2) |
 | `v_min` | `2.0` | Minimum commanded speed (m/s) |
@@ -831,9 +836,13 @@ its limits.
 
 | Param | Default | Description |
 |-------|---------|-------------|
-| `off_track_threshold` | `2.0` | CTE above this (m) counts as off-track |
-| `start_radius` | `2.0` | Distance (m) to centerline[0] to trigger lap zone |
-| `start_hysteresis` | `1.0` | Extra distance (m) vehicle must exceed before lap can complete |
+| `off_track_threshold` | `2.0` | Legacy progress-continuity scale (m); whole-vehicle validity uses truth cone boundaries |
+| `start_radius` | `2.0` | Fixed crossing-gate half-width (m) |
+| `reference_world` | empty | Generated SDF truth source; MVS otherwise latches complete scene cones, Gazebo selects its actual world |
+| `reference_closed` | mission/style dependent in launch | False for acceleration, true for circuits; explicit overrides supported |
+| `min_progress_fraction` | `0.98` | Minimum signed reference progress before a crossing |
+| `lap_start_speed` | `0.1` | Minimum driving speed to start timing (m/s) |
+| `max_odom_gap_sec` | `1.0` | Maximum scored odometry gap (s) |
 | `min_lap_time` | `5.0` | Minimum seconds before a lap return is accepted |
 | `output_csv` | `"data/metrics.csv"` | Path for CSV output (relative to cwd) |
 | `run_id` | `""` | Run identifier; auto-generates timestamp if empty |
@@ -844,6 +853,14 @@ its limits.
 ### Metrics output
 
 The metrics node publishes `/lhr/metrics/lap_complete` (`std_msgs/Bool`) when a lap is detected, which the mission manager uses to trigger the Driving → Finished transition.
+
+Metrics scores distance to fixed truth segments and accepts a lap only after
+continuous course progress and a forward crossing of its fixed gate. When
+a separate truth odometry topic exists, it alone supplies the scored pose;
+estimates only supply estimator-error measurements. Missing
+truth, shortcuts, odometry gaps and clock resets cannot produce an accepted
+lap. Invalidated runs terminate with `invalid_lap` rather than waiting for
+a timeout. See the [scoring contract](src/lhr_metrics/README.md#reference-and-lap-contract).
 
 A run now ends by itself. Metrics finishes on a completed lap, on the
 mission reaching `FINISHED` (so missions with no lap, such as
@@ -860,8 +877,10 @@ metrics exit code does not reach the shell. Use
 `outcome` from the row and exits on that. Anything wiring this into CI
 must go through that script, not `ros2 launch` directly.
 
-The CSV is 39 columns in six groups, because a row of results alone
-cannot be compared with another row:
+The CSV records run configuration and outcomes. The following is a subset;
+the full schema is in [metrics](src/lhr_metrics/README.md). Fixed reference
+identity and scoring settings distinguish rows from historical planner-relative
+measurements:
 
 ```
 run_id, vehicle_sha256, scenario, git_sha,
@@ -870,7 +889,8 @@ stack_window_sec, min_cluster_points, ground_z_min, start_on_track,
 lidar, mount_pitch_rad, elevation_profile, return_profile, fov_deg, max_range_m, noise_std_m, false_negative_rate,
 lookahead_dist, a_lat_max, v_min, v_max, max_accel, max_decel,
 outcome, duration_s, samples, path_length_m, mean_cte, max_cte,
-off_track_count, off_track_dist_m, mean_speed, max_speed, lap_completed
+off_track_count, off_track_dist_m, mean_speed, max_speed, lap_completed,
+reference_sha256, reference_source, reference_length_m, lap_progress_m, lap_time_s, lap_invalid_reason
 ```
 
 `mean_cte` and `off_track_dist_m` are weighted by distance travelled, not
@@ -884,7 +904,9 @@ while barely moving.
 
 Repeat runs are close but never identical: each node is its own process
 with its own executor, so callback interleaving is the scheduler's call.
-Gate on a band, never on equality. Measured over 8 runs at one seed:
+Gate on a band, never on equality. Historical planner-relative measurements
+over 8 runs at one seed gave the following bands; rebaseline them before
+claiming fixed-reference repeatability:
 
 | Metric | Spread | Band |
 |--------|--------|------|
@@ -903,8 +925,12 @@ provenance fields mean and how to add a column. CSV data accumulates in
 `data/metrics.csv` across runs; a file written under an older column set
 is moved aside rather than having its fields dropped.
 
-LiDAR launch modes set `closed_path=false`; local paths do not wrap at their
-ends and expire after `path_timeout_sec=1.0`. See [control](src/lhr_control/README.md).
+Both Gazebo perception modes and MVS LiDAR mode set `closed_path=false`;
+local paths do not wrap at their ends and expire after `path_timeout_sec=1.0`.
+Gazebo exposes `path_timeout_sec` as a typed launch argument in both modes.
+The three `boundary_graph` path limits do not apply to its current planners. See
+[Gazebo](src/lhr_gazebo/README.md#local-path-control) and
+[control](src/lhr_control/README.md).
 
 The MVS launcher also accepts `plant:=bobsim` for the optional
 [BobSim 3 DOF plant](src/lhr_sim_bobsim/README.md). CI initializes the pinned
@@ -914,7 +940,13 @@ Use the [driving study runner](src/lhr_demo/README.md#repeatable-driving-studies
 to compare vehicle plants and perception conditions across seeds and speeds.
 Motion distortion and solid trackside clutter are opt-in MVS launch settings.
 
-Estimator error columns (`mean_pos_error`, `max_pos_error`, `mean_yaw_error`) are appended and stay blank without a truth topic.
+Estimator error columns (`mean_pos_error`, `max_pos_error`, `mean_yaw_error`)
+exclude the READY hold and stay blank without a truth topic. Course validity
+checks a conservative YAML vehicle envelope against truth boundaries and nominal
+cone bases, including a padded translation/yaw sweep between continuous samples.
+Rows include `course_sha256`, `footprint_model`, `sweep_step_m`, `cones_hit` and
+`cone_hit_ids`; see [metrics](src/lhr_metrics/README.md#footprint-boundaries-and-contacts)
+for the contact model and off-track-distance uncertainty.
 
 ### lhr_safety (safety_node)
 

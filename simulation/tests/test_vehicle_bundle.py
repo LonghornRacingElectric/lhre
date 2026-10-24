@@ -1,5 +1,4 @@
 import copy
-import importlib.util
 import re
 import shutil
 import subprocess
@@ -61,7 +60,7 @@ def _is_leaf(node):
     return isinstance(node, dict) and set(node) == {"value", "status", "source"}
 
 
-FILLERS = {"reaction": "chassis", "date": "2026-10-14", "license": "restricted"}
+FILLERS = {"reaction": "chassis", "date": "2026-10-14", "license": "restricted", "front": 0.0, "rear": 0.0}
 
 
 def _declare_everything(data):
@@ -153,7 +152,7 @@ def test_released_needs_the_approval_record(root):
     assert ("axles.front.revision", "release_blocked") in codes
     assert ("frame.datum_z.rear", "release_blocked") in codes
     assert ("members.tires[0].license", "release_blocked") in codes
-    assert ("torque_topology.drive.reaction", "release_blocked") in codes
+    assert ("torque_topology.regen.reaction", "release_blocked") in codes
 
 
 def test_released_passes_when_every_leaf_is_release_grade(root):
@@ -443,14 +442,20 @@ def test_vehicle_has_one_vehicle_file():
     assert not (REPO / "vehicle" / "candidates").exists()
 
 
-def test_the_bobsim_validation_hook_says_what_ran(capsys):
+def test_the_check_says_which_vehicle_checks_ran(capsys):
     vb.main(["check"])
     out = capsys.readouterr().out
-    if importlib.util.find_spec("common.vehicle_schema") is None:
-        assert "BobSim vehicle validation: not available" in out
-    else:
-        assert "BobSim vehicle validation: " in out and "not available" not in out
+    assert "Vehicle checks (units, hardpoints, stored side, singular geometry): passed" in out
+    assert "Vertical datum: front unavailable, rear unavailable" in out
     assert "BobSim load: OK" in out
+
+
+def test_vehicle_checks_do_not_run_on_a_changed_vehicle(root, monkeypatch, capsys):
+    vehicle = root / "vehicle" / "vehicle.yml"
+    vehicle.write_bytes(vehicle.read_bytes() + b"# changed\n")
+    monkeypatch.setattr(vb, "REPO", root)
+    assert vb.main(["check"]) == 1
+    assert "Vehicle checks (units, hardpoints, stored side, singular geometry): not run." in capsys.readouterr().out
 
 
 def test_make_check_vehicle_passes_its_options():

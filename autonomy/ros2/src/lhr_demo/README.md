@@ -116,6 +116,13 @@ Every parameter taken from a launch argument is therefore wrapped in
 and a numeric-looking string stays a string. **A new parameter added to
 a node needs the matching helper**, or it reintroduces this.
 
+The plant and estimator nodes are the exception: `_launch_sim` reads its
+arguments with `perform()` and passes plain values, so convert each one
+there (`float()`, `int()`, `coerce_to_type(..., bool)`), never by
+comparing text. `test/test_launch_param_types.py` fails on a node
+parameter fed a bare `LaunchConfiguration`, and on any text value
+reaching a plant or estimator node.
+
 `run_id` still defaults to `%Y%m%dT%H%M%S` with a `T` rather than an
 underscore, which is now belt as well as braces. The metrics node also
 accepts a numerically-typed `run_id` and coerces it, so running that
@@ -199,6 +206,27 @@ the box and four cylinders instead. The argument is in the bag's
 provenance either way, so an empty-looking recording can be explained
 from the bag rather than from memory.
 
+## Fixed-reference scoring
+
+Metrics latches the complete scene truth on `/lhr/track/cones`, never the
+planner's moving path. Only the scorer receives this reference; LiDAR
+perception and control still use their existing inputs. An empty
+`reference_world` uses this topic; a file override must match the scene.
+
+Closed-course spawn snapping applies to both simplified and LiDAR perception;
+`start_on_track:=false` preserves the exact supplied pose. Open acceleration
+poses remain explicit rather than snapping the default guess into the course.
+
+The launch exposes `reference_closed` (true for circuits, false for acceleration), `off_track_threshold` (2.0 m legacy progress-continuity scale),
+`start_radius` (2.0 m gate half-width), `min_lap_time` (5.0 s),
+`min_progress_fraction` (0.98), `lap_start_speed` (0.1 m/s), and
+`max_odom_gap_sec` (1.0 s). All numeric overrides are explicitly typed doubles.
+The CSV records the latched geometry hash, scoring settings, circuit progress,
+interpolated lap time, actual scoring odometry topic, and any reason that
+disqualified the run. EKF mode scores truth and uses estimates only for error
+measurements. Invalidated runs terminate with a failure.
+See [metrics](../lhr_metrics/README.md#reference-and-lap-contract).
+
 ## Ending a run
 
 The metrics process exiting emits a launch `Shutdown`, so the whole graph
@@ -215,7 +243,7 @@ track. `lidar:=true` alone previews the cloud without changing perception.
 detections and selects the cloud detector, local `boundary_graph` planning and
 open-path control. That mode defaults to `v_max:=4.0` rather than 12 m/s.
 
-`start_on_track:=true` aligns the LiDAR-mode initial pose with the nearest
+`start_on_track:=true` aligns both closed-course perception modes' initial pose with the nearest
 generated centerline and its forward tangent; `false` preserves explicit
 `init_x`, `init_y`, `init_yaw`. Scene geometry sets only the starting pose;
 cone IDs and ground-truth centerlines do not reach the LiDAR planner.
@@ -314,3 +342,10 @@ above it. A dirty repository adds `-dirty` to the commit ID.
 
 The study runner asks ROS launch to stop its children once. It kills the
 process group only if launch does not finish within the cleanup timeout.
+
+The metrics node separately checks the whole YAML vehicle envelope against
+latched scene boundaries and nominal cone bases. `cones_hit` counts unique
+geometric contacts, and either a contact or excursion fails the run. See
+[footprint scoring](../lhr_metrics/README.md#footprint-boundaries-and-contacts)
+for sweep padding and limitations; the separate driving study runner still
+uses its existing point-based diagnostics.

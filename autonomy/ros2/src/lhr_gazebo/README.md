@@ -4,9 +4,10 @@ Gazebo Harmonic vehicle physics, sensor bridging, and demo launch. Run
 `ros2 launch lhr_gazebo gazebo_demo.launch.py` in a supported ROS environment.
 `perception:=sim` uses simplified cone detections; `perception:=lidar` uses
 [lhr_perception](../lhr_perception/README.md) and boundary planning.
-LiDAR mode also selects open-path control so a partial corridor is not
-treated as a complete circuit. See [the workspace reference](../../README.md)
-for launch arguments and vehicle physics.
+Both perception modes select open-path control: the track builder publishes
+a forward prefix, so lookahead and curvature must not connect its ends.
+See [the workspace reference](../../README.md) for launch arguments and
+vehicle physics.
 
 ## LiDAR coordinates
 
@@ -39,8 +40,48 @@ when using ground-relative thresholds. These opt-in configurations need
 Gazebo acceptance testing before changing defaults.
 
 The GPU sensor approximates Mid-360 with a repeating 500 × 40 grid at 10 Hz,
-360° horizontal and −7° to +52° vertical coverage, 0.1–40 m range and 0.02 m
-Gaussian range noise. Select the caster below for imported Livox scan directions.
+360° horizontal and −7° to +52° vertical coverage and 0.1–40 m range.
+This replaces the default VLP-16 grid, including `lidar_source:=gazebo`;
+the detector implementation and thresholds are retained, but its input changes.
+Select the caster below for imported Livox scan directions.
+
+### Range noise
+
+The GPU LiDAR applies independent, zero-mean Gaussian noise along each beam
+before publishing the point cloud. Its standard deviation comes from
+`sensors.lidar.range_noise_std_m` in `lhr_vehicle/config/vehicle.yaml`:
+`0.02` m (2 cm) by default. This rounds the upper end of the 10/4 acceptance
+test's 0.9-1.9 cm floor-patch residuals and matches the existing
+[Mid-360 simulator](../lhr_lidar_sim/README.md)'s range-noise setting.
+Floor-plane residuals are not a direct along-beam calibration; this is a
+provisional noise scale, not a calibration of the Mid-360 grid or caster.
+See the [acceptance log](../../../testing/2026-10-04-mid360-acceptance/log.md#outdoors-driveway-in-front-of-the-garage-from-1637).
+
+The setting must be finite and non-negative. Set it to `0.0` for an ideal-range
+comparison, then regenerate the model and rebuild as below. It is model
+configuration, not a ROS node parameter or launch argument. Sensor range
+limits still apply; angular error, dropout and reflectivity are separate models.
+
+#### Validation (2026-10-23)
+
+Historical VLP-16-grid checks against main `1f694cc`, before the default
+GPU grid replacement, in the ROS 2 Jazzy / Gazebo Harmonic container
+on Apple Silicon with software OpenGL. In the stationary target fixture,
+100 repeated central-beam ranges at 5 m had measured standard deviation
+0.01966 m with the 0.02 m setting and zero with noise disabled.
+
+Both seed-1 runs used `perception:=lidar estimator:=truth gui:=false
+rviz:=false enable_stereo_camera:=false`, default control parameters, and
+the generated 0.02 m noise model. Production metrics scored:
+
+| Track | Outcome | Lap time | Maximum CTE | Off-track distance | Cone contacts |
+| --- | --- | --- | --- | --- | --- |
+| Oval | `lap` | 27.7521 s | 0.2049 m | 0 m | 0 |
+| Autocross | `lap` | 33.6125 s | 0.2609 m | 0 m | 0 |
+
+A zero-noise autocross comparison also completed a valid lap with zero
+off-track distance and cone contacts. These are single-run smoke checks,
+not a measured completion probability or validation of the real sensor.
 
 ## Generated model
 
@@ -135,6 +176,31 @@ On Wayland with X11 available, Gazebo/RViz select `xcb` unless another backend
 is explicitly chosen. Gazebo uses the packaged Fontconfig configuration;
 an explicit `FONTCONFIG_FILE` takes precedence. These overrides are scoped
 to the launched processes.
+
+Every argument the launch forwards to a node carries the node's declared
+type, so a whole number like `v_max:=8` still reaches `pure_pursuit` as a
+double. Untyped, launch_ros would guess from the text and hand the node an
+integer, which kills it at startup. `test_launch_param_types.py` checks every
+node the launch can start for a parameter fed by a bare `LaunchConfiguration`.
+It does not see values the launch reads from `context.launch_configurations`
+itself or wraps in another substitution such as `PythonExpression`; type
+those by hand.
+
+## Local path control
+
+`path_timeout_sec` is a typed double launch argument (default `1.0`, matching
+pursuit) in both perception modes, including `lidar_classify_sides:=true`.
+For example, `path_timeout_sec:=2` changes the local-path expiry deadline.
+
+`closed_path` is fixed to `false` in both Gazebo branches: each publishes a
+car-anchored prefix, not a complete circuit. Lookahead and curvature do not
+connect the endpoints. Tests check default/override startup, endpoint stopping,
+and stale-path stopping; they do not establish Gazebo driving performance.
+
+`planning_horizon_m`, `max_path_gap_m`, and `max_path_turn_deg` only affect
+`boundary_graph`, which Gazebo does not select. They are intentionally not
+Gazebo launch arguments. The current `boundary` / `classified` modes use
+their chaining arguments documented above instead.
 
 ## Command timeout
 
@@ -337,3 +403,36 @@ geometry requires recomputing the measured target distance.
 Camera extrinsics are fixed relative to `base_link`. The existing vehicle
 state/TF is planar, so the map-frame camera pose does not fully represent
 physics roll/pitch. Future 3D projection/fusion needs a 6-DoF vehicle pose.
+
+## Reference scoring
+
+Metrics uses the actual selected world file, including an explicit `world:=...`
+override, as its fixed truth source. The supported generated worlds contain
+ordered `cone_blue_N` and `cone_yellow_N` includes. Metrics never uses the
+planner's path or feeds this reference back to perception/control.
+
+| Argument | Default | Meaning |
+| --- | --- | --- |
+| `reference_world` | empty | Empty resolves to the selected world; override only for a matching reference file |
+| `reference_closed` | mission/style dependent | False for acceleration, true for circuits; explicit overrides remain supported |
+| `off_track_threshold` | `2.0` | Legacy progress-continuity scale, metres; validity uses truth boundaries and the vehicle envelope |
+| `start_radius` | `2.0` | Fixed crossing-gate half-width, metres |
+| `min_lap_time` | `5.0` | Minimum simulation seconds after driving onset |
+| `min_progress_fraction` | `0.98` | Required signed circuit progress |
+| `lap_start_speed` | `0.1` | Speed at which driving timing starts, m/s |
+| `max_odom_gap_sec` | `1.0` | Maximum gap during a scored circuit |
+| `output_csv` | `data/metrics.csv` | Run row, including reference hash and invalidation reason |
+
+Scoring arguments are typed and forwarded in both perception branches and
+with truth or EKF estimation. EKF mode scores `/lhr/vehicle/odom_truth`; truth
+mode scores the plant-owned `/lhr/vehicle/odom`. Estimates only feed error
+measurements. Rows also record Gazebo's scenario, plant, seed, track style,
+waypoints, perception, estimator, and selected estimator perturbations. `reference_closed:=false` scores an open course
+without inventing a return segment or a circuit lap. Missing or invalid world
+geometry fails rather than silently using a different course. See the
+[metrics contract](../lhr_metrics/README.md#reference-and-lap-contract).
+
+Metrics counts conservative geometric contacts against nominal cone bases,
+including orange cones, and checks the whole YAML vehicle envelope against the
+selected world boundaries. This uses truth poses, not Gazebo contact forces;
+see the [scoring model](../lhr_metrics/README.md#footprint-boundaries-and-contacts).

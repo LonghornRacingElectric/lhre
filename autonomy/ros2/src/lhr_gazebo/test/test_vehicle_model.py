@@ -41,6 +41,18 @@ def test_steering_joint_limit_admits_the_inner_ackermann_angle():
     assert gen.inner_steer_limit(veh) > veh.max_steer_rad
 
 
+@pytest.mark.parametrize('stddev', [0.0, 0.0075, 0.02, 0.000001])
+def test_lidar_gaussian_range_noise_uses_vehicle_configuration(stddev):
+    gen = _generator()
+    veh = replace(gen.load_source_vehicle(), lidar_range_noise_std_m=stddev)
+    root = ET.fromstring(gen.render(veh))
+    noise = root.find(".//sensor[@type='gpu_lidar']/lidar/noise")
+    assert noise is not None
+    assert noise.findtext('type') == 'gaussian'
+    assert float(noise.findtext('mean')) == 0.0
+    assert float(noise.findtext('stddev')) == pytest.approx(stddev)
+
+
 def test_stereo_pair_has_shared_rectified_optics():
     """The rendered pair must have physical separation and usable calibration."""
     gen = _generator()
