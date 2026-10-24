@@ -42,6 +42,43 @@ Gazebo acceptance testing before changing defaults.
 Gazebo still uses its existing uniform-grid VLP-16 model. The imported Livox
 pattern belongs to the kinematic [Mid-360 simulator](../lhr_lidar_sim/README.md).
 
+### Range noise
+
+The GPU LiDAR applies independent, zero-mean Gaussian noise along each beam
+before publishing the point cloud. Its standard deviation comes from
+`sensors.lidar.range_noise_std_m` in `lhr_vehicle/config/vehicle.yaml`:
+`0.02` m (2 cm) by default. This rounds the upper end of the 10/4 acceptance
+test's 0.9-1.9 cm floor-patch residuals and matches the existing
+[Mid-360 simulator](../lhr_lidar_sim/README.md)'s range-noise setting.
+Floor-plane residuals are not a direct along-beam calibration; this is a
+provisional noise scale, while Gazebo retains its VLP-16 sampling geometry.
+See the [acceptance log](../../../testing/2026-10-04-mid360-acceptance/log.md#outdoors-driveway-in-front-of-the-garage-from-1637).
+
+The setting must be finite and non-negative. Set it to `0.0` for an ideal-range
+comparison, then regenerate the model and rebuild as below. It is model
+configuration, not a ROS node parameter or launch argument. Sensor range
+limits still apply; angular error, dropout and reflectivity are separate models.
+
+#### Validation (2026-10-23)
+
+Checked against main `1f694cc` in the ROS 2 Jazzy / Gazebo Harmonic container
+on Apple Silicon with software OpenGL. In the stationary target fixture,
+100 repeated central-beam ranges at 5 m had measured standard deviation
+0.01966 m with the 0.02 m setting and zero with noise disabled.
+
+Both seed-1 runs used `perception:=lidar estimator:=truth gui:=false
+rviz:=false enable_stereo_camera:=false`, default control parameters, and
+the generated 0.02 m noise model. Production metrics scored:
+
+| Track | Outcome | Lap time | Maximum CTE | Off-track distance | Cone contacts |
+| --- | --- | --- | --- | --- | --- |
+| Oval | `lap` | 27.7521 s | 0.2049 m | 0 m | 0 |
+| Autocross | `lap` | 33.6125 s | 0.2609 m | 0 m | 0 |
+
+A zero-noise autocross comparison also completed a valid lap with zero
+off-track distance and cone contacts. These are single-run smoke checks,
+not a measured completion probability or validation of the real sensor.
+
 ## Generated model
 
 Edit the template or vehicle YAML, then run
