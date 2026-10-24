@@ -206,7 +206,11 @@ class MissionManager(Node):
     def _start_driving(self):
         self._transition(STATE_DRIVING)
         self._driving_enter_time = self.get_clock().now()
-        self._start_pose = self._pose
+        # The course is fixed: the first drive's start is the reference for
+        # the rest of this launch. Re-arming after an emergency mid-course
+        # must not move the finish 75 m past wherever the car stopped.
+        if self._start_pose is None:
+            self._start_pose = self._pose
 
     def _tick_driving(self):
         """DRIVING -> EMERGENCY on e-stop, or FINISHED once complete and stopped."""

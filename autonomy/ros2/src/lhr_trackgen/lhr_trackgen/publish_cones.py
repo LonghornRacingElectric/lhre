@@ -283,6 +283,10 @@ ACCEL_GATE_M = 1.0
 
 def _evenly(x0: float, x1: float, spacing: float) -> List[float]:
     """Positions from x0 to x1 inclusive, no further apart than spacing."""
+    # A zero, negative or infinite spacing used to give a sparse course (or
+    # divide by zero) that looked like a perception fault downstream.
+    if not math.isfinite(spacing) or spacing <= 0:
+        raise ValueError(f'cone_spacing_m must be positive and finite, got {spacing}')
     n = max(1, math.ceil((x1 - x0) / spacing))
     return [x0 + (x1 - x0) * i / n for i in range(n + 1)]
 

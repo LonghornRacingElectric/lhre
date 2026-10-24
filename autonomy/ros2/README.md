@@ -693,7 +693,7 @@ emergency and trips Ready again.
 Mission completion triggers:
 - **autocross**: lap detected by `lhr_metrics` (via `/lhr/metrics/lap_complete`)
 - **inspection**: 28 seconds elapsed
-- **acceleration**: odometry says the car has gone 75.30 m along the heading it had when Driving began. The staged nose is 0.30 m behind the start line and the finish is 75 m past it, so that's the moment the nose crosses the finish, whatever the overhang
+- **acceleration**: odometry says the car has gone 75.30 m along the heading it had when it first began Driving in this launch (the course is fixed, so re-arming after an emergency mid-course keeps the same finish). The staged nose is 0.30 m behind the start line and the finish is 75 m past it, so that's the moment the nose crosses the finish, whatever the overhang
 - **skidpad, ebs_test, manual**: not yet implemented
 
 The control node (`pursuit_node`) subscribes to `/lhr/mission/status` and `/lhr/mission/complete`. It sends drive commands only while status is `DRIVING` and the mission is not complete; otherwise it commands speed 0. Finished means stopped, so the braking after the finish happens in Driving. When the mission manager is not running, the control node operates freely for backward compatibility.

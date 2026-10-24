@@ -121,8 +121,9 @@ def _launch_setup(context: LaunchContext):
         seed = context.launch_configurations.get('seed', '1')
         raise RuntimeError(
             f'No world for track_style:={track_style} seed:={seed}. Generate it '
-            f'with: python3 scripts/generate_world.py --style {track_style} '
-            f'--seed {seed} --output worlds/{track_style}_seed{seed}.sdf')
+            f'from autonomy/ros2 with: python3 src/lhr_gazebo/scripts/generate_world.py '
+            f'--style {track_style} --seed {seed} '
+            f'--output src/lhr_gazebo/worlds/{track_style}_seed{seed}.sdf, then rebuild')
 
     # The event follows the track: the acceleration course only completes
     # under the acceleration mission, which means nothing on a loop.

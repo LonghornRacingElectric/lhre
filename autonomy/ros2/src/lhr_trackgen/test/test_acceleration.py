@@ -73,6 +73,13 @@ def test_gaps_fit_the_perception_stack(spacing):
     assert max(gaps) <= max(spacing, 2.0) + 1e-9
 
 
+@pytest.mark.parametrize('spacing', [0.0, -2.0, float('inf'), float('nan')])
+def test_bad_spacing_is_rejected(spacing):
+    # Silently building a sparse course would look like a perception fault.
+    with pytest.raises(ValueError, match='cone_spacing_m'):
+        generate_acceleration_track(cone_spacing_m=spacing)
+
+
 def test_layout_ignores_seed_and_width():
     assert (generate_acceleration_track(seed=1, width_m=3.5)
             == generate_acceleration_track(seed=9, width_m=8.0))

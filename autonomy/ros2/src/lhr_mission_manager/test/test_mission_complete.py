@@ -99,6 +99,25 @@ def test_autocross_lap_brakes_before_finished(make):
     assert mm._state == 'FINISHED'
 
 
+def test_acceleration_finish_stays_put_after_an_emergency_restart(make):
+    mm = make('acceleration')
+    _odom(mm, -2.0, 0.0)
+    _drive(mm)
+    _odom(mm, 40.0, 0.0, speed=10.0)
+    mm._emergency_cb(Bool(data=True))
+    mm._tick()
+    mm._reset_cb(Bool(data=True))
+    mm._tick()
+    assert mm._state == 'OFF'
+    _drive(mm)  # re-armed with the car stopped mid-course
+    _odom(mm, -2.0 + ACCEL_FINISH_M - 0.1, 0.0, speed=10.0)
+    mm._tick()
+    assert not mm._complete
+    _odom(mm, -2.0 + ACCEL_FINISH_M + 0.1, 0.0, speed=10.0)
+    mm._tick()
+    assert mm._complete  # the physical finish, not 75 m past x = 40
+
+
 def test_reset_clears_completion(make):
     mm = make('autocross')
     _drive(mm)

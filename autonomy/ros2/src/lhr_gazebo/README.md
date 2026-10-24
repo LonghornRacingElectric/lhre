@@ -136,11 +136,15 @@ their chaining arguments documented above instead.
 `seed`: `autocross_seed1` to `seed5` (the MVP gate's seeds), `oval_seed1`,
 and `acceleration_seed1`. A missing world is an error, not a substitute:
 any other world would disagree with the cones `publish_cones` generates
-for that seed. Generate it:
+for that seed. Generate it from `autonomy/ros2`, then rebuild:
 
 ```bash
-python3 scripts/generate_world.py --style autocross --seed 6 --output worlds/autocross_seed6.sdf
+python3 src/lhr_gazebo/scripts/generate_world.py --style autocross --seed 6 \n    --output src/lhr_gazebo/worlds/autocross_seed6.sdf
 ```
+
+`./scripts/run_gazebo_demo.sh` passes its arguments straight to the launch,
+which picks the world the same way, so the world always matches the cones,
+mission and pairing width.
 
 `test_world_cones.py` fails when a committed world no longer holds exactly
 the cones trackgen publishes for its style and seed, so regenerate after
