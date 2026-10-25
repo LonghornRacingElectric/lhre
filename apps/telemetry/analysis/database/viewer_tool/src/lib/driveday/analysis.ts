@@ -74,15 +74,16 @@ export class Analysis {
     this.theoCache = undefined;
     const { runs } = this.s;
     const vr = runs.filter((l) => this.valid(l));
-    const pool = vr.length ? vr : runs;
+    const pool = vr;
     this.best = [0, 1, 2].map((i) => {
       const values = pool.map((l) => l.sec[i]).filter((v): v is number => v != null && Number.isFinite(v));
       return values.length ? Math.min(...values) : NaN;
     });
-    this.bestLap = Math.min(...pool.map((l) => l.dur));
+    this.bestLap = pool.length ? Math.min(...pool.map((l) => l.dur)) : NaN;
     this.theo = this.best.reduce((a, b) => a + b, 0);
-    this.bestRun = pool.reduce((a, b) => (b.dur < a.dur ? b : a));
+    this.bestRun = (pool.length ? pool : runs).reduce((a, b) => (b.dur < a.dur ? b : a));
     this.bestSec = [0, 1, 2].map((k) => {
+      if (!pool.length) return { v: NaN, lap: 0, label: "No eligible lap" };
       let bl = pool[0];
       pool.forEach((l) => {
         if (l.sec[k] != null && (bl.sec[k] == null || l.sec[k]! < bl.sec[k]!)) bl = l;
@@ -95,9 +96,13 @@ export class Analysis {
 
   /* ---- skipped laps, cones, penalty ---- */
   valid(l: Lap): boolean {
-    if (l.kind !== "lap") return true;
+    if (l.kind !== "lap") return false;
     const f = this.u.flags[this.s.lapNo(l)];
-    return !(f && f.x);
+    if (f?.x) return false;
+    if (typeof f?.include === "boolean") return f.include;
+    const rules = this.u.validity ?? { excludeCones: false, excludeOffCourse: true, excludeIncomplete: true };
+    return !(rules.excludeCones && (this.conesOf(l) > 0 || f?.f === "cone")) &&
+      !(rules.excludeOffCourse && f?.f === "offcourse") && !(rules.excludeIncomplete && f?.f === "incomplete");
   }
   pen(): number {
     const v = numSetup(this.u, "pen");
@@ -284,7 +289,7 @@ export function gpsStats(s: Session): { hz: number; gaps: number } {
   const dts: number[] = [];
   let gaps = 0;
   s.TLAPS.forEach((l) => {
-    const t = l.ch.t;
+    const t = s.D.quality ? s.D.quality.gpsTimes.filter(t => t >= l.t0 && t <= l.t1) : l.ch.t;
     for (let i = 1; i < t.length; i++) {
       const d = t[i] - t[i - 1];
       if (d > 1) {
@@ -302,7 +307,7 @@ export function gpsStats(s: Session): { hz: number; gaps: number } {
 export function sectorClass(a: Analysis, l: Lap, i: number): "p" | "g" | "y" | "n" {
   const v = l.sec[i];
   if (v == null || !Number.isFinite(v)) return "n";
-  if (l.kind === "lap" && Math.abs(v - a.best[i]) < 1) return "p";
+  if (l.kind === "lap" && a.valid(l) && Math.abs(v - a.best[i]) < 1) return "p";
   const baseline = a.s.base.sec[i];
   return baseline == null ? "n" : v <= baseline ? "g" : "y";
 }

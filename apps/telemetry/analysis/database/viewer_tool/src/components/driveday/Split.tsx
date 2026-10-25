@@ -17,7 +17,7 @@ export function Split({ main, dock, onDock }: { main: React.RefObject<HTMLElemen
   };
   const end = () => {
     dragging.current = false;
-    document.body.classList.remove("resizing");
+    document.querySelector(".ddv")?.classList.remove("resizing");
   };
   return (
     <div
@@ -31,7 +31,7 @@ export function Split({ main, dock, onDock }: { main: React.RefObject<HTMLElemen
       onPointerDown={(e) => {
         dragging.current = true;
         e.currentTarget.setPointerCapture(e.pointerId);
-        document.body.classList.add("resizing");
+        document.querySelector(".ddv")?.classList.add("resizing");
         e.preventDefault();
       }}
       onPointerMove={(e) => {

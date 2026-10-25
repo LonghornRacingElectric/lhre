@@ -360,6 +360,13 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
     ctx.fillText(tt, px, py);
   }
   /* ghost and the car */
+  for (const marker of p.reviewMarkers) {
+    const x = X(marker.point[0]), y = Y(marker.point[1]);
+    ctx.fillStyle = marker.color; ctx.strokeStyle = pal.panel; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, y, 5, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.font = "600 10px " + pal.fMono; ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+    ctx.fillText(marker.label, x + 8, y - 6);
+  }
   const R = p.refLap();
   if (R && R !== L) {
     const gp = p.replayPosition(R, rel);

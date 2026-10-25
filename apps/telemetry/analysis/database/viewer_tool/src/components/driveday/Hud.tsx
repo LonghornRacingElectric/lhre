@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { sectorClass } from "@/lib/driveday/analysis";
 import { clock, fmt } from "@/lib/driveday/format";
 import { interp } from "@/lib/driveday/math";
@@ -21,8 +22,8 @@ export function HudLeft() {
   const nm = L.kind === "out" ? "Out lap" : L.kind === "partial" ? L.name.replace(" (in progress)", "") : L.name;
   const cones = a.conesOf(L);
 
-  let secs: React.ReactNode = null; // typed: viewer_tool has noImplicitAny off, so a bare null is narrowed to null
-  if (L.sec) {
+  let secs: ReactNode = null;
+  if (R && L.sec) {
     const e0 = L.sec[0] ?? Infinity;
     const e1 = e0 + (L.sec[1] ?? Infinity);
     const act = rel < e0 ? 0 : rel < e1 ? 1 : 2;
@@ -43,7 +44,7 @@ export function HudLeft() {
       </div>
     );
   }
-  let gap: React.ReactNode = null;
+  let gap: ReactNode = null;
   if (R && R !== L) {
     const u = interp(L.ch.t, L.ch.u, rel);
     const g = rel <= 0 ? 0 : rel >= L.dur ? L.dur - R.dur : rel - elapsedAtDistance(R, u, p.RL);

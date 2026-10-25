@@ -2,6 +2,7 @@ import { Analysis } from "./analysis";
 import { clock } from "./format";
 import { posAt } from "./geometry";
 import { interp, wrap } from "./math";
+import { timelineWindow, zoomWindow } from "./timeline-window";
 import { pieces, segAt, zoneAt } from "./segments";
 import { sectorTimes, suggestGates, validGates, type SectorGates } from "./sectors";
 import type { Session } from "./session";
@@ -71,6 +72,8 @@ export class Player {
   videoKey = "";
   videoLinked = false;
   videoCodecLabel = "";
+  videoCurrentTime = 0;
+  reviewMarkers: { point: [number, number]; label: string; color: string }[] = [];
   showSeg = false;
   showCones = true;
   raceMode = false;
@@ -79,6 +82,19 @@ export class Player {
   baseIdx: number;
   sectorMethod: "auto" | "manual" = "auto";
   hoverT: number | null = null;
+  timelineStart = 0;
+  timelineEnd: number | null = null;
+  get timelineRange() { return timelineWindow(this.TD, this.timelineStart, this.timelineEnd ?? this.TD); }
+  setTimelineWindow(start: number, end: number) {
+    const range = timelineWindow(this.TD, start, end);
+    this.timelineStart = range.start; this.timelineEnd = range.end;
+    this.hoverT = null; this.ui.bump(); this.schedule(true);
+  }
+  zoomTimeline(factor: number, anchor = this.T) {
+    const r = this.timelineRange;
+    const next = zoomWindow(this.TD, r.start, r.end, factor, Math.max(r.start, Math.min(r.end, anchor)));
+    this.setTimelineWindow(next.start, next.end);
+  }
   /* camera */
   view: View;
   anim: { f: View; t: View; t0: number; dur: number } | null = null;
@@ -187,7 +203,7 @@ export class Player {
   }
   refLap(): Lap | null {
     switch (this.cmp) {
-      case "best": return this.analysis.bestRun;
+      case "best": return Number.isFinite(this.analysis.bestLap) ? this.analysis.bestRun : null;
       case "theo": return this.analysis.theoLap();
       case "lap": return this.laps[this.ghostLapI] ?? null;
       case "external":
@@ -315,7 +331,6 @@ export class Player {
     this.seekLap(order[n]);
   }
   play(on: boolean) {
-    if (on && this.playing) return; // a second tick loop would double the playback speed
     this.playing = on;
     if (on) {
       if (this.endMode === "stop" && this.T >= this.laps[this.sel].t1 - this.T0 - 80 && this.T < this.TD - 80) this.T = this.laps[this.sel].t1 - this.T0 + 1;
@@ -623,12 +638,19 @@ export class Player {
       user.dismissedCones = [...new Set([...(user.dismissedCones ?? []), event.id])];
     user.ce.splice(index, 1);
   }
-  addMark(text: string) {
+  addMark(text: string, category: "note" | "braking" | "cone" | "offcourse" | "video" = "note") {
     this.update((u) => {
-      u.marks.push({ id: Date.now().toString(36), t: Math.round(this.T), text });
+      u.marks.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), t: Math.round(this.T), text, category,
+        ...(this.videoUrl ? { video: { key: this.videoKey, name: this.videoName, time: this.videoCurrentTime } } : {}) });
       u.marks.sort((a, b) => a.t - b.t);
     });
     this.toast("Note added at " + clock(this.T));
+  }
+  seekMark(id: string) {
+    const mark = this.user.marks.find(m => m.id === id);
+    if (!mark) return;
+    this.play(false); this.setT(mark.t);
+    if (mark.video && typeof window !== "undefined") window.dispatchEvent(new CustomEvent("driveday:bookmark", { detail: { run: this.session.D.meta.sessId, ...mark.video } }));
   }
   deleteMark(i: number) {
     this.update((u) => { u.marks.splice(i, 1); });

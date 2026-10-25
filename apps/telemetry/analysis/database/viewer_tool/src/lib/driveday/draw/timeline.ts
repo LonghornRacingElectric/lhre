@@ -2,6 +2,7 @@ import type { Player } from "../player";
 import { sU } from "../units";
 import { KMH_PER_MPH } from "../format";
 import { MONO, palette, setupCanvas } from "./palette";
+import { speedEnvelope } from "../timeline-window";
 
 /* The session timeline: speed profile behind lap chapters, with sector ticks, cones, notes, alerts, the loop and the playhead. */
 
@@ -10,20 +11,24 @@ export const TOPH = 58;
 export const STRIP_Y = 62;
 export const STRIP_H = 24;
 
-export const timeX = (p: Player, ms: number, w: number) => TPAD + (ms / p.TD) * (w - 2 * TPAD);
+export const timeX = (p: Player, ms: number, w: number) => TPAD + ((ms - p.timelineRange.start) / p.timelineRange.span) * (w - 2 * TPAD);
 
 export function drawTimeline(p: Player, canvas: HTMLCanvasElement) {
   const c = setupCanvas(canvas);
   if (!c) return;
   const { g, w, h: physicalHeight } = c;
   const pal = palette();
-  if (physicalHeight < 70) { drawCompact(p, g, w, physicalHeight, pal); return; }
   const h = physicalHeight;
-  const topH = h - 50, stripY = topH + 4, stripH = 24;
+  const stripH = h < 70 ? 16 : 24;
+  const topH = h < 70 ? Math.max(14, h - stripH - 18) : h - 50, stripY = topH + 4;
   const { session: s, analysis: a } = p;
-  const { TLAPS, T0, vmaxMph, laps, base } = s;
+  const { TLAPS, T0, laps, base } = s;
+  const vmaxMph = Math.max(1, s.vmaxMph);
   const cur = laps[p.sel];
-  const tx = (ms: number) => timeX(p, ms, w);
+  const range = p.timelineRange;
+  const tx = (ms: number) => TPAD + (ms - range.start) / range.span * (w - 2 * TPAD);
+  const traces = TLAPS.filter(l => l.t1 - T0 >= range.start && l.t0 - T0 <= range.end).map(l => ({ l, indices: speedEnvelope(l.ch.t, l.ch.spd, range.start - l.t0 + T0, range.end - l.t0 + T0, w) }));
+  g.save(); g.beginPath(); g.rect(TPAD, 0, w - 2 * TPAD, h); g.clip();
 
   /* speed profile, like a heat strip behind the chapters */
   g.font = MONO(pal);
@@ -31,7 +36,7 @@ export function drawTimeline(p: Player, canvas: HTMLCanvasElement) {
   g.textBaseline = "alphabetic";
   (p.units.spd === "kph" ? [30, 60] : [20, 40]).forEach((d) => {
     const v = d / (p.units.spd === "kph" ? KMH_PER_MPH : 1);
-    if (v < vmaxMph) {
+    if (v < vmaxMph && h >= 70) {
       const y = topH - (v / vmaxMph) * (topH - 6);
       g.strokeStyle = pal.line;
       g.lineWidth = 1;
@@ -45,7 +50,7 @@ export function drawTimeline(p: Player, canvas: HTMLCanvasElement) {
   });
   g.beginPath();
   g.moveTo(tx(0), topH);
-  TLAPS.forEach((l) => l.ch.t.forEach((t, i) => g.lineTo(tx(l.t0 - T0 + t), topH - (l.ch.spd[i] / vmaxMph) * (topH - 6))));
+  traces.forEach(({ l, indices }) => indices.forEach(i => g.lineTo(tx(l.t0 - T0 + l.ch.t[i]), topH - (l.ch.spd[i] / vmaxMph) * (topH - 6))));
   g.lineTo(tx(p.TD), topH);
   g.closePath();
   g.globalAlpha = 0.5;
@@ -56,8 +61,9 @@ export function drawTimeline(p: Player, canvas: HTMLCanvasElement) {
   g.lineWidth = 1.8;
   g.beginPath();
   let started = false;
-  TLAPS.forEach((l) =>
-    l.ch.t.forEach((t, i) => {
+  traces.forEach(({ l, indices }) =>
+    indices.forEach((i) => {
+      const t = l.ch.t[i];
       const x = tx(l.t0 - T0 + t);
       const y = topH - (l.ch.spd[i] / vmaxMph) * (topH - 6);
       if (started) g.lineTo(x, y);
@@ -71,6 +77,7 @@ export function drawTimeline(p: Player, canvas: HTMLCanvasElement) {
   g.textAlign = "center";
   g.textBaseline = "middle";
   TLAPS.forEach((l) => {
+    if (l.t1 - T0 < range.start || l.t0 - T0 > range.end) return;
     const x0 = tx(l.t0 - T0);
     const x1 = tx(l.t1 - T0);
     const isCur = l === cur;
@@ -105,7 +112,8 @@ export function drawTimeline(p: Player, canvas: HTMLCanvasElement) {
       g.fillStyle = isCur ? pal.bg : pal.ink;
       g.globalAlpha = isCur ? 1 : 0.85;
       g.font = "600 11px " + pal.fMono;
-      g.fillText(fitLabel(g, label, x1 - x0 - 4), (x0 + x1) / 2, stripY + stripH / 2 - 2);
+      const visibleStart = Math.max(TPAD, x0), visibleEnd = Math.min(w - TPAD, x1);
+      g.fillText(fitLabel(g, label, visibleEnd - visibleStart - 4), (visibleStart + visibleEnd) / 2, stripY + stripH / 2 - 2);
       g.globalAlpha = 1;
     }
     /* cones counted without a time */
@@ -124,9 +132,10 @@ export function drawTimeline(p: Player, canvas: HTMLCanvasElement) {
   g.fillStyle = pal.mute;
   g.font = MONO(pal);
   g.textBaseline = "alphabetic";
-  for (let sec = 0; sec * 1000 <= p.TD; sec += 60) {
+  const tick = range.span <= 10000 ? 1 : range.span <= 60000 ? 5 : range.span <= 300000 ? 15 : 60;
+  for (let sec = Math.ceil(range.start / 1000 / tick) * tick; sec * 1000 <= range.end; sec += tick) {
     g.textAlign = sec === 0 ? "left" : "center";
-    g.fillText(Math.floor(sec / 60) + ":00", tx(sec * 1000), h - 4);
+    g.fillText(Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0"), tx(sec * 1000), h - 4);
   }
   /* hover and playhead */
   if (p.hoverT != null) {
@@ -152,29 +161,7 @@ export function drawTimeline(p: Player, canvas: HTMLCanvasElement) {
   g.arc(px, stripY + stripH + 8, 6, 0, 7);
   g.fill();
   g.stroke();
-}
-
-/** Compact mode retains lap chapters, timed events, loops and seeking, without the speed graph. */
-function drawCompact(p: Player, g: CanvasRenderingContext2D, w: number, h: number, pal: ReturnType<typeof palette>) {
-  const tx = (t: number) => timeX(p, t, w);
-  const { session: s } = p;
-  const y = 8, height = 21;
-  g.font = "600 10px " + pal.fMono; g.textAlign = "center"; g.textBaseline = "middle";
-  s.TLAPS.forEach(lap => {
-    const a = tx(lap.t0 - s.T0), b = tx(lap.t1 - s.T0);
-    g.fillStyle = lap.kind !== "lap" ? pal.track : Math.abs(lap.dur - p.analysis.bestLap) < 1 ? pal.purple : pal.green;
-    g.globalAlpha = lap === p.laps[p.sel] ? 1 : 0.5;
-    g.fillRect(a, y, Math.max(1, b - a - 1), height); g.globalAlpha = 1;
-    if (b - a > 40) { g.fillStyle = pal.ink; g.fillText(fitLabel(g, lap.name, b - a - 4), (a + b) / 2, y + height / 2); }
-  });
-  if (p.loopA != null && p.loopB != null) { g.fillStyle = pal.s1; g.globalAlpha = 0.2; g.fillRect(tx(p.loopA), y, tx(p.loopB) - tx(p.loopA), height); g.globalAlpha = 1; }
-  for (const [events, color] of [[p.user.ce, pal.s2], [p.user.marks, pal.purple], [p.analysis.alerts, pal.red]] as const) {
-    g.fillStyle = color;
-    for (const event of events) { g.beginPath(); g.arc(tx(event.t), 4, 2.5, 0, 7); g.fill(); }
-  }
-  g.fillStyle = pal.mute; g.font = MONO(pal); g.textBaseline = "alphabetic";
-  for (let t = 0; t <= p.TD; t += 60000) { g.textAlign = t === 0 ? "left" : "center"; g.fillText(Math.floor(t / 60000) + ":00", tx(t), h - 3); }
-  g.strokeStyle = pal.ink; g.lineWidth = 2; g.beginPath(); g.moveTo(tx(p.T), 0); g.lineTo(tx(p.T), height + y + 3); g.stroke();
+  g.restore();
 }
 
 /** Skipped laps, flags, loop, cone hits, notes, alerts. */

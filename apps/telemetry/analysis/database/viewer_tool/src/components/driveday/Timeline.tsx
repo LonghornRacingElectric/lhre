@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { clock } from "@/lib/driveday/format";
 import { interp } from "@/lib/driveday/math";
 import { drawTimeline, TPAD, timeX } from "@/lib/driveday/draw/timeline";
@@ -15,10 +15,32 @@ export function Timeline() {
   const ref = usePainter(p, "timeline", (c) => drawTimeline(p, c), true);
   const tip = useRef<HTMLDivElement>(null);
   const down = useRef(false);
+  const range = p.timelineRange;
 
-  const posOf = (e: React.PointerEvent) => {
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const wheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const current = p.timelineRange;
+      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? canvas.clientHeight : 1;
+      if (event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
+        const delta = (event.deltaX || event.deltaY) * unit / canvas.clientWidth * current.span;
+        p.setTimelineWindow(current.start + delta, current.end + delta);
+      } else if (event.deltaY) {
+        const bounds = canvas.getBoundingClientRect();
+        const fraction = Math.max(0, Math.min(1, (event.clientX - bounds.left - TPAD) / (bounds.width - 2 * TPAD)));
+        p.zoomTimeline(Math.exp(-Math.max(-120, Math.min(120, event.deltaY * unit)) * 0.004), current.start + fraction * current.span);
+      }
+      if (tip.current) tip.current.hidden = true;
+    };
+    canvas.addEventListener("wheel", wheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", wheel);
+  }, [p, ref]);
+
+  const posOf = (e: { clientX: number; currentTarget: EventTarget }) => {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    return Math.max(0, Math.min(p.TD, ((e.clientX - r.left - TPAD) / (r.width - 2 * TPAD)) * p.TD));
+    return Math.max(range.start, Math.min(range.end, range.start + ((e.clientX - r.left - TPAD) / (r.width - 2 * TPAD)) * range.span));
   };
   const onMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const t = posOf(e);
@@ -53,10 +75,13 @@ export function Timeline() {
         id="tl"
         role="slider"
         aria-label="Session timeline"
+        title="Scroll to zoom · Shift+scroll to pan · Double-click to show the whole session"
         aria-valuemin={0}
         aria-valuemax={Math.round(p.TD / 1000)}
         aria-valuenow={Math.round(p.T / 1000)}
         tabIndex={0}
+        onDoubleClick={() => p.setTimelineWindow(0, p.TD)}
+        onKeyDown={e => { if (e.key === "+" || e.key === "=") p.zoomTimeline(2); else if (e.key === "-") p.zoomTimeline(0.5); else if (e.key === "ArrowLeft" || e.key === "ArrowRight") { const delta = range.span * (e.key === "ArrowLeft" ? -0.2 : 0.2); p.setTimelineWindow(range.start + delta, range.end + delta); } else return; e.preventDefault(); e.stopPropagation(); }}
         onPointerDown={(e) => {
           down.current = true;
           e.currentTarget.setPointerCapture(e.pointerId);
@@ -71,6 +96,7 @@ export function Timeline() {
           p.schedule();
         }}
       />
+      {range.span < p.TD && <input className="timeline-pan" type="range" aria-label="Timeline window start" min={0} max={p.TD - range.span} step={20} value={range.start} onInput={e => p.setTimelineWindow(+e.currentTarget.value, +e.currentTarget.value + range.span)} />}
       <div className="tltip" id="tltip" ref={tip} hidden />
     </div>
   );

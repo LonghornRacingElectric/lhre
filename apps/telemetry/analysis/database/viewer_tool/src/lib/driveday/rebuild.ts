@@ -112,7 +112,7 @@ export function rebuildRun(D0: RunData): RunData {
       ch, name: src.name, kind: src.kind, t0, t1, dur: src.dur,
       sec: sectorTimes({ ch: { u, t: tt }, dur: src.dur, kind: src.kind }, [RL / 3, 2 * RL / 3]),
       pts, dist,
-      vmax: Math.max(...sm.map((s) => s.spd)),
+      vmax: sm.reduce((v, s) => Math.max(v, s.spd), 0),
       vavg: src.dur > 0 ? dist / (src.dur / 1000) : 0,
       dev: sm.reduce((a, s) => a + s.dev, 0) / m,
       wh: src.wh,

@@ -275,14 +275,13 @@ export function drawEnergy(p: Player, canvas: HTMLCanvasElement, m: EnergyModel)
     g.fill();
   });
   g.globalAlpha = 1;
-  const ri = runs.indexOf(p.laps[p.sel]); // the x axis counts runs, laps also holds the out lap
-  if (ri >= 0) {
+  if (p.laps[p.sel].kind === "lap") {
     g.strokeStyle = pal.ink;
     g.lineWidth = 1.5;
     g.globalAlpha = 0.6;
     g.beginPath();
-    g.moveTo(px(ri + 1), pt);
-    g.lineTo(px(ri + 1), h - pb);
+    g.moveTo(px(p.sel + 1), pt);
+    g.lineTo(px(p.sel + 1), h - pb);
     g.stroke();
     g.globalAlpha = 1;
   }

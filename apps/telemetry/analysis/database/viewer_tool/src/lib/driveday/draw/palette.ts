@@ -23,7 +23,7 @@ export function invalidatePalette() {
 
 export function palette(): Palette {
   if (cache) return cache;
-  const cs = getComputedStyle(document.querySelector(".ddv") ?? document.documentElement); // viewer_tool: font tokens live on the .ddv wrapper
+  const cs = getComputedStyle(document.querySelector(".ddv") ?? document.documentElement);
   const o = {} as Record<string, string>;
   for (const k of Object.keys(NAMES)) o[k] = cs.getPropertyValue(NAMES[k]).trim();
   const p = o as unknown as Palette;

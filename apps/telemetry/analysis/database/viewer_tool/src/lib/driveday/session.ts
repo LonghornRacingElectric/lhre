@@ -111,16 +111,13 @@ export class Session {
     const representative = this.runs.reduce((a, b) => b.dur < a.dur ? b : a);
     this.gates = suggestGates(representative, this.segs, this.RL);
     this.setGates(this.gates);
-    const pts = [...D.ref, ...this.runs.flatMap((l) => l.pts.map((p) => [p[0], p[1]] as [number, number]))];
-    /* a loop, not Math.min(...pts): at 20 Hz a day has more points than the engine takes as arguments */
-    const bb = { x: [Infinity, -Infinity] as [number, number], y: [Infinity, -Infinity] as [number, number] };
-    for (const q of pts) {
-      if (q[0] < bb.x[0]) bb.x[0] = q[0];
-      if (q[0] > bb.x[1]) bb.x[1] = q[0];
-      if (q[1] < bb.y[0]) bb.y[0] = q[1];
-      if (q[1] > bb.y[1]) bb.y[1] = q[1];
-    }
-    this.bbox = bb;
+    const bounds: { x: [number, number]; y: [number, number] } = { x: [Infinity, -Infinity], y: [Infinity, -Infinity] };
+    const include = (point: number[]) => {
+      bounds.x[0] = Math.min(bounds.x[0], point[0]); bounds.x[1] = Math.max(bounds.x[1], point[0]);
+      bounds.y[0] = Math.min(bounds.y[0], point[1]); bounds.y[1] = Math.max(bounds.y[1], point[1]);
+    };
+    D.ref.forEach(include); this.runs.forEach(lap => lap.pts.forEach(include));
+    this.bbox = bounds;
   }
 
   setGates(gates: SectorGates): boolean {

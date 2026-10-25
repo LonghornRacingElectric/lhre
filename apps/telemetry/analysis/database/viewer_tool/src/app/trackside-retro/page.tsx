@@ -8,8 +8,9 @@ const body = IBM_Plex_Sans({ subsets: ["latin"], weight: ["400", "500", "600"], 
 const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-mono", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "Trackside Retro",
-  description: "Lap, sector, corner and battery analysis for an exported Trackside session.",
+  title: "LAPDOG | Trackside Retro",
+  description: "Your driveday, replayed. LAPDOG lap analysis, video and telemetry.",
+  icons: { icon: "/lapdog-logo.webp" },
 };
 
 // Drive day viewer (analysis/driveday_data_viewer). Runs are imported in the browser

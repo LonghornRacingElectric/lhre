@@ -45,6 +45,23 @@ describe("convertSession", () => {
     expect(() => convertSession({ nope: true } as never, "x.json", [])).toThrow(/session export/);
   });
 
+  it("rejects frozen GPS even when telemetry timestamps continue", () => {
+    const j = synthSession({ laps: 3 });
+    j.sampleTail = j.sampleTail.map(s => ({ ...s, lat: j.sampleTail[0].lat, lon: j.sampleTail[0].lon }));
+    expect(() => convertSession(j, "frozen.json")).toThrow(/missing, frozen, stationary/);
+  });
+
+  it("keeps healthy laps and does not manufacture a course from GPS dropouts", () => {
+    const j = synthSession({ laps: 3 });
+    const lost = j.laps[1];
+    j.sampleTail = j.sampleTail.map(s => s.t >= lost.startMs && s.t <= lost.endMs ? { ...s, lat: 0, lon: 0 } : s);
+    const imported = convertSession(j, "dropout.json");
+    expect(imported).toHaveLength(1);
+    expect(imported[0].D.laps.filter(l => l.kind === "lap").map(l => l.dur)).toEqual([j.laps[0].durationMs, j.laps[2].durationMs]);
+    expect(imported[0].D.warnings.join(" ")).toMatch(/incomplete GPS coverage/);
+    expect(imported[0].D.RL).toBeGreaterThan(TRACK_LEN * 0.9);
+  });
+
   it("records which cell temperature sensors report", () => {
     expect(D.meta.cellIdx).toEqual([0, 1, 3, 4, 6, 7]);
   });
@@ -62,6 +79,20 @@ describe("convertSession", () => {
     });
     const partial = convertSession(exported, "20hz.json")[0].D.laps.find((l) => l.kind === "partial")!;
     expect(partial.ch.t.map((t) => t + partial.t0)).toEqual(tailSamples.map((s) => s.t));
+  });
+
+  it("retains every timestamp of a 50 Hz recording through playback rebuild", async () => {
+    const { rebuildRun } = await import("../../src/lib/driveday/rebuild");
+    const j = synthSession({ laps: 3, sampleMs: 20 });
+    j.laps.forEach(lap => { lap.samples = j.sampleTail.filter(s => s.t >= lap.startMs && s.t <= lap.endMs); });
+    const run = rebuildRun(convertSession({ ...j, sampleTail: j.sampleTail.slice(-100) }, "50hz.json")[0].D);
+    const timed = run.laps.filter(l => l.kind === "lap");
+    timed.forEach((lap, i) => {
+      const times = lap.ch.t.map(t => t + lap.t0);
+      expect(times).toEqual(expect.arrayContaining(j.laps[i].samples.map(s => s.t)));
+      // Rebuild can add exact logger-boundary endpoints between recorded samples.
+      expect(times.length).toBeLessThanOrEqual(j.laps[i].samples.length + 2);
+    });
   });
 
   it("keeps telemetry timestamps between GPS fixes and merges overlap", () => {

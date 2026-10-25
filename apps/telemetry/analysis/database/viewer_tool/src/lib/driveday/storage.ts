@@ -64,7 +64,7 @@ async function run<T>(stores: string[], mode: IDBTransactionMode, fn: (s: IDBObj
 async function guard<T>(idb: () => Promise<T>, mem: () => T): Promise<T> {
   if (storageMode === "memory") return mem();
   try {
-    await openDb();
+    return await idb();
   } catch (e) {
     storageMode = "memory";
     storageProblem = blocked
@@ -72,8 +72,6 @@ async function guard<T>(idb: () => Promise<T>, mem: () => T): Promise<T> {
       : String((e as Error)?.message || e);
     return mem();
   }
-  /* only a database that will not open is a reason to switch; one failed write (quota, bad record) stays an error for that call */
-  return idb();
 }
 export let storageProblem: string | null = null;
 

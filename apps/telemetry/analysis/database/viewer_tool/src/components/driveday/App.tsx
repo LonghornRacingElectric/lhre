@@ -7,7 +7,7 @@ import { Player, type Prefs } from "@/lib/driveday/player";
 import { rebuildRun } from "@/lib/driveday/rebuild";
 import { Session } from "@/lib/driveday/session";
 import { loadUserState, lsGet, lsSet, metaOf, runStore, saveUserState, storageProblem } from "@/lib/driveday/storage";
-import { seedFlags, type RunListEntry, type SessionExport } from "@/lib/driveday/types";
+import { isConeLabel, seedFlags, type RunListEntry, type SessionExport } from "@/lib/driveday/types";
 import { defaultUnits } from "@/lib/driveday/units";
 import { DbMenu, Header, type Theme } from "./Header";
 import { Workspace } from "./Workspace";
@@ -16,7 +16,8 @@ import { PlayerCtx, ToastProvider, useToast } from "./context";
 const NEXT_THEME: Record<Theme, Theme> = { auto: "light", light: "dark", dark: "auto" };
 
 function applyTheme(t: Theme) {
-  const r = document.documentElement;
+  const r = document.querySelector(".ddv");
+  if (!r) return;
   if (t === "auto") r.removeAttribute("data-theme");
   else r.setAttribute("data-theme", t);
   invalidatePalette();
@@ -45,7 +46,7 @@ function Shell() {
       if (!id) return;
       try {
         const D0 = await runStore.get(id);
-        if (req !== openReq.current) return; // a later open() took over while this one loaded
+        if (req !== openReq.current) return;
         if (!D0) throw new Error("That run is no longer stored in this browser.");
         const D = rebuildRun(D0);
         const session = new Session(D);
@@ -75,9 +76,8 @@ function Shell() {
         const last = lsGet<string | null>("run", null);
         const pick = list.find((r) => r.id === last)?.id ?? list[0]?.id ?? null;
         await open(pick);
-      } catch (e) {
-        /* saved runs could not be read; the page still opens, and loading a day works for this tab */
-        toast("Could not read saved runs: " + String((e as Error)?.message || e), "err");
+      } catch (error) {
+        toast("Could not read saved runs: " + (error as Error).message, "err");
       }
       setReady(true);
     })();
@@ -101,10 +101,10 @@ function Shell() {
             /* newest first in the list, so the courses of one file stay in order */
             await runStore.put({ ...metaOf(D), added: now - ci }, D);
             if (J.flags?.length) {
-              /* only the flags raised while this course was being driven; a file can hold several courses */
               const S = new Session(rebuildRun(D));
-              const fl = J.flags.filter((x) => x.t >= S.T0 && x.t <= S.T0 + S.TD);
-              if (fl.length) saveUserState(D.meta.sessId, seedFlags(loadUserState(D.meta.sessId), fl, S.T0));
+              const flags = J.flags.filter(f => f.t >= S.T0 && f.t <= S.T0 + S.TD &&
+                !isConeLabel(f.label));
+              saveUserState(D.meta.sessId, seedFlags(loadUserState(D.meta.sessId, D), flags, S.T0));
             }
             last ??= D.meta.sessId;
           }
@@ -121,11 +121,12 @@ function Shell() {
     [open, toast],
   );
 
-  /* the session Trackside last saved on the server (lap samples are stripped there, so only the recent tail has GPS) */
   const importCache = useCallback(async () => {
-    const r = await fetch("/api/motec/live/session-cache").catch(() => null);
-    if (!r?.ok) return toast("No saved Trackside session on the server.", "err");
-    await importFiles([new File([await r.blob()], "trackside-saved_session.json")]);
+    try {
+      const response = await fetch("/api/motec/live/session-cache");
+      if (!response.ok) throw new Error("No saved Trackside session on the server.");
+      await importFiles([new File([await response.blob()], "trackside-saved_session.json")]);
+    } catch (error) { toast((error as Error).message, "err"); }
   }, [importFiles, toast]);
 
   /* a drive day straight from the database, built server-side in the same export format */
@@ -217,13 +218,11 @@ function Shell() {
         {ready && !player && !current && (
           <div className="welcome">
             <div>
-              <h2>No runs loaded</h2>
-              <p>Pick a drive day from the database, or import a session JSON exported from Trackside. Each run is kept in this browser, and the dropdown at the top switches between them. You can also drop files anywhere on this page.</p>
-              <div className="welcome-actions">
+              <h2>Give LAPDOG a lap to follow.</h2>
+              <p>Choose a drive day from the database, or import a Trackside Live session export. LAPDOG keeps your runs in this browser, ready for the next debrief.</p>
               <DbMenu onDb={(day) => void importDb(day)} />
-              <button className="btn" type="button" onClick={() => file.current?.click()}>Import JSON</button>
+              <button className="btn" type="button" onClick={() => file.current?.click()}>Import JSON</button>{" "}
               <button className="btn" type="button" onClick={() => void importCache()}>Last Trackside session</button>
-              </div>
               <input ref={file} type="file" accept=".json,application/json" multiple hidden onChange={(e) => { if (e.target.files?.length) void importFiles(e.target.files); e.target.value = ""; }} />
             </div>
           </div>

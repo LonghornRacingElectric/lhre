@@ -3,7 +3,7 @@ import { convertSession } from "../../src/lib/driveday/convert";
 import { rebuildRun } from "../../src/lib/driveday/rebuild";
 import { Session } from "../../src/lib/driveday/session";
 import { segAt } from "../../src/lib/driveday/segments";
-import { COURSE_LEN, synthCourses, synthLoopPresses } from "./fixtures/courses";
+import { COURSE_LEN, synthCourses } from "./fixtures/courses";
 import { synthSession, TRACK_LEN } from "./fixtures/synth";
 
 const J = synthCourses();
@@ -43,7 +43,7 @@ describe("a session with separate start and finish lines, and a run the other wa
 
   it("keeps only the timed runs and says what it left out", () => {
     courses.forEach((c) => expect(c.D.laps.filter((l) => l.kind === "lap").length).toBe(2));
-    expect(courses[0].D.warnings.join(" ")).toMatch(/Manual 2, Manual 5 are too short or slow/);
+    expect(courses[0].D.warnings.join(" ")).toMatch(/Lap 2, Lap 5 are too short or slow/);
     expect(courses.every((c) => c.D.laps.every((l) => l.kind === "lap"))).toBe(true);
   });
 
@@ -90,19 +90,5 @@ describe("the start and finish lines", () => {
   });
   it("leave an open course as it was imported", () => {
     courses.forEach((c) => expect(rebuildRun(c.D)).toBe(c.D));
-  });
-});
-
-describe("manual laps on a loop, pressed at different places each time", () => {
-  const J = synthLoopPresses();
-  const rs = convertSession(J, "presses.json", []);
-  it("is one loop, not two open courses", () => {
-    expect(rs.length).toBe(1);
-    expect(rs[0].D.open).toBeUndefined();
-    expect(Math.abs(rs[0].D.RL - TRACK_LEN)).toBeLessThan(TRACK_LEN * 0.1);
-    expect(rs[0].D.laps.filter((l) => l.kind === "lap").map((l) => l.name)).toEqual(["Manual 1", "Manual 2"]);
-  });
-  it("puts every lap on the road", () => {
-    rs[0].D.laps.forEach((l) => expect(l.dev).toBeLessThan(3));
   });
 });

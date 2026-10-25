@@ -1,7 +1,7 @@
 "use client";
 
-import { useContext, useRef, useState } from "react";
-import { gpsStats } from "@/lib/driveday/analysis";
+import { useContext, useMemo, useRef, useState } from "react";
+import { sampleQuality } from "@/lib/driveday/review";
 import { fmt } from "@/lib/driveday/format";
 import type { Player } from "@/lib/driveday/player";
 import type { RunListEntry } from "@/lib/driveday/types";
@@ -28,22 +28,24 @@ function Kpis() {
   useUi(p);
   const a = p.analysis;
   const { runs } = p.session;
+  const eligible = runs.filter(l => a.valid(l));
+  const pool = eligible.length ? eligible : runs;
   let bi = 0;
-  runs.forEach((l, i) => {
-    if (a.adj(l) < a.adj(runs[bi])) bi = i;
+  pool.forEach((l, i) => {
+    if (a.adj(l) < a.adj(pool[bi])) bi = i;
   });
-  const bA = a.adj(runs[bi]);
+  const bA = eligible.length ? a.adj(pool[bi]) : NaN;
   const total = runs.reduce((s, l) => s + a.conesOf(l), 0);
-  const cb = a.conesOf(runs[bi]);
+  const cb = a.conesOf(pool[bi]);
   const pen = a.pen();
   const items: [string, string | number, React.ReactNode][] = [
-    ["Best real", fmt(a.bestLap), <div className="pop" key="r"><h5>Best real</h5><p>The fastest lap on the clock, with no cone penalty. {a.bestRun.name}.</p></div>],
+    ["Best real", fmt(a.bestLap), <div className="pop" key="r"><h5>Best real</h5><p>{eligible.length ? "Fastest eligible logged lap: " + a.bestRun.name : "No eligible completed laps."}</p></div>],
     ["Best adjusted", fmt(bA), (
       <div className="pop" key="a">
         <h5>Best adjusted</h5>
-        <p>Real time plus {pen.toFixed(1)} s for every cone.</p>
+        <p>{eligible.length ? "Real time plus " + pen.toFixed(1) + " s for every cone." : "No eligible completed laps."}</p>
         <table><tbody>
-          <tr><td>{runs[bi].name} real</td><td>{fmt(runs[bi].dur)}</td></tr>
+          <tr><td>{eligible.length ? pool[bi].name + " real" : "No eligible lap"}</td><td>{eligible.length ? fmt(pool[bi].dur) : "—"}</td></tr>
           <tr><td>{cb} cone{cb === 1 ? "" : "s"} x {pen.toFixed(1)} s</td><td>+{(cb * pen).toFixed(3)}</td></tr>
           <tr className="tot"><td>Adjusted</td><td>{fmt(bA)}</td></tr>
         </tbody></table>
@@ -79,24 +81,24 @@ function Kpis() {
 
 function Title({ run }: { run: RunListEntry | undefined }) {
   const p = useContext(PlayerCtx);
-  if (!p) return <><h1 id="title">Drive day visualizer</h1><div className="sub" id="sub" /></>;
+  if (!p) return <><h1 id="title">LAPDOG</h1><div className="sub" id="sub">Your driveday, replayed.</div></>;
   return <RunTitle p={p} run={run} />;
 }
 
 function RunTitle({ p, run }: { p: Player; run: RunListEntry | undefined }) {
   useUi(p);
   const m = p.session.D.meta;
-  const gp = gpsStats(p.session);
+  const samples = useMemo(() => sampleQuality(p.session.D.quality?.sampleTimes ?? p.session.TLAPS.flatMap(lap => lap.ch.t.map(t => t + lap.t0)).sort((a, b) => a - b)), [p.session]);
   const date = run?.ts ? new Date(run.ts).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "";
   const parts = [
     m.driver, m.venue, m.event, date,
     `${p.session.runs.length} timed laps`,
     `${p.session.RL.toFixed(0)} m ${p.session.open ? "course" : "loop"}`,
-    `GPS ${gp.hz.toFixed(1)} Hz${gp.gaps ? ` with ${gp.gaps} gap${gp.gaps === 1 ? "" : "s"}` : ""}`,
+    `Recorded samples ${samples.hz.toFixed(1)} Hz`,
   ].filter(Boolean);
   return (
     <>
-      <h1 id="title">{m.name || "Drive day visualizer"}</h1>
+      <h1 id="title">{m.name || "LAPDOG"}</h1>
       <div className="sub" id="sub">{parts.join(" · ")}</div>
     </>
   );
@@ -163,7 +165,7 @@ export function DbMenu({ onDb }: { onDb: (day: number) => void }) {
   );
 }
 
-export function Header({ runs, current, theme, onTheme, onSelect, onImport, onCache, onDb, onRemove }: Props) {
+export function Header({ runs, current, theme, onTheme, onSelect, onImport, onRemove, onCache, onDb }: Props) {
   const file = useRef<HTMLInputElement>(null);
   const p = useContext(PlayerCtx);
   return (
@@ -182,8 +184,7 @@ export function Header({ runs, current, theme, onTheme, onSelect, onImport, onCa
             </Menu></div>
           )}
           <DbMenu onDb={onDb} />
-          <button className="btn" type="button" title="Import one or more session JSON files" onClick={() => file.current?.click()}>Import JSON</button>
-          <button className="btn" type="button" title="Load the session Trackside last saved on the server" onClick={onCache}>Last Trackside session</button>
+          <button className="btn primary" type="button" title="Import one or more session JSON files" onClick={() => file.current?.click()}>Import</button>
           <input
             ref={file}
             type="file"
@@ -195,6 +196,7 @@ export function Header({ runs, current, theme, onTheme, onSelect, onImport, onCa
               e.target.value = "";
             }}
           />
+          <button className="btn" type="button" onClick={onCache} title="Import the latest session cached by Trackside Live; older samples may be unavailable">Last Trackside session</button>
           <SettingsMenu theme={theme} onTheme={onTheme} />
           <div id="workspace-actions" />
         </div>

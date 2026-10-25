@@ -41,6 +41,7 @@ export interface SessionInfoExport {
 }
 
 export interface SessionExport {
+  flags?: { id?: string | number; t: number; label: string; saved?: boolean }[];
   version?: number;
   savedAt?: number;
   source?: string;
@@ -57,8 +58,6 @@ export interface SessionExport {
   hasSectors?: boolean;
   sessionInfo?: SessionInfoExport | null;
   metadata?: Record<string, string>;
-  /** Trackside event flags; t is epoch ms like the samples. */
-  flags?: { id?: string | number; t: number; label: string; saved?: boolean }[];
 }
 
 /* ---------- converted run ---------- */
@@ -141,6 +140,7 @@ export interface RunMeta {
 }
 
 export interface RunData {
+  quality?: { sampleTimes: number[]; gpsTimes: number[]; positionUpdateTimes: number[]; interpolatedTimes: number[] };
   /** Exported cone hits assigned to completed laps; t is absolute logger time. */
   coneEvents?: ConeEvent[];
   ref: XY[];
@@ -191,10 +191,13 @@ export interface RunListEntry {
 /* ---------- per-run notes the user adds ---------- */
 
 export interface LapFlag {
+  include?: boolean;
   f?: string;
   x?: number;
 }
 export interface Mark {
+  video?: { key: string; name: string; time: number };
+  category?: "note" | "braking" | "cone" | "offcourse" | "video";
   id: string;
   t: number;
   text: string;
@@ -204,6 +207,7 @@ export interface ConeEvent {
   t: number;
 }
 export interface UserState {
+  validity?: { excludeCones: boolean; excludeOffCourse: boolean; excludeIncomplete: boolean };
   /** Imported hits explicitly removed by the user, so reopening does not restore them. */
   dismissedCones?: string[];
   setup: Record<string, string | number>;

@@ -1,5 +1,8 @@
 "use client";
 
+import { useState } from "react";
+
+import { SETUP_FORM as FORM } from "@/lib/driveday/setup";
 import { ALERT_DEFS } from "@/lib/driveday/analysis";
 import { buildDebrief } from "@/lib/driveday/debrief";
 import { clock } from "@/lib/driveday/format";
@@ -50,17 +53,23 @@ export function NotesPanel() {
   const p = usePlayer();
   useUi(p);
   const { marks } = p.user;
+  const [text, setText] = useState("");
+  const [category, setCategory] = useState<"note" | "braking" | "cone" | "offcourse" | "video">("note");
+  const [filter, setFilter] = useState("all");
+  const categories = [["note", "Note"], ["braking", "Braking"], ["cone", "Cone hit"], ["offcourse", "Off course"], ["video", "Video moment"]] as const;
   return (
     <>
-      <p className="pdesc">Comments pinned to moments on the timeline. They show as purple markers above the laps.</p>
+      <p className="pdesc">Bookmarks connect the timeline and loaded video. Clicking one jumps to its saved moment; reselect the matching video if it was closed.</p>
+      <form className="review-panel" onSubmit={e => { e.preventDefault(); p.addMark(text.trim() || categories.find(([key]) => key === category)![1], category); setText(""); }}><input aria-label="Bookmark label" placeholder="e.g. Late braking into T1" value={text} onChange={e => setText(e.target.value)} /><select aria-label="Bookmark category" value={category} onChange={e => setCategory(e.target.value as typeof category)}>{categories.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select><button className="btn" type="submit">Bookmark this moment</button></form>
+      <label className="review-filter">Show<select aria-label="Filter bookmarks" value={filter} onChange={e => setFilter(e.target.value)}><option value="all">All bookmarks</option>{categories.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
       {!marks.length ? (
         <div className="empty">No notes yet. Press N anywhere, or use + Note under the timeline, to pin a comment to the moment you are watching.</div>
       ) : (
         <ul className="notes">
-          {marks.map((m, i) => (
-            <li key={m.id} tabIndex={0} onClick={() => p.setT(m.t)} onKeyDown={(e) => e.key === "Enter" && p.setT(m.t)}>
+          {marks.map((m, i) => (filter === "all" || (m.category ?? "note") === filter) && (
+            <li key={m.id} tabIndex={0} onClick={() => p.seekMark(m.id)} onKeyDown={(e) => e.key === "Enter" && p.seekMark(m.id)}>
               <span className="nt">{clock(m.t)} · {p.lapLabelAt(m.t)}</span>
-              <span className="ntx">{m.text}</span>
+              <span className="ntx">{m.text}<small className="bookmark-meta">{m.category ?? "note"}{m.video ? " · " + m.video.name + " @ " + m.video.time.toFixed(2) + " s" : ""}</small></span>
               <button className="x" type="button" aria-label="Delete note" onClick={(e) => { e.stopPropagation(); p.deleteMark(i); }}>×</button>
             </li>
           ))}
@@ -84,13 +93,7 @@ export function DebriefPanel() {
             <li
               key={i}
               className={it.k + (go ? " go" : "")}
-              tabIndex={go ? 0 : undefined}
               onClick={() => {
-                if (it.seg != null) p.focusSeg(it.seg);
-                else if (it.zone != null) p.focusZone(it.zone);
-              }}
-              onKeyDown={(e) => {
-                if (e.key !== "Enter" || e.target !== e.currentTarget) return;
                 if (it.seg != null) p.focusSeg(it.seg);
                 else if (it.zone != null) p.focusZone(it.zone);
               }}
@@ -104,7 +107,7 @@ export function DebriefPanel() {
                   onClick={(e) => {
                     e.stopPropagation();
                     p.skipLaps(it.skip!);
-                    p.toast("Skipped " + it.skip!.map((n) => p.session.runs[n - 1].name).join(", "));
+                    p.toast("Skipped " + it.skip!.map((n) => "Lap " + n).join(", "));
                   }}
                 >
                   Skip {it.skip.length > 1 ? "them" : "it"}
@@ -117,16 +120,6 @@ export function DebriefPanel() {
     </>
   );
 }
-
-type Spec = [key: string, label: string, kind?: "number" | "text" | "area" | "select", options?: string[]];
-const FORM: [string, Spec[]][] = [
-  ["Conditions", [["driver", "Driver", "text"], ["airT", "Air temp (°C)"], ["surf", "Surface", "select", ["", "Dry", "Damp", "Wet"]], ["surfT", "Surface temp (°C)"], ["wind", "Wind and other", "text"]]],
-  ["Tire pressure, cold", [["coldFL", "Front left (psi)"], ["coldFR", "Front right (psi)"], ["coldRL", "Rear left (psi)"], ["coldRR", "Rear right (psi)"], ["compound", "Compound", "text"]]],
-  ["Tire pressure, hot after the run", [["hotFL", "Front left (psi)"], ["hotFR", "Front right (psi)"], ["hotRL", "Rear left (psi)"], ["hotRR", "Rear right (psi)"]]],
-  ["Alignment and chassis", [["camF", "Front camber (°)"], ["camR", "Rear camber (°)"], ["toeF", "Front toe (°)"], ["toeR", "Rear toe (°)"], ["bias", "Front brake bias (%)"], ["tqLimit", "Torque limit (Nm)"], ["aero", "Aero", "text"], ["susp", "Springs and dampers", "text"]]],
-  ["Alert limits (leave blank for none)", [["aCellT", "Hottest cell above (°C)"], ["aInvT", "Inverter hotspot above (°C)"], ["aMotT", "Motor above (°C)"], ["aCoolT", "Coolant above (°C)"], ["aCellV", "Lowest cell below (V)"], ["aPackV", "Pack voltage below (V)"]]],
-  ["Notes", [["notes", "Driver feedback and run notes", "area"], ["next", "Changes for the next run", "area"]]],
-];
 
 export function SetupPanel() {
   const p = usePlayer();

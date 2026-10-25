@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { lsGet, lsSet } from "@/lib/driveday/storage";
-import { defaultWorkspace, movePane, resizePair, restoreWorkspace, PANE_IDS, type PaneId, type PaneState, type WorkspaceLayout } from "@/lib/driveday/workspace";
+import { defaultWorkspace, movePane, resizePair, restoreWorkspace, workspacePreset, PANE_IDS, type SavedWorkspace, type PaneId, type PaneState, type WorkspaceLayout } from "@/lib/driveday/workspace";
+import { Menu } from "./Menu";
 import { Dock } from "./Dock";
 import { MapTools } from "./MapTools";
 import { MapView } from "./MapView";
@@ -21,6 +22,8 @@ export function Workspace() {
   const [toolbarHost, setToolbarHost] = useState<HTMLElement | null>(null);
   useEffect(() => { setToolbarHost(document.getElementById("workspace-actions")); }, []);
   const [timelineHeight, setTimelineHeight] = useState(() => Math.max(48, Math.min(240, lsGet<number>("timeline-height", 108))));
+  const [presetName, setPresetName] = useState("");
+  const [savedPresets, setSavedPresets] = useState<Record<string, SavedWorkspace>>(() => lsGet<Record<string, SavedWorkspace>>("workspace-presets", {}));
   const resizeTimeline = (height: number) => { setTimelineHeight(height); lsSet("timeline-height", height); };
   const [z, setZ] = useState<Record<PaneId, number>>({ video: 100, track: 101, analysis: 102 });
   const nextZ = useRef(102);
@@ -31,6 +34,12 @@ export function Workspace() {
   const names: Record<PaneId, string> = { video: "Video", track: "Track", analysis: "Analysis" };
   const docked = layout.order.filter(id => layout.panes[id].visible && !layout.panes[id].floating);
   const toggleTimelineDock = () => { const next = timelineMode === "track" ? "full" : "track"; setTimelineMode(next); lsSet("timeline-layout", next); };
+  const applyPreset = (preset: SavedWorkspace) => {
+    update(() => restoreWorkspace(preset.layout)); resizeTimeline(Math.max(48, Math.min(240, preset.timelineHeight || 108)));
+    const mode = preset.timelineMode === "track" ? "track" : "full"; setTimelineMode(mode); lsSet("timeline-layout", mode);
+    lsSet("panel", preset.panel); window.dispatchEvent(new CustomEvent("driveday:panel", { detail: preset.panel }));
+    requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+  };
 
   useEffect(() => {
     const fit = () => setLayout(current => {
@@ -100,7 +109,13 @@ export function Workspace() {
         <span className="lab">Windows</span>
         {PANE_IDS.map(id => <button className="chip" key={id} aria-pressed={layout.panes[id].visible} onClick={() => patch(id, { visible: !layout.panes[id].visible })}>{names[id]}</button>)}
         <span className="sp" /><span className="layout-hint">Drag headers to move · dividers to resize</span>
-        <button className="btn" onClick={() => { update(() => defaultWorkspace()); setTimelineMode("full"); lsSet("timeline-layout", "full"); resizeTimeline(108); }}>Reset layout</button>
+        <Menu label="Layouts" right wide ariaLabel="Workspace layouts">
+          {(["Driving review", "Battery analysis", "Video comparison"] as const).map(name => <button className="btn" key={name} onClick={() => applyPreset(workspacePreset(name))}>{name}</button>)}
+          <button className="btn" onClick={() => { update(() => defaultWorkspace()); setTimelineMode("full"); lsSet("timeline-layout", "full"); resizeTimeline(108); }}>Reset layout</button>
+          <input aria-label="Workspace preset name" placeholder="Name this layout" value={presetName} onChange={e => setPresetName(e.target.value)} />
+          <button className="btn" disabled={!presetName.trim()} onClick={() => { const name = presetName.trim(); const preset: SavedWorkspace = { layout, timelineHeight, timelineMode, panel: lsGet<string | null>("panel", "laps") }; const next = { ...savedPresets, [name]: preset }; setSavedPresets(next); lsSet("workspace-presets", next); setPresetName(""); }}>Save current layout</button>
+          {Object.entries(savedPresets).map(([name, preset]) => <div className="mrow" key={name}><button className="btn" onClick={() => applyPreset(preset)}>{name}</button><button className="x" aria-label={"Delete layout " + name} onClick={() => { const next = { ...savedPresets }; delete next[name]; setSavedPresets(next); lsSet("workspace-presets", next); }}>×</button></div>)}
+        </Menu>
       </div>;
   return (
     <div className="workspace" id="main">
