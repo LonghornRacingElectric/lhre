@@ -1084,6 +1084,6 @@ Legacy vcu_shutdown_faults flags from lhre-2026.
 | `Controls` | `46` | 31, 32, 33, 34, 35, 36, 37, 38 | Driver controls, torque commands, and VCU outputs. |
 | `DiagnosticsHigh` | `39` | *None* | High-rate state, shutdown, and fault telemetry. |
 | `DiagnosticsLow` | `18` | *None* | Low-rate state, shutdown, and fault telemetry. |
-| `Dynamics` | `36` | *None* | Vehicle motion and suspension telemetry. |
+| `Dynamics` | `37` | *None* | Vehicle motion and suspension telemetry. |
 | `Pack` | `23` | *None* | Accumulator and inverter electrical telemetry. |
 | `Thermal` | `39` | *None* | Temperatures, cooling, and charger telemetry. |
