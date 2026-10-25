@@ -381,3 +381,13 @@ left with BOOT asserted stays in ROM DFU and cannot run the rainbow.
 `bazel test --config=local //boards/VCU:mvp_test` checks the rainbow, shell,
 and both receive-hook and polled DFU paths without hardware. Hardware LED
 pinout, power and USB enumeration still need a bench check.
+
+For a dark or stuck LED, `/led` reports whether the animation is advancing
+(`rainbow_steps`). `/led red`, `/led green`, `/led blue` hold one channel
+at 25% duty for measurement; `/led off` disables all channels and `/led auto`
+resumes the rainbow. `/pwm` reads the real TIM2 counter, enable/polarity bits,
+compare registers and GPIOA mux configuration. Compare those values with
+PA0/PA1/PA2 measurements before diagnosing an LED polarity or assembly issue.
+The schematic drives a common-anode LED: Vdd on the anode side, resistors
+between cathodes and MCU pins; symbol pin names alone do not establish the
+fitted component's orientation.

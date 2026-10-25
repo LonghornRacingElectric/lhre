@@ -37,6 +37,28 @@ TEST(Mvp, RainbowRunsWithoutVehicleOrScheduler) {
   EXPECT_LT(f.r.duty(), red);
 }
 
+TEST(Mvp, ManualColorHoldsAndRainbowCanResume) {
+  Bench f;
+  f.Type("/led red\n");
+  f.app.Step();
+  EXPECT_FLOAT_EQ(f.r.duty(), 0.25f);
+  EXPECT_FLOAT_EQ(f.g.duty(), 0);
+  EXPECT_FLOAT_EQ(f.b.duty(), 0);
+  f.clock.Advance(100);
+  f.app.Step();
+  EXPECT_FLOAT_EQ(f.r.duty(), 0.25f);
+  f.Type("/led auto\n");
+  f.app.Step();
+  f.clock.Advance(33);
+  f.app.Step();
+  EXPECT_GT(f.g.duty(), 0);
+  f.Type("/led off\n");
+  f.app.Step();
+  EXPECT_FLOAT_EQ(f.r.duty(), 0);
+  EXPECT_FLOAT_EQ(f.g.duty(), 0);
+  EXPECT_FLOAT_EQ(f.b.duty(), 0);
+}
+
 TEST(Mvp, ReceiveHookDefersSplitNewlineFreeDfuToMainLoop) {
   Bench f;
   f.Type("upda");
