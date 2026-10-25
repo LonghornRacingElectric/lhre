@@ -38,6 +38,9 @@ sudo apt install -y ros-jazzy-ros-gz
 
 # Optional: signal plotting
 sudo apt install -y ros-jazzy-plotjuggler-ros
+
+# Optional: Foxglove WebSocket viewer (foxglove:=true)
+sudo apt install -y ros-jazzy-foxglove-bridge
 ```
 
 ## 3. Build

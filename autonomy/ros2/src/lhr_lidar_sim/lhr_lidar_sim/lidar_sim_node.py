@@ -95,7 +95,7 @@ class LidarSimNode(Node):
         self.declare_parameter('frame_rate_hz', 10.0)
         self.declare_parameter('point_rate_hz', 200_000.0)
         self.declare_parameter('max_range_m', 40.0)
-        self.declare_parameter('range_noise_std_m', 0.02)
+        self.declare_parameter('range_noise_std_m', vehicle.lidar_range_noise_std_m)
         self.declare_parameter('dropout_rate', 0.0)
         self.declare_parameter('elevation_profile', 'livox')
         self.declare_parameter('return_profile', 'baseline')
@@ -129,6 +129,7 @@ class LidarSimNode(Node):
         self._have_odom = False
         self._odom_stamp = None
         self._last_scan_stamp_ns = None
+        self._last_tf_stamp_ns = None
         self._world_sdf = str(param('world_sdf'))
         if self._world_sdf:
             self._cones = load_world_cones(self._world_sdf)
@@ -344,14 +345,16 @@ class LidarSimNode(Node):
     def _tick(self):
         now = self.get_clock().now()
         stamp = self._odom_stamp if self._have_odom else now.to_msg()
+        stamp_ns = stamp.sec * 1_000_000_000 + stamp.nanosec
         # Broadcast before the odom check, so the frame exists from the
         # first tick and a viewer opened early is not left with a cloud
         # it cannot place.
-        self._tf.sendTransform(self._mount_transform(stamp))
+        if stamp_ns != self._last_tf_stamp_ns:
+            self._tf.sendTransform(self._mount_transform(stamp))
+            self._last_tf_stamp_ns = stamp_ns
 
         if not self._have_odom:
             return
-        stamp_ns = stamp.sec * 1_000_000_000 + stamp.nanosec
         if stamp_ns == self._last_scan_stamp_ns:
             return
 

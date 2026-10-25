@@ -27,6 +27,7 @@ from launch.actions import (
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+from lhr_vehicle import load_vehicle
 import yaml
 
 
@@ -165,7 +166,6 @@ def _launch_setup(context: LaunchContext):
         raise RuntimeError('Camera classification requires enable_stereo_camera:=true')
     if enable_stereo:
         from lhr_gazebo.stereo_camera import stereo_actions
-        from lhr_vehicle import load_vehicle
         camera_nodes = stereo_actions(load_vehicle().stereo_camera, config_dir)
     if enable_color:
         from lhr_perception.cone_color import DEFAULT_THRESHOLDS, validate_config
@@ -322,6 +322,12 @@ def _launch_setup(context: LaunchContext):
                 parameters=[{
                     'world_sdf': ParameterValue(world_path, value_type=str),
                     'seed': ParameterValue(LaunchConfiguration('seed'), value_type=int),
+                    **{name: _float(f'mid360_{name}') for name in (
+                        'frame_rate_hz', 'point_rate_hz', 'max_range_m',
+                        'range_noise_std_m', 'dropout_rate')},
+                    **{name: ParameterValue(LaunchConfiguration(f'mid360_{name}'),
+                                            value_type=str)
+                       for name in ('elevation_profile', 'return_profile')},
                     'use_sim_time': True,
                 }],
                 remappings=[('/lhr/vehicle/odom', caster_odom),
@@ -623,8 +629,18 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'lidar_source', default_value='gazebo', choices=['gazebo', 'mid360'],
             description='Raw cloud source; mid360 requires perception:=lidar'),
-        DeclareLaunchArgument('foxglove', default_value='false'),
+        DeclareLaunchArgument('foxglove', default_value='false', choices=['true', 'false']),
         DeclareLaunchArgument('foxglove_port', default_value='8765'),
+        DeclareLaunchArgument('mid360_frame_rate_hz', default_value='10.0'),
+        DeclareLaunchArgument('mid360_point_rate_hz', default_value='200000.0'),
+        DeclareLaunchArgument('mid360_max_range_m', default_value='40.0'),
+        DeclareLaunchArgument('mid360_range_noise_std_m',
+                              default_value=str(load_vehicle().lidar_range_noise_std_m)),
+        DeclareLaunchArgument('mid360_dropout_rate', default_value='0.0'),
+        DeclareLaunchArgument('mid360_elevation_profile', default_value='livox',
+                              choices=['livox', 'rosette', 'uniform']),
+        DeclareLaunchArgument('mid360_return_profile', default_value='baseline',
+                              choices=['baseline', 'acceptance_overcast']),
         DeclareLaunchArgument(
             'lidar_classify_sides', default_value='false',
             description='Infer LiDAR cone sides (opt in; false publishes unlabeled cones)'),

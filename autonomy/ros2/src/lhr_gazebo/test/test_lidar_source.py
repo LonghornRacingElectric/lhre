@@ -9,6 +9,7 @@ from launch.actions import DeclareLaunchArgument
 from launch.utilities import perform_substitutions
 from launch_ros.utilities import evaluate_parameters, normalize_parameters
 from lhr_lidar_sim.lidar_sim_node import LidarSimNode
+from lhr_vehicle import load_vehicle
 import pytest
 import rclpy
 
@@ -150,8 +151,13 @@ def test_odometry_faults_leave_caster_on_clean_plant_pose(monkeypatch, estimator
 @pytest.mark.parametrize('override', [False, True])
 def test_caster_launch_defaults_and_overrides_reach_startup(monkeypatch, estimator, override):
     world = Path(__file__).parents[1] / 'worlds/autocross_seed1.sdf'
+    values = {'frame_rate_hz': '8', 'point_rate_hz': '160000', 'max_range_m': '30',
+              'range_noise_std_m': '0.0075', 'dropout_rate': '0.1',
+              'elevation_profile': 'uniform', 'return_profile': 'acceptance_overcast'}
+    options = {f'mid360_{key}': value for key, value in values.items()} if override else {}
     nodes = launch_nodes(monkeypatch, perception='lidar', estimator=estimator,
-                         lidar_source='mid360', world=str(world), seed='9' if override else '1')
+                         lidar_source='mid360', world=str(world), seed='9' if override else '1',
+                         **options)
     params = nodes['lidar_sim']['parameters'][0]
     args = ['--ros-args']
     for key, value in params.items():
@@ -162,6 +168,15 @@ def test_caster_launch_defaults_and_overrides_reach_startup(monkeypatch, estimat
         assert sensor._world_sdf == str(world)
         assert sensor._sensor.seed == (9 if override else 1)
         assert sensor.get_parameter('use_sim_time').value is True
+        defaults = {'frame_rate_hz': 10., 'point_rate_hz': 200000., 'max_range_m': 40.,
+                    'range_noise_std_m': load_vehicle().lidar_range_noise_std_m,
+                    'dropout_rate': 0., 'elevation_profile': 'livox', 'return_profile': 'baseline'}
+        for name, default in defaults.items():
+            convert = str if isinstance(default, str) else float
+            expected = convert(values[name]) if override else default
+            actual = getattr(sensor._sensor.config, name)
+            assert actual == expected
+            assert type(params[name]) is type(expected)
         assert '/lhr/track/cones' not in [s.topic_name for s in sensor.subscriptions]
     finally:
         sensor.destroy_node()
@@ -192,3 +207,24 @@ def test_foxglove_only_adds_viewer_nodes(monkeypatch, perception, source):
     assert set(selected) - set(baseline) == {'foxglove_bridge', 'vehicle_viz'}
     assert all(selected[name] == config for name, config in baseline.items())
     assert selected['vehicle_viz']['parameters'][0]['use_mesh'] is False
+
+
+def test_foxglove_rejects_misspelled_boolean():
+    path = Path(__file__).parents[1] / 'launch/gazebo_demo.launch.py'
+    spec = importlib.util.spec_from_file_location('viewer_choices', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    context = LaunchContext()
+    context.launch_configurations['foxglove'] = 'ture'
+    with pytest.raises(RuntimeError):
+        for action in module.generate_launch_description().entities:
+            if isinstance(action, DeclareLaunchArgument):
+                action.execute(context)
+
+
+@pytest.mark.parametrize('perception', ['sim', 'lidar'])
+def test_caster_settings_do_not_change_other_sources(monkeypatch, perception):
+    baseline = launch_nodes(monkeypatch, perception=perception)
+    overridden = launch_nodes(monkeypatch, perception=perception,
+                              mid360_max_range_m='30', mid360_range_noise_std_m='0')
+    assert baseline == overridden

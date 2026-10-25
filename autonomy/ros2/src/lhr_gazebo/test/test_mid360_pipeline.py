@@ -51,8 +51,10 @@ def test_world_clouds_reach_existing_detector_without_labels(tmp_path, monkeypat
             detector._odom_cb(odom)
             sensor._tick()
             before = len(clouds)
+            before_tf = len(transforms)
             sensor._tick()
             assert len(clouds) == before, 'Paused truth must not create another scan'
+            assert len(transforms) == before_tf, 'Paused truth must not repeat a mount TF'
             cloud = clouds[-1]
             assert cloud.header.stamp == odom.header.stamp == transforms[-1].header.stamp
             assert cloud.header.frame_id == 'lidar'
@@ -60,6 +62,7 @@ def test_world_clouds_reach_existing_detector_without_labels(tmp_path, monkeypat
             detector._cloud_cb(cloud)
             detector._process()
         assert len(clouds) == 40
+        assert len(transforms) == 40
         assert sensor._sensor.frame_labeled.call_count == 40
         assert len(detector._cone_map) == 2
         actual = np.array([c[:2] for c in detector._cone_map])
@@ -77,6 +80,7 @@ def test_world_clouds_reach_existing_detector_without_labels(tmp_path, monkeypat
         sensor._odom_cb(odom)
         sensor._tick()
         assert len(clouds) == 41, 'A simulation reset must resume scanning'
+        assert len(transforms) == 41
         forwarded = sensor._sensor.frame_labeled.call_args.kwargs
         assert forwarded['vehicle_z'] == .08
         assert forwarded['vehicle_roll'] == pytest.approx(.04)

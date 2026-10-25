@@ -94,7 +94,7 @@ interface swaps (see the
 
 | Sim today | On the car | Owner |
 |-----------|------------|-------|
-| Gazebo GPU LiDAR (VLP-16 model) / `sensor_sim` cones | Livox Mid-360 through `livox_ros_driver2`, same `lidar_cone_detector`. The Gazebo sensor stays a VLP-16 until someone models the Mid-360's rosette in `gpu_lidar` | Perception (car), Sim & test infra (model) |
+| Gazebo GPU LiDAR (Mid-360 regular grid), optional vendor-pattern world caster, or `sensor_sim` cones | Livox Mid-360 through `livox_ros_driver2`, same `lidar_cone_detector`. The GPU grid repeats; the caster replays imported scan directions against ideal surfaces. Neither establishes physical sensor accuracy | Perception (car), Sim & test infra (model) |
 | No camera; unclassified cones | ZED 2i → `cone_color_classifier` → `cone_fusion`; color-aware Delaunay | Perception |
 | Ground-truth `OdometryPublisher` | `lhr_state_estimation` EKF on the Mid-360 IMU (ZED IMU as backup) + LocusLock RTK position + wheel speeds + steer angle. Moving-base heading only if the second LocusLock unit works; otherwise the EKF derives heading from GNSS velocity and the IMU | State estimation |
 | `pure_pursuit` publishes a speed; Gazebo sets wheel velocity directly | Longitudinal controller turns speed into one signed torque request: positive drives, negative is rear regen, which is the service brake. No friction brake in normal driving | Planning & control |
@@ -142,8 +142,8 @@ line valve, so the spring-preloaded pedal applies the front brakes.
 - The donated Mid-360 passed its acceptance checks provisionally on
   2026-10-04 ([results](../../testing/2026-10-04-mid360-acceptance/README.md)).
   Still open: the 60 minute endurance run and the connector check. If either
-  fails, a used VLP-16 through `velodyne_driver`, which is what the sim
-  already models. The test also set two things this picture depends on: the
+  fails, a used VLP-16 through `velodyne_driver` remains a fallback; the
+  default simulator now approximates Mid-360. The test also set two things this picture depends on: the
   LiDAR mount height and pitch decide the near-field blind zone, and
   perception has to stack about 0.5 to 0.7 s of frames to see a small cone
   at 10 m in daylight.

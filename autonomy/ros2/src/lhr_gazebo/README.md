@@ -180,10 +180,35 @@ The internal read-only `world_sdf` is bound to launch's `world`, and `seed`
 reaches the caster as an integer. Mount, motion and clutter study settings are
 fixed in world mode; see [sensor limits](../lhr_lidar_sim/README.md#gazebo-world-input).
 
+The following typed startup arguments affect only `lidar_source:=mid360`:
+
+| Argument | Default |
+| --- | --- |
+| `mid360_frame_rate_hz` | `10.0` |
+| `mid360_point_rate_hz` | `200000.0` |
+| `mid360_max_range_m` | `40.0` |
+| `mid360_range_noise_std_m` | vehicle YAML, currently `0.02` m |
+| `mid360_dropout_rate` | `0.0` |
+| `mid360_elevation_profile` | `livox` (`rosette` / `uniform` are approximations) |
+| `mid360_return_profile` | `baseline` (`acceptance_overcast` is an empirical profile) |
+
+For example, `mid360_range_noise_std_m:=0 mid360_max_range_m:=30` starts the
+caster with ideal ranges limited to 30 m. The noise default shares the GPU
+sensor's vehicle-YAML value; this override affects only the caster. GPU noise
+still requires model regeneration. Record the source and effective settings
+with comparison results; the generic `max_range_m` controls `sensor_sim`, not
+the caster. These modes do not share a physical accuracy guarantee.
+
+World mode intentionally exposes no mount, motion-distortion or clutter launch
+controls: they are fixed to the shared mount, snapshot scans and no synthetic
+clutter. The internal world path follows `world`; the 0.1 m sensor minimum is
+fixed. Study those alternatives in marker mode instead.
+
 On Wayland with X11 available, Gazebo/RViz select `xcb` unless another backend
 is explicitly chosen. Gazebo uses the packaged Fontconfig configuration;
 an explicit `FONTCONFIG_FILE` takes precedence. These overrides are scoped
-to the launched processes.
+to the launched processes. The packaged font configuration caches under the
+user's XDG cache directory rather than rescanning without a cache on each start.
 
 Every argument the launch forwards to a node carries the node's declared
 type, so a whole number like `v_max:=8` still reaches `pure_pursuit` as a

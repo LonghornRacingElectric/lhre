@@ -117,12 +117,15 @@ always receives clean plant pose, including under injected driving-odometry faul
 Conservative azimuth culling speeds up casting without changing geometric hits.
 
 Cloud and mount TF share the truth acquisition stamp. Duplicate stamps suppress
-extra scans; a backward-time reset resumes scanning. Vehicle height/attitude and
+extra scans and repeated mount TFs; a backward-time reset resumes both. Vehicle height/attitude and
 the shared mount are applied, although current Gazebo odometry is planar.
 
 World mode fixes the mount to `vehicle.yaml` with zero rotation and requires
 snapshot scans without synthetic clutter. Incompatible startup values and runtime
 edits are rejected. Mount/motion/clutter studies remain available in marker mode.
+Gazebo exposes the supported startup rate, range, noise, dropout and profile
+settings as `mid360_*` launch arguments; its [argument table](../lhr_gazebo/README.md#mid-360-cloud-source-and-foxglove)
+also documents the fixed world-mode exceptions.
 
 ## Moving the sensor without restarting
 
@@ -222,7 +225,7 @@ height. To check flatness, transform into `base_link` first.
 | `frame_rate_hz` | `10.0` | |
 | `point_rate_hz` | `200000.0` | Datasheet |
 | `max_range_m` | `40.0` | Datasheet, at 10% reflectivity |
-| `range_noise_std_m` | `0.02` | Applied along the beam, not per axis |
+| `range_noise_std_m` | vehicle YAML (currently `0.02`) | Applied along the beam, not per axis; startup default shared with GPU model |
 | `dropout_rate` | `0.0` | Returns lost outright |
 | `elevation_profile` | `livox` | Imported vendor table; `rosette`/`uniform` are legacy approximations |
 
