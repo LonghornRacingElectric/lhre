@@ -147,10 +147,7 @@ void App::ProcessCanRx() {
     }
     // Other IDs: nothing subscribed yet; drop them.
   }
-  state_ = contactor_status_seen_ && contactor_status_.positive_hv_contactor &&
-                   contactor_status_.negative_hv_contactor
-               ? State::kDrive
-               : State::kIdle;
+  state_ = State::kIdle;
 }
 
 void App::SendStatus() {

@@ -91,4 +91,13 @@ The app uses the **raw FreeRTOS API** on top of that:
 
 The CAN bindings come from the migrated lhre-2026 matrix. This reference app
 broadcasts `VCU_STATE` at its specified 333 Hz and uses `CONTACTOR_STATUS`, the
-HVC packet addressed to the VCU, to distinguish idle from drive.
+HVC packet addressed to the VCU, for contactor diagnostics only. Contactor
+closure does not authorize drive. This reference app stays non-driving and
+does not assert the R2D buzzer; driver-request, brake and precharge interlocks
+must be specified and implemented before enabling a drive transition.
+
+The old reference fault consumed the removed mock `HvcPackStatus.coolant_temp`
+signal at 60°C. The current spec has no equivalent HVC coolant field. An
+approved replacement sensor/circuit and threshold are required before restoring
+that latch; inverter coolant is not assumed to measure the same circuit.
+This reference app is not a complete production VCU controller.

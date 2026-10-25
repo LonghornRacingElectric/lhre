@@ -59,7 +59,7 @@ TEST(VcuApp, BlinksAndBroadcastsStatus) {
   EXPECT_EQ(received, 334u);
 }
 
-TEST(VcuApp, TracksHvcContactorsAndEntersDrive) {
+TEST(VcuApp, TracksHvcContactorsWithoutAuthorizingDrive) {
   lhal::host::TestClock clock;
   lhal::host::CanNetwork network;
   lhal::host::Can vcu_can(&network);
@@ -87,9 +87,8 @@ TEST(VcuApp, TracksHvcContactorsAndEntersDrive) {
   clock.Advance(vcu::App::kStatusPeriodMs);
   app.Step();
 
-  EXPECT_EQ(app.state(), vcu::State::kDrive);
+  EXPECT_EQ(app.state(), vcu::State::kIdle);
 
-  // The last status frame reflects the ready-to-drive state.
   lhal::CanFrame frame;
   VcuStateMessage last;
   bool saw_status = false;
@@ -100,8 +99,19 @@ TEST(VcuApp, TracksHvcContactorsAndEntersDrive) {
     }
   }
   ASSERT_TRUE(saw_status);
-  EXPECT_EQ(last.prndl_state, static_cast<uint8_t>(vcu::State::kDrive));
-  EXPECT_TRUE(last.ready_to_drive_buzzer);
+  EXPECT_EQ(last.prndl_state, static_cast<uint8_t>(vcu::State::kIdle));
+  EXPECT_FALSE(last.ready_to_drive_buzzer);
+
+  contactors.precharge_contactor = true;
+  hvc.Send(contactors.ToFrame());
+  clock.Advance(vcu::App::kStatusPeriodMs);
+  app.Step();
+  EXPECT_EQ(app.state(), vcu::State::kIdle);
+  while (dash.Receive(&frame)) {
+    if (VcuStateMessage::Matches(frame.id)) {
+      EXPECT_FALSE(VcuStateMessage::FromFrame(frame).ready_to_drive_buzzer);
+    }
+  }
 }
 
 TEST(VcuApp, RunsWithoutOptionalPeripherals) {
@@ -143,7 +153,7 @@ TEST(VcuApp, ShellReportsStateOverDebugUart) {
 
   const auto tx = uart.TakeTx();
   const std::string out(tx.begin(), tx.end());
-  EXPECT_NE(out.find("state=drive"), std::string::npos) << out;
+  EXPECT_NE(out.find("state=idle"), std::string::npos) << out;
   EXPECT_NE(out.find("positive=1"), std::string::npos) << out;
   EXPECT_NE(out.find("negative=1"), std::string::npos) << out;
 }
