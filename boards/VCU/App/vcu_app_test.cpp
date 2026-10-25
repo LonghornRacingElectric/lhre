@@ -638,22 +638,22 @@ TEST_F(VcuAppTest, UsbMonitorPrintsOnConnectAndStreamsAtOneHz) {
             std::string::npos);
 }
 
-TEST_F(VcuAppTest, UsbStreamCanBeDisabledAndBannerReturnsOnReconnect) {
+TEST_F(VcuAppTest, UsbStatusAlwaysResumesOnReconnect) {
   app_->Step();
   b_.usb.TakeTx();
-  const std::string off = "/stream 0\n";
-  b_.usb.InjectRx(reinterpret_cast<const uint8_t*>(off.data()), off.size());
-  app_->Step();
-  b_.usb.TakeTx();
+  b_.usb.set_connected(false);
   b_.clock.Advance(2000);
   app_->Step();
   EXPECT_TRUE(b_.usb.TakeTx().empty());
-  b_.usb.set_connected(false);
-  app_->Step();
   b_.usb.set_connected(true);
   app_->Step();
   auto bytes = b_.usb.TakeTx();
   const std::string reconnected(bytes.begin(), bytes.end());
   EXPECT_NE(reconnected.find("Vehicle Control Unit"), std::string::npos);
-  EXPECT_EQ(reconnected.find("state="), std::string::npos);
+  EXPECT_NE(reconnected.find("state="), std::string::npos);
+  b_.clock.Advance(1000);
+  app_->Step();
+  bytes = b_.usb.TakeTx();
+  EXPECT_NE(std::string(bytes.begin(), bytes.end()).find("state="),
+            std::string::npos);
 }

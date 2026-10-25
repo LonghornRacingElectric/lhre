@@ -369,9 +369,18 @@ Opening the USB serial port prints the `Vehicle Control Unit` firmware
 banner, reset cause and command hint, even when the monitor connects after
 boot. Every second it prints state, fault mask, ADC freshness, pedal demand,
 torque/enable, APPS voltages, front/rear brake pressure and motor RPM.
-`/stream 0` disables periodic output; `/stream 1000` restores one-second
-updates (allowed intervals 100–60000 ms). The banner returns on reconnect.
+Status output is always enabled while the USB port is open; no stream
+command or setup is needed. The banner and status return on reconnect.
 `/state`, `/faults`, `/io` and `/analog` still give detailed on-demand output.
 Serial writes run only in the low-priority USB shell task, using a published
 snapshot; the control loop does not wait for the monitor. Existing event
 logging remains on the debug USART3 console.
+
+On macOS select `/dev/cu.usbmodem…` in external serial monitors. The friendly
+USB name does not rename this device path. Only one monitor should own the
+port at a time; close an existing monitor before opening another. The repo
+monitor selects the `cu` port automatically:
+
+```bash
+bazel run --config=local //tools/monitor
+```
