@@ -42,8 +42,9 @@ Each module is its own target so boards pull in only what they use:
   shell's byte hook, and raises a bootloader request flag.
 - `//drivers/longhorn:can_inbox` — `longhorn::CanInbox`, an ISR-to-task
   queue for classic CAN frames. `longhorn::RxSlot<Message>` holds the
-  latest decoded message with its age. `longhorn::PeriodMs<Message>()`
-  gives a spec message's transmit period.
+  latest decoded message with its age.
+- `//drivers/longhorn:period` — `longhorn::PeriodMs<Message>()`, a spec
+  message's transmit period in ms.
 - `//drivers/longhorn:debounce` — `Debouncer`, `EdgeButton` (no press edge
   until first released) and `PersistenceTimer`.
 - `//drivers/longhorn:math` — `Clamp`, `Lookup1D`, `Normalize` and `Ema`.
@@ -72,3 +73,16 @@ In tests, construct the same driver with `lhal::host::*` fakes instead.
 Task/RTOS wiring stays in the board app (see `boards/VCU/App`): drive
 `RgbLed::Rainbow(dt)` from a periodic task or a `Step()` loop. Pure,
 LHAL-free logic (CRC, pack/unpack, ring buffers) belongs in `lib/`, not here.
+
+`Shell::SetByteHandler` observes each byte before line parsing. Returning
+true consumes the byte and clears the partial line, supporting newline-free
+recovery tokens across polls. The hook runs in the polling task.
+
+RX slots live here because arrival timestamps, freshness policy and LHAL
+frame validation are board services rather than wire packing. A slot times
+out after twice the message period; aperiodic messages can be seen but are
+never fresh by age.
+
+`period` provides `PeriodMs<Message>()`: fractional Hz are converted before
+truncation, periods are at least 1 ms, and aperiodic or unrepresentable
+periods fail at compile time instead of dividing by zero.

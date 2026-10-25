@@ -84,6 +84,13 @@ cc_library(
 )
 
 cc_library(
+    name = "period",
+    hdrs = ["include/longhorn/period.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
     name = "rate_gate",
     hdrs = ["include/longhorn/rate_gate.hpp"],
     includes = ["include"],
@@ -196,6 +203,16 @@ cc_test(
     srcs = ["test/dfu_test.cpp"],
     deps = [
         ":dfu",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "period_test",
+    size = "small",
+    srcs = ["test/period_test.cpp"],
+    deps = [
+        ":period",
         "@googletest//:gtest_main",
     ],
 )

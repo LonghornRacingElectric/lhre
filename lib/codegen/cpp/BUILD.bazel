@@ -61,19 +61,6 @@ cc_library(
     for board in CAN_BOARDS
 ]
 
-# What each board receives, per bus (lhre_can_<board>_rx.hpp). Header-only;
-# depends on every sender's library.
-[
-    cc_library(
-        name = "can_{}_rx".format(board),
-        hdrs = ["lhre_can_{}_rx.hpp".format(board)],
-        includes = ["."],
-        visibility = ["//visibility:public"],
-        deps = [":can_" + b for b in CAN_BOARDS] + ["//drivers/lhal:lhal"],
-    )
-    for board in CAN_BOARDS
-]
-
 # Everything on the bus at once — tests, sims, and the future gateway.
 # Firmware should prefer the per-board targets above.
 cc_library(
@@ -90,7 +77,20 @@ cc_test(
     srcs = ["test/can_lib_test.cpp"],
     deps = [
         ":can_lib",
-        ":can_vcu_rx",
+        ":can_rx_vcu",
+        ":can_rx_pi",
         "@googletest//:gtest_main",
     ],
 )
+
+# RX headers include the source libraries named by recipient subscriptions.
+[
+    cc_library(
+        name = "can_rx_" + board,
+        hdrs = ["lhre_can_rx_{}.hpp".format(board)],
+        includes = ["."],
+        visibility = ["//visibility:public"],
+        deps = [":can_" + source for source in CAN_BOARDS] + ["//drivers/longhorn:can_inbox"],
+    )
+    for board in CAN_BOARDS
+]

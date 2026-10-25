@@ -6,7 +6,6 @@ library per source board:
 | Target | Contents |
 | ------ | -------- |
 | `:can_<board>` | That board's messages, in `namespace lhre::can::<board>` |
-| `:can_<board>_rx` | What that board receives: one `<Bus>Rx<Slot>` table per bus, built from `to_boards` |
 | `:can_types` | Shared enums, `ToString`, and the `kMessageMeta` table |
 | `:can_lib` | Umbrella over the whole bus, for tests, sims, and the gateway |
 
@@ -64,20 +63,6 @@ if (bus.Receive(&frame) && HvcPackStatus::Matches(frame.id)) {
 }
 ```
 
-A receive table holds one `Slot<Message>` per message the board receives
-on that bus, and `Dispatch(frame, now_ms)` tries each in turn. A message
-with `to_boards: "*"` goes to every board except its sender. The slot
-type is the board's choice; `longhorn::RxSlot` stores the latest message
-with its arrival time:
-
-```cpp
-struct VehicleRx : lhre::can::vcu::CriticalRx<longhorn::RxSlot> {};
-
-VehicleRx rx;
-rx.Dispatch(frame, now_ms);
-if (rx.hvc_contactor_status.Fresh(now_ms)) { /* ... */ }
-```
-
 `kMessageMeta[]` and `kMessageCount` give a frame-ID-sorted constexpr
 table of (id, dlc, quantity, frequency) for RTOS task tables.
 
@@ -107,3 +92,14 @@ name.
 Indexed array blocks (`quantity` > 1, e.g. `HVC_CELL_TEMPS`) are plain
 structs: fill the slots and call `ToFrame(i)` per frame. Element index
 math lives with [lib/spec](../../spec/README.md) and the gateway.
+
+## Recipient dispatch
+
+`:can_rx_<board>` exports `lhre_can_rx_<board>.hpp`. For each bus subscribed
+through `CanMessage.to_boards` (including `*`), it generates
+`lhre::can::rx::<Board><Bus>Rx`, containing one longhorn `RxSlot` per message
+(named with the lower-case spec name) and `Dispatch(frame, now_ms)`.
+Separate bus structs prevent cross-bus decoding. Board policy can derive
+from them to add freshness predicates without maintaining a decode chain.
+The RX target depends on source libraries and longhorn; existing packer
+libraries keep their original dependencies. No generated files are committed.

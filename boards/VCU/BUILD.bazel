@@ -11,6 +11,7 @@ firmware_project(
         "//drivers/longhorn:led",
         "//drivers/longhorn:logger",
         "//drivers/longhorn:math",
+        "//drivers/longhorn:period",
         "//drivers/longhorn:rainbow_task",
         "//drivers/longhorn:rate_gate",
         "//drivers/longhorn:rtos_lock",
@@ -23,12 +24,10 @@ firmware_project(
         "//lib/codegen/cpp:can_pdu",
         "//lib/codegen/cpp:can_pi",
         "//lib/codegen/cpp:can_vcu",
-        "//lib/codegen/cpp:can_vcu_rx",
+        "//lib/codegen/cpp:can_rx_vcu",
         "//lib/codegen/cpp:can_usm",
     ],
     enable_freertos = True,
     enable_usb = True,
     mcu = "stm32g474xx",
-    # Bring-up image: no inverter commands.
-    variants = {"test": ["VCU_TEST_IMAGE"]},
 )

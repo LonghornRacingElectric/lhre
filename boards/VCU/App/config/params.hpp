@@ -57,7 +57,7 @@ struct BseParams {
   float brake_light_duty = 0.30f;
   // Brake bias holds its last value below this total (vcu_can.c:331-341).
   float bias_min_total_psi = 1000.0f;
-  // TODO(verify rule EV.4.7): latch at 25% pedal; release below 5%.
+  // EV.4.7: unfiltered normalized APPS travel, before the torque deadzone.
   float bot_pedal_on = 0.25f;
   float bot_pedal_off = 0.05f;
   // TODO(verify): match the BSPD trimmer (0.595-0.976 V at the pin).

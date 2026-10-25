@@ -82,6 +82,7 @@ class App {
   static void SupervisorTaskEntry(void* self);
   static void VcpShellTaskEntry(void* self);
   static void UsbShellTaskEntry(void* self);
+  void PollUsbConsole();
 
   // Inverter values the torque stages share. Held values are kept for
   // diagnostics. Freshness gates DRIVE separately.
@@ -135,6 +136,8 @@ class App {
   longhorn::Shell vcp_shell_;
   longhorn::Shell usb_shell_;
   longhorn::Logger logger_;
+  bool usb_console_connected_ = false;
+  uint32_t usb_stream_last_ms_ = 0;
   longhorn::RainbowTask rainbow_;
   longhorn::DfuConsole usb_dfu_{&bootloader_request_};
   longhorn::DfuConsole vcp_dfu_{&bootloader_request_};

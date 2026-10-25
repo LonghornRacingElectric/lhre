@@ -1,5 +1,7 @@
 #include "app/vcu_app.hpp"
 
+#include "app/serial_report.hpp"
+#include "hmi/status_led.hpp"
 #include "longhorn/rtos_lock.hpp"
 
 namespace vcu {
@@ -8,13 +10,16 @@ App::App(const Peripherals& peripherals, const Params* initial_params)
     : p_(peripherals),
       vcp_mutex_(xSemaphoreCreateMutexStatic(&vcp_mutex_control_)),
       usb_mutex_(xSemaphoreCreateMutexStatic(&usb_mutex_control_)),
-      vcp_shell_(p_.debug_uart, p_.clock, "VCU", vcp_mutex_),
-      usb_shell_(p_.usb_uart, p_.clock, "VCU", usb_mutex_),
+      vcp_shell_(p_.debug_uart, p_.clock, "Vehicle Control Unit", vcp_mutex_),
+      usb_shell_(p_.usb_uart, p_.clock, "Vehicle Control Unit", usb_mutex_),
       logger_(p_.debug_uart, p_.clock, vcp_mutex_),
       rainbow_(p_.status_led, p_.clock),
       params_(initial_params != nullptr ? initial_params
                                         : &ParamsFor(kDefaultEventMode)),
       snapshot_mutex_(xSemaphoreCreateMutexStatic(&snapshot_mutex_control_)) {
+  const Rgb boot_color =
+      StatusColor(VcuState::kInit, lhre::can::VcuFaultCode::kNone, 0);
+  rainbow_.Override(boot_color.r, boot_color.g, boot_color.b);
   // Outputs to their safe state before anything else runs (Board/ already
   // did this at the pin level before constructing the app).
   WriteDigitalOutputs(p_.outputs, SafeOutputs());
@@ -96,7 +101,7 @@ void App::VcpShellTaskEntry(void* self) {
 void App::UsbShellTaskEntry(void* self) {
   auto* app = static_cast<App*>(self);
   for (;;) {
-    app->usb_shell_.Poll();
+    app->PollUsbConsole();
     vTaskDelay(pdMS_TO_TICKS(kShellPollMs));
   }
 }
@@ -111,7 +116,7 @@ void App::Step() {
     step_supervisor_ms_ = now - kSupervisorPeriodMs;
   }
   vcp_shell_.Poll();
-  usb_shell_.Poll();
+  PollUsbConsole();
   rainbow_.Step(now);
   logger_.DrainOne(0);
   if (lhal::ElapsedMs(now, step_control_ms_, kControlPeriodMs)) {
@@ -125,6 +130,39 @@ void App::Step() {
   if (lhal::ElapsedMs(now, step_supervisor_ms_, kSupervisorPeriodMs)) {
     step_supervisor_ms_ = now;
     SupervisorTick(now);
+  }
+}
+
+void App::PollUsbConsole() {
+  const bool connected = p_.usb_uart != nullptr && p_.usb_uart->connected();
+  const uint32_t now = p_.clock->Millis();
+  constexpr uint32_t kStatusPeriodMs = 1000;
+  if (connected && !usb_console_connected_) {
+    usb_shell_.PrintBanner();
+    auto& out = usb_shell_.console();
+    out.Printf("reset=%s; /help for commands", lhal::ToString(p_.reset_cause));
+    usb_stream_last_ms_ = now - kStatusPeriodMs;
+  }
+  usb_console_connected_ = connected;
+  usb_shell_.Poll();
+  if (!connected ||
+      !lhal::ElapsedMs(now, usb_stream_last_ms_, kStatusPeriodMs)) {
+    return;
+  }
+  usb_stream_last_ms_ = now;
+  const ControlSnapshot s = snapshot();
+  if constexpr (kDetailedSerialReport) {
+    SerialHealth health;
+    health.uptime_ms = p_.clock->Millis();
+    if (p_.critical_can != nullptr) health.critical = p_.critical_can->stats();
+    if (p_.data_can != nullptr) health.data = p_.data_can->stats();
+    health.critical_inbox_drops = critical_inbox_.dropped();
+    health.data_inbox_drops = data_inbox_.dropped();
+    health.control_beats = control_beats_.load();
+    health.telemetry_beats = telemetry_beats_.load();
+    PrintSerialReport(usb_shell_.console(), s, health, p_.reset_cause);
+  } else {
+    PrintCompactSerialReport(usb_shell_.console(), s);
   }
 }
 

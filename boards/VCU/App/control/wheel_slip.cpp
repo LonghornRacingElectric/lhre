@@ -49,16 +49,13 @@ WheelControlResult WheelSlipController::Update(const WheelInputs& in,
   const float trim =
       longhorn::Clamp(p.kp_nm * error + integral_nm_, 0.0f, demand_nm);
   const float target = demand_nm - trim;
-  // Cut at once. Ramp back only after a cut, so a normal pedal press with
-  // no slip passes straight through.
-  if (trim > 0) recovering_ = true;
+  // A normal throttle step is not recovery. Only a slip cut arms the ramp;
+  // keep it armed until the cut has been fully restored at current demand.
   out.positive_nm =
       recovering_
           ? longhorn::Clamp(target, 0.0f, previous_nm_ + p.recovery_nm_s * dt)
           : target;
-  if (recovering_ && trim <= 0 && out.positive_nm >= target) {
-    recovering_ = false;
-  }
+  recovering_ = trim > 0 || out.positive_nm < demand_nm;
   previous_nm_ = out.positive_nm;
   return out;
 }

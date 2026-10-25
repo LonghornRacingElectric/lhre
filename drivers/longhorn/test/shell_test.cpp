@@ -228,3 +228,24 @@ TEST(ShellRtos, VersionUnderSchedulerWithMutexDoesNotDeadlock) {
 }
 
 }  // namespace
+
+TEST(Shell, ByteHookConsumesAndClearsPartialLine) {
+  ShellFixture f;
+  int consumed = 0;
+  f.shell.SetByteHandler(
+      [](void* ctx, uint8_t byte) {
+        if (byte != '!') return false;
+        ++*static_cast<int*>(ctx);
+        return true;
+      },
+      &consumed);
+  Type(f.uart, f.shell, "/bad");
+  Type(f.uart, f.shell, "!");
+  EXPECT_EQ(consumed, 1);
+  EXPECT_EQ(TakeTxString(f.uart), "/bad");
+  Type(f.uart, f.shell, "/uptime\n");
+  EXPECT_TRUE(Contains(TakeTxString(f.uart), "uptime 0 ms"));
+  f.shell.SetByteHandler(nullptr, nullptr);
+  Type(f.uart, f.shell, "!");
+  EXPECT_EQ(TakeTxString(f.uart), "!");
+}

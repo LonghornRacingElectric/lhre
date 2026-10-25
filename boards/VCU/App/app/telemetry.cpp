@@ -1,6 +1,7 @@
 #include "app/vcu_app.hpp"
 #include "can/diag_frames.hpp"
 #include "lhre_can_vcu.hpp"
+#include "longhorn/period.hpp"
 
 namespace vcu {
 

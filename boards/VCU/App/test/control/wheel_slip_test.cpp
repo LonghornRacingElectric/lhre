@@ -25,33 +25,63 @@ TEST(WheelSlip, OneWheelSpinCutsTorqueAndRecoveryIsLimited) {
   EXPECT_EQ(control.Update(in, 100, 3, p).positive_nm, 0);
 }
 
-TEST(WheelSlip, PedalStepWithoutSlipIsNotRateLimited) {
+TEST(WheelSlip, NoSlipThrottleStepsAreNotRecoveryLimited) {
   vcu::WheelSlipController control;
   vcu::WheelControlParams p;
   p.enabled = true;
   vcu::WheelInputs in;
   in.fresh = true;
   for (float& speed : in.rad_s) speed = 50;
-  EXPECT_EQ(control.Update(in, 0, 3, p).positive_nm, 0);
+  EXPECT_FLOAT_EQ(control.Update(in, 0, 3, p).positive_nm, 0);
+  EXPECT_FLOAT_EQ(control.Update(in, 200, 3, p).positive_nm, 200);
+  EXPECT_FLOAT_EQ(control.Update(in, 250, 3, p).positive_nm, 250);
+  EXPECT_FLOAT_EQ(control.Update(in, 0, 3, p).positive_nm, 0);
   EXPECT_FLOAT_EQ(control.Update(in, 200, 3, p).positive_nm, 200);
 }
 
-TEST(WheelSlip, RampEndsOnceTorqueCatchesDemand) {
+TEST(WheelSlip, FirstSlipCutUsesPiTargetBeforeRecoveryRamping) {
   vcu::WheelSlipController control;
   vcu::WheelControlParams p;
   p.enabled = true;
+  p.ki_nm_s = 0;
   vcu::WheelInputs in;
   in.fresh = true;
   for (float& speed : in.rad_s) speed = 50;
-  control.Update(in, 100, 3, p);
-  in.rad_s[2] = 150;
-  control.Update(in, 100, 3, p);
+  in.rad_s[2] = 60;  // 20% slip, 10 points above target: a 10 Nm cut
+  EXPECT_NEAR(control.Update(in, 200, 3, p).positive_nm, 190, 1e-3f);
   in.rad_s[2] = 50;
-  vcu::WheelControlResult out;
-  for (int i = 0; i < 1000; ++i) out = control.Update(in, 100, 3, p);
-  ASSERT_FLOAT_EQ(out.positive_nm, 100);
-  // Back in normal mode: a demand step passes through at once.
-  EXPECT_FLOAT_EQ(control.Update(in, 150, 3, p).positive_nm, 150);
+  EXPECT_NEAR(control.Update(in, 200, 3, p).positive_nm, 191.2f, 1e-3f);
+}
+
+TEST(WheelSlip, OnlyPostCutRecoveryIsRampedAndPedalReleaseClearsIt) {
+  vcu::WheelSlipController control;
+  vcu::WheelControlParams p;
+  p.enabled = true;
+  p.ki_nm_s = 0;  // isolate the recovery cap from integral decay
+  vcu::WheelInputs in;
+  in.fresh = true;
+  for (float& speed : in.rad_s) speed = 50;
+  ASSERT_FLOAT_EQ(control.Update(in, 200, 3, p).positive_nm, 200);
+  in.rad_s[2] = 200;
+  ASSERT_FLOAT_EQ(control.Update(in, 200, 3, p).positive_nm, 0);
+  in.rad_s[2] = 50;
+  const float step = p.recovery_nm_s * 0.003f;
+  EXPECT_NEAR(control.Update(in, 200, 3, p).positive_nm, step, 1e-5f);
+  float previous = step;
+  for (int n = 0; n < 200; ++n) {
+    const float next = control.Update(in, 200, 3, p).positive_nm;
+    EXPECT_LE(next - previous, step + 1e-4f);
+    previous = next;
+  }
+  EXPECT_FLOAT_EQ(previous, 200);
+  EXPECT_FLOAT_EQ(control.Update(in, 250, 3, p).positive_nm, 250);
+  in.rad_s[2] = 200;
+  control.Update(in, 200, 3, p);
+  control.Update(in, 0, 3, p);
+  in.rad_s[2] = 50;
+  EXPECT_FLOAT_EQ(control.Update(in, 200, 3, p).positive_nm, 200);
+  in.fresh = false;
+  EXPECT_EQ(control.Update(in, 200, 3, p).positive_nm, 0);
 }
 
 TEST(WheelSlip, LockedRearWheelBlocksRegenAndZeroSpeedIsFinite) {

@@ -176,6 +176,14 @@ TEST_F(VcuAppTest, BrakeOverThrottleCutsUntilPedalReleased) {
   b_.SetBrakePsi(0.0f);
   b_.Run(*app_, 200);
   EXPECT_EQ(app_->torque_command(), 0.0f);
+  // Raw 10% is below the old deadzone-shifted release point, but must stay cut.
+  b_.SetPedalTravel(0.10f);
+  b_.Run(*app_, 200);
+  EXPECT_TRUE(app_->snapshot().pedals.brake_over_throttle);
+  EXPECT_EQ(app_->torque_command(), 0.0f);
+  b_.SetPedalTravel(0.5f);
+  b_.Run(*app_, 200);
+  EXPECT_EQ(app_->torque_command(), 0.0f);
   b_.SetPedalTravel(0.0f);
   b_.Run(*app_, 200);
   b_.SetPedalTravel(0.5f);
@@ -453,23 +461,33 @@ TEST_F(VcuAppTest, EitherFrozenAdcBankCutsTorqueEvenWithPlausibleCounts) {
   }
 }
 
-TEST_F(VcuAppTest, SharedRainbowAdvancesAndBspdOverridesIt) {
-  b_.Run(*app_, 20);
-  const float red = b_.led_r.duty();
-  b_.Run(*app_, 500);
-  EXPECT_NE(b_.led_r.duty(), red);
+TEST_F(VcuAppTest, StatusLedIsGreenInDriveAndMagentaAfterBspdTrip) {
+  ReachDrive();
+  b_.Run(*app_, 40);
+  EXPECT_FLOAT_EQ(b_.led_r.duty(), 0);
+  EXPECT_GT(b_.led_g.duty(), 0);
+  EXPECT_FLOAT_EQ(b_.led_b.duty(), 0);
   b_.latch_state.Write(true);
   b_.Run(*app_, 40);
+  EXPECT_GT(b_.led_r.duty(), 0);
   EXPECT_FLOAT_EQ(b_.led_r.duty(), b_.led_b.duty());
   EXPECT_FLOAT_EQ(b_.led_g.duty(), 0);
 }
 
-TEST_F(VcuAppTest, RainbowStillRunsAfterMoreThanOneCycleWithoutVehicleCan) {
+TEST_F(VcuAppTest, MissingVehicleCanShowsRedFaultPulsesRatherThanRainbow) {
   b_.hvc_alive = b_.inverter_alive = b_.pdu_alive = false;
-  b_.Run(*app_, 6000);
-  const float red = b_.led_r.duty();
-  b_.Run(*app_, 400);
-  EXPECT_NE(b_.led_r.duty(), red);
+  b_.Run(*app_, 40);  // allow the LED task its first 33 ms update
+  bool saw_red = false;
+  bool saw_off = false;
+  for (int n = 0; n < 60; ++n) {
+    b_.Run(*app_, 20);
+    EXPECT_FLOAT_EQ(b_.led_g.duty(), 0);
+    EXPECT_FLOAT_EQ(b_.led_b.duty(), 0);
+    saw_red |= b_.led_r.duty() > 0;
+    saw_off |= b_.led_r.duty() == 0;
+  }
+  EXPECT_TRUE(saw_red);
+  EXPECT_TRUE(saw_off);
 }
 
 TEST_F(VcuAppTest, DataBusGoldenWheelPacketsDecodeAndExpireIndependently) {
@@ -494,6 +512,25 @@ TEST_F(VcuAppTest, DataBusGoldenWheelPacketsDecodeAndExpireIndependently) {
   EXPECT_NEAR(wheels.reference_m_s, 50 * 0.2045f, 0.001f);
   b_.Run(*app_, 9);
   EXPECT_FALSE(app_->snapshot().wheel_control.valid);
+}
+
+TEST_F(VcuAppTest, EnabledSlipControlPassesNormalThrottleWithoutAnExtraRamp) {
+  b_.params.wheel_control.enabled = true;
+  app_ = std::make_unique<vcu::App>(b_.peripherals(), &b_.params);
+  for (int i = 0; i < 4; ++i) {
+    b_.wheel_alive[i] = true;
+    b_.wheel_rad_s[i] = 50;
+  }
+  ReachDrive();
+  b_.SetPedalTravel(0.5f);
+  for (int n = 0; n < 5; ++n) {
+    b_.Run(*app_, 3);
+    const auto s = app_->snapshot();
+    ASSERT_EQ(s.state, VcuState::kDrive);
+    ASSERT_TRUE(s.wheel_control.valid);
+    ASSERT_GT(s.torque.traction, 0);
+    EXPECT_FLOAT_EQ(s.wheel_control.positive_nm, s.torque.traction);
+  }
 }
 
 TEST_F(VcuAppTest, EnabledSlipControlCutsOneWheelSpinAndMissingData) {
@@ -615,4 +652,45 @@ TEST_F(VcuAppTest, EachBrakeComparatorFlagCutsTorqueAndLatches) {
     EXPECT_EQ(app->faults() & vcu::kFaultBrakeFlagLatched, 0u) << flag;
     EXPECT_NE(app->state(), VcuState::kDrive) << flag;
   }
+}
+
+TEST_F(VcuAppTest, UsbMonitorPrintsOnConnectAndStreamsAtOneHz) {
+  b_.usb.set_connected(false);
+  app_->Step();
+  EXPECT_TRUE(b_.usb.TakeTx().empty());
+  b_.usb.set_connected(true);
+  app_->Step();
+  auto bytes = b_.usb.TakeTx();
+  const std::string initial(bytes.begin(), bytes.end());
+  EXPECT_NE(initial.find("Vehicle Control Unit"), std::string::npos);
+  EXPECT_NE(initial.find("reset="), std::string::npos);
+  EXPECT_NE(initial.find("state="), std::string::npos);
+  b_.clock.Advance(999);
+  app_->Step();
+  EXPECT_TRUE(b_.usb.TakeTx().empty());
+  b_.clock.Advance(1);
+  app_->Step();
+  bytes = b_.usb.TakeTx();
+  EXPECT_NE(std::string(bytes.begin(), bytes.end()).find("state="),
+            std::string::npos);
+}
+
+TEST_F(VcuAppTest, UsbStatusAlwaysResumesOnReconnect) {
+  app_->Step();
+  b_.usb.TakeTx();
+  b_.usb.set_connected(false);
+  b_.clock.Advance(2000);
+  app_->Step();
+  EXPECT_TRUE(b_.usb.TakeTx().empty());
+  b_.usb.set_connected(true);
+  app_->Step();
+  auto bytes = b_.usb.TakeTx();
+  const std::string reconnected(bytes.begin(), bytes.end());
+  EXPECT_NE(reconnected.find("Vehicle Control Unit"), std::string::npos);
+  EXPECT_NE(reconnected.find("state="), std::string::npos);
+  b_.clock.Advance(1000);
+  app_->Step();
+  bytes = b_.usb.TakeTx();
+  EXPECT_NE(std::string(bytes.begin(), bytes.end()).find("state="),
+            std::string::npos);
 }

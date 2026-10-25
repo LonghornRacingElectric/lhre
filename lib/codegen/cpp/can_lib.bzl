@@ -40,17 +40,13 @@ _can_lib_sources = rule(
 )
 
 def can_lib_sources(name, spec, boards):
-    """Generates lhre_can_types.{hpp,cpp}, lhre_can_<board>.{hpp,cpp} and
-    lhre_can_<board>_rx.hpp per board, and the lhre_can.hpp umbrella. `boards` must match the
+    """Generates lhre_can_types.{hpp,cpp}, lhre_can_<board>.{hpp,cpp} per
+    board, and the lhre_can.hpp umbrella. `boards` must match the
     lib/spec/messages/*.textproto file stems — the generator errors with
     instructions if it drifts."""
     outs = ["lhre_can.hpp", "lhre_can_types.hpp", "lhre_can_types.cpp"]
     for board in boards:
-        outs += [
-            "lhre_can_{}.hpp".format(board),
-            "lhre_can_{}.cpp".format(board),
-            "lhre_can_{}_rx.hpp".format(board),
-        ]
+        outs += ["lhre_can_{}.hpp".format(board), "lhre_can_{}.cpp".format(board), "lhre_can_rx_{}.hpp".format(board)]
     _can_lib_sources(
         name = name,
         spec = spec,

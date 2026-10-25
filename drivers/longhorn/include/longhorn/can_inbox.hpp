@@ -72,14 +72,6 @@ class CanInbox {
   std::atomic<uint32_t> dropped_{0};
 };
 
-// Transmit period of a periodic spec message.
-template <class Message>
-constexpr uint32_t PeriodMs() {
-  static_assert(Message::kFrequencyHz >= 1.0f,
-                "PeriodMs needs a message sent at 1 Hz or faster");
-  return 1000 / static_cast<uint32_t>(Message::kFrequencyHz);
-}
-
 // The latest copy of one received message with its arrival time.
 template <class Message>
 struct RxSlot {

@@ -16,15 +16,14 @@ The DUI is a plain CAN peripheral this year.
 | Target                    | What                                                    |
 | ------------------------- | ------------------------------------------------------- |
 | `:vcu`                    | Vehicle firmware (`vcu::App`), plus `.elf`/`.hex`/`.bin`. |
-| `:vcu_test`               | Bring-up test image (`vcu::TestApp`, `VCU_TEST_IMAGE`). No vehicle logic, no inverter frames. |
-| `:openocd` / `:openocd_test` | `bazel run`: flash over ST-Link.                      |
-| `:dfu` / `:dfu_test`      | `bazel run`: flash over USB DFU (sends `update.`, then dfu-util). |
+| `:openocd`                | `bazel run`: flash over ST-Link.                        |
+| `:dfu`                    | `bazel run`: flash over USB DFU (sends `update.`, then dfu-util). |
 | `:<module>_test`          | One host test per module, under `App/test/`: `pedals_test`, `torque_test`, `state_machine_test`, and so on. |
 | `:vcu_app_test`           | Vehicle app end to end through `Step()` with LHAL fakes. |
-| `:test_app_test`          | Test image end to end.                                  |
+| `:test_app_test`          | Host bench harness end to end.                          |
 | `:vcu_rtos_test`          | Real FreeRTOS tasks under the simulator port.           |
 | `:vcu_sim`                | Scripted drive under the simulator (`bazel run --config=local`). |
-| `:release`                | Both images' elf/bin/hex for CI artifacts.              |
+| `:release`                | Vehicle elf/bin/hex for CI artifacts.              |
 
 ## Layout
 
@@ -37,6 +36,7 @@ The DUI is a plain CAN peripheral this year.
     The task bodies are in `control_loop.cpp`, `critical_tx.cpp`,
     `telemetry.cpp`, `supervisor.cpp` and `shell_commands.cpp`.
     `control_snapshot.hpp` is the state that the control task publishes.
+    `serial_report` formats the USB status report.
     `vcu_sim.cpp` is the scripted drive.
   - `io/`: the Board/App contract. `peripherals.hpp` holds the ADC ranks,
     pins, `Peripherals` and `BoardServices`. `digital_io.hpp` applies pin
@@ -53,12 +53,13 @@ The DUI is a plain CAN peripheral this year.
   - `hmi/`: driver feedback. `buzzer` is the RTD sound. `status_led` is the
     status RGB color policy.
   - `config/params.*`: every tunable, with per-event sets.
-  - `bringup/`: the bring-up test image (`test_app`, `test_shell`).
+  - `bringup/`: a host bench harness kept for integration tests
+    (`test_app`, `test_shell`). It is not flashed.
   - `test/`: one `<module>_test.cpp` per module, plus `bench.hpp` (host
     fakes and a scripted car, for tests and the sim).
 - Shared code the VCU uses: `//drivers/longhorn` (shell, logger, RGB LED and
-  rainbow task, DFU console hook, debounce, math, CAN inbox, rate gate, RTOS
-  lock) and `//drivers/lhal` (peripheral interfaces, STM32 adapters, host
+  rainbow task, DFU console hook, debounce, math, CAN inbox, period, rate
+  gate, RTOS lock) and `//drivers/lhal` (peripheral interfaces, STM32 adapters, host
   fakes).
 - `Board/`: hand-written bring-up at ST HAL level.
   - `main.cpp`: reset cause, clocks, safe outputs, the `MX_*_Init` calls,
@@ -81,7 +82,7 @@ The DUI is a plain CAN peripheral this year.
 | supervisor | 20 ms  | idle+6   | Feeds the IWDG (100 ms) only if control and telemetry both made progress; otherwise forces safe outputs and lets the IWDG reset. |
 | control    | 3 ms   | idle+5   | Inputs, plausibility, state machine, torque, outputs, Critical-bus TX (333 Hz, as on the 2026 car). |
 | telemetry  | 10 ms  | idle+3   | Data-bus diagnostics, flash writes for the fault latch. |
-| rainbow | 33 ms | idle+2 | VCU LED task; continuous five-second rainbow, as last year. |
+| LED status | 33 ms | idle+2 | Applies the state/fault color selected by control. |
 | shell ×2, logger | — | idle+1 | Debug consoles on the STDC14 VCP (USART3) and USB CDC. |
 
 ## Pin map (Rev A netlist)
@@ -99,7 +100,7 @@ The DUI is a plain CAN peripheral this year.
 | Linelock_Ctrl / Amp_Shutdown_SW | PE15 / PE14 | high = request / amp on |
 | BMS_Error_SW / IMD_Error_SW | PE12 / PE13 | high = lamp on; the board pull-up lights them if the MCU is dead |
 | Crit_STB / Data_STB | PD9 / PD8 | TJA1462 standby when high; held low (normal) |
-| LED_G / LED_R / LED_B | PA0 / PA1 / PA2 (TIM2 CH1-3) | common anode, PWM active low |
+| LED blue / red / green | PA0 / PA1 / PA2 (TIM2 CH1-3) | D35 rotated 180°; common anode, PWM active low |
 | Audio_DAC | PA4 (DAC1 OUT1) | to the PAM8302 |
 | Critical CAN | PB12/PB13 (FDCAN2) | 1 Mbit/s classic |
 | Data CAN | PD0/PD1 (FDCAN1) | 1 Mbit/s classic |
@@ -111,14 +112,11 @@ The DUI is a plain CAN peripheral this year.
 - **Boot**: the reset cause is read before anything else (reported in
   `VCU_DIAG`, the boot log, and `/state`). Outputs are safe before any
   peripheral starts. The state starts at INIT, then IDLE, and torque is 0.
-  The board-local `vcu::RgbLed` starts white, then a dedicated static
-  `vcu::RainbowTask` runs the five-second rainbow continuously at
-  33 ms intervals, as last year's shared LED task did. Only this task
-  writes the PWM; BSPD_TRIPPED overrides its color. The test image also
-  cycles continuously; `/led` overrides it and `/led auto` resumes it.
-  TIM2 channel order/polarity and the legacy CCR=125 boot brightness /
-  CCR<=127 rainbow brightness are preserved. Unlike the old VCU's CAN
-  callback, control never repeatedly creates or destroys LED threads.
+  The board-local `vcu::RgbLed` starts white, then the existing LED task
+  displays `StatusColor` at 33 ms intervals. The control task publishes
+  color requests atomically; only the LED task writes PWM. Tasks are never
+  created/destroyed on state changes. D35's corrected blue/green wiring
+  remains in effect.
 - **ADC progress**: each completed DMA scan increments a counter. Either
   bank without progress for 10 ms raises `ADC_STALE` (fault code 21), cuts
   torque, disables the inverter command and leaves DRIVE. Constant sensor
@@ -171,7 +169,7 @@ The DUI is a plain CAN peripheral this year.
   sends a zero/disabled inverter request and enters ROM DFU independently
   of the control task. The debug VCP accepts the same token via its shell.
   Each console has its own matcher so partial tokens cannot join across
-  ports. Both vehicle and test images support standalone USB flashing.
+  ports. The vehicle image supports standalone USB flashing.
   The board selects flash bank 1 if needed (the old `ota_set_bank1` behavior),
   holds PB7 BOOT0trig high for a measured 50 ms, then resets. USB flashing
   still writes 0x08000000 with `tools/dfu`; no dual-bank OTA implementation
@@ -194,7 +192,10 @@ periods. The older 0x130 packet cannot supply four independent speeds.
 `WheelControlParams::enabled` enables rear-drive slip control. It uses the
 faster undriven front wheel as speed reference, the faster rear wheel to
 detect one-wheel spin, and a bounded PI torque reduction. Reductions act
-immediately; torque recovery is limited. Missing/negative wheel feedback
+immediately; only recovery after a slip cut is rate-limited. Ordinary
+no-slip pedal applications and increases pass through immediately. Pedal
+release, disabled control or invalid feedback clear the recovery state.
+Missing/negative wheel feedback
 cuts positive torque while this feature is enabled. Near-zero speed uses a
 bounded denominator. Both tire radii match `vehicle/vehicle.yml` (0.2045 m).
 The 10% slip targets and controller gains are commissioning values; defaults
@@ -267,35 +268,42 @@ CAN IDs, layouts, and buses are defined in [lib/spec](../../lib/spec/README.md)
 the 2026 IDs and layouts. New diagnostics (`VCU_ADC_*`, `VCU_DIGITAL_IO`,
 `VCU_DIAG`, `VCU_CALIBRATED_*`) are on the Data bus.
 
-## Bring-up test image
+## Build, flash and check
 
-Flash `:vcu_test` (`bazel run //boards/VCU:openocd_test`), then open the
-VCP or the USB port with `bazel run //tools/monitor`.
+There is one firmware image: `:vcu`. It starts the vehicle app, ADC/DAC,
+both CAN buses, the RTOS tasks, watchdog supervision, both consoles and the
+status LED. The temporary MVP and bench firmware variants have been removed;
+`App/bringup/` remains as a host integration-test harness.
 
-| Command | Does |
-| --- | --- |
-| `/adc` | Every analog channel: counts, pin mV, sensor/loop mV, calibrated |
-| `/io` | Every digital input and output |
-| `/stream <ms>` | Logs all inputs to the VCP every `ms` (0 = off) |
-| `/cal start`, `/cal stop` | Min/max/mean per channel while sweeping a sensor (pedal calibration → `App/config/params.hpp`) |
-| `/out <linelock\|amp\|bms\|imd\|crit_stb\|data_stb> <0\|1>`, `/release` | Drive outputs, or return them all to safe |
-| `/tone <hz> <amp%> <ms>`, `/tone off` | DAC tone through the amp (capped at 1.5 s) |
-| `/led <r%> <g%> <b%>`, `/led auto` | Status RGB |
-| `/wdtest` | Stops feeding the IWDG. Expect outputs safe, then a reset with cause `iwdg`. |
-| `/info` | Reset cause, CAN error counters, bus-off count, drops |
+```bash
+bazel build --config=local //boards/VCU:vcu
+bazel run --config=local //boards/VCU:dfu
+# Or, with an ST-Link attached:
+bazel run --config=local //boards/VCU:openocd
+bazel run --config=local //tools/monitor
+```
 
-Over CAN, the image streams the `VCU_ADC_*`, `VCU_CALIBRATED_*` and
-`VCU_DIGITAL_IO` messages at 100 Hz and `VCU_DIAG` at 10 Hz on the Data
-bus. It also obeys `BENCH_TEST_COMMAND` (outputs, tone, watchdog test) and
-echoes `BENCH_ECHO_REQUEST_CRITICAL`/`_DATA` back on the same bus.
+After a manual BOOT0 flash, return the switch to normal boot and reset.
+Verify `/version` says `Vehicle Control Unit`, `/uptime` increases, and
+`/state`, `/faults`,
+`/io`, `/analog` respond. USB-only operation without the car produces
+missing-feedback/input faults; zero torque and disabled inverter commands
+are expected. The vehicle image sends CAN traffic, including inverter
+commands; use an isolated bench setup before connecting the drivetrain.
+The vehicle shell deliberately has no manual output overrides.
+
+Pedal plausibility, ADC progress, CAN freshness, shutdown-loop checks and
+the watchdog remain enabled. Regen, launch ramp and traction/slip-control
+features remain disabled until commissioning, as documented above; restoring
+the full app does not bypass their unverified limits or enable them.
+The corrected D35 blue/green mapping applies to this image.
 
 ## IOC gaps
 
 Optional `.ioc` cleanups. Everything here already works: `Board/` (or a
 `USER CODE` block) sets it up at runtime, and each workaround can go once
-CubeMX generates the equivalent. Items 5 and 6 are cosmetic (`main.cpp`
-drives the lamps high right after `MX_GPIO_Init`, and `tools/dfu` also
-matches the port by VID:PID).
+CubeMX generates the equivalent. Item 5 is cosmetic (`main.cpp` drives the
+lamps high right after `MX_GPIO_Init`).
 
 1. `ProjectManager.NoMain=true`. Today `Core/Src/main.c` renames its own
    `main()` away in `USER CODE BEGIN PFP`.
@@ -311,8 +319,6 @@ matches the port by VID:PID).
 4. IWDG. Today the LHAL adapter drives it at register level.
 5. GPIO user labels, and initial level high on PE12/PE13 (BMS/IMD lamps
    on).
-6. Restore the USB strings `LHRe` / `VCU` (`tools/dfu` matches the port by
-   "lhre" or VID:PID).
 9. FreeRTOS stack-overflow and malloc-failed hooks. Today they are set in
    the `FreeRTOSConfig.h` USER CODE.
 
@@ -321,7 +327,9 @@ FDCAN on PCLK1, ADC on HCLK/2 = 48 MHz, USB on PLLQ.
 
 ## Open items (verify on hardware)
 
-- The RGB LED D35 pinout: pins 1-3 are named as cathodes but tied to Vdd.
+- D35 required a 180° assembly rotation for correct polarity; rainbow operation
+  was confirmed on the bench. Firmware swaps blue/green in all images for
+  this reworked orientation; PCB net labels retain their original names.
 - RTD switch type. The firmware leaves DRIVE when the switch opens, as the
   2026 toggle did (`DriveParams::rtd_release_exits_drive`).
 - APPS and BSE sensor ranges and pedal endpoints. Defaults assume 0.5-4.5 V
@@ -333,3 +341,75 @@ FDCAN on PCLK1, ADC on HCLK/2 = 48 MHz, USB on PLLQ.
   `motor_disconnect` now cuts torque when high after debounce.
 - Rule text for every threshold marked `TODO(verify rule)`. The RTD sound
   needs measuring against its 80-90 dBA band.
+
+## USB serial monitor
+
+USB enumerates as **Vehicle Control Unit** (manufacturer **LHRe**), with
+unchanged VID:PID and hardware serial number. The port path is assigned by
+the host OS; its friendly USB product name is separate. These strings come
+from `VCU.ioc` and CubeMX regeneration of `USB_Device/App/usbd_desc.c`.
+The ROM bootloader retains ST's own DFU name.
+
+Opening the USB serial port prints the `Vehicle Control Unit` firmware
+banner, reset cause and command hint, even when the monitor connects after
+boot. Every second the default compact report shows state, all seven ADC channels
+(raw counts/pin mV), VREFINT/VDDA and all digital inputs/output commands.
+Inputs are reported after the application's polarity/debounce processing;
+outputs are commanded pin levels, not independent electrical readbacks.
+
+The full sectioned report remains available: set `kDetailedSerialReport`
+to `true` in `App/app/serial_report.hpp` and rebuild. It adds fault names,
+CAN health, control/task progress, pedal processing, torque and battery
+estimates. Both formats are append-only ASCII for standard serial monitors.
+Status output is always enabled while the USB port is open; no stream
+command or setup is needed. The banner and status return on reconnect.
+`/state`, `/faults`, `/io` and `/analog` still give detailed on-demand output.
+Serial writes run only in the low-priority USB shell task, using a published
+snapshot; the control loop does not wait for the monitor. Existing event
+logging remains on the debug USART3 console.
+
+On macOS select `/dev/cu.usbmodem…` in external serial monitors. The friendly
+USB name does not rename this device path. Only one monitor should own the
+port at a time; close an existing monitor before opening another. The repo
+monitor selects the `cu` port automatically:
+
+```bash
+bazel run --config=local //tools/monitor
+```
+
+## Status LED
+
+The vehicle image uses state/fault colors instead of a continuous rainbow.
+Last year's VCU used rainbow in DRIVE and mixed brake/drive-switch/pedal
+flags outside DRIVE. This image uses the existing state machine directly:
+
+| Indication | Meaning |
+| --- | --- |
+| White | Boot / INIT |
+| Solid blue | IDLE, no active faults |
+| Blinking amber | PRECHARGE, no active faults |
+| Solid amber | TS_ACTIVE, no active faults |
+| Blinking green | RTD_WAIT: ready, waiting for the driver's RTD action |
+| Solid green | DRIVE |
+| Red flashes followed by a pause | Active fault outside DRIVE; number of flashes is the primary `VcuFaultCode` number |
+| Solid red | FAULT state with no numbered primary fault |
+| Solid magenta | BSPD_TRIPPED; highest-priority indication, latched until power cycle |
+
+Active faults override the normal non-DRIVE state color. Thus an isolated
+USB bench without vehicle feedback normally flashes red even while the
+state reports IDLE. `/faults` gives the names and `/state` gives the primary
+fault; use these instead of counting long codes. PRECHARGE/RTD_WAIT blink
+at 1 Hz; fault pulses use 250 ms on/off with a 1.5 s inter-code pause.
+The host bench harness retains its rainbow/manual-color behavior for tests.
+
+## Pedal safety thresholds
+
+Brake-over-throttle uses the unfiltered average of the two calibrated,
+normalized APPS positions, before the EMA and torque-demand deadzone.
+With the brake-pressed condition active, travel strictly above 25% latches
+BOT; release requires travel strictly below 5%, even after the brake is
+released. Exactly 5% remains latched. These are mechanical-travel thresholds,
+not percentages of filtered torque demand, per
+[2026 rules EV.4.7, page 94](https://www.formulaknightsracing.com/_files/ugd/742c10_60e00afcfde64f9cae59db562c356c9c.pdf#page=94).
+Correct sensor endpoints remain a commissioning prerequisite. Brake-pressure
+filtering/hysteresis and the normal pedal-demand filter are unchanged.

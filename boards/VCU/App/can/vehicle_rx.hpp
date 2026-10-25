@@ -2,14 +2,18 @@
 
 #include <cstdint>
 
-#include "lhre_can_vcu_rx.hpp"
-#include "longhorn/can_inbox.hpp"
+#include "lhre_can_dui.hpp"
+#include "lhre_can_hvc.hpp"
+#include "lhre_can_inverter.hpp"
+#include "lhre_can_pdu.hpp"
+#include "lhre_can_pi.hpp"
+#include "lhre_can_rx_vcu.hpp"
+#include "lhre_can_usm.hpp"
 
 namespace vcu {
 
-// Critical-bus feedback. The message slots and Dispatch() are generated
-// from the spec's to_boards lists.
-struct VehicleRx : lhre::can::vcu::CriticalRx<longhorn::RxSlot> {
+// Vehicle feedback on the Critical bus.
+struct VehicleRx : lhre::can::rx::VcuCriticalRx {
   // Require measurement feedback as well as status. TODO(verify): inverter VSM
   // states.
   bool InverterFresh(uint32_t now_ms) const {
@@ -41,9 +45,8 @@ struct VehicleRx : lhre::can::vcu::CriticalRx<longhorn::RxSlot> {
   }
 };
 
-// Data-bus messages: wheel speeds, plus bench frames the vehicle image
-// ignores.
-struct WheelRx : lhre::can::vcu::DataRx<longhorn::RxSlot> {
+// Wheel measurements arrive on Data, not Critical.
+struct WheelRx : lhre::can::rx::VcuDataRx {
   bool Fresh(uint32_t now) const {
     return acceleration_vector_unsprung_wheel_speed_fl.Fresh(now) &&
            acceleration_vector_unsprung_wheel_speed_fr.Fresh(now) &&

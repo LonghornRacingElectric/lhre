@@ -2,6 +2,7 @@
 #include "can/critical_frames.hpp"
 #include "can/send.hpp"
 #include "lhre_can_vcu.hpp"
+#include "longhorn/period.hpp"
 
 namespace vcu {
 

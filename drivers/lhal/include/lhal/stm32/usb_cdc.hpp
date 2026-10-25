@@ -63,6 +63,9 @@ class UsbCdc final : public lhal::Uart {
   void HandleControl(uint8_t cmd, uint8_t* pbuf, uint16_t length);
 
  private:
+  RxObserver rx_observer_ = nullptr;
+  void* rx_observer_context_ = nullptr;
+
   bool Configured() const;
   bool TxBusy() const;
 
@@ -79,9 +82,6 @@ class UsbCdc final : public lhal::Uart {
 
   CompletionCallback tx_done_ = nullptr;
   void* tx_context_ = nullptr;
-
-  RxObserver rx_observer_ = nullptr;
-  void* rx_observer_context_ = nullptr;
 
   // Pending ReadAsync target, filled from interrupt context.
   uint8_t* rx_async_data_ = nullptr;

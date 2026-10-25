@@ -11,6 +11,12 @@ class Uart {
  public:
   virtual ~Uart() = default;
 
+  using RxObserver = void (*)(void*, const uint8_t*, size_t);
+  // Optional receive-path observer, before buffering (including overflow).
+  // May run in ISR context; must not block. Context must outlive registration.
+  // Returns false when unsupported; callers can observe polled bytes instead.
+  virtual bool SetRxObserver(RxObserver, void*) { return false; }
+
   // Blocking transfers. Return kTimeout if the transfer did not finish in
   // time; a partial transfer may have occurred.
   virtual Status Write(const uint8_t* data, size_t len,
@@ -28,13 +34,6 @@ class Uart {
   // True while a receiver is listening on the stream. Always true for raw
   // UART; on USB CDC it reflects enumeration and host port-open (DTR asserted).
   virtual bool connected() const { return true; }
-
-  // Sees every received chunk before Read() does, even when nothing reads.
-  // `observer` may run in interrupt context. False when unsupported.
-  using RxObserver = void (*)(void* context, const uint8_t* data, size_t len);
-  virtual bool SetRxObserver(RxObserver /*observer*/, void* /*context*/) {
-    return false;
-  }
 };
 
 }  // namespace lhal

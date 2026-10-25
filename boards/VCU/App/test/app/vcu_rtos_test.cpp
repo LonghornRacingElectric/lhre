@@ -73,8 +73,11 @@ TEST(VcuRtos, TasksRunUnderScheduler) {
   EXPECT_TRUE(watchdog.started());
   EXPECT_GE(watchdog.refresh_count(), 5u);
   EXPECT_EQ(app.state(), vcu::VcuState::kIdle);
-  EXPECT_GT(green.duty(), 0);
-  EXPECT_LT(red.duty(), 0.5f) << "independent rainbow task must advance";
+  // Missing vehicle inputs indicate a red fault pulse, possibly in its off
+  // phase.
+  EXPECT_FLOAT_EQ(green.duty(), 0);
+  EXPECT_FLOAT_EQ(blue.duty(), 0);
+  EXPECT_LT(red.duty(), 0.5f) << "LED task must replace the boot-white color";
 }
 
 }  // namespace

@@ -1,4 +1,5 @@
 #include "app/vcu_app.hpp"
+#include "hmi/status_led.hpp"
 #include "longhorn/math.hpp"
 
 namespace vcu {
@@ -26,7 +27,8 @@ void App::ControlTick(uint32_t now) {
   ApplyModeRequests();
 
   UpdateTorque(now, dt_ms, inverter_fresh);
-  if (sm_.state() == VcuState::kBspdTripped) rainbow_.Override(0.3f, 0, 0.3f);
+  const Rgb status = StatusColor(sm_.state(), PrimaryFault(faults_), now);
+  rainbow_.Override(status.r, status.g, status.b);
 
   UpdateStatus(now);
   DriveOutputs(now);

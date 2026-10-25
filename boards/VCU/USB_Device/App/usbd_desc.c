@@ -64,11 +64,11 @@
 
 #define USBD_VID     1155
 #define USBD_LANGID_STRING     1033
-#define USBD_MANUFACTURER_STRING     "STMicroelectronics"
+#define USBD_MANUFACTURER_STRING     "LHRe"
 #define USBD_PID     22336
-#define USBD_PRODUCT_STRING     "STM32 Virtual ComPort"
+#define USBD_PRODUCT_STRING     "Vehicle Control Unit"
 #define USBD_CONFIGURATION_STRING     "CDC Config"
-#define USBD_INTERFACE_STRING     "CDC Interface"
+#define USBD_INTERFACE_STRING     "Vehicle Control Unit"
 
 /* USER CODE BEGIN PRIVATE_DEFINES */
 

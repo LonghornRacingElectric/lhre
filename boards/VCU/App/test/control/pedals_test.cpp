@@ -82,17 +82,34 @@ TEST(Pedals, BrakeOverThrottleLatchesUntilBelow5Percent) {
   EXPECT_FALSE(Settle(pp, Pedal(0.6f), &t, 300).brake_over_throttle);
   EXPECT_TRUE(Settle(pp, Pedal(0.6f, 600.0f), &t, 300).brake_over_throttle);
   EXPECT_TRUE(Settle(pp, Pedal(0.6f), &t, 300).brake_over_throttle);
-  EXPECT_TRUE(Settle(pp, Pedal(0.13f), &t, 300).brake_over_throttle);
-  EXPECT_TRUE(Settle(pp, Pedal(0.06f), &t, 300).brake_over_throttle);
-  EXPECT_FALSE(Settle(pp, Pedal(0.04f), &t, 300).brake_over_throttle);
+  EXPECT_TRUE(Settle(pp, Pedal(0.10f), &t, 300).brake_over_throttle);
 }
 
-// The thresholds are raw pedal travel, not the deadzoned torque input.
-TEST(Pedals, BrakeOverThrottleTripsAt25PercentRawTravel) {
+TEST(Pedals, BrakeOverThrottleUsesUnfilteredMechanicalTravelAtBothThresholds) {
   vcu::PedalProcessor pp;
-  uint32_t t = 0;
-  EXPECT_FALSE(Settle(pp, Pedal(0.24f, 600.0f), &t, 300).brake_over_throttle);
-  EXPECT_TRUE(Settle(pp, Pedal(0.26f, 600.0f), &t, 300).brake_over_throttle);
+  auto apps = P().apps;
+  // Exact normalized endpoints isolate the strict 25%/5% comparisons.
+  apps.apps1_v_at_0 = apps.apps2_v_at_0 = 0;
+  apps.apps1_v_at_100 = apps.apps2_v_at_100 = 1;
+  apps.ema_alpha = 0.001f;
+  auto in = Pedal(0, 600);
+  in.apps1_v = in.apps2_v = 0;
+  ASSERT_TRUE(pp.Update(in, 0, apps, P().bse).brake_pressed);
+  in.apps1_v = in.apps2_v = 0.25f;
+  EXPECT_FALSE(pp.Update(in, 3, apps, P().bse).brake_over_throttle);
+  in.apps1_v = in.apps2_v = 0.251f;
+  auto out = pp.Update(in, 6, apps, P().bse);
+  EXPECT_EQ(out.pedal_travel, 0)
+      << "torque demand is still below its filtered deadzone";
+  EXPECT_TRUE(out.brake_over_throttle)
+      << "trip must not wait for the pedal EMA";
+  in.bse1_v = in.bse2_v = P().bse.v_at_0_psi;
+  for (float travel : {0.12f, 0.10f, 0.05f}) {
+    in.apps1_v = in.apps2_v = travel;
+    EXPECT_TRUE(pp.Update(in, 9, apps, P().bse).brake_over_throttle) << travel;
+  }
+  in.apps1_v = in.apps2_v = 0.049f;
+  EXPECT_FALSE(pp.Update(in, 12, apps, P().bse).brake_over_throttle);
 }
 
 TEST(Pedals, BrakePressedHysteresisAndLight) {
