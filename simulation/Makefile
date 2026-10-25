@@ -92,8 +92,9 @@ four-post-acceptance:
 new-study:
 	@echo '$(S)' | grep -Eqx '[a-z0-9]+(-[a-z0-9]+)*' || { echo "Set S=<name>, a kebab-case name such as rear-stabar-rate."; exit 1; }
 	@test ! -e studies/$(S) || { echo "studies/$(S) exists. Pick another name, or run make study S=$(S)."; exit 1; }
+	@test -n "$(BUNDLE_ID)" || { echo "../vehicle/bundle.yml has no bundle_id."; exit 1; }
 	mkdir studies/$(S)
-	for f in $(notdir $(wildcard $(STUDY_TEMPLATE)/*)); do sed -e 's/STUDY_NAME/$(S)/g' -e 's/BUNDLE_ID/$(BUNDLE_ID)/g' $(STUDY_TEMPLATE)/$$f > studies/$(S)/$$f; done
+	for f in $(notdir $(wildcard $(STUDY_TEMPLATE)/*)); do sed -e 's/STUDY_NAME/$(S)/g' -e 's/BUNDLE_ID/$(BUNDLE_ID)/g' $(STUDY_TEMPLATE)/$$f > studies/$(S)/$$f || { rm -rf studies/$(S); echo "Could not copy $$f."; exit 1; }; done
 	@echo "Made studies/$(S)/. Fill study.yml, run.py and README.md, then run make study S=$(S)."
 
 study:

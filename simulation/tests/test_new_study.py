@@ -52,6 +52,23 @@ def test_new_study_copies_a_template_that_runs_and_fills_its_readme(tree, tmp_pa
     assert text.startswith("# demo-study\n") and "**Status: current.**" in text and "TODO<!-- /out -->" not in text
 
 
+def test_new_study_refuses_a_vehicle_without_a_bundle_id(tree, tmp_path):
+    (tmp_path / "vehicle" / "bundle.yml").unlink()
+    result = _new_study(tree, "demo-study")
+    assert result.returncode != 0
+    assert "has no bundle_id" in result.stdout + result.stderr
+    assert not (tree / "studies" / "demo-study").exists()
+
+
+def test_template_run_refuses_a_vehicle_without_a_bundle(tree, tmp_path):
+    assert _new_study(tree, "demo-study").returncode == 0
+    (tmp_path / "vehicle" / "bundle.yml").unlink()
+    env = {**os.environ, "OUT_DIR": str(tmp_path), "BOBSIM_VEHICLE": str(tmp_path / "vehicle/vehicle.yml")}
+    run = subprocess.run([sys.executable, str(tree / "studies/demo-study/run.py")], env=env, capture_output=True, text=True)
+    assert run.returncode != 0
+    assert "the vehicle has None" in run.stderr
+
+
 @pytest.mark.parametrize("name", ["", "Rear-Stabar", "rear_stabar", "-rear", "rear/stabar", "taken"])
 def test_new_study_refuses_a_bad_or_existing_name(tree, name):
     (tree / "studies" / "taken").mkdir()

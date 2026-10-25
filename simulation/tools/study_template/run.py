@@ -36,8 +36,9 @@ def main():
     study = load(config)
     out = Path(os.environ["OUT_DIR"])
     vehicle_path = Path(os.environ["BOBSIM_VEHICLE"])
-    if bundle_id(vehicle_path) != study["bundle"]:
-        raise SystemExit(f"{config} names bundle {study['bundle']}, but the vehicle has {bundle_id(vehicle_path)}.")
+    have = bundle_id(vehicle_path)
+    if have is None or have != study["bundle"]:
+        raise SystemExit(f"{config} names bundle {study['bundle']}, but the vehicle has {have}.")
     vehicle = load(vehicle_path)
 
     rows = [solve(vehicle, case) for case in cases(study)]
