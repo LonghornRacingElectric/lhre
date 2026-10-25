@@ -1,6 +1,10 @@
 # ADR-013: The drive day viewer is a local Next.js app, outside Bazel
 
-- **Status:** Accepted
+- **Status:** Superseded (2026-10). The viewer moved into `viewer_tool` as
+  `/trackside-retro` and loads drive days straight from the `orion`
+  database; the standalone app was removed. See
+  `apps/telemetry/analysis/database/viewer_tool/src/lib/driveday/README.md`.
+  Kept for the history below.
 - **Date:** 2026-10
 
 ## Context
