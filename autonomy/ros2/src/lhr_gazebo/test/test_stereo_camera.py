@@ -88,7 +88,9 @@ def test_launch_camera_actions_and_rviz(perception, estimator, enabled, monkeypa
     """Stereo is independently opt-in and never redirects its TF to truth TF."""
     pytest.importorskip('launch_ros')
     launch = pytest.importorskip('launch')
-    from launch.actions import DeclareLaunchArgument, RegisterEventHandler, SetEnvironmentVariable
+    from launch.actions import (
+        DeclareLaunchArgument, ExecuteProcess, RegisterEventHandler, SetEnvironmentVariable,
+    )
     from launch.events import Shutdown
     from launch.utilities import normalize_to_list_of_substitutions, perform_substitutions
     from launch_ros.actions import Node
@@ -111,6 +113,12 @@ def test_launch_camera_actions_and_rviz(perception, estimator, enabled, monkeypa
         if isinstance(action, SetEnvironmentVariable):
             action.execute(context)
     resource_path = context.environment['GZ_SIM_RESOURCE_PATH'].split(':')[0]
+    gazebo = next(a for a in actions if type(a) is ExecuteProcess)
+    gazebo_env = {
+        perform_substitutions(context, key): perform_substitutions(context, value)
+        for key, value in gazebo.additional_env
+    }
+    assert gazebo_env['GZ_SIM_RESOURCE_PATH'] == context.environment['GZ_SIM_RESOURCE_PATH']
     model = ET.parse(Path(resource_path) / 'fsae_vehicle' / 'model.sdf')
     assert len(model.findall(".//sensor[@type='camera']")) == (2 if enabled == 'true' else 0)
     nodes = [a for a in actions if isinstance(a, Node)]

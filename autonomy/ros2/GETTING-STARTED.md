@@ -38,6 +38,9 @@ sudo apt install -y ros-jazzy-ros-gz
 
 # Optional: signal plotting
 sudo apt install -y ros-jazzy-plotjuggler-ros
+
+# Optional: Foxglove WebSocket viewer (foxglove:=true)
+sudo apt install -y ros-jazzy-foxglove-bridge
 ```
 
 Then install each package's own dependencies (scipy, `foxglove_bridge` and the rest) from its `package.xml`, the same way CI does, so a dependency a package adds reaches you without this guide changing:
