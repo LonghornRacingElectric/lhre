@@ -268,6 +268,50 @@ namespace lhre::can::{board} {{
         h.append(f"}}  // namespace lhre::can::{board}")
         return "\n".join(h) + "\n"
 
+    # ---- per-board receive tables ----------------------------------------
+
+    def received(self, board):
+        """(sender stem, message) pairs `board` listens to, from to_boards.
+        "*" means every board except the sender."""
+        out = []
+        for sender, msgs in self.boards.items():
+            for message in msgs:
+                targets = {t.lower() for t in message.to_boards}
+                if board in targets or ("*" in targets and sender != board):
+                    out.append((sender, message))
+        return sorted(out, key=lambda pair: pair[1].can_id)
+
+    def rx_header(self, provenance, board):
+        received = self.received(board)
+        senders = sorted({sender for sender, _ in received})
+        h = [provenance, "#pragma once", "", "#include <cstdint>", "",
+             '#include "lhal/can.hpp"']
+        h += [f'#include "lhre_can_{sender}.hpp"' for sender in senders]
+        h += ["",
+              f"// What the {board.upper()} board receives, one table per bus, from",
+              "// the spec's to_boards lists. `Slot<Message>` stores one message and",
+              "// provides bool TryDecode(const lhal::CanFrame&, uint32_t now_ms).",
+              f"namespace lhre::can::{board} {{", ""]
+        by_bus = {}
+        for sender, message in received:
+            by_bus.setdefault(message.bus, []).append((sender, message))
+        for bus in sorted(by_bus):
+            entries = by_bus[bus]
+            h.append("template <template <class> class Slot>")
+            h.append(f"struct {camel(bus.upper())}Rx {{")
+            for sender, message in entries:
+                h.append(f"  Slot<{sender}::{self.struct_name(message)}> {message.name.lower()};")
+            h.append("")
+            h.append("  // True when the frame was one of these messages.")
+            h.append("  bool Dispatch(const lhal::CanFrame& frame, uint32_t now_ms) {")
+            calls = [f"{message.name.lower()}.TryDecode(frame, now_ms)" for _, message in entries]
+            h.append("    return " + " ||\n           ".join(calls) + ";")
+            h.append("  }")
+            h.append("};")
+            h.append("")
+        h.append(f"}}  // namespace lhre::can::{board}")
+        return "\n".join(h) + "\n"
+
     # ---- per-board source ------------------------------------------------
 
     _HELPERS = """namespace {
@@ -468,6 +512,8 @@ def main():
             gen.board_header(stamp, board, "lhre_can_types.hpp"), encoding="utf-8")
         out.joinpath(f"lhre_can_{board}.cpp").write_text(
             gen.board_source(stamp, board, gen_header), encoding="utf-8")
+        out.joinpath(f"lhre_can_{board}_rx.hpp").write_text(
+            gen.rx_header(stamp, board), encoding="utf-8")
     out.joinpath("lhre_can.hpp").write_text("\n".join(umbrella) + "\n", encoding="utf-8")
     return 0
 

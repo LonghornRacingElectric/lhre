@@ -33,11 +33,13 @@ WheelControlResult WheelSlipController::Update(const WheelInputs& in,
   }
   if (!p.enabled) {
     integral_nm_ = previous_nm_ = 0;
+    recovering_ = false;
     out.positive_nm = demand_nm;
     return out;
   }
   if (!out.valid || demand_nm <= 0) {
     integral_nm_ = previous_nm_ = 0;
+    recovering_ = false;
     return out;
   }
   const float dt = static_cast<float>(dt_ms) * 0.001f;
@@ -47,9 +49,16 @@ WheelControlResult WheelSlipController::Update(const WheelInputs& in,
   const float trim =
       longhorn::Clamp(p.kp_nm * error + integral_nm_, 0.0f, demand_nm);
   const float target = demand_nm - trim;
-  // Cut immediately; ramp recovery to avoid reapplying torque abruptly.
+  // Cut at once. Ramp back only after a cut, so a normal pedal press with
+  // no slip passes straight through.
+  if (trim > 0) recovering_ = true;
   out.positive_nm =
-      longhorn::Clamp(target, 0.0f, previous_nm_ + p.recovery_nm_s * dt);
+      recovering_
+          ? longhorn::Clamp(target, 0.0f, previous_nm_ + p.recovery_nm_s * dt)
+          : target;
+  if (recovering_ && trim <= 0 && out.positive_nm >= target) {
+    recovering_ = false;
+  }
   previous_nm_ = out.positive_nm;
   return out;
 }

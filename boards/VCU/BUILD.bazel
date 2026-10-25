@@ -23,10 +23,9 @@ firmware_project(
         "//lib/codegen/cpp:can_pdu",
         "//lib/codegen/cpp:can_pi",
         "//lib/codegen/cpp:can_vcu",
+        "//lib/codegen/cpp:can_vcu_rx",
         "//lib/codegen/cpp:can_usm",
     ],
-    # USART3 is configured in Board/comms_setup.cpp, not the .ioc.
-    defines = ["HAL_UART_MODULE_ENABLED"],
     enable_freertos = True,
     enable_usb = True,
     mcu = "stm32g474xx",

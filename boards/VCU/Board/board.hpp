@@ -28,14 +28,6 @@ void ConfigureAnalog();
 // Starts the ADC trigger timer once both DMA scans are running.
 void StartAdcTrigger();
 
-// FDCAN details the .ioc doesn't express: the Critical bus (FDCAN2) gets
-// automatic retransmission and its IRQ lines.
-void ConfigureCan();
-
-// The STDC14 virtual COM port (USART3 on PC10/PC11, AF7).
-extern UART_HandleTypeDef huart3;
-void ConfigureDebugUart();
-
 // Brake comparator soft latch in the last flash page of bank 2.
 uint32_t LoadFaultLatch();
 void SaveFaultLatch(uint32_t value);

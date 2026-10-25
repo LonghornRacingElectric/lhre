@@ -17,6 +17,7 @@ struct TorqueInputs {
   float ocv_min_cell_v = 0.0f;  // battery estimate
   uint32_t dt_ms = 0;
   uint32_t speed_sample_ms = 0;  // arrival time of the chosen CAN speed sample
+  bool speed_from_high_speed = false;  // which inverter frame supplied it
 };
 
 struct TorqueOutputs {
@@ -42,6 +43,7 @@ class TorquePath {
   uint32_t tc_prev_sample_ms_ = 0;
   float tc_trim_ = 0.0f;
   bool tc_seeded_ = false;
+  bool tc_prev_from_high_speed_ = false;
   longhorn::Ema tc_alpha_filter_;
 };
 

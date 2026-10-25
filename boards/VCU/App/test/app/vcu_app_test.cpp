@@ -9,7 +9,7 @@
 #include "app/vcu_app.hpp"
 #include "lhre_can_vcu.hpp"
 #include "safety/faults.hpp"
-#include "testing/bench.hpp"
+#include "test/bench.hpp"
 
 namespace {
 

@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 
 #include "lhre_can.hpp"
+#include "lhre_can_vcu_rx.hpp"
 
 namespace lhre::can {
 namespace {
@@ -186,6 +187,26 @@ TEST(CanLib, CellTempArrayBlock) {
   EXPECT_EQ(out.cell_temp_slot1_raw, -113);
   EXPECT_EQ(out.cell_temp_slot2_raw, 0);
   EXPECT_NEAR(out.cell_temp_slot3(), 45.9f, 1e-3f);
+}
+
+// Minimal slot: counts decodes of its own message.
+template <class Message>
+struct CountSlot {
+  int count = 0;
+  bool TryDecode(const lhal::CanFrame& frame, uint32_t /*now_ms*/) {
+    if (!Message::Matches(frame.id)) return false;
+    ++count;
+    return true;
+  }
+};
+
+TEST(CanLib, RxTableDispatchesOnlyMessagesTheBoardReceives) {
+  vcu::CriticalRx<CountSlot> critical;
+  HvcPackStatus pack;  // to_boards "*", so the VCU receives it
+  EXPECT_TRUE(critical.Dispatch(pack.ToFrame(), 0));
+  EXPECT_EQ(critical.hvc_pack_status.count, 1);
+  VcuStatus own;  // the VCU's own message is not in its receive table
+  EXPECT_FALSE(critical.Dispatch(own.ToFrame(), 0));
 }
 
 }  // namespace

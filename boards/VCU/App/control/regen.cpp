@@ -8,7 +8,8 @@ namespace vcu {
 
 RegenResult BrakeRegen::Update(const RegenInputs& in, const RegenParams& p) {
   RegenResult out;
-  if (in.rear_pre_psi <= 100.0f && in.dc_a >= -p.max_current_a) {
+  if (in.rear_pre_psi <= p.current_cut_release_psi &&
+      in.dc_a >= -p.max_current_a) {
     current_cut_ = false;
   }
   if (p.enabled && in.feedback_fresh && in.dc_a < -p.hard_cut_current_a) {

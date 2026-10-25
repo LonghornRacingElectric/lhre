@@ -77,4 +77,24 @@ TEST(Traction, SampleTimingFilterAndHeldTrimSurviveRepeatedControlTicks) {
   EXPECT_EQ(stale.traction, stale.power_limited);
 }
 
+TEST(Traction, SpeedSourceSwitchIsNotAnAcceleration) {
+  const auto& p = vcu::ParamsFor(vcu::kDefaultEventMode);
+  vcu::TorquePath path;
+  vcu::TorqueInputs in;
+  in.motor_speed_valid = true;
+  in.pedal_travel = 1;
+  in.dt_ms = 3;
+  in.speed_from_high_speed = true;
+  in.speed_sample_ms = 100;
+  vcu::TractionParams tc;
+  tc.enabled = true;
+  path.Update(in, p.torque, p.power_limit, tc);
+  // The slower position frame reports a different speed with its own clock.
+  in.speed_from_high_speed = false;
+  in.motor_rpm = 1000;
+  in.speed_sample_ms = 103;
+  const auto out = path.Update(in, p.torque, p.power_limit, tc);
+  EXPECT_EQ(out.traction, out.power_limited);
+}
+
 }  // namespace

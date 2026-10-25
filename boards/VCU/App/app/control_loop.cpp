@@ -40,7 +40,6 @@ void App::DrainCan(uint32_t now) {
   while (critical_inbox_.Pop(&frame)) {
     rx_.Dispatch(frame, now);
   }
-  // The vehicle image ignores bench frames on the Data bus.
   while (data_inbox_.Pop(&frame)) {
     wheels_.Dispatch(frame, now);
   }
@@ -95,8 +94,8 @@ bool App::ReadInputs(uint32_t now) {
 void App::UpdateBrakeLatch(uint32_t now) {
   const DigitalInputs& in = live_.inputs;
   // Brake comparator soft latch: cleared only by the dash's reset.
-  const bool dui_fresh = rx_.dui_inputs.Fresh(now);
-  const bool reset_level = dui_fresh && rx_.dui_inputs.msg.fault_reset;
+  const bool dui_fresh = rx_.dui_driver_inputs.Fresh(now);
+  const bool reset_level = dui_fresh && rx_.dui_driver_inputs.msg.fault_reset;
   const bool reset_edge = reset_level && !prev_fault_reset_;
   prev_fault_reset_ = reset_level;
   brake_latch_.Update(in.b1_disconnect || in.b1_overvoltage ||
@@ -128,22 +127,23 @@ uint32_t App::ComputeFaults(uint32_t now, bool inverter_fresh,
   if (brake_latch_.latched()) f |= kFaultBrakeFlagLatched;
   if (ped.brake_over_throttle) f |= kFaultBrakeOverThrottle;
   if (!shutdown_loop_.closed()) f |= kFaultShutdownOpen;
-  if (!rx_.hvc_contactors.Fresh(now)) f |= kFaultHvcTimeout;
+  if (!rx_.hvc_contactor_status.Fresh(now)) f |= kFaultHvcTimeout;
   if (!inverter_fresh) f |= kFaultInverterTimeout;
   if (!rx_.pdu_bse3.Fresh(now)) f |= kFaultPduTimeout | kFaultBse3Unavailable;
   if (inverter_faulted) f |= kFaultInverterFault;
   if (live_.inputs.latch_state) f |= kFaultBspdTripped;
   if (ped.hard_brake_mismatch) f |= kFaultHardBrakeMismatch;
-  if (!rx_.dui_inputs.Fresh(now)) f |= kFaultDuiTimeout;
+  if (!rx_.dui_driver_inputs.Fresh(now)) f |= kFaultDuiTimeout;
   if (live_.inputs.motor_disconnect) f |= kFaultMotorDisconnect;
   if (live_.loop == ShutdownLoopState::kImplausible) {
     f |= kFaultShutdownSenseImplausible;
   }
   StateInputs hvc;
-  hvc.hvc_fresh = rx_.hvc_contactors.Fresh(now);
-  hvc.hvc_state = rx_.hvc_contactors.msg.hvc_state;
-  hvc.contactors_closed = rx_.hvc_contactors.msg.positive_contactor_closed &&
-                          rx_.hvc_contactors.msg.negative_contactor_closed;
+  hvc.hvc_fresh = rx_.hvc_contactor_status.Fresh(now);
+  hvc.hvc_state = rx_.hvc_contactor_status.msg.hvc_state;
+  hvc.contactors_closed =
+      rx_.hvc_contactor_status.msg.positive_contactor_closed &&
+      rx_.hvc_contactor_status.msg.negative_contactor_closed;
   if (sm_.state() == VcuState::kDrive && !StateConditions::Energized(hvc)) {
     f |= kFaultContactorsOpen;
   }
@@ -157,10 +157,11 @@ void App::UpdateState(uint32_t now, bool rtd_edge, bool inverter_fresh,
   const PedalOutputs& ped = live_.pedals;
   StateInputs si;
   si.bspd_latched = in.latch_state;
-  si.hvc_fresh = rx_.hvc_contactors.Fresh(now);
-  si.hvc_state = rx_.hvc_contactors.msg.hvc_state;
-  si.contactors_closed = rx_.hvc_contactors.msg.positive_contactor_closed &&
-                         rx_.hvc_contactors.msg.negative_contactor_closed;
+  si.hvc_fresh = rx_.hvc_contactor_status.Fresh(now);
+  si.hvc_state = rx_.hvc_contactor_status.msg.hvc_state;
+  si.contactors_closed =
+      rx_.hvc_contactor_status.msg.positive_contactor_closed &&
+      rx_.hvc_contactor_status.msg.negative_contactor_closed;
   si.loop_closed = shutdown_loop_.closed();
   si.torque_cut_fault = (faults_ & kTorqueCutFaults) != 0;
   si.inverter_ready = inverter_fresh && !inverter_faulted;
@@ -190,9 +191,9 @@ void App::UpdateState(uint32_t now, bool rtd_edge, bool inverter_fresh,
 }
 
 void App::ApplyModeRequests() {
-  if (rx_.mode_command.count != handled_mode_commands_) {
-    handled_mode_commands_ = rx_.mode_command.count;
-    pending_mode_ = static_cast<int>(rx_.mode_command.msg.event_mode);
+  if (rx_.vcu_mode_command.count != handled_mode_commands_) {
+    handled_mode_commands_ = rx_.vcu_mode_command.count;
+    pending_mode_ = static_cast<int>(rx_.vcu_mode_command.msg.event_mode);
   }
   const int shell_request = shell_mode_request_.exchange(-1);
   if (shell_request >= 0) {
@@ -264,9 +265,10 @@ float App::PositiveTorque(uint32_t now, uint32_t dt_ms, bool torque_allowed,
   tin.dc_bus_current = fb.dc_a;
   tin.ocv_min_cell_v = live_.battery.ocv_min_cell_v;
   tin.dt_ms = dt_ms;
-  tin.speed_sample_ms = rx_.inverter_high_speed.Fresh(now)
+  tin.speed_from_high_speed = rx_.inverter_high_speed.Fresh(now);
+  tin.speed_sample_ms = tin.speed_from_high_speed
                             ? rx_.inverter_high_speed.last_ms
-                            : rx_.motor_position.last_ms;
+                            : rx_.inverter_motor_position.last_ms;
   TractionParams acceleration_limiter = P.traction;
   if (P.wheel_control.enabled) acceleration_limiter.enabled = false;
   live_.torque =
@@ -274,10 +276,14 @@ float App::PositiveTorque(uint32_t now, uint32_t dt_ms, bool torque_allowed,
 
   WheelInputs win;
   win.fresh = wheels_.Fresh(now);
-  win.rad_s[0] = wheels_.fl.msg.wheel_speed();
-  win.rad_s[1] = wheels_.fr.msg.wheel_speed();
-  win.rad_s[2] = wheels_.rl.msg.wheel_speed();
-  win.rad_s[3] = wheels_.rr.msg.wheel_speed();
+  win.rad_s[0] =
+      wheels_.acceleration_vector_unsprung_wheel_speed_fl.msg.wheel_speed();
+  win.rad_s[1] =
+      wheels_.acceleration_vector_unsprung_wheel_speed_fr.msg.wheel_speed();
+  win.rad_s[2] =
+      wheels_.acceleration_vector_unsprung_wheel_speed_rl.msg.wheel_speed();
+  win.rad_s[3] =
+      wheels_.acceleration_vector_unsprung_wheel_speed_rr.msg.wheel_speed();
   live_.wheel_control = wheel_control_.Update(
       win, torque_allowed ? live_.torque.traction : 0, dt_ms, P.wheel_control);
   if (launch_request_.exchange(false)) {

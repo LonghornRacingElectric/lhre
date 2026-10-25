@@ -19,7 +19,7 @@ The DUI is a plain CAN peripheral this year.
 | `:vcu_test`               | Bring-up test image (`vcu::TestApp`, `VCU_TEST_IMAGE`). No vehicle logic, no inverter frames. |
 | `:openocd` / `:openocd_test` | `bazel run`: flash over ST-Link.                      |
 | `:dfu` / `:dfu_test`      | `bazel run`: flash over USB DFU (sends `update.`, then dfu-util). |
-| `:<module>_test`          | One host test per module, next to its source: `pedals_test`, `torque_test`, `state_machine_test`, and so on. |
+| `:<module>_test`          | One host test per module, under `App/test/`: `pedals_test`, `torque_test`, `state_machine_test`, and so on. |
 | `:vcu_app_test`           | Vehicle app end to end through `Step()` with LHAL fakes. |
 | `:test_app_test`          | Test image end to end.                                  |
 | `:vcu_rtos_test`          | Real FreeRTOS tasks under the simulator port.           |
@@ -31,7 +31,8 @@ The DUI is a plain CAN peripheral this year.
 - `App/`: application logic against `//drivers/lhal` plus the raw FreeRTOS
   API, so the same code links into the firmware, the host tests, and the
   sim. Includes are relative to `App/` (`#include "control/pedals.hpp"`).
-  Each module's test sits next to it as `<module>_test.cpp`.
+  Tests mirror the tree under `test/`, for example
+  `test/control/pedals_test.cpp`.
   - `app/`: the vehicle app. `vcu_app.*` owns the tasks and `Step()`.
     The task bodies are in `control_loop.cpp`, `critical_tx.cpp`,
     `telemetry.cpp`, `supervisor.cpp` and `shell_commands.cpp`.
@@ -53,8 +54,8 @@ The DUI is a plain CAN peripheral this year.
     status RGB color policy.
   - `config/params.*`: every tunable, with per-event sets.
   - `bringup/`: the bring-up test image (`test_app`, `test_shell`).
-  - `testing/bench.hpp`: host fakes plus a scripted car, for tests and the
-    sim.
+  - `test/`: one `<module>_test.cpp` per module, plus `bench.hpp` (host
+    fakes and a scripted car, for tests and the sim).
 - Shared code the VCU uses: `//drivers/longhorn` (shell, logger, RGB LED and
   rainbow task, DFU console hook, debounce, math, CAN inbox, rate gate, RTOS
   lock) and `//drivers/lhal` (peripheral interfaces, STM32 adapters, host
@@ -62,8 +63,7 @@ The DUI is a plain CAN peripheral this year.
 - `Board/`: hand-written bring-up at ST HAL level.
   - `main.cpp`: reset cause, clocks, safe outputs, the `MX_*_Init` calls,
     LHAL adapters, and the app.
-  - `analog_setup.cpp`, `comms_setup.cpp`: what the `.ioc` doesn't express
-    yet (see [IOC gaps](#ioc-gaps)).
+  - `analog_setup.cpp`: what the `.ioc` doesn't express yet (see [IOC gaps](#ioc-gaps)).
   - `fault_store.cpp`: flash persistence and bootloader entry.
   - `board_safe_state.cpp`: the safe output levels, also used from
     `Error_Handler` and the fault handlers.
@@ -293,7 +293,7 @@ echoes `BENCH_ECHO_REQUEST_CRITICAL`/`_DATA` back on the same bus.
 
 Optional `.ioc` cleanups. Everything here already works: `Board/` (or a
 `USER CODE` block) sets it up at runtime, and each workaround can go once
-CubeMX generates the equivalent. Items 7 and 8 are cosmetic (`main.cpp`
+CubeMX generates the equivalent. Items 5 and 6 are cosmetic (`main.cpp`
 drives the lamps high right after `MX_GPIO_Init`, and `tools/dfu` also
 matches the port by VID:PID).
 
@@ -308,15 +308,10 @@ matches the port by VID:PID).
    - drop the unused AWD3.
 3. DAC1 CH1 triggered by TIM7 TRGO, with DMA on DMA1_Ch3. TIM6/TIM7 as
    basic timers with TRGO on update.
-4. FDCAN2 (Critical):
-   - automatic retransmission on;
-   - FDCAN2_IT0/IT1 at priority 5.
-5. IWDG. Today the LHAL adapter drives it at register level.
-6. USART3 on PC10/PC11 for the STDC14 VCP. Today `comms_setup.cpp` sets it
-   up, and `BUILD.bazel` defines `HAL_UART_MODULE_ENABLED`.
-7. GPIO user labels, and initial level high on PE12/PE13 (BMS/IMD lamps
+4. IWDG. Today the LHAL adapter drives it at register level.
+5. GPIO user labels, and initial level high on PE12/PE13 (BMS/IMD lamps
    on).
-8. Restore the USB strings `LHRe` / `VCU` (`tools/dfu` matches the port by
+6. Restore the USB strings `LHRe` / `VCU` (`tools/dfu` matches the port by
    "lhre" or VID:PID).
 9. FreeRTOS stack-overflow and malloc-failed hooks. Today they are set in
    the `FreeRTOSConfig.h` USER CODE.

@@ -6,6 +6,7 @@ library per source board:
 | Target | Contents |
 | ------ | -------- |
 | `:can_<board>` | That board's messages, in `namespace lhre::can::<board>` |
+| `:can_<board>_rx` | What that board receives: one `<Bus>Rx<Slot>` table per bus, built from `to_boards` |
 | `:can_types` | Shared enums, `ToString`, and the `kMessageMeta` table |
 | `:can_lib` | Umbrella over the whole bus, for tests, sims, and the gateway |
 
@@ -61,6 +62,20 @@ lhal::CanFrame frame;
 if (bus.Receive(&frame) && HvcPackStatus::Matches(frame.id)) {
   auto pack = HvcPackStatus::FromFrame(frame);
 }
+```
+
+A receive table holds one `Slot<Message>` per message the board receives
+on that bus, and `Dispatch(frame, now_ms)` tries each in turn. A message
+with `to_boards: "*"` goes to every board except its sender. The slot
+type is the board's choice; `longhorn::RxSlot` stores the latest message
+with its arrival time:
+
+```cpp
+struct VehicleRx : lhre::can::vcu::CriticalRx<longhorn::RxSlot> {};
+
+VehicleRx rx;
+rx.Dispatch(frame, now_ms);
+if (rx.hvc_contactor_status.Fresh(now_ms)) { /* ... */ }
 ```
 
 `kMessageMeta[]` and `kMessageCount` give a frame-ID-sorted constexpr

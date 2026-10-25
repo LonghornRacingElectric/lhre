@@ -173,6 +173,8 @@ struct RegenParams {
   float max_torque_nm = 230.0f;
   float max_current_a = 0.0f;
   float hard_cut_current_a = 0.0f;
+  // The hard current cut releases once rear pressure is back under this.
+  float current_cut_release_psi = 100.0f;
   float max_cell_v = 4.05f;
   float max_pack_v =
       132.0f * 4.2f;  // RS50 cell ceiling, not live BMS permission

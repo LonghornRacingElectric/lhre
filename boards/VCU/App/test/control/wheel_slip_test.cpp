@@ -25,6 +25,35 @@ TEST(WheelSlip, OneWheelSpinCutsTorqueAndRecoveryIsLimited) {
   EXPECT_EQ(control.Update(in, 100, 3, p).positive_nm, 0);
 }
 
+TEST(WheelSlip, PedalStepWithoutSlipIsNotRateLimited) {
+  vcu::WheelSlipController control;
+  vcu::WheelControlParams p;
+  p.enabled = true;
+  vcu::WheelInputs in;
+  in.fresh = true;
+  for (float& speed : in.rad_s) speed = 50;
+  EXPECT_EQ(control.Update(in, 0, 3, p).positive_nm, 0);
+  EXPECT_FLOAT_EQ(control.Update(in, 200, 3, p).positive_nm, 200);
+}
+
+TEST(WheelSlip, RampEndsOnceTorqueCatchesDemand) {
+  vcu::WheelSlipController control;
+  vcu::WheelControlParams p;
+  p.enabled = true;
+  vcu::WheelInputs in;
+  in.fresh = true;
+  for (float& speed : in.rad_s) speed = 50;
+  control.Update(in, 100, 3, p);
+  in.rad_s[2] = 150;
+  control.Update(in, 100, 3, p);
+  in.rad_s[2] = 50;
+  vcu::WheelControlResult out;
+  for (int i = 0; i < 1000; ++i) out = control.Update(in, 100, 3, p);
+  ASSERT_FLOAT_EQ(out.positive_nm, 100);
+  // Back in normal mode: a demand step passes through at once.
+  EXPECT_FLOAT_EQ(control.Update(in, 150, 3, p).positive_nm, 150);
+}
+
 TEST(WheelSlip, LockedRearWheelBlocksRegenAndZeroSpeedIsFinite) {
   vcu::WheelSlipController control;
   vcu::WheelControlParams p;

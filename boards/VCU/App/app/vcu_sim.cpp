@@ -10,7 +10,7 @@
 #include "FreeRTOS.h"
 #include "app/vcu_app.hpp"
 #include "task.h"
-#include "testing/bench.hpp"
+#include "test/bench.hpp"
 
 namespace {
 

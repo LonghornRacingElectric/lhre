@@ -8,7 +8,7 @@
 #include "bringup/test_app.hpp"
 #include "lhre_can_bench.hpp"
 #include "lhre_can_vcu.hpp"
-#include "testing/bench.hpp"
+#include "test/bench.hpp"
 
 namespace {
 

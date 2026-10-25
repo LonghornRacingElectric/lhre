@@ -25,6 +25,7 @@
 #include "longhorn/led.hpp"
 #include "task.h"
 #include "tim.h"
+#include "usart.h"
 #include "usb_device.h"
 #ifdef VCU_TEST_IMAGE
 #include "bringup/test_app.hpp"
@@ -73,8 +74,7 @@ int main() {
   MX_TIM2_Init();
   MX_DAC1_Init();
   vcu_board::ConfigureAnalog();
-  vcu_board::ConfigureCan();
-  vcu_board::ConfigureDebugUart();
+  MX_USART3_UART_Init();  // STDC14 virtual COM port
 
   // Everything the tasks touch must be static: the Cortex-M port reclaims
   // main()'s stack for interrupts when the scheduler starts.
@@ -115,7 +115,7 @@ int main() {
                                      127.0f / (htim2.Init.Period + 1),
                                      125.0f / (htim2.Init.Period + 1));
 
-  static lhal::stm32::Uart debug_uart(&vcu_board::huart3);
+  static lhal::stm32::Uart debug_uart(&huart3);
   // Construct before USB starts so the first packet reaches it.
   static lhal::stm32::UsbCdc usb(&hUsbDeviceFS);
   MX_USB_Device_Init();

@@ -68,8 +68,11 @@ TorqueOutputs TorquePath::Update(const TorqueInputs& in,
   out.traction = out.power_limited;
   if (tc.enabled && in.motor_speed_valid) {
     const float omega = std::fabs(in.motor_rpm) * kPi / 30.0f;
-    if (!tc_seeded_) {
+    // Re-seed when the speed source changes: a difference across two frames
+    // and clocks is not an acceleration. The held trim stays.
+    if (!tc_seeded_ || in.speed_from_high_speed != tc_prev_from_high_speed_) {
       tc_seeded_ = true;
+      tc_prev_from_high_speed_ = in.speed_from_high_speed;
       tc_prev_omega_ = omega;
       tc_prev_sample_ms_ = in.speed_sample_ms;
     } else if (in.speed_sample_ms != tc_prev_sample_ms_) {

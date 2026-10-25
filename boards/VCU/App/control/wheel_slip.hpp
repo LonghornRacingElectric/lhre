@@ -28,6 +28,7 @@ class WheelSlipController {
  private:
   float integral_nm_ = 0;
   float previous_nm_ = 0;
+  bool recovering_ = false;
 };
 
 }  // namespace vcu

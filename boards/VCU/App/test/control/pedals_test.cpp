@@ -83,7 +83,16 @@ TEST(Pedals, BrakeOverThrottleLatchesUntilBelow5Percent) {
   EXPECT_TRUE(Settle(pp, Pedal(0.6f, 600.0f), &t, 300).brake_over_throttle);
   EXPECT_TRUE(Settle(pp, Pedal(0.6f), &t, 300).brake_over_throttle);
   EXPECT_TRUE(Settle(pp, Pedal(0.13f), &t, 300).brake_over_throttle);
-  EXPECT_FALSE(Settle(pp, Pedal(0.0f), &t, 300).brake_over_throttle);
+  EXPECT_TRUE(Settle(pp, Pedal(0.06f), &t, 300).brake_over_throttle);
+  EXPECT_FALSE(Settle(pp, Pedal(0.04f), &t, 300).brake_over_throttle);
+}
+
+// The thresholds are raw pedal travel, not the deadzoned torque input.
+TEST(Pedals, BrakeOverThrottleTripsAt25PercentRawTravel) {
+  vcu::PedalProcessor pp;
+  uint32_t t = 0;
+  EXPECT_FALSE(Settle(pp, Pedal(0.24f, 600.0f), &t, 300).brake_over_throttle);
+  EXPECT_TRUE(Settle(pp, Pedal(0.26f, 600.0f), &t, 300).brake_over_throttle);
 }
 
 TEST(Pedals, BrakePressedHysteresisAndLight) {
