@@ -42,10 +42,10 @@ int main() {
   vcu_board::ForceSafeOutputs();
   MX_TIM2_Init();
 
-  // Rev A: PA0 green, PA1 red, PA2 blue; active-low PWM is set by the IOC.
-  static lhal::stm32::Pwm green(&htim2, TIM_CHANNEL_1);
+  // D35 rotated 180 degrees for common-anode wiring: PA0 blue, PA2 green.
+  static lhal::stm32::Pwm blue(&htim2, TIM_CHANNEL_1);
   static lhal::stm32::Pwm red(&htim2, TIM_CHANNEL_2);
-  static lhal::stm32::Pwm blue(&htim2, TIM_CHANNEL_3);
+  static lhal::stm32::Pwm green(&htim2, TIM_CHANNEL_3);
   if (!lhal::IsOk(red.Start()) || !lhal::IsOk(green.Start()) ||
       !lhal::IsOk(blue.Start())) {
     Error_Handler();

@@ -86,7 +86,7 @@ The DUI is a plain CAN peripheral this year.
 | Linelock_Ctrl / Amp_Shutdown_SW | PE15 / PE14 | high = request / amp on |
 | BMS_Error_SW / IMD_Error_SW | PE12 / PE13 | high = lamp on; the board pull-up lights them if the MCU is dead |
 | Crit_STB / Data_STB | PD9 / PD8 | TJA1462 standby when high; held low (normal) |
-| LED_G / LED_R / LED_B | PA0 / PA1 / PA2 (TIM2 CH1-3) | common anode, PWM active low |
+| LED blue / red / green | PA0 / PA1 / PA2 (TIM2 CH1-3) | D35 rotated 180°; common anode, PWM active low |
 | Audio_DAC | PA4 (DAC1 OUT1) | to the PAM8302 |
 | Critical CAN | PB12/PB13 (FDCAN2) | 1 Mbit/s classic |
 | Data CAN | PD0/PD1 (FDCAN1) | 1 Mbit/s classic |
@@ -315,7 +315,9 @@ FDCAN on PCLK1, ADC on HCLK/2 = 48 MHz, USB on PLLQ.
 
 ## Open items (verify on hardware)
 
-- The RGB LED D35 pinout: pins 1-3 are named as cathodes but tied to Vdd.
+- D35 required a 180° assembly rotation for correct polarity; rainbow operation
+  was confirmed on the bench. Firmware swaps blue/green in all images for
+  this reworked orientation; PCB net labels retain their original names.
 - RTD switch type. The firmware leaves DRIVE when the switch opens, as the
   2026 toggle did (`DriveParams::rtd_release_exits_drive`).
 - APPS and BSE sensor ranges and pedal endpoints. Defaults assume 0.5-4.5 V
@@ -391,3 +393,58 @@ PA0/PA1/PA2 measurements before diagnosing an LED polarity or assembly issue.
 The schematic drives a common-anode LED: Vdd on the anode side, resistors
 between cathodes and MCU pins; symbol pin names alone do not establish the
 fitted component's orientation.
+
+## Bench sequence after MVP
+
+Use the existing full bench image as the next step; vehicle control remains
+in `:vcu`, and `:vcu_mvp` remains available for recovery/isolation. The bench
+image adds FreeRTOS tasks, ADC DMA, digital I/O, DAC audio, CAN diagnostics
+and watchdog supervision without running vehicle torque/state logic or
+sending inverter commands. Keep traction power and actuators disconnected
+while testing manual outputs.
+
+```bash
+bazel run --config=local //boards/VCU:dfu_test
+bazel run --config=local //tools/monitor
+```
+
+Run these checks in order; stop at the first unexpected result:
+
+1. **Boot and scheduler:** `/version` must say `VCU-TEST`. Run `/uptime`,
+   wait a few seconds, then repeat; it should increase without resetting.
+   `/info` reports the reset cause and CAN counters. Unconnected CAN buses
+   may accumulate errors/dropped TX; this alone is not a failed boot test.
+2. **Color mapping:** `/led 25 0 0`, `/led 0 25 0`, `/led 0 0 25` must show
+   red, green and blue respectively. `/led auto` resumes the rainbow.
+   These percent-based bench commands differ from MVP's named colors.
+3. **Digital inputs:** `/io`; operate the RTD switch and rerun `/io`.
+   `rtd` should follow the pressed state. Exercise other connected switches
+   individually and verify the matching field. Disconnected floating inputs
+   are not meaningful acceptance readings.
+4. **ADC:** `/adc` should show VDDA near the measured 3.3 V rail using
+   VREFINT. Compare each reported pin voltage to a meter. Then connect and
+   sweep one sensor at a time. `/cal start`, sweep, `/cal stop`, `/cal show`
+   capture extrema without modifying the firmware calibration. Raw MCU ADC
+   pins accept only 0–VDDA; connector voltages pass through board dividers.
+5. **Lamp outputs:** `/out bms 0`, `/out bms 1`, then the same for `imd`;
+   verify PE12/PE13 and the attached lamp circuitry. These commands set pin
+   levels; visible lamp polarity depends on the external circuit.
+   `/release` restores safe defaults and the rainbow.
+6. **DAC/audio:** with the amplifier's required supply present, use
+   `/tone 1000 10 200` for a quiet, short 1 kHz tone; it must stop on its
+   own. `/tone off` stops it explicitly. Without amplifier power, scope
+   PA4 to test DAC output only.
+7. **CAN:** connect a second active CAN node with the correct bus voltage,
+   1 Mbit/s bitrate, common reference and end termination. Observe the
+   `VCU_ADC_*`/digital diagnostics on Data and verify Critical/Data bench
+   echo requests independently. `/info` should show successful echoes;
+   error counters should not keep rising on a healthy connected bus.
+8. **Watchdog:** `/wdtest` intentionally forces safe outputs and a reset.
+   Reconnect the console and check `/info` for reset cause `iwdg`.
+9. **USB update:** rerun `:dfu_test` with the application running; it should
+   send `update.`, download successfully and return to `VCU-TEST` after
+   normal boot. Check the download result, not just Bazel's build result.
+
+`/stream` writes through the debug USART3 logger, not the USB console; use
+repeated `/adc` and `/io` for USB-only testing. Leave manual line-lock and
+amp-output overrides until their connected hardware is ready.

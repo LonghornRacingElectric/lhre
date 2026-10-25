@@ -103,10 +103,10 @@ int main() {
   }
 
   // Status RGB on TIM2 CH1-3, OC polarity low (common anode): duty is
-  // brightness. TODO(verify) D35's pinout and colour order on the bench.
-  static lhal::stm32::Pwm led_g(&htim2, TIM_CHANNEL_1);  // PA0 LED_G
+  // brightness. D35 is rotated 180 degrees to correct its assembled polarity.
+  static lhal::stm32::Pwm led_b(&htim2, TIM_CHANNEL_1);  // PA0, net LED_G
   static lhal::stm32::Pwm led_r(&htim2, TIM_CHANNEL_2);  // PA1 LED_R
-  static lhal::stm32::Pwm led_b(&htim2, TIM_CHANNEL_3);  // PA2 LED_B
+  static lhal::stm32::Pwm led_g(&htim2, TIM_CHANNEL_3);  // PA2, net LED_B
   led_r.Start();
   led_g.Start();
   led_b.Start();
