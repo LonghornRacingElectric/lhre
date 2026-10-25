@@ -48,6 +48,7 @@ struct ExternalDynamicsData {
     gps: Vec<f32>,
     gps_imu: Vec<f32>,
     gps_speed: f32,
+    gps_precise: Vec<f64>,
 }
 
 #[cfg(target_os = "linux")]
@@ -442,6 +443,11 @@ fn update_external_dynamics_from_sentence(external_dynamics: &Arc<Mutex<External
         return;
     }
 
+    if let Some(precise) = parse_ppos(sentence) {
+        external_dynamics.lock().unwrap().gps_precise = precise;
+        return;
+    }
+
     if let Some((lat, lon)) = parse_nmea_gps(sentence) {
         let mut locked = external_dynamics.lock().unwrap();
         locked.gps.clear();
@@ -463,6 +469,19 @@ fn update_external_dynamics_from_sentence(external_dynamics: &Arc<Mutex<External
         let mut locked = external_dynamics.lock().unwrap();
         locked.gps_speed = speed;
     }
+}
+
+/// `$PPOS,lat,lon,h,sigma_h,src,utc*CS`: ChudPi's best position at full precision
+/// (gbx_bestpos.py), as [lat deg, lon deg, ellipsoid height m, 1-sigma horizontal error m,
+/// src (1 = standard, 2 = RTK), fix time in Unix s]. Empty while ChudPi has no solution, so
+/// an old position is not kept. A sentence with a bad checksum is ignored.
+fn parse_ppos(sentence: &str) -> Option<Vec<f64>> {
+    let (body, checksum) = sentence.strip_prefix('$')?.split_once('*')?;
+    if !body.starts_with("PPOS,") || u8::from_str_radix(checksum.trim(), 16).ok()? != body.bytes().fold(0, |a, b| a ^ b) {
+        return None;
+    }
+    let values: Vec<f64> = body.split(',').skip(1).map_while(|f| f.parse().ok()).collect();
+    Some(if values.len() == 6 { values } else { Vec::new() })
 }
 
 fn parse_nmea_gps(sentence: &str) -> Option<(f32, f32)> {
@@ -559,6 +578,7 @@ fn apply_external_dynamics(data: &mut OrionSensorData, external_dynamics: &Exter
     dynamics.gps = external_dynamics.gps.clone();
     dynamics.gps_imu = external_dynamics.gps_imu.clone();
     dynamics.gps_speed = external_dynamics.gps_speed;
+    dynamics.gps_precise = external_dynamics.gps_precise.clone();
 }
 
 fn board_last_seen_value(board_last_seen: &HashMap<String, f32>, board: &str) -> f32 {
@@ -775,5 +795,34 @@ fn ipc_server_loop(
         if elapsed < publish_interval {
             thread::sleep(publish_interval - elapsed);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ppos_keeps_full_precision_through_the_frame() {
+        // A sentence made from ChudPi's recording of 2026-10-10.
+        let state = Arc::new(Mutex::new(ExternalDynamicsData::default()));
+        update_external_dynamics_from_sentence(&state, "$PPOS,30.139619879,-97.630361770,136.754,0.792,1,1791653675.300*16");
+        let mut data = OrionSensorData::default();
+        apply_external_dynamics(&mut data, &state.lock().unwrap());
+        let sent = OrionSensorData::decode(&data.encode_to_vec()[..]).unwrap().dynamics.unwrap();
+        assert_eq!(sent.gps_precise, vec![30.139619879, -97.630361770, 136.754, 0.792, 1.0, 1791653675.300]);
+        assert!(sent.gps.is_empty(), "$PPOS must not touch the old field");
+
+        // GGA still fills the old field and leaves the new one alone.
+        update_external_dynamics_from_sentence(&state, "$GPGGA,190115.30,3008.3772,N,09737.8217,W,1,08,1.0,163.1,M,-26.3,M,,*00");
+        assert_eq!(state.lock().unwrap().gps.len(), 2);
+        assert_eq!(state.lock().unwrap().gps_precise.len(), 6);
+
+        // A damaged or cut-off sentence changes nothing; "no solution" clears the field.
+        update_external_dynamics_from_sentence(&state, "$PPOS,30.139619879,-97.630361770,136.754,0.792,1,1791653675.300*17");
+        update_external_dynamics_from_sentence(&state, "$PPOS,30.139619879,-97.630361770,136.754,0.792,1,17916536");
+        assert_eq!(state.lock().unwrap().gps_precise.len(), 6);
+        update_external_dynamics_from_sentence(&state, "$PPOS,,,,,0,*2C");
+        assert!(state.lock().unwrap().gps_precise.is_empty());
     }
 }

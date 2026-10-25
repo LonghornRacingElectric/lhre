@@ -10,6 +10,7 @@ from sqlalchemy import (
     SmallInteger,
     Text,
     ForeignKey,
+    Index,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, BYTEA, JSONB
 from sqlalchemy.ext.declarative import declarative_base
@@ -510,6 +511,7 @@ class OrionDynamics(BaseOrion):
     fr_sus_pot_v = Column(Float)
     ride_height = Column(Float)
     wheel_speed = Column(Float)
+    gps_precise = Column(ARRAY(Float))
     packet = relationship("OrionPacket", back_populates="dynamics")
 
 class OrionControls(BaseOrion):
@@ -709,3 +711,26 @@ class OrionBoardStatus(BaseOrion):
     packet = relationship("OrionPacket", back_populates="board_status")
 
 # END GENERATED Orion
+
+
+class OrionGpsPrecise(BaseOrion):
+    """
+    publishd's GPS-only feed (MQTT orion/gps): one row per receiver fix at up
+    to PUBLISHD_GPS_HZ, beside the 20 Hz dynamics rows. Hand-written, not from
+    the CAN spec: no packet row and no FK, so it never slows the full-frame
+    insert and the normal tables keep their rate. reconcile_orm_schema()
+    creates it (with the time index) on a deployed database at ingest startup;
+    orion_db_init.sql carries the same DDL for fresh volumes.
+    """
+    __tablename__ = 'gps_precise'
+    __table_args__ = (Index('idx_gps_precise_time', 'time'), {'schema': 'public', 'extend_existing': True})
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    time = Column(BigInteger, nullable=False)
+    packet_id = Column(BigInteger)
+    lat_precise = Column(Float)
+    lon_precise = Column(Float)
+    gps_h_m = Column(Float)
+    gps_sigma_h_m = Column(Float)
+    gps_src = Column(SmallInteger)
+    gps_fix_time = Column(Float)
+    gps_speed_kn = Column(Float)

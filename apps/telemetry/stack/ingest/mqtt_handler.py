@@ -377,6 +377,8 @@ class MQTTHandler:
                 # Send via gRPC BEFORE database insertion
                 self._send_to_bridge(payload=msg.payload, car="Angelique")
                 self._proto_ingest(payload=msg.payload, cache_enable=self.cache_enable, car="Angelique")
+        elif msg.topic == 'orion/gps':
+            self._gps_ingest(msg.payload)
         elif (topic_split := msg.topic.split('/'))[0] == 'orion':
             if topic_split[-1] in self.table_specs["Orion"]:
                 self._data_ingest(msg.payload, topic_split[-1], cache_enable=self.cache_enable, car="Orion")
@@ -386,6 +388,29 @@ class MQTTHandler:
         else:
             logging.warning(f'No corresponding topic found for {msg.topic}')
     
+    def _gps_ingest(self, payload: bytes):
+        '''
+        publishd's GPS-only feed (orion/gps): one small JSON object per receiver fix at up to
+        PUBLISHD_GPS_HZ, beside the full frames on 'orion'. Forwarded to the bridge unchanged for
+        the live map (car_type orion_gps -> Kafka grafana_data_orion_gps) and queued for the
+        gps_precise table. No packet row: the full-frame tables keep their own rate.
+        '''
+        try:
+            row = json.loads(payload)
+        except ValueError:
+            logging.warning('orion/gps payload is not JSON; dropped')
+            return
+        spec = self.table_specs["Orion"]["gps_precise"]
+        row = {k: v for k, v in row.items() if k in spec}
+        if row.get("time") is None:
+            logging.warning('orion/gps payload has no time; dropped')
+            return
+        self._send_to_bridge(payload=payload, car="orion_gps")
+        try:
+            self.db_queues["Orion"].put_nowait([("gps_precise", row)])
+        except queue.Full:
+            logging.error('Orion DB queue full; dropping gps_precise row')
+
     def _make_bridge_channel(self):
         '''
         Create a keepalive-enabled gRPC channel to the bridge. Keepalive keeps an

@@ -84,7 +84,7 @@ groups {
   }
   group {
     name: "Dynamics"
-    next_free_id: 36
+    next_free_id: 37
     description: "Vehicle motion and suspension telemetry."
     snapshot_id: 3
     external_field {
@@ -106,6 +106,13 @@ groups {
       id: 3
       type: PROTO_FLOAT
       description: "NMEA ground speed populated by the gateway."
+    }
+    external_field {
+      name: "gps_precise"
+      id: 36
+      type: PROTO_DOUBLE
+      repeated: true
+      description: "ChudPi\'s full-precision position from $PPOS: lat deg, lon deg, ellipsoid height m, 1-sigma horizontal error m, source (1 standard, 2 RTK), fix time Unix s. Double because float keeps lat/lon only to about 0.4 m. Empty while ChudPi has no solution."
     }
   }
   group {

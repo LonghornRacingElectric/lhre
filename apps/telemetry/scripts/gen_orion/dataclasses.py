@@ -38,6 +38,7 @@ class OrionDynamics:
     fr_sus_pot_v: Optional[float] = None
     ride_height: Optional[float] = None
     wheel_speed: Optional[float] = None
+    gps_precise: List[float] = field(default_factory=list)
 
 @dataclass
 class OrionControls:
