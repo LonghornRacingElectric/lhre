@@ -4,6 +4,7 @@ firmware_project(
     name = "vcu",
     app_deps = [
         "//drivers/longhorn:logger",
+        "//drivers/longhorn:led",
         "//drivers/longhorn:console",
         "//drivers/longhorn:shell",
         "//drivers/longhorn:period",
@@ -26,6 +27,9 @@ firmware_project(
     enable_freertos = True,
     enable_usb = True,
     mcu = "stm32g474xx",
-    # Bring-up image: no inverter commands.
-    variants = {"test": ["VCU_TEST_IMAGE"]},
+    # Keep vehicle and full bench images alongside minimal USB/LED bring-up.
+    variants = {
+        "mvp": ["VCU_MVP_IMAGE"],
+        "test": ["VCU_TEST_IMAGE"],
+    },
 )

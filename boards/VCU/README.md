@@ -348,3 +348,36 @@ ownership and send ordering. Rate gates use longhorn's checked `PeriodMs`.
 `VehicleRx` and `WheelRx` extend the generated VCU Critical/Data subscription
 structs from `:can_rx_vcu`; only vehicle freshness/fault policy stays local.
 Subscriptions come from the existing spec `to_boards` fields.
+
+## Minimal USB/LED image
+
+Use `:vcu_mvp` for first power-on. This leaves the vehicle (`:vcu`) and full
+bench (`:vcu_test`) implementations intact. `Board/mvp_main.cpp` initializes
+only the core clock, GPIO safe levels, TIM2 LED PWM and USB CDC. It does not
+initialize CAN, ADC, DAC, USART3, the watchdog or start the RTOS scheduler.
+`App/mvp.hpp` polls the shared longhorn RGB LED and shell in one loop.
+
+Like the 2026 `longhorn-lib` LED/DFU helpers, the rainbow follows a five-second
+red/green/blue cycle at 33 ms intervals, and recovery recognizes `update.`
+without a newline across USB packets. This image uses the shared LED's 50%
+normalized brightness cap. Board-specific code is limited to pins, startup,
+and the existing BOOT0/bank-1/reset recovery routine. USB receive interrupts
+request recovery; the main loop performs the reset.
+
+```bash
+bazel build --config=local //boards/VCU:vcu_mvp
+bazel run --config=local //boards/VCU:dfu_mvp
+# Or, with an ST-Link attached:
+bazel run --config=local //boards/VCU:openocd_mvp
+bazel run --config=local //tools/monitor
+```
+
+After flashing, return the physical BOOT switch to normal application boot
+and reset. The LED starts white, then rainbows. Over USB, `/version` reports
+`VCU-MVP`; `/help`, `/uptime`, `/dfu` and raw `update.` are supported.
+No car connections or sensors are required. A successfully flashed board
+left with BOOT asserted stays in ROM DFU and cannot run the rainbow.
+
+`bazel test --config=local //boards/VCU:mvp_test` checks the rainbow, shell,
+and both receive-hook and polled DFU paths without hardware. Hardware LED
+pinout, power and USB enumeration still need a bench check.

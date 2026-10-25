@@ -1,3 +1,5 @@
+#ifndef VCU_MVP_IMAGE
+
 // VCU Rev A startup, shared by the vehicle and test images.
 
 #include "main.h"
@@ -183,3 +185,5 @@ int main() {
 
   Error_Handler();  // the scheduler only returns if it failed to start
 }
+
+#endif  // !VCU_MVP_IMAGE
