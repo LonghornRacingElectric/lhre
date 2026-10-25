@@ -1,4 +1,5 @@
 load("@aspect_bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
+load("@rules_python//python:defs.bzl", "py_test")
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
@@ -27,8 +28,8 @@ alias(
 )
 
 # Runs build.rs to generate the prost bindings AND generated_mapping.rs into
-# OUT_DIR (lib.rs include!()s both) — same script the Cargo flow runs, but
-# pointed at the hermetic protoc and the Bazel-generated can.json.
+# OUT_DIR (lib.rs include!()s both) from the hermetic protoc and the shared
+# Bazel-generated protobuf and CAN JSON.
 cargo_build_script(
     name = "sensor_proto_build",
     srcs = ["build.rs"],
@@ -73,14 +74,34 @@ rust_library(
 # get bundled with the runtime assets and runbook scripts, and one command
 # pushes the bundle over SSH. See README.md → "Deploying to the Pi".
 
+_PI_CORE_DAEMONS = [
+    "//apps/BEVO/cand",
+    "//apps/BEVO/loggerd",
+    "//apps/BEVO/publishd",
+]
+
+platform_transition_filegroup(
+    name = "pi_core_binaries",
+    srcs = _PI_CORE_DAEMONS,
+    target_compatible_with = NOT_WINDOWS,
+    target_platform = "//platforms:pi",
+    visibility = ["//visibility:public"],
+)
+
+py_test(
+    name = "pi_core_binary_test",
+    size = "small",
+    srcs = ["pi_core_binary_test.py"],
+    args = ["$(rootpaths :pi_core_binaries)"],
+    data = [":pi_core_binaries"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
 platform_transition_filegroup(
     name = "pi_binaries",
-    srcs = [
-        "//apps/BEVO/cand",
+    srcs = _PI_CORE_DAEMONS + [
         "//apps/BEVO/dashd",
         "//apps/BEVO/debugd",
-        "//apps/BEVO/loggerd",
-        "//apps/BEVO/publishd",
     ],
     target_compatible_with = NOT_WINDOWS,
     target_platform = "//platforms:pi",

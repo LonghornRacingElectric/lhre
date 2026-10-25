@@ -1,34 +1,26 @@
 //! Generates everything derived from the CAN schema at build time:
 //!
-//!   1. `_.rs` — prost bindings for schema/can_packets.proto (serde-derived)
+//!   1. `_.rs` — prost bindings for the Bazel-generated can_packets.proto
 //!   2. `generated_mapping.rs` — the name→proto-field dispatch used by cand
 //!
 //! Both land in OUT_DIR; lib.rs include!()s them. Nothing generated is
-//! checked in. Under Bazel, PROTOC / PROTO_FILE / CAN_JSON point at the
-//! hermetic protoc and the Bazel-generated can.json; under plain Cargo the
-//! defaults kick in and can.json is produced by the in-repo Python
-//! generator (python3, stdlib only).
+//! checked in. Bazel supplies PROTOC / PROTO_FILE / CAN_JSON as declared
+//! inputs from the shared textproto pipeline.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
-use std::process::Command;
 
 use prost::Message;
 use prost_types::{field_descriptor_proto, DescriptorProto, FileDescriptorSet};
 use serde_json::Value;
 
 fn main() {
-    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR not set"));
 
-    let proto_path = env::var("PROTO_FILE").unwrap_or_else(|_| {
-        PathBuf::from(&manifest_dir)
-            .join("schema/can_packets.proto")
-            .to_string_lossy()
-            .to_string()
-    });
+    let proto_path = env::var("PROTO_FILE")
+        .expect("PROTO_FILE must be supplied by Bazel; build //apps/BEVO:pi_core_binaries");
     let mut proto_dir = PathBuf::from(&proto_path);
     proto_dir.pop();
 
@@ -41,10 +33,10 @@ fn main() {
         .compile_protos(&[proto_path.clone()], &[proto_dir.to_string_lossy().to_string()])
         .unwrap();
 
-    let can_json_path = match env::var("CAN_JSON") {
-        Ok(path) => PathBuf::from(path),
-        Err(_) => generate_can_json_with_python(&manifest_dir, &out_dir),
-    };
+    let can_json_path = PathBuf::from(
+        env::var("CAN_JSON")
+            .expect("CAN_JSON must be supplied by Bazel; build //apps/BEVO:pi_core_binaries"),
+    );
 
     let fds_bytes = fs::read(&fds_path).expect("reading descriptor set");
     let fds = FileDescriptorSet::decode(fds_bytes.as_slice()).expect("decoding descriptor set");
@@ -55,27 +47,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=PROTO_FILE");
     println!("cargo:rerun-if-env-changed=CAN_JSON");
     println!("cargo:rerun-if-changed={}", proto_path);
-    for f in ["can_packets.csv", "can_bitfields.csv", "generate_can_json.py"] {
-        println!(
-            "cargo:rerun-if-changed={}",
-            PathBuf::from(&manifest_dir).join("schema").join(f).display()
-        );
-    }
-}
-
-/// Cargo-only fallback: run the in-repo generator (stdlib-only Python).
-fn generate_can_json_with_python(manifest_dir: &str, out_dir: &PathBuf) -> PathBuf {
-    let schema = PathBuf::from(manifest_dir).join("schema");
-    let out = out_dir.join("can.json");
-    let status = Command::new("python3")
-        .arg(schema.join("generate_can_json.py"))
-        .arg(schema.join("can_packets.csv"))
-        .arg(schema.join("can_bitfields.csv"))
-        .arg(&out)
-        .status()
-        .expect("running schema/generate_can_json.py (Cargo builds need python3 on PATH)");
-    assert!(status.success(), "generate_can_json.py failed");
-    out
+    println!("cargo:rerun-if-changed={}", can_json_path.display());
 }
 
 /// Port of the retired codegen.py: emit the match-based dispatch that routes
