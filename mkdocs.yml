@@ -21,6 +21,7 @@ nav:
       - ADR-010 Telemetry Stack in Bazel: docs/architecture/010-telemetry-stack-in-bazel.md
       - ADR-012 Simulation Outside Bazel: docs/architecture/012-simulation-outside-bazel.md
       - ADR-013 Drive Day Viewer Outside Bazel: docs/architecture/013-driveday-viewer-outside-bazel.md
+      - ADR-015 Study Layout: docs/architecture/015-study-layout.md
       - Build System: docs/build-system.md
       - Cookbook: docs/cookbook.md
   - Boards:
