@@ -111,6 +111,26 @@ TEST(Shell, NonSlashLineGetsHint) {
   EXPECT_TRUE(Contains(TakeTxString(f.uart), "commands start with '/'"));
 }
 
+TEST(Shell, PlainLineHandlerReceivesNonCommandLines) {
+  ShellFixture f;
+  std::string seen;
+  f.shell.SetPlainLineHandler(
+      [](void* context, longhorn::Console& out, const char* line) {
+        *static_cast<std::string*>(context) = line;
+        out.Println("ok");
+      },
+      &seen);
+  Type(f.uart, f.shell, "update.\r");
+  EXPECT_EQ(seen, "update.");
+  const std::string out = TakeTxString(f.uart);
+  EXPECT_TRUE(Contains(out, "ok")) << out;
+  EXPECT_FALSE(Contains(out, "commands start with '/'")) << out;
+
+  // Commands still dispatch normally.
+  Type(f.uart, f.shell, "/uptime\r");
+  EXPECT_EQ(seen, "update.");
+}
+
 TEST(Shell, BackspaceEditsLine) {
   ShellFixture f;
   Type(f.uart, f.shell, "/versoin\x7f\x7f\x7fion\r");

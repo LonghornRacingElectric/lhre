@@ -62,7 +62,9 @@ _Min_Stack_Size = 0x400; /* required amount of stack */
 MEMORY
 {
 RAM (xrw)      : ORIGIN = 0x20000000, LENGTH = 128K
-FLASH (rx)      : ORIGIN = 0x8000000, LENGTH = 512K
+/* The last 2 KB page of bank 2 (0x0807F800) holds the VCU's brake fault
+   latch (Board/fault_store.cpp), so code stops short of it. */
+FLASH (rx)      : ORIGIN = 0x8000000, LENGTH = 510K
 }
 
 /* Define output sections */

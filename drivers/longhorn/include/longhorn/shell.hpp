@@ -61,6 +61,17 @@ class Shell {
         {"uptime", "milliseconds since boot", &Shell::UptimeHandler, this});
   }
 
+  // Receives completed lines that don't start with '/' (instead of the
+  // "commands start with '/'" hint), with the same locking as commands.
+  // tools/dfu's "update." bootloader request arrives this way. Pass a null
+  // handler to restore the hint.
+  void SetPlainLineHandler(void (*handler)(void* context, Console& out,
+                                           const char* line),
+                           void* context) {
+    plain_handler_ = handler;
+    plain_context_ = context;
+  }
+
   // False when the command table is full.
   bool AddCommand(const ShellCommand& command) {
     if (num_commands_ >= kMaxCommands) {
@@ -143,7 +154,11 @@ class Shell {
     }
 
     if (line_[0] != '/') {
-      console_.Println("commands start with '/' (try /help)");
+      if (plain_handler_ != nullptr) {
+        plain_handler_(plain_context_, console_, line_);
+      } else {
+        console_.Println("commands start with '/' (try /help)");
+      }
       if (lock) {
         xSemaphoreGive(mutex_);
       }
@@ -218,6 +233,9 @@ class Shell {
   const char* board_name_;
   SemaphoreHandle_t mutex_;
   Console console_;
+  void (*plain_handler_)(void* context, Console& out,
+                         const char* line) = nullptr;
+  void* plain_context_ = nullptr;
 
   ShellCommand commands_[kMaxCommands];
   size_t num_commands_ = 0;

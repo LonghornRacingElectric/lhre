@@ -1,0 +1,267 @@
+# proto-file: lib/spec/proto/can_spec.proto
+# proto-message: lhre.canspec.SpecFile
+
+message {
+  name: "ACCELERATION_VECTOR_UNSPRUNG_WHEEL_SPEED_FL"
+  can_id: 1026
+  from_board: "USM"
+  to_boards: "VCU"
+  to_boards: "Pi"
+  bus: "Data"
+  dlc: 8
+  frequency_hz: 333.333333
+  description: "USM FL: lhre-2026 sender uses a 3 ms period; legacy FREQ macro is a period in ms. Speed is signed little-endian centiradians/s in bytes 6-7."
+  signal {
+    name: "x"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+  }
+  signal {
+    name: "y"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+  }
+  signal {
+    name: "z"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+  }
+  signal {
+    name: "wheel_speed"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "rad/s"
+      }
+    }
+  }
+}
+message {
+  name: "ACCELERATION_VECTOR_UNSPRUNG_WHEEL_SPEED_FR"
+  can_id: 1027
+  from_board: "USM"
+  to_boards: "VCU"
+  to_boards: "Pi"
+  bus: "Data"
+  dlc: 8
+  frequency_hz: 333.333333
+  description: "USM FR: lhre-2026 sender uses a 3 ms period; legacy FREQ macro is a period in ms. Speed is signed little-endian centiradians/s in bytes 6-7."
+  signal {
+    name: "x"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+  }
+  signal {
+    name: "y"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+  }
+  signal {
+    name: "z"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+  }
+  signal {
+    name: "wheel_speed"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "rad/s"
+      }
+    }
+  }
+}
+message {
+  name: "ACCELERATION_VECTOR_UNSPRUNG_WHEEL_SPEED_RL"
+  can_id: 1028
+  from_board: "USM"
+  to_boards: "VCU"
+  to_boards: "Pi"
+  bus: "Data"
+  dlc: 8
+  frequency_hz: 333.333333
+  description: "USM RL: lhre-2026 sender uses a 3 ms period; legacy FREQ macro is a period in ms. Speed is signed little-endian centiradians/s in bytes 6-7."
+  signal {
+    name: "x"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+  }
+  signal {
+    name: "y"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+  }
+  signal {
+    name: "z"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+  }
+  signal {
+    name: "wheel_speed"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "rad/s"
+      }
+    }
+  }
+}
+message {
+  name: "ACCELERATION_VECTOR_UNSPRUNG_WHEEL_SPEED_RR"
+  can_id: 1029
+  from_board: "USM"
+  to_boards: "VCU"
+  to_boards: "Pi"
+  bus: "Data"
+  dlc: 8
+  frequency_hz: 333.333333
+  description: "USM RR: lhre-2026 sender uses a 3 ms period; legacy FREQ macro is a period in ms. Speed is signed little-endian centiradians/s in bytes 6-7."
+  signal {
+    name: "x"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+  }
+  signal {
+    name: "y"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+  }
+  signal {
+    name: "z"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+  }
+  signal {
+    name: "wheel_speed"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "rad/s"
+      }
+    }
+  }
+}

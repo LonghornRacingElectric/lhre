@@ -1,0 +1,126 @@
+# proto-file: lib/spec/proto/can_spec.proto
+# proto-message: lhre.canspec.SpecFile
+
+message {
+  name: "BENCH_TEST_COMMAND"
+  can_id: 472
+  from_board: "Bench"
+  to_boards: "VCU"
+  bus: "Data"
+  dlc: 8
+  description: "Bring-up test image command from a bench CAN adapter. Ignored by the vehicle image."
+  signal {
+    name: "command"
+    encoding {
+      bit_length: 8
+    }
+    logical {
+      enum_type: "BenchCommand"
+    }
+    description: "Command"
+  }
+  signal {
+    name: "output_mask"
+    encoding {
+      start_bit: 8
+      bit_length: 8
+    }
+    logical {
+      bitfield {
+        bitfield_type: "VcuDigitalOutputs"
+      }
+    }
+    description: "SET_OUTPUTS: outputs to change"
+  }
+  signal {
+    name: "output_values"
+    encoding {
+      start_bit: 16
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "SET_OUTPUTS: levels, same bit order as output_mask"
+  }
+  signal {
+    name: "tone_frequency"
+    encoding {
+      start_bit: 24
+      bit_length: 16
+    }
+    logical {
+      physical {
+        unit: "Hz"
+      }
+    }
+    description: "PLAY_TONE: frequency"
+  }
+  signal {
+    name: "tone_amplitude"
+    encoding {
+      start_bit: 40
+      bit_length: 8
+      scale: 0.01
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "PLAY_TONE: amplitude fraction of full scale"
+  }
+  signal {
+    name: "tone_duration"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+    }
+    logical {
+      physical {
+        unit: "ms"
+      }
+    }
+    description: "PLAY_TONE: duration (capped by the local buzzer limit)"
+  }
+}
+message {
+  name: "BENCH_ECHO_REQUEST_CRITICAL"
+  can_id: 473
+  from_board: "Bench"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 8
+  description: "Bring-up image: echoed back as VCU_ECHO_REPLY_CRITICAL."
+  signal {
+    name: "payload"
+    encoding {
+      bit_length: 64
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Payload"
+  }
+}
+message {
+  name: "BENCH_ECHO_REQUEST_DATA"
+  can_id: 473
+  from_board: "Bench"
+  to_boards: "VCU"
+  bus: "Data"
+  dlc: 8
+  description: "Bring-up image: echoed back as VCU_ECHO_REPLY_DATA."
+  signal {
+    name: "payload"
+    encoding {
+      bit_length: 64
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Payload"
+  }
+}

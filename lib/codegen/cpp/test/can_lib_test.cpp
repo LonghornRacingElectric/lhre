@@ -131,16 +131,34 @@ TEST(CanLib, EnumToString) {
   EXPECT_STREQ(ToString(static_cast<VcuState>(200)), "?");
 }
 
+// First metadata entry for `frame_id`, or nullptr. (The same ID may appear
+// once per bus.)
+const MessageMeta* FindMeta(uint32_t frame_id) {
+  for (size_t i = 0; i < kMessageCount; ++i) {
+    if (kMessageMeta[i].frame_id == frame_id) {
+      return &kMessageMeta[i];
+    }
+  }
+  return nullptr;
+}
+
 TEST(CanLib, QuantityBlockAndMetadata) {
-  ASSERT_EQ(kMessageCount, 5u);
-  // Sorted by frame ID; bootloader block occupies 0x010-0x013.
-  EXPECT_EQ(kMessageMeta[0].frame_id, VcuBootloaderData::kFrameId);
-  EXPECT_EQ(kMessageMeta[0].quantity, 4);
-  EXPECT_EQ(kMessageMeta[0].frequency_hz, 0.0f);
-  EXPECT_EQ(kMessageMeta[1].frame_id, 0x300u);
-  EXPECT_EQ(kMessageMeta[1].dlc, 8);
-  EXPECT_EQ(kMessageMeta[3].frame_id, 0x400u);
-  EXPECT_EQ(kMessageMeta[3].frequency_hz, 50.0f);
+  ASSERT_GT(kMessageCount, 0u);
+  // Sorted by frame ID.
+  for (size_t i = 1; i < kMessageCount; ++i) {
+    EXPECT_LE(kMessageMeta[i - 1].frame_id, kMessageMeta[i].frame_id) << i;
+  }
+  // The bootloader block occupies 0x010-0x013.
+  const MessageMeta* boot_meta = FindMeta(VcuBootloaderData::kFrameId);
+  ASSERT_NE(boot_meta, nullptr);
+  EXPECT_EQ(boot_meta->quantity, 4);
+  EXPECT_EQ(boot_meta->frequency_hz, 0.0f);
+  const MessageMeta* status_meta = FindMeta(0x300u);
+  ASSERT_NE(status_meta, nullptr);
+  EXPECT_EQ(status_meta->dlc, 8);
+  const MessageMeta* pack_meta = FindMeta(0x400u);
+  ASSERT_NE(pack_meta, nullptr);
+  EXPECT_EQ(pack_meta->frequency_hz, 50.0f);
 
   EXPECT_TRUE(VcuBootloaderData::Matches(0x013));
   EXPECT_FALSE(VcuBootloaderData::Matches(0x014));

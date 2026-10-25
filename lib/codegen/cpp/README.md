@@ -10,7 +10,7 @@ library per source board:
 | `:can_lib` | Umbrella over the whole bus, for tests, sims, and the gateway |
 
 Firmware depends on the per-board targets for what it sends and listens
-to. `boards/VCU/BUILD.bazel` lists `:can_vcu` and `:can_hvc`. The board
+to; `boards/VCU/BUILD.bazel` is the worked example. The board
 list is `CAN_BOARDS` in this package's BUILD file; the generator errors
 with instructions when `lib/spec/messages/` gains or loses a file.
 

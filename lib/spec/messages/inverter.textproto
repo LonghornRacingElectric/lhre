@@ -1,0 +1,414 @@
+# proto-file: lib/spec/proto/can_spec.proto
+# proto-message: lhre.canspec.SpecFile
+
+message {
+  name: "INVERTER_MOTOR_POSITION"
+  can_id: 165
+  from_board: "Inverter"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 8
+  frequency_hz: 100.0
+  description: "Cascadia motor position information."
+  signal {
+    name: "motor_angle"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "deg"
+      }
+    }
+    description: "Electrical motor angle"
+  }
+  signal {
+    name: "motor_speed"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+    }
+    logical {
+      physical {
+        unit: "rpm"
+      }
+    }
+    description: "Motor speed"
+  }
+  signal {
+    name: "electrical_frequency"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "Hz"
+      }
+    }
+    description: "Electrical output frequency"
+  }
+  signal {
+    name: "delta_resolver_filtered"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "deg"
+      }
+    }
+    description: "Delta resolver angle"
+  }
+}
+message {
+  name: "INVERTER_CURRENT"
+  can_id: 166
+  from_board: "Inverter"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 8
+  frequency_hz: 10.0
+  description: "Cascadia current information."
+  signal {
+    name: "phase_a_current"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "A"
+      }
+    }
+    description: "Phase A current"
+  }
+  signal {
+    name: "phase_b_current"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "A"
+      }
+    }
+    description: "Phase B current"
+  }
+  signal {
+    name: "phase_c_current"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "A"
+      }
+    }
+    description: "Phase C current"
+  }
+  signal {
+    name: "dc_bus_current"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "A"
+      }
+    }
+    description: "DC bus current (negative = regen)"
+  }
+}
+message {
+  name: "INVERTER_VOLTAGE"
+  can_id: 167
+  from_board: "Inverter"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 8
+  frequency_hz: 100.0
+  description: "Cascadia voltage information."
+  signal {
+    name: "dc_bus_voltage"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    description: "DC bus voltage"
+  }
+  signal {
+    name: "output_voltage"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    description: "Output voltage"
+  }
+  signal {
+    name: "vab_vq_voltage"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    description: "Vab / Vq"
+  }
+  signal {
+    name: "vbc_vd_voltage"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    description: "Vbc / Vd"
+  }
+}
+message {
+  name: "INVERTER_INTERNAL_STATES"
+  can_id: 170
+  from_board: "Inverter"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 8
+  frequency_hz: 100.0
+  description: "Cascadia internal states, raw bytes (not interpreted by the VCU)."
+  signal {
+    name: "vsm_state"
+    encoding {
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Vehicle state machine state"
+  }
+  signal {
+    name: "pwm_frequency"
+    encoding {
+      start_bit: 8
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "PWM frequency"
+  }
+  signal {
+    name: "inverter_state"
+    encoding {
+      start_bit: 16
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Inverter state"
+  }
+  signal {
+    name: "relay_state"
+    encoding {
+      start_bit: 24
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Relay state"
+  }
+  signal {
+    name: "misc1"
+    encoding {
+      start_bit: 32
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Misc byte 4"
+  }
+  signal {
+    name: "misc2"
+    encoding {
+      start_bit: 40
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Misc byte 5"
+  }
+  signal {
+    name: "misc3"
+    encoding {
+      start_bit: 48
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Misc byte 6"
+  }
+  signal {
+    name: "misc4"
+    encoding {
+      start_bit: 56
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Misc byte 7"
+  }
+}
+message {
+  name: "INVERTER_FAULTS"
+  can_id: 171
+  from_board: "Inverter"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 8
+  frequency_hz: 100.0
+  description: "Cascadia fault codes."
+  signal {
+    name: "post_faults"
+    encoding {
+      bit_length: 32
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "POST fault bits"
+  }
+  signal {
+    name: "run_faults"
+    encoding {
+      start_bit: 32
+      bit_length: 32
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Run fault bits"
+  }
+}
+message {
+  name: "INVERTER_HIGH_SPEED"
+  can_id: 176
+  from_board: "Inverter"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 8
+  frequency_hz: 333.0
+  description: "Cascadia fast message: torque, speed, DC bus voltage."
+  signal {
+    name: "torque_command"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "Nm"
+      }
+    }
+    description: "Commanded torque"
+  }
+  signal {
+    name: "torque_feedback"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "Nm"
+      }
+    }
+    description: "Torque feedback"
+  }
+  signal {
+    name: "motor_speed"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+    }
+    logical {
+      physical {
+        unit: "rpm"
+      }
+    }
+    description: "Motor speed"
+  }
+  signal {
+    name: "dc_bus_voltage"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    description: "DC bus voltage"
+  }
+}
