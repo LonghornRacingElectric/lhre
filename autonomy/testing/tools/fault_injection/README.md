@@ -41,7 +41,7 @@ container:
 ../testing/tools/fault_injection/run_faults.sh
 ```
 
-Environment variables pick the matrix: `CASES`, `SPEEDS` (`v_max` values,
+Environment variables pick the matrix: `CASES` (empty for none), `SPEEDS` (`v_max` values,
 default `3 5 8`), `REPEATS` (2), `TRACK` (for the fault cases, `oval`),
 `CLEAN_SEEDS` (`1 2 3 4 5`, empty for none), `AFTER` (fault seconds after
 `DRIVING`, 25), `RUN_S` (60), `CLEAN_S` (150), `OUT` and `EXTRA` (more launch

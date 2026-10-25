@@ -219,6 +219,20 @@ def test_ready_estimates_do_not_dilute_driving_error(metrics):
     assert metrics._build_row()['mean_pos_error'] == '1.0000'
 
 
+@pytest.mark.parametrize('metrics', [{'truth_odom_topic': '/test/truth'}], indirect=True)
+def test_estimate_waits_for_truth_at_its_own_stamp(metrics):
+    # Truth delivered late must not read as estimator error (#165).
+    metrics._reference_cb(reference())
+    metrics._status_cb(String(data='DRIVING'))
+    metrics._truth_cb(odom(0., 0., 10.))
+    metrics._truth_cb(odom(1., 0., 10.2))
+    metrics._odom_cb(odom(1.5, 0., 10.3))  # exact, but its truth is not in yet
+    assert metrics._err_samples == 0
+    metrics._truth_cb(odom(2., 0., 10.4))
+    assert metrics._err_samples == 1
+    assert metrics._build_row()['max_pos_error'] == '0.0000'
+
+
 def lane_reference(half_width=1.75):
     message = MarkerArray()
     for namespace, side in [('left_cones', 1), ('right_cones', -1)]:

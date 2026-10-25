@@ -35,7 +35,7 @@ flowchart LR
     builder -- "/lhr/track/centerline" --> pursuit["pure_pursuit"]
     builder -- "/lhr/track/centerline" --> mission["mission_manager"]
     builder -- "/lhr/track/centerline" --> metrics["metrics_node"]
-    mission -- "/lhr/mission/status<br>(gates control)" --> pursuit
+    mission -- "/lhr/mission/status<br>/lhr/mission/complete<br>(gate control)" --> pursuit
     pursuit -- "/lhr/vehicle/cmd" --> sim["sim_kinematic"]
     sim -- "/lhr/vehicle/odom" --> sensor
     sim -- "/lhr/vehicle/odom" --> pursuit
@@ -271,11 +271,12 @@ Launch arguments work the same way as `run_demo.sh`'s, typed the same way:
 ./scripts/run_gazebo_demo.sh perception:=lidar lidar_classify_sides:=true  # opt into side inference and classified pairing
 ./scripts/run_gazebo_demo.sh track_style:=oval   # oval track (also: autocross, simple)
 ./scripts/run_gazebo_demo.sh track_style:=oval perception:=lidar  # LiDAR on oval (best LiDAR experience)
+./scripts/run_gazebo_demo.sh track_style:=acceleration  # 75 m straight, runs the acceleration mission, stops in the exit lane
 ./scripts/run_gazebo_demo.sh estimator:=ekf      # EKF odometry instead of Gazebo ground truth
 ./scripts/run_gazebo_demo.sh perception:=lidar estimator:=ekf safety:=true  # trip the mission on stack faults (lhr_safety)
 ```
 
-The `track_style` argument selects the track generator (`oval`, `autocross`, or `simple`). The world SDF is auto-resolved from `track_style` + `seed` (e.g. `oval_seed1.sdf`). Pre-generated worlds are installed by colcon from `worlds/*.sdf`.
+The `track_style` argument selects the track generator (`oval`, `autocross`, `acceleration` or `simple`). The world SDF is auto-resolved from `track_style` + `seed` (e.g. `oval_seed1.sdf`). Pre-generated worlds are installed by colcon from `worlds/*.sdf`: `autocross_seed1` to `seed5` (the MVP gate's seeds), `oval_seed1` and `acceleration_seed1`. The acceleration layout ignores the seed and always runs the acceleration mission; `mission:=acceleration` on any other track is an error. A missing world is an error that names the generate command, never a substitute world.
 
 The track builder's eight chaining parameters are also launch arguments in
 both `perception:=sim` and `perception:=lidar`: `chaining_alg`, `min_step_m`,
@@ -402,9 +403,10 @@ All paths produce the same ROS 2 topic interfaces. Boundary pairing uses color w
 ### World generation
 
 The world generator script (`lhr_gazebo/scripts/generate_world.py`) creates a Gazebo world SDF from `lhr_trackgen` output:
-- Accepts `--style` flag to select the track generator: `autocross` (default), `simple`, or `oval`
+- Accepts `--style` flag to select the track generator: `autocross` (default), `simple`, `oval` or `acceleration`
 - Procedural cone placement from Catmull-Rom splines (same geometry as kinematic sim)
-- Vehicle spawn position auto-computed on the straightest section of track (avoids loop closure area)
+- Vehicle spawn position auto-computed on the straightest section of track (avoids loop closure area). For `acceleration` the car is staged instead, nose 0.30 m behind the start line (DD.4.2.2), with the nose taken from `vehicle.yaml`
+- Orange gate and exit-lane cones use the `cone_orange_large` and `cone_orange_small` models; blue and yellow keep their names, so regenerating an existing world reproduces it
 - ODE physics engine at 1 kHz (0.001 s step), real-time factor 1.0
 - Ground plane: 200 x 200 m
 - Pre-generated worlds (e.g. `worlds/oval_seed1.sdf`) are installed by colcon via `setup.py` `data_files`
@@ -486,7 +488,7 @@ reproducible exactly. Gate on a tolerance band, not on equality.
 
 | Topic | Type | Description |
 |-------|------|-------------|
-| `/lhr/track/cones` | `visualization_msgs/MarkerArray` | Blue (left) and yellow (right) cone markers (ground truth) |
+| `/lhr/track/cones` | `visualization_msgs/MarkerArray` | Left (`left_cones`) and right (`right_cones`) cone markers (ground truth). Blue and yellow, plus orange gate and lane cones on the acceleration course; the namespace is the side, the color is only for display |
 | `/lhr/sensor/cones_detected` | `visualization_msgs/MarkerArray` | Cones detected by sensor sim (accumulated, FOV-filtered) |
 | `/lhr/sensor/cones_viz` | `visualization_msgs/MarkerArray` | All cones: detected = bright, unseen = dim/transparent |
 | `/lhr/sensor/fov_viz` | `visualization_msgs/MarkerArray` | Sensor FOV frustum visualization |
@@ -499,6 +501,7 @@ reproducible exactly. Gate on a tolerance band, not on equality.
 | `/lhr/control/lookahead` | `visualization_msgs/Marker` | Debug: lookahead target point |
 | `/lhr/mission/status` | `std_msgs/String` | Driverless system status (`OFF`, `READY`, `DRIVING`, `FINISHED`, `EMERGENCY`) |
 | `/lhr/mission/go` | `std_msgs/Bool` | Go signal — triggers Ready → Driving transition |
+| `/lhr/mission/complete` | `std_msgs/Bool` | Every tick: the mission is complete. The car brakes in Driving until it stops, then goes Finished |
 | `/lhr/mission/emergency` | `std_msgs/Bool` | Emergency stop: triggers Ready/Driving → Emergency. `safety_node` publishes it every tick while tripped |
 | `/lhr/safety/heartbeat` | `std_msgs/UInt32` | Counter that advances only while every safety check passes and no trip is latched |
 | `/lhr/safety/status` | `diagnostic_msgs/DiagnosticStatus` | Safety state: `OK` or the fault name, with code, latch and heartbeat |
@@ -538,7 +541,7 @@ than erroring.
 | `seed` | `1` | Random seed for track generation |
 | `frame_id` | `"map"` | TF frame |
 | `publish_hz` | `5.0` | Publishing rate (Hz) |
-| `track_style` | `"autocross"` | Generator: `autocross` (Catmull-Rom spline), `simple` (original oval), or `oval` (dedicated oval generator) |
+| `track_style` | `"autocross"` | Generator: `autocross` (Catmull-Rom spline), `simple` (original oval), `oval` (dedicated oval generator), or `acceleration` (fixed rules layout: 75 m start to finish, 4.9 m clear between cone bases, large orange cones flanking both lines, a 75 m small-orange exit lane; only `cone_spacing_m` applies) |
 | `num_waypoints` | `10` | Number of waypoints around the loop (autocross only) |
 | `radius_m` | `25.0` | Base radius of the track (autocross only) |
 | `jitter_m` | `10.0` | Radial jitter per waypoint (autocross only) |
@@ -681,7 +684,7 @@ stateDiagram-v2
 |------------|---------|
 | Off → Ready | Centerline path becomes available |
 | Ready → Driving | Go signal received, or auto-go timer expires |
-| Driving → Finished | Mission complete + vehicle speed < 0.5 m/s |
+| Driving → Finished | Mission complete + vehicle speed < 0.5 m/s. In between, `/lhr/mission/complete` is true and the controller brakes |
 | Ready → Emergency | Emergency signal received (straight there, without a tick of Driving) |
 | Driving → Emergency | Emergency signal received |
 | Emergency → Off | Reset signal received |
@@ -694,9 +697,10 @@ emergency and trips Ready again.
 Mission completion triggers:
 - **autocross**: lap detected by `lhr_metrics` (via `/lhr/metrics/lap_complete`)
 - **inspection**: 28 seconds elapsed
-- **acceleration, skidpad, ebs_test, manual**: not yet implemented
+- **acceleration**: odometry says the car has gone 75.30 m along the heading it had when it first began Driving in this launch (the course is fixed, so re-arming after an emergency mid-course keeps the same finish). The staged nose is 0.30 m behind the start line and the finish is 75 m past it, so that's the moment the nose crosses the finish, whatever the overhang
+- **skidpad, ebs_test, manual**: not yet implemented
 
-The control node (`pursuit_node`) subscribes to `/lhr/mission/status` and only sends drive commands when status is `DRIVING`. When the mission manager is not running, the control node operates freely for backward compatibility.
+The control node (`pursuit_node`) subscribes to `/lhr/mission/status` and `/lhr/mission/complete`. It sends drive commands only while status is `DRIVING` and the mission is not complete; otherwise it commands speed 0. Finished means stopped, so the braking after the finish happens in Driving. When the mission manager is not running, the control node operates freely for backward compatibility.
 
 #### Sending commands (manual go/emergency/reset)
 
@@ -941,7 +945,8 @@ to compare vehicle plants and perception conditions across seeds and speeds.
 Motion distortion and solid trackside clutter are opt-in MVS launch settings.
 
 Estimator error columns (`mean_pos_error`, `max_pos_error`, `mean_yaw_error`)
-exclude the READY hold and stay blank without a truth topic. Course validity
+compare each estimate with truth at the same stamp, exclude the READY hold and
+stay blank without a truth topic. Course validity
 checks a conservative YAML vehicle envelope against truth boundaries and nominal
 cone bases, including a padded translation/yaw sweep between continuous samples.
 Rows include `course_sha256`, `footprint_model`, `sweep_step_m`, `cones_hit` and
