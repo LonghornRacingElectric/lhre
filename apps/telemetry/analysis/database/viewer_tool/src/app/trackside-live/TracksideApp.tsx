@@ -138,6 +138,8 @@ type LiveLap = {
    *  from the lap's samples. Drives the battery thermal-projection trend. */
   maxCellTempC?: number;
   notes?: string; // per-lap note (synced to the classifier DB)
+  /** Entered by hand as a duration only: its times are when it was typed in, so it stays out of the DB sync. */
+  byHand?: boolean;
 };
 type LiveSessionState = {
   running: boolean;
@@ -151,6 +153,8 @@ type LiveSessionState = {
   lapSamples: LiveSample[];
   laps: LiveLap[];
   lapStartMs: number | null;
+  /** Set by Stop Lap: the start/finish gate does not start a lap until Start Lap is pressed. */
+  gateDisarmed?: boolean;
   sectorStartMs: number | null;
   nextSplitIndex: number;
   currentSectors: number[];
@@ -1098,7 +1102,7 @@ function App() {
     if (isMirror || sessionInfo?.dayId == null) return;
     if (lapSyncTimerRef.current) window.clearTimeout(lapSyncTimerRef.current);
     const dayId = sessionInfo.dayId;
-    const laps = liveState.laps.map((l) => ({ start_time: l.startMs, end_time: l.endMs, notes: l.notes ?? "" }));
+    const laps = liveState.laps.filter((l) => !l.byHand).map((l) => ({ start_time: l.startMs, end_time: l.endMs, notes: l.notes ?? "" }));
     lapSyncTimerRef.current = window.setTimeout(() => {
       void fetch("/api/laps/sync", {
         method: "POST", headers: { "content-type": "application/json" },
@@ -2071,7 +2075,7 @@ function App() {
     if (sessionInfo?.dayId != null) {
       if (lapSyncTimerRef.current) { window.clearTimeout(lapSyncTimerRef.current); lapSyncTimerRef.current = null; }
       const dayId = sessionInfo.dayId;
-      const laps = liveStateRef.current.laps.map((l) => ({ start_time: l.startMs, end_time: l.endMs, notes: l.notes ?? "" }));
+      const laps = liveStateRef.current.laps.filter((l) => !l.byHand).map((l) => ({ start_time: l.startMs, end_time: l.endMs, notes: l.notes ?? "" }));
       void fetch("/api/laps/sync", {
         method: "POST", headers: { "content-type": "application/json" }, keepalive: true,
         body: JSON.stringify({ day_id: dayId, laps }),
@@ -2316,7 +2320,7 @@ function App() {
     if (gpsTrustworthy) {
       const startGate = trackForLive.gates.find((gate) => gate.role === "start_finish");
       const splits = trackForLive.gates.filter((gate) => gate.role === "split");
-      if (startGate && sampleCrossesGate(previous, sample, startGate)) {
+      if (startGate && !current.gateDisarmed && sampleCrossesGate(previous, sample, startGate)) {
         if (lapStartMs && sample.t - lapStartMs > 5000) {
           const durationMs = sample.t - lapStartMs;
           const finalSectorMs = sectorStartMs ? sample.t - sectorStartMs : durationMs;
@@ -2423,6 +2427,7 @@ function App() {
         lapDistanceM: 0,
         lapSamples: [sample],
         deltaMs: 0,
+        gateDisarmed: false,
         status: "Manual lap started.",
       };
       liveStateRef.current = nextState;
@@ -2533,6 +2538,7 @@ function App() {
       lapDistanceM: 0,
       lapSamples: [],
       deltaMs: 0,
+      gateDisarmed: true,
       status: "Lap stopped. Start Lap arms the next run.",
     };
     liveStateRef.current = next;
@@ -2561,6 +2567,7 @@ function App() {
       avgSpeedMps: null,
       samples: [],
       notes: "entered by hand",
+      byHand: true,
     };
     const next: LiveSessionState = { ...current, laps: [...current.laps, lap], status: `${lap.label} entered by hand.` };
     liveStateRef.current = next;
