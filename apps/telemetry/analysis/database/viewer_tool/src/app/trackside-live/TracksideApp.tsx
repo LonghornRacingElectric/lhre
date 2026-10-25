@@ -3073,7 +3073,7 @@ function App() {
             <span className="statusSrc">{sourceLabel}</span>
           </div>
           {/* plain <a>: a full load keeps trackside.css out of the viewer */}
-          <a className="tool" href="/trackside-retro" title="Review an exported session JSON: laps, sectors, corners, cones">
+          <a className="tool" href="/trackside-retro" title="Review a drive day from the database: laps, sectors, corners, cones">
             <History size={14} /> Retro
           </a>
           <button className="tool iconOnly" onClick={() => setShowTour(true)} aria-label="Show guided tour" title="Guided tour">
