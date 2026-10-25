@@ -396,17 +396,15 @@ class MQTTHandler:
         row: the full-frame tables keep their own rate. Values are typed here because the row shares
         a transaction with packet rows, and one bad value would roll the whole batch back.
         '''
-        try:
-            row = json.loads(payload)
-        except ValueError:
-            logging.warning('orion/gps payload is not JSON; dropped')
-            return
         spec = self.table_specs["Orion"]["gps_precise"]
         try:
             row = {k: int(v) if k in ("time", "packet_id", "gps_src") else float(v)
-                   for k, v in row.items() if k in spec and v is not None}
-        except (TypeError, ValueError):
-            logging.warning('orion/gps payload has a non-numeric value; dropped')
+                   for k, v in json.loads(payload).items() if k in spec and k != "id" and v is not None}
+            if not (all(-2**63 <= row.get(k, 0) < 2**63 for k in ("time", "packet_id"))
+                    and -2**15 <= row.get("gps_src", 0) < 2**15):
+                raise ValueError("integer out of column range")
+        except (AttributeError, TypeError, ValueError, OverflowError):
+            logging.warning(f'orion/gps payload is not a JSON object of in-range numbers; dropped: {payload[:200]!r}')
             return
         if "time" not in row:
             logging.warning('orion/gps payload has no time; dropped')

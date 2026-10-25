@@ -396,7 +396,10 @@ class QueryBuilder:
                 QueryBuilder.get_insert_values(table_name, row, model, table_spec)
                 for row in table_rows
             ]
-            
+            # One multi-row insert needs the same keys in every row; get_insert_values drops None/NaN.
+            all_keys = set().union(*processed_rows)
+            processed_rows = [{k: r.get(k) for k in all_keys} for r in processed_rows]
+
             stmt = insert(model.__table__).values(processed_rows)
             session.execute(stmt)
         
