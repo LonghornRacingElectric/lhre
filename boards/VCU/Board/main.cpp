@@ -1,6 +1,4 @@
-#ifndef VCU_MVP_IMAGE
-
-// VCU Rev A startup, shared by the vehicle and test images.
+// VCU Rev A vehicle firmware startup.
 
 #include "main.h"
 
@@ -26,12 +24,8 @@
 #include "task.h"
 #include "tim.h"
 #include "usb_device.h"
-#include "vcu_io.hpp"
-#ifdef VCU_TEST_IMAGE
-#include "vcu_test_app.hpp"
-#else
 #include "vcu_app.hpp"
-#endif
+#include "vcu_io.hpp"
 
 // Defined in the CubeMX-generated USB_Device/App/usb_device.c.
 extern USBD_HandleTypeDef hUsbDeviceFS;
@@ -175,15 +169,9 @@ int main() {
   p.reset_cause = reset_cause;
   p.vrefint_cal = *kVrefintCal;
 
-#ifdef VCU_TEST_IMAGE
-  static vcu::TestApp app(p);
-#else
   static vcu::App app(p);
-#endif
   app.StartTasks();
   vTaskStartScheduler();
 
   Error_Handler();  // the scheduler only returns if it failed to start
 }
-
-#endif  // !VCU_MVP_IMAGE

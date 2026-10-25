@@ -22,8 +22,8 @@ If no serial port matches (device already in DFU mode, e.g. via the BOOT0
 pin), step 1 is skipped and it flashes directly.
 
 For a local build without BuildBuddy credentials, use
-`bazel run --config=local //boards/VCU:dfu_test` for the VCU bring-up image
-(or `:dfu` for the vehicle image). A successful build does not mean a flash
+`bazel run --config=local //boards/VCU:dfu` for the vehicle image.
+A successful build does not mean a flash
 succeeded: the script must also find the ROM DFU device. If it cannot find
 `0483:df11`, it exits before writing flash. For a blank board, enter ROM
 DFU using the board's BOOT0/reset controls and a USB data cable; the running

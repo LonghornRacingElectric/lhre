@@ -16,17 +16,16 @@ The DUI is a plain CAN peripheral this year.
 | Target                    | What                                                    |
 | ------------------------- | ------------------------------------------------------- |
 | `:vcu`                    | Vehicle firmware (`vcu::App`), plus `.elf`/`.hex`/`.bin`. |
-| `:vcu_test`               | Bring-up test image (`vcu::TestApp`, `VCU_TEST_IMAGE`). No vehicle logic, no inverter frames. |
-| `:openocd` / `:openocd_test` | `bazel run`: flash over ST-Link.                      |
-| `:dfu` / `:dfu_test`      | `bazel run`: flash over USB DFU (sends `update.`, then dfu-util). |
+| `:openocd` | `bazel run`: flash over ST-Link.                      |
+| `:dfu`      | `bazel run`: flash over USB DFU (sends `update.`, then dfu-util). |
 | `:vcu_logic_test`         | Pure logic: conversions, plausibility, debounce, shutdown loop, torque, SoE, buzzer. |
 | `:vcu_state_machine_test` | Every row of the state machine's transition table.      |
 | `:vcu_app_test`           | Vehicle app end to end through `Step()` with LHAL fakes. |
-| `:vcu_test_app_test`      | Test image end to end.                                  |
+| `:vcu_test_app_test`      | Host bench harness end to end.                                  |
 | `:vcu_rtos_test`          | Real FreeRTOS tasks under the simulator port.           |
 | `:control_features_test`  | Regen, launch ramp, sampled traction limiter, ADC progress. |
 | `:vcu_sim`                | Scripted drive under the simulator (`bazel run --config=local`). |
-| `:release`                | Both images' elf/bin/hex for CI artifacts.              |
+| `:release`                | Vehicle elf/bin/hex for CI artifacts.              |
 
 ## Layout
 
@@ -43,9 +42,9 @@ The DUI is a plain CAN peripheral this year.
   - `vcu_config.hpp`: every tunable, with per-event sets.
   - `vcu_io.hpp`: the Board/App contract (ADC ranks, pins, `Peripherals`,
     `BoardServices`).
-  - `vcu_app.*`: the vehicle app's tasks. `vcu_test_app.*`: the bring-up
-    image. `vcu_test_bench.hpp`: host fakes plus a scripted car, for tests
-    and the sim.
+  - `vcu_app.*`: the vehicle app's tasks. `vcu_test_app.*`: a host bench
+    harness retained for integration tests. `vcu_test_bench.hpp`: host fakes
+    plus a scripted car, for tests and the sim.
 - `Board/`: hand-written bring-up at ST HAL level.
   - `main.cpp`: reset cause, clocks, safe outputs, the `MX_*_Init` calls,
     LHAL adapters, and the app.
@@ -101,8 +100,8 @@ The DUI is a plain CAN peripheral this year.
   The board-local `vcu::RgbLed` starts white, then a dedicated static
   `vcu::RainbowTask` runs the five-second rainbow continuously at
   33 ms intervals, as last year's shared LED task did. Only this task
-  writes the PWM; BSPD_TRIPPED overrides its color. The test image also
-  cycles continuously; `/led` overrides it and `/led auto` resumes it.
+  writes the PWM; BSPD_TRIPPED overrides its color. The rainbow runs
+  independently of vehicle CAN freshness.
   TIM2 channel order/polarity and the legacy CCR=125 boot brightness /
   CCR<=127 rainbow brightness are preserved. Unlike the old VCU's CAN
   callback, control never repeatedly creates or destroys LED threads.
@@ -158,7 +157,7 @@ The DUI is a plain CAN peripheral this year.
   sends a zero/disabled inverter request and enters ROM DFU independently
   of the control task. The debug VCP accepts the same token via its shell.
   Each console has its own matcher so partial tokens cannot join across
-  ports. Both vehicle and test images support standalone USB flashing.
+  ports. The vehicle image supports standalone USB flashing.
   The board selects flash bank 1 if needed (the old `ota_set_bank1` behavior),
   holds PB7 BOOT0trig high for a measured 50 ms, then resets. USB flashing
   still writes 0x08000000 with `tools/dfu`; no dual-bank OTA implementation
@@ -254,27 +253,34 @@ CAN IDs, layouts, and buses are defined in [lib/spec](../../lib/spec/README.md)
 the 2026 IDs and layouts. New diagnostics (`VCU_ADC_*`, `VCU_DIGITAL_IO`,
 `VCU_DIAG`, `VCU_CALIBRATED_*`) are on the Data bus.
 
-## Bring-up test image
+## Build, flash and check
 
-Flash `:vcu_test` (`bazel run //boards/VCU:openocd_test`), then open the
-VCP or the USB port with `bazel run //tools/monitor`.
+There is one firmware image: `:vcu`. It starts the vehicle app, ADC/DAC,
+both CAN buses, the RTOS tasks, watchdog supervision, both consoles and the
+rainbow. The temporary MVP and bench firmware variants have been removed;
+`vcu_test_app.*` remains as a host integration-test harness.
 
-| Command | Does |
-| --- | --- |
-| `/adc` | Every analog channel: counts, pin mV, sensor/loop mV, calibrated |
-| `/io` | Every digital input and output |
-| `/stream <ms>` | Logs all inputs to the VCP every `ms` (0 = off) |
-| `/cal start`, `/cal stop` | Min/max/mean per channel while sweeping a sensor (pedal calibration → `App/vcu_config.hpp`) |
-| `/out <linelock\|amp\|bms\|imd\|crit_stb\|data_stb> <0\|1>`, `/release` | Drive outputs, or return them all to safe |
-| `/tone <hz> <amp%> <ms>`, `/tone off` | DAC tone through the amp (capped at 1.5 s) |
-| `/led <r%> <g%> <b%>`, `/led auto` | Status RGB |
-| `/wdtest` | Stops feeding the IWDG. Expect outputs safe, then a reset with cause `iwdg`. |
-| `/info` | Reset cause, CAN error counters, bus-off count, drops |
+```bash
+bazel build --config=local //boards/VCU:vcu
+bazel run --config=local //boards/VCU:dfu
+# Or, with an ST-Link attached:
+bazel run --config=local //boards/VCU:openocd
+bazel run --config=local //tools/monitor
+```
 
-Over CAN, the image streams the `VCU_ADC_*`, `VCU_CALIBRATED_*` and
-`VCU_DIGITAL_IO` messages at 100 Hz and `VCU_DIAG` at 10 Hz on the Data
-bus. It also obeys `BENCH_TEST_COMMAND` (outputs, tone, watchdog test) and
-echoes `BENCH_ECHO_REQUEST_CRITICAL`/`_DATA` back on the same bus.
+After a manual BOOT0 flash, return the switch to normal boot and reset.
+Verify `/version` says `VCU`, `/uptime` increases, and `/state`, `/faults`,
+`/io`, `/analog` respond. USB-only operation without the car produces
+missing-feedback/input faults; zero torque and disabled inverter commands
+are expected. The vehicle image sends CAN traffic, including inverter
+commands; use an isolated bench setup before connecting the drivetrain.
+The vehicle shell deliberately has no manual output overrides.
+
+Pedal plausibility, ADC progress, CAN freshness, shutdown-loop checks and
+the watchdog remain enabled. Regen, launch ramp and traction/slip-control
+features remain disabled until commissioning, as documented above; restoring
+the full app does not bypass their unverified limits or enable them.
+The corrected D35 blue/green mapping applies to this image.
 
 ## IOC gaps
 
@@ -350,101 +356,3 @@ ownership and send ordering. Rate gates use longhorn's checked `PeriodMs`.
 `VehicleRx` and `WheelRx` extend the generated VCU Critical/Data subscription
 structs from `:can_rx_vcu`; only vehicle freshness/fault policy stays local.
 Subscriptions come from the existing spec `to_boards` fields.
-
-## Minimal USB/LED image
-
-Use `:vcu_mvp` for first power-on. This leaves the vehicle (`:vcu`) and full
-bench (`:vcu_test`) implementations intact. `Board/mvp_main.cpp` initializes
-only the core clock, GPIO safe levels, TIM2 LED PWM and USB CDC. It does not
-initialize CAN, ADC, DAC, USART3, the watchdog or start the RTOS scheduler.
-`App/mvp.hpp` polls the shared longhorn RGB LED and shell in one loop.
-
-Like the 2026 `longhorn-lib` LED/DFU helpers, the rainbow follows a five-second
-red/green/blue cycle at 33 ms intervals, and recovery recognizes `update.`
-without a newline across USB packets. This image uses the shared LED's 50%
-normalized brightness cap. Board-specific code is limited to pins, startup,
-and the existing BOOT0/bank-1/reset recovery routine. USB receive interrupts
-request recovery; the main loop performs the reset.
-
-```bash
-bazel build --config=local //boards/VCU:vcu_mvp
-bazel run --config=local //boards/VCU:dfu_mvp
-# Or, with an ST-Link attached:
-bazel run --config=local //boards/VCU:openocd_mvp
-bazel run --config=local //tools/monitor
-```
-
-After flashing, return the physical BOOT switch to normal application boot
-and reset. The LED starts white, then rainbows. Over USB, `/version` reports
-`VCU-MVP`; `/help`, `/uptime`, `/dfu` and raw `update.` are supported.
-No car connections or sensors are required. A successfully flashed board
-left with BOOT asserted stays in ROM DFU and cannot run the rainbow.
-
-`bazel test --config=local //boards/VCU:mvp_test` checks the rainbow, shell,
-and both receive-hook and polled DFU paths without hardware. Hardware LED
-pinout, power and USB enumeration still need a bench check.
-
-For a dark or stuck LED, `/led` reports whether the animation is advancing
-(`rainbow_steps`). `/led red`, `/led green`, `/led blue` hold one channel
-at 25% duty for measurement; `/led off` disables all channels and `/led auto`
-resumes the rainbow. `/pwm` reads the real TIM2 counter, enable/polarity bits,
-compare registers and GPIOA mux configuration. Compare those values with
-PA0/PA1/PA2 measurements before diagnosing an LED polarity or assembly issue.
-The schematic drives a common-anode LED: Vdd on the anode side, resistors
-between cathodes and MCU pins; symbol pin names alone do not establish the
-fitted component's orientation.
-
-## Bench sequence after MVP
-
-Use the existing full bench image as the next step; vehicle control remains
-in `:vcu`, and `:vcu_mvp` remains available for recovery/isolation. The bench
-image adds FreeRTOS tasks, ADC DMA, digital I/O, DAC audio, CAN diagnostics
-and watchdog supervision without running vehicle torque/state logic or
-sending inverter commands. Keep traction power and actuators disconnected
-while testing manual outputs.
-
-```bash
-bazel run --config=local //boards/VCU:dfu_test
-bazel run --config=local //tools/monitor
-```
-
-Run these checks in order; stop at the first unexpected result:
-
-1. **Boot and scheduler:** `/version` must say `VCU-TEST`. Run `/uptime`,
-   wait a few seconds, then repeat; it should increase without resetting.
-   `/info` reports the reset cause and CAN counters. Unconnected CAN buses
-   may accumulate errors/dropped TX; this alone is not a failed boot test.
-2. **Color mapping:** `/led 25 0 0`, `/led 0 25 0`, `/led 0 0 25` must show
-   red, green and blue respectively. `/led auto` resumes the rainbow.
-   These percent-based bench commands differ from MVP's named colors.
-3. **Digital inputs:** `/io`; operate the RTD switch and rerun `/io`.
-   `rtd` should follow the pressed state. Exercise other connected switches
-   individually and verify the matching field. Disconnected floating inputs
-   are not meaningful acceptance readings.
-4. **ADC:** `/adc` should show VDDA near the measured 3.3 V rail using
-   VREFINT. Compare each reported pin voltage to a meter. Then connect and
-   sweep one sensor at a time. `/cal start`, sweep, `/cal stop`, `/cal show`
-   capture extrema without modifying the firmware calibration. Raw MCU ADC
-   pins accept only 0–VDDA; connector voltages pass through board dividers.
-5. **Lamp outputs:** `/out bms 0`, `/out bms 1`, then the same for `imd`;
-   verify PE12/PE13 and the attached lamp circuitry. These commands set pin
-   levels; visible lamp polarity depends on the external circuit.
-   `/release` restores safe defaults and the rainbow.
-6. **DAC/audio:** with the amplifier's required supply present, use
-   `/tone 1000 10 200` for a quiet, short 1 kHz tone; it must stop on its
-   own. `/tone off` stops it explicitly. Without amplifier power, scope
-   PA4 to test DAC output only.
-7. **CAN:** connect a second active CAN node with the correct bus voltage,
-   1 Mbit/s bitrate, common reference and end termination. Observe the
-   `VCU_ADC_*`/digital diagnostics on Data and verify Critical/Data bench
-   echo requests independently. `/info` should show successful echoes;
-   error counters should not keep rising on a healthy connected bus.
-8. **Watchdog:** `/wdtest` intentionally forces safe outputs and a reset.
-   Reconnect the console and check `/info` for reset cause `iwdg`.
-9. **USB update:** rerun `:dfu_test` with the application running; it should
-   send `update.`, download successfully and return to `VCU-TEST` after
-   normal boot. Check the download result, not just Bazel's build result.
-
-`/stream` writes through the debug USART3 logger, not the USB console; use
-repeated `/adc` and `/io` for USB-only testing. Leave manual line-lock and
-amp-output overrides until their connected hardware is ready.

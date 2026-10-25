@@ -22,8 +22,8 @@
 
 namespace vcu {
 
-// Bench image: IO, calibration, CAN echo and watchdog tests; no inverter
-// commands.
+// Host bench harness for IO, calibration, CAN echo and watchdog tests.
+// Not selected by the board entry point; no inverter commands.
 class TestApp {
  public:
   static constexpr uint32_t kIoPeriodMs = 10;
