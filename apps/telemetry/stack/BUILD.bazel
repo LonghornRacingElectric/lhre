@@ -33,6 +33,7 @@ py_library(
 exports_files([
     "requirements.txt",
     "requirements_lock.txt",
+    "orion_schema.sh",
     "server_devtool.sh",
     "win_server_devtools.ps1",
 ])
@@ -40,7 +41,11 @@ exports_files([
 sh_test(
     name = "server_devtool_test",
     srcs = ["server_devtool_test.sh"],
-    data = ["server_devtool.sh"],
+    data = [
+        "orion_schema.sh",
+        "server_devtool.sh",
+        "//apps/telemetry/stack/tests:run_integration_test.sh",
+    ],
     target_compatible_with = NOT_WINDOWS,
 )
 

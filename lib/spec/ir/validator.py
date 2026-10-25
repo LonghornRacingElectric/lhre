@@ -320,7 +320,8 @@ def _check_ledgers(spec, report):
     live = {name: {} for name in groups}  # group -> id -> (where, field)
     field_names = {}  # bare field name -> where (rule 2)
 
-    def record(group_name, field, field_id, repeated, array_index, where):
+    def record(group_name, field, field_id, repeated, array_index, where,
+               shared_source=False, source_contract=None, producer=None):
         if group_name not in groups:
             report.error(where, 5, f"unknown telemetry group '{group_name}'")
             return
@@ -330,9 +331,6 @@ def _check_ledgers(spec, report):
         if field_id == 0:
             report.error(where, 1, "telemetry id 0 is not a valid proto field number")
             return
-        # One ledger entry per field name. Repeated fields share one entry
-        # (and one id) across array_index bindings; anything else that
-        # reuses a name or an id is a collision.
         group_live = live[group_name]
         entry = group_live.get(field)
         if entry is None:
@@ -342,15 +340,23 @@ def _check_ledgers(spec, report):
             group_live[field] = {
                 "id": field_id, "repeated": repeated,
                 "indexes": {array_index}, "where": where,
+                "shared_source": shared_source, "source_contract": source_contract,
+                "producers": {producer},
             }
         else:
             if entry["id"] != field_id:
                 report.error(where, 1, f"field '{field}' bound with id {field_id} but {entry['where']} uses id {entry['id']}")
-            if not (entry["repeated"] and repeated):
+            if entry["shared_source"] and shared_source and not repeated:
+                if entry["source_contract"] != source_contract:
+                    report.error(where, 1, f"shared field '{field}' has a different encoding, meaning, unit, or wire type from {entry['where']}")
+                if producer in entry["producers"]:
+                    report.error(where, 1, f"shared field '{field}' is already bound in this message")
+            elif not (entry["repeated"] and repeated):
                 report.error(where, 1, f"field '{field}' already bound by {entry['where']}")
             elif array_index in entry["indexes"]:
                 report.error(where, 1, f"field '{field}' array_index {array_index} already bound by {entry['where']}")
             entry["indexes"].add(array_index)
+            entry["producers"].add(producer)
 
         prior = field_names.setdefault(field, (group_name, where))
         if prior[0] != group_name:
@@ -362,8 +368,19 @@ def _check_ledgers(spec, report):
         where = f"{filename}: {prefix}{signal.name}{suffix}"
         if resolve_tier(message, telemetry) == can_spec_pb2.TIER_UNSPECIFIED:
             report.error(where, 7, "signal does not resolve to a concrete rate tier")
+        if telemetry.shared_source and (telemetry.repeated or bit is not None):
+            report.error(where, 1, "shared_source requires a scalar CAN signal")
+        source_contract = None
+        if telemetry.shared_source and bit is None:
+            encoding = signal.encoding
+            source_contract = (
+                encoding.bit_length, encoding.sign, effective_scale(encoding),
+                encoding.offset, signal.logical.SerializeToString(deterministic=True),
+                telemetry.wire_type,
+            )
         record(telemetry.group, telemetry.field, telemetry.id, telemetry.repeated,
-               telemetry.array_index, where)
+               telemetry.array_index, where, telemetry.shared_source, source_contract,
+               message.name)
 
     for filename, group in spec.groups():
         for field in group.external_field:

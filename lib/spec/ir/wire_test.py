@@ -130,7 +130,15 @@ class ManifestTest(unittest.TestCase):
         self.assertIn("Battery.cell_temps 1 repeated float[8]", text)
         self.assertIn("Battery.cell_count 2 uint32", text)
         self.assertIn("Battery.gateway_temp 3 float", text)
-        self.assertIn("[Battery] next_free_id=4", text)
+        self.assertIn("[Battery] snapshot_id=3 next_free_id=4", text)
+
+    def test_swapping_root_ids_changes_the_manifest(self):
+        spec = self.spec()
+        battery = spec.files["registry.textproto"].groups.group[0]
+        other = spec.files["registry.textproto"].groups.group.add(name="Other", snapshot_id=4)
+        before = wire.manifest(spec)
+        battery.snapshot_id, other.snapshot_id = other.snapshot_id, battery.snapshot_id
+        self.assertNotEqual(before, wire.manifest(spec))
 
     def test_manifest_is_stable(self):
         self.assertEqual(wire.manifest(self.spec()), wire.manifest(self.spec()))

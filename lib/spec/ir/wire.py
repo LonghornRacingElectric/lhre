@@ -140,12 +140,12 @@ HEADER = """# Generated wire contract — DO NOT EDIT.
 # Update with: bazel run //tools/spec:lock
 #
 # One line per telemetry field: <group>.<field> <id> <proto type>, plus
-# each group's tombstones. This is what the gateway publishes and the
-# telemetry server decodes: changing any existing line breaks deployed
-# consumers and archived data, which is why it is committed and reviewed
+# each group's root snapshot id and tombstones. This is what the gateway
+# publishes and the telemetry server decodes: changing an existing line breaks
+# deployed consumers and archived data, so it is committed and reviewed
 # rather than silently regenerated. Types are derived from the spec's
 # encodings unless a deployed field has a compatibility override
-# (lib/spec/wire.py). Encoding edits can still change a non-overridden type.
+# (lib/spec/ir/wire.py). Encoding edits can still change a non-overridden type.
 """
 
 
@@ -162,7 +162,7 @@ def manifest(spec):
     lines = [HEADER]
     for _, group in sorted(spec.groups(), key=lambda g: g[1].name):
         entries = sorted(by_group.get(group.name, []))
-        lines.append(f"[{group.name}] next_free_id={group.next_free_id}")
+        lines.append(f"[{group.name}] snapshot_id={group.snapshot_id} next_free_id={group.next_free_id}")
         for field_id, field, rendered in entries:
             lines.append(f"{group.name}.{field} {field_id} {rendered}")
         for reserved in sorted(group.reserved_ids):

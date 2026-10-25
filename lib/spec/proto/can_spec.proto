@@ -126,6 +126,7 @@ message Telemetry {
   ProtoScalarType wire_type = 7;  // compatibility override for an existing
                                   // deployed protobuf field; new fields derive
                                   // their type from the logical/encoding layers
+  bool shared_source = 8;
 }
 
 enum ProtoScalarType {

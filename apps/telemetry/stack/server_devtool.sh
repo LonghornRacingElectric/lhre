@@ -49,6 +49,7 @@ MIN_FREE_GB="${MIN_FREE_GB:-10}"   # warn / auto-trim build cache below this
 CRIT_FREE_GB="${CRIT_FREE_GB:-5}"  # hard-warn + prompt below this
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/orion_schema.sh"
 DASHBOARD_SOURCE_DIR="$SCRIPT_DIR/../analysis/database/dashboards"
 
 NETWORK="telemetry_network"        # external in every compose file → we own it
@@ -144,7 +145,7 @@ compose_in() {  # compose_in <dir> <args...>
         warn "no docker-compose.(yml|yaml) in $dir — skipping"; return 1
     fi
     if [[ "$(basename "$dir")" == "ingest" ]]; then
-        ensure_orion_schema_path || return 1
+        prepare_orion_schema "$REPO_ROOT" "${1:-}" || return 1
         ( cd "$dir" && $SUDO env "ORION_DB_INIT_SQL=$ORION_DB_INIT_SQL" docker compose "$@" )
         return
     fi
@@ -167,26 +168,6 @@ comp_pm2name() { comp_field "$1" 4; }
 comp_bazel_targets() { comp_field "$1" 5; }
 
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-
-ensure_orion_schema_path() {
-    local generated="$REPO_ROOT/bazel-bin/lib/codegen/telemetry/orion_db_init.sql"
-    if [[ -n "${ORION_DB_INIT_SQL:-}" && "$ORION_DB_INIT_SQL" != "$generated" ]]; then
-        [[ "$ORION_DB_INIT_SQL" == /* && -f "$ORION_DB_INIT_SQL" ]] || {
-            err "Explicit ORION_DB_INIT_SQL must name an existing absolute file: $ORION_DB_INIT_SQL"
-            return 1
-        }
-        export ORION_DB_INIT_SQL
-        return 0
-    fi
-    command -v bazel >/dev/null 2>&1 || {
-        err "bazel is required to resolve the generated Orion database schema"
-        return 1
-    }
-    ( cd "$REPO_ROOT" && bazel build --config=local //apps/telemetry:current_schema_sql ) || return 1
-    [[ -f "$generated" ]] || { err "Bazel did not produce Orion database schema: $generated"; return 1; }
-    ORION_DB_INIT_SQL="$generated"
-    export ORION_DB_INIT_SQL
-}
 
 bazel_load_component() {
     local name="$1" targets target

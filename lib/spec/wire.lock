@@ -2,14 +2,14 @@
 # Update with: bazel run //tools/spec:lock
 #
 # One line per telemetry field: <group>.<field> <id> <proto type>, plus
-# each group's tombstones. This is what the gateway publishes and the
-# telemetry server decodes: changing any existing line breaks deployed
-# consumers and archived data, which is why it is committed and reviewed
+# each group's root snapshot id and tombstones. This is what the gateway
+# publishes and the telemetry server decodes: changing an existing line breaks
+# deployed consumers and archived data, so it is committed and reviewed
 # rather than silently regenerated. Types are derived from the spec's
 # encodings unless a deployed field has a compatibility override
-# (lib/spec/wire.py). Encoding edits can still change a non-overridden type.
+# (lib/spec/ir/wire.py). Encoding edits can still change a non-overridden type.
 
-[BoardStatus] next_free_id=9
+[BoardStatus] snapshot_id=9 next_free_id=9
 BoardStatus.csm_last_seen_s 1 float
 BoardStatus.dui_last_seen_s 2 float
 BoardStatus.hvc_last_seen_s 3 float
@@ -19,7 +19,7 @@ BoardStatus.tsm_last_seen_s 6 float
 BoardStatus.usm_last_seen_s 7 float
 BoardStatus.vcu_last_seen_s 8 float
 
-[Controls] next_free_id=46
+[Controls] snapshot_id=4 next_free_id=46
 Controls.motor_speed 1 float
 Controls.torque_feedback 2 float
 Controls.apps1_travel 3 float
@@ -66,7 +66,7 @@ Controls RESERVED_ID 36
 Controls RESERVED_ID 37
 Controls RESERVED_ID 38
 
-[DiagnosticsHigh] next_free_id=39
+[DiagnosticsHigh] snapshot_id=6 next_free_id=39
 DiagnosticsHigh.prndl_state 1 float
 DiagnosticsHigh.shutdown_current 2 float
 DiagnosticsHigh.hvc_state_machine 3 float
@@ -106,7 +106,7 @@ DiagnosticsHigh.neg_hv_contactor 36 bool
 DiagnosticsHigh.pos_hv_contactor 37 bool
 DiagnosticsHigh.precharge_contactor 38 bool
 
-[DiagnosticsLow] next_free_id=18
+[DiagnosticsLow] snapshot_id=7 next_free_id=18
 DiagnosticsLow.precharge_r_temp 1 float
 DiagnosticsLow.bmb_comm_error 2 bool
 DiagnosticsLow.imd_gnd_isolation_error 3 bool
@@ -125,7 +125,7 @@ DiagnosticsLow.charger_voltage 15 float
 DiagnosticsLow.charger_enabled 16 bool
 DiagnosticsLow.imd_led 17 bool
 
-[Dynamics] next_free_id=36
+[Dynamics] snapshot_id=3 next_free_id=36
 Dynamics.gps 1 repeated float
 Dynamics.gps_imu 2 repeated float
 Dynamics.gps_speed 3 float
@@ -162,7 +162,7 @@ Dynamics.fr_sus_pot_v 33 float
 Dynamics.ride_height 34 float
 Dynamics.wheel_speed 35 float
 
-[Pack] next_free_id=23
+[Pack] snapshot_id=5 next_free_id=23
 Pack.bus_voltage 1 float
 Pack.lv_boards_current 2 float
 Pack.soc_estimate 3 float
@@ -186,7 +186,7 @@ Pack.phase_a_current 20 float
 Pack.phase_b_current 21 float
 Pack.phase_c_current 22 float
 
-[Thermal] next_free_id=39
+[Thermal] snapshot_id=8 next_free_id=39
 Thermal.batt_cooling_current 1 float
 Thermal.motor_cooling_current 2 float
 Thermal.ambient_temp 3 float

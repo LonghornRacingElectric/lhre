@@ -42,11 +42,12 @@ typed spec:
 - Legacy `Quantity` was not an ID-range contract. Only cell voltages (`33`)
   and cell temperatures (`23`) occupy consecutive IDs; firmware-update rows
   are single IDs.
-- Four telemetry names had multiple producers. The canonical bindings are
-  `ambient_temp` from `FAN_FLOW_SPEEDS`, `motor_temp` from
-  `INVERTER_TEMPS_2`, and `motor_speed` plus `torque_feedback` from
-  `INVERTER_SPEED`. The duplicate CAN signals remain in the spec but are
-  bus-only.
+- Ambiguous thermal names use `ambient_temp` from `FAN_FLOW_SPEEDS` and
+  `motor_temp` from `INVERTER_TEMPS_2`; their other CAN signals remain bus-only.
+- Inverter telemetry preserves both legacy producers: `motor_speed` from
+  `INVERTER_STATUS` (`0xA5`) and `INVERTER_SPEED` (`0xB0`), and
+  `torque_feedback` from `INVERTER_TSO` (`0xAC`) and `INVERTER_SPEED`.
+  These explicitly shared bindings keep updating even without `0xB0`.
 - GPS fields have no CAN rows because the gateway populates them from NMEA.
   They remain live `Dynamics` fields in `groups.textproto`, alongside the
   gateway-produced `BoardStatus` fields.
@@ -128,13 +129,30 @@ in `groups.textproto`. Both appear in `wire.lock` and feed the same generators.
 ## wire.lock
 
 `wire.lock` records every telemetry field as `<group>.<field> <id>
-<type>`, plus tombstones. It is generated, committed, and checked by
+<type>`, plus each group's root `snapshot_id` and tombstones. Swapping root
+group numbers changes the lock even if all nested fields stay unchanged.
+It is generated, committed, and checked by
 `//lib/spec:wire_lock_test`, the same way `MODULE.bazel.lock` works.
 Regenerate with `bazel run //tools/spec:lock` and read the diff: those
 lines are what deployed consumers and archived data can see.
 
 The generated `.proto`, runtime `can.json`, and Orion database DDL stay Bazel
 outputs under `//lib/codegen/telemetry` and are never committed.
+
+## Shared scalar sources
+
+Multiple CAN messages may update one scalar snapshot field when every
+producer opts in with `telemetry.shared_source: true`. They must bind the same
+group, field name and protobuf id, with identical raw width/sign, scale,
+offset, logical meaning/unit and compatibility type override. Repeated fields,
+bitfield bits and duplicate producers in one message cannot use this option.
+Unmarked duplicate scalar bindings remain errors.
+
+Each producer gets its own generated JSON mapping; protobuf and SQL still
+declare the field once. The existing gateway uses the latest received value,
+as with the legacy inverter mappings. There is no preferred-source switch,
+timeout fallback or hardcoded CAN-id handling. Add or change shared bindings
+in textproto, then run `fmt`, `lock` and the spec tests as usual.
 
 ## Indexed arrays
 

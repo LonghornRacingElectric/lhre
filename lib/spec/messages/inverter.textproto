@@ -219,6 +219,13 @@ message {
         unit: "rpm"
       }
     }
+    telemetry {
+      group: "Controls"
+      field: "motor_speed"
+      id: 1
+      wire_type: PROTO_FLOAT
+      shared_source: true
+    }
     description: "Motor Speed"
   }
   signal {
@@ -631,6 +638,12 @@ message {
         unit: "Nm"
       }
     }
+    telemetry {
+      group: "Controls"
+      field: "torque_feedback"
+      id: 2
+      shared_source: true
+    }
     description: "torque feedback"
   }
   signal {
@@ -699,6 +712,7 @@ message {
       group: "Controls"
       field: "torque_feedback"
       id: 2
+      shared_source: true
     }
     description: "torque feedback"
   }
@@ -719,6 +733,7 @@ message {
       field: "motor_speed"
       id: 1
       wire_type: PROTO_FLOAT
+      shared_source: true
     }
     description: "Motor Speed"
   }

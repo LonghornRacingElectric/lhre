@@ -18,6 +18,10 @@ Compatibility-only type overrides live beside their telemetry binding in the
 spec and appear in `wire.lock`; new fields use the derived type unless they
 must match an existing deployed field.
 
+Explicit `shared_source` bindings generate multiple CAN-to-field mappings but
+only one protobuf field and SQL column. This preserves the inverter's legacy
+RPM and torque-feedback sources without special cases in BEVO or ingest.
+
 Build all outputs with:
 
 ```bash

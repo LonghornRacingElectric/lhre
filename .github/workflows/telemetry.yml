@@ -92,6 +92,8 @@ jobs:
 
       - name: Stop services
         if: always() && env.HAVE_SECRETS == 'true'
+        env:
+          ORION_DB_INIT_SQL: ${{ github.workspace }}/bazel-bin/lib/codegen/telemetry/orion_db_init.sql
         run: |
           (cd apps/telemetry/stack/ingest && docker compose down -v --remove-orphans) || true
           (cd apps/telemetry/stack/kafka && docker compose down -v --remove-orphans) || true

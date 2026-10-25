@@ -44,6 +44,29 @@ class TelemetryGeneratorTest(unittest.TestCase):
                 self.assertRegex(sql, rf"(?m)^\s+{field}\s+")
         self.assertRegex(sql, r"(?m)^\s+gps\s+real\[\],")
 
+    def test_legacy_inverter_sources_keep_the_same_snapshot_fields(self):
+        messages = {message.name: message for _, message in self.spec.messages()}
+        packets = {packet["packet_id"]: packet for packet in json.loads(gen_telemetry.render_json(self.spec))}
+        proto = gen_telemetry.render_proto(self.spec, "test")
+        for message_name, field in (
+            ("INVERTER_STATUS", "motor_speed"),
+            ("INVERTER_TSO", "torque_feedback"),
+            ("INVERTER_SPEED", "motor_speed"),
+            ("INVERTER_SPEED", "torque_feedback"),
+        ):
+            with self.subTest(message=message_name, field=field):
+                message = messages[message_name]
+                index, signal = next((index, signal) for index, signal in enumerate(message.signal)
+                                     if signal.name == field)
+                self.assertTrue(signal.telemetry.shared_source)
+                self.assertEqual(signal.telemetry.group, "Controls")
+                self.assertEqual(signal.telemetry.field, field)
+                mapping = packets[message.can_id]["bytes"][index]["protobuf"]
+                self.assertEqual(mapping["field"], field)
+                self.assertEqual(mapping["proto_id"], signal.telemetry.id)
+                self.assertEqual(mapping["type"], "float")
+                self.assertEqual(proto.count(f"float {field} = {signal.telemetry.id};"), 1)
+
 
 if __name__ == "__main__":
     unittest.main(argv=[sys.argv[0]])

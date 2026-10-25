@@ -323,7 +323,7 @@ Inverter Status
 | Signal | Start Bit | Bit Length | Byte Order | Value Type | Scale | Offset | Bounds [Min, Max] | Unit | Telemetry Binding | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | `motor_angle` | 0 | 16 | LITTLE_ENDIAN | Physical (signed) | 0.1 | 0.0 | - | deg | `Controls.motor_angle` (#25) | Motor Angle |
-| `motor_speed` | 16 | 16 | LITTLE_ENDIAN | Physical (signed) | 1.0 | 0.0 | - | rpm | *Bus only* | Motor Speed |
+| `motor_speed` | 16 | 16 | LITTLE_ENDIAN | Physical (signed) | 1.0 | 0.0 | - | rpm | `Controls.motor_speed` (#1) | Motor Speed |
 | `inverter_frequency` | 32 | 16 | LITTLE_ENDIAN | Physical (signed) | 0.1 | 0.0 | - | Hz | `Pack.inverter_freq` (#7) | Inverter Frequency |
 | `delta_resolver_angle` | 48 | 16 | LITTLE_ENDIAN | Physical (signed) | 0.1 | 0.0 | - | deg | `Pack.delta_resolver_angle` (#6) | Delta Resolver Angle |
 
@@ -385,7 +385,7 @@ Inverter TSO
 | Signal | Start Bit | Bit Length | Byte Order | Value Type | Scale | Offset | Bounds [Min, Max] | Unit | Telemetry Binding | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | `commanded_torque` | 0 | 16 | LITTLE_ENDIAN | Physical (signed) | 0.1 | 0.0 | - | Nm | `Controls.commanded_torque` (#24) | commanded torque |
-| `torque_feedback` | 16 | 16 | LITTLE_ENDIAN | Physical (signed) | 0.1 | 0.0 | - | Nm | *Bus only* | torque feedback |
+| `torque_feedback` | 16 | 16 | LITTLE_ENDIAN | Physical (signed) | 0.1 | 0.0 | - | Nm | `Controls.torque_feedback` (#2) | torque feedback |
 | `time_since_turned_on` | 32 | 32 | LITTLE_ENDIAN | Physical (unsigned) | 0.003 | 0.0 | - | s | `Pack.time_since_on` (#9) | Time since turned ON |
 
 ### `INVERTER_SPEED` {: #msg-inverter-speed }
