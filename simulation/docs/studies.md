@@ -33,10 +33,6 @@ committed figures. These rules are fixed:
 - A study has no tests of its own. Shared code in `tools/` has its tests in
   `tests/`.
 
-`studies/front-ackermann/` is older than this layout. Its inputs are in
-`run.py` and on its command line, and its README is marked historical. Do
-not copy its layout.
-
 ## study.yml
 
 `study.yml` holds the inputs. It holds no results. The template has these
