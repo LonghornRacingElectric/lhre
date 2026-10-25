@@ -171,15 +171,19 @@ void App::PollUsbConsole() {
   }
   usb_stream_last_ms_ = now;
   const ControlSnapshot s = snapshot();
-  SerialHealth health;
-  health.uptime_ms = p_.clock->Millis();
-  if (p_.critical_can != nullptr) health.critical = p_.critical_can->stats();
-  if (p_.data_can != nullptr) health.data = p_.data_can->stats();
-  health.critical_inbox_drops = critical_inbox_.dropped();
-  health.data_inbox_drops = data_inbox_.dropped();
-  health.control_beats = control_beats_.load();
-  health.telemetry_beats = telemetry_beats_.load();
-  PrintSerialReport(usb_shell_.console(), s, health, p_.reset_cause);
+  if constexpr (kDetailedSerialReport) {
+    SerialHealth health;
+    health.uptime_ms = p_.clock->Millis();
+    if (p_.critical_can != nullptr) health.critical = p_.critical_can->stats();
+    if (p_.data_can != nullptr) health.data = p_.data_can->stats();
+    health.critical_inbox_drops = critical_inbox_.dropped();
+    health.data_inbox_drops = data_inbox_.dropped();
+    health.control_beats = control_beats_.load();
+    health.telemetry_beats = telemetry_beats_.load();
+    PrintSerialReport(usb_shell_.console(), s, health, p_.reset_cause);
+  } else {
+    PrintCompactSerialReport(usb_shell_.console(), s);
+  }
 }
 
 }  // namespace vcu

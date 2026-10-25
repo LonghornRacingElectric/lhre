@@ -23,6 +23,37 @@ void CanRow(longhorn::Console& out, const char* name, const lhal::CanStats& s,
 
 }  // namespace
 
+void PrintCompactSerialReport(longhorn::Console& out,
+                              const ControlSnapshot& s) {
+  const auto& a = s.analog;
+  const auto& i = s.inputs;
+  const auto& o = s.outputs;
+  out.Printf("--- [%lu ms] state=%s ---", static_cast<unsigned long>(s.now_ms),
+             lhre::can::ToString(s.state));
+  out.Printf("ADC count/mV | APPS1=%u/%d APPS2=%u/%d BSE1=%u/%d BSE2=%u/%d",
+             a.apps1.counts, static_cast<int>(a.apps1.pin_v * 1000),
+             a.apps2.counts, static_cast<int>(a.apps2.pin_v * 1000),
+             a.bse1.counts, static_cast<int>(a.bse1.pin_v * 1000),
+             a.bse2.counts, static_cast<int>(a.bse2.pin_v * 1000));
+  out.Printf("ADC count/mV | STEER=%u/%d SD_IN=%u/%d SD_OUT=%u/%d",
+             a.steering.counts, static_cast<int>(a.steering.pin_v * 1000),
+             a.shutdown_in.counts, static_cast<int>(a.shutdown_in.pin_v * 1000),
+             a.shutdown_out.counts,
+             static_cast<int>(a.shutdown_out.pin_v * 1000));
+  out.Printf("ADC reference | VREFINT=%u counts VDDA=%dmV", a.vrefint_counts,
+             static_cast<int>(a.vdda * 1000));
+  out.Printf("GPIO IN | B1disc=%d B1ov=%d B2disc=%d B2ov=%d", i.b1_disconnect,
+             i.b1_overvoltage, i.b2_disconnect, i.b2_overvoltage);
+  out.Printf("        | hard=%d combined=%d confirmed=%d latch=%d",
+             i.hard_braking, i.combined_condition, i.fault_confirmed,
+             i.latch_state);
+  out.Printf("        | LLout=%d motorPwr=%d motorDisc=%d RTD=%d",
+             i.linelock_out, i.motor_power, i.motor_disconnect, i.rtd_pressed);
+  out.Printf("GPIO OUT | LL=%d amp=%d BMS=%d IMD=%d CritSTB=%d DataSTB=%d",
+             o.linelock_ctrl, o.amp_enable, o.bms_led, o.imd_led, o.crit_stb,
+             o.data_stb);
+}
+
 void PrintSerialReport(longhorn::Console& out, const ControlSnapshot& s,
                        const SerialHealth& h, lhal::ResetCause reset) {
   const auto& p = s.pedals;

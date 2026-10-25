@@ -5,6 +5,9 @@
 
 namespace vcu {
 
+// Set true and rebuild to restore the full diagnostic report.
+inline constexpr bool kDetailedSerialReport = false;
+
 struct SerialHealth {
   uint32_t uptime_ms = 0;
   lhal::CanStats critical;
@@ -14,6 +17,8 @@ struct SerialHealth {
   uint32_t control_beats = 0;
   uint32_t telemetry_beats = 0;
 };
+
+void PrintCompactSerialReport(longhorn::Console& out, const ControlSnapshot& s);
 
 void PrintSerialReport(longhorn::Console& out, const ControlSnapshot& s,
                        const SerialHealth& health, lhal::ResetCause reset);
