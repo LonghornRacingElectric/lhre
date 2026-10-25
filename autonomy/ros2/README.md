@@ -941,7 +941,8 @@ to compare vehicle plants and perception conditions across seeds and speeds.
 Motion distortion and solid trackside clutter are opt-in MVS launch settings.
 
 Estimator error columns (`mean_pos_error`, `max_pos_error`, `mean_yaw_error`)
-exclude the READY hold and stay blank without a truth topic. Course validity
+compare each estimate with truth at the same stamp, exclude the READY hold and
+stay blank without a truth topic. Course validity
 checks a conservative YAML vehicle envelope against truth boundaries and nominal
 cone bases, including a padded translation/yaw sweep between continuous samples.
 Rows include `course_sha256`, `footprint_model`, `sweep_step_m`, `cones_hit` and
