@@ -10,7 +10,7 @@ table of passes and failures rather than a judgment call.
 
 | File | What it does |
 |---|---|
-| `run_gate.sh` | Runs the matrix: autocross seeds 1 to 5 three times each and acceleration three times on the no-shortcuts stack, plus one truth-stack baseline per seed. One headless launch per run, recorded to a bag |
+| `run_gate.sh` | Runs the matrix: autocross seeds 1 to 5 three times each, acceleration three times and skidpad three times on the no-shortcuts stack, plus one truth-stack baseline per autocross seed. One headless launch per run, recorded to a bag |
 | `score_gate.py` | Reads every run folder and writes `results.csv` (one row per run) and `summary.md` (the pass/fail table). Rerunnable, it only reads |
 
 Every gate run is `perception:=lidar estimator:=ekf safety:=true` with launch
@@ -18,7 +18,17 @@ defaults, which is the stack the pass criteria define. The baselines are
 `perception:=sim estimator:=truth`, the reference for the lap time check.
 A run ends `SETTLE_S` seconds after the mission reaches `FINISHED` or
 `EMERGENCY`, so the bag holds the stop, or at `RUN_S` wall seconds.
-Skidpad is not in the matrix yet: it has no track style on main.
+Skidpad joins the matrix on its own once
+`lhr_gazebo/worlds/skidpad_seed1.sdf` is in the tree
+([#114](https://github.com/LonghornRacingElectric/lhre/issues/114)). Until
+then the runner writes it to `waived.txt` and the summary names it as
+waived, as the pass criteria allow, instead of failing three missing runs.
+Skidpad scores like acceleration, so the skidpad work has to meet the same
+contract: `track_style:=skidpad` runs the mission, the mission manager
+publishes `/lhr/mission/complete` when the car crosses the exit line (not
+once it has stopped, or the stop distance reads zero), and metrics reports
+`mission_finished` against the skidpad reference. Metrics has no skidpad
+reference yet, so skidpad runs fail `completes` until it does.
 
 ## Running
 
@@ -30,13 +40,14 @@ container:
 ```
 
 Environment variables pick the matrix: `SEEDS` (`1 2 3 4 5`), `REPEATS` (3),
-`ACCEL_REPEATS` (3, empty or 0 for none), `BASELINE` (1, 0 to skip the
+`ACCEL_REPEATS` and `SKIDPAD_REPEATS` (3 each, empty or 0 for none),
+`BASELINE` (1, 0 to skip the
 truth-stack runs), `RUN_S` (180), `SETTLE_S` (3), `OUT` and `EXTRA` (more
-launch arguments). The full matrix is 23 runs, about an hour on the Mac
-container. A quick check:
+launch arguments). The full matrix without skidpad is 23 runs, about 20
+minutes on the Mac container. A quick check:
 
 ```bash
-SEEDS=1 REPEATS=1 ACCEL_REPEATS=1 ../testing/tools/gate/run_gate.sh
+SEEDS=1 REPEATS=1 ACCEL_REPEATS=1 SKIDPAD_REPEATS=1 ../testing/tools/gate/run_gate.sh
 ```
 
 On a CPU-rendered machine (the Mac container) Gazebo drops LiDAR frames, so
@@ -63,18 +74,18 @@ Each gate run gets a pass or fail per check:
 
 | Check | Pass when | Source |
 |---|---|---|
-| `completes` | metrics `outcome` is `lap` (autocross) or `mission_finished` (acceleration) | metrics |
-| `stops` | standstill within 30 m (autocross) or 75 m (acceleration) of the finish, mission `FINISHED`, and the car never rolls above 0.5 m/s again | bag |
+| `completes` | metrics `outcome` is `lap` (autocross) or `mission_finished` (acceleration, skidpad) | metrics |
+| `stops` | standstill within 30 m (autocross), 75 m (acceleration) or 25 m (skidpad) of the finish, mission `FINISHED`, and the car never rolls above 0.5 m/s again | bag |
 | `off_course` | `off_track_count` is 0 | metrics (#156) |
 | `cones` | `cones_hit` is 0 | metrics (#156) |
 | `cte` | `max_cte` at most 1.0 m | metrics |
 | `ekf` | `max_pos_error` at most 0.5 m | metrics |
-| `lap_time` | at most 1.5 times the same seed's baseline; always passes for acceleration | metrics |
+| `lap_time` | at most 1.5 times the same seed's baseline; always passes for acceleration and skidpad | metrics |
 | `health` | no node other than metrics dies or exits before teardown, and no `EMERGENCY` | launch log, bag |
 
 The finish is the reference gate for autocross (`/lhr/metrics/lap_complete`)
-and the mission's own completion for acceleration (`/lhr/mission/complete`,
-the nose on the line). Stop distances are optimistic until the regen and
+and the mission's own completion for acceleration and skidpad
+(`/lhr/mission/complete`, the car on the finish line). Stop distances are optimistic until the regen and
 spring-brake model lands
 ([#116](https://github.com/LonghornRacingElectric/lhre/issues/116)): the sim
 stops the wheels outright.
