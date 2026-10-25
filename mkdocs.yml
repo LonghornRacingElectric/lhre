@@ -84,6 +84,7 @@ nav:
       - Testing:
           - Overview: autonomy/testing/README.md
           - Mid-360 Acceptance 2026-10-04: autonomy/testing/2026-10-04-mid360-acceptance/README.md
+          - MVP Gate 2026-10-28: autonomy/testing/2026-10-28-mvp-gate/README.md
           - Livox Test Tools: autonomy/testing/tools/livox/README.md
           - Fault Injection Tools: autonomy/testing/tools/fault_injection/README.md
           - MVP Gate Tools: autonomy/testing/tools/gate/README.md
