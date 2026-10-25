@@ -143,6 +143,8 @@ The lock also records root group numbers and enum mappings/tombstones.
 reservations. CI compares the PR-base lock with the current lock using
 `//tools/spec:check_wire_compat`; changing a deployed number, type or known
 array layout requires a new field rather than editing the old entry.
+The compatibility checker reads `snapshot_id` from group headers as well as
+explicit `Root` entries, including when the PR-base lock only has headers.
 
 External snapshot fields declare `unit` and, for arrays, ordered
 `element_names`. GPS is latitude/longitude in degrees; GPS IMU has x/y/z

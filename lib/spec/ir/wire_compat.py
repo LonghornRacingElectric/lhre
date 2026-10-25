@@ -6,12 +6,22 @@ from pathlib import Path
 
 def parse_lock(contents):
     fields, reserved_ids, reserved_names, high_water = {}, set(), set(), {}
+
+    def record_field(key, value):
+        if key in fields and fields[key] != value:
+            raise ValueError(f"conflicting wire lock entries for {key[0]}.{key[1]}")
+        fields[key] = value
+
     for line in contents.splitlines():
         if not line or line.startswith("#"):
             continue
         if line.startswith("["):
-            if "next_free_id=" in line:
-                high_water[line.split("]")[0][1:]] = int(line.split("=")[1])
+            section, metadata = line[1:].split("]", 1)
+            attributes = dict(item.split("=", 1) for item in metadata.split())
+            if "next_free_id" in attributes:
+                high_water[section] = int(attributes["next_free_id"])
+            if "snapshot_id" in attributes:
+                record_field(("Root", section), (int(attributes["snapshot_id"]), f"message {section}"))
             continue
         parts = line.split()
         if len(parts) < 3:
@@ -22,7 +32,7 @@ def parse_lock(contents):
             reserved_names.add((parts[0], parts[2]))
         else:
             group, name = parts[0].rsplit(".", 1)
-            fields[(group, name)] = (int(parts[1]), " ".join(parts[2:]))
+            record_field((group, name), (int(parts[1]), " ".join(parts[2:])))
     return fields, reserved_ids, reserved_names, high_water
 
 

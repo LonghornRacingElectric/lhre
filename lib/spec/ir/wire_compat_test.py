@@ -1,9 +1,21 @@
 import unittest
 
-from lib.spec.ir.wire_compat import compatibility_errors
+from lib.spec.ir.wire_compat import compatibility_errors, parse_lock
 
 
 class WireCompatTest(unittest.TestCase):
+    def test_root_metadata_in_group_headers_is_part_of_the_contract(self):
+        for attributes in ("snapshot_id=3 next_free_id=2", "next_free_id=2 snapshot_id=3"):
+            with self.subTest(attributes=attributes):
+                baseline = f"[Vehicle] {attributes}\nVehicle.speed 1 float\n"
+                fields, _, _, high_water = parse_lock(baseline)
+                self.assertEqual(fields[("Root", "Vehicle")], (3, "message Vehicle"))
+                self.assertEqual(high_water, {"Vehicle": 2})
+                self.assertEqual(compatibility_errors(baseline, "Root.Vehicle 3 message Vehicle\n" + baseline), [])
+                self.assertTrue(compatibility_errors(baseline, baseline.replace("snapshot_id=3", "snapshot_id=4")))
+                with self.assertRaisesRegex(ValueError, "conflicting wire lock entries"):
+                    parse_lock("Root.Vehicle 4 message Vehicle\n" + baseline)
+
     def test_append_and_proper_deletion(self):
         baseline = "[Controls] next_free_id=2\nControls.enabled 1 bool\n"
         self.assertEqual(compatibility_errors(baseline, baseline + "Controls.new 2 float\n"), [])
