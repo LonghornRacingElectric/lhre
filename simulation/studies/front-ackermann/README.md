@@ -249,7 +249,7 @@ Before a full run: `make study S=front-ackermann ARGS="--quick" V=smoke`.
 | Static toe and camber, aero | 0, 0, none | assumption |
 | Track, power limit | Michigan 2019 endurance, 32 kW | BobSim lap config |
 
-`study.yml` holds the inputs and the source of each car and geometry value. The static camber and toe come from `vehicle.yml`. A variant is a copy of `study.yml` passed with `ARGS="--config <file>"`. `out/front-ackermann/vehicle_front.yml` holds the front geometry only. `summary.json` `effective_inputs` holds every value the run used. BobSim interfaces: public `solve_qss_lap`, `GGVMap.from_arrays`, `optimize_racing_line`, `CornerKinematics`, `project_vehicle_yaml` and the loaders, plus private `_mf52_fx_pure` and `_mf52_fy_pure` from `app.tire_eval` (see the [bobsim-boundary skill](../../docs/skills/bobsim-boundary/SKILL.md)).
+`study.yml` holds the inputs and the source of each car and geometry value. The static camber and toe come from `vehicle.yml`. A variant is a copy of `study.yml` passed with `ARGS="--config <file>"`. In a curve list, `$design` is `front_geometry.name`. The report racks always include `rack_travel_mm`. `out/front-ackermann/vehicle_front.yml` holds the front geometry only. `summary.json` `effective_inputs` holds every value the run used. BobSim interfaces: public `solve_qss_lap`, `GGVMap.from_arrays`, `optimize_racing_line`, `CornerKinematics`, `project_vehicle_yaml` and the loaders, plus private `_mf52_fx_pure` and `_mf52_fy_pure` from `app.tire_eval` (see the [bobsim-boundary skill](../../docs/skills/bobsim-boundary/SKILL.md)).
 
 ## Provenance
 

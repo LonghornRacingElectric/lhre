@@ -78,18 +78,22 @@ def load_inputs(path, vehicle, quick=False):
     quick_sweep = value(study["quick"]) if quick else {}
     if set(quick_sweep) - set(sweep):
         raise SystemExit(f"{path}: quick names inputs that the sweep does not have: {sorted(set(quick_sweep) - set(sweep))}")
+    sweep = {**sweep, **quick_sweep}
+    sweep.update({k: tuple(front["name"] if c == "$design" else c for c in v) for k, v in sweep.items() if k.endswith("_curves")})
+    rack_travel_mm = value(front["rack_travel_mm"])
     wheels = [vehicle[axle]["wheel"] for axle in ("front", "rear")]
     camber, toe = {float(w["camber_deg"]) for w in wheels}, {float(w["toe_deg"]) for w in wheels}
     if len(camber) != 1 or toe != {0.0}:
         raise SystemExit("The trim model takes one static camber on all four wheels and no static toe.")
     speeds = method.pop("qss_speeds_mps")
     method["rack_mm"], method["fx_max_fz_n"] = grid(method.pop("rack_grid_mm")), grid(method.pop("fx_max_fz_grid_n"))
+    method["report_rack_mm"] = tuple(sorted({*method["report_rack_mm"], rack_travel_mm}))
     return Inputs(
-        **{**sweep, **quick_sweep}, **value(study["policy"]), **value(study["rules"]), **method,
+        **sweep, **value(study["policy"]), **value(study["rules"]), **method,
         question=study["question"], bundle=study["bundle"], lap_config=study["lap_config"], design=front["name"],
         front_m={k: [c / 1000.0 for c in v] for k, v in value(front["hardpoints_mm"]).items()},
         rack_pickup_m=[c / 1000.0 for c in value(front["rack_pickup_mm"])],
-        rack_travel_mm=value(front["rack_travel_mm"]),
+        rack_travel_mm=rack_travel_mm,
         team_2027={
             "mass": (car["car_mass_lb"] + car["driver_mass_lb"]) * LB_TO_KG,
             "cg_height": car["cg_height_in"] * IN_TO_M, "front_static_frac": car["front_static_frac"],
