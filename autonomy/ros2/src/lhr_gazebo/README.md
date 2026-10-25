@@ -45,6 +45,22 @@ This replaces the default VLP-16 grid, including `lidar_source:=gazebo`;
 the detector implementation and thresholds are retained, but its input changes.
 Select the caster below for imported Livox scan directions.
 
+### Open validation follow-ups
+
+**PR133-GPU-SEED2 remains open.** The replacement GPU grid contacted
+`cone_blue_10` in two isolated autocross seed-2 runs; the previous main GPU
+model and the vendor-pattern caster passed that same world. The GPU grid is
+retained in PR #133 by scope decision, and its driving regression is deferred.
+This is a failed whole-vehicle/cone-base scoring check, not a passing acceptance
+result or a measured collision force. Planner and detector defaults are not
+retuned here. See the [reproduction, comparison and closure checklist](../../../testing/2026-10-24-pr133-integration/README.md#pr133-gpu-seed2-open-deferred).
+
+The unchanged 0.3 s LiDAR timeout also tripped `LIDAR_STALE` with both main
+and PR GPU models on the test laptop. GPU runs using
+`safety_lidar_timeout_s:=1.5` are diagnostics and do not pass the default-timeout
+gate. Track frame-delivery failures with [#123](https://github.com/LonghornRacingElectric/lhre/issues/123)
+and the [validation record](../../../testing/2026-10-24-pr133-integration/README.md).
+
 ### Range noise
 
 The GPU LiDAR applies independent, zero-mean Gaussian noise along each beam

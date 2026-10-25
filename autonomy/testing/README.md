@@ -19,7 +19,17 @@ testing/
 | -------- | -------- | ------ | ---- |
 | [2026-10-04 Mid-360 acceptance](2026-10-04-mid360-acceptance/README.md) | Is the donated, dropped Livox Mid-360 good enough for the car, and how far does it see a cone? | Car sensor, provisional: endurance and connector checks not run | [SharePoint](https://utexas.sharepoint.com/sites/ENGR-LonghornRacing/LHR%20Electric/Design/_VMS_/Autonomous/Test%20Data/2026-10-04-mid360-acceptance) |
 
-## Rules
+## Simulator validation
+
+These runs use simulated sensors and vehicle geometry, not physical hardware
+acceptance. Their failed checks remain visible even when a change retains its
+scope and defers the repair.
+
+| Campaign | Question | Status |
+| --- | --- | --- |
+| [2026-10-24 PR #133 integration](2026-10-24-pr133-integration/README.md) | Does the source integration preserve launch/fault behavior and drive under current scoring? | **Open:** replacement GPU seed-2 cone contact; default GPU LiDAR timeout fails on the test laptop |
+
+## Data and reporting rules
 
 - **Raw data is never committed.** Recordings run 50 to 100 MB per minute.
   Upload each campaign's whole data folder (recordings, ROS 2 bags, health
