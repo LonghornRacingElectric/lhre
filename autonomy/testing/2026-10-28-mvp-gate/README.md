@@ -60,6 +60,7 @@ block the gate. They mean the EKF has an easier job here than on the car.
 | --- | --- | --- | --- | --- |
 | 1 | 10/24 | `main` + #132 + #161, Mac container | 16 of 18, then 17 of 18 on repeat | [#164](https://github.com/LonghornRacingElectric/lhre/issues/164): safety tripped on a stale stream in READY at startup, 2 of 20 starts. [#165](https://github.com/LonghornRacingElectric/lhre/issues/165): metrics compared each estimate with the latest truth rather than truth at its stamp, reporting 0.59 m for a real 0.18 m. [#166](https://github.com/LonghornRacingElectric/lhre/issues/166), found while fixing #164: pursuit could move before the mission manager's first status |
 | 2 | 10/24 | `main` f2fea986 (#163, #167, #168), Mac container | 18 of 18, no reruns, no safety trips | Nothing new. The 23 runs took 20 minutes |
+| 3 | 10/24 | `main` 0d1ca009 (#160: no ZED rendering with stereo off), Mac container | 18 of 18, no reruns, no safety trips | Nothing new. LiDAR on the Mac went from about 6.3 to 7.7 Hz |
 
 Fixes: #167 holds READY until the safety heartbeat is steady and keeps
 pursuit stopped until DRIVING (#164, #166). #168 scores the estimate
