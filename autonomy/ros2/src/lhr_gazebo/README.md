@@ -55,15 +55,15 @@ the caster passes seeds 1–3 and acceleration. PR #133 now preserves main's
 GPU sampling geometry; the underlying observation failure remains undiagnosed.
 The historical failures use whole-vehicle/cone-base scoring, not measured
 collision forces. Planner and detector defaults are retained. The local
-rollback passes focused seed-2 and seed-3 driving checks with the diagnostic
-timeout; see the [rollback results and retained failures](../../../testing/2026-10-24-pr133-integration/README.md#local-gpu-rollback-checks-2026-10-25).
+integrated rollback passes focused seed-2 and seed-3 driving checks with the
+diagnostic timeout; see the [integration results and retained failures](../../../testing/2026-10-24-pr133-integration/README.md#integrated-main-verification-2026-10-25).
 
-Before integrating main `0ab0357`, the unchanged 0.3 s LiDAR timeout tripped
-`LIDAR_STALE` on the rollback tree before driving, with a 0.4 s acquisition
-gap. GPU runs using
+The unchanged 0.3 s LiDAR timeout still trips `LIDAR_STALE` locally on both
+the integrated rollback and clean main `0ab0357`, with 0.4–0.5 s acquisition
+gaps. GPU runs using
 `safety_lidar_timeout_s:=1.5` are diagnostics and do not pass the default-timeout
 gate. The integrated tree retains main's camera-free default model and
-startup-readiness gating; the earlier failures do not characterize it. See
+startup-readiness gating; the remaining local delivery cause is not established. See
 [#123](https://github.com/LonghornRacingElectric/lhre/issues/123) and the
 [validation record](../../../testing/2026-10-24-pr133-integration/README.md).
 
@@ -182,6 +182,13 @@ Connect to `ws://localhost:8767` and import `autonomy/ros2/foxglove/lhr_sim.json
 The viewer includes primitive car markers; no mesh server is needed.
 `/lhr/track/cones` is absent in LiDAR mode. Foxglove works in either perception
 mode and defaults to `foxglove:=false foxglove_port:=8765`.
+
+Custom WebSocket clients should offer `foxglove.sdk.v1` as well as the legacy
+`foxglove.websocket.v1`. The installed SDK-based bridge accepted the former
+and streamed PointCloud2; a legacy-only probe received HTTP 400. The
+[upstream handshake](https://github.com/foxglove/foxglove-sdk/blob/main/rust/foxglove/src/websocket/handshake.rs)
+rejects clients without a supported subprotocol. This protocol check does not
+verify the graphical layout.
 
 `mid360` requires `perception:=lidar`. The caster reads the resolved SDF and
 Gazebo truth pose; perception still receives estimated odometry under EKF.

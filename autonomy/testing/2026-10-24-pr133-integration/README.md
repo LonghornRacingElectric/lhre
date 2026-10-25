@@ -1,15 +1,77 @@
 # PR #133 integration validation
 
-The source integration and review fixes passed their unit/startup checks, but
-the replacement default GPU grid had a reproducible driving regression.
-On 2026-10-25, the user chose to remove that grid from PR #133 and defer
-vendor-pattern GPU sampling to a separate experiment. The local rollback
-restores main's 1800 × 16 grid, ±15° vertical coverage and 0.9–100 m range,
-including its 0.003 m range resolution, while retaining configurable noise.
-The local rollback checks below are separate from the historical tables.
-**PR133-GPU-SEED2 retains the failed-grid evidence; its cause is not
-established.** A longer diagnostic timeout does not erase a failed default
-freshness check.
+The current candidate integrates main through `44aceaf`, retains the default
+1800 × 16 GPU grid and adds opt-in vendor-pattern casting and Foxglove. The
+experimental 500 × 40 GPU grid was reverted after reproducible cone contacts;
+hybrid GPU/pattern sampling remains separate work. **PR133-GPU-SEED2 retains
+the failed-grid evidence; its rendered-observation cause is not established.**
+
+## Integrated-main verification (2026-10-25)
+
+Implementation `1e9ffdc` includes main `0ab0357` and the GPU rollback. All 15
+ROS packages build, and **760 workspace checks pass with zero errors, failures
+or skips**. This includes 225 Gazebo checks, dual-model generation, stereo
+resource selection and cleanup, readiness/heartbeat gating, typed source/fault
+wiring, world preflight, culling equivalence and duplicate-TF protection.
+The unmodified BobSim tests completed in 487.74 s; earlier capped attempts
+below are retained as incomplete, not evidence of a demonstrated solver defect.
+
+Main subsequently advanced to `44aceaf` with a simulation-wrapper argument
+guard. That commit is merged in `3dee866`; it changes no ROS code, tests,
+models or vehicle parameters. The final ROS implementation matches the tested
+`1e9ffdc` apart from documentation. Both SDF variants pass `gz sdf -k` and
+generator freshness checks. Strict MkDocs and whitespace checks pass.
+
+The merge preserves main's camera-free default model and opt-in stereo
+overlay, plus pursuit/mission readiness gating. It retains the PR's clean
+caster odometry, source-specific fault routing, TF guard and scoped GUI/cache
+settings. Detector, planner and controller defaults are not retuned.
+
+| Source / check | LiDAR timeout | Result | Lap time | Max CTE | Cone contacts | Stop after finish |
+| --- | ---: | --- | ---: | ---: | ---: | ---: |
+| GPU / seed 2 | 1.5 s | Diagnostic pass | 33.8015 s | 0.2540 m | 0 | 1.38 m |
+| GPU / seed 3 | 1.5 s | Diagnostic pass | 33.7160 s | 0.2327 m | 0 | 1.44 m |
+| Caster / EKF seed 2, SDK viewer | 0.3 s | Pass | 33.8086 s | 0.2490 m | 0 | 1.39 m |
+
+These runs had zero off-track distance, no safety trips or unexpected node
+exits, observed detections/path/motion, and `FINISHED` with zero final speed
+and speed command. Launch and the expected driving nodes remained alive
+before cleanup. Cloud and caster mount-TF stamps did not repeat.
+
+The moving caster/truth `odom_nan` check caught `EKF_DIVERGED` at an actual
+5.03 m/s, with 0.031 s trip latency. It stopped in 2.07 m against the 3.27 m
+formula bound and ended with zero speed and command. The caster retained
+379 sampled above-ground returns after injection, supporting clean-pose
+isolation. Its metrics row is an invalid lap after the intentional fault;
+it is a fault-response pass, not a successful circuit.
+
+**Default GPU freshness still fails locally.** With the unchanged 0.3 s
+timeout, the integrated PR tripped `LIDAR_STALE` on seed 2 both during the
+workspace-test load and in an isolated repeat, with maximum acquisition gaps
+of 0.4 and 0.5 s. A clean `0ab0357` main checkout also tripped on the identical
+world, with a 0.4 s gap. All three ended stopped. Main's camera fix is included;
+these bounded observations do not establish the remaining delivery cause.
+The 1.5 s GPU runs remain diagnostic and do not pass default-timeout acceptance.
+
+Foxglove bridge package `3.6.0-1noble.20260930.003057` negotiated
+`foxglove.sdk.v1`, advertised `sensor_msgs/msg/PointCloud2` on
+`/lhr/lidar/points`, and delivered a 31,749-byte binary message to a subscribed
+client. The first caster/viewer attempt completed its circuit, but its
+legacy-only client received HTTP 400. That attempt is retained separately;
+the SDK-compatible repeat passed. Graphical layout verification remains open.
+
+`integrated-checks.csv` records all eight simulation attempts, including the
+main comparison and protocol rejection. Raw commands, hashes, exact dirty
+patches, probe sources, metrics, timing, trajectories and logs remain under
+`/tmp/lhre-pr133-acceptance/integrated_20261025_*`. Completed workspace XML is
+under `/tmp/lhre-pr133-publication/workspace-validation`. Only the initial GPU
+and caster/viewer runs overlapped the native workspace tests; later checks
+and the main comparison had no competing test workload. Runs used unique
+Gazebo partitions, a single-run lock and one simulation at a time.
+
+This is focused integration verification, not the full MVP acceptance matrix
+or a physical sensor/braking validation. No full fault campaign or raw-cloud
+bag capture is claimed. Local raw data is volatile and has not been uploaded.
 
 ## Local GPU rollback checks (2026-10-25)
 
@@ -251,4 +313,5 @@ has not been established. No safety thresholds were loosened for either
 startup failure. `focused-checks.csv` records both attempts and both drop checks;
 `partial-fault-matrix.csv` preserves the earlier 16 scored rows.
 
-Current-tree Gazebo/RViz/Foxglove visuals still need user verification.
+Gazebo/RViz/Foxglove graphical layouts still need user verification. The
+integrated SDK handshake and selected-cloud transport are verified above.
