@@ -41,6 +41,7 @@ export function axisY(g: CanvasRenderingContext2D, pal: Palette, w: number, h: n
 
 export interface BarOpts {
   n: number;
+  labels?: string[];
   series: { col: Col; vals: number[] }[];
   hline?: { v: number; label: string };
   fmt?: (v: number) => string;
@@ -57,7 +58,7 @@ export function barChart(canvas: HTMLCanvasElement, o: BarOpts) {
   const pw = w - pl - pr;
   const up = Array(o.n).fill(0) as number[];
   const dn = Array(o.n).fill(0) as number[];
-  o.series.forEach((s) => s.vals.forEach((v, i) => { if (v >= 0) up[i] += v; else dn[i] += v; }));
+  o.series.forEach((s) => s.vals.forEach((v, i) => { if (!Number.isFinite(v)) return; if (v >= 0) up[i] += v; else dn[i] += v; }));
   let hi = Math.max(...up, o.hline ? o.hline.v : 0);
   let lo = Math.min(...dn, 0);
   const nt = nice(lo, hi * 1.04, 4);
@@ -72,6 +73,7 @@ export function barChart(canvas: HTMLCanvasElement, o: BarOpts) {
     let d = 0;
     o.series.forEach((s) => {
       const v = s.vals[i];
+      if (!Number.isFinite(v)) return;
       let y0: number, y1: number;
       if (v >= 0) { y0 = py(u); y1 = py(u + v); u += v; } else { y0 = py(d); y1 = py(d + v); d += v; }
       g.fillStyle = pal[s.col] as string;
@@ -113,7 +115,7 @@ export function barChart(canvas: HTMLCanvasElement, o: BarOpts) {
   g.textAlign = "center";
   g.textBaseline = "alphabetic";
   const every = slot < 20 ? 2 : 1;
-  for (let i = 0; i < o.n; i++) if (i % every === 0) g.fillText(String(i + 1), pl + i * slot + slot / 2, h - 6);
+  for (let i = 0; i < o.n; i++) if (i % every === 0) g.fillText(o.labels?.[i] ?? String(i + 1), pl + i * slot + slot / 2, h - 6, Math.max(10, slot - 4));
   chartGeo.set(canvas, { pl, pw, slot, n: o.n });
 }
 
@@ -160,7 +162,7 @@ export function lineTime(p: Player, canvas: HTMLCanvasElement, o: { series: Line
   runs.forEach((l, i) => {
     if (i % 5 === 0) {
       const x = px((l.t0 - Tl0) / 1000);
-      g.fillText("L" + (i + 1), x, h - 6);
+      g.fillText(l.name, x, h - 6);
       g.strokeStyle = pal.line;
       g.beginPath();
       g.moveTo(x, pt);

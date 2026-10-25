@@ -24,7 +24,8 @@ export class Geo {
         ];
       }
     }
-    return [ref[0][0], ref[0][1], 0];
+    const end = this.open ? ref.length - 1 : 0;
+    return [ref[end][0], ref[end][1], 0];
   }
 
   /** Points along the loop from arc length a, len metres on. Wraps past the start. */
@@ -114,7 +115,7 @@ export type RoadPt = [number, number, number, number];
 
 const roadCache = new WeakMap<Lap, RoadPt[]>();
 
-/** The road drawn for the base overlay: one clean, closed loop with the off-track lead-in and tail trimmed. */
+/** Measured overlay path. Manual cuts and open courses must not be closed by an invented chord. */
 export function roadOf(L: Lap): RoadPt[] {
   const hit = roadCache.get(L);
   if (hit) return hit;
@@ -124,19 +125,39 @@ export function roadOf(L: Lap): RoadPt[] {
   while (a < b && p[a][4] > 2.2) a++;
   while (b > a && p[b][4] > 2.2) b--;
   const r = p.slice(a, b + 1);
-  const closed = L.kind !== "partial" && r.length > 3;
   const n = r.length;
-  const g = (k: number) => (closed ? r[((k % n) + n) % n] : r[Math.max(0, Math.min(n - 1, k))]);
+  const g = (k: number) => r[Math.max(0, Math.min(n - 1, k))];
   const dense: RoadPt[] = [];
-  for (let k = 0; k < (closed ? n : n - 1); k++) {
+  for (let k = 0; k < n - 1; k++) {
     for (let s = 0; s < 4; s++) {
       const q = cr(g(k - 1), g(k), g(k + 1), g(k + 2), s / 4);
       dense.push([q[0], q[1], 0, r[k][3]]);
     }
   }
-  dense.push(closed ? dense[0] : [r[n - 1][0], r[n - 1][1], 0, r[n - 1][3]]);
+  dense.push([r[n - 1][0], r[n - 1][1], 0, r[n - 1][3]]);
   roadCache.set(L, dense);
   return dense;
+}
+
+const joinCache = new WeakMap<Geo, WeakMap<Lap, { points: XY[]; distance: number } | null>>();
+
+/** A visibly untimed join along the known layout, only for a small gap in a completed loop lap. */
+export function lapCutJoin(L: Lap, geo: Geo): { points: XY[]; distance: number } | null {
+  const cache = joinCache.get(geo) ?? new WeakMap<Lap, { points: XY[]; distance: number } | null>();
+  joinCache.set(geo, cache);
+  if (cache.has(L)) return cache.get(L)!;
+  if (geo.open || L.kind !== "lap" || L.pts.length < 2) return null;
+  const first = L.pts[0], last = L.pts[L.pts.length - 1];
+  if (Math.hypot(first[0] - last[0], first[1] - last[1]) < 1) return null;
+  const a = geo.nearest(last[0], last[1]).s;
+  const b = geo.nearest(first[0], first[1]).s;
+  const distance = ((b - a) % geo.RL + geo.RL) % geo.RL;
+  if (distance < 1 || distance > geo.RL * 0.15) return null;
+  // Only continue the known layout. Joining an off-track recorded endpoint
+  // directly to it would draw a fictitious diagonal across the infield.
+  const join = { points: geo.arcW(a, distance), distance };
+  cache.set(L, join);
+  return join;
 }
 
 /** Time (ms from lap start) at which the lap reaches distance u. */

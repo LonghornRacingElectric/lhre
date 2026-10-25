@@ -20,6 +20,8 @@ nav:
       - ADR-009 Autonomy Outside Bazel: docs/architecture/009-autonomy-outside-bazel.md
       - ADR-010 Telemetry Stack in Bazel: docs/architecture/010-telemetry-stack-in-bazel.md
       - ADR-012 Simulation Outside Bazel: docs/architecture/012-simulation-outside-bazel.md
+      - ADR-013 Drive Day Viewer Outside Bazel: docs/architecture/013-driveday-viewer-outside-bazel.md
+      - ADR-015 Study Layout: docs/architecture/015-study-layout.md
       - Build System: docs/build-system.md
       - Cookbook: docs/cookbook.md
   - Boards:
@@ -54,21 +56,39 @@ nav:
       - ROS 2 Workspace: autonomy/ros2/README.md
       - Docker (macOS): autonomy/ros2/docker/README.md
       - Vehicle Parameters: autonomy/ros2/src/lhr_vehicle/README.md
-      - State Estimation: autonomy/ros2/src/lhr_state_estimation/README.md
-      - LiDAR Perception: autonomy/ros2/src/lhr_perception/README.md
+      - Vehicle Mesh: autonomy/ros2/src/lhr_vehicle/meshes/README.md
+      - Sensor Simulation: autonomy/ros2/src/lhr_sensor_sim/README.md
+      - Metrics: autonomy/ros2/src/lhr_metrics/README.md
+      - Kinematic Sim: autonomy/ros2/src/lhr_sim_kinematic/README.md
+      - BobSim Plant: autonomy/ros2/src/lhr_sim_bobsim/README.md
+      - Demo Launch: autonomy/ros2/src/lhr_demo/README.md
+      - Track Generation: autonomy/ros2/src/lhr_trackgen/README.md
       - Track Builder: autonomy/ros2/src/lhr_track_builder/README.md
-      - Gazebo Simulation: autonomy/ros2/src/lhr_gazebo/README.md
+      - Control: autonomy/ros2/src/lhr_control/README.md
+      - Mission Manager: autonomy/ros2/src/lhr_mission_manager/README.md
+      - LiDAR Perception: autonomy/ros2/src/lhr_perception/README.md
+      - Perception Tests: autonomy/ros2/src/lhr_perception/test/README.md
+      - Gazebo: autonomy/ros2/src/lhr_gazebo/README.md
+      - Mid-360 Lidar Sim: autonomy/ros2/src/lhr_lidar_sim/README.md
+      - State Estimation: autonomy/ros2/src/lhr_state_estimation/README.md
+      - Safety Monitor: autonomy/ros2/src/lhr_safety/README.md
       - Plans:
           - Overview: autonomy/docs/plans/README.md
           - Retrofit Roadmap 2026-27: autonomy/docs/plans/retrofit-roadmap-2026-27.md
           - Gazebo Integration: autonomy/docs/plans/gazebo-integration.md
           - Gazebo Change Notes: autonomy/docs/plans/gazebo-change-notes.md
           - Camera Fusion: autonomy/docs/plans/camera-fusion.md
+          - ZED 2i Stereo: autonomy/docs/plans/zed2i-stereo.md
+          - ZED 2i Implementation: autonomy/docs/plans/zed2i-stereo-implementation.md
           - On-Car Architecture: autonomy/docs/plans/on-car-architecture.md
+          - MVP Pass Criteria: autonomy/docs/plans/mvp-pass-criteria.md
       - Testing:
           - Overview: autonomy/testing/README.md
           - Mid-360 Acceptance 2026-10-04: autonomy/testing/2026-10-04-mid360-acceptance/README.md
+          - MVP Gate 2026-10-28: autonomy/testing/2026-10-28-mvp-gate/README.md
           - Livox Test Tools: autonomy/testing/tools/livox/README.md
+          - Fault Injection Tools: autonomy/testing/tools/fault_injection/README.md
+          - MVP Gate Tools: autonomy/testing/tools/gate/README.md
       - FSAE Rules:
           - Track and Events: autonomy/docs/rules/fsae-track-and-events.md
           - Vehicle Systems: autonomy/docs/rules/fsae-vehicle-systems.md
@@ -132,7 +152,7 @@ hooks:
 
 # Docs live next to the code: any *.md in the tree becomes a page at the
 # same path (README.md renders as the directory index). The simple plugin
-# also extracts fenced doc-comment blocks from source files — see
+# also extracts fenced doc-comment blocks from source files, see
 # https://athackst.github.io/mkdocs-simple-plugin/ ("semiliterate").
 plugins:
   - search

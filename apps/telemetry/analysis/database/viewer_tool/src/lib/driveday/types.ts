@@ -58,7 +58,7 @@ export interface SessionExport {
   sessionInfo?: SessionInfoExport | null;
   metadata?: Record<string, string>;
   /** Trackside event flags; t is epoch ms like the samples. */
-  flags?: { t: number; label: string; saved?: boolean }[];
+  flags?: { id?: string | number; t: number; label: string; saved?: boolean }[];
 }
 
 /* ---------- converted run ---------- */
@@ -141,6 +141,8 @@ export interface RunMeta {
 }
 
 export interface RunData {
+  /** Exported cone hits assigned to completed laps; t is absolute logger time. */
+  coneEvents?: ConeEvent[];
   ref: XY[];
   cum: number[];
   /** Length of the loop, or of the course between the start line and the finish line when `open`. */
@@ -202,6 +204,8 @@ export interface ConeEvent {
   t: number;
 }
 export interface UserState {
+  /** Imported hits explicitly removed by the user, so reopening does not restore them. */
+  dismissedCones?: string[];
   setup: Record<string, string | number>;
   /** Cone counts that were entered without a time, keyed by lap number. */
   cones: Record<string, number>;
@@ -212,16 +216,17 @@ export interface UserState {
 
 export const emptyUserState = (): UserState => ({ setup: {}, cones: {}, flags: {}, marks: [], ce: [] });
 
-/** Add Trackside event flags to a run's notes: "Hit Cone" becomes a timed cone, anything else a mark.
-    Ids come from the flag time, so importing the same file again adds nothing. T0 is Session.T0. */
+/** "Hit Cone" and its spellings, as Trackside labels a cone flag. */
+export const isConeLabel = (label: string) => /^(?:hit[\s_-]*)?cones?(?:[\s_-]*hit)?$/i.test(label.trim());
+
+/** Add Trackside event flags to a run's notes as marks. Cone flags are skipped: convert.ts turns them into the run's
+    coneEvents, which seedCones adds as timed cones. Ids come from the flag time, so importing the same file again adds nothing. T0 is Session.T0. */
 export function seedFlags(u: UserState, flags: NonNullable<SessionExport["flags"]>, T0: number): UserState {
-  const have = new Set([...u.ce, ...u.marks].map((e) => e.id));
+  const have = new Set(u.marks.map((e) => e.id));
   for (const f of flags) {
     const id = "flag-" + f.t;
-    if (have.has(id)) continue;
-    const t = Math.round(f.t - T0);
-    if (f.label === "Hit Cone") u.ce.push({ id, t });
-    else u.marks.push({ id, t, text: f.label });
+    if (have.has(id) || isConeLabel(f.label)) continue;
+    u.marks.push({ id, t: Math.round(f.t - T0), text: f.label });
   }
   return u;
 }

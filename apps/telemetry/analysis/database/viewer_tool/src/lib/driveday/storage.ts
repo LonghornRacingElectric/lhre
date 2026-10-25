@@ -144,5 +144,19 @@ export function lsDel(key: string) {
   }
 }
 
-export const loadUserState = (sessId: string): UserState => ({ ...emptyUserState(), ...lsGet<Partial<UserState>>("state:" + sessId, {}) });
+/** Merge exported hits by stable identity; manual hits and explicit removals survive reimport. */
+export function seedCones(D: RunData, user: UserState): UserState {
+  const origin = Math.min(...D.laps.map((lap) => lap.t0));
+  const dismissed = new Set(user.dismissedCones ?? []);
+  const events = new Map(user.ce.map((event) => [event.id, { ...event }]));
+  (D.coneEvents ?? []).filter((event) => !dismissed.has(event.id)).forEach((event) => {
+    events.set(event.id, { ...event, t: event.t - origin });
+  });
+  return { ...user, ce: [...events.values()].sort((a, b) => a.t - b.t) };
+}
+
+export const loadUserState = (sessId: string, D?: RunData): UserState => {
+  const user = { ...emptyUserState(), ...lsGet<Partial<UserState>>("state:" + sessId, {}) };
+  return D ? seedCones(D, user) : user;
+};
 export const saveUserState = (sessId: string, u: UserState) => lsSet("state:" + sessId, u);

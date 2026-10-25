@@ -2,7 +2,15 @@
 
 ## Goal
 
-Add a monocular camera to the Gazebo model and fuse its output with the existing LiDAR pipeline to classify cones as left (blue) or right (yellow). Use color labels to strengthen Delaunay-based boundary pairing rather than replace it.
+Add one ZED 2i stereo camera with the 2.1 mm wide lens to the Gazebo model and fuse its output with the existing LiDAR pipeline to classify cones as left (blue) or right (yellow). Use color labels to strengthen Delaunay-based boundary pairing rather than replace it.
+
+The camera unit and lens were confirmed on 2026-10-11. The first milestone is
+stereo images and calibration in ROS/RViz; its design and implementation scope are in
+[ZED 2i Stereo Simulation](zed2i-stereo.md). The stereo input interface is implemented; runtime validation is recorded
+in the [Gazebo README](../../ros2/src/lhr_gazebo/README.md#stereo-validation).
+Camera-only HSV region classification is implemented as an opt-in debug view;
+see [classifier usage](../../ros2/src/lhr_perception/README.md#camera-color-classification).
+Live classification validation and LiDAR fusion remain subsequent work.
 
 ## Background
 
@@ -41,14 +49,16 @@ For our sim pipeline, the equivalent is: render camera image, segment by color, 
 ## Implementation Tasks
 
 ### 3.1 — Add camera sensor to Gazebo model
-- Mount a forward-facing camera on the vehicle SDF/URDF
-- Bridge the image topic to ROS 2 (`/lhr/sensor/camera/image_raw`)
-- Verify image stream in RViz
+- Implemented as the ZED 2i stereo pair; the left input is
+  `/lhr/sensor/zed2i/left/image_rect`, with a corresponding right stream.
+- Stereo validation is recorded in the Gazebo README linked above.
 
 ### 3.2 — Cone color classifier (sim)
-- Subscribe to camera image
-- Use color segmentation (HSV thresholding) to identify blue/yellow regions
-- Publish classified regions or a lookup service
+- Implemented: subscribe to the left camera image and segment blue/yellow/orange
+  regions using configurable HSV bounds and minimum connected pixel area.
+- Publish a labeled debug image, retaining input timestamps and frames.
+- These are color candidates, not cone-object detections. Live validation and
+  a machine-readable region interface for fusion remain follow-up work.
 
 ### 3.3 — LiDAR-camera fusion node
 - Subscribe to both LiDAR cone detections and camera image
@@ -57,9 +67,10 @@ For our sim pipeline, the equivalent is: render camera image, segment by color, 
 - Publish cone markers with color labels (blue/yellow/unknown)
 
 ### 3.4 — Update track builder to use color
-- In `_pair_boundary`, add a filter: reject Delaunay edges where both endpoints have the same known color
-- Accept edges where at least one endpoint is unknown (fallback to distance-only)
-- Minimal change — ~5 lines in the existing method
+- Implemented in [#83](https://github.com/LonghornRacingElectric/lhre/pull/83): `_pair_boundary` rejects Delaunay
+  edges whose endpoints share a known color (`boundary_use_color`, default true).
+- Edges with an unknown endpoint keep the distance-only filter, so unlabeled
+  LiDAR cones pair as before.
 
 ### 3.5 — Validate on autocross track
 - Run full pipeline on an autocross layout
@@ -68,7 +79,7 @@ For our sim pipeline, the equivalent is: render camera image, segment by color, 
 
 ## Dependencies
 
-- Phase 2 LiDAR pipeline must be functional (it is on oval)
+- Phase 2 LiDAR pipeline must be functional (it laps autocross in the [MVP dry runs](../../testing/2026-10-28-mvp-gate/README.md))
 - Vehicle model must support camera mount point
 - Gazebo bridge must support image transport
 

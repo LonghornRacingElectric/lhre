@@ -1,6 +1,6 @@
 "use client";
 
-import { useContext, useRef } from "react";
+import { useContext, useRef, useState } from "react";
 import { gpsStats } from "@/lib/driveday/analysis";
 import { fmt } from "@/lib/driveday/format";
 import type { Player } from "@/lib/driveday/player";
@@ -19,7 +19,8 @@ interface Props {
   onSelect: (id: string) => void;
   onImport: (files: FileList) => void;
   onCache: () => void;
-  onRemove: () => void;
+  onDb: (day: number) => void;
+  onRemove: (id: string) => void;
 }
 
 function Kpis() {
@@ -35,15 +36,14 @@ function Kpis() {
   const total = runs.reduce((s, l) => s + a.conesOf(l), 0);
   const cb = a.conesOf(runs[bi]);
   const pen = a.pen();
-  const bn = runs.indexOf(a.bestRun) + 1;
   const items: [string, string | number, React.ReactNode][] = [
-    ["Best real", fmt(a.bestLap), <div className="pop" key="r"><h5>Best real</h5><p>The fastest lap on the clock, with no cone penalty. Lap {bn}.</p></div>],
+    ["Best real", fmt(a.bestLap), <div className="pop" key="r"><h5>Best real</h5><p>The fastest lap on the clock, with no cone penalty. {a.bestRun.name}.</p></div>],
     ["Best adjusted", fmt(bA), (
       <div className="pop" key="a">
         <h5>Best adjusted</h5>
         <p>Real time plus {pen.toFixed(1)} s for every cone.</p>
         <table><tbody>
-          <tr><td>Lap {bi + 1} real</td><td>{fmt(runs[bi].dur)}</td></tr>
+          <tr><td>{runs[bi].name} real</td><td>{fmt(runs[bi].dur)}</td></tr>
           <tr><td>{cb} cone{cb === 1 ? "" : "s"} x {pen.toFixed(1)} s</td><td>+{(cb * pen).toFixed(3)}</td></tr>
           <tr className="tot"><td>Adjusted</td><td>{fmt(bA)}</td></tr>
         </tbody></table>
@@ -55,7 +55,7 @@ function Kpis() {
         <h5>Theoretical best</h5>
         <p>Your fastest S1, S2 and S3, each taken from whichever lap it was set on, added together. It is a target, not a lap you drove.</p>
         <table><tbody>
-          {a.bestSec.map((b, k) => <tr key={k}><td>S{k + 1}</td><td>Lap {b.lap}</td><td>{fmt(b.v)}</td></tr>)}
+          {a.bestSec.map((b, k) => <tr key={k}><td>S{k + 1}</td><td>{b.label}</td><td>{fmt(b.v)}</td></tr>)}
           <tr className="tot"><td colSpan={2}>Sum</td><td>{fmt(a.theo)}</td></tr>
         </tbody></table>
         <p>Your best real lap is {fmt(a.bestLap)}, so {((a.bestLap - a.theo) / 1000).toFixed(3)} s is still on the table.</p>
@@ -102,9 +102,9 @@ function RunTitle({ p, run }: { p: Player; run: RunListEntry | undefined }) {
   );
 }
 
-function SettingsMenu({ theme, onTheme, onRemove }: Pick<Props, "theme" | "onTheme" | "onRemove">) {
+function SettingsMenu({ theme, onTheme }: Pick<Props, "theme" | "onTheme">) {
   const p = useContext(PlayerCtx);
-  return p ? <RunSettings p={p} theme={theme} onTheme={onTheme} onRemove={onRemove} /> : (
+  return p ? <RunSettings p={p} theme={theme} onTheme={onTheme} /> : (
     <Menu label={<span title="Settings" aria-label="Settings">⚙</span>}>
       <div className="mrow">
         <span className="lab">Theme</span>
@@ -114,7 +114,7 @@ function SettingsMenu({ theme, onTheme, onRemove }: Pick<Props, "theme" | "onThe
   );
 }
 
-function RunSettings({ p, theme, onTheme, onRemove }: Pick<Props, "theme" | "onTheme" | "onRemove"> & { p: Player }) {
+function RunSettings({ p, theme, onTheme }: Pick<Props, "theme" | "onTheme"> & { p: Player }) {
   useUi(p);
   return (
     <Menu label={<span title="Settings" aria-label="Settings">⚙</span>}>
@@ -131,14 +131,39 @@ function RunSettings({ p, theme, onTheme, onRemove }: Pick<Props, "theme" | "onT
         <span className="lab">Theme</span>
         <button className="btn" type="button" title="Switch between automatic, light and dark" onClick={onTheme}>Theme: {theme}</button>
       </div>
-      <div className="mrow">
-        <button className="btn" type="button" title="Remove this run from the browser" onClick={onRemove}>Remove this run</button>
-      </div>
     </Menu>
   );
 }
 
-export function Header({ runs, current, theme, onTheme, onSelect, onImport, onCache, onRemove }: Props) {
+interface DbDayEntry { day_id: number; date: string; track_name: string | null; event_type: string | null; driver_name: string | null; laps: number; flags: number }
+
+/** Drive days in the orion database that have laps; picking one loads it like an imported file. */
+export function DbMenu({ onDb }: { onDb: (day: number) => void }) {
+  const [days, setDays] = useState<DbDayEntry[] | string | null>(null);
+  const load = () => {
+    setDays(null);
+    fetch("/api/driveday/db")
+      .then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error || r.statusText); setDays(j.days); })
+      .catch((e: Error) => setDays(e.message));
+  };
+  return (
+    <div className="run-selector"><Menu wide ariaLabel="Load a drive day from the database" label="From database" onToggle={(open) => { if (open) load(); }}>
+      {days === null ? <p className="run-selector-note">Loading drive days…</p>
+        : typeof days === "string" ? <p className="run-selector-note">Database unavailable: {days}</p>
+        : !days.length ? <p className="run-selector-note">No drive days with laps yet.</p>
+        : <div className="run-selector-list" aria-label="Drive days">
+          {days.map((d) => <div className="run-selector-row" key={d.day_id}>
+            <button className="run-choice" type="button" onClick={() => onDb(d.day_id)}>
+              <strong>{d.date}{d.track_name ? " · " + d.track_name : ""}</strong>
+              <small>Day {d.day_id} · {d.laps} laps{d.flags ? " · " + d.flags + " flags" : ""}{d.event_type ? " · " + d.event_type : ""}{d.driver_name ? " · " + d.driver_name : ""}</small>
+            </button>
+          </div>)}
+        </div>}
+    </Menu></div>
+  );
+}
+
+export function Header({ runs, current, theme, onTheme, onSelect, onImport, onCache, onDb, onRemove }: Props) {
   const file = useRef<HTMLInputElement>(null);
   const p = useContext(PlayerCtx);
   return (
@@ -146,12 +171,18 @@ export function Header({ runs, current, theme, onTheme, onSelect, onImport, onCa
       <div>
         <Title run={runs.find((r) => r.id === current)} />
         <div className="runbar">
-          {runs.length > 1 && (
-            <select aria-label="Run" value={current ?? ""} onChange={(e) => onSelect(e.target.value)}>
-              {runs.map((r) => <option key={r.id} value={r.id}>{runLabel(r)}</option>)}
-            </select>
+          {runs.length > 0 && (
+            <div className="run-selector"><Menu wide ariaLabel="Select run" label={<span className="run-selector-label">{runs.find(r => r.id === current)?.name || "Choose run"}</span>}>
+              <div className="run-selector-list" aria-label="Saved runs">
+                {runs.map(r => <div className={"run-selector-row" + (r.id === current ? " selected" : "")} key={r.id}>
+                  <button className="run-choice" type="button" aria-current={r.id === current ? "true" : undefined} title={runLabel(r)} onClick={() => onSelect(r.id)}><strong>{r.name || "Untitled run"}</strong><small>{runLabel(r)}</small></button>
+                  <button className="run-delete" type="button" aria-label={"Delete " + (r.name || "Untitled run")} title="Delete this saved run" onClick={() => onRemove(r.id)}>Delete</button>
+                </div>)}
+              </div>
+            </Menu></div>
           )}
-          <button className="btn primary" type="button" title="Import one or more session JSON files" onClick={() => file.current?.click()}>Import</button>
+          <DbMenu onDb={onDb} />
+          <button className="btn" type="button" title="Import one or more session JSON files" onClick={() => file.current?.click()}>Import JSON</button>
           <button className="btn" type="button" title="Load the session Trackside last saved on the server" onClick={onCache}>Last Trackside session</button>
           <input
             ref={file}
@@ -164,7 +195,8 @@ export function Header({ runs, current, theme, onTheme, onSelect, onImport, onCa
               e.target.value = "";
             }}
           />
-          <SettingsMenu theme={theme} onTheme={onTheme} onRemove={onRemove} />
+          <SettingsMenu theme={theme} onTheme={onTheme} />
+          <div id="workspace-actions" />
         </div>
       </div>
       {p && <Kpis />}

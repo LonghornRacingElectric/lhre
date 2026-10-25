@@ -16,17 +16,24 @@ Usage:
 import os
 
 from ament_index_python.packages import get_package_share_directory
-
 from launch import LaunchContext, LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
     ExecuteProcess,
     OpaqueFunction,
+    RegisterEventHandler,
     SetEnvironmentVariable,
 )
-from launch.substitutions import LaunchConfiguration
+from launch.event_handlers import OnShutdown
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+import yaml
+
+
+def _float(name):
+    """Forward a launch argument as a double, so v_max:=5 is not an int."""
+    return ParameterValue(LaunchConfiguration(name), value_type=float)
 
 
 def _find_world(context: LaunchContext):
@@ -37,7 +44,9 @@ def _find_world(context: LaunchContext):
       1. Explicit ``world`` argument (if the user overrode it)
       2. ``<worlds_dir>/<track_style>_seed<seed>.sdf`` in the source tree
       3. Same pattern in the installed share directory
-      4. Fall back to any SDF in the source worlds directory
+
+    Nothing else: any other world would disagree with the cones
+    publish_cones generates for this track_style and seed.
     """
     world_arg = context.launch_configurations.get('world', '')
     track_style = context.launch_configurations.get('track_style', 'autocross')
@@ -65,13 +74,40 @@ def _find_world(context: LaunchContext):
     except Exception:
         pass
 
-    # Fallback: first SDF found in source worlds directory
-    if os.path.isdir(src_worlds):
-        for f in sorted(os.listdir(src_worlds)):
-            if f.endswith('.sdf'):
-                return os.path.abspath(os.path.join(src_worlds, f))
-
     return ''
+
+
+def _fault_remaps(fault: str, use_ekf: bool, configs: dict) -> dict:
+    """
+    Where fault:=<kind> splices fault_injector in: node name -> remappings.
+
+    A topic fault moves the producer (or, for steer_freeze, the consumer) onto
+    a side topic so the injector sits in the middle. Process faults need no
+    rewiring. No fault means no change to any node. A fault that cannot trip
+    under the other launch arguments fails the launch.
+    """
+    if not fault:
+        return {}
+    from lhr_gazebo.fault_injector import FAULTS
+    if fault not in FAULTS:
+        raise RuntimeError(
+            f'Unknown fault {fault!r}, expected one of {sorted(FAULTS)}')
+    for arg, value in FAULTS[fault].needs:
+        if configs.get(arg, '').lower() != value:
+            raise RuntimeError(f'fault:={fault} can only trip with {arg}:={value}')
+    odom_raw = [('/lhr/vehicle/odom', '/lhr/vehicle/odom_raw')]
+    # Under ekf the bridge's odom is already truth; corrupt the estimate.
+    odom_owner = 'ekf_node' if use_ekf else 'ros_gz_bridge'
+    return {
+        'odom_nan': {odom_owner: odom_raw},
+        'odom_spike': {odom_owner: odom_raw},
+        'lidar_drop': {'ros_gz_bridge': [
+            ('/lhr/lidar/points', '/lhr/lidar/points_raw')]},
+        'cmd_nan': {'pure_pursuit': [
+            ('/lhr/vehicle/cmd', '/lhr/vehicle/cmd_raw')]},
+        'steer_freeze': {'joint_cmd_adapter': [
+            ('/lhr/vehicle/cmd', '/lhr/vehicle/cmd_actuated')]},
+    }.get(fault, {})
 
 
 def _launch_setup(context: LaunchContext):
@@ -81,11 +117,25 @@ def _launch_setup(context: LaunchContext):
     Called via OpaqueFunction so we can resolve the world path from
     track_style + seed at launch time.
     """
+    track_style = context.launch_configurations.get('track_style', 'autocross')
     world_path = _find_world(context)
     if not world_path:
+        seed = context.launch_configurations.get('seed', '1')
         raise RuntimeError(
-            'No world SDF found. Generate one with: '
-            'python3 scripts/generate_world.py --style <style> --seed <seed>')
+            f'No world for track_style:={track_style} seed:={seed}. Generate it '
+            f'from autonomy/ros2 with: python3 src/lhr_gazebo/scripts/generate_world.py '
+            f'--style {track_style} --seed {seed} '
+            f'--output src/lhr_gazebo/worlds/{track_style}_seed{seed}.sdf, then rebuild')
+
+    # The event follows the track: the acceleration course only completes
+    # under the acceleration mission, which means nothing on a loop.
+    mission = context.launch_configurations.get('mission', 'autocross')
+    if track_style == 'acceleration':
+        mission = 'acceleration'
+    elif mission == 'acceleration':
+        raise RuntimeError('mission:=acceleration needs track_style:=acceleration')
+    from lhr_trackgen.publish_cones import pairing_width_m
+    track_width = pairing_width_m(track_style)
 
     pkg_share = get_package_share_directory('lhr_gazebo')
     models_dir = os.path.join(pkg_share, 'models')
@@ -96,10 +146,52 @@ def _launch_setup(context: LaunchContext):
         'lidar_classify_sides', 'false').lower() == 'true'
     use_ekf = context.launch_configurations.get(
         'estimator', 'truth').lower() == 'ekf'
+    fault = context.launch_configurations.get('fault', '')
+    fault_remaps = _fault_remaps(fault, use_ekf, context.launch_configurations)
 
-    _gz_env = {
-        'GZ_SIM_RESOURCE_PATH': models_dir,
-    }
+    enable_stereo = context.launch_configurations.get(
+        'enable_stereo_camera', 'false').lower() == 'true'
+    camera_nodes = []
+    enable_color = context.launch_configurations.get(
+        'enable_camera_color_classifier', 'false').lower() == 'true'
+    if enable_color and not enable_stereo:
+        raise RuntimeError('Camera classification requires enable_stereo_camera:=true')
+    if enable_stereo:
+        from lhr_gazebo.stereo_camera import stereo_actions
+        from lhr_vehicle import load_vehicle
+        camera_nodes = stereo_actions(load_vehicle().stereo_camera, config_dir)
+    if enable_color:
+        from lhr_perception.cone_color import DEFAULT_THRESHOLDS, validate_config
+        thresholds = {
+            color: yaml.safe_load(context.launch_configurations[f'cone_color_{color}_hsv'])
+            for color in DEFAULT_THRESHOLDS
+        }
+        min_area = int(context.launch_configurations['cone_color_min_region_area'])
+        validate_config(thresholds, min_area)
+        camera_nodes.append(Node(
+            package='lhr_perception',
+            executable='camera_color_classifier',
+            name='camera_color_classifier',
+            parameters=[{
+                'use_sim_time': True,
+                'min_region_area': ParameterValue(
+                    LaunchConfiguration('cone_color_min_region_area'), value_type=int),
+                **{f'{color}_hsv': bounds for color, bounds in thresholds.items()},
+            }],
+            output='screen',
+        ))
+
+    resource_path = models_dir
+    resource_cleanup = []
+    if enable_stereo:
+        from lhr_gazebo.stereo_camera import stereo_model_resources
+        # Keep world URIs and mesh paths identical in both modes. The overlay
+        # lives for this launch only; concurrent runs never edit shared models.
+        resources = stereo_model_resources(models_dir)
+        resource_path = os.pathsep.join((resources.name, models_dir))
+        resource_cleanup.append(RegisterEventHandler(OnShutdown(
+            on_shutdown=lambda event, context: resources.cleanup())))
+    _gz_env = {'GZ_SIM_RESOURCE_PATH': resource_path}
 
     # ----- Gazebo server -----
     gui = context.launch_configurations.get('gui', 'true').lower()
@@ -131,7 +223,7 @@ def _launch_setup(context: LaunchContext):
         parameters=[{
             'config_file': os.path.join(config_dir, 'ros_gz_bridge.yaml'),
         }],
-        remappings=bridge_remaps,
+        remappings=bridge_remaps + fault_remaps.get('ros_gz_bridge', []),
         output='screen',
     )
 
@@ -146,9 +238,8 @@ def _launch_setup(context: LaunchContext):
             name='inertial_sim',
             parameters=[{
                 'publish_imu': False,
-                'gyro_bias': LaunchConfiguration('gyro_bias'),
-                'wheel_scale_error': LaunchConfiguration(
-                    'wheel_scale_error'),
+                'gyro_bias': _float('gyro_bias'),
+                'wheel_scale_error': _float('wheel_scale_error'),
                 'use_sim_time': True,
             }],
             output='screen',
@@ -163,6 +254,7 @@ def _launch_setup(context: LaunchContext):
                 'init_pose_topic': '/lhr/vehicle/odom_truth',
                 'use_sim_time': True,
             }],
+            remappings=fault_remaps.get('ekf_node', []),
             output='screen',
         ))
 
@@ -171,7 +263,12 @@ def _launch_setup(context: LaunchContext):
         package='lhr_gazebo',
         executable='joint_cmd_adapter',
         name='joint_cmd_adapter',
-        parameters=[{'use_sim_time': True}],
+        parameters=[{
+            'cmd_timeout_s': ParameterValue(
+                LaunchConfiguration('adapter_cmd_timeout_s'), value_type=float),
+            'use_sim_time': True,
+        }],
+        remappings=fault_remaps.get('joint_cmd_adapter', []),
         output='screen',
     )
 
@@ -184,9 +281,11 @@ def _launch_setup(context: LaunchContext):
             executable='publish_cones',
             name='publish_cones',
             parameters=[{
-                'seed': LaunchConfiguration('seed'),
-                'track_style': LaunchConfiguration('track_style'),
-                'num_waypoints': LaunchConfiguration('num_waypoints'),
+                'seed': ParameterValue(LaunchConfiguration('seed'), value_type=int),
+                'track_style': ParameterValue(
+                    LaunchConfiguration('track_style'), value_type=str),
+                'num_waypoints': ParameterValue(
+                    LaunchConfiguration('num_waypoints'), value_type=int),
                 'use_sim_time': True,
             }],
             output='screen',
@@ -196,8 +295,8 @@ def _launch_setup(context: LaunchContext):
             executable='sensor_sim',
             name='sensor_sim',
             parameters=[{
-                'fov_deg': LaunchConfiguration('fov_deg'),
-                'max_range_m': LaunchConfiguration('max_range_m'),
+                'fov_deg': _float('fov_deg'),
+                'max_range_m': _float('max_range_m'),
                 'use_sim_time': True,
             }],
             output='screen',
@@ -211,11 +310,27 @@ def _launch_setup(context: LaunchContext):
                 'use_sim_time': True,
                 'max_range': 20.0,
                 'min_range': 0.8,
-                'ground_z_min': -0.40,
-                'ground_z_max': 0.5,
                 'cluster_radius': 0.5,
-                'min_cluster_points': 1,
-                'dedup_radius': 1.5,
+                'ground_z_min': ParameterValue(
+                    LaunchConfiguration('lidar_ground_z_min'), value_type=float),
+                'ground_z_max': ParameterValue(
+                    LaunchConfiguration('lidar_ground_z_max'), value_type=float),
+                'min_cluster_points': ParameterValue(
+                    LaunchConfiguration('lidar_min_cluster_points'), value_type=int),
+                'dedup_radius': ParameterValue(
+                    LaunchConfiguration('lidar_dedup_radius'), value_type=float),
+                'max_cluster_points': ParameterValue(
+                    LaunchConfiguration('lidar_max_cluster_points'), value_type=int),
+                'stack_window_sec': ParameterValue(
+                    LaunchConfiguration('lidar_stack_window_sec'), value_type=float),
+                'stack_max_frames': ParameterValue(
+                    LaunchConfiguration('lidar_stack_max_frames'), value_type=int),
+                'transform_wait_sec': ParameterValue(
+                    LaunchConfiguration('lidar_transform_wait_sec'), value_type=float),
+                'sensor_transform_source': ParameterValue(
+                    LaunchConfiguration('lidar_sensor_transform_source'), value_type=str),
+                'height_filter_frame': ParameterValue(
+                    LaunchConfiguration('lidar_height_filter_frame'), value_type=str),
                 'classify_sides': classify_sides,
             }],
             output='screen',
@@ -247,7 +362,7 @@ def _launch_setup(context: LaunchContext):
                     LaunchConfiguration('beam_width'), value_type=int),
                 'beam_depth': ParameterValue(
                     LaunchConfiguration('beam_depth'), value_type=int),
-                'track_width': 3.5,
+                'track_width': track_width,
                 'track_width_tolerance': 1.0,
             }],
             output='screen',
@@ -276,6 +391,7 @@ def _launch_setup(context: LaunchContext):
                     LaunchConfiguration('beam_width'), value_type=int),
                 'beam_depth': ParameterValue(
                     LaunchConfiguration('beam_depth'), value_type=int),
+                'track_width': track_width,
             }],
             output='screen',
         )
@@ -286,17 +402,24 @@ def _launch_setup(context: LaunchContext):
         executable='pursuit_node',
         name='pure_pursuit',
         parameters=[{
-            'lookahead_dist': LaunchConfiguration('lookahead_dist'),
-            'lookahead_min': LaunchConfiguration('lookahead_min'),
-            'lookahead_curvature_gain': LaunchConfiguration(
-                'lookahead_curvature_gain'),
-            'a_lat_max': LaunchConfiguration('a_lat_max'),
-            'v_min': LaunchConfiguration('v_min'),
-            'v_max': LaunchConfiguration('v_max'),
-            'max_accel': LaunchConfiguration('max_accel'),
-            'max_decel': LaunchConfiguration('max_decel'),
+            'lookahead_dist': _float('lookahead_dist'),
+            'lookahead_min': _float('lookahead_min'),
+            'lookahead_curvature_gain': _float('lookahead_curvature_gain'),
+            'a_lat_max': _float('a_lat_max'),
+            'v_min': _float('v_min'),
+            'v_max': _float('v_max'),
+            'max_accel': _float('max_accel'),
+            'max_decel': _float('max_decel'),
             'use_sim_time': True,
+            # Both planners publish a forward prefix, not a complete circuit.
+            'closed_path': False,
+            'path_timeout_sec': ParameterValue(
+                LaunchConfiguration('path_timeout_sec'), value_type=float),
+            # Not an argument: this launch always starts the mission manager,
+            # so the car must never move before it says DRIVING.
+            'wait_for_mission': True,
         }],
+        remappings=fault_remaps.get('pure_pursuit', []),
         output='screen',
     )
 
@@ -309,7 +432,41 @@ def _launch_setup(context: LaunchContext):
             executable='metrics_node',
             name='metrics_node',
             parameters=[{
-                'truth_odom_topic': '/lhr/vehicle/odom_truth',
+                'reference_world': ParameterValue(
+                    context.launch_configurations.get('reference_world', '') or world_path,
+                    value_type=str),
+                # The forced mission, so a finished acceleration run is not
+                # scored as an autocross that never lapped.
+                'mission': mission,
+                'output_csv': ParameterValue(LaunchConfiguration('output_csv'), value_type=str),
+                'off_track_threshold': ParameterValue(
+                    LaunchConfiguration('off_track_threshold'), value_type=float),
+                'start_radius': ParameterValue(
+                    LaunchConfiguration('start_radius'), value_type=float),
+                'min_lap_time': ParameterValue(
+                    LaunchConfiguration('min_lap_time'), value_type=float),
+                'reference_closed': ParameterValue(
+                    LaunchConfiguration('reference_closed'), value_type=bool),
+                'min_progress_fraction': ParameterValue(
+                    LaunchConfiguration('min_progress_fraction'), value_type=float),
+                'lap_start_speed': ParameterValue(
+                    LaunchConfiguration('lap_start_speed'), value_type=float),
+                'max_odom_gap_sec': ParameterValue(
+                    LaunchConfiguration('max_odom_gap_sec'), value_type=float),
+                'truth_odom_topic': '/lhr/vehicle/odom_truth' if use_ekf else '',
+                'scenario': 'gazebo_demo',
+                'plant': 'gazebo',
+                'seed': ParameterValue(LaunchConfiguration('seed'), value_type=int),
+                'num_waypoints': ParameterValue(
+                    LaunchConfiguration('num_waypoints'), value_type=int),
+                'track_style': ParameterValue(
+                    LaunchConfiguration('track_style'), value_type=str),
+                'perception': perception,
+                'estimator': 'ekf' if use_ekf else 'truth',
+                'gyro_bias': ParameterValue(LaunchConfiguration('gyro_bias'), value_type=float),
+                'wheel_scale_error': ParameterValue(
+                    LaunchConfiguration('wheel_scale_error'), value_type=float),
+                'lidar_classify_sides': classify_sides,
                 'use_sim_time': True,
             }],
             output='screen',
@@ -322,36 +479,93 @@ def _launch_setup(context: LaunchContext):
             package='rviz2',
             executable='rviz2',
             name='rviz2',
-            arguments=['-d', os.path.join(config_dir, 'default.rviz')],
+            arguments=['-d', os.path.join(
+                config_dir, 'stereo.rviz' if enable_stereo else 'default.rviz')],
             parameters=[{'use_sim_time': True}],
             output='screen',
         ))
 
     # ----- Mission manager -----
+    safety_on = context.launch_configurations.get('safety', 'false').lower() == 'true'
     mission_mgr = Node(
         package='lhr_mission_manager',
         executable='mission_manager',
         name='mission_manager',
         parameters=[{
-            'mission': LaunchConfiguration('mission'),
-            'auto_go': LaunchConfiguration('auto_go'),
-            'ready_hold_sec': LaunchConfiguration('ready_hold_sec'),
+            'mission': mission,
+            'auto_go': ParameterValue(
+                LaunchConfiguration('auto_go'), value_type=bool),
+            'ready_hold_sec': _float('ready_hold_sec'),
+            # Follows safety:= rather than being an argument: without
+            # safety_node there is no heartbeat to wait for.
+            'require_safety_heartbeat': safety_on,
+            'safety_settle_s': _float('safety_settle_s'),
             'use_sim_time': True,
         }],
         output='screen',
     )
 
+    # ----- Safety monitor -----
+    safety_nodes = []
+    if safety_on:
+        safety_nodes.append(Node(
+            package='lhr_safety',
+            executable='safety_node',
+            name='safety_node',
+            parameters=[{
+                # Follows the perception mode rather than being an argument:
+                # the Gazebo LiDAR always publishes, but under
+                # perception:=sim nothing reads the cloud.
+                'monitor_lidar': perception == 'lidar',
+                'lidar_timeout_s': _float('safety_lidar_timeout_s'),
+                'odom_timeout_s': _float('safety_odom_timeout_s'),
+                'cmd_timeout_s': _float('safety_cmd_timeout_s'),
+                'max_position_std_m': _float('safety_max_position_std_m'),
+                'max_speed_factor': _float('safety_max_speed_factor'),
+                'geofence_radius_m': _float('safety_geofence_radius_m'),
+                'steer_min_speed_mps': _float('safety_steer_min_speed_mps'),
+                'steer_yaw_rate_tol': _float('safety_steer_yaw_rate_tol'),
+                'steer_rel_tol': _float('safety_steer_rel_tol'),
+                'steer_window_s': _float('safety_steer_window_s'),
+                'use_sim_time': True,
+            }],
+            output='screen',
+        ))
+
+    # ----- Fault injection (safety testing, #117; sim only) -----
+    fault_nodes = []
+    if fault:
+        fault_nodes.append(Node(
+            package='lhr_gazebo',
+            executable='fault_injector',
+            name='fault_injector',
+            parameters=[{
+                'fault': ParameterValue(LaunchConfiguration('fault'),
+                                        value_type=str),
+                'fault_after_s': ParameterValue(
+                    LaunchConfiguration('fault_after_s'), value_type=float),
+                'fault_duration_s': ParameterValue(
+                    LaunchConfiguration('fault_duration_s'), value_type=float),
+                'use_sim_time': True,
+            }],
+            output='screen',
+        ))
+
     return [
-        SetEnvironmentVariable('GZ_SIM_RESOURCE_PATH', models_dir),
+        SetEnvironmentVariable('GZ_SIM_RESOURCE_PATH', resource_path),
+        *resource_cleanup,
         gz_sim,
         bridge,
         cmd_adapter,
+        *camera_nodes,
         *estimation_nodes,
         *perception_nodes,
         centerline,
         mission_mgr,
         control,
         *metrics_nodes,
+        *safety_nodes,
+        *fault_nodes,
         *rviz_nodes,
     ]
 
@@ -379,15 +593,46 @@ def generate_launch_description():
             description='Odometry source: "truth" (Gazebo) or "ekf"'),
         DeclareLaunchArgument(
             'gyro_bias', default_value='0.0',
-            description='Simulated gyro bias (rad/s); drives heading drift'),
+            description='Gyro bias (rad/s); recorded only, Gazebo bridges its own IMU'),
         DeclareLaunchArgument(
             'wheel_scale_error', default_value='1.0',
             description='Simulated rolling-radius error (1.0 = exact)'),
         DeclareLaunchArgument('seed', default_value='1'),
         DeclareLaunchArgument('num_waypoints', default_value='10'),
+        DeclareLaunchArgument(
+            'enable_stereo_camera', default_value='false',
+            choices=['true', 'false'],
+            description='Spawn ZED 2i sensors and bridge stereo images/calibration and TF'),
+        DeclareLaunchArgument(
+            'enable_camera_color_classifier', default_value='false',
+            choices=['true', 'false'],
+            description='Label ZED color regions; requires enable_stereo_camera'),
+        DeclareLaunchArgument(
+            'cone_color_min_region_area', default_value='25',
+            description='Minimum connected color region area in pixels'),
+        DeclareLaunchArgument(
+            'cone_color_blue_hsv', default_value='[100, 100, 50, 130, 255, 255]',
+            description='Blue HSV bounds [h_min, s_min, v_min, h_max, s_max, v_max]'),
+        DeclareLaunchArgument(
+            'cone_color_yellow_hsv', default_value='[20, 100, 50, 35, 255, 255]',
+            description='Yellow HSV bounds [h_min, s_min, v_min, h_max, s_max, v_max]'),
+        DeclareLaunchArgument(
+            'cone_color_orange_hsv', default_value='[5, 100, 50, 19, 255, 255]',
+            description='Orange HSV bounds [h_min, s_min, v_min, h_max, s_max, v_max]'),
         # Sensor sim
         DeclareLaunchArgument('fov_deg', default_value='200.0'),
         DeclareLaunchArgument('max_range_m', default_value='20.0'),
+        # Gazebo keeps its sensor-frame detector defaults.
+        DeclareLaunchArgument('lidar_ground_z_min', default_value='-0.40'),
+        DeclareLaunchArgument('lidar_ground_z_max', default_value='0.5'),
+        DeclareLaunchArgument('lidar_min_cluster_points', default_value='1'),
+        DeclareLaunchArgument('lidar_dedup_radius', default_value='1.5'),
+        DeclareLaunchArgument('lidar_max_cluster_points', default_value='50'),
+        DeclareLaunchArgument('lidar_stack_window_sec', default_value='0.0'),
+        DeclareLaunchArgument('lidar_stack_max_frames', default_value='10'),
+        DeclareLaunchArgument('lidar_transform_wait_sec', default_value='0.5'),
+        DeclareLaunchArgument('lidar_sensor_transform_source', default_value='vehicle_config'),
+        DeclareLaunchArgument('lidar_height_filter_frame', default_value='sensor'),
         # Track builder chaining (both perception modes)
         DeclareLaunchArgument('chaining_alg', default_value='constrained_greedy'),
         DeclareLaunchArgument('min_step_m', default_value='0.3'),
@@ -398,6 +643,7 @@ def generate_launch_description():
         DeclareLaunchArgument('beam_width', default_value='3'),
         DeclareLaunchArgument('beam_depth', default_value='10'),
         # Control
+        DeclareLaunchArgument('path_timeout_sec', default_value='1.0'),
         DeclareLaunchArgument('lookahead_dist', default_value='5.0'),
         DeclareLaunchArgument('lookahead_min', default_value='2.0'),
         DeclareLaunchArgument('lookahead_curvature_gain', default_value='3.0'),
@@ -409,10 +655,50 @@ def generate_launch_description():
         # RViz / metrics
         DeclareLaunchArgument('rviz', default_value='true'),
         DeclareLaunchArgument('enable_metrics', default_value='true'),
+        DeclareLaunchArgument('output_csv', default_value='data/metrics.csv'),
+        DeclareLaunchArgument('reference_world', default_value=''),
+        DeclareLaunchArgument('off_track_threshold', default_value='2.0'),
+        DeclareLaunchArgument('start_radius', default_value='2.0'),
+        DeclareLaunchArgument('min_lap_time', default_value='5.0'),
+        DeclareLaunchArgument('min_progress_fraction', default_value='0.98'),
+        DeclareLaunchArgument('lap_start_speed', default_value='0.1'),
+        DeclareLaunchArgument('max_odom_gap_sec', default_value='1.0'),
+
         # Mission
         DeclareLaunchArgument('mission', default_value='autocross'),
+        DeclareLaunchArgument(
+            'reference_closed', default_value=PythonExpression([
+                "'false' if '", LaunchConfiguration('mission'),
+                "' == 'acceleration' or '", LaunchConfiguration('track_style'),
+                "' == 'acceleration' else 'true'"
+            ])),
         DeclareLaunchArgument('auto_go', default_value='true'),
         DeclareLaunchArgument('ready_hold_sec', default_value='5.0'),
+        # Joint adapter: stop the wheels when commands stop (0 disables)
+        DeclareLaunchArgument('adapter_cmd_timeout_s', default_value='0.3'),
+        # Fault injection for safety testing (#117). Empty = no injector.
+        DeclareLaunchArgument(
+            'fault', default_value='',
+            description='One fault_injector kind, e.g. ekf_kill, lidar_drop'),
+        DeclareLaunchArgument('fault_after_s', default_value='30.0'),
+        DeclareLaunchArgument('fault_duration_s', default_value='0.0'),
+        # Safety monitor (lhr_safety). Off until #117's fault injection
+        # has tuned the thresholds; defaults match the node's.
+        DeclareLaunchArgument(
+            'safety', default_value='false',
+            description='Run safety_node: trips the mission on stack faults'),
+        # READY waits until safety's heartbeat has been steady this long
+        DeclareLaunchArgument('safety_settle_s', default_value='2.0'),
+        DeclareLaunchArgument('safety_lidar_timeout_s', default_value='0.3'),
+        DeclareLaunchArgument('safety_odom_timeout_s', default_value='0.25'),
+        DeclareLaunchArgument('safety_cmd_timeout_s', default_value='0.25'),
+        DeclareLaunchArgument('safety_max_position_std_m', default_value='0.0'),
+        DeclareLaunchArgument('safety_max_speed_factor', default_value='1.5'),
+        DeclareLaunchArgument('safety_geofence_radius_m', default_value='150.0'),
+        DeclareLaunchArgument('safety_steer_min_speed_mps', default_value='2.0'),
+        DeclareLaunchArgument('safety_steer_yaw_rate_tol', default_value='0.15'),
+        DeclareLaunchArgument('safety_steer_rel_tol', default_value='0.5'),
+        DeclareLaunchArgument('safety_steer_window_s', default_value='1.0'),
         # ----- Build all nodes via OpaqueFunction -----
         OpaqueFunction(function=_launch_setup),
     ])

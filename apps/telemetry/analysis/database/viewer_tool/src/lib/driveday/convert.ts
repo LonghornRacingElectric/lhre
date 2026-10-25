@@ -10,6 +10,7 @@ import type {
   Track,
   XY,
 } from "./types";
+import { isConeLabel } from "./types";
 
 /* Raw session export  ->  run data the viewer draws.
    Runs entirely in the browser: the export can be 15 MB, and nothing needs to leave the machine. */
@@ -158,13 +159,21 @@ function planCourses(prep: Prepared[], pr: (s: LiveSample) => XY): { courses: Co
   if (!runs.length) runs = legs;
   const left = legs.filter((l) => !runs.includes(l));
   /* A lap of a loop ends close to where it began. Lap presses on a loop land tens of metres apart, though, so a run is also a lap
-     when another run drove on through where this one began or ended: on a course with its own start and finish lines no run does. */
+     when another run of about its length drove on through where this one began or ended: on a course with its own start and finish
+     lines no run does. "Through" is measured along each GPS segment, not at the nearest fix, so sparse GPS still counts. */
   const through = (o: Leg, p: XY) => {
-    let k = 0;
-    for (let i = 1; i < o.P.length; i++) if (dist2d(o.P[i], p) < dist2d(o.P[k], p)) k = i;
-    return dist2d(o.P[k], p) < 10 && o.cum[k] > 15 && o.cum[k] < o.len - 15;
+    const margin = Math.min(20, Math.max(8, o.len * 0.05));
+    for (let i = 1; i < o.P.length; i++) {
+      const a = o.P[i - 1], b = o.P[i];
+      const dx = b[0] - a[0], dy = b[1] - a[1], seg = Math.hypot(dx, dy);
+      const f = seg ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (seg * seg))) : 0;
+      const along = o.cum[i - 1] + f * seg;
+      if (along > margin && along < o.len - margin && Math.hypot(p[0] - a[0] - f * dx, p[1] - a[1] - f * dy) < 10) return true;
+    }
+    return false;
   };
-  const loop = (l: Leg) => l.gap < Math.max(15, 0.08 * l.len) || runs.some((o) => o !== l && (through(o, l.start) || through(o, l.end)));
+  const alike = (o: Leg, l: Leg) => o !== l && o.len > l.len * 0.75 && o.len < l.len * 1.35;
+  const loop = (l: Leg) => l.gap < Math.max(15, 0.08 * l.len) || runs.some((o) => alike(o, l) && (through(o, l.start) || through(o, l.end)));
   const open = runs.filter(loop).length < runs.length / 2;
 
   const same = (a: Leg, b: Leg) => {
@@ -294,10 +303,13 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
     for (let i = 0; i < cellN; i++) if (tot && cnt[i] >= tot * 0.5) cellIdx.push(i);
   }
 
-  return courses.map((course, ci) => {
+  /* a course with no clean lap is left out with a warning; the session fails only when no course has one */
+  const skipped: string[] = [];
+  let noClean = "";
+  const out = courses.map((course, ci) => {
     const group = course.legs.map((l) => ({ o: l.o, sm: l.sm }));
     const multi = courses.length > 1;
-    const cw: string[] = ci === 0 ? warn.slice() : [];
+    const cw: string[] = [];
     const all = ([] as LiveSample[]).concat(...group.map((x) => x.sm));
     const probe = all.filter((_, i) => i % Math.max(1, Math.floor(all.length / 300)) === 0);
     const TOL = 6;
@@ -306,17 +318,23 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
           - at least 90% of this run's fixes lie within 6 m of the saved line
           - at least 90% of the saved line lies within 6 m of one of this run's laps (a smaller course in the same lot does not match)
           - a typical lap is within 12% of the saved lap length, and progress runs the same direction
-          Open courses are never matched: their start and finish lines are part of what they are. */
+          Open courses must also match the ordered start and finish positions. */
     let track: Track | null = null;
     let isNew = false;
     let renamed = false;
 
     const sameTrack = (t: Track): number => {
-      if (t.open) return 0;
+      if (!!t.open !== !!course.open) return 0;
       const pr = projWith(frame(t.lat0, t.lon0));
       const near = probe.filter((s) => nearOn(t.ref, t.cum, pr(s))[1] <= TOL).length / probe.length;
       if (near < 0.9) return 0;
       const laps = group.map((x) => x.sm.map(pr));
+      if (course.open) {
+        const first = t.ref[0], last = t.ref[t.ref.length - 1];
+        const startError = medianOf(laps.map(P => Math.hypot(P[0][0] - first[0], P[0][1] - first[1])));
+        const endError = medianOf(laps.map(P => Math.hypot(P[P.length - 1][0] - last[0], P[P.length - 1][1] - last[1])));
+        if (startError > TOL || endError > TOL) return 0;
+      }
       const stepN = Math.max(2, Math.round(t.RL / 3));
       let cov = 0;
       for (let i = 0; i < stepN; i++) {
@@ -347,7 +365,7 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
           let d = 0;
           for (let k = 1; k < P.length; k++) {
             let ds = nearOn(t.ref, t.cum, P[k])[0] - nearOn(t.ref, t.cum, P[k - 1])[0];
-            ds -= t.RL * Math.round(ds / t.RL);
+            if (!course.open) ds -= t.RL * Math.round(ds / t.RL);
             d += ds;
           }
           return d;
@@ -357,7 +375,7 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
       return near * (cov / stepN);
     };
 
-    if (!course.open) {
+    {
       let bestScore = 0;
       for (const t of tracks) {
         const sc = sameTrack(t);
@@ -380,9 +398,32 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
       const f = frame(lat0, lon0);
       const pr = projWith(f);
       const cand = group.map((x) => {
-        const P = x.sm.map(pr);
+        let P = x.sm.map(pr);
         let len = 0;
         for (let k = 1; k < P.length; k++) len += Math.hypot(P[k][0] - P[k - 1][0], P[k][1] - P[k - 1][1]);
+        if (!course.open) {
+          // A late manual press may include the beginning of the next circuit.
+          // Use one observed return to the starting position for the layout only.
+          const direction = dirOf(P[0], P[Math.min(3, P.length - 1)]);
+          let along = 0, best = 3, cut = -1;
+          let end: XY | null = null;
+          for (let k = 1; k < P.length; k++) {
+            const a = P[k - 1], b = P[k];
+            const dx = b[0] - a[0], dy = b[1] - a[1], length = Math.hypot(dx, dy);
+            const fraction = length ? Math.max(0, Math.min(1, ((P[0][0] - a[0]) * dx + (P[0][1] - a[1]) * dy) / length ** 2)) : 0;
+            const point: XY = [a[0] + fraction * dx, a[1] + fraction * dy];
+            const distance = dist2d(point, P[0]);
+            if (along + fraction * length > len * 0.6 && distance < best &&
+                length > 0 && (direction[0] * dx + direction[1] * dy) / length > 0.2) {
+              best = distance; cut = k; end = point;
+            }
+            along += length;
+          }
+          if (end && cut > 0) {
+            P = P.slice(0, cut).concat([end]);
+            len = cumOf(P).at(-1)!;
+          }
+        }
         return { x, P, len, gap: Math.hypot(P[0][0] - P[P.length - 1][0], P[0][1] - P[P.length - 1][1]) };
       });
       let ref: XY[];
@@ -545,15 +586,9 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
       };
       const c1 = cross(gates[0]);
       const c2 = cross(gates[1]);
-      let sec: number[] = [];
-      if (c1 != null) sec.push(c1);
-      if (c1 != null && c2 != null) {
-        sec.push(c2 - c1);
-        if (complete) sec.push(dur - c2);
-      } else if (complete) {
-        sec = [dur / 3, dur / 3, dur / 3];
-        oddStart.push(name);
-      }
+      const sec = [c1, c1 != null && c2 != null ? c2 - c1 : null,
+        complete && c2 != null ? dur - c2 : null];
+      if (complete && (c1 == null || c2 == null)) oddStart.push(name);
       let dist = 0;
       for (let k = 1; k < m; k++) dist += Math.hypot(P[k][0] - P[k - 1][0], P[k][1] - P[k - 1][1]);
       const vmax = spd.reduce((a, b) => (b > a ? b : a), -Infinity);
@@ -598,8 +633,12 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
       if (L.span < 0.6 * RL) cw.push(name + " only covers " + Math.round((L.span / RL) * 100) + "% of the " + noun + ", check its GPS");
       laps.push(strip(L));
     });
-    if (!laps.length) throw new Error("No timed lap was a clean single " + noun + " of the track.");
-    if (oddStart.length) cw.push(oddStart.join(", ") + ": did not pass both standard sector gates, sectors split evenly by time");
+    if (!laps.length) {
+      noClean = "No timed lap was a clean single " + noun + " of the track.";
+      skipped.push((course.label || "A course") + " was left out: none of its laps was a clean single " + noun + ".");
+      return null;
+    }
+    if (oddStart.length) cw.push(oddStart.join(", ") + ": did not pass both initial sector gates; missing sector times are unavailable");
 
     const spdAt = (arr: LiveSample[], k: number) => {
       const a = arr[Math.max(0, k - 1)];
@@ -644,6 +683,10 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
       RL,
       open: open || undefined,
       laps,
+      coneEvents: [...new Map((Array.isArray(J.flags) ? J.flags : [])
+        .filter((flag) => flag && typeof flag.label === "string" && isConeLabel(flag.label) && Number.isFinite(flag.t) &&
+          laps.some((lap) => lap.kind === "lap" && flag.t >= lap.t0 && flag.t < lap.t1))
+        .map((flag) => { const event = { id: "export:cone:" + (flag.id ?? flag.t), t: flag.t }; return [event.id, event] as const; })).values()],
       meta: {
         cellIdx,
         sessId: multi ? base + "~" + (ci + 1) : base,
@@ -660,5 +703,8 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
       warnings: cw,
     };
     return { D, track: tk, isNew, renamed, label: course.label };
-  });
+  }).filter((r): r is NonNullable<typeof r> => r !== null);
+  if (!out.length) throw new Error(noClean);
+  out[0].D.warnings.unshift(...warn, ...skipped);
+  return out;
 }

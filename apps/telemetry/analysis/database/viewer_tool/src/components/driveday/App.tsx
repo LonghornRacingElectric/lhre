@@ -9,7 +9,7 @@ import { Session } from "@/lib/driveday/session";
 import { loadUserState, lsGet, lsSet, metaOf, runStore, saveUserState, storageProblem } from "@/lib/driveday/storage";
 import { seedFlags, type RunListEntry, type SessionExport } from "@/lib/driveday/types";
 import { defaultUnits } from "@/lib/driveday/units";
-import { Header, type Theme } from "./Header";
+import { DbMenu, Header, type Theme } from "./Header";
 import { Workspace } from "./Workspace";
 import { PlayerCtx, ToastProvider, useToast } from "./context";
 
@@ -50,7 +50,7 @@ function Shell() {
         const D = rebuildRun(D0);
         const session = new Session(D);
         const prefs = lsGet<Partial<Prefs>>("prefs", {});
-        const p = new Player(session, loadUserState(D.meta.sessId), prefs.units ?? defaultUnits(), prefs);
+        const p = new Player(session, loadUserState(D.meta.sessId, D), prefs.units ?? defaultUnits(), prefs);
         p.toast = toast;
         live.current = p;
         lsSet("run", id);
@@ -68,12 +68,17 @@ function Shell() {
     setTheme(t);
     applyTheme(t);
     void (async () => {
-      const list = (await runStore.list()).sort((a, b) => b.added - a.added);
-      setRuns(list);
-      if (storageProblem) toast(storageProblem, "err");
-      const last = lsGet<string | null>("run", null);
-      const pick = list.find((r) => r.id === last)?.id ?? list[0]?.id ?? null;
-      await open(pick);
+      try {
+        const list = (await runStore.list()).sort((a, b) => b.added - a.added);
+        setRuns(list);
+        if (storageProblem) toast(storageProblem, "err");
+        const last = lsGet<string | null>("run", null);
+        const pick = list.find((r) => r.id === last)?.id ?? list[0]?.id ?? null;
+        await open(pick);
+      } catch (e) {
+        /* saved runs could not be read; the page still opens, and loading a day works for this tab */
+        toast("Could not read saved runs: " + String((e as Error)?.message || e), "err");
+      }
       setReady(true);
     })();
     return () => {
@@ -123,15 +128,26 @@ function Shell() {
     await importFiles([new File([await r.blob()], "trackside-saved_session.json")]);
   }, [importFiles, toast]);
 
-  const remove = useCallback(async () => {
-    if (!current) return;
-    if (!window.confirm("Remove this run from the browser? Your notes for it go too.")) return;
-    await runStore.del(current);
-    const list = (await runStore.list()).sort((a, b) => b.added - a.added);
-    setRuns(list);
-    await open(list[0]?.id ?? null);
-    toast("Run removed.");
-  }, [current, open, toast]);
+  /* a drive day straight from the database, built server-side in the same export format */
+  const importDb = useCallback(async (day: number) => {
+    toast("Loading day " + day + " from the database…", "busy");
+    const r = await fetch("/api/driveday/db?day=" + day).catch(() => null);
+    if (!r?.ok) return toast(((await r?.json().catch(() => null))?.error as string) || "Could not reach the database.", "err");
+    await importFiles([new File([await r.blob()], "orion-day-" + day + ".json")]);
+  }, [importFiles, toast]);
+
+  const remove = useCallback(async (id: string) => {
+    const run = runs.find(r => r.id === id);
+    if (!run) return;
+    if (!window.confirm('Delete "' + (run.name || "Untitled run") + '" from saved runs? You can reimport the original JSON.')) return;
+    try {
+      await runStore.del(id);
+      const list = (await runStore.list()).sort((a, b) => b.added - a.added);
+      setRuns(list);
+      if (id === current) await open(list[0]?.id ?? null);
+      toast("Run removed.");
+    } catch (e) { toast("Could not delete this run: " + (e as Error).message, "err"); }
+  }, [current, runs, open, toast]);
 
   /* drag and drop anywhere */
   useEffect(() => {
@@ -193,7 +209,8 @@ function Shell() {
             onSelect={(id) => void open(id)}
             onImport={(f) => void importFiles(f)}
             onCache={() => void importCache()}
-            onRemove={() => void remove()}
+            onDb={(day) => void importDb(day)}
+            onRemove={(id) => void remove(id)}
           />
           {player && <Workspace key={player.session.D.meta.sessId} />}
         </div>
@@ -201,9 +218,12 @@ function Shell() {
           <div className="welcome">
             <div>
               <h2>No runs loaded</h2>
-              <p>Import a session JSON exported from the logger. Each run is kept in this browser, and the dropdown at the top switches between them. You can also drop files anywhere on this page.</p>
-              <button className="btn primary" type="button" onClick={() => file.current?.click()}>Import JSON</button>{" "}
+              <p>Pick a drive day from the database, or import a session JSON exported from Trackside. Each run is kept in this browser, and the dropdown at the top switches between them. You can also drop files anywhere on this page.</p>
+              <div className="welcome-actions">
+              <DbMenu onDb={(day) => void importDb(day)} />
+              <button className="btn" type="button" onClick={() => file.current?.click()}>Import JSON</button>
               <button className="btn" type="button" onClick={() => void importCache()}>Last Trackside session</button>
+              </div>
               <input ref={file} type="file" accept=".json,application/json" multiple hidden onChange={(e) => { if (e.target.files?.length) void importFiles(e.target.files); e.target.value = ""; }} />
             </div>
           </div>

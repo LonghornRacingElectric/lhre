@@ -8,9 +8,8 @@ to the estimator would prove nothing, so noise, bias and rolling-radius scale
 error are the point of this node, not decoration.
 
 Speed and yaw rate are differentiated from the truth *pose* rather than read
-from its twist, because the kinematic sim reports twist in the world frame
-and Gazebo reports it in the body frame; a pose difference means the same
-thing in both.
+from its twist, because a pose difference means the same thing whatever
+frame a plant reports its twist in.
 
 The real car reports four wheel speeds (USM, one CAN frame per corner), so
 this publishes four even though the estimator only consumes the rear pair.
@@ -178,4 +177,4 @@ def main():
     except KeyboardInterrupt:
         pass
     node.destroy_node()
-    rclpy.shutdown()
+    rclpy.try_shutdown()

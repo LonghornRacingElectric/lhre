@@ -3,6 +3,7 @@ import { clock } from "./format";
 import { posAt } from "./geometry";
 import { interp, wrap } from "./math";
 import { pieces, segAt, zoneAt } from "./segments";
+import { sectorTimes, suggestGates, validGates, type SectorGates } from "./sectors";
 import type { Session } from "./session";
 import { lsGet, lsSet, saveUserState } from "./storage";
 import type { Lap, LapFlag, UserState } from "./types";
@@ -12,7 +13,7 @@ import type { Units } from "./units";
    React reads it through subscriptions; canvases are painted from it once per animation frame. */
 
 export type Mode = "speed" | "pedal" | "acc" | "gain" | "sec";
-export type Cmp = "best" | "theo" | "lap" | "none";
+export type Cmp = "best" | "theo" | "lap" | "external" | "none";
 export type EndMode = "go" | "stop" | "loop";
 export interface View { cx: number; cy: number; z: number }
 export interface Focus { a: number; len: number; type: "c" | "s" | "b"; name: string }
@@ -63,12 +64,20 @@ export class Player {
   cmp: Cmp = "best";
   ghostLapI: number;
   ghostAll = false;
+  externalGhost: Lap | null = null;
+  externalKey = "";
+  videoUrl = "";
+  videoName = "";
+  videoKey = "";
+  videoLinked = false;
+  videoCodecLabel = "";
   showSeg = false;
   showCones = true;
   raceMode = false;
   consMode = false;
   layoutOnly = false;
   baseIdx: number;
+  sectorMethod: "auto" | "manual" = "auto";
   hoverT: number | null = null;
   /* camera */
   view: View;
@@ -110,6 +119,14 @@ export class Player {
   ) {
     this.user = user;
     this.units = units;
+    const savedSectors = lsGet<{ gates: number[]; method: "auto" | "manual" } | null>("sectors:" + session.D.meta.trackId, null);
+    if (savedSectors && Array.isArray(savedSectors.gates)) {
+      const gates = savedSectors.gates.map((g) => g * session.RL);
+      if (validGates(gates, session.RL)) {
+        session.setGates(gates);
+        this.sectorMethod = savedSectors.method === "manual" ? "manual" : "auto";
+      }
+    } else this.saveSectors();
     this.analysis = new Analysis(session, user);
     this.mode = prefs.mode ?? "speed";
     this.endMode = prefs.endMode ?? "go";
@@ -117,12 +134,40 @@ export class Player {
     const { bbox, laps, runs } = session;
     this.view = { cx: (bbox.x[0] + bbox.x[1]) / 2, cy: (bbox.y[0] + bbox.y[1]) / 2, z: 1 };
     this.ghostLapI = laps.indexOf(this.analysis.bestRun);
-    let b = laps.findIndex((l) => l.kind === "out");
-    if (b < 0) b = Math.max(0, laps.indexOf(runs[0]));
+    const b = Math.max(0, laps.indexOf(runs[0]));
     const saved = lsGet<number | null>("base:" + session.D.meta.sessId, null);
     this.baseIdx = saved != null && laps[saved] ? saved : b;
     const pos = lsGet<number | null>("pos:" + session.D.meta.sessId, null);
     this.T = pos != null && pos >= 0 && pos <= session.TD ? pos : session.base.t0 - session.T0;
+  }
+
+  private saveSectors() {
+    lsSet("sectors:" + this.session.D.meta.trackId, { gates: this.session.gates.map((g) => g / this.RL), method: this.sectorMethod });
+  }
+
+  setSectorAtPlayhead(index: 0 | 1): void {
+    const { L, rel } = this.curState();
+    if (L.kind !== "lap") return this.toast("Choose a completed lap to place a sector boundary.");
+    const distance = interp(L.ch.t, L.ch.u, rel);
+    const gates: SectorGates = [...this.session.gates];
+    gates[index] = distance;
+    if (!validGates(gates, this.RL) || Math.min(gates[0], gates[1] - gates[0], this.RL - gates[1]) < 5)
+      return this.toast("Keep the boundaries in order, at least 5 m apart and away from start/finish.");
+    this.session.setGates(gates);
+    this.sectorMethod = "manual";
+    this.saveSectors();
+    this.analysis.recompute();
+    this.changed();
+    this.toast("S" + (index + 1) + " ends here. All laps now use these boundaries.");
+  }
+
+  autoSectors(): void {
+    const lap = this.analysis.bestRun;
+    this.session.setGates(suggestGates(lap, this.session.segs, this.RL));
+    this.sectorMethod = "auto";
+    this.saveSectors();
+    this.analysis.recompute();
+    this.changed();
   }
 
   /* ================= small helpers ================= */
@@ -131,6 +176,10 @@ export class Player {
   get RL() { return this.session.RL; }
   get T0() { return this.session.T0; }
   get TD() { return this.session.TD; }
+
+  replayPosition(lap: Lap, elapsed: number): [number, number] {
+    return posAt(lap, Math.max(0, Math.min(lap.dur, elapsed)));
+  }
 
   curState(): { L: Lap; rel: number } {
     const L = this.laps[this.sel];
@@ -141,11 +190,20 @@ export class Player {
       case "best": return this.analysis.bestRun;
       case "theo": return this.analysis.theoLap();
       case "lap": return this.laps[this.ghostLapI] ?? null;
+      case "external":
+        if (this.externalGhost) this.externalGhost.sec = sectorTimes(this.externalGhost, this.session.gates);
+        return this.externalGhost;
       default: return null;
     }
   }
   refKey() {
-    return this.cmp + "|" + this.ghostLapI;
+    return this.cmp + "|" + this.ghostLapI + "|" + this.externalKey;
+  }
+  setExternalGhost(lap: Lap, key: string) {
+    this.externalGhost = lap;
+    this.externalKey = key;
+    this.cmp = "external";
+    this.changed();
   }
   lapLabelAt(tms: number) {
     const l = this.laps[this.session.lapIndexAt(tms)];
@@ -161,8 +219,8 @@ export class Player {
   coneWhere(e: { t: number }) {
     const { l } = this.conePos(e);
     const rel = Math.max(0, e.t + this.T0 - l.t0);
-    const u = wrap(interp(l.ch.t, l.ch.u, rel), this.RL);
-    const sg = segAt(this.session.segs, this.RL, u);
+    const u = interp(l.ch.t, l.ch.u, rel);
+    const sg = segAt(this.session.segs, this.RL, u, this.session.open);
     return { lap: l, rel, seg: sg >= 0 ? this.session.segs[sg].name : "" };
   }
 
@@ -225,12 +283,13 @@ export class Player {
   dispose() {
     this.disposed = true;
     this.playing = false;
+    if (this.videoUrl) URL.revokeObjectURL(this.videoUrl);
   }
   private updateLoc() {
     const { L, rel } = this.curState();
-    const s = wrap(interp(L.ch.t, L.ch.u, rel), this.RL);
-    this.curSeg = segAt(this.session.segs, this.RL, s);
-    this.curZone = zoneAt(this.session.zones, this.RL, s);
+    const s = interp(L.ch.t, L.ch.u, rel);
+    this.curSeg = segAt(this.session.segs, this.RL, s, this.session.open);
+    this.curZone = zoneAt(this.session.zones, this.RL, s, this.session.open);
   }
 
   /* ================= playback ================= */
@@ -529,7 +588,7 @@ export class Player {
     if (ev.length) {
       let b = ev[0];
       ev.forEach((e) => { if (Math.abs(e.t - this.T) < Math.abs(b.t - this.T)) b = e; });
-      this.update((u) => { u.ce.splice(u.ce.indexOf(b), 1); });
+      this.update((u) => { this.removeTimedCone(u, u.ce.indexOf(b)); });
       this.toast("Removed the cone nearest the playhead on " + L.name + ".");
     } else if ((this.user.cones[n] || 0) > 0) {
       this.setCone(n, -1);
@@ -548,14 +607,21 @@ export class Player {
     }
     const ev = this.analysis.coneEvIn(l);
     this.update((u) => {
-      if (ev.length) { u.ce.splice(u.ce.indexOf(ev[ev.length - 1]), 1); return; }
+      if (ev.length) { this.removeTimedCone(u, u.ce.indexOf(ev[ev.length - 1])); return; }
       const c = Math.max(0, (+u.cones[n] || 0) - 1);
       if (c) u.cones[n] = c;
       else delete u.cones[n];
     });
   }
   deleteCone(i: number) {
-    this.update((u) => { u.ce.splice(i, 1); });
+    this.update((u) => { this.removeTimedCone(u, i); });
+  }
+  private removeTimedCone(user: UserState, index: number) {
+    const event = user.ce[index];
+    if (!event) return;
+    if (event.id.startsWith("export:cone:"))
+      user.dismissedCones = [...new Set([...(user.dismissedCones ?? []), event.id])];
+    user.ce.splice(index, 1);
   }
   addMark(text: string) {
     this.update((u) => {
