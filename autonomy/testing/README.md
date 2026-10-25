@@ -29,7 +29,7 @@ scope and defers the repair.
 | --- | --- | --- |
 | [2026-10-24 PR #133 integration](2026-10-24-pr133-integration/README.md) | Does the source integration preserve launch/fault behavior and drive under current scoring? | **Open:** replacement GPU seed-2 cone contact; default GPU LiDAR timeout fails on the test laptop |
 
-## Data and reporting rules
+## Rules
 
 - **Raw data is never committed.** Recordings run 50 to 100 MB per minute.
   Upload each campaign's whole data folder (recordings, ROS 2 bags, health

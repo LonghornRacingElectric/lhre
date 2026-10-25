@@ -49,7 +49,9 @@ Select the caster below for imported Livox scan directions.
 
 **PR133-GPU-SEED2 remains open.** The replacement GPU grid contacted
 `cone_blue_10` in two isolated autocross seed-2 runs; the previous main GPU
-model and the vendor-pattern caster passed that same world. The GPU grid is
+model and the vendor-pattern caster passed that same world. The current-tree
+official bounded gate also reports cone contacts on GPU seeds 2 and 3, while
+the caster passes seeds 1–3 and acceleration. The GPU grid is
 retained in PR #133 by scope decision, and its driving regression is deferred.
 This is a failed whole-vehicle/cone-base scoring check, not a passing acceptance
 result or a measured collision force. Planner and detector defaults are not
