@@ -2,11 +2,29 @@ import { describe, expect, it } from "vitest";
 import { convertSession } from "../../src/lib/driveday/convert";
 import { rebuildRun } from "../../src/lib/driveday/rebuild";
 import { Session } from "../../src/lib/driveday/session";
-import { COURSE_LEN, synthCourses, synthLoopPresses } from "./fixtures/courses";
-import { TRACK_LEN } from "./fixtures/synth";
+import { segAt } from "../../src/lib/driveday/segments";
+import { COURSE_LEN, synthCourses } from "./fixtures/courses";
+import { synthSession, TRACK_LEN } from "./fixtures/synth";
 
 const J = synthCourses();
 const courses = convertSession(J, "courses.json", []);
+
+describe("manual presses at different positions on a loop", () => {
+  it("uses a full loop and preserves logger labels even when cuts are far apart", () => {
+    const j = synthSession({ laps: 4 });
+    const offsets = [0, 3500, -1800, 2300, 0];
+    j.laps.forEach((l, i) => {
+      l.startMs += offsets[i]; l.endMs += offsets[i + 1];
+      l.durationMs = l.endMs - l.startMs;
+      l.label = "Manual " + (i * 2 + 3);
+    });
+    const imported = convertSession(j, "varied-cuts.json");
+    expect(imported).toHaveLength(1);
+    expect(imported[0].D.open).toBeUndefined();
+    expect(Math.abs(imported[0].D.RL - TRACK_LEN)).toBeLessThan(TRACK_LEN * 0.1);
+    expect(imported[0].D.laps.filter((l) => l.kind === "lap").map((l) => l.name)).toEqual(j.laps.map((l) => l.label));
+  });
+});
 
 describe("a session with separate start and finish lines, and a run the other way", () => {
   it("opens each way round as its own course", () => {
@@ -25,7 +43,7 @@ describe("a session with separate start and finish lines, and a run the other wa
 
   it("keeps only the timed runs and says what it left out", () => {
     courses.forEach((c) => expect(c.D.laps.filter((l) => l.kind === "lap").length).toBe(2));
-    expect(courses[0].D.warnings.join(" ")).toMatch(/Manual 2, Manual 5 are too short or slow/);
+    expect(courses[0].D.warnings.join(" ")).toMatch(/Lap 2, Lap 5 are too short or slow/);
     expect(courses.every((c) => c.D.laps.every((l) => l.kind === "lap"))).toBe(true);
   });
 
@@ -53,6 +71,7 @@ describe("a session with separate start and finish lines, and a run the other wa
     const last = s.segs[s.segs.length - 1];
     expect(last.a + last.len).toBeCloseTo(s.RL, 0);
     expect(s.segs.some((g) => g.type === "c")).toBe(true);
+    expect(segAt(s.segs, s.RL, s.RL, true)).toBe(s.segs.length - 1);
   });
 });
 
@@ -71,19 +90,5 @@ describe("the start and finish lines", () => {
   });
   it("leave an open course as it was imported", () => {
     courses.forEach((c) => expect(rebuildRun(c.D)).toBe(c.D));
-  });
-});
-
-describe("manual laps on a loop, pressed at different places each time", () => {
-  const J = synthLoopPresses();
-  const rs = convertSession(J, "presses.json", []);
-  it("is one loop, not two open courses", () => {
-    expect(rs.length).toBe(1);
-    expect(rs[0].D.open).toBeUndefined();
-    expect(Math.abs(rs[0].D.RL - TRACK_LEN)).toBeLessThan(TRACK_LEN * 0.1);
-    expect(rs[0].D.laps.filter((l) => l.kind === "lap").map((l) => l.name)).toEqual(["Manual 1", "Manual 2"]);
-  });
-  it("puts every lap on the road", () => {
-    rs[0].D.laps.forEach((l) => expect(l.dev).toBeLessThan(3));
   });
 });

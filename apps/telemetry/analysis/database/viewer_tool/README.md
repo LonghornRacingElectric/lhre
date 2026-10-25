@@ -118,3 +118,16 @@ energy plan. It runs entirely in the browser and keeps its data in IndexedDB.
 How it sorts lap presses into courses, where the export comes from and how to
 test it are in [src/lib/driveday/README.md](src/lib/driveday/README.md);
 `npm run test:driveday` runs its tests.
+
+## LAPDOG refresh
+
+Trackside Retro includes the current LAPDOG video/track/analysis workspace,
+wheel-zoom timeline, route-matched cross-file comparisons, GPS-quality checks
+and driving debrief tools. Existing server-cache import and Trackside event
+notes remain available. See [the retro guide](src/lib/driveday/README.md).
+
+Video playback copies are made locally using `ffmpeg-static`.
+`npm run dev` and `npm start` launch the loopback helper; remote users run
+`npm run video-helper -- --origin https://your-viewer-host.example` on their
+own computer. Originals are not uploaded to the viewer server. See
+[helper setup](tools/README.md). No database setup is needed for the helper.

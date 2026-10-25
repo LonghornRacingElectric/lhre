@@ -1,8 +1,10 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { sectorClass } from "@/lib/driveday/analysis";
 import { clock, fmt } from "@/lib/driveday/format";
 import { interp } from "@/lib/driveday/math";
+import { elapsedAtDistance } from "@/lib/driveday/sectors";
 import { cvS, cvT, sU, tU } from "@/lib/driveday/units";
 import { usePlayer, useFrame, useUi } from "./context";
 
@@ -20,16 +22,16 @@ export function HudLeft() {
   const nm = L.kind === "out" ? "Out lap" : L.kind === "partial" ? L.name.replace(" (in progress)", "") : L.name;
   const cones = a.conesOf(L);
 
-  let secs: React.ReactNode = null; // typed: viewer_tool has noImplicitAny off, so a bare null is narrowed to null
-  if (R && L.sec && L.sec[0] != null) {
-    const e0 = L.sec[0] as number;
-    const e1 = e0 + (L.sec[1] as number);
+  let secs: ReactNode = null;
+  if (R && L.sec) {
+    const e0 = L.sec[0] ?? Infinity;
+    const e1 = e0 + (L.sec[1] ?? Infinity);
     const act = rel < e0 ? 0 : rel < e1 ? 1 : 2;
     const starts = [0, e0, e1];
     secs = (
       <div className="secs">
         {[0, 1, 2].map((k) => {
-          const done = (k === 0 && rel >= e0) || (k === 1 && rel >= e1) || (k === 2 && L.sec[2] != null && rel >= L.dur - 1);
+          const done = L.sec[k] != null && ((k === 0 && rel >= e0) || (k === 1 && rel >= e1) || (k === 2 && rel >= L.dur - 1));
           const state = done ? "done" : k === act ? "act" : "fut";
           const val = done ? (L.sec[k] as number) : k === act ? rel - starts[k] : null;
           return (
@@ -42,12 +44,10 @@ export function HudLeft() {
       </div>
     );
   }
-  let gap: React.ReactNode = null;
+  let gap: ReactNode = null;
   if (R && R !== L) {
-    const tc0 = interp(L.ch.u, L.ch.t, 0);
-    const tr0 = interp(R.ch.u, R.ch.t, 0);
     const u = interp(L.ch.t, L.ch.u, rel);
-    const g = rel - tc0 - (interp(R.ch.u, R.ch.t, u) - tr0);
+    const g = rel <= 0 ? 0 : rel >= L.dur ? L.dur - R.dur : rel - elapsedAtDistance(R, u, p.RL);
     gap = (
       <div className={"gap " + (g > 0 ? "pos" : "neg")}>
         {g >= 0 ? "+" : "−"}{(Math.abs(g) / 1000).toFixed(2)}<small>vs {R.name}</small>

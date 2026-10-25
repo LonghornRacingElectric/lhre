@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { cellGeo, cellStats, cellsAt, COLS, drawCells, NSLOT } from "@/lib/driveday/draw/cells";
 import { interp } from "@/lib/driveday/math";
 import { cvT, cvTd, tU } from "@/lib/driveday/units";
@@ -18,7 +18,6 @@ export function CellsPanel() {
   const hoverRef = useRef(-1);
   hoverRef.current = hover;
   const ref = usePainter(p, "cells", (c) => drawCells(p, c, st, mode, hoverRef.current), true);
-  useEffect(() => { p.schedule(true); }, [p, mode, hover]); // the painter reads mode/hover, so a change needs a repaint even while paused
   const { L, rel } = p.curState();
   const cs = cellsAt(L, rel);
   const V = (k: "cellV" | "vmaxC" | "vavgC") => interp(L.ch.t, L.ch[k], rel);
@@ -42,10 +41,10 @@ export function CellsPanel() {
         <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <div className="seg" role="group" aria-label="Cell colour">
             <button aria-pressed={mode === "abs"} onClick={() => setMode("abs")}>Temperature</button>
-            <button aria-pressed={mode === "rise"} onClick={() => setMode("rise")}>Rise since {p.session.base.name}</button>
+            <button aria-pressed={mode === "rise"} onClick={() => setMode("rise")}>Rise since Lap 1</button>
           </div>
           <span className="mono">
-            {hover >= 0 ? `Sensor ${idx[hover]} · ${cvT(u, cs[hover]).toFixed(1)} ${tU(u)} · ${rise >= 0 ? "+" : "−"}${Math.abs(cvTd(u, rise)).toFixed(1)} since ${p.session.base.name} start` : "Hover a cell for its reading"}
+            {hover >= 0 ? `Sensor ${idx[hover]} · ${cvT(u, cs[hover]).toFixed(1)} ${tU(u)} · ${rise >= 0 ? "+" : "−"}${Math.abs(cvTd(u, rise)).toFixed(1)} since Lap 1 start` : "Hover a cell for its reading"}
           </span>
         </div>
         <canvas

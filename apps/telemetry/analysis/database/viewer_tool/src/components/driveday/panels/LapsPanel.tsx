@@ -7,8 +7,9 @@ import { fmt } from "@/lib/driveday/format";
 import { clock } from "@/lib/driveday/format";
 import { usePlayer, useUi } from "../context";
 import { Field } from "./Tile";
+import { ValidityControls } from "./ReviewPanels";
 
-const FLAGS: [string, string][] = [["", "—"], ["off", "Off line"], ["traffic", "Traffic"], ["spin", "Spin"], ["mistake", "Mistake"], ["skip", "Skip lap"]];
+const FLAGS: [string, string][] = [["", "Unmarked"], ["clean", "Clean"], ["cone", "Cone hit"], ["offcourse", "Off course"], ["incomplete", "Incomplete"], ["off", "Off line"], ["traffic", "Traffic"], ["spin", "Spin"], ["mistake", "Mistake"], ["skip", "Skip lap"]];
 
 function ConeList() {
   const p = usePlayer();
@@ -41,10 +42,12 @@ export function LapsPanel() {
     const r = { out: 0, lap: 1, partial: 2, theo: 3 } as const;
     return r[laps[x].kind] - r[laps[y].kind] || x - y;
   });
-  const bA = Math.min(...runs.map((l) => a.adj(l)));
+  const eligible = runs.filter(l => a.valid(l));
+  const bA = eligible.length ? Math.min(...eligible.map((l) => a.adj(l))) : NaN;
   const m = p.session.D.meta;
   return (
     <>
+      <details className="review-details"><summary>Lap eligibility rules</summary><ValidityControls /></details>
       <div className="scroll">
         <table>
           <thead>
@@ -66,8 +69,8 @@ export function LapsPanel() {
               const cur = f.x ? "skip" : f.f || "";
               const prev = n > 0 ? laps[order[n - 1]].kind : null;
               const sep = (n > 0 && prev !== l.kind && l.kind !== "out") || (isLap && prev === "out");
-              const bestR = isLap && Math.abs(l.dur - a.bestLap) < 1;
-              const bestA = isLap && Math.abs(a.adj(l) - bA) < 1;
+              const bestR = isLap && a.valid(l) && Math.abs(l.dur - a.bestLap) < 1;
+              const bestA = isLap && a.valid(l) && Math.abs(a.adj(l) - bA) < 1;
               const tag = l.kind === "out" ? "OUT" : l.kind === "partial" ? "PARTIAL" : l === base ? "BASE" : "";
               return (
                 <tr

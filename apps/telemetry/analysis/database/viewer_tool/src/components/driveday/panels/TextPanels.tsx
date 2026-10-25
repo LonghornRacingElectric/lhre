@@ -1,5 +1,8 @@
 "use client";
 
+import { useState } from "react";
+
+import { SETUP_FORM as FORM } from "@/lib/driveday/setup";
 import { ALERT_DEFS } from "@/lib/driveday/analysis";
 import { buildDebrief } from "@/lib/driveday/debrief";
 import { clock } from "@/lib/driveday/format";
@@ -50,17 +53,23 @@ export function NotesPanel() {
   const p = usePlayer();
   useUi(p);
   const { marks } = p.user;
+  const [text, setText] = useState("");
+  const [category, setCategory] = useState<"note" | "braking" | "cone" | "offcourse" | "video">("note");
+  const [filter, setFilter] = useState("all");
+  const categories = [["note", "Note"], ["braking", "Braking"], ["cone", "Cone hit"], ["offcourse", "Off course"], ["video", "Video moment"]] as const;
   return (
     <>
-      <p className="pdesc">Comments pinned to moments on the timeline. They show as purple markers above the laps.</p>
+      <p className="pdesc">Bookmarks connect the timeline and loaded video. Clicking one jumps to its saved moment; reselect the matching video if it was closed.</p>
+      <form className="review-panel" onSubmit={e => { e.preventDefault(); p.addMark(text.trim() || categories.find(([key]) => key === category)![1], category); setText(""); }}><input aria-label="Bookmark label" placeholder="e.g. Late braking into T1" value={text} onChange={e => setText(e.target.value)} /><select aria-label="Bookmark category" value={category} onChange={e => setCategory(e.target.value as typeof category)}>{categories.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select><button className="btn" type="submit">Bookmark this moment</button></form>
+      <label className="review-filter">Show<select aria-label="Filter bookmarks" value={filter} onChange={e => setFilter(e.target.value)}><option value="all">All bookmarks</option>{categories.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
       {!marks.length ? (
         <div className="empty">No notes yet. Press N anywhere, or use + Note under the timeline, to pin a comment to the moment you are watching.</div>
       ) : (
         <ul className="notes">
-          {marks.map((m, i) => (
-            <li key={m.id} tabIndex={0} onClick={() => p.setT(m.t)} onKeyDown={(e) => e.key === "Enter" && p.setT(m.t)}>
+          {marks.map((m, i) => (filter === "all" || (m.category ?? "note") === filter) && (
+            <li key={m.id} tabIndex={0} onClick={() => p.seekMark(m.id)} onKeyDown={(e) => e.key === "Enter" && p.seekMark(m.id)}>
               <span className="nt">{clock(m.t)} · {p.lapLabelAt(m.t)}</span>
-              <span className="ntx">{m.text}</span>
+              <span className="ntx">{m.text}<small className="bookmark-meta">{m.category ?? "note"}{m.video ? " · " + m.video.name + " @ " + m.video.time.toFixed(2) + " s" : ""}</small></span>
               <button className="x" type="button" aria-label="Delete note" onClick={(e) => { e.stopPropagation(); p.deleteMark(i); }}>×</button>
             </li>
           ))}
@@ -84,13 +93,7 @@ export function DebriefPanel() {
             <li
               key={i}
               className={it.k + (go ? " go" : "")}
-              tabIndex={go ? 0 : undefined}
               onClick={() => {
-                if (it.seg != null) p.focusSeg(it.seg);
-                else if (it.zone != null) p.focusZone(it.zone);
-              }}
-              onKeyDown={(e) => {
-                if (e.key !== "Enter" || e.target !== e.currentTarget) return;
                 if (it.seg != null) p.focusSeg(it.seg);
                 else if (it.zone != null) p.focusZone(it.zone);
               }}
@@ -104,7 +107,7 @@ export function DebriefPanel() {
                   onClick={(e) => {
                     e.stopPropagation();
                     p.skipLaps(it.skip!);
-                    p.toast("Skipped " + it.skip!.map((n) => p.session.runs[n - 1].name).join(", "));
+                    p.toast("Skipped " + it.skip!.map((n) => "Lap " + n).join(", "));
                   }}
                 >
                   Skip {it.skip.length > 1 ? "them" : "it"}
@@ -117,16 +120,6 @@ export function DebriefPanel() {
     </>
   );
 }
-
-type Spec = [key: string, label: string, kind?: "number" | "text" | "area" | "select", options?: string[]];
-const FORM: [string, Spec[]][] = [
-  ["Conditions", [["driver", "Driver", "text"], ["airT", "Air temp (°C)"], ["surf", "Surface", "select", ["", "Dry", "Damp", "Wet"]], ["surfT", "Surface temp (°C)"], ["wind", "Wind and other", "text"]]],
-  ["Tire pressure, cold", [["coldFL", "Front left (psi)"], ["coldFR", "Front right (psi)"], ["coldRL", "Rear left (psi)"], ["coldRR", "Rear right (psi)"], ["compound", "Compound", "text"]]],
-  ["Tire pressure, hot after the run", [["hotFL", "Front left (psi)"], ["hotFR", "Front right (psi)"], ["hotRL", "Rear left (psi)"], ["hotRR", "Rear right (psi)"]]],
-  ["Alignment and chassis", [["camF", "Front camber (°)"], ["camR", "Rear camber (°)"], ["toeF", "Front toe (°)"], ["toeR", "Rear toe (°)"], ["bias", "Front brake bias (%)"], ["tqLimit", "Torque limit (Nm)"], ["aero", "Aero", "text"], ["susp", "Springs and dampers", "text"]]],
-  ["Alert limits (leave blank for none)", [["aCellT", "Hottest cell above (°C)"], ["aInvT", "Inverter hotspot above (°C)"], ["aMotT", "Motor above (°C)"], ["aCoolT", "Coolant above (°C)"], ["aCellV", "Lowest cell below (V)"], ["aPackV", "Pack voltage below (V)"]]],
-  ["Notes", [["notes", "Driver feedback and run notes", "area"], ["next", "Changes for the next run", "area"]]],
-];
 
 export function SetupPanel() {
   const p = usePlayer();
@@ -165,9 +158,11 @@ export function AboutPanel() {
     <div className="note2" style={{ paddingTop: 12 }}>
       <b>Timeline.</b> Everything follows the playhead along the whole run, out lap first. Click or drag the timeline, press Play, or click the track or any chart to jump. Laps are the chapters, with sector marks inside them and an orange marker for every cone hit.
       <br /><br />
-      <b>Sectors.</b> The base overlay lap&apos;s GPS path is split into three equal-distance sectors, and every other lap is projected onto it so each is timed through the same two gates. Crossings are interpolated between GPS fixes. The sectors add up to the lap time: the first one starts at the logged lap start and the last one ends at the logged lap end.
+      <b>Sectors.</b> Automatic boundaries aim for balanced driving time and snap to nearby corner/straight transitions. Use the Sectors menu to set S1 and S2 at the playhead or reset the suggestion. Every lap uses the same saved gates; crossings are interpolated between GPS fixes. Measured sectors add up to the logged lap time, and missing crossings show a dash.
       <br /><br />
       <b>Colours.</b> Purple is the session best, green is faster than the base lap, yellow is slower. Adjusted time adds the cone penalty to real time.
+      <br /><br />
+      <b>Ghost.</b> Best is the fastest unskipped logged lap. Replay starts both laps at logged time zero and stops each at its logged finish; a faster lap can still be behind in an individual section. Best sectors stitches the fastest measured sectors using the same boundaries.
       <br /><br />
       <b>Samples and smoothing.</b> Imports combine the session tail and full lap samples at their original timestamps, including 20 Hz exports. Playback positions and derived speed/acceleration use a centred 0.5 s average; imported fixes, telemetry channels and logged lap times are retained. Lateral g is a GPS curvature estimate, not an IMU reading. GPS noise and gaps affect its accuracy.
       <br /><br />

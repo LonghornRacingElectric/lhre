@@ -1,4 +1,5 @@
 import { CH_KEYS, type BaseChannels, type ChKey, type Pt, type RawLap, type RunData } from "./types";
+import { sectorTimes } from "./sectors";
 
 /* The start line is wherever the car was when each timed lap began, and the finish line wherever it was when the lap ended
    (convert.ts puts them there). Lap times, laps and energy are always the logger's.
@@ -10,27 +11,6 @@ const round = (v: number, d: number) => {
   const m = Math.pow(10, d);
   return Math.round(v * m) / m;
 };
-
-/** Sector times for a lap from its distance along the track, cut at thirds of the track length. */
-function sectorsOf(u: number[], tt: number[], RL: number, dur: number, complete: boolean): number[] {
-  const cross = (th: number): number | null => {
-    for (let k = 1; k < u.length; k++) {
-      if (u[k - 1] < th && u[k] >= th) return tt[k - 1] + ((tt[k] - tt[k - 1]) * (th - u[k - 1])) / (u[k] - u[k - 1]);
-    }
-    return null;
-  };
-  const c1 = cross(RL / 3);
-  const c2 = cross((2 * RL) / 3);
-  let sec: number[] = [];
-  if (c1 != null) sec.push(c1);
-  if (c1 != null && c2 != null) {
-    sec.push(c2 - c1);
-    if (complete) sec.push(dur - c2);
-  } else if (complete) {
-    sec = [dur / 3, dur / 3, dur / 3];
-  }
-  return sec;
-}
 
 interface Sample {
   t: number;
@@ -130,9 +110,9 @@ export function rebuildRun(D0: RunData): RunData {
     for (let k = 1; k < m; k++) dist += Math.hypot(sm[k].x - sm[k - 1].x, sm[k].y - sm[k - 1].y);
     return {
       ch, name: src.name, kind: src.kind, t0, t1, dur: src.dur,
-      sec: sectorsOf(u, tt, RL, src.dur, src.kind !== "partial"),
+      sec: sectorTimes({ ch: { u, t: tt }, dur: src.dur, kind: src.kind }, [RL / 3, 2 * RL / 3]),
       pts, dist,
-      vmax: Math.max(...sm.map((s) => s.spd)),
+      vmax: sm.reduce((v, s) => Math.max(v, s.spd), 0),
       vavg: src.dur > 0 ? dist / (src.dur / 1000) : 0,
       dev: sm.reduce((a, s) => a + s.dev, 0) / m,
       wh: src.wh,

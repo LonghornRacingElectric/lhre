@@ -32,7 +32,7 @@ export function buildDebrief(a: Analysis, units: Units): DebriefItem[] {
   }
   const off = runs.filter((l) => a.valid(l) && l.dur > mdn * 1.1);
   if (off.length) {
-    out.push({ k: "warn", t: `${off.map((l) => l.name).join(", ")} ${off.length > 1 ? "are" : "is"} more than 10% slower than the median and pull the averages around.`, skip: off.map((l) => runs.indexOf(l) + 1) });
+    out.push({ k: "warn", t: `${off.map((l) => l.name).join(", ")} ${off.length > 1 ? "are" : "is"} more than 10% slower than the median and pull the averages around.`, skip: off.map((l) => s.lapNo(l)) });
   }
   const sg = segs
     .map((g, i) => {
@@ -46,9 +46,10 @@ export function buildDebrief(a: Analysis, units: Units): DebriefItem[] {
     .forEach((x) => out.push({ k: "warn", t: `${x.g.name} costs the most: a typical lap is ${((x.med - x.min) / 1000).toFixed(2)} s slower through it than your best, and it varies by about ${(x.sd / 1000).toFixed(2)} s.`, seg: x.i }));
   const steady = [...sg].sort((p, q) => p.sd - q.sd)[0];
   if (steady) out.push({ k: "good", t: `${steady.g.name} is your most repeatable segment, within ${(steady.sd / 1000).toFixed(2)} s lap to lap.`, seg: steady.i });
-  const ss = [0, 1, 2].map((k) => sd(vr.map((l) => (l.sec[k] as number) / 1000)));
+  const ss = [0, 1, 2].map((k) => sd(vr.filter((l) => l.sec[k] != null).map((l) => l.sec[k]! / 1000)));
   const wk = ss.indexOf(Math.max(...ss));
-  out.push({ k: "info", t: `S${wk + 1} varies the most between laps (spread ${ss[wk].toFixed(2)} s), S${ss.indexOf(Math.min(...ss)) + 1} the least (${Math.min(...ss).toFixed(2)} s).` });
+  if ([0, 1, 2].every((k) => vr.filter((l) => l.sec[k] != null).length >= 2))
+    out.push({ k: "info", t: `S${wk + 1} varies the most between laps (spread ${ss[wk].toFixed(2)} s), S${ss.indexOf(Math.min(...ss)) + 1} the least (${Math.min(...ss).toFixed(2)} s).` });
   const bz = a.cons.bstd.map((v, i) => ({ v, i })).filter((x) => a.cons.brake[x.i].length >= 3);
   if (bz.length) {
     const w = [...bz].sort((p, q) => q.v - p.v)[0];
@@ -62,9 +63,9 @@ export function buildDebrief(a: Analysis, units: Units): DebriefItem[] {
     .sort((p, q) => q.v - p.v)[0];
   if (az) out.push({ k: "info", t: `Minimum speed in ${segs[az.i].name} varies by about ${cvS(units, az.v).toFixed(1)} ${sU(units)} between laps, the most of any corner.`, seg: az.i });
   const bl = vr.reduce((p, l) => (l.dur < p.dur ? l : p));
-  const gains = [0, 1, 2].map((k) => (bl.sec[k] as number) - a.best[k]);
+  const gains = [0, 1, 2].map((k) => bl.sec[k] != null ? bl.sec[k]! - a.best[k] : NaN);
   const gk = gains.indexOf(Math.max(...gains));
-  out.push({ k: "info", t: `Theoretical best is ${((bl.dur - a.theo) / 1000).toFixed(3)} s under your best lap. The biggest piece is S${gk + 1} (${(gains[gk] / 1000).toFixed(3)} s), set on Lap ${a.bestSec[gk].lap}.` });
+  if (gains.every(Number.isFinite)) out.push({ k: "info", t: `Theoretical best is ${((bl.dur - a.theo) / 1000).toFixed(3)} s under your best lap. The biggest piece is S${gk + 1} (${(gains[gk] / 1000).toFixed(3)} s), set on ${a.bestSec[gk].label}.` });
   const wh = vr.map((l) => l.wh).filter((v): v is number => v != null);
   if (wh.length >= 5) out.push({ k: "info", t: `Energy: median ${med(wh).toFixed(0)} Wh a lap, last 5 clean laps ${(wh.slice(-5).reduce((x, y) => x + y, 0) / 5).toFixed(0)} Wh.` });
   const hot = Math.max(...runs.map((l) => Math.max(...l.ch.cellT)));
@@ -84,16 +85,16 @@ export function buildDebrief(a: Analysis, units: Units): DebriefItem[] {
 export function lapsCsv(a: Analysis, units: Units): string {
   const unit = units.spd === "kph" ? "kmh" : "mph";
   const rows: (string | number)[][] = [["lap", "real_s", "s1_s", "s2_s", "s3_s", "cones", "adjusted_s", "flag", "skipped", "energy_Wh", `avg_speed_${unit}`, `max_speed_${unit}`]];
-  a.s.runs.forEach((l, i) => {
-    const n = i + 1;
+  a.s.runs.forEach((l) => {
+    const n = a.s.lapNo(l);
     const f = a.u.flags[n] || {};
     rows.push([
-      l.name, (l.dur / 1000).toFixed(3), ...[0, 1, 2].map((k) => ((l.sec[k] as number) / 1000).toFixed(3)),
+      l.name, (l.dur / 1000).toFixed(3), ...[0, 1, 2].map((k) => l.sec[k] != null ? (l.sec[k]! / 1000).toFixed(3) : ""),
       a.conesOf(l), (a.adj(l) / 1000).toFixed(3), f.f || "", f.x ? 1 : 0,
       l.wh != null ? l.wh.toFixed(1) : "", cvS(units, l.vavg * MPH).toFixed(1), cvS(units, l.vmax * MPH).toFixed(1),
     ]);
   });
-  return rows.map((r) => r.join(",")).join("\n");
+  return rows.map((r) => r.map((v) => typeof v === "string" && /[,"\n]/.test(v) ? '"' + v.replaceAll('"', '""') + '"' : v).join(",")).join("\n");
 }
 
 /** A few lines to paste into a chat or an email. */

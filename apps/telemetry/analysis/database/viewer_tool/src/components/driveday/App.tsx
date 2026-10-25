@@ -16,7 +16,8 @@ import { PlayerCtx, ToastProvider, useToast } from "./context";
 const NEXT_THEME: Record<Theme, Theme> = { auto: "light", light: "dark", dark: "auto" };
 
 function applyTheme(t: Theme) {
-  const r = document.documentElement;
+  const r = document.querySelector(".ddv");
+  if (!r) return;
   if (t === "auto") r.removeAttribute("data-theme");
   else r.setAttribute("data-theme", t);
   invalidatePalette();
@@ -45,12 +46,12 @@ function Shell() {
       if (!id) return;
       try {
         const D0 = await runStore.get(id);
-        if (req !== openReq.current) return; // a later open() took over while this one loaded
+        if (req !== openReq.current) return;
         if (!D0) throw new Error("That run is no longer stored in this browser.");
         const D = rebuildRun(D0);
         const session = new Session(D);
         const prefs = lsGet<Partial<Prefs>>("prefs", {});
-        const p = new Player(session, loadUserState(D.meta.sessId), prefs.units ?? defaultUnits(), prefs);
+        const p = new Player(session, loadUserState(D.meta.sessId, D), prefs.units ?? defaultUnits(), prefs);
         p.toast = toast;
         live.current = p;
         lsSet("run", id);
@@ -96,10 +97,10 @@ function Shell() {
             /* newest first in the list, so the courses of one file stay in order */
             await runStore.put({ ...metaOf(D), added: now - ci }, D);
             if (J.flags?.length) {
-              /* only the flags raised while this course was being driven; a file can hold several courses */
               const S = new Session(rebuildRun(D));
-              const fl = J.flags.filter((x) => x.t >= S.T0 && x.t <= S.T0 + S.TD);
-              if (fl.length) saveUserState(D.meta.sessId, seedFlags(loadUserState(D.meta.sessId), fl, S.T0));
+              const flags = J.flags.filter(f => f.t >= S.T0 && f.t <= S.T0 + S.TD &&
+                !/^(?:hit[\s_-]*)?cones?(?:[\s_-]*hit)?$/i.test(f.label.trim()));
+              saveUserState(D.meta.sessId, seedFlags(loadUserState(D.meta.sessId, D), flags, S.T0));
             }
             last ??= D.meta.sessId;
           }
@@ -116,22 +117,26 @@ function Shell() {
     [open, toast],
   );
 
-  /* the session Trackside last saved on the server (lap samples are stripped there, so only the recent tail has GPS) */
   const importCache = useCallback(async () => {
-    const r = await fetch("/api/motec/live/session-cache").catch(() => null);
-    if (!r?.ok) return toast("No saved Trackside session on the server.", "err");
-    await importFiles([new File([await r.blob()], "trackside-saved_session.json")]);
+    try {
+      const response = await fetch("/api/motec/live/session-cache");
+      if (!response.ok) throw new Error("No saved Trackside session on the server.");
+      await importFiles([new File([await response.blob()], "trackside-saved_session.json")]);
+    } catch (error) { toast((error as Error).message, "err"); }
   }, [importFiles, toast]);
 
-  const remove = useCallback(async () => {
-    if (!current) return;
-    if (!window.confirm("Remove this run from the browser? Your notes for it go too.")) return;
-    await runStore.del(current);
-    const list = (await runStore.list()).sort((a, b) => b.added - a.added);
-    setRuns(list);
-    await open(list[0]?.id ?? null);
-    toast("Run removed.");
-  }, [current, open, toast]);
+  const remove = useCallback(async (id: string) => {
+    const run = runs.find(r => r.id === id);
+    if (!run) return;
+    if (!window.confirm('Delete "' + (run.name || "Untitled run") + '" from saved runs? You can reimport the original JSON.')) return;
+    try {
+      await runStore.del(id);
+      const list = (await runStore.list()).sort((a, b) => b.added - a.added);
+      setRuns(list);
+      if (id === current) await open(list[0]?.id ?? null);
+      toast("Run removed.");
+    } catch (e) { toast("Could not delete this run: " + (e as Error).message, "err"); }
+  }, [current, runs, open, toast]);
 
   /* drag and drop anywhere */
   useEffect(() => {
@@ -193,16 +198,16 @@ function Shell() {
             onSelect={(id) => void open(id)}
             onImport={(f) => void importFiles(f)}
             onCache={() => void importCache()}
-            onRemove={() => void remove()}
+            onRemove={(id) => void remove(id)}
           />
           {player && <Workspace key={player.session.D.meta.sessId} />}
         </div>
         {ready && !player && !current && (
           <div className="welcome">
             <div>
-              <h2>No runs loaded</h2>
-              <p>Import a session JSON exported from the logger. Each run is kept in this browser, and the dropdown at the top switches between them. You can also drop files anywhere on this page.</p>
-              <button className="btn primary" type="button" onClick={() => file.current?.click()}>Import JSON</button>{" "}
+              <h2>Give LAPDOG a lap to follow.</h2>
+              <p>Drop a Trackside Live session export here, or choose a file below. LAPDOG keeps your runs in this browser, ready for the next debrief.</p>
+              <button className="btn primary" type="button" onClick={() => file.current?.click()}>Open a session</button>{" "}
               <button className="btn" type="button" onClick={() => void importCache()}>Last Trackside session</button>
               <input ref={file} type="file" accept=".json,application/json" multiple hidden onChange={(e) => { if (e.target.files?.length) void importFiles(e.target.files); e.target.value = ""; }} />
             </div>

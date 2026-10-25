@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { lsGet, lsSet } from "@/lib/driveday/storage";
 import { Menu } from "./Menu";
 import { usePlayer, useUi } from "./context";
@@ -13,6 +13,7 @@ import { EnergyPanel } from "./panels/EnergyPanel";
 import { LapsPanel } from "./panels/LapsPanel";
 import { AboutPanel, AlertsPanel, DebriefPanel, NotesPanel, SetupPanel } from "./panels/TextPanels";
 import { TracePanel } from "./panels/TracePanel";
+import { DrivingReviewPanel, QualityPanel, ReportPanel, SetupComparePanel } from "./panels/ReviewPanels";
 
 interface PanelDef {
   id: string;
@@ -28,8 +29,12 @@ const PANELS: PanelDef[] = [
   { id: "trace", chip: "Telemetry", title: "Telemetry by distance", body: <TracePanel /> },
   { id: "corners", chip: "Corners", title: "Corners, straights and braking", body: <CornersPanel /> },
   { id: "compare", chip: "Compare", title: "Lap comparison", body: <ComparePanel /> },
+  { id: "quality", chip: "Data quality", title: "Data quality", body: <QualityPanel /> },
+  { id: "driving", chip: "Driving review", title: "Braking and section comparison", body: <DrivingReviewPanel /> },
+  { id: "setupcompare", chip: "Setup comparison", title: "Setup comparison", body: <SetupComparePanel /> },
+  { id: "report", chip: "Export debrief", title: "Shareable debrief", body: <ReportPanel /> },
   { id: "debrief", chip: "Debrief", title: "Debrief", body: <DebriefPanel /> },
-  { id: "notes", chip: "Notes", title: "Timeline notes", body: <NotesPanel /> },
+  { id: "notes", chip: "Bookmarks", title: "Notes and video bookmarks", body: <NotesPanel /> },
   { id: "setup", chip: "Setup", title: "Run setup and notes", body: <SetupPanel /> },
   { id: "car", chip: "Car", title: "Car state", body: <CarPanel /> },
   { id: "cells", chip: "Cells", title: "Battery cells", body: <CellsPanel /> },
@@ -48,7 +53,12 @@ const PANELS: PanelDef[] = [
 export function Dock() {
   const p = usePlayer();
   useUi(p);
-  const [open, setOpen] = useState<string | null>(() => lsGet<string | null>("panel", "laps"));
+  const [open, setOpen] = useState<string | null>(() => { const saved = lsGet<string | null>("panel", "laps"); return saved === "video" ? "laps" : saved; });
+  useEffect(() => {
+    const select = (event: Event) => { const id = (event as CustomEvent<string | null>).detail; setOpen(id == null || PANELS.some(panel => panel.id === id) ? id : "laps"); p.schedule(true); };
+    window.addEventListener("driveday:panel", select);
+    return () => window.removeEventListener("driveday:panel", select);
+  }, [p]);
   const toggle = (id: string) => {
     const next = open === id ? null : id;
     setOpen(next);

@@ -2,6 +2,7 @@ import { Geo, curveOf } from "./geometry";
 import { MPH } from "./format";
 import { interp, pctl, timeAverage } from "./math";
 import { buildSegments, buildZones, type Seg, type Zone } from "./segments";
+import { sectorTimes, suggestGates, validGates, type SectorGates } from "./sectors";
 import type { Channels, Lap, Pt, RawLap, RunData } from "./types";
 
 const maxOf = (a: number[][], f = 1) => {
@@ -84,6 +85,7 @@ export class Session {
   readonly vhi: number;
   readonly segs: Seg[];
   readonly zones: Zone[];
+  gates: SectorGates;
   readonly bbox: { x: [number, number]; y: [number, number] };
 
   constructor(D: RunData) {
@@ -106,16 +108,27 @@ export class Session {
     this.vhi = Math.max(this.vlo + 1, pctl(spdAll, 0.97));
     this.segs = buildSegments(this.geo);
     this.zones = buildZones(this.runs, this.RL, this.open);
-    const pts = [...D.ref, ...this.runs.flatMap((l) => l.pts.map((p) => [p[0], p[1]] as [number, number]))];
-    /* a loop, not Math.min(...pts): at 20 Hz a day has more points than the engine takes as arguments */
-    const bb = { x: [Infinity, -Infinity] as [number, number], y: [Infinity, -Infinity] as [number, number] };
-    for (const q of pts) {
-      if (q[0] < bb.x[0]) bb.x[0] = q[0];
-      if (q[0] > bb.x[1]) bb.x[1] = q[0];
-      if (q[1] < bb.y[0]) bb.y[0] = q[1];
-      if (q[1] > bb.y[1]) bb.y[1] = q[1];
-    }
-    this.bbox = bb;
+    const representative = this.runs.reduce((a, b) => b.dur < a.dur ? b : a);
+    this.gates = suggestGates(representative, this.segs, this.RL);
+    this.setGates(this.gates);
+    const bounds: { x: [number, number]; y: [number, number] } = { x: [Infinity, -Infinity], y: [Infinity, -Infinity] };
+    const include = (point: number[]) => {
+      bounds.x[0] = Math.min(bounds.x[0], point[0]); bounds.x[1] = Math.max(bounds.x[1], point[0]);
+      bounds.y[0] = Math.min(bounds.y[0], point[1]); bounds.y[1] = Math.max(bounds.y[1], point[1]);
+    };
+    D.ref.forEach(include); this.runs.forEach(lap => lap.pts.forEach(include));
+    this.bbox = bounds;
+  }
+
+  setGates(gates: SectorGates): boolean {
+    if (!validGates(gates, this.RL)) return false;
+    this.gates = [...gates];
+    this.laps.forEach((lap) => { lap.sec = sectorTimes(lap, gates); lap.gainKey = undefined; });
+    return true;
+  }
+
+  sectorAt(distance: number): number {
+    return distance < this.gates[0] ? 0 : distance < this.gates[1] ? 1 : 2;
   }
 
   /** The lap the session clock T (ms from the start of the out lap) falls in. */

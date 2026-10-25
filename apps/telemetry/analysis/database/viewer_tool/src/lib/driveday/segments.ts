@@ -22,34 +22,32 @@ export interface Zone {
   name: string;
 }
 
-/** Corners are where the loop turns tighter than about 18 m radius for at least 6 m. */
+/** Smooth over metres rather than sample counts so low-rate GPS noise does not create tiny corners. */
+function trackCurvature(geo: Geo): { rate: number[]; count: number; step: number } {
+  const count = Math.max(8, Math.round(geo.RL / 2));
+  const step = geo.RL / count;
+  const points = Array.from({ length: count }, (_, i) => geo.at(i * step));
+  const at = (i: number) => geo.open ? Math.max(0, Math.min(count - 1, i)) : (i + count) % count;
+  const smooth = points.map((_, i) => {
+    const weights = [1, 2, 3, 2, 1];
+    return [0, 1].map((axis) => weights.reduce((sum, w, k) => sum + w * points[at(i + k - 2)][axis], 0) / 9);
+  });
+  const heading = smooth.map((_, i) => Math.atan2(smooth[at(i + 2)][1] - smooth[at(i - 2)][1], smooth[at(i + 2)][0] - smooth[at(i - 2)][0]));
+  const rate = heading.map((_, i) => {
+    let delta = heading[at(i + 2)] - heading[at(i - 2)];
+    while (delta > Math.PI) delta -= 2 * Math.PI;
+    while (delta < -Math.PI) delta += 2 * Math.PI;
+    return delta * 180 / Math.PI / (4 * step);
+  });
+  return { rate, count, step };
+}
+
+/** Sustained curvature tighter than about 26 m radius for at least 8 m. */
 export function buildSegments(geo: Geo): Seg[] {
   if (geo.open) return buildOpenSegments(geo);
   const { RL } = geo;
-  const NSEG = Math.round(RL / 2);
-  const STEP = RL / NSEG;
-  const P: [number, number][] = [];
-  for (let i = 0; i < NSEG; i++) {
-    const a = geo.at(i * STEP);
-    P.push([a[0], a[1]]);
-  }
-  const Q = P.map((p, i) => {
-    const a = P[(i + NSEG - 1) % NSEG];
-    const b = P[(i + 1) % NSEG];
-    return [(a[0] + p[0] + b[0]) / 3, (a[1] + p[1] + b[1]) / 3];
-  });
-  const Hd = Q.map((p, i) => {
-    const b = Q[(i + 2) % NSEG];
-    return Math.atan2(b[1] - p[1], b[0] - p[0]);
-  });
-  const dh = (a: number, b: number) => {
-    let x = b - a;
-    while (x > Math.PI) x -= 2 * Math.PI;
-    while (x < -Math.PI) x += 2 * Math.PI;
-    return x;
-  };
-  const rate = Hd.map((_, i) => (dh(Hd[(i + NSEG - 1) % NSEG], Hd[(i + 1) % NSEG]) * 180) / Math.PI / (2 * STEP));
-  const corner = rate.map((r) => Math.abs(r) > 3.2);
+  const { rate, count: NSEG, step: STEP } = trackCurvature(geo);
+  const corner = rate.map((r) => Math.abs(r) > 2.2);
 
   /* start the scan in the middle of the longest straight so no corner straddles the start of the scan */
   let i0 = 0;
@@ -85,7 +83,8 @@ export function buildSegments(geo: Geo): Seg[] {
     }
   }
   if (cur) runs.push(cur);
-  const cs = runs.filter((r) => r.e - r.s + 1 >= 3);
+  const cs = runs.filter((r) => r.e - r.s + 1 >= 4);
+  if (!cs.length) return [{ a: 0, len: RL, type: "s", dir: 0, name: "Str 1" }];
 
   interface Raw { k0: number; k1: number; type: "c" | "s"; dir: number }
   const out: Raw[] = [];
@@ -124,36 +123,12 @@ export function buildSegments(geo: Geo): Seg[] {
 
 /** The same corner test along a path from the start line to the finish line: nothing wraps, and the first and last pieces are just straights or corners. */
 function buildOpenSegments(geo: Geo): Seg[] {
-  const { RL } = geo;
-  const N = Math.max(4, Math.round(RL / 2));
-  const STEP = RL / N;
-  const P: [number, number][] = [];
-  for (let i = 0; i < N; i++) {
-    const a = geo.at(i * STEP);
-    P.push([a[0], a[1]]);
-  }
-  const at = (i: number) => Math.max(0, Math.min(N - 1, i));
-  const Q = P.map((p, i) => {
-    const a = P[at(i - 1)];
-    const b = P[at(i + 1)];
-    return [(a[0] + p[0] + b[0]) / 3, (a[1] + p[1] + b[1]) / 3];
-  });
-  const Hd = Q.map((p, i) => {
-    const b = Q[at(i + 2)];
-    return Math.atan2(b[1] - p[1], b[0] - p[0]);
-  });
-  const dh = (a: number, b: number) => {
-    let x = b - a;
-    while (x > Math.PI) x -= 2 * Math.PI;
-    while (x < -Math.PI) x += 2 * Math.PI;
-    return x;
-  };
-  const rate = Hd.map((_, i) => (dh(Hd[at(i - 1)], Hd[at(i + 1)]) * 180) / Math.PI / (2 * STEP));
+  const { rate, count: N, step: STEP } = trackCurvature(geo);
   interface Run { s: number; e: number; sign: number }
   const runs: Run[] = [];
   let cur: Run | null = null;
   for (let i = 0; i < N; i++) {
-    if (Math.abs(rate[i]) > 3.2) {
+    if (Math.abs(rate[i]) > 2.2) {
       const sg = rate[i] > 0 ? 1 : -1;
       if (cur && cur.sign === sg && i - cur.e <= 4) cur.e = i;
       else {
@@ -163,15 +138,15 @@ function buildOpenSegments(geo: Geo): Seg[] {
     }
   }
   if (cur) runs.push(cur);
-  const corners = runs.filter((r) => r.e - r.s + 1 >= 3);
+  const corners = runs.filter((r) => r.e - r.s + 1 >= 4);
   interface Raw { k0: number; k1: number; type: "c" | "s"; dir: number }
   const out: Raw[] = [];
   let pos = 0;
   corners.forEach((r) => {
     const gap = r.s - pos;
     if (gap >= 3) out.push({ k0: pos, k1: r.s, type: "s", dir: 0 });
-    /* a gap too short to be a straight belongs to the corner, so every sample has exactly one owner */
-    out.push({ k0: gap >= 3 ? r.s : pos, k1: r.e + 1, type: "c", dir: r.sign });
+    else if (out.length) out[out.length - 1].k1 += gap;
+    out.push({ k0: gap >= 3 || !out.length ? r.s : pos, k1: r.e + 1, type: "c", dir: r.sign });
     pos = r.e + 1;
   });
   if (N - pos >= 3 || !out.length) out.push({ k0: pos, k1: N, type: "s", dir: 0 });
@@ -187,7 +162,11 @@ function buildOpenSegments(geo: Geo): Seg[] {
   }));
 }
 
-export const segAt = (segs: Seg[], RL: number, s: number): number => {
+export const segAt = (segs: Seg[], RL: number, s: number, open = false): number => {
+  if (open) {
+    s = Math.max(0, Math.min(RL - 1e-7, s));
+    return segs.findIndex((g) => s >= g.a && s < g.a + g.len);
+  }
   s = wrap(s, RL);
   for (let i = 0; i < segs.length; i++) if (wrap(s - segs[i].a, RL) < segs[i].len) return i;
   return -1;
@@ -252,7 +231,8 @@ export function buildZones(runs: Lap[], RL: number, open = false): Zone[] {
   return zs;
 }
 
-export const zoneAt = (zones: Zone[], RL: number, s: number): number => {
+export const zoneAt = (zones: Zone[], RL: number, s: number, open = false): number => {
+  if (open) return zones.findIndex((z) => s >= z.s0 - 3 && s < z.s0 + z.len + 4);
   s = wrap(s, RL);
   for (let i = 0; i < zones.length; i++) {
     const d = wrap(s - zones[i].s0, RL);

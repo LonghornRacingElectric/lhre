@@ -1,125 +1,73 @@
-# Drive day viewer (`/trackside-retro`)
+# LAPDOG in Trackside Retro
 
-Looks back at a drive day the way trackside-live looks at it as it happens.
-Import a session export and scrub through it like a video: a GPS map with
-F1-style sectors, a timeline of every lap, corner and braking-zone
-breakdowns, battery cell temperatures, the energy plan, cone and note
-logging.
+`/trackside-retro` embeds the current LAPDOG workspace inside viewer_tool's
+existing login, navigation and deployment. It includes movable video/track/
+analysis panes, a resizable full-width timeline with wheel zoom, cross-file
+lap comparisons on the same route, configurable sectors, cone logging,
+lateral g estimates, data-quality checks and portable HTML debriefs.
 
-Nothing leaves the browser. The export is parsed client-side and kept in
-IndexedDB, so the page works on an archived export with no car and no Kafka.
+## Open a session
 
-## Use it
+Use **Import**, drop session JSON, or choose **Last Trackside session** to
+load `/api/motec/live/session-cache`. Imports merge completed-lap samples,
+current-lap samples and the recent tail by timestamp. Every stored timestamp
+is retained, including 50 Hz recordings; the displayed sample and GPS rates
+reflect the export rather than assuming a fixed rate. Empty per-lap arrays
+can be recovered from overlapping tail samples. Missing or frozen GPS cannot
+supply a route and is reported instead of drawing a false track.
 
-Open `/trackside-retro` in `viewer_tool`, then **Import** (or drop a
-file on the page) or **Last Trackside session**, which loads the server's
-cached live session. That cache is the trackside-live autosave and holds only
-the last ~1500 samples (about 14 minutes), so for a whole day use the JSON
-downloaded from trackside-live. The page remembers imported runs, notes,
-cones, setup values and where you were in each run.
+The server cache strips per-lap samples and keeps at most 1,500 tail samples;
+the downloaded export keeps at most 6,000 tail samples. At 50 Hz those tails
+span about 30 seconds and two minutes respectively. Neither reconstructs
+older samples absent from the file. This refresh does not change live
+capture, the cache, database ingestion or retention settings.
+
+## Review a run
+
+Video, Track and Analysis can be hidden, reordered, resized or floated. The
+timeline retains its speed graph and lap colours when compressed; scroll to
+zoom around the pointer, shift-scroll to pan and double-click to reset.
+Delete saved runs directly from the run selector. Notes and cones remain in
+the timeline toolbar. Match the route before comparing another file's laps.
+
+Use the analysis panels for telemetry, corners, battery cells, driving review,
+setup comparisons, quality checks and HTML reports. Recorded lap times stay
+fixed; sectors can use sensible geometry-based boundaries or manual markers.
+Lateral g is estimated from GPS, not measured by an IMU. Steering jumps are
+flagged without guessing a correction. Notes, layouts and runs are stored
+in this browser (IndexedDB and the existing `driveday:` localStorage prefix).
+Reimport a run to apply improved GPS recovery and quality checks.
+
+## Video
+
+Choose an onboard file in Video. Every selection automatically requests an
+H.264 playback copy from the loopback helper; the original stays unchanged.
+Sync a frame with telemetry, optionally add a second checkpoint for drift,
+and enable speed or racing-line arrows. The arrows are a calibrated
+projection of the recorded route, not a computed ideal racing line.
+
+`npm run dev` and `npm start` start the local helper automatically. For a
+remote viewer, the helper must run on the user's computer, not only on the
+server: `npm run video-helper -- --origin https://your-viewer-host.example`.
+The panel provides setup and retry guidance. Conversion details and limits
+are in [the helper README](../../../tools/README.md).
+
+## Code and checks
+
+- `src/lib/driveday/`: import, analysis, storage, player and canvas drawing.
+- `src/components/driveday/`: LAPDOG panes and controls.
+- `src/app/trackside-retro/`: route, fonts and styles scoped under `.ddv`.
+- `tests/driveday/`: synthetic regression fixtures; real exports stay local.
 
 ```bash
-npm run test:driveday                                   # vitest, synthetic tracks
-DRIVEDAY_SAMPLE=path/to/session.json npm run test:driveday   # plus a real export
+npm run test:driveday
+npm run test:video-helper
+DRIVEDAY_UTA_DIR=path/to/Sessions npm run test:driveday
+DRIVEDAY_COTA_SAMPLE=path/to/session.json npm run test:driveday
 ```
 
-Real exports are too big to commit. `tests/driveday/real.test.ts` expects a
-clean export (one course, no stray lap presses); on a messy day it fails and
-that is a property of the day, not the code.
-
-## Where the export comes from
-
-The JSON is the session export from the trackside-live page: `laps` (with
-each lap's `samples`), `currentLap.lapSamples`, `sampleTail` (the exporter
-caps it at 6,000 samples), `sessionInfo`, `soeCutoffCellV`, `targetLaps` and,
-when the live page logged any, `flags`. The three sample lists are merged by
-timestamp, so every distinct sample in the file is kept, 20 Hz included, and
-a sample between two GPS fixes keeps its time and gets an interpolated
-position. Runs imported before this merge existed need reimporting to pick
-up the samples the old importer dropped. `types.ts` has the shape this code expects. There is no
-shared type with trackside-live yet; when the export changes, this is the
-file that has to follow. A session needs at least 30 GPS fixes.
-
-## How it is laid out
-
-```text
-src/lib/driveday/         analysis, no React: convert, rebuild, geometry,
-                          segments, session, analysis, energy, debrief,
-                          storage, player
-src/lib/driveday/draw/    canvas drawing: map, timeline, traces, charts, cells
-src/components/driveday/  React: header, map, transport, dock, panels
-src/app/trackside-retro/  the route: page.tsx mounts the App, driveday.css
-                          carries the viewer's palette scoped under .ddv so
-                          it does not fight viewer_tool's globals
-tests/driveday/           vitest, with a synthetic stadium-shaped track in
-                          fixtures/
-```
-
-- `convert.ts` turns an export into run data. It sorts the logger's laps
-  into timed runs and slow drives back, groups the runs into courses, finds
-  each track (matching a stored layout if one exists), and cuts sectors at
-  thirds.
-- `rebuild.ts` makes each lap of a loop end exactly where the next begins,
-  so the car marker never jumps between laps.
-- `Player` (`player.ts`) is the one mutable model: playhead, camera, ghost,
-  notes. React reads it through two subscriptions, one for options and one
-  per painted frame. Canvases are painted from it in one animation frame
-  loop, so playback never goes through React state.
-- Stored data is under the `driveday:` prefix in localStorage, plus an
-  IndexedDB database for runs and track layouts. If IndexedDB is blocked the
-  viewer falls back to memory for the tab and says so.
-
-## Start and finish lines, and courses
-
-Lap times are always the logger's. The lines are never set by hand: the start
-line is where the car was when the timed laps began, and the finish line is
-where it was when they ended (the middle of those positions over all the
-laps), and the sectors are cut at thirds between them.
-
-- **A loop** (laps end where they began) has one start/finish line. Manual
-  lap presses on a loop land tens of metres apart, so a run also counts as a
-  lap of the loop when another run drove on through the point where it
-  began or ended. On a course with its own start and finish lines no run
-  does that.
-- **An open course** (the finish line is somewhere else, as on an autocross
-  day) has a start line and a finish line, and the path between them is the
-  course.
-- **Courses.** The logger marks a lap every time the button is pressed, so a
-  drive back to the start is also a "lap". On import, short or slow legs
-  (under 60% of a typical run's length or 40% of its speed) are left out.
-  The remaining runs are grouped by where they start and finish and which way
-  they go, and each group opens as its own run in the dropdown (for example
-  "Course 2 (reverse of 1)"). Laps on different lines are not comparable, so
-  they are never mixed in one set of bests, ghosts and charts. Runs whose
-  start and finish both lie within about 25 m of each other (or 10% of the
-  run length) count as the same course.
-- **Lap names** are the logger's labels ("Manual 3"), not a renumbering from
-  1, so a lap here is the same lap on the trackside-live page and in the CSV
-  export. Whatever was driven after the last press shows as "... (in
-  progress)" when it is at lap pace, and is dropped as the drive back to the
-  pits when it is not.
-
-## What it does not do
-
-The earlier single-file version had a few things that depended on its host
-and were left out: shared notes between people, an "ask about this run" box,
-and comparing against another driver's run. Notes are per browser. Each would
-need a server, so they are follow-ups.
-
-## Gotchas
-
-- The GPS rate is whatever the export has. Playback position, speed and
-  acceleration are centred 0.5 s time averages over the raw fixes (no sample
-  is dropped, the logged lap times are untouched), so expect the drawn line
-  to cut corners on a tight autocross course; that is the data, not the fit.
-- Lateral g (map HUD, hover readout, Car panel) is a **GPS estimate**: speed
-  squared times the signed curvature of three fixes on the smoothed path.
-  It is not an IMU reading and ignores banking; endpoints, repeated
-  timestamps, speeds under 1 m/s and fixes under 1 m apart show a dash.
-- Third sectors are missing on the unfinished last lap, and cones are only
-  counted on completed laps.
-- Units (mph or km/h, °C or °F) and the theme are display settings. Stored
-  speeds are mph and temperatures °C.
-- This started as a standalone Next.js app (`apps/telemetry/analysis/driveday_data_viewer`,
-  removed in the PR that moved it here). It lives inside `viewer_tool` so it
-  shares the login, the session cache and one deploy.
+The standalone LAPDOG workspace was used as the source for this refresh.
+Imports are namespaced under `driveday`; viewer_tool-specific adapters retain
+server-cache loading, event notes and the host's authentication. Styles and
+canvas theme tokens are scoped to the retro wrapper so other pages keep
+their own palette.

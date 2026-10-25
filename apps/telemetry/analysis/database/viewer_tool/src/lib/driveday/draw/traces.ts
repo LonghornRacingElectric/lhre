@@ -1,5 +1,6 @@
 import { KMH_PER_MPH } from "../format";
 import { interp, nice } from "../math";
+import { elapsedAtDistance } from "../sectors";
 import type { Player } from "../player";
 import type { Lap } from "../types";
 import { sU } from "../units";
@@ -41,12 +42,10 @@ function deltaSeries(L: Lap, R: Lap | null, RL: number) {
   const n = 100;
   const u: number[] = [];
   const v: number[] = [];
-  const a = interp(L.ch.u, L.ch.t, 0);
-  const b = R ? interp(R.ch.u, R.ch.t, 0) : 0;
   for (let i = 0; i < n; i++) {
     const d = (i * RL) / (n - 1);
     u.push(d);
-    v.push(R ? (interp(L.ch.u, L.ch.t, d) - a - (interp(R.ch.u, R.ch.t, d) - b)) / 1000 : 0);
+    v.push(R ? (elapsedAtDistance(L, d, RL) - elapsedAtDistance(R, d, RL)) / 1000 : 0);
   }
   return { u, v };
 }
@@ -94,10 +93,11 @@ export function drawTrace(p: Player, canvas: HTMLCanvasElement, c: TraceDef) {
     hi = nt.hi;
   }
   const py = (v: number) => pt + (1 - (v - lo) / (hi - lo)) * (h - pt - pb);
+  const boundaries = [0, ...p.session.gates, RL];
   for (let k = 0; k < 3; k++) {
     g.globalAlpha = 0.08;
     g.fillStyle = pal.sector[k];
-    g.fillRect(px((k * RL) / 3), pt, pw / 3, h - pt - pb);
+    g.fillRect(px(boundaries[k]), pt, px(boundaries[k + 1]) - px(boundaries[k]), h - pt - pb);
   }
   g.globalAlpha = 1;
   g.font = MONO(pal);
@@ -118,7 +118,7 @@ export function drawTrace(p: Player, canvas: HTMLCanvasElement, c: TraceDef) {
   g.setLineDash([3, 3]);
   g.strokeStyle = mute;
   g.globalAlpha = 0.5;
-  [RL / 3, (2 * RL) / 3].forEach((d) => {
+  p.session.gates.forEach((d) => {
     g.beginPath();
     g.moveTo(px(d), pt);
     g.lineTo(px(d), h - pb);
