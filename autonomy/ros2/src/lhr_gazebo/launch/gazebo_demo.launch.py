@@ -405,6 +405,9 @@ def _launch_setup(context: LaunchContext):
             'closed_path': False,
             'path_timeout_sec': ParameterValue(
                 LaunchConfiguration('path_timeout_sec'), value_type=float),
+            # Not an argument: this launch always starts the mission manager,
+            # so the car must never move before it says DRIVING.
+            'wait_for_mission': True,
         }],
         remappings=fault_remaps.get('pure_pursuit', []),
         output='screen',
@@ -473,6 +476,7 @@ def _launch_setup(context: LaunchContext):
         ))
 
     # ----- Mission manager -----
+    safety_on = context.launch_configurations.get('safety', 'false').lower() == 'true'
     mission_mgr = Node(
         package='lhr_mission_manager',
         executable='mission_manager',
@@ -482,6 +486,10 @@ def _launch_setup(context: LaunchContext):
             'auto_go': ParameterValue(
                 LaunchConfiguration('auto_go'), value_type=bool),
             'ready_hold_sec': _float('ready_hold_sec'),
+            # Follows safety:= rather than being an argument: without
+            # safety_node there is no heartbeat to wait for.
+            'require_safety_heartbeat': safety_on,
+            'safety_settle_s': _float('safety_settle_s'),
             'use_sim_time': True,
         }],
         output='screen',
@@ -489,7 +497,7 @@ def _launch_setup(context: LaunchContext):
 
     # ----- Safety monitor -----
     safety_nodes = []
-    if context.launch_configurations.get('safety', 'false').lower() == 'true':
+    if safety_on:
         safety_nodes.append(Node(
             package='lhr_safety',
             executable='safety_node',
@@ -668,6 +676,8 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'safety', default_value='false',
             description='Run safety_node: trips the mission on stack faults'),
+        # READY waits until safety's heartbeat has been steady this long
+        DeclareLaunchArgument('safety_settle_s', default_value='2.0'),
         DeclareLaunchArgument('safety_lidar_timeout_s', default_value='0.3'),
         DeclareLaunchArgument('safety_odom_timeout_s', default_value='0.25'),
         DeclareLaunchArgument('safety_cmd_timeout_s', default_value='0.25'),

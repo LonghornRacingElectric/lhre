@@ -237,6 +237,11 @@ or steering that does not track. It is off by default while the thresholds
 are tuned; each one is a `safety_*` launch argument. See
 [lhr_safety](../lhr_safety/README.md).
 
+With safety on, the mission manager also waits for the safety heartbeat to
+be steady for `safety_settle_s` (2.0) before READY, so safety only arms
+once every stream it watches is flowing. That follows `safety:=` rather
+than being its own argument: without `safety_node` there is no heartbeat.
+
 ## Visual check
 
 In RViz, inferred left cones are blue, inferred right cones are yellow, and

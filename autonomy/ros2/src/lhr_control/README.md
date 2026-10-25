@@ -27,10 +27,18 @@ is still Driving (Finished means stopped). Steering keeps following the
 path so the car stops in its lane, and with no path or target it still
 commands the stop rather than going quiet.
 
+The car only moves while the mission status is Driving. With no status at
+all the node runs freely, for tests and standalone use, unless
+`wait_for_mission` is set. Both demo launches set it, since they always
+start a mission manager: otherwise a path that arrives before the
+manager's first status moves the car before the mission exists. It is
+not a launch argument for that reason.
+
 | Parameter | Default | Meaning |
 | --- | --- | --- |
 | `closed_path` | `true` | Wrap lookahead and curvature for a complete circuit |
 | `path_timeout_sec` | `1.0` | Stop if an open path is not updated within this time |
+| `wait_for_mission` | `false` | Stay stopped until a mission manager says Driving (the demo launches set it) |
 
 Other steering and speed parameters are listed in the
 [workspace reference](../../README.md#lhr_control-pursuit_node).

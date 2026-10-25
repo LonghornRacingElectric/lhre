@@ -661,13 +661,15 @@ Implements the FSAE driverless state machine (DO.1.1). Controls when the vehicle
 | `auto_go` | `true` | Auto-transition Ready → Driving after `ready_hold_sec` (convenient for sim) |
 | `ready_hold_sec` | `5.0` | Seconds to wait in Ready before auto-go |
 | `status_hz` | `10.0` | Status publish rate (Hz) |
+| `require_safety_heartbeat` | `false` | Also wait for a steady `/lhr/safety/heartbeat` before Ready (Gazebo sets it with `safety:=true`) |
+| `safety_settle_s` | `2.0` | Seconds the heartbeat must arrive without a gap |
 
 #### State machine
 
 ```mermaid
 stateDiagram-v2
     [*] --> OFF
-    OFF --> READY: centerline path available
+    OFF --> READY: centerline path available (and safety settled)
     READY --> DRIVING: go signal, or auto_go timeout
     DRIVING --> FINISHED: mission complete + vehicle stopped
     READY --> EMERGENCY: emergency signal
@@ -740,6 +742,7 @@ Speed is planned from path curvature:
 | `wheelbase` | from `vehicle.yaml` | Wheelbase for steering calc (m) (default: `lhr_vehicle`) |
 | `closed_path` | `true` | Wrap only a complete circuit; Gazebo and MVS LiDAR override to false |
 | `path_timeout_sec` | `1.0` | Stop when an open path expires (s) |
+| `wait_for_mission` | `false` | Stay stopped until mission status is Driving; both demo launches set it, so the car never moves before the mission manager exists |
 | `control_hz` | `20.0` | Control loop rate (Hz) |
 | `a_lat_max` | `6.0` | Max lateral acceleration for speed law (m/s^2) |
 | `v_min` | `2.0` | Minimum commanded speed (m/s) |
