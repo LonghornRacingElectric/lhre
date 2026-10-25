@@ -10,7 +10,7 @@ from lhr_vehicle import load_vehicle
 from nav_msgs.msg import Odometry, Path
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import ColorRGBA, Float32, Header, String
+from std_msgs.msg import Bool, ColorRGBA, Float32, Header, String
 from visualization_msgs.msg import Marker
 
 
@@ -92,6 +92,7 @@ class PurePursuit(Node):
         self._ld = self._ld_max  # current (adaptive) lookahead
         self._v_prev = 0.0  # for accel limiting
         self._mission_status = ''  # empty = no manager, run freely
+        self._mission_complete = False
 
         # --- Subscribers ---
         self.create_subscription(
@@ -100,6 +101,8 @@ class PurePursuit(Node):
             Odometry, '/lhr/vehicle/odom', self._odom_cb, 10)
         self.create_subscription(
             String, '/lhr/mission/status', self._status_cb, 10)
+        self.create_subscription(
+            Bool, '/lhr/mission/complete', self._complete_cb, 10)
 
         # --- Publishers ---
         self._cmd_pub = self.create_publisher(
@@ -137,23 +140,25 @@ class PurePursuit(Node):
     def _status_cb(self, msg: String):
         self._mission_status = msg.data
 
+    def _complete_cb(self, msg: Bool):
+        self._mission_complete = msg.data
+
     # ------------------------------------------------------------------
     # Control
     # ------------------------------------------------------------------
     def _control_loop(self):
-        # Gate on mission status — only drive when DRIVING (or no manager)
+        # Gate on mission status — only drive when DRIVING (or no manager).
         if self._mission_status and self._mission_status != 'DRIVING':
-            cmd = AckermannDriveStamped()
-            cmd.header.stamp = self.get_clock().now().to_msg()
-            cmd.drive = AckermannDrive()
-            cmd.drive.speed = 0.0
-            cmd.drive.steering_angle = 0.0
-            self._cmd_pub.publish(cmd)
-            self._v_prev = 0.0
+            self._stop()
             return
+        # Past the finish the mission stays DRIVING until the car stops, so
+        # completion is what brakes it. It keeps steering along the path
+        # while it does, so the car stops in its lane instead of running
+        # straight, and every way out below still commands the stop.
+        braking = self._mission_complete
 
         if not self._path or not self._have_odom:
-            if not self._closed_path:
+            if braking or not self._closed_path:
                 self._stop()
             return
         if not self._closed_path and self._path_received_at is not None:
@@ -173,7 +178,7 @@ class PurePursuit(Node):
 
         la = self._find_lookahead()
         if la is None:
-            if not self._closed_path:
+            if braking or not self._closed_path:
                 self._stop()
             return
 
@@ -187,6 +192,8 @@ class PurePursuit(Node):
 
         ld_sq = local_x * local_x + local_y * local_y
         if ld_sq < 1e-6:
+            if braking:
+                self._stop()
             return
         curvature_pp = 2.0 * local_y / ld_sq
 
@@ -195,22 +202,25 @@ class PurePursuit(Node):
 
         # --- Speed planning ---
         kappa = self._estimate_curvature(la_idx)
-        v_des = math.sqrt(
-            self._a_lat_max / max(abs(kappa), self._kappa_eps))
-        v_des = max(self._v_min, min(self._v_max, v_des))
-        if not self._closed_path:
-            remaining = math.hypot(self._path[closest_idx][0] - self._x,
-                                   self._path[closest_idx][1] - self._y)
-            remaining += sum(math.dist(a, b) for a, b in zip(
-                self._path[closest_idx:-1], self._path[closest_idx + 1:]))
-            v_des = min(v_des, math.sqrt(2.0 * self._max_decel * remaining))
+        if braking:
+            v_cmd = 0.0
+        else:
+            v_des = math.sqrt(
+                self._a_lat_max / max(abs(kappa), self._kappa_eps))
+            v_des = max(self._v_min, min(self._v_max, v_des))
+            if not self._closed_path:
+                remaining = math.hypot(self._path[closest_idx][0] - self._x,
+                                       self._path[closest_idx][1] - self._y)
+                remaining += sum(math.dist(a, b) for a, b in zip(
+                    self._path[closest_idx:-1], self._path[closest_idx + 1:]))
+                v_des = min(v_des, math.sqrt(2.0 * self._max_decel * remaining))
 
-        # Accel limiting
-        dv = v_des - self._v_prev
-        dv = max(-self._max_decel * self._dt,
-                 min(self._max_accel * self._dt, dv))
-        floor = self._v_min if self._closed_path else 0.0
-        v_cmd = max(floor, min(self._v_max, self._v_prev + dv))
+            # Accel limiting
+            dv = v_des - self._v_prev
+            dv = max(-self._max_decel * self._dt,
+                     min(self._max_accel * self._dt, dv))
+            floor = self._v_min if self._closed_path else 0.0
+            v_cmd = max(floor, min(self._v_max, self._v_prev + dv))
         self._v_prev = v_cmd
 
         # --- Publish command ---

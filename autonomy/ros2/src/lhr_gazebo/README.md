@@ -167,6 +167,34 @@ and stale-path stopping; they do not establish Gazebo driving performance.
 Gazebo launch arguments. The current `boundary` / `classified` modes use
 their chaining arguments documented above instead.
 
+## Worlds
+
+`worlds/` holds the generated tracks the launch picks by `track_style` and
+`seed`: `autocross_seed1` to `seed5` (the MVP gate's seeds), `oval_seed1`,
+and `acceleration_seed1`. A missing world is an error, not a substitute:
+any other world would disagree with the cones `publish_cones` generates
+for that seed. Generate it from `autonomy/ros2`, then rebuild:
+
+```bash
+python3 src/lhr_gazebo/scripts/generate_world.py --style autocross --seed 6 \n    --output src/lhr_gazebo/worlds/autocross_seed6.sdf
+```
+
+`./scripts/run_gazebo_demo.sh` passes its arguments straight to the launch,
+which picks the world the same way, so the world always matches the cones,
+mission and pairing width.
+
+`test_world_cones.py` fails when a committed world no longer holds exactly
+the cones trackgen publishes for its style and seed, so regenerate after
+changing a generator. The acceleration course is a fixed rules layout with
+4.9 m clear between cone bases, staged with the nose 0.30 m behind the
+start line. `track_style:=acceleration` runs the acceleration mission and
+pairs cones at the course's 5.13 m center spacing; the mission brakes the
+car in the exit lane once the nose crosses the finish:
+
+```bash
+./scripts/run_gazebo_demo.sh track_style:=acceleration perception:=lidar estimator:=ekf
+```
+
 ## Command timeout
 
 `joint_cmd_adapter` stops the wheels when `/lhr/vehicle/cmd` has been silent
@@ -383,7 +411,8 @@ planner's path or feeds this reference back to perception/control.
 Scoring arguments are typed and forwarded in both perception branches and
 with truth or EKF estimation. EKF mode scores `/lhr/vehicle/odom_truth`; truth
 mode scores the plant-owned `/lhr/vehicle/odom`. Estimates only feed error
-measurements. Rows also record Gazebo's scenario, plant, seed, track style,
+measurements. Rows also record the mission the launch actually runs (always
+acceleration on the acceleration track), Gazebo's scenario, plant, seed, track style,
 waypoints, perception, estimator, and selected estimator perturbations. `reference_closed:=false` scores an open course
 without inventing a return segment or a circuit lap. Missing or invalid world
 geometry fails rather than silently using a different course. See the

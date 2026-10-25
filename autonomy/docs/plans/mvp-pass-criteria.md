@@ -76,15 +76,17 @@ the hardware half of the loop exists.
 
 ### Gaps in today's metrics
 
-- `cones_hit` and an OC flag do not exist yet. Both need the vehicle
-  footprint from `lhr_vehicle` checked against trackgen cone positions;
-  that belongs in #94's rework.
+- Off course and `cones_hit`
+  ([#156](https://github.com/LonghornRacingElectric/lhre/pull/156)) check a
+  conservative box from `lhr_vehicle`, the body plus every wheel at any
+  steering angle, against the cone-center boundary and each cone's base.
+  That is stricter than the rules (any part of the box over the cone line,
+  not all four wheels out), and on a 3.5 m track a contact trips at about
+  0.79 m of CTE, before the 1.0 m CTE row.
 - Distance to stop after the finish line is not recorded.
-- Off `DRIVING`, the controller commands speed 0 at once, so sim stop
-  distances are optimistic until #116 adds a regen and spring-brake model.
-- [#91](https://github.com/LonghornRacingElectric/lhre/pull/91) already
-  moves timing to sim time, weights CTE by distance, and adds an `outcome`
-  column, so it lands first.
+- Once the mission completes (and off `DRIVING`), the controller commands
+  speed 0 at once, so sim stop distances are optimistic until #116 adds a
+  regen and spring-brake model.
 
 ## Waivers if something misses 10/28
 
