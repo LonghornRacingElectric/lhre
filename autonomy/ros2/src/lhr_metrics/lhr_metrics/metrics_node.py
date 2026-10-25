@@ -8,6 +8,7 @@ import sys
 import time
 from typing import Optional, Tuple
 
+from lhr_metrics.alignment import TruthAligner
 from lhr_metrics.course import CourseEnvelope, FOOTPRINT_MODEL, SWEEP_STEP_M
 from lhr_metrics.reference import (
     CircuitProgress, paired_centerline, ReferenceTrack, world_geometry)
@@ -194,6 +195,7 @@ class MetricsNode(Node):
         self._outcome = 'interrupted'
         # --- Estimate-vs-truth stats (only when a truth topic is given) ---
         self._truth: Optional[Tuple[float, float, float]] = None
+        self._aligner = TruthAligner()
         self._err_samples = 0
         self._pos_err_sum = 0.0
         self._pos_err_max = 0.0
@@ -295,8 +297,10 @@ class MetricsNode(Node):
             if (self._truth is not None and not self.finished and self._lap is not None
                     and self._lap.started_at is not None and self._mission_state in ('', 'DRIVING')
                     and stamp is not None and stamp >= self._lap.started_at):
-                self._accumulate_error(msg.pose.pose.position.x, msg.pose.pose.position.y,
-                                       msg.pose.pose.orientation)
+                for errors in self._aligner.add_estimate(
+                        stamp, msg.pose.pose.position.x, msg.pose.pose.position.y,
+                        quat_to_yaw(msg.pose.pose.orientation)):
+                    self._accumulate_error(*errors)
         else:
             self._score_odom(msg)
 
@@ -370,6 +374,11 @@ class MetricsNode(Node):
             msg.pose.pose.position.x,
             msg.pose.pose.position.y,
             quat_to_yaw(msg.pose.pose.orientation))
+        stamp = self._stamp_sec(msg.header.stamp)
+        if stamp is not None and not self.finished:
+            # Estimates that were waiting for truth at their stamp score now.
+            for errors in self._aligner.add_truth(stamp, *self._truth):
+                self._accumulate_error(*errors)
         self._score_odom(msg)
 
     # ------------------------------------------------------------------
@@ -392,12 +401,8 @@ class MetricsNode(Node):
     # ------------------------------------------------------------------
     # Geometry
     # ------------------------------------------------------------------
-    def _accumulate_error(self, px: float, py: float, orientation):
-        """Score the published estimate against the latest truth sample."""
-        tx, ty, tyaw = self._truth
-        pos_err = math.hypot(px - tx, py - ty)
-        yaw_err = abs(wrap_angle(quat_to_yaw(orientation) - tyaw))
-
+    def _accumulate_error(self, pos_err: float, yaw_err: float):
+        """Add one estimate's error against truth at the same stamp."""
         self._err_samples += 1
         self._pos_err_sum += pos_err
         self._yaw_err_sum += yaw_err

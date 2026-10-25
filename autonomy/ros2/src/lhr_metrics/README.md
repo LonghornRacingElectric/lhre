@@ -279,7 +279,11 @@ They remain blank without a truth stream. The CSV includes `estimator`,
 `gyro_bias`, `wheel_scale_error`, and `lidar_classify_sides` alongside the
 existing run parameters. Distance-weighted CTE and run outcome checks remain
 active. Error accumulation starts only after driving/scoring onset and excludes
-stationary READY observations. Estimator errors compare to the latest truth sample, so callback
-timing can affect them; they are not a timestamp-aligned accuracy guarantee.
+stationary READY observations. Each estimate is compared with truth
+interpolated at the estimate's own stamp (`alignment.py`): an estimate waits
+until truth at or past its stamp arrives, and one older than the 2 s truth
+buffer is skipped. Comparing with the latest received truth sample instead
+scored scheduling, since a 0.1 s stall at 5 m/s reads as 0.5 m of error
+([#165](https://github.com/LonghornRacingElectric/lhre/issues/165)).
 
 Node cleanup tolerates an already-stopped ROS context after launch shutdown.
