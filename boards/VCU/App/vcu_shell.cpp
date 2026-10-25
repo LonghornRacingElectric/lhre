@@ -3,6 +3,7 @@
 #include <cstring>
 
 #include "longhorn/console.hpp"
+#include "serial_report.hpp"
 
 namespace vcu {
 using lhre::can::VcuFaultCode;
@@ -170,19 +171,15 @@ void App::PollUsbConsole() {
   }
   usb_stream_last_ms_ = now;
   const ControlSnapshot s = snapshot();
-  auto& out = usb_shell_.console();
-  out.Printf(
-      "[%lu] state=%s faults=0x%08lx adc=%s pedal=%d%% torque=%dNm enable=%d",
-      static_cast<unsigned long>(now), lhre::can::ToString(s.state),
-      static_cast<unsigned long>(s.faults), s.adc_fresh ? "ok" : "stale",
-      static_cast<int>(s.pedals.pedal_travel * 100),
-      static_cast<int>(s.torque_command), s.inverter_enable);
-  out.Printf("apps1=%dmV apps2=%dmV brake_front=%dpsi brake_rear=%dpsi rpm=%ld",
-             static_cast<int>(s.analog.apps1.source_v * 1000),
-             static_cast<int>(s.analog.apps2.source_v * 1000),
-             static_cast<int>(s.pedals.bse1_psi),
-             static_cast<int>(s.pedals.bse2_psi),
-             static_cast<long>(s.motor_rpm));
+  SerialHealth health;
+  health.uptime_ms = p_.clock->Millis();
+  if (p_.critical_can != nullptr) health.critical = p_.critical_can->stats();
+  if (p_.data_can != nullptr) health.data = p_.data_can->stats();
+  health.critical_inbox_drops = critical_inbox_.dropped();
+  health.data_inbox_drops = data_inbox_.dropped();
+  health.control_beats = control_beats_.load();
+  health.telemetry_beats = telemetry_beats_.load();
+  PrintSerialReport(usb_shell_.console(), s, health, p_.reset_cause);
 }
 
 }  // namespace vcu

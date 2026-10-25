@@ -367,8 +367,17 @@ The ROM bootloader retains ST's own DFU name.
 
 Opening the USB serial port prints the `Vehicle Control Unit` firmware
 banner, reset cause and command hint, even when the monitor connects after
-boot. Every second it prints state, fault mask, ADC freshness, pedal demand,
-torque/enable, APPS voltages, front/rear brake pressure and motor RPM.
+boot. Every second it prints a plain-text report with section headings and units:
+state/mode/transition, sample age and task progress; all seven ADC channels
+(counts, pin mV and source mV), VDDA/VREFINT; pedal/brake/steering processing;
+digital inputs and output levels; shutdown/BSPD readbacks; torque path and
+motor freshness; estimated battery SoE/OCV/energy; wheel feedback validity
+and slip; CAN errors/drop counters; and active fault names with torque-cut
+classification. Estimated, stale and fallback values are labelled. Analog
+and control values use one published snapshot; CAN counters are read at
+report time. Reports are append-only ASCII (no screen-clearing escape codes)
+so they work in VS Code's serial monitor and saved logs. Each line is bounded
+by the shared console buffer.
 Status output is always enabled while the USB port is open; no stream
 command or setup is needed. The banner and status return on reconnect.
 `/state`, `/faults`, `/io` and `/analog` still give detailed on-demand output.
