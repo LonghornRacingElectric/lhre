@@ -6,7 +6,7 @@ import { invalidatePalette } from "@/lib/driveday/draw/palette";
 import { Player, type Prefs } from "@/lib/driveday/player";
 import { rebuildRun } from "@/lib/driveday/rebuild";
 import { Session } from "@/lib/driveday/session";
-import { loadUserState, lsGet, lsSet, metaOf, runStore, saveUserState, storageProblem } from "@/lib/driveday/storage";
+import { loadUserState, lsDel, lsGet, lsSet, metaOf, runStore, saveUserState, storageProblem } from "@/lib/driveday/storage";
 import { isConeLabel, seedFlags, type RunListEntry, type SessionExport } from "@/lib/driveday/types";
 import { defaultUnits } from "@/lib/driveday/units";
 import { DbMenu, Header, type Theme } from "./Header";
@@ -142,10 +142,11 @@ function Shell() {
     if (!run) return;
     if (!window.confirm('Delete "' + (run.name || "Untitled run") + '" from saved runs? You can reimport the original JSON.')) return;
     try {
+      /* open the next run first, so the old player saves its position before that is cleared */
+      if (id === current) await open(runs.find((r) => r.id !== id)?.id ?? null);
       await runStore.del(id);
-      const list = (await runStore.list()).sort((a, b) => b.added - a.added);
-      setRuns(list);
-      if (id === current) await open(list[0]?.id ?? null);
+      for (const key of ["state:", "pos:", "base:"]) lsDel(key + id);
+      setRuns((await runStore.list()).sort((a, b) => b.added - a.added));
       toast("Run removed.");
     } catch (e) { toast("Could not delete this run: " + (e as Error).message, "err"); }
   }, [current, runs, open, toast]);

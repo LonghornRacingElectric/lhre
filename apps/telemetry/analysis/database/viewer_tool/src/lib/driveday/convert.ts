@@ -327,10 +327,13 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
     for (let i = 0; i < cellN; i++) if (tot && cnt[i] >= tot * 0.5) cellIdx.push(i);
   }
 
-  return courses.map((course, ci) => {
+  /* a course with no clean lap is left out with a warning; the session fails only when no course has one */
+  const skipped: string[] = [];
+  let noClean = "";
+  const out = courses.map((course, ci) => {
     const group = course.legs.map((l) => ({ o: l.o, sm: l.sm }));
     const multi = courses.length > 1;
-    const cw: string[] = ci === 0 ? warn.slice() : [];
+    const cw: string[] = [];
     const all = ([] as LiveSample[]).concat(...group.map((x) => x.sm));
     const probe = all.filter((_, i) => i % Math.max(1, Math.floor(all.length / 300)) === 0);
     const TOL = 6;
@@ -655,7 +658,11 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
       if (L.span < 0.6 * RL) cw.push("Lap " + no + " only covers " + Math.round((L.span / RL) * 100) + "% of the " + noun + ", check its GPS");
       laps.push(strip(L));
     });
-    if (!laps.length) throw new Error("No timed lap was a clean single " + noun + " of the track.");
+    if (!laps.length) {
+      noClean = "No timed lap was a clean single " + noun + " of the track.";
+      skipped.push((course.label || "A course") + " was left out: none of its laps was a clean single " + noun + ".");
+      return null;
+    }
     if (oddStart.length) cw.push(oddStart.join(", ") + ": did not pass both initial sector gates; missing sector times are unavailable");
 
     const spdAt = (arr: LiveSample[], k: number) => {
@@ -686,7 +693,8 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
         while (tail.length && spdAt(tail, tail.length - 1) < 1) tail.pop();
         if (tail.length >= 8) {
           const L = build(tail, "In progress", "partial", tail[0].t, tail[tail.length - 1].t, null, false);
-          laps.push(strip(L));
+          /* driven at run pace it is a lap in progress; crawling, it is the drive back to the pits */
+          if (L.vavg >= 0.4 * Math.max(...laps.map((l) => l.vavg))) laps.push(strip(L));
         }
       }
     }
@@ -721,5 +729,8 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
       warnings: cw,
     };
     return { D, track: tk, isNew, renamed, label: course.label };
-  });
+  }).filter((r): r is NonNullable<typeof r> => r !== null);
+  if (!out.length) throw new Error(noClean);
+  out[0].D.warnings.unshift(...warn, ...skipped);
+  return out;
 }
