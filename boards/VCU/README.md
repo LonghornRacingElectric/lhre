@@ -177,7 +177,10 @@ periods. The older 0x130 packet cannot supply four independent speeds.
 `WheelControlParams::enabled` enables rear-drive slip control. It uses the
 faster undriven front wheel as speed reference, the faster rear wheel to
 detect one-wheel spin, and a bounded PI torque reduction. Reductions act
-immediately; torque recovery is limited. Missing/negative wheel feedback
+immediately; only recovery after a slip cut is rate-limited. Ordinary
+no-slip pedal applications and increases pass through immediately. Pedal
+release, disabled control or invalid feedback clear the recovery state.
+Missing/negative wheel feedback
 cuts positive torque while this feature is enabled. Near-zero speed uses a
 bounded denominator. Both tire radii match `vehicle/vehicle.yml` (0.2045 m).
 The 10% slip targets and controller gains are commissioning values; defaults
@@ -413,3 +416,15 @@ state reports IDLE. `/faults` gives the names and `/state` gives the primary
 fault; use these instead of counting long codes. PRECHARGE/RTD_WAIT blink
 at 1 Hz; fault pulses use 250 ms on/off with a 1.5 s inter-code pause.
 The host bench harness retains its rainbow/manual-color behavior for tests.
+
+## Pedal safety thresholds
+
+Brake-over-throttle uses the unfiltered average of the two calibrated,
+normalized APPS positions, before the EMA and torque-demand deadzone.
+With the brake-pressed condition active, travel strictly above 25% latches
+BOT; release requires travel strictly below 5%, even after the brake is
+released. Exactly 5% remains latched. These are mechanical-travel thresholds,
+not percentages of filtered torque demand, per
+[2026 rules EV.4.7, page 94](https://www.formulaknightsracing.com/_files/ugd/742c10_60e00afcfde64f9cae59db562c356c9c.pdf#page=94).
+Correct sensor endpoints remain a commissioning prerequisite. Brake-pressure
+filtering/hysteresis and the normal pedal-demand filter are unchanged.

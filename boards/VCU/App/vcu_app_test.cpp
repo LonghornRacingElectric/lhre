@@ -176,6 +176,14 @@ TEST_F(VcuAppTest, BrakeOverThrottleCutsUntilPedalReleased) {
   b_.SetBrakePsi(0.0f);
   b_.Run(*app_, 200);
   EXPECT_EQ(app_->torque_command(), 0.0f);
+  // Raw 10% is below the old deadzone-shifted release point, but must stay cut.
+  b_.SetPedalTravel(0.10f);
+  b_.Run(*app_, 200);
+  EXPECT_TRUE(app_->snapshot().pedals.brake_over_throttle);
+  EXPECT_EQ(app_->torque_command(), 0.0f);
+  b_.SetPedalTravel(0.5f);
+  b_.Run(*app_, 200);
+  EXPECT_EQ(app_->torque_command(), 0.0f);
   b_.SetPedalTravel(0.0f);
   b_.Run(*app_, 200);
   b_.SetPedalTravel(0.5f);
@@ -504,6 +512,25 @@ TEST_F(VcuAppTest, DataBusGoldenWheelPacketsDecodeAndExpireIndependently) {
   EXPECT_NEAR(wheels.reference_m_s, 50 * 0.2045f, 0.001f);
   b_.Run(*app_, 9);
   EXPECT_FALSE(app_->snapshot().wheel_control.valid);
+}
+
+TEST_F(VcuAppTest, EnabledSlipControlPassesNormalThrottleWithoutAnExtraRamp) {
+  b_.params.wheel_control.enabled = true;
+  app_ = std::make_unique<vcu::App>(b_.peripherals(), &b_.params);
+  for (int i = 0; i < 4; ++i) {
+    b_.wheel_alive[i] = true;
+    b_.wheel_rad_s[i] = 50;
+  }
+  ReachDrive();
+  b_.SetPedalTravel(0.5f);
+  for (int n = 0; n < 5; ++n) {
+    b_.Run(*app_, 3);
+    const auto s = app_->snapshot();
+    ASSERT_EQ(s.state, VcuState::kDrive);
+    ASSERT_TRUE(s.wheel_control.valid);
+    ASSERT_GT(s.torque.traction, 0);
+    EXPECT_FLOAT_EQ(s.wheel_control.positive_nm, s.torque.traction);
+  }
 }
 
 TEST_F(VcuAppTest, EnabledSlipControlCutsOneWheelSpinAndMissingData) {

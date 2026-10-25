@@ -33,11 +33,13 @@ WheelControlResult WheelSlipController::Update(const WheelInputs& in,
   }
   if (!p.enabled) {
     integral_nm_ = previous_nm_ = 0;
+    recovering_ = false;
     out.positive_nm = demand_nm;
     return out;
   }
   if (!out.valid || demand_nm <= 0) {
     integral_nm_ = previous_nm_ = 0;
+    recovering_ = false;
     return out;
   }
   const float dt = static_cast<float>(dt_ms) * 0.001f;
@@ -45,8 +47,12 @@ WheelControlResult WheelSlipController::Update(const WheelInputs& in,
   integral_nm_ = Clamp(integral_nm_ + p.ki_nm_s * error * dt, 0.0f, demand_nm);
   const float trim = Clamp(p.kp_nm * error + integral_nm_, 0.0f, demand_nm);
   const float target = demand_nm - trim;
-  // Cut immediately; ramp recovery to avoid reapplying torque abruptly.
-  out.positive_nm = Clamp(target, 0.0f, previous_nm_ + p.recovery_nm_s * dt);
+  // A normal throttle step is not recovery. Only a slip cut arms the ramp;
+  // keep it armed until the cut has been fully restored at current demand.
+  out.positive_nm =
+      recovering_ ? Clamp(target, 0.0f, previous_nm_ + p.recovery_nm_s * dt)
+                  : target;
+  recovering_ = trim > 0 || out.positive_nm < demand_nm;
   previous_nm_ = out.positive_nm;
   return out;
 }

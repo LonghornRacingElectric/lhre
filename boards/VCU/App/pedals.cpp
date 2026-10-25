@@ -83,11 +83,11 @@ PedalOutputs PedalProcessor::Update(const PedalInputs& in, uint32_t now_ms,
   out.brake_for_rtd = out.bse_psi_filtered >= bse.brake_light_psi;
   out.brake_light = out.brake_for_rtd ? bse.brake_light_duty : 0.0f;
 
-  // EV.4.7 brake-over-throttle (TODO(verify rule)): latch with brake
-  // pressed and pedal > 25%, release only when the pedal drops below 5%.
-  if (brake_pressed_ && out.pedal_travel > bse.bot_pedal_on) {
+  // EV.4.7 thresholds refer to calibrated mechanical travel, before the
+  // torque-demand filter/deadzone can shift or delay the trip and release.
+  if (brake_pressed_ && average > bse.bot_pedal_on) {
     bot_latched_ = true;
-  } else if (out.pedal_travel < bse.bot_pedal_off) {
+  } else if (average < bse.bot_pedal_off) {
     bot_latched_ = false;
   }
   out.brake_over_throttle = bot_latched_;
