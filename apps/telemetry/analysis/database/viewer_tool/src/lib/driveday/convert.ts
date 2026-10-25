@@ -694,7 +694,7 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
         if (tail.length >= 8) {
           const L = build(tail, "In progress", "partial", tail[0].t, tail[tail.length - 1].t, null, false);
           /* driven at run pace it is a lap in progress; crawling, it is the drive back to the pits */
-          if (L.vavg >= 0.4 * Math.max(...laps.map((l) => l.vavg))) laps.push(strip(L));
+          if (L.vavg >= 0.4 * Math.max(...laps.filter((l) => l.kind === "lap").map((l) => l.vavg))) laps.push(strip(L));
         }
       }
     }
