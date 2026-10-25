@@ -391,9 +391,10 @@ class MQTTHandler:
     def _gps_ingest(self, payload: bytes):
         '''
         publishd's GPS-only feed (orion/gps): one small JSON object per receiver fix at up to
-        PUBLISHD_GPS_HZ, beside the full frames on 'orion'. Forwarded to the bridge unchanged for
-        the live map (car_type orion_gps -> Kafka grafana_data_orion_gps) and queued for the
-        gps_precise table. No packet row: the full-frame tables keep their own rate.
+        PUBLISHD_GPS_HZ, beside the full frames on 'orion'. Queued for the gps_precise table only:
+        the bridge decodes only car frames, and the live map reads gps_precise from those. No packet
+        row: the full-frame tables keep their own rate. Values are typed here because the row shares
+        a transaction with packet rows, and one bad value would roll the whole batch back.
         '''
         try:
             row = json.loads(payload)
@@ -401,11 +402,15 @@ class MQTTHandler:
             logging.warning('orion/gps payload is not JSON; dropped')
             return
         spec = self.table_specs["Orion"]["gps_precise"]
-        row = {k: v for k, v in row.items() if k in spec}
-        if row.get("time") is None:
+        try:
+            row = {k: int(v) if k in ("time", "packet_id", "gps_src") else float(v)
+                   for k, v in row.items() if k in spec and v is not None}
+        except (TypeError, ValueError):
+            logging.warning('orion/gps payload has a non-numeric value; dropped')
+            return
+        if "time" not in row:
             logging.warning('orion/gps payload has no time; dropped')
             return
-        self._send_to_bridge(payload=payload, car="orion_gps")
         try:
             self.db_queues["Orion"].put_nowait([("gps_precise", row)])
         except queue.Full:
