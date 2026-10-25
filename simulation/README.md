@@ -36,11 +36,11 @@ make test    # check that BobSim loads //vehicle, then run the fast tests
 | `make test` | Run `make smoke`, then `make unit` |
 | `make smoke` | Check that BobSim loads `vehicle/vehicle.yml` and its tires. It checks loading only. |
 | `make unit` | Run the fast unit and contract tests in `tests/`. Then check that `bobsim/` has no local changes. See [docs/tests.md](docs/tests.md). |
-| `make records` | Write `vehicle/vehicle.yml` into BobLib's Modelica records |
+| `make records` | Write `vehicle/vehicle.yml` into BobLib's Modelica records. `VEHICLE=<path>` writes a candidate copy instead. |
 | `make records-undo` | Put back only the files `make records` wrote |
 | `make bobsim T=<target>` | Run a BobSim make target on BobSim's own car. `T=help` lists them. |
-| `make car T=<target>` | Run a BobSim make target on `vehicle/vehicle.yml`, then restore `bobsim/`. Outputs and `identity.json` go to `out/car/<target>/`. See [docs/bobsim.md](docs/bobsim.md#run-a-bobsim-target-on-our-car). |
-| `make four-post-acceptance T=<target>` | Check the FourPost outputs of `make car T=<target>`. `T` defaults to `standard-eval-four-post`. |
+| `make car T=<target>` | Run a BobSim make target on `vehicle/vehicle.yml`, then restore `bobsim/`. Outputs and `identity.json` go to `out/car/<target>/`. `VEHICLE=out/<name>/vehicle.yml` runs a candidate copy to `out/car/<target>--<name>/`. See [docs/bobsim.md](docs/bobsim.md#run-a-bobsim-target-on-our-car). |
+| `make four-post-acceptance T=<target>` | Check the FourPost outputs of `make car T=<target>`. `T` defaults to `standard-eval-four-post`. Pass the same `VEHICLE` as `make car`. |
 | `make study S=<name>` | Run `studies/<name>/run.py`. If it succeeds, write outputs to `out/<name>/`. `STUDY_WORKERS=n` limits the CPUs for parallel cases. `ARGS=... V=<name>` runs a variant to `out/<name>--<V>/`. |
 | `make stale S=<name>` | Check if the result in `studies/<name>/README.md` is current, stale or unknown. Without `S`, check every study. See [docs/studies.md](docs/studies.md#check-a-result). |
 | `make bump-bobsim REF=<ref>` | Move the BobSim pin to a commit, tag or branch |

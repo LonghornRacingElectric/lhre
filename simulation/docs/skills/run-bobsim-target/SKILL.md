@@ -23,7 +23,9 @@ description: Run a BobSim make target (standard evaluation, envelope, lap sim, s
    `make car` writes our records, installs `vehicle/vehicle.yml` as
    `bobsim/vehicle.yml`, runs the target and restores `bobsim/`. See
    [bobsim.md](../../bobsim.md#run-a-bobsim-target-on-our-car). Some
-   targets take up to two hours. Run them in the background.
+   targets take up to two hours. Run them in the background. To run a
+   candidate copy, add `VEHICLE=out/<name>/vehicle.yml`. See
+   [bobsim.md](../../bobsim.md#run-a-bobsim-target-on-a-candidate).
 4. For FourPost, check the outputs:
 
    ```bash

@@ -175,6 +175,21 @@ assert args.pop(0) == "sim", args
 sys.exit(subprocess.call(args, cwd=SIM, env=env))
 '''
 
+FAKE_BUNDLE_CHECK = '''\
+import hashlib
+import sys
+from pathlib import Path
+
+import yaml
+
+bundle = Path(sys.argv[sys.argv.index("--bundle") + 1])
+vehicle = Path(sys.argv[sys.argv.index("--vehicle") + 1])
+expected = yaml.safe_load(bundle.read_text(encoding="utf-8"))["members"]["vehicle"]["sha256"]
+if hashlib.sha256(vehicle.read_bytes()).hexdigest() != expected:
+    print("FAIL: members.vehicle.sha256 does not match the vehicle.")
+    sys.exit(1)
+'''
+
 
 def _git(cwd, *args):
     subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, env={**os.environ, **GIT_ENV})
@@ -194,6 +209,7 @@ def lhre(tmp_path):
     sim = root / "simulation"
     for name in ("Makefile", "tools/car.sh", "tools/car_identity.py"):
         _write(sim / name, (SIM / name).read_text(encoding="utf-8"))
+    _write(sim / "tools" / "bundle.py", FAKE_BUNDLE_CHECK)
     bobsim = sim / "bobsim"
     _write(bobsim / "vehicle.yml", BOBSIM_VEHICLE)
     _write(bobsim / "README.md", "fake BobSim\n")
@@ -219,10 +235,10 @@ def lhre(tmp_path):
     return root
 
 
-def _make_car(lhre, target):
+def _make_car(lhre, target, *args):
     compose = f"{sys.executable} {lhre.parent / 'compose.py'}"
     result = subprocess.run(
-        ["make", "car", f"T={target}", f"COMPOSE={compose}"],
+        ["make", "car", f"T={target}", f"COMPOSE={compose}", *args],
         cwd=lhre / "simulation",
         capture_output=True,
         text=True,
@@ -295,6 +311,46 @@ def test_make_car_runs_the_target_on_our_vehicle_and_restores_bobsim(lhre):
     metrics = out / "generated_results" / "four_post_eval_report_metrics.csv"
     assert outputs["generated_results/four_post_eval_report_metrics.csv"] == _sha256(metrics)
     assert outputs["four_post_eval_config.yml"] == _sha256(bobsim / FOUR_POST_CONFIG)
+
+
+def _candidate(lhre, bundle_sha256=None):
+    vehicle = OUR_VEHICLE.replace("mass_kg: 160.0", "mass_kg: 170.0")
+    folder = lhre / "simulation" / "out" / "cand"
+    _write(folder / "vehicle.yml", vehicle)
+    _write(folder / "bundle.yml", BUNDLE.format(sha256=bundle_sha256 or hashlib.sha256(vehicle.encode()).hexdigest()))
+    return folder / "vehicle.yml"
+
+
+def test_make_car_runs_a_candidate_vehicle_into_its_own_folder(lhre):
+    assert _make_car(lhre, "ok").returncode == 0
+    candidate = _candidate(lhre)
+    result = _make_car(lhre, "ok", "VEHICLE=out/cand/vehicle.yml")
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    seen = lhre / "simulation/bobsim/simulations/mbd/generated_results/seen_vehicle.yml"
+    assert seen.read_bytes() == candidate.read_bytes()
+    assert _bobsim_status(lhre) == ""
+    car = lhre / "simulation" / "out" / "car"
+    assert (car / "ok--cand" / "vehicle.yml").read_bytes() == candidate.read_bytes()
+    assert (car / "ok" / "vehicle.yml").read_bytes() == (lhre / "vehicle" / "vehicle.yml").read_bytes()
+    identity = _identity(lhre, "ok--cand")
+    assert identity["status"] == "ok", identity
+    assert identity["vehicle"]["path"] == "simulation/out/cand/vehicle.yml"
+    assert identity["vehicle"]["sha256"] == _sha256(candidate)
+    assert identity["vehicle"]["candidate"] is True
+    assert identity["bundle"]["path"] == "simulation/out/cand/bundle.yml"
+    assert identity["bundle"]["describes_vehicle"] is True
+    assert _identity(lhre, "ok")["vehicle"]["candidate"] is False
+
+
+def test_make_car_stops_before_the_target_on_a_candidate_that_fails_the_check(lhre):
+    _candidate(lhre, bundle_sha256="0" * 64)
+    result = _make_car(lhre, "ok", "VEHICLE=out/cand/vehicle.yml")
+    assert result.returncode != 0
+    assert "fails the candidate check" in result.stderr
+    assert not (lhre / "simulation/bobsim/simulations/mbd/generated_results/seen_vehicle.yml").exists()
+    assert not (lhre / "simulation/out/car/ok--cand").exists()
+    assert _bobsim_status(lhre) == ""
 
 
 def test_make_car_fails_without_a_vehicle_bundle(lhre):

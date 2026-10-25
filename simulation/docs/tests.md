@@ -27,7 +27,9 @@ The BobSim test takes about 6 s of `make unit`.
   target sees our vehicle. `bobsim/` is restored after a pass, a failed
   target, failed records and an interrupt. A target that leaves `bobsim/`
   changed fails. An executable older than the records fails. No `.tir`
-  file reaches the outputs. It runs no Modelica.
+  file reaches the outputs. A candidate `VEHICLE` runs to its own folder.
+  A candidate that fails the check stops before the target. It runs no
+  Modelica.
 - `test_four_post_acceptance.py`: the FourPost acceptance on small
   synthetic metrics files and run manifests. The metrics files use the
   `fe03bab` format, and a format with a `status` column.
