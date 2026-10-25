@@ -32,8 +32,8 @@ This ADR replaces only that one line of ADR-012. The rest of ADR-012 stays.
   `simulation/tools/study_template/`. There is no study framework.
 - A study has no tests of its own. Tests cover shared code in
   `simulation/tools/` once.
-- `studies/front-ackermann/` is older than this rule. It stays as it is and
-  is marked historical.
+- `studies/front-ackermann/` follows this layout. Its committed results
+  are historical.
 
 [simulation/docs/studies.md](../../simulation/docs/studies.md) has the
 detail.
