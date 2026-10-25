@@ -8,6 +8,9 @@ where each number came from.
 """
 
 from dataclasses import dataclass
+import hashlib
+
+import math
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -17,6 +20,41 @@ CONFIG_NAME = 'vehicle.yaml'
 SCHEMA = 'lhr.vehicle.v1'
 
 Vec3 = Tuple[float, float, float]
+
+
+@dataclass(frozen=True)
+class StereoCamera:
+    """One ideal rectified ZED 2i rig; mount pose is in base_link."""
+
+    model: str
+    lens_focal_length_mm: float
+    position_m: Vec3
+    rpy_rad: Vec3
+    baseline_m: float
+    image_width: int
+    image_height: int
+    update_rate_hz: float
+    horizontal_fov_rad: float
+
+    @property
+    def fx_px(self) -> float:
+        """Pixel focal length used by both rendering and calibration."""
+        return self.image_width / (2.0 * math.tan(self.horizontal_fov_rad / 2.0))
+
+    @property
+    def fy_px(self) -> float:
+        """Return the same focal length for the ideal square pixels."""
+        return self.fx_px
+
+    @property
+    def cx_px(self) -> float:
+        """Horizontal principal point at image center."""
+        return self.image_width / 2.0
+
+    @property
+    def cy_px(self) -> float:
+        """Vertical principal point at image center."""
+        return self.image_height / 2.0
 
 
 @dataclass(frozen=True)
@@ -38,6 +76,8 @@ class Vehicle:
     max_steer_rate_rad_s: float
     max_speed_mps: float
     lidar_position_m: Vec3
+    lidar_range_noise_std_m: float
+    stereo_camera: StereoCamera
 
     @property
     def chassis_center_x_m(self) -> float:
@@ -84,9 +124,68 @@ def config_path() -> Path:
         + ', '.join(str(c) for c in candidates))
 
 
+def vehicle_sha256(path: Optional[Path] = None) -> str:
+    """
+    Fingerprint the vehicle file's bytes.
+
+    Stamped onto anything derived from these numbers, so a stored
+    result says which car description produced it. A commit id does
+    not cover that: the file is often edited without being committed.
+
+    Same formula as the study harness in ``simulation/tools``, so a
+    sim run and a BobDyn study are comparable on this field.
+    """
+    source = Path(path) if path is not None else config_path()
+    return hashlib.sha256(source.read_bytes()).hexdigest()
+
+
 def _vec3(values) -> Vec3:
     x, y, z = (float(v) for v in values)
     return (x, y, z)
+
+
+def _camera_number(raw, field) -> float:
+    value = raw.get(field)
+    if (type(value) not in (int, float) or not math.isfinite(value)):
+        raise ValueError(f'stereo_camera.{field}: require a finite number')
+    return float(value)
+
+
+def _camera_vec3(raw, field) -> Vec3:
+    values = raw.get(field)
+    if (not isinstance(values, (list, tuple)) or len(values) != 3
+            or any(type(v) not in (int, float) or not math.isfinite(v)
+                   for v in values)):
+        raise ValueError(f'stereo_camera.{field}: require three finite numbers')
+    return tuple(float(v) for v in values)
+
+
+def _load_stereo_camera(raw) -> StereoCamera:
+    if not isinstance(raw, dict):
+        raise ValueError('stereo_camera: require a configuration mapping')
+    if raw.get('model') != 'zed2i':
+        raise ValueError('stereo_camera.model: require zed2i')
+    lens = _camera_number(raw, 'lens_focal_length_mm')
+    if lens != 2.1:
+        raise ValueError('stereo_camera.lens_focal_length_mm: require 2.1')
+    baseline = _camera_number(raw, 'baseline_m')
+    rate = _camera_number(raw, 'update_rate_hz')
+    fov = _camera_number(raw, 'horizontal_fov_deg')
+    for field, value in (('baseline_m', baseline), ('update_rate_hz', rate)):
+        if value <= 0:
+            raise ValueError(f'stereo_camera.{field}: require a positive value')
+    if not 0 < fov < 180:
+        raise ValueError('stereo_camera.horizontal_fov_deg: require 0 < FOV < 180')
+    for field in ('image_width', 'image_height'):
+        if type(raw.get(field)) is not int or raw[field] <= 0:
+            raise ValueError(f'stereo_camera.{field}: require a positive integer')
+    return StereoCamera(
+        model='zed2i', lens_focal_length_mm=lens,
+        position_m=_camera_vec3(raw, 'position_m'),
+        rpy_rad=_camera_vec3(raw, 'rpy_rad'), baseline_m=baseline,
+        image_width=raw['image_width'], image_height=raw['image_height'],
+        update_rate_hz=rate, horizontal_fov_rad=math.radians(fov),
+    )
 
 
 def load_vehicle(path: Optional[Path] = None) -> Vehicle:
@@ -106,6 +205,10 @@ def load_vehicle(path: Optional[Path] = None) -> Vehicle:
     steering = raw['steering']
     limits = raw['limits']
     sensors = raw['sensors']
+    range_noise_std = sensors['lidar'].get('range_noise_std_m')
+    if (type(range_noise_std) not in (int, float)
+            or not math.isfinite(range_noise_std) or range_noise_std < 0):
+        raise ValueError('lidar.range_noise_std_m: require a finite non-negative number')
 
     return Vehicle(
         name=str(raw['vehicle']['name']),
@@ -123,4 +226,6 @@ def load_vehicle(path: Optional[Path] = None) -> Vehicle:
         max_steer_rate_rad_s=float(steering['max_rate_rad_s']),
         max_speed_mps=float(limits['max_speed_mps']),
         lidar_position_m=_vec3(sensors['lidar']['position_m']),
+        lidar_range_noise_std_m=float(range_noise_std),
+        stereo_camera=_load_stereo_camera(sensors.get('stereo_camera')),
     )

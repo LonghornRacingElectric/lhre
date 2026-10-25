@@ -2,10 +2,10 @@
 import './trackside.css';
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type Dispatch, type MouseEvent, type ReactNode, type SetStateAction } from "react";
-import { Activity, AlertTriangle, ArrowDown, ArrowUp, CalendarDays, ChevronLeft, ChevronRight, Crosshair, Disc3, Download, FileText, Flag, Gauge, GraduationCap, HelpCircle, MapPinned, Minus, MonitorCog, Moon, NotebookText, Plus, Power, Radio, RefreshCcw, Save, Scissors, SlidersHorizontal, Sun, Target, Thermometer, Timer, Trash2, Upload, Users, WifiOff, X, Zap } from "lucide-react";
+import { Activity, AlertTriangle, ArrowDown, ArrowUp, CalendarDays, ChevronLeft, ChevronRight, Crosshair, Disc3, Download, FileText, Flag, Gauge, GraduationCap, HelpCircle, History, MapPinned, Minus, MonitorCog, Moon, NotebookText, Plus, Power, Radio, RefreshCcw, Save, Scissors, SlidersHorizontal, Square, Sun, Target, Thermometer, Timer, Trash2, Upload, Users, WifiOff, X, Zap } from "lucide-react";
 import { api } from "@/lib/trackside/api";
 import { useCarStatus, CAR_STATE_META, humanizeReason, type CarState, type CarStatusFeed } from "@/lib/trackside/useCarStatus";
-import { EVENT_TYPES, upsertSession, patchSession, syncRegistryWithServer, type TracksideSessionInfo } from "@/lib/trackside/sessionRegistry";
+import { EVENT_TYPES, upsertSession, patchSession, suggestSessionName, syncRegistryWithServer, type TracksideSessionInfo } from "@/lib/trackside/sessionRegistry";
 import { usePresence } from "@/lib/trackside/usePresence";
 import { useSession } from "next-auth/react";
 import { DashLayoutEditor } from "@/components/dashlayout/DashLayoutEditor";
@@ -16,6 +16,8 @@ import { useMessageLibrary } from "@/lib/dash/useMessageLibrary";
 import { activeMessages, MESSAGE_ICON_GLYPH, type DashMessage } from "@/lib/dash/dashMessages";
 import { useRacePlan } from "@/lib/dash/useRacePlan";
 import { DriveDaySetupForm, driveDaySetupToPayload, type DriveDaySetup } from "@/components/trackside/DriveDaySetupForm";
+import { ManualLapEntry } from "@/components/trackside/ManualLapEntry";
+import { parseLapTimeInput } from "@/lib/trackside/lapTime";
 import type {
   ChannelDef,
   ChannelChartDefinition,
@@ -136,6 +138,8 @@ type LiveLap = {
    *  from the lap's samples. Drives the battery thermal-projection trend. */
   maxCellTempC?: number;
   notes?: string; // per-lap note (synced to the classifier DB)
+  /** Entered by hand as a duration only: its times are when it was typed in, so it stays out of the DB sync. */
+  byHand?: boolean;
 };
 type LiveSessionState = {
   running: boolean;
@@ -149,6 +153,8 @@ type LiveSessionState = {
   lapSamples: LiveSample[];
   laps: LiveLap[];
   lapStartMs: number | null;
+  /** Set by Stop Lap: the start/finish gate does not start a lap until Start Lap is pressed. */
+  gateDisarmed?: boolean;
   sectorStartMs: number | null;
   nextSplitIndex: number;
   currentSectors: number[];
@@ -1112,7 +1118,7 @@ function App() {
     if (isMirror || sessionInfo?.dayId == null) return;
     if (lapSyncTimerRef.current) window.clearTimeout(lapSyncTimerRef.current);
     const dayId = sessionInfo.dayId;
-    const laps = liveState.laps.map((l) => ({ start_time: l.startMs, end_time: l.endMs, notes: l.notes ?? "" }));
+    const laps = liveState.laps.filter((l) => !l.byHand).map((l) => ({ start_time: l.startMs, end_time: l.endMs, notes: l.notes ?? "" }));
     lapSyncTimerRef.current = window.setTimeout(() => {
       void fetch("/api/laps/sync", {
         method: "POST", headers: { "content-type": "application/json" },
@@ -2133,7 +2139,7 @@ function App() {
     if (sessionInfo?.dayId != null) {
       if (lapSyncTimerRef.current) { window.clearTimeout(lapSyncTimerRef.current); lapSyncTimerRef.current = null; }
       const dayId = sessionInfo.dayId;
-      const laps = liveStateRef.current.laps.map((l) => ({ start_time: l.startMs, end_time: l.endMs, notes: l.notes ?? "" }));
+      const laps = liveStateRef.current.laps.filter((l) => !l.byHand).map((l) => ({ start_time: l.startMs, end_time: l.endMs, notes: l.notes ?? "" }));
       void fetch("/api/laps/sync", {
         method: "POST", headers: { "content-type": "application/json" }, keepalive: true,
         body: JSON.stringify({ day_id: dayId, laps }),
@@ -2395,7 +2401,7 @@ function App() {
     if (gpsTrustworthy) {
       const startGate = trackForLive.gates.find((gate) => gate.role === "start_finish");
       const splits = trackForLive.gates.filter((gate) => gate.role === "split");
-      if (startGate && sampleCrossesGate(previous, sample, startGate)) {
+      if (startGate && !current.gateDisarmed && sampleCrossesGate(previous, sample, startGate)) {
         if (lapStartMs && sample.t - lapStartMs > 5000) {
           const durationMs = sample.t - lapStartMs;
           const finalSectorMs = sectorStartMs ? sample.t - sectorStartMs : durationMs;
@@ -2507,6 +2513,7 @@ function App() {
         lapDistanceM: 0,
         lapSamples: [sample],
         deltaMs: 0,
+        gateDisarmed: false,
         status: "Manual lap started.",
       };
       liveStateRef.current = nextState;
@@ -2594,6 +2601,66 @@ function App() {
       setMsgSendStatus(`Lap timer started — next click closes lap 1.`);
     }
     window.setTimeout(() => setMsgSendStatus(""), 4000);
+  }
+
+  // Close the running lap WITHOUT arming the next one. Log Lap always re-arms,
+  // which is right on a loop but on an autocross / accel / skidpad run turns
+  // the drive back to the start into a bogus lap that has to be deleted or
+  // filtered out downstream (the retro viewer drops slow legs for this reason).
+  function stopLap() {
+    if (isMirrorRef.current || !liveStateRef.current.lapStartMs) return;
+    const before = liveStateRef.current.laps.length;
+    markLap();
+    if (liveStateRef.current.laps.length === before) return; // nothing closed (no sample / zero length)
+    const next: LiveSessionState = {
+      ...liveStateRef.current,
+      lapStartMs: null,
+      sectorStartMs: null,
+      nextSplitIndex: 0,
+      currentSectors: [],
+      lapEnergyWh: 0,
+      lapEnergyOutWh: 0,
+      lapEnergyInWh: 0,
+      lapDistanceM: 0,
+      lapSamples: [],
+      deltaMs: 0,
+      gateDisarmed: true,
+      status: "Lap stopped. Start Lap arms the next run.",
+    };
+    liveStateRef.current = next;
+    persistLiveSession(next, { saveLocal: true, saveBackend: true, includeFullLapSamples: false });
+    setLiveState(next);
+  }
+
+  // A lap timed elsewhere (official timing, a stopwatch): just its duration.
+  // No samples, sectors or energy, so it shows in the table and counts toward
+  // laps and the average, nothing else.
+  function addManualLap(durationMs: number) {
+    if (isMirrorRef.current || !(durationMs > 0)) return;
+    const current = liveStateRef.current;
+    const endMs = Date.now();
+    const n = current.laps.length + 1;
+    const lap: LiveLap = {
+      id: `manual-lap-${n}-${endMs}`,
+      label: `Manual ${n}`,
+      kind: "manual",
+      startMs: endMs - durationMs,
+      endMs,
+      durationMs,
+      sectors: [],
+      energyWh: 0,
+      distanceM: 0,
+      avgSpeedMps: null,
+      samples: [],
+      notes: "entered by hand",
+      byHand: true,
+    };
+    const next: LiveSessionState = { ...current, laps: [...current.laps, lap], status: `${lap.label} entered by hand.` };
+    liveStateRef.current = next;
+    selectCompletedLapByDefault(lap.id);
+    persistLiveSession(next, { saveLocal: true, saveBackend: true, includeFullLapSamples: false });
+    lastSavedLapCountRef.current = next.laps.length;
+    setLiveState(next);
   }
 
   function toggleLapSelected(lapId: string) {
@@ -3161,6 +3228,10 @@ function App() {
             <span className="statusSep">·</span>
             <span className="statusSrc">{sourceLabel}</span>
           </div>
+          {/* plain <a>: a full load keeps trackside.css out of the viewer */}
+          <a className="tool" href="/trackside-retro" title="Review a drive day from the database: laps, sectors, corners, cones">
+            <History size={14} /> Retro
+          </a>
           <button className="tool driveToggle" onClick={() => setPhoneFull(false)}>Drive view</button>
           <button className="tool iconOnly" onClick={() => setShowTour(true)} aria-label="Show guided tour" title="Guided tour">
             <HelpCircle size={16} />
@@ -3718,6 +3789,16 @@ function App() {
               >
                 <Flag size={20} /> {liveState.lapStartMs ? "Log Lap" : "Start Lap"}
               </button>
+              {liveState.lapStartMs ? (
+                <button
+                  className="tool liveAction"
+                  disabled={isMirror}
+                  onClick={stopLap}
+                  title="Close this lap without starting the next one (autocross / accel / skidpad runs). Start Lap arms the next run."
+                >
+                  <Square size={20} /> Stop Lap
+                </button>
+              ) : null}
               <div className="liveActionPair">
                 <button
                   className={recordingStartMs != null ? "tool liveAction dangerPrimary" : "tool liveAction"}
@@ -3784,6 +3865,7 @@ function App() {
                   targetEnergyPerLapWh={targetEnergyPerLapWh}
                   averages={lapAverages}
                 />
+                <ManualLapEntry disabled={isMirror} onAdd={addManualLap} />
               </Panel>
               <PackStatusPanel state={liveState} displayState={filteredLiveState} soeCutoffCellV={soeCutoffCellV} />
               <CellThermalsPanel sample={filteredLiveState.lastSample} />
@@ -4678,7 +4760,7 @@ function NewSessionModal({
   const [eventType, setEventType] = useState<string>(EVENT_TYPES[0]);
   const [venue, setVenue] = useState(defaultVenue);
   const [name, setName] = useState("");
-  const suggestedName = `${venue || "Session"} · ${eventType}`;
+  const suggestedName = suggestSessionName(venue, eventType);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -6784,22 +6866,6 @@ function formatLapTime(ms: number) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toFixed(2).padStart(5, "0")}`;
-}
-
-// Parse an edited lap time. Accepts "M:SS.ss" / "MM:SS.ss" or plain seconds
-// ("83.45"). Returns milliseconds, or null if it can't be parsed.
-function parseLapTimeInput(text: string): number | null {
-  const s = text.trim();
-  if (!s) return null;
-  const colon = s.match(/^(\d+):(\d{1,2}(?:\.\d+)?)$/);
-  if (colon) {
-    const min = Number(colon[1]);
-    const sec = Number(colon[2]);
-    if (!Number.isFinite(min) || !Number.isFinite(sec) || sec >= 60) return null;
-    return Math.round((min * 60 + sec) * 1000);
-  }
-  const n = Number(s);
-  return Number.isFinite(n) && n >= 0 ? Math.round(n * 1000) : null;
 }
 
 // Lap-time cell: click to edit (M:SS.ss or seconds), Enter/blur commits, Esc

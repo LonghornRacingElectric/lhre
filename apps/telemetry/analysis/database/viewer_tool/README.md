@@ -80,3 +80,54 @@ Run dev server:
 ```bash
 npm run dev
 ```
+
+## Hosting
+
+The viewer is self-hosted: `npm run build` + `npm start` on the telemetry
+box, kept up by PM2 (see [the stack README](../../../stack/README.md)) and
+reached through a Cloudflare tunnel. Nothing in this directory targets
+Vercel; the `lapdog` Vercel check that used to post on PRs belonged to the
+removed standalone drive day app and is managed in Vercel's dashboard, not
+here.
+
+## Trackside live
+
+`/trackside-live` is the pit-wall page: live samples from Kafka, lap timing,
+energy plan, driver dash. Lap controls, in the Live Laps panel:
+
+- **Start Lap / Log Lap** starts the timer, then closes a lap and re-arms the
+  next one (a loop). **Stop Lap** closes the lap without re-arming, for
+  autocross, accel and skidpad runs where the drive back is not a lap; Start
+  Lap arms the next run. Both are leader-only.
+- **Add time** enters a lap by its duration (`m:ss.ss` or seconds) when the
+  official timing or a stopwatch has it and the page does not. It is a
+  `manual` lap with no samples, sectors or energy, so it counts toward laps
+  and the average and nothing else.
+- A new session is named `<venue> · <event type> N · YYYY-MM-DD`, N counting
+  this browser's sessions of that type today; type over it if you want.
+
+The page keeps the last 6,000 samples in memory and in the JSON export, so
+at 20 Hz the export holds the last 5 minutes of samples and at 50 Hz the last
+2 minutes (laps keep their times either way). The full stream is in Postgres.
+
+## Drive day viewer
+
+`/trackside-retro` replays a trackside-live session export after the fact:
+map with sectors, lap timeline, corners and braking zones, cell temperatures,
+energy plan. It runs entirely in the browser and keeps its data in IndexedDB.
+How it sorts lap presses into courses, where the export comes from and how to
+test it are in [src/lib/driveday/README.md](src/lib/driveday/README.md);
+`npm run test:driveday` runs its tests.
+
+## LAPDOG refresh
+
+Trackside Retro includes the current LAPDOG video/track/analysis workspace,
+wheel-zoom timeline, route-matched cross-file comparisons, GPS-quality checks
+and driving debrief tools. Existing server-cache import and Trackside event
+notes remain available. See [the retro guide](src/lib/driveday/README.md).
+
+Video playback copies are made locally using `ffmpeg-static`.
+`npm run dev` and `npm start` launch the loopback helper; remote users run
+`npm run video-helper -- --origin https://your-viewer-host.example` on their
+own computer. Originals are not uploaded to the viewer server. See
+[helper setup](tools/README.md). No database setup is needed for the helper.
