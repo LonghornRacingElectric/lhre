@@ -30,6 +30,10 @@ fail() {
     exit 1
 }
 
+open_outputs() {
+    $RUN sim sh -c 'if [ -d bobsim/simulations/mbd ]; then chmod -R a+rwX bobsim/simulations/mbd; fi'
+}
+
 bobsim_changes() {
     git -C bobsim status --porcelain --ignore-submodules=none
 }
@@ -73,6 +77,7 @@ finish() {
     restored=true
     git -c core.autocrlf=false -C bobsim checkout -- vehicle.yml || restored=false
     make records-undo || restored=false
+    open_outputs || restored=false
     if [ "$restored" = false ]; then
         fact failure "Restoring bobsim/ failed."
         status=1
@@ -157,8 +162,7 @@ target_status=$(cat "$out/.target-status")
 fact target_status "$target_status"
 
 say "Let the host read the BobSim outputs"
-$RUN sim sh -c 'if [ -d bobsim/simulations/mbd ]; then chmod -R a+rwX bobsim/simulations/mbd; fi' \
-    || fail "Could not make bobsim/simulations/mbd readable on the host."
+open_outputs || fail "Could not make bobsim/simulations/mbd readable on the host."
 
 say "Copy the outputs to $out"
 if [ -d "$results" ] && { ! [ -r "$results" ] || ! [ -x "$results" ]; }; then
