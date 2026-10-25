@@ -13,6 +13,7 @@ Course scoring (completion, off course, cones, CTE, EKF error) is
 lhr_metrics' verdict. The bag adds what metrics does not record: distance
 from the finish to standstill, that the mission reached FINISHED and that
 the car stayed stopped. Times are sim seconds, mapped through /clock.
+Events listed in <out>/waived.txt are named in the summary, not scored.
 """
 
 import bisect
@@ -27,11 +28,12 @@ from rosbag2_py import ConverterOptions, SequentialReader, StorageOptions
 from rosidl_runtime_py.utilities import get_message
 
 # Thresholds from the pass criteria.
-STOP_LIMIT_M = {'autocross': 30.0, 'acceleration': 75.0}
+STOP_LIMIT_M = {'autocross': 30.0, 'acceleration': 75.0, 'skidpad': 25.0}
 MAX_CTE_M = 1.0
 MAX_EKF_ERROR_M = 0.5
 LAP_TIME_RATIO = 1.5
-COMPLETE = {'autocross': 'lap', 'acceleration': 'mission_finished'}
+COMPLETE = {'autocross': 'lap', 'acceleration': 'mission_finished',
+            'skidpad': 'mission_finished'}
 STOPPED = 0.1  # m/s
 MOVED = 0.5  # m/s: rolling again after the stop fails the run
 
@@ -40,7 +42,8 @@ FIELDS = (['id', 'kind', 'event', 'seed', 'outcome', 'lap_time_s', 'baseline_lap
            'lap_ratio', 'max_cte', 'off_track_count', 'cones_hit', 'max_pos_error',
            'stop_dist_m', 'stop_time_s', 'max_v_after_stop', 'finished', 'emergency',
            'early_exits', 'invalid_reason'] + CHECKS + ['passed'])
-RUN_ID = re.compile(r'^(baseline_)?(autocross|acceleration)(?:_s(\d+))?(?:_r(\d+))?$')
+RUN_ID = re.compile(
+    r'^(baseline_)?(autocross|acceleration|skidpad)(?:_s(\d+))?(?:_r(\d+))?$')
 
 
 def read(bag):
@@ -79,8 +82,8 @@ def finish_and_stop(topics, event):
     odom = [(to_sim(t), m.pose.pose.position.x, m.pose.pose.position.y,
              math.hypot(m.twist.twist.linear.x, m.twist.twist.linear.y)) for t, m in truth]
     status = [(to_sim(t), m.data) for t, m in topics.get('/lhr/mission/status', [])]
-    # The finish: the reference gate for a lap, the nose on the line for
-    # acceleration (the mission's own completion).
+    # The finish: the reference gate for a lap, the mission's own completion
+    # for acceleration and skidpad (the car crossing the finish line).
     finish_topic = ('/lhr/metrics/lap_complete' if event == 'autocross'
                     else '/lhr/mission/complete')
     finish = first_true(topics.get(finish_topic, []))
@@ -209,8 +212,15 @@ def main(out):
         writer.writeheader()
         writer.writerows(rows)
     passed = sum(r['passed'] for r in gate)
+    waived_path = os.path.join(out, 'waived.txt')
+    waived = []
+    if os.path.exists(waived_path):
+        with open(waived_path) as f:
+            waived = [line.strip() for line in f if line.strip()]
     lines = [f'# MVP gate: {"PASS" if gate and passed == len(gate) else "FAIL"}, '
-             f'{passed} of {len(gate)} runs pass', '',
+             f'{passed} of {len(gate)} runs pass'
+             + (f', {", ".join(w.split(":")[0] for w in waived)} waived' if waived else ''),
+             '',
              '| Run | Outcome | Stop after finish | Off course | Cones | Max CTE | '
              'Max EKF error | Lap / baseline | Health | Pass |',
              '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |']
@@ -227,6 +237,8 @@ def main(out):
               '| --- | --- | --- |']
     lines += [f'| {r["seed"]} | {r["outcome"]} | {r.get("lap_time_s", "")} |'
               for r in rows if r['kind'] == 'baseline']
+    if waived:
+        lines += ['', '## Waived', ''] + [f'- {w}' for w in waived]
     failed = [r for r in gate if not r['passed']]
     if failed:
         lines += ['', '## Failures', '']

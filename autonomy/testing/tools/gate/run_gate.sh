@@ -11,14 +11,15 @@
 # $OUT/summary.md.
 #
 #   ../testing/tools/gate/run_gate.sh
-#   SEEDS=1 REPEATS=1 ACCEL_REPEATS=1 ../testing/tools/gate/run_gate.sh
-#   EXTRA="safety_lidar_timeout_s:=1.5" ...   # CPU-rendered machines (#123)
+#   SEEDS=1 REPEATS=1 ACCEL_REPEATS=1 SKIDPAD_REPEATS=1 ../testing/tools/gate/run_gate.sh
+#   EXTRA="safety_lidar_timeout_s:=1.5" ...   # CPU-rendered machines (see the gate README)
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 
 SEEDS=${SEEDS-"1 2 3 4 5"}
 REPEATS=${REPEATS:-3}
 ACCEL_REPEATS=${ACCEL_REPEATS-3}   # empty or 0 skips acceleration
+SKIDPAD_REPEATS=${SKIDPAD_REPEATS-3}  # empty or 0 skips skidpad
 BASELINE=${BASELINE:-1}            # 0 skips the truth-stack baselines
 RUN_S=${RUN_S:-180}                # wall-second cap per run
 SETTLE_S=${SETTLE_S:-3}            # keep recording this long after FINISHED
@@ -114,7 +115,22 @@ plan() {  # one line per run: the id, then its launch arguments
     for r in $(seq 1 "${ACCEL_REPEATS:-0}"); do
         echo "acceleration_r$r track_style:=acceleration perception:=lidar estimator:=ekf"
     done
+    if [ -e "$SKIDPAD_WORLD" ]; then
+        for r in $(seq 1 "${SKIDPAD_REPEATS:-0}"); do
+            echo "skidpad_r$r track_style:=skidpad mission:=skidpad perception:=lidar estimator:=ekf"
+        done
+    fi
 }
+
+# Skidpad joins the matrix once its world is in the tree. Until then the pass
+# criteria record it as a waiver, which the summary states, not as missing
+# runs.
+SKIDPAD_WORLD=$HERE/../../../ros2/src/lhr_gazebo/worlds/skidpad_seed1.sdf
+{
+    if [ "${SKIDPAD_REPEATS:-0}" != 0 ] && [ ! -e "$SKIDPAD_WORLD" ]; then
+        echo "skidpad: no skidpad_seed1.sdf world in this checkout (#114)"
+    fi
+} > "$OUT/waived.txt"
 
 # The scorer fails every planned run with no result, so a campaign that was
 # cut short can never read as a pass.

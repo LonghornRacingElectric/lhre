@@ -3,7 +3,14 @@
 Coordinate the demo's OFF, READY, DRIVING, FINISHED and EMERGENCY states.
 The controller reads `/lhr/mission/status`; an available centerline lets the
 manager enter READY. Go, emergency and reset commands arrive on the matching
-`/lhr/mission/*` Boolean topics. Lap completion comes from metrics.
+`/lhr/mission/*` Boolean topics.
+
+Completion depends on the mission: autocross waits for metrics' verified lap
+on `/lhr/metrics/lap_complete`, acceleration for 75.30 m of travel along the
+start heading (the nose on the finish line), inspection for 28 s. Skidpad,
+ebs_test and manual never complete yet. Once complete, the manager publishes
+`true` on `/lhr/mission/complete` every tick and stays in DRIVING so pursuit
+can brake; FINISHED means the car is below 0.5 m/s.
 
 Run it through [the demo launcher](../lhr_demo/README.md), or use
 `ros2 run lhr_mission_manager mission_manager` in a built ROS workspace.

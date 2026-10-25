@@ -593,7 +593,7 @@ def generate_launch_description():
             description='Odometry source: "truth" (Gazebo) or "ekf"'),
         DeclareLaunchArgument(
             'gyro_bias', default_value='0.0',
-            description='Simulated gyro bias (rad/s); drives heading drift'),
+            description='Gyro bias (rad/s); recorded only, Gazebo bridges its own IMU'),
         DeclareLaunchArgument(
             'wheel_scale_error', default_value='1.0',
             description='Simulated rolling-radius error (1.0 = exact)'),

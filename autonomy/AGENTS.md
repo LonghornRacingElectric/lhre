@@ -25,9 +25,12 @@ here. Do not add `BUILD.bazel` files.
 - Title every autonomy PR `Autonomous: <summary>`. The prefix tells other
   teams which PRs are ours, and it is what makes CodeRabbit skip the PR
   (`.coderabbit.yaml` at the repo root; it also ignores `autonomy/` files).
-- The demo scripts (`run_demo.sh`, `run_gazebo_demo.sh`, `rviz_demo.sh`)
-  need a display and a ROS install. Do not run them in CI or from a
-  headless agent.
+- Every demo script needs a ROS install. `rviz_demo.sh` and a default
+  `run_gazebo_demo.sh` (Gazebo GUI plus RViz) also need a display; do not
+  run those in CI or from a headless agent. `run_demo.sh` opens no window.
+  Headless runs use `scripts/run_headless.sh` (kinematic) or
+  `run_gazebo_demo.sh gui:=false rviz:=false` (needs Gazebo, which CI does
+  not install).
 - Without a ROS install (any Windows machine, most agents) you can edit and
   reason about the code but cannot build or run it. Say so instead of
   claiming a change was verified.
