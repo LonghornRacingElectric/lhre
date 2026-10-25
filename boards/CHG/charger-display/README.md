@@ -26,6 +26,17 @@ python3 boards/CHG/charger-display/tools/build.py --mode monitor
 python3 boards/CHG/charger-display/tools/build.py --mode control
 ```
 
+For a new checkout, install Python 3.12+ and Arduino CLI first. The build script
+requires the ESP32 Arduino core to be installed separately (it does not install
+or update your global core):
+
+```sh
+arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+arduino-cli core install esp32:esp32@3.3.8 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+```
+
+The first build downloads and verifies the pinned display library automatically.
+
 Default `demo` sends no STM32 UART messages. `monitor` reads real telemetry but
 cannot request charging. `control` explicitly enables engineering START/STOP
 requests and requires a real, validated controller integration. Builds do not
@@ -82,6 +93,35 @@ Use the selected build's `flash_args` and the matching esptool/uploader, checkin
 port and chip identity first. The most recent port was `/dev/cu.usbserial-110`;
 it can change on reconnection. Keep the NVS sector intact to retain calibration.
 There is no automatic flash target in this initial package.
+
+After building, upload with the same Arduino CLI configuration. From the repo
+root (macOS/Linux shell), replacing the port with your display's current port:
+
+```sh
+arduino-cli upload \
+  --config-file boards/CHG/charger-display/arduino-cli.yaml \
+  --fqbn esp32:esp32:esp32:FlashSize=4M,FlashMode=dio,FlashFreq=40,UploadSpeed=115200,PartitionScheme=default \
+  --port /dev/cu.usbserial-110 \
+  --input-dir boards/CHG/charger-display/build/demo \
+  boards/CHG/charger-display/firmware/ChargerDisplay
+```
+
+This uploads the demo bootloader, partition/boot-selection images and application
+without erasing NVS calibration. Do not upload the merged 4 MB image if you want
+to retain NVS. Close other serial monitors before upload. Automatic bootloader
+entry normally needs no buttons. If it stalls at Connecting, hold BOOT, tap
+RESET, and release BOOT once writing begins. Recalibrate with BOOT held for two
+seconds while the demo is running only if navigation needs it.
+
+Check runtime output after upload:
+
+```sh
+python3 boards/CHG/charger-display/tools/monitor.py --port /dev/cu.usbserial-110 --seconds 8
+```
+
+Expect `UI_ALIVE mode=DEMO`, increasing uptime, `link=1` for simulated data, and
+`touch=1` when calibration is saved. This confirms firmware health, not a live
+STM32 connection; check the screen and tabs physically as well.
 
 START requires a 1.5-second hold, fresh telemetry, all required checks, no faults
 and positive allowed power. STOP is a normal shutdown request and supersedes a
