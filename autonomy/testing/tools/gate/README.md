@@ -46,8 +46,12 @@ next to the results, since it is not a launch default.
 
 Output goes to `~/lhr-test-data/<date>-mvp-gate/`: `runs/<id>/` (bag,
 `metrics.csv`, launch and recorder logs, the launch arguments), then
-`results.csv` and `summary.md`. An existing run folder is skipped, so a
-stopped campaign resumes where it left off; move a folder aside to rerun it.
+`results.csv` and `summary.md`. `expected.txt` lists every planned run, and
+the scorer fails any planned run with no result, so a campaign cut short
+(a laptop sleeping, an SSH drop) never reads as a pass. Rerunning resumes:
+a finished run (its folder has `args.txt`, written last) is skipped, a run
+that was cut short is moved to `incomplete/` and run again, and Ctrl-C stops
+the current run cleanly. Move a finished folder aside to rerun it.
 Bags never go in git. The gate's write-up goes in
 `autonomy/testing/2026-10-28-mvp-gate/` with `results.csv`, the summary and
 the chosen figures, and the bags go to SharePoint
@@ -66,7 +70,7 @@ Each gate run gets a pass or fail per check:
 | `cte` | `max_cte` at most 1.0 m | metrics |
 | `ekf` | `max_pos_error` at most 0.5 m | metrics |
 | `lap_time` | at most 1.5 times the same seed's baseline; always passes for acceleration | metrics |
-| `health` | no node other than metrics exits before teardown, and no `EMERGENCY` | launch log, bag |
+| `health` | no node other than metrics dies or exits before teardown, and no `EMERGENCY` | launch log, bag |
 
 The finish is the reference gate for autocross (`/lhr/metrics/lap_complete`)
 and the mission's own completion for acceleration (`/lhr/mission/complete`,

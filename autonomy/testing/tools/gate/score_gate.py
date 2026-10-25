@@ -101,7 +101,7 @@ def finish_and_stop(topics, event):
 
 
 def early_exits(log_path):
-    """Return nodes that died before teardown began; metrics ending a run is not one."""
+    """Return nodes that exited before teardown began; metrics ending a run is not one."""
     if not os.path.exists(log_path):
         return ['no launch log']
     died = []
@@ -109,7 +109,10 @@ def early_exits(log_path):
         for line in log:
             if re.search(r'user interrupted|signal_handler|sending signal', line):
                 break
-            match = re.search(r'\[ERROR\] \[([\w-]+)\]: process has died', line)
+            # A clean exit mid-run is as fatal as a crash for any node but
+            # metrics, which ends the run on purpose.
+            match = re.search(
+                r'\] \[([\w-]+)\]: process has (?:died|finished cleanly)', line)
             if match and not match.group(1).startswith('metrics_node'):
                 died.append(match.group(1))
     return died
@@ -129,6 +132,9 @@ def score(run_dir, run_id):
     baseline, event, seed, _ = match.groups()
     row = {'id': run_id, 'kind': 'baseline' if baseline else 'gate', 'event': event,
            'seed': seed or ''}
+    if not os.path.isdir(run_dir):
+        # Planned but never run: a campaign cut short must not read as a pass.
+        return {**row, 'outcome': 'missing', 'early_exits': ''}
     metrics_csv = os.path.join(run_dir, 'metrics.csv')
     if os.path.exists(metrics_csv):
         with open(metrics_csv, newline='') as f:
@@ -140,6 +146,9 @@ def score(run_dir, run_id):
                 'max_pos_error')})
             row['invalid_reason'] = m.get('lap_invalid_reason', '')
     row.setdefault('outcome', 'no_metrics')
+    if not os.path.exists(os.path.join(run_dir, 'args.txt')):
+        # run_gate.sh writes args.txt last, so the run was cut short.
+        row['outcome'] = 'incomplete'
     bag = os.path.join(run_dir, 'bag')
     if os.path.isdir(bag):
         try:
@@ -180,7 +189,12 @@ def judge(row, baselines):
 
 def main(out):
     runs = os.path.join(out, 'runs')
-    rows = [r for r in (score(os.path.join(runs, d), d) for d in sorted(os.listdir(runs))) if r]
+    ids = set(os.listdir(runs)) if os.path.isdir(runs) else set()
+    expected_path = os.path.join(out, 'expected.txt')
+    if os.path.exists(expected_path):
+        with open(expected_path) as f:
+            ids |= {line.strip() for line in f if line.strip()}
+    rows = [r for r in (score(os.path.join(runs, d), d) for d in sorted(ids)) if r]
     baselines = {r['seed']: number(r['lap_time_s']) for r in rows
                  if r['kind'] == 'baseline' and r['outcome'] == 'lap'}
     gate = [r for r in rows if r['kind'] == 'gate']
