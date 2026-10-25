@@ -10,3 +10,4 @@ simulation
 external
 C
 apps/telemetry/analysis/driveday_data_viewer
+boards/CHG/charger-display
