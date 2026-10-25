@@ -1,16 +1,64 @@
 # Studies
 
 A study answers one engineering question about the current car. It is a
-folder under `studies/` with two files:
+folder under `studies/`. Make one from the template in
+`tools/study_template/`:
+
+```bash
+make new-study S=<name>
+```
 
 ```text
 studies/<name>/
-  README.md   # the question, the method and the result
-  run.py      # the script that makes the result
+  README.md   # the question, the method, the result and a status line
+  study.yml   # the inputs: the question, the bundle, the parameters and the sweep grid
+  run.py      # reads study.yml and writes every output to OUT_DIR
 ```
 
 Use a short kebab-case name that says the question, for example
-`rear-stabar-rate` or `aero-balance-ggv`.
+`rear-stabar-rate` or `aero-balance-ggv`. `make new-study` refuses another
+name form and a name that exists.
+
+The three files are the minimum, not a fixed layout. A study can add
+helper modules next to `run.py`, more config files, and at most two
+committed figures. These rules are fixed:
+
+- Every output goes to `OUT_DIR`.
+- Car numbers come from the vehicle file (`BOBSIM_VEHICLE`) and its bundle.
+  `run.py` does not hard-code them.
+- Study choices, such as the parameters and the sweep grid, are in
+  `study.yml`.
+- Every run writes `summary.json` and `readme.json`. `make study` writes
+  `provenance.json`.
+- A study has no tests of its own. Shared code in `tools/` has its tests in
+  `tests/`.
+
+`studies/front-ackermann/` is older than this layout. Its inputs are in
+`run.py` and on its command line, and its README is marked historical. Do
+not copy its layout.
+
+## study.yml
+
+`study.yml` holds the inputs. It holds no results. The template has these
+keys:
+
+| Key | Value |
+| --- | ----- |
+| `question` | The question in one sentence. The README shows it from `readme.json`. |
+| `decision` | The choice that the result informs, and the result that would change it. |
+| `bundle` | The `bundle_id` in `vehicle/bundle.yml`. `run.py` stops if the vehicle has another bundle. |
+| `parameters` | The fixed inputs of each case. |
+| `sweep` | A list of values for each swept parameter. `run.py` runs every combination. |
+
+- Add keys when the study needs them.
+- `make study` does not read `study.yml`. `run.py` reads it. If the file is
+  missing, the template `run.py` stops with an error.
+- Every file in the study folder is an input of the result. A change to
+  `study.yml` makes the committed result stale. See
+  [Invalidation keys](#invalidation-keys).
+- To mark an input that is not validated, write it as
+  `{value, status, source}`. The stale check ignores `status` and `source`.
+  `run.py` reads `value`.
 
 ## run.py
 
@@ -31,8 +79,11 @@ The script gets these environment variables:
 
 Rules:
 
+- Read the inputs from `study.yml` next to `run.py`.
 - Read the vehicle from `BOBSIM_VEHICLE`. Do not hardcode a path.
 - Write every output to `OUT_DIR`. Write nothing else.
+- Write `summary.json` with every result and the inputs that the run used.
+  Write `readme.json` with the values that the README markers read.
 - To test a parameter change, load the vehicle, change the value in memory
   or in a copy under `OUT_DIR`, and pass that to BobSim.
 - Import BobSim modules. For example:
@@ -44,10 +95,11 @@ Rules:
 ## Variants
 
 A variant runs the same study with changed inputs, for example a higher
-tire grip scale. `run.py` reads the inputs from its command line.
+tire grip scale. Put the changed inputs in a second config file next to
+`study.yml`. The template `run.py` reads it with `--config`:
 
 ```bash
-make study S=front-ackermann ARGS="--mu 0.75" V=mu075
+make study S=<name> ARGS="--config studies/<name>/mu075.yml" V=mu075
 ```
 
 - `ARGS` goes to `run.py`. `V` names the variant and is required with
@@ -105,13 +157,16 @@ simple:
 - Do not repeat a number in prose that a table already shows.
 
 1. **Question.** One or two sentences.
-2. **Method.** Tier, evaluation, the parameters you changed and their range.
+2. **Method.** Tier, evaluation, and the parameters and sweep in `study.yml`.
 3. **Result.** Numbers with units, and one or two figures. Say how sure you
    are and why.
 4. **Provenance.** The BobSim SHA, the vehicle hash and the date, from
    `out/<name>/provenance.json`.
 
 ### Status
+
+The README starts with a status line. The word is `current`,
+`historical` or `stale`. The template starts with `**Status: current.**`.
 
 A committed result can become stale when an input changes. Then run the
 study again, or mark the README as historical. Put the mark near the top,
@@ -125,9 +180,8 @@ in one of these two forms:
 | Status | historical |
 ```
 
-The status word is `historical` or `stale`. `make unit` runs
-`tests/test_committed_results.py`. For each README without this mark, the
-test fails when the result is `STALE` or `UNKNOWN`, or when the README has
+`make unit` runs `tests/test_committed_results.py`. For each README that
+is not marked `historical` or `stale`, the test fails when the result is `STALE` or `UNKNOWN`, or when the README has
 no readable provenance block. In a git worktree, git in the container cannot
 read BobSim and BobLib. A result that is `UNKNOWN` only for that reason then
 skips. `LHRE_REQUIRE_GIT=1`, as in CI, makes it fail. See

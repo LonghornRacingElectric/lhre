@@ -41,6 +41,7 @@ make test    # check that BobSim loads //vehicle, then run the fast tests
 | `make bobsim T=<target>` | Run a BobSim make target on BobSim's own car. `T=help` lists them. |
 | `make car T=<target>` | Run a BobSim make target on `vehicle/vehicle.yml`, then restore `bobsim/`. Outputs and `identity.json` go to `out/car/<target>/`. `VEHICLE=out/<name>/vehicle.yml` runs a candidate copy to `out/car/<target>--<name>/`. See [docs/bobsim.md](docs/bobsim.md#run-a-bobsim-target-on-our-car). |
 | `make four-post-acceptance T=<target>` | Check the FourPost outputs of `make car T=<target>`. `T` defaults to `standard-eval-four-post`. Pass the same `VEHICLE` as `make car`. |
+| `make new-study S=<name>` | Copy the study template in `tools/study_template/` to `studies/<name>/`. See [docs/studies.md](docs/studies.md). |
 | `make study S=<name>` | Run `studies/<name>/run.py`. If it succeeds, write outputs to `out/<name>/`. `STUDY_WORKERS=n` limits the CPUs for parallel cases. `ARGS=... V=<name>` runs a variant to `out/<name>--<V>/`. |
 | `make stale S=<name>` | Check if the result in `studies/<name>/README.md` is current, stale or unknown. Without `S`, check every study. See [docs/studies.md](docs/studies.md#check-a-result). |
 | `make bump-bobsim REF=<ref>` | Move the BobSim pin to a commit, tag or branch |
@@ -53,7 +54,7 @@ simulation/
   Makefile            # every target runs in Docker
   docker-compose.yml  # the image is built from bobsim/Dockerfile
   bobsim/             # submodule, pinned SHA
-  studies/<name>/     # README.md + run.py
+  studies/<name>/     # README.md + study.yml + run.py
   tools/              # make smoke, make car, study provenance, README fill and shared study helpers
   tools/              # make smoke, vehicle and bundle checks, anti records, study helpers
   tests/              # make unit: fast unit and contract tests

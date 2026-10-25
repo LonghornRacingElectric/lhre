@@ -7,10 +7,12 @@ STUDY_WORKERS ?=
 ARGS ?=
 V ?=
 STUDY_OUT = $(S)$(if $(V),--$(V))
+STUDY_TEMPLATE := tools/study_template
+BUNDLE_ID = $(shell sed -n 's/^bundle_id: *//p' ../vehicle/bundle.yml 2>/dev/null)
 
 GIT_LF := git -c core.autocrlf=false -c core.longpaths=true
 
-.PHONY: help init build shell test smoke unit records records-undo bobsim car four-post-acceptance study stale bump-bobsim clean
+.PHONY: help init build shell test smoke unit records records-undo bobsim car four-post-acceptance new-study study stale bump-bobsim clean
 
 help:
 	@echo "make init                  Get submodules and build the image"
@@ -25,6 +27,7 @@ help:
 	@echo "make car T=<target>        Run a BobSim target on //vehicle, then restore bobsim/"
 	@echo "                           VEHICLE=out/<name>/vehicle.yml runs a candidate copy instead"
 	@echo "make four-post-acceptance  Check the FourPost outputs of make car (T=<target>)"
+	@echo "make new-study S=<name>    Copy the study template to studies/<name>/"
 	@echo "make study S=<name>        Run studies/<name>/run.py (STUDY_WORKERS=n limits CPUs)"
 	@echo "make stale [S=<name>]      Check if a committed study result is stale (no S: every study)"
 	@echo "make bump-bobsim REF=<ref> Move the BobSim pin"
@@ -85,6 +88,13 @@ car:
 
 four-post-acceptance:
 	$(RUN) $(CAR_ENV) sim python tools/four_post_acceptance.py $(call car_out,$(or $(T),standard-eval-four-post))
+
+new-study:
+	@echo '$(S)' | grep -Eqx '[a-z0-9]+(-[a-z0-9]+)*' || { echo "Set S=<name>, a kebab-case name such as rear-stabar-rate."; exit 1; }
+	@test ! -e studies/$(S) || { echo "studies/$(S) exists. Pick another name, or run make study S=$(S)."; exit 1; }
+	mkdir studies/$(S)
+	for f in $(notdir $(wildcard $(STUDY_TEMPLATE)/*)); do sed -e 's/STUDY_NAME/$(S)/g' -e 's/BUNDLE_ID/$(BUNDLE_ID)/g' $(STUDY_TEMPLATE)/$$f > studies/$(S)/$$f; done
+	@echo "Made studies/$(S)/. Fill study.yml, run.py and README.md, then run make study S=$(S)."
 
 study:
 	@test -n "$(S)" || { echo "Set S=<study name>."; exit 1; }
