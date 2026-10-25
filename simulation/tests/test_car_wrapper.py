@@ -458,6 +458,14 @@ def test_make_car_refuses_a_bobsim_with_local_changes(lhre):
     assert not (bobsim / "simulations/mbd/generated_results/seen_vehicle.yml").exists()
 
 
+def test_make_car_rejects_a_candidate_in_a_nested_folder(lhre):
+    _write(lhre / "simulation/out/a/b/vehicle.yml", OUR_VEHICLE)
+    result = _make_car(lhre, "ok", "VEHICLE=out/a/b/vehicle.yml")
+    assert result.returncode != 0
+    assert "is not a file under out/<name>/" in result.stderr
+    assert not (lhre / "simulation/out/car").exists()
+
+
 @pytest.mark.parametrize("target", ["ok VEHICLE=x", "-B", "../ok"])
 def test_make_car_rejects_a_target_that_is_not_a_name(lhre, target):
     result = _make_car(lhre, target)

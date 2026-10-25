@@ -13,6 +13,7 @@ vehicle=$CAR_VEHICLE
 case $vehicle in
     ../vehicle/vehicle.yml) candidate=false ;;
     *..* | *[!A-Za-z0-9_./-]* | */) candidate=bad ;;
+    out/*/*/*) candidate=bad ;;
     out/*/*) candidate=true ;;
     *) candidate=bad ;;
 esac

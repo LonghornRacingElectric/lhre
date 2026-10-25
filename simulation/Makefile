@@ -57,7 +57,7 @@ BOBLIB := bobsim/engines/boblib
 COMMITTED_VEHICLE := ../vehicle/vehicle.yml
 CAR_VEHICLE = $(or $(VEHICLE),$(COMMITTED_VEHICLE))
 CAR_ENV = $(if $(VEHICLE),-e BOBSIM_VEHICLE=$(VEHICLE))
-car_out = out/car/$(1)$(if $(filter-out $(COMMITTED_VEHICLE),$(CAR_VEHICLE)),--$(subst /,-,$(patsubst out/%/,%,$(dir $(CAR_VEHICLE)))))
+car_out = out/car/$(1)$(if $(filter-out $(COMMITTED_VEHICLE),$(CAR_VEHICLE)),--$(patsubst out/%/,%,$(dir $(CAR_VEHICLE))))
 VEHICLE_NAME = $(shell sed -n 's/^  name: *//p' $(CAR_VEHICLE) 2>/dev/null | head -n 1)
 RECORD_FILES = \
 	BobLib/Records/VehicleDefn/$(VEHICLE_NAME)Record.mo \

@@ -132,17 +132,18 @@ make four-post-acceptance T=standard-eval-four-post VEHICLE=out/frozen-2027/vehi
 ```
 
 `VEHICLE` is relative to `simulation/`. Without it, `make car` uses
-`vehicle/vehicle.yml`. With it, `make car` changes these steps:
+`../vehicle/vehicle.yml`, which is `vehicle/vehicle.yml` at the repo root.
+With it, `make car` changes these steps:
 
-- It stops if `VEHICLE` is not a file under `out/<name>/`. The repo has
-  one vehicle file. The container sees only the repo.
+- It stops if `VEHICLE` is not a file directly in `out/<name>/`. A deeper
+  folder is refused. The repo has one vehicle file. The container sees only the repo.
 - After step 1, it runs the candidate check of `make check-vehicle` with
   `out/<name>/bundle.yml`. It stops on a problem, before it writes
   anything.
 - It writes the records for the candidate and installs the candidate as
   `bobsim/vehicle.yml`.
 - It writes the outputs to `out/car/<target>--<name>/`. `<name>` is the
-  folder under `out/`, with `-` in place of `/`. A run on
+  folder under `out/`. A run on
   `vehicle/vehicle.yml` writes to `out/car/<target>/`. Two cars never
   share a folder.
 - `identity.json` names the candidate path and its sha256. It sets
