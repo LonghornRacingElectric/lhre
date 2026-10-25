@@ -1,5 +1,6 @@
 #include "vcu_app.hpp"
 
+#include <cstdlib>
 #include <cstring>
 
 #include "longhorn/console.hpp"
@@ -20,6 +21,8 @@ void App::RegisterShellCommands(longhorn::Shell& shell) {
                     &App::ModeCommand, this});
   shell.AddCommand({"launch", "launch arm (opt-in acceleration ramp)",
                     &App::LaunchCommand, this});
+  shell.AddCommand({"stream", "USB status interval in ms (0=off, 100..60000)",
+                    &App::StreamCommand, this});
   shell.SetPlainLineHandler(&App::PlainLine, this);
 }
 
@@ -148,6 +151,58 @@ void App::LaunchCommand(void* ctx, longhorn::Console& out, const char* args) {
   static_cast<App*>(ctx)->launch_request_.store(true);
   out.Println(
       "launch request queued (requires enabled acceleration configuration)");
+}
+
+// The USB shell task owns these writes, keeping serial I/O off the control
+// loop.
+void App::PollUsbConsole() {
+  const bool connected = p_.usb_uart != nullptr && p_.usb_uart->connected();
+  const uint32_t now = p_.clock->Millis();
+  uint32_t period = usb_stream_ms_.load();
+  if (connected && !usb_console_connected_) {
+    usb_shell_.PrintBanner();
+    auto& out = usb_shell_.console();
+    out.Printf("reset=%s; /help for commands; /stream 0 stops status output",
+               lhal::ToString(p_.reset_cause));
+    usb_stream_last_ms_ = now - period;
+  }
+  usb_console_connected_ = connected;
+  usb_shell_.Poll();
+  period = usb_stream_ms_.load();
+  if (!connected || period == 0 ||
+      !lhal::ElapsedMs(now, usb_stream_last_ms_, period)) {
+    return;
+  }
+  usb_stream_last_ms_ = now;
+  const ControlSnapshot s = snapshot();
+  auto& out = usb_shell_.console();
+  out.Printf(
+      "[%lu] state=%s faults=0x%08lx adc=%s pedal=%d%% torque=%dNm enable=%d",
+      static_cast<unsigned long>(now), lhre::can::ToString(s.state),
+      static_cast<unsigned long>(s.faults), s.adc_fresh ? "ok" : "stale",
+      static_cast<int>(s.pedals.pedal_travel * 100),
+      static_cast<int>(s.torque_command), s.inverter_enable);
+  out.Printf("apps1=%dmV apps2=%dmV brake_front=%dpsi brake_rear=%dpsi rpm=%ld",
+             static_cast<int>(s.analog.apps1.source_v * 1000),
+             static_cast<int>(s.analog.apps2.source_v * 1000),
+             static_cast<int>(s.pedals.bse1_psi),
+             static_cast<int>(s.pedals.bse2_psi),
+             static_cast<long>(s.motor_rpm));
+}
+
+void App::StreamCommand(void* ctx, longhorn::Console& out, const char* args) {
+  auto* app = static_cast<App*>(ctx);
+  if (*args != '\0') {
+    char* end = nullptr;
+    const unsigned long ms = std::strtoul(args, &end, 10);
+    if (*end != '\0' || (ms != 0 && (ms < 100 || ms > 60000))) {
+      out.Println("usage: /stream 0|100..60000 (USB status interval in ms)");
+      return;
+    }
+    app->usb_stream_ms_.store(static_cast<uint32_t>(ms));
+  }
+  out.Printf("USB status interval=%lums",
+             static_cast<unsigned long>(app->usb_stream_ms_.load()));
 }
 
 }  // namespace vcu

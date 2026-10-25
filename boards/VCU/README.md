@@ -269,7 +269,8 @@ bazel run --config=local //tools/monitor
 ```
 
 After a manual BOOT0 flash, return the switch to normal boot and reset.
-Verify `/version` says `VCU`, `/uptime` increases, and `/state`, `/faults`,
+Verify `/version` says `Vehicle Control Unit`, `/uptime` increases, and
+`/state`, `/faults`,
 `/io`, `/analog` respond. USB-only operation without the car produces
 missing-feedback/input faults; zero torque and disabled inverter commands
 are expected. The vehicle image sends CAN traffic, including inverter
@@ -286,9 +287,8 @@ The corrected D35 blue/green mapping applies to this image.
 
 Optional `.ioc` cleanups. Everything here already works: `Board/` (or a
 `USER CODE` block) sets it up at runtime, and each workaround can go once
-CubeMX generates the equivalent. Items 7 and 8 are cosmetic (`main.cpp`
-drives the lamps high right after `MX_GPIO_Init`, and `tools/dfu` also
-matches the port by VID:PID).
+CubeMX generates the equivalent. Item 7 is cosmetic (`main.cpp` drives the lamps high right after
+`MX_GPIO_Init`); item 8 is now resolved.
 
 1. `ProjectManager.NoMain=true`. Today `Core/Src/main.c` renames its own
    `main()` away in `USER CODE BEGIN PFP`.
@@ -311,8 +311,8 @@ matches the port by VID:PID).
    up, and `BUILD.bazel` defines `HAL_UART_MODULE_ENABLED`.
 7. GPIO user labels, and initial level high on PE12/PE13 (BMS/IMD lamps
    on).
-8. Restore the USB strings `LHRe` / `VCU` (`tools/dfu` matches the port by
-   "lhre" or VID:PID).
+8. Resolved: the IOC names the USB manufacturer `LHRe` and product/interface
+   `Vehicle Control Unit`. The generated USB descriptor follows these settings.
 9. FreeRTOS stack-overflow and malloc-failed hooks. Today they are set in
    the `FreeRTOSConfig.h` USER CODE.
 
@@ -356,3 +356,22 @@ ownership and send ordering. Rate gates use longhorn's checked `PeriodMs`.
 `VehicleRx` and `WheelRx` extend the generated VCU Critical/Data subscription
 structs from `:can_rx_vcu`; only vehicle freshness/fault policy stays local.
 Subscriptions come from the existing spec `to_boards` fields.
+
+## USB serial monitor
+
+USB enumerates as **Vehicle Control Unit** (manufacturer **LHRe**), with
+unchanged VID:PID and hardware serial number. The port path is assigned by
+the host OS; its friendly USB product name is separate. These strings come
+from `VCU.ioc` and CubeMX regeneration of `USB_Device/App/usbd_desc.c`.
+The ROM bootloader retains ST's own DFU name.
+
+Opening the USB serial port prints the `Vehicle Control Unit` firmware
+banner, reset cause and command hint, even when the monitor connects after
+boot. Every second it prints state, fault mask, ADC freshness, pedal demand,
+torque/enable, APPS voltages, front/rear brake pressure and motor RPM.
+`/stream 0` disables periodic output; `/stream 1000` restores one-second
+updates (allowed intervals 100–60000 ms). The banner returns on reconnect.
+`/state`, `/faults`, `/io` and `/analog` still give detailed on-demand output.
+Serial writes run only in the low-priority USB shell task, using a published
+snapshot; the control loop does not wait for the monitor. Existing event
+logging remains on the debug USART3 console.

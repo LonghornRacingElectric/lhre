@@ -8,8 +8,8 @@ App::App(const Peripherals& peripherals, const Params* initial_params)
     : p_(peripherals),
       vcp_mutex_(xSemaphoreCreateMutexStatic(&vcp_mutex_control_)),
       usb_mutex_(xSemaphoreCreateMutexStatic(&usb_mutex_control_)),
-      vcp_shell_(p_.debug_uart, p_.clock, "VCU", vcp_mutex_),
-      usb_shell_(p_.usb_uart, p_.clock, "VCU", usb_mutex_),
+      vcp_shell_(p_.debug_uart, p_.clock, "Vehicle Control Unit", vcp_mutex_),
+      usb_shell_(p_.usb_uart, p_.clock, "Vehicle Control Unit", usb_mutex_),
       logger_(p_.debug_uart, p_.clock, vcp_mutex_),
       rainbow_(p_.status_led, p_.clock),
       params_(initial_params != nullptr ? initial_params
@@ -99,7 +99,7 @@ void App::VcpShellTaskEntry(void* self) {
 void App::UsbShellTaskEntry(void* self) {
   auto* app = static_cast<App*>(self);
   for (;;) {
-    app->usb_shell_.Poll();
+    app->PollUsbConsole();
     vTaskDelay(pdMS_TO_TICKS(kShellPollMs));
   }
 }
@@ -114,7 +114,7 @@ void App::Step() {
     step_supervisor_ms_ = now - kSupervisorPeriodMs;
   }
   vcp_shell_.Poll();
-  usb_shell_.Poll();
+  PollUsbConsole();
   rainbow_.Step(now);
   logger_.DrainOne(0);
   if (lhal::ElapsedMs(now, step_control_ms_, kControlPeriodMs)) {

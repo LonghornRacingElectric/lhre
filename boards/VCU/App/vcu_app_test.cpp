@@ -616,3 +616,44 @@ TEST_F(VcuAppTest, EachBrakeComparatorFlagCutsTorqueAndLatches) {
     EXPECT_NE(app->state(), VcuState::kDrive) << flag;
   }
 }
+
+TEST_F(VcuAppTest, UsbMonitorPrintsOnConnectAndStreamsAtOneHz) {
+  b_.usb.set_connected(false);
+  app_->Step();
+  EXPECT_TRUE(b_.usb.TakeTx().empty());
+  b_.usb.set_connected(true);
+  app_->Step();
+  auto bytes = b_.usb.TakeTx();
+  const std::string initial(bytes.begin(), bytes.end());
+  EXPECT_NE(initial.find("Vehicle Control Unit"), std::string::npos);
+  EXPECT_NE(initial.find("reset="), std::string::npos);
+  EXPECT_NE(initial.find("state="), std::string::npos);
+  b_.clock.Advance(999);
+  app_->Step();
+  EXPECT_TRUE(b_.usb.TakeTx().empty());
+  b_.clock.Advance(1);
+  app_->Step();
+  bytes = b_.usb.TakeTx();
+  EXPECT_NE(std::string(bytes.begin(), bytes.end()).find("state="),
+            std::string::npos);
+}
+
+TEST_F(VcuAppTest, UsbStreamCanBeDisabledAndBannerReturnsOnReconnect) {
+  app_->Step();
+  b_.usb.TakeTx();
+  const std::string off = "/stream 0\n";
+  b_.usb.InjectRx(reinterpret_cast<const uint8_t*>(off.data()), off.size());
+  app_->Step();
+  b_.usb.TakeTx();
+  b_.clock.Advance(2000);
+  app_->Step();
+  EXPECT_TRUE(b_.usb.TakeTx().empty());
+  b_.usb.set_connected(false);
+  app_->Step();
+  b_.usb.set_connected(true);
+  app_->Step();
+  auto bytes = b_.usb.TakeTx();
+  const std::string reconnected(bytes.begin(), bytes.end());
+  EXPECT_NE(reconnected.find("Vehicle Control Unit"), std::string::npos);
+  EXPECT_EQ(reconnected.find("state="), std::string::npos);
+}

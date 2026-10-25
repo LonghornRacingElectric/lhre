@@ -134,6 +134,9 @@ class App {
   static void SupervisorTaskEntry(void* self);
   static void VcpShellTaskEntry(void* self);
   static void UsbShellTaskEntry(void* self);
+  void PollUsbConsole();
+  static void StreamCommand(void* ctx, longhorn::Console& out,
+                            const char* args);
 
   void ControlTick(uint32_t now_ms);
   void TelemetryTick(uint32_t now_ms);
@@ -171,6 +174,9 @@ class App {
   longhorn::Shell vcp_shell_;
   longhorn::Shell usb_shell_;
   longhorn::Logger logger_;
+  std::atomic<uint32_t> usb_stream_ms_{1000};
+  bool usb_console_connected_ = false;
+  uint32_t usb_stream_last_ms_ = 0;
   vcu::RainbowTask rainbow_;
   vcu::DfuCommand usb_dfu_;
   vcu::DfuCommand vcp_dfu_;
