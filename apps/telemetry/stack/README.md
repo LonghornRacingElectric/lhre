@@ -24,6 +24,16 @@ Before invoking the ingest Compose project, the devtool resolves
 `//apps/telemetry:current_schema_sql` and mounts that generated Orion DDL into
 Postgres. A `lib/spec` edit therefore reaches a newly initialized server
 database without rewriting `orion_db_init.sql` in the source tree.
+The devtool invokes Bazel even when the DDL output already exists, so Bazel
+checks spec dependencies instead of reusing a file merely because it is
+present. Compose receives the selected path explicitly after `sudo` as well
+as without sudo. An explicit `ORION_DB_INIT_SQL` override must be an existing
+absolute file; missing overrides fail rather than falling back.
+
+Direct Compose use must also set `ORION_DB_INIT_SQL`. The mount is read-only,
+does not create missing host paths and has no checked-in Orion SQL fallback.
+Existing database volumes are not migrated by rebuilding this initialization
+file. Integration tests do not create missing tables to conceal a failed init.
 
 Disk preflight uses Docker's data root on Linux. On macOS, that path exists
 inside Docker Desktop's VM, so the devtool reports free space on the host

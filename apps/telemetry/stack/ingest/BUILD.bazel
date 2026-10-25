@@ -52,7 +52,6 @@ exports_files([
     "init-databases.sh",
     "nightwatch_db_init.sql",
     "angelique_db_init.sql",
-    "orion_db_init.sql",
 ])
 
 exports_files(

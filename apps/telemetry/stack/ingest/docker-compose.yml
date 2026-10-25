@@ -48,7 +48,12 @@ services:
       - telemetry_db:/var/lib/postgresql/data
       - ./nightwatch_db_init.sql:/app/nightwatch_db_init.sql
       - ./angelique_db_init.sql:/app/angelique_db_init.sql
-      - ${ORION_DB_INIT_SQL:-./orion_db_init.sql}:/app/orion_db_init.sql
+      - type: bind
+        source: ${ORION_DB_INIT_SQL:?Build //apps/telemetry:current_schema_sql and set its absolute output path}
+        target: /app/orion_db_init.sql
+        read_only: true
+        bind:
+          create_host_path: false
       - ./init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh
     networks:
       - telemetry_network
