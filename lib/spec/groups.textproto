@@ -3,25 +3,121 @@
 
 groups {
   group {
-    name: "Battery"
-    next_free_id: 5
-    description: "Accumulator pack state."
+    name: "BoardStatus"
+    next_free_id: 9
+    description: "Gateway-generated board heartbeat ages."
+    snapshot_id: 9
+    external_field {
+      name: "csm_last_seen_s"
+      id: 1
+      type: PROTO_FLOAT
+      description: "Seconds since the gateway received a CSM frame."
+    }
+    external_field {
+      name: "dui_last_seen_s"
+      id: 2
+      type: PROTO_FLOAT
+      description: "Seconds since the gateway received a DUI frame."
+    }
+    external_field {
+      name: "hvc_last_seen_s"
+      id: 3
+      type: PROTO_FLOAT
+      description: "Seconds since the gateway received an HVC frame."
+    }
+    external_field {
+      name: "inverter_last_seen_s"
+      id: 4
+      type: PROTO_FLOAT
+      description: "Seconds since the gateway received an inverter frame."
+    }
+    external_field {
+      name: "pdu_last_seen_s"
+      id: 5
+      type: PROTO_FLOAT
+      description: "Seconds since the gateway received a PDU frame."
+    }
+    external_field {
+      name: "tsm_last_seen_s"
+      id: 6
+      type: PROTO_FLOAT
+      description: "Seconds since the gateway received a TSM frame."
+    }
+    external_field {
+      name: "usm_last_seen_s"
+      id: 7
+      type: PROTO_FLOAT
+      description: "Seconds since the gateway received a USM frame."
+    }
+    external_field {
+      name: "vcu_last_seen_s"
+      id: 8
+      type: PROTO_FLOAT
+      description: "Seconds since the gateway received a VCU frame."
+    }
   }
   group {
-    name: "Faults"
-    next_free_id: 4
-    description: "Latched fault flags, one bool per fault."
+    name: "Controls"
+    next_free_id: 46
+    reserved_ids: 31
+    reserved_ids: 32
+    reserved_ids: 33
+    reserved_ids: 34
+    reserved_ids: 35
+    reserved_ids: 36
+    reserved_ids: 37
+    reserved_ids: 38
+    description: "Driver controls, torque commands, and VCU outputs."
+    snapshot_id: 4
+  }
+  group {
+    name: "DiagnosticsHigh"
+    next_free_id: 39
+    description: "High-rate state, shutdown, and fault telemetry."
+    snapshot_id: 6
+  }
+  group {
+    name: "DiagnosticsLow"
+    next_free_id: 18
+    description: "Low-rate state, shutdown, and fault telemetry."
+    snapshot_id: 7
+  }
+  group {
+    name: "Dynamics"
+    next_free_id: 36
+    description: "Vehicle motion and suspension telemetry."
+    snapshot_id: 3
+    external_field {
+      name: "gps"
+      id: 1
+      type: PROTO_FLOAT
+      repeated: true
+      description: "NMEA latitude and longitude populated by the gateway."
+    }
+    external_field {
+      name: "gps_imu"
+      id: 2
+      type: PROTO_FLOAT
+      repeated: true
+      description: "NMEA inertial vector populated by the gateway."
+    }
+    external_field {
+      name: "gps_speed"
+      id: 3
+      type: PROTO_FLOAT
+      description: "NMEA ground speed populated by the gateway."
+    }
+  }
+  group {
+    name: "Pack"
+    next_free_id: 23
+    description: "Accumulator and inverter electrical telemetry."
+    snapshot_id: 5
   }
   group {
     name: "Thermal"
-    next_free_id: 3
-    reserved_ids: 1
-    reserved_names: "old_coolant_temp"
-    description: "Temperatures across the car."
-  }
-  group {
-    name: "Vehicle"
-    next_free_id: 4
-    description: "Driver inputs and vehicle dynamics."
+    next_free_id: 39
+    description: "Temperatures, cooling, and charger telemetry."
+    snapshot_id: 8
   }
 }

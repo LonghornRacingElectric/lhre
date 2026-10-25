@@ -163,6 +163,24 @@ fn generate_mapping(fds: &FileDescriptorSet, can_json: &str) -> String {
             .cloned()
             .unwrap_or_default();
         for sig in &signals {
+            if sig.get("conv_type").and_then(Value::as_str) == Some("bitfield") {
+                let mappings = ["bitfield_encoding", "mappings", "bits"]
+                    .iter()
+                    .find_map(|k| sig.get(*k).and_then(Value::as_array).cloned())
+                    .unwrap_or_default();
+                for mapping in &mappings {
+                    let bit_name = ["protobuf_field", "field", "name"]
+                        .iter()
+                        .find_map(|k| mapping.get(*k).and_then(Value::as_str));
+                    if let Some(bit_name) = bit_name {
+                        if field_to_var.contains_key(bit_name) {
+                            bool_signals.insert(bit_name.to_string());
+                        }
+                    }
+                }
+                continue;
+            }
+
             let Some(pb) = sig.get("protobuf").filter(|v| v.is_object()) else {
                 continue;
             };
@@ -188,22 +206,6 @@ fn generate_mapping(fds: &FileDescriptorSet, can_json: &str) -> String {
                 scalar_signals.insert(fname.to_string(), ty);
             }
 
-            if sig.get("conv_type").and_then(Value::as_str) == Some("bitfield") {
-                let mappings = ["bitfield_encoding", "mappings", "bits"]
-                    .iter()
-                    .find_map(|k| sig.get(*k).and_then(Value::as_array).cloned())
-                    .unwrap_or_default();
-                for mapping in &mappings {
-                    let bit_name = ["protobuf_field", "field", "name"]
-                        .iter()
-                        .find_map(|k| mapping.get(*k).and_then(Value::as_str));
-                    if let Some(bit_name) = bit_name {
-                        if field_to_var.contains_key(bit_name) {
-                            bool_signals.insert(bit_name.to_string());
-                        }
-                    }
-                }
-            }
         }
     }
 

@@ -1,0 +1,427 @@
+# proto-file: lib/spec/proto/can_spec.proto
+# proto-message: lhre.canspec.SpecFile
+
+message {
+  name: "WHEEL_SPEED_RIDE_HEIGHT"
+  can_id: 304
+  from_board: "USM"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 4
+  frequency_hz: 10.0
+  description: "Wheel Speed, Ride height"
+  signal {
+    name: "wheel_speed"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.0078125
+    }
+    logical {
+      physical {
+        unit: "rad/s"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "wheel_speed"
+      id: 35
+    }
+    description: "Wheel Speed"
+  }
+  signal {
+    name: "ride_height"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      scale: 0.0625
+    }
+    logical {
+      physical {
+        unit: "mm"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "ride_height"
+      id: 34
+    }
+    description: "Ride Height"
+  }
+}
+message {
+  name: "ACCELERATION_VECTOR_UNSPRUNG_WHEEL_SPEED_FL"
+  can_id: 1026
+  from_board: "USM"
+  to_boards: "Pi"
+  bus: "Data Acq"
+  dlc: 8
+  frequency_hz: 333.0
+  description: "Acceleration Vector Unsprung + Wheel Speed FL"
+  signal {
+    name: "x"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "fl_unsprung_accel"
+      id: 6
+      repeated: true
+    }
+    description: "X"
+  }
+  signal {
+    name: "y"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "fl_unsprung_accel"
+      id: 6
+      array_index: 1
+      repeated: true
+    }
+    description: "Y"
+  }
+  signal {
+    name: "z"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "fl_unsprung_accel"
+      id: 6
+      array_index: 2
+      repeated: true
+    }
+    description: "Z"
+  }
+  signal {
+    name: "wheel_speed"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "rad/s"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "fl_wheel_speed"
+      id: 11
+    }
+    description: "Wheel Speed"
+  }
+}
+message {
+  name: "ACCELERATION_VECTOR_UNSPRUNG_WHEEL_SPEED_FR"
+  can_id: 1027
+  from_board: "USM"
+  to_boards: "Pi"
+  bus: "Data Acq"
+  dlc: 8
+  frequency_hz: 333.0
+  description: "Acceleration Vector Unsprung + Wheel Speed FR"
+  signal {
+    name: "x"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "fr_unsprung_accel"
+      id: 7
+      repeated: true
+    }
+    description: "X"
+  }
+  signal {
+    name: "y"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "fr_unsprung_accel"
+      id: 7
+      array_index: 1
+      repeated: true
+    }
+    description: "Y"
+  }
+  signal {
+    name: "z"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "fr_unsprung_accel"
+      id: 7
+      array_index: 2
+      repeated: true
+    }
+    description: "Z"
+  }
+  signal {
+    name: "wheel_speed"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "rad/s"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "fr_wheel_speed"
+      id: 12
+    }
+    description: "Wheel Speed"
+  }
+}
+message {
+  name: "ACCELERATION_VECTOR_UNSPRUNG_WHEEL_SPEED_RL"
+  can_id: 1028
+  from_board: "USM"
+  to_boards: "Pi"
+  bus: "Data Acq"
+  dlc: 8
+  frequency_hz: 333.0
+  description: "Acceleration Vector Unsprung + Wheel Speed RL"
+  signal {
+    name: "x"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "bl_unsprung_accel"
+      id: 4
+      repeated: true
+    }
+    description: "X"
+  }
+  signal {
+    name: "y"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "bl_unsprung_accel"
+      id: 4
+      array_index: 1
+      repeated: true
+    }
+    description: "Y"
+  }
+  signal {
+    name: "z"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "bl_unsprung_accel"
+      id: 4
+      array_index: 2
+      repeated: true
+    }
+    description: "Z"
+  }
+  signal {
+    name: "wheel_speed"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "rad/s"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "bl_wheel_speed"
+      id: 9
+    }
+    description: "Wheel Speed"
+  }
+}
+message {
+  name: "ACCELERATION_VECTOR_UNSPRUNG_WHEEL_SPEED_RR"
+  can_id: 1029
+  from_board: "USM"
+  to_boards: "Pi"
+  bus: "Data Acq"
+  dlc: 8
+  frequency_hz: 333.0
+  description: "Acceleration Vector Unsprung + Wheel Speed RR"
+  signal {
+    name: "x"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "br_unsprung_accel"
+      id: 5
+      repeated: true
+    }
+    description: "X"
+  }
+  signal {
+    name: "y"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "br_unsprung_accel"
+      id: 5
+      array_index: 1
+      repeated: true
+    }
+    description: "Y"
+  }
+  signal {
+    name: "z"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "br_unsprung_accel"
+      id: 5
+      array_index: 2
+      repeated: true
+    }
+    description: "Z"
+  }
+  signal {
+    name: "wheel_speed"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "rad/s"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "br_wheel_speed"
+      id: 10
+    }
+    description: "Wheel Speed"
+  }
+}

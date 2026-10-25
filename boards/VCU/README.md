@@ -49,8 +49,9 @@ run on LPUART1 (PA2/PA3, the ST-LINK VCP pins on the Nucleo dev board):
 
 - **Interactive Shell (`longhorn::Shell`)**: Polled by a low-priority task (`kShellPollMs`).
   `bazel run //tools/monitor` connects, checks the flashed sha against your checkout, and
-  gives you `/help`, `/version`, `/uptime`, and the VCU's `/state` (state machine, latched faults,
-  last pack status). Command responses are clean and un-prefixed for machine parsing.
+  gives you `/help`, `/version`, `/uptime`, and the VCU's `/state` (state
+  machine, status count, and last HVC contactor status). Command responses
+  are clean and un-prefixed for machine parsing.
 - **Diagnostic Logging (`longhorn::Logger`)**: Application and timing logs (`logger_.Info(...)`,
   `logger_.Error(...)`) are timestamped (`[<ms>]`), level-tagged (`[INFO]`, `[ERROR]`, etc.),
   non-blocking, and drained by a low-priority FreeRTOS task. On USB CDC transports the
@@ -87,3 +88,16 @@ The app uses the **raw FreeRTOS API** on top of that:
   `:vcu_app_test` uses it for exact, deterministic timing tests, while
   `:vcu_rtos_test` runs the real tasks under the simulator port (see
   [drivers/freertos](../../drivers/freertos/README.md#testing-rtos-code-on-the-host)).
+
+The CAN bindings come from the migrated lhre-2026 matrix. This reference app
+broadcasts `VCU_STATE` at its specified 333 Hz and uses `CONTACTOR_STATUS`, the
+HVC packet addressed to the VCU, for contactor diagnostics only. Contactor
+closure does not authorize drive. This reference app stays non-driving and
+does not assert the R2D buzzer; driver-request, brake and precharge interlocks
+must be specified and implemented before enabling a drive transition.
+
+The old reference fault consumed the removed mock `HvcPackStatus.coolant_temp`
+signal at 60°C. The current spec has no equivalent HVC coolant field. An
+approved replacement sensor/circuit and threshold are required before restoring
+that latch; inverter coolant is not assumed to measure the same circuit.
+This reference app is not a complete production VCU controller.
