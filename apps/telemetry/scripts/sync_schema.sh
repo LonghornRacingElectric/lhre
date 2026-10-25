@@ -6,7 +6,7 @@ set -e
 
 SCRIPT_ROOT="$(cd "$(dirname "$0")" && pwd)"
 TELEMETRY_ROOT="$(cd "$SCRIPT_ROOT/.." && pwd)"
-REPO_ROOT="$(cd "$TELEMETRY_ROOT/.." && pwd)"
+REPO_ROOT="$(cd "$TELEMETRY_ROOT/../.." && pwd)"
 
 CAR_NAME="${1:-Orion}"
 CAR_LOWER="$(echo "$CAR_NAME" | tr '[:upper:]' '[:lower:]')"
@@ -22,7 +22,7 @@ COMMON_PRISMA="$SCRIPT_DIR/common.prisma"
 
 case "$CAR_NAME" in
   Orion)
-    PROTO_FILE="$REPO_ROOT/drivers/longhorn-lib/protobuf/can_packets.proto"
+    PROTO_FILE="$REPO_ROOT/apps/BEVO/schema/can_packets.proto"
     ROOT_MESSAGE="OrionSensorData"
     ;;
   Angelique)
@@ -30,7 +30,7 @@ case "$CAR_NAME" in
     ROOT_MESSAGE="AngeliqueSensorData"
     ;;
   *)
-    PROTO_FILE="$REPO_ROOT/drivers/longhorn-lib/protobuf/can_packets.proto"
+    PROTO_FILE="$REPO_ROOT/apps/BEVO/schema/can_packets.proto"
     ROOT_MESSAGE="auto"
     ;;
 esac

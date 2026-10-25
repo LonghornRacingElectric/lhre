@@ -85,6 +85,38 @@ Editing `scale` therefore changes a live field's wire type while its id
 stays the same. The ledger cannot see that, which is what `wire.lock` is
 for.
 
+## Message rate and telemetry rate
+
+These are different controls:
+
+- `CanMessage.frequency_hz` is how often the sender puts the packet on the
+  CAN bus. It also feeds the schema's estimated CAN bus-load check.
+- `Telemetry.rate_tier` controls the telemetry update tier for one signal.
+  It does not change the CAN packet rate or the proto field layout.
+
+For a telemetry-bound signal, `ir/validator.py` resolves the tier in this
+order: signal `rate_tier`, message `default_rate_tier`, then a tier inferred
+from `frequency_hz` (`FAST` at 50 Hz or more, `MEDIUM` at 5 Hz or more,
+otherwise `SLOW`). These are categories, not numeric Hz settings; the schema
+does not currently define numeric uplink or logging rates. A signal with no
+telemetry binding has no telemetry rate.
+
+For example, a 100 Hz CAN message with an explicit `SLOW` signal tier still
+transmits at 100 Hz on CAN. The tier only affects the downstream telemetry
+policy that consumes it. To inspect the implementation, start at
+`proto/can_spec.proto` (`frequency_hz`, `default_rate_tier`, and
+`Telemetry.rate_tier`), then read `ir/validator.py` (`resolve_tier` and
+`_check_bus_load`).
+
+The older [BEVO CSV pipeline](../../apps/BEVO/schema/README.md#packet-and-telemetry-rates)
+is separate: `apps/BEVO/schema/can_packets.csv` contains native packet
+frequencies and generates the BEVO runtime `can.json` through
+`generate_can_json.py`. That JSON does not get these `lib/spec` rate tiers.
+BEVO supports optional per-signal `uplink_hz` / `log_hz` metadata: omitted
+means no added cap, zero requests disabling the stream, and positive Hz
+requests an update cap. BEVO's daemons do not yet enforce this policy. These
+fields are not part of the textproto spec and never change CAN packet cadence.
+
 ## wire.lock
 
 `wire.lock` records every telemetry field as `<group>.<field> <id>

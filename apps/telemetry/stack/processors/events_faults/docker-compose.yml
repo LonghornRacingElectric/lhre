@@ -1,0 +1,19 @@
+services:
+  events_faults:
+    image: ${TELEMETRY_EVENTS_FAULTS_IMAGE:-lhre/telemetry-events-faults:dev}
+    container_name: events_faults_processor
+    restart: unless-stopped
+    environment:
+      PYTHONUNBUFFERED: 1
+      IN_DOCKER: 1
+      LOGLEVEL: INFO
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_INPUT_TOPIC: sensor_data
+      KAFKA_OUTPUT_TOPIC: fault_events
+      KAFKA_GROUP_ID: events-faults-group
+    networks:
+      - telemetry_network
+
+networks:
+  telemetry_network:
+    external: true

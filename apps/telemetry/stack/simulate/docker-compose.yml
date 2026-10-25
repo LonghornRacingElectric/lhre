@@ -1,0 +1,23 @@
+services:
+  simulate:
+    image: ${TELEMETRY_SIMULATE_IMAGE:-lhre/telemetry-simulate:dev}
+    container_name: simulate_processor
+    restart: unless-stopped
+    environment:
+      PYTHONUNBUFFERED: 1
+      IN_DOCKER: 1
+      LOGLEVEL: INFO
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_OUTPUT_TOPIC: sensor_data
+      # Default replays data/autox_uta_2026-10-17.pb.gz. "random" uses the generator,
+      # which is the only mode the SIM_RATE_HZ/DROPOUT/FAULT knobs below apply to.
+      # SIM_DATA: random
+      SIM_RATE_HZ: 5
+      SIM_DROPOUT_P: 0.05
+      SIM_FAULT_TOGGLE_P: 0.01
+    networks:
+      - telemetry_network
+
+networks:
+  telemetry_network:
+    external: true

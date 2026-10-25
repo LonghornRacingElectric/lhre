@@ -22,6 +22,10 @@ pub struct SignalConfig {
     pub name: String,
     pub conv_type: String, // "uint16", "int16", "bitfield", etc.
     pub precision: f64,
+    // Schema policy: None = no added cap, Some(0) = disabled. Consumers
+    // currently retain these values without enforcing per-signal throttles.
+    pub uplink_hz: Option<f64>,
+    pub log_hz: Option<f64>,
     pub bitfield_encoding: Option<Vec<BitfieldMapping>>,
     pub protobuf: Option<ProtobufMapping>,
 }

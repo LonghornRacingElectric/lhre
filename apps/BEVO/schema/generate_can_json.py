@@ -23,6 +23,49 @@ protobuf_pattern = re.compile(r"([\w\.]+)(?:\[(\d+)\])?\s*\(([^)]+)\)")
 # Regex for the persistent protobuf field id annotation, e.g. "... (float) #12".
 # This is the stable wire-format tag for the field; see generate_can_proto.py.
 proto_id_pattern = re.compile(r"#\s*(\d+)\b")
+rate_metadata_pattern = re.compile(r"\[([^\[\]]*)\]")
+
+
+class RateMetadataError(ValueError):
+    """Invalid rate policy must fail generation, rather than drop a signal."""
+
+
+def parse_rate_metadata(cell):
+    """Extract optional rates from a `[key=value, ...]` signal annotation."""
+    rates = {}
+
+    def extract(match):
+        contents = match.group(1)
+        # Signal names and protobuf fields also use brackets (Voltage[i],
+        # cells_v[0]); those are part of the mapping, not rate annotations.
+        if "=" not in contents and not re.search(r"\b(?:uplink_hz|log_hz)\b", contents):
+            return match.group(0)
+        for item in contents.split(","):
+            key, separator, value = item.partition("=")
+            key = key.strip()
+            if not separator or key not in ("uplink_hz", "log_hz"):
+                raise RateMetadataError(
+                    f"Unknown or malformed signal rate metadata '{item.strip()}'"
+                )
+            if key in rates:
+                raise RateMetadataError(f"Duplicate signal rate '{key}'")
+            try:
+                rate = float(value.strip())
+            except ValueError as exc:
+                raise RateMetadataError(
+                    f"Could not parse {key} value '{value.strip()}'"
+                ) from exc
+            if not math.isfinite(rate) or rate < 0:
+                raise RateMetadataError(
+                    f"{key} must be finite and nonnegative, got '{value.strip()}'"
+                )
+            rates[key] = rate
+        return ""
+
+    cleaned = rate_metadata_pattern.sub(extract, cell)
+    if re.search(r"\b(?:uplink_hz|log_hz)\s*=", cleaned):
+        raise RateMetadataError("Signal rates must be enclosed in [key=value, ...]")
+    return cleaned, rates
 
 # --- Type Definitions ---
 type_lengths = {
@@ -160,6 +203,12 @@ def load_bitfield_definitions(filepath):
                     if not col_name:
                         continue
                     cell_content = row.get(col_name, "").strip()
+                    try:
+                        cell_content, bit_rates = parse_rate_metadata(cell_content)
+                    except RateMetadataError as exc:
+                        raise RateMetadataError(
+                            f"{filepath}, row {row_num}, bit {bit_index}: {exc}"
+                        ) from exc
                     if ";" in cell_content:
                         try:
                             proto_seg = cell_content.split(";", 1)[1].strip()
@@ -176,6 +225,7 @@ def load_bitfield_definitions(filepath):
                                         "protobuf_field": protobuf_field,
                                         "bit_index": bit_index,
                                         "proto_id": proto_id,
+                                        **bit_rates,
                                     }
                                 )
                         except IndexError:
@@ -184,6 +234,8 @@ def load_bitfield_definitions(filepath):
                             )
                 if bits_list:
                     definitions[bitfield_name] = bits_list
+    except RateMetadataError:
+        raise
     except Exception as e:
         print(f"Error loading bitfield definitions from {filepath}: {e}")
     print(f"Loaded {len(definitions)} bitfield definitions.")
@@ -244,6 +296,13 @@ def process_csv(can_filepath, bitfield_definitions, bitfield_csv_filename):
                         ):
                             continue
 
+                        try:
+                            byte_info_str, signal_rates = parse_rate_metadata(byte_info_str)
+                        except RateMetadataError as exc:
+                            raise RateMetadataError(
+                                f"{can_filepath}, row {row_num}, ID {packet_id_str}, Data[{byte_num}]: {exc}"
+                            ) from exc
+
                         # --- Split CAN and Protobuf parts (Protobuf part is optional) ---
                         can_part = byte_info_str
                         protobuf_info = None
@@ -251,7 +310,9 @@ def process_csv(can_filepath, bitfield_definitions, bitfield_csv_filename):
                             parts = byte_info_str.split(";", 1)
                             can_part = parts[0].strip()
                             proto_part_raw = parts[1].strip()
-                            proto_match = protobuf_pattern.search(proto_part_raw)
+                            # match, not search: search would turn "Practice Fault (bool)"
+                            # or "practice-fault (bool)" into a field named "fault".
+                            proto_match = protobuf_pattern.match(proto_part_raw)
                             if proto_match:
                                 proto_field, proto_index_str, proto_type = (
                                     proto_match.groups()
@@ -262,6 +323,12 @@ def process_csv(can_filepath, bitfield_definitions, bitfield_csv_filename):
                                     "type": proto_type,
                                     "field": proto_field,
                                 }
+                                if proto_type not in ("float", "bool"):
+                                    # BEVO's build.rs assigns every non-bool field an f32,
+                                    # so any other type is a Rust compile error there.
+                                    print(
+                                        f"Warning: Row {row_num}, ID {packet_id_str}, Data[{byte_num}]: Protobuf type '{proto_type}' for '{proto_field}' is not float or bool; //apps/BEVO:sensor_proto will not compile."
+                                    )
                                 # Capture the persistent field id (#N) if the author or a
                                 # previous generator run wrote one. Searching after the
                                 # protobuf field match avoids matching '#' inside the type.
@@ -286,8 +353,14 @@ def process_csv(can_filepath, bitfield_definitions, bitfield_csv_filename):
                                     protobuf_info["field_index"] = None
                             else:
                                 print(
-                                    f"Warning: Row {row_num}, ID {packet_id_str}, Data[{byte_num}]: Could not parse protobuf format in '{proto_part_raw}'."
+                                    f"Warning: Row {row_num}, ID {packet_id_str}, Data[{byte_num}]: Could not parse protobuf format in '{proto_part_raw}' (expected e.g. 'my_signal (float)'); left out of the proto."
                                 )
+                        elif byte_info_str.count("(") >= 2:
+                            # Without ';' the mapping is ignored and the signal silently
+                            # never reaches the proto.
+                            print(
+                                f"Warning: Row {row_num}, ID {packet_id_str}, Data[{byte_num}]: '{byte_info_str}' looks like it has a protobuf mapping but no ';' before it; left out of the proto."
+                            )
 
                         # --- Parse the CAN signal part ---
                         bitfield_encoding_details = None  # Reset for each field
@@ -389,6 +462,7 @@ def process_csv(can_filepath, bitfield_definitions, bitfield_csv_filename):
                                 "conv_type": conv_type,
                                 "precision": precision,
                             }
+                            byte_def.update(signal_rates)
                             if is_boolean_flag:
                                 byte_def["is_boolean"] = True
                             if protobuf_info:
@@ -419,6 +493,12 @@ def process_csv(can_filepath, bitfield_definitions, bitfield_csv_filename):
                                         "is_boolean": True,
                                         "protobuf": proto_meta,
                                     }
+                                    sub_byte_def.update(signal_rates)
+                                    # A bit's explicit policy overrides the containing
+                                    # byte's defaults independently for each stream.
+                                    for key in ("uplink_hz", "log_hz"):
+                                        if key in bit:
+                                            sub_byte_def[key] = bit[key]
                                     bytes_list.append(sub_byte_def)
                                     field_index_counter += 1
                             bytes_list.append(byte_def)
@@ -453,6 +533,7 @@ def process_csv(can_filepath, bitfield_definitions, bitfield_csv_filename):
                                         "conv_type": normalized_type,
                                         "precision": 1.0,
                                     }
+                                    byte_def.update(signal_rates)
                                     if is_boolean_flag:
                                         byte_def["is_boolean"] = True
                                     if protobuf_info:
@@ -483,6 +564,8 @@ def process_csv(can_filepath, bitfield_definitions, bitfield_csv_filename):
                         can_packets.append(can_packet_json)
                         processed_rows += 1
 
+                except RateMetadataError:
+                    raise
                 except ValueError as ve:
                     print(
                         f"Error processing row {row_num} (ValueError): {ve}. Skipping row. Data: {row}"
@@ -496,6 +579,8 @@ def process_csv(can_filepath, bitfield_definitions, bitfield_csv_filename):
                         f"Unexpected error processing row {row_num}: {e}. Skipping row. Data: {row}"
                     )
 
+    except RateMetadataError:
+        raise
     except FileNotFoundError:
         print(f"Error: CAN definition file not found at '{can_filepath}'")
         return []
@@ -522,11 +607,8 @@ def calculate_bus_utilization(packets, bus_name="Overall"):
     for p in filtered_packets:
         freq = p.get("frequency")
         dlc = p.get("data_length", 0)
-        qty = p.get("quantity", 0)  # Some packets have Quantity > 1 implied?
-        # Usually quantity in CSV means "how many of these".
-        # We will assume 'quantity' is for BOM count,
-        # but frequency is the transmission rate per unit.
-        # We trust 'frequency' is the total rate for this message ID.
+        # Frequency is per CAN ID; indexed blocks transmit one frame per ID.
+        qty = max(p.get("quantity", 1), 1)
 
         if freq is None:
             continue
@@ -534,7 +616,7 @@ def calculate_bus_utilization(packets, bus_name="Overall"):
         # --- Classic CAN Calculation (1 Mb/s) ---
         # Formula: (DLC * 8) + Metadata(47) + Stuff(7)
         packet_bits_classic = (dlc * 8) + CLASSIC_METADATA_BITS + STUFF_BITS
-        total_bits_per_sec_1m += packet_bits_classic * freq
+        total_bits_per_sec_1m += packet_bits_classic * freq * qty
 
         # --- CAN FD Calculation (8 Mb/s) ---
         # Formula: (DLC * 8) + FD_Metadata + Stuff(7)
@@ -549,7 +631,7 @@ def calculate_bus_utilization(packets, bus_name="Overall"):
         fd_overhead_bits = FD_FIXED_OVERHEAD + crc_bits + crc_del_bit + STUFF_BITS
 
         packet_bits_fd = (dlc * 8) + fd_overhead_bits
-        total_bits_per_sec_8m += packet_bits_fd * freq
+        total_bits_per_sec_8m += packet_bits_fd * freq * qty
 
     # Bandwidths
     bandwidth_1m = 1_000_000.0
