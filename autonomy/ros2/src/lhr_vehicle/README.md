@@ -9,9 +9,23 @@ and every consumer reads it from there:
   overrides still work; the file only replaces the hardcoded fallbacks.
 - `lhr_gazebo/joint_cmd_adapter` uses it for the Ackermann and
   differential-speed math.
-- `lhr_perception/lidar_cone_detector` uses the LiDAR mount position for
-  the sensor→`base_link` transform and the body dimensions for the
-  self-exclusion box.
+- `lhr_perception/lidar_cone_detector` uses the body dimensions for the
+  self-exclusion box. It takes its mount from TF by default and uses the
+  LiDAR position for the sensor→`base_link` transform only with
+  `sensor_transform_source:=vehicle_config`, which the Gazebo launch
+  passes. `evaluate_recordings` uses the mount x/y and stamps the file's
+  hash on its results.
+- `lhr_lidar_sim` takes its default mount position from it.
+- `lhr_metrics` builds the whole-vehicle footprint envelope from the body
+  and wheel dimensions, and stamps the file's hash on every row.
+- `lhr_safety` takes its wheelbase and speed-limit defaults from it.
+- `lhr_sensor_sim/inertial_sim` takes its wheel radius and track defaults
+  from it, and `lhr_state_estimation/ekf_node` its wheel radius.
+- `lhr_sim_bobsim` refuses to start when BobSim's wheelbase or wheel radius
+  disagrees with it, and records its hash in the plant provenance.
+- `lhr_gazebo` publishes the stereo camera transforms from it, and
+  `generate_world.py` uses the body and wheel extents to stage the car's
+  nose behind the acceleration start line.
 - The Gazebo models `lhr_gazebo/models/fsae_vehicle/model.sdf` and
   `model_stereo.sdf` are
   **generated** from it (see below); wheel poses, joint limits, masses and

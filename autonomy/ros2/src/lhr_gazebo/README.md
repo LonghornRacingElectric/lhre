@@ -105,8 +105,6 @@ The seed-1 autocross and oval fixtures use the corrected closed-boundary
 spacing from [trackgen](../lhr_trackgen/README.md). Regenerate worlds after
 changing track generation so the Gazebo scene matches MVS track truth.
 
-## State estimation and optional side inference
-
 ## Run
 
 ```bash
@@ -176,7 +174,8 @@ any other world would disagree with the cones `publish_cones` generates
 for that seed. Generate it from `autonomy/ros2`, then rebuild:
 
 ```bash
-python3 src/lhr_gazebo/scripts/generate_world.py --style autocross --seed 6 \n    --output src/lhr_gazebo/worlds/autocross_seed6.sdf
+python3 src/lhr_gazebo/scripts/generate_world.py --style autocross --seed 6 \
+    --output src/lhr_gazebo/worlds/autocross_seed6.sdf
 ```
 
 `./scripts/run_gazebo_demo.sh` passes its arguments straight to the launch,
@@ -187,9 +186,11 @@ mission and pairing width.
 the cones trackgen publishes for its style and seed, so regenerate after
 changing a generator. The acceleration course is a fixed rules layout with
 4.9 m clear between cone bases, staged with the nose 0.30 m behind the
-start line. `track_style:=acceleration` runs the acceleration mission and
-pairs cones at the course's 5.13 m center spacing; the mission brakes the
-car in the exit lane once the nose crosses the finish:
+start line. `track_style:=acceleration` always runs the acceleration
+mission, whatever `mission:=` says, and `mission:=acceleration` on another
+track fails the launch: the course only completes under its own mission.
+It pairs cones at the course's 5.13 m center spacing, and the mission
+brakes the car in the exit lane once the nose crosses the finish:
 
 ```bash
 ./scripts/run_gazebo_demo.sh track_style:=acceleration perception:=lidar estimator:=ekf

@@ -13,18 +13,18 @@ Test Data > 2026-10-28-mvp-gate (upload pending).
 
 ## Result
 
-**Pending the gate run.** Dry run #2 on `main` passed all 18 runs: every
-autocross lap and acceleration finish done, 0 off course, 0 cones, max CTE
-0.26 m, max EKF error 0.07 m, laps at 1.00 times the truth stack, stopped
-1.4 to 2.0 m past the line. Dry run #1 passed 17 of 18, and each failure
-came from the harness or the scoring, not the stack.
+**Pending the gate run.** Dry runs #2 and #3 on `main` each passed all 18
+runs: every autocross lap and acceleration finish done, 0 off course, 0
+cones, max CTE 0.26 m, max EKF error 0.07 m, laps at 1.00 times the truth
+stack, stopped 1.2 to 2.0 m past the line. Dry run #1 passed 17 of 18, and
+each failure came from the harness or the scoring, not the stack.
 
 ## Stack under test
 
 `perception:=lidar estimator:=ekf safety:=true`, otherwise launch defaults,
 the same for every run. CPU-rendered machines add
-`safety_lidar_timeout_s:=1.5`
-([#123](https://github.com/LonghornRacingElectric/lhre/issues/123)).
+`safety_lidar_timeout_s:=1.5`: Gazebo still leaves LiDAR gaps up to about
+0.7 s there with the cameras off (#160), against the 0.3 s default.
 
 Waived per the pass criteria:
 
@@ -84,4 +84,4 @@ seconds. `score_gate.py` writes `results.csv` and `summary.md`. See the
 
 ## Files
 
-- `results.csv`: `score_gate.py`'s per-run table from the gate run.
+- `results.csv`: `score_gate.py`'s per-run table, added with the gate run.

@@ -50,10 +50,10 @@ minutes on the Mac container. A quick check:
 SEEDS=1 REPEATS=1 ACCEL_REPEATS=1 SKIDPAD_REPEATS=1 ../testing/tools/gate/run_gate.sh
 ```
 
-On a CPU-rendered machine (the Mac container) Gazebo drops LiDAR frames, so
+On a CPU-rendered machine (the Mac container) Gazebo still drops LiDAR
+frames, with gaps up to about 0.7 s even with the cameras off (#160), so
 add `EXTRA="safety_lidar_timeout_s:=1.5"` or runs trip `LIDAR_STALE`
-([#123](https://github.com/LonghornRacingElectric/lhre/issues/123)). Say so
-next to the results, since it is not a launch default.
+Say so next to the results, since it is not a launch default.
 
 Output goes to `~/lhr-test-data/<date>-mvp-gate/`: `runs/<id>/` (bag,
 `metrics.csv`, launch and recorder logs, the launch arguments), then

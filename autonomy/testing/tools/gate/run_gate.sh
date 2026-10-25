@@ -12,7 +12,7 @@
 #
 #   ../testing/tools/gate/run_gate.sh
 #   SEEDS=1 REPEATS=1 ACCEL_REPEATS=1 SKIDPAD_REPEATS=1 ../testing/tools/gate/run_gate.sh
-#   EXTRA="safety_lidar_timeout_s:=1.5" ...   # CPU-rendered machines (#123)
+#   EXTRA="safety_lidar_timeout_s:=1.5" ...   # CPU-rendered machines (see the gate README)
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 

@@ -6,13 +6,14 @@ markers on `/lhr/track/centerline_markers`.
 
 ## Pairing
 
-The `pairing_strategy` parameter selects one of three algorithms:
+The `pairing_strategy` parameter selects one of four algorithms. The
+fourth, `boundary_graph`, has [its own section](#local-unclassified-corridor).
 
 - `nearest` pairs each blue (`left_cones`) cone with the nearest unused yellow
   (`right_cones`) cone. This strategy requires classified cones.
 - `classified` computes a minimum-cost one-to-one left/right assignment within
   `track_width +/- track_width_tolerance`, leaving unmatched cones unused.
-  The Gazebo launch selects it with
+  Both demo launches select it with
   `perception:=lidar lidar_classify_sides:=true`. It depends on correct side
   labels; sparse detections can cause the experimental classifier to mislabel
   a boundary and leave gaps or an incorrect path.
@@ -153,9 +154,11 @@ for topics and all parameters.
 
 ## Local unclassified corridor
 
-`pairing_strategy:=boundary_graph` selects the harness's geometry-only local
-corridor. It connects Delaunay edge midpoints through shared triangles, limits
-gaps to `max_path_gap_m` (4 m), turns to `max_path_turn_deg` (60 degrees), and
+`pairing_strategy:=boundary_graph` selects a geometry-only local corridor.
+`mvs_demo.launch.py` uses it under `perception:=lidar` unless
+`lidar_classify_sides:=true`; the Gazebo launch never does. It connects
+Delaunay edge midpoints through shared triangles, limits gaps to
+`max_path_gap_m` (4 m), turns to `max_path_turn_deg` (60 degrees), and
 length to `planning_horizon_m` (30 m). It needs odometry and publishes an empty
 path when no forward corridor exists. The controller then stops. This option
 does not replace the default color-aware `boundary` pairing or its configurable

@@ -12,7 +12,7 @@ testing/
     log.md         # timestamped log kept during the test
     figures/       # the figures the README and slides use
     *.py           # the scripts that made those figures from the raw data
-  tools/<sensor>/  # the scripts that recorded and analyzed the data
+  tools/<name>/    # recording, run and scoring scripts (livox/, gate/, fault_injection/)
 ```
 
 | Campaign | Question | Status | Data |

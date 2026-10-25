@@ -18,6 +18,9 @@ the Gazebo demo still uses its own sensor.
 | `mid360.py` | Beam pattern and range model. No ROS. |
 | `scene.py` | Ray casting against ground and cones. No ROS. |
 | `sensor.py` | Mount pose and the per-frame pipeline. No ROS. |
+| `return_profile.py` | Recorded small-cone return-density profile. No ROS. |
+| `acceptance.py` | `compare_acceptance` entry point. No ROS. |
+| `patterns/acceptance_*` | Bundled acceptance results and the fitted overcast profile |
 | `lidar_sim_node.py` | The ROS wrapper. |
 
 Only the ROS wrapper imports ROS. The numerical modules run and are tested
@@ -203,6 +206,12 @@ height. To check flatness, transform into `base_link` first.
 | `range_noise_std_m` | `0.02` | Applied along the beam, not per axis |
 | `dropout_rate` | `0.0` | Returns lost outright |
 | `elevation_profile` | `livox` | Imported vendor table; `rosette`/`uniform` are legacy approximations |
+| `return_profile` | `baseline` | `acceptance_overcast` thins small-cone returns by range |
+| `motion_distortion` | `false` | Cast each frame from interpolated poses |
+| `clutter_profile` | `none` | `trackside` adds solid boxes beside the boundaries |
+
+`range_noise_std_m` is a node parameter here, not read from `vehicle.yaml`
+like Gazebo's range noise (#161), so change both together.
 
 Passed through the launch file these are type-coerced, so
 `mount_pitch_rad:=0` works as well as `0.0`. See
@@ -238,13 +247,16 @@ make a placeholder look like a measurement.
 
 ## Not done yet
 
-- Cones are opaque cones of a single size, with no reflectivity model,
-  so `dropout_rate` is a flat fraction rather than a function of range
-  and colour. A dark cone at 30 m is the case that matters and this does
-  not yet capture it.
-- No motion within a frame. All 20,000 beams are cast from one pose, so
+- No reflectivity model, so `dropout_rate` is a flat fraction rather
+  than a function of range and colour. Only
+  `return_profile=acceptance_overcast` adds range dependence, and only
+  for small cones. A dark cone at 30 m is the case that matters and this
+  does not yet capture it.
+- Motion within a frame is off by default. With the default
+  `motion_distortion=false` all 20,000 beams are cast from one pose, so
   at 15 m/s the 1.5 m travelled during a frame is ignored. That flatters
-  the model at speed.
+  the model at speed; `motion_distortion:=true` casts interpolated poses
+  instead (see [motion and clutter studies](#motion-and-clutter-studies)).
 
 ## Hardware comparison
 
