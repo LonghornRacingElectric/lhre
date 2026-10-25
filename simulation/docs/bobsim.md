@@ -144,7 +144,8 @@ With it, `make car` changes these steps:
   `bobsim/vehicle.yml`.
 - It writes the outputs to `out/car/<target>--<name>/`. `<name>` is the
   folder under `out/`. A run on
-  `vehicle/vehicle.yml` writes to `out/car/<target>/`. Two cars never
+  `vehicle/vehicle.yml` writes to `out/car/<target>/`. `make car` refuses
+  a target name with `--`, so two cars never
   share a folder.
 - `identity.json` names the candidate path and its sha256. It sets
   `vehicle.candidate` to `true`. The candidate is not the vehicle member

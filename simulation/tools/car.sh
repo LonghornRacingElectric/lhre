@@ -3,7 +3,7 @@ set -u
 
 target=${1:-}
 case $target in
-    '' | -* | *[!A-Za-z0-9_.-]*)
+    '' | -* | *--* | *[!A-Za-z0-9_.-]*)
         echo "make car: T='$target' is not a BobSim target name." >&2
         exit 2
         ;;
