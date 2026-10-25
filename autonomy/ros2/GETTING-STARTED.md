@@ -43,6 +43,15 @@ sudo apt install -y ros-jazzy-plotjuggler-ros
 sudo apt install -y ros-jazzy-foxglove-bridge
 ```
 
+Then install each package's own dependencies (scipy, `foxglove_bridge` and the rest) from its `package.xml`, the same way CI does, so a dependency a package adds reaches you without this guide changing:
+
+```bash
+sudo apt install -y python3-rosdep
+sudo rosdep init    # once per machine; "already initialized" is fine
+rosdep update
+rosdep install --from-paths src --ignore-src -y --rosdistro jazzy
+```
+
 ## 3. Build
 
 ```bash
@@ -64,6 +73,8 @@ sudo apt install -y ros-jazzy-foxglove-bridge
 RViz shows a cone track and the car drives itself around it and completes a lap. That is the whole pipeline working: track generation, simulated perception, path building, control, mission management.
 
 If you see that, your setup is correct.
+
+The launch then shuts itself down. That is the run ending, not a crash: metrics ends the run on the lap, writes its row to `data/metrics.csv`, and its exit stops the rest of the launch. To keep the car lapping, start it with `./scripts/run_demo.sh enable_metrics:=false`.
 
 ## Next steps
 

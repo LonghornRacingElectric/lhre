@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Render models/fsae_vehicle/model.sdf from lhr_vehicle's vehicle.yaml.
+Render the default and stereo vehicle SDFs from lhr_vehicle's vehicle.yaml.
 
-Run after editing vehicle.yaml and commit the regenerated model.sdf:
+Run after editing vehicle.yaml and commit both regenerated SDFs:
 
     python3 src/lhr_gazebo/scripts/generate_vehicle_model.py
 
-``--check`` renders without writing and fails if the committed model.sdf is
+``--check`` renders without writing and fails if either committed SDF is
 out of date; lhr_gazebo's tests run the same comparison so CI catches a
 YAML edit that forgot the regenerate step.
 """
@@ -20,7 +20,9 @@ import sys
 PKG_DIR = Path(__file__).resolve().parents[1]
 SRC_DIR = PKG_DIR.parent
 TEMPLATE = PKG_DIR / 'templates' / 'model.sdf.in'
+STEREO_TEMPLATE = TEMPLATE.with_name('stereo_camera.sdf.in')
 OUTPUT = PKG_DIR / 'models' / 'fsae_vehicle' / 'model.sdf'
+STEREO_OUTPUT = OUTPUT.with_name('model_stereo.sdf')
 # Always the source-tree YAML: an installed copy can predate the edit.
 VEHICLE_YAML = SRC_DIR / 'lhr_vehicle' / 'config' / 'vehicle.yaml'
 
@@ -59,7 +61,7 @@ def _fmt(value: float) -> str:
     return f'{value:.4f}'.rstrip('0').rstrip('.')
 
 
-def render(veh) -> str:
+def render(veh, *, enable_stereo_camera=False) -> str:
     body_ratio = veh.wheelbase_m / MESH_REF_WHEELBASE_M
     tire_ratio = veh.wheel_radius_m / MESH_REF_WHEEL_RADIUS_M
     m, L, W, H = (veh.chassis_mass_kg, veh.body_length_m,
@@ -116,6 +118,9 @@ def render(veh) -> str:
     }
     # Optical metadata needs more precision than the existing chassis dimensions.
     substitutions.update({k: format(v, '.12g') for k, v in stereo_values.items()})
+    substitutions['stereo_camera'] = (
+        Template(STEREO_TEMPLATE.read_text(encoding='utf-8')).substitute(substitutions).rstrip()
+        if enable_stereo_camera else '')
     template = Template(TEMPLATE.read_text(encoding='utf-8'))
     return template.substitute(substitutions)
 
@@ -123,27 +128,26 @@ def render(veh) -> str:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
     parser.add_argument('--check', action='store_true',
-                        help='fail if the committed model.sdf is out of date')
+                        help='fail if either committed vehicle SDF is out of date')
     args = parser.parse_args(argv)
 
     veh = load_source_vehicle()
-    rendered = render(veh)
-    rel = OUTPUT.relative_to(SRC_DIR.parent)
-
-    if args.check:
-        current = OUTPUT.read_text(encoding='utf-8') if OUTPUT.exists() else ''
-        if current != rendered:
-            print(f'{rel} is out of date with {VEHICLE_YAML.name}; '
-                  f'run {Path(__file__).name} and commit the result')
-            return 1
-        print(f'{rel} is in sync with {VEHICLE_YAML.name}')
-        return 0
-
-    OUTPUT.write_text(rendered, encoding='utf-8', newline='\n')
-    print(f'wrote {rel} (wheelbase {veh.wheelbase_m} m, track {veh.track_m} m, '
-          f'center lock {veh.max_steer_rad} rad, '
-          f'joint limit {inner_steer_limit(veh):.4f} rad)')
-    return 0
+    stale = False
+    for output, stereo in ((OUTPUT, False), (STEREO_OUTPUT, True)):
+        rendered = render(veh, enable_stereo_camera=stereo)
+        rel = output.relative_to(SRC_DIR.parent)
+        if args.check:
+            current = output.read_text(encoding='utf-8') if output.exists() else ''
+            if current != rendered:
+                print(f'{rel} is out of date with {VEHICLE_YAML.name}; '
+                      f'run {Path(__file__).name} and commit the result')
+                stale = True
+            else:
+                print(f'{rel} is in sync with {VEHICLE_YAML.name}')
+        else:
+            output.write_text(rendered, encoding='utf-8', newline='\n')
+            print(f'wrote {rel}')
+    return int(stale)
 
 
 if __name__ == '__main__':

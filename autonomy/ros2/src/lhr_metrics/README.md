@@ -13,9 +13,10 @@ runs can be compared without guessing which geometry or gate was used.
 | Group | Columns |
 | --- | --- |
 | Identity | `run_id` |
-| Provenance | `vehicle_sha256`, `git_sha`, `scenario` |
+| Provenance | `vehicle_sha256`, `git_sha`, `scenario`, `plant` |
 | Scenario | `seed`, `track_style`, `num_waypoints`, `mission`, `perception`, `start_on_track`, `start_finish_cones` |
-| Sensor | `lidar`, `mount_pitch_rad`, `elevation_profile`, `return_profile`, `stack_window_sec`, `min_cluster_points`, `ground_z_min`, `fov_deg`, `max_range_m`, `noise_std_m`, `false_negative_rate` |
+| Sensor | `lidar`, `mount_pitch_rad`, `elevation_profile`, `return_profile`, `stack_window_sec`, `min_cluster_points`, `ground_z_min`, `fov_deg`, `max_range_m`, `noise_std_m`, `false_negative_rate`, `motion_distortion`, `clutter_profile` |
+| Estimator | `estimator`, `gyro_bias`, `wheel_scale_error`, `lidar_classify_sides`, `mean_pos_error`, `max_pos_error`, `mean_yaw_error` |
 | Control | `lookahead_dist`, `a_lat_max`, `v_min`, `v_max`, `max_accel`, `max_decel` |
 | Reference | `reference_sha256`, `reference_source`, `reference_length_m`, `reference_world`, `reference_closed` |
 | Scoring | `course_sha256`, `footprint_model`, `sweep_step_m`, `off_track_threshold`, `start_radius`, `min_lap_time`, `min_progress_fraction`, `lap_start_speed`, `max_odom_gap_sec` |
@@ -25,7 +26,11 @@ runs can be compared without guessing which geometry or gate was used.
 
 `git_sha` comes from the launch file and carries a `-dirty` suffix when the
 tree has uncommitted changes, since a clean-looking id on a modified tree
-is worse than no id. `vehicle_sha256` hashes `lhr_vehicle`'s config file
+is worse than no id. Only `mvs_demo.launch.py` fills `git_sha` and the
+Sensor and Control columns. `gazebo_demo.launch.py` passes neither, so
+Gazebo rows read `unknown` and the node's MVS defaults there (`lidar`
+false, `min_cluster_points` 3 while Gazebo runs 1); take a Gazebo run's
+commit and settings from its launch arguments. `vehicle_sha256` hashes `lhr_vehicle`'s config file
 with the same formula the study harness in `simulation/tools` uses, so a
 sim run and a BobDyn study are comparable on that field.
 
@@ -98,8 +103,9 @@ reference supports CTE/progress but never publishes a circuit lap.
 
 The accepted flag is published once on `/lhr/metrics/lap_complete`, which
 the mission manager latches. Autocross `FINISHED` without a verified lap is
-recorded as `invalid_completion` and fails. Braking/mission-controller changes
-remain separate work; this node does not feed reference geometry to control.
+recorded as `invalid_completion` and fails. The mission manager then
+publishes `/lhr/mission/complete` and pursuit brakes to a stop before
+FINISHED; this node never feeds reference geometry to control.
 
 ## Footprint, boundaries and contacts
 
@@ -185,6 +191,7 @@ Beyond `RUN_PARAMS`, which only ever reach the CSV:
 | `max_odom_gap_sec` | 1.0 | Largest gap allowed during a scored circuit |
 | `min_lap_time` | 5.0 | Reject a lap shorter than this |
 | `timeout_sec` | 0.0 | Optional wall-clock watchdog; zero disables it |
+| `truth_odom_topic` | empty | Truth odometry to score; the estimate on `/lhr/vehicle/odom` then only feeds the error columns |
 | `output_csv` | `data/metrics.csv` | Where the row goes |
 | `run_id` | wall clock | Row identifier |
 

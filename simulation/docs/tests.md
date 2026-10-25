@@ -23,11 +23,16 @@ The BobSim test takes about 6 s of `make unit`.
 - `test_committed_results.py`: each committed study result is current, or
   its README marks it historical or stale. See
   [studies.md](studies.md#status).
+- `test_new_study.py`: `make new-study` copies the template, and the
+  template `run.py` writes `summary.json` and `readme.json` that fill its
+  README. The target refuses a bad name and a name that exists.
 - `test_car_wrapper.py`: `make car` on a small fake BobSim git repo. The
   target sees our vehicle. `bobsim/` is restored after a pass, a failed
   target, failed records and an interrupt. A target that leaves `bobsim/`
   changed fails. An executable older than the records fails. No `.tir`
-  file reaches the outputs. It runs no Modelica.
+  file reaches the outputs. A candidate `VEHICLE` runs to its own folder.
+  A candidate that fails the check stops before the target. It runs no
+  Modelica.
 - `test_four_post_acceptance.py`: the FourPost acceptance on small
   synthetic metrics files and run manifests. The metrics files use the
   `fe03bab` format, and a format with a `status` column.

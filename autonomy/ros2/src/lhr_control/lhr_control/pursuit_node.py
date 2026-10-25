@@ -37,6 +37,11 @@ class PurePursuit(Node):
         self.declare_parameter('control_hz', 20.0)
         self.declare_parameter('closed_path', True)
         self.declare_parameter('path_timeout_sec', 1.0)
+        # Launches that start a mission manager set this, so the car never
+        # moves before that manager says DRIVING. Without it, no status at
+        # all means "no manager, run freely", which at startup let a path
+        # that arrived before the first OFF drive the car.
+        self.declare_parameter('wait_for_mission', False)
 
         # --- Speed planning params ---
         self.declare_parameter('a_lat_max', 6.0)
@@ -80,6 +85,7 @@ class PurePursuit(Node):
 
         self._closed_path = bool(self.get_parameter('closed_path').value)
         self._path_timeout = float(self.get_parameter('path_timeout_sec').value)
+        self._wait_for_mission = bool(self.get_parameter('wait_for_mission').value)
         self._path_received_at = None
         self._dt = 1.0 / control_hz
 
@@ -148,7 +154,8 @@ class PurePursuit(Node):
     # ------------------------------------------------------------------
     def _control_loop(self):
         # Gate on mission status — only drive when DRIVING (or no manager).
-        if self._mission_status and self._mission_status != 'DRIVING':
+        gated = self._mission_status or self._wait_for_mission
+        if gated and self._mission_status != 'DRIVING':
             self._stop()
             return
         # Past the finish the mission stays DRIVING until the car stops, so

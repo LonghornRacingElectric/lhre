@@ -55,9 +55,10 @@ CASES="ekf_kill steer_freeze" SPEEDS=5 REPEATS=1 CLEAN_SEEDS= \
     ../testing/tools/fault_injection/run_faults.sh
 ```
 
-On a CPU-rendered machine (the Mac container) Gazebo drops LiDAR frames, so
+On a CPU-rendered machine (the Mac container) Gazebo still drops LiDAR
+frames, with gaps up to about 0.7 s even with the cameras off (#160), so
 add `EXTRA="safety_lidar_timeout_s:=1.5"` or every run trips `LIDAR_STALE`
-first ([#123](https://github.com/LonghornRacingElectric/lhre/issues/123)).
+first.
 
 Output goes to `~/lhr-test-data/<date>-fault-injection/`: `bags/` (one bag
 plus launch and recorder logs per run), `worlds/` (generated seeds),

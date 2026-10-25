@@ -58,11 +58,12 @@ collision forces. Planner and detector defaults are retained. The local
 rollback passes focused seed-2 and seed-3 driving checks with the diagnostic
 timeout; see the [rollback results and retained failures](../../../testing/2026-10-24-pr133-integration/README.md#local-gpu-rollback-checks-2026-10-25).
 
-The unchanged 0.3 s LiDAR timeout still trips `LIDAR_STALE` on the local
-rollback tree, before driving, with a 0.4 s acquisition gap. GPU runs using
+Before integrating main `0ab0357`, the unchanged 0.3 s LiDAR timeout tripped
+`LIDAR_STALE` on the rollback tree before driving, with a 0.4 s acquisition
+gap. GPU runs using
 `safety_lidar_timeout_s:=1.5` are diagnostics and do not pass the default-timeout
-gate. Newer main's camera-rendering and startup-readiness changes are not
-integrated into this tree; these are not results for newest main. See
+gate. The integrated tree retains main's camera-free default model and
+startup-readiness gating; the earlier failures do not characterize it. See
 [#123](https://github.com/LonghornRacingElectric/lhre/issues/123) and the
 [validation record](../../../testing/2026-10-24-pr133-integration/README.md).
 
@@ -108,7 +109,8 @@ not a measured completion probability or validation of the real sensor.
 
 Edit the template or vehicle YAML, then run
 `python3 src/lhr_gazebo/scripts/generate_vehicle_model.py` from the ROS workspace.
-Commit the regenerated model alongside the source. The model consistency tests
+Commit both regenerated models (`model.sdf` and `model_stereo.sdf`) alongside
+the source. The model consistency tests
 run with `colcon test --packages-select lhr_gazebo` and need no GUI.
 
 ## Competition cone assets
@@ -129,8 +131,6 @@ optional gate layout is not added to existing generated Gazebo worlds.
 The seed-1 autocross and oval fixtures use the corrected closed-boundary
 spacing from [trackgen](../lhr_trackgen/README.md). Regenerate worlds after
 changing track generation so the Gazebo scene matches MVS track truth.
-
-## State estimation and optional side inference
 
 ## Run
 
@@ -265,7 +265,8 @@ any other world would disagree with the cones `publish_cones` generates
 for that seed. Generate it from `autonomy/ros2`, then rebuild:
 
 ```bash
-python3 src/lhr_gazebo/scripts/generate_world.py --style autocross --seed 6 \n    --output src/lhr_gazebo/worlds/autocross_seed6.sdf
+python3 src/lhr_gazebo/scripts/generate_world.py --style autocross --seed 6 \
+    --output src/lhr_gazebo/worlds/autocross_seed6.sdf
 ```
 
 `./scripts/run_gazebo_demo.sh` passes its arguments straight to the launch,
@@ -276,9 +277,11 @@ mission and pairing width.
 the cones trackgen publishes for its style and seed, so regenerate after
 changing a generator. The acceleration course is a fixed rules layout with
 4.9 m clear between cone bases, staged with the nose 0.30 m behind the
-start line. `track_style:=acceleration` runs the acceleration mission and
-pairs cones at the course's 5.13 m center spacing; the mission brakes the
-car in the exit lane once the nose crosses the finish:
+start line. `track_style:=acceleration` always runs the acceleration
+mission, whatever `mission:=` says, and `mission:=acceleration` on another
+track fails the launch: the course only completes under its own mission.
+It pairs cones at the course's 5.13 m center spacing, and the mission
+brakes the car in the exit lane once the nose crosses the finish:
 
 ```bash
 ./scripts/run_gazebo_demo.sh track_style:=acceleration perception:=lidar estimator:=ekf
@@ -326,6 +329,11 @@ or steering that does not track. It is off by default while the thresholds
 are tuned; each one is a `safety_*` launch argument. See
 [lhr_safety](../lhr_safety/README.md).
 
+With safety on, the mission manager also waits for the safety heartbeat to
+be steady for `safety_settle_s` (2.0) before READY, so safety only arms
+once every stream it watches is flowing. That follows `safety:=` rather
+than being its own argument: without `safety_node` there is no heartbeat.
+
 ## Visual check
 
 In RViz, inferred left cones are blue, inferred right cones are yellow, and
@@ -361,11 +369,23 @@ so a startup error does not cascade into later cases.
 
 ## Stereo model
 
-The generated vehicle carries one ZED 2i rig with the 2.1 mm lens: two ideal
+The default generated `models/fsae_vehicle/model.sdf` has no cameras, so
+LiDAR-only runs pay no camera initialization or rendering cost.
+`model_stereo.sdf` adds one ZED 2i rig with the 2.1 mm lens: two ideal
 RGB pinhole sensors, parallel axes, and a 0.12 m local-y separation. Both
 sensors share `zed2i_link`, so rotating the mount preserves Gazebo's stereo
 baseline calculation. Geometry and optics come from `lhr_vehicle`'s YAML;
-regenerate the model after changing them.
+regenerate both models after changing them:
+
+```bash
+cd autonomy/ros2
+python3 src/lhr_gazebo/scripts/generate_vehicle_model.py
+python3 src/lhr_gazebo/scripts/generate_vehicle_model.py --check
+./scripts/build.sh
+```
+
+Commit both generated SDFs. The generator and freshness tests check both
+variants against `vehicle.yaml` and the templates.
 
 The camera-only link has no collision and uses 0.001 kg mass / 0.000001 kg m2
 diagonal inertia for simulation bookkeeping. The initial mount and optics
@@ -380,10 +400,15 @@ Enable the camera independently of perception and state estimation:
   estimator:=truth enable_stereo_camera:=true
 ```
 
-`enable_stereo_camera` defaults to `false`. Enabling it starts a separate
-lazy image/calibration bridge, publishes the rig's static optical transforms,
-and selects an RViz configuration with left/right Image panels. The option
+`enable_stereo_camera` defaults to `false`. Enabling it selects the stereo
+model, starts a separate lazy image/calibration bridge, publishes the rig's
+static optical transforms, and selects an RViz configuration with left/right
+Image panels. The option
 works with both `perception:=sim` / `lidar` and `estimator:=truth` / `ekf`.
+The launch prepends a temporary model resource directory that maps the existing
+`model://fsae_vehicle` URI to `model_stereo.sdf` and the shared meshes. It removes
+that directory on shutdown. Worlds, including custom `world:=...` files, keep
+their existing vehicle URI; the installed default model is never modified.
 Camera geometry and optics are model configuration, not ROS node parameters:
 edit `lhr_vehicle/config/vehicle.yaml`, regenerate, rebuild, and relaunch.
 
@@ -402,8 +427,9 @@ optical frames` (optical x right, y down, z forward). The mount transform
 continues to attach to the estimator-owned `base_link` in EKF mode.
 
 The 30 Hz configured rate is in simulation time. Software rendering can
-reduce wall-clock throughput; no subscribers means the lazy bridges do not
-request images. Camera resources may still initialize at simulator startup.
+reduce wall-clock throughput. The lazy bridges stop requesting images without
+subscribers, but enabled cameras still render in Gazebo. Disable stereo to
+remove that load entirely.
 Camera color segmentation can now consume the left stream; LiDAR fusion
 remains later work.
 
@@ -438,6 +464,31 @@ match the bridge. Harmonic's default is `/model/fsae_vehicle/pose`; leaving
 that implicit prevents `map -> base_link` from reaching ROS in truth mode.
 
 ## Stereo validation
+
+### Disabled-camera rendering regression
+
+Checked on 2026-10-20 for [#123](https://github.com/LonghornRacingElectric/lhre/issues/123)
+in the Apple Silicon Docker/Colima environment (6 CPUs, 8 GiB, software OpenGL).
+Both runs used `track_style:=oval perception:=lidar estimator:=ekf`,
+`gui:=false rviz:=false enable_metrics:=false enable_stereo_camera:=false`.
+After 10 simulation seconds of warmup, `/lhr/lidar/points` header timestamps
+were measured for about 90 simulation seconds:
+
+| Model | LiDAR rate | Longest gap | Gazebo camera topics |
+| --- | --- | --- | --- |
+| Previous committed model, cameras always present | 6.26 Hz | 1.30 s | 4 |
+| Camera-free default model | 7.97 Hz | 0.70 s | 0 |
+
+The fixed run had no ROS camera messages either. These are same-session
+measurements; absolute rates depend on host load and software rendering.
+An enabled-stereo run delivered both 1280x720 RGB streams and both calibration
+streams. Intrinsics, the right projection's baseline, and both optical
+transforms from `base_link` and `map` passed runtime checks.
+The full workspace build and 248 tests passed, including enabled/disabled
+launch selection in both perception and estimator modes, shutdown cleanup,
+and rejection of either stale generated SDF. Both models passed `gz sdf -k`.
+
+### Original stereo interface check
 
 Checked on 2026-10-11 in the repository's Ubuntu 24.04 / ROS 2 Jazzy /
 Gazebo Harmonic Docker image on Apple Silicon with software OpenGL:

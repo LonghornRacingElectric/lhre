@@ -39,9 +39,13 @@ scan-time map registration → bounded cloud history → XY connected-component
 clustering → cone-size checks → persistent map.
 
 `/lhr/sensor/cones_detected` is a reliable, transient-local `MarkerArray`.
-Markers use frame `map`, namespace `cones`, and IDs assigned by the detector.
-They have no colour or left/right classification. Use the track builder's
-`boundary` strategy, which constructs a centerline from geometric cone pairs.
+Markers use frame `map` and IDs assigned by the detector. LiDAR measures no
+colour, so with `classify_sides:=false` every cone stays in namespace
+`cones`. The node default, `true`, moves cones with side evidence into
+`left_cones` or `right_cones` (see [side inference](#optional-side-inference)).
+Both demo launches pass `false` by default. `mvs_demo` then pairs with the
+track builder's `boundary_graph` strategy and Gazebo with `boundary`; both
+switch to `classified` when sides are on.
 `/lhr/perception/debug` shows the accumulated detections.
 
 ## Parameters
@@ -91,7 +95,8 @@ cannot satisfy the point threshold. Empty scans expire old evidence. A
 backward scan timestamp clears history and the persistent map for replay
 restarts. Stacking compensates motion between scans, but does not deskew
 individual points within a scan. Accuracy depends on odometry and TF;
-current kinematic odometry is ground truth, not a noisy state estimator.
+the default `estimator:=truth` supplies ground truth, and `estimator:=ekf`
+registers scans with the EKF estimate instead.
 
 ## Recording evaluation
 

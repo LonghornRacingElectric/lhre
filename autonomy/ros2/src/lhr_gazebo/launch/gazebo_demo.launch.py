@@ -22,8 +22,10 @@ from launch.actions import (
     DeclareLaunchArgument,
     ExecuteProcess,
     OpaqueFunction,
+    RegisterEventHandler,
     SetEnvironmentVariable,
 )
+from launch.event_handlers import OnShutdown
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
@@ -205,8 +207,18 @@ def _launch_setup(context: LaunchContext):
         # Ogre's GLX windows need XWayland even when Qt prefers Wayland.
         qt_env['QT_QPA_PLATFORM'] = 'xcb'
 
+    resource_path = models_dir
+    resource_cleanup = []
+    if enable_stereo:
+        from lhr_gazebo.stereo_camera import stereo_model_resources
+        # Keep world URIs and mesh paths identical in both modes. The overlay
+        # lives for this launch only; concurrent runs never edit shared models.
+        resources = stereo_model_resources(models_dir)
+        resource_path = os.pathsep.join((resources.name, models_dir))
+        resource_cleanup.append(RegisterEventHandler(OnShutdown(
+            on_shutdown=lambda event, context: resources.cleanup())))
     _gz_env = {
-        'GZ_SIM_RESOURCE_PATH': models_dir,
+        'GZ_SIM_RESOURCE_PATH': resource_path,
         'FONTCONFIG_FILE': os.environ.get('FONTCONFIG_FILE') or os.path.join(
             config_dir, 'gazebo-fontconfig.conf'),
         **qt_env,
@@ -457,6 +469,9 @@ def _launch_setup(context: LaunchContext):
             'closed_path': False,
             'path_timeout_sec': ParameterValue(
                 LaunchConfiguration('path_timeout_sec'), value_type=float),
+            # Not an argument: this launch always starts the mission manager,
+            # so the car must never move before it says DRIVING.
+            'wait_for_mission': True,
         }],
         remappings=fault_remaps.get('pure_pursuit', []),
         output='screen',
@@ -526,6 +541,7 @@ def _launch_setup(context: LaunchContext):
         ))
 
     # ----- Mission manager -----
+    safety_on = context.launch_configurations.get('safety', 'false').lower() == 'true'
     mission_mgr = Node(
         package='lhr_mission_manager',
         executable='mission_manager',
@@ -535,6 +551,10 @@ def _launch_setup(context: LaunchContext):
             'auto_go': ParameterValue(
                 LaunchConfiguration('auto_go'), value_type=bool),
             'ready_hold_sec': _float('ready_hold_sec'),
+            # Follows safety:= rather than being an argument: without
+            # safety_node there is no heartbeat to wait for.
+            'require_safety_heartbeat': safety_on,
+            'safety_settle_s': _float('safety_settle_s'),
             'use_sim_time': True,
         }],
         output='screen',
@@ -542,7 +562,7 @@ def _launch_setup(context: LaunchContext):
 
     # ----- Safety monitor -----
     safety_nodes = []
-    if context.launch_configurations.get('safety', 'false').lower() == 'true':
+    if safety_on:
         safety_nodes.append(Node(
             package='lhr_safety',
             executable='safety_node',
@@ -608,7 +628,8 @@ def _launch_setup(context: LaunchContext):
         ))
 
     return [
-        SetEnvironmentVariable('GZ_SIM_RESOURCE_PATH', models_dir),
+        SetEnvironmentVariable('GZ_SIM_RESOURCE_PATH', resource_path),
+        *resource_cleanup,
         gz_sim,
         bridge,
         cmd_adapter,
@@ -664,7 +685,7 @@ def generate_launch_description():
             description='Odometry source: "truth" (Gazebo) or "ekf"'),
         DeclareLaunchArgument(
             'gyro_bias', default_value='0.0',
-            description='Simulated gyro bias (rad/s); drives heading drift'),
+            description='Gyro bias (rad/s); recorded only, Gazebo bridges its own IMU'),
         DeclareLaunchArgument(
             'wheel_scale_error', default_value='1.0',
             description='Simulated rolling-radius error (1.0 = exact)'),
@@ -673,7 +694,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'enable_stereo_camera', default_value='false',
             choices=['true', 'false'],
-            description='Bridge ZED 2i stereo images/calibration and camera TF'),
+            description='Spawn ZED 2i sensors and bridge stereo images/calibration and TF'),
         DeclareLaunchArgument(
             'enable_camera_color_classifier', default_value='false',
             choices=['true', 'false'],
@@ -758,6 +779,8 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'safety', default_value='false',
             description='Run safety_node: trips the mission on stack faults'),
+        # READY waits until safety's heartbeat has been steady this long
+        DeclareLaunchArgument('safety_settle_s', default_value='2.0'),
         DeclareLaunchArgument('safety_lidar_timeout_s', default_value='0.3'),
         DeclareLaunchArgument('safety_odom_timeout_s', default_value='0.25'),
         DeclareLaunchArgument('safety_cmd_timeout_s', default_value='0.25'),

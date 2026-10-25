@@ -74,3 +74,30 @@ def test_braking_without_a_path_still_commands_a_stop(pp):
 def test_stopped_outside_driving(pp):
     pp._status_cb(String(data='READY'))
     assert _speed(pp) == 0.0
+
+
+@pytest.fixture
+def waiting():
+    rclpy.init(args=['--ros-args', '-p', 'wait_for_mission:=true'])
+    try:
+        node = PurePursuit()
+        node._path = [(float(x), 0.0) for x in range(40)]
+        node._have_odom = True
+        node._cmd_pub = _Capture()
+        yield node
+        node.destroy_node()
+    finally:
+        rclpy.shutdown()
+
+
+def test_waits_for_the_mission_manager_before_moving(waiting):
+    # A path and odometry before the manager's first status must not move
+    # the car when a launch says a manager is coming.
+    assert _speed(waiting) == 0.0
+    waiting._status_cb(String(data='DRIVING'))
+    assert _speed(waiting) > 0.0
+
+
+def test_without_a_manager_it_still_runs_freely(pp):
+    pp._v_prev = 0.0
+    assert _speed(pp) > 0.0

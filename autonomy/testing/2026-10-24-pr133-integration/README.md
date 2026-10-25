@@ -19,8 +19,8 @@ source selection, caster fixes, detector/controller settings and vehicle-YAML
 noise are retained. The installed model matches the source, and its GPU sensor
 XML matches fetched main `0ab0357`. The model SHA-256 is
 `dae1e6941a650b87e325a9719a737ce3a401ef54343cc85ea63a16cf9dd8b684`.
-Newer main's camera-free model split and readiness changes are not integrated;
-these are not performance results for newest main.
+That pre-integration tree did not include main's camera-free model split or
+readiness changes; these are not performance results for the later integration.
 
 All 15 ROS packages build. The 210 `lhr_gazebo` checks pass, including model
 freshness, launch/source/fault wiring, caster integration and lint. The broader
