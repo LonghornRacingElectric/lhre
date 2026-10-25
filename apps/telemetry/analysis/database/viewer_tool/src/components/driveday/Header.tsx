@@ -1,6 +1,6 @@
 "use client";
 
-import { useContext, useMemo, useRef } from "react";
+import { useContext, useMemo, useRef, useState } from "react";
 import { sampleQuality } from "@/lib/driveday/review";
 import { fmt } from "@/lib/driveday/format";
 import type { Player } from "@/lib/driveday/player";
@@ -19,6 +19,7 @@ interface Props {
   onSelect: (id: string) => void;
   onImport: (files: FileList) => void;
   onCache: () => void;
+  onDb: (day: number) => void;
   onRemove: (id: string) => void;
 }
 
@@ -136,7 +137,35 @@ function RunSettings({ p, theme, onTheme }: Pick<Props, "theme" | "onTheme"> & {
   );
 }
 
-export function Header({ runs, current, theme, onTheme, onSelect, onImport, onRemove, onCache }: Props) {
+interface DbDayEntry { day_id: number; date: string; track_name: string | null; event_type: string | null; driver_name: string | null; laps: number; flags: number }
+
+/** Drive days in the orion database that have laps; picking one loads it like an imported file. */
+export function DbMenu({ onDb }: { onDb: (day: number) => void }) {
+  const [days, setDays] = useState<DbDayEntry[] | string | null>(null);
+  const load = () => {
+    setDays(null);
+    fetch("/api/driveday/db")
+      .then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error || r.statusText); setDays(j.days); })
+      .catch((e: Error) => setDays(e.message));
+  };
+  return (
+    <div className="run-selector"><Menu wide ariaLabel="Load a drive day from the database" label="From database" onToggle={(open) => { if (open) load(); }}>
+      {days === null ? <p className="run-selector-note">Loading drive days…</p>
+        : typeof days === "string" ? <p className="run-selector-note">Database unavailable: {days}</p>
+        : !days.length ? <p className="run-selector-note">No drive days with laps yet.</p>
+        : <div className="run-selector-list" aria-label="Drive days">
+          {days.map((d) => <div className="run-selector-row" key={d.day_id}>
+            <button className="run-choice" type="button" onClick={() => onDb(d.day_id)}>
+              <strong>{d.date}{d.track_name ? " · " + d.track_name : ""}</strong>
+              <small>Day {d.day_id} · {d.laps} laps{d.flags ? " · " + d.flags + " flags" : ""}{d.event_type ? " · " + d.event_type : ""}{d.driver_name ? " · " + d.driver_name : ""}</small>
+            </button>
+          </div>)}
+        </div>}
+    </Menu></div>
+  );
+}
+
+export function Header({ runs, current, theme, onTheme, onSelect, onImport, onRemove, onCache, onDb }: Props) {
   const file = useRef<HTMLInputElement>(null);
   const p = useContext(PlayerCtx);
   return (
@@ -154,6 +183,7 @@ export function Header({ runs, current, theme, onTheme, onSelect, onImport, onRe
               </div>
             </Menu></div>
           )}
+          <DbMenu onDb={onDb} />
           <button className="btn primary" type="button" title="Import one or more session JSON files" onClick={() => file.current?.click()}>Import</button>
           <input
             ref={file}

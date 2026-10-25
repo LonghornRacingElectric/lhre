@@ -8,6 +8,7 @@
   <license>MIT</license>
 
   <exec_depend>rclpy</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
   <exec_depend>lhr_vehicle</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>visualization_msgs</exec_depend>
@@ -17,6 +18,7 @@
   <exec_depend>sensor_msgs_py</exec_depend>
   <exec_depend>python3-numpy</exec_depend>
   <exec_depend>python3-scipy</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
 
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>

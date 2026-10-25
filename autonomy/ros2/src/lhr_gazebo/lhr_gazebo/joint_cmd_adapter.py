@@ -5,6 +5,12 @@ Adapter: AckermannDriveStamped -> individual joint commands for Gazebo.
 Publishes:
   - 2x Float64 for steering joint positions (Ackermann-corrected angles)
   - 4x Float64 for wheel joint velocities (differential-corrected speeds)
+
+Gazebo's joint controllers hold their last target, so without a timeout a
+dead controller would leave the car driving on its last command. The real
+car's actuators stop when commands stop (the VCU watchdog and the hardware
+safety loop), so the adapter does the same: no command for cmd_timeout_s
+zeroes the wheel speeds. Steering holds where it was.
 """
 
 import math
@@ -26,6 +32,12 @@ class JointCmdAdapter(Node):
         self._track = veh.track_m
         self._wheel_radius = veh.wheel_radius_m
         self._max_steer = veh.max_steer_rad
+
+        # 0 disables the timeout.
+        self.declare_parameter('cmd_timeout_s', 0.3)
+        self._cmd_timeout = float(self.get_parameter('cmd_timeout_s').value)
+        self._last_cmd = None
+        self._timed_out = False
 
         self._sub = self.create_subscription(
             AckermannDriveStamped, '/lhr/vehicle/cmd', self._cmd_cb, 10)
@@ -52,15 +64,42 @@ class JointCmdAdapter(Node):
             Float64,
             '/model/fsae_vehicle/joint/rear_right_wheel_joint/cmd_vel', 10)
 
+        if self._cmd_timeout > 0.0:
+            self.create_timer(0.05, lambda: self._watchdog(self._now()))
+
         self.get_logger().info(
             f'JointCmdAdapter ready  (L={self._wheelbase}, '
-            f'track={self._track}, max_steer={self._max_steer})')
+            f'track={self._track}, max_steer={self._max_steer}, '
+            f'cmd_timeout={self._cmd_timeout}s)')
+
+    def _now(self) -> float:
+        return self.get_clock().now().nanoseconds * 1e-9
 
     # ------------------------------------------------------------------
+    def _watchdog(self, now: float):
+        """Zero the wheel speeds once commands have stopped arriving."""
+        if self._last_cmd is None or self._timed_out:
+            return
+        age = now - self._last_cmd
+        # A clock that jumped backwards (a sim reset) is treated as a
+        # timeout too, rather than as a command from the future.
+        if age > self._cmd_timeout or age < 0.0:
+            self._timed_out = True
+            self.get_logger().warning(
+                f'No command for {self._cmd_timeout:.2f} s, stopping wheels')
+            for pub in (self._pub_vel_fl, self._pub_vel_fr,
+                        self._pub_vel_rl, self._pub_vel_rr):
+                pub.publish(Float64(data=0.0))
+
     def _cmd_cb(self, msg: AckermannDriveStamped):
-        speed = msg.drive.speed
-        steer = max(-self._max_steer, min(self._max_steer,
-                                          msg.drive.steering_angle))
+        self._apply(msg.drive.speed, msg.drive.steering_angle, self._now())
+
+    def _apply(self, speed: float, steering_angle: float, now: float):
+        if self._timed_out:
+            self.get_logger().info('Commands resumed')
+        self._last_cmd = now
+        self._timed_out = False
+        steer = max(-self._max_steer, min(self._max_steer, steering_angle))
 
         left_angle, right_angle = self._ackermann_angles(steer)
         fl_vel, fr_vel, rl_vel, rr_vel = self._wheel_velocities(speed, steer)
@@ -134,7 +173,7 @@ def main(args=None):
     node = JointCmdAdapter()
     rclpy.spin(node)
     node.destroy_node()
-    rclpy.shutdown()
+    rclpy.try_shutdown()
 
 
 if __name__ == '__main__':

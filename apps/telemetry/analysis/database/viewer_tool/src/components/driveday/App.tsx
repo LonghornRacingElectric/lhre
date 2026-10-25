@@ -7,9 +7,9 @@ import { Player, type Prefs } from "@/lib/driveday/player";
 import { rebuildRun } from "@/lib/driveday/rebuild";
 import { Session } from "@/lib/driveday/session";
 import { loadUserState, lsGet, lsSet, metaOf, runStore, saveUserState, storageProblem } from "@/lib/driveday/storage";
-import { seedFlags, type RunListEntry, type SessionExport } from "@/lib/driveday/types";
+import { isConeLabel, seedFlags, type RunListEntry, type SessionExport } from "@/lib/driveday/types";
 import { defaultUnits } from "@/lib/driveday/units";
-import { Header, type Theme } from "./Header";
+import { DbMenu, Header, type Theme } from "./Header";
 import { Workspace } from "./Workspace";
 import { PlayerCtx, ToastProvider, useToast } from "./context";
 
@@ -69,12 +69,16 @@ function Shell() {
     setTheme(t);
     applyTheme(t);
     void (async () => {
-      const list = (await runStore.list()).sort((a, b) => b.added - a.added);
-      setRuns(list);
-      if (storageProblem) toast(storageProblem, "err");
-      const last = lsGet<string | null>("run", null);
-      const pick = list.find((r) => r.id === last)?.id ?? list[0]?.id ?? null;
-      await open(pick);
+      try {
+        const list = (await runStore.list()).sort((a, b) => b.added - a.added);
+        setRuns(list);
+        if (storageProblem) toast(storageProblem, "err");
+        const last = lsGet<string | null>("run", null);
+        const pick = list.find((r) => r.id === last)?.id ?? list[0]?.id ?? null;
+        await open(pick);
+      } catch (error) {
+        toast("Could not read saved runs: " + (error as Error).message, "err");
+      }
       setReady(true);
     })();
     return () => {
@@ -99,7 +103,7 @@ function Shell() {
             if (J.flags?.length) {
               const S = new Session(rebuildRun(D));
               const flags = J.flags.filter(f => f.t >= S.T0 && f.t <= S.T0 + S.TD &&
-                !/^(?:hit[\s_-]*)?cones?(?:[\s_-]*hit)?$/i.test(f.label.trim()));
+                !isConeLabel(f.label));
               saveUserState(D.meta.sessId, seedFlags(loadUserState(D.meta.sessId, D), flags, S.T0));
             }
             last ??= D.meta.sessId;
@@ -123,6 +127,14 @@ function Shell() {
       if (!response.ok) throw new Error("No saved Trackside session on the server.");
       await importFiles([new File([await response.blob()], "trackside-saved_session.json")]);
     } catch (error) { toast((error as Error).message, "err"); }
+  }, [importFiles, toast]);
+
+  /* a drive day straight from the database, built server-side in the same export format */
+  const importDb = useCallback(async (day: number) => {
+    toast("Loading day " + day + " from the database…", "busy");
+    const r = await fetch("/api/driveday/db?day=" + day).catch(() => null);
+    if (!r?.ok) return toast(((await r?.json().catch(() => null))?.error as string) || "Could not reach the database.", "err");
+    await importFiles([new File([await r.blob()], "orion-day-" + day + ".json")]);
   }, [importFiles, toast]);
 
   const remove = useCallback(async (id: string) => {
@@ -198,6 +210,7 @@ function Shell() {
             onSelect={(id) => void open(id)}
             onImport={(f) => void importFiles(f)}
             onCache={() => void importCache()}
+            onDb={(day) => void importDb(day)}
             onRemove={(id) => void remove(id)}
           />
           {player && <Workspace key={player.session.D.meta.sessId} />}
@@ -206,8 +219,9 @@ function Shell() {
           <div className="welcome">
             <div>
               <h2>Give LAPDOG a lap to follow.</h2>
-              <p>Drop a Trackside Live session export here, or choose a file below. LAPDOG keeps your runs in this browser, ready for the next debrief.</p>
-              <button className="btn primary" type="button" onClick={() => file.current?.click()}>Open a session</button>{" "}
+              <p>Choose a drive day from the database, or import a Trackside Live session export. LAPDOG keeps your runs in this browser, ready for the next debrief.</p>
+              <DbMenu onDb={(day) => void importDb(day)} />
+              <button className="btn" type="button" onClick={() => file.current?.click()}>Import JSON</button>{" "}
               <button className="btn" type="button" onClick={() => void importCache()}>Last Trackside session</button>
               <input ref={file} type="file" accept=".json,application/json" multiple hidden onChange={(e) => { if (e.target.files?.length) void importFiles(e.target.files); e.target.value = ""; }} />
             </div>

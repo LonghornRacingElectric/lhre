@@ -8,7 +8,8 @@ lateral g estimates, data-quality checks and portable HTML debriefs.
 
 ## Open a session
 
-Use **Import**, drop session JSON, or choose **Last Trackside session** to
+Use **From database** to load an Orion drive day directly, **Import** or drop
+session JSON, or choose **Last Trackside session** to
 load `/api/motec/live/session-cache`. Imports merge completed-lap samples,
 current-lap samples and the recent tail by timestamp. Every stored timestamp
 is retained, including 50 Hz recordings; the displayed sample and GPS rates
@@ -71,3 +72,34 @@ Imports are namespaced under `driveday`; viewer_tool-specific adapters retain
 server-cache loading, event notes and the host's authentication. Styles and
 canvas theme tokens are scoped to the retro wrapper so other pages keep
 their own palette.
+
+## Loading from the database
+
+`GET /api/driveday/db` lists the drive days that have laps. `GET
+/api/driveday/db?day=<day_id>` builds that day in the same shape as a
+trackside-live export (`src/lib/driveday/db.ts`), and the page imports it
+exactly like a file, using the same review workflow above.
+
+- **Laps** are the day's `classifier` rows of type `lap`, the same lap
+  presses trackside-live syncs. Rows over 15 minutes are the gaps between
+  runs or a lap left open; they are not fetched. The importer then sorts the
+  rest into timed runs and drives back as usual.
+- **Cones and flags** are the `event_flag` rows. `Hit Cone` becomes a cone
+  on its lap; other notes become timeline marks.
+- **Samples** are one packet per 100 ms (10 Hz) inside the lap windows, from
+  `dynamics`, `controls`, `pack` and `thermal`. GPS prefers
+  `dynamics.gps_precise` and falls back to `dynamics.gps`. The hottest cell
+  comes from `pack.cells_temps`. `avg_cell_v_stat` is not in the database,
+  so that trace is empty.
+- **Lap energy** is counted from the VCU's `net_energy` and `regen_energy`
+  counters, the way trackside-live counts it. A step faster than 200 kW is a
+  counter glitch (a frame read as 0), not driving, and is skipped.
+- **Frozen GPS.** When the car's GPS stops updating, the database repeats
+  one position. A lap whose positions span fewer than three distinct fixes
+  is loaded without GPS, so a day with no working GPS says so instead of
+  drawing a track of zero length. On 2026-10-17 and 10-18 (days 76, 81 and
+  most of 80) this is the case.
+- A day is tens of MB of JSON; the route gzips it (about 0.3–0.6 MB) and
+  takes 1–6 s.
+- Like every `/api` route in `viewer_tool`, it is outside the login
+  middleware. It only reads.

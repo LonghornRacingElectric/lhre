@@ -18,7 +18,7 @@ Dashboards in `analysis/database/dashboards/<car>/<mode>/*.json` are auto-provis
 `orion/real-time/orion_live_gps.json` (Live GPS) samples the stream at
 `sampleIntervalMs: 20` for the 50 Hz GPS experiment (the receiver does 10/50/100
 Hz). The kafka datasource does not take a template variable there, so the
-value is literal in each of the five panels; to go back to 20 Hz, replace
+value is literal in each of the five panels; to go back to 5 Hz, replace
 `"sampleIntervalMs": 20,` with `200,` across the file.
 
 ## Retrospective Dashboards

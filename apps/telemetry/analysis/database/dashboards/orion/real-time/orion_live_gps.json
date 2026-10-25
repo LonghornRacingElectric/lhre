@@ -33,7 +33,7 @@
     {
       "type": "geomap",
       "title": "Track, last 5 min",
-      "description": "Route from latitude/longitude on grafana_data_orion_derived, 5 Hz, coloured by GPS speed (mph). Messages with no fix or a (0,0) fix are dropped. cand keeps the last fix through a GPS dropout, so a stall in the track can mean lost fix, not a stopped car. The view is fixed on the 30.39, -97.73 lot so a zoom or pan holds while data streams; at another site, pan there.",
+      "description": "Route from latitude/longitude on grafana_data_orion_derived, 50 Hz (sampleIntervalMs 20), coloured by GPS speed (mph). Messages with no fix or a (0,0) fix are dropped. cand keeps the last fix through a GPS dropout, so a stall in the track can mean lost fix, not a stopped car. The view is fixed on the 30.39, -97.73 lot so a zoom or pan holds while data streams; at another site, pan there.",
       "datasource": {
         "type": "lhre-kafka-datasource",
         "uid": "real-time-data"
@@ -764,24 +764,6 @@
       ],
       "transformations": [
         {
-          "id": "filterFieldsByName",
-          "options": {
-            "include": {
-              "names": [
-                "gps_speed_kn"
-              ]
-            }
-          }
-        },
-        {
-          "id": "organize",
-          "options": {
-            "indexByName": {
-              "gps_speed_kn": 0
-            }
-          }
-        },
-        {
           "id": "filterByValue",
           "options": {
             "type": "exclude",
@@ -806,6 +788,24 @@
                 }
               }
             ]
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "gps_speed_kn"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "gps_speed_kn": 0
+            }
           }
         }
       ],

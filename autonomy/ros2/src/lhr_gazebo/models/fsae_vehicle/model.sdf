@@ -2,7 +2,7 @@
 <sdf version="1.9">
   <model name="fsae_vehicle">
     <!--
-      GENERATED FILE — do not edit model.sdf by hand.
+      GENERATED FILE — do not edit by hand.
       Source: lhr_vehicle/config/vehicle.yaml rendered through
       lhr_gazebo/templates/model.sdf.in by lhr_gazebo/scripts/generate_vehicle_model.py.
 
@@ -87,9 +87,16 @@
             <max>100.0</max>
             <resolution>0.003</resolution>
           </range>
+          <noise>
+            <type>gaussian</type>
+            <mean>0</mean>
+            <stddev>0.02</stddev>
+          </noise>
         </lidar>
       </sensor>
     </link>
+
+
 
     <!-- ===== FRONT LEFT STEERING KNUCKLE ===== -->
     <link name="front_left_steering">
@@ -380,6 +387,8 @@
       filename="gz-sim-odometry-publisher-system"
       name="gz::sim::systems::OdometryPublisher">
       <odom_topic>/model/fsae_vehicle/odometry</odom_topic>
+      <!-- Harmonic defaults to /pose; the bridge explicitly consumes /tf. -->
+      <tf_topic>/model/fsae_vehicle/tf</tf_topic>
       <odom_frame>map</odom_frame>
       <robot_base_frame>base_link</robot_base_frame>
       <odom_publish_frequency>50</odom_publish_frequency>

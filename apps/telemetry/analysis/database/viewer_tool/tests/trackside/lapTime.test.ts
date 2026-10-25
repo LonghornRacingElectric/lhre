@@ -13,6 +13,8 @@ describe("parseLapTimeInput", () => {
     expect(parseLapTimeInput("1:75")).toBeNull();
     expect(parseLapTimeInput("-3")).toBeNull();
     expect(parseLapTimeInput("abc")).toBeNull();
+    expect(parseLapTimeInput("1e308")).toBeNull();
+    expect(parseLapTimeInput("99999999999999:00")).toBeNull();
   });
 });
 
