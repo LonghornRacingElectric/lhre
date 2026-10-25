@@ -58,6 +58,25 @@ def test_lidar_sits_on_the_car():
     assert 0.0 < lz < 1.5
 
 
+@pytest.mark.parametrize('stddev', [0.0, 0.0075, 0.02])
+def test_lidar_range_noise_is_loaded_from_yaml(tmp_path, stddev):
+    raw = yaml.safe_load(config_path().read_text())
+    raw['sensors']['lidar']['range_noise_std_m'] = stddev
+    source = tmp_path / 'vehicle.yaml'
+    source.write_text(yaml.safe_dump(raw))
+    assert load_vehicle(source).lidar_range_noise_std_m == stddev
+
+
+@pytest.mark.parametrize('stddev', [-0.01, float('nan'), float('inf'), True, '0.02', None])
+def test_invalid_lidar_range_noise_is_rejected(tmp_path, stddev):
+    raw = yaml.safe_load(config_path().read_text())
+    raw['sensors']['lidar']['range_noise_std_m'] = stddev
+    source = tmp_path / 'vehicle.yaml'
+    source.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ValueError, match='range_noise_std_m'):
+        load_vehicle(source)
+
+
 def test_vehicle_sha256_matches_the_file_on_disk():
     expected = hashlib.sha256(config_path().read_bytes()).hexdigest()
     assert vehicle_sha256() == expected

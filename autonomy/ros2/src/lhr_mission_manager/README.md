@@ -14,6 +14,15 @@ Run it through [the demo launcher](../lhr_demo/README.md), or use
 | `auto_go` | `true` | Start after the READY hold without an explicit go command |
 | `ready_hold_sec` | `5.0` | Time to hold READY |
 | `status_hz` | `10.0` | Status update rate |
+| `require_safety_heartbeat` | `false` | Also wait for `/lhr/safety/heartbeat` before READY |
+| `safety_settle_s` | `2.0` | How long the heartbeat must arrive without a gap |
+
+With `require_safety_heartbeat`, READY waits until `safety_node`'s
+heartbeat has arrived for `safety_settle_s` with no gap over 0.25 s.
+Arming on the first centerline would arm in the busiest moment of startup,
+when a sensor that is merely late reads as stale and safety latches an
+emergency ([#164](https://github.com/LonghornRacingElectric/lhre/issues/164)).
+A check that never passes keeps the car in OFF instead.
 
 The supported mission names are inspection, manual, ebs_test, acceleration,
 skidpad and autocross. The state machine uses the node clock; demo launches

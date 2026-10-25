@@ -103,6 +103,7 @@ def render(veh, *, enable_stereo_camera=False) -> str:
         'max_steer_rate': veh.max_steer_rate_rad_s,
     }
     substitutions = {k: _fmt(v) for k, v in values.items()}
+    substitutions['lidar_range_noise_std_m'] = format(veh.lidar_range_noise_std_m, '.12g')
     camera = veh.stereo_camera
     x, y, z = camera.position_m
     roll, pitch, yaw = camera.rpy_rad

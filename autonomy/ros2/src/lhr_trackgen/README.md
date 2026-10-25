@@ -60,4 +60,13 @@ The legacy `simple` debug layout retains its original behavior.
 `test/test_track_layout.py` checks spacing, width, closure and crossings
 across several seeds for both styles.
 
+`acceleration` is a fixed rules layout instead (DD.4.2, D.9.1): a straight
+along +x, start line at x = 0, 75 m to the finish, then a 75 m exit lane.
+Its 4.9 m is clear width between cone bases, so centers sit half a base
+further out and `pairing_width_m('acceleration')` (5.13 m) is the spacing
+the track builder pairs at. Large orange cones flank both lines and small
+orange marks the exit lane; they stay in the left/right lists, with the
+kind on each marker. Only `cone_spacing_m` applies, not the seed or
+`width_m`. `test/test_acceleration.py` checks the layout.
+
 Node cleanup tolerates an already-stopped ROS context after launch shutdown.

@@ -488,6 +488,9 @@ def generate_launch_description():
             'v_max': _f('v_max'),
             'max_accel': _f('max_accel'),
             'max_decel': _f('max_decel'),
+            # Not an argument: this launch always starts the mission manager,
+            # so the car must never move before it says DRIVING.
+            'wait_for_mission': True,
         }],
         output='screen',
     )

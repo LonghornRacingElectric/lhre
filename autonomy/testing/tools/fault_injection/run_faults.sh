@@ -16,7 +16,8 @@ set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROS2=$(cd "$HERE/../../../ros2" && pwd)
 
-CASES=${CASES:-"ekf_kill controller_kill controller_pause odom_nan odom_spike lidar_drop cmd_nan steer_freeze geofence"}
+# Empty means none, like CLEAN_SEEDS: CASES= runs only the clean laps.
+CASES=${CASES-"ekf_kill controller_kill controller_pause odom_nan odom_spike lidar_drop cmd_nan steer_freeze geofence"}
 SPEEDS=${SPEEDS:-"3 5 8"}
 REPEATS=${REPEATS:-2}
 CLEAN_SEEDS=${CLEAN_SEEDS-"1 2 3 4 5"}   # clean autocross laps: false trips
@@ -41,8 +42,8 @@ cleanup() {
 }
 
 world_for() {  # track seed: prints world:=<sdf>, or nothing if one is committed
-    # Without a committed <track>_seed<N>.sdf the launch quietly falls back
-    # to another world, so generate the one the seed asks for.
+    # Without a committed <track>_seed<N>.sdf the launch refuses to start,
+    # so generate the one the seed asks for.
     local track=$1 seed=$2
     [ -f "$ROS2/src/lhr_gazebo/worlds/${track}_seed${seed}.sdf" ] && return 0
     local sdf="$OUT/worlds/${track}_seed${seed}.sdf"

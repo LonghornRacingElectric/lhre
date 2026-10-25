@@ -64,6 +64,14 @@ veh = load_vehicle()
 veh.wheelbase_m, veh.track_m, veh.max_steer_rad, veh.lidar_position_m
 ```
 
+`sensors.lidar.range_noise_std_m` sets Gazebo's along-beam Gaussian range
+noise standard deviation in metres, exposed as `veh.lidar_range_noise_std_m`.
+The provisional default is 0.02 m, based on the 10/4 Mid-360 acceptance noise
+scale and matching the kinematic Mid-360 simulator. Values must be finite and
+non-negative; zero disables range noise. Regenerate the Gazebo model after
+changing it. See [the noise model](../lhr_gazebo/README.md#range-noise) for
+provenance and limits.
+
 `load_vehicle()` finds the installed copy through the ament index, or the
 source-tree copy when imported straight from the checkout. The model
 generator always passes the source-tree path explicitly so an installed
