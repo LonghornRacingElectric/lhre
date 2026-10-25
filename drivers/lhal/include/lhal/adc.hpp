@@ -22,6 +22,10 @@ class AdcScan {
 
   // Count corresponding to the ADC reference voltage (4095 for 12-bit).
   virtual uint16_t full_scale() const = 0;
+
+  // Scans finished since start, so callers can tell frozen data from a
+  // steady signal. 0 when the backend does not count.
+  virtual uint32_t completed_scans() const { return 0; }
 };
 
 }  // namespace lhal

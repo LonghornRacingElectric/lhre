@@ -4,6 +4,7 @@
 
 #ifdef HAL_ADC_MODULE_ENABLED
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 
@@ -19,13 +20,16 @@ namespace lhal::stm32 {
 class DmaAdc final : public lhal::AdcScan {
  public:
   // `buffer` holds one halfword per scan rank and must outlive the adapter
-  // (it is the DMA target).
+  // (it is the DMA target). `completed_scans`, when set, is a counter the
+  // board's conversion-complete callback increments.
   DmaAdc(ADC_HandleTypeDef* hadc, volatile uint16_t* buffer, size_t channels,
-         uint16_t full_scale = 4095)
+         uint16_t full_scale = 4095,
+         const std::atomic<uint32_t>* completed_scans = nullptr)
       : hadc_(hadc),
         buffer_(buffer),
         channels_(channels),
-        full_scale_(full_scale) {}
+        full_scale_(full_scale),
+        completed_scans_(completed_scans) {}
 
   DmaAdc(const DmaAdc&) = delete;
   DmaAdc& operator=(const DmaAdc&) = delete;
@@ -47,6 +51,9 @@ class DmaAdc final : public lhal::AdcScan {
     return channel < channels_ ? buffer_[channel] : 0;
   }
   uint16_t full_scale() const override { return full_scale_; }
+  uint32_t completed_scans() const override {
+    return completed_scans_ == nullptr ? 0 : completed_scans_->load();
+  }
 
   // Escape hatch for anything LHAL doesn't cover.
   ADC_HandleTypeDef* handle() { return hadc_; }
@@ -56,6 +63,7 @@ class DmaAdc final : public lhal::AdcScan {
   volatile uint16_t* buffer_;
   size_t channels_;
   uint16_t full_scale_;
+  const std::atomic<uint32_t>* completed_scans_;
 };
 
 }  // namespace lhal::stm32

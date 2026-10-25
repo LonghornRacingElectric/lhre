@@ -19,12 +19,10 @@ The DUI is a plain CAN peripheral this year.
 | `:vcu_test`               | Bring-up test image (`vcu::TestApp`, `VCU_TEST_IMAGE`). No vehicle logic, no inverter frames. |
 | `:openocd` / `:openocd_test` | `bazel run`: flash over ST-Link.                      |
 | `:dfu` / `:dfu_test`      | `bazel run`: flash over USB DFU (sends `update.`, then dfu-util). |
-| `:vcu_logic_test`         | Pure logic: conversions, plausibility, debounce, shutdown loop, torque, SoE, buzzer. |
-| `:vcu_state_machine_test` | Every row of the state machine's transition table.      |
+| `:<module>_test`          | One host test per module, next to its source: `pedals_test`, `torque_test`, `state_machine_test`, and so on. |
 | `:vcu_app_test`           | Vehicle app end to end through `Step()` with LHAL fakes. |
-| `:vcu_test_app_test`      | Test image end to end.                                  |
+| `:test_app_test`          | Test image end to end.                                  |
 | `:vcu_rtos_test`          | Real FreeRTOS tasks under the simulator port.           |
-| `:control_features_test`  | Regen, launch ramp, sampled traction limiter, ADC progress. |
 | `:vcu_sim`                | Scripted drive under the simulator (`bazel run --config=local`). |
 | `:release`                | Both images' elf/bin/hex for CI artifacts.              |
 
@@ -32,20 +30,35 @@ The DUI is a plain CAN peripheral this year.
 
 - `App/`: application logic against `//drivers/lhal` plus the raw FreeRTOS
   API, so the same code links into the firmware, the host tests, and the
-  sim.
-  - Pure, host-testable logic: `analog` (counts → volts, VREFINT
-    correction), `pedals` (APPS/BSE plausibility, brake-over-throttle,
-    hard-brake cross-check), `steering`, `shutdown_loop`, `faults` (fault
-    bits, brake comparator soft latch, BMS/IMD lamp policy),
-    `state_machine`, `torque` (ported 2026 torque map, power limit,
-    motor-acceleration limiter), `control_features` (regen and launch ramp), `battery` (SoE, energy), `buzzer`,
-    `status_led`.
-  - `vcu_config.hpp`: every tunable, with per-event sets.
-  - `vcu_io.hpp`: the Board/App contract (ADC ranks, pins, `Peripherals`,
-    `BoardServices`).
-  - `vcu_app.*`: the vehicle app's tasks. `vcu_test_app.*`: the bring-up
-    image. `vcu_test_bench.hpp`: host fakes plus a scripted car, for tests
-    and the sim.
+  sim. Includes are relative to `App/` (`#include "control/pedals.hpp"`).
+  Each module's test sits next to it as `<module>_test.cpp`.
+  - `app/`: the vehicle app. `vcu_app.*` owns the tasks and `Step()`.
+    The task bodies are in `control_loop.cpp`, `critical_tx.cpp`,
+    `telemetry.cpp`, `supervisor.cpp` and `shell_commands.cpp`.
+    `control_snapshot.hpp` is the state that the control task publishes.
+    `vcu_sim.cpp` is the scripted drive.
+  - `io/`: the Board/App contract. `peripherals.hpp` holds the ADC ranks,
+    pins, `Peripherals` and `BoardServices`. `digital_io.hpp` applies pin
+    polarity. `analog` converts counts to volts with VREFINT correction.
+  - `control/`: `pedals` (APPS/BSE plausibility, brake-over-throttle,
+    hard-brake cross-check), `steering`, `brake_bias`, `torque` (ported
+    2026 torque map, power limit, motor-acceleration limiter), `wheel_slip`,
+    `regen`, `launch`, `battery` (SoE, energy).
+  - `safety/`: `faults` (fault bits, brake comparator soft latch, BMS/IMD
+    lamp policy), `shutdown_loop`, `state_machine`.
+  - `can/`: `vehicle_rx.hpp` (received messages), `critical_frames`
+    (Critical-bus frame packing), `diag_frames` (Data-bus diagnostics),
+    `field_ranges.hpp`, `send.hpp`.
+  - `hmi/`: driver feedback. `buzzer` is the RTD sound. `status_led` is the
+    status RGB color policy.
+  - `config/params.*`: every tunable, with per-event sets.
+  - `bringup/`: the bring-up test image (`test_app`, `test_shell`).
+  - `testing/bench.hpp`: host fakes plus a scripted car, for tests and the
+    sim.
+- Shared code the VCU uses: `//drivers/longhorn` (shell, logger, RGB LED and
+  rainbow task, DFU console hook, debounce, math, CAN inbox, rate gate, RTOS
+  lock) and `//drivers/lhal` (peripheral interfaces, STM32 adapters, host
+  fakes).
 - `Board/`: hand-written bring-up at ST HAL level.
   - `main.cpp`: reset cause, clocks, safe outputs, the `MX_*_Init` calls,
     LHAL adapters, and the app.
@@ -131,7 +144,7 @@ The DUI is a plain CAN peripheral this year.
   DRIVE needs a debounced RTD press edge (a switch held at boot doesn't
   count), brake ≥ 30 psi, and the pedal released. Leaving DRIVE for any of
   those reasons goes to FAULT, and getting back needs a fresh RTD
-  sequence. The table and its rationale are in `App/state_machine.cpp`.
+  sequence. The table and its rationale are in `App/safety/state_machine.cpp`.
 - **BSPD**: `latch_state_mcu` zeroes torque the same tick and enters
   BSPD_TRIPPED. Only a power cycle clears it, in hardware and in firmware.
 - **Brake comparator flags**: B1 disconnect, B2 disconnect, B1 overvoltage
@@ -264,7 +277,7 @@ VCP or the USB port with `bazel run //tools/monitor`.
 | `/adc` | Every analog channel: counts, pin mV, sensor/loop mV, calibrated |
 | `/io` | Every digital input and output |
 | `/stream <ms>` | Logs all inputs to the VCP every `ms` (0 = off) |
-| `/cal start`, `/cal stop` | Min/max/mean per channel while sweeping a sensor (pedal calibration → `App/vcu_config.hpp`) |
+| `/cal start`, `/cal stop` | Min/max/mean per channel while sweeping a sensor (pedal calibration → `App/config/params.hpp`) |
 | `/out <linelock\|amp\|bms\|imd\|crit_stb\|data_stb> <0\|1>`, `/release` | Drive outputs, or return them all to safe |
 | `/tone <hz> <amp%> <ms>`, `/tone off` | DAC tone through the amp (capped at 1.5 s) |
 | `/led <r%> <g%> <b%>`, `/led auto` | Status RGB |
@@ -325,14 +338,3 @@ FDCAN on PCLK1, ADC on HCLK/2 = 48 MHz, USB on PLLQ.
   `motor_disconnect` now cuts torque when high after debounce.
 - Rule text for every threshold marked `TODO(verify rule)`. The RTD sound
   needs measuring against its 80-90 dBA band.
-
-### Board-local compatibility support
-
-The VCU keeps its ADC progress interface, host ADC/UART fakes, raw-command
-shell, RGB animation and rainbow task in `App/`. `Board/dma_adc.hpp` and
-`Board/usb_cdc.*` provide the hardware adapters. These are VCU-local versions
-of the existing shared implementations, extended for completed-scan monitoring,
-legacy brightness and newline-free DFU recovery. Shared drivers remain unchanged.
-Board startup follows CubeMX’s initialization sequence but registers the
-VCU USB callbacks before starting USB; generated files are unchanged.
-CAN message definitions and generated-code target declarations remain shared.

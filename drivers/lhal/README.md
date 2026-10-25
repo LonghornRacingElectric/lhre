@@ -22,12 +22,12 @@ sims — while keeping ST's HAL underneath on real hardware.
 | Interface         | Covers                                              |
 | ----------------- | --------------------------------------------------- |
 | `lhal::Gpio`      | digital read/write/toggle                           |
-| `lhal::Uart`      | blocking + async read/write (DMA/IT on target)      |
+| `lhal::Uart`      | blocking + async read/write (DMA/IT on target), optional RX observer |
 | `lhal::I2cMaster` | write / read / write-then-read (register access)    |
 | `lhal::CanBus`    | send, polled receive, RX callback; classic + CAN FD |
 | `lhal::Pwm`       | duty-cycle control of one PWM output channel        |
 | `lhal::Clock`     | `Millis()` / `DelayMs()` (+ wrap-safe `ElapsedMs`)  |
-| `lhal::AdcScan`   | latest counts of a continuously sampled ADC bank    |
+| `lhal::AdcScan`   | latest counts of a continuously sampled ADC bank, optional scan counter |
 | `lhal::WaveformDac` | loop a sample buffer at a sample rate (tones)     |
 | `lhal::Watchdog`  | start (one-way) and refresh a hardware watchdog     |
 | `lhal::ResetCause` | enum: why the MCU last reset (`lhal/reset.hpp`)    |
@@ -49,10 +49,10 @@ kernel builds for the host too — see
 Application logic lives in `App/` against LHAL only, and the board's
 `firmware_project` call synthesizes the targets from the file names (see
 [tools/firmware](../../tools/firmware/README.md) and `//boards/VCU` for the
-reference layout): `App/vcu_app.cpp` becomes the `:vcu_app` library — a
+reference layout): the `App/` sources become the `:vcu_app` library — a
 plain `cc_library` on `//drivers/lhal`, so it links into firmware and host
 tests alike (MCU flags come from the per-family platform/toolchain) — and
-each `App/*_test.cpp` becomes a host `cc_test` against `:vcu_app` +
+each `App/**/*_test.cpp` becomes a host `cc_test` against `:vcu_app` +
 `//drivers/lhal:host`. The STM32 LHAL backend is wired into the firmware
 binary by the macro itself.
 

@@ -50,6 +50,7 @@ class UsbCdc final : public lhal::Uart {
   // True while the device is enumerated and the host has the port open
   // (DTR asserted) — useful to skip logging when no terminal is attached.
   bool connected() const override;
+  bool SetRxObserver(RxObserver observer, void* context) override;
 
   // Escape hatch for anything LHAL doesn't cover.
   USBD_HandleTypeDef* handle() { return handle_; }
@@ -78,6 +79,9 @@ class UsbCdc final : public lhal::Uart {
 
   CompletionCallback tx_done_ = nullptr;
   void* tx_context_ = nullptr;
+
+  RxObserver rx_observer_ = nullptr;
+  void* rx_observer_context_ = nullptr;
 
   // Pending ReadAsync target, filled from interrupt context.
   uint8_t* rx_async_data_ = nullptr;

@@ -31,6 +31,26 @@ Each module is its own target so boards pull in only what they use:
   logging immediately when disconnected to avoid queue/formatting overhead.
   Header only, so the kernel comes from the consumer's build; on the MCU
   construct it statically and `StartTask()` before `vTaskStartScheduler()`.
+- `//drivers/longhorn:rainbow_task` — `longhorn::RainbowTask`, the single
+  writer for an `RgbLed`: a 33 ms rainbow task with a cross-task color
+  override.
+- `//drivers/longhorn:dfu` — `longhorn::DfuCommand`, a byte-stream matcher
+  for the tools/dfu `update.` token. No newline is needed, and partial
+  tokens survive packet boundaries.
+- `//drivers/longhorn:dfu_console` — `longhorn::DfuConsole`, which watches
+  one console for that token through the stream's RX observer or the
+  shell's byte hook, and raises a bootloader request flag.
+- `//drivers/longhorn:can_inbox` — `longhorn::CanInbox`, an ISR-to-task
+  queue for classic CAN frames. `longhorn::RxSlot<Message>` holds the
+  latest decoded message with its age. `longhorn::PeriodMs<Message>()`
+  gives a spec message's transmit period.
+- `//drivers/longhorn:debounce` — `Debouncer`, `EdgeButton` (no press edge
+  until first released) and `PersistenceTimer`.
+- `//drivers/longhorn:math` — `Clamp`, `Lookup1D`, `Normalize` and `Ema`.
+- `//drivers/longhorn:rate_gate` — `longhorn::RateGate`, a drift-free
+  fixed-rate trigger inside a faster loop.
+- `//drivers/longhorn:rtos_lock` — `longhorn::SchedulerLock`, a scoped
+  mutex lock that is a no-op before the scheduler starts.
 
 ## Using a module on a board
 

@@ -433,9 +433,9 @@ def firmware_project(
         App/**/*.cpp|hpp    → cc_library {name}_app (LHAL + raw FreeRTOS
                               API), linked into the firmware and built for
                               the host
-        App/*_test.cpp      → one small cc_test each, named by file stem,
+        App/**/*_test.cpp   → one small cc_test each, named by file stem,
                               against {name}_app + the LHAL host fakes
-        App/*_sim.cpp       → one host cc_binary each, named by file stem
+        App/**/*_sim.cpp    → one host cc_binary each, named by file stem
 
     Args:
         name (string): name of the project
@@ -458,12 +458,12 @@ def firmware_project(
             for a board that outgrows the convention and hand-writes its app
             library, tests, and sims. Defaults to True.
         enable_tests (bool, optional): Synthesize a cc_test per
-            App/*_test.cpp. Set False to keep the app library but skip the
+            App/**/*_test.cpp. Set False to keep the app library but skip the
             host tests — the escape hatch for boards that don't maintain
             them (the files, if present, simply stop being compiled).
             Defaults to True.
         enable_sims (bool, optional): Synthesize a host cc_binary per
-            App/*_sim.cpp. Same escape hatch as enable_tests, for the
+            App/**/*_sim.cpp. Same escape hatch as enable_tests, for the
             sims. Defaults to True.
         enable_freertos (bool, optional): Whether or not to use FreeRTOS. Defaults to False.
         enable_usb (bool, optional): Wire in USB CDC (virtual COM port): ST's USB Device
@@ -555,9 +555,9 @@ def firmware_project(
             deps = final_app_deps,
         )
 
-        for test_src in native.glob(["App/*_test.cpp"], allow_empty = True) if enable_tests else []:
+        for test_src in native.glob(["App/**/*_test.cpp"], allow_empty = True) if enable_tests else []:
             cc_test(
-                name = test_src[len("App/"):-len(".cpp")],
+                name = test_src.split("/")[-1][:-len(".cpp")],
                 size = "small",
                 srcs = [test_src],
                 deps = [
@@ -567,9 +567,9 @@ def firmware_project(
                 ],
             )
 
-        for sim_src in native.glob(["App/*_sim.cpp"], allow_empty = True) if enable_sims else []:
+        for sim_src in native.glob(["App/**/*_sim.cpp"], allow_empty = True) if enable_sims else []:
             cc_binary(
-                name = sim_src[len("App/"):-len(".cpp")],
+                name = sim_src.split("/")[-1][:-len(".cpp")],
                 srcs = [sim_src],
                 deps = [
                     ":" + app_name,

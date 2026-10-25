@@ -151,8 +151,8 @@ the `.ioc` and creates everything `firmware_project` can't derive:
 - **`BUILD.bazel`** — the minimal `firmware_project` call. The macro
   derives the rest (device define, linker script, startup file, HAL
   wiring) and synthesizes targets from file names: `App/**/*.cpp` form the
-  `<name>_app` library, each `App/*_test.cpp` becomes a host test, each
-  `App/*_sim.cpp` a host simulator (see
+  `<name>_app` library, each `App/**/*_test.cpp` becomes a host test, each
+  `App/**/*_sim.cpp` a host simulator (see
   [tools/firmware](tools/firmware/README.md)).
 - **Starter `App/` and `Board/` files** that compile, pass their test, and
   blink an LED as-is: `App/<name>_app.{hpp,cpp}` (application logic,

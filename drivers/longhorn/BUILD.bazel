@@ -53,6 +53,77 @@ cc_library(
     deps = ["//drivers/lhal"],
 )
 
+cc_library(
+    name = "debounce",
+    hdrs = ["include/longhorn/debounce.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+    deps = ["//drivers/lhal"],
+)
+
+cc_library(
+    name = "math",
+    hdrs = ["include/longhorn/math.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "dfu",
+    hdrs = ["include/longhorn/dfu.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "can_inbox",
+    hdrs = ["include/longhorn/can_inbox.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+    deps = ["//drivers/lhal"],
+)
+
+cc_library(
+    name = "rate_gate",
+    hdrs = ["include/longhorn/rate_gate.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+)
+
+# Header-only: FreeRTOS.h resolves against the consumer's kernel.
+cc_library(
+    name = "dfu_console",
+    hdrs = ["include/longhorn/dfu_console.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":console",
+        ":dfu",
+        ":shell",
+        "//drivers/lhal",
+    ],
+)
+
+# Header-only: FreeRTOS.h resolves against the consumer's kernel.
+cc_library(
+    name = "rtos_lock",
+    hdrs = ["include/longhorn/rtos_lock.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+)
+
+# Header-only: FreeRTOS.h resolves against the consumer's kernel.
+cc_library(
+    name = "rainbow_task",
+    hdrs = ["include/longhorn/rainbow_task.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":led",
+        "//drivers/lhal",
+    ],
+)
+
 cc_test(
     name = "logger_test",
     size = "small",
@@ -95,6 +166,36 @@ cc_test(
     deps = [
         ":led",
         "//drivers/lhal:host",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "debounce_test",
+    size = "small",
+    srcs = ["test/debounce_test.cpp"],
+    deps = [
+        ":debounce",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "math_test",
+    size = "small",
+    srcs = ["test/math_test.cpp"],
+    deps = [
+        ":math",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "dfu_test",
+    size = "small",
+    srcs = ["test/dfu_test.cpp"],
+    deps = [
+        ":dfu",
         "@googletest//:gtest_main",
     ],
 )

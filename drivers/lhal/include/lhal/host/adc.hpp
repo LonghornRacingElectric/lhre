@@ -19,8 +19,10 @@ class AdcScan final : public lhal::AdcScan {
     return channel < counts_.size() ? counts_[channel] : 0;
   }
   uint16_t full_scale() const override { return full_scale_; }
+  uint32_t completed_scans() const override { return completed_scans_; }
 
   // Test helpers -----------------------------------------------------------
+  void CompleteScan() { ++completed_scans_; }
   void Set(size_t channel, uint16_t counts) {
     if (channel < counts_.size()) {
       counts_[channel] = counts > full_scale_ ? full_scale_ : counts;
@@ -38,6 +40,7 @@ class AdcScan final : public lhal::AdcScan {
  private:
   std::vector<uint16_t> counts_;
   uint16_t full_scale_;
+  uint32_t completed_scans_ = 0;
 };
 
 }  // namespace lhal::host

@@ -8,9 +8,10 @@
 #include "board_safe_state.hpp"
 #include "dac.h"
 #include "dma.h"
-#include "dma_adc.hpp"
 #include "fdcan.h"
 #include "gpio.h"
+#include "io/peripherals.hpp"
+#include "lhal/stm32/adc.hpp"
 #include "lhal/stm32/can.hpp"
 #include "lhal/stm32/dac.hpp"
 #include "lhal/stm32/gpio.hpp"
@@ -19,17 +20,16 @@
 #include "lhal/stm32/reset.hpp"
 #include "lhal/stm32/system.hpp"
 #include "lhal/stm32/uart.hpp"
+#include "lhal/stm32/usb_cdc.hpp"
 #include "lhal/stm32/watchdog.hpp"
+#include "longhorn/led.hpp"
 #include "task.h"
 #include "tim.h"
-#include "usb_cdc.hpp"
 #include "usb_device.h"
-#include "usbd_desc.h"
-#include "vcu_io.hpp"
 #ifdef VCU_TEST_IMAGE
-#include "vcu_test_app.hpp"
+#include "bringup/test_app.hpp"
 #else
-#include "vcu_app.hpp"
+#include "app/vcu_app.hpp"
 #endif
 
 // Defined in the CubeMX-generated USB_Device/App/usb_device.c.
@@ -81,12 +81,12 @@ int main() {
   static lhal::stm32::Clock clock;
   static Board board;
 
-  static vcu_board::DmaAdc adc1(&hadc1, vcu_board::g_adc1_buffer,
-                                vcu::kAdc1Channels, 4095,
-                                &vcu_board::g_adc1_scans);
-  static vcu_board::DmaAdc adc2(&hadc2, vcu_board::g_adc2_buffer,
-                                vcu::kAdc2Channels, 4095,
-                                &vcu_board::g_adc2_scans);
+  static lhal::stm32::DmaAdc adc1(&hadc1, vcu_board::g_adc1_buffer,
+                                  vcu::kAdc1Channels, 4095,
+                                  &vcu_board::g_adc1_scans);
+  static lhal::stm32::DmaAdc adc2(&hadc2, vcu_board::g_adc2_buffer,
+                                  vcu::kAdc2Channels, 4095,
+                                  &vcu_board::g_adc2_scans);
   if (!lhal::IsOk(adc1.Start()) || !lhal::IsOk(adc2.Start())) {
     Error_Handler();
   }
@@ -111,20 +111,14 @@ int main() {
   led_g.Start();
   led_b.Start();
   // Match the old CCR brightness: boot 125, rainbow peak 127 (ARR=1000).
-  static vcu::RgbLed status_led(&led_r, &led_g, &led_b,
-                                127.0f / (htim2.Init.Period + 1),
-                                125.0f / (htim2.Init.Period + 1));
+  static longhorn::RgbLed status_led(&led_r, &led_g, &led_b,
+                                     127.0f / (htim2.Init.Period + 1),
+                                     125.0f / (htim2.Init.Period + 1));
 
   static lhal::stm32::Uart debug_uart(&vcu_board::huart3);
-  static vcu_board::UsbCdc usb(&hUsbDeviceFS);
-  // Same startup as CubeMX, with the VCU receive callbacks installed before USB
-  // starts.
-  if (USBD_Init(&hUsbDeviceFS, &CDC_Desc, DEVICE_FS) != USBD_OK ||
-      USBD_RegisterClass(&hUsbDeviceFS, &USBD_CDC) != USBD_OK ||
-      USBD_CDC_RegisterInterface(&hUsbDeviceFS, &VcuUsbInterface) != USBD_OK ||
-      USBD_Start(&hUsbDeviceFS) != USBD_OK) {
-    Error_Handler();
-  }
+  // Construct before USB starts so the first packet reaches it.
+  static lhal::stm32::UsbCdc usb(&hUsbDeviceFS);
+  MX_USB_Device_Init();
   static lhal::stm32::Iwdg watchdog;
 
   static lhal::stm32::Gpio b1_disconnect(GPIOD, GPIO_PIN_13);

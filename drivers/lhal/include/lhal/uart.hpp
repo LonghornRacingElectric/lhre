@@ -28,6 +28,13 @@ class Uart {
   // True while a receiver is listening on the stream. Always true for raw
   // UART; on USB CDC it reflects enumeration and host port-open (DTR asserted).
   virtual bool connected() const { return true; }
+
+  // Sees every received chunk before Read() does, even when nothing reads.
+  // `observer` may run in interrupt context. False when unsupported.
+  using RxObserver = void (*)(void* context, const uint8_t* data, size_t len);
+  virtual bool SetRxObserver(RxObserver /*observer*/, void* /*context*/) {
+    return false;
+  }
 };
 
 }  // namespace lhal

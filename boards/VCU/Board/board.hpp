@@ -5,8 +5,8 @@
 #include <atomic>
 #include <cstdint>
 
+#include "io/peripherals.hpp"
 #include "main.h"
-#include "vcu_io.hpp"
 
 namespace vcu_board {
 
