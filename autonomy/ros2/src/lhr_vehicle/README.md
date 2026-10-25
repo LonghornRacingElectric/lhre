@@ -12,7 +12,8 @@ and every consumer reads it from there:
 - `lhr_perception/lidar_cone_detector` uses the LiDAR mount position for
   the sensor→`base_link` transform and the body dimensions for the
   self-exclusion box.
-- The Gazebo model `lhr_gazebo/models/fsae_vehicle/model.sdf` is
+- The Gazebo models `lhr_gazebo/models/fsae_vehicle/model.sdf` and
+  `model_stereo.sdf` are
   **generated** from it (see below); wheel poses, joint limits, masses and
   sensor poses all derive from the same numbers. The steering joints get
   the Ackermann *inner* angle at full lock, since that is what they see.
@@ -86,10 +87,12 @@ python3 src/lhr_gazebo/scripts/generate_vehicle_model.py
 ./scripts/build.sh
 ```
 
-Commit the regenerated `model.sdf` alongside the YAML change: it is
-checked in, like the generated world files. `generate_vehicle_model.py
---check` reports whether the two agree, and `lhr_gazebo`'s tests fail when
-they don't, so CI catches a forgotten regenerate.
+Commit the regenerated `model.sdf` and `model_stereo.sdf` alongside the YAML
+change. The default model omits cameras; the stereo variant adds the rig.
+Both are checked in, like the generated world files.
+`generate_vehicle_model.py --check` reports whether both agree with the YAML
+and templates, and `lhr_gazebo`'s tests fail when they don't, so CI catches a
+forgotten regenerate.
 
 ## Seeing the car
 
