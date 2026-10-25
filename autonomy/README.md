@@ -19,11 +19,11 @@ The code is organized so each lane owns whole packages. Lane ownership is tracke
 
 | Lane | Packages | Starter work |
 |------|----------|--------------|
-| Perception | `lhr_perception` (+ `lhr_sensor_sim` as its sim stand-in) | Autocross reliability: sparse LiDAR returns can cause incorrect track-side labels. See [known issues](docs/plans/gazebo-integration.md) |
+| Perception | `lhr_perception` (+ `lhr_sensor_sim` and `lhr_lidar_sim` as its sim stand-ins) | Autocross reliability: sparse LiDAR returns can cause incorrect track-side labels. See [known issues](docs/plans/gazebo-integration.md) |
 | State estimation | `lhr_state_estimation` (+ `lhr_sensor_sim`'s `inertial_sim` as its sensor stand-in) | GNSS: no sim model exists yet, and position drift is unbounded without it. Slip handling, IMU lever arm |
-| Planning & control | `lhr_track_builder`, `lhr_control`, `lhr_mission_manager` | Centerline ordering on tight corners. Unimplemented missions (acceleration, skidpad) |
+| Planning & control | `lhr_track_builder`, `lhr_control`, `lhr_mission_manager` | Centerline ordering on tight corners. Skidpad mission and world ([#114](https://github.com/LonghornRacingElectric/lhre/issues/114)) |
 | Safety | `lhr_safety` | Hardware half of the loop (CAN heartbeat, BEVO timer, relay, valve) for the 12/2 bench rig. Sim brake model, threshold tuning by fault injection |
-| Sim & test infra | `lhr_gazebo`, `lhr_sim_kinematic`, `lhr_trackgen`, `lhr_metrics`, `lhr_demo`, `lhr_vehicle`, `scripts/` | Extend the generated-track tests to model real sensor visibility and vehicle feedback |
+| Sim & test infra | `lhr_gazebo`, `lhr_sim_kinematic`, `lhr_sim_bobsim`, `lhr_sim_fmu`, `lhr_trackgen`, `lhr_metrics`, `lhr_demo`, `lhr_vehicle`, `scripts/`, `testing/tools/gate/` | Extend the generated-track tests to model real sensor visibility and vehicle feedback |
 
 ## How the pieces fit
 
@@ -72,4 +72,11 @@ flowchart LR
   the car leaves the course
 - ZED 2i stereo inputs implemented; camera color-region classification is
   available as an opt-in debug image. LiDAR color fusion remains future work
+- Acceleration event runs in sim, from the staged start through the 75 m
+  mission to a stop in the exit lane
+- `safety_node` trips the mission on stack faults (Gazebo, `safety:=true`)
+  and fault injection exercises each check; off by default until the
+  thresholds are tuned
+- The 10/28 MVP gate runs and scores itself in Gazebo
+  ([gate tools](testing/tools/gate/README.md))
 - Retrofit hardware being ordered (details in Notion)

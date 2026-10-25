@@ -13,18 +13,24 @@ runs can be compared without guessing which geometry or gate was used.
 | Group | Columns |
 | --- | --- |
 | Identity | `run_id` |
-| Provenance | `vehicle_sha256`, `git_sha`, `scenario` |
+| Provenance | `vehicle_sha256`, `git_sha`, `scenario`, `plant` |
 | Scenario | `seed`, `track_style`, `num_waypoints`, `mission`, `perception`, `start_on_track`, `start_finish_cones` |
-| Sensor | `lidar`, `mount_pitch_rad`, `elevation_profile`, `return_profile`, `stack_window_sec`, `min_cluster_points`, `ground_z_min`, `fov_deg`, `max_range_m`, `noise_std_m`, `false_negative_rate` |
+| Sensor | `lidar`, `mount_pitch_rad`, `elevation_profile`, `return_profile`, `stack_window_sec`, `min_cluster_points`, `ground_z_min`, `fov_deg`, `max_range_m`, `noise_std_m`, `false_negative_rate`, `motion_distortion`, `clutter_profile` |
+| Estimator | `estimator`, `gyro_bias`, `wheel_scale_error`, `lidar_classify_sides`, `mean_pos_error`, `max_pos_error`, `mean_yaw_error` |
 | Control | `lookahead_dist`, `a_lat_max`, `v_min`, `v_max`, `max_accel`, `max_decel` |
 | Reference | `reference_sha256`, `reference_source`, `reference_length_m`, `reference_world`, `reference_closed` |
-| Scoring | `off_track_threshold`, `start_radius`, `min_lap_time`, `min_progress_fraction`, `lap_start_speed`, `max_odom_gap_sec` |
+| Scoring | `course_sha256`, `footprint_model`, `sweep_step_m`, `off_track_threshold`, `start_radius`, `min_lap_time`, `min_progress_fraction`, `lap_start_speed`, `max_odom_gap_sec` |
 | Circuit | `lap_progress_m`, `lap_time_s`, `lap_invalid_reason`, `scoring_odom_topic`, `lap_start_stamp_s`, `lap_gate_x_m`, `lap_gate_y_m`, `lap_gate_tangent_x`, `lap_gate_tangent_y` |
+| Contacts | `cones_hit`, `cone_hit_ids` |
 | Outcomes | `outcome`, `duration_s`, `samples`, `path_length_m`, `mean_cte`, `max_cte`, `off_track_count`, `off_track_dist_m`, `mean_speed`, `max_speed`, `lap_completed` |
 
 `git_sha` comes from the launch file and carries a `-dirty` suffix when the
 tree has uncommitted changes, since a clean-looking id on a modified tree
-is worse than no id. `vehicle_sha256` hashes `lhr_vehicle`'s config file
+is worse than no id. Only `mvs_demo.launch.py` fills `git_sha` and the
+Sensor and Control columns. `gazebo_demo.launch.py` passes neither, so
+Gazebo rows read `unknown` and the node's MVS defaults there (`lidar`
+false, `min_cluster_points` 3 while Gazebo runs 1); take a Gazebo run's
+commit and settings from its launch arguments. `vehicle_sha256` hashes `lhr_vehicle`'s config file
 with the same formula the study harness in `simulation/tools` uses, so a
 sim run and a BobDyn study are comparable on that field.
 
@@ -32,6 +38,10 @@ The independent variables are declared in `RUN_PARAMS` and passed in by
 the launch file. **A new launch argument that changes a result belongs in
 that tuple too**, or rows quietly stop explaining themselves. Scoring
 settings live in `SCORING_PARAMS` and are also written on every row.
+
+`fmu_pedal_gain` is recorded only when `plant=fmu`; other plants leave the
+column blank. It belongs to the MVS FMU adapter, so the Gazebo launcher does
+not expose it.
 
 A `data/metrics.csv` written under an older column set is moved aside to
 `data/metrics.csv.old` with a warning rather than having its extra fields
@@ -87,51 +97,76 @@ An odometry gap, a backward clock, an off-course chord between observations,
 or a discontinuous jump invalidates lap acceptance for the rest of that run.
 The node terminates with `outcome=invalid_lap` and exit code 1; the final
 row records the last scoring sample and `lap_invalid_reason`. Start a new
-run to reset it. Chord sampling uses
-half the allowed corridor width; this is a bounded simulation check, not
-proof of motion between arbitrarily sparse real sensor observations.
+run to reset it. Progress continuity checks the base-link chord against the
+scene boundary strips. Whole-vehicle checks additionally cover translation
+and shortest-angle yaw interpolation between continuous observations; see below.
+Neither assumes an unobserved nonlinear trajectory between real sensor samples.
 Closed references must enclose nonzero area; collinear or degenerate loops
 are rejected. This scorer does not judge a multi-loop skidpad route. An open
 reference supports CTE/progress but never publishes a circuit lap.
 
 The accepted flag is published once on `/lhr/metrics/lap_complete`, which
 the mission manager latches. Autocross `FINISHED` without a verified lap is
-recorded as `invalid_completion` and fails. Braking/mission-controller changes
-remain separate work; this node does not feed reference geometry to control.
+recorded as `invalid_completion` and fails. The mission manager then
+publishes `/lhr/mission/complete` and pursuit brakes to a stop before
+FINISHED; this node never feeds reference geometry to control.
+
+## Footprint, boundaries and contacts
+
+`course.py` latches the same scene truth as the centerline, including orange
+start/finish cones. The road is the union of quadrilateral strips between
+consecutive left/right pairs. Closed courses retain their inner island;
+open courses include start/end caps. This supports the ordered generated
+courses, not arbitrary SDF meshes or crossed/branching boundary layouts.
+
+A conservative rectangle encloses the YAML chassis box and all steering
+orientations of the YAML wheel envelopes. Its origin follows `base_link`
+(the rear axle); its nose is not centered on the odometry position. Checking
+all corners plus boundary-segment intersections catches a side, nose or
+wheel extending outside even when the rear axle has low CTE. Space between
+collision solids is included, so this can reject a geometric near miss that
+separate 3D solids would allow. The YAML contains assumed dimensions; this
+is not a measured physical car envelope.
+
+For continuous observations, the sweep interpolates XY and shortest-angle
+yaw. Translation plus maximum corner travel per step is bounded by 0.05 m.
+Each sample rectangle is padded by half that step's motion bound (at most
+0.025 m), conservatively covering motion between samples. This catches a
+contact or excursion with safe endpoints, including rotation in place.
+Telemetry gaps, backward time and discontinuous progress fail the run instead
+of interpolating across unobserved travel. Duplicate timestamps are ignored.
+
+Cone contacts use each nominal cone's oriented square base from
+[lhr_trackgen](../lhr_trackgen/README.md), including both orange sizes.
+`cones_hit` counts distinct scene identities touched by the swept envelope;
+`cone_hit_ids` records them. Repeated overlap counts once. A footprint
+excursion (`vehicle_off_course`) or contact (`cone_contact`) terminates the
+run as `invalid_lap`; neither can publish a successful circuit flag. All
+contacts in the final checked interval are counted before stopping.
+These are conservative geometric contacts with static nominal cones, not
+Gazebo force-sensor events or a count of cones physically knocked down.
+
+`course_sha256` hashes boundaries, nominal cone poses/kinds/base widths,
+closure, the vehicle envelope and sweep resolution. `footprint_model` and
+`sweep_step_m` record the scoring convention. Existing `reference_sha256`
+continues to identify only the CTE centerline. Historical off-track/contact
+rows must be rebaselined against this convention.
+
+`off_track_count` counts scored samples/intervals with an envelope excursion.
+`off_track_dist_m` conservatively includes the entire odometry chord for each
+violating interval, ending at the first failure; it is not an exact crossing
+length and retains sampling uncertainty. It replaces the old CTE-threshold
+classification. `off_track_threshold` remains a legacy progress-continuity
+scale (chord probe spacing and arc-jump tolerance), not the road width.
 
 ## Error is weighted by distance, not by sample
 
-`mean_cte` is the integral of cross-track error over arc length divided
-by `path_length_m`, and `off_track_dist_m` is the metres driven beyond
-`off_track_threshold`. Neither depends on how often odom fired.
-
-Averaging per sample instead makes the number a property of the speed
-profile. Odom arrives at a fixed rate, so a slow corner yields far more
-samples per metre than a fast straight, and the mean drifts toward
-wherever the car was slowest. It also overstates excursions badly,
-because the car is usually slowest exactly where it is off line.
-
-Historical planner-relative measurements illustrate the weighting effect
-(they are not a baseline for the fixed-reference scorer):
-
-| Measure | Reading |
-| --- | --- |
-| Off-track samples | 291 of 772, so 38% |
-| Off-track distance | 1.66 m of 83.74 m, so 2.0% |
-
-The car is off the racing line for a moment, oscillating slowly, not for
-a third of the lap. `off_track_count` is kept in the row because it is
-free, but `off_track_dist_m` is the one to read.
-
-`path_length_m` is also a cheap cross-check on the arc length itself:
-divided by `duration_s` it must agree with `mean_speed`.
-
-The accumulation lives in
-[`track_error.py`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/ros2/src/lhr_metrics/lhr_metrics/track_error.py),
-deliberately free of ROS imports so it is unit tested directly. The test
-that matters drives one path at two sampling densities and asserts the
-weighted mean does not move, where the per-sample mean reports 1.0
-against 1.79.
+`mean_cte` remains the trapezoidal integral of segment CTE over distance
+divided by `path_length_m`. Changing speed or sample density should not
+reweight slow corners. `max_cte` is the largest scored segment distance.
+CTE remains a rear-axle tracking metric, separate from whole-vehicle validity.
+The pure `track_error.py` tests check the distance weighting at different
+sampling densities; footprint/contact tests separately check course validity.
 
 ## Clock
 
@@ -151,7 +186,7 @@ Beyond `RUN_PARAMS`, which only ever reach the CSV:
 
 | Parameter | Default | What it does |
 | --- | --- | --- |
-| `off_track_threshold` | 2.0 | CTE above this counts as off track |
+| `off_track_threshold` | 2.0 | Legacy progress continuity scale, metres; road width comes from truth boundaries |
 | `start_radius` | 2.0 | Half-width of the fixed crossing gate, metres |
 | `reference_world` | empty | Generated SDF truth source; empty waits for scene markers |
 | `reference_closed` | true | Include closure and circuit laps; launch defaults false for acceleration |
@@ -160,6 +195,7 @@ Beyond `RUN_PARAMS`, which only ever reach the CSV:
 | `max_odom_gap_sec` | 1.0 | Largest gap allowed during a scored circuit |
 | `min_lap_time` | 5.0 | Reject a lap shorter than this |
 | `timeout_sec` | 0.0 | Optional wall-clock watchdog; zero disables it |
+| `truth_odom_topic` | empty | Truth odometry to score; the estimate on `/lhr/vehicle/odom` then only feeds the error columns |
 | `output_csv` | `data/metrics.csv` | Where the row goes |
 | `run_id` | wall clock | Row identifier |
 
@@ -256,11 +292,12 @@ position and yaw error columns for the separate estimate.
 They remain blank without a truth stream. The CSV includes `estimator`,
 `gyro_bias`, `wheel_scale_error`, and `lidar_classify_sides` alongside the
 existing run parameters. Distance-weighted CTE and run outcome checks remain
-active. Estimator errors compare to the latest truth sample, so callback
-timing can affect them; they are not a timestamp-aligned accuracy guarantee.
+active. Error accumulation starts only after driving/scoring onset and excludes
+stationary READY observations. Each estimate is compared with truth
+interpolated at the estimate's own stamp (`alignment.py`): an estimate waits
+until truth at or past its stamp arrives, and one older than the 2 s truth
+buffer is skipped. Comparing with the latest received truth sample instead
+scored scheduling, since a 0.1 s stall at 5 m/s reads as 0.5 m of error
+([#165](https://github.com/LonghornRacingElectric/lhre/issues/165)).
 
 Node cleanup tolerates an already-stopped ROS context after launch shutdown.
-
-Course validity currently uses the configured centerline corridor, not the
-cone boundaries expanded by the vehicle footprint. Cone contacts are not
-counted. Those checks remain separate from this circuit/CTE scorer.

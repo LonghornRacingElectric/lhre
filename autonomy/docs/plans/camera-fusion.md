@@ -67,9 +67,10 @@ For our sim pipeline, the equivalent is: render camera image, segment by color, 
 - Publish cone markers with color labels (blue/yellow/unknown)
 
 ### 3.4 — Update track builder to use color
-- In `_pair_boundary`, add a filter: reject Delaunay edges where both endpoints have the same known color
-- Accept edges where at least one endpoint is unknown (fallback to distance-only)
-- Minimal change — ~5 lines in the existing method
+- Implemented in [#83](https://github.com/LonghornRacingElectric/lhre/pull/83): `_pair_boundary` rejects Delaunay
+  edges whose endpoints share a known color (`boundary_use_color`, default true).
+- Edges with an unknown endpoint keep the distance-only filter, so unlabeled
+  LiDAR cones pair as before.
 
 ### 3.5 — Validate on autocross track
 - Run full pipeline on an autocross layout
@@ -78,7 +79,7 @@ For our sim pipeline, the equivalent is: render camera image, segment by color, 
 
 ## Dependencies
 
-- Phase 2 LiDAR pipeline must be functional (it is on oval)
+- Phase 2 LiDAR pipeline must be functional (it laps autocross in the [MVP dry runs](../../testing/2026-10-28-mvp-gate/README.md))
 - Vehicle model must support camera mount point
 - Gazebo bridge must support image transport
 

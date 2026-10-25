@@ -10,6 +10,8 @@ The rule it follows is the PDR's: software may only ever keep the stop loop
 from firing by actively saying all is well; it can never block a stop. The
 heartbeat only advances while every check passes and nothing is latched, so
 a fault, a crash or a hang all look the same to whatever is listening.
+`mission_manager` already listens: with `safety:=true`, READY waits for
+`safety_settle_s` (2.0 s) of heartbeat with no gap over 0.25 s.
 
 ## Checks
 
@@ -63,7 +65,10 @@ result.
 - `mission_manager` goes to `EMERGENCY` from either `READY` or `DRIVING`, and
   ignores an emergency that arrived while `OFF`, so the tail of a cleared
   trip cannot stop the next run. A check that is still failing after reset
-  trips again as soon as the mission reaches `READY`.
+  withholds the heartbeat, so with `require_safety_heartbeat` (the Gazebo
+  launch sets it from `safety:=true`) the mission manager stays in `OFF`
+  instead of re-arming. Without it, the check trips again as soon as the
+  mission reaches `READY`.
 - Both nodes subscribe to the reset, so publish it with `-w 2`, or one of them
   may miss it:
 
@@ -90,8 +95,9 @@ append-only: never renumber or reuse one.
 ```
 
 On a CPU-rendered machine (the Mac Docker container) Gazebo drops LiDAR
-frames: the cloud arrived at 5.6 Hz with gaps up to 1.1 s on 10/18 (#123),
-and up to 0.5 s even without the ZED cameras. The default
+frames: the cloud arrived at 5.6 Hz with gaps up to 1.1 s on 10/18 while
+the ZED cameras always rendered (#123), and still has gaps up to about
+0.7 s with them off since #160. The default
 `lidar_timeout_s` (0.3 s, three missed frames) is for the real Mid-360, so
 add `safety_lidar_timeout_s:=1.5` there:
 
@@ -139,3 +145,5 @@ colcon test-result --verbose
 `lhr_gazebo`'s `test_safety_launch.py` checks the launch defaults, overrides
 and types against the node, and `lhr_mission_manager`'s
 `test_state_machine.py` covers the emergency and reset transitions.
+`lhr_mission_manager`'s `test_safety_settle.py` and `lhr_gazebo`'s
+`test_safety_prearm.py` cover the heartbeat wait before READY.

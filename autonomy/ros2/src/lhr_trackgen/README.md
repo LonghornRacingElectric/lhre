@@ -34,9 +34,11 @@ Set `start_finish_cones:=true` on the MVS launch to place four large orange
 cones around the first centerline pair, in namespace `start_finish`. They
 appear in the LiDAR scene with their own dimensions; neither their IDs nor
 colors reach the detector. The default is false to preserve existing track
-fixtures. This marks a scene gate, not an implemented lap timing system or
+fixtures. It is ignored on `acceleration`, whose layout already has its
+gates. This marks a scene gate, not an implemented lap timing system or
 an assertion that the generated track is event compliant. Entry/exit layouts
-remain future work; all four cone asset types are available in Gazebo.
+for the closed courses remain future work (acceleration has both); all four
+cone asset types are available in Gazebo.
 
 Run `colcon test --packages-select lhr_trackgen` for envelope and marker
 contract checks. See [Gazebo](../lhr_gazebo/README.md) for mesh regeneration.
@@ -59,5 +61,16 @@ versions; regenerate Gazebo worlds before comparing the two simulators.
 The legacy `simple` debug layout retains its original behavior.
 `test/test_track_layout.py` checks spacing, width, closure and crossings
 across several seeds for both styles.
+
+`acceleration` is a fixed rules layout instead (DD.4.2, D.9.1): a straight
+along +x, a 7 m entry lane, start line at x = 0, 75 m to the finish, then a
+75 m exit lane. Its 4.9 m is clear width between cone bases, so centers sit
+half a base further out and `pairing_width_m('acceleration')` (5.13 m) is
+the spacing the Gazebo launch gives the track builder. The kinematic launch
+does not pass it yet, so acceleration runs only under Gazebo. Large
+orange cones flank both lines and small orange marks the exit lane; they
+stay in the left/right lists, with the kind on each marker. Only
+`cone_spacing_m` applies, not the seed or `width_m`.
+`test/test_acceleration.py` checks the layout.
 
 Node cleanup tolerates an already-stopped ROS context after launch shutdown.

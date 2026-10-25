@@ -102,7 +102,7 @@ true:
 - The CSV has a `status` column and a row has a status other than `ok`.
 - The pin reports a static balance or equilibrium failure.
 - A FourPost run manifest sets a spring table or an anti-roll bar rate
-  that differs from `vehicle/vehicle.yml`.
+  that differs from the vehicle file of the run.
 
 A check that the pin cannot answer is `UNAVAILABLE`. It is not a pass.
 At `fe03bab` three checks are unavailable. The CSV has no status column.
@@ -118,6 +118,43 @@ anti-roll bar rates from `model_overrides` in its own
 525. So the FourPost bar roll stiffness and load transfer are not for our
 bars. BobSim PR #117 removes these overrides. Until the pin has a fix,
 the FourPost check in CI fails for our car.
+
+### Run a BobSim target on a candidate
+
+A candidate is a changed copy of the car, for example with the frozen 2027
+hardpoints. It lives in `out/<name>/` with its own `bundle.yml`. Do not
+commit it. See
+[edit-vehicle](skills/edit-vehicle/SKILL.md#check-a-candidate).
+
+```bash
+make car T=standard-eval-four-post VEHICLE=out/frozen-2027/vehicle.yml
+make four-post-acceptance T=standard-eval-four-post VEHICLE=out/frozen-2027/vehicle.yml
+```
+
+`VEHICLE` is relative to `simulation/`. Without it, `make car` uses
+`../vehicle/vehicle.yml`, which is `vehicle/vehicle.yml` at the repo root.
+With it, `make car` changes these steps:
+
+- It stops if `VEHICLE` is not a file directly in `out/<name>/`. A deeper
+  folder is refused. The repo has one vehicle file. The container sees only the repo.
+- After step 1, it runs the candidate check of `make check-vehicle` with
+  `out/<name>/bundle.yml`. It stops on a problem, before it writes
+  anything.
+- It writes the records for the candidate and installs the candidate as
+  `bobsim/vehicle.yml`.
+- It writes the outputs to `out/car/<target>--<name>/`. `<name>` is the
+  folder under `out/`. A run on
+  `vehicle/vehicle.yml` writes to `out/car/<target>/`. `make car` refuses
+  a target name with `--`, so two cars never
+  share a folder.
+- `identity.json` names the candidate path and its sha256. It sets
+  `vehicle.candidate` to `true`. The candidate is not the vehicle member
+  of `vehicle/bundle.yml`. The `bundle` entry is `out/<name>/bundle.yml`.
+
+`make four-post-acceptance` with the same `VEHICLE` reads
+`out/car/<target>--<name>/`. It compares the executed setup with the
+candidate. If you change the candidate after the run, the acceptance
+fails.
 
 ### Modelica initialization
 

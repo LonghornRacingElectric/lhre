@@ -221,3 +221,12 @@ def test_overrides_start_the_node_with_their_types(exe):
             assert defaults[arg] != want, f'{arg} override is the node default'
             assert reached[arg] == want, arg
             assert type(reached[arg]) is type(want), arg
+
+
+def test_pursuit_waits_for_the_mission_manager():
+    # The launch always starts mission_manager, so the car must not move
+    # before it says DRIVING.
+    context, nodes = _launch()
+    assert any(n.node_executable == 'mission_manager' for n in nodes)
+    (params,) = _evaluate(context, nodes, 'pursuit_node')
+    assert params['wait_for_mission'] is True

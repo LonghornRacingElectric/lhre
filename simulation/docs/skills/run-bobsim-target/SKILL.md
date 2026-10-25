@@ -23,15 +23,20 @@ description: Run a BobSim make target (standard evaluation, envelope, lap sim, s
    `make car` writes our records, installs `vehicle/vehicle.yml` as
    `bobsim/vehicle.yml`, runs the target and restores `bobsim/`. See
    [bobsim.md](../../bobsim.md#run-a-bobsim-target-on-our-car). Some
-   targets take up to two hours. Run them in the background.
-4. For FourPost, check the outputs:
+   targets take up to two hours. Run them in the background. To run a
+   candidate copy, add `VEHICLE=out/<name>/vehicle.yml`. See
+   [bobsim.md](../../bobsim.md#run-a-bobsim-target-on-a-candidate).
+4. For FourPost, check the outputs. For a candidate, add the same
+   `VEHICLE` as in step 3:
 
    ```bash
    make four-post-acceptance T=standard-eval-four-post
+   make four-post-acceptance T=standard-eval-four-post VEHICLE=out/<name>/vehicle.yml
    ```
 
    Report each `UNAVAILABLE` check with the result. It is not a pass.
-5. Find the outputs in `out/car/<target>/`. `identity.json` names the
+5. Find the outputs in `out/car/<target>/`, or `out/car/<target>--<name>/`
+   for a candidate. `identity.json` names the
    commits, the vehicle sha256 and the image. Do not commit them.
 
 ## Limits

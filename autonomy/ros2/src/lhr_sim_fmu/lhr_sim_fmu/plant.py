@@ -30,8 +30,14 @@ def load_provenance(path, vehicle_file, bobsim_root):
             raise ValueError('Tire provenance escapes the canonical vehicle directory')
         if hashlib.sha256(tire.read_bytes()).hexdigest() != expected:
             raise ValueError(f'Stale FMU tire: {tire}; rebuild the FMU')
-    sha = subprocess.check_output(['git', '-C', str(bobsim_root), 'rev-parse', 'HEAD'],
-                                  text=True).strip()
+    try:
+        sha = subprocess.check_output(
+            ['git', '-C', str(bobsim_root), 'rev-parse', 'HEAD'],
+            text=True, stderr=subprocess.PIPE).strip()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise ValueError(
+            f'Cannot read BobSim calibration commit at {bobsim_root}; '
+            'use an initialized Git checkout and check BOBSIM_ROOT') from exc
     if sha != manifest['bobsim_sha']:
         raise ValueError('BobSim calibration differs from the FMU build; rebuild the FMU')
     return manifest

@@ -7,11 +7,11 @@ the vehicle's field of view and range, and republishes them on
 Why it exists: it lets planning and control run without a point cloud or a
 renderer, so the kinematic stack works headless, on any OS, and in CI.
 
-What it costs: it hands out cone positions directly, so
-`lhr_perception/lidar_cone_detector` is never exercised by the kinematic
-stack. That is the reason perception currently has no automated test at
-all. This package is a shortcut with a name, kept so it can be retired
-once a synthetic LiDAR publishes `/lhr/lidar/points` without Gazebo.
+What it costs: it hands out cone positions directly, so `perception:=sim`
+never exercises `lhr_perception/lidar_cone_detector`. `perception:=lidar`
+swaps it for [`lhr_lidar_sim`](../lhr_lidar_sim/README.md) and the real
+detector. This package is a shortcut with a name, kept because the
+`perception:=sim` baseline needs a cone source with no point cloud.
 
 ## Parameters
 
@@ -59,3 +59,34 @@ visualization. The simplified sensor copies each scene marker before adding
 position noise, so it cannot alter the ground-truth scene positions.
 
 Node cleanup tolerates an already-stopped ROS context after launch shutdown.
+
+## inertial_sim
+
+The second node, started by `estimator:=ekf`. It degrades
+`/lhr/vehicle/odom_truth` into `/lhr/imu/data` and four wheel speeds on
+`/lhr/sensor/wheel_speeds`, the inputs the
+[EKF](../lhr_state_estimation/README.md) fuses. Feeding the filter raw
+truth would prove nothing, so the error is the point.
+
+Speed and yaw rate come from differencing the truth pose rather than
+reading its twist, so the result does not depend on which frame a plant
+reports twist in. Wheel radius and track default from
+[`vehicle.yaml`](../lhr_vehicle/README.md). Wheel speeds follow body
+motion exactly, so wheel slip never appears. Front speeds ignore
+steering and are approximate in tight turns; the EKF reads only the rear
+pair.
+
+| Parameter | Default | What it does |
+| --- | --- | --- |
+| `gyro_noise_std` | 0.01 | Yaw-rate noise, rad/s std dev |
+| `gyro_bias` | 0.0 | Constant yaw-rate offset, rad/s |
+| `accel_noise_std` | 0.1 | Acceleration noise, m/s² std dev |
+| `accel_bias` | 0.0 | Constant longitudinal acceleration offset, m/s² |
+| `wheel_speed_noise_std` | 0.05 | Wheel-speed noise, rad/s std dev |
+| `wheel_scale_error` | 1.0 | Scale on reported wheel speed; 1.0 is a perfectly known rolling radius |
+| `seed` | 0 | Seeds this node's random stream |
+| `publish_imu` | true | Publish the synthetic IMU |
+
+Gazebo sets `publish_imu` false because it bridges a physics IMU on the
+same topic, so under Gazebo `gyro_bias` and the IMU noise do nothing;
+only the wheel-speed terms apply.

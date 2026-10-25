@@ -48,6 +48,9 @@ remain inside the full model. It does not use VehicleSim's built-in maneuver.
 
 The speed adapter applies exclusive accelerator/brake pedals in [0, 1].
 `fmu_pedal_gain` is a proportional driver gain, not a commanded acceleration.
+The P-only driver can settle below the requested speed, and brake demand
+fades as speed approaches zero. Stops can take longer than in the kinematic
+plant; do not reuse its stopping-distance baseline.
 The driver uses the model longitudinal velocity as ideal speed feedback, as
 in the DynPy adapter. Speed-sensor errors in this actuation loop are not modeled.
 Road-wheel steering uses the canonical vehicle's public KinPy rack mapping

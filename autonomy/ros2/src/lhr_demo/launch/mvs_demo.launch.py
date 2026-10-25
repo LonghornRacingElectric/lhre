@@ -24,8 +24,9 @@ import numpy as np
 # viz topics republish every cone marker at rate and would dominate the
 # bag, and this list doubles as a statement of what the seam between
 # lanes actually is. A topic nothing publishes in a given mode costs
-# nothing, so `/lhr/lidar/points` stays in for the Gazebo and on-car
-# paths that do publish it.
+# nothing, so `/lhr/lidar/points` stays in: lhr_lidar_sim publishes it
+# here with lidar:=true or perception:=lidar, and Gazebo and the car
+# always do.
 RECORDED_TOPICS = (
     # Without /clock a sim-time bag has no timeline a viewer can read.
     '/clock',
@@ -493,6 +494,9 @@ def generate_launch_description():
             'v_max': _f('v_max'),
             'max_accel': _f('max_accel'),
             'max_decel': _f('max_decel'),
+            # Not an argument: this launch always starts the mission manager,
+            # so the car must never move before it says DRIVING.
+            'wait_for_mission': True,
         }],
         output='screen',
     )

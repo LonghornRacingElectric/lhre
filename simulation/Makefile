@@ -7,10 +7,12 @@ STUDY_WORKERS ?=
 ARGS ?=
 V ?=
 STUDY_OUT = $(S)$(if $(V),--$(V))
+STUDY_TEMPLATE := tools/study_template
+BUNDLE_ID = $(shell sed -n 's/^bundle_id: *//p' ../vehicle/bundle.yml 2>/dev/null)
 
 GIT_LF := git -c core.autocrlf=false -c core.longpaths=true
 
-.PHONY: help init build shell test smoke unit records records-undo bobsim car four-post-acceptance study stale bump-bobsim clean
+.PHONY: help init build shell test smoke unit records records-undo bobsim car four-post-acceptance new-study study stale bump-bobsim clean
 
 help:
 	@echo "make init                  Get submodules and build the image"
@@ -23,7 +25,9 @@ help:
 	@echo "make records-undo          Put back only the files make records wrote"
 	@echo "make bobsim T=<target>     Run a BobSim make target"
 	@echo "make car T=<target>        Run a BobSim target on //vehicle, then restore bobsim/"
+	@echo "                           VEHICLE=out/<name>/vehicle.yml runs a candidate copy instead"
 	@echo "make four-post-acceptance  Check the FourPost outputs of make car (T=<target>)"
+	@echo "make new-study S=<name>    Copy the study template to studies/<name>/"
 	@echo "make study S=<name>        Run studies/<name>/run.py (STUDY_WORKERS=n limits CPUs)"
 	@echo "make stale [S=<name>]      Check if a committed study result is stale (no S: every study)"
 	@echo "make bump-bobsim REF=<ref> Move the BobSim pin"
@@ -55,7 +59,11 @@ unit:
 	@test -z "$$(git -C bobsim status --porcelain --ignore-submodules=none)" || { echo "bobsim/ has local changes after the tests. Tests must not write into BobSim. If make records wrote them, run make records-undo."; git -C bobsim status --short --ignore-submodules=none; exit 1; }
 
 BOBLIB := bobsim/engines/boblib
-VEHICLE_NAME = $(shell sed -n 's/^  name: *//p' ../vehicle/vehicle.yml | head -n 1)
+COMMITTED_VEHICLE := ../vehicle/vehicle.yml
+CAR_VEHICLE = $(or $(VEHICLE),$(COMMITTED_VEHICLE))
+CAR_ENV = $(if $(VEHICLE),-e BOBSIM_VEHICLE=$(VEHICLE))
+car_out = out/car/$(1)$(if $(filter-out $(COMMITTED_VEHICLE),$(CAR_VEHICLE)),--$(patsubst out/%/,%,$(dir $(CAR_VEHICLE))))
+VEHICLE_NAME = $(shell sed -n 's/^  name: *//p' $(CAR_VEHICLE) 2>/dev/null | head -n 1)
 RECORD_FILES = \
 	BobLib/Records/VehicleDefn/$(VEHICLE_NAME)Record.mo \
 	BobLib/Records/VehicleDefn/package.order \
@@ -67,7 +75,7 @@ RECORD_FILES = \
 	BobLib/Experiments/Standards/FourPostSim.mo
 
 records:
-	$(RUN) sim sh -c 'cd bobsim && python -m app.modelica_generator "$$BOBSIM_VEHICLE" --write'
+	$(RUN) $(CAR_ENV) sim sh -c 'v=$$(realpath "$$BOBSIM_VEHICLE") && cd bobsim && python -m app.modelica_generator "$$v" --write'
 
 records-undo:
 	cd $(BOBLIB) && git checkout -- $$(git ls-files -- $(RECORD_FILES)) && git clean -f -- $(RECORD_FILES)
@@ -78,10 +86,18 @@ bobsim:
 
 car:
 	@test -n "$(T)" || { echo "Set T=<bobsim target>, for example T=standard-eval-four-post."; exit 1; }
-	COMPOSE='$(COMPOSE)' RUN='$(RUN)' CAR_BOBLIB='$(BOBLIB)' CAR_VEHICLE_NAME='$(VEHICLE_NAME)' CAR_RECORD_FILES='$(RECORD_FILES)' sh tools/car.sh '$(T)'
+	COMPOSE='$(COMPOSE)' RUN='$(RUN)' CAR_BOBLIB='$(BOBLIB)' CAR_VEHICLE='$(CAR_VEHICLE)' CAR_OUT='$(call car_out,$(T))' CAR_VEHICLE_NAME='$(VEHICLE_NAME)' CAR_RECORD_FILES='$(RECORD_FILES)' sh tools/car.sh '$(T)'
 
 four-post-acceptance:
-	$(RUN) sim python tools/four_post_acceptance.py out/car/$(or $(T),standard-eval-four-post)
+	$(RUN) $(CAR_ENV) sim python tools/four_post_acceptance.py $(call car_out,$(or $(T),standard-eval-four-post))
+
+new-study:
+	@echo '$(S)' | grep -Eqx '[a-z0-9]+(-[a-z0-9]+)*' || { echo "Set S=<name>, a kebab-case name such as rear-stabar-rate."; exit 1; }
+	@test ! -e studies/$(S) || { echo "studies/$(S) exists. Pick another name, or run make study S=$(S)."; exit 1; }
+	@test -n "$(BUNDLE_ID)" || { echo "../vehicle/bundle.yml has no bundle_id."; exit 1; }
+	mkdir studies/$(S)
+	for f in $(notdir $(wildcard $(STUDY_TEMPLATE)/*)); do sed -e 's/STUDY_NAME/$(S)/g' -e 's/BUNDLE_ID/$(BUNDLE_ID)/g' $(STUDY_TEMPLATE)/$$f > studies/$(S)/$$f || { rm -rf studies/$(S); echo "Could not copy $$f."; exit 1; }; done
+	@echo "Made studies/$(S)/. Fill study.yml, run.py and README.md, then run make study S=$(S)."
 
 study:
 	@test -n "$(S)" || { echo "Set S=<study name>."; exit 1; }

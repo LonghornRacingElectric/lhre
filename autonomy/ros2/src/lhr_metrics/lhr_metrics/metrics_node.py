@@ -8,10 +8,12 @@ import sys
 import time
 from typing import Optional, Tuple
 
+from lhr_metrics.alignment import TruthAligner
+from lhr_metrics.course import CourseEnvelope, FOOTPRINT_MODEL, SWEEP_STEP_M
 from lhr_metrics.reference import (
-    CircuitProgress, paired_centerline, ReferenceTrack, world_centerline)
+    CircuitProgress, paired_centerline, ReferenceTrack, world_geometry)
 from lhr_metrics.track_error import TrackErrorAccumulator
-from lhr_vehicle import vehicle_sha256
+from lhr_vehicle import load_vehicle, vehicle_sha256
 from nav_msgs.msg import Odometry
 from rcl_interfaces.msg import ParameterDescriptor
 import rclpy
@@ -95,7 +97,8 @@ CSV_HEADER = (
     + ['mean_pos_error', 'max_pos_error', 'mean_yaw_error']
     + ['reference_sha256', 'reference_source', 'reference_length_m',
        'lap_progress_m', 'lap_time_s', 'lap_invalid_reason', 'lap_start_stamp_s',
-       'scoring_odom_topic']
+       'scoring_odom_topic', 'course_sha256', 'footprint_model', 'sweep_step_m',
+       'cones_hit', 'cone_hit_ids']
     + list(GATE_FIELDS)
 )
 
@@ -153,6 +156,8 @@ class MetricsNode(Node):
         for name, default in RUN_PARAMS:
             self.declare_parameter(name, default)
             self._run_params[name] = str(self.get_parameter(name).value)
+        if self._run_params['plant'] != 'fmu':
+            self._run_params['fmu_pedal_gain'] = ''
 
         try:
             self._vehicle_sha = vehicle_sha256()
@@ -162,7 +167,10 @@ class MetricsNode(Node):
             self.get_logger().warn(f'vehicle_sha256 unavailable: {exc}')
 
         # Reference truth is latched once, never read from the planner.
-        self._reference = self._lap = None
+        self._reference = self._lap = self._course = None
+        self._boundary_off_count = 0
+        self._boundary_off_distance = 0.
+        self._last_scored_position = None
         self._reference_source = ''
         self._mission_state = ''
         self._last_stamp = None
@@ -190,6 +198,7 @@ class MetricsNode(Node):
         self._outcome = 'interrupted'
         # --- Estimate-vs-truth stats (only when a truth topic is given) ---
         self._truth: Optional[Tuple[float, float, float]] = None
+        self._aligner = TruthAligner()
         self._err_samples = 0
         self._pos_err_sum = 0.0
         self._pos_err_max = 0.0
@@ -205,9 +214,9 @@ class MetricsNode(Node):
         self._truth_topic = self.get_parameter('truth_odom_topic').value
         reference_world = self.get_parameter('reference_world').value
         if reference_world:
-            self._set_reference(world_centerline(
+            self._set_reference(*world_geometry(
                 reference_world, acceleration=self._run_params['mission'] == 'acceleration'
-                or self._run_params['track_style'] == 'acceleration'), reference_world)
+                or self._run_params['track_style'] == 'acceleration'), source=reference_world)
         else:
             qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                              durability=DurabilityPolicy.TRANSIENT_LOCAL)
@@ -225,7 +234,7 @@ class MetricsNode(Node):
 
         self.get_logger().info(
             f'Metrics v0 ready  (run_id={self._run_id}, '
-            f'off_track>{self._off_track_thresh}m, '
+            f'course_scoring={FOOTPRINT_MODEL}, '
             f'truth={truth_topic or "none"})')
 
     # ------------------------------------------------------------------
@@ -243,15 +252,18 @@ class MetricsNode(Node):
         elif msg.data == 'EMERGENCY':
             self.finish('emergency')
 
-    def _set_reference(self, points, source):
-        track = ReferenceTrack(points, self.get_parameter('reference_closed').value)
+    def _set_reference(self, left, right, cones, source):
+        closed = self.get_parameter('reference_closed').value
+        track = ReferenceTrack(paired_centerline(left, right), closed)
+        course = CourseEnvelope(left, right, cones, load_vehicle(), closed)
         lap = CircuitProgress(
             track, min_fraction=self.get_parameter('min_progress_fraction').value,
             gate_half_width=self._start_radius, min_lap_time=self._min_lap_time,
             start_speed=self.get_parameter('lap_start_speed').value,
             max_gap=self.get_parameter('max_odom_gap_sec').value,
-            corridor=self._off_track_thresh)
-        self._reference, self._lap, self._reference_source = track, lap, source
+            corridor=self._off_track_thresh, on_course=course.contains)
+        self._reference, self._lap, self._course = track, lap, course
+        self._reference_source = source
 
     def _reference_cb(self, message: MarkerArray):
         if self._reference is not None:
@@ -265,7 +277,18 @@ class MetricsNode(Node):
                 return
             sides.append([(m.pose.position.x, m.pose.position.y) for m in markers])
         try:
-            self._set_reference(paired_centerline(*sides), '/lhr/track/cones')
+            cones = []
+            kinds = {'left_cones': 'blue', 'right_cones': 'yellow',
+                     'start_finish': 'orange_large'}
+            for marker in message.markers:
+                if marker.ns not in kinds:
+                    continue
+                if marker.header.frame_id != 'map':
+                    raise ValueError('cone truth must use the map frame')
+                kind = marker.text or kinds[marker.ns]
+                cones.append((f'{marker.ns}/{marker.id}', marker.pose.position.x,
+                              marker.pose.position.y, quat_to_yaw(marker.pose.orientation), kind))
+            self._set_reference(*sides, cones, '/lhr/track/cones')
         except ValueError as error:
             self.get_logger().warning(f'Waiting for complete reference truth: {error}')
 
@@ -273,9 +296,14 @@ class MetricsNode(Node):
         if self._truth_topic:
             # With an estimator, only truth can earn progress or a pass.
             # Estimates remain an error measurement, never a fallback plant pose.
-            if self._truth is not None and not self.finished:
-                self._accumulate_error(msg.pose.pose.position.x, msg.pose.pose.position.y,
-                                       msg.pose.pose.orientation)
+            stamp = self._stamp_sec(msg.header.stamp)
+            if (self._truth is not None and not self.finished and self._lap is not None
+                    and self._lap.started_at is not None and self._mission_state in ('', 'DRIVING')
+                    and stamp is not None and stamp >= self._lap.started_at):
+                for errors in self._aligner.add_estimate(
+                        stamp, msg.pose.pose.position.x, msg.pose.pose.position.y,
+                        quat_to_yaw(msg.pose.pose.orientation)):
+                    self._accumulate_error(*errors)
         else:
             self._score_odom(msg)
 
@@ -294,21 +322,32 @@ class MetricsNode(Node):
             return
         vx, vy = msg.twist.twist.linear.x, msg.twist.twist.linear.y
         speed = math.hypot(vx, vy)
-        if not all(map(math.isfinite, (px, py, speed))):
+        yaw = quat_to_yaw(msg.pose.pose.orientation)
+        if not all(map(math.isfinite, (px, py, yaw, speed))):
             self._lap.invalid_reason = 'nonfinite_odometry'
             self.finish('invalid_lap')
             return
         previous_reason = self._lap.invalid_reason
         completed = self._lap.observe(
             px, py, now, speed, self._mission_state in ('', 'DRIVING'))
-        if self._lap.invalid_reason and not previous_reason:
-            self.get_logger().warning(f'Circuit invalidated: {self._lap.invalid_reason}')
-            self.finish('invalid_lap')
         if self._lap.started_at is None:
             return
         if self._last_stamp is not None and now <= self._last_stamp:
+            if self._lap.invalid_reason:
+                self.finish('invalid_lap')
             return
+        continuous = self._lap.invalid_reason in ('', 'off_course')
+        outside, contacts = self._course.observe(px, py, yaw, continuous=continuous)
+        if outside:
+            self._boundary_off_count += 1
+            if continuous and self._last_scored_position is not None:
+                self._boundary_off_distance += math.dist(
+                    (px, py), self._last_scored_position)
+            self._lap.invalid_reason = self._lap.invalid_reason or 'vehicle_off_course'
+        if contacts:
+            self._lap.invalid_reason = self._lap.invalid_reason or 'cone_contact'
         self._last_stamp = now
+        self._last_scored_position = (px, py)
         self._start_time = self._lap.started_at
         self._last_time = now
 
@@ -319,6 +358,12 @@ class MetricsNode(Node):
         self._speed_sum += speed
         if speed > self._speed_max:
             self._speed_max = speed
+
+        if self._lap.invalid_reason:
+            if not previous_reason:
+                self.get_logger().warning(f'Run invalidated: {self._lap.invalid_reason}')
+            self.finish('invalid_lap')
+            return
 
         # --- Lap detection ---
         if completed:
@@ -332,6 +377,11 @@ class MetricsNode(Node):
             msg.pose.pose.position.x,
             msg.pose.pose.position.y,
             quat_to_yaw(msg.pose.pose.orientation))
+        stamp = self._stamp_sec(msg.header.stamp)
+        if stamp is not None and not self.finished:
+            # Estimates that were waiting for truth at their stamp score now.
+            for errors in self._aligner.add_truth(stamp, *self._truth):
+                self._accumulate_error(*errors)
         self._score_odom(msg)
 
     # ------------------------------------------------------------------
@@ -354,12 +404,8 @@ class MetricsNode(Node):
     # ------------------------------------------------------------------
     # Geometry
     # ------------------------------------------------------------------
-    def _accumulate_error(self, px: float, py: float, orientation):
-        """Score the published estimate against the latest truth sample."""
-        tx, ty, tyaw = self._truth
-        pos_err = math.hypot(px - tx, py - ty)
-        yaw_err = abs(wrap_angle(quat_to_yaw(orientation) - tyaw))
-
+    def _accumulate_error(self, pos_err: float, yaw_err: float):
+        """Add one estimate's error against truth at the same stamp."""
         self._err_samples += 1
         self._pos_err_sum += pos_err
         self._yaw_err_sum += yaw_err
@@ -398,14 +444,19 @@ class MetricsNode(Node):
             'path_length_m': f'{self._cte.path_length:.2f}',
             'mean_cte': f'{self._cte.mean_cte:.4f}',
             'max_cte': f'{self._cte.max_cte:.4f}',
-            'off_track_count': str(self._cte.off_track_samples),
-            'off_track_dist_m': f'{self._cte.off_track_distance:.2f}',
+            'off_track_count': str(self._boundary_off_count),
+            'off_track_dist_m': f'{self._boundary_off_distance:.2f}',
             'mean_speed': f'{mean_speed:.2f}',
             'max_speed': f'{self._speed_max:.2f}',
             'lap_completed': str(self._lap_completed).lower(),
             'reference_sha256': self._reference.sha256 if self._reference else '',
             'reference_source': self._reference_source,
             'scoring_odom_topic': self._truth_topic or '/lhr/vehicle/odom',
+            'course_sha256': self._course.sha256 if self._course else '',
+            'footprint_model': FOOTPRINT_MODEL,
+            'sweep_step_m': str(SWEEP_STEP_M),
+            'cones_hit': str(len(self._course.hit_ids)) if self._course else '0',
+            'cone_hit_ids': ';'.join(sorted(self._course.hit_ids)) if self._course else '',
             'reference_length_m': f'{self._reference.length:.4f}' if self._reference else '',
             'lap_progress_m': f'{self._lap.progress:.4f}' if self._lap else '',
             'lap_time_s': (f'{self._lap.completed_at - self._lap.started_at:.4f}'

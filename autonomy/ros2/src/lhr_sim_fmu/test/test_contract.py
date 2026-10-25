@@ -4,6 +4,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import subprocess
 from types import SimpleNamespace
 
 from lhr_sim_fmu.plant import (
@@ -143,3 +144,23 @@ def test_incompatible_fmi_interface_is_rejected_before_instantiation(defect):
         variables[0].type = 'Integer'
     with pytest.raises(ValueError):
         interface_references(description)
+
+
+@pytest.mark.parametrize('error', [
+    OSError('git unavailable'), subprocess.CalledProcessError(128, ['git']),
+])
+def test_missing_bobsim_checkout_has_an_actionable_error(tmp_path, monkeypatch, error):
+    artifact, vehicle = tmp_path/'OrionFMI.fmu', tmp_path/'vehicle.yml'
+    artifact.write_bytes(b'compiled artifact')
+    vehicle.write_bytes(b'canonical vehicle')
+    manifest = {'schema': 'lhre.fmu.v1',
+                'fmu_sha256': hashlib.sha256(artifact.read_bytes()).hexdigest(),
+                'vehicle_sha256': hashlib.sha256(vehicle.read_bytes()).hexdigest(),
+                'tires': {}, 'bobsim_sha': 'unused'}
+    (tmp_path/'provenance.json').write_text(json.dumps(manifest))
+
+    def fail(*args, **kwargs):
+        raise error
+    monkeypatch.setattr('lhr_sim_fmu.plant.subprocess.check_output', fail)
+    with pytest.raises(ValueError, match='initialized Git checkout.*BOBSIM_ROOT'):
+        load_provenance(artifact, vehicle, tmp_path)
