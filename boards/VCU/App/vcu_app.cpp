@@ -15,6 +15,9 @@ App::App(const Peripherals& peripherals, const Params* initial_params)
       params_(initial_params != nullptr ? initial_params
                                         : &ParamsFor(kDefaultEventMode)),
       snapshot_mutex_(xSemaphoreCreateMutexStatic(&snapshot_mutex_control_)) {
+  const Rgb boot_color =
+      StatusColor(VcuState::kInit, lhre::can::VcuFaultCode::kNone, 0);
+  rainbow_.Override(boot_color.r, boot_color.g, boot_color.b);
   // Outputs to their safe state before anything else runs (Board/ already
   // did this at the pin level before constructing the app).
   WriteDigitalOutputs(p_.outputs, SafeOutputs());

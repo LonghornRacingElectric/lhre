@@ -453,23 +453,33 @@ TEST_F(VcuAppTest, EitherFrozenAdcBankCutsTorqueEvenWithPlausibleCounts) {
   }
 }
 
-TEST_F(VcuAppTest, SharedRainbowAdvancesAndBspdOverridesIt) {
-  b_.Run(*app_, 20);
-  const float red = b_.led_r.duty();
-  b_.Run(*app_, 500);
-  EXPECT_NE(b_.led_r.duty(), red);
+TEST_F(VcuAppTest, StatusLedIsGreenInDriveAndMagentaAfterBspdTrip) {
+  ReachDrive();
+  b_.Run(*app_, 40);
+  EXPECT_FLOAT_EQ(b_.led_r.duty(), 0);
+  EXPECT_GT(b_.led_g.duty(), 0);
+  EXPECT_FLOAT_EQ(b_.led_b.duty(), 0);
   b_.latch_state.Write(true);
   b_.Run(*app_, 40);
+  EXPECT_GT(b_.led_r.duty(), 0);
   EXPECT_FLOAT_EQ(b_.led_r.duty(), b_.led_b.duty());
   EXPECT_FLOAT_EQ(b_.led_g.duty(), 0);
 }
 
-TEST_F(VcuAppTest, RainbowStillRunsAfterMoreThanOneCycleWithoutVehicleCan) {
+TEST_F(VcuAppTest, MissingVehicleCanShowsRedFaultPulsesRatherThanRainbow) {
   b_.hvc_alive = b_.inverter_alive = b_.pdu_alive = false;
-  b_.Run(*app_, 6000);
-  const float red = b_.led_r.duty();
-  b_.Run(*app_, 400);
-  EXPECT_NE(b_.led_r.duty(), red);
+  b_.Run(*app_, 40);  // allow the LED task its first 33 ms update
+  bool saw_red = false;
+  bool saw_off = false;
+  for (int n = 0; n < 60; ++n) {
+    b_.Run(*app_, 20);
+    EXPECT_FLOAT_EQ(b_.led_g.duty(), 0);
+    EXPECT_FLOAT_EQ(b_.led_b.duty(), 0);
+    saw_red |= b_.led_r.duty() > 0;
+    saw_off |= b_.led_r.duty() == 0;
+  }
+  EXPECT_TRUE(saw_red);
+  EXPECT_TRUE(saw_off);
 }
 
 TEST_F(VcuAppTest, DataBusGoldenWheelPacketsDecodeAndExpireIndependently) {

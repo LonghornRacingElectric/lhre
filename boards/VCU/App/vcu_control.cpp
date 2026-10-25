@@ -2,6 +2,7 @@
 
 #include "longhorn/rtos_lock.hpp"
 #include "lookup.hpp"
+#include "status_led.hpp"
 
 namespace vcu {
 using lhre::can::EventMode;
@@ -234,7 +235,8 @@ void App::ControlTick(uint32_t now) {
       !bootloader_entered_.load() && !bootloader_request_.load();
   live_.linelock_request = torque_allowed && regen.linelock_request;
 
-  if (state == VcuState::kBspdTripped) rainbow_.Override(0.3f, 0, 0.3f);
+  const Rgb status = StatusColor(state, PrimaryFault(faults_), now);
+  rainbow_.Override(status.r, status.g, status.b);
 
   DriveOutputs(now);
   SendCritical(now);

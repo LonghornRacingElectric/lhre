@@ -67,7 +67,7 @@ The DUI is a plain CAN peripheral this year.
 | supervisor | 20 ms  | idle+6   | Feeds the IWDG (100 ms) only if control and telemetry both made progress; otherwise forces safe outputs and lets the IWDG reset. |
 | control    | 3 ms   | idle+5   | Inputs, plausibility, state machine, torque, outputs, Critical-bus TX (333 Hz, as on the 2026 car). |
 | telemetry  | 10 ms  | idle+3   | Data-bus diagnostics, flash writes for the fault latch. |
-| rainbow | 33 ms | idle+2 | VCU LED task; continuous five-second rainbow, as last year. |
+| LED status | 33 ms | idle+2 | Applies the state/fault color selected by control. |
 | shell ×2, logger | — | idle+1 | Debug consoles on the STDC14 VCP (USART3) and USB CDC. |
 
 ## Pin map (Rev A netlist)
@@ -97,14 +97,11 @@ The DUI is a plain CAN peripheral this year.
 - **Boot**: the reset cause is read before anything else (reported in
   `VCU_DIAG`, the boot log, and `/state`). Outputs are safe before any
   peripheral starts. The state starts at INIT, then IDLE, and torque is 0.
-  The board-local `vcu::RgbLed` starts white, then a dedicated static
-  `vcu::RainbowTask` runs the five-second rainbow continuously at
-  33 ms intervals, as last year's shared LED task did. Only this task
-  writes the PWM; BSPD_TRIPPED overrides its color. The rainbow runs
-  independently of vehicle CAN freshness.
-  TIM2 channel order/polarity and the legacy CCR=125 boot brightness /
-  CCR<=127 rainbow brightness are preserved. Unlike the old VCU's CAN
-  callback, control never repeatedly creates or destroys LED threads.
+  The board-local `vcu::RgbLed` starts white, then the existing LED task
+  displays `StatusColor` at 33 ms intervals. The control task publishes
+  color requests atomically; only the LED task writes PWM. Tasks are never
+  created/destroyed on state changes. D35's corrected blue/green wiring
+  remains in effect.
 - **ADC progress**: each completed DMA scan increments a counter. Either
   bank without progress for 10 ms raises `ADC_STALE` (fault code 21), cuts
   torque, disables the inverter command and leaves DRIVE. Constant sensor
@@ -257,7 +254,7 @@ the 2026 IDs and layouts. New diagnostics (`VCU_ADC_*`, `VCU_DIGITAL_IO`,
 
 There is one firmware image: `:vcu`. It starts the vehicle app, ADC/DAC,
 both CAN buses, the RTOS tasks, watchdog supervision, both consoles and the
-rainbow. The temporary MVP and bench firmware variants have been removed;
+status LED. The temporary MVP and bench firmware variants have been removed;
 `vcu_test_app.*` remains as a host integration-test harness.
 
 ```bash
@@ -391,3 +388,28 @@ monitor selects the `cu` port automatically:
 ```bash
 bazel run --config=local //tools/monitor
 ```
+
+## Status LED
+
+The vehicle image uses state/fault colors instead of a continuous rainbow.
+Last year's VCU used rainbow in DRIVE and mixed brake/drive-switch/pedal
+flags outside DRIVE. This image uses the existing state machine directly:
+
+| Indication | Meaning |
+| --- | --- |
+| White | Boot / INIT |
+| Solid blue | IDLE, no active faults |
+| Blinking amber | PRECHARGE, no active faults |
+| Solid amber | TS_ACTIVE, no active faults |
+| Blinking green | RTD_WAIT: ready, waiting for the driver's RTD action |
+| Solid green | DRIVE |
+| Red flashes followed by a pause | Active fault outside DRIVE; number of flashes is the primary `VcuFaultCode` number |
+| Solid red | FAULT state with no numbered primary fault |
+| Solid magenta | BSPD_TRIPPED; highest-priority indication, latched until power cycle |
+
+Active faults override the normal non-DRIVE state color. Thus an isolated
+USB bench without vehicle feedback normally flashes red even while the
+state reports IDLE. `/faults` gives the names and `/state` gives the primary
+fault; use these instead of counting long codes. PRECHARGE/RTD_WAIT blink
+at 1 Hz; fault pulses use 250 ms on/off with a 1.5 s inter-code pause.
+The host bench harness retains its rainbow/manual-color behavior for tests.
