@@ -55,9 +55,9 @@
         <topic>/imu/data</topic>
       </sensor>
 
-      <!-- Mid-360 approximation. Gazebo repeats this regular grid rather than
-           the real sensor's non-repeating scan pattern. 500 x 40 rays at
-           10 Hz give the nominal 200,000 first-return points/s budget. -->
+      <!-- Retain main's VLP-16-style grid. The 500 x 40 Mid-360 approximation
+           regressed cone-contact gates; vendor-pattern GPU sampling belongs
+           in a separate experiment. -->
       <sensor name="lidar" type="gpu_lidar">
         <pose>1.0253 0 0.2 0 0 0</pose>
         <always_on>true</always_on>
@@ -67,22 +67,22 @@
         <lidar>
           <scan>
             <horizontal>
-              <samples>500</samples>
+              <samples>1800</samples>
               <resolution>1</resolution>
               <min_angle>-3.14159</min_angle>
               <max_angle>3.14159</max_angle>
             </horizontal>
             <vertical>
-              <samples>40</samples>
+              <samples>16</samples>
               <resolution>1</resolution>
-              <min_angle>-0.122173</min_angle>
-              <max_angle>0.907571</max_angle>
+              <min_angle>-0.261799</min_angle>
+              <max_angle>0.261799</max_angle>
             </vertical>
           </scan>
           <range>
-            <min>0.1</min>
-            <max>40.0</max>
-            <resolution>0.01</resolution>
+            <min>0.9</min>
+            <max>100.0</max>
+            <resolution>0.003</resolution>
           </range>
           <noise>
             <type>gaussian</type>

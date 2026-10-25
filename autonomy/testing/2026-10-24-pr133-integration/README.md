@@ -1,13 +1,79 @@
 # PR #133 integration validation
 
-The source integration and review fixes pass their unit/startup checks, but
-the replacement default GPU grid has a reproducible seed-2 driving regression.
-The GPU grid remains in PR #133; the user explicitly deferred this repair to
-keep the current PR scope. **PR133-GPU-SEED2 is open, not an accepted gate.**
-The default GPU LiDAR timeout also fails locally. A longer diagnostic timeout
-does not erase either failed check.
+The source integration and review fixes passed their unit/startup checks, but
+the replacement default GPU grid had a reproducible driving regression.
+On 2026-10-25, the user chose to remove that grid from PR #133 and defer
+vendor-pattern GPU sampling to a separate experiment. The local rollback
+restores main's 1800 × 16 grid, ±15° vertical coverage and 0.9–100 m range,
+including its 0.003 m range resolution, while retaining configurable noise.
+The local rollback checks below are separate from the historical tables.
+**PR133-GPU-SEED2 retains the failed-grid evidence; its cause is not
+established.** A longer diagnostic timeout does not erase a failed default
+freshness check.
 
-## Provenance and scope
+## Local GPU rollback checks (2026-10-25)
+
+Tested `b4d7b86` plus the uncommitted GPU rollback in `/tmp/lhre-pr133-fixes`.
+The template and generated model restore the previous GPU sampling geometry;
+source selection, caster fixes, detector/controller settings and vehicle-YAML
+noise are retained. The installed model matches the source, and its GPU sensor
+XML matches fetched main `0ab0357`. The model SHA-256 is
+`dae1e6941a650b87e325a9719a737ce3a401ef54343cc85ea63a16cf9dd8b684`.
+Newer main's camera-free model split and readiness changes are not integrated;
+these are not performance results for newest main.
+
+All 15 ROS packages build. The 210 `lhr_gazebo` checks pass, including model
+freshness, launch/source/fault wiring, caster integration and lint. The broader
+workspace run completed 736 checks successfully; the unmodified BobSim
+`test_expired_and_invalid_ros_commands_brake` was interrupted after about
+314 seconds inside the solver. Its interrupt triggered a ROS double-shutdown
+teardown error. An isolated package retry also hit a 60-second cap. This is
+**not a clean full-workspace pass**; both attempts are retained. Strict MkDocs,
+`gz sdf -k`, generated-model freshness and `git diff --check` pass.
+
+Live runs used `perception:=lidar estimator:=ekf safety:=true`, the bundled
+autocross worlds and a 5 m/s speed cap, one simulation at a time. A live
+parameter query confirmed the existing height band (-0.4 to 0.5 m), 1-point
+cluster minimum, 0.5 m cluster radius, zero raw-point stacking and controller
+limits. Actual clouds were 1800 × 16 in `fsae_vehicle/chassis/lidar`.
+
+| Run | LiDAR timeout | Result | Lap time | Max CTE | Cone contacts | Stop after finish |
+| --- | ---: | --- | ---: | ---: | ---: | ---: |
+| Seed 2, default timeout | 0.3 s | **FAIL**, `LIDAR_STALE` before driving | — | — | unscored | — |
+| Seed 2 | 1.5 s | Diagnostic pass | 33.8023 s | 0.2509 m | 0 | 1.37 m |
+| Seed 3 | 1.5 s | Diagnostic pass | 33.7156 s | 0.2327 m | 0 | 1.44 m |
+| Seed 1, control repeat | 1.5 s | Diagnostic pass | 33.6033 s | 0.2455 m | 0 | 1.55 m |
+
+All three diagnostic passes had zero off-track distance, no safety trips or
+unexpected node exits, a live launch and the expected driving nodes before
+cleanup, and final `FINISHED` state with zero measured speed and speed command.
+No duplicate cloud stamps were observed. Course/contact results come from
+production metrics. Stop distances use the official gate's helper with probe
+receive times expressed in simulation time. These are focused regression
+checks, not the full MVP gate, its lap-time-ratio check or physical validation.
+
+The first seed-1 control is retained as **unscored**: it reached `FINISHED`,
+but the observer latched a partially written metrics CSV row and raised
+`KeyError: lap_completed` during final scoring. The temporary probe was fixed
+to wait for complete required fields and repeated with unchanged launch
+settings. Its original final metrics remain in `rollback-gpu.csv`, explicitly
+excluded from the pass count.
+
+The default-timeout failure had zero vehicle motion and a 0.4 s acquisition
+gap. Diagnostic runs still had maximum acquisition gaps of 0.4–0.6 s, so the
+rollback does not establish default-timeout acceptance. It removes the
+regressing grid and passes the known contact scenes under the diagnostic
+timeout; it does not establish the rendered-observation cause.
+
+`rollback-gpu.csv` records all five live attempts. Local raw results are under
+`/tmp/lhre-pr133-acceptance/rollback_20261025_*`: commands, world/model hashes,
+the exact dirty patch and probe source, metrics, trajectories, cloud timing,
+completion observations and logs. The first control also contains the live
+effective-parameter query. Workspace XML and interrupted-test logs are in
+`rollback_20261025_workspace`. These new runs did not record raw-cloud bags;
+the local `/tmp` evidence is volatile and has not been uploaded to SharePoint.
+
+## Historical provenance and scope
 
 Initial comparisons used implementation `d588126` against main `0a157ab` on
 2026-10-24, Ubuntu native / ROS 2 Jazzy / Gazebo Harmonic, NVIDIA RTX 3050
@@ -30,6 +96,10 @@ and repeated in isolation. They are excluded from the table. A single-run lock
 prevents overlapping probe sessions afterward.
 
 ## PR133-GPU-SEED2: open, deferred
+
+Historical regression record: the 500 × 40 grid is no longer selected by
+this local PR tree. Diagnosis and any replacement sampling approach remain
+follow-up work; reverting the grid does not turn the failed runs into passes.
 
 With identical seed-2 world bytes and default controller/detector settings,
 the replacement GPU grid touched `cone_blue_10` in both isolated attempts.
@@ -90,7 +160,7 @@ gate pass. Related frame-delivery work is tracked in
 - [ ] Characterize acquisition gaps and transport timing under load.
 - [ ] Repeat GPU driving at the unchanged default timeout after the repair.
 
-## Current-tree bounded official gate
+## Historical bounded official gate (2921bf3)
 
 All 15 packages build on the integration with main `4cf75bb`; **737 workspace
 checks pass, with zero errors, failures or skips**. Every bundled world,
@@ -117,7 +187,7 @@ processes; simultaneous simulations were not used.
 | Caster / acceleration | pass | 0.0042 m | 0 | 1.45 m |
 
 The GPU subset is **2/4 passing**; the caster subset is **4/4 passing**.
-Both current-tree GPU contact failures remain under PR133-GPU-SEED2, which
+Both GPU contact failures on that tree remain under PR133-GPU-SEED2, which
 now also includes seed 3 (`cone_blue_19`). They are not removed from the campaign or counted
 as passes. The invalid runs did not produce a scored lap or FINISHED stop.
 All three truth-stack baselines completed valid laps.

@@ -39,29 +39,32 @@ and a published scan-time mount transform; select `lidar_height_filter_frame:=ba
 when using ground-relative thresholds. These opt-in configurations need
 Gazebo acceptance testing before changing defaults.
 
-The GPU sensor approximates Mid-360 with a repeating 500 × 40 grid at 10 Hz,
-360° horizontal and −7° to +52° vertical coverage and 0.1–40 m range.
-This replaces the default VLP-16 grid, including `lidar_source:=gazebo`;
-the detector implementation and thresholds are retained, but its input changes.
-Select the caster below for imported Livox scan directions.
+The default `lidar_source:=gazebo` retains main's repeating VLP-16-style grid:
+1800 × 16 rays at 10 Hz, 360° horizontal and −15° to +15° vertical coverage,
+0.9–100 m range and 0.003 m range resolution. Select the caster below for
+imported Livox scan directions. Vendor-pattern GPU sampling is deferred to a
+separate experiment.
 
-### Open validation follow-ups
+### GPU grid rollback
 
-**PR133-GPU-SEED2 remains open.** The replacement GPU grid contacted
+**The experimental GPU grid has been reverted.** The 500 × 40 grid contacted
 `cone_blue_10` in two isolated autocross seed-2 runs; the previous main GPU
-model and the vendor-pattern caster passed that same world. The current-tree
+model and the vendor-pattern caster passed that same world. The historical
 official bounded gate also reports cone contacts on GPU seeds 2 and 3, while
-the caster passes seeds 1–3 and acceleration. The GPU grid is
-retained in PR #133 by scope decision, and its driving regression is deferred.
-This is a failed whole-vehicle/cone-base scoring check, not a passing acceptance
-result or a measured collision force. Planner and detector defaults are not
-retuned here. See the [reproduction, comparison and closure checklist](../../../testing/2026-10-24-pr133-integration/README.md#pr133-gpu-seed2-open-deferred).
+the caster passes seeds 1–3 and acceleration. PR #133 now preserves main's
+GPU sampling geometry; the underlying observation failure remains undiagnosed.
+The historical failures use whole-vehicle/cone-base scoring, not measured
+collision forces. Planner and detector defaults are retained. The local
+rollback passes focused seed-2 and seed-3 driving checks with the diagnostic
+timeout; see the [rollback results and retained failures](../../../testing/2026-10-24-pr133-integration/README.md#local-gpu-rollback-checks-2026-10-25).
 
-The unchanged 0.3 s LiDAR timeout also tripped `LIDAR_STALE` with both main
-and PR GPU models on the test laptop. GPU runs using
+The unchanged 0.3 s LiDAR timeout still trips `LIDAR_STALE` on the local
+rollback tree, before driving, with a 0.4 s acquisition gap. GPU runs using
 `safety_lidar_timeout_s:=1.5` are diagnostics and do not pass the default-timeout
-gate. Track frame-delivery failures with [#123](https://github.com/LonghornRacingElectric/lhre/issues/123)
-and the [validation record](../../../testing/2026-10-24-pr133-integration/README.md).
+gate. Newer main's camera-rendering and startup-readiness changes are not
+integrated into this tree; these are not results for newest main. See
+[#123](https://github.com/LonghornRacingElectric/lhre/issues/123) and the
+[validation record](../../../testing/2026-10-24-pr133-integration/README.md).
 
 ### Range noise
 
@@ -72,7 +75,7 @@ before publishing the point cloud. Its standard deviation comes from
 test's 0.9-1.9 cm floor-patch residuals and matches the existing
 [Mid-360 simulator](../lhr_lidar_sim/README.md)'s range-noise setting.
 Floor-plane residuals are not a direct along-beam calibration; this is a
-provisional noise scale, not a calibration of the Mid-360 grid or caster.
+provisional noise scale, not a calibration of the GPU grid or caster.
 See the [acceptance log](../../../testing/2026-10-04-mid360-acceptance/log.md#outdoors-driveway-in-front-of-the-garage-from-1637).
 
 The setting must be finite and non-negative. Set it to `0.0` for an ideal-range
