@@ -1,5 +1,5 @@
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
-load("@rules_python//python:defs.bzl", "py_binary")
+load("@rules_python//python:defs.bzl", "py_binary", "py_test")
 load(":build_info.bzl", "build_info_header")
 
 py_binary(
@@ -26,3 +26,12 @@ cc_library(
 
 # Run by each firmware image's {image}_size_test (firmware_project).
 exports_files(["size_check.py"])
+
+py_test(
+    name = "size_check_test",
+    size = "small",
+    srcs = [
+        "size_check.py",
+        "size_check_test.py",
+    ],
+)

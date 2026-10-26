@@ -16,14 +16,16 @@ _UNITS = {"": 1, "K": 1024, "M": 1024 * 1024}
 
 
 def memory_regions(ld_text):
-    block = re.search(r"MEMORY\s*\{(.*?)\}", ld_text, re.S).group(1)
-    block = re.sub(r"/\*.*?\*/", "", block, flags=re.S)
+    # Strip comments first so a brace inside one cannot end the block.
+    text = re.sub(r"/\*.*?\*/", "", ld_text, flags=re.S)
+    block = re.search(r"MEMORY\s*\{(.*?)\}", text, re.S).group(1)
     regions = {}
     for name, origin, length, unit in re.findall(
-        r"(\w+)\s*\([^)]*\)\s*:\s*ORIGIN\s*=\s*(\w+)\s*,\s*LENGTH\s*=\s*(\d+)\s*([KM]?)",
+        r"(\w+)\s*\([^)]*\)\s*:\s*ORIGIN\s*=\s*(\w+)\s*,\s*"
+        r"LENGTH\s*=\s*(0[xX][0-9A-Fa-f]+|\d+)\s*([KM]?)",
         block,
     ):
-        regions[name] = (int(origin, 0), int(length) * _UNITS[unit])
+        regions[name] = (int(origin, 0), int(length, 0) * _UNITS[unit])
     return regions
 
 
@@ -46,6 +48,8 @@ def main(elf_path, ld_path, budget_pct):
         regions = memory_regions(f.read())
     flash_origin, flash_len = regions["FLASH"]
     ram_origin, ram_len = regions["RAM"]
+    if not flash_len or not ram_len:
+        raise ValueError(f"{ld_path}: FLASH or RAM has zero length")
     flash = ram = 0
     for sh_type, addr, size in alloc_sections(elf):
         if ram_origin <= addr < ram_origin + ram_len:
