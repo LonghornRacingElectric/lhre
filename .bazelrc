@@ -145,4 +145,12 @@ build:offline --nofetch
 common:ci --bes_upload_mode=wait_for_upload_complete
 common:ci --noremote_cache_async
 
+# Host tests under UBSan in trap mode: undefined behavior stops the test, and
+# no sanitizer runtime is needed (the hermetic LLVM ships none). Firmware
+# images can't take these flags, so their size tests are skipped.
+build:ubsan --copt=-fsanitize=undefined
+build:ubsan --copt=-fsanitize-trap=undefined
+test:ubsan --build_tests_only
+test:ubsan --test_tag_filters=-firmware_size
+
 try-import %workspace%/.bazelrc.user

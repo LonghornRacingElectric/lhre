@@ -3,6 +3,11 @@ name: presubmit
 on:
   pull_request:
 
+# A new push to a PR cancels that PR's older run. Runs on main finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # autonomy/ and simulation/ are outside Bazel (ADR-009, ADR-012), so a PR
   # that only touches them has nothing for the Bazel jobs to check. They are
@@ -56,6 +61,10 @@ jobs:
 
       - name: Test everything
         run: bazel test //...
+
+      # Firmware host tests again with undefined behavior trapping.
+      - name: Test firmware under UBSan
+        run: bazel test --config=ubsan //boards/... //drivers/...
 
   # Windows builds run fully locally (see .bazelrc: Bazel can't drive the
   # Linux remote executors from a Windows client) but still share the

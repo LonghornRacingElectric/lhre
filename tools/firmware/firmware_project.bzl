@@ -4,6 +4,7 @@ load("@aspect_bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("@rules_python//python:defs.bzl", "py_test")
 
 # ---------------------------------------------------------------------------
 # Target platform per family. Each platform's CPU-core constraint selects the
@@ -413,6 +414,7 @@ def firmware_project(
         locations = [],
         variants = {},
         enable_printf_float = False,
+        size_budget_percent = 85,
         linker_script = None,
         startup_script = None,
         driver_headers = None,
@@ -481,6 +483,9 @@ def firmware_project(
             selection in Board/ code, e.g. a bring-up test image. Defaults
             to {}.
         enable_printf_float (bool, optional): Whether to link -u _printf_float (adds ~10KB). Defaults to False.
+        size_budget_percent (int, optional): Each image gets a
+            {image}_size_test that fails above this share of flash or RAM.
+            The linker alone only fails at 100%. Defaults to 85.
         linker_script (path, optional): Override for the mcu-derived linker script.
         startup_script (path, optional): Override for the mcu-derived startup file.
         driver_headers (label, optional): Override for the driver headers target. Defaults to //drivers/stm32/{family}:headers.
@@ -552,6 +557,7 @@ def firmware_project(
             srcs = app_srcs,
             hdrs = native.glob(["App/**/*.hpp"], allow_empty = True),
             includes = ["App"],
+            copts = ["-Wall", "-Wextra", "-Werror"],
             deps = final_app_deps,
         )
 
@@ -687,6 +693,22 @@ def firmware_project(
             name = target_name,
             src = target_name,
             visibility = ["//visibility:public"],
+        )
+        py_test(
+            name = "{}_size_test".format(target_name),
+            size = "small",
+            srcs = ["//tools/firmware:size_check.py"],
+            tags = ["firmware_size"],
+            main = "//tools/firmware:size_check.py",
+            args = [
+                "$(rootpath :{}_elf)".format(target_name),
+                "$(rootpath {})".format(linker_script),
+                str(size_budget_percent),
+            ],
+            data = [
+                ":{}_elf".format(target_name),
+                linker_script,
+            ],
         )
         hex_out(
             name = target_name,

@@ -3,6 +3,11 @@ name: lint-format
 on:
   pull_request:
 
+# A new push to a PR cancels that PR's older run. Runs on main finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   lint-format:
     runs-on: ubuntu-latest
