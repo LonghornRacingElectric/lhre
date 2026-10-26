@@ -414,6 +414,7 @@ def firmware_project(
         locations = [],
         enable_printf_float = False,
         size_budget_percent = 85,
+        size_budget_overrides = {},
         linker_script = None,
         startup_script = None,
         driver_headers = None,
@@ -476,8 +477,12 @@ def firmware_project(
         locations (list, optional): A list of location identifiers (e.g., ["FR", "FL"]).
         enable_printf_float (bool, optional): Whether to link -u _printf_float (adds ~10KB). Defaults to False.
         size_budget_percent (int, optional): Each image gets a
-            {image}_size_test that fails above this share of flash or RAM.
-            The linker alone only fails at 100%. Defaults to 85.
+            {image}_size_test that fails when any MEMORY region of the
+            linker script is filled past this percent. The linker alone
+            only fails at 100%. Defaults to 85.
+        size_budget_overrides (dict, optional): Per-region budgets that
+            replace size_budget_percent, e.g. {"DTCMRAM": 100} for a region
+            meant to be filled. Defaults to {}.
         linker_script (path, optional): Override for the mcu-derived linker script.
         startup_script (path, optional): Override for the mcu-derived startup file.
         driver_headers (label, optional): Override for the driver headers target. Defaults to //drivers/stm32/{family}:headers.
@@ -686,6 +691,9 @@ def firmware_project(
                 "$(rootpath :{}_elf)".format(target_name),
                 "$(rootpath {})".format(linker_script),
                 str(size_budget_percent),
+            ] + [
+                "{}={}".format(region, percent)
+                for region, percent in size_budget_overrides.items()
             ],
             data = [
                 ":{}_elf".format(target_name),
