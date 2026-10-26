@@ -156,9 +156,14 @@ def main():
 
         process = os.popen(f"{dfu_util_exe_actual_path} --list")
         dfu_path = find_first_path_for_device_regex(process.read())
-        # Flash to both banks so the board boots correctly regardless of
-        # which bank BFB2 is currently pointing at (OTA toggles BFB2).
-        # Bank 1: 0x08000000, Bank 2: 0x08040000 (STM32G4, 512K flash)
+        if dfu_path is None:
+            sys.stderr.write(
+                "No STM32 ROM DFU device (0483:df11) detected. "
+                "Enter ROM DFU mode using BOOT0/reset, check the USB data cable, "
+                "then retry. No firmware was written.\n"
+            )
+            return 1
+        # This firmware boots from bank 1.
         for bank_addr in ["0x08000000"]:
             dfu_command = (
                 f'{dfu_util_exe_actual_path} -a 0 -p "{dfu_path}" '
@@ -180,4 +185,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

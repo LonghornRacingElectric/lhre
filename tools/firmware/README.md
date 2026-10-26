@@ -27,7 +27,7 @@ One call produces the whole target family:
 | `:dfu`                              | `bazel run` target: flash the BIN over USB DFU.        |
 | `:release`                          | Filegroup of every elf/bin/hex (for CI artifacts).     |
 | `:vcu_app`                          | The app library, synthesized from `App/` (see below).  |
-| `:vcu_app_test` / `:vcu_rtos_test` / `:vcu_sim` | One host test per `App/*_test.cpp`, one host binary per `App/*_sim.cpp`. |
+| `:vcu_app_test` / `:vcu_rtos_test` / `:vcu_sim` | One host test per `App/**/*_test.cpp`, one host binary per `App/**/*_sim.cpp`. |
 
 ## One fact: `mcu`
 
@@ -75,9 +75,10 @@ from the `App/` directory instead of boards restating it:
   automatically — Cortex-M port + the board's CubeMX `FreeRTOSConfig.h`
   (exposed as `{name}_freertos_config`) when cross-compiling, simulator
   port + host config otherwise — so task code runs unmodified on the host.
-- `App/*_test.cpp` → one small `cc_test` per file, named by its stem,
-  against `{name}_app` + the LHAL host fakes + gtest.
-- `App/*_sim.cpp` → one host `cc_binary` per file, named by its stem.
+- `App/**/*_test.cpp` → one small `cc_test` per file, named by its stem,
+  against `{name}_app` + the LHAL host fakes + gtest. Stems must be unique
+  across `App/`.
+- `App/**/*_sim.cpp` → one host `cc_binary` per file, named by its stem.
 
 `app_deps` adds host-buildable dependencies to the app library (e.g.
 `//drivers/longhorn`). A board that outgrows the convention sets

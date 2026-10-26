@@ -152,8 +152,8 @@ the `.ioc` and creates everything `firmware_project` can't derive:
 - **`BUILD.bazel`** — the minimal `firmware_project` call. The macro
   derives the rest (device define, linker script, startup file, HAL
   wiring) and synthesizes targets from file names: `App/**/*.cpp` form the
-  `<name>_app` library, each `App/*_test.cpp` becomes a host test, each
-  `App/*_sim.cpp` a host simulator (see
+  `<name>_app` library, each `App/**/*_test.cpp` becomes a host test, each
+  `App/**/*_sim.cpp` a host simulator (see
   [tools/firmware](tools/firmware/README.md)).
 - **Starter `App/` and `Board/` files** that compile, pass their test, and
   blink an LED as-is: `App/<name>_app.{hpp,cpp}` (application logic,
@@ -184,21 +184,21 @@ and with the board on an ST-Link, `bazel run //boards/<Name>:openocd`
 flashes the blinker. From there, follow the scaffolder's printed next
 steps: grow the app in `App/` (new `*_test.cpp` / `*_sim.cpp` files become
 targets automatically), wire real peripherals in `Board/main.cpp`, add
-`:release` to `//boards:all_firmware`, add a `post_cubemx.sh` like VCU's,
-and write the board README.
+`:release` to `//boards:all_firmware`, and write the board README.
 
 ## Regenerating CubeMX code safely
 
 `Core/` is 100% CubeMX-owned; `Board/` is 100% ours. That split is what makes
 "Generate Code" safe:
 
-1. Edit the `.ioc` in CubeMX and generate.
-2. Run the board's `post_cubemx.sh` (deletes the generated `main.c`; our
-   entry point is `Board/main.cpp`).
-3. If you changed the clock tree in CubeMX, mirror it by hand in
-   `Board/main.cpp` (`ConfigureSystemClock()`) — clock config is the one
-   thing owned in both places.
-4. Build and diff: only `Core/` files should have changed.
+1. Edit the `.ioc` in CubeMX and generate. Keep
+   `ProjectManager.NoMain=true` (Project Manager → Code Generator → "Do
+   not generate the main()"): the generated `main.c` then only supplies
+   `SystemClock_Config()` and `Error_Handler()`, which the firmware
+   compiles and `lhal::stm32::InitCore()` calls, so clock-tree changes
+   apply with no hand transcription. Our entry point is `Board/main.cpp`.
+2. Build and diff: only `Core/` (and `USB_Device/`) files should have
+   changed, and `USER CODE` sections must survive.
 
 ## Season policy
 

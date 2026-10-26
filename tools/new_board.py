@@ -10,8 +10,8 @@ is derived from it by firmware_project) and which middleware CubeMX has
 enabled. This script reads exactly that and emits the minimal call.
 
 firmware_project synthesizes the rest of the board's targets from file
-names (App/**/*.cpp → the app library, App/*_test.cpp → host tests,
-App/*_sim.cpp → host sims, Board/ → firmware entry point), so the script
+names (App/**/*.cpp → the app library, App/**/*_test.cpp → host tests,
+App/**/*_sim.cpp → host sims, Board/ → firmware entry point), so the script
 also writes compiling starter files for each of those (see
 new_board_templates.py) — a new board blinks, host-tests, and simulates
 out of the box. Existing files are never overwritten.
@@ -456,8 +456,8 @@ def main():
         print()
         print("next steps:")
         print(f"  - flesh out the starter files: App/{name}_app.* is the application")
-        print(f"    (LHAL-only; new App/*.cpp files join the library, new App/*_test.cpp /")
-        print(f"    App/*_sim.cpp files become their own test/sim targets automatically),")
+        print(f"    (LHAL-only; new App/*.cpp files join the library, new App/**/*_test.cpp /")
+        print(f"    App/**/*_sim.cpp files become their own test/sim targets automatically),")
         print(f"    Board/main.cpp is bring-up + wiring (fix the status-LED TODO)")
         print(f"  - add //boards/{board}:release to //boards:all_firmware")
         print(f"  - add a post_cubemx.sh like VCU's")
