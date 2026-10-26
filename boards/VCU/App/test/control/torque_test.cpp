@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
+
 #include "config/params.hpp"
 #include "control/torque.hpp"
 
@@ -26,14 +28,99 @@ TEST(Torque, MapPowerLimitAndDerate) {
   in.motor_rpm = 6000.0f;
   out = path.Update(in, P().torque, P().power_limit, P().traction);
   EXPECT_NEAR(out.lookup, 103.0f * 0.35355f, 0.01f);
+}
 
-  // 80 kW against a 70 kW limit trims torque.
-  in.pedal_travel = 1.0f;
-  in.dc_bus_voltage = 500.0f;
-  in.dc_bus_current = 160.0f;
-  out = path.Update(in, P().torque, P().power_limit, P().traction);
+constexpr float kPi = 3.14159265358979f;
+
+float Omega(float rpm) { return rpm * kPi / 30.0f; }
+
+// A car whose inverter reports `true_ratio` x torque x omega as DC power.
+// Current samples arrive every 10 ms; the controller runs every 3 ms.
+struct PowerPlant {
+  vcu::TorquePath path;
+  vcu::TorqueInputs in;
+  vcu::PowerLimitParams pl = P().power_limit;
+  float true_ratio = 0.85f;
+  float last_torque = 0.0f;
+  uint32_t now = 0;
+
+  PowerPlant(float rpm) {
+    in.pedal_travel = 1.0f;
+    in.motor_rpm = rpm;
+    in.motor_speed_valid = true;
+    in.dt_ms = 3;
+  }
+  vcu::TorqueOutputs Tick() {
+    now += 3;
+    if (now % 10 < 3) {
+      in.power_sample_ms = now;
+      in.dc_bus_voltage = 500.0f;
+      in.dc_bus_current =
+          true_ratio * last_torque * Omega(in.motor_rpm) / 500.0f;
+    }
+    const auto out = path.Update(in, P().torque, pl, P().traction);
+    last_torque = out.power_limited;
+    return out;
+  }
+  float PowerW() const {
+    return true_ratio * last_torque * Omega(in.motor_rpm);
+  }
+};
+
+TEST(PowerLimit, CapsTorqueFromSpeedBeforeAnyFeedback) {
+  PowerPlant car(4000.0f);
+  car.pl.limit_w = 40000.0f;
+  const auto out = car.Tick();
+  EXPECT_NEAR(out.power_limited, 40000.0f / (0.85f * Omega(4000.0f)), 0.01f);
   EXPECT_LT(out.power_limited, out.lookup);
-  EXPECT_GE(out.power_limited, 0.0f);
+}
+
+TEST(PowerLimit, TrimRemovesRatioErrorWithoutOvershoot) {
+  PowerPlant car(4000.0f);
+  car.pl.limit_w = 40000.0f;
+  car.true_ratio = 0.90f;  // the controller assumes 0.85
+  float peak = 0.0f;
+  for (int i = 0; i < 1000; ++i) {  // 3 s
+    car.Tick();
+    peak = std::max(peak, car.PowerW());
+  }
+  EXPECT_NEAR(car.PowerW(), 40000.0f, 400.0f);
+  EXPECT_LT(peak, 40000.0f * 0.90f / 0.85f + 1.0f);
+}
+
+TEST(PowerLimit, TrimMovesOnlyOnNewSamples) {
+  PowerPlant car(4000.0f);
+  car.pl.limit_w = 40000.0f;
+  car.true_ratio = 0.90f;
+  for (int i = 0; i < 50; ++i) car.Tick();
+  const float trim = car.Tick().power_trim_w;
+  // Same sample time: repeated ticks must not integrate it again.
+  for (int i = 0; i < 5; ++i) {
+    EXPECT_FLOAT_EQ(
+        car.path.Update(car.in, P().torque, car.pl, P().traction).power_trim_w,
+        trim);
+  }
+}
+
+TEST(PowerLimit, TrimHoldsWhileTheCapIsNotLimiting) {
+  PowerPlant car(4000.0f);
+  car.in.pedal_travel = 0.3f;  // driver demand stays under the cap
+  car.true_ratio = 2.0f;       // reported power far above the limit
+  vcu::TorqueOutputs out;
+  for (int i = 0; i < 300; ++i) out = car.Tick();
+  EXPECT_FLOAT_EQ(out.power_trim_w, 0.0f);
+  EXPECT_FLOAT_EQ(out.power_limited, out.lookup);
+}
+
+TEST(PowerLimit, NoCapNearStandstillOrWithoutSpeed) {
+  PowerPlant car(50.0f);  // about 5 rad/s
+  car.pl.limit_w = 1000.0f;
+  auto out = car.Tick();
+  EXPECT_FLOAT_EQ(out.power_limited, out.lookup);
+  car.in.motor_rpm = 4000.0f;
+  car.in.motor_speed_valid = false;
+  out = car.Tick();
+  EXPECT_FLOAT_EQ(out.power_limited, out.lookup);
 }
 
 TEST(Torque, SkidpadParamsSaturateAt70Percent) {

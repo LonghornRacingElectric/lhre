@@ -189,6 +189,14 @@ legacy `FREQ=3` means milliseconds, not 3 Hz. Each corner expires after two
 periods. The older 0x130 packet cannot supply four independent speeds.
 `/state` reports wheel validity and drive/braking slip.
 
+The power limit caps torque at `(limit_w - trim) / (dc_power_ratio * omega)`.
+Motor speed is fresh every tick, so the cap has no feedback delay. A slow
+integral trim, in watts, corrects `dc_power_ratio` from inverter V x I. It
+updates once per new current sample, only while the cap is limiting, and is
+clamped to 0-`trim_max_w`. It is kept across pulls. Below
+`min_omega_rad_s` the cap is off. The ratio comes from drive logs and is not
+validated against the official energy meter, so keep the 70 kW margin.
+
 `WheelControlParams::enabled` enables rear-drive slip control. It uses the
 faster undriven front wheel as speed reference, the faster rear wheel to
 detect one-wheel spin, and a bounded PI torque reduction. Reductions act

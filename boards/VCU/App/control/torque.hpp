@@ -12,9 +12,10 @@ struct TorqueInputs {
   float pedal_travel = 0.0f;  // 0..1 after filter and deadzone
   float motor_rpm = 0.0f;
   bool motor_speed_valid = false;
-  float dc_bus_voltage = 0.0f;  // inverter 0x0A7
-  float dc_bus_current = 0.0f;  // inverter 0x0A6 (negative = regen)
-  float ocv_min_cell_v = 0.0f;  // battery estimate
+  float dc_bus_voltage = 0.0f;   // inverter 0x0A7
+  float dc_bus_current = 0.0f;   // inverter 0x0A6 (negative = regen)
+  uint32_t power_sample_ms = 0;  // arrival time of the current sample
+  float ocv_min_cell_v = 0.0f;   // battery estimate
   uint32_t dt_ms = 0;
   uint32_t speed_sample_ms = 0;  // arrival time of the chosen CAN speed sample
   bool speed_from_high_speed = false;  // which inverter frame supplied it
@@ -23,9 +24,10 @@ struct TorqueInputs {
 struct TorqueOutputs {
   float lookup = 0.0f;         // pedal map x torque table
   float derated = 0.0f;        // low-cell derate (telemetry unless applied)
-  float power_limited = 0.0f;  // after the closed-loop trim
+  float power_limited = 0.0f;  // after the power cap
   float traction = 0.0f;       // after traction control
-  float power_w = 0.0f;
+  float power_w = 0.0f;        // inverter-reported V x I
+  float power_trim_w = 0.0f;
 };
 
 // Pedal map -> power limit -> acceleration limiter. App handles state/fault
@@ -37,7 +39,14 @@ class TorquePath {
   void Reset();
 
  private:
-  float power_integral_ = 0.0f;
+  float LimitPower(const TorqueInputs& in, const PowerLimitParams& pl,
+                   float base, TorqueOutputs* out);
+
+  // Kept across Reset(): it corrects a slow-drifting ratio, not one pull.
+  float power_trim_w_ = 0.0f;
+  uint32_t power_prev_sample_ms_ = 0;
+  bool power_seeded_ = false;
+  bool power_cap_active_ = false;
   float tc_integral_ = 0.0f;
   float tc_prev_omega_ = 0.0f;
   uint32_t tc_prev_sample_ms_ = 0;

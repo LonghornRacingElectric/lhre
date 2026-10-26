@@ -265,6 +265,7 @@ float App::PositiveTorque(uint32_t now, uint32_t dt_ms, bool torque_allowed,
   tin.motor_speed_valid = live_.motor_speed_valid;
   tin.dc_bus_voltage = fb.dc_v;
   tin.dc_bus_current = fb.dc_a;
+  tin.power_sample_ms = rx_.inverter_current.last_ms;
   tin.ocv_min_cell_v = live_.battery.ocv_min_cell_v;
   tin.dt_ms = dt_ms;
   tin.speed_from_high_speed = rx_.inverter_speed.Fresh(now);

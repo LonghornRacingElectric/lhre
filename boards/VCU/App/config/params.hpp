@@ -132,12 +132,16 @@ struct TorqueParams {
   bool apply_low_cell_derate = false;
 };
 
+// Torque cap from motor speed, plus a slow trim learned from inverter V x I.
 struct PowerLimitParams {
-  // Closed-loop trim on inverter DC bus V x I (PowerLimit.c:16-39).
   float limit_w = 70000.0f;
-  float kp = 0.006f;
-  float ki = 0.6f;
-  float integral_max = 20000.0f;
+  // Inverter-reported Vdc x Idc per unit of torque feedback x omega. Taken
+  // from drive logs; not a physical efficiency.
+  float dc_power_ratio = 0.85f;
+  float trim_ki_per_s = 2.0f;  // trim watts per watt-second of error
+  float trim_max_w = 10000.0f;
+  // Below this speed the cap is skipped; omega near 0 would divide by zero.
+  float min_omega_rad_s = 10.0f;
 };
 
 struct TractionParams {
