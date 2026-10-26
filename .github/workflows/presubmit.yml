@@ -63,9 +63,12 @@ jobs:
       - name: Test everything
         run: bazel test //...
 
-      # Firmware host tests again with undefined behavior trapping.
-      - name: Test firmware under UBSan
-        run: bazel test --config=ubsan //boards/... //drivers/...
+      # Host C++ tests again with undefined behavior trapping. trap_test is
+      # the canary that proves the sanitizer is on (tools/ubsan/README.md).
+      - name: Test host C++ under UBSan
+        run: >-
+          bazel test --config=ubsan
+          //boards/... //drivers/... //lib/codegen/cpp/... //tools/ubsan:trap_test
 
   # Windows builds run fully locally (see .bazelrc: Bazel can't drive the
   # Linux remote executors from a Windows client) but still share the
