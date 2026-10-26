@@ -2,39 +2,6 @@
 # proto-message: lhre.canspec.SpecFile
 
 message {
-  name: "VCU_BOOTLOADER_DATA"
-  can_id: 16
-  quantity: 4
-  from_board: "VCU"
-  to_boards: "*"
-  bus: "Critical"
-  dlc: 8
-  description: "Seed example: firmware-update payload frames, IDs 0x010-0x013. Bus-only, never telemetered."
-  signal {
-    name: "word0"
-    encoding {
-      bit_length: 32
-    }
-    logical {
-      physical {
-      }
-    }
-    description: "Payload bytes 0-3"
-  }
-  signal {
-    name: "word1"
-    encoding {
-      start_bit: 32
-      bit_length: 32
-    }
-    logical {
-      physical {
-      }
-    }
-    description: "Payload bytes 4-7"
-  }
-}
-message {
   name: "INVERTER_TORQUE_COMMAND"
   can_id: 192
   from_board: "VCU"
@@ -42,7 +9,7 @@ message {
   bus: "Critical"
   dlc: 8
   frequency_hz: 333.0
-  description: "Cascadia torque-mode command. Sent with enable=0 outside DRIVE to clear the inverter lockout."
+  description: "Inverter Torque Command"
   signal {
     name: "torque_request"
     encoding {
@@ -55,7 +22,12 @@ message {
         unit: "Nm"
       }
     }
-    description: "Commanded torque; negative is regen"
+    telemetry {
+      group: "Controls"
+      field: "torque_request"
+      id: 23
+    }
+    description: "torque request"
   }
   signal {
     name: "rpm_request"
@@ -69,7 +41,13 @@ message {
         unit: "rpm"
       }
     }
-    description: "Speed request (unused in torque mode)"
+    telemetry {
+      group: "Controls"
+      field: "rpm_request"
+      id: 20
+      wire_type: PROTO_FLOAT
+    }
+    description: "rpm request"
   }
   signal {
     name: "direction"
@@ -80,7 +58,12 @@ message {
     logical {
       boolean: true
     }
-    description: "Direction command (1 = forward)"
+    telemetry {
+      group: "Controls"
+      field: "direction"
+      id: 26
+    }
+    description: "direction"
   }
   signal {
     name: "enable"
@@ -91,7 +74,12 @@ message {
     logical {
       boolean: true
     }
-    description: "Inverter enable"
+    telemetry {
+      group: "Controls"
+      field: "enable"
+      id: 27
+    }
+    description: "enable"
   }
   signal {
     name: "torque_limit"
@@ -106,7 +94,12 @@ message {
         unit: "Nm"
       }
     }
-    description: "Torque limit sent to the inverter"
+    telemetry {
+      group: "Controls"
+      field: "torque_limit"
+      id: 22
+    }
+    description: "torque limit"
   }
 }
 message {
@@ -116,7 +109,7 @@ message {
   to_boards: "Inverter"
   bus: "Critical"
   dlc: 8
-  description: "Cascadia parameter read/write. Address 20 write 0 clears inverter faults."
+  description: "Inverter Parameter Request"
   signal {
     name: "parameter_address"
     encoding {
@@ -126,10 +119,10 @@ message {
       physical {
       }
     }
-    description: "Parameter address"
+    description: "parameter address"
   }
   signal {
-    name: "write"
+    name: "r_w"
     encoding {
       start_bit: 16
       bit_length: 1
@@ -137,30 +130,272 @@ message {
     logical {
       boolean: true
     }
-    description: "1 = write, 0 = read"
+    description: "r/w"
   }
   signal {
-    name: "data"
+    name: "data_to_be_written"
     encoding {
       start_bit: 32
-      bit_length: 16
+      bit_length: 32
     }
     logical {
       physical {
       }
     }
-    description: "Data to write"
+    description: "Data to be written"
   }
 }
 message {
-  name: "VCU_APPS_VOLTAGES"
+  name: "DUI_R2_D_AUTHORIZATION"
+  can_id: 289
+  from_board: "VCU"
+  to_boards: "DUI"
+  bus: "Critical"
+  dlc: 3
+  frequency_hz: 10.0
+  description: "DUI R2D Authorization"
+  signal {
+    name: "r2_d_authorized"
+    encoding {
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    telemetry {
+      group: "DiagnosticsLow"
+      field: "r2d_authorized"
+      id: 4
+    }
+    description: "R2D Authorized"
+  }
+  signal {
+    name: "dui_imd_faults"
+    encoding {
+      start_bit: 8
+      bit_length: 8
+    }
+    logical {
+      bitfield {
+        bitfield_type: "DuiImdFaults"
+      }
+    }
+    description: "DUI IMD Faults"
+  }
+  signal {
+    name: "dui_ams_faults"
+    encoding {
+      start_bit: 16
+      bit_length: 8
+    }
+    logical {
+      bitfield {
+        bitfield_type: "DuiAmsFaults"
+      }
+    }
+    description: "DUI AMS Faults"
+  }
+}
+message {
+  name: "ALLOW_BALANCE_COMMAND"
+  can_id: 309
+  from_board: "VCU"
+  to_boards: "HVC"
+  bus: "Critical"
+  description: "Allow Balance Command"
+}
+message {
+  name: "VCU_SHUTDOWN_STATUS"
+  can_id: 320
+  from_board: "VCU"
+  to_boards: "PDU"
+  bus: "Critical"
+  dlc: 1
+  frequency_hz: 333.0
+  description: "VCU Shutdown Status"
+  signal {
+    name: "vcu_shutdown_status"
+    encoding {
+      bit_length: 8
+    }
+    logical {
+      bitfield {
+        bitfield_type: "VcuShutdownFaults"
+      }
+    }
+    description: "VCU Shutdown Status"
+  }
+}
+message {
+  name: "VCU_FUSES"
+  can_id: 321
+  from_board: "VCU"
+  to_boards: "PDU"
+  bus: "Critical"
+  dlc: 2
+  frequency_hz: 333.0
+  description: "VCU Fuses"
+  signal {
+    name: "vcu_fuses_1"
+    encoding {
+      bit_length: 8
+    }
+    logical {
+      bitfield {
+        bitfield_type: "VcuFuses1"
+      }
+    }
+    description: "VCU Fuses 1"
+  }
+  signal {
+    name: "vcu_fuses_2"
+    encoding {
+      start_bit: 8
+      bit_length: 8
+    }
+    logical {
+      bitfield {
+        bitfield_type: "VcuFuses2"
+      }
+    }
+    description: "VCU Fuses 2"
+  }
+}
+message {
+  name: "VCU_CURRENT_SENSE"
+  can_id: 322
+  from_board: "VCU"
+  to_boards: "PDU"
+  bus: "Critical"
+  dlc: 5
+  frequency_hz: 333.0
+  description: "VCU Current Sense"
+  signal {
+    name: "lv_boards_current"
+    encoding {
+      bit_length: 8
+      scale: 0.04
+    }
+    logical {
+      physical {
+        unit: "A"
+      }
+    }
+    telemetry {
+      group: "Pack"
+      field: "lv_boards_current"
+      id: 2
+    }
+    description: "LV Boards Current"
+  }
+  signal {
+    name: "shutdown_current"
+    encoding {
+      start_bit: 8
+      bit_length: 8
+      scale: 0.04
+    }
+    logical {
+      physical {
+        unit: "A"
+      }
+    }
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "shutdown_current"
+      id: 2
+    }
+    description: "Shutdown Current"
+  }
+  signal {
+    name: "battery_cooling_current"
+    encoding {
+      start_bit: 16
+      bit_length: 8
+      scale: 0.04
+    }
+    logical {
+      physical {
+        unit: "A"
+      }
+    }
+    telemetry {
+      group: "Thermal"
+      field: "batt_cooling_current"
+      id: 1
+    }
+    description: "Battery Cooling Current"
+  }
+  signal {
+    name: "motor_cooling_current"
+    encoding {
+      start_bit: 24
+      bit_length: 8
+      scale: 0.04
+    }
+    logical {
+      physical {
+        unit: "A"
+      }
+    }
+    telemetry {
+      group: "Thermal"
+      field: "motor_cooling_current"
+      id: 2
+    }
+    description: "Motor Cooling Current"
+  }
+  signal {
+    name: "lights_current_current"
+    encoding {
+      start_bit: 32
+      bit_length: 8
+      scale: 0.04
+    }
+    logical {
+      physical {
+        unit: "A"
+      }
+    }
+    telemetry {
+      group: "Controls"
+      field: "lights_current"
+      id: 19
+    }
+    description: "Lights Current Current"
+  }
+}
+message {
+  name: "SWITCH_COMMAND"
+  can_id: 323
+  from_board: "VCU"
+  to_boards: "PDU"
+  bus: "Critical"
+  dlc: 2
+  frequency_hz: 10.0
+  description: "Switch Command"
+  signal {
+    name: "switch_command"
+    encoding {
+      bit_length: 8
+    }
+    logical {
+      bitfield {
+        bitfield_type: "SwitchCommand"
+      }
+    }
+    description: "Switch Command"
+  }
+}
+message {
+  name: "APPS_VOLTAGES"
   can_id: 448
   from_board: "VCU"
   to_boards: "Pi"
   bus: "Critical"
   dlc: 8
   frequency_hz: 333.0
-  description: "APPS sensor voltages (sensor side, before the board divider) and per-sensor travel."
+  description: "APPS Voltages"
   signal {
     name: "apps1_voltage"
     encoding {
@@ -172,7 +407,12 @@ message {
         unit: "V"
       }
     }
-    description: "APPS1 sensor voltage"
+    telemetry {
+      group: "Controls"
+      field: "apps1_v"
+      id: 4
+    }
+    description: "APPS1 Voltage"
   }
   signal {
     name: "apps2_voltage"
@@ -186,7 +426,12 @@ message {
         unit: "V"
       }
     }
-    description: "APPS2 sensor voltage"
+    telemetry {
+      group: "Controls"
+      field: "apps2_v"
+      id: 6
+    }
+    description: "APPS2 Voltage"
   }
   signal {
     name: "apps1_travel"
@@ -197,9 +442,15 @@ message {
     }
     logical {
       physical {
+        unit: "%"
       }
     }
-    description: "APPS1 travel fraction 0..1 (clamped)"
+    telemetry {
+      group: "Controls"
+      field: "apps1_travel"
+      id: 3
+    }
+    description: "APPS1 Travel"
   }
   signal {
     name: "apps2_travel"
@@ -210,31 +461,43 @@ message {
     }
     logical {
       physical {
+        unit: "%"
       }
     }
-    description: "APPS2 travel fraction 0..1 (clamped)"
+    telemetry {
+      group: "Controls"
+      field: "apps2_travel"
+      id: 5
+    }
+    description: "APPS2 Travel"
   }
 }
 message {
-  name: "VCU_ACCEL_PEDAL"
+  name: "ACCELERATOR_PEDAL"
   can_id: 449
   from_board: "VCU"
   to_boards: "Pi"
   bus: "Critical"
   dlc: 3
   frequency_hz: 333.0
-  description: "Filtered accelerator pedal travel and APPS faults."
+  description: "Accelerator Pedal"
   signal {
-    name: "accel_pedal_travel"
+    name: "accelerator_pedal_travel"
     encoding {
       bit_length: 16
       scale: 0.0001
     }
     logical {
       physical {
+        unit: "%"
       }
     }
-    description: "Pedal travel fraction 0..1 after filter and deadzone"
+    telemetry {
+      group: "Dynamics"
+      field: "accel_pedal_travel"
+      id: 8
+    }
+    description: "Accelerator Pedal Travel"
   }
   signal {
     name: "apps_faults"
@@ -247,19 +510,103 @@ message {
         bitfield_type: "AppsFaults"
       }
     }
-    description: "APPS fault flags"
+    description: "APPS Faults"
   }
 }
 message {
-  name: "VCU_BRAKE_PEDAL"
+  name: "BPPS_VOLTAGES"
+  can_id: 450
+  from_board: "VCU"
+  to_boards: "Pi"
+  bus: "Critical"
+  dlc: 8
+  frequency_hz: 333.0
+  description: "BPPS Voltages"
+  signal {
+    name: "bpps1_voltage"
+    encoding {
+      bit_length: 16
+      scale: 0.0001
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    telemetry {
+      group: "Controls"
+      field: "bpps1_v"
+      id: 8
+    }
+    description: "BPPS1 Voltage"
+  }
+  signal {
+    name: "bpps2_voltage"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      scale: 0.0001
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    telemetry {
+      group: "Controls"
+      field: "bpps2_v"
+      id: 10
+    }
+    description: "BPPS2 Voltage"
+  }
+  signal {
+    name: "bpps1_travel"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      scale: 0.0001
+    }
+    logical {
+      physical {
+        unit: "%"
+      }
+    }
+    telemetry {
+      group: "Controls"
+      field: "bpps1_travel"
+      id: 7
+    }
+    description: "BPPS1 Travel"
+  }
+  signal {
+    name: "bpps2_travel"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      scale: 0.0001
+    }
+    logical {
+      physical {
+        unit: "%"
+      }
+    }
+    telemetry {
+      group: "Controls"
+      field: "bpps2_travel"
+      id: 9
+    }
+    description: "BPPS2 Travel"
+  }
+}
+message {
+  name: "BRAKE_PEDAL"
   can_id: 451
   from_board: "VCU"
   to_boards: "Pi"
-  to_boards: "PDU"
   bus: "Critical"
   dlc: 5
   frequency_hz: 333.0
-  description: "Brake light command for the PDU. Rev A has no BPPS: travel and bpps_faults are always 0."
+  description: "Brake Pedal"
   signal {
     name: "brake_pedal_travel"
     encoding {
@@ -268,9 +615,10 @@ message {
     }
     logical {
       physical {
+        unit: "%"
       }
     }
-    description: "Unused on Rev A (no BPPS); 0"
+    description: "Brake Pedal Travel"
   }
   signal {
     name: "bpps_faults"
@@ -279,13 +627,14 @@ message {
       bit_length: 8
     }
     logical {
-      physical {
+      bitfield {
+        bitfield_type: "BppsFaults"
       }
     }
-    description: "Unused on Rev A (no BPPS); 0"
+    description: "BPPS Faults"
   }
   signal {
-    name: "brake_light"
+    name: "brake_light_percent"
     encoding {
       start_bit: 24
       bit_length: 16
@@ -293,20 +642,26 @@ message {
     }
     logical {
       physical {
+        unit: "%"
       }
     }
-    description: "Brake light duty fraction 0..1"
+    telemetry {
+      group: "Controls"
+      field: "brake_light_pct"
+      id: 12
+    }
+    description: "Brake Light Percent"
   }
 }
 message {
-  name: "VCU_BSE_VOLTAGES"
+  name: "BSE_VOLTAGES"
   can_id: 452
   from_board: "VCU"
   to_boards: "Pi"
   bus: "Critical"
   dlc: 6
   frequency_hz: 333.0
-  description: "BSE sensor voltages (sensor side, before the board divider)."
+  description: "BSE Voltages"
   signal {
     name: "bse_front_voltage"
     encoding {
@@ -318,7 +673,12 @@ message {
         unit: "V"
       }
     }
-    description: "BSE1 (front) sensor voltage"
+    telemetry {
+      group: "Controls"
+      field: "bse1_v"
+      id: 16
+    }
+    description: "BSE Front Voltage"
   }
   signal {
     name: "bse_rear_voltage"
@@ -332,7 +692,12 @@ message {
         unit: "V"
       }
     }
-    description: "BSE2 (rear, pre line lock) sensor voltage"
+    telemetry {
+      group: "Controls"
+      field: "bse2_v"
+      id: 17
+    }
+    description: "BSE Rear Voltage"
   }
   signal {
     name: "bse_line_lock_voltage"
@@ -346,18 +711,23 @@ message {
         unit: "V"
       }
     }
-    description: "Unused: BSE3 arrives from the PDU in psi; 0"
+    telemetry {
+      group: "Controls"
+      field: "bse3_v"
+      id: 18
+    }
+    description: "BSE Line Lock Voltage"
   }
 }
 message {
-  name: "VCU_BRAKES"
+  name: "BRAKES"
   can_id: 453
   from_board: "VCU"
   to_boards: "Pi"
   bus: "Critical"
   dlc: 8
   frequency_hz: 333.0
-  description: "Brake pressures, bias, and BSE faults."
+  description: "Brakes"
   signal {
     name: "brake_pressure_front"
     encoding {
@@ -369,7 +739,12 @@ message {
         unit: "psi"
       }
     }
-    description: "BSE1 front pressure"
+    telemetry {
+      group: "Controls"
+      field: "brake_pressure_f"
+      id: 13
+    }
+    description: "Brake Pressure Front"
   }
   signal {
     name: "brake_pressure_rear_pre_lock"
@@ -383,7 +758,12 @@ message {
         unit: "psi"
       }
     }
-    description: "BSE2 rear pressure upstream of the line lock"
+    telemetry {
+      group: "Controls"
+      field: "brake_pressure_rbll"
+      id: 15
+    }
+    description: "Brake Pressure Rear Pre Lock"
   }
   signal {
     name: "brake_pressure_rear_post_lock"
@@ -397,7 +777,12 @@ message {
         unit: "psi"
       }
     }
-    description: "BSE3 from the PDU (downstream of the line lock); 0 when unavailable"
+    telemetry {
+      group: "Controls"
+      field: "brake_pressure_rall"
+      id: 14
+    }
+    description: "Brake Pressure Rear Post Lock"
   }
   signal {
     name: "brake_bias"
@@ -408,9 +793,15 @@ message {
     }
     logical {
       physical {
+        unit: "%"
       }
     }
-    description: "Front fraction of total pressure 0..1, held below 1000 psi total"
+    telemetry {
+      group: "Controls"
+      field: "brake_bias"
+      id: 11
+    }
+    description: "Brake Bias"
   }
   signal {
     name: "bse_faults"
@@ -423,20 +814,20 @@ message {
         bitfield_type: "BseFaults"
       }
     }
-    description: "BSE fault flags"
+    description: "BSE Faults"
   }
 }
 message {
-  name: "VCU_STEERING"
+  name: "STEERING_COLUMN"
   can_id: 454
   from_board: "VCU"
   to_boards: "Pi"
   bus: "Critical"
   dlc: 2
   frequency_hz: 333.0
-  description: "Steering column angle."
+  description: "Steering Column"
   signal {
-    name: "steering_angle"
+    name: "steering_column_angle"
     encoding {
       bit_length: 16
       sign: SIGNED
@@ -447,20 +838,23 @@ message {
         unit: "deg"
       }
     }
-    description: "Steering column angle"
+    telemetry {
+      group: "Dynamics"
+      field: "steer_col_angle"
+      id: 13
+    }
+    description: "Steering Column Angle"
   }
 }
 message {
-  name: "VCU_DRIVE_STATE"
+  name: "VCU_STATE"
   can_id: 455
   from_board: "VCU"
   to_boards: "Pi"
-  to_boards: "DUI"
-  to_boards: "PDU"
   bus: "Critical"
   dlc: 8
   frequency_hz: 333.0
-  description: "Driver-facing VCU state. The PDU drives the line lock solenoid from line_lock_enabled and pumps/fans from prndl_state."
+  description: "VCU State"
   signal {
     name: "prndl_state"
     encoding {
@@ -470,7 +864,13 @@ message {
       physical {
       }
     }
-    description: "0 = park, 1 = drive"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "prndl_state"
+      id: 1
+      wire_type: PROTO_FLOAT
+    }
+    description: "PRNDL State"
   }
   signal {
     name: "stomp_fault"
@@ -481,7 +881,12 @@ message {
     logical {
       boolean: true
     }
-    description: "Brake-over-throttle latch active"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "stomp_fault"
+      id: 33
+    }
+    description: "STOMP Fault"
   }
   signal {
     name: "ready_to_drive_buzzer"
@@ -492,10 +897,15 @@ message {
     logical {
       boolean: true
     }
-    description: "RTD sound playing"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "r2d_buzzer"
+      id: 27
+    }
+    description: "Ready To Drive Buzzer"
   }
   signal {
-    name: "soc_estimate"
+    name: "state_of_charge_estimate"
     encoding {
       start_bit: 24
       bit_length: 16
@@ -506,7 +916,12 @@ message {
         unit: "%"
       }
     }
-    description: "State of energy estimate"
+    telemetry {
+      group: "Pack"
+      field: "soc_estimate"
+      id: 3
+    }
+    description: "State of Charge Estimate"
   }
   signal {
     name: "line_lock_enabled"
@@ -517,7 +932,12 @@ message {
     logical {
       boolean: true
     }
-    description: "Actual gated line lock (linelock_out readback)"
+    telemetry {
+      group: "Controls"
+      field: "line_lock_enabled"
+      id: 28
+    }
+    description: "Line Lock Enabled"
   }
   signal {
     name: "event_mode"
@@ -526,9 +946,16 @@ message {
       bit_length: 8
     }
     logical {
-      enum_type: "EventMode"
+      physical {
+      }
     }
-    description: "Active event parameter set (echo of VCU_MODE_COMMAND)"
+    telemetry {
+      group: "Controls"
+      field: "event_mode"
+      id: 39
+      wire_type: PROTO_FLOAT
+    }
+    description: "Event Mode"
   }
   signal {
     name: "line_lock_request"
@@ -543,14 +970,14 @@ message {
   }
 }
 message {
-  name: "VCU_ENERGY"
+  name: "ENERGY_ESTIMATE"
   can_id: 457
   from_board: "VCU"
   to_boards: "Pi"
   bus: "Critical"
   dlc: 8
   frequency_hz: 10.0
-  description: "Energy counters from inverter DC bus V x I."
+  description: "Energy Estimate"
   signal {
     name: "net_energy"
     encoding {
@@ -562,7 +989,13 @@ message {
         unit: "Wh"
       }
     }
-    description: "Net energy drawn since boot (floored at 0)"
+    telemetry {
+      group: "Controls"
+      field: "net_energy"
+      id: 40
+      wire_type: PROTO_FLOAT
+    }
+    description: "Net Energy"
   }
   signal {
     name: "regen_energy"
@@ -576,18 +1009,24 @@ message {
         unit: "Wh"
       }
     }
-    description: "Energy recovered since boot"
+    telemetry {
+      group: "Controls"
+      field: "regen_energy"
+      id: 41
+      wire_type: PROTO_FLOAT
+    }
+    description: "Regen Energy"
   }
 }
 message {
-  name: "VCU_TORQUE_PATH"
+  name: "TORQUE_PATH"
   can_id: 458
   from_board: "VCU"
   to_boards: "Pi"
   bus: "Critical"
   dlc: 8
-  frequency_hz: 10.0
-  description: "Torque at each stage of the request chain (floored at 0)."
+  frequency_hz: 100.0
+  description: "Torque Path"
   signal {
     name: "torque_lookup"
     encoding {
@@ -599,7 +1038,12 @@ message {
         unit: "Nm"
       }
     }
-    description: "Pedal map x torque table"
+    telemetry {
+      group: "Controls"
+      field: "torque_lookup"
+      id: 42
+    }
+    description: "Torque Lookup"
   }
   signal {
     name: "torque_derated"
@@ -613,7 +1057,12 @@ message {
         unit: "Nm"
       }
     }
-    description: "After low-cell derate (telemetry only)"
+    telemetry {
+      group: "Controls"
+      field: "torque_derated"
+      id: 43
+    }
+    description: "Torque Derated"
   }
   signal {
     name: "torque_power_limited"
@@ -627,10 +1076,15 @@ message {
         unit: "Nm"
       }
     }
-    description: "After the closed-loop power limit"
+    telemetry {
+      group: "Controls"
+      field: "torque_power_limited"
+      id: 44
+    }
+    description: "Torque Power Limited"
   }
   signal {
-    name: "torque_final"
+    name: "torque_traction_controlled"
     encoding {
       start_bit: 48
       bit_length: 16
@@ -641,7 +1095,12 @@ message {
         unit: "Nm"
       }
     }
-    description: "Final command after traction control and fault gating"
+    telemetry {
+      group: "Controls"
+      field: "torque_traction_controlled"
+      id: 45
+    }
+    description: "Torque Traction Controlled"
   }
 }
 message {
@@ -684,7 +1143,7 @@ message {
       bit_length: 8
     }
     logical {
-      enum_type: "VcuState"
+      enum_type: "VcuStateMachine"
     }
     description: "VCU state"
   }
@@ -717,7 +1176,7 @@ message {
   can_id: 464
   from_board: "VCU"
   to_boards: "Pi"
-  bus: "Data"
+  bus: "Data Acq"
   dlc: 8
   frequency_hz: 100.0
   description: "Raw ADC counts (12-bit, 16x oversampled) for the pedal channels."
@@ -774,7 +1233,7 @@ message {
   can_id: 465
   from_board: "VCU"
   to_boards: "Pi"
-  bus: "Data"
+  bus: "Data Acq"
   dlc: 8
   frequency_hz: 100.0
   description: "Raw ADC counts for steering, shutdown taps, and VREFINT."
@@ -831,7 +1290,7 @@ message {
   can_id: 466
   from_board: "VCU"
   to_boards: "Pi"
-  bus: "Data"
+  bus: "Data Acq"
   dlc: 8
   frequency_hz: 100.0
   description: "VREFINT-corrected MCU pin voltages for the pedal channels."
@@ -896,7 +1355,7 @@ message {
   can_id: 467
   from_board: "VCU"
   to_boards: "Pi"
-  bus: "Data"
+  bus: "Data Acq"
   dlc: 8
   frequency_hz: 100.0
   description: "Steering pin voltage, shutdown loop voltages, and the measured ADC reference."
@@ -961,7 +1420,7 @@ message {
   can_id: 468
   from_board: "VCU"
   to_boards: "Pi"
-  bus: "Data"
+  bus: "Data Acq"
   dlc: 8
   frequency_hz: 100.0
   description: "Digital inputs, commanded outputs, and loop state."
@@ -1015,7 +1474,7 @@ message {
   signal {
     name: "hard_brake_mismatch"
     encoding {
-      start_bit: 33
+      start_bit: 40
       bit_length: 1
     }
     logical {
@@ -1029,7 +1488,7 @@ message {
   can_id: 469
   from_board: "VCU"
   to_boards: "Pi"
-  bus: "Data"
+  bus: "Data Acq"
   dlc: 8
   frequency_hz: 10.0
   description: "Reset cause, uptime, and CAN bus health."
@@ -1047,14 +1506,14 @@ message {
     name: "uptime"
     encoding {
       start_bit: 8
-      bit_length: 24
+      bit_length: 16
     }
     logical {
       physical {
         unit: "s"
       }
     }
-    description: "Seconds since boot"
+    description: "Seconds since boot, saturating at 65535"
   }
   signal {
     name: "critical_bus_off_count"
@@ -1110,7 +1569,7 @@ message {
   can_id: 470
   from_board: "VCU"
   to_boards: "Pi"
-  bus: "Data"
+  bus: "Data Acq"
   dlc: 8
   frequency_hz: 100.0
   description: "Calibrated pedal values (unclamped, so out-of-range shows)."
@@ -1177,7 +1636,7 @@ message {
   can_id: 471
   from_board: "VCU"
   to_boards: "Pi"
-  bus: "Data"
+  bus: "Data Acq"
   dlc: 4
   frequency_hz: 100.0
   description: "Calibrated steering."
@@ -1235,7 +1694,7 @@ message {
   can_id: 474
   from_board: "VCU"
   to_boards: "Bench"
-  bus: "Data"
+  bus: "Data Acq"
   dlc: 8
   description: "Bring-up image: echo of BENCH_ECHO_REQUEST_DATA."
   signal {
@@ -1248,152 +1707,5 @@ message {
       }
     }
     description: "Echoed payload"
-  }
-}
-message {
-  name: "VCU_STATUS"
-  can_id: 768
-  from_board: "VCU"
-  to_boards: "*"
-  bus: "Critical"
-  dlc: 8
-  frequency_hz: 100.0
-  description: "VCU heartbeat at 100 Hz: state, summary faults, torque request, speed, steering."
-  signal {
-    name: "state"
-    encoding {
-      bit_length: 8
-    }
-    logical {
-      enum_type: "VcuState"
-    }
-    telemetry {
-      group: "Vehicle"
-      field: "vcu_state"
-      id: 3
-    }
-    description: "VCU state machine state"
-  }
-  signal {
-    name: "faults"
-    encoding {
-      start_bit: 8
-      bit_length: 8
-    }
-    logical {
-      bitfield {
-        bitfield_type: "VcuFaults"
-      }
-    }
-    description: "Latched fault flags"
-  }
-  signal {
-    name: "torque_request"
-    encoding {
-      start_bit: 16
-      bit_length: 16
-      sign: SIGNED
-      scale: 0.1
-      min: -300.0
-      max: 300.0
-    }
-    logical {
-      physical {
-        unit: "Nm"
-      }
-    }
-    telemetry {
-      group: "Vehicle"
-      field: "torque_request"
-      id: 1
-    }
-    description: "Commanded motor torque"
-  }
-  signal {
-    name: "speed"
-    encoding {
-      start_bit: 32
-      bit_length: 16
-      scale: 0.01
-    }
-    logical {
-      physical {
-        unit: "kph"
-      }
-    }
-    telemetry {
-      group: "Vehicle"
-      field: "vehicle_speed"
-      id: 2
-    }
-    description: "Vehicle speed from wheel odometry"
-  }
-  signal {
-    name: "steering_angle"
-    encoding {
-      start_bit: 55
-      bit_length: 16
-      byte_order: BIG_ENDIAN
-      sign: SIGNED
-      scale: 0.1
-    }
-    logical {
-      physical {
-        unit: "deg"
-      }
-    }
-    description: "Steering wheel angle, big-endian sensor value passed through"
-  }
-}
-message {
-  name: "VCU_DEBUG"
-  can_id: 784
-  from_board: "VCU"
-  to_boards: "*"
-  bus: "Critical"
-  dlc: 8
-  frequency_hz: 10.0
-  description: "Seed example: multiplexed debug channel. Bus-only."
-  signal {
-    name: "channel"
-    encoding {
-      bit_length: 8
-    }
-    logical {
-      physical {
-      }
-      mux_selector: true
-    }
-    description: "Mux selector: which debug value this frame carries"
-  }
-  signal {
-    name: "loop_time"
-    encoding {
-      start_bit: 8
-      bit_length: 32
-      muxed: true
-    }
-    logical {
-      physical {
-        unit: "us"
-      }
-    }
-    description: "Control loop execution time (channel 0)"
-  }
-  signal {
-    name: "cpu_load"
-    encoding {
-      start_bit: 8
-      bit_length: 16
-      scale: 0.01
-      mux_value: 1
-      muxed: true
-    }
-    logical {
-      physical {
-        unit: "%"
-      }
-    }
-    description: "RTOS CPU load (channel 1)"
   }
 }

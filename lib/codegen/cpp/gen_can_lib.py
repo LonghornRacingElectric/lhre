@@ -71,18 +71,22 @@ class Generator:
                       key=lambda m: m.can_id)
 
     def rx_header(self, stamp, board):
+        # Source namespace is the spec file stem, not the from_board label.
+        source_of = {m.name: stem for stem, msgs in self.boards.items() for m in msgs}
         messages = [m for m in self.all_messages()
-                    if board.casefold() in {node.casefold() for node in m.to_boards}
-                    or "*" in m.to_boards]
+                    if source_of[m.name] != board
+                    and (board.casefold() in {node.casefold() for node in m.to_boards}
+                         or "*" in m.to_boards)]
         out = [stamp, "#pragma once", '#include "longhorn/can_inbox.hpp"']
-        for source in sorted({m.from_board.lower() for m in messages}):
+        for source in sorted({source_of[m.name] for m in messages}):
             out.append(f'#include "lhre_can_{source}.hpp"')
         out += ["", "namespace lhre::can::rx {"]
         for bus in sorted({m.bus for m in messages}):
             members = [m for m in messages if m.bus == bus]
-            out.append(f"struct {camel(board)}{camel(bus)}Rx {{")
+            bus_id = re.sub(r"\W+", "_", bus).upper()  # "Data Acq" -> DataAcq
+            out.append(f"struct {camel(board.upper())}{camel(bus_id)}Rx {{")
             for m in members:
-                out.append(f"  longhorn::RxSlot<lhre::can::{m.from_board.lower()}::{camel(m.name)}> {m.name.lower()};")
+                out.append(f"  longhorn::RxSlot<lhre::can::{source_of[m.name]}::{camel(m.name)}> {m.name.lower()};")
             out.append("  bool Dispatch(const lhal::CanFrame& frame, uint32_t now_ms) {")
             out.append("    return " + " ||\n           ".join(
                 f"{m.name.lower()}.TryDecode(frame, now_ms)" for m in members) + ";")

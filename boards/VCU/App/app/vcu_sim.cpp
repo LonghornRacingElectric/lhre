@@ -22,7 +22,7 @@ vcu::App* g_app = nullptr;
 
 void CarTaskLoop(void*) {
   vcu::bench::Bench& b = *g_bench;
-  lhre::can::VcuState last = lhre::can::VcuState::kInit;
+  lhre::can::VcuStateMachine last = lhre::can::VcuStateMachine::kInit;
   for (uint32_t t = 0; t < kSimDurationMs; ++t) {
     if (t == 200) b.hvc_state = lhre::can::HvcState::kPrecharging;
     if (t == 700) b.Energize();
@@ -33,7 +33,7 @@ void CarTaskLoop(void*) {
     if (t == 3000) b.SetLoop(24.0f, 0.0f);
     if (t % 5 == 0) b.SendCarFrames();
     b.clock.Advance(1);
-    const lhre::can::VcuState s = g_app->state();
+    const lhre::can::VcuStateMachine s = g_app->state();
     if (s != last || t % 500 == 0) {
       std::printf("[%4u ms] state=%-12s torque=%6.1f Nm faults=0x%05x\n", t,
                   lhre::can::ToString(s), g_app->torque_command(),

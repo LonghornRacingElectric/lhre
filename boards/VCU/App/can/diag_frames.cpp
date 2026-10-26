@@ -104,7 +104,8 @@ int SendHealthDiag(lhal::CanBus* bus, lhal::ResetCause reset_cause,
   VcuDiag d;
   // lhal::ResetCause and the spec's ResetCause share numbering.
   d.reset_cause = static_cast<lhre::can::ResetCause>(reset_cause);
-  d.uptime = (uptime_ms / 1000u) & 0xFFFFFFu;
+  const uint32_t uptime_s = uptime_ms / 1000u;
+  d.uptime = static_cast<uint16_t>(uptime_s > 0xFFFFu ? 0xFFFFu : uptime_s);
   d.critical_bus_off_count = Saturate8(critical.bus_off_count);
   d.data_bus_off_count = Saturate8(data.bus_off_count);
   d.critical_tx_dropped = Saturate8(critical.tx_dropped);

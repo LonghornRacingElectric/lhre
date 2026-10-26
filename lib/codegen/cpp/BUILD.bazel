@@ -16,13 +16,16 @@ load(":can_lib.bzl", "can_lib_sources")
 # errors with instructions when a board file is added or removed.
 CAN_BOARDS = [
     "bench",
+    "charger",
+    "csm",
     "dui",
     "hvc",
     "inverter",
     "pdu",
     "pi",
-    "vcu",
+    "tsm",
     "usm",
+    "vcu",
 ]
 
 py_binary(

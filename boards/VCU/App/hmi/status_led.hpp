@@ -17,7 +17,7 @@ struct Rgb {
 // fault code can be read without a laptop.
 //   INIT white, IDLE blue, PRECHARGE amber blink, TS_ACTIVE amber,
 //   RTD_WAIT green blink, DRIVE green, FAULT red code, BSPD_TRIPPED magenta.
-Rgb StatusColor(lhre::can::VcuState state, lhre::can::VcuFaultCode code,
+Rgb StatusColor(lhre::can::VcuStateMachine state, lhre::can::VcuFaultCode code,
                 uint32_t now_ms);
 
 }  // namespace vcu

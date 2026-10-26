@@ -17,7 +17,7 @@ const IPC_SOCKET_PATH: &str = "/tmp/BEVO_cand_publishd.sock";
 const STARTUP_SEMAPHORE_PATH: &str = "/tmp/BEVO_publishd_ready";
 // const OTA_SEMAPHORE_PATH: &str = "/tmp/BEVO_ota_request";
 // // const MQTT_HOST: &str = "192.168.1.109";
-const MQTT_HOST: &str = "18.191.225.118"; // aws broker hard coded for testing
+const MQTT_HOST: &str = "100.88.194.126"; // telemetry server, over Tailscale
 const MQTT_PORT: u16 = 1883;
 const MQTT_CLIENT_ID: &str = "BEVO-ORION";
 const MQTT_ANNOUNCE_CLIENT_ID: &str = "BEVO-Orion";
@@ -31,6 +31,12 @@ fn env_or_default(name: &str, default: &str) -> String {
     std::env::var(name).unwrap_or_else(|_| default.to_string())
 }
 
+/// Publish rate when `PUBLISHD_PUBLISH_HZ` is unset. 50 Hz is the GPS
+/// experiment (Locus Lock does 10/50/100 Hz; the dashboard samples at 20 ms to
+/// match); it was 20. One knob so it is easy to try and revert. The car's
+/// systemd drop-in overrides it when present.
+const DEFAULT_PUBLISH_HZ: f64 = 50.0;
+
 /// Minimum interval between *published* snapshots, from `PUBLISHD_PUBLISH_HZ`.
 ///
 /// Each cand frame is a full all-subsystem snapshot at ~100 Hz, so publishing
@@ -38,9 +44,9 @@ fn env_or_default(name: &str, default: &str) -> String {
 /// all) — it just caps the temporal resolution on the live + DB path to keep the
 /// cellular uplink (and end-to-end latency) bounded. loggerd still logs every
 /// frame at full rate via cand's other socket. `PUBLISHD_PUBLISH_HZ=0` disables
-/// throttling (full-rate publish). Defaults to 20 Hz.
+/// throttling (full-rate publish). Defaults to `DEFAULT_PUBLISH_HZ`.
 fn publish_min_interval() -> Option<Duration> {
-    let hz: f64 = env_or_default("PUBLISHD_PUBLISH_HZ", "20").parse().unwrap_or(20.0);
+    let hz: f64 = std::env::var("PUBLISHD_PUBLISH_HZ").ok().and_then(|s| s.parse().ok()).unwrap_or(DEFAULT_PUBLISH_HZ);
     if hz <= 0.0 {
         None
     } else {

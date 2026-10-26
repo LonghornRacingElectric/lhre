@@ -4,10 +4,10 @@
 bus {
   name: "Critical"
   bitrate_bps: 1000000
-  description: "Primary vehicle bus: VCU, inverter, HVC, PDU, dash. VCU Rev A: FDCAN2 (PB12/PB13)."
+  description: "Primary vehicle bus: VCU, inverter, HVC, dash."
 }
 bus {
-  name: "Data"
+  name: "Data Acq"
   bitrate_bps: 1000000
-  description: "Data acquisition bus (last year \"Data Acq\"): sensor nodes, VCU diagnostics. VCU Rev A: FDCAN1 (PD0/PD1)."
+  description: "Sensor acquisition bus: corner, upright, and thermal modules."
 }

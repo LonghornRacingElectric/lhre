@@ -2,6 +2,44 @@
 # proto-message: lhre.canspec.SpecFile
 
 message {
+  name: "DUI_R2_D_STATUS"
+  can_id: 288
+  from_board: "DUI"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 2
+  frequency_hz: 10.0
+  description: "DUI R2D Status"
+  signal {
+    name: "r2_d_status"
+    encoding {
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    telemetry {
+      group: "DiagnosticsLow"
+      field: "r2d_status"
+      id: 5
+    }
+    description: "R2D Status"
+  }
+  signal {
+    name: "dui_shutdown_faults"
+    encoding {
+      start_bit: 8
+      bit_length: 8
+    }
+    logical {
+      bitfield {
+        bitfield_type: "DuiShutdownFaults"
+      }
+    }
+    description: "DUI Shutdown Faults"
+  }
+}
+message {
   name: "DUI_DRIVER_INPUTS"
   can_id: 290
   from_board: "DUI"

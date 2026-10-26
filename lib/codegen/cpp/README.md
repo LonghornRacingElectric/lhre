@@ -9,8 +9,8 @@ library per source board:
 | `:can_types` | Shared enums, `ToString`, and the `kMessageMeta` table |
 | `:can_lib` | Umbrella over the whole bus, for tests, sims, and the gateway |
 
-Firmware depends on the per-board targets for what it sends and listens
-to; `boards/VCU/BUILD.bazel` is the worked example. The board
+Firmware depends on the per-source targets for what it sends and listens
+to. `boards/VCU/BUILD.bazel` is the worked example. The source
 list is `CAN_BOARDS` in this package's BUILD file; the generator errors
 with instructions when `lib/spec/messages/` gains or loses a file.
 
@@ -22,25 +22,25 @@ stay invisible to firmware.
 ```cpp
 namespace lhre::can::vcu {
 
-struct VcuStatus {
-  static constexpr uint32_t kFrameId = 0x300;
+struct VcuState {
+  static constexpr uint32_t kFrameId = 0x1C7;
   static constexpr uint8_t kQuantity = 1;
-  static constexpr uint8_t kDlc = 8;
-  static constexpr float kFrequencyHz = 100.0f;
+  static constexpr uint8_t kDlc = 7;
+  static constexpr float kFrequencyHz = 333.0f;
 
-  VcuState state{};
-  bool faults_overtemp{};
-  int16_t torque_request_raw{};  // phys = raw * 0.1 [Nm]
+  uint8_t prndl_state{};
+  bool stomp_fault{};
+  uint16_t state_of_charge_estimate_raw{};  // phys = raw * 0.1 [%]
 
-  float torque_request() const;
-  void set_torque_request(float value);  // rounds to nearest
+  float state_of_charge_estimate() const;
+  void set_state_of_charge_estimate(float value);  // rounds to nearest
 
   static constexpr bool Matches(uint32_t frame_id);
   void Pack(uint8_t* dst) const;
   void Unpack(const uint8_t* src);
 
   lhal::CanFrame ToFrame() const;  // ToFrame(index) when kQuantity > 1
-  static VcuStatus FromFrame(const lhal::CanFrame& frame);
+  static VcuState FromFrame(const lhal::CanFrame& frame);
 };
 
 }  // namespace lhre::can::vcu
@@ -49,17 +49,16 @@ struct VcuStatus {
 Typical use against [LHAL](../../../drivers/lhal/README.md):
 
 ```cpp
-using lhre::can::hvc::HvcPackStatus;
-using lhre::can::vcu::VcuStatus;
+using lhre::can::hvc::ContactorStatus;
+using lhre::can::vcu::VcuState;
 
-VcuStatus status;
-status.state = lhre::can::VcuState::kDrive;
-status.set_torque_request(-123.4f);
+VcuState status;
+status.prndl_state = 2;
 bus.Send(status.ToFrame());
 
 lhal::CanFrame frame;
-if (bus.Receive(&frame) && HvcPackStatus::Matches(frame.id)) {
-  auto pack = HvcPackStatus::FromFrame(frame);
+if (bus.Receive(&frame) && ContactorStatus::Matches(frame.id)) {
+  auto contactors = ContactorStatus::FromFrame(frame);
 }
 ```
 
@@ -89,7 +88,7 @@ name.
 - FD frames (dlc > 8) and big-endian bitfields are rejected by the
   generator for now.
 
-Indexed array blocks (`quantity` > 1, e.g. `HVC_CELL_TEMPS`) are plain
+Indexed array blocks (`quantity` > 1, e.g. `CELL_TEMPERATURES`) are plain
 structs: fill the slots and call `ToFrame(i)` per frame. Element index
 math lives with [lib/spec](../../spec/README.md) and the gateway.
 

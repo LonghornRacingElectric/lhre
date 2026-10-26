@@ -11,7 +11,7 @@ TEST(SerialReport, IncludesReadableSectionsUnitsAndFaultReasons) {
   longhorn::Console console(&uart);
   vcu::ControlSnapshot s;
   s.now_ms = 990;
-  s.state = lhre::can::VcuState::kIdle;
+  s.state = lhre::can::VcuStateMachine::kIdle;
   s.adc_fresh = true;
   s.analog.apps1 = {1234, 1.234f, 2.468f};
   s.faults = vcu::kFaultAdcStale | vcu::kFaultSteeringRange;
@@ -38,7 +38,7 @@ TEST(SerialReport, CompactShowsStateAdcAndGpioWithoutDetailedSections) {
   lhal::host::Uart uart;
   longhorn::Console console(&uart);
   vcu::ControlSnapshot s;
-  s.state = lhre::can::VcuState::kIdle;
+  s.state = lhre::can::VcuStateMachine::kIdle;
   s.analog.apps1 = {1000, 1.0f, 1.5f};
   s.inputs.rtd_pressed = true;
   vcu::PrintCompactSerialReport(console, s);

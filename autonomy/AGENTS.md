@@ -12,8 +12,7 @@ here. Do not add `BUILD.bazel` files.
   ([GETTING-STARTED](ros2/GETTING-STARTED.md)). macOS uses the Docker image
   ([ros2/docker](ros2/docker/README.md)). No WSL.
 - Build: `cd ros2 && ./scripts/build.sh` (colcon). Test: `colcon test`
-  from `ros2/` (ament lint only today; functional tests are open work for
-  the Sim & Test Infra lane).
+  from `ros2/` (ament lint plus unit and generated-track regression tests).
 - CI: `.github/workflows/autonomy.yml` at the repo root runs the same
   build and `colcon test` on every PR that touches `autonomy/`. Not a
   required check. PRs that touch only `autonomy/` skip the Bazel jobs in
@@ -23,9 +22,15 @@ here. Do not add `BUILD.bazel` files.
 - PRs touching `autonomy/` need an approving review from a member of the
   `autonomous` GitHub team (`.github/CODEOWNERS` requests them; the `main`
   ruleset requires the code-owner approval).
-- The demo scripts (`run_demo.sh`, `run_gazebo_demo.sh`, `rviz_demo.sh`)
-  need a display and a ROS install. Do not run them in CI or from a
-  headless agent.
+- Title every autonomy PR `Autonomous: <summary>`. The prefix tells other
+  teams which PRs are ours, and it is what makes CodeRabbit skip the PR
+  (`.coderabbit.yaml` at the repo root; it also ignores `autonomy/` files).
+- Every demo script needs a ROS install. `rviz_demo.sh` and a default
+  `run_gazebo_demo.sh` (Gazebo GUI plus RViz) also need a display; do not
+  run those in CI or from a headless agent. `run_demo.sh` opens no window.
+  Headless runs use `scripts/run_headless.sh` (kinematic) or
+  `run_gazebo_demo.sh gui:=false rviz:=false` (needs Gazebo, which CI does
+  not install).
 - Without a ROS install (any Windows machine, most agents) you can edit and
   reason about the code but cannot build or run it. Say so instead of
   claiming a change was verified.
@@ -35,15 +40,23 @@ here. Do not add `BUILD.bazel` files.
 - Everything is LF. `autonomy/.gitattributes` enforces it for tracked
   files; on Windows run `sed -i 's/\r$//' <file>` on anything new before
   committing.
-- `ros2/build`, `ros2/install`, `ros2/log`, and `ros2/data/metrics.csv` are
-  gitignored build/run outputs. Never commit them.
+- `ros2/build`, `ros2/install`, `ros2/log` and `ros2/data` are gitignored
+  build/run outputs. Never commit them. `ros2/data` holds metrics CSVs
+  and recorded MCAP bags, which get large fast.
+
+- Hardware test recordings (MCAP, `.npz`, ROS 2 bags) never go in git. They
+  live on SharePoint under _VMS_ > Autonomous > Test Data; only the writeup,
+  results table, chosen figures and scripts go in `testing/`
+  ([testing/README.md](testing/README.md)).
 - Vehicle numbers (wheelbase, track, steering limit, masses, sensor
   mounts) live only in `ros2/src/lhr_vehicle/config/vehicle.yaml`; nodes
   read them through `lhr_vehicle.load_vehicle()`. Never hardcode them.
-  `lhr_gazebo/models/fsae_vehicle/model.sdf` is generated from that file
+  `lhr_gazebo/models/fsae_vehicle/model.sdf` (no cameras) and
+  `model_stereo.sdf` (with cameras) are generated from that file
   by `lhr_gazebo/scripts/generate_vehicle_model.py` — edit the YAML or
-  `lhr_gazebo/templates/model.sdf.in`, rerun the generator, and commit
-  both. `lhr_gazebo`'s tests fail if the committed `model.sdf` is stale.
+  the templates in `lhr_gazebo/templates/`, rerun the generator, and commit
+  the YAML and both generated SDFs. `lhr_gazebo`'s tests fail if either
+  committed model is stale.
 - Packages map to software lanes (table in [README.md](README.md)). Keep a
   change inside the owning lane's packages where possible.
 - Docs next to code, same as the root rule: change behavior, change the
@@ -54,5 +67,17 @@ here. Do not add `BUILD.bazel` files.
   site with the rest of the repo: a new page needs a `nav` entry in the
   root `mkdocs.yml`, and `uv run --group docs mkdocs build --strict` from
   the repo root must pass (it fails on broken links).
+- When adding or renaming a node parameter used in the Gazebo stack, also
+  expose it in `ros2/src/lhr_gazebo/launch/gazebo_demo.launch.py` in the same
+  change: declare the launch argument and forward its `LaunchConfiguration`
+  to the owning node in every applicable perception branch (`sim` and `lidar`).
+  Match the node's default and use explicit `ParameterValue` types for strings,
+  floats, integers, and booleans so CLI values retain the declared ROS type.
+  Preserve intentional mode-specific defaults; document any exception to
+  exposing a parameter. Update the adjacent README with usage and verify both
+  defaults and non-default overrides through launch evaluation and node startup,
+  including every applicable branch. A declared launch argument alone is not
+  evidence that a parameter reaches the node. If ROS is unavailable, report
+  which checks remain unverified.
 - The live plan, timeline, and hardware decisions are in Notion (VMS /
   Autonomous). If a doc here disagrees with Notion, Notion wins.

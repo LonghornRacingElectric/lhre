@@ -48,7 +48,12 @@ services:
       - telemetry_db:/var/lib/postgresql/data
       - ./nightwatch_db_init.sql:/app/nightwatch_db_init.sql
       - ./angelique_db_init.sql:/app/angelique_db_init.sql
-      - ./orion_db_init.sql:/app/orion_db_init.sql
+      - type: bind
+        source: ${ORION_DB_INIT_SQL:?Build //apps/telemetry:current_schema_sql and set its absolute output path}
+        target: /app/orion_db_init.sql
+        read_only: true
+        bind:
+          create_host_path: false
       - ./init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh
     networks:
       - telemetry_network
@@ -67,7 +72,7 @@ services:
         required: true
     environment:
       GF_DASHBOARDS_MIN_REFRESH_INTERVAL: '250ms'     # Sets min refresh rate of grafana dashboard
-      GF_SERVER_ROOT_URL: 'https://lhrelectric.org/grafana/'  # Adjust if using a different host or port
+      GF_SERVER_ROOT_URL: 'https://telemetry.lhre.org/grafana/'  # Adjust if using a different host or port
       GF_SERVER_SERVE_FROM_SUB_PATH: 'true'
       GF_SERVER_PROTOCOL: 'http'
       GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: 'lhre-kafka-datasource'

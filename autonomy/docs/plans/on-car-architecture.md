@@ -7,15 +7,15 @@ September changes noted inline (donated LiDAR, the 9/27 brake decision, BEVO
 as the only radio). Node names follow the Software Architecture page in
 Notion — if this page and Notion disagree, Notion wins.
 
-Solid boxes exist today (ours, or off-the-shelf drivers). Dashed boxes are
-not written yet.
+Solid boxes exist today (ours, or off-the-shelf drivers); where only part
+exists, the label says what is planned. Dashed boxes are not written yet.
 
 ```mermaid
 flowchart LR
     classDef planned stroke-dasharray: 6 4
 
     subgraph sensors["Sensors — mast and chassis"]
-        lidar["Livox Mid-360 (donated, under test)<br>Ethernet, 10 Hz, 200 Hz IMU built in"]
+        lidar["Livox Mid-360 (donated, passed acceptance 10/4, provisional)<br>Ethernet, 10 Hz, 200 Hz IMU built in"]
         cam["Stereolabs ZED 2i<br>USB3"]
         gnss["LocusLock unit pair<br>RTK GNSS + moving-base heading<br>(second unit unverified)"]
     end
@@ -29,17 +29,17 @@ flowchart LR
         end
         subgraph perception["Perception"]
             det["lidar_cone_detector"]
-            cls["cone_color_classifier"]:::planned
+            cls["cone_color_classifier<br>sim: HSV debug image only (camera_color_classifier)"]:::planned
             fus["cone_fusion"]:::planned
         end
-        est["lhr_state_estimation<br>EKF: IMU + GNSS + wheel speeds + steer angle"]:::planned
+        est["lhr_state_estimation<br>EKF: IMU + wheel speeds today<br>GNSS + steer angle planned"]
         subgraph pnc["Planning & control"]
             tb["track_builder"]
             pp["pure_pursuit"]
             lon["longitudinal controller<br>speed → signed torque (drive / regen)"]:::planned
         end
         mm["mission_manager"]
-        safe["safety_node<br>heartbeat · watchdog · e-stop mapping"]:::planned
+        safe["safety_node<br>fault checks + ROS heartbeat today<br>CAN heartbeat + e-stop mapping planned"]
         vif["vehicle_interface<br>ROS ↔ CAN"]:::planned
         ops["rosbag2 logging · PPS/PTP time sync<br>autonomy status frames onto CAN"]:::planned
     end
@@ -95,8 +95,8 @@ interface swaps (see the
 | Sim today | On the car | Owner |
 |-----------|------------|-------|
 | Gazebo GPU LiDAR (VLP-16 model) / `sensor_sim` cones | Livox Mid-360 through `livox_ros_driver2`, same `lidar_cone_detector`. The Gazebo sensor stays a VLP-16 until someone models the Mid-360's rosette in `gpu_lidar` | Perception (car), Sim & test infra (model) |
-| No camera; unclassified cones | ZED 2i → `cone_color_classifier` → `cone_fusion`; color-aware Delaunay | Perception |
-| Ground-truth `OdometryPublisher` | `lhr_state_estimation` EKF on the Mid-360 IMU (ZED IMU as backup) + LocusLock RTK position + wheel speeds + steer angle. Moving-base heading only if the second LocusLock unit works; otherwise the EKF derives heading from GNSS velocity and the IMU | State estimation |
+| ZED 2i opt-in (`enable_stereo_camera:=true`), HSV debug view only; cones are unlabeled, so `track_builder`'s color-aware Delaunay pairs on width alone | ZED 2i → `cone_color_classifier` → `cone_fusion`; color-aware Delaunay | Perception |
+| Ground-truth `OdometryPublisher` by default; `estimator:=ekf` runs the EKF on IMU + rear wheel speeds, seeded from truth, and keeps truth for scoring | `lhr_state_estimation` EKF on the Mid-360 IMU (ZED IMU as backup) + LocusLock RTK position + wheel speeds + steer angle. Moving-base heading only if the second LocusLock unit works; otherwise the EKF derives heading from GNSS velocity and the IMU | State estimation |
 | `pure_pursuit` publishes a speed; Gazebo sets wheel velocity directly | Longitudinal controller turns speed into one signed torque request: positive drives, negative is rear regen, which is the service brake. No friction brake in normal driving | Planning & control |
 | `joint_cmd_adapter` → Gazebo joints | `vehicle_interface` → CAN: column angle to the steering motor and a signed torque request to the VCU; feedback back in. The emergency brake is not on CAN | Sim & test infra + ELC |
 | `auto_go` timer | An explicit go command from the pit device over the same link as the heartbeat. Heartbeat presence is liveness only and never grants go. `safety_node` heartbeat that the VCU watchdogs | Lead + ELC |
@@ -139,9 +139,14 @@ line valve, so the spring-preloaded pedal applies the front brakes.
 - The CAN message set between the Jetson and the VCU (commands, feedback,
   heartbeat) and the autonomy status frames BEVO relays — to be written as
   an ADR with ELC before the bench rig.
-- Whether the donated Mid-360 passes its acceptance test (LiDAR Test Plan
-  in the Notion wiki). If not, a used VLP-16 through `velodyne_driver`, which
-  is what the sim already models.
+- The donated Mid-360 passed its acceptance checks provisionally on
+  2026-10-04 ([results](../../testing/2026-10-04-mid360-acceptance/README.md)).
+  Still open: the 60 minute endurance run and the connector check. If either
+  fails, a used VLP-16 through `velodyne_driver`, which is what the sim
+  already models. The test also set two things this picture depends on: the
+  LiDAR mount height and pitch decide the near-field blind zone, and
+  perception has to stack about 0.5 to 0.7 s of frames to see a small cone
+  at 10 m in daylight.
 - Brakes, decided with DYN on 9/27: regen is the service brake, and the
   emergency brake is a spring preloading the pedal plus a front line valve
   that opens on power loss. Still open: the spring rate and where it reacts

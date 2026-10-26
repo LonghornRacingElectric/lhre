@@ -19,12 +19,12 @@ const SOCKET_PATH: &str = "/tmp/BEVO_cand.sock";
 /// cand's CAN transmit request socket — dashd relays trackside commands (the
 /// 0x029 VCU Mode Command) here; cand owns the actual CAN write.
 const CAND_TX_SOCKET_PATH: &str = "/tmp/BEVO_cand_tx.sock";
-/// CAN id of the Pi->VCU "VCU Mode Command" packet (see can_packets.csv 0x029).
+/// CAN id of the Pi->VCU "VCU Mode Command" packet in lib/spec/messages/pi.textproto.
 const VCU_MODE_COMMAND_ID: u32 = 0x029;
 const WS_PORT: u16 = 8001;
 const WS_SEND_HZ: u64 = 30;
 
-const MQTT_HOST: &str = "18.191.225.118";
+const MQTT_HOST: &str = "100.88.194.126"; // telemetry server, over Tailscale
 const MQTT_PORT: u16 = 1883;
 const MQTT_CLIENT_ID: &str = "BEVO-DASHD";
 const MQTT_TOPIC_PREFIX: &str = "lhre/dash/";
@@ -803,7 +803,7 @@ fn extract_can_data(data: &OrionSensorData, last_qualified_soc: &mut Option<f32>
         // Workaround: the can.json precision on brake_bias is 0.01, so a
         // raw VCU byte of 45 (meaning 45%) decodes to 0.45 and the dash
         // rounds to "0%". Multiply back to 0..100 here. Proper fix is in
-        // longhorn-lib's can_packets.csv (set precision to 1.0); remove
+        // lib/spec/messages/vcu.textproto (set scale to 1.0); remove
         // this scaling once that lands and can.json refreshes.
         brake_bias: controls.map(|c| c.brake_bias * 100.0),
         apps: controls.map(|c| c.apps1_travel),

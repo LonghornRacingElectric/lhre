@@ -61,10 +61,22 @@ pkg_tar(
 
 # Stable consumer-facing seam for the currently deployed telemetry schema.
 # A future registry can change this selection without making every service
-# depend directly on BEVO's generator layout.
+# depend directly on the code generator's physical package layout.
 alias(
     name = "current_schema_proto",
-    actual = "//apps/BEVO/schema:can_packets.proto",
+    actual = "//lib/codegen/telemetry:can_packets_proto",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "current_schema_json",
+    actual = "//lib/codegen/telemetry:can_json",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "current_schema_sql",
+    actual = "//lib/codegen/telemetry:orion_db_init",
     visibility = ["//visibility:public"],
 )
 
@@ -72,7 +84,8 @@ filegroup(
     name = "current_schema_bundle",
     srcs = [
         ":current_schema_proto",
-        "//apps/BEVO/schema:can_json",
+        ":current_schema_json",
+        ":current_schema_sql",
     ],
     visibility = ["//visibility:public"],
 )

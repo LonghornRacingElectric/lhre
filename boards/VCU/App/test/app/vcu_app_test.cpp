@@ -15,7 +15,7 @@ namespace {
 
 using lhre::can::EventMode;
 using lhre::can::HvcState;
-using lhre::can::VcuState;
+using VcuState = lhre::can::VcuStateMachine;
 using vcu::bench::Bench;
 namespace msg = lhre::can::vcu;
 
@@ -312,16 +312,16 @@ TEST_F(VcuAppTest, ErrorLedsOnlyAddIndication) {
 TEST_F(VcuAppTest, ModeCommandAppliesOnlyOutsideDriveAndEchoes) {
   ReachDrive();
   lhre::can::pi::VcuModeCommand m;
-  m.event_mode = EventMode::kSkidpad;
+  m.event_mode = static_cast<uint8_t>(EventMode::kSkidpad);
   b_.car.Send(m.ToFrame());
   b_.Run(*app_, 30);
   EXPECT_EQ(app_->snapshot().event_mode, EventMode::kEndurance);
   b_.PressRtd(false);  // leave DRIVE
   b_.Run(*app_, 30);
   EXPECT_EQ(app_->snapshot().event_mode, EventMode::kSkidpad);
-  msg::VcuDriveState ds;
+  msg::VcuState ds;
   ASSERT_TRUE(b_.LastFrame(b_.car, &ds));
-  EXPECT_EQ(ds.event_mode, EventMode::kSkidpad);
+  EXPECT_EQ(ds.event_mode, static_cast<uint8_t>(EventMode::kSkidpad));
 }
 
 TEST_F(VcuAppTest, LineLockRequestStaysZeroAndActualIsReported) {
@@ -329,7 +329,7 @@ TEST_F(VcuAppTest, LineLockRequestStaysZeroAndActualIsReported) {
   EXPECT_FALSE(b_.linelock_ctrl.Read());
   b_.linelock_out.Write(true);  // readback from the hardware gate
   b_.Run(*app_, 10);
-  msg::VcuDriveState ds;
+  msg::VcuState ds;
   ASSERT_TRUE(b_.LastFrame(b_.car, &ds));
   EXPECT_TRUE(ds.line_lock_enabled);
   EXPECT_FALSE(ds.line_lock_request);

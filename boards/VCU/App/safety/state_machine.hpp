@@ -7,7 +7,7 @@
 
 namespace vcu {
 
-using lhre::can::VcuState;
+using VcuState = lhre::can::VcuStateMachine;
 
 // Everything the state machine decides on, sampled once per control tick.
 struct StateInputs {

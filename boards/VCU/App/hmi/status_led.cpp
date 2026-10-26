@@ -21,9 +21,9 @@ bool CodeBlink(uint32_t code, uint32_t now_ms) {
 
 }  // namespace
 
-Rgb StatusColor(lhre::can::VcuState state, lhre::can::VcuFaultCode code,
+Rgb StatusColor(lhre::can::VcuStateMachine state, lhre::can::VcuFaultCode code,
                 uint32_t now_ms) {
-  using lhre::can::VcuState;
+  using VcuState = lhre::can::VcuStateMachine;
   const uint32_t n = static_cast<uint32_t>(code);
   switch (state) {
     case VcuState::kBspdTripped:

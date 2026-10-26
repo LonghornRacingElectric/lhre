@@ -12,16 +12,15 @@ lhre::can::vcu::InverterTorqueCommand TorqueCommandFrame(
     const ControlSnapshot& s, const InverterParams& p);
 lhre::can::vcu::InverterParameterRequest FaultClearFrame(
     const InverterParams& p);
-lhre::can::vcu::VcuAppsVoltages AppsVoltagesFrame(const ControlSnapshot& s);
-lhre::can::vcu::VcuAccelPedal AccelPedalFrame(const ControlSnapshot& s);
-lhre::can::vcu::VcuBrakePedal BrakePedalFrame(const ControlSnapshot& s);
-lhre::can::vcu::VcuBseVoltages BseVoltagesFrame(const ControlSnapshot& s);
-lhre::can::vcu::VcuBrakes BrakesFrame(const ControlSnapshot& s);
-lhre::can::vcu::VcuSteering SteeringFrame(const ControlSnapshot& s);
-lhre::can::vcu::VcuDriveState DriveStateFrame(const ControlSnapshot& s);
-lhre::can::vcu::VcuStatus StatusFrame(const ControlSnapshot& s);
+lhre::can::vcu::AppsVoltages AppsVoltagesFrame(const ControlSnapshot& s);
+lhre::can::vcu::AcceleratorPedal AccelPedalFrame(const ControlSnapshot& s);
+lhre::can::vcu::BrakePedal BrakePedalFrame(const ControlSnapshot& s);
+lhre::can::vcu::BseVoltages BseVoltagesFrame(const ControlSnapshot& s);
+lhre::can::vcu::Brakes BrakesFrame(const ControlSnapshot& s);
+lhre::can::vcu::SteeringColumn SteeringFrame(const ControlSnapshot& s);
+lhre::can::vcu::VcuState DriveStateFrame(const ControlSnapshot& s);
 lhre::can::vcu::VcuFaults FaultsFrame(const ControlSnapshot& s);
-lhre::can::vcu::VcuEnergy EnergyFrame(const ControlSnapshot& s);
-lhre::can::vcu::VcuTorquePath TorquePathFrame(const ControlSnapshot& s);
+lhre::can::vcu::EnergyEstimate EnergyFrame(const ControlSnapshot& s);
+lhre::can::vcu::TorquePath TorquePathFrame(const ControlSnapshot& s);
 
 }  // namespace vcu

@@ -35,13 +35,10 @@ void App::SendCritical(uint32_t now) {
   Send(bus, SteeringFrame(s).ToFrame());
   Send(bus, DriveStateFrame(s).ToFrame());
 
-  if (status_gate_.Due(now, PeriodMs<msg::VcuStatus>())) {
-    Send(bus, StatusFrame(s).ToFrame());
-  }
   if (faults_gate_.Due(now, PeriodMs<msg::VcuFaults>())) {
     Send(bus, FaultsFrame(s).ToFrame());
   }
-  if (energy_gate_.Due(now, PeriodMs<msg::VcuEnergy>())) {
+  if (energy_gate_.Due(now, PeriodMs<msg::EnergyEstimate>())) {
     Send(bus, EnergyFrame(s).ToFrame());
     Send(bus, TorquePathFrame(s).ToFrame());
   }

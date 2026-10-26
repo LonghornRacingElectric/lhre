@@ -9,6 +9,8 @@ from lhr_vehicle import load_vehicle
 from nav_msgs.msg import Odometry
 import rclpy
 from rclpy.node import Node
+from rclpy.time import Time
+from rosgraph_msgs.msg import Clock
 from tf2_ros import TransformBroadcaster
 
 
@@ -23,8 +25,8 @@ def yaw_to_quat(yaw: float) -> Quaternion:
 class SimKinematic(Node):
     """Integrate a kinematic bicycle model and publish odom + TF."""
 
-    def __init__(self):
-        super().__init__('sim_kinematic')
+    def __init__(self, node_name='sim_kinematic'):
+        super().__init__(node_name)
 
         # --- Parameters (vehicle defaults come from lhr_vehicle) ---
         veh = load_vehicle()
@@ -37,6 +39,7 @@ class SimKinematic(Node):
         self.declare_parameter('init_x', 0.0)
         self.declare_parameter('init_y', 0.0)
         self.declare_parameter('init_yaw', 0.0)
+        self.declare_parameter('publish_clock', False)
 
         self._L = self.get_parameter(
             'wheelbase').get_parameter_value().double_value
@@ -60,11 +63,28 @@ class SimKinematic(Node):
             'init_yaw').get_parameter_value().double_value
         self._v = 0.0
         self._steer = 0.0
+        self._vy = 0.0
+        self._yaw_rate = 0.0
 
         # --- Command subscriber ---
         self.create_subscription(
             AckermannDriveStamped, '/lhr/vehicle/cmd',
             self._cmd_cb, 10)
+
+        # --- Clock ---
+        # This node is the plant, so it is also the clock. Its step is a
+        # fixed dt already, so publishing that as /clock makes every
+        # other node advance in exact increments instead of drifting
+        # with host load. It must keep its own wall-clock timer and
+        # use_sim_time false: a clock source waiting on its own clock
+        # never ticks.
+        self._publish_clock = bool(
+            self.get_parameter('publish_clock').value)
+        # Start away from zero; a zero stamp reads as 'unset' downstream.
+        self._sim_ns = 1_000_000_000
+        self._clock_pub = (
+            self.create_publisher(Clock, '/clock', 10)
+            if self._publish_clock else None)
 
         # --- Odom publisher ---
         self._odom_pub = self.create_publisher(
@@ -75,9 +95,11 @@ class SimKinematic(Node):
 
         # --- Timer ---
         self._dt = 1.0 / update_hz
+        self._step_ns = int(round(self._dt * 1e9))
         self.create_timer(self._dt, self._step)
         self.get_logger().info(
-            f'SimKinematic ready  (L={self._L}, hz={update_hz})')
+            f'Simulator interface ready  (L={self._L}, hz={update_hz}, '
+            f'clock={"sim" if self._publish_clock else "wall"})')
 
     # ------------------------------------------------------------------
     def _cmd_cb(self, msg: AckermannDriveStamped):
@@ -88,15 +110,25 @@ class SimKinematic(Node):
                               msg.drive.steering_angle))
 
     # ------------------------------------------------------------------
-    def _step(self):
-        """Integrate one timestep and publish."""
+    def _advance(self):
+        """Advance the plant state by one fixed timestep."""
         # Kinematic bicycle model
         dt = self._dt
         self._x += self._v * math.cos(self._yaw) * dt
         self._y += self._v * math.sin(self._yaw) * dt
-        self._yaw += (self._v / self._L) * math.tan(self._steer) * dt
+        self._yaw_rate = (self._v / self._L) * math.tan(self._steer)
+        self._yaw += self._yaw_rate * dt
 
-        now = self.get_clock().now().to_msg()
+    def _step(self):
+        """Advance the plant and publish a consistent clock, odometry and TF."""
+        self._advance()
+
+        if self._publish_clock:
+            self._sim_ns += self._step_ns
+            now = Time(nanoseconds=self._sim_ns).to_msg()
+            self._clock_pub.publish(Clock(clock=now))
+        else:
+            now = self.get_clock().now().to_msg()
 
         # --- Odometry ---
         odom = Odometry()
@@ -108,13 +140,11 @@ class SimKinematic(Node):
         odom.pose.pose.position.y = self._y
         odom.pose.pose.orientation = yaw_to_quat(self._yaw)
 
-        odom.twist.twist.linear = Vector3(
-            x=self._v * math.cos(self._yaw),
-            y=self._v * math.sin(self._yaw),
-            z=0.0)
+        # Odometry twist belongs to child_frame_id, not the map frame.
+        odom.twist.twist.linear = Vector3(x=self._v, y=self._vy, z=0.0)
         odom.twist.twist.angular = Vector3(
             x=0.0, y=0.0,
-            z=(self._v / self._L) * math.tan(self._steer))
+            z=self._yaw_rate)
 
         self._odom_pub.publish(odom)
 
@@ -138,4 +168,4 @@ def main():
     except KeyboardInterrupt:
         pass
     node.destroy_node()
-    rclpy.shutdown()
+    rclpy.try_shutdown()

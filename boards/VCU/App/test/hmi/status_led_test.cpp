@@ -4,7 +4,7 @@
 
 namespace {
 using lhre::can::VcuFaultCode;
-using lhre::can::VcuState;
+using VcuState = lhre::can::VcuStateMachine;
 
 TEST(StatusLed, NormalStatesHaveDistinctColorsAndReadinessPatterns) {
   const auto idle = vcu::StatusColor(VcuState::kIdle, VcuFaultCode::kNone, 0);

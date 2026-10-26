@@ -1,5 +1,9 @@
 # SDD System Usage Guide
 
+For Orion use the [Bazel schema workflow](../README.md). The legacy guide
+below describes source-patching tools; `sync_schema.sh` now only builds Bazel
+outputs and does not update checked-in SQL, protobuf or models.
+
 The Schema Driven Development (SDD) system automates the synchronization of database schemas, ORM models, and frontend Prisma definitions. 
 
 For high-level architectural details and motivation, see [SCHEMA_DRIVEN_DEV.md](./SCHEMA_DRIVEN_DEV.md).

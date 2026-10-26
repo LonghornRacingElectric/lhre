@@ -192,18 +192,18 @@ struct Bench {
   void SendCarFrames() {
     using namespace lhre::can;  // NOLINT
     if (hvc_alive) {
-      hvc::HvcContactorStatus s;
-      s.hvc_state = hvc_state;
-      s.positive_contactor_closed = contactors;
-      s.negative_contactor_closed = contactors;
+      hvc::ContactorStatus s;
+      s.hvc_state_machine = static_cast<uint8_t>(hvc_state);
+      s.positive_hv_contactor = contactors;
+      s.negative_hv_contactor = contactors;
       car.Send(s.ToFrame());
-      hvc::HvcCellLimits c;
+      hvc::BatteryCellLimits c;
       c.set_min_cell_voltage(3.9f);
       c.set_max_cell_voltage(3.95f);
       car.Send(c.ToFrame());
     }
     if (indicators_alive) {
-      hvc::HvcIndicators i;
+      hvc::IndicatorsShutdownStatus i;
       i.bms_error = bms_error;
       i.imd_error = imd_error;
       car.Send(i.ToFrame());
@@ -212,8 +212,8 @@ struct Bench {
       inverter::InverterFaults f;
       f.run_faults = inverter_run_faults;
       car.Send(f.ToFrame());
-      car.Send(inverter::InverterInternalStates{}.ToFrame());
-      inverter::InverterHighSpeed hs;
+      car.Send(inverter::InverterDetails{}.ToFrame());
+      inverter::InverterSpeed hs;
       hs.motor_speed = motor_rpm;
       if (speed_alive) car.Send(hs.ToFrame());
       if (current_alive) {
@@ -228,8 +228,8 @@ struct Bench {
       }
     }
     if (pdu_alive) {
-      pdu::PduBse3 b;
-      b.set_brake_pressure(bse3_psi);
+      pdu::Bse3 b;
+      b.set_brake_pressure_3(bse3_psi);
       car.Send(b.ToFrame());
     }
     if (dui_alive) {

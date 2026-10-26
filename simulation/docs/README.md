@@ -7,6 +7,8 @@ Detail for people and coding agents who work in `simulation/`. Start with
 
 - [Studies](studies.md): what a study is and how to write one.
 - [BobSim](bobsim.md): the tiers, how long they take, and the pin.
+- [Tests](tests.md): what `make test` checks, how to add a test, and the CI job.
+- [Anti records](anti-paths.md): anti-dive and anti-squat by force path, and their status.
 
 ## Skills
 
@@ -19,3 +21,5 @@ skill before they start. People can follow them too.
 | [run-bobsim-target](skills/run-bobsim-target/SKILL.md) | Run a BobSim evaluation, envelope or sweep |
 | [edit-vehicle](skills/edit-vehicle/SKILL.md) | Change a parameter in `vehicle/vehicle.yml` |
 | [bump-bobsim](skills/bump-bobsim/SKILL.md) | Move the BobSim submodule to a new commit |
+| [bobsim-boundary](skills/bobsim-boundary/SKILL.md) | Keep lhre code apart from BobSim and work across the line |
+| [orchestrate-subagents](skills/orchestrate-subagents/SKILL.md) | Plan and run study work as a team of subagents |

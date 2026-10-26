@@ -110,9 +110,9 @@ void App::UpdateBrakeLatch(uint32_t now) {
   }
 
   // BSE3 from the PDU: regen blending needs it; no blending without it.
-  live_.bse3_available = rx_.pdu_bse3.Fresh(now);
+  live_.bse3_available = rx_.bse_3.Fresh(now);
   live_.bse3_psi =
-      live_.bse3_available ? rx_.pdu_bse3.msg.brake_pressure() : 0.0f;
+      live_.bse3_available ? rx_.bse_3.msg.brake_pressure_3() : 0.0f;
 }
 
 uint32_t App::ComputeFaults(uint32_t now, bool inverter_fresh,
@@ -129,9 +129,9 @@ uint32_t App::ComputeFaults(uint32_t now, bool inverter_fresh,
   if (brake_latch_.latched()) f |= kFaultBrakeFlagLatched;
   if (ped.brake_over_throttle) f |= kFaultBrakeOverThrottle;
   if (!shutdown_loop_.closed()) f |= kFaultShutdownOpen;
-  if (!rx_.hvc_contactor_status.Fresh(now)) f |= kFaultHvcTimeout;
+  if (!rx_.contactor_status.Fresh(now)) f |= kFaultHvcTimeout;
   if (!inverter_fresh) f |= kFaultInverterTimeout;
-  if (!rx_.pdu_bse3.Fresh(now)) f |= kFaultPduTimeout | kFaultBse3Unavailable;
+  if (!rx_.bse_3.Fresh(now)) f |= kFaultPduTimeout | kFaultBse3Unavailable;
   if (inverter_faulted) f |= kFaultInverterFault;
   if (live_.inputs.latch_state) f |= kFaultBspdTripped;
   if (ped.hard_brake_mismatch) f |= kFaultHardBrakeMismatch;
@@ -141,11 +141,11 @@ uint32_t App::ComputeFaults(uint32_t now, bool inverter_fresh,
     f |= kFaultShutdownSenseImplausible;
   }
   StateInputs hvc;
-  hvc.hvc_fresh = rx_.hvc_contactor_status.Fresh(now);
-  hvc.hvc_state = rx_.hvc_contactor_status.msg.hvc_state;
-  hvc.contactors_closed =
-      rx_.hvc_contactor_status.msg.positive_contactor_closed &&
-      rx_.hvc_contactor_status.msg.negative_contactor_closed;
+  hvc.hvc_fresh = rx_.contactor_status.Fresh(now);
+  hvc.hvc_state = static_cast<lhre::can::HvcState>(
+      rx_.contactor_status.msg.hvc_state_machine);
+  hvc.contactors_closed = rx_.contactor_status.msg.positive_hv_contactor &&
+                          rx_.contactor_status.msg.negative_hv_contactor;
   if (sm_.state() == VcuState::kDrive && !StateConditions::Energized(hvc)) {
     f |= kFaultContactorsOpen;
   }
@@ -159,11 +159,11 @@ void App::UpdateState(uint32_t now, bool rtd_edge, bool inverter_fresh,
   const PedalOutputs& ped = live_.pedals;
   StateInputs si;
   si.bspd_latched = in.latch_state;
-  si.hvc_fresh = rx_.hvc_contactor_status.Fresh(now);
-  si.hvc_state = rx_.hvc_contactor_status.msg.hvc_state;
-  si.contactors_closed =
-      rx_.hvc_contactor_status.msg.positive_contactor_closed &&
-      rx_.hvc_contactor_status.msg.negative_contactor_closed;
+  si.hvc_fresh = rx_.contactor_status.Fresh(now);
+  si.hvc_state = static_cast<lhre::can::HvcState>(
+      rx_.contactor_status.msg.hvc_state_machine);
+  si.contactors_closed = rx_.contactor_status.msg.positive_hv_contactor &&
+                         rx_.contactor_status.msg.negative_hv_contactor;
   si.loop_closed = shutdown_loop_.closed();
   si.torque_cut_fault = (faults_ & kTorqueCutFaults) != 0;
   si.inverter_ready = inverter_fresh && !inverter_faulted;
@@ -222,11 +222,11 @@ void App::UpdateTorque(uint32_t now, uint32_t dt_ms, bool inverter_fresh) {
   BatteryInputs bin;
   bin.dc_bus_current = fb.dc_a;
   bin.dc_bus_voltage = fb.dc_v;
-  bin.min_cell_v = rx_.hvc_cell_limits.seen()
-                       ? rx_.hvc_cell_limits.msg.min_cell_voltage()
+  bin.min_cell_v = rx_.battery_cell_limits.seen()
+                       ? rx_.battery_cell_limits.msg.min_cell_voltage()
                        : 0.0f;
-  bin.max_cell_v = rx_.hvc_cell_limits.seen()
-                       ? rx_.hvc_cell_limits.msg.max_cell_voltage()
+  bin.max_cell_v = rx_.battery_cell_limits.seen()
+                       ? rx_.battery_cell_limits.msg.max_cell_voltage()
                        : 0.0f;
   bin.dt_ms = dt_ms;
   live_.battery = battery_.Update(bin, params_->battery);
@@ -267,10 +267,9 @@ float App::PositiveTorque(uint32_t now, uint32_t dt_ms, bool torque_allowed,
   tin.dc_bus_current = fb.dc_a;
   tin.ocv_min_cell_v = live_.battery.ocv_min_cell_v;
   tin.dt_ms = dt_ms;
-  tin.speed_from_high_speed = rx_.inverter_high_speed.Fresh(now);
-  tin.speed_sample_ms = tin.speed_from_high_speed
-                            ? rx_.inverter_high_speed.last_ms
-                            : rx_.inverter_motor_position.last_ms;
+  tin.speed_from_high_speed = rx_.inverter_speed.Fresh(now);
+  tin.speed_sample_ms = tin.speed_from_high_speed ? rx_.inverter_speed.last_ms
+                                                  : rx_.inverter_status.last_ms;
   TractionParams acceleration_limiter = P.traction;
   if (P.wheel_control.enabled) acceleration_limiter.enabled = false;
   live_.torque =
@@ -316,7 +315,7 @@ void App::ArbitrateTorque(uint32_t now, uint32_t dt_ms, bool torque_allowed,
   rin.feedback_fresh = inverter_fresh && live_.bse3_available &&
                        live_.wheel_control.valid &&
                        live_.wheel_control.regen_allowed &&
-                       rx_.hvc_cell_limits.Fresh(now) && live_.adc_fresh;
+                       rx_.battery_cell_limits.Fresh(now) && live_.adc_fresh;
   rin.hard_braking = live_.inputs.hard_braking || ped.firmware_hard_brake;
   rin.linelock_out = live_.inputs.linelock_out;
   rin.pedal = ped.pedal_travel;
@@ -325,7 +324,7 @@ void App::ArbitrateTorque(uint32_t now, uint32_t dt_ms, bool torque_allowed,
   rin.motor_rpm = fb.rpm;
   rin.dc_v = fb.dc_v;
   rin.dc_a = fb.dc_a;
-  rin.max_cell_v = rx_.hvc_cell_limits.msg.max_cell_voltage();
+  rin.max_cell_v = rx_.battery_cell_limits.msg.max_cell_voltage();
   rin.dt_ms = dt_ms;
   const RegenResult regen = regen_.Update(rin, P.regen);
   live_.regen_current_cut = regen.current_cut;
@@ -385,9 +384,9 @@ void App::DriveOutputs(uint32_t now) {
   out.amp_enable = sound;
 
   // BMS/IMD LEDs only ever add indication over the board default (on).
-  error_leds_.Update(rx_.hvc_indicators.Fresh(now),
-                     rx_.hvc_indicators.msg.bms_error,
-                     rx_.hvc_indicators.msg.imd_error);
+  error_leds_.Update(rx_.indicators_shutdown_status.Fresh(now),
+                     rx_.indicators_shutdown_status.msg.bms_error,
+                     rx_.indicators_shutdown_status.msg.imd_error);
   out.bms_led = error_leds_.bms_on();
   out.imd_led = error_leds_.imd_on();
 

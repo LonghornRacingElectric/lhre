@@ -181,7 +181,6 @@ class App {
   uint32_t faults_ = 0;
   float torque_command_ = 0.0f;
   ControlSnapshot live_;
-  longhorn::RateGate status_gate_;
   longhorn::RateGate faults_gate_;
   longhorn::RateGate energy_gate_;
 

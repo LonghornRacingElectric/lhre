@@ -17,11 +17,9 @@ struct VehicleRx : lhre::can::rx::VcuCriticalRx {
   // Require measurement feedback as well as status. TODO(verify): inverter VSM
   // states.
   bool InverterFresh(uint32_t now_ms) const {
-    return inverter_faults.Fresh(now_ms) &&
-           inverter_internal_states.Fresh(now_ms) &&
+    return inverter_faults.Fresh(now_ms) && inverter_details.Fresh(now_ms) &&
            inverter_current.Fresh(now_ms) && inverter_voltage.Fresh(now_ms) &&
-           (inverter_high_speed.Fresh(now_ms) ||
-            inverter_motor_position.Fresh(now_ms));
+           (inverter_speed.Fresh(now_ms) || inverter_status.Fresh(now_ms));
   }
   bool InverterFaulted(uint32_t now_ms) const {
     return inverter_faults.Fresh(now_ms) &&
@@ -32,12 +30,12 @@ struct VehicleRx : lhre::can::rx::VcuCriticalRx {
   // Motor speed from the fast frame, falling back to motor position
   // (lhre-2026 vcu_can.c:389-423). Returns false when both are stale.
   bool MotorRpm(uint32_t now_ms, float* rpm) const {
-    if (inverter_high_speed.Fresh(now_ms)) {
-      *rpm = static_cast<float>(inverter_high_speed.msg.motor_speed);
+    if (inverter_speed.Fresh(now_ms)) {
+      *rpm = static_cast<float>(inverter_speed.msg.motor_speed);
       return true;
     }
-    if (inverter_motor_position.Fresh(now_ms)) {
-      *rpm = static_cast<float>(inverter_motor_position.msg.motor_speed);
+    if (inverter_status.Fresh(now_ms)) {
+      *rpm = static_cast<float>(inverter_status.msg.motor_speed);
       return true;
     }
     *rpm = 0.0f;
@@ -46,7 +44,7 @@ struct VehicleRx : lhre::can::rx::VcuCriticalRx {
 };
 
 // Wheel measurements arrive on Data, not Critical.
-struct WheelRx : lhre::can::rx::VcuDataRx {
+struct WheelRx : lhre::can::rx::VcuDataAcqRx {
   bool Fresh(uint32_t now) const {
     return acceleration_vector_unsprung_wheel_speed_fl.Fresh(now) &&
            acceleration_vector_unsprung_wheel_speed_fr.Fresh(now) &&

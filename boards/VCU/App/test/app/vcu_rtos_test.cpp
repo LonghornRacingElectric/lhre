@@ -63,13 +63,13 @@ TEST(VcuRtos, TasksRunUnderScheduler) {
       EXPECT_FALSE(
           lhre::can::vcu::InverterTorqueCommand::FromFrame(frame).enable);
     }
-    if (lhre::can::vcu::VcuStatus::Matches(frame.id)) {
+    if (lhre::can::vcu::VcuState::Matches(frame.id)) {
       ++heartbeats;
     }
   }
-  // 350 ms at 3 ms (~116) and 10 ms (~35); generous for scheduler jitter.
+  // Both frames go out every 3 ms (~116 in 350 ms); generous for jitter.
   EXPECT_GE(inverter, 30u);
-  EXPECT_GE(heartbeats, 10u);
+  EXPECT_GE(heartbeats, 30u);
   EXPECT_TRUE(watchdog.started());
   EXPECT_GE(watchdog.refresh_count(), 5u);
   EXPECT_EQ(app.state(), vcu::VcuState::kIdle);
