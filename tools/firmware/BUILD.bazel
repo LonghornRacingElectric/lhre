@@ -23,3 +23,6 @@ cc_library(
     includes = ["."],
     visibility = ["//visibility:public"],
 )
+
+# Run by each firmware image's {image}_size_test (firmware_project).
+exports_files(["size_check.py"])
