@@ -25,6 +25,7 @@ firmware_project(
         "//lib/codegen/cpp:can_pi",
         "//lib/codegen/cpp:can_vcu",
         "//lib/codegen/cpp:can_rx_vcu",
+        "//lib/codegen/cpp:can_tsm",
         "//lib/codegen/cpp:can_usm",
     ],
     enable_freertos = True,

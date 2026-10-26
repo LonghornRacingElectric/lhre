@@ -30,6 +30,7 @@ enum FaultBit : uint32_t {
   kFaultMotorDisconnect = 1u << 18,
   kFaultShutdownSenseImplausible = 1u << 19,
   kFaultAdcStale = 1u << 20,
+  kFaultCoolantOvertemp = 1u << 21,
 };
 
 // These faults exit DRIVE. Brake-over-throttle only cuts torque until pedal
@@ -98,6 +99,25 @@ class ErrorLeds {
   bool imd_latched_ = false;
   bool bms_on_ = true;
   bool imd_on_ = true;
+};
+
+// Coolant overtemp latches until a dash reset with the loop back under the
+// limit. It warns the driver but does not cut torque: the limit is not yet
+// validated, and the inverter has its own temperature faults.
+class CoolantOvertempLatch {
+ public:
+  void Update(bool over, bool reset_edge) {
+    if (over) {
+      latched_ = true;
+    } else if (reset_edge) {
+      latched_ = false;
+    }
+  }
+
+  bool latched() const { return latched_; }
+
+ private:
+  bool latched_ = false;
 };
 
 }  // namespace vcu

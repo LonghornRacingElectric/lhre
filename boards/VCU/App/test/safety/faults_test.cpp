@@ -15,6 +15,13 @@ TEST(Faults, PrimaryFaultPriority) {
   EXPECT_EQ(
       vcu::PrimaryFault(vcu::kFaultAppsImplausible | vcu::kFaultHvcTimeout),
       VcuFaultCode::kHvcTimeout);
+  // Coolant overtemp outranks diagnostics but not torque-cut faults.
+  EXPECT_EQ(
+      vcu::PrimaryFault(vcu::kFaultCoolantOvertemp | vcu::kFaultSteeringRange),
+      VcuFaultCode::kCoolantOvertemp);
+  EXPECT_EQ(
+      vcu::PrimaryFault(vcu::kFaultCoolantOvertemp | vcu::kFaultHvcTimeout),
+      VcuFaultCode::kHvcTimeout);
 }
 
 TEST(Faults, BrakeFlagLatch) {
@@ -39,6 +46,20 @@ TEST(Faults, BrakeFlagLatch) {
   EXPECT_TRUE(restored.latched());
   restored.Restore(0x12345678u);  // corrupt/erased storage reads as clear
   EXPECT_FALSE(restored.latched());
+}
+
+TEST(Faults, CoolantOvertempLatch) {
+  vcu::CoolantOvertempLatch latch;
+  latch.Update(false, true);
+  EXPECT_FALSE(latch.latched());
+  latch.Update(true, false);
+  EXPECT_TRUE(latch.latched());
+  latch.Update(true, true);  // reset refused while still over
+  EXPECT_TRUE(latch.latched());
+  latch.Update(false, false);
+  EXPECT_TRUE(latch.latched());  // no auto-clear
+  latch.Update(false, true);
+  EXPECT_FALSE(latch.latched());
 }
 
 TEST(Faults, ErrorLedsDefaultOnAndLatch) {

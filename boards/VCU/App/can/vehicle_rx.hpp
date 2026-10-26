@@ -43,7 +43,7 @@ struct VehicleRx : lhre::can::rx::VcuCriticalRx {
   }
 };
 
-// Wheel measurements arrive on Data, not Critical.
+// Wheel measurements and TSM coolant temps arrive on Data, not Critical.
 struct WheelRx : lhre::can::rx::VcuDataAcqRx {
   bool Fresh(uint32_t now) const {
     return acceleration_vector_unsprung_wheel_speed_fl.Fresh(now) &&

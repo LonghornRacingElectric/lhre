@@ -120,6 +120,7 @@ msg::VcuFaults FaultsFrame(const ControlSnapshot& s) {
   vf.active_faults_shutdown_sense_implausible =
       (f & kFaultShutdownSenseImplausible) != 0;
   vf.active_faults_adc_stale = (f & kFaultAdcStale) != 0;
+  vf.active_faults_coolant_overtemp = (f & kFaultCoolantOvertemp) != 0;
   vf.primary_fault = s.primary_fault;
   vf.state = s.state;
   vf.brake_flags_latched = s.brake_flags_latched;

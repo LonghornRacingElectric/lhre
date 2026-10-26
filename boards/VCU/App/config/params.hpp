@@ -87,6 +87,12 @@ struct ShutdownParams {
   uint32_t debounce_ms = 10;
 };
 
+struct CoolingParams {
+  // TODO(verify): 60 C is the old reference app's HVC coolant limit, carried
+  // over as a placeholder. Pick the limit for the TSM loop sensors.
+  float overtemp_c = 60.0f;
+};
+
 struct DigitalParams {
   uint32_t brake_flag_debounce_ms = 10;
   uint32_t motor_debounce_ms = 15;
@@ -219,6 +225,7 @@ struct Params {
   BseParams bse;
   SteeringParams steering;
   ShutdownParams shutdown;
+  CoolingParams cooling;
   DigitalParams digital;
   DriveParams drive;
   BuzzerParams buzzer;

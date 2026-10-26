@@ -273,6 +273,11 @@ enum_type {
     number: 21
     description: "An ADC bank stopped completing scans; torque cut"
   }
+  value {
+    name: "COOLANT_OVERTEMP"
+    number: 22
+    description: "TSM coolant loop at or above the overtemp limit; latched until a dash reset (diagnostic)"
+  }
 }
 enum_type {
   name: "VcuStateMachine"
@@ -740,6 +745,10 @@ bitfield_type {
   bit {
     name: "adc_stale"
     description: "An ADC bank stopped completing scans; torque cut"
+  }
+  bit {
+    name: "coolant_overtemp"
+    description: "TSM coolant loop at or above the overtemp limit; latched until a dash reset (diagnostic)"
   }
 }
 bitfield_type {

@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include "app/vcu_app.hpp"
 #include "hmi/status_led.hpp"
 #include "longhorn/math.hpp"
@@ -18,7 +20,7 @@ void App::ControlTick(uint32_t now) {
 
   DrainCan(now);
   const bool rtd_edge = ReadInputs(now);
-  UpdateBrakeLatch(now);
+  UpdateCoolantLatch(now, UpdateBrakeLatch(now));
 
   const bool inverter_fresh = rx_.InverterFresh(now);
   const bool inverter_faulted = rx_.InverterFaulted(now);
@@ -93,7 +95,7 @@ bool App::ReadInputs(uint32_t now) {
   return rtd_edge;
 }
 
-void App::UpdateBrakeLatch(uint32_t now) {
+bool App::UpdateBrakeLatch(uint32_t now) {
   const DigitalInputs& in = live_.inputs;
   // Brake comparator soft latch: cleared only by the dash's reset.
   const bool dui_fresh = rx_.dui_driver_inputs.Fresh(now);
@@ -113,6 +115,17 @@ void App::UpdateBrakeLatch(uint32_t now) {
   live_.bse3_available = rx_.bse_3.Fresh(now);
   live_.bse3_psi =
       live_.bse3_available ? rx_.bse_3.msg.brake_pressure_3() : 0.0f;
+  return reset_edge;
+}
+
+void App::UpdateCoolantLatch(uint32_t now, bool reset_edge) {
+  // A silent TSM leaves the latch as it is: the TSM is not needed to drive.
+  const auto& coolant = wheels_.coolant_loop_temps;
+  const float hottest_c = std::max(coolant.msg.loop_temp_after_motor(),
+                                   coolant.msg.loop_temp_after_inverter());
+  const bool over =
+      coolant.Fresh(now) && hottest_c >= params_->cooling.overtemp_c;
+  coolant_latch_.Update(over, reset_edge);
 }
 
 uint32_t App::ComputeFaults(uint32_t now, bool inverter_fresh,
@@ -127,6 +140,7 @@ uint32_t App::ComputeFaults(uint32_t now, bool inverter_fresh,
   if (ped.bse2_fault) f |= kFaultBse2Range;
   if (live_.steering.range_fault) f |= kFaultSteeringRange;
   if (brake_latch_.latched()) f |= kFaultBrakeFlagLatched;
+  if (coolant_latch_.latched()) f |= kFaultCoolantOvertemp;
   if (ped.brake_over_throttle) f |= kFaultBrakeOverThrottle;
   if (!shutdown_loop_.closed()) f |= kFaultShutdownOpen;
   if (!rx_.contactor_status.Fresh(now)) f |= kFaultHvcTimeout;

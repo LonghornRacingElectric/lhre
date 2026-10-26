@@ -8,7 +8,7 @@ lhre::can::VcuFaultCode PrimaryFault(uint32_t faults) {
       kFaultHvcTimeout,       kFaultInverterTimeout,   kFaultInverterFault,
       kFaultPduTimeout,       kFaultMotorDisconnect,   kFaultAdcStale,
       kFaultAppsImplausible,  kFaultBse1Range,         kFaultBse2Range,
-      kFaultBrakeFlagLatched, kFaultBrakeOverThrottle,
+      kFaultBrakeFlagLatched, kFaultBrakeOverThrottle, kFaultCoolantOvertemp,
   };
   for (uint32_t bit : kPriority) {
     if ((faults & bit) != 0) {

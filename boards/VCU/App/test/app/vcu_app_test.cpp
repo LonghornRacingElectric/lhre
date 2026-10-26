@@ -293,6 +293,41 @@ TEST_F(VcuAppTest, DashResetIgnoredWhileFlagActive) {
   EXPECT_EQ(app_->faults() & vcu::kFaultBrakeFlagLatched, 0u);
 }
 
+TEST_F(VcuAppTest, CoolantOvertempLatchesWithoutCuttingTorque) {
+  b_.coolant_alive = true;
+  ReachDrive();
+  b_.SetPedalTravel(0.5f);
+  b_.Run(*app_, 200);
+  EXPECT_EQ(app_->faults() & vcu::kFaultCoolantOvertemp, 0u);
+
+  // Either loop sensor at the limit latches the fault, reported on CAN.
+  b_.coolant_after_inverter_c = vcu::CoolingParams{}.overtemp_c;
+  b_.Run(*app_, 200);
+  EXPECT_NE(app_->faults() & vcu::kFaultCoolantOvertemp, 0u);
+  msg::VcuFaults vf;
+  ASSERT_TRUE(b_.LastFrame(b_.car, &vf));
+  EXPECT_TRUE(vf.active_faults_coolant_overtemp);
+  // Diagnostic only: the car keeps driving.
+  EXPECT_EQ(app_->state(), VcuState::kDrive);
+  EXPECT_GT(app_->torque_command(), 0.0f);
+
+  // Cooling down or the TSM going silent does not clear it; a dash reset
+  // with the loop back under the limit does.
+  b_.coolant_after_inverter_c = 30.0f;
+  b_.Run(*app_, 200);
+  b_.coolant_alive = false;
+  b_.Run(*app_, 500);
+  EXPECT_NE(app_->faults() & vcu::kFaultCoolantOvertemp, 0u);
+  b_.fault_reset = true;
+  b_.Run(*app_, 30);
+  EXPECT_EQ(app_->faults() & vcu::kFaultCoolantOvertemp, 0u);
+}
+
+TEST_F(VcuAppTest, SilentTsmRaisesNoCoolantFault) {
+  b_.Run(*app_, 500);
+  EXPECT_EQ(app_->faults() & vcu::kFaultCoolantOvertemp, 0u);
+}
+
 TEST_F(VcuAppTest, ErrorLedsOnlyAddIndication) {
   b_.Run(*app_, 50);
   EXPECT_FALSE(b_.bms_led.Read());  // fresh, no fault

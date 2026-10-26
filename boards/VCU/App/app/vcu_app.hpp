@@ -98,8 +98,9 @@ class App {
 
   // Control-loop stages, in tick order.
   void DrainCan(uint32_t now_ms);
-  bool ReadInputs(uint32_t now_ms);  // returns the RTD press edge
-  void UpdateBrakeLatch(uint32_t now_ms);
+  bool ReadInputs(uint32_t now_ms);        // returns the RTD press edge
+  bool UpdateBrakeLatch(uint32_t now_ms);  // returns the dash reset edge
+  void UpdateCoolantLatch(uint32_t now_ms, bool reset_edge);
   uint32_t ComputeFaults(uint32_t now_ms, bool inverter_fresh,
                          bool inverter_faulted) const;
   void UpdateState(uint32_t now_ms, bool rtd_edge, bool inverter_fresh,
@@ -161,6 +162,7 @@ class App {
   longhorn::Debouncer motor_disconnect_;
   longhorn::EdgeButton rtd_switch_;
   BrakeFlagLatch brake_latch_;
+  CoolantOvertempLatch coolant_latch_;
   ErrorLeds error_leds_;
   StateMachine sm_;
   TorquePath torque_path_;

@@ -150,6 +150,15 @@ The DUI is a plain CAN peripheral this year.
   after the 10 ms input debounce. They share a soft latch stored in flash,
   so a power cycle doesn't clear it; only the dash's
   `DUI_DRIVER_INPUTS.fault_reset`, pressed while no flag is active, does.
+- **Coolant overtemp**: the VCU reads the TSM's `COOLANT_LOOP_TEMPS` from
+  the Data bus. Either the after-motor or after-inverter loop temperature at
+  or above `CoolingParams::overtemp_c` raises `COOLANT_OVERTEMP` (fault code
+  22). It latches until a `fault_reset` press with the loop back under the
+  limit, but only warns: it doesn't cut torque or leave DRIVE, because the
+  60 C limit is a placeholder from the old reference app and the inverter
+  has its own temperature faults. A silent TSM raises nothing, since the
+  car doesn't need the TSM to drive. Confirm the limit, and whether it
+  should cut torque, before relying on it.
 - **RTD sound**: a 1 kHz sine from the DAC for 1.2 s on entering DRIVE.
   There is a local 1.5 s ceiling, and the amp is cut immediately if the
   shutdown loop opens.
@@ -347,6 +356,9 @@ FDCAN on PCLK1, ADC on HCLK/2 = 48 MHz, USB on PLLQ.
 - Polarity of `motor_disconnect`. Neither motor cable has a pull resistor,
   so an unplugged cable reads undefined. `motor_power` remains diagnostic;
   `motor_disconnect` now cuts torque when high after debounce.
+- Coolant overtemp limit (`CoolingParams::overtemp_c`, a 60 C placeholder)
+  and whether the fault should cut torque. The TSM's loop sensor wiring and
+  scaling are unchecked on the car.
 - Rule text for every threshold marked `TODO(verify rule)`. The RTD sound
   needs measuring against its 80-90 dBA band.
 
