@@ -46,6 +46,10 @@ def main(elf_path, ld_path, budget_pct):
         elf = f.read()
     with open(ld_path, encoding="utf-8") as f:
         regions = memory_regions(f.read())
+    if "FLASH" not in regions or "RAM" not in regions:
+        raise ValueError(
+            f"{ld_path}: MEMORY needs regions named FLASH and RAM "
+            f"(found {sorted(regions)})")
     flash_origin, flash_len = regions["FLASH"]
     ram_origin, ram_len = regions["RAM"]
     if not flash_len or not ram_len:
