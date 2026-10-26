@@ -40,7 +40,7 @@ struct PowerPlant {
   vcu::TorquePath path;
   vcu::TorqueInputs in;
   vcu::PowerLimitParams pl = P().power_limit;
-  float true_ratio = 0.85f;
+  float true_ratio = P().power_limit.dc_power_ratio;
   float last_torque = 0.0f;
   uint32_t now = 0;
 
@@ -71,27 +71,28 @@ TEST(PowerLimit, CapsTorqueFromSpeedBeforeAnyFeedback) {
   PowerPlant car(4000.0f);
   car.pl.limit_w = 40000.0f;
   const auto out = car.Tick();
-  EXPECT_NEAR(out.power_limited, 40000.0f / (0.85f * Omega(4000.0f)), 0.01f);
+  EXPECT_NEAR(out.power_limited,
+              40000.0f / (car.pl.dc_power_ratio * Omega(4000.0f)), 0.01f);
   EXPECT_LT(out.power_limited, out.lookup);
 }
 
 TEST(PowerLimit, TrimRemovesRatioErrorWithoutOvershoot) {
   PowerPlant car(4000.0f);
   car.pl.limit_w = 40000.0f;
-  car.true_ratio = 0.90f;  // the controller assumes 0.85
+  car.true_ratio = 1.05f * car.pl.dc_power_ratio;  // 5% above the assumption
   float peak = 0.0f;
   for (int i = 0; i < 1000; ++i) {  // 3 s
     car.Tick();
     peak = std::max(peak, car.PowerW());
   }
   EXPECT_NEAR(car.PowerW(), 40000.0f, 400.0f);
-  EXPECT_LT(peak, 40000.0f * 0.90f / 0.85f + 1.0f);
+  EXPECT_LT(peak, 40000.0f * 1.05f + 1.0f);
 }
 
 TEST(PowerLimit, TrimMovesOnlyOnNewSamples) {
   PowerPlant car(4000.0f);
   car.pl.limit_w = 40000.0f;
-  car.true_ratio = 0.90f;
+  car.true_ratio = 1.05f * car.pl.dc_power_ratio;
   for (int i = 0; i < 50; ++i) car.Tick();
   const float trim = car.Tick().power_trim_w;
   // Same sample time: repeated ticks must not integrate it again.
