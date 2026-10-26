@@ -66,8 +66,13 @@ Raw data remains in the gitignored host directory
 `autonomy/ros2/data/2026-10-26-fmu-seeds/`. Each
 `fmu_autocross_seed<N>_run1/` holds `metrics.csv`, `args.txt`, `exit_code.txt`,
 `launch.log`, and `bags/<run_id>/`. The root holds `provenance.json` and
-`audit.json`. SharePoint upload is pending; there is no shared raw-data link
-yet. Keep the local recordings until the upload is verified.
+`audit.json`. The complete campaign is also on
+[SharePoint](https://utexas.sharepoint.com/sites/ENGR-LonghornRacing/LHR%20Electric/Design/_VMS_/Autonomous/Test%20Data/2026-10-26-fmu-seeds).
+The upload was verified against all 32 local file paths and their individual
+byte sizes: 4,405,825,351 bytes total. The
+[raw-data inventory](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/testing/2026-10-26-fmu-seeds/raw-data-inventory.json)
+retains those sizes and local SHA-256 checksums. Remote checksums were not
+compared. The local recordings remain available.
 
 ## Repeat
 

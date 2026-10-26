@@ -20,3 +20,7 @@ All times below are UTC on 2026-10-26 (local date: October 26, America/Chicago).
 - Copied the five original metrics rows and the artifact manifest into
   this campaign folder. Raw recordings and logs remain gitignored.
   No GitHub comment, issue closure, merge, or SharePoint upload was made.
+- Uploaded the full campaign to SharePoint after the initial results commit.
+  Verified all 32 paths and individual file sizes against the local inventory:
+  4,405,825,351 bytes total. Kept the local recordings. Added the SharePoint
+  link and local checksum inventory to the write-up.
