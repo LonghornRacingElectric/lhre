@@ -186,6 +186,7 @@ class UsageTest(unittest.TestCase):
 
 class MainTest(unittest.TestCase):
     def check(self, ld, sections, budget_pct, overrides=()):
+        self.output = io.StringIO()
         with tempfile.TemporaryDirectory() as tmp:
             elf_path = os.path.join(tmp, "image.elf")
             ld_path = os.path.join(tmp, "image.ld")
@@ -193,7 +194,7 @@ class MainTest(unittest.TestCase):
                 f.write(_elf(sections))
             with open(ld_path, "w", encoding="utf-8") as f:
                 f.write(ld)
-            with contextlib.redirect_stdout(io.StringIO()):
+            with contextlib.redirect_stdout(self.output):
                 return size_check.main(elf_path, ld_path, budget_pct,
                                        overrides)
 
@@ -205,6 +206,10 @@ class MainTest(unittest.TestCase):
     def test_non_primary_region_over_budget(self):
         dma = _section(".dma_buffers", 0x30000000, 1000, sh_type=NOBITS)
         self.assertEqual(self.check(H7, [dma], 85), 1)
+        self.assertIn("| RAM_D2 | 1,000 | 1,024 | 97.7% | 85% | over |",
+                      self.output.getvalue())
+        self.assertIn("| RAM_D1 | 0 | 2,048 | 0.0% | 85% | ok |",
+                      self.output.getvalue())
 
     def test_region_override(self):
         stack = _section(".stack", 0x20000000, 1024, sh_type=NOBITS)

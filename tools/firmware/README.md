@@ -175,7 +175,8 @@ The linker only fails at 100%, by which point the next feature has
 nowhere to go. So each image gets an `{image}_size_test`
 ([size_check.py](https://github.com/LonghornRacingElectric/lhre/blob/main/tools/firmware/size_check.py))
 that prints how full every region is and fails once any of them passes
-`size_budget_percent`. It knows nothing about particular boards:
+`size_budget_percent`. Presubmit copies each image's table onto the run's
+summary page, so every PR shows where memory stands. It knows nothing about particular boards:
 
 - The regions are whatever the linker script's `MEMORY` block declares,
   so a G4's `FLASH`/`RAM`, an F4's `CCMRAM` and an H7's `DTCMRAM` and

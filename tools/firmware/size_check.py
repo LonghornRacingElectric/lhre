@@ -129,16 +129,17 @@ def main(elf_path, ld_path, budget_pct, overrides=()):
                              f"declare (regions: {', '.join(regions)})")
         budgets[region] = float(pct)
     used = usage(regions, alloc_sections(elf))
+    # A markdown table: readable in the test log, and CI copies it as-is
+    # into the run's summary page.
+    print("| Region | Used (bytes) | Size (bytes) | Use | Budget | |")
+    print("| :-- | --: | --: | --: | --: | :-- |")
     over = []
-    width = max(map(len, regions))
     for region, (_, length) in regions.items():
         pct = 100.0 * used[region] / length if length else 0.0
-        print(f"{region:<{width}}  {used[region]:>8} / {length:>8} bytes  "
-              f"{pct:5.1f}%  (budget {budgets[region]:g}%)")
         if pct > budgets[region]:
             over.append(region)
-    if over:
-        print(f"over budget: {', '.join(over)}")
+        print(f"| {region} | {used[region]:,} | {length:,} | {pct:.1f}% | "
+              f"{budgets[region]:g}% | {'over' if region in over else 'ok'} |")
     return 1 if over else 0
 
 

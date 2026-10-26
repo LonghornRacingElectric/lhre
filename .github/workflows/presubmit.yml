@@ -63,6 +63,21 @@ jobs:
       - name: Test everything
         run: bazel test //...
 
+      # Each image's per-region memory table, copied from its size test's
+      # log onto the run's summary page. !cancelled() so an over-budget
+      # failure still shows which region blew it.
+      - name: Summarize firmware memory use
+        if: ${{ !cancelled() }}
+        run: |
+          for label in $(bazel query 'attr(tags, firmware_size, tests(//...))'); do
+            log="bazel-testlogs/${label#//}"
+            log="${log/://}/test.log"
+            [ -f "$log" ] || continue
+            printf '#### `%s`\n\n' "$label"
+            grep '^|' "$log" || true
+            echo
+          done | tee -a "$GITHUB_STEP_SUMMARY"
+
       # Host C++ tests again with undefined behavior trapping. trap_test is
       # the canary that proves the sanitizer is on (tools/ubsan/README.md).
       - name: Test host C++ under UBSan
