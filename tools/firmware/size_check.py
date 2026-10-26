@@ -4,6 +4,8 @@ Usage: size_check.py <image.elf> <linker_script.ld> <budget_percent>
 
 Regions come from the linker script's MEMORY block. Initialized data counts
 against both RAM and flash, because its initial values are stored in flash.
+A LENGTH this script can't read exactly (an expression like `512K - 16K`)
+is an error, not a guess: guessing high would under-report usage.
 """
 
 import re
@@ -13,6 +15,11 @@ import sys
 SHF_ALLOC = 0x2
 SHT_NOBITS = 8
 _UNITS = {"": 1, "K": 1024, "M": 1024 * 1024}
+# Attributes are optional in GNU ld. LENGTH runs to the end of the line,
+# since linker scripts put one region per line.
+_REGION = re.compile(r"(\w+)\s*(?:\([^)]*\))?\s*:\s*ORIGIN\s*=\s*(\w+)\s*,"
+                     r"\s*LENGTH\s*=\s*([^\n]+)")
+_LENGTH = re.compile(r"(0[xX][0-9A-Fa-f]+|\d+)\s*([KM]?)")
 
 
 def memory_regions(ld_text):
@@ -20,12 +27,13 @@ def memory_regions(ld_text):
     text = re.sub(r"/\*.*?\*/", "", ld_text, flags=re.S)
     block = re.search(r"MEMORY\s*\{(.*?)\}", text, re.S).group(1)
     regions = {}
-    for name, origin, length, unit in re.findall(
-        r"(\w+)\s*\([^)]*\)\s*:\s*ORIGIN\s*=\s*(\w+)\s*,\s*"
-        r"LENGTH\s*=\s*(0[xX][0-9A-Fa-f]+|\d+)\s*([KM]?)",
-        block,
-    ):
-        regions[name] = (int(origin, 0), int(length, 0) * _UNITS[unit])
+    for name, origin, length in _REGION.findall(block):
+        m = _LENGTH.fullmatch(length.strip())
+        if not m:
+            raise ValueError(
+                f"{name}: unsupported LENGTH {length.strip()!r} "
+                f"(expected a number with an optional K or M)")
+        regions[name] = (int(origin, 0), int(m.group(1), 0) * _UNITS[m.group(2)])
     return regions
 
 
