@@ -12,6 +12,7 @@ import ffmpegStatic from 'ffmpeg-static';
 
 export const HELPER_PORT = 43129;
 const MAX_BYTES = 8 * 1024 ** 3;
+const ORPHAN_MS = 2 * 60 * 1000;
 
 export function allowedOrigin(origin, extra = []) {
   try {
@@ -84,6 +85,8 @@ export function createVideoHelper({ origins = [], ffmpeg = process.env.LAPDOG_FF
       if (req.method === 'GET' && url.pathname === '/health') { send(200, { token, version: 1, maxBytes: MAX_BYTES }); return; }
       if (req.headers.authorization !== `Bearer ${token}`) { send(401, { error: 'Reconnect to the video helper.' }); return; }
       if (req.method === 'POST' && url.pathname === '/jobs') {
+        // The page polls a job every 500 ms (about once a minute in a hidden tab), so one left unpolled for 2 minutes lost its page to a reload or close.
+        for (const [oldId, old] of jobs) if (['waiting', 'encoding'].includes(old.state) && Date.now() - old.updated > ORPHAN_MS) { await clean(old); jobs.delete(oldId); }
         if ([...jobs.values()].some(j => ['waiting', 'uploading', 'encoding'].includes(j.state))) { send(409, { error: 'Another video is being compressed. Wait for it to finish or cancel it.' }); return; }
         const directory = await mkdtemp(join(tmpdir(), 'lapdog-video-'));
         const id = randomUUID();
