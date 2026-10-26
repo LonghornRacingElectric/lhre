@@ -5,7 +5,8 @@ Usage: size_check.py <image.elf> <linker_script.ld> <budget_percent>
 Regions come from the linker script's MEMORY block. Initialized data counts
 against both RAM and flash, because its initial values are stored in flash.
 A LENGTH this script can't read exactly (an expression like `512K - 16K`)
-is an error, not a guess: guessing high would under-report usage.
+is an error, not a guess: guessing high would under-report usage. So is a
+section outside both FLASH and RAM, which would otherwise go uncounted.
 """
 
 import re
@@ -38,15 +39,22 @@ def memory_regions(ld_text):
 
 
 def alloc_sections(elf):
+    """Yields (name, sh_type, addr, size) for each section that takes memory."""
     if elf[:4] != b"\x7fELF" or elf[4] != 1 or elf[5] != 1:
         raise ValueError("expected a 32-bit little-endian ELF")
     shoff, = struct.unpack_from("<I", elf, 0x20)
-    shentsize, shnum = struct.unpack_from("<HH", elf, 0x2E)
+    shentsize, shnum, shstrndx = struct.unpack_from("<HHH", elf, 0x2E)
+
+    def header(i):
+        return struct.unpack_from("<IIIIII", elf, shoff + i * shentsize)
+
+    names = header(shstrndx)[4]  # file offset of the section-name table
     for i in range(shnum):
-        _, sh_type, flags, addr, _, size = struct.unpack_from(
-            "<IIIIII", elf, shoff + i * shentsize)
+        name, sh_type, flags, addr, _, size = header(i)
         if flags & SHF_ALLOC and size:
-            yield sh_type, addr, size
+            start = names + name
+            name = elf[start:elf.index(b"\0", start)].decode()
+            yield name, sh_type, addr, size
 
 
 def main(elf_path, ld_path, budget_pct):
@@ -63,13 +71,19 @@ def main(elf_path, ld_path, budget_pct):
     if not flash_len or not ram_len:
         raise ValueError(f"{ld_path}: FLASH or RAM has zero length")
     flash = ram = 0
-    for sh_type, addr, size in alloc_sections(elf):
+    for name, sh_type, addr, size in alloc_sections(elf):
         if ram_origin <= addr < ram_origin + ram_len:
             ram += size
             if sh_type != SHT_NOBITS:
                 flash += size  # initial values of .data
         elif flash_origin <= addr < flash_origin + flash_len:
             flash += size
+        else:
+            # CCM SRAM, a second RAM bank, and the like. Skipping it would
+            # let the budget pass on an undercount.
+            raise ValueError(
+                f"{elf_path}: section {name} at {addr:#x} is outside FLASH "
+                f"and RAM, so it can't be counted against the budget")
     failed = False
     for name, used, total in (("flash", flash, flash_len), ("RAM", ram, ram_len)):
         pct = 100.0 * used / total

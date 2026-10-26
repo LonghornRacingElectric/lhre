@@ -181,7 +181,9 @@ both numbers either way. It reads:
   `512K - 16K`, fails the test rather than guessing.
 - Every allocated section in the ELF. `.data` counts against both RAM and
   flash (its initial values live in flash), and the linker script's
-  heap/stack reserve counts against RAM.
+  heap/stack reserve counts against RAM. A section outside both regions
+  (CCM SRAM, a second RAM bank) fails the test instead of going uncounted;
+  teach `size_check.py` about the region when a board needs one.
 
 The test is tagged `firmware_size`, which `--config=ubsan` filters out
 (see [tools/ubsan](../ubsan/README.md)).

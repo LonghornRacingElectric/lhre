@@ -10,26 +10,35 @@ _LD = ("MEMORY\n{\nRAM (xrw) : ORIGIN = 0x20000000, LENGTH = 1K\n"
 
 
 def _elf(sections):
-    """A 32-bit little-endian ELF holding only section headers.
+    """A 32-bit little-endian ELF holding only section headers and names.
 
-    sections: (sh_type, sh_flags, sh_addr, sh_size) per section, after the
-    null section every ELF starts with.
+    sections: (name, sh_type, sh_flags, sh_addr, sh_size) per section. The
+    null section every ELF starts with and the section-name table are
+    added around them.
     """
+    names = b"\0"
+    entries = [(0, 0, 0, 0, 0, 0)]
+    for name, sh_type, flags, addr, size in sections:
+        entries.append((len(names), sh_type, flags, addr, 0, size))
+        names += name.encode() + b"\0"
+    shoff = 52 + len(names)
+    entries.append((0, STRTAB, 0, 0, 52, len(names)))  # .shstrtab, unnamed
+
     header = bytearray(52)
     header[:6] = b"\x7fELF\x01\x01"
-    struct.pack_into("<I", header, 0x20, len(header))  # e_shoff
-    struct.pack_into("<HH", header, 0x2E, 40, len(sections) + 1)
-    entries = [(0, 0, 0, 0)] + list(sections)
-    return bytes(header) + b"".join(
-        struct.pack("<10I", 0, sh_type, flags, addr, 0, size, 0, 0, 0, 0)
-        for sh_type, flags, addr, size in entries)
+    struct.pack_into("<I", header, 0x20, shoff)
+    struct.pack_into("<HHH", header, 0x2E, 40, len(entries), len(entries) - 1)
+    return bytes(header) + names + b"".join(
+        struct.pack("<6I16x", *entry) for entry in entries)
 
 
 PROGBITS = 1
-TEXT = (PROGBITS, 0x6, 0x8000000, 1000)
-DATA = (PROGBITS, 0x3, 0x20000000, 100)
-BSS = (size_check.SHT_NOBITS, 0x3, 0x20000064, 500)
-DEBUG = (PROGBITS, 0x0, 0x0, 4000)  # not SHF_ALLOC: takes no memory
+STRTAB = 3
+TEXT = (".text", PROGBITS, 0x6, 0x8000000, 1000)
+DATA = (".data", PROGBITS, 0x3, 0x20000000, 100)
+BSS = (".bss", size_check.SHT_NOBITS, 0x3, 0x20000064, 500)
+DEBUG = (".debug_info", PROGBITS, 0x0, 0x0, 4000)  # not SHF_ALLOC
+CCM = (".ccmram", PROGBITS, 0x3, 0x10000000, 64)  # in no MEMORY region here
 
 
 class MemoryRegionsTest(unittest.TestCase):
@@ -81,6 +90,10 @@ class MainTest(unittest.TestCase):
         self.assertEqual(self.check(sections, 60), 0)
         self.assertEqual(self.check(sections, 58), 1)
         self.assertEqual(self.check([TEXT, BSS], 50), 0)  # 48.8% / 48.8%
+
+    def test_section_outside_flash_and_ram_is_an_error(self):
+        with self.assertRaisesRegex(ValueError, r"\.ccmram at 0x10000000"):
+            self.check([TEXT, CCM], 85)
 
     def test_rejects_64_bit_elf(self):
         with self.assertRaisesRegex(ValueError, "32-bit"):
