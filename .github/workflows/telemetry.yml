@@ -17,6 +17,9 @@ on:
   pull_request:
     paths:
       - "apps/telemetry/**"
+      - "apps/BEVO/**"
+      - "lib/spec/**"
+      - "lib/codegen/telemetry/**"
       - ".github/workflows/telemetry.yml"
   workflow_dispatch:
 
@@ -40,7 +43,7 @@ jobs:
           echo "common --config=ci" >> .bazelrc.user
 
       - name: Build all telemetry images
-        run: bazel build //apps/telemetry:all_images
+        run: bazel build //apps/telemetry:all_images //lib/codegen/telemetry:server_schema
 
       - name: Load and smoke-test core images
         run: bazel test //apps/telemetry:core_smoke_tests --test_output=errors
@@ -58,12 +61,15 @@ jobs:
           docker volume create grafana_storage || true
           docker volume create telemetry_db || true
           docker volume create kafka_data || true
+          ORION_DB_INIT_SQL="$GITHUB_WORKSPACE/bazel-bin/lib/codegen/telemetry/orion_db_init.sql"
+          export ORION_DB_INIT_SQL
           {
             echo "POSTGRES_USER=$POSTGRES_USER"
             echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD"
             echo "ELECTRIC_PWD=$ELECTRIC_PWD"
             echo "GRAFANA_PWD=$GRAFANA_PWD"
             echo "ANALYSIS_PWD=$ANALYSIS_PWD"
+            echo "ORION_DB_INIT_SQL=$ORION_DB_INIT_SQL"
           } > .env
           (cd apps/telemetry/stack/kafka && docker compose up -d --no-build --wait)
           (cd apps/telemetry/stack/ingest && docker compose up -d --no-build --wait)
@@ -86,6 +92,8 @@ jobs:
 
       - name: Stop services
         if: always() && env.HAVE_SECRETS == 'true'
+        env:
+          ORION_DB_INIT_SQL: ${{ github.workspace }}/bazel-bin/lib/codegen/telemetry/orion_db_init.sql
         run: |
           (cd apps/telemetry/stack/ingest && docker compose down -v --remove-orphans) || true
           (cd apps/telemetry/stack/kafka && docker compose down -v --remove-orphans) || true

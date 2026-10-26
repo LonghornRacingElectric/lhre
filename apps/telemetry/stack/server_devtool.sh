@@ -49,6 +49,7 @@ MIN_FREE_GB="${MIN_FREE_GB:-10}"   # warn / auto-trim build cache below this
 CRIT_FREE_GB="${CRIT_FREE_GB:-5}"  # hard-warn + prompt below this
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/orion_schema.sh"
 DASHBOARD_SOURCE_DIR="$SCRIPT_DIR/../analysis/database/dashboards"
 
 NETWORK="telemetry_network"        # external in every compose file → we own it
@@ -116,19 +117,23 @@ require_docker() {
     if ! command -v docker >/dev/null 2>&1; then
         err "docker is not installed / not on PATH."; exit 1
     fi
-    # Prefer running without sudo (user in the docker group). Only fall back to
-    # sudo if a plain docker call fails — `sudo docker` uses root's cli-plugins
-    # dir and often can't find the compose plugin, which is the usual cause of
-    # the bogus "'docker compose' (v2) is required" error.
-    if docker compose version >/dev/null 2>&1; then
+    # `docker compose version` only checks the client plugin, so it succeeds on
+    # macOS even when Docker Desktop is stopped. Verify the daemon separately
+    # before disk checks or image loads produce misleading follow-on errors.
+    if docker info >/dev/null 2>&1; then
         SUDO=""
-    elif command -v sudo >/dev/null 2>&1 && sudo docker compose version >/dev/null 2>&1; then
+    elif [[ "$OS" == "Linux" ]] && command -v sudo >/dev/null 2>&1 && sudo docker info >/dev/null 2>&1; then
         SUDO="sudo"
-    elif docker version >/dev/null 2>&1 || { command -v sudo >/dev/null 2>&1 && sudo docker version >/dev/null 2>&1; }; then
-        err "docker is reachable but the compose v2 plugin is missing. Install docker-compose-plugin."
-        exit 1
     else
-        err "cannot talk to the docker daemon (is it running? are you in the 'docker' group?)."
+        if [[ "$OS" == "Darwin" ]]; then
+            err "cannot talk to the docker daemon. Start Docker Desktop and try again."
+        else
+            err "cannot talk to the docker daemon (is it running? are you in the 'docker' group?)."
+        fi
+        exit 1
+    fi
+    if ! $SUDO docker compose version >/dev/null 2>&1; then
+        err "docker is reachable but the compose v2 plugin is missing. Install docker-compose-plugin."
         exit 1
     fi
 }
@@ -138,6 +143,11 @@ compose_in() {  # compose_in <dir> <args...>
     local dir="$1"; shift
     if [[ ! -f "$dir/docker-compose.yml" && ! -f "$dir/docker-compose.yaml" ]]; then
         warn "no docker-compose.(yml|yaml) in $dir — skipping"; return 1
+    fi
+    if [[ "$(basename "$dir")" == "ingest" ]]; then
+        prepare_orion_schema "$REPO_ROOT" "${1:-}" || return 1
+        ( cd "$dir" && $SUDO env "ORION_DB_INIT_SQL=$ORION_DB_INIT_SQL" docker compose "$@" )
+        return
     fi
     ( cd "$dir" && $SUDO docker compose "$@" )
 }
@@ -199,17 +209,35 @@ comp_project() {
 }
 
 # ----------------------------------------------------------------------------- disk safety
-docker_root() { dk info -f '{{.DockerRootDir}}' 2>/dev/null || echo /var/lib/docker; }
+docker_root() {
+    if [[ "$OS" == "Darwin" ]]; then
+        # DockerRootDir is inside Docker Desktop's Linux VM and does not exist
+        # on the host. Its sparse disk image ultimately consumes host storage.
+        printf '%s\n' "$HOME"
+        return
+    fi
+    local root
+    root="$(dk info -f '{{.DockerRootDir}}' 2>/dev/null)"
+    [[ -n "$root" && -d "$root" ]] || root="/"
+    printf '%s\n' "$root"
+}
 free_gb() {
-    local root; root="$(docker_root)"; [[ -d "$root" ]] || root="/"
-    df -BG --output=avail "$root" 2>/dev/null | tail -1 | tr -dc '0-9' || echo 0
+    local root available_kb
+    root="$(docker_root)"
+    available_kb="$(df -Pk "$root" 2>/dev/null | awk 'NR == 2 { print $4 }')"
+    [[ "$available_kb" =~ ^[0-9]+$ ]] || return 1
+    printf '%s\n' "$((available_kb / 1024 / 1024))"
 }
 
 disk_summary() {
-    local root free; root="$(docker_root)"; free="$(free_gb)"
-    info "Docker disk usage  (root: $root)"
+    local root free; root="$(docker_root)"
+    info "Docker disk usage  ($([[ "$OS" == "Darwin" ]] && printf 'host filesystem' || printf 'root'): $root)"
     dk system df 2>/dev/null || true
     echo
+    if ! free="$(free_gb)"; then
+        warn "Unable to determine free disk space for $root."
+        return
+    fi
     if (( ${free:-0} < CRIT_FREE_GB )); then
         err "Only ${free} GB free — CRITICAL. The stack can fail silently. Run: $0 prune-deep"
     elif (( ${free:-0} < MIN_FREE_GB )); then
@@ -221,17 +249,26 @@ disk_summary() {
 
 # Run before any build. Auto-trims build cache when low; prompts if critical.
 preflight_disk() {
-    local free; free="$(free_gb)"
+    local free
+    if ! free="$(free_gb)"; then
+        warn "Unable to determine free disk space; continuing without automatic pruning."
+        return 0
+    fi
     (( ${free:-0} >= MIN_FREE_GB )) && return 0
     warn "Low disk before build: ${free} GB free (< ${MIN_FREE_GB} GB)."
     info "Auto-trimming docker build cache + dangling images..."
     dk builder prune -f >/dev/null 2>&1 || true
     dk image prune -f   >/dev/null 2>&1 || true
-    free="$(free_gb)"; ok "After trim: ${free} GB free"
+    if ! free="$(free_gb)"; then
+        warn "Unable to determine free disk space after pruning; continuing."
+        return 0
+    fi
+    ok "After trim: ${free} GB free"
     if (( ${free:-0} < CRIT_FREE_GB )); then
         err "Still only ${free} GB free."
         if confirm "Run a deep prune (remove ALL unused images, keep volumes) now?"; then
-            prune_deep; free="$(free_gb)"
+            prune_deep
+            free="$(free_gb)" || return 0
         fi
     fi
     (( ${free:-0} < CRIT_FREE_GB )) && warn "Disk still critical (${free} GB). Build may fail; continuing."
@@ -600,9 +637,11 @@ menu() {
 }
 
 # ----------------------------------------------------------------------------- entrypoint
-if [[ $# -gt 0 ]]; then
-    require_docker
-    run_command "$@"
-else
-    menu
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    if [[ $# -gt 0 ]]; then
+        require_docker
+        run_command "$@"
+    else
+        menu
+    fi
 fi

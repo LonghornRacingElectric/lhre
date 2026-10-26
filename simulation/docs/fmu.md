@@ -51,7 +51,7 @@ smoke and unit suite; it does not compile or drive an FMU on every PR.
 
 This build route implements the capability tracked by LHRe #98 without
 waiting for BobSim to adopt the merged exporter. It does not change or close
-that PR. See [ADR-014](../../docs/architecture/014-fmu-artifact-boundary.md)
+that PR. See [ADR-016](../../docs/architecture/016-fmu-artifact-boundary.md)
 for the dependency boundary. BobLib's known motor-latch failure on some
 brake-hold/relaunch profiles remains upstream; do not treat one passing
 profile as a general solver or hardware acceptance result.

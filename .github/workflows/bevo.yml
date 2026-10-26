@@ -1,0 +1,37 @@
+name: BEVO
+
+on:
+  pull_request:
+    paths:
+      - "apps/BEVO/**"
+      - "lib/spec/**"
+      - "lib/codegen/telemetry/**"
+      - "platforms/**"
+      - "toolchains/**"
+      - "MODULE.bazel"
+      - "MODULE.bazel.lock"
+      - ".github/workflows/bevo.yml"
+  workflow_dispatch:
+
+jobs:
+  raspberry-pi-binaries:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Configure BuildBuddy
+        env:
+          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
+        run: |
+          if [ -n "$BUILDBUDDY_API_KEY" ]; then
+            echo "common --remote_header=x-buildbuddy-api-key=$BUILDBUDDY_API_KEY" > .bazelrc.user
+          else
+            echo "common --config=local" > .bazelrc.user
+          fi
+          echo "common --config=ci" >> .bazelrc.user
+
+      - name: Cross-compile core daemons for Raspberry Pi OS
+        run: bazel build //apps/BEVO:pi_core_binaries
+
+      - name: Verify static AArch64 executables
+        run: bazel test //apps/BEVO:pi_core_binary_test --test_output=errors

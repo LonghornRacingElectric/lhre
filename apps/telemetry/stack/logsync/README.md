@@ -109,3 +109,8 @@ networking isn't acceptable, run a Tailscale sidecar instead: add a `tailscale`
 service (userspace or `/dev/net/tun` + `NET_ADMIN`) with a `TS_AUTHKEY`, attach
 `logsync` to the `telemetry_network` for DB access, and set
 `LOGSYNC_PG_HOST=db`. The transfer/motion logic is unchanged.
+
+The worker listens on `127.0.0.1` only (`LOGSYNC_HOST` in `docker-compose.yml`),
+so it is not reachable from the tailnet. Use it through the viewer at
+`/api/logsync/*`, which requires the same sign-in as the pages, or with
+`curl localhost:8090/...` on the server itself.

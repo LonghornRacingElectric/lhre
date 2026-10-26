@@ -1,3 +1,34 @@
+function Invoke-TelemetryCompose {
+    $composeArguments = @($args)
+    if ((Split-Path (Get-Location).Path -Leaf) -eq "ingest") {
+        $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\.."))
+        $generated = Join-Path $repoRoot "bazel-bin\lib\codegen\telemetry\orion_db_init.sql"
+        $selected = $env:ORION_DB_INIT_SQL
+        if (-not $selected) { $selected = $generated }
+        if ($composeArguments[0] -in @("up", "create", "run", "watch")) {
+            if ($selected -ne $generated) {
+                if ($selected -notmatch '^(?:[A-Za-z]:[\\/]|\\\\)' -or -not (Test-Path -LiteralPath $selected -PathType Leaf)) {
+                    throw "Explicit ORION_DB_INIT_SQL must name an existing absolute file: $selected"
+                }
+            } else {
+                Get-Command bazel -ErrorAction Stop | Out-Null
+                Push-Location $repoRoot
+                try {
+                    & bazel build --config=local //apps/telemetry:current_schema_sql
+                    if ($LASTEXITCODE -ne 0) { throw "Bazel failed to generate the Orion database schema" }
+                } finally {
+                    Pop-Location
+                }
+                if (-not (Test-Path -LiteralPath $generated -PathType Leaf)) {
+                    throw "Bazel did not produce Orion database schema: $generated"
+                }
+            }
+        }
+        $env:ORION_DB_INIT_SQL = $selected
+    }
+    & docker-compose @composeArguments
+}
+
 # Welcome message and options
 Write-Host "Welcome to the Telemetry Server CLI Devtool. Please pick from the following methods to start the server:"
 Write-Host "`t1) Start the server (ONLY)"
@@ -32,7 +63,7 @@ function Stop-TelemetryStack {
         if (Test-Path $composeFile) {
             Set-Location $target.Path
             Write-Host "Stopping $($target.Label)..."
-            docker-compose down
+            Invoke-TelemetryCompose down
             if ($LASTEXITCODE -ne 0) {
                 Write-Host "Failed to stop $($target.Label)."
             }
@@ -56,8 +87,8 @@ while ($true) {
         {
             "1" {
                 # Option 1: Start the server
-                docker-compose down
-                docker-compose up
+                Invoke-TelemetryCompose down
+                Invoke-TelemetryCompose up
                 break
             }
             "2" {
@@ -76,8 +107,8 @@ while ($true) {
 
                 # --- kafka first ---
                 Set-Location $kafkaDir
-                docker-compose down
-                docker-compose up -d
+                Invoke-TelemetryCompose down
+                Invoke-TelemetryCompose up -d
 
                 # --- then ingest ---
                 if (-not (Test-Path $ingestDir)) {
@@ -86,12 +117,12 @@ while ($true) {
                 }
                 Set-Location $ingestDir
 
-                docker-compose down
+                Invoke-TelemetryCompose down
                 $telemetryBackendImages = docker image ls --filter "reference=telemetry_backend" -q
                 foreach ($image in $telemetryBackendImages) {
                     docker rmi $image
                 }
-                docker-compose up
+                Invoke-TelemetryCompose up
                 break
             }
             "3" {
@@ -110,8 +141,8 @@ while ($true) {
 
                 # --- kafka first ---
                 Set-Location $kafkaDir
-                docker-compose down
-                docker-compose up -d
+                Invoke-TelemetryCompose down
+                Invoke-TelemetryCompose up -d
 
                 # --- then ingest ---
                 if (-not (Test-Path $ingestDir)) {
@@ -121,14 +152,14 @@ while ($true) {
                 Set-Location $ingestDir
 
                 # Option 3: Delete images + reset telemetry_db volume
-                docker-compose down
+                Invoke-TelemetryCompose down
                 $telemetryBackendImages = docker image ls --filter "reference=telemetry_backend" -q
                 foreach ($image in $telemetryBackendImages) {
                     docker rmi $image
                 }
                 docker volume rm telemetry_db
                 docker volume create telemetry_db
-                docker-compose up
+                Invoke-TelemetryCompose up
                 break
             }
             "4" {
@@ -141,7 +172,7 @@ while ($true) {
 
                     if ($yn -match "^[Yy]$")
                     {
-                        docker-compose down
+                        Invoke-TelemetryCompose down
                         $telemetryBackendImages = docker image ls --filter "reference=telemetry_backend" -q
                         foreach ($image in $telemetryBackendImages)
                         {
@@ -151,7 +182,7 @@ while ($true) {
                         docker volume create telemetry_db
                         docker volume rm grafana_storage
                         docker volume create grafana_storage
-                        docker-compose up
+                        Invoke-TelemetryCompose up
                         break
                     }
                     elseif ($yn -match "^[Nn]$")
@@ -168,8 +199,8 @@ while ($true) {
             }
             "Q" {
                 # Option Q: Run Processor in background and start server
-                docker-compose down
-                docker-compose up -d
+                Invoke-TelemetryCompose down
+                Invoke-TelemetryCompose up -d
                 # Change directory to "processors"
                 Set-Location (Get-ChildItem -Recurse -Directory | Where-Object { $_.Name -eq "processors" }).FullName
                 if (-not (Test-Path .\processors))
@@ -177,18 +208,18 @@ while ($true) {
                     Write-Host "Failed to find processors"
                     exit
                 }
-                docker-compose down
-                docker-compose up -d
+                Invoke-TelemetryCompose down
+                Invoke-TelemetryCompose up -d
                 $processorContainerId = (docker container ls --filter "name=telemetry_processors" -q)
                 Write-Host "Processor container ID: $processorContainerId"
                 # Change directory back to "ingest"
                 Set-Location (Get-ChildItem -Recurse -Directory | Where-Object { $_.Name -eq "ingest" }).FullName
-                docker-compose logs -f
+                Invoke-TelemetryCompose logs -f
                 break
             }
             "W" {
                 # Option W: Delete the existing server and processors images
-                docker-compose down
+                Invoke-TelemetryCompose down
                 $telemetryBackendImages = docker image ls --filter "reference=telemetry_backend" -q
                 foreach ($image in $telemetryBackendImages)
                 {
@@ -199,7 +230,7 @@ while ($true) {
                 {
                     docker rmi $image
                 }
-                docker-compose up -d
+                Invoke-TelemetryCompose up -d
                 # Change directory to "processors"
                 Set-Location (Get-ChildItem -Recurse -Directory | Where-Object { $_.Name -eq "processors" }).FullName
                 if (-not (Test-Path .\processors))
@@ -207,13 +238,13 @@ while ($true) {
                     Write-Host "Failed to find processors"
                     exit
                 }
-                docker-compose down
-                docker-compose up -d
+                Invoke-TelemetryCompose down
+                Invoke-TelemetryCompose up -d
                 $processorContainerId = (docker container ls --filter "name=telemetry_processors" -q)
                 Write-Host "Processor container ID: $processorContainerId"
                 # Change directory back to "ingest"
                 Set-Location (Get-ChildItem -Recurse -Directory | Where-Object { $_.Name -eq "ingest" }).FullName
-                docker-compose logs -f
+                Invoke-TelemetryCompose logs -f
                 break
             }
             "E" {
@@ -224,12 +255,12 @@ while ($true) {
                     exit
                 }
                 Set-Location $lapTimerPath.FullName
-                docker-compose down
+                Invoke-TelemetryCompose down
                 $lapTimerImages = docker image ls --filter "reference=lap_timer" -q
                 foreach ($image in $lapTimerImages) {
                     docker rmi $image
                 }
-                docker-compose up
+                Invoke-TelemetryCompose up
                 break
             }
             "F" {
@@ -240,12 +271,12 @@ while ($true) {
                     exit
                 }
                 Set-Location $gpsClassifierPath.FullName
-                docker-compose down
+                Invoke-TelemetryCompose down
                 $gpsClassifierImages = docker image ls --filter "reference=gps_classifier" -q
                 foreach ($image in $gpsClassifierImages) {
                     docker rmi $image
                 }
-                docker-compose up
+                Invoke-TelemetryCompose up
                 break
             }
             "S" {

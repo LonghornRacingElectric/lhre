@@ -1,0 +1,1256 @@
+{
+  "id": null,
+  "uid": "orion_live_gps_rt_v1",
+  "title": "Live GPS - Orion (Real-time)",
+  "description": "Live GPS track, speed and G-G from grafana_data_orion_derived. History fills from page open. Position is the full-precision one (gps_precise).",
+  "tags": [
+    "orion",
+    "real-time",
+    "kafka",
+    "gps"
+  ],
+  "editable": true,
+  "graphTooltip": 1,
+  "timezone": "browser",
+  "fiscalYearStartMonth": 0,
+  "liveNow": true,
+  "refresh": "1s",
+  "schemaVersion": 40,
+  "version": 1,
+  "time": {
+    "from": "now-5m",
+    "to": "now"
+  },
+  "timepicker": {},
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [],
+  "panels": [
+    {
+      "type": "geomap",
+      "title": "Track, last 5 min",
+      "description": "Route from latitude/longitude on grafana_data_orion_derived, 50 Hz (sampleIntervalMs 20), coloured by GPS speed (mph). Messages with no fix or a (0,0) fix are dropped. cand keeps the last fix through a GPS dropout, so a stall in the track can mean lost fix, not a stopped car. The view is fixed on the 30.39, -97.73 lot so a zoom or pan holds while data streams; at another site, pan there.",
+      "datasource": {
+        "type": "lhre-kafka-datasource",
+        "uid": "real-time-data"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "lhre-kafka-datasource",
+            "uid": "real-time-data"
+          },
+          "refId": "A",
+          "topicName": "grafana_data_orion_derived",
+          "partition": "all",
+          "autoOffsetReset": "latest",
+          "timestampMode": "message",
+          "messageFormat": "json",
+          "avroSchemaSource": "schemaRegistry",
+          "selectedFields": [
+            "lat_precise",
+            "lon_precise",
+            "gps_speed_kn",
+            "gps_sigma_h_m",
+            "gps_src"
+          ],
+          "sampleIntervalMs": 20,
+          "bufferDurationSec": 300
+        }
+      ],
+      "transformations": [
+        {
+          "id": "filterByValue",
+          "options": {
+            "type": "exclude",
+            "match": "any",
+            "filters": [
+              {
+                "fieldName": "lat_precise",
+                "config": {
+                  "id": "equal",
+                  "options": {
+                    "value": 0
+                  }
+                }
+              },
+              {
+                "fieldName": "lon_precise",
+                "config": {
+                  "id": "equal",
+                  "options": {
+                    "value": 0
+                  }
+                }
+              },
+              {
+                "fieldName": "lat_precise",
+                "config": {
+                  "id": "isNull",
+                  "options": {}
+                }
+              },
+              {
+                "fieldName": "lon_precise",
+                "config": {
+                  "id": "isNull",
+                  "options": {}
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "binary",
+            "alias": "speed_mph",
+            "replaceFields": false,
+            "binary": {
+              "left": "gps_speed_kn",
+              "operator": "*",
+              "right": "1.15078"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "velocitymph",
+          "decimals": 1,
+          "color": {
+            "mode": "continuous-YlRd"
+          },
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lat_precise"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 7
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lon_precise"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 7
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gps_sigma_h_m"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Accuracy (1 sigma)"
+              },
+              {
+                "id": "unit",
+                "value": "lengthm"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "unknown",
+                        "index": 0
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gps_src"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Source"
+              },
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "rounded (old feed)",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "standard",
+                        "index": 1
+                      },
+                      "2": {
+                        "text": "RTK",
+                        "index": 2
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "basemap": {
+          "type": "esri-xyz",
+          "name": "Satellite",
+          "config": {
+            "server": "world-imagery"
+          }
+        },
+        "controls": {
+          "showZoom": true,
+          "mouseWheelZoom": true,
+          "showAttribution": true,
+          "showScale": true,
+          "showMeasure": false,
+          "showDebug": false
+        },
+        "layers": [
+          {
+            "type": "route",
+            "name": "Track",
+            "tooltip": false,
+            "location": {
+              "mode": "coords",
+              "latitude": "lat_precise",
+              "longitude": "lon_precise"
+            },
+            "config": {
+              "arrow": 1,
+              "style": {
+                "color": {
+                  "field": "speed_mph",
+                  "fixed": "yellow"
+                },
+                "opacity": 0.9,
+                "lineWidth": 3
+              }
+            }
+          },
+          {
+            "type": "markers",
+            "name": "Samples",
+            "tooltip": true,
+            "location": {
+              "mode": "coords",
+              "latitude": "lat_precise",
+              "longitude": "lon_precise"
+            },
+            "config": {
+              "showLegend": true,
+              "style": {
+                "color": {
+                  "field": "speed_mph",
+                  "fixed": "yellow"
+                },
+                "opacity": 0.8,
+                "size": {
+                  "fixed": 3
+                },
+                "symbol": {
+                  "fixed": "img/icons/marker/circle.svg",
+                  "mode": "fixed"
+                }
+              }
+            }
+          }
+        ],
+        "tooltip": {
+          "mode": "details"
+        },
+        "view": {
+          "id": "coords",
+          "lat": 30.3899,
+          "lon": -97.7284,
+          "zoom": 15
+        }
+      },
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 9,
+        "h": 18
+      }
+    },
+    {
+      "type": "xychart",
+      "pluginVersion": "11.3.0",
+      "title": "G-G, last 20 s",
+      "description": "Lateral vs longitudinal g from the chudpi IMU, every message (~15-20 Hz) for the last 20 s, coloured by GPS speed (mph). imu_lat_g/imu_long_g come from the field enricher, rotated onto the car's axes with the mount fitted on 2026-10-10. The enricher's long_g/lat_g are raw sensor axes, not these. Junk samples arrive as null and are dropped. Dotted ring = 1 g (gg_ring_lat/long from the enricher, sweeping once every 4 s). A drag-zoom resets at the next message (Grafana's XY chart rescales on new data); zoom the retrospective G-G instead.",
+      "datasource": {
+        "type": "lhre-kafka-datasource",
+        "uid": "real-time-data"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "lhre-kafka-datasource",
+            "uid": "real-time-data"
+          },
+          "refId": "A",
+          "topicName": "grafana_data_orion_derived",
+          "partition": "all",
+          "autoOffsetReset": "latest",
+          "timestampMode": "message",
+          "messageFormat": "json",
+          "avroSchemaSource": "schemaRegistry",
+          "selectedFields": [
+            "imu_lat_g",
+            "imu_long_g",
+            "gps_speed_kn",
+            "gg_ring_lat",
+            "gg_ring_long"
+          ],
+          "sampleIntervalMs": 0,
+          "bufferDurationSec": 20
+        }
+      ],
+      "transformations": [
+        {
+          "id": "filterByValue",
+          "options": {
+            "type": "exclude",
+            "match": "any",
+            "filters": [
+              {
+                "fieldName": "imu_lat_g",
+                "config": {
+                  "id": "isNull",
+                  "options": {}
+                }
+              },
+              {
+                "fieldName": "imu_long_g",
+                "config": {
+                  "id": "isNull",
+                  "options": {}
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "binary",
+            "alias": "speed_mph",
+            "replaceFields": false,
+            "binary": {
+              "left": "gps_speed_kn",
+              "operator": "*",
+              "right": "1.15078"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: g",
+          "decimals": 2,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "yellow"
+          },
+          "custom": {
+            "show": "points",
+            "pointShape": "circle",
+            "pointSize": {
+              "fixed": 4
+            },
+            "pointStrokeWidth": 0,
+            "fillOpacity": 80,
+            "axisCenteredZero": true,
+            "axisSoftMin": -1.5,
+            "axisSoftMax": 1.5,
+            "axisPlacement": "auto",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "imu_lat_g"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Lateral (+ right)"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "Lateral g (+ right)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "imu_long_g"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Longitudinal (+ accel)"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "Longitudinal g (+ accel)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "speed_mph"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "velocitymph"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "continuous-YlRd"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gg_ring_long"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8e8e8e"
+                }
+              },
+              {
+                "id": "displayName",
+                "value": "1 g"
+              },
+              {
+                "id": "custom.show",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": {
+                  "fixed": 2
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "mapping": "manual",
+        "series": [
+          {
+            "frame": {
+              "matcher": {
+                "id": "byIndex",
+                "options": 0
+              }
+            },
+            "x": {
+              "matcher": {
+                "id": "byName",
+                "options": "imu_lat_g"
+              }
+            },
+            "y": {
+              "matcher": {
+                "id": "byName",
+                "options": "imu_long_g"
+              }
+            },
+            "name": {
+              "fixed": "Samples"
+            },
+            "color": {
+              "matcher": {
+                "id": "byName",
+                "options": "speed_mph"
+              }
+            }
+          },
+          {
+            "frame": {
+              "matcher": {
+                "id": "byIndex",
+                "options": 0
+              }
+            },
+            "x": {
+              "matcher": {
+                "id": "byName",
+                "options": "gg_ring_lat"
+              }
+            },
+            "y": {
+              "matcher": {
+                "id": "byName",
+                "options": "gg_ring_long"
+              }
+            },
+            "name": {
+              "fixed": "1 g"
+            }
+          }
+        ],
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "id": 2,
+      "gridPos": {
+        "x": 9,
+        "y": 0,
+        "w": 9,
+        "h": 18
+      }
+    },
+    {
+      "type": "stat",
+      "title": "GPS speed",
+      "datasource": {
+        "type": "lhre-kafka-datasource",
+        "uid": "real-time-data"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "lhre-kafka-datasource",
+            "uid": "real-time-data"
+          },
+          "refId": "A",
+          "topicName": "grafana_data_orion_derived",
+          "partition": "all",
+          "autoOffsetReset": "latest",
+          "timestampMode": "message",
+          "messageFormat": "json",
+          "avroSchemaSource": "schemaRegistry",
+          "selectedFields": [
+            "lat_precise",
+            "lon_precise",
+            "gps_speed_kn",
+            "gps_sigma_h_m",
+            "gps_src"
+          ],
+          "sampleIntervalMs": 20,
+          "bufferDurationSec": 300
+        }
+      ],
+      "transformations": [
+        {
+          "id": "filterByValue",
+          "options": {
+            "type": "exclude",
+            "match": "any",
+            "filters": [
+              {
+                "fieldName": "lat_precise",
+                "config": {
+                  "id": "equal",
+                  "options": {
+                    "value": 0
+                  }
+                }
+              },
+              {
+                "fieldName": "lon_precise",
+                "config": {
+                  "id": "equal",
+                  "options": {
+                    "value": 0
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "binary",
+            "alias": "speed_mph",
+            "replaceFields": false,
+            "binary": {
+              "left": "gps_speed_kn",
+              "operator": "*",
+              "right": "1.15078"
+            }
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "speed_mph"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "speed_mph": 0
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "velocitymph",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "noValue": "NO FIX"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": "/.*/"
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "auto",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      },
+      "description": "Latest GPS speed from the bridge's gps_speed_kn (knots x 1.15078). NO FIX when the latest message has no fix.",
+      "id": 3,
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 6
+      }
+    },
+    {
+      "type": "stat",
+      "title": "GPS speed (knots)",
+      "datasource": {
+        "type": "lhre-kafka-datasource",
+        "uid": "real-time-data"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "lhre-kafka-datasource",
+            "uid": "real-time-data"
+          },
+          "refId": "A",
+          "topicName": "grafana_data_orion_derived",
+          "partition": "all",
+          "autoOffsetReset": "latest",
+          "timestampMode": "message",
+          "messageFormat": "json",
+          "avroSchemaSource": "schemaRegistry",
+          "selectedFields": [
+            "lat_precise",
+            "lon_precise",
+            "gps_speed_kn",
+            "gps_sigma_h_m",
+            "gps_src"
+          ],
+          "sampleIntervalMs": 20,
+          "bufferDurationSec": 300
+        }
+      ],
+      "transformations": [
+        {
+          "id": "filterByValue",
+          "options": {
+            "type": "exclude",
+            "match": "any",
+            "filters": [
+              {
+                "fieldName": "lat_precise",
+                "config": {
+                  "id": "equal",
+                  "options": {
+                    "value": 0
+                  }
+                }
+              },
+              {
+                "fieldName": "lon_precise",
+                "config": {
+                  "id": "equal",
+                  "options": {
+                    "value": 0
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "gps_speed_kn"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "gps_speed_kn": 0
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "velocityknot",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "noValue": "NO FIX"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": "/.*/"
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "auto",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      },
+      "id": 4,
+      "gridPos": {
+        "x": 18,
+        "y": 6,
+        "w": 6,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Position",
+      "datasource": {
+        "type": "lhre-kafka-datasource",
+        "uid": "real-time-data"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "lhre-kafka-datasource",
+            "uid": "real-time-data"
+          },
+          "refId": "A",
+          "topicName": "grafana_data_orion_derived",
+          "partition": "all",
+          "autoOffsetReset": "latest",
+          "timestampMode": "message",
+          "messageFormat": "json",
+          "avroSchemaSource": "schemaRegistry",
+          "selectedFields": [
+            "lat_precise",
+            "lon_precise",
+            "gps_speed_kn",
+            "gps_sigma_h_m",
+            "gps_src"
+          ],
+          "sampleIntervalMs": 20,
+          "bufferDurationSec": 300
+        }
+      ],
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "lat_precise",
+                "lon_precise",
+                "gps_sigma_h_m",
+                "gps_src"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "lat_precise": 0,
+              "lon_precise": 1,
+              "gps_sigma_h_m": 2,
+              "gps_src": 3
+            }
+          }
+        },
+        {
+          "id": "filterByValue",
+          "options": {
+            "type": "exclude",
+            "match": "any",
+            "filters": [
+              {
+                "fieldName": "lat_precise",
+                "config": {
+                  "id": "equal",
+                  "options": {
+                    "value": 0
+                  }
+                }
+              },
+              {
+                "fieldName": "lon_precise",
+                "config": {
+                  "id": "equal",
+                  "options": {
+                    "value": 0
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": null,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 7,
+          "noValue": "NO FIX"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lat_precise"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Latitude"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lon_precise"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Longitude"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gps_sigma_h_m"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Accuracy (1 sigma)"
+              },
+              {
+                "id": "unit",
+                "value": "lengthm"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "unknown",
+                        "index": 0
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gps_src"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Source"
+              },
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "rounded (old feed)",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "standard",
+                        "index": 1
+                      },
+                      "2": {
+                        "text": "RTK",
+                        "index": 2
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "last"
+          ],
+          "fields": "/.*/"
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value_and_name",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      },
+      "description": "Latest full-precision position, its 1-sigma horizontal accuracy and where it comes from. NO FIX when the latest message has no fix.",
+      "id": 5,
+      "gridPos": {
+        "x": 18,
+        "y": 10,
+        "w": 6,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "GPS speed, last 5 min",
+      "datasource": {
+        "type": "lhre-kafka-datasource",
+        "uid": "real-time-data"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "lhre-kafka-datasource",
+            "uid": "real-time-data"
+          },
+          "refId": "A",
+          "topicName": "grafana_data_orion_derived",
+          "partition": "all",
+          "autoOffsetReset": "latest",
+          "timestampMode": "message",
+          "messageFormat": "json",
+          "avroSchemaSource": "schemaRegistry",
+          "selectedFields": [
+            "lat_precise",
+            "lon_precise",
+            "gps_speed_kn",
+            "gps_sigma_h_m",
+            "gps_src"
+          ],
+          "sampleIntervalMs": 20,
+          "bufferDurationSec": 300
+        }
+      ],
+      "transformations": [
+        {
+          "id": "filterByValue",
+          "options": {
+            "type": "exclude",
+            "match": "any",
+            "filters": [
+              {
+                "fieldName": "lat_precise",
+                "config": {
+                  "id": "equal",
+                  "options": {
+                    "value": 0
+                  }
+                }
+              },
+              {
+                "fieldName": "lon_precise",
+                "config": {
+                  "id": "equal",
+                  "options": {
+                    "value": 0
+                  }
+                }
+              },
+              {
+                "fieldName": "lat_precise",
+                "config": {
+                  "id": "isNull",
+                  "options": {}
+                }
+              },
+              {
+                "fieldName": "lon_precise",
+                "config": {
+                  "id": "isNull",
+                  "options": {}
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "binary",
+            "alias": "speed_mph",
+            "replaceFields": false,
+            "binary": {
+              "left": "gps_speed_kn",
+              "operator": "*",
+              "right": "1.15078"
+            }
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "time",
+                "speed_mph"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "time": 0,
+              "speed_mph": 1
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "velocitymph",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": true,
+            "axisBorderShow": false,
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "speed_mph"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "GPS speed"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "id": 6,
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 24,
+        "h": 7
+      }
+    }
+  ]
+}

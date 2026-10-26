@@ -1,57 +1,397 @@
 # proto-file: lib/spec/proto/can_spec.proto
 # proto-message: lhre.canspec.SpecFile
 
-enum_type {
-  name: "VcuState"
-  description: "Top-level VCU state machine state."
-  value {
-    name: "INIT"
-    description: "Power-on self test"
+bitfield_type {
+  name: "AppsFaults"
+  description: "Legacy apps_faults flags from lhre-2026."
+  bit {
+    name: "apps1_disconnect"
+    description: "APPS1 Disconnect"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "apps1_disconnect"
+      id: 6
+    }
   }
-  value {
-    name: "IDLE"
-    number: 1
-    description: "HV off, waiting for RTD"
+  bit {
+    name: "apps2_disconnect"
+    description: "APPS2 Disconnect"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "apps2_disconnect"
+      id: 8
+    }
   }
-  value {
-    name: "DRIVE"
-    number: 2
-    description: "Ready to drive"
+  bit {
+    name: "apps1_out_range"
+    description: "APPS1 Out of Range"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "apps1_out_range"
+      id: 7
+    }
   }
-  value {
-    name: "FAULT"
-    number: 3
-    description: "Latched fault, HV opening"
+  bit {
+    name: "apps2_out_range"
+    description: "APPS2 Out of Range"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "apps2_out_range"
+      id: 9
+    }
+  }
+  bit {
+    name: "apps_mismatch"
+    description: "APPS Mismatch"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "apps_mismatch"
+      id: 11
+    }
+  }
+  bit {
+    name: "apps_implause"
+    description: "APPS Implausibility"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "apps_implause"
+      id: 10
+    }
   }
 }
 bitfield_type {
-  name: "VcuFaults"
-  description: "Latched VCU fault flags. Bit i of the wire value is entry i."
+  name: "BppsFaults"
+  description: "Legacy bpps_faults flags from lhre-2026."
   bit {
-    name: "overtemp"
-    description: "Motor or inverter over temperature limit"
+    name: "bpps1_disconnect"
+    description: "BPPS1 Disconnect"
     telemetry {
-      group: "Faults"
-      field: "vcu_fault_overtemp"
-      id: 1
+      group: "DiagnosticsHigh"
+      field: "bpps1_disconnect"
+      id: 15
     }
   }
   bit {
-    name: "overcurrent"
-    description: "DC bus current above limit"
+    name: "bpps2_disconnect"
+    description: "BPPS2 Disconnect"
     telemetry {
-      group: "Faults"
-      field: "vcu_fault_overcurrent"
-      id: 2
+      group: "DiagnosticsHigh"
+      field: "bpps2_disconnect"
+      id: 17
     }
   }
   bit {
-    name: "sensor_loss"
-    description: "APPS/BSE plausibility or sensor loss"
+    name: "bpps1_out_range"
+    description: "BPPS1 Out of Range"
     telemetry {
-      group: "Faults"
-      field: "vcu_fault_sensor_loss"
-      id: 3
+      group: "DiagnosticsHigh"
+      field: "bpps1_out_range"
+      id: 16
     }
+  }
+  bit {
+    name: "bpps2_out_range"
+    description: "BPPS2 Out of Range"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "bpps2_out_range"
+      id: 18
+    }
+  }
+  bit {
+    name: "bpps_mismatch"
+    description: "BPPS Mismatch"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "bpps_mismatch"
+      id: 19
+    }
+  }
+}
+bitfield_type {
+  name: "BseFaults"
+  description: "Legacy bse_faults flags from lhre-2026."
+  bit {
+    name: "bse1_disconnect"
+    description: "BSE1 Disconnect"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "bse1_disconnect"
+      id: 21
+    }
+  }
+  bit {
+    name: "bse2_disconnect"
+    description: "BSE2 Disconnect"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "bse2_disconnect"
+      id: 23
+    }
+  }
+  bit {
+    name: "bse1_out_range"
+    description: "BSE1 Out of Range"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "bse1_out_range"
+      id: 22
+    }
+  }
+  bit {
+    name: "bse2_out_range"
+    description: "BSE2 Out of Range"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "bse2_out_range"
+      id: 24
+    }
+  }
+}
+bitfield_type {
+  name: "DuiAmsFaults"
+  description: "Legacy dui_ams_faults flags from lhre-2026."
+  bit {
+    name: "temp_ams_1"
+    description: "Temp AMS 1"
+    telemetry {
+      group: "Thermal"
+      field: "temp_ams_1"
+      id: 29
+    }
+  }
+  bit {
+    name: "temp_ams_2"
+    description: "Temp AMS 2"
+    telemetry {
+      group: "Thermal"
+      field: "temp_ams_2"
+      id: 30
+    }
+  }
+}
+bitfield_type {
+  name: "DuiImdFaults"
+  description: "Legacy dui_imd_faults flags from lhre-2026."
+  bit {
+    name: "temp_imd_1"
+    description: "Temp IMD 1"
+    telemetry {
+      group: "DiagnosticsLow"
+      field: "temp_imd_1"
+      id: 10
+    }
+  }
+  bit {
+    name: "temp_imd_2"
+    description: "Temp IMD 2"
+    telemetry {
+      group: "DiagnosticsLow"
+      field: "temp_imd_2"
+      id: 11
+    }
+  }
+}
+bitfield_type {
+  name: "DuiShutdownFaults"
+  description: "Legacy dui_shutdown_faults flags from lhre-2026."
+  bit {
+    name: "temp_shutdown_1"
+    description: "Temp Shutdown 1"
+    telemetry {
+      group: "DiagnosticsLow"
+      field: "temp_shutdown_1"
+      id: 12
+    }
+  }
+  bit {
+    name: "temp_shutdown_2"
+    description: "Temp Shutdown 2"
+    telemetry {
+      group: "DiagnosticsLow"
+      field: "temp_shutdown_2"
+      id: 13
+    }
+  }
+}
+bitfield_type {
+  name: "SwitchCommand"
+  description: "Legacy switch_command flags from lhre-2026."
+  bit {
+    name: "temp_command_1"
+    description: "Temp Command 1"
+    telemetry {
+      group: "Thermal"
+      field: "temp_command_1"
+      id: 31
+    }
+  }
+  bit {
+    name: "temp_command_2"
+    description: "Temp Command 2"
+    telemetry {
+      group: "Thermal"
+      field: "temp_command_2"
+      id: 32
+    }
+  }
+}
+bitfield_type {
+  name: "SwitchOutput"
+  description: "Legacy switch_output flags from lhre-2026."
+  bit {
+    name: "temp_output_1"
+    description: "Temp Output 1"
+    telemetry {
+      group: "Thermal"
+      field: "temp_output_1"
+      id: 33
+    }
+  }
+  bit {
+    name: "temp_output_2"
+    description: "Temp Output 2"
+    telemetry {
+      group: "Thermal"
+      field: "temp_output_2"
+      id: 34
+    }
+  }
+}
+bitfield_type {
+  name: "VcuFuses1"
+  description: "Legacy vcu_fuses_1 flags from lhre-2026."
+  bit {
+    name: "batt_pump_fuse"
+    description: "Battery Pump Fuse"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "batt_pump_fuse"
+      id: 13
+    }
+  }
+  bit {
+    name: "tssi_green_fuse"
+    description: "TSSI Green Fuse"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "tssi_green_fuse"
+      id: 34
+    }
+  }
+  bit {
+    name: "tssi_red_fuse"
+    description: "TSSI Red Fuse"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "tssi_red_fuse"
+      id: 35
+    }
+  }
+  bit {
+    name: "batt_fans_fuse"
+    description: "Battery Fans Fuse"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "batt_fans_fuse"
+      id: 12
+    }
+  }
+  bit {
+    name: "shtdn_fuse"
+    description: "Shutdown Fuse"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "shtdn_fuse"
+      id: 29
+    }
+  }
+  bit {
+    name: "ll_fuse"
+    description: "Linelock Fuse"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "ll_fuse"
+      id: 25
+    }
+  }
+  bit {
+    name: "motor_pump_fuse"
+    description: "Motor Pump Fuse"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "motor_pump_fuse"
+      id: 26
+    }
+  }
+  bit {
+    name: "boards_fuse"
+    description: "Boards Fuse"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "boards_fuse"
+      id: 14
+    }
+  }
+}
+bitfield_type {
+  name: "VcuFuses2"
+  description: "Legacy vcu_fuses_2 flags from lhre-2026."
+  bit {
+    name: "brake_light_fuse"
+    description: "Brake Light Fuse"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "brake_light_fuse"
+      id: 20
+    }
+  }
+  bit {
+    name: "rtd_fuse"
+    description: "Ready to Move Light Fuse"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "rtd_fuse"
+      id: 28
+    }
+  }
+  bit {
+    name: "spare_fuse"
+    description: "Spare Fuse"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "spare_fuse"
+      id: 32
+    }
+  }
+  bit {
+    name: "nothing"
+    description: "nothing"
+  }
+}
+bitfield_type {
+  name: "VcuShutdownFaults"
+  description: "Legacy vcu_shutdown_faults flags from lhre-2026."
+  bit {
+    name: "shutdown_bspd_status"
+    description: "Shutdown BSPD Relay Status"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "shutdown_bspd_status"
+      id: 30
+    }
+  }
+  bit {
+    name: "shutdown_emeter_status"
+    description: "Shutdown E-Meter HVIL Status"
+    telemetry {
+      group: "DiagnosticsHigh"
+      field: "shutdown_emeter_status"
+      id: 31
+    }
+  }
+  bit {
+    name: "shutdown_msd_status"
+    description: "Shutdown MSD HVIL Status"
   }
 }

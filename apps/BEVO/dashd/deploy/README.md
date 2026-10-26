@@ -11,7 +11,7 @@ update workflow once it's there.
 | `dash-kiosk.desktop`          | `~/.config/autostart/`                              | Auto-launches Chromium kiosk on graphical login          |
 | `launch_kiosk.sh`             | runs in place                                       | Waits for the server, then `chromium --kiosk` at it      |
 | `install.sh`                  | runs once                                           | Copies the two config files above, enables the unit     |
-| `deploy.sh`                   | runs each update                                    | `git pull` + rebuild Rust/JS + restart services          |
+| `deploy.sh`                   | runs each update                                    | `git pull` + rebuild frontend JS + restart services     |
 
 ## How the runtime fits together
 
@@ -34,24 +34,14 @@ sudo apt update
 sudo apt install -y git build-essential pkg-config libssl-dev \
     python3 chromium-browser curl
 
-# Rust toolchain (stable)
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-. "$HOME/.cargo/env"
-
 # Node + npm (use distro version; v18 or newer is fine for CRA build)
 sudo apt install -y nodejs npm
 
 # Clone repo (matches paths in bevo_telemetry.service)
 mkdir -p ~/Documents
 cd ~/Documents
-git clone https://github.com/LonghornRacingElectric/lhre-2026.git
-cd lhre-2026/BEVO
-
-# Generate vendored CAN assets + Rust mapping (one-time)
-bash nonhermetic/setup_local_env.sh
-
-# Build the daemons
-cargo build --release
+git clone https://github.com/LonghornRacingElectric/lhre.git
+cd lhre/apps/BEVO
 
 # Build the frontend
 cd dashd/frontend
@@ -71,23 +61,27 @@ sudo systemctl enable --now bevo_telemetry.service
 sudo reboot
 ```
 
-Common installs that *might* be missing:
-
-- `protoc` or `bazel` — required by `BEVO/nonhermetic/sync_assets.sh` when the `.proto` changes. `cargo build` itself does not need either of them; `BEVO/build.rs` uses `prost_build` directly on `nonhermetic/assets/can_packets.proto`. So most pulls don't need a sync. If you see a build error about `OrionSensorData` not having a field that's clearly in the proto, run sync_assets.
+Before enabling telemetry, install its executables and generated `can.json`.
+Build the core daemons on the development machine using
+`bazel build //apps/BEVO:pi_core_binaries`; see the
+[BEVO build instructions](../../README.md). This kiosk flow does not build the
+Rust executables. The display backend must also be installed separately.
 
 ## Update workflow
 
 Once first-time setup is done, the day-to-day cycle is:
 
 ```bash
-bash ~/Documents/lhre-2026/BEVO/dashd/deploy/deploy.sh
+bash ~/Documents/lhre/apps/BEVO/dashd/deploy/deploy.sh
 ```
 
-That pulls, rebuilds Rust + JS, restarts both services. To pick up new frontend bits in the kiosk that's already running, hit Ctrl+R in the browser or:
+That pulls, rebuilds frontend JS, and restarts both services. Deploy updated
+core executables separately through the Bazel flow. To pick up new frontend
+bits in the kiosk that's already running, hit Ctrl+R in the browser or:
 
 ```bash
 pkill chromium
-~/Documents/lhre-2026/BEVO/dashd/deploy/launch_kiosk.sh
+~/Documents/lhre/apps/BEVO/dashd/deploy/launch_kiosk.sh
 ```
 
 ## First-run checklist
@@ -130,7 +124,7 @@ The static server didn't come up. Either `npm run build` was never run (missing 
 Some Windows checkout brought CRLF line endings in despite `.gitattributes`. Fix in place:
 
 ```bash
-sed -i 's/\r$//' ~/Documents/lhre-2026/BEVO/dashd/deploy/*.sh
+sed -i 's/\r$//' ~/Documents/lhre/apps/BEVO/dashd/deploy/*.sh
 ```
 
 ### Manual control of components
@@ -141,6 +135,6 @@ sed -i 's/\r$//' ~/Documents/lhre-2026/BEVO/dashd/deploy/*.sh
 | View static-server logs           | `journalctl -u bevo_dash_serve.service -f`                    |
 | Restart everything                | `sudo systemctl restart bevo_telemetry.service bevo_dash_serve.service` |
 | Kill the kiosk                    | `pkill chromium`                                              |
-| Relaunch the kiosk                | `bash ~/Documents/lhre-2026/BEVO/dashd/deploy/launch_kiosk.sh` |
+| Relaunch the kiosk                | `bash ~/Documents/lhre/apps/BEVO/dashd/deploy/launch_kiosk.sh` |
 | What CAN frames is cand seeing?   | `candump can0`                                                |
 | Is `dashd` actually emitting JSON?| `curl --include --no-buffer --header "Connection: Upgrade" --header "Upgrade: websocket" --header "Sec-WebSocket-Version: 13" --header "Sec-WebSocket-Key: dGVzdA==" http://localhost:8001/` (or use `wscat -c ws://localhost:8001` if installed) |
