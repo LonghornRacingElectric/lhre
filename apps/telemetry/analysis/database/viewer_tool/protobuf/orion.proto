@@ -60,6 +60,7 @@ message Dynamics {
     float fr_sus_pot_v = 33;
     float ride_height = 34;
     float wheel_speed = 35;
+    repeated double gps_precise = 36;
 }
 
 message Controls {

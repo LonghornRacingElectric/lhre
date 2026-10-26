@@ -38,6 +38,7 @@ from .models import (
     OrionDiagnosticsLow,
     OrionThermal,
     OrionBoardStatus,
+    OrionGpsPrecise,
 )
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import JSONB # Added for JSONB type handling
@@ -90,6 +91,7 @@ class QueryBuilder:
             self._models["Thermal"] = OrionThermal
             self._models["BoardStatus"] = OrionBoardStatus
             self._models["Packet"] = OrionPacket
+            self._models["GpsPrecise"] = OrionGpsPrecise
         else:
             raise ValueError(f"Car {car} is not supported.")
 
@@ -295,8 +297,8 @@ class QueryBuilder:
                 return np.isnan(val)
             return False
 
-        # --- Find missing columns ---
-        missing_cols = [col for col in table_desc if col not in data]
+        # --- Find missing columns (a serial id is the database's to fill) ---
+        missing_cols = [col for col in table_desc if col not in data and model.__table__.c[col].autoincrement is not True]
         if missing_cols:
             logging.warning(f"Missing columns in {table}: {', '.join(missing_cols)}")
 
@@ -349,7 +351,7 @@ class QueryBuilder:
         if car == "Angelique":
             return shared_models + [AngeliquePacket, AngeliqueDynamics, AngeliqueControls, AngeliquePack, AngeliqueDiagnostics, AngeliqueThermal]
         if car == "Orion":
-            return shared_models + [OrionPacket, OrionDynamics, OrionControls, OrionPack, OrionDiagnosticsHigh, OrionDiagnosticsLow, OrionThermal, OrionBoardStatus]
+            return shared_models + [OrionPacket, OrionDynamics, OrionControls, OrionPack, OrionDiagnosticsHigh, OrionDiagnosticsLow, OrionThermal, OrionBoardStatus, OrionGpsPrecise]
         raise ValueError(f"Car {car} is not supported.")
 
     @staticmethod
@@ -394,7 +396,10 @@ class QueryBuilder:
                 QueryBuilder.get_insert_values(table_name, row, model, table_spec)
                 for row in table_rows
             ]
-            
+            # One multi-row insert needs the same keys in every row; get_insert_values drops None/NaN.
+            all_keys = set().union(*processed_rows)
+            processed_rows = [{k: r.get(k) for k in all_keys} for r in processed_rows]
+
             stmt = insert(model.__table__).values(processed_rows)
             session.execute(stmt)
         

@@ -125,7 +125,7 @@ DiagnosticsLow.charger_voltage 15 float
 DiagnosticsLow.charger_enabled 16 bool
 DiagnosticsLow.imd_led 17 bool
 
-[Dynamics] snapshot_id=3 next_free_id=36
+[Dynamics] snapshot_id=3 next_free_id=37
 Dynamics.gps 1 repeated float
 Dynamics.gps_imu 2 repeated float
 Dynamics.gps_speed 3 float
@@ -161,6 +161,7 @@ Dynamics.fr_strain_gauge_v 32 float
 Dynamics.fr_sus_pot_v 33 float
 Dynamics.ride_height 34 float
 Dynamics.wheel_speed 35 float
+Dynamics.gps_precise 36 repeated double
 
 [Pack] snapshot_id=5 next_free_id=23
 Pack.bus_voltage 1 float

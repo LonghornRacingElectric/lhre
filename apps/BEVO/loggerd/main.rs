@@ -141,6 +141,7 @@ fn repeated_field_lengths(packets: &[PacketConfig]) -> HashMap<String, usize> {
     // NMEA-populated fields that don't appear in can.json.
     lengths.entry("gps".to_string()).or_insert(2);
     lengths.entry("gps_imu".to_string()).or_insert(3);
+    lengths.entry("gps_precise".to_string()).or_insert(6);
 
     lengths
 }
@@ -496,6 +497,11 @@ mod tests {
             let key = format!("dynamics.{gyro}[0]");
             assert!(headers.contains(&key), "missing column {key}");
         }
+    }
+
+    #[test]
+    fn gps_precise_has_six_columns() {
+        assert_eq!(indexed(&headers(), "dynamics.gps_precise["), (0..6).collect::<Vec<_>>());
     }
 
     #[test]
