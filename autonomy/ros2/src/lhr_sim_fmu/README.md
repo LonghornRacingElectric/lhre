@@ -70,6 +70,9 @@ The loader rejects altered artifact/vehicle/tire bytes and a different BobSim
 calibration commit. It publishes the complete manifest plus the autonomy
 vehicle hash on transient-local `/lhr/sim/provenance`. Keep that message or
 the manifest with study outputs; CSV alone does not carry the FMU hash.
+The commit check trusts only the selected BobSim path for that Git command,
+so a container can read a host-owned mount. It reports Git's diagnostic if
+the checkout is missing or unreadable. It does not change global Git settings.
 
 ## Tests and limitations
 
@@ -78,6 +81,9 @@ colcon test --packages-select lhr_sim_fmu lhr_demo --return-code-on-test-failure
 # Opt in to the actual compiled-model test; no substitute model is used:
 LHR_TEST_FMU=/opt/lhr/simulation/out/fmu/OrionFMI.fmu \
   colcon test --packages-select lhr_sim_fmu --return-code-on-test-failure
+# With the ROS and workspace setup sourced, check the aero test on its own:
+LHR_TEST_FMU=/opt/lhr/simulation/out/fmu/OrionFMI.fmu \
+  python3 -m pytest src/lhr_sim_fmu/test/test_native_fmu.py -k aero -q
 ```
 
 CI runs interface/error/provenance tests without building a large native FMU.

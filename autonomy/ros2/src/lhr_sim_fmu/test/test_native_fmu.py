@@ -42,11 +42,13 @@ def test_real_wait_launch_turn_stop_and_relaunch():
         plant.close()
 
 
-def test_compiled_aero_references_are_our_car_instead_of_boblib_defaults():
+def test_compiled_aero_references_are_our_car_instead_of_boblib_defaults(monkeypatch):
     from fmpy import read_model_description
-    from common.vehicle_io import load_yaml
     from lhr_sim_bobsim.plant import dependency_paths
-    data = load_yaml(dependency_paths()[1])
+    root, vehicle_file = dependency_paths()
+    monkeypatch.syspath_prepend(str(root))
+    from common.vehicle_io import load_yaml
+    data = load_yaml(vehicle_file)
     variables = {v.name: v for v in read_model_description(ARTIFACT).modelVariables}
     for prefix, key in [('FL', 'front_left_ride_height_ref_m'),
                         ('RL', 'rear_left_ride_height_ref_m')]:

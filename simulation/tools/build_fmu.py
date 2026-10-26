@@ -4,34 +4,27 @@ import importlib.util
 import json
 from pathlib import Path
 import shutil
-import subprocess
 import sys
 import tempfile
 
 from app.modelica_generator import plan_modelica_stack
 from common.vehicle_io import load_yaml
+from tools.invalidation import git, sha256_file
 
 
 BOBLIB_SHA = '4741a5ec6201635051031ed356a1bb55932df89c'
 
 
-def sha256(path):
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
-
-
 def git_sha(path):
-    return subprocess.check_output(['git', '-C', str(path), 'rev-parse', 'HEAD'], text=True).strip()
+    return git(path, 'rev-parse', 'HEAD').strip()
 
 
 def require_matching_models(source, bobsim_root):
     def tree(root):
-        return subprocess.check_output(
-            ['git', '-C', str(root), 'rev-parse', 'HEAD:BobLib'], text=True).strip()
+        return git(root, 'rev-parse', 'HEAD:BobLib').strip()
     if tree(source) != tree(bobsim_root/'engines/boblib'):
         raise ValueError('FMU source and pinned BobLib model trees differ; review the dependency update')
-    if subprocess.check_output(
-            ['git', '-C', str(bobsim_root), 'status', '--porcelain', '--ignore-submodules=none'],
-            text=True):
+    if git(bobsim_root, 'status', '--porcelain', '--ignore-submodules=none'):
         raise ValueError('BobSim has local changes; restore it before building the FMU')
 
 
@@ -74,7 +67,7 @@ end OrionFMI;
 def build(source, output, vehicle_path, bobsim_root):
     if git_sha(source) != BOBLIB_SHA:
         raise ValueError('FMU source does not match the reviewed BobLib export pin')
-    if subprocess.check_output(['git', '-C', str(source), 'status', '--porcelain'], text=True):
+    if git(source, 'status', '--porcelain'):
         raise ValueError('FMU source checkout has local changes')
     require_matching_models(source, bobsim_root)
     vehicle = load_yaml(vehicle_path)
@@ -106,12 +99,12 @@ def build(source, output, vehicle_path, bobsim_root):
                 target.write_text('\n'.join([*entries, name])+'\n')
         artifact = exporter.export_fmu(stage, output, timeout_s=3600, name='OrionFMI', model=text)
     manifest = {
-        'schema': 'lhre.fmu.v1', 'fmu_sha256': sha256(artifact),
+        'schema': 'lhre.fmu.v1', 'fmu_sha256': sha256_file(artifact),
         'boblib_sha': BOBLIB_SHA, 'bobsim_sha': git_sha(bobsim_root),
-        'vehicle_sha256': sha256(vehicle_path),
+        'vehicle_sha256': sha256_file(vehicle_path),
         'model_sha256': hashlib.sha256(text.encode()).hexdigest(),
         'record_sha256': hashlib.sha256(plan.contents[0][1].encode()).hexdigest(),
-        'tires': {str(path.relative_to(vehicle_path.parent)): sha256(path)
+        'tires': {str(path.relative_to(vehicle_path.parent)): sha256_file(path)
                   for path in sorted((vehicle_path.parent/'tires').glob('*.tir'))},
     }
     (output/'provenance.json').write_text(json.dumps(manifest, indent=2)+'\n')

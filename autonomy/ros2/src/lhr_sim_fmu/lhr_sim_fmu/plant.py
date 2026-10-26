@@ -32,11 +32,13 @@ def load_provenance(path, vehicle_file, bobsim_root):
             raise ValueError(f'Stale FMU tire: {tire}; rebuild the FMU')
     try:
         sha = subprocess.check_output(
-            ['git', '-C', str(bobsim_root), 'rev-parse', 'HEAD'],
+            ['git', '-c', f'safe.directory={Path(bobsim_root).resolve()}',
+             '-C', str(bobsim_root), 'rev-parse', 'HEAD'],
             text=True, stderr=subprocess.PIPE).strip()
     except (OSError, subprocess.CalledProcessError) as exc:
+        detail = (getattr(exc, 'stderr', None) or str(exc)).strip()
         raise ValueError(
-            f'Cannot read BobSim calibration commit at {bobsim_root}; '
+            f'Cannot read BobSim calibration commit at {bobsim_root}: {detail}; '
             'use an initialized Git checkout and check BOBSIM_ROOT') from exc
     if sha != manifest['bobsim_sha']:
         raise ValueError('BobSim calibration differs from the FMU build; rebuild the FMU')

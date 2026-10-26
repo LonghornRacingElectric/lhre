@@ -147,7 +147,8 @@ def test_incompatible_fmi_interface_is_rejected_before_instantiation(defect):
 
 
 @pytest.mark.parametrize('error', [
-    OSError('git unavailable'), subprocess.CalledProcessError(128, ['git']),
+    OSError('git unavailable'),
+    subprocess.CalledProcessError(128, ['git'], stderr='fatal: fixture checkout unavailable'),
 ])
 def test_missing_bobsim_checkout_has_an_actionable_error(tmp_path, monkeypatch, error):
     artifact, vehicle = tmp_path/'OrionFMI.fmu', tmp_path/'vehicle.yml'
@@ -162,5 +163,30 @@ def test_missing_bobsim_checkout_has_an_actionable_error(tmp_path, monkeypatch, 
     def fail(*args, **kwargs):
         raise error
     monkeypatch.setattr('lhr_sim_fmu.plant.subprocess.check_output', fail)
-    with pytest.raises(ValueError, match='initialized Git checkout.*BOBSIM_ROOT'):
+    with pytest.raises(ValueError, match='initialized Git checkout.*BOBSIM_ROOT') as caught:
         load_provenance(artifact, vehicle, tmp_path)
+    assert (getattr(error, 'stderr', None) or str(error)) in str(caught.value)
+
+
+def test_provenance_accepts_a_differently_owned_checkout(tmp_path, monkeypatch):
+    subprocess.run(['git', 'init', '-q', str(tmp_path)], check=True)
+    subprocess.run(['git', '-C', str(tmp_path), '-c', 'user.name=Fixture',
+                    '-c', 'user.email=fixture@example.invalid',
+                    'commit', '--allow-empty', '-qm', 'fixture'], check=True)
+    sha = subprocess.check_output(
+        ['git', '-C', str(tmp_path), 'rev-parse', 'HEAD'], text=True).strip()
+    artifact, vehicle = tmp_path/'OrionFMI.fmu', tmp_path/'vehicle.yml'
+    artifact.write_bytes(b'compiled artifact')
+    vehicle.write_bytes(b'canonical vehicle')
+    manifest = {'schema': 'lhre.fmu.v1',
+                'fmu_sha256': hashlib.sha256(artifact.read_bytes()).hexdigest(),
+                'vehicle_sha256': hashlib.sha256(vehicle.read_bytes()).hexdigest(),
+                'tires': {}, 'bobsim_sha': sha}
+    (tmp_path/'provenance.json').write_text(json.dumps(manifest))
+    monkeypatch.setenv('GIT_CONFIG_GLOBAL', '/dev/null')
+    monkeypatch.setenv('GIT_CONFIG_SYSTEM', '/dev/null')
+    monkeypatch.setenv('GIT_TEST_ASSUME_DIFFERENT_OWNER', '1')
+    unsafe = subprocess.run(['git', '-C', str(tmp_path), 'rev-parse', 'HEAD'],
+                            capture_output=True, text=True)
+    assert unsafe.returncode != 0 and 'dubious ownership' in unsafe.stderr
+    assert load_provenance(artifact, vehicle, tmp_path) == manifest
