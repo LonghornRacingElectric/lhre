@@ -23,6 +23,7 @@ One call produces the whole target family:
 | `:vcu`                              | The linked firmware (ELF), built for the family's MCU. |
 | `:vcu.elf` / `:vcu.hex` / `:vcu.bin` | objcopy'd output formats.                              |
 | `:vcu.out.map`                      | Linker map (`--cref`), for section/size spelunking.    |
+| `:vcu_size_test`                    | Fails when the image passes its flash/RAM budget (below). |
 | `:openocd`                          | `bazel run` target: flash the ELF over ST-Link.        |
 | `:dfu`                              | `bazel run` target: flash the BIN over USB DFU.        |
 | `:release`                          | Filegroup of every elf/bin/hex (for CI artifacts).     |
@@ -75,6 +76,12 @@ from the `App/` directory instead of boards restating it:
   automatically — Cortex-M port + the board's CubeMX `FreeRTOSConfig.h`
   (exposed as `{name}_freertos_config`) when cross-compiling, simulator
   port + host config otherwise — so task code runs unmodified on the host.
+  It compiles with `-Wall -Wextra -Werror`: app code is ours and starts
+  warning-clean, so new warnings get fixed when they appear instead of
+  piling up. That covers
+  headers it includes from `app_deps` too. `Core/` and `Board/` stay
+  outside it, since they compile alongside CubeMX and ST HAL sources that
+  aren't warning-clean.
 - `App/*_test.cpp` → one small `cc_test` per file, named by its stem,
   against `{name}_app` + the LHAL host fakes + gtest.
 - `App/*_sim.cpp` → one host `cc_binary` per file, named by its stem.
@@ -156,9 +163,28 @@ Adding a family = adding it in those two packages, then mapping it in
   `update.` serial command enables probe-less reflashing (see
   [tools/dfu](../dfu/README.md)).
 - `enable_printf_float` links `-u _printf_float` (~10 KB of flash).
+- `size_budget_percent` (default 85) sets the flash/RAM budget below.
 
 Flash targets are tagged `local` (they must run where the board is plugged
 in, never on remote executors).
+
+## Flash and RAM budget
+
+The linker only fails at 100%, by which point the next feature has
+nowhere to go. So each image gets an `{image}_size_test`
+([size_check.py](https://github.com/LonghornRacingElectric/lhre/blob/main/tools/firmware/size_check.py))
+that fails once flash or RAM use passes `size_budget_percent`, and prints
+both numbers either way. It reads:
+
+- The regions from the linker script's `MEMORY` block, which must name
+  them `FLASH` and `RAM`. A `LENGTH` it can't read exactly, like
+  `512K - 16K`, fails the test rather than guessing.
+- Every allocated section in the ELF. `.data` counts against both RAM and
+  flash (its initial values live in flash), and the linker script's
+  heap/stack reserve counts against RAM.
+
+The test is tagged `firmware_size`, which `--config=ubsan` filters out
+(see [tools/ubsan](../ubsan/README.md)).
 
 ## Build provenance
 

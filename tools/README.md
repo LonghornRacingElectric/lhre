@@ -10,6 +10,7 @@ Build and dev tooling. Each package documents itself:
 | [format/](format/README.md) | clang-format for the whole repo: `bazel run //tools/format` (or `:check`). |
 | [monitor/](monitor/README.md) | Serial console for the longhorn debug shell: `bazel run //tools/monitor` connects, checks the flashed sha against the checkout, and goes interactive. |
 | [ide/](ide/README.md) | `compile_commands.json` regeneration for clangd/IDEs: `bazel run //:refresh_ide` (or the fast `//:refresh_compile_commands`). |
+| [ubsan/](ubsan/README.md) | `--config=ubsan`: host tests with undefined behavior trapping, plus the canary that proves it's on. |
 
 `new_board.py` (`bazel run //tools:new_board -- boards/<Name>/<Name>.ioc`)
 scaffolds a whole working board from its CubeMX `.ioc`, so new boards
