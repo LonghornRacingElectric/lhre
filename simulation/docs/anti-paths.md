@@ -3,7 +3,7 @@
 `tools/anti_paths.py` gives one anti record for each axle and each
 longitudinal force source: drive, hydraulic brake and regen. It reads the
 car from `vehicle/vehicle.yml` and the torque topology from
-`vehicle/bundle.yml`. It uses BobSim KinPy through public names only.
+`vehicle/bundle.yml`. It uses numpy only, with no BobSim code.
 
 ```python
 from tools.anti_paths import anti_records
@@ -25,14 +25,15 @@ the wheel torque reacts sets the path.
 | `chassis` | Inboard motor, differential, inboard caliper | `virtual_power_3d` | The chassis holds the wheel spin. The contact force does no work through the spin rate of the upright. |
 | `null` (`unavailable`) | Not known | none | No number. Status `unavailable`. |
 
-`s` is the contact-patch travel in KinPy (`CornerKinematics.solve_jounce`).
-The tool takes five-point central differences with a 1 mm step at the
-design pose (zero jounce, zero rack travel).
+The tool solves the upright twist at the design pose (zero jounce, zero
+rack travel). Each of the five links (four wishbone legs and the tie rod)
+keeps its length, so the twist is the null space of a 5x6 linear system.
+`s` is the contact-patch travel along that twist. Parallel links that
+leave the upright more than one degree of freedom give `invalid`.
 
 The side-view wheel-center formula `-(dx_wc/ds)/(dz_cp/ds)` is only a
 cross-check. It is exact only at zero toe. `pose.cross_checks_n_per_n`
-holds it and the BobSim DynPy instant-link value. DynPy uses the
-contact-patch path for every force.
+holds it.
 
 ## Record
 
@@ -45,7 +46,7 @@ The keys follow contract C5.
 | `axle_force_share` | The share of the source force on this axle. `pct` does not include it. The hydraulic brake share is `brake.front_bias`. |
 | `h_m`, `h_basis` | CG height above the ground plane. `sprung_and_driver_cg_z` when `driver_mass` exists, else `sprung_cg_z`. |
 | `wheelbase_m` | Front wheel-center x minus rear wheel-center x. |
-| `pose` | Jounce, rack travel, step, tolerance in N/N, the h reference and the cross-checks. |
+| `pose` | The method (`hardpoint_twist`), jounce, rack travel, the h reference and the cross-check. |
 | `status` | `ok`, `partial`, `unavailable` or `invalid`. |
 | `reason` | Why a value is missing, and each input that is only `assumed` or `guessed`. |
 
@@ -63,7 +64,8 @@ opposes the pitch that the force causes. The sign of Fx does not change
   above the ground, so the tool withholds it.
 - With a datum, `h_m` is the CG z minus the ground-plane z at the CG x,
   from the front and rear datum values.
-- A KinPy solve failure or a nonfinite value gives `invalid`.
+- A twist with more than one degree of freedom or a nonfinite value gives
+  `invalid`.
 - Bad geometry raises `VehicleCheckError` with the key path. The tool runs
   `tools/vehicle_checks.py` first.
 

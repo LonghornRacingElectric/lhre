@@ -614,6 +614,6 @@ def test_parallel_wishbones_give_the_tangent_of_their_side_view_pitch(monkeypatc
             "tie_o_m": tie["outer"] + np.array([0.05, 0.0, 0.0]), "wheel_center_m": [0.0, 0.6, 0.2],
         },
         "steering": {"rack_pickup_m": tie["aft"] + np.array([0.05, 0.0, 0.0]) + 0.1 * axis},
-        "wheel": {"radius_m": 0.2},
+        "wheel": {"radius_m": 0.2, "camber_deg": 0.0, "toe_deg": 0.0},
     }}
     assert acceptance.contact_patch_coefficient(car, "front") == pytest.approx(math.tan(pitch), abs=1e-12)

@@ -7,7 +7,6 @@ import re
 import sys
 from pathlib import Path
 
-import numpy as np
 import yaml
 
 SCHEMA = "lhre.four-post-acceptance.v2"
@@ -439,28 +438,10 @@ def _metric_checks(fields, rows, duplicates, vehicle):
     return checks
 
 
-def _velocity_row(point, direction):
-    return np.concatenate([direction, np.cross(point, direction)])
-
-
 def contact_patch_coefficient(car, axle):
-    """Jacking coefficient c = -(dx_cp/ds)/(dz_cp/ds) of the upright-fixed contact patch at the design pose."""
-    points = {name: np.asarray(value, dtype=float) for name, value in car[axle]["suspension"].items()}
-    rack = np.asarray(car[axle]["steering"]["rack_pickup_m"], dtype=float)
-    rows = []
-    for arm in ("lower", "upper"):
-        aft, joint = points[f"{arm}_aft_i_m"], points[f"{arm}_o_m"]
-        rows += [_velocity_row(joint, points[f"{arm}_fore_i_m"] - aft), _velocity_row(joint, joint - aft)]
-    rows.append(_velocity_row(points["tie_o_m"], points["tie_o_m"] - rack))
-    _, sing, vt = np.linalg.svd(np.array(rows))
-    if sing[4] < 1e-9 * sing[0]:
-        raise ValueError(f"{axle} suspension constraints are rank deficient")
-    twist = vt[-1]
-    contact = points["wheel_center_m"] - np.array([0.0, 0.0, float(car[axle]["wheel"]["radius_m"])])
-    velocity = twist[:3] + np.cross(twist[3:], contact)
-    if abs(velocity[2]) < 1e-12:
-        raise ValueError(f"{axle} contact patch has no vertical velocity")
-    return float(-velocity[0] / velocity[2])
+    from tools.anti_paths import corner_coefficients
+
+    return corner_coefficients(car, axle).values["contact_patch_path"]
 
 
 def _anti_check(rows, vehicle):

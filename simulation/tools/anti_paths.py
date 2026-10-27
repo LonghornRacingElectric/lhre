@@ -1,13 +1,10 @@
-import contextlib
 import math
-import warnings
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 
-from engines.kinpy import CornerKinematics, create_kinematics
 from tools import vehicle_checks
 
 SOURCES = ("drive", "hydraulic_brake", "regen")
@@ -38,9 +35,14 @@ RECORD_KEYS = (
     "status",
     "reason",
 )
-STEP_M = 1e-3
-UPRIGHT_POINTS = ("lower_o", "upper_o", "tie_o", "wheel_center", "tire_front")
-OFFSETS = (0, 1, 2, -1, -2)
+LINKS = (
+    ("suspension", "lower_fore_i_m", "lower_o_m"),
+    ("suspension", "lower_aft_i_m", "lower_o_m"),
+    ("suspension", "upper_fore_i_m", "upper_o_m"),
+    ("suspension", "upper_aft_i_m", "upper_o_m"),
+    ("steering", "rack_pickup_m", "tie_o_m"),
+)
+LOCKED_SINGULAR_VALUE = 1e-9
 X_AXIS = np.array([1.0, 0.0, 0.0])
 Z_AXIS = np.array([0.0, 0.0, 1.0])
 
@@ -48,11 +50,7 @@ Z_AXIS = np.array([0.0, 0.0, 1.0])
 @dataclass(frozen=True)
 class CornerCoefficients:
     axle: str
-    step_m: float
     values: Mapping[str, float]
-    tolerance: Mapping[str, float]
-    bobsim_instant_link: float
-    residual_m: float
 
 
 @dataclass(frozen=True)
@@ -75,87 +73,49 @@ class Normalization:
     datum_notes: tuple[str, ...]
 
 
-def _cross_matrix(vector: np.ndarray) -> np.ndarray:
-    x, y, z = vector
-    return np.array([[0.0, -z, y], [z, 0.0, -x], [-y, x, 0.0]])
-
-
 def _unit(vector: np.ndarray) -> np.ndarray:
     return vector / np.linalg.norm(vector)
 
 
-@contextlib.contextmanager
-def _quiet_minpack() -> Iterator[None]:
-    with warnings.catch_warnings():
-        # MINPACK warns at the zero-rotation root. KinPy still rejects a residual above 1e-8 m.
-        warnings.filterwarnings("ignore", "The iteration is not making good progress", RuntimeWarning)
-        yield
+def _twist(side: Mapping[str, Any]) -> np.ndarray:
+    """Upright twist (v0, omega) at the design pose that keeps each link length fixed, for one unit of travel."""
+    rows = []
+    for group, inboard, outboard in LINKS:
+        upright = np.asarray(side["suspension"][outboard], dtype=float)
+        link = upright - np.asarray(side[group][inboard], dtype=float)
+        rows.append(np.concatenate([link, np.cross(upright, link)]))
+    _, singular, rows_t = np.linalg.svd(np.array(rows))
+    if singular[-1] < LOCKED_SINGULAR_VALUE * singular[0]:
+        raise ValueError("Two links are parallel, so the upright has more than one degree of freedom.")
+    return rows_t[-1]
 
 
-def _sweep(corner: CornerKinematics, step_m: float) -> tuple[dict[int, dict[str, np.ndarray]], float]:
-    samples: dict[int, dict[str, np.ndarray]] = {}
-    guesses = {0: np.zeros(3)}
-    residuals = []
-    for offset in OFFSETS:
-        guess = guesses[offset - int(math.copysign(1, offset))] if offset else guesses[0]
-        with _quiet_minpack():
-            solution, points, residual = corner.solve_jounce(offset * step_m, guess)
-        guesses[offset] = solution
-        samples[offset] = {name: np.array(getattr(points, name), dtype=float) for name in (*UPRIGHT_POINTS, "contact_patch")}
-        residuals.append(float(residual))
-    return samples, max(residuals)
-
-
-def _tangents(samples: dict[int, dict[str, np.ndarray]], step_m: float, five_point: bool) -> dict[str, np.ndarray]:
-    tangents = {}
-    for name in samples[0]:
-        near = (samples[1][name] - samples[-1][name]) / (2.0 * step_m)
-        far = (samples[2][name] - samples[-2][name]) / (4.0 * step_m)
-        tangents[name] = (4.0 * near - far) / 3.0 if five_point else near
-    return tangents
-
-
-def _path_coefficients(pose: dict[str, np.ndarray], tangent: dict[str, np.ndarray]) -> dict[str, float]:
-    contact, center = pose["contact_patch"], pose["wheel_center"]
-    t_cp = tangent["contact_patch"]
-    arms = np.vstack([-_cross_matrix(pose[name] - contact) for name in UPRIGHT_POINTS])
-    rates = np.concatenate([tangent[name] - t_cp for name in UPRIGHT_POINTS])
-    omega = np.linalg.lstsq(arms, rates, rcond=None)[0]
-    spin = _unit(np.cross(pose["tire_front"] - center, contact - center))
-    radius = contact - center
+def corner_coefficients(vehicle: Mapping[str, Any], axle: str) -> CornerCoefficients:
+    if axle not in AXLES:
+        raise ValueError(f"Axle {axle!r} is not valid. Use front or rear.")
+    side = vehicle[axle]
+    radius = float(side["wheel"]["radius_m"])
+    camber, toe = math.radians(side["wheel"]["camber_deg"]), math.radians(side["wheel"]["toe_deg"])
+    center = np.asarray(side["suspension"]["wheel_center_m"], dtype=float)
+    contact = center - radius * np.array([0.0, math.sin(camber), math.cos(camber)])
+    spin = _unit(np.cross(np.array([math.cos(toe), math.sin(toe), 0.0]), center - contact))
+    twist = _twist(side)
+    v_origin, omega = twist[:3], twist[3:]
+    t_cp, t_wc = v_origin + np.cross(omega, contact), v_origin + np.cross(omega, center)
+    if abs(t_cp[2]) < 1e-12 * np.linalg.norm(twist):
+        raise ValueError(f"The {axle} contact patch has no vertical velocity.")
+    radius_vector = contact - center
 
     # The chassis holds the wheel spin, so the contact force does no work through the upright's spin rate.
     def power(force: np.ndarray) -> float:
-        return float(force @ t_cp - np.dot(np.cross(radius, force), spin) * np.dot(spin, omega))
+        return float(force @ t_cp - np.dot(np.cross(radius_vector, force), spin) * np.dot(spin, omega))
 
-    return {
+    values = {
         "contact_patch_path": -float(t_cp[0] / t_cp[2]),
-        "wheel_center_path": -float(tangent["wheel_center"][0] / t_cp[2]),
+        "wheel_center_path": -float(t_wc[0] / t_cp[2]),
         "virtual_power_3d": -power(X_AXIS) / power(Z_AXIS),
     }
-
-
-def corner_coefficients(vehicle: Mapping[str, Any], axle: str, *, step_m: float = STEP_M) -> CornerCoefficients:
-    if axle not in AXLES:
-        raise ValueError(f"Axle {axle!r} is not valid. Use front or rear.")
-    if not (math.isfinite(step_m) and step_m > 0.0):
-        raise ValueError(f"step_m is {step_m!r}. It must be finite and positive.")
-    samples, residual = _sweep(CornerKinematics.from_vehicle(dict(vehicle), axle), step_m)
-    fine = _tangents(samples, step_m, five_point=True)
-    values = _path_coefficients(samples[0], fine)
-    rough = _path_coefficients(samples[0], _tangents(samples, step_m, five_point=False))
-    noise = residual / step_m / abs(float(fine["contact_patch"][2]))
-    tolerance = {name: abs(values[name] - rough[name]) + noise * (1.0 + abs(values[name])) for name in values}
-    with _quiet_minpack():
-        links = create_kinematics(vehicle, mode="nonlinear").at(np.zeros(4)).instant_links
-    return CornerCoefficients(
-        axle=axle,
-        step_m=step_m,
-        values=values,
-        tolerance=tolerance,
-        bobsim_instant_link=links.corners[0 if axle == "front" else 2].longitudinal_jacking_coefficient,
-        residual_m=residual,
-    )
+    return CornerCoefficients(axle=axle, values=values)
 
 
 def anti_percent(axle: str, coeff_n_per_n: float, h_m: float, wheelbase_m: float) -> float:
@@ -247,7 +207,7 @@ def _record(
         h_m=norm.h_m,
         h_basis=norm.h_basis,
         wheelbase_m=norm.wheelbase_m,
-        pose={"kind": "kinpy_corner_jounce", "jounce_m": 0.0, "rack_displacement_m": 0.0, "h_reference": norm.h_reference},
+        pose={"kind": "hardpoint_twist", "jounce_m": 0.0, "rack_displacement_m": 0.0, "h_reference": norm.h_reference},
         sign_convention=SIGN_CONVENTION,
         status="unavailable",
     )
@@ -256,17 +216,10 @@ def _record(
         return record
     method = record["coeff_method"] = COEFF_METHODS[path.reaction]
     if not isinstance(coefficients, CornerCoefficients):
-        record.update(status="invalid", reason=f"KinPy cannot solve the {axle} corner: {coefficients}")
+        record.update(status="invalid", reason=f"The {axle} hardpoints give no single-degree-of-freedom upright: {coefficients}")
         return record
     coeff = coefficients.values[method]
-    record["pose"].update(
-        jounce_step_m=coefficients.step_m,
-        coeff_tolerance_n_per_n=coefficients.tolerance[method],
-        cross_checks_n_per_n={
-            "wheel_center_path": coefficients.values["wheel_center_path"],
-            "bobsim_instant_link": coefficients.bobsim_instant_link,
-        },
-    )
+    record["pose"]["cross_checks_n_per_n"] = {"wheel_center_path": coefficients.values["wheel_center_path"]}
     if not math.isfinite(coeff):
         record.update(status="invalid", reason=f"The {method} coefficient is not finite.")
         return record
@@ -289,7 +242,7 @@ def _record(
     return record
 
 
-def anti_records(vehicle: Mapping[str, Any], bundle: Mapping[str, Any], *, step_m: float = STEP_M) -> list[dict[str, Any]]:
+def anti_records(vehicle: Mapping[str, Any], bundle: Mapping[str, Any]) -> list[dict[str, Any]]:
     if "force_paths" in vehicle:
         raise ValueError("vehicle.yml declares force_paths. lhre keeps the torque topology in vehicle/bundle.yml only.")
     frame = vehicle_checks.Frame.from_bundle(bundle)
@@ -301,7 +254,7 @@ def anti_records(vehicle: Mapping[str, Any], bundle: Mapping[str, Any], *, step_
         coefficients: CornerCoefficients | ValueError | None = None
         if any(paths[(source, axle)].reaction != "unknown" for source in SOURCES):
             try:
-                coefficients = corner_coefficients(vehicle, axle, step_m=step_m)
+                coefficients = corner_coefficients(vehicle, axle)
             except ValueError as error:
                 coefficients = error
         records += [_record(vehicle, axle, source, paths[(source, axle)], norm, coefficients) for source in SOURCES]
