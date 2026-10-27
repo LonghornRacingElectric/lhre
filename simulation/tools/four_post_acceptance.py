@@ -7,6 +7,7 @@ import re
 import sys
 from pathlib import Path
 
+import numpy as np
 import yaml
 
 SCHEMA = "lhre.four-post-acceptance.v2"
@@ -438,30 +439,38 @@ def _metric_checks(fields, rows, duplicates, vehicle):
     return checks
 
 
-def _kinpy_coefficients(vehicle):
-    from common.vehicle_io import load_yaml
-    from tools.anti_paths import corner_coefficients
+def _velocity_row(point, direction):
+    return np.concatenate([direction, np.cross(point, direction)])
 
-    car = load_yaml(str(vehicle))
-    return {axle: corner_coefficients(car, axle) for axle in AXLES}
+
+def contact_patch_coefficient(car, axle):
+    """Jacking coefficient c = -(dx_cp/ds)/(dz_cp/ds) of the upright-fixed contact patch at the design pose."""
+    points = {name: np.asarray(value, dtype=float) for name, value in car[axle]["suspension"].items()}
+    rack = np.asarray(car[axle]["steering"]["rack_pickup_m"], dtype=float)
+    rows = []
+    for arm in ("lower", "upper"):
+        aft, joint = points[f"{arm}_aft_i_m"], points[f"{arm}_o_m"]
+        rows += [_velocity_row(joint, points[f"{arm}_fore_i_m"] - aft), _velocity_row(joint, joint - aft)]
+    rows.append(_velocity_row(points["tie_o_m"], points["tie_o_m"] - rack))
+    twist = np.linalg.svd(np.array(rows))[2][-1]
+    contact = points["wheel_center_m"] - np.array([0.0, 0.0, float(car[axle]["wheel"]["radius_m"])])
+    velocity = twist[:3] + np.cross(twist[3:], contact)
+    return float(-velocity[0] / velocity[2])
 
 
 def _anti_check(rows, vehicle):
     keys = {axle: ANTI_KEY.format(axle=axle) for axle in AXLES}
     if any(key not in rows for key in keys.values()):
         return _check("anti geometry", UNAVAILABLE, "The CSV has no longitudinal jacking coefficients at this pin.")
-    try:
-        kinpy = _kinpy_coefficients(vehicle)
-    except ImportError as error:
-        return _check("anti geometry", UNAVAILABLE, f"KinPy is not importable here: {error}.")
+    car = yaml.safe_load(Path(vehicle).read_text(encoding="utf-8"))
     details, failed = [], False
     for axle, key in keys.items():
         four_post = _number(rows[key].get("value"))
-        expected = kinpy[axle].values["contact_patch_path"]
-        tolerance = max(ANTI_REL_TOL * abs(expected), ANTI_ABS_TOL) + kinpy[axle].tolerance["contact_patch_path"]
+        expected = contact_patch_coefficient(car, axle)
+        tolerance = max(ANTI_REL_TOL * abs(expected), ANTI_ABS_TOL)
         ok = math.isfinite(four_post) and abs(four_post - expected) <= tolerance
         failed = failed or not ok
-        details.append(f"{axle} FourPost {four_post:.6g} N/N, KinPy contact-patch path {expected:.6g} N/N, tolerance {tolerance:.2g}.")
+        details.append(f"{axle} FourPost {four_post:.6g} N/N, hardpoints {expected:.6g} N/N, tolerance {tolerance:.2g}.")
     return _check("anti geometry", FAIL if failed else PASS, " ".join(details))
 
 
