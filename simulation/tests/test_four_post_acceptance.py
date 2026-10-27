@@ -92,6 +92,17 @@ CORNER_REASON = "corner load differs from target by 12.3 N"
 SPRING_REASON = "spring force differs from the executed table by 130 N"
 
 
+class _Coefficients:
+    def __init__(self, value, tolerance=0.0):
+        self.values = {"contact_patch_path": value}
+        self.tolerance = {"contact_patch_path": tolerance}
+
+
+@pytest.fixture(autouse=True)
+def _kinpy_matches_the_rows(monkeypatch):
+    monkeypatch.setattr(acceptance, "_kinpy_coefficients", lambda vehicle: {axle: _Coefficients(1.5) for axle in acceptance.AXLES})
+
+
 def _sha256(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -558,3 +569,35 @@ def test_a_fourpost_manifest_that_changed_after_the_run_fails(tmp_path, monkeypa
     code, checks, _ = _accept(run, vehicle, monkeypatch)
     assert code == 1
     assert checks["executed spring tables"]["result"] == "FAIL"
+
+
+def test_anti_coefficients_that_match_kinpy_pass(tmp_path, monkeypatch):
+    run, vehicle = _write_run(tmp_path, _labelled_rows())
+    _, checks, _ = _accept(run, vehicle, monkeypatch)
+    assert checks["anti geometry"]["result"] == "PASS"
+
+
+@pytest.mark.parametrize("kinpy", [-1.5, 1.6, 1.4])
+def test_anti_coefficients_outside_the_tolerance_fail(tmp_path, monkeypatch, kinpy):
+    monkeypatch.setattr(acceptance, "_kinpy_coefficients", lambda vehicle: {axle: _Coefficients(kinpy) for axle in acceptance.AXLES})
+    run, vehicle = _write_run(tmp_path, _labelled_rows())
+    code, checks, _ = _accept(run, vehicle, monkeypatch)
+    assert code == 1
+    assert checks["anti geometry"]["result"] == "FAIL"
+
+
+def test_an_anti_coefficient_without_a_finite_value_fails(tmp_path, monkeypatch):
+    rows = {**_labelled_rows(), "avg_longitudinal_jacking_coeff_rear": "nan"}
+    run, vehicle = _write_run(tmp_path, rows)
+    _, checks, _ = _accept(run, vehicle, monkeypatch)
+    assert checks["anti geometry"]["result"] == "FAIL"
+
+
+def test_anti_geometry_is_unavailable_when_kinpy_cannot_load(tmp_path, monkeypatch):
+    def missing(vehicle):
+        raise ImportError("no engines.kinpy")
+
+    monkeypatch.setattr(acceptance, "_kinpy_coefficients", missing)
+    run, vehicle = _write_run(tmp_path, _labelled_rows())
+    _, checks, _ = _accept(run, vehicle, monkeypatch)
+    assert checks["anti geometry"]["result"] == "UNAVAILABLE"
