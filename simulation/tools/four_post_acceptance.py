@@ -471,7 +471,10 @@ def _anti_check(rows, vehicle):
     details, failed = [], False
     for axle, key in keys.items():
         four_post = _number(rows[key].get("value"))
-        expected = contact_patch_coefficient(car, axle)
+        try:
+            expected = contact_patch_coefficient(car, axle)
+        except (KeyError, TypeError, ValueError) as error:
+            return _check("anti geometry", FAIL, f"{axle} hardpoints cannot give a reference: {error!r}.")
         tolerance = max(ANTI_REL_TOL * abs(expected), ANTI_ABS_TOL)
         ok = math.isfinite(four_post) and abs(four_post - expected) <= tolerance
         failed = failed or not ok
