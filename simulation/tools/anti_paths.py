@@ -102,6 +102,8 @@ def corner_coefficients(vehicle: Mapping[str, Any], axle: str) -> CornerCoeffici
     twist = _twist(side)
     v_origin, omega = twist[:3], twist[3:]
     t_cp, t_wc = v_origin + np.cross(omega, contact), v_origin + np.cross(omega, center)
+    if abs(t_cp[2]) < 1e-12 * np.linalg.norm(twist):
+        raise ValueError(f"The {axle} contact patch has no vertical velocity.")
     radius_vector = contact - center
 
     # The chassis holds the wheel spin, so the contact force does no work through the upright's spin rate.
