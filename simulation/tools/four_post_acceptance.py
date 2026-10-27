@@ -452,9 +452,14 @@ def contact_patch_coefficient(car, axle):
         aft, joint = points[f"{arm}_aft_i_m"], points[f"{arm}_o_m"]
         rows += [_velocity_row(joint, points[f"{arm}_fore_i_m"] - aft), _velocity_row(joint, joint - aft)]
     rows.append(_velocity_row(points["tie_o_m"], points["tie_o_m"] - rack))
-    twist = np.linalg.svd(np.array(rows))[2][-1]
+    _, sing, vt = np.linalg.svd(np.array(rows))
+    if sing[4] < 1e-9 * sing[0]:
+        raise ValueError(f"{axle} suspension constraints are rank deficient")
+    twist = vt[-1]
     contact = points["wheel_center_m"] - np.array([0.0, 0.0, float(car[axle]["wheel"]["radius_m"])])
     velocity = twist[:3] + np.cross(twist[3:], contact)
+    if abs(velocity[2]) < 1e-12:
+        raise ValueError(f"{axle} contact patch has no vertical velocity")
     return float(-velocity[0] / velocity[2])
 
 
