@@ -1,7 +1,9 @@
 import csv
 import hashlib
 import json
+import math
 
+import numpy as np
 import pytest
 
 from tools import four_post_acceptance as acceptance
@@ -90,6 +92,11 @@ FE03BAB_KEYS = (
 DRIFT_REASON = "closure 4.10e-03 of load scale exceeds 1e-04 at t = 118 s"
 CORNER_REASON = "corner load differs from target by 12.3 N"
 SPRING_REASON = "spring force differs from the executed table by 130 N"
+
+
+@pytest.fixture(autouse=True)
+def _hardpoints_match_the_rows(monkeypatch):
+    monkeypatch.setattr(acceptance, "contact_patch_coefficient", lambda car, axle: 1.5)
 
 
 def _sha256(path):
@@ -558,3 +565,55 @@ def test_a_fourpost_manifest_that_changed_after_the_run_fails(tmp_path, monkeypa
     code, checks, _ = _accept(run, vehicle, monkeypatch)
     assert code == 1
     assert checks["executed spring tables"]["result"] == "FAIL"
+
+
+def test_anti_coefficients_that_match_the_hardpoints_pass(tmp_path, monkeypatch):
+    run, vehicle = _write_run(tmp_path, _labelled_rows())
+    _, checks, _ = _accept(run, vehicle, monkeypatch)
+    assert checks["anti geometry"]["result"] == "PASS"
+
+
+@pytest.mark.parametrize("expected", [-1.5, 1.6, 1.4])
+def test_anti_coefficients_outside_the_tolerance_fail(tmp_path, monkeypatch, expected):
+    monkeypatch.setattr(acceptance, "contact_patch_coefficient", lambda car, axle: expected)
+    run, vehicle = _write_run(tmp_path, _labelled_rows())
+    code, checks, _ = _accept(run, vehicle, monkeypatch)
+    assert code == 1
+    assert checks["anti geometry"]["result"] == "FAIL"
+
+
+def test_an_anti_coefficient_without_a_finite_value_fails(tmp_path, monkeypatch):
+    rows = {**_labelled_rows(), "avg_longitudinal_jacking_coeff_rear": "nan"}
+    run, vehicle = _write_run(tmp_path, rows)
+    _, checks, _ = _accept(run, vehicle, monkeypatch)
+    assert checks["anti geometry"]["result"] == "FAIL"
+
+
+def test_a_csv_without_jacking_coefficients_is_unavailable(tmp_path, monkeypatch):
+    rows = {key: value for key, value in _labelled_rows().items() if "longitudinal_jacking" not in key}
+    run, vehicle = _write_run(tmp_path, rows)
+    _, checks, _ = _accept(run, vehicle, monkeypatch)
+    assert checks["anti geometry"]["result"] == "UNAVAILABLE"
+
+
+@pytest.mark.parametrize("pitch_deg", [-5.0, 0.0, 8.0])
+def test_parallel_wishbones_give_the_tangent_of_their_side_view_pitch(monkeypatch, pitch_deg):
+    monkeypatch.undo()
+    pitch = math.radians(pitch_deg)
+    axis = np.array([math.cos(pitch), 0.0, math.sin(pitch)])
+
+    def arm(y, z):
+        inner = np.array([0.0, y, z])
+        return {"fore": inner + 0.1 * axis, "aft": inner - 0.1 * axis, "outer": np.array([0.0, 0.55, z])}
+
+    lower, upper, tie = arm(0.2, 0.1), arm(0.25, 0.3), arm(0.22, 0.2)
+    car = {"front": {
+        "suspension": {
+            "lower_fore_i_m": lower["fore"], "lower_aft_i_m": lower["aft"], "lower_o_m": lower["outer"],
+            "upper_fore_i_m": upper["fore"], "upper_aft_i_m": upper["aft"], "upper_o_m": upper["outer"],
+            "tie_o_m": tie["outer"] + np.array([0.05, 0.0, 0.0]), "wheel_center_m": [0.0, 0.6, 0.2],
+        },
+        "steering": {"rack_pickup_m": tie["aft"] + np.array([0.05, 0.0, 0.0]) + 0.1 * axis},
+        "wheel": {"radius_m": 0.2},
+    }}
+    assert acceptance.contact_patch_coefficient(car, "front") == pytest.approx(math.tan(pitch), abs=1e-12)

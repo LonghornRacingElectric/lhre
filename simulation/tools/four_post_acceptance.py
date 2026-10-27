@@ -7,6 +7,7 @@ import re
 import sys
 from pathlib import Path
 
+import numpy as np
 import yaml
 
 SCHEMA = "lhre.four-post-acceptance.v2"
@@ -18,6 +19,9 @@ BAR_RATE_KEY = re.compile(r"(?:pVehicle\.)?p(Fr|Rr)Stabar\.barRate")
 SPRING_TABLE_KEY = re.compile(r"pVehicle\.p(Fr|Rr)AxleDW\.springTable\[\d+,\d+\]")
 CONFIG_BAR_RATE_KEYS = ("stabar_rate_n_m_per_rad", "bar_rate_n_m_per_rad", "arb_rate")
 TARGETS = ("standard-eval-four-post", "standard-eval-all")
+ANTI_KEY = "avg_longitudinal_jacking_coeff_{axle}"
+ANTI_REL_TOL = 0.05
+ANTI_ABS_TOL = 1e-4
 REQUIRED_METRICS = (
     "avg_motion_ratio_front",
     "avg_motion_ratio_rear",
@@ -435,11 +439,56 @@ def _metric_checks(fields, rows, duplicates, vehicle):
     return checks
 
 
+def _velocity_row(point, direction):
+    return np.concatenate([direction, np.cross(point, direction)])
+
+
+def contact_patch_coefficient(car, axle):
+    """Jacking coefficient c = -(dx_cp/ds)/(dz_cp/ds) of the upright-fixed contact patch at the design pose."""
+    points = {name: np.asarray(value, dtype=float) for name, value in car[axle]["suspension"].items()}
+    rack = np.asarray(car[axle]["steering"]["rack_pickup_m"], dtype=float)
+    rows = []
+    for arm in ("lower", "upper"):
+        aft, joint = points[f"{arm}_aft_i_m"], points[f"{arm}_o_m"]
+        rows += [_velocity_row(joint, points[f"{arm}_fore_i_m"] - aft), _velocity_row(joint, joint - aft)]
+    rows.append(_velocity_row(points["tie_o_m"], points["tie_o_m"] - rack))
+    _, sing, vt = np.linalg.svd(np.array(rows))
+    if sing[4] < 1e-9 * sing[0]:
+        raise ValueError(f"{axle} suspension constraints are rank deficient")
+    twist = vt[-1]
+    contact = points["wheel_center_m"] - np.array([0.0, 0.0, float(car[axle]["wheel"]["radius_m"])])
+    velocity = twist[:3] + np.cross(twist[3:], contact)
+    if abs(velocity[2]) < 1e-12:
+        raise ValueError(f"{axle} contact patch has no vertical velocity")
+    return float(-velocity[0] / velocity[2])
+
+
+def _anti_check(rows, vehicle):
+    keys = {axle: ANTI_KEY.format(axle=axle) for axle in AXLES}
+    if any(key not in rows for key in keys.values()):
+        return _check("anti geometry", UNAVAILABLE, "The CSV has no longitudinal jacking coefficients at this pin.")
+    car = yaml.safe_load(Path(vehicle).read_text(encoding="utf-8"))
+    details, failed = [], False
+    for axle, key in keys.items():
+        four_post = _number(rows[key].get("value"))
+        try:
+            expected = contact_patch_coefficient(car, axle)
+        except (KeyError, TypeError, ValueError) as error:
+            return _check("anti geometry", FAIL, f"{axle} hardpoints cannot give a reference: {error!r}.")
+        tolerance = max(ANTI_REL_TOL * abs(expected), ANTI_ABS_TOL)
+        ok = math.isfinite(four_post) and abs(four_post - expected) <= tolerance
+        failed = failed or not ok
+        details.append(f"{axle} FourPost {four_post:.6g} N/N, hardpoints {expected:.6g} N/N, tolerance {tolerance:.2g}.")
+    return _check("anti geometry", FAIL if failed else PASS, " ".join(details))
+
+
 def evaluate(run, vehicle):
     identity, checks = _identity_checks(run, vehicle)
     checks.append(_file_check(run, identity))
     if (run / METRICS).is_file():
-        checks.extend(_metric_checks(*_read_metrics(run / METRICS), vehicle))
+        fields, rows, duplicates = _read_metrics(run / METRICS)
+        checks.extend(_metric_checks(fields, rows, duplicates, vehicle))
+        checks.append(_anti_check(rows, vehicle))
     cases, changed = _manifest_cases(run, identity)
     expected = _vehicle_setup(vehicle)
     checks.append(_spring_table_check(run, cases, changed, expected, vehicle))
