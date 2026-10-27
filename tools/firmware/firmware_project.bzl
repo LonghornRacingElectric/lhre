@@ -4,6 +4,7 @@ load("@aspect_bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("@rules_python//python:defs.bzl", "py_test")
 
 # ---------------------------------------------------------------------------
 # Target platform per family. Each platform's CPU-core constraint selects the
@@ -412,6 +413,8 @@ def firmware_project(
         enable_dfu = False,
         locations = [],
         enable_printf_float = False,
+        size_budget_percent = 85,
+        size_budget_overrides = {},
         linker_script = None,
         startup_script = None,
         driver_headers = None,
@@ -473,6 +476,13 @@ def firmware_project(
         enable_dfu (bool, optional): Whether or not to accept strings to go into DFU. Defaults to False.
         locations (list, optional): A list of location identifiers (e.g., ["FR", "FL"]).
         enable_printf_float (bool, optional): Whether to link -u _printf_float (adds ~10KB). Defaults to False.
+        size_budget_percent (int, optional): Each image gets a
+            {image}_size_test that fails when any MEMORY region of the
+            linker script is filled past this percent. The linker alone
+            only fails at 100%. Defaults to 85.
+        size_budget_overrides (dict, optional): Per-region budgets that
+            replace size_budget_percent, e.g. {"DTCMRAM": 100} for a region
+            meant to be filled. Defaults to {}.
         linker_script (path, optional): Override for the mcu-derived linker script.
         startup_script (path, optional): Override for the mcu-derived startup file.
         driver_headers (label, optional): Override for the driver headers target. Defaults to //drivers/stm32/{family}:headers.
@@ -544,6 +554,7 @@ def firmware_project(
             srcs = app_srcs,
             hdrs = native.glob(["App/**/*.hpp"], allow_empty = True),
             includes = ["App"],
+            copts = ["-Wall", "-Wextra", "-Werror"],
             deps = final_app_deps,
         )
 
@@ -669,6 +680,25 @@ def firmware_project(
             name = target_name,
             src = target_name,
             visibility = ["//visibility:public"],
+        )
+        py_test(
+            name = "{}_size_test".format(target_name),
+            size = "small",
+            srcs = ["//tools/firmware:size_check.py"],
+            tags = ["firmware_size"],
+            main = "//tools/firmware:size_check.py",
+            args = [
+                "$(rootpath :{}_elf)".format(target_name),
+                "$(rootpath {})".format(linker_script),
+                str(size_budget_percent),
+            ] + [
+                "{}={}".format(region, percent)
+                for region, percent in size_budget_overrides.items()
+            ],
+            data = [
+                ":{}_elf".format(target_name),
+                linker_script,
+            ],
         )
         hex_out(
             name = target_name,

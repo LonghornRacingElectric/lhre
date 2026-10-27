@@ -51,6 +51,7 @@ nav:
       - CAN Spec Tools: tools/spec/README.md
       - IDE Setup: tools/ide/README.md
       - Serial Monitor: tools/monitor/README.md
+      - UBSan: tools/ubsan/README.md
       - Prebuilt protoc: tools/protoc/README.md
   - Autonomy:
       - Overview: autonomy/README.md
