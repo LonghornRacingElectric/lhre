@@ -37,6 +37,7 @@ RUN_PARAMS = (
     ('mission', ''),
     ('perception', 'sim'),
     ('plant', 'kinematic'),
+    ('fmu_pedal_gain', .1),
     ('estimator', 'truth'),
     ('gyro_bias', 0.0),
     ('wheel_scale_error', 1.0),
@@ -155,6 +156,8 @@ class MetricsNode(Node):
         for name, default in RUN_PARAMS:
             self.declare_parameter(name, default)
             self._run_params[name] = str(self.get_parameter(name).value)
+        if self._run_params['plant'] != 'fmu':
+            self._run_params['fmu_pedal_gain'] = ''
 
         try:
             self._vehicle_sha = vehicle_sha256()

@@ -31,6 +31,8 @@ help:
 	@echo "make study S=<name>        Run studies/<name>/run.py (STUDY_WORKERS=n limits CPUs)"
 	@echo "make stale [S=<name>]      Check if a committed study result is stale (no S: every study)"
 	@echo "make bump-bobsim REF=<ref> Move the BobSim pin"
+	@echo "make fmu                   Build the identified Orion FMU (fetches pinned exporter)"
+	@echo "make fmu-source            Fetch the pinned BobLib exporter into out/fmu/"
 	@echo "make clean                 Delete out/"
 
 init:
@@ -127,3 +129,18 @@ clean:
 .PHONY: check-vehicle
 check-vehicle:
 	$(RUN) sim python tools/bundle.py check $(if $(BUNDLE),--bundle $(BUNDLE)) $(if $(VEHICLE),--vehicle $(VEHICLE)) $(if $(BASE),--base $(BASE))
+
+FMU_BOBLIB_SHA := 4741a5ec6201635051031ed356a1bb55932df89c
+FMU_SOURCE := out/fmu/boblib-source
+
+.PHONY: fmu-source fmu
+fmu-source:
+	@test -d $(FMU_SOURCE)/.git || $(GIT_LF) clone https://github.com/BobDyn/BobLib.git $(FMU_SOURCE)
+	@test -z "$$(git -C $(FMU_SOURCE) status --porcelain)" || { echo "FMU source checkout has local changes"; exit 1; }
+	@git -C $(FMU_SOURCE) cat-file -e $(FMU_BOBLIB_SHA) 2>/dev/null || git -C $(FMU_SOURCE) fetch origin $(FMU_BOBLIB_SHA)
+	git -C $(FMU_SOURCE) config core.autocrlf false
+	git -C $(FMU_SOURCE) config core.longpaths true
+	$(GIT_LF) -C $(FMU_SOURCE) checkout --detach $(FMU_BOBLIB_SHA)
+
+fmu: fmu-source
+	$(RUN) sim python tools/build_fmu.py --source $(FMU_SOURCE)
