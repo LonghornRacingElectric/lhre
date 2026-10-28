@@ -9,7 +9,7 @@ import { Session } from "@/lib/driveday/session";
 import { loadUserState, lsDel, lsGet, lsSet, metaOf, runStore, saveUserState, storageProblem } from "@/lib/driveday/storage";
 import { isConeLabel, seedFlags, type RunListEntry, type SessionExport } from "@/lib/driveday/types";
 import { defaultUnits } from "@/lib/driveday/units";
-import { DbMenu, Header, type Theme } from "./Header";
+import { ImportMenu, Header, type Theme } from "./Header";
 import { Workspace } from "./Workspace";
 import { PlayerCtx, ToastProvider, useToast } from "./context";
 
@@ -221,9 +221,7 @@ function Shell() {
             <div>
               <h2>Give LAPDOG a lap to follow.</h2>
               <p>Choose a drive day from the database, or import a Trackside Live session export. LAPDOG keeps your runs in this browser, ready for the next debrief.</p>
-              <DbMenu onDb={(day) => void importDb(day)} />
-              <button className="btn" type="button" onClick={() => file.current?.click()}>Import JSON</button>{" "}
-              <button className="btn" type="button" onClick={() => void importCache()}>Last Trackside session</button>
+              <ImportMenu onDb={(day) => void importDb(day)} onJson={() => file.current?.click()} onCache={() => void importCache()} />
               <input ref={file} type="file" accept=".json,application/json" multiple hidden onChange={(e) => { if (e.target.files?.length) void importFiles(e.target.files); e.target.value = ""; }} />
             </div>
           </div>

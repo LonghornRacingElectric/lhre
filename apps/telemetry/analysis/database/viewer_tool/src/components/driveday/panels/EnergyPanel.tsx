@@ -11,7 +11,7 @@ export function EnergyPanel() {
   useUi(p);
   const m = energyModel(p.session, p.user);
   const ref = usePainter(p, "energy", (c) => drawEnergy(p, c, m), false);
-  const { runs, base } = p.session;
+  const { runs } = p.session;
   const sp = p.user.setup;
   let pill = "Not enough data";
   let pillCls = "pill";
@@ -44,9 +44,6 @@ export function EnergyPanel() {
         <Field label="Reserve (% SOC)" k="reserve" value={sp.reserve} placeholder="10" onValue={(v) => p.setSetup("reserve", v)} />
         <Field label="Plan laps" k="planLaps" value={sp.planLaps} placeholder={String(p.session.D.meta.planLaps)} onValue={(v) => p.setSetup("planLaps", v)} />
         <Field label="Budget (kWh)" k="planKwh" value={sp.planKwh} placeholder={String(p.session.D.meta.planKwh)} onValue={(v) => p.setSetup("planKwh", v)} />
-      </div>
-      <div className="note2">
-        Capacity comes from how fast state of charge fell against energy used from lap 3 on, using the median slope so single bad readings do not move it. Laps left assume the last-5-lap pace holds. The plan budget of {m.planKwh} kWh was set for a full-length course, so it does not compare directly to this {Math.round(base.dist)} m loop.
       </div>
     </>
   );
