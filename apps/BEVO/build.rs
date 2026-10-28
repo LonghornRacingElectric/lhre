@@ -2,8 +2,9 @@
 //!
 //!   1. `_.rs` — prost bindings for the Bazel-generated can_packets.proto
 //!   2. `generated_mapping.rs` — the name→proto-field dispatch used by cand
+//!   3. `generated_config.rs` — typed CAN tables and CSV columns/array lengths
 //!
-//! Both land in OUT_DIR; lib.rs include!()s them. Nothing generated is
+//! Outputs land in OUT_DIR and are compiled into sensor_proto. Nothing generated is
 //! checked in. Bazel supplies PROTOC / PROTO_FILE / CAN_JSON as declared
 //! inputs from the shared textproto pipeline.
 
@@ -43,6 +44,9 @@ fn main() {
     let can_json = fs::read_to_string(&can_json_path).expect("reading can.json");
     let mapping = generate_mapping(&fds, &can_json);
     fs::write(out_dir.join("generated_mapping.rs"), mapping).expect("writing generated_mapping.rs");
+    let contract_path = env::var("SCHEMA_CONTRACT").expect("SCHEMA_CONTRACT must be supplied by Bazel");
+    let contract: Value = serde_json::from_slice(&fs::read(contract_path).expect("reading schema contract")).expect("parsing schema contract");
+    fs::write(out_dir.join("generated_config.rs"), generate_config(&can_json, &contract)).expect("writing generated_config.rs");
 
     println!("cargo:rerun-if-env-changed=PROTO_FILE");
     println!("cargo:rerun-if-env-changed=CAN_JSON");
@@ -50,9 +54,61 @@ fn main() {
     println!("cargo:rerun-if-changed={}", can_json_path.display());
 }
 
-/// Port of the retired codegen.py: emit the match-based dispatch that routes
-/// decoded CAN signal names into the right OrionSensorData sub-message field.
-/// Output is kept byte-identical to what codegen.py produced.
+fn generate_config(can_json: &str, contract: &Value) -> String {
+    let packets: Vec<Value> = serde_json::from_str(can_json).expect("parsing generated CAN map");
+    let mut code = vec!["pub fn packets() -> Vec<PacketConfig> { vec![".to_string()];
+    for packet in packets {
+        let sources: Vec<String> = packet["from"].as_array().unwrap().iter()
+            .map(|name| format!("{:?}.to_string()", name.as_str().unwrap())).collect();
+        code.push(format!("PacketConfig {{ packet_id: {}, packet_name: {:?}.to_string(), from: vec![{}], quantity: {}, bytes: vec![",
+            packet["packet_id"], packet["packet_name"].as_str().unwrap(), sources.join(","), packet["quantity"]));
+        for signal in packet["bytes"].as_array().unwrap() {
+            let protobuf = if signal["protobuf"].is_object() {
+                let mapping = &signal["protobuf"];
+                let index = mapping["field_index"].as_u64().map(|value| format!("Some({value})")).unwrap_or_else(|| "None".to_string());
+                format!("Some(ProtobufMapping {{ field_name: {:?}.to_string(), repeated: {}, field_index: {} }})",
+                    mapping["field"].as_str().unwrap(), mapping["repeated"], index)
+            } else { "None".to_string() };
+            let bitfield = if let Some(bits) = signal["bitfield_encoding"].as_array() {
+                let entries: Vec<String> = bits.iter().map(|bit| format!("BitfieldMapping {{ protobuf_field: {:?}.to_string(), bit_index: {} }}",
+                    bit["protobuf_field"].as_str().unwrap(), bit["bit_index"])).collect();
+                format!("Some(vec![{}])", entries.join(","))
+            } else { "None".to_string() };
+            code.push(format!("SignalConfig {{ start_byte: {}, length: {}, name: {:?}.to_string(), conv_type: {:?}.to_string(), precision: {:?}, bitfield_encoding: {}, protobuf: {} }},",
+                signal["start_byte"], signal["length"], signal["name"].as_str().unwrap(), signal["conv_type"].as_str().unwrap(),
+                signal["precision"].as_f64().unwrap(), bitfield, protobuf));
+        }
+        code.push("] },".to_string());
+    }
+    code.push("] }".to_string());
+    let mut headers = Vec::new();
+    let mut repeated = Vec::new();
+    for field in contract["fields"].as_array().unwrap() {
+        let names: Vec<&str> = field["names"].as_array().unwrap().iter().map(|name| name.as_str().unwrap()).collect();
+        let name = names.join(".");
+        if field["repeated"].as_bool().unwrap() {
+            let count = field["layout"].as_array().unwrap().len();
+            repeated.push(format!("({:?}, {count})", names.last().unwrap()));
+            headers.extend((0..count).map(|index| format!("{name}[{index}]")));
+        } else { headers.push(name); }
+    }
+    code.push(format!("pub const CSV_HEADERS: &[&str] = &{headers:?};"));
+    code.push(format!("pub const REPEATED_FIELDS: &[(&str, usize)] = &[{}];", repeated.join(",")));
+    code.join("\n")
+}
+
+fn value_expression(field_type: &str) -> &str {
+    match field_type {
+        "float" => "val",
+        "double" => "val as f64",
+        "uint32" => "val as u32",
+        "uint64" => "val as u64",
+        "int64" => "val as i64",
+        "bool" => "val != 0.0",
+        _ => "val as i32",
+    }
+}
+
 fn generate_mapping(fds: &FileDescriptorSet, can_json: &str) -> String {
     // Index all top-level messages by fully-qualified name.
     let mut messages: HashMap<String, &DescriptorProto> = HashMap::new();
@@ -125,7 +181,7 @@ fn generate_mapping(fds: &FileDescriptorSet, can_json: &str) -> String {
     // Walk can.json for the signals that carry a protobuf mapping.
     let packets: Vec<Value> = serde_json::from_str(can_json).expect("parsing can.json");
     let mut scalar_signals: BTreeMap<String, String> = BTreeMap::new();
-    let mut rep_signals: BTreeSet<String> = BTreeSet::new();
+    let mut rep_signals: BTreeMap<String, String> = BTreeMap::new();
     let mut bool_signals: BTreeSet<String> = BTreeSet::new();
     for pkt in &packets {
         let signals = pkt
@@ -165,7 +221,7 @@ fn generate_mapping(fds: &FileDescriptorSet, can_json: &str) -> String {
             }
 
             if pb.get("repeated").and_then(Value::as_bool).unwrap_or(false) {
-                rep_signals.insert(fname.to_string());
+                rep_signals.insert(fname.to_string(), pb["type"].as_str().expect("generated protobuf type").to_string());
             } else {
                 let ty = pb
                     .get("type")
@@ -202,10 +258,11 @@ fn generate_mapping(fds: &FileDescriptorSet, can_json: &str) -> String {
         "        if let Some(i) = config.field_index {".to_string(),
         "            match name {".to_string(),
     ]);
-    for field_name in &rep_signals {
+    for (field_name, field_type) in &rep_signals {
         let var = &field_to_var[field_name];
+        let expression = value_expression(field_type);
         code.push(format!(
-            "                \"{field_name}\" => crate::set_vec_index(&mut {var}.{field_name}, i, val),"
+            "                \"{field_name}\" => crate::set_vec_index(&mut {var}.{field_name}, i, {expression}),"
         ));
     }
     code.extend([
@@ -222,7 +279,8 @@ fn generate_mapping(fds: &FileDescriptorSet, can_json: &str) -> String {
                 "            \"{field_name}\" => {var}.{field_name} = val != 0.0,"
             ));
         } else {
-            code.push(format!("            \"{field_name}\" => {var}.{field_name} = val,"));
+            let expression = value_expression(field_type);
+            code.push(format!("            \"{field_name}\" => {var}.{field_name} = {expression},"));
         }
     }
     code.extend([

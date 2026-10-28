@@ -77,6 +77,7 @@ filegroup(
     name = "protobuf_files",
     srcs = glob(["protobuf/**"]) + [
         ":can_packets_pb2",
+        ":bridge_pb2",
     ],
     target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
@@ -134,19 +135,12 @@ py_binary(
     target_compatible_with = NOT_WINDOWS,
 )
 
-# Writes telemetry/stack/ingest/protobuf/can_packets_pb2.py into the workspace.
-# Use: bazel run //telemetry/stack/ingest:update_can_packets_pb2
-py_binary(
-    name = "update_can_packets_pb2",
-    target_compatible_with = ["@platforms//os:linux"],
-    imports = ["../..", "../../.."],
-    srcs = [
-        "update_can_packets_pb2.py",
-    ],
-    data = [
-        ":can_packets_pb2",
-    ],
-    visibility = ["//visibility:public"],
+genrule(
+    name = "bridge_pb2",
+    srcs = ["//apps/telemetry/stack/kafka:proto/bridge.proto"],
+    outs = ["protobuf/bridge_pb2.py"],
+    cmd = "$(location //tools/protoc) --python_out=$(RULEDIR)/protobuf --proto_path=$$(dirname $(location //apps/telemetry/stack/kafka:proto/bridge.proto)) $(location //apps/telemetry/stack/kafka:proto/bridge.proto)",
+    tools = ["//tools/protoc"],
 )
 
 # Files opened by path rather than through Bazel runfiles. Python sources and

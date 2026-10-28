@@ -45,6 +45,10 @@ file. Integration tests do not create missing tables to conceal a failed init.
 See the [integration runner notes](tests/README.md) before using its
 volume-removing cleanup.
 
+Starting/rebuilding/reloading the viewer also builds the shared schema bundle
+and exports `ORION_PROTO_PATH`. Node/PM2 remains outside Bazel, but the viewer's
+Orion protobuf and optional Prisma definitions are Bazel outputs.
+
 Disk preflight uses Docker's data root on Linux. On macOS, that path exists
 inside Docker Desktop's VM, so the devtool reports free space on the host
 filesystem backing Docker Desktop instead. It also checks the daemon before

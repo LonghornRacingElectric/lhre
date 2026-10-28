@@ -1,0 +1,12 @@
+services:
+  schema_registry:
+    image: ${TELEMETRY_SCHEMA_REGISTRY_IMAGE:-lhre/telemetry-schema-registry:dev}
+    platform: linux/amd64
+    command: ["--listen", "0.0.0.0"]
+    environment:
+      TELEMETRY_SCHEMA_RELEASES: /config/releases.json
+    volumes:
+      - ${TELEMETRY_SCHEMA_RELEASES:?Set an absolute path to the approved releases.json}:/config/releases.json:ro
+    ports:
+      - "127.0.0.1:${TELEMETRY_SCHEMA_PORT:-8085}:8085"
+    restart: unless-stopped

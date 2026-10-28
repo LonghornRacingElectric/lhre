@@ -169,6 +169,14 @@ comp_bazel_targets() { comp_field "$1" 5; }
 
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
+ensure_viewer_schema() {
+    command -v bazel >/dev/null 2>&1 || { err "bazel is required to generate the viewer schema"; return 1; }
+    ( cd "$REPO_ROOT" && bazel build --config=local //lib/codegen/telemetry:server_schema ) || return 1
+    ORION_PROTO_PATH="${ORION_PROTO_PATH:-$REPO_ROOT/bazel-bin/lib/codegen/telemetry/can_packets.proto}"
+    [[ -f "$ORION_PROTO_PATH" ]] || { err "Selected viewer protobuf does not exist: $ORION_PROTO_PATH"; return 1; }
+    export ORION_PROTO_PATH
+}
+
 bazel_load_component() {
     local name="$1" targets target
     targets="$(comp_bazel_targets "$name")" || return 1
@@ -341,6 +349,7 @@ free_db_port() {
 up_pm2_component() {  # up_pm2_component <name> <dir> <build>
     local name="$1" dir="$2" build="$3" app
     app="$(comp_pm2name "$name")"; app="${app:-$name}"
+    if [[ "$name" == "viewer" ]]; then ensure_viewer_schema || return 1; fi
     ensure_node || return 1
     if [[ "$build" == "1" ]]; then
         if [[ ! -d "$dir/node_modules" ]]; then
@@ -416,6 +425,7 @@ restart_set() {
         info "Restarting $n ..."
         if [[ "$(comp_type "$n")" == "pm2" ]]; then
             local app; app="$(comp_pm2name "$n")"; app="${app:-$n}"
+            if [[ "$n" == "viewer" ]]; then ensure_viewer_schema || return 1; fi
             ensure_node && pm2 reload "$app" --update-env || up_component "$n" 0
         else
             compose_in "$dir" restart 2>/dev/null || up_component "$n" 0
