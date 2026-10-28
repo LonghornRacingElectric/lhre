@@ -25,8 +25,7 @@ jobs:
       - name: Move BobSim to its main branch
         run: |
           git -C bobsim fetch --no-tags origin main
-          git -C bobsim checkout --detach FETCH_HEAD
-          git -C bobsim submodule update --init --recursive
+          make bump-bobsim REF="$(git -C bobsim rev-parse FETCH_HEAD)"
           {
             echo "BobSim pin: $(git rev-parse HEAD:simulation/bobsim)"
             echo "BobSim main: $(git -C bobsim rev-parse HEAD)"
