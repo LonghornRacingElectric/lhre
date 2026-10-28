@@ -29,9 +29,7 @@ function Shell() {
   const [current, setCurrent] = useState<string | null>(null);
   const [player, setPlayer] = useState<Player | null>(null);
   const [ready, setReady] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
   const [theme, setTheme] = useState<Theme>("auto");
-  const file = useRef<HTMLInputElement>(null);
   const live = useRef<Player | null>(null);
   const openReq = useRef(0);
 
@@ -87,60 +85,42 @@ function Shell() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const importFiles = useCallback(
-    async (files: FileList | File[]) => {
-      let last: string | null = null;
-      for (const f of Array.from(files)) {
-        try {
-          toast("Reading " + f.name + "…", "busy");
-          const J = JSON.parse(await f.text()) as SessionExport;
-          const courses = convertSession(J, f.name, await runStore.tracks());
-          const now = Date.now();
-          for (const [ci, { D, track, isNew, renamed }] of courses.entries()) {
-            if (isNew || renamed) await runStore.putTrack(track);
-            /* newest first in the list, so the courses of one file stay in order */
-            await runStore.put({ ...metaOf(D), added: now - ci }, D);
-            if (J.flags?.length) {
-              const S = new Session(rebuildRun(D));
-              const flags = J.flags.filter(f => f.t >= S.T0 && f.t <= S.T0 + S.TD &&
-                !isConeLabel(f.label));
-              saveUserState(D.meta.sessId, seedFlags(loadUserState(D.meta.sessId, D), flags, S.T0));
-            }
-            last ??= D.meta.sessId;
-          }
-          const n = courses.reduce((a, c) => a + c.D.laps.filter((l) => l.kind === "lap").length, 0);
-          const note = courses[0].D.warnings.join(" ");
-          toast(f.name + ": " + n + " laps" + (courses.length > 1 ? " in " + courses.length + " courses" : "") + "." + (note ? " " + note : ""));
-        } catch (e) {
-          toast(f.name + ": " + (e as Error).message, "err");
-        }
-      }
-      setRuns((await runStore.list()).sort((a, b) => b.added - a.added));
-      if (last) await open(last);
-    },
-    [open, toast],
-  );
-
-  const importCache = useCallback(async () => {
-    try {
-      const response = await fetch("/api/motec/live/session-cache");
-      if (!response.ok) throw new Error("No saved Trackside session on the server.");
-      await importFiles([new File([await response.blob()], "trackside-saved_session.json")]);
-    } catch (error) { toast((error as Error).message, "err"); }
-  }, [importFiles, toast]);
-
-  /* a drive day straight from the database, built server-side in the same export format */
+  /* a drive day straight from the database, built server-side in the trackside-live export format */
   const importDb = useCallback(async (day: number) => {
     toast("Loading day " + day + " from the database…", "busy");
     const r = await fetch("/api/driveday/db?day=" + day).catch(() => null);
     if (!r?.ok) return toast(((await r?.json().catch(() => null))?.error as string) || "Could not reach the database.", "err");
-    await importFiles([new File([await r.blob()], "orion-day-" + day + ".json")]);
-  }, [importFiles, toast]);
+    let last: string | null = null;
+    try {
+      const J = (await r.json()) as SessionExport;
+      const courses = convertSession(J, "orion-day-" + day + ".json", await runStore.tracks());
+      const now = Date.now();
+      for (const [ci, { D, track, isNew, renamed }] of courses.entries()) {
+        if (isNew || renamed) await runStore.putTrack(track);
+        /* newest first in the list, so the courses of one day stay in order */
+        await runStore.put({ ...metaOf(D), added: now - ci }, D);
+        if (J.flags?.length) {
+          const S = new Session(rebuildRun(D));
+          const flags = J.flags.filter(f => f.t >= S.T0 && f.t <= S.T0 + S.TD &&
+            !isConeLabel(f.label));
+          saveUserState(D.meta.sessId, seedFlags(loadUserState(D.meta.sessId, D), flags, S.T0));
+        }
+        last ??= D.meta.sessId;
+      }
+      const n = courses.reduce((a, c) => a + c.D.laps.filter((l) => l.kind === "lap").length, 0);
+      const note = courses[0].D.warnings.join(" ");
+      toast("Day " + day + ": " + n + " laps" + (courses.length > 1 ? " in " + courses.length + " courses" : "") + "." + (note ? " " + note : ""));
+    } catch (e) {
+      toast("Day " + day + ": " + (e as Error).message, "err");
+    }
+    setRuns((await runStore.list()).sort((a, b) => b.added - a.added));
+    if (last) await open(last);
+  }, [open, toast]);
 
   const remove = useCallback(async (id: string) => {
     const run = runs.find(r => r.id === id);
     if (!run) return;
-    if (!window.confirm('Delete "' + (run.name || "Untitled run") + '" from saved runs? You can reimport the original JSON.')) return;
+    if (!window.confirm('Delete "' + (run.name || "Untitled run") + '" from saved runs? You can load it again from the database.')) return;
     try {
       /* open the next run first, so the old player saves its position before that is cleared */
       if (id === current) await open(runs.find((r) => r.id !== id)?.id ?? null);
@@ -150,32 +130,6 @@ function Shell() {
       toast("Run removed.");
     } catch (e) { toast("Could not delete this run: " + (e as Error).message, "err"); }
   }, [current, runs, open, toast]);
-
-  /* drag and drop anywhere */
-  useEffect(() => {
-    let depth = 0;
-    const has = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
-    const enter = (e: DragEvent) => { if (has(e)) { depth++; setDragOver(true); } };
-    const leave = (e: DragEvent) => { if (has(e) && --depth <= 0) { depth = 0; setDragOver(false); } };
-    const over = (e: DragEvent) => { if (has(e)) e.preventDefault(); };
-    const drop = (e: DragEvent) => {
-      if (!has(e)) return;
-      e.preventDefault();
-      depth = 0;
-      setDragOver(false);
-      if (e.dataTransfer?.files.length) void importFiles(e.dataTransfer.files);
-    };
-    addEventListener("dragenter", enter);
-    addEventListener("dragleave", leave);
-    addEventListener("dragover", over);
-    addEventListener("drop", drop);
-    return () => {
-      removeEventListener("dragenter", enter);
-      removeEventListener("dragleave", leave);
-      removeEventListener("dragover", over);
-      removeEventListener("drop", drop);
-    };
-  }, [importFiles]);
 
   /* repaint canvases when the theme or the OS colour scheme changes */
   useEffect(() => {
@@ -209,8 +163,6 @@ function Shell() {
             theme={theme}
             onTheme={cycleTheme}
             onSelect={(id) => void open(id)}
-            onImport={(f) => void importFiles(f)}
-            onCache={() => void importCache()}
             onDb={(day) => void importDb(day)}
             onRemove={(id) => void remove(id)}
           />
@@ -220,15 +172,11 @@ function Shell() {
           <div className="welcome">
             <div>
               <h2>Give LAPDOG a lap to follow.</h2>
-              <p>Choose a drive day from the database, or import a Trackside Live session export. LAPDOG keeps your runs in this browser, ready for the next debrief.</p>
+              <p>Choose a drive day from the database. LAPDOG keeps your runs in this browser, ready for the next debrief.</p>
               <DbMenu onDb={(day) => void importDb(day)} />
-              <button className="btn" type="button" onClick={() => file.current?.click()}>Import JSON</button>{" "}
-              <button className="btn" type="button" onClick={() => void importCache()}>Last Trackside session</button>
-              <input ref={file} type="file" accept=".json,application/json" multiple hidden onChange={(e) => { if (e.target.files?.length) void importFiles(e.target.files); e.target.value = ""; }} />
             </div>
           </div>
         )}
-        {dragOver && <div className="dropzone">Drop session JSON to import</div>}
       </PlayerCtx.Provider>
   );
 }
