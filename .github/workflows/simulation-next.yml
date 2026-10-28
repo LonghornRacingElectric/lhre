@@ -2,7 +2,7 @@ name: simulation against BobSim main
 
 on:
   schedule:
-    - cron: "41 6 * * *"
+    - cron: "0 8 * * *"
   workflow_dispatch:
   pull_request:
     paths:
