@@ -120,7 +120,7 @@ function Shell() {
   const remove = useCallback(async (id: string) => {
     const run = runs.find(r => r.id === id);
     if (!run) return;
-    if (!window.confirm('Delete "' + (run.name || "Untitled run") + '" from saved runs? You can load it again from the database.')) return;
+    if (!window.confirm('Delete "' + (run.name || "Untitled run") + '" from saved runs? Its notes are deleted for good; database days can be loaded again, older imported runs cannot.')) return;
     try {
       /* open the next run first, so the old player saves its position before that is cleared */
       if (id === current) await open(runs.find((r) => r.id !== id)?.id ?? null);

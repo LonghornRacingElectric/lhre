@@ -10,8 +10,9 @@ lateral g estimates, data-quality checks and portable HTML debriefs.
 
 Use **From database** to load an Orion drive day. The database is the only
 source: the viewer does not import session JSON files or the Trackside Live
-session cache. Every stored timestamp is retained; the displayed sample and
-GPS rates reflect the data rather than assuming a fixed rate. Missing or
+session cache. The route returns at most one packet per 100 ms, and only inside
+lap windows; the displayed sample and GPS rates reflect that response rather
+than assuming a fixed rate. Missing or
 frozen GPS cannot supply a route and is reported instead of drawing a false
 track.
 
