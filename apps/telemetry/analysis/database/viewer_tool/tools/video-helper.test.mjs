@@ -67,3 +67,20 @@ test('real conversion, failure, auth and cancellation', { timeout: 30000 }, asyn
     await access(source);
   } finally { await helper.close(); await rm(root, { recursive: true, force: true }); }
 });
+
+test('a job its page stopped polling does not block the next one', async () => {
+  const helper = createVideoHelper();
+  await new Promise(resolve => helper.server.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${helper.server.address().port}`;
+  const origin = { Origin: 'http://localhost:3002' };
+  const now = Date.now;
+  try {
+    const health = await (await fetch(base + '/health', { headers: origin })).json();
+    const headers = { ...origin, Authorization: 'Bearer ' + health.token };
+    const lost = await (await fetch(base + '/jobs', { method: 'POST', headers })).json();
+    assert.equal((await fetch(base + '/jobs', { method: 'POST', headers })).status, 409);
+    Date.now = () => now() + 3 * 60 * 1000; // the page reloaded 3 minutes ago and never polled again
+    assert.equal((await fetch(base + '/jobs', { method: 'POST', headers })).status, 201);
+    assert.equal((await fetch(base + '/jobs/' + lost.id, { headers })).status, 404);
+  } finally { Date.now = now; await helper.close(); }
+});

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { convertSession } from "../../src/lib/driveday/convert";
+import type { SessionExport } from "../../src/lib/driveday/types";
 import { synthSession, TRACK_LEN } from "./fixtures/synth";
 
 describe("convertSession", () => {
@@ -106,5 +107,37 @@ describe("convertSession", () => {
       expect(l.ch.t.map((t) => t + l.t0)).toEqual(expected[i].map((s) => s.t));
       expect(l.ch.thr).toEqual(expected[i].map((s) => Math.round(s.values!.accel_pedal_travel * 1000) / 10));
     });
+  });
+});
+
+describe("a session with one course that has no clean lap", () => {
+  /* the same loop driven the other way round, as a mirror image */
+  const mirror = (J: SessionExport) => { J.sampleTail.forEach((s) => { s.lon = 2 * -97.7242 - s.lon; }); return J; };
+  const reverse = convertSession(mirror(synthSession({ laps: 4, sessionId: "sess-reverse" })), "reverse.json", [])[0].track;
+  /* forward laps, then the reverse loop with every second press missed: each of its laps covers the known track twice */
+  const fwd = synthSession({ laps: 8 });
+  const back = mirror(synthSession({ laps: 6, startMs: fwd.sampleTail.at(-1)!.t + 60_000, sessionId: "sess-back" }));
+  const missed = [0, 2, 4].map((i) => ({ ...back.laps[i], id: "double-" + i, endMs: back.laps[i + 1].endMs, durationMs: back.laps[i + 1].endMs - back.laps[i].startMs }));
+  const J = { ...fwd, laps: [...fwd.laps, ...missed], sampleTail: [...fwd.sampleTail, ...back.sampleTail] };
+
+  it("opens the other course and says which one it left out", () => {
+    const rs = convertSession(J, "two-courses.json", [reverse]);
+    expect(rs.length).toBe(1);
+    expect(rs[0].D.laps.filter((l) => l.kind === "lap").length).toBe(8);
+    expect(rs[0].D.warnings.join(" ")).toMatch(/was left out: none of its laps was a clean single circuit/);
+  });
+
+  it("fails only when no course has a clean lap", () => {
+    expect(() => convertSession({ ...back, laps: missed }, "back.json", [reverse])).toThrow(/No timed lap was a clean single circuit/);
+  });
+});
+
+describe("the drive after the last lap press", () => {
+  it("is kept as a lap in progress at run pace, and dropped when it is a crawl back to the pits", () => {
+    const J = synthSession({ laps: 4 });
+    const last = J.laps.at(-1)!.endMs;
+    /* the same ten seconds of driving, stretched to fifty: a fifth of the speed */
+    J.sampleTail.forEach((s) => { if (s.t > last) s.t = last + (s.t - last) * 5; });
+    expect(convertSession(J, "crawl.json", [])[0].D.laps.some((l) => l.kind === "partial")).toBe(false);
   });
 });

@@ -17,6 +17,12 @@ on:
       - "uv.lock"
       - ".github/workflows/docs.yml"
 
+# A new push to a PR cancels that PR's older run. Every other run gets its
+# own group, so no push, schedule or manual run is dropped.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build:
     runs-on: ubuntu-latest

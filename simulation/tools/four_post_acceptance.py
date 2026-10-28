@@ -18,6 +18,9 @@ BAR_RATE_KEY = re.compile(r"(?:pVehicle\.)?p(Fr|Rr)Stabar\.barRate")
 SPRING_TABLE_KEY = re.compile(r"pVehicle\.p(Fr|Rr)AxleDW\.springTable\[\d+,\d+\]")
 CONFIG_BAR_RATE_KEYS = ("stabar_rate_n_m_per_rad", "bar_rate_n_m_per_rad", "arb_rate")
 TARGETS = ("standard-eval-four-post", "standard-eval-all")
+ANTI_KEY = "avg_longitudinal_jacking_coeff_{axle}"
+ANTI_REL_TOL = 0.05
+ANTI_ABS_TOL = 1e-4
 REQUIRED_METRICS = (
     "avg_motion_ratio_front",
     "avg_motion_ratio_rear",
@@ -435,11 +438,38 @@ def _metric_checks(fields, rows, duplicates, vehicle):
     return checks
 
 
+def contact_patch_coefficient(car, axle):
+    from tools.anti_paths import corner_coefficients
+
+    return corner_coefficients(car, axle).values["contact_patch_path"]
+
+
+def _anti_check(rows, vehicle):
+    keys = {axle: ANTI_KEY.format(axle=axle) for axle in AXLES}
+    if any(key not in rows for key in keys.values()):
+        return _check("anti geometry", UNAVAILABLE, "The CSV has no longitudinal jacking coefficients at this pin.")
+    car = yaml.safe_load(Path(vehicle).read_text(encoding="utf-8"))
+    details, failed = [], False
+    for axle, key in keys.items():
+        four_post = _number(rows[key].get("value"))
+        try:
+            expected = contact_patch_coefficient(car, axle)
+        except (KeyError, TypeError, ValueError) as error:
+            return _check("anti geometry", FAIL, f"{axle} hardpoints cannot give a reference: {error!r}.")
+        tolerance = max(ANTI_REL_TOL * abs(expected), ANTI_ABS_TOL)
+        ok = math.isfinite(four_post) and abs(four_post - expected) <= tolerance
+        failed = failed or not ok
+        details.append(f"{axle} FourPost {four_post:.6g} N/N, hardpoints {expected:.6g} N/N, tolerance {tolerance:.2g}.")
+    return _check("anti geometry", FAIL if failed else PASS, " ".join(details))
+
+
 def evaluate(run, vehicle):
     identity, checks = _identity_checks(run, vehicle)
     checks.append(_file_check(run, identity))
     if (run / METRICS).is_file():
-        checks.extend(_metric_checks(*_read_metrics(run / METRICS), vehicle))
+        fields, rows, duplicates = _read_metrics(run / METRICS)
+        checks.extend(_metric_checks(fields, rows, duplicates, vehicle))
+        checks.append(_anti_check(rows, vehicle))
     cases, changed = _manifest_cases(run, identity)
     expected = _vehicle_setup(vehicle)
     checks.append(_spring_table_check(run, cases, changed, expected, vehicle))

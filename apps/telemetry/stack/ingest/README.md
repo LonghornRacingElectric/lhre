@@ -19,3 +19,16 @@ alias of `ingest_load` for one migration cycle.
 `docker-compose.yml` also defines Mosquitto, PostgreSQL, and Grafana. Their
 local tags come from the root `_load` targets, so Compose must be run with
 `--no-build` after `bazel run //apps/telemetry:load_core_images`.
+
+The devtool and integration runner prepare this path automatically. For direct
+Compose calls, including `down` and `logs`, export the selected absolute path
+first; those non-creating commands do not need to build the file. Container
+creation must still use current Bazel-generated SQL or an explicit admin override.
+
+Build `//apps/telemetry:current_schema_sql` and set `ORION_DB_INIT_SQL` to the
+absolute `bazel-bin/lib/codegen/telemetry/orion_db_init.sql` output before a
+direct Compose invocation. Without this variable Compose fails, and a missing
+host file is not created as a directory. There is no checked-in Orion SQL
+fallback. The [devtool](../README.md) checks the Bazel target and forwards the
+path even when Docker requires sudo. Initialization applies only to a new
+database volume; migrate deployed databases explicitly.

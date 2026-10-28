@@ -466,7 +466,7 @@ def test_make_car_rejects_a_candidate_in_a_nested_folder(lhre):
     assert not (lhre / "simulation/out/car").exists()
 
 
-@pytest.mark.parametrize("target", ["ok VEHICLE=x", "-B", "../ok"])
+@pytest.mark.parametrize("target", ["ok VEHICLE=x", "-B", "../ok", "ok--cand"])
 def test_make_car_rejects_a_target_that_is_not_a_name(lhre, target):
     result = _make_car(lhre, target)
     assert result.returncode != 0

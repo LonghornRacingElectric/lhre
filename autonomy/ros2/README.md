@@ -1017,3 +1017,9 @@ the node only with `safety:=true`. `monitor_lidar` follows `perception`, and
 `rate_hz` and `lidar_topic` are not launch arguments; the package README says
 why. See [lhr_safety](src/lhr_safety/README.md)
 for what a trip does.
+
+The MVS launcher also accepts `plant:=fmu` for the optional
+[full BobLib vehicle](src/lhr_sim_fmu/README.md). Build its identified artifact
+with `make -C simulation fmu`. `fmu_path` selects the artifact and
+`fmu_pedal_gain` (0.1) sets the proportional driver gain. This is separate
+from Gazebo dynamics and does not change the MVP plant choice.

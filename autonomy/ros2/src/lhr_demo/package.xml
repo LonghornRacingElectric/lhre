@@ -18,6 +18,7 @@
   <exec_depend>lhr_track_builder</exec_depend>
   <exec_depend>lhr_sim_kinematic</exec_depend>
   <exec_depend>lhr_sim_bobsim</exec_depend>
+  <exec_depend>lhr_sim_fmu</exec_depend>
   <exec_depend>lhr_control</exec_depend>
   <exec_depend>lhr_metrics</exec_depend>
   <exec_depend>lhr_mission_manager</exec_depend>

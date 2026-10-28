@@ -279,3 +279,13 @@ def test_orange_contact_between_samples_prevents_a_clean_finish(metrics):
     assert row['cones_hit'] == '1'
     assert row['off_track_count'] == '0'
     assert metrics.finalize() == 1
+
+
+@pytest.mark.parametrize('metrics,expected', [
+    ({'plant': 'fmu', 'fmu_pedal_gain': .25}, '0.25'),
+    ({'plant': 'kinematic', 'fmu_pedal_gain': .25}, ''),
+    ({'plant': 'gazebo', 'fmu_pedal_gain': .25}, ''),
+    ({'plant': 'bobsim', 'fmu_pedal_gain': .25}, ''),
+], indirect=['metrics'])
+def test_fmu_driver_gain_is_recorded_only_for_the_fmu_plant(metrics, expected):
+    assert metrics._run_params['fmu_pedal_gain'] == expected
