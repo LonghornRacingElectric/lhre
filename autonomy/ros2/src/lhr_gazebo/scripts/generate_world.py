@@ -19,14 +19,15 @@ import textwrap
 # Allow importing lhr_trackgen even when not installed as a ROS package.
 # Walk up to find the src directory and add trackgen to the path.
 _this_dir = os.path.dirname(os.path.abspath(__file__))
-_trackgen_pkg = os.path.join(
-    _this_dir, os.pardir, os.pardir, 'lhr_trackgen')
-if os.path.isdir(_trackgen_pkg):
-    sys.path.insert(0, _trackgen_pkg)
+for _package in ('lhr_trackgen', 'lhr_vehicle'):
+    _source = os.path.join(_this_dir, os.pardir, os.pardir, _package)
+    if os.path.isdir(_source):
+        sys.path.insert(0, _source)
 
 from lhr_trackgen.cone_geometry import CONE_SPECS  # noqa: E402
 from lhr_trackgen.publish_cones import (  # noqa: E402
     ACCEL_STAGING_M, cone_kinds, GENERATORS)
+from lhr_trackgen.skidpad_geometry import generate_skidpad_lanes  # noqa: E402
 
 # Gazebo model for each lhr_trackgen cone kind (the CONE_SPECS keys).
 CONE_MODELS = {
@@ -105,6 +106,7 @@ def generate_world_sdf(
     vehicle_y: float = None,
     vehicle_yaw: float = None,
     model_dir: str = '',
+    orange_small=(), orange_large=(),
     left_kinds=None,
     right_kinds=None,
 ) -> str:
@@ -133,6 +135,12 @@ def generate_world_sdf(
                 model, f'{model}_{index}', cx, cy,
                 CONE_SPECS[kind].height_m / 2.0))
 
+    for points, kind in ((orange_small, 'orange_small'), (orange_large, 'orange_large')):
+        model = CONE_MODELS[kind]
+        for i, (cx, cy) in enumerate(points):
+            cone_blocks.append(_cone_include(
+                model, f'{model}_{counts.get(model, 0) + i}', cx, cy,
+                CONE_SPECS[kind].height_m / 2.0))
     cones_xml = '\n'.join(cone_blocks)
 
     # Vehicle spawn height: wheel radius so it sits on the ground
@@ -277,6 +285,12 @@ def main():
         vy = 0.0 if vy is None else vy
         vyaw = 0.0 if vyaw is None else vyaw
 
+    orange = generate_skidpad_lanes() if args.style == 'skidpad' else ([], [])
+    if args.style == 'skidpad':
+        vx = 0.0 if vx is None else vx
+        vy = -15.0 - _vehicle_nose_m() if vy is None else vy
+        vyaw = math.pi / 2 if vyaw is None else vyaw
+
     sdf = generate_world_sdf(
         left, right,
         vehicle_x=vx,
@@ -284,6 +298,7 @@ def main():
         vehicle_yaw=vyaw,
         left_kinds=left_kinds,
         right_kinds=right_kinds,
+        orange_small=orange[0], orange_large=orange[1],
     )
 
     if args.output is None:
