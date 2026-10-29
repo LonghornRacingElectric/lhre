@@ -113,6 +113,7 @@ interface Leg extends Prepared {
   end: XY;
   speed: number; // average, m/s
   loop: boolean; // it ends close to where it began
+  returning: boolean; // it ends heading back to its start, or has passed it again
 }
 
 interface Course {
@@ -146,7 +147,11 @@ function planCourses(prep: Prepared[], pr: (s: LiveSample) => XY): { courses: Co
     for (let k = 1; k < P.length; k++) len += dist2d(P[k], P[k - 1]);
     const gap = dist2d(P[0], P[P.length - 1]);
     const sec = Math.max(1, x.o.l.durationMs / 1000);
-    return { ...x, P, len, start: P[0], end: P[P.length - 1], speed: len / sec, loop: gap < Math.max(15, 0.08 * len) };
+    // Past 15 m a loop is still heading back to its start (an early press) or has passed it (a late one). A finish line
+    // beside the start line is crossed driving away from it, and closing that run draws a chord across the gap.
+    const n = P.length;
+    const returning = dist2d(P[Math.max(0, n - 5)], P[0]) > gap || P.some((p, k) => k > 0.6 * n && segDist(P[k - 1], p, P[0]) < 6);
+    return { ...x, P, len, start: P[0], end: P[n - 1], speed: len / sec, returning, loop: gap < 15 || (gap < 0.08 * len && returning) };
   });
   /* what a run looks like: the upper quartile, so the short slow drives back do not drag it down */
   const upper = (v: number[]) => [...v].sort((x, y) => x - y)[Math.floor(0.75 * (v.length - 1))];
@@ -172,7 +177,7 @@ function planCourses(prep: Prepared[], pr: (s: LiveSample) => XY): { courses: Co
     return false;
   };
   runs.forEach((leg) => {
-    if (!leg.loop) leg.loop = runs.some((other) => other !== leg &&
+    if (!leg.loop && leg.returning) leg.loop = runs.some((other) => other !== leg &&
       other.len > leg.len * 0.75 && other.len < leg.len * 1.35 && (passes(other, leg.start) || passes(other, leg.end)));
   });
   const open = runs.filter((l) => l.loop).length < runs.length / 2;
