@@ -1,6 +1,6 @@
 "use client";
 
-import { useContext, useMemo, useRef, useState } from "react";
+import { useContext, useMemo, useState } from "react";
 import { sampleQuality } from "@/lib/driveday/review";
 import { fmt } from "@/lib/driveday/format";
 import type { Player } from "@/lib/driveday/player";
@@ -17,8 +17,6 @@ interface Props {
   theme: Theme;
   onTheme: () => void;
   onSelect: (id: string) => void;
-  onImport: (files: FileList) => void;
-  onCache: () => void;
   onDb: (day: number) => void;
   onRemove: (id: string) => void;
 }
@@ -139,7 +137,7 @@ function RunSettings({ p, theme, onTheme }: Pick<Props, "theme" | "onTheme"> & {
 
 interface DbDayEntry { day_id: number; date: string; track_name: string | null; event_type: string | null; driver_name: string | null; laps: number; flags: number }
 
-/** Drive days in the orion database that have laps; picking one loads it like an imported file. */
+/** Drive days in the orion database that have laps; picking one loads it into the run list. */
 export function DbMenu({ onDb }: { onDb: (day: number) => void }) {
   const [days, setDays] = useState<DbDayEntry[] | string | null>(null);
   const load = () => {
@@ -165,8 +163,7 @@ export function DbMenu({ onDb }: { onDb: (day: number) => void }) {
   );
 }
 
-export function Header({ runs, current, theme, onTheme, onSelect, onImport, onRemove, onCache, onDb }: Props) {
-  const file = useRef<HTMLInputElement>(null);
+export function Header({ runs, current, theme, onTheme, onSelect, onRemove, onDb }: Props) {
   const p = useContext(PlayerCtx);
   return (
     <header className="top">
@@ -184,19 +181,6 @@ export function Header({ runs, current, theme, onTheme, onSelect, onImport, onRe
             </Menu></div>
           )}
           <DbMenu onDb={onDb} />
-          <button className="btn primary" type="button" title="Import one or more session JSON files" onClick={() => file.current?.click()}>Import</button>
-          <input
-            ref={file}
-            type="file"
-            accept=".json,application/json"
-            multiple
-            hidden
-            onChange={(e) => {
-              if (e.target.files?.length) onImport(e.target.files);
-              e.target.value = "";
-            }}
-          />
-          <button className="btn" type="button" onClick={onCache} title="Import the latest session cached by Trackside Live; older samples may be unavailable">Last Trackside session</button>
           <SettingsMenu theme={theme} onTheme={onTheme} />
           <div id="workspace-actions" />
         </div>
