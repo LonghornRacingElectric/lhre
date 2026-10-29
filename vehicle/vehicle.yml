@@ -6,8 +6,9 @@ architecture:
   front: bellcrank_stabar
   rear: bellcrank_stabar
 paths:
-  boblib: _0_Utils/external/BobLib/BobLib
+  boblib: engines/boblib/BobLib
   tire_templates: ../../vehicle/tires
+modelica_initialization: legacy
 sprung_mass:
   mass_kg: 160.64
   cg_m:

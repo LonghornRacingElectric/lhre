@@ -20,23 +20,31 @@ BobSim only through imports and `make` targets.
    Every use of BobSim in lhre is an `import`. Do not paste BobSim code,
    not even one function.
 3. **Use public names.** In BobSim, a module, class or function name that
-   starts with `_` is private. Package names such as `_0_Utils` and
-   `_5_App` also start with `_`. They are not private.
+   starts with `_` is private. Package names such as `_1_elements` in
+   `engines/kinpy` also start with `_`. They are not private.
     - Import a private name only when no public name does the job. List
       each private import in the study README. Expect it to break on a pin
       bump.
     - Example: the front-ackermann study imports `_mf52_fx_pure` and
-      `_mf52_fy_pure` from `_5_App.tire_eval`. At `4da577a`, BobSim has no
-      public function that gives MF5.2 force at one load and one slip.
+      `_mf52_fy_pure` from `app.tire_eval`. At `fe03bab`, the public
+      `engines.dynpy.tire.MF52Tire.forces` also gives MF5.2 force. It is
+      not the same function. It fades force below `FZMIN`, and its lateral
+      force has the opposite sign (see its docstring). A switch changes the
+      study numbers. Check the sign and the values with a fixture first.
     - Example: make a `GGVMap` with the public `GGVMap.from_arrays`. Do not
       make one from the private `_GGVSlice`.
 4. **Check that the tool can see the effect.** Before you use a BobSim
    tool for a variable, run a case where the effect must show. A tool
    with no input for the variable gives a null result that means nothing.
-    - Example: in `_0_Utils/dyn_py/models.py`, `ModelInputs.steering_rad`
-      is one angle for both front wheels. The reduced-order models, the
-      transient lap and the GGV and YMD envelopes use it. None of them can
-      see Ackermann.
+    - Example: at `4da577a`, DynPy `ModelInputs.steering_rad` was one
+      angle for both front wheels. The reduced-order models, the transient
+      lap and the GGV and YMD envelopes could not see Ackermann.
+    - At `fe03bab`, DynPy turns the steer angle into rack travel through
+      KinPy (`engines/dynpy/models.py`, `ModelInputs.rack_displacement_m`).
+      So DynPy and the GGV envelope see the Ackermann of the linkage.
+      BobSim PR #84 says the hardpoints stay mirrored left to right and the
+      motion ratios stay nominal. Run a case where a linkage change must
+      move the output before you trust it.
     - The Modelica tier runs fixed maneuvers only: steady state, ramp
       steer, step and sine steer, and four-post. It does not run a lap.
 5. **Fill a gap on the lhre side.** In the study, compute what BobSim
@@ -53,15 +61,16 @@ BobSim only through imports and `make` targets.
    study reads it from `BOBSIM_VEHICLE`. To test a change, change the
    value in memory or in a copy under `OUT_DIR`. `make bobsim T=...`
    targets read `simulation/bobsim/vehicle.yml` until BobSim reads
-   `BOBSIM_VEHICLE`. See [bobsim.md](../../bobsim.md#our-vehicle-and-bobsim).
+   `BOBSIM_VEHICLE`. To run one on our car, use `make car T=...`. See
+   [bobsim.md](../../bobsim.md#our-vehicle-and-bobsim).
 8. **Run BobSim through `make`.** Run each `make` target from
    `simulation/`. Every target runs in Docker. Do not run BobSim with a
    host Python.
 9. **Make silent failures stop the run.** Some BobSim paths drop an input
    and continue. Check that a changed input changed the output.
-    - At `4da577a`, `_3_StandardSim/_modelica_runner.py` drops a run-time
-      override whose name is not in the build's `_init.xml`. It logs
-      nothing.
+    - At `fe03bab`, `simulations/response/mbd/_modelica_runner.py` drops
+      a run-time override whose name is not in the build's `_init.xml`. It
+      logs nothing.
     - The compiled Modelica model ignores an override of a calculated
       parameter. It writes only a warning to `run.log`: "It is not possible
       to override". Stop the run when `run.log` has that text.

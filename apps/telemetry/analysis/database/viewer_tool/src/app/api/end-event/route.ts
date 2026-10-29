@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (!activeDay) {
-      return NextResponse.json({ message: 'No active drive day found' }, { status: 204 });
+      return new NextResponse(null, { status: 204 }); // a 204 can't carry a body
     }
 
     const car =

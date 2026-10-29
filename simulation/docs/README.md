@@ -7,6 +7,9 @@ Detail for people and coding agents who work in `simulation/`. Start with
 
 - [Studies](studies.md): what a study is and how to write one.
 - [BobSim](bobsim.md): the tiers, how long they take, and the pin.
+- [FMU](fmu.md): build an identified full-vehicle artifact for autonomy.
+- [Tests](tests.md): what `make test` checks, how to add a test, and the CI job.
+- [Anti records](anti-paths.md): anti-dive and anti-squat by force path, and their status.
 
 ## Skills
 

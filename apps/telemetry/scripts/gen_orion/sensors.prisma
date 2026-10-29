@@ -48,6 +48,7 @@ model dynamics {
   fr_sus_pot_v         Float?
   ride_height          Float?
   wheel_speed          Float?
+  gps_precise          Float[]
 
   packet packet @relation(fields: [packet_id], references: [packet_id])
 }

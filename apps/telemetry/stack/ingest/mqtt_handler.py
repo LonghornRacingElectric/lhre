@@ -377,6 +377,8 @@ class MQTTHandler:
                 # Send via gRPC BEFORE database insertion
                 self._send_to_bridge(payload=msg.payload, car="Angelique")
                 self._proto_ingest(payload=msg.payload, cache_enable=self.cache_enable, car="Angelique")
+        elif msg.topic == 'orion/gps':
+            self._gps_ingest(msg.payload)
         elif (topic_split := msg.topic.split('/'))[0] == 'orion':
             if topic_split[-1] in self.table_specs["Orion"]:
                 self._data_ingest(msg.payload, topic_split[-1], cache_enable=self.cache_enable, car="Orion")
@@ -386,6 +388,32 @@ class MQTTHandler:
         else:
             logging.warning(f'No corresponding topic found for {msg.topic}')
     
+    def _gps_ingest(self, payload: bytes):
+        '''
+        publishd's GPS-only feed (orion/gps): one small JSON object per receiver fix at up to
+        PUBLISHD_GPS_HZ, beside the full frames on 'orion'. Queued for the gps_precise table only:
+        the bridge decodes only car frames, and the live map reads gps_precise from those. No packet
+        row: the full-frame tables keep their own rate. Values are typed here because the row shares
+        a transaction with packet rows, and one bad value would roll the whole batch back.
+        '''
+        spec = self.table_specs["Orion"]["gps_precise"]
+        try:
+            row = {k: int(v) if k in ("time", "packet_id", "gps_src") else float(v)
+                   for k, v in json.loads(payload).items() if k in spec and k != "id" and v is not None}
+            if not (all(-2**63 <= row.get(k, 0) < 2**63 for k in ("time", "packet_id"))
+                    and -2**15 <= row.get("gps_src", 0) < 2**15):
+                raise ValueError("integer out of column range")
+        except (AttributeError, TypeError, ValueError, OverflowError):
+            logging.warning(f'orion/gps payload is not a JSON object of in-range numbers; dropped: {payload[:200]!r}')
+            return
+        if "time" not in row:
+            logging.warning('orion/gps payload has no time; dropped')
+            return
+        try:
+            self.db_queues["Orion"].put_nowait([("gps_precise", row)])
+        except queue.Full:
+            logging.error('Orion DB queue full; dropping gps_precise row')
+
     def _make_bridge_channel(self):
         '''
         Create a keepalive-enabled gRPC channel to the bridge. Keepalive keeps an

@@ -50,7 +50,7 @@ def test_acquisition_launch(perception, override, monkeypatch):
     control = next(node for node in nodes if node.node_package == 'lhr_control')
     control_params = evaluate_parameters(context, control._Node__parameters)[0]
     assert control_params['require_planner_limit'] is True
-    assert control_params['path_closed'] is False
+    assert control_params['closed_path'] is False
     if perception == 'sim':
         sensor = next(node for node in nodes if node.node_package == 'lhr_sensor_sim')
         sensor_params = evaluate_parameters(context, sensor._Node__parameters)[0]

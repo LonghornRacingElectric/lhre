@@ -20,7 +20,11 @@ three years after everyone who made the decision graduated.
 | [009](009-autonomy-outside-bazel.md) | Autonomy (ROS 2) builds with colcon, outside Bazel | Accepted |
 | [010](010-telemetry-stack-in-bazel.md) | Telemetry server stack builds in Bazel, its tests run beside Docker | Superseded by ADR-011 |
 | [011](011-bazel-owned-telemetry-images.md) | Bazel owns every telemetry stack image; Compose only runs loaded tags | Accepted |
-| [012](012-simulation-outside-bazel.md) | Simulation runs BobSim in Docker, outside Bazel | Accepted |
+| [012](012-simulation-outside-bazel.md) | Simulation runs BobSim in Docker, outside Bazel | Accepted. ADR-015 replaces its study layout line. |
+| [013](013-driveday-viewer-outside-bazel.md) | The drive day viewer is a local Next.js app, outside Bazel | Superseded |
+| [014](014-deployed-telemetry-schema.md) | Generate server artifacts while preserving the deployed telemetry schema | Accepted |
+| [015](015-study-layout.md) | A study is a README, a study.yml and a run.py | Accepted |
+| [016](016-fmu-artifact-boundary.md) | Identified full-vehicle FMU artifact for autonomy | Accepted |
 
 ## ADRs vs. READMEs
 

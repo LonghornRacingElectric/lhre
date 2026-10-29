@@ -1,8 +1,8 @@
-# Hardware tests
+# Tests
 
-Results from bench and field tests of autonomy hardware: what was tested,
-what passed, and the figures that show it. One folder per test campaign.
-The raw data stays out of git.
+Results from bench, field and simulation tests of the autonomy stack: what
+was tested, what passed, and the figures that show it. One folder per test
+campaign. The raw data stays out of git.
 
 ```text
 testing/
@@ -12,12 +12,14 @@ testing/
     log.md         # timestamped log kept during the test
     figures/       # the figures the README and slides use
     *.py           # the scripts that made those figures from the raw data
-  tools/<sensor>/  # the scripts that recorded and analyzed the data
+  tools/<name>/    # recording, run and scoring scripts (livox/, gate/, fault_injection/)
 ```
 
 | Campaign | Question | Status | Data |
 | -------- | -------- | ------ | ---- |
 | [2026-10-04 Mid-360 acceptance](2026-10-04-mid360-acceptance/README.md) | Is the donated, dropped Livox Mid-360 good enough for the car, and how far does it see a cone? | Car sensor, provisional: endurance and connector checks not run | [SharePoint](https://utexas.sharepoint.com/sites/ENGR-LonghornRacing/LHR%20Electric/Design/_VMS_/Autonomous/Test%20Data/2026-10-04-mid360-acceptance) |
+| [2026-10-26 FMU seeds](2026-10-26-fmu-seeds/README.md) | Does the FMU plant complete autocross seeds 1 to 5 with LiDAR and EKF? | 5/5 verified laps; seed 2 has a shutdown error | [SharePoint](https://utexas.sharepoint.com/sites/ENGR-LonghornRacing/LHR%20Electric/Design/_VMS_/Autonomous/Test%20Data/2026-10-26-fmu-seeds) |
+| [2026-10-28 MVP gate](2026-10-28-mvp-gate/README.md) | Does the full stack, with no ground-truth shortcuts, pass every gate run in Gazebo? | Pending: dry runs done, gate run next | Upload pending |
 
 ## Rules
 

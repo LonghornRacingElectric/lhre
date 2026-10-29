@@ -13,7 +13,7 @@ from std_msgs.msg import Float32
 @pytest.fixture
 def controller():
     rclpy.init(args=['--ros-args', '-p', 'require_planner_limit:=true',
-                     '-p', 'path_closed:=false'])
+                     '-p', 'closed_path:=false'])
     node = PurePursuit()
     node._test_time = 10.0
     node.get_clock = lambda: Mock(now=lambda: Time(seconds=node._test_time))
@@ -47,10 +47,22 @@ def test_invalid_or_zero_limit_stops(controller, limit):
 
 def test_open_path_never_wraps_lookahead_or_curvature(controller):
     node = controller
-    node._x = 2.9
+    node._x = 2.8
     assert node._find_lookahead() == (3, 3, 0)
     assert node._estimate_curvature(3) == 0
     node._speed_limit_cb(Float32(data=0.5))
     node._path_cb(Path())
     node._control_loop()
     assert node._cmd_pub.publish.call_args.args[0].drive.speed == 0
+
+
+def test_mission_completion_and_startup_gating_override_fresh_limit(controller):
+    node = controller
+    node._speed_limit_cb(Float32(data=0.5))
+    node._mission_complete = True
+    node._control_loop()
+    assert node._cmd_pub.publish.call_args.args[0].drive.speed == 0.0
+    node._mission_complete = False
+    node._mission_status = ''
+    node._control_loop()
+    assert node._cmd_pub.publish.call_args.args[0].drive.speed == 0.0

@@ -24,9 +24,33 @@ for _package in ('lhr_trackgen', 'lhr_vehicle'):
     if os.path.isdir(_source):
         sys.path.insert(0, _source)
 
-from lhr_trackgen.publish_cones import GENERATORS  # noqa: E402
+from lhr_trackgen.cone_geometry import CONE_SPECS  # noqa: E402
+from lhr_trackgen.publish_cones import (  # noqa: E402
+    ACCEL_STAGING_M, cone_kinds, GENERATORS)
 from lhr_trackgen.skidpad_geometry import generate_skidpad_lanes  # noqa: E402
-from lhr_vehicle import load_vehicle  # noqa: E402
+
+# Gazebo model for each lhr_trackgen cone kind (the CONE_SPECS keys).
+CONE_MODELS = {
+    'blue': 'cone_blue',
+    'yellow': 'cone_yellow',
+    'orange_small': 'cone_orange_small',
+    'orange_large': 'cone_orange_large',
+}
+
+
+def _vehicle_nose_m() -> float:
+    """How far the car's foremost point is ahead of base_link (rear axle)."""
+    vehicle_pkg = os.path.join(_this_dir, os.pardir, os.pardir, 'lhr_vehicle')
+    try:
+        from lhr_vehicle import load_vehicle
+    except ImportError:
+        sys.path.insert(0, vehicle_pkg)
+        from lhr_vehicle import load_vehicle
+    # The source-tree YAML, like generate_vehicle_model.py: an installed
+    # copy can predate the edit.
+    veh = load_vehicle(os.path.join(vehicle_pkg, 'config', 'vehicle.yaml'))
+    return max(veh.chassis_center_x_m + veh.body_length_m / 2.0,
+               veh.wheelbase_m + veh.wheel_radius_m)
 
 
 def _cone_include(model_name: str, instance_name: str,
@@ -83,6 +107,8 @@ def generate_world_sdf(
     vehicle_yaw: float = None,
     model_dir: str = '',
     orange_small=(), orange_large=(),
+    left_kinds=None,
+    right_kinds=None,
 ) -> str:
     """Build a complete Gazebo world SDF string."""
     # Auto-compute spawn from track geometry if not explicitly set
@@ -91,30 +117,30 @@ def generate_world_sdf(
         vehicle_x = vehicle_x if vehicle_x is not None else sx
         vehicle_y = vehicle_y if vehicle_y is not None else sy
         vehicle_yaw = vehicle_yaw if vehicle_yaw is not None else syaw
+    left_kinds = left_kinds or ['blue'] * len(left_cones)
+    right_kinds = right_kinds or ['yellow'] * len(right_cones)
 
+    # Blue cones on the left boundary, yellow on the right, plus any orange
+    # gate and lane cones on either. One counter per model keeps blue and
+    # yellow on their old names, so existing worlds regenerate unchanged, and
+    # leaves no gaps in any model's numbering for parsers that walk it.
     cone_blocks = []
+    counts = {}
+    for cones, kinds in ((left_cones, left_kinds), (right_cones, right_kinds)):
+        for (cx, cy), kind in zip(cones, kinds):
+            model = CONE_MODELS[kind]
+            index = counts.get(model, 0)
+            counts[model] = index + 1
+            cone_blocks.append(_cone_include(
+                model, f'{model}_{index}', cx, cy,
+                CONE_SPECS[kind].height_m / 2.0))
 
-    # Blue cones on the left boundary
-    blue_half_h = 0.325 / 2.0
-    for i, (cx, cy) in enumerate(left_cones):
-        cone_blocks.append(
-            _cone_include('cone_blue', f'cone_blue_{i}',
-                          cx, cy, blue_half_h))
-
-    # Yellow cones on the right boundary
-    yellow_half_h = 0.325 / 2.0
-    for i, (cx, cy) in enumerate(right_cones):
-        cone_blocks.append(
-            _cone_include('cone_yellow', f'cone_yellow_{i}',
-                          cx, cy, yellow_half_h))
-
-    for points, model, height in (
-        (orange_small, 'cone_orange_small', 0.325),
-        (orange_large, 'cone_orange_large', 0.505),
-    ):
+    for points, kind in ((orange_small, 'orange_small'), (orange_large, 'orange_large')):
+        model = CONE_MODELS[kind]
         for i, (cx, cy) in enumerate(points):
             cone_blocks.append(_cone_include(
-                model, f'{model}_{i}', cx, cy, height / 2.0))
+                model, f'{model}_{counts.get(model, 0) + i}', cx, cy,
+                CONE_SPECS[kind].height_m / 2.0))
     cones_xml = '\n'.join(cone_blocks)
 
     # Vehicle spawn height: wheel radius so it sits on the ground
@@ -250,22 +276,28 @@ def main():
 
     print(f'Generated track: {len(left)} left cones, {len(right)} right cones')
 
+    left_kinds, right_kinds = cone_kinds(args.style, left, right,
+                                         args.cone_spacing)
+    vx, vy, vyaw = args.vehicle_x, args.vehicle_y, args.vehicle_yaw
+    if args.style == 'acceleration':
+        # Staged with the nose ACCEL_STAGING_M behind the start line (x = 0).
+        vx = -(ACCEL_STAGING_M + _vehicle_nose_m()) if vx is None else vx
+        vy = 0.0 if vy is None else vy
+        vyaw = 0.0 if vyaw is None else vyaw
+
     orange = generate_skidpad_lanes() if args.style == 'skidpad' else ([], [])
     if args.style == 'skidpad':
-        vehicle = load_vehicle()
-        front = max(vehicle.chassis_center_x_m + vehicle.body_length_m / 2,
-                    vehicle.wheelbase_m + vehicle.wheel_radius_m)
-        if args.vehicle_x is None:
-            args.vehicle_x = 0.0
-        if args.vehicle_y is None:
-            args.vehicle_y = -15.0 - front
-        if args.vehicle_yaw is None:
-            args.vehicle_yaw = math.pi / 2
+        vx = 0.0 if vx is None else vx
+        vy = -15.0 - _vehicle_nose_m() if vy is None else vy
+        vyaw = math.pi / 2 if vyaw is None else vyaw
+
     sdf = generate_world_sdf(
         left, right,
-        vehicle_x=args.vehicle_x,
-        vehicle_y=args.vehicle_y,
-        vehicle_yaw=args.vehicle_yaw,
+        vehicle_x=vx,
+        vehicle_y=vy,
+        vehicle_yaw=vyaw,
+        left_kinds=left_kinds,
+        right_kinds=right_kinds,
         orange_small=orange[0], orange_large=orange[1],
     )
 

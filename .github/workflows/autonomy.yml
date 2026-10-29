@@ -13,10 +13,20 @@ on:
     paths:
       - "autonomy/**"
       - ".github/workflows/autonomy.yml"
+      - "simulation/bobsim"
+      - "vehicle/**"
   pull_request:
     paths:
       - "autonomy/**"
       - ".github/workflows/autonomy.yml"
+      - "simulation/bobsim"
+      - "vehicle/**"
+
+# A new push to a PR cancels that PR's older run. Every other run gets its
+# own group, so no push, schedule or manual run is dropped.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   colcon:
@@ -28,6 +38,13 @@ jobs:
         working-directory: autonomy/ros2
     steps:
       - uses: actions/checkout@v7
+
+      - name: Initialize dynamics dependency
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive simulation/bobsim
+          echo "BOBSIM_ROOT=$GITHUB_WORKSPACE/simulation/bobsim" >> "$GITHUB_ENV"
+          echo "BOBSIM_VEHICLE=$GITHUB_WORKSPACE/vehicle/vehicle.yml" >> "$GITHUB_ENV"
 
       # Dependencies come from each package.xml, so declaring one there is
       # enough. ros_gz is skipped: it pulls in all of Gazebo Harmonic and
@@ -50,8 +67,7 @@ jobs:
           source /opt/ros/jazzy/setup.bash
           colcon build
 
-      # ament lint (flake8, pep257) per package today; functional tests are
-      # open work for the Sim & Test Infra lane. Rules: ros2/README.md.
+      # Package tests include ament lint and functional simulation checks.
       - name: Test
         id: test
         run: |

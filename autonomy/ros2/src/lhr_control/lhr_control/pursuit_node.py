@@ -10,7 +10,7 @@ from lhr_vehicle import load_vehicle
 from nav_msgs.msg import Odometry, Path
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import ColorRGBA, Float32, Header, String
+from std_msgs.msg import Bool, ColorRGBA, Float32, Header, String
 from visualization_msgs.msg import Marker
 
 
@@ -35,6 +35,13 @@ class PurePursuit(Node):
         self.declare_parameter('max_steer', veh.max_steer_rad)
         self.declare_parameter('wheelbase', veh.wheelbase_m)
         self.declare_parameter('control_hz', 20.0)
+        self.declare_parameter('closed_path', True)
+        self.declare_parameter('path_timeout_sec', 1.0)
+        # Launches that start a mission manager set this, so the car never
+        # moves before that manager says DRIVING. Without it, no status at
+        # all means "no manager, run freely", which at startup let a path
+        # that arrived before the first OFF drive the car.
+        self.declare_parameter('wait_for_mission', False)
 
         # --- Speed planning params ---
         self.declare_parameter('a_lat_max', 6.0)
@@ -45,10 +52,8 @@ class PurePursuit(Node):
         self.declare_parameter('max_accel', 2.0)
         self.declare_parameter('max_decel', 3.0)
 
-        self.declare_parameter('path_closed', True)
         self.declare_parameter('require_planner_limit', False)
         self.declare_parameter('planner_timeout_sec', 0.5)
-        self._path_closed = bool(self.get_parameter('path_closed').value)
         self._require_limit = bool(self.get_parameter('require_planner_limit').value)
         self._timeout = float(self.get_parameter('planner_timeout_sec').value)
         if not math.isfinite(self._timeout) or self._timeout <= 0:
@@ -89,6 +94,10 @@ class PurePursuit(Node):
         self._max_decel = self.get_parameter(
             'max_decel').get_parameter_value().double_value
 
+        self._closed_path = bool(self.get_parameter('closed_path').value)
+        self._path_timeout = float(self.get_parameter('path_timeout_sec').value)
+        self._wait_for_mission = bool(self.get_parameter('wait_for_mission').value)
+        self._path_received_at = None
         self._dt = 1.0 / control_hz
 
         # --- State ---
@@ -100,6 +109,7 @@ class PurePursuit(Node):
         self._ld = self._ld_max  # current (adaptive) lookahead
         self._v_prev = 0.0  # for accel limiting
         self._mission_status = ''  # empty = no manager, run freely
+        self._mission_complete = False
 
         # --- Subscribers ---
         self.create_subscription(
@@ -108,6 +118,8 @@ class PurePursuit(Node):
             Odometry, '/lhr/vehicle/odom', self._odom_cb, 10)
         self.create_subscription(
             String, '/lhr/mission/status', self._status_cb, 10)
+        self.create_subscription(
+            Bool, '/lhr/mission/complete', self._complete_cb, 10)
 
         self.create_subscription(
             Float32, '/lhr/planning/speed_limit', self._speed_limit_cb, 10)
@@ -134,6 +146,7 @@ class PurePursuit(Node):
     # ------------------------------------------------------------------
     def _path_cb(self, msg: Path):
         self._path_time = self.get_clock().now().nanoseconds / 1e9
+        self._path_received_at = self.get_clock().now()
         self._path = [
             (ps.pose.position.x, ps.pose.position.y)
             for ps in msg.poses
@@ -153,29 +166,42 @@ class PurePursuit(Node):
     def _status_cb(self, msg: String):
         self._mission_status = msg.data
 
+    def _complete_cb(self, msg: Bool):
+        self._mission_complete = msg.data
+
     # ------------------------------------------------------------------
     # Control
     # ------------------------------------------------------------------
     def _control_loop(self):
-        # Gate on mission status — only drive when DRIVING (or no manager)
         now = self.get_clock().now().nanoseconds / 1e9
         stale = self._require_limit and (
             self._mission_status != 'DRIVING' or not self._path or not self._have_odom
             or self._speed_limit <= 0.0
             or any(stamp is None or not 0 <= now - stamp <= self._timeout
                    for stamp in (self._limit_time, self._path_time, self._odom_time)))
-        if stale or (self._mission_status and self._mission_status != 'DRIVING'):
-            cmd = AckermannDriveStamped()
-            cmd.header.stamp = self.get_clock().now().to_msg()
-            cmd.drive = AckermannDrive()
-            cmd.drive.speed = 0.0
-            cmd.drive.steering_angle = 0.0
-            self._cmd_pub.publish(cmd)
-            self._v_prev = 0.0
+        if stale:
+            self._stop()
             return
+        # Gate on mission status — only drive when DRIVING (or no manager).
+        gated = self._mission_status or self._wait_for_mission
+        if gated and self._mission_status != 'DRIVING':
+            self._stop()
+            return
+        # Past the finish the mission stays DRIVING until the car stops, so
+        # completion is what brakes it. It keeps steering along the path
+        # while it does, so the car stops in its lane instead of running
+        # straight, and every way out below still commands the stop.
+        braking = self._mission_complete
 
         if not self._path or not self._have_odom:
+            if braking or not self._closed_path:
+                self._stop()
             return
+        if not self._closed_path and self._path_received_at is not None:
+            age = (self.get_clock().now() - self._path_received_at).nanoseconds * 1e-9
+            if age > self._path_timeout:
+                self._stop()
+                return
 
         # --- Curvature-adaptive lookahead ---
         # First, estimate curvature near the car to shorten lookahead
@@ -188,6 +214,8 @@ class PurePursuit(Node):
 
         la = self._find_lookahead()
         if la is None:
+            if braking or not self._closed_path:
+                self._stop()
             return
 
         la_idx, gx, gy = la
@@ -200,6 +228,8 @@ class PurePursuit(Node):
 
         ld_sq = local_x * local_x + local_y * local_y
         if ld_sq < 1e-6:
+            if braking:
+                self._stop()
             return
         curvature_pp = 2.0 * local_y / ld_sq
 
@@ -208,19 +238,28 @@ class PurePursuit(Node):
 
         # --- Speed planning ---
         kappa = self._estimate_curvature(la_idx)
-        v_des = math.sqrt(
-            self._a_lat_max / max(abs(kappa), self._kappa_eps))
-        v_des = max(self._v_min, min(self._v_max, v_des))
+        if braking:
+            v_cmd = 0.0
+        else:
+            v_des = math.sqrt(
+                self._a_lat_max / max(abs(kappa), self._kappa_eps))
+            v_des = max(self._v_min, min(self._v_max, v_des))
+            if not self._closed_path:
+                remaining = math.hypot(self._path[closest_idx][0] - self._x,
+                                       self._path[closest_idx][1] - self._y)
+                remaining += sum(math.dist(a, b) for a, b in zip(
+                    self._path[closest_idx:-1], self._path[closest_idx + 1:]))
+                v_des = min(v_des, math.sqrt(2.0 * self._max_decel * remaining))
 
-        if self._require_limit:
-            v_des = min(v_des, self._speed_limit)
+            if self._require_limit:
+                v_des = min(v_des, self._speed_limit)
 
-        # Accel limiting
-        dv = v_des - self._v_prev
-        dv = max(-self._max_decel * self._dt,
-                 min(self._max_accel * self._dt, dv))
-        minimum = 0.0 if self._require_limit else self._v_min
-        v_cmd = max(minimum, min(self._v_max, self._v_prev + dv))
+            # Accel limiting
+            dv = v_des - self._v_prev
+            dv = max(-self._max_decel * self._dt,
+                     min(self._max_accel * self._dt, dv))
+            floor = self._v_min if self._closed_path and not self._require_limit else 0.0
+            v_cmd = max(floor, min(self._v_max, self._v_prev + dv))
         if self._require_limit:
             v_cmd = min(v_cmd, self._speed_limit)
         self._v_prev = v_cmd
@@ -237,6 +276,13 @@ class PurePursuit(Node):
         self._publish_lookahead_marker(gx, gy)
         self._curv_pub.publish(Float32(data=kappa))
         self._vcmd_pub.publish(Float32(data=v_cmd))
+
+    def _stop(self):
+        """Stop when a local path is absent, expired, or behind the vehicle."""
+        cmd = AckermannDriveStamped()
+        cmd.header.stamp = self.get_clock().now().to_msg()
+        self._cmd_pub.publish(cmd)
+        self._v_prev = 0.0
 
     # ------------------------------------------------------------------
     # Helpers
@@ -259,7 +305,7 @@ class PurePursuit(Node):
         """
         Find the first path point >= lookahead_dist away.
 
-        Returns (index, x, y) or None.  Treats path as closed loop.
+        Return (index, x, y) or None, wrapping only for a closed path.
         """
         n = len(self._path)
         if n == 0:
@@ -267,19 +313,23 @@ class PurePursuit(Node):
 
         best_idx = self._find_closest_idx()
 
-        # Walk forward to find lookahead
+        # A partial perception path ends; it cannot wrap to its start.
         ld_sq = self._ld * self._ld
-        for j in range(n):
-            if not self._path_closed and best_idx + j >= n:
-                break
-            idx = (best_idx + j) % n
+        indices = (((best_idx + j) % n for j in range(n)) if self._closed_path
+                   else range(best_idx, n))
+        last_forward = None
+        for idx in indices:
             px, py = self._path[idx]
-            d2 = (px - self._x) ** 2 + (py - self._y) ** 2
-            if d2 >= ld_sq:
-                return (idx, px, py)
-
-        # Fallback
-        idx = (best_idx + n // 2) % n if self._path_closed else n - 1
+            dx, dy = px - self._x, py - self._y
+            if not self._closed_path and (
+                    dx * math.cos(self._yaw) + dy * math.sin(self._yaw) <= 0.1):
+                continue
+            last_forward = (idx, px, py)
+            if dx * dx + dy * dy >= ld_sq:
+                return last_forward
+        if not self._closed_path:
+            return last_forward
+        idx = (best_idx + n // 2) % n
         return (idx, self._path[idx][0], self._path[idx][1])
 
     # ------------------------------------------------------------------
@@ -289,14 +339,22 @@ class PurePursuit(Node):
         """
         Estimate curvature at path[idx] using circumcircle of 3 points.
 
-        Uses points at idx-w, idx, idx+w (wrapped for closed loop).
+        Use nearby points, clamping at open-path ends instead of wrapping.
         """
         n = len(self._path)
         w = self._curv_win
 
-        ax, ay = self._path[(idx - w) % n if self._path_closed else max(0, idx - w)]
-        bx, by = self._path[idx]
-        cx, cy = self._path[(idx + w) % n if self._path_closed else min(n - 1, idx + w)]
+        if n < 3:
+            return 0.0
+        if self._closed_path:
+            a, b, c = (idx - w) % n, idx, (idx + w) % n
+        else:
+            a = max(0, min(idx - w, n - 3))
+            c = min(n - 1, max(idx + w, a + 2))
+            b = max(a + 1, min(idx, c - 1))
+        ax, ay = self._path[a]
+        bx, by = self._path[b]
+        cx, cy = self._path[c]
 
         # Lengths of triangle sides
         ab = math.hypot(bx - ax, by - ay)
@@ -343,4 +401,4 @@ def main():
     except KeyboardInterrupt:
         pass
     node.destroy_node()
-    rclpy.shutdown()
+    rclpy.try_shutdown()

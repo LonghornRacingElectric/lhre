@@ -42,15 +42,14 @@ void ObserverTaskLoop(void* arg) {
 
     lhal::CanFrame frame;
     while (world.observer.Receive(&frame)) {
-      if (!lhre::can::vcu::VcuStatus::Matches(frame.id)) {
+      if (!lhre::can::vcu::VcuState::Matches(frame.id)) {
         continue;
       }
-      auto status = lhre::can::vcu::VcuStatus::FromFrame(frame);
+      auto status = lhre::can::vcu::VcuState::FromFrame(frame);
       ++statuses_seen;
       if (statuses_seen % 10 == 1) {
-        std::printf("[%4u ms] CAN 0x%03X VcuStatus state=%s\n",
-                    world.clock.Millis(), frame.id,
-                    lhre::can::ToString(status.state));
+        std::printf("[%4u ms] CAN 0x%03X VcuState prndl=%u\n",
+                    world.clock.Millis(), frame.id, status.prndl_state);
       }
     }
 

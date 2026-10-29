@@ -483,6 +483,7 @@ export default function ReplayPage() {
           <Card className="h-[calc(100vh-140px)] overflow-hidden">
             <CardHeader>
               <CardTitle>Replay</CardTitle>
+              <a href="/trackside-retro" className="text-sm text-blue-600 hover:underline">Analyse a drive day (laps, sectors, cones) →</a>
             </CardHeader>
             <CardContent className="h-full overflow-auto space-y-4">
               <div className="space-y-2">

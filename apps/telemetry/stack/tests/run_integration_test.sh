@@ -15,6 +15,11 @@ set -e
 # --- Configuration ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TELEMETRY_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
+REPO_ROOT="$(cd "$TELEMETRY_DIR/../.." && pwd)"
+source "$TELEMETRY_DIR/stack/orion_schema.sh"
+if [[ -n "${TEST_SRCDIR:-}" && -n "${1:-}" && -z "${ORION_DB_INIT_SQL:-}" ]]; then
+    export ORION_DB_INIT_SQL="$TEST_SRCDIR/$1"
+fi
 
 # Docker compose file paths (relative to telemetry directory)
 INGEST_COMPOSE="$TELEMETRY_DIR/stack/ingest/docker-compose.yml"
@@ -44,17 +49,13 @@ cleanup() {
     log_info "Tearing down Docker containers..."
     
     # Stop containers in reverse order
-    docker-compose -f "$GPS_COMPOSE" down --volumes 2>/dev/null || true
-    docker-compose -f "$LAP_TIMER_COMPOSE" down --volumes 2>/dev/null || true
-    docker-compose -f "$KAFKA_BASE_COMPOSE" down --volumes 2>/dev/null || true
-    docker-compose -f "$INGEST_COMPOSE" down --volumes 2>/dev/null || true
-    docker-compose -f "$KAFKA_COMPOSE" down --volumes 2>/dev/null || true
+    prepare_orion_schema "$REPO_ROOT" down
+    for compose_file in "$GPS_COMPOSE" "$LAP_TIMER_COMPOSE" "$KAFKA_BASE_COMPOSE" "$INGEST_COMPOSE" "$KAFKA_COMPOSE"; do
+        docker-compose -f "$compose_file" down --volumes || log_warn "Cleanup failed for $compose_file"
+    done
     
     log_info "Cleanup complete"
 }
-
-# Register cleanup on exit
-trap cleanup EXIT
 
 # --- Create Docker Network ---
 create_network() {
@@ -159,6 +160,8 @@ run_tests() {
 
 # --- Main ---
 main() {
+    trap cleanup EXIT
+    prepare_orion_schema "$REPO_ROOT" up || return 1
     log_info "=== Telemetry Stack Integration Test ==="
     log_info "Starting test at $(date)"
     
@@ -180,4 +183,6 @@ main() {
     fi
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi

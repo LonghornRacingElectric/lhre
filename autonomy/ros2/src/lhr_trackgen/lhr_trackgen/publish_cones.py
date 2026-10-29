@@ -5,11 +5,14 @@ import math
 import random
 from typing import List, Tuple
 
+from geometry_msgs.msg import Point
+from lhr_trackgen.cone_geometry import CONE_SPECS, cone_triangles, start_finish_gates
 from lhr_trackgen.skidpad_geometry import (
     CENTER_SEPARATION, generate_skidpad_lanes, INNER_RADIUS, OUTER_RADIUS)
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from std_msgs.msg import ColorRGBA
 from visualization_msgs.msg import Marker, MarkerArray
 
 # ---------------------------------------------------------------------------
@@ -82,69 +85,17 @@ def generate_oval_track(
 
     The oval has semi-major axis *radius_m* and semi-minor axis
     *radius_m * aspect*.  Cones are placed at uniform arc-length
-    intervals of *cone_spacing_m* along the centerline.
+    intervals no larger than *cone_spacing_m* on either boundary.
     """
-    a = radius_m          # semi-major axis (x)
-    b = radius_m * aspect  # semi-minor axis (y)
-    half_w = width_m / 2.0
-
-    # Step 1: Dense sampling of the ellipse centerline
-    n_dense = 1000
-    dense_pts: List[Tuple[float, float]] = []
-    for i in range(n_dense):
-        t = 2.0 * math.pi * i / n_dense
-        dense_pts.append((a * math.cos(t), b * math.sin(t)))
-
-    # Step 2: Compute cumulative arc lengths
-    arc = [0.0]
-    for i in range(1, n_dense):
-        dx = dense_pts[i][0] - dense_pts[i - 1][0]
-        dy = dense_pts[i][1] - dense_pts[i - 1][1]
-        arc.append(arc[-1] + math.hypot(dx, dy))
-    # Close the loop
-    dx = dense_pts[0][0] - dense_pts[-1][0]
-    dy = dense_pts[0][1] - dense_pts[-1][1]
-    perimeter = arc[-1] + math.hypot(dx, dy)
-
-    # Step 3: Resample at uniform arc-length intervals
-    n_cones = max(20, int(perimeter / cone_spacing_m))
-    target_spacing = perimeter / n_cones
-
-    left: ConeList = []
-    right: ConeList = []
-    j = 0  # index into dense_pts
-
-    for i in range(n_cones):
-        target_s = i * target_spacing
-
-        # Advance j until arc[j] >= target_s
-        while j < n_dense - 1 and arc[j + 1] < target_s:
-            j += 1
-
-        # Interpolate between dense_pts[j] and dense_pts[j+1]
-        if j < n_dense - 1:
-            seg_len = arc[j + 1] - arc[j]
-            frac = (target_s - arc[j]) / seg_len if seg_len > 0 else 0.0
-            cx = dense_pts[j][0] + frac * (dense_pts[j + 1][0] - dense_pts[j][0])
-            cy = dense_pts[j][1] + frac * (dense_pts[j + 1][1] - dense_pts[j][1])
-        else:
-            cx, cy = dense_pts[j]
-
-        # Tangent via finite difference on the ellipse parametric form
-        t = 2.0 * math.pi * target_s / perimeter
-        tx = -a * math.sin(t)
-        ty = b * math.cos(t)
-        tn = math.hypot(tx, ty) or 1.0
-        tx /= tn
-        ty /= tn
-
-        # Outward normal (left of tangent direction = counterclockwise)
-        nx, ny = -ty, tx
-
-        left.append((cx + half_w * nx, cy + half_w * ny))
-        right.append((cx - half_w * nx, cy - half_w * ny))
-
-    return left, right
+    _validate_dimensions(radius_m, width_m, cone_spacing_m)
+    if not math.isfinite(aspect) or aspect <= 0:
+        raise ValueError('aspect must be positive and finite')
+    dense = [(radius_m * math.cos(2 * math.pi * i / 1000),
+              radius_m * aspect * math.sin(2 * math.pi * i / 1000))
+             for i in range(1000)]
+    if _minimum_radius(dense) <= width_m / 2:
+        raise ValueError('oval is too tight for the requested width')
+    return _offset_cones(dense, width_m / 2, cone_spacing_m)
 
 
 # ---------------------------------------------------------------------------
@@ -193,72 +144,84 @@ def _catmull_rom_closed(
     return curve
 
 
-def _arc_lengths(pts: List[Tuple[float, float]]) -> List[float]:
-    """Cumulative arc-length along a point list (closed)."""
-    lengths = [0.0]
-    for i in range(1, len(pts)):
-        dx = pts[i][0] - pts[i - 1][0]
-        dy = pts[i][1] - pts[i - 1][1]
-        lengths.append(lengths[-1] + math.hypot(dx, dy))
-    return lengths
+def _validate_dimensions(radius, width, spacing):
+    """Reject invalid scene dimensions before sampling."""
+    if any(not math.isfinite(v) or v <= 0 for v in (radius, width, spacing)):
+        raise ValueError('radius, width and spacing must be positive and finite')
 
 
-def _resample_uniform(
-    pts: List[Tuple[float, float]],
-    spacing: float,
-) -> List[Tuple[float, float]]:
-    """Resample a polyline to approximately uniform spacing."""
-    cum = _arc_lengths(pts)
-    total = cum[-1]
-    n_out = max(2, int(total / spacing))
+def _minimum_radius(points):
+    """Measure the tightest bend using three-point circumcircles."""
+    minimum = math.inf
+    for i, b in enumerate(points):
+        a, c = points[i - 1], points[(i + 1) % len(points)]
+        cross = abs((b[0] - a[0]) * (c[1] - b[1])
+                    - (b[1] - a[1]) * (c[0] - b[0]))
+        if cross > 1e-12:
+            radius = (math.dist(a, b) * math.dist(b, c) * math.dist(a, c)
+                      / (2 * cross))
+            minimum = min(minimum, radius)
+    return minimum
 
-    resampled: List[Tuple[float, float]] = []
+
+def _boundaries_cross(left, right):
+    """Reject crossed boundaries, including nonadjacent edges of either loop."""
+    edges = []
+    for side, points in enumerate((left, right)):
+        edges.extend((side, i, p, points[(i + 1) % len(points)])
+                     for i, p in enumerate(points))
+
+    def orient(a, b, c):
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+    for k, (side, i, a, b) in enumerate(edges):
+        for other, j, c, d in edges[k + 1:]:
+            if side == other and (i - j) % len(left) in (0, 1, len(left) - 1):
+                continue
+            if (max(a[0], b[0]) < min(c[0], d[0])
+                    or max(c[0], d[0]) < min(a[0], b[0])
+                    or max(a[1], b[1]) < min(c[1], d[1])
+                    or max(c[1], d[1]) < min(a[1], b[1])):
+                continue
+            if orient(a, b, c) * orient(a, b, d) <= 0 and \
+                    orient(c, d, a) * orient(c, d, b) <= 0:
+                return True
+    return False
+
+
+def _offset_cones(center, half_width, cone_spacing):
+    """Space paired cones by the longer boundary, including the closing edge."""
+    normals = []
+    for i in range(len(center)):
+        a, b = center[i - 1], center[(i + 1) % len(center)]
+        tx, ty = b[0] - a[0], b[1] - a[1]
+        length = math.hypot(tx, ty)
+        normals.append((-ty / length, tx / length))
+    boundaries = [[(p[0] + sign * half_width * n[0],
+                    p[1] + sign * half_width * n[1])
+                   for p, n in zip(center, normals)] for sign in (1, -1)]
+    arc = [0.0]
+    for i in range(len(center)):
+        arc.append(arc[-1] + max(math.dist(side[i], side[(i + 1) % len(center)])
+                                 for side in boundaries))
+    # A tiny reserve covers normal renormalization during interpolation.
+    count = max(3, math.ceil(arc[-1] / (cone_spacing * .999)))
+    left, right = [], []
     j = 0
-    for i in range(n_out):
-        target = total * i / n_out
-        while j < len(cum) - 1 and cum[j + 1] < target:
+    for i in range(count):
+        target = arc[-1] * i / count
+        while arc[j + 1] < target:
             j += 1
-        seg_len = cum[j + 1] - cum[j] if j < len(cum) - 1 else 1.0
-        frac = (target - cum[j]) / seg_len if seg_len > 1e-9 else 0.0
-        j2 = min(j + 1, len(pts) - 1)
-        x = pts[j][0] + frac * (pts[j2][0] - pts[j][0])
-        y = pts[j][1] + frac * (pts[j2][1] - pts[j][1])
-        resampled.append((x, y))
-    return resampled
-
-
-def _offset_cones(
-    center: List[Tuple[float, float]],
-    half_width: float,
-    cone_spacing: float,
-    rng: random.Random,
-) -> Tuple[ConeList, ConeList]:
-    """Offset centerline to produce left/right cone lists."""
-    # Resample to cone spacing first
-    cone_pts = _resample_uniform(center, cone_spacing)
-    nc = len(cone_pts)
-
-    left: ConeList = []
-    right: ConeList = []
-    for i in range(nc):
-        x0, y0 = cone_pts[(i - 1) % nc]
-        x1, y1 = cone_pts[i]
-        x2, y2 = cone_pts[(i + 1) % nc]
-
-        tx = x2 - x0
-        ty = y2 - y0
-        norm = math.hypot(tx, ty) or 1.0
-        tx /= norm
-        ty /= norm
-
-        nx, ny = -ty, tx
-        jitter = rng.uniform(-0.05, 0.05)
-
-        left.append((x1 + (half_width + jitter) * nx,
-                     y1 + (half_width + jitter) * ny))
-        right.append((x1 - (half_width + jitter) * nx,
-                      y1 - (half_width + jitter) * ny))
-
+        f = (target - arc[j]) / (arc[j + 1] - arc[j])
+        k = (j + 1) % len(center)
+        x, y = (center[j][axis] * (1 - f) + center[k][axis] * f
+                for axis in (0, 1))
+        nx, ny = (normals[j][axis] * (1 - f) + normals[k][axis] * f
+                  for axis in (0, 1))
+        length = math.hypot(nx, ny)
+        nx, ny = nx / length, ny / length
+        left.append((x + half_width * nx, y + half_width * ny))
+        right.append((x - half_width * nx, y - half_width * ny))
     return left, right
 
 
@@ -274,41 +237,105 @@ def generate_autocross_track(
     """
     Generate a randomised autocross track with S-curves and chicanes.
 
-    1. Sample waypoints around a circle with radial + angular jitter.
-    2. Sort by angle to form a closed loop.
-    3. Fit a Catmull-Rom spline through the waypoints.
-    4. Resample to uniform centerline spacing.
-    5. Offset left/right to produce cones.
+    Reduce seeded waypoint jitter until bends have radius at least
+    max(6 m, twice the track width), then sample both closed boundaries.
     """
+    _validate_dimensions(radius_m, width_m, cone_spacing_m)
+    if num_waypoints < 4 or not math.isfinite(jitter_m) or jitter_m < 0:
+        raise ValueError('use at least four waypoints and nonnegative finite jitter')
     rng = random.Random(seed)
+    perturbations = [(rng.uniform(-math.pi / num_waypoints * .6,
+                                  math.pi / num_waypoints * .6),
+                      rng.uniform(-jitter_m, jitter_m))
+                     for _ in range(num_waypoints)]
+    # Preserve seeded character while reducing bends that fold the corridor.
+    for attempt in range(24):
+        strength = .75 ** attempt
+        waypoints = []
+        for i, (angle_delta, radius_delta) in enumerate(perturbations):
+            angle = 2 * math.pi * i / num_waypoints + strength * angle_delta
+            radius = max(radius_m * .3, radius_m + strength * radius_delta)
+            waypoints.append((radius * math.cos(angle), radius * math.sin(angle)))
+        center = _catmull_rom_closed(waypoints, 100)
+        if _minimum_radius(center) < max(6.0, width_m * 2):
+            continue
+        left, right = _offset_cones(center, width_m / 2, cone_spacing_m)
+        if not _boundaries_cross(left, right):
+            return left, right
+    raise ValueError('track dimensions cannot support a smooth, uncrossed corridor')
 
-    # --- 1. Generate waypoints ---
-    waypoints: List[Tuple[float, float]] = []
-    for i in range(num_waypoints):
-        base_angle = 2.0 * math.pi * i / num_waypoints
-        # Angular jitter: ± half the gap between adjacent waypoints
-        max_angle_jitter = math.pi / num_waypoints * 0.6
-        angle = base_angle + rng.uniform(-max_angle_jitter, max_angle_jitter)
 
-        # Radial jitter
-        r = radius_m + rng.uniform(-jitter_m, jitter_m)
-        # Clamp radius so track doesn't collapse to centre
-        r = max(r, radius_m * 0.3)
+# ---------------------------------------------------------------------------
+# Acceleration generator (DD.4.2): a fixed rules layout, the seed does nothing
+# ---------------------------------------------------------------------------
 
-        waypoints.append((r * math.cos(angle), r * math.sin(angle)))
+# Start line at x = 0, driving along +x. Length and width are D.9.1 of the
+# main FSAE rules, which the Driverless Supplement points to; check them
+# against the 2026 rules. The rules' cone interval is looser than
+# cone_spacing_m, which keeps gaps inside track_builder's max_step_m.
+ACCEL_LENGTH_M = 75.0     # start line to finish line
+ACCEL_WIDTH_M = 4.9       # minimum clear width, between the cone bases
+ACCEL_STAGING_M = 0.30    # nose to start line (DD.4.2.2)
+ACCEL_EXIT_M = 75.0       # full stop within this far past the finish (DD.4.2.4)
+ACCEL_ENTRY_M = 7.0       # lane behind the start, so the staged car sees one
+# Large orange cones stand this far before and after each line, 2 m apart:
+# closer, and the LiDAR detector's 1.5 m dedup_radius merges them.
+ACCEL_GATE_M = 1.0
 
-    # --- 2. Sort by angle to guarantee loop ordering ---
-    waypoints.sort(key=lambda p: math.atan2(p[1], p[0]))
 
-    # --- 3. Spline ---
-    pts_per_seg = max(10, int(120 / num_waypoints))
-    centerline = _catmull_rom_closed(waypoints, pts_per_seg)
+def _evenly(x0: float, x1: float, spacing: float) -> List[float]:
+    """Positions from x0 to x1 inclusive, no further apart than spacing."""
+    # A zero, negative or infinite spacing used to give a sparse course (or
+    # divide by zero) that looked like a perception fault downstream.
+    if not math.isfinite(spacing) or spacing <= 0:
+        raise ValueError(f'cone_spacing_m must be positive and finite, got {spacing}')
+    n = max(1, math.ceil((x1 - x0) / spacing))
+    return [x0 + (x1 - x0) * i / n for i in range(n + 1)]
 
-    # --- 4. Resample to ~0.5 m for smooth normals ---
-    centerline = _resample_uniform(centerline, 0.5)
 
-    # --- 5. Offset to cones ---
-    return _offset_cones(centerline, width_m / 2.0, cone_spacing_m, rng)
+def acceleration_layout(cone_spacing_m: float = 2.0) -> List[Tuple[float, str]]:
+    """
+    Return (x, kind) for each cone along one side of the acceleration course.
+
+    Both sides are mirror images. Large orange cones flank the start and
+    finish lines (DD.1.1.d), small orange marks the exit lane (DD.1.1.c),
+    and 'side' is that side's own color.
+    """
+    g, finish = ACCEL_GATE_M, ACCEL_LENGTH_M
+    cones = [(x, 'side')
+             for x in _evenly(-ACCEL_ENTRY_M, -g, cone_spacing_m)[:-1]]
+    cones += [(-g, 'orange_large'), (g, 'orange_large')]
+    cones += [(x, 'side')
+              for x in _evenly(g, finish - g, cone_spacing_m)[1:-1]]
+    cones += [(finish - g, 'orange_large'), (finish + g, 'orange_large')]
+    cones += [(x, 'orange_small')
+              for x in _evenly(finish + g, finish + ACCEL_EXIT_M,
+                               cone_spacing_m)[1:]]
+    return cones
+
+
+def generate_acceleration_track(
+    cone_spacing_m: float = 2.0,
+    **_kw,
+) -> Tuple[ConeList, ConeList]:
+    """Straight acceleration course along +x, start line at x = 0."""
+    left: ConeList = []
+    right: ConeList = []
+    for x, kind in acceleration_layout(cone_spacing_m):
+        # The clear width is between bases, so each center sits half its
+        # own base further out; large cones are wider than small ones.
+        spec = CONE_SPECS['blue' if kind == 'side' else kind]
+        y = ACCEL_WIDTH_M / 2.0 + spec.base_width_m / 2.0
+        left.append((x, y))
+        right.append((x, -y))
+    return left, right
+
+
+def pairing_width_m(style: str, width_m: float = 3.5) -> float:
+    """Return the center-to-center width track_builder should pair at."""
+    if style == 'acceleration':
+        return ACCEL_WIDTH_M + CONE_SPECS['blue'].base_width_m
+    return width_m
 
 
 # ---------------------------------------------------------------------------
@@ -362,7 +389,23 @@ GENERATORS = {
     'autocross': generate_autocross_track,
     'oval': generate_oval_track,
     'skidpad': generate_skidpad_track,
+    'acceleration': generate_acceleration_track,
 }
+
+
+def cone_kinds(style: str, left: ConeList, right: ConeList,
+               cone_spacing_m: float = 2.0) -> Tuple[List[str], List[str]]:
+    """
+    Return the kind (a CONE_SPECS key) of every left and right cone.
+
+    Consumers read the side from the marker namespace, never the kind, so
+    orange gate and lane cones stay in the left/right lists.
+    """
+    if style == 'acceleration':
+        kinds = [k for _, k in acceleration_layout(cone_spacing_m)]
+        return ([('blue' if k == 'side' else k) for k in kinds],
+                [('yellow' if k == 'side' else k) for k in kinds])
+    return ['blue'] * len(left), ['yellow'] * len(right)
 
 
 # ---------------------------------------------------------------------------
@@ -376,6 +419,7 @@ class ConePublisher(Node):
         super().__init__('cone_publisher')
 
         # --- Parameters ---
+        self.declare_parameter('start_finish_cones', False)
         self.declare_parameter('seed', 1)
         self.declare_parameter('frame_id', 'map')
         self.declare_parameter('publish_hz', 5.0)
@@ -387,9 +431,10 @@ class ConePublisher(Node):
         self.declare_parameter('cone_spacing_m', 2.0)
 
         self.seed = int(self.get_parameter('seed').value)
+        self.start_finish_cones = bool(self.get_parameter('start_finish_cones').value)
         self.frame_id = str(self.get_parameter('frame_id').value)
         hz = float(self.get_parameter('publish_hz').value)
-        style = str(self.get_parameter('track_style').value)
+        style = self.style = str(self.get_parameter('track_style').value)
         num_wp = int(self.get_parameter('num_waypoints').value)
         radius = float(self.get_parameter('radius_m').value)
         jitter = float(self.get_parameter('jitter_m').value)
@@ -411,6 +456,8 @@ class ConePublisher(Node):
             width_m=width,
             cone_spacing_m=spacing,
         )
+        self.left_kinds, self.right_kinds = cone_kinds(
+            style, self.left, self.right, spacing)
 
         self._orange = generate_skidpad_lanes() if style == 'skidpad' else ([], [])
 
@@ -432,54 +479,61 @@ class ConePublisher(Node):
     def make_cone_marker(
         self, mid: int, ns: str,
         x: float, y: float,
-        r: float, g: float, b: float,
+        r: float, g: float, b: float, kind=None,
     ) -> Marker:
-        """Create a single cone sphere marker."""
+        """Create a nominal small competition cone marker."""
         m = Marker()
         m.header.frame_id = self.frame_id
         m.header.stamp = self.get_clock().now().to_msg()
         m.ns = ns
         m.id = mid
-        m.type = Marker.SPHERE
+        m.type = Marker.TRIANGLE_LIST
         m.action = Marker.ADD
         m.pose.position.x = float(x)
         m.pose.position.y = float(y)
         m.pose.position.z = 0.0
         m.pose.orientation.w = 1.0
 
-        m.scale.x = 0.35
-        m.scale.y = 0.35
-        m.scale.z = 0.35
+        m.scale.x = m.scale.y = m.scale.z = 1.0
+        kind = kind or ('blue' if ns == 'left_cones' else 'yellow')
+        m.text = kind
+        faces, colors = cone_triangles(CONE_SPECS[kind])
+        for face, color in zip(faces, colors):
+            for px, py, pz in face:
+                m.points.append(Point(x=px, y=py, z=pz))
+                m.colors.append(ColorRGBA(r=color[0], g=color[1], b=color[2], a=1.0))
 
         m.color.a = 1.0
-        m.color.r = float(r)
-        m.color.g = float(g)
-        m.color.b = float(b)
+        m.color.r = m.color.g = m.color.b = 1.0
         return m
 
     def on_timer(self):
         """Publish all cone markers."""
         arr = MarkerArray()
 
-        for i, (x, y) in enumerate(self.left):
-            arr.markers.append(
-                self.make_cone_marker(i, 'left_cones', x, y,
-                                      0.0, 0.2, 1.0))
+        for i, ((x, y), kind) in enumerate(zip(self.left, self.left_kinds)):
+            arr.markers.append(self.make_cone_marker(
+                i, 'left_cones', x, y, *CONE_SPECS[kind].color, kind=kind))
 
         base = 10000
-        for i, (x, y) in enumerate(self.right):
-            arr.markers.append(
-                self.make_cone_marker(base + i, 'right_cones', x, y,
-                                      1.0, 1.0, 0.0))
+        for i, ((x, y), kind) in enumerate(zip(self.right, self.right_kinds)):
+            arr.markers.append(self.make_cone_marker(
+                base + i, 'right_cones', x, y, *CONE_SPECS[kind].color,
+                kind=kind))
 
-        for group, (points, ns, size) in enumerate(zip(
-            self._orange, ('orange_small', 'orange_large'), (0.325, 0.505),
+        for group, (points, ns) in enumerate(zip(
+            self._orange, ('orange_small', 'orange_large'),
         )):
             for i, (x, y) in enumerate(points):
                 marker = self.make_cone_marker(
-                    20000 + group * 10000 + i, ns, x, y, 1.0, 0.5, 0.0)
-                marker.scale.z = size
+                    20000 + group * 10000 + i, ns, x, y,
+                    *CONE_SPECS[ns].color, kind=ns)
                 arr.markers.append(marker)
+        # The acceleration layout already has its gates.
+        if self.start_finish_cones and self.style not in ('acceleration', 'skidpad'):
+            for i, (x, y) in enumerate(start_finish_gates(self.left, self.right)):
+                arr.markers.append(self.make_cone_marker(
+                    20000 + i, 'start_finish', x, y, 1., .35, 0., kind='orange_large'))
         self.pub.publish(arr)
 
 
@@ -492,7 +546,7 @@ def main():
     except KeyboardInterrupt:
         pass
     node.destroy_node()
-    rclpy.shutdown()
+    rclpy.try_shutdown()
 
 
 if __name__ == '__main__':
