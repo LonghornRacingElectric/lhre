@@ -3,7 +3,6 @@
 import math
 
 from lhr_trackgen.publish_cones import generate_skidpad_track, GENERATORS
-
 import pytest
 
 
