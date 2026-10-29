@@ -293,10 +293,10 @@ ideal labelled detections and truth odometry; it is not the no-shortcuts gate.
 All [acquisition thresholds](../lhr_track_builder/README.md#skidpad-planning)
 are launch arguments with matching defaults/types. `fov_deg` / `max_range_m`
 retain 200 / 20 defaults for other missions. `accumulate_detections` defaults
-to true elsewhere; skidpad defaults to false. `path_closed` and
-`require_planner_limit` default to false/true for skidpad, true/false otherwise;
-`planner_timeout_sec` is 0.5. Do not disable the required cap or enable closed
-paths for acquisition. Chaining parameters apply only to the autocross planner.
+to true elsewhere; skidpad defaults to false. Gazebo sets `closed_path` to
+false for all missions. `require_planner_limit` defaults to true for skidpad
+and false otherwise; `planner_timeout_sec` is 0.5. Do not disable the required
+cap for acquisition. Chaining parameters apply only to the autocross planner.
 
 
 In RViz, inferred left cones are blue, inferred right cones are yellow, and
