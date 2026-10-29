@@ -8,20 +8,13 @@ lateral g estimates, data-quality checks and portable HTML debriefs.
 
 ## Open a session
 
-Use **From database** to load an Orion drive day directly, **Import** or drop
-session JSON, or choose **Last Trackside session** to
-load `/api/motec/live/session-cache`. Imports merge completed-lap samples,
-current-lap samples and the recent tail by timestamp. Every stored timestamp
-is retained, including 50 Hz recordings; the displayed sample and GPS rates
-reflect the export rather than assuming a fixed rate. Empty per-lap arrays
-can be recovered from overlapping tail samples. Missing or frozen GPS cannot
-supply a route and is reported instead of drawing a false track.
-
-The server cache strips per-lap samples and keeps at most 1,500 tail samples;
-the downloaded export keeps at most 6,000 tail samples. At 50 Hz those tails
-span about 30 seconds and two minutes respectively. Neither reconstructs
-older samples absent from the file. This refresh does not change live
-capture, the cache, database ingestion or retention settings.
+Use **From database** to load an Orion drive day. The database is the only
+source: the viewer does not import session JSON files or the Trackside Live
+session cache. The route returns at most one packet per 100 ms, and only inside
+lap windows; the displayed sample and GPS rates reflect that response rather
+than assuming a fixed rate. Missing or
+frozen GPS cannot supply a route and is reported instead of drawing a false
+track.
 
 ## Review a run
 
@@ -37,7 +30,7 @@ fixed; sectors can use sensible geometry-based boundaries or manual markers.
 Lateral g is estimated from GPS, not measured by an IMU. Steering jumps are
 flagged without guessing a correction. Notes, layouts and runs are stored
 in this browser (IndexedDB and the existing `driveday:` localStorage prefix).
-Reimport a run to apply improved GPS recovery and quality checks.
+Load a day again to apply improved GPS recovery and quality checks.
 
 ## Video
 
@@ -77,8 +70,8 @@ their own palette.
 
 `GET /api/driveday/db` lists the drive days that have laps. `GET
 /api/driveday/db?day=<day_id>` builds that day in the same shape as a
-trackside-live export (`src/lib/driveday/db.ts`), and the page imports it
-exactly like a file, using the same review workflow above.
+trackside-live export (`src/lib/driveday/db.ts`), and the page converts it
+with the same review workflow above.
 
 - **Laps** are the day's `classifier` rows of type `lap`, the same lap
   presses trackside-live syncs. Rows over 15 minutes are the gaps between

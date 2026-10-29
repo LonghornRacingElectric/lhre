@@ -1,6 +1,6 @@
 "use client";
 
-import { useContext, useMemo, useRef, useState } from "react";
+import { useContext, useMemo, useState } from "react";
 import { sampleQuality } from "@/lib/driveday/review";
 import { fmt } from "@/lib/driveday/format";
 import type { Player } from "@/lib/driveday/player";
@@ -17,8 +17,6 @@ interface Props {
   theme: Theme;
   onTheme: () => void;
   onSelect: (id: string) => void;
-  onImport: (files: FileList) => void;
-  onCache: () => void;
   onDb: (day: number) => void;
   onRemove: (id: string) => void;
 }
@@ -183,8 +181,7 @@ export function ImportMenu({ onDb, onJson, onCache }: { onDb: (day: number) => v
   );
 }
 
-export function Header({ runs, current, theme, onTheme, onSelect, onImport, onRemove, onCache, onDb }: Props) {
-  const file = useRef<HTMLInputElement>(null);
+export function Header({ runs, current, theme, onTheme, onSelect, onRemove, onDb }: Props) {
   const p = useContext(PlayerCtx);
   return (
     <header className="top">

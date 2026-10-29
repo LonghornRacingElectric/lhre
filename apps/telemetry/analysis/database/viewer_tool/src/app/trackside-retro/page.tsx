@@ -9,7 +9,8 @@ export const metadata: Metadata = {
   icons: { icon: "/lapdog-logo.webp" },
 };
 
-// Imported recordings stay in IndexedDB for subsequent reviews.
+// Drive day viewer (analysis/driveday_data_viewer). Drive days load from the orion
+// database (/api/driveday/db) and are kept in IndexedDB.
 export default function TracksideRetroPage() {
   return (
     <div className="ddv">
