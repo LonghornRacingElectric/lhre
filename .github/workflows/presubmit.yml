@@ -28,7 +28,7 @@ jobs:
         run: |
           files=$(gh api --paginate \
             "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
-            --jq '.[].filename')
+            --jq '.[] | .filename, (.previous_filename // empty)')
           if grep -qvE '^(autonomy|simulation)/' <<< "$files"; then
             echo "bazel=true" >> "$GITHUB_OUTPUT"
           else

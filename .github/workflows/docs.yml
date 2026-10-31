@@ -9,13 +9,6 @@ on:
   push:
     branches: [main]
   pull_request:
-    paths:
-      - "**.md"
-      - "docs/**"
-      - "mkdocs.yml"
-      - "pyproject.toml"
-      - "uv.lock"
-      - ".github/workflows/docs.yml"
 
 # A new push to a PR cancels that PR's older run. Every other run gets its
 # own group, so no push, schedule or manual run is dropped.
@@ -24,7 +17,29 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    outputs:
+      docs: ${{ steps.check.outputs.docs }}
+    steps:
+      - name: Look for changes to the docs
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[] | .filename, (.previous_filename // empty)')
+          if grep -qE '(\.md$|^docs/|^mkdocs\.yml$|^pyproject\.toml$|^uv\.lock$|^\.github/workflows/docs\.yml$)' <<< "$files"; then
+            echo "docs=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "docs=false" >> "$GITHUB_OUTPUT"
+            echo "No change to the docs. Skipping."
+          fi
+
   build:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.docs != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

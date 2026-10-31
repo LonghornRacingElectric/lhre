@@ -2,15 +2,6 @@ name: BEVO
 
 on:
   pull_request:
-    paths:
-      - "apps/BEVO/**"
-      - "lib/spec/**"
-      - "lib/codegen/telemetry/**"
-      - "platforms/**"
-      - "toolchains/**"
-      - "MODULE.bazel"
-      - "MODULE.bazel.lock"
-      - ".github/workflows/bevo.yml"
   workflow_dispatch:
 
 # A new push to a PR cancels that PR's older run. Every other run gets its
@@ -20,7 +11,29 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    outputs:
+      bevo: ${{ steps.check.outputs.bevo }}
+    steps:
+      - name: Look for changes to BEVO or its toolchain
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[] | .filename, (.previous_filename // empty)')
+          if grep -qE '^(apps/BEVO/|lib/spec/|lib/codegen/telemetry/|platforms/|toolchains/|MODULE\.bazel$|MODULE\.bazel\.lock$|\.github/workflows/bevo\.yml$)' <<< "$files"; then
+            echo "bevo=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "bevo=false" >> "$GITHUB_OUTPUT"
+            echo "No change to BEVO or its toolchain. Skipping."
+          fi
+
   raspberry-pi-binaries:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.bevo != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
