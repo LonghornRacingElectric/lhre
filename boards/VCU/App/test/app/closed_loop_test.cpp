@@ -40,9 +40,8 @@ struct Car {
     return ratio * torque_nm * MotorOmega();
   }
   void Step(float torque_nm, float dt_s) {
-    const float reflected_mass =
-        kMassKg + kRotorJ * kFinalDrive * kFinalDrive /
-                      (kWheelRadiusM * kWheelRadiusM);
+    const float reflected_mass = kMassKg + kRotorJ * kFinalDrive * kFinalDrive /
+                                               (kWheelRadiusM * kWheelRadiusM);
     const float force = std::max(torque_nm, 0.0f) * kFinalDrive / kWheelRadiusM;
     speed_m_s += force / reflected_mass * dt_s;
   }
