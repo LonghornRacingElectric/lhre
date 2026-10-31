@@ -15,7 +15,7 @@ everywhere.
 - Branch from `main`: `<your-name>/<short-description>` (e.g.
   `dhairya/vcu-can-heartbeat`).
 - Open a PR; the `main` ruleset requires one approving review from someone
-  other than the author and a green presubmit before merge. No direct
+  other than the author and a green `All checks passed` check before merge. No direct
   pushes to `main`.
 - Reviews are routed by `.github/CODEOWNERS`: a PR touching `autonomy/`
   automatically requests the `@LonghornRacingElectric/autonomous` team,
@@ -30,17 +30,23 @@ everywhere.
   out of every review. Its repo settings live in
   [`.coderabbit.yaml`](https://github.com/LonghornRacingElectric/lhre/blob/main/.coderabbit.yaml);
   everything else follows the org's CodeRabbit settings.
-- Presubmit runs `bazel test //...` (builds all firmware, runs host tests)
-  and `bazel run //tools/format:check`. Run both locally before pushing.
-- `autonomy/` is outside Bazel
-  ([ADR-009](docs/architecture/009-autonomy-outside-bazel.md)); its own
-  path-filtered workflow builds and lints it with colcon, and PRs that
-  touch only `autonomy/` skip the Bazel jobs (they report as skipped,
-  which satisfies the required check).
+- Every PR, every push to `main` and a weekly run use
+  [`ci.yml`](https://github.com/LonghornRacingElectric/lhre/blob/main/.github/workflows/ci.yml).
+  Its `Changes` job finds which areas the change touches. Each area's job
+  runs only when its paths changed: Bazel build and test on Linux and
+  Windows, simulation, FourPost, autonomy (colcon, outside Bazel per
+  [ADR-009](docs/architecture/009-autonomy-outside-bazel.md)), BEVO, docs
+  and telemetry (images and Docker Compose integration tests). The format
+  check always runs.
+- `All checks passed` is the one required check. It fails if any job failed or
+  was cancelled, or if `Changes` failed. Its run page shows a table of
+  every job's result.
+- Run `bazel test //...` and `bazel run //tools/format:check` locally
+  before pushing.
 
 ## Formatting
 
-clang-formatted code is a **requirement** for every push and PR — presubmit
+clang-formatted code is a **requirement** for every push and PR — CI
 runs `bazel run //tools/format:check` and fails on any unformatted file.
 Before pushing, run:
 
@@ -121,7 +127,7 @@ uv run --group docs mkdocs serve
 ```
 
 PRs that touch docs run `mkdocs build --strict`, so broken links between
-pages fail presubmit. Links to *code* files (BUILD files, configs) don't
+pages fail CI. Links to *code* files (BUILD files, configs) don't
 exist on the site — use a full GitHub URL for those.
 
 Decisions that bind the whole repo — layout, build system, a new
