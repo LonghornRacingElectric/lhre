@@ -119,13 +119,14 @@ bool App::UpdateBrakeLatch(uint32_t now) {
 }
 
 void App::UpdateCoolantLatch(uint32_t now, bool reset_edge) {
-  // A silent TSM leaves the latch as it is: the TSM is not needed to drive.
+  // A silent TSM leaves the latch as it is: it raises nothing, since the TSM
+  // is not needed to drive, and it clears nothing, since a reset needs a
+  // fresh reading under the limit.
   const auto& coolant = wheels_.coolant_loop_temps;
+  if (!coolant.Fresh(now)) return;
   const float hottest_c = std::max(coolant.msg.loop_temp_after_motor(),
                                    coolant.msg.loop_temp_after_inverter());
-  const bool over =
-      coolant.Fresh(now) && hottest_c >= params_->cooling.overtemp_c;
-  coolant_latch_.Update(over, reset_edge);
+  coolant_latch_.Update(hottest_c >= params_->cooling.overtemp_c, reset_edge);
 }
 
 uint32_t App::ComputeFaults(uint32_t now, bool inverter_fresh,

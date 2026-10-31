@@ -157,7 +157,8 @@ The DUI is a plain CAN peripheral this year.
   limit, but only warns: it doesn't cut torque or leave DRIVE, because the
   60 C limit is a placeholder from the old reference app and the inverter
   has its own temperature faults. A silent TSM raises nothing, since the
-  car doesn't need the TSM to drive. Confirm the limit, and whether it
+  car doesn't need the TSM to drive, and clears nothing, since a reset
+  needs a fresh reading under the limit. Confirm the limit, and whether it
   should cut torque, before relying on it.
 - **RTD sound**: a 1 kHz sine from the DAC for 1.2 s on entering DRIVE.
   There is a local 1.5 s ceiling, and the amp is cut immediately if the

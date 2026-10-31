@@ -311,12 +311,21 @@ TEST_F(VcuAppTest, CoolantOvertempLatchesWithoutCuttingTorque) {
   EXPECT_EQ(app_->state(), VcuState::kDrive);
   EXPECT_GT(app_->torque_command(), 0.0f);
 
-  // Cooling down or the TSM going silent does not clear it; a dash reset
-  // with the loop back under the limit does.
+  // Cooling down or the TSM going silent does not clear it, and neither does
+  // a dash reset while the TSM is silent: nothing shows the loop has cooled.
   b_.coolant_after_inverter_c = 30.0f;
   b_.Run(*app_, 200);
   b_.coolant_alive = false;
   b_.Run(*app_, 500);
+  EXPECT_NE(app_->faults() & vcu::kFaultCoolantOvertemp, 0u);
+  b_.fault_reset = true;
+  b_.Run(*app_, 30);
+  EXPECT_NE(app_->faults() & vcu::kFaultCoolantOvertemp, 0u);
+
+  // A reset with a fresh reading under the limit clears it.
+  b_.fault_reset = false;
+  b_.coolant_alive = true;
+  b_.Run(*app_, 200);
   EXPECT_NE(app_->faults() & vcu::kFaultCoolantOvertemp, 0u);
   b_.fault_reset = true;
   b_.Run(*app_, 30);
