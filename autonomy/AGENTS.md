@@ -13,10 +13,11 @@ here. Do not add `BUILD.bazel` files.
   ([ros2/docker](ros2/docker/README.md)). No WSL.
 - Build: `cd ros2 && ./scripts/build.sh` (colcon). Test: `colcon test`
   from `ros2/` (ament lint plus unit and generated-track regression tests).
-- CI: `.github/workflows/autonomy.yml` at the repo root runs the same
-  build and `colcon test` on every PR that touches `autonomy/`. Not a
-  required check. PRs that touch only `autonomy/` skip the Bazel jobs in
-  presubmit. The lint rules it enforces are listed in
+- CI: the `Autonomy · colcon` job in the repo's `.github/workflows/ci.yml`
+  runs the same build and `colcon test` when a PR touches `autonomy/`,
+  `vehicle/` or the BobSim pin. The required `CI passed` check fails if it
+  fails. PRs that touch only `autonomy/` skip the Bazel jobs. The lint
+  rules it enforces are listed in
   [ros2/README.md](ros2/README.md#tests-and-ci); run them locally before
   pushing if you can.
 - PRs touching `autonomy/` need an approving review from a member of the

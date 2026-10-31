@@ -1,15 +1,24 @@
 name: CI
 
+# Every check runs from here: on PRs, on pushes to main, weekly and by hand.
 on:
   pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "23 7 * * 1"
+  workflow_dispatch:
 
+# A new push to a PR cancels that PR's older run. Every other run gets its
+# own group, so no push, schedule or manual run is dropped.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Jobs skip only when this job says their paths are untouched. If it
-  # fails, every job runs and ci-passed still fails (tools/ci/gate.py).
+  # Jobs skip only when this job says their paths are untouched. Weekly and
+  # manual runs, and pushes too large to list, run everything. If this job
+  # fails, every job runs and ci-passed still fails.
   changes:
     name: Changes
     runs-on: ubuntu-latest
@@ -21,24 +30,37 @@ jobs:
       bevo: ${{ steps.check.outputs.bevo }}
       docs: ${{ steps.check.outputs.docs }}
     steps:
-      - name: Find the areas this PR changes
+      - name: Find the areas this change touches
         id: check
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
           PR: ${{ github.event.pull_request.number }}
+          BEFORE: ${{ github.event.before }}
         run: |
-          files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" \
-            --jq '.[] | .filename, (.previous_filename // empty)')
+          everything=false
+          case "$EVENT" in
+            pull_request)
+              files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" \
+                --jq '.[] | .filename, (.previous_filename // empty)') ;;
+            push)
+              compare=$(gh api "repos/$GITHUB_REPOSITORY/compare/$BEFORE...$GITHUB_SHA")
+              files=$(jq -r '.files[] | .filename, (.previous_filename // empty)' <<< "$compare")
+              [ "$(jq '.files | length' <<< "$compare")" -lt 300 ] || everything=true ;;
+            *)
+              files=""
+              everything=true ;;
+          esac
           area() {
-            if grep -qE "$2" <<< "$files"; then echo "$1=true"; else echo "$1=false"; fi | tee -a "$GITHUB_OUTPUT"
+            if [ "$everything" = true ] || grep -qE "$2" <<< "$files"; then echo "$1=true"; else echo "$1=false"; fi | tee -a "$GITHUB_OUTPUT"
           }
-          if grep -qvE '^(autonomy|simulation)/' <<< "$files"; then echo "bazel=true"; else echo "bazel=false"; fi | tee -a "$GITHUB_OUTPUT"
-          area sim '^(simulation/|vehicle/|\.gitmodules$|\.github/workflows/(ci|simulation)\.yml$)'
-          area car '^(vehicle/|simulation/bobsim$|simulation/tools/|simulation/Makefile$|simulation/docker-compose\.yml$|\.github/workflows/(ci|simulation)\.yml$)'
-          area autonomy '^(autonomy/|simulation/bobsim$|vehicle/|\.github/workflows/(ci|autonomy)\.yml$)'
-          area bevo '^(apps/BEVO/|lib/spec/|lib/codegen/telemetry/|platforms/|toolchains/|MODULE\.bazel$|MODULE\.bazel\.lock$|\.github/workflows/(ci|bevo)\.yml$)'
-          area docs '(\.md$|^docs/|^mkdocs\.yml$|^pyproject\.toml$|^uv\.lock$|^\.github/workflows/(ci|docs)\.yml$)'
+          if [ "$everything" = true ] || grep -qvE '^(autonomy|simulation)/' <<< "$files"; then echo "bazel=true"; else echo "bazel=false"; fi | tee -a "$GITHUB_OUTPUT"
+          area sim '^(simulation/|vehicle/|\.gitmodules$|\.github/workflows/ci\.yml$)'
+          area car '^(vehicle/|simulation/bobsim$|simulation/tools/|simulation/Makefile$|simulation/docker-compose\.yml$|\.github/workflows/ci\.yml$)'
+          area autonomy '^(autonomy/|simulation/bobsim$|vehicle/|\.github/workflows/ci\.yml$)'
+          area bevo '^(apps/BEVO/|lib/spec/|lib/codegen/telemetry/|platforms/|toolchains/|MODULE\.bazel$|MODULE\.bazel\.lock$|\.github/workflows/ci\.yml$)'
+          area docs '(\.md$|^docs/|^mkdocs\.yml$|^pyproject\.toml$|^uv\.lock$|^\.github/workflows/ci\.yml$)'
 
   format:
     name: Format
@@ -64,7 +86,7 @@ jobs:
         run: bazel run //tools/format:check
 
   bazel:
-    name: Firmware · Bazel (Linux)
+    name: Bazel · Linux
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.bazel != 'false' }}
     runs-on: ubuntu-latest
@@ -126,7 +148,7 @@ jobs:
   # under Windows' 260-char MAX_PATH — same setup the .bazelrc.user.example
   # asks of Windows dev machines.
   bazel-windows:
-    name: Firmware · Bazel (Windows)
+    name: Bazel · Windows
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.bazel != 'false' }}
     runs-on: windows-latest
@@ -149,7 +171,10 @@ jobs:
           fi
           echo "common --config=ci" >> .bazelrc.user
 
-      # Keyed on the files that pin external deps, NOT the commit: an
+      # Runs on main write the cache that PRs restore: GitHub scopes
+      # PR-created caches to their own branch, but caches created on main
+      # are visible to every PR. Keyed on the files that pin external deps,
+      # NOT the commit: an
       # exact hit skips the multi-GB re-upload at job end (GitHub caps the
       # whole repo at 10 GB, LRU-evicted). Stale bazel-out contents from
       # older commits are safe — Bazel's action cache invalidates
@@ -211,6 +236,7 @@ jobs:
         run: make smoke
 
       - name: Check that a changed bundle member has a new bundle_id
+        if: github.event_name == 'pull_request'
         run: |
           git fetch --no-tags --depth=1 origin "+refs/heads/$GITHUB_BASE_REF:refs/remotes/origin/$GITHUB_BASE_REF"
           make check-vehicle BASE="origin/$GITHUB_BASE_REF"
@@ -338,10 +364,11 @@ jobs:
       - name: Verify static AArch64 executables
         run: bazel test //apps/BEVO:pi_core_binary_test --test_output=errors
 
+  # On main, docs.yml builds and publishes the site instead.
   docs:
     name: Docs · build
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.docs != 'false' }}
+    if: ${{ !cancelled() && github.event_name != 'push' && needs.changes.outputs.docs != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -351,8 +378,8 @@ jobs:
       - name: Build site
         run: uv run --group docs mkdocs build --strict
 
-  # The only required check. A skipped job counts as passing only when
-  # Changes said its paths are untouched.
+  # The only required check, so the ruleset names one check, not nine.
+  # Jobs skip only on an untouched area, and run if Changes fails.
   ci-passed:
     name: CI passed
     needs: [changes, format, bazel, bazel-windows, sim-fast, four-post, autonomy, bevo, docs]
@@ -361,10 +388,26 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          sparse-checkout: tools/ci
+          sparse-checkout: .github/workflows
 
-      - name: Check every job against the changed areas
+      - name: Fail unless every job passed or skipped an untouched area
         env:
           NEEDS: ${{ toJSON(needs) }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: python3 tools/ci/gate.py
+        run: |
+          {
+            echo "| Job | Result |"
+            echo "|---|---|"
+            jq -r 'to_entries[] | "| \(.key) | \(.value.result) |"' <<< "$NEEDS"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          status=0
+          for job in $(sed -n '/^jobs:/,$p' .github/workflows/ci.yml | grep -E '^  [a-z0-9-]+:$' | tr -d ' :'); do
+            [ "$job" = ci-passed ] || jq -e --arg j "$job" 'has($j)' <<< "$NEEDS" > /dev/null \
+              || { echo "::error::$job is not in ci-passed's needs, so nothing checks it"; status=1; }
+          done
+          jq -e '.changes.result == "success"' <<< "$NEEDS" > /dev/null \
+            || { echo "::error::Changes failed, so a skipped job cannot be trusted"; status=1; }
+          for job in $(jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | .key' <<< "$NEEDS"); do
+            echo "::error::$job: $(jq -r --arg j "$job" '.[$j].result' <<< "$NEEDS")"
+            status=1
+          done
+          exit $status

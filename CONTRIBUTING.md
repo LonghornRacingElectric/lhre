@@ -30,15 +30,16 @@ everywhere.
   out of every review. Its repo settings live in
   [`.coderabbit.yaml`](https://github.com/LonghornRacingElectric/lhre/blob/main/.coderabbit.yaml);
   everything else follows the org's CodeRabbit settings.
-- Every PR runs [`ci.yml`](https://github.com/LonghornRacingElectric/lhre/blob/main/.github/workflows/ci.yml). Its `Changes` job
-  finds which areas the PR touches. Each area's job runs only when its paths
-  changed: Bazel build and test on Linux and Windows, simulation, FourPost,
-  autonomy (colcon, outside Bazel per
-  [ADR-009](docs/architecture/009-autonomy-outside-bazel.md)), BEVO and docs.
-  The format check always runs.
-- `CI passed` is the one required check. It fails if any job failed, was
-  cancelled, or was skipped although its paths changed. Its run page shows
-  a table of every job and why it ran or skipped.
+- Every PR, every push to `main` and a weekly run use
+  [`ci.yml`](https://github.com/LonghornRacingElectric/lhre/blob/main/.github/workflows/ci.yml).
+  Its `Changes` job finds which areas the change touches. Each area's job
+  runs only when its paths changed: Bazel build and test on Linux and
+  Windows, simulation, FourPost, autonomy (colcon, outside Bazel per
+  [ADR-009](docs/architecture/009-autonomy-outside-bazel.md)), BEVO and
+  docs. The format check always runs.
+- `CI passed` is the one required check. It fails if any job failed or
+  was cancelled, or if `Changes` failed. Its run page shows a table of
+  every job's result.
 - Run `bazel test //...` and `bazel run //tools/format:check` locally
   before pushing.
 

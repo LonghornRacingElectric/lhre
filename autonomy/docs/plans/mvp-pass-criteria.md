@@ -125,7 +125,7 @@ No waiver for EKF, LiDAR, or the reference metrics. Those are the MVP.
   [testing/README.md](../../testing/README.md): the table and chosen plots.
   Raw recordings go to SharePoint.
 - **Regression after 10/28:** #91's `run_headless.sh` on the kinematic
-  stack, cheap enough for CI. Whether it gates PRs in `autonomy.yml` is a
+  stack, cheap enough for CI. Whether it gates PRs in `ci.yml` is a
   separate decision.
 
 ## Open questions

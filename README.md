@@ -1,6 +1,6 @@
 # LHRe
 
-[![postsubmit](https://github.com/LonghornRacingElectric/lhre/actions/workflows/postsubmit.yml/badge.svg)](https://github.com/LonghornRacingElectric/lhre/actions/workflows/postsubmit.yml)
+[![CI](https://github.com/LonghornRacingElectric/lhre/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/LonghornRacingElectric/lhre/actions/workflows/ci.yml)
 
 Documentation: https://docs.lhre.org
 

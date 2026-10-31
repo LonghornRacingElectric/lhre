@@ -75,11 +75,16 @@ works in a worktree too.
 
 ## CI
 
-`.github/workflows/simulation.yml` runs on pull requests that touch
-`simulation/`, `vehicle/`, `.gitmodules` or the workflow. It also runs on
-pushes to `main`, every Monday and by hand. It has these jobs.
+The repo's `.github/workflows/ci.yml` runs the simulation checks on pull
+requests, on pushes to `main`, every Monday and by hand. Its `Changes` job
+decides which jobs run. Both jobs are part of the required `CI passed`
+check. The full run of every standard evaluation is in
+`.github/workflows/simulation.yml`.
 
 ### fast
+
+The `Simulation · fast checks` job runs when a change touches
+`simulation/`, `vehicle/`, `.gitmodules` or `ci.yml`.
 
 1. Build the image with the GitHub Actions layer cache. A layer is built
    again only when the BobSim `Dockerfile` or `requirements.txt` changes.
@@ -97,15 +102,14 @@ if the job runs a `make` target other than `build`, `smoke`, `unit` or
 
 ### four-post
 
-It runs FourPost on our car: `make car T=standard-eval-four-post`, then
+The `Simulation · FourPost` job runs FourPost on our car: `make car T=standard-eval-four-post`, then
 `make four-post-acceptance`. See
 [bobsim.md](bobsim.md#run-a-bobsim-target-on-our-car).
 
-The `changes` job decides if it runs. It runs when a pull request or a
-push changes `vehicle/`, the BobSim pin, `simulation/tools/`,
-`simulation/Makefile`, `simulation/docker-compose.yml` or the workflow.
-If the `changes` job fails, `four-post` runs. A manual run always runs it.
-The weekly run does not, because `full-regeneration` covers FourPost.
+It runs when a pull request or a push changes `vehicle/`, the BobSim pin,
+`simulation/tools/`, `simulation/Makefile`, `simulation/docker-compose.yml`
+or `ci.yml`. If the `Changes` job fails, it runs anyway and `CI passed`
+fails. Weekly and manual runs of `ci.yml` always run it.
 
 At BobSim `fe03bab` the acceptance fails for our car. FourPost runs its
 own anti-roll bar rates, not ours. See
@@ -113,7 +117,7 @@ own anti-roll bar rates, not ours. See
 
 ### full-regeneration
 
-It runs every standard evaluation on our car:
+This job is in `simulation.yml`. It runs every standard evaluation on our car:
 `make car T=standard-eval-all`, then `make four-post-acceptance`. It runs
 every Monday, and on a manual run with `full_regeneration` set. It runs
 no optimization, envelope, lap or study target.
