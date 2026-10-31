@@ -8,7 +8,6 @@ on:
       - "vehicle/**"
       - ".gitmodules"
       - ".github/workflows/simulation.yml"
-  pull_request:
   schedule:
     - cron: "23 7 * * 1"
   workflow_dispatch:
@@ -26,8 +25,6 @@ concurrency:
 
 jobs:
   fast:
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.sim != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -68,10 +65,9 @@ jobs:
     if: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
     runs-on: ubuntu-latest
     outputs:
-      sim: ${{ steps.check.outputs.sim }}
       car: ${{ steps.check.outputs.car }}
     steps:
-      - name: Look for changes to simulation, the car, the BobSim pin or the wrapper
+      - name: Look for changes to the car, the BobSim pin or the wrapper
         id: check
         env:
           GH_TOKEN: ${{ github.token }}
@@ -80,15 +76,9 @@ jobs:
           BEFORE: ${{ github.event.before }}
         run: |
           if [ "$EVENT" = pull_request ]; then
-            files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[] | .filename, (.previous_filename // empty)')
+            files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[].filename')
           else
             files=$(gh api "repos/$GITHUB_REPOSITORY/compare/$BEFORE...$GITHUB_SHA" --jq '.files[] | .filename, (.previous_filename // empty)')
-          fi
-          if grep -qE '^(simulation/|vehicle/|\.gitmodules$|\.github/workflows/simulation\.yml$)' <<< "$files"; then
-            echo "sim=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "sim=false" >> "$GITHUB_OUTPUT"
-            echo "No change to simulation/ or vehicle/. Skipping the fast checks."
           fi
           paths='^(vehicle/|simulation/bobsim$|simulation/tools/|simulation/Makefile$|simulation/docker-compose\.yml$|\.github/workflows/simulation\.yml$)'
           if grep -qE "$paths" <<< "$files"; then
