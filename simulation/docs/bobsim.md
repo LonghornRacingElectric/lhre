@@ -103,6 +103,11 @@ true:
 - The pin reports a static balance or equilibrium failure.
 - A FourPost run manifest sets a spring table or an anti-roll bar rate
   that differs from the vehicle file of the run.
+- A FourPost longitudinal jacking coefficient differs by more than 5 %
+  (at least 1e-4 N/N) from the contact-patch coefficient that the
+  `tools/anti_paths.py` computes from the `vehicle.yml` hardpoints, with no
+  BobSim code. FourPost averages over the heave sweep. On
+  our car they differ by 1.5 to 2.3 %.
 
 A check that the pin cannot answer is `UNAVAILABLE`. It is not a pass.
 At `fe03bab` three checks are unavailable. The CSV has no status column.
