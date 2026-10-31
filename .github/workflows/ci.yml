@@ -17,7 +17,8 @@ concurrency:
 
 jobs:
   # Jobs skip only when this job says their paths are untouched. Weekly and
-  # manual runs, and pushes too large to list, run everything. If this job
+  # manual runs, and pushes too large to list, run everything, except that
+  # the weekly run leaves FourPost to simulation.yml's full regeneration. If this job
   # fails, every job runs and all-checks still fails.
   changes:
     name: Changes
@@ -58,7 +59,11 @@ jobs:
           }
           if [ "$everything" = true ] || grep -qvE '^(autonomy|simulation)/' <<< "$files"; then echo "bazel=true"; else echo "bazel=false"; fi | tee -a "$GITHUB_OUTPUT"
           area sim '^(simulation/|vehicle/|\.gitmodules$|\.github/workflows/ci\.yml$)'
-          area car '^(vehicle/|simulation/bobsim$|simulation/tools/|simulation/Makefile$|simulation/docker-compose\.yml$|\.github/workflows/ci\.yml$)'
+          if [ "$EVENT" = schedule ]; then
+            echo "car=false" | tee -a "$GITHUB_OUTPUT"
+          else
+            area car '^(vehicle/|simulation/bobsim$|simulation/tools/|simulation/Makefile$|simulation/docker-compose\.yml$|\.github/workflows/ci\.yml$)'
+          fi
           area autonomy '^(autonomy/|simulation/bobsim$|vehicle/|\.github/workflows/ci\.yml$)'
           area bevo '^(apps/BEVO/|lib/spec/|lib/codegen/telemetry/|platforms/|toolchains/|MODULE\.bazel$|MODULE\.bazel\.lock$|\.github/workflows/ci\.yml$)'
           area docs '(\.md$|^docs/|^mkdocs\.yml$|^pyproject\.toml$|^uv\.lock$|^\.github/workflows/ci\.yml$)'
@@ -394,7 +399,7 @@ jobs:
     if: ${{ !cancelled() && needs.changes.outputs.telemetry != 'false' }}
     runs-on: ubuntu-latest
     env:
-      HAVE_SECRETS: ${{ secrets.POSTGRES_USER != '' }}
+      HAVE_SECRETS: ${{ secrets.POSTGRES_USER != '' && secrets.POSTGRES_PASSWORD != '' && secrets.ELECTRIC_PWD != '' && secrets.GRAFANA_PWD != '' && secrets.ANALYSIS_PWD != '' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -417,7 +422,7 @@ jobs:
 
       - name: Warn that the integration tests cannot run
         if: env.HAVE_SECRETS != 'true'
-        run: echo "::warning::No telemetry secrets in this run, so the integration tests are skipped. Only the images and smoke tests ran."
+        run: echo "::warning::Not every telemetry secret is set in this run, so the integration tests are skipped. Only the images and smoke tests ran."
 
       - name: Start services
         if: env.HAVE_SECRETS == 'true'
@@ -493,7 +498,7 @@ jobs:
             jq -r 'to_entries[] | "| \(.key) | \(.value.result) |"' <<< "$NEEDS"
           } | tee -a "$GITHUB_STEP_SUMMARY"
           status=0
-          for job in $(sed -n '/^jobs:/,$p' .github/workflows/ci.yml | grep -E '^  [a-z0-9-]+:$' | tr -d ' :'); do
+          for job in $(sed -n '/^jobs:/,$p' .github/workflows/ci.yml | grep -E '^  [A-Za-z0-9_-]+:[[:space:]]*$' | tr -d ' :'); do
             [ "$job" = all-checks ] || jq -e --arg j "$job" 'has($j)' <<< "$NEEDS" > /dev/null \
               || { echo "::error::$job is not in the needs of all-checks, so nothing checks it"; status=1; }
           done

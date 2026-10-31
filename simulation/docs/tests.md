@@ -109,7 +109,8 @@ The `FourPost` job runs FourPost on our car: `make car T=standard-eval-four-post
 It runs when a pull request or a push changes `vehicle/`, the BobSim pin,
 `simulation/tools/`, `simulation/Makefile`, `simulation/docker-compose.yml`
 or `ci.yml`. If the `Changes` job fails, it runs anyway and `All checks passed`
-fails. Weekly and manual runs of `ci.yml` always run it.
+fails. A manual run of `ci.yml` always runs it. The weekly run does not,
+because `full-regeneration` covers FourPost.
 
 At BobSim `fe03bab` the acceptance fails for our car. FourPost runs its
 own anti-roll bar rates, not ours. See
