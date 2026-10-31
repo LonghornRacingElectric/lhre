@@ -4,8 +4,6 @@ name: autonomy
 # (docs/architecture/009-autonomy-outside-bazel.md), so presubmit's
 # `bazel test //...` never sees it. This job runs on the official Jazzy
 # image (Ubuntu 24.04) rather than apt-installing ROS on the runner.
-# Not a required check on main: a path-filtered required check would
-# block every PR that does not touch autonomy/.
 
 on:
   push:
@@ -16,11 +14,6 @@ on:
       - "simulation/bobsim"
       - "vehicle/**"
   pull_request:
-    paths:
-      - "autonomy/**"
-      - ".github/workflows/autonomy.yml"
-      - "simulation/bobsim"
-      - "vehicle/**"
 
 # A new push to a PR cancels that PR's older run. Every other run gets its
 # own group, so no push, schedule or manual run is dropped.
@@ -29,7 +22,29 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    outputs:
+      autonomy: ${{ steps.check.outputs.autonomy }}
+    steps:
+      - name: Look for changes to autonomy/, vehicle/ or the BobSim pin
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[].filename')
+          if grep -qE '^(autonomy/|simulation/bobsim$|vehicle/|\.github/workflows/autonomy\.yml$)' <<< "$files"; then
+            echo "autonomy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "autonomy=false" >> "$GITHUB_OUTPUT"
+            echo "No change to autonomy/, vehicle/ or the BobSim pin. Skipping."
+          fi
+
   colcon:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.autonomy != 'false' }}
     runs-on: ubuntu-latest
     container: ros:jazzy-ros-base
     defaults:
