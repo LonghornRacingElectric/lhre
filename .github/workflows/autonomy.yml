@@ -34,7 +34,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
         run: |
-          files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[].filename')
+          files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[] | .filename, (.previous_filename // empty)')
           if grep -qE '^(autonomy/|simulation/bobsim$|vehicle/|\.github/workflows/autonomy\.yml$)' <<< "$files"; then
             echo "autonomy=true" >> "$GITHUB_OUTPUT"
           else
