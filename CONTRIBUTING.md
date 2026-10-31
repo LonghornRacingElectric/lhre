@@ -15,7 +15,7 @@ everywhere.
 - Branch from `main`: `<your-name>/<short-description>` (e.g.
   `dhairya/vcu-can-heartbeat`).
 - Open a PR; the `main` ruleset requires one approving review from someone
-  other than the author and a green `CI passed` check before merge. No direct
+  other than the author and a green `All checks passed` check before merge. No direct
   pushes to `main`.
 - Reviews are routed by `.github/CODEOWNERS`: a PR touching `autonomy/`
   automatically requests the `@LonghornRacingElectric/autonomous` team,
@@ -38,7 +38,7 @@ everywhere.
   [ADR-009](docs/architecture/009-autonomy-outside-bazel.md)), BEVO, docs
   and telemetry (images and Docker Compose integration tests). The format
   check always runs.
-- `CI passed` is the one required check. It fails if any job failed or
+- `All checks passed` is the one required check. It fails if any job failed or
   was cancelled, or if `Changes` failed. Its run page shows a table of
   every job's result.
 - Run `bazel test //...` and `bazel run //tools/format:check` locally

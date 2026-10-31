@@ -18,7 +18,7 @@ concurrency:
 jobs:
   # Jobs skip only when this job says their paths are untouched. Weekly and
   # manual runs, and pushes too large to list, run everything. If this job
-  # fails, every job runs and ci-passed still fails.
+  # fails, every job runs and all-checks still fails.
   changes:
     name: Changes
     runs-on: ubuntu-latest
@@ -88,7 +88,7 @@ jobs:
         run: bazel run //tools/format:check
 
   bazel:
-    name: Bazel · Linux
+    name: Bazel (Linux)
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.bazel != 'false' }}
     runs-on: ubuntu-latest
@@ -150,7 +150,7 @@ jobs:
   # under Windows' 260-char MAX_PATH — same setup the .bazelrc.user.example
   # asks of Windows dev machines.
   bazel-windows:
-    name: Bazel · Windows
+    name: Bazel (Windows)
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.bazel != 'false' }}
     runs-on: windows-latest
@@ -207,7 +207,7 @@ jobs:
         run: bazel shutdown
 
   sim-fast:
-    name: Simulation · fast checks
+    name: Simulation fast checks
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.sim != 'false' }}
     runs-on: ubuntu-latest
@@ -247,7 +247,7 @@ jobs:
         run: make unit
 
   four-post:
-    name: Simulation · FourPost
+    name: FourPost
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.car != 'false' }}
     runs-on: ubuntu-latest
@@ -288,7 +288,7 @@ jobs:
             !simulation/out/car/**/*.tir
 
   autonomy:
-    name: Autonomy · colcon
+    name: Autonomy (colcon)
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.autonomy != 'false' }}
     runs-on: ubuntu-latest
@@ -339,7 +339,7 @@ jobs:
         run: colcon test-result --verbose
 
   bevo:
-    name: BEVO · Pi binaries
+    name: BEVO Pi binaries
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.bevo != 'false' }}
     runs-on: ubuntu-latest
@@ -368,7 +368,7 @@ jobs:
 
   # On main, docs.yml builds and publishes the site instead.
   docs:
-    name: Docs · build
+    name: Docs
     needs: changes
     if: ${{ !cancelled() && github.event_name != 'push' && needs.changes.outputs.docs != 'false' }}
     runs-on: ubuntu-latest
@@ -389,7 +389,7 @@ jobs:
   # roles, so POSTGRES_USER must be "electric" and ELECTRIC_PWD must equal
   # POSTGRES_PASSWORD.
   telemetry:
-    name: Telemetry · images and integration
+    name: Telemetry
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.telemetry != 'false' }}
     runs-on: ubuntu-latest
@@ -473,8 +473,8 @@ jobs:
 
   # The only required check, so the ruleset names one check, not ten.
   # Jobs skip only on an untouched area, and run if Changes fails.
-  ci-passed:
-    name: CI passed
+  all-checks:
+    name: All checks passed
     needs: [changes, format, bazel, bazel-windows, sim-fast, four-post, autonomy, bevo, docs, telemetry]
     if: always()
     runs-on: ubuntu-latest
@@ -494,8 +494,8 @@ jobs:
           } | tee -a "$GITHUB_STEP_SUMMARY"
           status=0
           for job in $(sed -n '/^jobs:/,$p' .github/workflows/ci.yml | grep -E '^  [a-z0-9-]+:$' | tr -d ' :'); do
-            [ "$job" = ci-passed ] || jq -e --arg j "$job" 'has($j)' <<< "$NEEDS" > /dev/null \
-              || { echo "::error::$job is not in ci-passed's needs, so nothing checks it"; status=1; }
+            [ "$job" = all-checks ] || jq -e --arg j "$job" 'has($j)' <<< "$NEEDS" > /dev/null \
+              || { echo "::error::$job is not in the needs of all-checks, so nothing checks it"; status=1; }
           done
           jq -e '.changes.result == "success"' <<< "$NEEDS" > /dev/null \
             || { echo "::error::Changes failed, so a skipped job cannot be trusted"; status=1; }

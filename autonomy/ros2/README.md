@@ -198,10 +198,10 @@ unit tests, and generated-track regressions for the LiDAR centerline. These
 regressions use idealized cone visibility; they do not establish that the
 vehicle completes a live Gazebo autocross lap.
 
-CI runs the same build and test (the `Autonomy · colcon` job in
+CI runs the same build and test (the `Autonomy (colcon)` job in
 [`.github/workflows/ci.yml`](https://github.com/LonghornRacingElectric/lhre/blob/main/.github/workflows/ci.yml))
 on the `ros:jazzy-ros-base` image for every PR that touches `autonomy/`,
-`vehicle/` or the BobSim pin. It is part of the required `CI passed` check.
+`vehicle/` or the BobSim pin. It is part of the required `All checks passed` check.
 Dependencies are installed from each package's `package.xml` with `rosdep`,
 so declare new ones there. Gazebo (`ros_gz_*`) is skipped in CI since
 nothing there launches a simulator.

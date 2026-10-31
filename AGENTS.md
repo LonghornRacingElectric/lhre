@@ -57,14 +57,14 @@ It runs on every PR, on every push to `main`, weekly, and by hand.
   included. Each area's job runs only when its paths changed: Bazel on
   Linux and Windows, simulation fast checks, FourPost, autonomy (colcon),
   BEVO, docs and telemetry. `Format` always runs.
-- `CI passed` is the only required check. It fails if any job failed or
+- `All checks passed` is the only required check. It fails if any job failed or
   was cancelled, or if `Changes` failed. A job skips only when `Changes`
   says its paths are untouched. If `Changes` fails, every job runs.
-- To read a failure, open the run's summary page: `CI passed` lists every
+- To read a failure, open the run's summary page: `All checks passed` lists every
   job's result, and a failed Bazel job lists each failed test with the end
   of its log.
 - To add a check, add a job to `ci.yml`, an area for it in `Changes` if it
-  is path-gated, and the job to `CI passed`'s `needs`. `CI passed` fails
+  is path-gated, and the job to the `needs` of `all-checks`. `All checks passed` fails
   if a job is missing from its `needs`.
 - The telemetry job builds the images, smoke-tests them and runs the
   integration tests against Docker Compose. Without the repo secrets it

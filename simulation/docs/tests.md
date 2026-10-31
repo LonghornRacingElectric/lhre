@@ -77,13 +77,13 @@ works in a worktree too.
 
 The repo's `.github/workflows/ci.yml` runs the simulation checks on pull
 requests, on pushes to `main`, every Monday and by hand. Its `Changes` job
-decides which jobs run. Both jobs are part of the required `CI passed`
+decides which jobs run. Both jobs are part of the required `All checks passed`
 check. The full run of every standard evaluation is in
 `.github/workflows/simulation.yml`.
 
 ### fast
 
-The `Simulation · fast checks` job runs when a change touches
+The `Simulation fast checks` job runs when a change touches
 `simulation/`, `vehicle/`, `.gitmodules` or `ci.yml`.
 
 1. Build the image with the GitHub Actions layer cache. A layer is built
@@ -102,13 +102,13 @@ if the job runs a `make` target other than `build`, `smoke`, `unit` or
 
 ### four-post
 
-The `Simulation · FourPost` job runs FourPost on our car: `make car T=standard-eval-four-post`, then
+The `FourPost` job runs FourPost on our car: `make car T=standard-eval-four-post`, then
 `make four-post-acceptance`. See
 [bobsim.md](bobsim.md#run-a-bobsim-target-on-our-car).
 
 It runs when a pull request or a push changes `vehicle/`, the BobSim pin,
 `simulation/tools/`, `simulation/Makefile`, `simulation/docker-compose.yml`
-or `ci.yml`. If the `Changes` job fails, it runs anyway and `CI passed`
+or `ci.yml`. If the `Changes` job fails, it runs anyway and `All checks passed`
 fails. Weekly and manual runs of `ci.yml` always run it.
 
 At BobSim `fe03bab` the acceptance fails for our car. FourPost runs its
