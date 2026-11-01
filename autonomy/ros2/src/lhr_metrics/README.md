@@ -56,6 +56,10 @@ the launch file. **A new launch argument that changes a result belongs in
 that tuple too**, or rows quietly stop explaining themselves. Scoring
 settings live in `SCORING_PARAMS` and are also written on every row.
 
+`fmu_pedal_gain` is recorded only when `plant=fmu`; other plants leave the
+column blank. It belongs to the MVS FMU adapter, so the Gazebo launcher does
+not expose it.
+
 A `data/metrics.csv` written under an older column set is moved aside to
 `data/metrics.csv.old` with a warning rather than having its extra fields
 dropped, which is how a metrics file starts lying about what it holds.
@@ -287,7 +291,10 @@ separated from the simplified baseline. Existing CSV files with an older
 header use the existing schema-mismatch handling; do not compare modes using
 only the outcome columns.
 
-The `plant` field distinguishes `kinematic` and `bobsim` runs. BobSim's
+The `plant` field distinguishes `kinematic`, `bobsim` and `fmu` runs.
+`fmu_pedal_gain` records the FMU driver gain. The FMU manifest and latched
+`/lhr/sim/provenance` message carry its artifact/vehicle/tire hashes and
+exporter commit; retain them with results because CSV alone lacks that identity. BobSim's
 commit and dynamics vehicle hash are in the recorded `/lhr/sim/provenance`
 message; the existing `vehicle_sha256` column still hashes the autonomy YAML.
 

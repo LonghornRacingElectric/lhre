@@ -23,7 +23,7 @@
 
 namespace {
 
-// Long enough for a handful of 100 ms status broadcasts, short enough to keep
+// Long enough for many 3 ms status broadcasts, short enough to keep
 // the test snappy.
 constexpr uint32_t kRunMs = 350;
 
@@ -55,8 +55,8 @@ TEST(VcuRtos, StatusTaskRunsUnderScheduler) {
 
   vTaskStartScheduler();  // returns when StopTaskEntry ends the scheduler
 
-  // 350 ms at a 100 ms period, first broadcast immediate: expect ~4; ≥2
-  // allows heavy scheduler-start jitter.
+  // The first broadcast is immediate; this lower bound allows heavy
+  // scheduler-start jitter without weakening the task-wiring check.
   EXPECT_GE(app.statuses_sent(), 2u);
 
   // The observer saw exactly what was sent, decodable with the generated
@@ -64,10 +64,10 @@ TEST(VcuRtos, StatusTaskRunsUnderScheduler) {
   lhal::CanFrame frame;
   uint32_t received = 0;
   while (dash.Receive(&frame)) {
-    ASSERT_TRUE(lhre::can::vcu::VcuStatus::Matches(frame.id));
-    ASSERT_EQ(frame.len, lhre::can::vcu::VcuStatus::kDlc);
-    EXPECT_EQ(lhre::can::vcu::VcuStatus::FromFrame(frame).state,
-              lhre::can::VcuState::kIdle);
+    ASSERT_TRUE(lhre::can::vcu::VcuState::Matches(frame.id));
+    ASSERT_EQ(frame.len, lhre::can::vcu::VcuState::kDlc);
+    EXPECT_EQ(lhre::can::vcu::VcuState::FromFrame(frame).prndl_state,
+              static_cast<uint8_t>(vcu::State::kIdle));
     ++received;
   }
   EXPECT_EQ(received, app.statuses_sent());

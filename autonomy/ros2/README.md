@@ -198,9 +198,10 @@ unit tests, and generated-track regressions for the LiDAR centerline. These
 regressions use idealized cone visibility; they do not establish that the
 vehicle completes a live Gazebo autocross lap.
 
-CI runs the same build and test
-([`.github/workflows/autonomy.yml`](https://github.com/LonghornRacingElectric/lhre/blob/main/.github/workflows/autonomy.yml))
-on the `ros:jazzy-ros-base` image for every PR that touches `autonomy/`.
+CI runs the same build and test (the `Autonomy (colcon)` job in
+[`.github/workflows/ci.yml`](https://github.com/LonghornRacingElectric/lhre/blob/main/.github/workflows/ci.yml))
+on the `ros:jazzy-ros-base` image for every PR that touches `autonomy/`,
+`vehicle/` or the BobSim pin. It is part of the required `All checks passed` check.
 Dependencies are installed from each package's `package.xml` with `rosdep`,
 so declare new ones there. Gazebo (`ros_gz_*`) is skipped in CI since
 nothing there launches a simulator.
@@ -1025,3 +1026,9 @@ the node only with `safety:=true`. `monitor_lidar` follows `perception`, and
 `rate_hz` and `lidar_topic` are not launch arguments; the package README says
 why. See [lhr_safety](src/lhr_safety/README.md)
 for what a trip does.
+
+The MVS launcher also accepts `plant:=fmu` for the optional
+[full BobLib vehicle](src/lhr_sim_fmu/README.md). Build its identified artifact
+with `make -C simulation fmu`. `fmu_path` selects the artifact and
+`fmu_pedal_gain` (0.1) sets the proportional driver gain. This is separate
+from Gazebo dynamics and does not change the MVP plant choice.

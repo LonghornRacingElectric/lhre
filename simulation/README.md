@@ -38,6 +38,8 @@ make test    # check that BobSim loads //vehicle, then run the fast tests
 | `make unit` | Run the fast unit and contract tests in `tests/`. Then check that `bobsim/` has no local changes. See [docs/tests.md](docs/tests.md). |
 | `make records` | Write `vehicle/vehicle.yml` into BobLib's Modelica records. `VEHICLE=<path>` writes a candidate copy instead. |
 | `make records-undo` | Put back only the files `make records` wrote |
+| `make fmu` | Build the identified Orion FMU with the merged upstream exporter; see [FMU](docs/fmu.md) |
+| `make fmu-source` | Fetch the separately pinned exporter source into ignored build space |
 | `make bobsim T=<target>` | Run a BobSim make target on BobSim's own car. `T=help` lists them. |
 | `make car T=<target>` | Run a BobSim make target on `vehicle/vehicle.yml`, then restore `bobsim/`. Outputs and `identity.json` go to `out/car/<target>/`. `VEHICLE=out/<name>/vehicle.yml` runs a candidate copy to `out/car/<target>--<name>/`. See [docs/bobsim.md](docs/bobsim.md#run-a-bobsim-target-on-our-car). |
 | `make four-post-acceptance T=<target>` | Check the FourPost outputs of `make car T=<target>`. `T` defaults to `standard-eval-four-post`. Pass the same `VEHICLE` as `make car`. |
@@ -55,8 +57,7 @@ simulation/
   docker-compose.yml  # the image is built from bobsim/Dockerfile
   bobsim/             # submodule, pinned SHA
   studies/<name>/     # README.md + study.yml + run.py
-  tools/              # make smoke, make car, study provenance, README fill and shared study helpers
-  tools/              # make smoke, vehicle and bundle checks, anti records, study helpers
+  tools/              # smoke, car and FMU builds, vehicle and bundle checks, study helpers
   tests/              # make unit: fast unit and contract tests
   docs/               # detail and agent skills
   out/                # gitignored outputs

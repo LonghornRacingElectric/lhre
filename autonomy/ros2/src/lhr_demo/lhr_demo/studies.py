@@ -211,7 +211,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--seeds', type=int, nargs='+', default=[1, 7])
     parser.add_argument('--speeds', type=float, nargs='+', default=[4.])
-    parser.add_argument('--plants', nargs='+', choices=['kinematic', 'bobsim'],
+    parser.add_argument('--plants', nargs='+', choices=['kinematic', 'bobsim', 'fmu'],
                         default=['kinematic', 'bobsim'])
     parser.add_argument('--conditions', nargs='+', choices=list(CONDITIONS),
                         default=['clean', 'motion', 'clutter'])

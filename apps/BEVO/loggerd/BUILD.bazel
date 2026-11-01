@@ -25,8 +25,6 @@ rust_test(
     name = "loggerd_test",
     crate = ":loggerd",
     data = ["//apps/BEVO:can_json"],
-    # Runfiles path of the generated can.json; under Cargo the tests fall
-    # back to the build script's OUT_DIR copy instead.
-    env = {"LOGGERD_CAN_JSON_PATH": "apps/BEVO/schema/can.json"},
+    env = {"LOGGERD_CAN_JSON_PATH": "lib/codegen/telemetry/can.json"},
     target_compatible_with = NOT_WINDOWS,
 )

@@ -20,4 +20,4 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # breaking apt's scipy and OpenCV (built against numpy 1.x). Shadow both with
 # wheels that support the base image's NumPy ABI.
 RUN pip install --no-cache-dir --break-system-packages --ignore-installed \
-    "scipy>=1.14" "pandas>=2.2" "opencv-python-headless>=4.10,<5"
+    "fmpy==0.3.32" "scipy>=1.14" "pandas>=2.2" "opencv-python-headless>=4.10,<5"

@@ -21,7 +21,9 @@ nav:
       - ADR-010 Telemetry Stack in Bazel: docs/architecture/010-telemetry-stack-in-bazel.md
       - ADR-012 Simulation Outside Bazel: docs/architecture/012-simulation-outside-bazel.md
       - ADR-013 Drive Day Viewer Outside Bazel: docs/architecture/013-driveday-viewer-outside-bazel.md
+      - ADR-014 Deployed Telemetry Schema: docs/architecture/014-deployed-telemetry-schema.md
       - ADR-015 Study Layout: docs/architecture/015-study-layout.md
+      - ADR-016 FMU Artifact Boundary: docs/architecture/016-fmu-artifact-boundary.md
       - Build System: docs/build-system.md
       - Cookbook: docs/cookbook.md
   - Boards:
@@ -49,6 +51,7 @@ nav:
       - CAN Spec Tools: tools/spec/README.md
       - IDE Setup: tools/ide/README.md
       - Serial Monitor: tools/monitor/README.md
+      - UBSan: tools/ubsan/README.md
       - Prebuilt protoc: tools/protoc/README.md
   - Autonomy:
       - Overview: autonomy/README.md
@@ -62,6 +65,9 @@ nav:
       - Metrics: autonomy/ros2/src/lhr_metrics/README.md
       - Kinematic Sim: autonomy/ros2/src/lhr_sim_kinematic/README.md
       - BobSim Plant: autonomy/ros2/src/lhr_sim_bobsim/README.md
+      - Full Vehicle FMU Plant: autonomy/ros2/src/lhr_sim_fmu/README.md
+      - FMU Runtime: autonomy/ros2/src/lhr_sim_fmu/lhr_sim_fmu/README.md
+      - FMU Tests: autonomy/ros2/src/lhr_sim_fmu/test/README.md
       - Demo Launch: autonomy/ros2/src/lhr_demo/README.md
       - Track Generation: autonomy/ros2/src/lhr_trackgen/README.md
       - Track Builder: autonomy/ros2/src/lhr_track_builder/README.md
@@ -87,6 +93,7 @@ nav:
           - Overview: autonomy/testing/README.md
           - Mid-360 Acceptance 2026-10-04: autonomy/testing/2026-10-04-mid360-acceptance/README.md
           - PR 133 Integration 2026-10-24: autonomy/testing/2026-10-24-pr133-integration/README.md
+          - FMU Seeds 2026-10-26: autonomy/testing/2026-10-26-fmu-seeds/README.md
           - MVP Gate 2026-10-28: autonomy/testing/2026-10-28-mvp-gate/README.md
           - Livox Test Tools: autonomy/testing/tools/livox/README.md
           - Fault Injection Tools: autonomy/testing/tools/fault_injection/README.md
@@ -102,6 +109,8 @@ nav:
       - Docs: simulation/docs/README.md
       - Studies: simulation/docs/studies.md
       - BobSim: simulation/docs/bobsim.md
+      - FMU Artifact: simulation/docs/fmu.md
+      - Simulation Tools: simulation/tools/README.md
       - Skills:
           - Add a Study: simulation/docs/skills/add-study/SKILL.md
           - Run a BobSim Target: simulation/docs/skills/run-bobsim-target/SKILL.md
@@ -127,7 +136,7 @@ nav:
           - Overview: apps/telemetry/README.md
           - Bazel Build Guide: apps/telemetry/BAZEL_BUILD.md
           - Viewer Tool: apps/telemetry/analysis/database/viewer_tool/README.md
-          - Drive Day Viewer: apps/telemetry/analysis/driveday_data_viewer/README.md
+          - Drive Day Viewer: apps/telemetry/analysis/database/viewer_tool/src/lib/driveday/README.md
           - Multi-Car Viewer Plan: apps/telemetry/VIEWER_MULTI_CAR_PLAN.md
           - Field Pipeline: apps/telemetry/TELEMETRY_FIELD_PIPELINE.md
           - Car Status: apps/telemetry/docs/car_status_design.md
@@ -191,13 +200,13 @@ plugins:
         - "site/**" # mkdocs build output
         - "external/**" # third-party staging
         - "patches/**"
+        - "**/node_modules/**" # npm deps of viewer_tool and the autonomy UI, when installed locally
         - "autonomy/ros2/build/**" # colcon outputs on dev machines
         - "autonomy/ros2/install/**"
         - "autonomy/ros2/log/**"
         - "simulation/bobsim/**"
         - "simulation/out/**"
         - "apps/telemetry/stack/ingest/grafana-kafka-datasource/**" # vendored plugin
-        - "apps/telemetry/analysis/driveday_data_viewer/node_modules/**" # npm install, see ADR-013
 
 theme:
   name: material

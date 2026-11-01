@@ -126,3 +126,10 @@ startup check negotiated `foxglove.sdk.v1` and received LiDAR, live metrics,
 truth odometry, truth cones and the fixed truth centerline. This confirms
 startup and transport after recovery, not graphical or renewed driving
 acceptance.
+
+Integration with main `028ac75` builds all 16 ROS packages. The selected
+Gazebo, metrics, caster, demo and FMU interface checks have 437 passes,
+zero failures and two skips: the native-FMU checks require an explicitly
+supplied compiled artifact. Strict MkDocs passes. This integration run
+does not repeat the historical driving circuits or the full workspace
+suite; graphical acceptance is still pending.

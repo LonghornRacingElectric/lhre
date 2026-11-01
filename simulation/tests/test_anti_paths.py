@@ -163,16 +163,13 @@ VARIANTS = [
 
 @pytest.mark.parametrize("make", [make for _, make in VARIANTS], ids=[name for name, _ in VARIANTS])
 @pytest.mark.parametrize("axle", ["front", "rear"])
-def test_kinpy_coefficients_match_the_oracle(make, axle):
+def test_hardpoint_coefficients_match_the_oracle(make, axle):
     vehicle = make()
     corner = oracle.corner_from_vehicle(vehicle, axle)
     found = ap.corner_coefficients(vehicle, axle)
     for reaction, method in ap.COEFF_METHODS.items():
-        tolerance = found.tolerance[method]
-        assert 0.0 < tolerance < 1e-5
-        assert found.values[method] == pytest.approx(oracle.virtual_power_coeff(corner, reaction), abs=tolerance + 1e-9)
-        assert found.values[method] == pytest.approx(oracle.statics_coeff(corner, reaction), abs=tolerance + 1e-9)
-    assert found.bobsim_instant_link == pytest.approx(found.values["contact_patch_path"], abs=1e-6)
+        assert found.values[method] == pytest.approx(oracle.virtual_power_coeff(corner, reaction), abs=1e-9)
+        assert found.values[method] == pytest.approx(oracle.statics_coeff(corner, reaction), abs=1e-9)
     assert abs(found.values["contact_patch_path"] - found.values["virtual_power_3d"]) > 1e-3
 
 
@@ -255,8 +252,8 @@ def test_records_carry_the_c5_contract():
         assert record["status"] == "ok"
         assert record["h_basis"] == "sprung_cg_z"
         assert (record["h_m"], record["wheelbase_m"]) == (pytest.approx(H), pytest.approx(L))
-        assert record["pose"]["jounce_m"] == 0.0 and record["pose"]["coeff_tolerance_n_per_n"] < 1e-5
-        assert set(record["pose"]["cross_checks_n_per_n"]) == {"wheel_center_path", "bobsim_instant_link"}
+        assert record["pose"]["jounce_m"] == 0.0 and record["pose"]["kind"] == "hardpoint_twist"
+        assert set(record["pose"]["cross_checks_n_per_n"]) == {"wheel_center_path"}
         assert "Jacking +Fz lifts the body" in record["sign_convention"]
         assert record["pct"] == pytest.approx(ap.anti_percent(record["axle"], record["coeff_n_per_n"], H, L))
     assert _record(records, "front", "drive")["reason"] == (
@@ -285,3 +282,12 @@ def test_a_vehicle_file_cannot_declare_its_own_force_paths():
     vehicle = dict(VEHICLE, force_paths={})
     with pytest.raises(ValueError, match="bundle"):
         ap.anti_records(vehicle, BUNDLE)
+
+
+def test_parallel_links_are_rejected():
+    vehicle = copy.deepcopy(VEHICLE)
+    front = vehicle["front"]
+    front["steering"]["rack_pickup_m"] = front["suspension"]["lower_fore_i_m"]
+    front["suspension"]["tie_o_m"] = front["suspension"]["lower_o_m"]
+    with pytest.raises(ValueError, match="more than one degree of freedom"):
+        ap.corner_coefficients(vehicle, "front")
