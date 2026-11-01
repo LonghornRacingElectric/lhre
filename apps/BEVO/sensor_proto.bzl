@@ -32,7 +32,7 @@ def sensor_proto_library(name, proto, can_json, contract, testonly = False):
     rust_library(
         name = name,
         testonly = testonly,
-        srcs = ["//apps/BEVO:config.rs", "//apps/BEVO:lib.rs"],
+        srcs = ["//apps/BEVO:config.rs", "//apps/BEVO:lib.rs", "//apps/BEVO:projection.rs"],
         crate_root = "//apps/BEVO:lib.rs",
         edition = "2021",
         target_compatible_with = compatible,
@@ -40,5 +40,6 @@ def sensor_proto_library(name, proto, can_json, contract, testonly = False):
             ":" + name + "_build",
             "@crates//:prost",
             "@crates//:serde",
+            "@crates//:serde_json",
         ],
     )

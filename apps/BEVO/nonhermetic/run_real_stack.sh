@@ -9,9 +9,18 @@ CORE_RELEASE="${BEVO_CORE_RELEASE:-}"
 if [[ -z "$CORE_RELEASE" && -n "${BEVO_CORE_ROOT:-}" ]]; then
   CORE_RELEASE="$BEVO_CORE_ROOT/current"
 fi
+if [[ -z "$CORE_RELEASE" ]]; then
+  echo "Set BEVO_CORE_ROOT or BEVO_CORE_RELEASE to an updater-installed release with reconciliation.json." >&2
+  exit 1
+fi
 if [[ -n "$CORE_RELEASE" ]]; then
   CORE_RELEASE="$(cd "$CORE_RELEASE" && pwd -P)"
   CORE_BIN_DIR="$CORE_RELEASE/bin"
+  export BEVO_CORE_RELEASE_ROOT="$CORE_RELEASE"
+fi
+if [[ ! -f "$CORE_RELEASE/reconciliation.json" ]]; then
+  echo "Missing reconciliation plan in $CORE_RELEASE; run the updater before starting telemetry." >&2
+  exit 1
 fi
 CAN_IFACE_0="${CAND_CAN_INTERFACE_0:-can0}"
 CAN_IFACE_1="${CAND_CAN_INTERFACE_1:-can1}"

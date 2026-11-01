@@ -1,3 +1,4 @@
+import copy
 from pathlib import Path
 import json
 import subprocess
@@ -7,6 +8,7 @@ import unittest
 
 from apps.BEVO.updater.oci import Registry
 from apps.BEVO.updater.updater import EXECUTABLES, MAX_RELEASE_BYTES, METADATA_FILES, Updater, release_schema, unpack, validate_binaries
+from lib.telemetry.contract import seal_manifest
 
 
 class PackageTest(unittest.TestCase):
@@ -37,6 +39,16 @@ class PackageTest(unittest.TestCase):
             updater = Updater(directory, registry)
             selection = updater.choose({"format_version": 1, "schema": json.loads(metadata["schema_contract.json"]), "releases": [reference]})
             updater.install(selection)
+            self.assertEqual(updater.installed().schema_id, selection["schema_id"])
+
+            server = copy.deepcopy(json.loads(metadata["schema_contract.json"]))
+            measurement = next(field for field in server["fields"] if len(field["path"]) == 2)
+            excluded_path = measurement["path"]
+            measurement["unit"] += "_different_unit"
+            reconciled = updater.choose({"format_version": 1, "schema": seal_manifest(server), "releases": []})
+            self.assertEqual(reconciled["action"], "reconcile")
+            self.assertEqual([field["path"] for field in reconciled["excluded"]], [excluded_path])
+            updater.install(reconciled)
             self.assertEqual(updater.installed().schema_id, selection["schema_id"])
 
 

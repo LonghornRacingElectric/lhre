@@ -112,12 +112,12 @@ def compare(producer, server):
         raise ValueError("incompatible root message")
     source_groups = {path[0]: field["names"][0] for path, field in producer.fields.items() if len(path) == 2}
     target_groups = {path[0]: field["names"][0] for path, field in server.fields.items() if len(path) == 2}
-    if any(source_groups[number] != target_groups[number] for number in source_groups.keys() & target_groups.keys()):
-        raise ValueError("protobuf group number was repurposed")
     for path, source in producer.fields.items():
         target = server.fields.get(path)
         reason = ""
-        if target is None:
+        if len(path) == 2 and path[0] in target_groups and source_groups[path[0]] != target_groups[path[0]]:
+            reason = "protobuf group number was repurposed"
+        elif target is None:
             reason = "unknown server field"
         elif any(source.get(key) != target.get(key) for key in ("names", "type", "repeated", "unit", "layout")):
             reason = "type, meaning, unit, or array layout differs"
@@ -144,3 +144,16 @@ def release_compatible(producer, server):
     except ValueError:
         return False
     return all(reason == "unknown server field" for reason in rejected.values())
+
+
+def release_plan(metadata, producer, server):
+    if metadata.get("projection_version") != 1 or metadata["schema_id"] != producer.schema_id:
+        raise ValueError("release lacks numeric projection support")
+    accepted, rejected = compare(producer, server)
+    plan = {
+        "format_version": 1, "producer_schema_id": producer.schema_id,
+        "server": server.manifest, "metadata": metadata,
+        "accepted": [{"path": list(path), "enum_values": accepted[path]} for path in sorted(accepted)],
+        "excluded": [{"path": list(path), "reason": rejected[path]} for path in sorted(rejected)],
+    }
+    return dict(plan, plan_id=content_id(plan))

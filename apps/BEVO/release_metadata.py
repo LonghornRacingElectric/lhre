@@ -19,6 +19,7 @@ def metadata(binaries, can_json, contract, descriptor):
     schema = Schema(contract.read_bytes(), descriptor.read_bytes())
     return {
         "format_version": 1, "platform": "linux/arm64",
+        "projection_version": 1,
         "schema_id": schema.schema_id,
         "executables": {path.name: {"sha256": digest(path)} for path in sorted(binaries)},
         "can_json_sha256": digest(can_json), "schema_contract_sha256": digest(contract),

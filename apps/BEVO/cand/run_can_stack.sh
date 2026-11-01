@@ -6,6 +6,10 @@ CAND_BIN="$RUNFILES_ROOT/_main/apps/BEVO/cand/cand"
 DASHD_BIN="$RUNFILES_ROOT/_main/apps/BEVO/dashd/dashd"
 PUBLISHD_BIN="$RUNFILES_ROOT/_main/apps/BEVO/publishd/publishd"
 LOGGERD_BIN="$RUNFILES_ROOT/_main/apps/BEVO/loggerd/loggerd"
+if [[ -z "${BEVO_CORE_RELEASE_ROOT:-}" || ! -f "$BEVO_CORE_RELEASE_ROOT/reconciliation.json" ]]; then
+  echo "Set BEVO_CORE_RELEASE_ROOT to a release plan matching these Bazel-built executables." >&2
+  exit 1
+fi
 
 STARTUP_SEMAPHORE_PATH="/tmp/BEVO_publishd_ready"
 IPC_SOCKET_PATH="/tmp/BEVO_cand.sock"

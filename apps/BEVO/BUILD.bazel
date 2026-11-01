@@ -21,7 +21,7 @@ exports_files([
 ])
 
 exports_files(
-    ["build.rs", "config.rs", "lib.rs"],
+    ["build.rs", "config.rs", "lib.rs", "projection.rs"],
     visibility = ["//apps/BEVO:__subpackages__"],
 )
 

@@ -26,9 +26,16 @@ symlink once at startup and launches core executables from that release;
 the dashboard remains separately installed under `BEVO_BIN_DIR`.
 `BEVO_CORE_RELEASE=/absolute/release` is an explicit admin override and takes
 precedence over `BEVO_CORE_ROOT`. Missing explicitly selected releases fail
-startup rather than falling back. Without either setting, existing bundle
-paths behave as before. No updater/network request runs inside this launcher;
+startup rather than falling back. A core release and `reconciliation.json`
+are required before starting the real stack. The launcher exports its resolved
+physical directory as `BEVO_CORE_RELEASE_ROOT` for `publishd`.
+No updater/network request runs inside this launcher;
 install first, then restart the stack when appropriate.
+
+The full mock stack requires `BEVO_CORE_RELEASE_ROOT` pointing to a plan for
+the same schema compiled into its separately installed mock executables.
+An explicit updater admin override can prepare an offline identity plan;
+the mock launcher does not invent a plan or bypass publisher validation.
 
 The CAN mapping and CSV column layout are compiled from the shared textproto
 at build time. None of these launchers reads a runtime `can.json`, and the old

@@ -17,6 +17,13 @@ to encode values, including zero/false; the server's generated descriptor
 must decode them. The older descriptor must still decode the shared field.
 No field/packet totals are pinned to the real car schema.
 
+The same compiled helper also loads an updater-generated release plan and
+projects its snapshot. A unit mismatch must remove just the affected wire
+field while preserving root fields and a repeated value containing zero.
+A plan for another producer schema must fail. The test explicitly observes
+the existing proto3 default for an omitted scalar; it does not assert NULL
+or availability semantics in server storage.
+
 All fixture artifacts stay in Bazel outputs; packet files and updater tests
 use temporary directories. No Git history, GitHub/GHCR credentials, Docker,
 MQTT, Kafka, database service, running Pi or image pull is involved. There is

@@ -27,7 +27,13 @@ fn main() {
     update_proto_bool_generated(&mut data, &active.protobuf_field, true);
     assert!(data.controls.as_ref().unwrap().active);
     update_proto_bool_generated(&mut data, &active.protobuf_field, false);
-    std::fs::write(std::env::args().nth(1).unwrap(), data.encode_to_vec()).unwrap();
+    let encoded = data.encode_to_vec();
+    let encoded = match std::env::args().nth(2) {
+        Some(directory) => appended_sensor_proto::projection::Projection::from_release(std::path::Path::new(&directory))
+            .expect("valid release projection").project(&encoded).expect("valid snapshot"),
+        None => encoded,
+    };
+    std::fs::write(std::env::args().nth(1).unwrap(), encoded).unwrap();
     println!(
         "{}",
         serde_json::json!({

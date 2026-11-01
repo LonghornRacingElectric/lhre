@@ -4,6 +4,10 @@ set -euo pipefail
 SCRIPT_ROOT="$(cd "$(dirname "$0")" && pwd)"
 BEVO_ROOT="$(cd "$SCRIPT_ROOT/.." && pwd)"
 BIN_DIR="${BEVO_BIN_DIR:-$BEVO_ROOT/bin}"
+if [[ -z "${BEVO_CORE_RELEASE_ROOT:-}" || ! -f "$BEVO_CORE_RELEASE_ROOT/reconciliation.json" ]]; then
+  echo "Set BEVO_CORE_RELEASE_ROOT to a release plan matching the mock-stack executable schema." >&2
+  exit 1
+fi
 
 # environment variables mirrored from run_real_stack.sh but for mock use
 CAN_IFACE="${CAND_CAN_INTERFACE:-can0}"

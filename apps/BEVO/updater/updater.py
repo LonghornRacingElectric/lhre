@@ -2,7 +2,6 @@
 
 import argparse
 import fcntl
-import hashlib
 import io
 import json
 import os
@@ -14,11 +13,12 @@ import tempfile
 import urllib.parse
 
 from apps.BEVO.updater.oci import Registry, fetch, verify
-from lib.telemetry.contract import Manifest, release_compatible
+from lib.telemetry.contract import Manifest, canonical_json, content_id, release_plan
 
 
 METADATA_FILES = {"pi_core_manifest.json", "schema_contract.json", "schema_descriptor.pb", "can.json"}
 EXECUTABLES = {"cand", "loggerd", "publishd"}
+PLAN_FILE = "reconciliation.json"
 MAX_RELEASE_BYTES = 128 * 1024 * 1024
 
 
@@ -64,6 +64,20 @@ def validate_binaries(files, metadata):
             raise ValueError("core executable is not an AArch64 ELF")
 
 
+def checked_plan(files, metadata, producer):
+    plan = json.loads(files[PLAN_FILE])
+    expected = release_plan(metadata, producer, Manifest(plan["server"]))
+    if plan != expected:
+        raise ValueError("reconciliation plan does not belong to this release")
+    return plan
+
+
+def identity_release(files):
+    metadata, producer = release_schema(files)
+    plan = release_plan(metadata, producer, producer)
+    return dict(files, **{PLAN_FILE: canonical_json(plan).encode()})
+
+
 class Updater:
     def __init__(self, root, registry):
         self.root = Path(root).resolve()
@@ -77,6 +91,9 @@ class Updater:
         metadata, schema = release_schema(files)
         binaries = {"bin/" + name: (current / "bin" / name).read_bytes() for name in EXECUTABLES}
         validate_binaries(binaries, metadata)
+        if (current / PLAN_FILE).exists():
+            files[PLAN_FILE] = (current / PLAN_FILE).read_bytes()
+            checked_plan(files, metadata, schema)
         return schema
 
     def choose(self, profile, upgrade=False):
@@ -84,26 +101,53 @@ class Updater:
             raise ValueError("unsupported server profile")
         server = Manifest(profile["schema"])
         installed = self.installed()
-        if installed and release_compatible(installed, server) and not upgrade:
-            return {"action": "keep", "schema_id": installed.schema_id, "server_schema_id": server.schema_id}
+        if installed and not upgrade:
+            current = self.root / "current"
+            files = {name: (current / name).read_bytes() for name in METADATA_FILES}
+            metadata, _ = release_schema(files)
+            try:
+                plan = release_plan(metadata, installed, server)
+            except ValueError:
+                pass
+            else:
+                selection = self.selection("keep", files, metadata, plan)
+                if not (current / PLAN_FILE).exists() or json.loads((current / PLAN_FILE).read_bytes()) != plan:
+                    selection["action"] = "reconcile"
+                    selection["files"].update({"bin/" + name: (current / "bin" / name).read_bytes() for name in EXECUTABLES})
+                return selection
         for reference in profile["releases"]:
             manifest = self.registry.manifest(reference)
             files = unpack(self.registry.blob(manifest["layers"][0], 2 * 1024 * 1024), METADATA_FILES, 2 * 1024 * 1024)
             metadata, schema = release_schema(files)
-            if release_compatible(schema, server):
-                return {"action": "install", "reference": reference, "schema_id": schema.schema_id,
-                        "server_schema_id": server.schema_id, "files": files, "metadata": metadata, "image": manifest}
-        raise ValueError("no registry release is compatible with the authoritative server schema")
+            try:
+                plan = release_plan(metadata, schema, server)
+            except ValueError:
+                continue
+            return dict(self.selection("install", files, metadata, plan), reference=reference, image=manifest)
+        raise ValueError("no approved GHCR release supports a usable intersection with the deployed server schema")
+
+    def selection(self, action, files, metadata, plan):
+        return {
+            "action": action, "schema_id": plan["producer_schema_id"],
+            "server_schema_id": plan["server"]["schema_id"],
+            "projection_id": plan["plan_id"], "excluded": plan["excluded"],
+            "files": dict(files, **{PLAN_FILE: canonical_json(plan).encode()}), "metadata": metadata,
+        }
 
     def install(self, selection):
+        if selection["action"] == "reconcile":
+            return self.activate(selection["files"])
         binaries = unpack(self.registry.blob(selection["image"]["layers"][1], MAX_RELEASE_BYTES), {"bin/" + name for name in EXECUTABLES}, MAX_RELEASE_BYTES)
         validate_binaries(binaries, selection["metadata"])
         return self.activate(dict(selection["files"], **binaries))
 
     def activate(self, files):
-        metadata, _ = release_schema(files)
+        if files.keys() != METADATA_FILES | {"bin/" + name for name in EXECUTABLES} | {PLAN_FILE}:
+            raise ValueError("incomplete or unexpected managed release files")
+        metadata, producer = release_schema(files)
         validate_binaries(files, metadata)
-        identifier = hashlib.sha256(files["pi_core_manifest.json"]).hexdigest()
+        plan = checked_plan(files, metadata, producer)
+        identifier = content_id({"release_id": content_id(metadata), "projection_id": plan["plan_id"]})
         releases = self.root / "releases"
         releases.mkdir(parents=True, exist_ok=True)
         destination = releases / identifier
@@ -159,9 +203,11 @@ def main():
             files = {name: (args.release / name).read_bytes() for name in names}
             release_schema(files)
             validate_binaries(files, json.loads(files["pi_core_manifest.json"]))
+            files = identity_release(files)
+            plan = checked_plan(files, json.loads(files["pi_core_manifest.json"]), Manifest(files["schema_contract.json"]))
             temporary = override.with_suffix(".tmp")
             temporary.write_text(json.dumps({"source": str(args.release.resolve()), "schema_id": Manifest(files["schema_contract.json"]).schema_id,
-                                             "release_id": hashlib.sha256(files["pi_core_manifest.json"]).hexdigest()}))
+                                             "release_id": content_id({"release_id": content_id(plan["metadata"]), "projection_id": plan["plan_id"]})}))
             os.replace(temporary, override)
             destination = updater.activate(files)
             print(json.dumps({"action": "admin-override", "release": str(destination), "restart_required": True}))
@@ -180,7 +226,7 @@ def main():
         descriptor_url = urllib.parse.urljoin(args.server_url, "schema_descriptor.pb")
         verify(fetch(descriptor_url, 2 * 1024 * 1024, server_headers), "sha256:" + profile["schema_descriptor_sha256"])
         selection = updater.choose(profile, args.upgrade)
-        if args.command == "update" and selection["action"] == "install":
+        if args.command == "update" and selection["action"] in ("install", "reconcile"):
             selection["release"] = str(updater.install(selection))
             selection["restart_required"] = True
         print(json.dumps({key: value for key, value in selection.items() if key not in ("files", "metadata", "image")}))

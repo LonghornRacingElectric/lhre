@@ -47,11 +47,57 @@ fn main() {
     let contract_path = env::var("SCHEMA_CONTRACT").expect("SCHEMA_CONTRACT must be supplied by Bazel");
     let contract: Value = serde_json::from_slice(&fs::read(contract_path).expect("reading schema contract")).expect("parsing schema contract");
     fs::write(out_dir.join("generated_config.rs"), generate_config(&can_json, &contract)).expect("writing generated_config.rs");
+    fs::write(out_dir.join("generated_projection.rs"), generate_projection(&fds, &contract)).expect("writing generated_projection.rs");
 
     println!("cargo:rerun-if-env-changed=PROTO_FILE");
     println!("cargo:rerun-if-env-changed=CAN_JSON");
     println!("cargo:rerun-if-changed={}", proto_path);
     println!("cargo:rerun-if-changed={}", can_json_path.display());
+}
+
+fn rust_member(name: &str) -> String {
+    if ["type", "ref", "match", "loop", "move", "self", "mod", "pub", "use", "where", "crate", "super", "async", "await", "dyn", "in", "as", "fn", "const", "static", "struct", "enum", "trait", "impl", "return", "break", "continue", "let", "mut", "if", "else", "for", "while", "unsafe", "extern", "true", "false"].contains(&name) {
+        format!("r#{name}")
+    } else { name.to_string() }
+}
+
+fn generate_projection(descriptors: &FileDescriptorSet, contract: &Value) -> String {
+    let root_name = contract["root"].as_str().unwrap();
+    let root_type = format!("crate::proto::{}", root_name.replace('.', "::"));
+    let mut code = vec![format!("pub const PRODUCER_SCHEMA_ID: &str = {:?};", contract["schema_id"].as_str().unwrap())];
+    let paths: Vec<Vec<u32>> = contract["fields"].as_array().unwrap().iter().map(|field|
+        field["path"].as_array().unwrap().iter().map(|number| number.as_u64().unwrap() as u32).collect()).collect();
+    code.push(format!("pub const NUMERIC_PATHS: &[&[u32]] = &[{}];", paths.iter().map(|path| format!("&{path:?}")).collect::<Vec<_>>().join(",")));
+    code.push(format!("pub fn project_message(source: &{root_type}, accepted: &std::collections::BTreeMap<Vec<u32>, Vec<i32>>) -> {root_type} {{ let mut output = {root_type}::default();"));
+    let root = descriptors.file.iter().flat_map(|file| file.message_type.iter().map(move |message| (file, message)))
+        .find(|(file, message)| format!("{}.{}", file.package(), message.name()) == root_name).unwrap().1;
+    for root_field in &root.field {
+        let member = rust_member(root_field.name());
+        let number = root_field.number();
+        if root_field.r#type() == field_descriptor_proto::Type::Message {
+            let group_type = format!("crate::proto::{}", root_field.type_name().trim_start_matches('.').replace('.', "::"));
+            code.push(format!("if let Some(group) = &source.{member} {{ let mut selected = {group_type}::default(); let mut present = false;"));
+            for field in contract["fields"].as_array().unwrap().iter().filter(|field| field["path"][0].as_i64() == Some(number as i64)) {
+                let path: Vec<u32> = field["path"].as_array().unwrap().iter().map(|value| value.as_u64().unwrap() as u32).collect();
+                let leaf = rust_member(field["names"][1].as_str().unwrap());
+                let condition = if field["enum"].as_object().is_some_and(|values| !values.is_empty()) {
+                    if field["repeated"].as_bool() == Some(true) {
+                        format!("accepted.get(&{path:?}.to_vec()).is_some_and(|allowed| group.{leaf}.iter().all(|value| allowed.contains(value)))")
+                    } else {
+                        format!("accepted.get(&{path:?}.to_vec()).is_some_and(|allowed| allowed.contains(&group.{leaf}))")
+                    }
+                } else {
+                    format!("accepted.contains_key(&{path:?}.to_vec())")
+                };
+                code.push(format!("if {condition} {{ selected.{leaf} = group.{leaf}.clone(); present = true; }}"));
+            }
+            code.push(format!("if present {{ output.{member} = Some(selected); }} }}"));
+        } else {
+            code.push(format!("if accepted.contains_key(&vec![{number}]) {{ output.{member} = source.{member}.clone(); }}"));
+        }
+    }
+    code.push("output }".to_string());
+    code.join("\n")
 }
 
 fn generate_config(can_json: &str, contract: &Value) -> String {

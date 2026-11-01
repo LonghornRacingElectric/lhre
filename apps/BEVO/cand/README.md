@@ -16,6 +16,12 @@ NMEA GPS from a TCP/UDP listener, and publishes protobuf
 - `:run_can_stack` / `:run_mock_can_stack` — launch the whole daemon fleet
   (see the scripts for the wiring).
 
+The physical stack launcher requires `BEVO_CORE_RELEASE_ROOT` containing an
+[updater-generated plan](../updater/README.md) for the same compiled schema
+as its Bazel-built executables. `publishd` requires that plan before it can
+release cand's startup semaphore. The mock launcher without `publishd` is
+unaffected.
+
 Config is via `CAND_*` env vars (interface names and publish rate).
 The CAN mapping is compiled into the executable; there is no runtime JSON
 file or `CAND_CAN_JSON_PATH` override. Change the textproto and rebuild the

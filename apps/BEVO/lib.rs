@@ -3,6 +3,7 @@ pub mod proto {
 }
 
 pub mod config;
+pub mod projection;
 
 pub mod generated_mapping {
     include!(concat!(env!("OUT_DIR"), "/generated_mapping.rs"));

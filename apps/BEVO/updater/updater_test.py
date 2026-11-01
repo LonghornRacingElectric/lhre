@@ -1,3 +1,4 @@
+import copy
 import hashlib
 import io
 import json
@@ -10,8 +11,8 @@ import urllib.error
 import urllib.request
 
 from apps.BEVO.updater.oci import Registry, SafeRedirect, verify
-from apps.BEVO.updater.updater import EXECUTABLES, METADATA_FILES, Updater, main, unpack
-from lib.telemetry.contract import canonical_json
+from apps.BEVO.updater.updater import EXECUTABLES, METADATA_FILES, PLAN_FILE, Updater, identity_release, main, unpack
+from lib.telemetry.contract import Manifest, canonical_json, seal_manifest
 from lib.telemetry.testing import fixture_schema
 
 
@@ -29,7 +30,7 @@ def archive(files):
     return output.getvalue()
 
 
-def release(schema, marker=b"release"):
+def release(schema, marker=b"release", projection=True):
     executable = b"\x7fELF\x02\x01" + bytes(12) + b"\xb7\x00" + marker
     files = {"bin/" + name: executable + name.encode() for name in EXECUTABLES}
     files.update({"schema_contract.json": canonical_json(schema.manifest).encode(), "schema_descriptor.pb": schema.descriptor_set, "can.json": b"[]"})
@@ -39,8 +40,10 @@ def release(schema, marker=b"release"):
         "schema_contract_sha256": digest(files["schema_contract.json"]),
         "schema_descriptor_sha256": digest(files["schema_descriptor.pb"]), "can_json_sha256": digest(files["can.json"]),
     }
+    if projection:
+        metadata["projection_version"] = 1
     files["pi_core_manifest.json"] = canonical_json(metadata).encode()
-    return files
+    return identity_release(files) if projection else files
 
 
 class FakeRegistry:
@@ -54,7 +57,7 @@ class FakeRegistry:
         return {"layers": [0, 1]}
 
     def blob(self, layer, limit):
-        return archive({name: data for name, data in self.files.items() if (name in METADATA_FILES) == (layer == 0)})
+        return archive({name: data for name, data in self.files.items() if name in (METADATA_FILES if layer == 0 else {"bin/" + binary for binary in EXECUTABLES})})
 
 
 class UpdaterTest(unittest.TestCase):
@@ -64,16 +67,21 @@ class UpdaterTest(unittest.TestCase):
         self.root = Path(self.directory.name).resolve()
         self.schema = fixture_schema()
 
-    def test_current_compatible_release_is_retained_without_registry_download(self):
+    def test_current_release_is_reconciled_without_registry_download(self):
         registry = FakeRegistry({})
         updater = Updater(self.root, registry)
         updater.activate(release(self.schema))
         profile = {"format_version": 1, "schema": fixture_schema(extra=True).manifest, "releases": []}
+        selection = updater.choose(profile)
+        self.assertEqual(selection["action"], "reconcile")
+        original = (self.root / "current/bin/publishd").read_bytes()
+        updater.install(selection)
+        self.assertEqual((self.root / "current/bin/publishd").read_bytes(), original)
         self.assertEqual(updater.choose(profile)["action"], "keep")
         self.assertEqual(registry.requested, [])
 
     def test_selects_compatible_prebuilt_release_and_activates_all_core_files_together(self):
-        registry = FakeRegistry({"bad": release(fixture_schema(value_type="string")), "good": release(self.schema)})
+        registry = FakeRegistry({"bad": release(self.schema, projection=False), "good": release(self.schema)})
         updater = Updater(self.root, registry)
         profile = {"format_version": 1, "schema": self.schema.manifest, "releases": ["bad", "good"]}
         selected = updater.choose(profile)
@@ -86,9 +94,35 @@ class UpdaterTest(unittest.TestCase):
     def test_incompatible_registry_does_not_replace_installed_release(self):
         updater = Updater(self.root, FakeRegistry({"bad": release(fixture_schema(value_type="string"))}))
         original = updater.activate(release(self.schema))
-        profile = {"format_version": 1, "schema": fixture_schema(unit="mV").manifest, "releases": ["bad"]}
+        incompatible = copy.deepcopy(self.schema.manifest)
+        for field in incompatible["fields"]:
+            if len(field["path"]) == 2:
+                field["names"][0] = "another_group"
+        profile = {"format_version": 1, "schema": seal_manifest(incompatible), "releases": ["bad"]}
         with self.assertRaises(ValueError):
             updater.choose(profile)
+        self.assertEqual((self.root / "current").resolve(), original)
+
+    def test_partial_intersection_keeps_the_actual_installed_release(self):
+        updater = Updater(self.root, FakeRegistry({}))
+        updater.activate(release(self.schema))
+        server = fixture_schema(value_type="string")
+        selection = updater.choose({"format_version": 1, "schema": server.manifest, "releases": []})
+        self.assertEqual(selection["action"], "reconcile")
+        self.assertEqual(selection["schema_id"], self.schema.schema_id)
+        self.assertEqual(selection["excluded"][0]["path"], [3, 1])
+        updater.install(selection)
+        plan = json.loads((self.root / "current" / PLAN_FILE).read_bytes())
+        self.assertIn([3, 2], [entry["path"] for entry in plan["accepted"]])
+        self.assertEqual(plan["server"]["schema_id"], server.schema_id)
+
+    def test_projection_for_another_release_cannot_activate(self):
+        updater = Updater(self.root, FakeRegistry({}))
+        original = updater.activate(release(self.schema))
+        changed = release(self.schema, b"next")
+        changed[PLAN_FILE] = release(self.schema)[PLAN_FILE]
+        with self.assertRaises(ValueError):
+            updater.activate(changed)
         self.assertEqual((self.root / "current").resolve(), original)
 
     def test_tampered_binary_never_activates(self):

@@ -1,7 +1,7 @@
 import copy
 import unittest
 
-from lib.telemetry.contract import Schema, compare, seal_manifest
+from lib.telemetry.contract import Manifest, Schema, compare, release_plan, seal_manifest
 from lib.telemetry.testing import fixture_schema
 
 
@@ -50,6 +50,27 @@ class ContractTest(unittest.TestCase):
         reordered = copy.deepcopy(schema.manifest)
         reordered["fields"].reverse()
         self.assertEqual(seal_manifest(reordered)["schema_id"], schema.schema_id)
+
+    def test_plan_excludes_renamed_tag_without_changing_server_schema(self):
+        producer = fixture_schema()
+        changed = copy.deepcopy(producer.manifest)
+        changed["fields"][2]["names"][-1] = "renamed_voltage"
+        server = Manifest(seal_manifest(changed))
+        original = copy.deepcopy(server.manifest)
+        plan = release_plan({"projection_version": 1, "schema_id": producer.schema_id}, producer, server)
+        self.assertEqual([entry["path"] for entry in plan["excluded"]], [[3, 1]])
+        self.assertIn([3, 2], [entry["path"] for entry in plan["accepted"]])
+        self.assertEqual(server.manifest, original)
+        self.assertEqual(plan["server"], original)
+
+    def test_plan_preserves_enum_numeric_intersection_and_rejects_legacy_publisher(self):
+        producer = fixture_schema(enum={0: "OFF", 1: "ON", 2: "NEW"})
+        metadata = {"projection_version": 1, "schema_id": producer.schema_id}
+        plan = release_plan(metadata, producer, fixture_schema())
+        enum = next(entry for entry in plan["accepted"] if entry["path"] == [3, 4])
+        self.assertEqual(enum["enum_values"], [0, 1])
+        with self.assertRaises(ValueError):
+            release_plan({"schema_id": producer.schema_id}, producer, fixture_schema())
 
 
 if __name__ == "__main__":
