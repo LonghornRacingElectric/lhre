@@ -27,3 +27,29 @@ checks that `classify_sides:=false` still deduplicates and publishes every
 cone. `test_cone_color.py` covers the camera color regions, thresholds and
 image decoding; `test_camera_color_classifier.py` checks that the node keeps
 the image header and drops malformed frames.
+
+Camera fusion adds ROS-independent projection, region-association and vote tests
+in `test_camera_lidar_geometry.py`. `test_camera_lidar_fusion.py` uses actual
+ROS camera/map messages and TF to check timing, resets, marker lifecycle, and
+late-subscriber behavior. Its ROS checks skip when `rclpy` is unavailable;
+a skipped test does not verify integration. Gazebo's
+`test_camera_lidar_fusion_launch.py` evaluates defaults/overrides and starts
+fusion with those parameters in truth and EKF modes.
+
+Fallback checks distinguish persistent physical-color history from current
+camera eligibility. Pure tests cover priority, timeout boundaries, latest-frame
+visibility/conflicts and ID generations; ROS tests check the separate classified
+output, deletion markers and timer expiration with no new map.
+
+Delayed-image regression checks preserve the map, votes, physical-orange
+evidence, and dynamic TF for both small and large image timestamp regressions,
+and verify that subsequent fresh frames still process. Map/clock regression
+checks separately verify that actual epoch changes discard previous evidence
+and dynamic poses while retaining the static mount.
+
+Orange stays orange on the inspection output while the classified output
+preserves its LiDAR side/unknown namespace. Gazebo's acceleration regression
+uses the generated full course, confirms camera colors, and checks that the
+resulting planner path extends past the 75 m finish with both classified and
+unclassified orange source cones. This catches the premature stop caused by
+excluding the orange finish gate and exit lane.

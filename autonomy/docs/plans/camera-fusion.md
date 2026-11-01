@@ -10,7 +10,15 @@ stereo images and calibration in ROS/RViz; its design and implementation scope a
 in the [Gazebo README](../../ros2/src/lhr_gazebo/README.md#stereo-validation).
 Camera-only HSV region classification is implemented as an opt-in debug view;
 see [classifier usage](../../ros2/src/lhr_perception/README.md#camera-color-classification).
-Live classification validation and LiDAR fusion remain subsequent work.
+Celina has visually exercised classification in VNC. A separate colored LiDAR
+map for inspection is implemented for code review;
+its approach was approved on 2026-10-12. The
+[detailed fusion design](camera-lidar-fusion-design.md) records the contract;
+ROS launch/startup and synthetic image-to-planner integration tests run in
+Docker. LiDAR fallback and track-builder wiring are implemented on a separate
+classified topic. Celina confirmed camera-color and autocross/EKF visuals;
+see the [validation record](../../ros2/src/lhr_gazebo/README.md#fusion-planner-validation-2026-11-01)
+for the automated checks and remaining live-interruption evidence.
 
 ## Background
 
@@ -57,20 +65,27 @@ For our sim pipeline, the equivalent is: render camera image, segment by color, 
 - Implemented: subscribe to the left camera image and segment blue/yellow/orange
   regions using configurable HSV bounds and minimum connected pixel area.
 - Publish a labeled debug image, retaining input timestamps and frames.
-- These are color candidates, not cone-object detections. Live validation and
-  a machine-readable region interface for fusion remain follow-up work.
+- These are color candidates, not cone-object detections. The selected fusion
+  approach reuses segmentation on raw images rather than introducing a new
+  region transport interface. Physical-camera accuracy remains unvalidated.
 
 ### 3.3 — LiDAR-camera fusion node
-- Subscribe to both LiDAR cone detections and camera image
-- Project each LiDAR cone position into the camera frame using TF
-- Look up the color at that pixel location in the classified image
-- Publish cone markers with color labels (blue/yellow/unknown)
+- Implemented for code review: timestamp-aligned
+  projection, conservative region matching, and correctable per-ID votes.
+- Publishes blue/yellow/orange/unknown markers on the separate RViz topic
+  `/lhr/perception/cones_fused`,
+  preserving LiDAR positions and IDs. A second classified topic prefers fresh
+  confirmed camera matches and falls back to the existing inferred LiDAR side.
+  Gazebo connects the classified output to color-aware boundary pairing.
 
 ### 3.4 — Update track builder to use color
-- Implemented in [#83](https://github.com/LonghornRacingElectric/lhre/pull/83): `_pair_boundary` rejects Delaunay
-  edges whose endpoints share a known color (`boundary_use_color`, default true).
-- Edges with an unknown endpoint keep the distance-only filter, so unlabeled
-  LiDAR cones pair as before.
+- Gazebo fusion mode selects the classified topic and color-aware boundary
+  pairing, with automatic LiDAR side inference for fallback. Same-known-color
+  edges are rejected; unknown and orange cones keep their LiDAR geometry
+  labels for pairing. The inspection map retains physical orange, while
+  acceleration finish/exit cones stay available to planning.
+- Fusion-disabled launch behavior is preserved. Synthetic ROS/DDS tests cover
+  priority, conflicting camera labels, dropout and recovery.
 
 ### 3.5 — Validate on autocross track
 - Run full pipeline on an autocross layout

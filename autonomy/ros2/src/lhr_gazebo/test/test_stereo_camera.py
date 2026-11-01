@@ -153,7 +153,14 @@ def test_stereo_rviz_preserves_existing_displays():
     stereo = yaml.safe_load(path.read_text())['Visualization Manager']['Displays']
     original = yaml.safe_load((PKG / 'config' / 'default.rviz').read_text())
     images = [d for d in stereo if d['Class'] == 'rviz_default_plugins/Image']
-    driving = [d for d in stereo if d['Class'] != 'rviz_default_plugins/Image']
+    fusion_topics = {'/lhr/perception/cones_fused', '/lhr/perception/cones_classified'}
+    fusion_displays = [d for d in stereo if d.get('Topic', {}).get('Value') in fusion_topics]
+    driving = [d for d in stereo if d['Class'] != 'rviz_default_plugins/Image'
+               and d not in fusion_displays]
+    assert {d['Topic']['Value'] for d in fusion_displays} == fusion_topics
+    assert all(d['Enabled'] is False and d['Value'] is False for d in fusion_displays)
+    assert all(d['Topic']['Durability Policy'] == 'Transient Local'
+               and d['Topic']['Reliability Policy'] == 'Reliable' for d in fusion_displays)
     assert driving == original['Visualization Manager']['Displays']
     assert [d['Topic']['Value'] for d in images] == [
         '/lhr/sensor/zed2i/left/image_rect', '/lhr/sensor/zed2i/right/image_rect',

@@ -174,12 +174,19 @@ def _launch_setup(context: LaunchContext):
     camera_nodes = []
     enable_color = context.launch_configurations.get(
         'enable_camera_color_classifier', 'false').lower() == 'true'
+    enable_fusion = context.launch_configurations.get(
+        'enable_camera_lidar_fusion', 'false').lower() == 'true'
+    if enable_fusion and (not enable_stereo or perception != 'lidar'):
+        raise RuntimeError(
+            'Camera fusion requires enable_stereo_camera:=true and perception:=lidar')
+    # Fusion needs inferred sides whenever camera evidence is unavailable.
+    classify_sides = classify_sides or enable_fusion
     if enable_color and not enable_stereo:
         raise RuntimeError('Camera classification requires enable_stereo_camera:=true')
     if enable_stereo:
         from lhr_gazebo.stereo_camera import stereo_actions
         camera_nodes = stereo_actions(load_vehicle().stereo_camera, config_dir)
-    if enable_color:
+    if enable_color or enable_fusion:
         from lhr_perception.cone_color import DEFAULT_THRESHOLDS, validate_config
         thresholds = {
             color: yaml.safe_load(context.launch_configurations[f'cone_color_{color}_hsv'])
@@ -187,18 +194,26 @@ def _launch_setup(context: LaunchContext):
         }
         min_area = int(context.launch_configurations['cone_color_min_region_area'])
         validate_config(thresholds, min_area)
-        camera_nodes.append(Node(
-            package='lhr_perception',
-            executable='camera_color_classifier',
-            name='camera_color_classifier',
-            parameters=[{
-                'use_sim_time': True,
-                'min_region_area': ParameterValue(
-                    LaunchConfiguration('cone_color_min_region_area'), value_type=int),
-                **{f'{color}_hsv': bounds for color, bounds in thresholds.items()},
-            }],
-            output='screen',
-        ))
+        color_parameters = {
+            'use_sim_time': True,
+            'min_region_area': ParameterValue(
+                LaunchConfiguration('cone_color_min_region_area'), value_type=int),
+            **{f'{color}_hsv': bounds for color, bounds in thresholds.items()},
+        }
+        if enable_color:
+            camera_nodes.append(Node(
+                package='lhr_perception', executable='camera_color_classifier',
+                name='camera_color_classifier', parameters=[color_parameters], output='screen'))
+        if enable_fusion:
+            from lhr_perception.camera_lidar_geometry import FUSION_DEFAULTS
+            camera_nodes.append(Node(
+                package='lhr_perception', executable='camera_lidar_fusion',
+                name='camera_lidar_fusion', parameters=[{
+                    **color_parameters,
+                    **{name: ParameterValue(LaunchConfiguration(f'fusion_{name}'),
+                                            value_type=type(default))
+                       for name, default in FUSION_DEFAULTS.items()},
+                }], output='screen'))
 
     qt_platform = os.environ.get('QT_QPA_PLATFORM', '')
     qt_env = {}
@@ -398,8 +413,11 @@ def _launch_setup(context: LaunchContext):
             name='track_builder',
             parameters=[{
                 'use_sim_time': True,
-                'pairing_strategy': (
-                    'classified' if classify_sides else 'boundary'),
+                'cone_topic': ('/lhr/perception/cones_classified' if enable_fusion
+                               else '/lhr/sensor/cones_detected'),
+                'pairing_strategy': ('boundary' if enable_fusion else
+                                     'classified' if classify_sides else 'boundary'),
+                'boundary_use_color': True,
                 'chaining_alg': ParameterValue(
                     LaunchConfiguration('chaining_alg'), value_type=str),
                 'min_step_m': ParameterValue(
@@ -688,7 +706,7 @@ def generate_launch_description():
                               choices=['baseline', 'acceptance_overcast']),
         DeclareLaunchArgument(
             'lidar_classify_sides', default_value='false',
-            description='Infer LiDAR cone sides (opt in; false publishes unlabeled cones)'),
+            description='Infer LiDAR sides; always enabled when camera fusion is enabled'),
         DeclareLaunchArgument(
             'track_style', default_value='autocross',
             description='Track style: "autocross", "oval", or "simple"'),
@@ -711,6 +729,23 @@ def generate_launch_description():
             'enable_camera_color_classifier', default_value='false',
             choices=['true', 'false'],
             description='Label ZED color regions; requires enable_stereo_camera'),
+        DeclareLaunchArgument(
+            'enable_camera_lidar_fusion', default_value='false', choices=['true', 'false'],
+            description='Color a separate LiDAR map; requires stereo and perception:=lidar'),
+        *[DeclareLaunchArgument(
+            f'fusion_{name}', default_value=str(default), description=description)
+          for name, default, description in (
+              ('process_hz', 10.0, 'Maximum fusion processing frequency'),
+              ('map_max_age_sec', 0.5, 'Maximum map age at image time, at most 2 seconds'),
+              ('camera_max_age_sec', 0.5, 'Maximum camera age before using LiDAR sides'),
+              ('sample_height_m', 0.1625, 'Height above planar map points to sample color'),
+              ('max_color_range_m', 20.0, 'Maximum 3D camera-to-sample distance'),
+              ('pixel_margin', 6.0, 'Region bounding-box expansion in pixels'),
+              ('vote_window', 5, 'Maximum accepted color votes per cone'),
+              ('min_color_votes', 3, 'Minimum matching votes to confirm a color'),
+              ('min_color_fraction', 0.7, 'Minimum fraction of matching color votes'),
+              ('id_reset_distance_m', 0.5, 'Map displacement that clears camera evidence'),
+          )],
         DeclareLaunchArgument(
             'cone_color_min_region_area', default_value='25',
             description='Minimum connected color region area in pixels'),
