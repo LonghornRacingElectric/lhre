@@ -387,7 +387,9 @@ Enable **ClassifiedCones** to inspect it. Fusion automatically enables the
 existing geometry classifier for fallback, including when the explicit
 `lidar_classify_sides` argument is false. Without fusion, the planner topic
 and pairing/side-inference choices retain their previous behavior. Confirmed
-orange cones remain excluded from boundary planning during camera loss.
+orange cones keep their LiDAR side/unknown namespace in planning, including
+during camera loss. Their physical color remains orange on the inspection map;
+finish and exit-lane cones are not removed from the acceleration path.
 
 All node settings are exposed with `fusion_` prefixes; color thresholds and
 minimum area reuse `cone_color_*` with or without the debug classifier.
@@ -541,3 +543,22 @@ map, confirmed-orange evidence, or dynamic TF. Regression tests cover small
 and large delays, duplicate frames, and continued processing of fresh frames;
 map and ROS-clock regressions still reset the previous epoch. The affected
 ROS suites passed **467 tests, zero errors/failures/skips** after this fix.
+
+### Acceleration orange-geometry correction
+
+The initial fusion planner output excluded confirmed orange cones. On the
+acceleration course this removed the finish gate and the exit-lane corridor:
+a generated-course regression reproduced a path endpoint at x=72.027 m,
+before the 75 m finish. Orange now retains the detector's `left_cones`,
+`right_cones`, or `cones` namespace for planning; its physical color remains
+orange on the inspection topic. Blue/yellow camera priority is unchanged.
+
+The regression confirms colors on the full generated acceleration layout and
+checks that the path continues beyond the finish with both side-classified
+and unclassified orange inputs. In a separate headless acceleration/EKF run
+with fusion enabled, the mission reached `FINISHED` in 70.7 wall seconds. The
+observer saw up to 18 confirmed orange cones on the inspection map, no
+`orange_cones` on the classified topic, and planner paths extending to x=96 m.
+Final estimated speed was 0.0024 m/s. This was one moving completion check
+with safety/metrics disabled, not a repeated/scored MVP gate campaign; the
+reviewer's full acceleration gate rerun is still needed.

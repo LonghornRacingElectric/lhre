@@ -231,7 +231,7 @@ def test_camera_fusion_topic_drives_color_pairing_and_recovers_from_camera_loss(
                     break
             assert set(planner._left_cones) == left
             assert set(planner._right_cones) == right
-            assert 11 not in planner._unknown_cones
+            assert planner._unknown_cones == {11: (7.75, 0.)}
 
         for stamp in (10, 11, 12):
             feed(stamp)
@@ -247,6 +247,61 @@ def test_camera_fusion_topic_drives_color_pairing_and_recovers_from_camera_loss(
     finally:
         if executor is not None:
             executor.shutdown()
+        if planner is not None:
+            planner.destroy_node()
+        if fusion is not None:
+            fusion.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+
+
+@pytest.mark.parametrize('infer_orange_sides', [False, True])
+def test_confirmed_acceleration_orange_keeps_path_beyond_finish(infer_orange_sides):
+    """Confirming finish/exit orange must not turn the finish into a path endpoint."""
+    rclpy = pytest.importorskip('rclpy')
+    from lhr_perception.camera_lidar_fusion import CameraLidarFusion
+    from lhr_track_builder.track_builder_node import TrackBuilder
+    from lhr_trackgen.publish_cones import (
+        ACCEL_LENGTH_M, cone_kinds, generate_acceleration_track, pairing_width_m)
+    from rclpy.time import Time
+    from visualization_msgs.msg import Marker, MarkerArray
+
+    rclpy.init(args=['--ros-args', '-p', 'use_sim_time:=true',
+                     '-p', f'track_width:={pairing_width_m("acceleration")}'], domain_id=89)
+    fusion = planner = None
+    try:
+        fusion, planner = CameraLidarFusion(), TrackBuilder()
+        left, right = generate_acceleration_track()
+        left_kinds, right_kinds = cone_kinds('acceleration', left, right)
+        source, colors = MarkerArray(), {}
+        for points, kinds, side in ((left, left_kinds, 'left_cones'),
+                                    (right, right_kinds, 'right_cones')):
+            for (x, y), kind in zip(points, kinds):
+                cone_id = len(source.markers)
+                orange = kind.startswith('orange')
+                namespace = side if not orange or infer_orange_sides else 'cones'
+                marker = Marker(id=cone_id, ns=namespace, type=Marker.SPHERE)
+                marker.header.frame_id, marker.header.stamp.sec = 'map', 10
+                marker.pose.position.x, marker.pose.position.y = x, y
+                marker.pose.orientation.w = 1.
+                source.markers.append(marker)
+                colors[cone_id] = 'orange' if orange else kind
+        fusion._map_cb(source)
+        generations = fusion._map_history[-1][2]
+        for stamp in (10_000_000_001, 10_000_000_002, 10_000_000_003):
+            fusion._evidence.observe(colors, stamp, generations)
+        fusion.get_clock().set_ros_time_override(Time(seconds=10.3))
+        planner._cones_cb(fusion._output_snapshot(classified=True))
+        planner._have_odom = True
+        planner._veh_x, planner._veh_y, planner._veh_yaw = 70., 0., 0.
+        path = planner._compute_midpoints()
+        assert path
+        end_x = max(x for x, _ in path)
+        assert end_x > ACCEL_LENGTH_M, f'Path stops before finish at x={end_x:.3f}'
+        assert (len(planner._left_cones) + len(planner._right_cones)
+                + len(planner._unknown_cones)) == len(source.markers)
+        assert any(m.ns == 'orange_cones' for m in fusion._output_snapshot().markers)
+    finally:
         if planner is not None:
             planner.destroy_node()
         if fusion is not None:

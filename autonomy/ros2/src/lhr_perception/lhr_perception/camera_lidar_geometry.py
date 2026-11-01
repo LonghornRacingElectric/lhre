@@ -98,8 +98,8 @@ def associate_regions(pixels, regions, pixel_margin):
 
 
 def resolve_cone_namespace(camera_color, lidar_namespace):
-    """Prefer measured camera color, otherwise retain the inferred LiDAR side."""
-    return {'blue': 'left_cones', 'yellow': 'right_cones', 'orange': 'orange_cones'}.get(
+    """Use blue/yellow camera sides; keep LiDAR geometry for orange or unknown."""
+    return {'blue': 'left_cones', 'yellow': 'right_cones'}.get(
         camera_color, lidar_namespace)
 
 
@@ -165,10 +165,3 @@ class ColorEvidence:
                 if (cone_id in self._entries
                     and self._entries[cone_id].generation == generation
                     and self._entries[cone_id].label == color)}
-
-    def planning_labels(self, now_ns, max_age_ns):
-        """Use fresh boundary colors and retain known orange exclusions through dropout."""
-        labels = self.visible_labels(now_ns, max_age_ns)
-        labels.update({cone_id: 'orange' for cone_id, entry in self._entries.items()
-                       if entry.label == 'orange'})
-        return labels

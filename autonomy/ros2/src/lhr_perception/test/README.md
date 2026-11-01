@@ -41,8 +41,15 @@ camera eligibility. Pure tests cover priority, timeout boundaries, latest-frame
 visibility/conflicts and ID generations; ROS tests check the separate classified
 output, deletion markers and timer expiration with no new map.
 
-Delayed-image regression checks preserve the map, votes, confirmed-orange
-exclusion, and dynamic TF for both small and large image timestamp regressions,
+Delayed-image regression checks preserve the map, votes, physical-orange
+evidence, and dynamic TF for both small and large image timestamp regressions,
 and verify that subsequent fresh frames still process. Map/clock regression
 checks separately verify that actual epoch changes discard previous evidence
 and dynamic poses while retaining the static mount.
+
+Orange stays orange on the inspection output while the classified output
+preserves its LiDAR side/unknown namespace. Gazebo's acceleration regression
+uses the generated full course, confirms camera colors, and checks that the
+resulting planner path extends past the 75 m finish with both classified and
+unclassified orange source cones. This catches the premature stop caused by
+excluding the orange finish gate and exit lane.

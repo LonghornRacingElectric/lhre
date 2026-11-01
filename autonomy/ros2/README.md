@@ -354,7 +354,8 @@ LiDAR side fallback. Enable **ClassifiedCones** to inspect the planner input.
 Fusion mode automatically enables LiDAR side inference for fallback.
 `fusion_camera_max_age_sec` (default `0.5`) bounds boundary-color freshness.
 The planner reads the classified output with color-aware boundary pairing;
-unknown cones retain geometry checks and confirmed orange cones are excluded. See the
+unknown and orange cones retain geometry-based pairing. Physical orange stays
+on the inspection map; the planner keeps its LiDAR side/unknown namespace. See the
 [perception contract and tuning parameters](src/lhr_perception/README.md#cameralidar-inspection-map)
 and [Gazebo usage](src/lhr_gazebo/README.md#cameralidar-inspection-map).
 ROS launch/startup and synthetic image-to-planner checks run in Docker.

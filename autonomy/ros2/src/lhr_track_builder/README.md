@@ -56,9 +56,10 @@ enable_camera_lidar_fusion:=true`, Gazebo launch connects `cone_topic` to
 `/lhr/perception/cones_classified` and selects `pairing_strategy:=boundary`
 with `boundary_use_color:=true`. Camera blue/yellow arrive as `left_cones`/
 `right_cones`; same-known-color Delaunay edges are rejected, while edges
-involving unknown `cones` keep the width filter. Confirmed orange uses
-`orange_cones`, which this consumer excludes from pairing, including during
-camera dropout. Orange identity lasts until evidence changes or the ID resets.
+involving unknown `cones` keep the width filter. For orange, fusion preserves
+the LiDAR namespace (`left_cones`, `right_cones`, or `cones`) so geometry can
+still pair acceleration finish/exit cones. Physical orange is retained on the
+separate inspection map; it is not an exclusion from planning.
 
 Fusion automatically enables the existing LiDAR side classifier as fallback,
 even if `lidar_classify_sides:=false` was supplied. Camera labels override those
@@ -71,7 +72,7 @@ Without fusion, Gazebo keeps `/lhr/sensor/cones_detected` and its existing
 boundary/default or opt-in classified pairing. The `sim` perception branch is
 unchanged. Fusion launch tests check actual node subscription topics in both
 estimators and a real image/TF/DDS integration exercises camera priority,
-conflicts, dropout, recovery, pairing results and orange exclusion. Live
+conflicts, dropout, recovery, pairing results and orange geometry fallback. Live
 Gazebo autocross/EKF visuals were confirmed manually; see the
 [validation record](../lhr_gazebo/README.md#fusion-planner-validation-2026-11-01)
 for the stationary run and remaining live-interruption evidence.

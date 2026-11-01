@@ -233,7 +233,7 @@ def test_zero_stamp_bad_image_and_replay_restart_do_not_reuse_evidence(node):
 
 @pytest.mark.parametrize('seconds,nanoseconds', [(11, 900_000_000), (1, 0), (12, 0)])
 def test_late_or_duplicate_image_preserves_map_votes_tf_and_orange(node, seconds, nanoseconds):
-    """A delayed frame must not erase the map or let known orange enter pairing."""
+    """A delayed frame must not erase the map, physical color memory, or TF."""
     from rclpy.time import Time
     for stamp in (10, 11, 12):
         observe(node, stamp, color=(255, 100, 0))
@@ -248,7 +248,8 @@ def test_late_or_duplicate_image_preserves_map_votes_tf_and_orange(node, seconds
     assert node._last_image_stamp == node._processed_stamp == 12_000_000_000
     assert not node._images
     assert node._tf_buffer.can_transform('camera_optical', 'map', Time(seconds=12))
-    assert node._classified_keys == {('orange_cones', 7)}
+    assert node._classified_keys == {('left_cones', 7)}
+    assert node._output_snapshot().markers[-1].ns == 'orange_cones'
     # The next valid frame continues the same map and color evidence.
     observe(node, 13, color=(255, 100, 0))
     assert node._processed_stamp == 13_000_000_000
@@ -398,15 +399,18 @@ def test_unusable_camera_observations_return_to_inferred_side(node, reason):
     assert all(m.ns == 'right_cones' for m in adds)
 
 
-def test_observed_orange_is_not_reclassified_as_a_track_side(node):
-    """A confirmed orange observation remains distinct from fallback boundary sides."""
+@pytest.mark.parametrize('namespace', ['left_cones', 'right_cones', 'cones'])
+def test_orange_uses_lidar_geometry_for_planning_and_color_for_inspection(node, namespace):
+    """Finish/exit orange stays plannable while the inspection map keeps its color."""
     from rclpy.time import Time
     for stamp in (10, 11, 12):
         observe(node, stamp, color=(255, 100, 0))
     node.get_clock().set_ros_time_override(Time(seconds=12.))
+    node._map_cb(snapshot(12, namespace=namespace))
     marker = node._output_snapshot(classified=True).markers[-1]
-    assert marker.ns == 'orange_cones'
+    assert marker.ns == namespace
     assert marker.id == 7
+    assert node._output_snapshot().markers[-1].ns == 'orange_cones'
 
 
 @pytest.mark.parametrize('topic', ['/lhr/perception/cones_fused',

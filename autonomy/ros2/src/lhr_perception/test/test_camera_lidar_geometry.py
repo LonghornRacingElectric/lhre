@@ -168,7 +168,8 @@ def test_rigid_transform_matrix_handles_rotation_translation_and_bad_quaternions
 
 @pytest.mark.parametrize('camera,lidar,expected', [
     ('blue', 'right_cones', 'left_cones'), ('yellow', 'left_cones', 'right_cones'),
-    ('orange', 'left_cones', 'orange_cones'), (None, 'left_cones', 'left_cones'),
+    ('orange', 'left_cones', 'left_cones'), ('orange', 'right_cones', 'right_cones'),
+    ('orange', 'cones', 'cones'), (None, 'left_cones', 'left_cones'),
     (None, 'right_cones', 'right_cones'), (None, 'cones', 'cones'),
 ])
 def test_camera_side_overrides_lidar_only_when_available(camera, lidar, expected):
@@ -223,14 +224,15 @@ def test_invalid_camera_max_age_is_rejected(value):
         fusion().validate_settings(dict(fusion().FUSION_DEFAULTS, camera_max_age_sec=value))
 
 
-def test_confirmed_orange_stays_excluded_through_camera_loss_until_id_reset():
-    """An already identified orange cone must not become a boundary after dropout."""
+def test_confirmed_orange_color_memory_survives_camera_loss_until_id_reset():
+    """Inspection keeps physical orange without changing its inferred planning side."""
     votes = fusion().ColorEvidence(5, 3, .7, .5)
     generations = votes.update_map({7: (1., 2., 0.)})
     for stamp in (100, 200, 300):
         votes.observe({7: 'orange'}, stamp, generations)
-    assert votes.planning_labels(1000, 50) == {7: 'orange'}
+    assert votes.labels() == {7: 'orange'}
+    assert votes.visible_labels(1000, 50) == {}
     votes.observe({}, 1100, generations)
-    assert votes.planning_labels(1100, 50) == {7: 'orange'}
+    assert votes.labels() == {7: 'orange'}
     votes.update_map({7: (2., 2., 0.)})
-    assert votes.planning_labels(1100, 50) == {}
+    assert votes.labels() == {7: None}

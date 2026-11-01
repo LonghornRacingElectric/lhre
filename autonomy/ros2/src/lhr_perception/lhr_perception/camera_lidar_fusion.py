@@ -208,7 +208,7 @@ class CameraLidarFusion(Node):
 
     def _output_snapshot(self, *, classified=False):
         if classified:
-            labels = self._evidence.planning_labels(
+            labels = self._evidence.visible_labels(
                 self.get_clock().now().nanoseconds, self._settings['camera_max_age_sec'] * 1e9)
             namespaces = {key: resolve_cone_namespace(labels.get(key), source.ns)
                           for key, source in self._current_map.items()}

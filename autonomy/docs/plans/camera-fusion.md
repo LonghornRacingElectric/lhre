@@ -81,8 +81,9 @@ For our sim pipeline, the equivalent is: render camera image, segment by color, 
 ### 3.4 — Update track builder to use color
 - Gazebo fusion mode selects the classified topic and color-aware boundary
   pairing, with automatic LiDAR side inference for fallback. Same-known-color
-  edges are rejected; unknown cones keep geometry pairing. Confirmed orange
-  cones are excluded even during camera dropout, until evidence or ID reset.
+  edges are rejected; unknown and orange cones keep their LiDAR geometry
+  labels for pairing. The inspection map retains physical orange, while
+  acceleration finish/exit cones stay available to planning.
 - Fusion-disabled launch behavior is preserved. Synthetic ROS/DDS tests cover
   priority, conflicting camera labels, dropout and recovery.
 

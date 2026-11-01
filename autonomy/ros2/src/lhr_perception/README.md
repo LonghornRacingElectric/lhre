@@ -394,7 +394,8 @@ namespaces. It preserves each source ID, position, pose, scale, type, and map
 stamp. In Gazebo fusion mode, the track builder subscribes to this topic.
 
 A confirmed blue camera label becomes `left_cones`; yellow becomes
-`right_cones`; orange remains `orange_cones`. Camera evidence can override an
+`right_cones`. Orange keeps its source LiDAR namespace (`left_cones`,
+`right_cones`, or unclassified `cones`) in the planner output. Camera evidence can override an
 opposite LiDAR side only while the latest processed image uniquely matches
 that cone to the same confirmed color and the image is no more than
 `camera_max_age_sec` old in ROS time. A missing, ambiguous, or contradictory
@@ -403,8 +404,10 @@ An absent/invalid camera stream or missing calibration/TF uses LiDAR once the pr
 expires. The processing timer publishes that transition even with no new map.
 Duplicate/older images cannot refresh the timeout. A later matching camera
 observation can restore camera priority without discarding the vote history.
-Confirmed orange remains excluded from boundary pairing even after camera
-loss, until the evidence changes or its map ID resets.
+Physical orange remains recorded on the inspection map, but it never removes
+a cone from geometry-based planning. This preserves acceleration finish gates
+and the orange exit lane; both large and small orange cones follow the same
+source-side policy, including during camera loss.
 
 LiDAR fallback retains `left_cones`, `right_cones`, or unclassified `cones`
 from the source map; it never copies marker RGB as measured camera evidence.
@@ -414,7 +417,7 @@ Each published snapshot begins with DELETEALL for its display, then the
 complete current map. A depth-one subscriber can miss a transition without
 keeping stale markers. Namespace transitions also delete the old marker on
 each output independently.
-Removing/resetting an ID also revokes its camera eligibility.
+Removing/resetting an ID also revokes its camera eligibility and physical-color history.
 
 Gazebo enables LiDAR side inference automatically in fusion mode, even with
 `lidar_classify_sides:=false`, so the fallback is always available. Run:
@@ -427,7 +430,7 @@ Gazebo enables LiDAR side inference automatically in fusion mode, even with
 Enable **ClassifiedCones** in stereo RViz to inspect the planner's input; hide
 other cone displays when comparing it with **CameraFusedCones**. Gazebo selects
 color-aware `boundary` pairing on this output, preserving geometry for unknown
-cones and excluding orange. Without fusion, the original planner topic and
+and orange cones. Without fusion, the original planner topic and
 explicit side-classifier switch keep their existing behavior. The geometry
 classifier remains experimental and retains its documented failure modes.
 

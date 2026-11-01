@@ -304,8 +304,9 @@ inspection publisher. Every published snapshot on either output starts with
 DELETEALL followed by the complete current map, so a depth-one subscriber
 that misses a one-off deletion can still discard stale markers.
 
-Confirmed camera blue/yellow use `left_cones`/`right_cones`; confirmed orange
-uses `orange_cones`. Camera priority requires a unique match in the latest
+Confirmed camera blue/yellow use `left_cones`/`right_cones`; orange preserves
+the current LiDAR side/unknown namespace for geometry pairing. The inspection
+map continues to use `orange_cones` for physical orange. Camera priority requires a unique match in the latest
 processed image, agreement between that match and the confirmed vote label,
 and age in `[0, camera_max_age_sec]`. Otherwise use the current source map's
 `left_cones`, `right_cones`, or `cones` namespace. Missing or contradictory
@@ -336,12 +337,14 @@ topic and explicit side-inference/pairing choices remain unchanged. The `sim`
 branch is unchanged.
 
 Blue/yellow camera priority and fallback use the step 2 freshness rules.
-Confirmed physical orange is an exception to age expiry: keep it in
-`orange_cones` through dropout so a known non-boundary cone cannot enter
-geometry-based boundary pairing. Normal conflicting evidence can clear or
-replace its confirmation; map removal/displacement/reset clears its identity.
-The existing track builder consumes only `left_cones`, `right_cones`, and
-`cones`, so orange is excluded from both triangulation and pairing.
+Orange keeps its current source LiDAR namespace (`left_cones`, `right_cones`,
+or `cones`) rather than overriding it with the camera's physical-color label.
+Acceleration uses orange finish gates and an orange exit lane as part of its
+corridor. Excluding them from the planner truncated the path at x=72.027 m and
+made the controller brake before mission completion. Preserve their geometry
+through both camera visibility and dropout; do not infer a left/right side
+from orange hue alone. The separate inspection map retains physical orange
+votes and IDs. All track types use this source-side fallback policy.
 
 Tests evaluate all truth/EKF, enabled/disabled and explicit side-switch
 combinations, and start the actual planner with evaluated parameters to check
@@ -349,7 +352,7 @@ its subscription topic and pairing strategy. A DDS integration feeds synthetic
 RGB images, CameraInfo, full map snapshots and stamped TF through fusion to
 the actual planner. It checks camera priority over opposite side inference,
 centerline pair locations, conflicting labels, blank frames, recovery and
-persistent orange exclusion. These checks run in the isolated ROS Docker
+orange geometry fallback. These checks run in the isolated ROS Docker
 image. A stationary live Gazebo check also delivered camera colors, classified
 maps and planner paths. Celina confirmed manual camera-color and autocross/EKF
 visuals. Scored accuracy and a separate live pause/resume outcome were not
