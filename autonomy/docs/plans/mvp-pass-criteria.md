@@ -96,7 +96,7 @@ the hardware half of the loop exists.
   the gate scorer (`testing/tools/gate/score_gate.py`), not by metrics.
 - Once the mission completes, pursuit ramps the speed command down at
   `max_decel` and Gazebo's wheels follow it exactly, so sim stop distances
-  are optimistic until #116 adds a regen and spring-brake model.
+  are optimistic until #199 adds a regen and spring-brake model.
 
 ## Waivers if something misses 10/28
 

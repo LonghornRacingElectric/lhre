@@ -125,8 +125,8 @@ arguments:
   `joint_cmd_adapter`'s own command timeout (`adapter_cmd_timeout_s`) instead.
   On the car the hardware loop opens regardless.
 - Normal braking is still the controller commanding speed 0, so stops in
-  sim are optimistic. A regen and spring-brake model is the other half of
-  [#116](https://github.com/LonghornRacingElectric/lhre/issues/116).
+  sim are optimistic. A regen and spring-brake model is
+  [#199](https://github.com/LonghornRacingElectric/lhre/issues/199).
 - A dead `mission_manager` is not detected
   ([#127](https://github.com/LonghornRacingElectric/lhre/issues/127)).
 - Thresholds are starting points; #117 measures time to trip and stop

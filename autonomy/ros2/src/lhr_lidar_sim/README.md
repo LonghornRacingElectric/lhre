@@ -8,8 +8,8 @@ Livox's complete simulator plugin targets Gazebo Classic 9 and ROS 1.
 Our workspace uses Gazebo Harmonic and ROS 2 Jazzy, so we import its scan
 data into the existing headless caster rather than depend on that plugin.
 A regular Gazebo `gpu_lidar` uses a uniform angular grid and does not
-replay this table. This package currently runs in the kinematic demo;
-the Gazebo demo still uses its own sensor.
+replay this table. This package runs in the kinematic demo, and in the
+Gazebo demo with `lidar_source:=mid360` (see below).
 
 ## Layout
 
