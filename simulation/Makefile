@@ -75,8 +75,12 @@ RECORD_FILES = \
 	BobLib/Experiments/Standards/VehicleSim.mo \
 	BobLib/Experiments/Standards/FourPostSim.mo
 
+# The container runs as root. Since BobSim f58f932 the generator creates a
+# new package directory (BobSimTemplates/), so on a Linux host that directory
+# is root-owned and records-undo cannot delete the files in it. Opening the
+# record directories keeps records-undo a plain host-side git clean.
 records:
-	$(RUN) $(CAR_ENV) sim sh -c 'v=$$(realpath "$$BOBSIM_VEHICLE") && cd bobsim && python -m app.modelica_generator "$$v" --write'
+	$(RUN) $(CAR_ENV) sim sh -c 'v=$$(realpath "$$BOBSIM_VEHICLE") && cd bobsim && python -m app.modelica_generator "$$v" --write && for d in $(sort $(dir $(RECORD_FILES))); do if [ -d engines/boblib/$$d ]; then chmod a+rwx engines/boblib/$$d; fi; done'
 
 records-undo:
 	cd $(BOBLIB) && git checkout -- $$(git ls-files -- $(RECORD_FILES)) && git clean -f -- $(RECORD_FILES)

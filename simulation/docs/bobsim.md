@@ -44,7 +44,10 @@ evaluations, through `make car`. See [tests.md](tests.md#ci).
 - The Modelica tier compiles BobLib's `.mo` records. `make records`
   writes our vehicle into those records inside the submodule, at
   `bobsim/engines/boblib`. Do not commit those files. `make records-undo`
-  puts back only those files.
+  puts back only those files. The generator writes some of them into a
+  directory it creates, `BobSimTemplates/`, as the container's root user.
+  `make records` opens the record directories so that `records-undo` can
+  delete those files from a Linux host.
 - Our vehicle has the same name as BobSim's default car. So `make records`
   replaces BobSim's record for that car until `make records-undo`.
 
