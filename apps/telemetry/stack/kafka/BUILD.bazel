@@ -1,5 +1,5 @@
 load("@protobuf//bazel:proto_library.bzl", "proto_library")
-load("@rules_go//go:def.bzl", "go_binary")
+load("@rules_go//go:def.bzl", "go_binary", "go_test")
 load("@rules_go//proto:def.bzl", "go_grpc_library", "go_proto_library")
 load("//apps/telemetry:compatibility.bzl", "NOT_WINDOWS")
 load("//apps/telemetry:container.bzl", "telemetry_service_image")
@@ -72,4 +72,20 @@ filegroup(
     srcs = ["docker-compose.yml"],
     target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "kafka_bridge_test",
+    srcs = ["cmd/bridge/main.go", "cmd/bridge/main_test.go"],
+    importpath = "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/cmd/bridge",
+    pure = "on",
+    target_compatible_with = NOT_WINDOWS,
+    deps = [
+        ":bridge_go_proto",
+        ":sensor_go_proto",
+        "@com_github_ibm_sarama//:sarama",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//keepalive",
+        "@org_golang_google_protobuf//proto",
+    ],
 )

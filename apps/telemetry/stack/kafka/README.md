@@ -21,3 +21,25 @@ they are not checked into `proto/`.
 Compose expects both `lhre/telemetry-kafka:4.1.0` and
 `lhre/telemetry-kafka-bridge:dev` to be loaded. The root
 `//apps/telemetry:load_core_images` target does both.
+
+## Raw persistence contract
+
+A successful `SendSensorData` RPC means Kafka acknowledged the raw protobuf
+record on `sensor_data` with its `car_type` header. Producer errors return failure;
+there is no intermediate raw-data channel that can drop a successful request.
+An uncertain RPC may be retried, producing duplicates; the
+[database writer](../processors/db_writer/README.md) admits each packet once.
+The Grafana queue remains best effort and cannot prevent raw persistence.
+The single-broker deployment uses all available replica acknowledgments but does
+not provide resilience to loss of that broker's disk.
+
+The bridge configures `sensor_data` retention on startup, including existing
+topics, using incremental config changes. `SENSOR_DATA_RETENTION_MS` defaults to
+604800000 (7 days), and `SENSOR_DATA_RETENTION_BYTES` to 8589934592 (8 GiB per
+partition). Whichever limit is reached first bounds database recovery. Size both
+for measured traffic and the required outage budget, and monitor consumer lag
+and free space. Broker defaults apply separately to other topics.
+
+```bash
+bazel test //apps/telemetry/stack/kafka:kafka_bridge_test
+```

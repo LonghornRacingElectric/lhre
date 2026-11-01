@@ -26,12 +26,12 @@ type SensorMessage struct {
 }
 
 var (
-	rawDataChan     = make(chan SensorMessage, 10000)
 	grafanaDataChan = make(chan SensorMessage, 10000)
 )
 
 type bridgeServer struct {
 	pb.UnimplementedBridgeServiceServer
+	producer sarama.SyncProducer
 }
 
 func (s *bridgeServer) SendSensorData(ctx context.Context, req *pb.SensorDataRequest) (*pb.SensorDataResponse, error) {
@@ -41,11 +41,15 @@ func (s *bridgeServer) SendSensorData(ctx context.Context, req *pb.SensorDataReq
 		CarType: req.CarType,
 	}
 
-	// Non-blocking send to both channels
-	select {
-	case rawDataChan <- msg:
-	default:
-		log.Println("Warning: rawDataChan full, dropping message")
+	// A successful RPC means Kafka acknowledged the raw packet. The client may
+	// retry an uncertain RPC; db_writer admits each packet only once.
+	_, _, err := s.producer.SendMessage(&sarama.ProducerMessage{
+		Topic:   "sensor_data",
+		Value:   sarama.ByteEncoder(msg.Payload),
+		Headers: []sarama.RecordHeader{{Key: []byte("car_type"), Value: []byte(msg.CarType)}},
+	})
+	if err != nil {
+		return &pb.SensorDataResponse{Success: false, Message: err.Error()}, nil
 	}
 
 	select {
@@ -54,7 +58,7 @@ func (s *bridgeServer) SendSensorData(ctx context.Context, req *pb.SensorDataReq
 		log.Println("Warning: grafanaDataChan full, dropping message")
 	}
 
-	return &pb.SensorDataResponse{Success: true, Message: "queued"}, nil
+	return &pb.SensorDataResponse{Success: true, Message: "persisted to Kafka"}, nil
 }
 
 func getKafkaBroker() string {
@@ -70,7 +74,10 @@ func getKafkaBroker() string {
 func newKafkaProducer() (sarama.SyncProducer, error) {
 	config := sarama.NewConfig()
 	config.Producer.Return.Successes = true
-	config.Producer.RequiredAcks = sarama.WaitForLocal
+	config.Producer.RequiredAcks = sarama.WaitForAll
+	config.Producer.Timeout = 5 * time.Second
+	config.Net.WriteTimeout = 5 * time.Second
+	config.Net.ReadTimeout = 5 * time.Second
 	config.Producer.Retry.Max = 3
 
 	broker := getKafkaBroker()
@@ -79,69 +86,94 @@ func newKafkaProducer() (sarama.SyncProducer, error) {
 
 // newKafkaAdmin creates a ClusterAdmin for topic management
 func newKafkaAdmin() (sarama.ClusterAdmin, error) {
-    config := sarama.NewConfig()
-    config.Version = sarama.V3_6_0_0 // Use latest stable version
-    config.Admin.Timeout = 10 * time.Second
-    broker := getKafkaBroker()
-    return sarama.NewClusterAdmin([]string{broker}, config)
+	config := sarama.NewConfig()
+	config.Version = sarama.V3_6_0_0 // Use latest stable version
+	config.Admin.Timeout = 10 * time.Second
+	broker := getKafkaBroker()
+	return sarama.NewClusterAdmin([]string{broker}, config)
 }
 
 func strPtr(s string) *string { return &s }
 
+// Raw telemetry is a persistence backlog; size retention for the outage budget.
+func rawRetention() map[string]*string {
+	age := os.Getenv("SENSOR_DATA_RETENTION_MS")
+	if age == "" {
+		age = "604800000"
+	}
+	size := os.Getenv("SENSOR_DATA_RETENTION_BYTES")
+	if size == "" {
+		size = "8589934592"
+	}
+	return map[string]*string{"retention.ms": strPtr(age), "retention.bytes": strPtr(size)}
+}
+
 // ensureTopicExists creates the topic if it doesn't already exist
 func ensureTopicExists(admin sarama.ClusterAdmin, topic string) error {
-    // Retry logic for listing topics
-    var topics map[string]sarama.TopicDetail
-    var err error
-    maxRetries := 5
-    
-    for i := 0; i < maxRetries; i++ {
-        topics, err = admin.ListTopics()
-        if err == nil {
-            break
-        }
-        log.Printf("Attempt %d/%d: Failed to list topics: %v", i+1, maxRetries, err)
-        time.Sleep(2 * time.Second)
-    }
-    
-    if err != nil {
-        return fmt.Errorf("failed to list topics after %d retries: %w", maxRetries, err)
-    }
-    
-    if _, ok := topics[topic]; ok {
-        log.Printf("Topic %s already exists", topic)
-        return nil
-    }
+	// Retry logic for listing topics
+	var topics map[string]sarama.TopicDetail
+	var err error
+	maxRetries := 5
 
-    log.Printf("Creating topic %s...", topic)
-    detail := &sarama.TopicDetail{
-        NumPartitions:     1,
-        ReplicationFactor: 1,
-        ConfigEntries: map[string]*string{
-            "retention.ms":   strPtr("604800000"), // 7 days
-            "cleanup.policy": strPtr("delete"),
-        },
-    }
-    
-    err = admin.CreateTopic(topic, detail, false)
-    if err != nil {
-        return fmt.Errorf("failed to create topic %s: %w", topic, err)
-    }
-    
-    log.Printf("Successfully created topic %s", topic)
-    
-    // Verify topic was created
-    time.Sleep(1 * time.Second)
-    topics, err = admin.ListTopics()
-    if err != nil {
-        log.Printf("Warning: Could not verify topic creation: %v", err)
-    } else if _, ok := topics[topic]; ok {
-        log.Printf("Verified: Topic %s exists in Kafka", topic)
-    } else {
-        log.Printf("Warning: Topic %s not found after creation", topic)
-    }
-    
-    return nil
+	for i := 0; i < maxRetries; i++ {
+		topics, err = admin.ListTopics()
+		if err == nil {
+			break
+		}
+		log.Printf("Attempt %d/%d: Failed to list topics: %v", i+1, maxRetries, err)
+		time.Sleep(2 * time.Second)
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to list topics after %d retries: %w", maxRetries, err)
+	}
+
+	if _, ok := topics[topic]; ok {
+		if topic == "sensor_data" {
+			entries := map[string]sarama.IncrementalAlterConfigsEntry{}
+			for key, value := range rawRetention() {
+				entries[key] = sarama.IncrementalAlterConfigsEntry{Operation: sarama.IncrementalAlterConfigsOperationSet, Value: value}
+			}
+			return admin.IncrementalAlterConfig(sarama.TopicResource, topic, entries, false)
+		}
+		log.Printf("Topic %s already exists", topic)
+		return nil
+	}
+
+	log.Printf("Creating topic %s...", topic)
+	detail := &sarama.TopicDetail{
+		NumPartitions:     1,
+		ReplicationFactor: 1,
+		ConfigEntries: map[string]*string{
+			"retention.ms":   strPtr("604800000"), // 7 days
+			"cleanup.policy": strPtr("delete"),
+		},
+	}
+
+	if topic == "sensor_data" {
+		for key, value := range rawRetention() {
+			detail.ConfigEntries[key] = value
+		}
+	}
+	err = admin.CreateTopic(topic, detail, false)
+	if err != nil {
+		return fmt.Errorf("failed to create topic %s: %w", topic, err)
+	}
+
+	log.Printf("Successfully created topic %s", topic)
+
+	// Verify topic was created
+	time.Sleep(1 * time.Second)
+	topics, err = admin.ListTopics()
+	if err != nil {
+		log.Printf("Warning: Could not verify topic creation: %v", err)
+	} else if _, ok := topics[topic]; ok {
+		log.Printf("Verified: Topic %s exists in Kafka", topic)
+	} else {
+		log.Printf("Warning: Topic %s not found after creation", topic)
+	}
+
+	return nil
 }
 
 // defaultSeedMap returns a zero-valued map for the given car type, populated
@@ -204,24 +236,6 @@ func seedTopic(producer sarama.SyncProducer, topic, carType string) {
 		log.Printf("Failed to seed topic %s: %v", topic, err)
 	} else {
 		log.Printf("Successfully seeded topic %s (partition: %d, offset: %d)", topic, partition, offset)
-	}
-}
-
-// rawDataWorker publishes raw protobuf bytes to sensor_data topic
-func rawDataWorker(producer sarama.SyncProducer) {
-	for msg := range rawDataChan {
-		kafkaMsg := &sarama.ProducerMessage{
-			Topic: "sensor_data",
-			Value: sarama.ByteEncoder(msg.Payload),
-			Headers: []sarama.RecordHeader{
-				{Key: []byte("car_type"), Value: []byte(msg.CarType)},
-			},
-		}
-
-		_, _, err := producer.SendMessage(kafkaMsg)
-		if err != nil {
-			log.Printf("Error sending to sensor_data: %v", err)
-		}
 	}
 }
 
@@ -928,7 +942,6 @@ func main() {
 	}
 
 	// Start worker goroutines
-	go rawDataWorker(producer)
 	go grafanaDataWorker(producer)
 
 	// Start gRPC server
@@ -946,7 +959,7 @@ func main() {
 		MinTime:             10 * time.Second,
 		PermitWithoutStream: true,
 	}))
-	pb.RegisterBridgeServiceServer(grpcServer, &bridgeServer{})
+	pb.RegisterBridgeServiceServer(grpcServer, &bridgeServer{producer: producer})
 
 	// Graceful shutdown
 	sigChan := make(chan os.Signal, 1)
@@ -956,7 +969,6 @@ func main() {
 		<-sigChan
 		log.Println("Shutting down...")
 		grpcServer.GracefulStop()
-		close(rawDataChan)
 		close(grafanaDataChan)
 	}()
 

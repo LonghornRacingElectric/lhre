@@ -75,7 +75,7 @@ fi
 #  is a plugin build helper — neither is a runtime service, so both are omitted.)
 STACK_COMPONENTS="
 kafka|kafka|docker||//apps/telemetry:kafka_load,//apps/telemetry/stack/kafka:kafka_bridge_load
-ingest|ingest|docker||//apps/telemetry:mqtt_load,//apps/telemetry:postgres_load,//apps/telemetry:grafana_load,//apps/telemetry/stack/ingest:ingest_load
+ingest|ingest|docker||//apps/telemetry:mqtt_load,//apps/telemetry:postgres_load,//apps/telemetry:grafana_load,//apps/telemetry/stack/ingest:ingest_load,//apps/telemetry/stack/processors/db_writer:db_writer_load
 field_enricher|processors/field_enricher|docker||//apps/telemetry/stack/processors/field_enricher:field_enricher_load
 gps_classifier|processors/gps_classifier|docker||//apps/telemetry/stack/processors/gps_classifier:gps_classifier_load
 lap_timer|processors/lap_timer|docker||//apps/telemetry/stack/processors/lap_timer:lap_timer_load
