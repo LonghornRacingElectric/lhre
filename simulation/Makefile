@@ -67,10 +67,11 @@ VEHICLE_NAME = $(shell sed -n 's/^  name: *//p' $(CAR_VEHICLE) 2>/dev/null | hea
 RECORD_FILES = \
 	BobLib/Records/VehicleDefn/$(VEHICLE_NAME)Record.mo \
 	BobLib/Records/VehicleDefn/package.order \
-	BobLib/Experiments/Standards/Templates/Vehicle/VehicleSim_$(VEHICLE_NAME).mo \
-	BobLib/Experiments/Standards/Templates/Vehicle/package.order \
-	BobLib/Experiments/Standards/Templates/FourPost/FourPostSim_$(VEHICLE_NAME).mo \
-	BobLib/Experiments/Standards/Templates/FourPost/package.order \
+	BobLib/Experiments/Standards/BobSimTemplates/VehicleSim_$(VEHICLE_NAME).mo \
+	BobLib/Experiments/Standards/BobSimTemplates/FourPostSim_$(VEHICLE_NAME).mo \
+	BobLib/Experiments/Standards/BobSimTemplates/package.mo \
+	BobLib/Experiments/Standards/BobSimTemplates/package.order \
+	BobLib/Experiments/Standards/package.order \
 	BobLib/Experiments/Standards/VehicleSim.mo \
 	BobLib/Experiments/Standards/FourPostSim.mo
 

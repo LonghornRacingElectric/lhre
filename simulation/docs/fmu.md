@@ -14,11 +14,12 @@ container build has no network, as with the rest of simulation. The build
 refuses a modified BobSim checkout or a different upstream Modelica tree,
 so a future dependency update needs review instead of silently mixing models.
 
-BobSim stays at `22c5056`, with its own nested BobLib at `1bd6d78`. The
-`BobLib/` model trees of the nested and export commits both have Git tree
-`bb8379ca9fe8cbae57a47d3af441d40110d839ba`. The divergent history is the
-squashed bellcrank visual change, test baselines and the exporter; it does
-not introduce another vehicle-physics tree.
+The export pin matched BobSim `22c5056` and its nested BobLib `1bd6d78`.
+Both `BobLib/` model trees were Git tree
+`bb8379ca9fe8cbae57a47d3af441d40110d839ba`. BobSim `f58f932` moves the
+nested BobLib to `75b6e03`, which has another model tree and nested
+records. So `make fmu` refuses at this pin until a reviewed exporter
+commit moves `FMU_BOBLIB_SHA`.
 
 The build calls public `app.modelica_generator.plan_modelica_stack` on
 `vehicle/vehicle.yml` with the pinned BobSim root. It writes the generated

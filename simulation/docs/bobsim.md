@@ -110,19 +110,13 @@ true:
   our car they differ by 1.5 to 2.3 %.
 
 A check that the pin cannot answer is `UNAVAILABLE`. It is not a pass.
-At `fe03bab` three checks are unavailable. The CSV has no status column.
-The CSV does not name its vehicle. The only static balance value,
-`static_balance_pass`, compares target loads with themselves, so it is
-not a measurement. The acceptance is a software check. It is not a
-physical validation of the car.
+At `f58f932` one check is unavailable: the CSV does not name its vehicle.
+The acceptance is a software check. It is not a physical validation of
+the car.
 
-At `fe03bab` our car fails the executed setup check. FourPost takes the
-anti-roll bar rates from `model_overrides` in its own
-`four_post_eval_config.yml`: 390 and 525 N·m/rad. Our `vehicle.yml` has
-257.62 and 535.47 N·m/rad. `run.log` shows that the model applied 390 and
-525. So the FourPost bar roll stiffness and load transfer are not for our
-bars. BobSim PR #117 removes these overrides. Until the pin has a fix,
-the FourPost check in CI fails for our car.
+At `f58f932` our car passes the static balance closure. BobLib `75b6e03`
+removed the closure drift that `1bd6d78` had (4.39 N at 118 s). So a
+closure failure is now a `FAIL`, not a known upstream defect.
 
 ### Run a BobSim target on a candidate
 
@@ -227,6 +221,32 @@ minimum-curvature line. Old lap, envelope and autonomy study results are
 historical until rerun at this pin. The ROS plant uses direct transient
 stepping; it does not use BobSim's QSS lap planner.
 
+### BobSim `f58f932` and BobLib `75b6e03`
+
+PR #193 moves the pin from `22c5056` to `f58f932` (BobSim main). BobLib
+moves from `1bd6d78` to `75b6e03`. These commits change physics, numerics
+or model inputs for our car:
+
+| Commit | Class | Effect |
+| ------ | ----- | ------ |
+| `fa62abc` (#153) | Model input | A runtime override that cannot take effect stops the run. |
+| `0b96c31` (#154) | Model input | FourPost sends bar rates only to the rig bars that exist. |
+| `cf9da89` (#155) | Numerics | FourPost measures static balance from executed signals. |
+| `17ce5a8` (#158) | Model input | VehicleSim braking uses `brake.front_bias` from `vehicle.yml`. |
+| `f58f932` (#160) | Physics/model input | BobLib nested records, new driveline (`ClutchLSD` law, halfshaft inertia, chassis-reacted drive), inboard rear brakes, quasi-static FourPost rig. |
+| BobLib `6df65e6` (#61) | Physics | The LSD `slidingFrictionRatio` default is 1. 0.85 drove a stick-slip limit cycle. |
+
+At #160 the generator maps `powertrain.pDriveline` through BobLib
+`MIGRATION.md`. It stops on an unknown field, on unequal left and right
+halfshaft values, and on `pVCU.finalDriveRatio`. Our file has none of
+these. These fields of our file have no BobLib home and stay unbound:
+`diff_T_capacity_max`, `diff_clutchEffectiveRadius`, `diff_w_transition`,
+`diff_c_viscous`, `halfshaftLeftJEquivalent` and
+`halfshaftRightJEquivalent`. `make records` lists each one.
+
+A Modelica result made before this pin is historical. Run it again before
+you use it.
+
 ### Old to new names
 
 BobSim `6629ab8` (#82) and `6329270` (#97) moved its source. The pin moved
@@ -246,6 +266,20 @@ lhre used.
 | `_3_StandardSim/_modelica_runner.py` | `simulations/response/mbd/_modelica_runner.py` |
 | `_3_StandardSim/generated_results/` | `simulations/mbd/generated_results/` |
 | BobLib at `_0_Utils/external/BobLib` | BobLib at `engines/boblib` |
+
+BobSim `f58f932` (#160) moved to the nested BobLib records. This table maps
+the BobLib names that lhre used. BobLib `MIGRATION.md` has the full map.
+
+| At `22c5056` | At `f58f932` |
+| ------------ | ------------ |
+| `Experiments/Standards/Templates/Vehicle/` | `Experiments/Standards/BobSimTemplates/` (generated package) |
+| `Experiments/Standards/Templates/FourPost/` | `Experiments/Standards/BobSimTemplates/` (generated package) |
+| `pVehicle.pFrAxleDW.*`, `pVehicle.pRrAxleDW.*` | `pVehicle.chassis.frontAxle.actuation.*`, `pVehicle.chassis.rearAxle.actuation.*` |
+| `pVehicle.pFrStabar`, `pVehicle.pRrStabar` | `pVehicle.chassis.frontAxle.stabilizer`, `pVehicle.chassis.rearAxle.stabilizer` |
+| `vcu.*` runtime overrides | `driver.*` |
+
+FourPost still sends its bar rates to the rig bars `pFrStabar.barRate` and
+`pRrStabar.barRate`.
 
 `make test` fails if lhre code or docs use a name from the left column.
 

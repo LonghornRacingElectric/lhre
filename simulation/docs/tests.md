@@ -112,8 +112,8 @@ or `ci.yml`. If the `Changes` job fails, it runs anyway and `All checks passed`
 fails. A manual run of `ci.yml` always runs it. The weekly run does not,
 because `full-regeneration` covers FourPost.
 
-At BobSim `fe03bab` the acceptance fails for our car. FourPost runs its
-own anti-roll bar rates, not ours. See
+At BobSim `f58f932` the acceptance accepts our car. FourPost runs our
+spring tables and anti-roll bar rates. See
 [bobsim.md](bobsim.md#run-a-bobsim-target-on-our-car).
 
 ### full-regeneration

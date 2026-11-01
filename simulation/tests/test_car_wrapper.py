@@ -14,7 +14,8 @@ SIM = Path(__file__).resolve().parents[1]
 NAME = "TestCar"
 BOBLIB = "engines/boblib/BobLib"
 RECORD = f"{BOBLIB}/Records/VehicleDefn/{NAME}Record.mo"
-TEMPLATE = f"{BOBLIB}/Experiments/Standards/Templates/FourPost/FourPostSim_{NAME}.mo"
+TEMPLATES = f"{BOBLIB}/Experiments/Standards/BobSimTemplates"
+STANDARDS_ORDER = f"{BOBLIB}/Experiments/Standards/package.order"
 METRICS = "simulations/mbd/generated_results/four_post_eval_report_metrics.csv"
 RUN_DIR = "simulations/mbd/BuildBobLib/FourPostSim/results/run_new"
 EXE = "simulations/mbd/BuildBobLib/FourPostSim/BobLib.Experiments.Standards.FourPostSim"
@@ -71,11 +72,17 @@ def main(argv):
     name = data["vehicle"]["name"]
     boblib = Path(data["paths"]["boblib"])
     record = boblib / "Records/VehicleDefn" / f"{name}Record.mo"
-    template = boblib / "Experiments/Standards/Templates/FourPost" / f"FourPostSim_{name}.mo"
+    templates = boblib / "Experiments/Standards/BobSimTemplates"
+    template = templates / f"FourPostSim_{name}.mo"
     expected = "record " + hashlib.sha256(vehicle.read_bytes()).hexdigest() + "\\n"
     if write:
         record.write_text(expected, encoding="utf-8")
+        templates.mkdir(exist_ok=True)
         template.write_text(expected, encoding="utf-8")
+        (templates / "package.mo").write_text("package BobSimTemplates\\n", encoding="utf-8")
+        (templates / "package.order").write_text(f"FourPostSim_{name}\\n", encoding="utf-8")
+        order = boblib / "Experiments/Standards/package.order"
+        order.write_text(order.read_text(encoding="utf-8") + "BobSimTemplates\\n", encoding="utf-8")
     current = record.is_file() and record.read_text(encoding="utf-8") == expected
     print(f"vehicle:  {name}")
     print("state:    " + ("written" if current else "stale"))
@@ -221,7 +228,7 @@ def lhre(tmp_path):
     _write(bobsim / "common" / "vehicle_io.py", FAKE_VEHICLE_IO)
     _write(bobsim / RECORD, "record of the BobSim car\n")
     _write(bobsim / BOBLIB / "Records/VehicleDefn/package.order", f"{NAME}Record\n")
-    _write(bobsim / BOBLIB / "Experiments/Standards/Templates/FourPost/package.order", "")
+    _write(bobsim / STANDARDS_ORDER, "VehicleSim\nFourPostSim\n")
     _write(bobsim / "simulations/mbd/generated_results/old_car_metrics.csv", "metric,value\nold,1\n")
     _write(bobsim / FOUR_POST_CONFIG, "procedure:\n  heaveMagnitude: 0.03\n")
     _git(bobsim, "init", "-q")
@@ -275,7 +282,8 @@ def test_make_car_runs_the_target_on_our_vehicle_and_restores_bobsim(lhre):
     assert (bobsim / "simulations/mbd/generated_results/seen_vehicle.yml").read_bytes() == our_vehicle.read_bytes()
     assert (bobsim / "vehicle.yml").read_text(encoding="utf-8") == BOBSIM_VEHICLE
     assert (bobsim / RECORD).read_text(encoding="utf-8") == "record of the BobSim car\n"
-    assert not (bobsim / TEMPLATE).exists()
+    assert not list((bobsim / TEMPLATES).glob("*"))
+    assert (bobsim / STANDARDS_ORDER).read_text(encoding="utf-8") == "VehicleSim\nFourPostSim\n"
     assert _bobsim_status(lhre) == ""
     assert not (bobsim / "simulations/mbd/generated_results/old_car_metrics.csv").exists()
 
