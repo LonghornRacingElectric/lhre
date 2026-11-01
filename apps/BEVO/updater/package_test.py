@@ -4,11 +4,13 @@ import json
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 
 from apps.BEVO.updater.oci import Registry
 from apps.BEVO.updater.updater import EXECUTABLES, MAX_RELEASE_BYTES, METADATA_FILES, Updater, release_schema, unpack, validate_binaries
 from lib.telemetry.contract import seal_manifest
+from apps.telemetry.schema_registry.server import create_server, profile
 
 
 class PackageTest(unittest.TestCase):
@@ -41,6 +43,7 @@ class PackageTest(unittest.TestCase):
             updater.install(selection)
             self.assertEqual(updater.installed().schema_id, selection["schema_id"])
 
+            deployed = Path(directory) / "deployed-server"
             server = copy.deepcopy(json.loads(metadata["schema_contract.json"]))
             measurement = next(field for field in server["fields"] if len(field["path"]) == 2)
             excluded_path = measurement["path"]
@@ -50,6 +53,42 @@ class PackageTest(unittest.TestCase):
             self.assertEqual([field["path"] for field in reconciled["excluded"]], [excluded_path])
             updater.install(reconciled)
             self.assertEqual(updater.installed().schema_id, selection["schema_id"])
+
+            deployed.mkdir()
+            (deployed / "schema_contract.json").write_text(json.dumps(seal_manifest(server)))
+            (deployed / "schema_descriptor.pb").write_bytes(metadata["schema_descriptor.pb"])
+            remaining_reads = None
+            def snapshot():
+                nonlocal remaining_reads
+                if remaining_reads is not None:
+                    if remaining_reads == 0:
+                        raise ValueError("mixed deployed schemas")
+                    remaining_reads -= 1
+                return profile(deployed, {"releases": []})
+            authority = create_server(snapshot, ("127.0.0.1", 0))
+            thread = threading.Thread(target=authority.serve_forever, daemon=True)
+            thread.start()
+            try:
+                url = f"http://127.0.0.1:{authority.server_address[1]}/profile.json"
+                command = [sys.executable, "-I", "-S", str(Path(sys.argv[1]).resolve()), "update", "--root", directory, "--server-url", url]
+                next(field for field in server["fields"] if field["path"] == excluded_path)["unit"] += "_next"
+                (deployed / "schema_contract.json").write_text(json.dumps(seal_manifest(server)))
+                update = subprocess.run(command, capture_output=True, text=True)
+                self.assertEqual(update.returncode, 0, update.stderr)
+                self.assertEqual(json.loads(update.stdout)["action"], "reconcile")
+                plan = json.loads((Path(directory) / "current/reconciliation.json").read_bytes())
+                self.assertEqual(plan["server"]["schema_id"], seal_manifest(server)["schema_id"])
+                active = (Path(directory) / "current").resolve()
+                next(field for field in server["fields"] if field["path"] == excluded_path)["unit"] += "_rolling"
+                (deployed / "schema_contract.json").write_text(json.dumps(seal_manifest(server)))
+                remaining_reads = 2
+                failed = subprocess.run(command, capture_output=True, text=True)
+                self.assertNotEqual(failed.returncode, 0)
+                self.assertEqual((Path(directory) / "current").resolve(), active)
+            finally:
+                authority.shutdown()
+                authority.server_close()
+                thread.join(timeout=5)
 
 
 if __name__ == "__main__":

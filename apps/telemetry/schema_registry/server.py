@@ -7,10 +7,12 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
 
 from runfiles import Runfiles
 
 from lib.telemetry.contract import Schema, canonical_json
+from apps.telemetry.schema_registry.deployment import DockerDeployment
 
 
 def profile(schema_directory, configuration):
@@ -26,28 +28,22 @@ def profile(schema_directory, configuration):
     }, schema.descriptor_set
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", type=Path, default=os.getenv("TELEMETRY_SCHEMA_RELEASES"), required=not os.getenv("TELEMETRY_SCHEMA_RELEASES"))
-    parser.add_argument("--schema-directory", type=Path, default=os.getenv("TELEMETRY_SERVER_SCHEMA_DIR"))
-    parser.add_argument("--listen", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8085)
-    args = parser.parse_args()
-    directory = args.schema_directory
-    if directory is None:
-        directory = Path(Runfiles.Create().Rlocation("_main/lib/codegen/telemetry/schema_contract.json")).parent
-    configuration, descriptor = profile(directory, json.loads(args.config.read_text()))
-    payload = canonical_json(configuration).encode()
-
+def create_server(provider, address):
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
-            if self.path == "/profile.json":
-                content, mime = payload, "application/json"
-            elif self.path == "/schema_descriptor.pb":
-                content, mime = descriptor, "application/octet-stream"
-            else:
+            if self.path not in ("/profile.json", "/schema_descriptor.pb"):
                 self.send_error(404)
                 return
+            try:
+                configuration, descriptor = provider()
+            except (ValueError, KeyError, OSError, RuntimeError, subprocess.SubprocessError) as error:
+                self.log_error("Cannot read authoritative deployed schema: %s", error)
+                self.send_error(503, "Deployed schema unavailable; check both schema consumers")
+                return
+            if self.path == "/profile.json":
+                content, mime = canonical_json(configuration).encode(), "application/json"
+            else:
+                content, mime = descriptor, "application/octet-stream"
             self.send_response(200)
             self.send_header("Content-Type", mime)
             self.send_header("Content-Length", str(len(content)))
@@ -55,7 +51,36 @@ def main():
             self.end_headers()
             self.wfile.write(content)
 
-    ThreadingHTTPServer((args.listen, args.port), Handler).serve_forever()
+    return ThreadingHTTPServer(address, Handler)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", type=Path, default=os.getenv("TELEMETRY_SCHEMA_RELEASES"), required=not os.getenv("TELEMETRY_SCHEMA_RELEASES"))
+    parser.add_argument("--schema-directory", type=Path, default=os.getenv("TELEMETRY_SERVER_SCHEMA_DIR"))
+    parser.add_argument("--deployed", action="store_true", help="read schema from running ingest and bridge containers on this host")
+    parser.add_argument("--docker-sudo", action="store_true")
+    parser.add_argument("--ingest-container", default="ingest")
+    parser.add_argument("--bridge-container", default="kafka-bridge")
+    parser.add_argument("--listen", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8085)
+    args = parser.parse_args()
+    configuration = json.loads(args.config.read_text())
+    if args.deployed:
+        if args.schema_directory is not None:
+            parser.error("--deployed cannot be combined with a schema-directory override")
+        deployment = DockerDeployment((args.ingest_container, args.bridge_container), sudo=args.docker_sudo)
+        provider = lambda: deployment.snapshot(configuration)
+    else:
+        if args.docker_sudo:
+            parser.error("--docker-sudo requires --deployed")
+        directory = args.schema_directory
+        if directory is None:
+            directory = Path(Runfiles.Create().Rlocation("_main/lib/codegen/telemetry/schema_contract.json")).parent
+        selected = profile(directory, configuration)
+        provider = lambda: selected
+    with create_server(provider, (args.listen, args.port)) as server:
+        server.serve_forever()
 
 
 if __name__ == "__main__":

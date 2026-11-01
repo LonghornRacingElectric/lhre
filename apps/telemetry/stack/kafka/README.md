@@ -26,6 +26,11 @@ schema/field list. Existing derived GPS, power and cell-statistics metrics
 remain application logic, and the gRPC/MQTT payload contracts are unchanged.
 The standalone Dockerfile was removed; build images through Bazel only.
 
+The image also packages the generated contract/descriptor under `/schema/`
+for the [deployed authority](../../schema_registry/README.md). That metadata
+must match the running ingest image before the authority advertises a schema
+to BEVO. This does not change the bridge's decoding or RPC behavior.
+
 Compose expects both `lhre/telemetry-kafka:4.1.0` and
 `lhre/telemetry-kafka-bridge:dev` to be loaded. The root
 `//apps/telemetry:load_core_images` target does both.

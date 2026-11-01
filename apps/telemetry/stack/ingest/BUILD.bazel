@@ -167,6 +167,7 @@ telemetry_service_image(
     ],
     repository = "ghcr.io/longhornracingelectric/telemetry-ingest",
     tars = [
+        "//apps/telemetry:current_schema_tar",
         ":ingest_runtime_config_tar",
         "//apps/telemetry:runtime_config_tar",
     ],

@@ -104,6 +104,14 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
+pkg_tar(
+    name = "current_schema_tar",
+    srcs = [":current_schema_contract", ":current_schema_descriptor"],
+    package_dir = "/schema",
+    target_compatible_with = NOT_WINDOWS,
+    visibility = ["//visibility:public"],
+)
+
 telemetry_upstream_image(
     name = "mqtt",
     executable = "/usr/sbin/mosquitto",

@@ -16,6 +16,12 @@ network configuration opened by path at runtime. The generated
 never edit or check in the Bazel output. The legacy `ingest_tarball` label is an
 alias of `ingest_load` for one migration cycle.
 
+`/schema/schema_contract.json` and `/schema/schema_descriptor.pb` are packaged
+from those same inputs for the [deployed authority](../../schema_registry/README.md).
+They describe this image's compiled schema; they are not runtime overrides
+or definitions loaded by the MQTT handler. Rebuild the bridge alongside
+ingest when deploying a schema change.
+
 Orion database models also come from `//lib/codegen/telemetry:orion_models`;
 analysis re-exports their existing class names. The CSV header's group list is
 derived from those models. No MQTT routing, packet-ID handshake or ingest

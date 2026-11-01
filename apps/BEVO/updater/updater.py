@@ -134,11 +134,15 @@ class Updater:
             "files": dict(files, **{PLAN_FILE: canonical_json(plan).encode()}), "metadata": metadata,
         }
 
-    def install(self, selection):
+    def install(self, selection, confirm=None):
         if selection["action"] == "reconcile":
+            if confirm is not None:
+                confirm()
             return self.activate(selection["files"])
         binaries = unpack(self.registry.blob(selection["image"]["layers"][1], MAX_RELEASE_BYTES), {"bin/" + name for name in EXECUTABLES}, MAX_RELEASE_BYTES)
         validate_binaries(binaries, selection["metadata"])
+        if confirm is not None:
+            confirm()
         return self.activate(dict(selection["files"], **binaries))
 
     def activate(self, files):
@@ -226,9 +230,14 @@ def main():
         descriptor_url = urllib.parse.urljoin(args.server_url, "schema_descriptor.pb")
         verify(fetch(descriptor_url, 2 * 1024 * 1024, server_headers), "sha256:" + profile["schema_descriptor_sha256"])
         selection = updater.choose(profile, args.upgrade)
+        def confirm_server():
+            if json.loads(fetch(args.server_url, 2 * 1024 * 1024, server_headers)) != profile:
+                raise ValueError("server schema/deployment or approved releases changed during update; retry")
         if args.command == "update" and selection["action"] in ("install", "reconcile"):
-            selection["release"] = str(updater.install(selection))
+            selection["release"] = str(updater.install(selection, confirm=confirm_server))
             selection["restart_required"] = True
+        else:
+            confirm_server()
         print(json.dumps({key: value for key, value in selection.items() if key not in ("files", "metadata", "image")}))
 
 

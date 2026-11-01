@@ -4,8 +4,8 @@ load("//apps/telemetry:container.bzl", "telemetry_service_image")
 
 py_library(
     name = "registry_lib",
-    srcs = ["server.py"],
-    data = ["//apps/telemetry:current_schema_contract", "//apps/telemetry:current_schema_descriptor"],
+    srcs = ["server.py", "deployment.py"],
+    visibility = ["//apps/BEVO/updater:__pkg__"],
     deps = ["//lib/telemetry:contract", "@lhre_pypi//bazel_runfiles"],
     target_compatible_with = NOT_WINDOWS,
 )
@@ -14,6 +14,16 @@ py_binary(
     name = "registry_binary",
     srcs = ["server.py"],
     main = "server.py",
+    data = ["//apps/telemetry:current_schema_contract", "//apps/telemetry:current_schema_descriptor"],
+    deps = [":registry_lib"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_binary(
+    name = "deployed_registry_binary",
+    srcs = ["server.py"],
+    main = "server.py",
+    args = ["--deployed"],
     deps = [":registry_lib"],
     target_compatible_with = NOT_WINDOWS,
 )
@@ -31,6 +41,8 @@ py_test(
     name = "registry_test",
     srcs = ["server_test.py"],
     main = "server_test.py",
+    args = ["$(rootpath //apps/telemetry:current_schema_tar)"],
+    data = ["//apps/telemetry:current_schema_tar"],
     deps = [":registry_lib", "//lib/telemetry:testing"],
     target_compatible_with = NOT_WINDOWS,
 )

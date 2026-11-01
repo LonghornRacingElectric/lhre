@@ -74,6 +74,7 @@ telemetry_service_image(
         "kafka-bridge:latest",
     ],
     repository = "ghcr.io/longhornracingelectric/telemetry-kafka-bridge",
+    tars = ["//apps/telemetry:current_schema_tar"],
     visibility = ["//visibility:public"],
 )
 

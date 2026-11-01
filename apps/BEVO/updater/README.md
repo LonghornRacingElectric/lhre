@@ -68,6 +68,18 @@ not stored. Set `BEVO_SERVER_TOKEN` when the server's reverse proxy requires
 Bearer authentication. `--repository` explicitly changes the allowed repository;
 candidates from other repositories and mutable tags are rejected.
 
+For a server deployed from a clone, run the authority through the
+[server's `schema-serve` command](../../telemetry/schema_registry/README.md).
+That mode checks the matching metadata in the running ingest and bridge
+containers on every request. GitHub does not deploy or synchronize the
+server; checking out a branch without rebuilding those images has no effect.
+
+After fetching the descriptor and selecting/downloading a release, the CLI
+fetches the profile again immediately before activation (or returning a
+`check`/`keep` result). Changed deployment, schema or approved releases abort
+the operation with the existing activation intact. This catches changes
+during a download; it does not lock the server against later deployments.
+
 The server profile is authoritative and orders approved releases
 preferred-first. A compatible installed release is kept without downloading
 images. `--upgrade` selects the first compatible approved release even when
@@ -148,6 +160,38 @@ requires a validated release plan. Explicit overrides are
 not automatic fallbacks and do not make incompatible schemas compatible.
 
 ## Local regression tests
+
+With Docker running, exercise the deployed-container path without GHCR or a Pi:
+
+```bash
+bazel test --config=local //apps/BEVO/updater:docker_updater_test --test_output=errors
+```
+
+This opt-in test loads the Bazel-built images and starts actual ingest and
+bridge processes with isolated Kafka, MQTT and PostgreSQL. Database schemas
+are initialized from the normal SQL artifacts. It checks that the authority
+reads the running images, the standalone updater activates a matching plan
+with unchanged core executables, and a repeated update keeps that release.
+Stopping the bridge must produce HTTP 503 and preserve the activation;
+restarting it must restore successful checks. The test removes its own
+containers/network and uses temporary database/install state. It does not
+reuse the normal stack's volumes, publish to GHCR or exercise sensor delivery.
+Its initial core files come from the locally built release layers; the
+separate live-server test covers actual registry downloads.
+Both live-state targets always execute when selected; Bazel cannot reuse a
+previous passing test result instead of checking the current Docker/server state.
+
+The package test runs an actual loopback HTTP authority and the standalone
+updater archive, verifies plan activation from the server's schema and
+preserves the old installation on HTTP 503. It never needs a Pi or registry.
+
+For the real deployed server and GHCR path, use the opt-in
+`//apps/BEVO/updater:live_server_test` target described in the
+[authority runbook](../../telemetry/schema_registry/README.md#update-sequence-and-live-verification).
+It installs into a temporary root and verifies a second update keeps the
+release. It requires an approved available GHCR digest and actual server URL;
+private services also require credentials. A Pi is needed only for executing
+the ARM daemons and checking hardware, not for this copy/activation test.
 
 ```bash
 bazel test --config=local //apps/BEVO/updater:updater_test //apps/BEVO/updater:package_test

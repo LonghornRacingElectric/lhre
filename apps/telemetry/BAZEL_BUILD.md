@@ -95,6 +95,12 @@ that software.
 
 ## Server workflow
 
+`//apps/telemetry:current_schema_tar` packages the current contract and
+descriptor under `/schema/` in ingest and bridge images. The
+[authority's deployed mode](schema_registry/README.md) reads these artifacts
+from the running containers and checks their agreement, independently of
+the source checkout. GitHub deployment is not required.
+
 [`stack/server_devtool.sh`](stack/README.md) maps every Bazel-managed component
 to its `_load` target. `build`, `rebuild`, and `enable` run that target before
 starting Compose; `up` only reuses already loaded tags. This keeps rebuilds

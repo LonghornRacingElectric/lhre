@@ -26,6 +26,7 @@
 #   disk               docker disk usage + free space on the docker data dir
 #   up                 start the core stack detached (reuses images, no rebuild)
 #   build [comp...]    rebuild + start (core, or named components)
+#   schema-serve       serve the running ingest/bridge schema (foreground; --config /absolute/releases.json)
 #   logs [comp...]     follow logs (Ctrl-C detaches; containers keep running)
 #   attach             alias for `logs` on the core stack
 #   restart [comp...]  restart component(s) (default: core)
@@ -580,6 +581,10 @@ run_command() {
             require_docker
             if [[ $# -gt 0 ]]; then up_set 1 "$@"; else up_set 1 $CORE_ORDER; fi
             echo; ok "Built + started (detached). Logs: $0 logs" ;;
+        schema-serve)
+            require_docker
+            if [[ -n "$SUDO" ]]; then set -- --docker-sudo "$@"; fi
+            ( cd "$REPO_ROOT" && bazel run --config=local //apps/telemetry/schema_registry:deployed_registry_binary -- "$@" ) ;;
         logs|attach) require_docker; logs_for "$@" ;;
         restart)     require_docker; if [[ $# -gt 0 ]]; then restart_set "$@"; else restart_set $CORE_ORDER; fi ;;
         stop|down)   require_docker; stop_all ;;
