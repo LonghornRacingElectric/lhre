@@ -237,8 +237,8 @@ Parameter changes require a node restart.
 Keep projection/association and voting in a ROS-independent helper module,
 with a thin `camera_lidar_fusion` ROS node owning queues, TF, subscriptions,
 and marker publication. Reuse existing color helpers without changing their
-public behavior. Register the new executable and declare `tf2_ros` as a direct
-runtime dependency of `lhr_perception`. The existing container already installs
+public behavior. Register the new executable and declare `tf2_ros` and `tf2_ros_py` as direct
+runtime dependencies of `lhr_perception`. The existing container already installs
 ROS TF and OpenCV, so no new image dependency is expected.
 
 Update launch/RViz/tests in `lhr_gazebo`, package/workspace READMEs, and the

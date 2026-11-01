@@ -312,7 +312,8 @@ original cone display to inspect colors without overlapping markers. Add
 fusion works with that view disabled. Both truth and EKF estimation are
 supported. Enabling fusion without stereo or with `perception:=sim` fails
 launch. Standalone: `ros2 run lhr_perception camera_lidar_fusion`; remap standard
-ROS topics for other sources.
+ROS topics for other sources. The package declares both `tf2_ros` and
+`tf2_ros_py`; Jazzy supplies the Python TF module through the latter.
 
 Each processed image needs CameraInfo with exactly the same timestamp, optical
 frame, and dimensions. Only finite, full-image, undistorted, unbinned rectified
