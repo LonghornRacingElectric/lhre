@@ -36,6 +36,25 @@ services:
     networks:
       - telemetry_network
 
+  db_writer:
+    image: ${TELEMETRY_DB_WRITER_IMAGE:-lhre/telemetry-db-writer:dev}
+    container_name: db-writer
+    restart: unless-stopped
+    depends_on:
+      - db
+    env_file:
+      - path: ../../../../.env
+        required: true
+    environment:
+      IN_DOCKER: 1
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_GROUP_ID: telemetry-db-writer-v1
+      DB_BATCH_PACKETS: ${DB_BATCH_PACKETS:-500}
+      DB_BATCH_BYTES: ${DB_BATCH_BYTES:-8388608}
+      DB_BATCH_SECONDS: ${DB_BATCH_SECONDS:-0.25}
+    networks:
+      - telemetry_network
+
   db:
     image: ${TELEMETRY_POSTGRES_IMAGE:-lhre/telemetry-postgres:17.11}
     container_name: db

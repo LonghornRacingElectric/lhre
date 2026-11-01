@@ -28,3 +28,9 @@ or a failed schema build cannot block teardown, and Compose failures are reporte
 The Docker-free `//apps/telemetry/stack:server_devtool_test` exercises schema
 refresh, sudo forwarding, startup failures and the runner's cleanup path with
 fake Bazel/Docker commands. It does not start services or delete real volumes.
+
+Protobuf persistence is MQTT → bridge → `sensor_data` → core `db_writer` →
+Postgres. `data_flow_test` requires the writer service from ingest's Compose
+project. Raw test producers must include the `car_type` header; malformed records
+block the persistence group intentionally. Separate disposable-database rollback
+and replay tests live with the [writer](../processors/db_writer/README.md).

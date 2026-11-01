@@ -1,7 +1,29 @@
 # Ingest
 
-Ingest accepts MQTT telemetry, decodes the selected protobuf schema, persists
-packets to PostgreSQL, and forwards the raw stream to Kafka.
+Ingest forwards MQTT protobuf frames through the gRPC bridge to Kafka.
+The core [database writer](../processors/db_writer/README.md) consumes
+`sensor_data`, decodes the selected protobuf schema, and persists complete
+batches to PostgreSQL. Protobuf frames never enter MQTT's database queues.
+
+The MQTT callback only queues raw forwarding and optional Orion CSV work;
+CSV decoding and file writes run on their own worker. GPS JSON (`orion/gps`),
+legacy table JSON/pickle topics, and legacy base64 inputs retain their existing
+database paths. Their queues and the pre-Kafka forwarding queue remain bounded:
+this change provides recovery for records acknowledged by Kafka, not lossless
+MQTT delivery during an unlimited broker outage.
+
+The forwarding worker retries failed/uncertain sends in order until Kafka
+acknowledges the raw record. A full forwarding queue still logs and drops new
+input; car logs remain the recovery source for that pre-Kafka window.
+
+BEVO welcome lookups run on a control worker. They wait for queued bridge work,
+then choose a packet ID above both Postgres and a snapshot of retained raw Kafka
+records, so database lag cannot reuse IDs after a producer restart. This scans
+retained history and may delay startup; it fails closed when either lookup fails.
+The existing protocol assumes one active publisher per car; concurrent producer
+allocation is not supported. A Kafka scan has a 120-second processing deadline
+in addition to client network timeouts. Keep the raw retention window large
+enough to cover database outages. See the writer guide for cutover steps.
 
 ```bash
 bazel build //apps/telemetry/stack/ingest:ingest_binary

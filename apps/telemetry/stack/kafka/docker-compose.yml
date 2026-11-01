@@ -21,8 +21,8 @@ services:
       KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
       # KRaft logs live on the NVMe SSD (via the bind mount below), off the small
       # root disk where they previously filled the container layer. Retention is
-      # bounded so the realtime buffer can't grow unbounded — Postgres is the
-      # system of record; kafka here is just live + recent history.
+      # bounded for derived streams. The bridge sets sensor_data's own retention
+      # for the database backlog (SENSOR_DATA_RETENTION_* below).
       KAFKA_LOG_DIRS: /var/lib/kafka/data
       KAFKA_LOG_RETENTION_MS: ${KAFKA_LOG_RETENTION_MS:-21600000}          # 6h
       KAFKA_LOG_RETENTION_BYTES: ${KAFKA_LOG_RETENTION_BYTES:-1073741824}  # 1 GiB/partition cap
@@ -50,6 +50,8 @@ services:
       IN_DOCKER: 1
       KAFKA_BROKER: kafka:9092
       BRIDGE_ADDR: ":50051"
+      SENSOR_DATA_RETENTION_MS: ${SENSOR_DATA_RETENTION_MS:-604800000}
+      SENSOR_DATA_RETENTION_BYTES: ${SENSOR_DATA_RETENTION_BYTES:-8589934592}
     depends_on:
       kafka:
         condition: service_healthy

@@ -23,6 +23,8 @@ from analysis.sql_utils.db_session import get_db, engine_nightwatch, engine_ange
 from analysis.sql_utils.query_builder import QueryBuilder
 from analysis.sql_utils.models import AngeliquePacket, OrionPacket, BaseTelemetry, BaseAngelique, BaseOrion
 from stack.ingest.partition_manager import PartitionManager
+from stack.ingest.sensor_decode import decode_sensor
+from stack.ingest.packet_ids import retained_packet_high_water
 from stack.ingest.protobuf import template_pb2, angelique_pb2, can_packets_pb2, bridge_pb2, bridge_pb2_grpc
 
 # Determine path to net_configs.json based on execution context
@@ -61,6 +63,7 @@ class MQTTHandler:
         # logging state for Orion csv output
         self.orion_log_path: Path | None = None
         self.orion_cols: list[str] = []
+        self.orion_csv_config = None
         self.client.username_pw_set(name)
         self.client.user_data_set(self)  # Pass self to callbacks
         self.client.on_connect = self.on_connect
@@ -109,6 +112,12 @@ class MQTTHandler:
         self.bridge_queue = queue.Queue(maxsize=30000)
         self.bridge_worker = threading.Thread(target=self._bridge_worker, daemon=True)
         self.bridge_worker.start()
+        # Kafka scans and DB lookups belong to the control plane, off paho's loop.
+        self.control_queue = queue.Queue(maxsize=32)
+        self.control_pending = set()
+        self.control_lock = threading.Lock()
+        self.control_worker = threading.Thread(target=self._control_worker, daemon=True)
+        self.control_worker.start()
 
     @staticmethod
     def on_connect(client: mqtt_client.Client, userdata, flags: dict, rc: int):
@@ -276,74 +285,24 @@ class MQTTHandler:
                 self.csv_queue.task_done()
                 break
 
-            file_path, row_vals = item
             try:
-                with open(file_path, 'a', newline='') as f:
-                    csv.writer(f).writerow(row_vals)
+                payload, car, file_path, columns = item
+                self._write_proto_csv(payload, car, file_path, columns)
             except Exception as e:
-                logging.error(f"CSV worker write failed for {file_path}: {e}")
+                logging.error(f"CSV worker write failed: {e}")
             finally:
                 self.csv_queue.task_done()
 
     def on_message(self, client: mqtt_client.Client, userdata, msg):
         if msg.topic == 'client-connections':
-            connected_client_id = msg.payload.decode().strip()
-            if connected_client_id in {'BEVO-Angelique', 'BEVO_ANGELIQUE'}:
-                # Query the database for the latest packet_id from Angelique
-                logging.warning(f'\t\tBEVO-Angelique has connected. Querying database for latest packet_id to send welcome message...')
+            with self.control_lock:
+                if msg.payload in self.control_pending:
+                    return
                 try:
-                    with QueryBuilder("Angelique") as qb:
-                        result = qb.session.query(AngeliquePacket.packet_id).order_by(AngeliquePacket.packet_id.desc()).first()
-                        if result:
-                            next_packet_id = result[0] + 1
-                        else:
-                            next_packet_id = 1  # If no packets, start from 1
-                except Exception as e:
-                    logging.error(f'\t\tUnable to fetch latest Angelique packet_id: {e}')
-                    next_packet_id = 1
-                welcome_msg = json.dumps({
-                    "packet_id": next_packet_id,
-                })
-                userdata.client.publish('server-communication', welcome_msg)
-                logging.info(f'\t\tBEVO-Angelique connected. Sent welcome message with next packet_id: {next_packet_id}')
-            elif connected_client_id in {'BEVO-Orion', 'BEVO_ORION'}:
-                logging.warning('\t\tBEVO-Orion has connected. Querying database for latest packet_id to send welcome message...')
-                try:
-                    with QueryBuilder("Orion") as qb:
-                        result = qb.session.query(OrionPacket.packet_id).order_by(OrionPacket.packet_id.desc()).first()
-                        if result:
-                            next_packet_id = result[0] + 1
-                        else:
-                            next_packet_id = 1
-
-                    # determine log base directory: allow override for mounted volume
-                    base_env = os.getenv("LOG_BASE_DIR")
-                    if base_env:
-                        log_base = Path(base_env)
-                    else:
-                        repo_root = Path(__file__).parents[2]
-                        log_base = repo_root / "logs"
-                    log_dir = log_base / "orion"
-                    log_dir.mkdir(parents=True, exist_ok=True)
-                    log_file = log_dir / f"orion_log_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-                    cols = []
-                    # Qualify columns with table name so similarly named fields map correctly.
-                    for table, col_spec in self.table_specs["Orion"].items():
-                        if (table in {"packet", "dynamics", "controls", "pack", "diagnostics_low", "diagnostics_high", "thermal", "board_status"}):
-                            cols.extend(f"{table}.{col}" for col in col_spec.keys())
-                    with open(log_file, 'w', newline='') as f:
-                        csv.writer(f).writerow(cols)
-                    logging.info(f'\t\tCreated new log file for Orion at {log_file}')
-                    # record path and header columns for later appends
-                    self.orion_log_path = log_file
-                    self.orion_cols = cols
-                except Exception as e:
-                    logging.error(f'\t\tUnable to fetch latest Orion packet_id: {e}')
-                    next_packet_id = 1
-
-                welcome_msg = json.dumps({"packet_id": next_packet_id})
-                userdata.client.publish('server-communication', welcome_msg)
-                logging.info(f'\t\tBEVO-Orion connected. Sent welcome message with next packet_id: {next_packet_id}')
+                    self.control_queue.put_nowait(msg)
+                    self.control_pending.add(msg.payload)
+                except queue.Full:
+                    logging.error("Control queue full; client must retry welcome request")
             return
         if msg.topic == 'server-communication':
             logging.debug('Ignoring server-communication control message on ingest subscriber')
@@ -374,7 +333,7 @@ class MQTTHandler:
             if topic_split[-1] in self.table_specs["Angelique"]:
                 self._data_ingest(msg.payload, topic_split[-1], cache_enable=self.cache_enable, car="Angelique")
             else:
-                # Send via gRPC BEFORE database insertion
+                # Raw Kafka is the persistence input.
                 self._send_to_bridge(payload=msg.payload, car="Angelique")
                 self._proto_ingest(payload=msg.payload, cache_enable=self.cache_enable, car="Angelique")
         elif msg.topic == 'orion/gps':
@@ -388,6 +347,86 @@ class MQTTHandler:
         else:
             logging.warning(f'No corresponding topic found for {msg.topic}')
     
+    def _control_worker(self):
+        while not self._shutdown:
+            try:
+                msg = self.control_queue.get(timeout=1)
+            except queue.Empty:
+                continue
+            try:
+                self._client_connected(msg)
+            except Exception:
+                logging.exception("Welcome lookup failed; waiting for client retry")
+            finally:
+                with self.control_lock:
+                    self.control_pending.discard(msg.payload)
+                self.control_queue.task_done()
+
+    def _client_connected(self, msg):
+        connected_client_id = msg.payload.decode().strip()
+        if connected_client_id in {'BEVO-Angelique', 'BEVO_ANGELIQUE'}:
+            # Query the database for the latest packet_id from Angelique
+            logging.warning(f'\t\tBEVO-Angelique has connected. Querying database for latest packet_id to send welcome message...')
+            try:
+                with QueryBuilder("Angelique") as qb:
+                    result = qb.session.query(AngeliquePacket.packet_id).order_by(AngeliquePacket.packet_id.desc()).first()
+                    if result:
+                        next_packet_id = int(result[0]) + 1
+                    else:
+                        next_packet_id = 1  # If no packets, start from 1
+            except Exception as e:
+                logging.error(f'\t\tUnable to fetch latest Angelique packet_id: {e}')
+                return
+            self.bridge_queue.join()
+            next_packet_id = retained_packet_high_water("Angelique", next_packet_id - 1) + 1
+            welcome_msg = json.dumps({
+                "packet_id": next_packet_id,
+            })
+            self.client.publish('server-communication', welcome_msg)
+            logging.info(f'\t\tBEVO-Angelique connected. Sent welcome message with next packet_id: {next_packet_id}')
+        elif connected_client_id in {'BEVO-Orion', 'BEVO_ORION'}:
+            logging.warning('\t\tBEVO-Orion has connected. Querying database for latest packet_id to send welcome message...')
+            try:
+                with QueryBuilder("Orion") as qb:
+                    result = qb.session.query(OrionPacket.packet_id).order_by(OrionPacket.packet_id.desc()).first()
+                    if result:
+                        next_packet_id = int(result[0]) + 1
+                    else:
+                        next_packet_id = 1
+
+                # determine log base directory: allow override for mounted volume
+                base_env = os.getenv("LOG_BASE_DIR")
+                if base_env:
+                    log_base = Path(base_env)
+                else:
+                    repo_root = Path(__file__).parents[2]
+                    log_base = repo_root / "logs"
+                log_dir = log_base / "orion"
+                log_dir.mkdir(parents=True, exist_ok=True)
+                log_file = log_dir / f"orion_log_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                cols = []
+                # Qualify columns with table name so similarly named fields map correctly.
+                for table, col_spec in self.table_specs["Orion"].items():
+                    if (table in {"packet", "dynamics", "controls", "pack", "diagnostics_low", "diagnostics_high", "thermal", "board_status"}):
+                        cols.extend(f"{table}.{col}" for col in col_spec.keys())
+                with open(log_file, 'w', newline='') as f:
+                    csv.writer(f).writerow(cols)
+                logging.info(f'\t\tCreated new log file for Orion at {log_file}')
+                # record path and header columns for later appends
+                self.orion_log_path = log_file
+                self.orion_cols = cols
+                self.orion_csv_config = (log_file, tuple(cols))
+            except Exception as e:
+                logging.error(f'\t\tUnable to fetch latest Orion packet_id: {e}')
+                return
+
+            self.bridge_queue.join()
+            next_packet_id = retained_packet_high_water("Orion", next_packet_id - 1) + 1
+            welcome_msg = json.dumps({"packet_id": next_packet_id})
+            self.client.publish('server-communication', welcome_msg)
+            logging.info(f'\t\tBEVO-Orion connected. Sent welcome message with next packet_id: {next_packet_id}')
+        return
+
     def _gps_ingest(self, payload: bytes):
         '''
         publishd's GPS-only feed (orion/gps): one small JSON object per receiver fix at up to
@@ -455,20 +494,19 @@ class MQTTHandler:
                 break
             payload, car = item
             try:
-                request = bridge_pb2.SensorDataRequest(payload=payload, car_type=car)
-                response = self.bridge_stub.SendSensorData(request, timeout=2)
-                if not response.success:
-                    logging.warning(f'Bridge returned failure: {response.message}')
-            except grpc.RpcError as e:
-                logging.error(f'gRPC error sending to bridge: {e.code()} - {e.details()}; recreating channel')
-                try:
-                    self.grpc_channel.close()
-                except Exception:
-                    pass
-                self.grpc_channel = self._make_bridge_channel()
-                self.bridge_stub = bridge_pb2_grpc.BridgeServiceStub(self.grpc_channel)
-            except Exception as e:
-                logging.error(f'Unexpected error forwarding to bridge: {e}')
+                while not self._shutdown:
+                    try:
+                        request = bridge_pb2.SensorDataRequest(payload=payload, car_type=car)
+                        response = self.bridge_stub.SendSensorData(request, timeout=10)
+                        if not response.success:
+                            raise RuntimeError(response.message)
+                        break
+                    except Exception:
+                        logging.exception("Raw Kafka forward failed; retaining packet for retry")
+                        self.grpc_channel.close()
+                        self.grpc_channel = self._make_bridge_channel()
+                        self.bridge_stub = bridge_pb2_grpc.BridgeServiceStub(self.grpc_channel)
+                        time.sleep(1)
             finally:
                 self.bridge_queue.task_done()
 
@@ -552,43 +590,22 @@ class MQTTHandler:
                 session.rollback()
                 logging.error(f"Data ingest failed for {car}.{table}: {e}")
     
-    def _proto_ingest(self, payload:str, cache_enable = False, car = "Nightwatch"):
+    def _proto_ingest(self, payload: bytes, cache_enable=False, car="Nightwatch"):
+        # Protobuf persistence is exclusively owned by db_writer. CSV is best effort.
+        config = self.orion_csv_config
+        if car == "Orion" and config is not None:
+            try:
+                self.csv_queue.put_nowait((payload, car, *config))
+            except queue.Full:
+                logging.error("CSV queue full for Orion log; dropping row")
+
+    def _write_proto_csv(self, payload, car, file_path, columns):
         message_dict = self._proto_decode(payload=payload, car=car)
 
-        if ("time" not in message_dict or "packet_id" not in message_dict):
-            raise Exception("time/packet_id MISSING FROM PAYLOAD")
-        
         builder = QueryBuilder(car)
         table_specs = self.table_specs[car]
-        insert_jobs = []
 
-        for table in table_specs.keys():
-            model = builder._models.get(self._model_key(table))
-            if model:
-                table_desc = table_specs[model.__tablename__]
-                data = {col.name: message_dict[col.name] for col in model.__table__.columns if col.name in message_dict} if table == "packet" else None
-                if (data is None):
-                    data = ({col.name: message_dict[table][col.name] for col in model.__table__.columns if col.name in message_dict[table]}
-                    | {"packet_id": message_dict["packet_id"]}) if table in message_dict else None
-
-                if data is not None:
-                    if not cache_enable:
-                        insert_jobs.append((table, data))
-                    elif table == 'packet':
-                        insert_jobs.append((table, data))
-                    elif table != 'packet':
-                        self.cache.append((table, data))
-                        if (len(self.cache) == 24):
-                            insert_jobs.extend(self.cache)
-                            self.cache.clear()
-
-        if insert_jobs:
-            try:
-                self.db_queues[car].put_nowait(insert_jobs)
-            except queue.Full:
-                logging.error(f"DB queue full for {car}; dropping message packet_id={message_dict.get('packet_id')}")
-
-        if car == "Orion" and self.orion_log_path is not None:
+        if car == "Orion":
             flat = {}
             for table in table_specs.keys():
                 model = builder._models.get(self._model_key(table))
@@ -605,16 +622,13 @@ class MQTTHandler:
                         flat[f"{table}.{col_name}"] = val
 
             row_vals = []
-            for col in self.orion_cols:
+            for col in columns:
                 val = flat.get(col, "")
                 if isinstance(val, (list, dict)):
                     val = json.dumps(val)
                 row_vals.append(val)
-            try:
-                self.csv_queue.put_nowait((self.orion_log_path, row_vals))
-            except queue.Full:
-                logging.error("CSV queue full for Orion log; dropping row")
-
+            with open(file_path, "a", newline="") as output:
+                csv.writer(output).writerow(row_vals)
 
     def _b64_ingest(self, payload: str, high_freq: bool):
         '''
@@ -647,29 +661,7 @@ class MQTTHandler:
 
     def _proto_decode(self, payload: str, car = "Nightwatch") -> dict:
         # logging.debug('Data Received via Protobuf')
-        if (car == "Angelique"):
-            row = angelique_pb2.AngeliqueSensorData()
-        elif (car == "Orion"):
-            row = can_packets_pb2.OrionSensorData()
-        else:
-            row = template_pb2.SensorData()
-        row.ParseFromString(payload)
-        row = MessageToDict(row, preserving_proto_field_name=True, always_print_fields_with_no_presence=True)
-        if car == "Orion" and isinstance(row.get("dynamics"), dict):
-            # The Orion proto names these fields blw_speed/brw_speed/flw_speed/frw_speed,
-            # but the dynamics table columns are bl_wheel_speed/.../fr_wheel_speed.
-            # Remap so the live insert populates the columns instead of writing NULL.
-            dyn = row["dynamics"]
-            for proto_name, db_name in (
-                ("blw_speed", "bl_wheel_speed"),
-                ("brw_speed", "br_wheel_speed"),
-                ("flw_speed", "fl_wheel_speed"),
-                ("frw_speed", "fr_wheel_speed"),
-            ):
-                if proto_name in dyn:
-                    dyn[db_name] = dyn.pop(proto_name)
-        # logging.debug(row)
-        return row
+        return decode_sensor(payload, car)
 
     def _base64_decode(self, payload: str, high_freq: bool) -> dict:
         '''
