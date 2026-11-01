@@ -70,10 +70,13 @@ one_run() {  # id kind track seed v_max seconds [launch args...]
     ros2 bag record -s mcap -o "$bag" --topics $TOPICS \
         > "$OUT/bags/$id.record.log" 2>&1 &
     local rec=$!
+    # Metrics off: a finished lap ends the mission (#132) and safety only
+    # arms in READY and DRIVING, so a fault after the first lap would score
+    # missed. An 8 m/s oval lap is shorter than AFTER.
     timeout -s INT "$secs" ros2 launch lhr_gazebo gazebo_demo.launch.py \
         gui:=false rviz:=false track_style:="$track" seed:="$seed" \
         perception:=lidar estimator:=ekf safety:=true \
-        v_max:="$vmax" ${world:+"$world"} \
+        v_max:="$vmax" ${world:+"$world"} enable_metrics:=false \
         $EXTRA "$@" > "$OUT/bags/$id.launch.log" 2>&1
     # A background job ignores SIGINT in a non-interactive shell; TERM is
     # what makes the recorder close the bag.

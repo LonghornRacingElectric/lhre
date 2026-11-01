@@ -87,7 +87,7 @@ The finish is the reference gate for autocross (`/lhr/metrics/lap_complete`)
 and the mission's own completion for acceleration and skidpad
 (`/lhr/mission/complete`, the car on the finish line). Stop distances are optimistic until the regen and
 spring-brake model lands
-([#116](https://github.com/LonghornRacingElectric/lhre/issues/116)): the sim
+([#199](https://github.com/LonghornRacingElectric/lhre/issues/199)): the sim
 stops the wheels outright.
 
 The gate passes only when every run passes. Per the pass criteria, a failed
