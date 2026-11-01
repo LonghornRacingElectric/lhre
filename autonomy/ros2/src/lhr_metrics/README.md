@@ -5,6 +5,23 @@ distance spent off track, speed stats, and lap completion. Writes one CSV
 row per run to `data/metrics.csv` (never committed, see
 `autonomy/AGENTS.md`).
 
+## Live viewer summary
+
+`/lhr/metrics/live` (`diagnostic_msgs/DiagnosticArray`) mirrors the existing
+score at 2 Hz on the node clock and once at finish. Its named values include
+CTE, off-track distance, cone contacts, progress, elapsed time and
+timestamp-aligned estimator errors. Units match the CSV: metres, seconds
+and radians. Missing estimator errors stay blank. The diagnostic message
+says `waiting for scored odometry`, `running` or the terminal outcome;
+it is viewer telemetry, not a safety input. It does not change scoring,
+completion, CSV output or exit status.
+
+This publication has a fixed topic and rate rather than new launch knobs.
+It exists whenever the metrics node runs (`enable_metrics:=true` in Gazebo).
+The node exits at the scored outcome, so the viewer's final summary can precede
+the vehicle reaching `FINISHED`; continue watching mission state and speed.
+See the [Gazebo layout guide](../../foxglove/README.md).
+
 ## What a row holds
 
 Rows include configuration, fixed-reference identity, and outcomes so two

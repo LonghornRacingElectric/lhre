@@ -186,3 +186,27 @@ def test_box_occludes_cone_and_returns_nearest_surface():
     ranges, hit, _ = cast(directions, np.empty((0, 2)), .2,
                           boxes=np.array([[2., 1., 0., 3., 2., 1.]]))
     assert not hit[0] and np.isinf(ranges[0])
+
+
+@pytest.mark.parametrize('sensor_z', [0.005, 0.55, 1.2])
+def test_azimuth_culling_preserves_unculled_surface_hits(monkeypatch, sensor_z):
+    # Compare against the same analytic surfaces with culling disabled. Include
+    # wrapped azimuths, near/overhead cones, square corners and vertical rays.
+    import lhr_lidar_sim.scene as scene
+    rng = np.random.default_rng(912)
+    cones = np.array([[8., 0.], [-8., 0.], [0., 8.], [0., -8.],
+                      [.1, .1], [0., 0.]])
+    vectors = list(rng.normal(size=(20000, 3)))
+    for x, y in cones:
+        for dx in (-.113, .113):
+            for dy in (-.113, .113):
+                vectors.append([x + dx, y + dy, .01 - sensor_z])
+    vectors.extend([[0., 0., -1.], [0., 0., 1.], [-1., 1e-12, 0.],
+                    [-1., -1e-12, 0.]])
+    dirs = _dirs(vectors)
+    culled = scene.cone_ranges(dirs, cones, sensor_z)
+    monkeypatch.setattr(scene, '_candidate_rays',
+                        lambda azimuths, order, ax, ay, radius: order)
+    unculled = scene.cone_ranges(dirs, cones, sensor_z)
+    for actual, expected in zip(culled, unculled):
+        np.testing.assert_array_equal(actual, expected)

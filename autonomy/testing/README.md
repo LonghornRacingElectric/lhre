@@ -21,6 +21,16 @@ testing/
 | [2026-10-26 FMU seeds](2026-10-26-fmu-seeds/README.md) | Does the FMU plant complete autocross seeds 1 to 5 with LiDAR and EKF? | 5/5 verified laps; seed 2 has a shutdown error | [SharePoint](https://utexas.sharepoint.com/sites/ENGR-LonghornRacing/LHR%20Electric/Design/_VMS_/Autonomous/Test%20Data/2026-10-26-fmu-seeds) |
 | [2026-10-28 MVP gate](2026-10-28-mvp-gate/README.md) | Does the full stack, with no ground-truth shortcuts, pass every gate run in Gazebo? | Pass, 18 of 18 (11/1); camera fusion and skidpad waived | Upload pending |
 
+## Simulator validation
+
+These runs use simulated sensors and vehicle geometry, not physical hardware
+acceptance. Their failed checks remain visible even when a change retains its
+scope and defers the repair.
+
+| Campaign | Question | Status |
+| --- | --- | --- |
+| [2026-10-24 PR #133 integration](2026-10-24-pr133-integration/README.md) | Does the source integration preserve launch/fault behavior and drive under current scoring? | **Open:** replacement GPU seed-2 cone contact; default GPU LiDAR timeout fails on the test laptop |
+
 ## Rules
 
 - **Raw data is never committed.** Recordings run 50 to 100 MB per minute.

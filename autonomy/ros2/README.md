@@ -267,6 +267,10 @@ The `lhr_gazebo` package provides an alternative simulation backend using Gazebo
 
 RViz launches automatically alongside Gazebo (disable with `rviz:=false`). The RViz config shows centerline, cones, odometry trail, lookahead point, and FOV visualization.
 
+Gazebo also supports `perception:=lidar lidar_source:=mid360` and optional
+`foxglove:=true`. See [source selection and viewer setup](src/lhr_gazebo/README.md#mid-360-cloud-source-and-foxglove)
+for defaults, headless usage and model limits.
+
 Launch arguments pass through and are typed the same way as `run_demo.sh`'s,
 but each launch declares its own set. `ros2 launch` silently ignores a name
 the launch does not declare, so `record:=true` does nothing here and
@@ -404,7 +408,7 @@ flowchart TB
 
 | Component | Kinematic | Gazebo (`perception:=sim`) | Gazebo (`perception:=lidar`) |
 |-----------|-----------|----------------------------|------------------------------|
-| Cone source | `publish_cones` | `publish_cones` (reused) | Gazebo GPU LiDAR |
+| Cone source | `publish_cones` | `publish_cones` (reused) | Gazebo GPU LiDAR or world-backed Mid-360 caster |
 | Perception | `sensor_sim` (FOV filter) | `sensor_sim` (reused) | `lidar_cone_detector` (pointcloud clustering) |
 | Physics / vehicle | `sim_kinematic` | Gazebo | Gazebo |
 | `track_builder` pairing | boundary (Delaunay) | boundary (Delaunay) | boundary by default; classified when `lidar_classify_sides:=true` |
@@ -460,7 +464,11 @@ itself carries `run_id`, `git_sha`, `scenario` and `seed` as rosbag2
 `custom_data`. Recording is off by default: a lap is roughly 6 MiB and
 the gate runs many seeds.
 
-Load [`foxglove/lhr_sim.json`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/ros2/foxglove/lhr_sim.json)
+For Gazebo, use the [Gazebo layout and recording steps](foxglove/README.md).
+That layout includes viewer-only truth cones, estimated versus true pose,
+and live run metrics. It expects `estimator:=ekf foxglove:=true`.
+
+For the kinematic demo, load [`foxglove/lhr_sim.json`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/ros2/foxglove/lhr_sim.json)
 as the layout so everyone is looking at the same panels: a 3D view of
 the track and cloud, command against actual speed, steering, and
 mission state.

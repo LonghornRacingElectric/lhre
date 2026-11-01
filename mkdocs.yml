@@ -57,6 +57,7 @@ nav:
       - Overview: autonomy/README.md
       - Getting Started: autonomy/ros2/GETTING-STARTED.md
       - ROS 2 Workspace: autonomy/ros2/README.md
+      - Foxglove Layouts: autonomy/ros2/foxglove/README.md
       - Docker (macOS): autonomy/ros2/docker/README.md
       - Vehicle Parameters: autonomy/ros2/src/lhr_vehicle/README.md
       - Vehicle Mesh: autonomy/ros2/src/lhr_vehicle/meshes/README.md
@@ -91,6 +92,7 @@ nav:
       - Testing:
           - Overview: autonomy/testing/README.md
           - Mid-360 Acceptance 2026-10-04: autonomy/testing/2026-10-04-mid360-acceptance/README.md
+          - PR 133 Integration 2026-10-24: autonomy/testing/2026-10-24-pr133-integration/README.md
           - FMU Seeds 2026-10-26: autonomy/testing/2026-10-26-fmu-seeds/README.md
           - MVP Gate 2026-10-28: autonomy/testing/2026-10-28-mvp-gate/README.md
           - Livox Test Tools: autonomy/testing/tools/livox/README.md

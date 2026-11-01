@@ -7,11 +7,12 @@ import math
 from geometry_msgs.msg import TransformStamped
 from lhr_lidar_sim.mid360 import Mid360Config
 from lhr_lidar_sim.sensor import Mid360Sensor, MountPose
+from lhr_lidar_sim.world import load_world_cones
 from lhr_trackgen.cone_geometry import CONE_SPECS
 from lhr_vehicle import load_vehicle
 from nav_msgs.msg import Odometry
 import numpy as np
-from rcl_interfaces.msg import SetParametersResult
+from rcl_interfaces.msg import ParameterDescriptor, SetParametersResult
 import rclpy
 from rclpy.node import Node
 from rclpy.parameter import Parameter
@@ -94,12 +95,14 @@ class LidarSimNode(Node):
         self.declare_parameter('frame_rate_hz', 10.0)
         self.declare_parameter('point_rate_hz', 200_000.0)
         self.declare_parameter('max_range_m', 40.0)
-        self.declare_parameter('range_noise_std_m', 0.02)
+        self.declare_parameter('range_noise_std_m', vehicle.lidar_range_noise_std_m)
         self.declare_parameter('dropout_rate', 0.0)
         self.declare_parameter('elevation_profile', 'livox')
         self.declare_parameter('return_profile', 'baseline')
         self.declare_parameter('motion_distortion', False)
         self.declare_parameter('clutter_profile', 'none')
+        self.declare_parameter('world_sdf', '',
+                               ParameterDescriptor(read_only=True))
 
         def param(name):
             return self.get_parameter(name).value
@@ -122,16 +125,27 @@ class LidarSimNode(Node):
         self._boxes = np.empty((0, 6))
         self._cones = np.empty((0, 2))
         self._veh = (0.0, 0.0, 0.0)
+        self._attitude = (0.0, 0.0, 0.0)
         self._have_odom = False
         self._odom_stamp = None
+        self._last_scan_stamp_ns = None
+        self._last_tf_stamp_ns = None
+        self._world_sdf = str(param('world_sdf'))
+        if self._world_sdf:
+            self._cones = load_world_cones(self._world_sdf)
+            if mount != MountPose():
+                raise ValueError('World input requires the fixed vehicle.yaml mount')
+            if param('motion_distortion') or param('clutter_profile') != 'none':
+                raise ValueError('World input requires snapshot scans and no synthetic clutter')
 
         latch_qos = QoSProfile(
             depth=1,
             reliability=ReliabilityPolicy.RELIABLE,
             durability=DurabilityPolicy.TRANSIENT_LOCAL,
         )
-        self.create_subscription(
-            MarkerArray, '/lhr/track/cones', self._cones_cb, latch_qos)
+        if not self._world_sdf:
+            self.create_subscription(
+                MarkerArray, '/lhr/track/cones', self._cones_cb, latch_qos)
         self.create_subscription(
             Odometry, '/lhr/vehicle/odom', self._odom_cb, 10)
         self._cloud_pub = self.create_publisher(
@@ -195,9 +209,18 @@ class LidarSimNode(Node):
         halfway into a new one.
         """
         overrides = {}
+        world_options = {'motion_distortion': False, 'clutter_profile': 'none'}
         for param in params:
+            if (self._world_sdf and param.name in world_options
+                    and param.value != world_options[param.name]):
+                return SetParametersResult(
+                    successful=False, reason='World mode requires snapshot scans and no clutter')
             if param.name not in MOUNT_PARAMS:
                 continue
+            if self._world_sdf:
+                return SetParametersResult(
+                    successful=False,
+                    reason='World mode uses the fixed vehicle.yaml mount for perception')
             if param.type_ not in (Parameter.Type.DOUBLE,
                                    Parameter.Type.INTEGER):
                 return SetParametersResult(
@@ -304,6 +327,11 @@ class LidarSimNode(Node):
         self._veh = (msg.pose.pose.position.x,
                      msg.pose.pose.position.y,
                      quat_to_yaw(msg.pose.pose.orientation))
+        q = msg.pose.pose.orientation
+        roll = math.atan2(2.0 * (q.w * q.x + q.y * q.z),
+                          1.0 - 2.0 * (q.x * q.x + q.y * q.y))
+        pitch = math.asin(max(-1.0, min(1.0, 2.0 * (q.w * q.y - q.z * q.x))))
+        self._attitude = (msg.pose.pose.position.z, roll, pitch)
         stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
         if self._history and stamp <= self._history[-1][0]:
             if stamp < self._history[-1][0]:
@@ -317,12 +345,17 @@ class LidarSimNode(Node):
     def _tick(self):
         now = self.get_clock().now()
         stamp = self._odom_stamp if self._have_odom else now.to_msg()
+        stamp_ns = stamp.sec * 1_000_000_000 + stamp.nanosec
         # Broadcast before the odom check, so the frame exists from the
         # first tick and a viewer opened early is not left with a cloud
         # it cannot place.
-        self._tf.sendTransform(self._mount_transform(stamp))
+        if stamp_ns != self._last_tf_stamp_ns:
+            self._tf.sendTransform(self._mount_transform(stamp))
+            self._last_tf_stamp_ns = stamp_ns
 
         if not self._have_odom:
+            return
+        if stamp_ns == self._last_scan_stamp_ns:
             return
 
         # Scan time comes from the ROS clock so the pattern advances
@@ -343,14 +376,17 @@ class LidarSimNode(Node):
             poses = np.column_stack([np.interp(acquisition, times, history[:, axis])
                                      for axis in range(3)])
             t -= period
-        points, _ = self._sensor.frame_labeled(t, x, y, yaw, self._cones,
-                                               boxes=self._boxes, poses=poses)
+        z, roll, pitch = self._attitude
+        points, _ = self._sensor.frame_labeled(
+            t, x, y, yaw, self._cones, boxes=self._boxes, poses=poses,
+            vehicle_z=z, vehicle_roll=roll, vehicle_pitch=pitch)
 
         header = Header()
         header.stamp = stamp
         header.frame_id = LIDAR_FRAME
         self._cloud_pub.publish(
             point_cloud2.create_cloud_xyz32(header, points))
+        self._last_scan_stamp_ns = stamp_ns
 
 
 def main():

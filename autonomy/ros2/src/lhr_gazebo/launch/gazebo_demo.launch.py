@@ -14,6 +14,7 @@ Usage:
 """
 
 import os
+import xml.etree.ElementTree as ET
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchContext, LaunchDescription
@@ -28,6 +29,7 @@ from launch.event_handlers import OnShutdown
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+from lhr_vehicle import load_vehicle
 import yaml
 
 
@@ -52,8 +54,10 @@ def _find_world(context: LaunchContext):
     track_style = context.launch_configurations.get('track_style', 'autocross')
     seed = context.launch_configurations.get('seed', '1')
 
-    # If the user explicitly passed a valid world path, use it
-    if world_arg and os.path.isfile(world_arg):
+    # An explicit typo must not silently select a different scene.
+    if world_arg:
+        if not os.path.isfile(world_arg):
+            raise ValueError(f'World file does not exist: {world_arg!r}')
         return world_arg
 
     expected = f'{track_style}_seed{seed}.sdf'
@@ -98,10 +102,11 @@ def _fault_remaps(fault: str, use_ekf: bool, configs: dict) -> dict:
     odom_raw = [('/lhr/vehicle/odom', '/lhr/vehicle/odom_raw')]
     # Under ekf the bridge's odom is already truth; corrupt the estimate.
     odom_owner = 'ekf_node' if use_ekf else 'ros_gz_bridge'
+    cloud_owner = 'lidar_sim' if configs.get('lidar_source') == 'mid360' else 'ros_gz_bridge'
     return {
         'odom_nan': {odom_owner: odom_raw},
         'odom_spike': {odom_owner: odom_raw},
-        'lidar_drop': {'ros_gz_bridge': [
+        'lidar_drop': {cloud_owner: [
             ('/lhr/lidar/points', '/lhr/lidar/points_raw')]},
         'cmd_nan': {'pure_pursuit': [
             ('/lhr/vehicle/cmd', '/lhr/vehicle/cmd_raw')]},
@@ -142,12 +147,27 @@ def _launch_setup(context: LaunchContext):
     config_dir = os.path.join(pkg_share, 'config')
 
     perception = context.launch_configurations.get('perception', 'sim')
+    lidar_source = context.launch_configurations.get('lidar_source', 'gazebo')
+    if lidar_source not in ('gazebo', 'mid360'):
+        raise ValueError('lidar_source must be gazebo or mid360')
+    if lidar_source == 'mid360' and perception != 'lidar':
+        raise ValueError('lidar_source:=mid360 requires perception:=lidar')
+    if lidar_source == 'mid360':
+        from lhr_lidar_sim.world import load_world_cones
+        try:
+            load_world_cones(world_path)
+        except (OSError, ET.ParseError, ValueError) as error:
+            raise ValueError(f'Unsupported Mid-360 world {world_path!r}: {error}') from error
     classify_sides = context.launch_configurations.get(
         'lidar_classify_sides', 'false').lower() == 'true'
     use_ekf = context.launch_configurations.get(
         'estimator', 'truth').lower() == 'ekf'
     fault = context.launch_configurations.get('fault', '')
     fault_remaps = _fault_remaps(fault, use_ekf, context.launch_configurations)
+    # The sensor sim observes the plant, never the injected driving estimate.
+    caster_odom = '/lhr/vehicle/odom_truth' if use_ekf else (
+        '/lhr/vehicle/odom_raw' if fault in ('odom_nan', 'odom_spike')
+        else '/lhr/vehicle/odom')
 
     enable_stereo = context.launch_configurations.get(
         'enable_stereo_camera', 'false').lower() == 'true'
@@ -158,7 +178,6 @@ def _launch_setup(context: LaunchContext):
         raise RuntimeError('Camera classification requires enable_stereo_camera:=true')
     if enable_stereo:
         from lhr_gazebo.stereo_camera import stereo_actions
-        from lhr_vehicle import load_vehicle
         camera_nodes = stereo_actions(load_vehicle().stereo_camera, config_dir)
     if enable_color:
         from lhr_perception.cone_color import DEFAULT_THRESHOLDS, validate_config
@@ -181,6 +200,13 @@ def _launch_setup(context: LaunchContext):
             output='screen',
         ))
 
+    qt_platform = os.environ.get('QT_QPA_PLATFORM', '')
+    qt_env = {}
+    if (os.environ.get('WAYLAND_DISPLAY') and os.environ.get('DISPLAY')
+            and (not qt_platform or qt_platform.split(';', 1)[0] == 'wayland')):
+        # Ogre's GLX windows need XWayland even when Qt prefers Wayland.
+        qt_env['QT_QPA_PLATFORM'] = 'xcb'
+
     resource_path = models_dir
     resource_cleanup = []
     if enable_stereo:
@@ -191,7 +217,12 @@ def _launch_setup(context: LaunchContext):
         resource_path = os.pathsep.join((resources.name, models_dir))
         resource_cleanup.append(RegisterEventHandler(OnShutdown(
             on_shutdown=lambda event, context: resources.cleanup())))
-    _gz_env = {'GZ_SIM_RESOURCE_PATH': resource_path}
+    _gz_env = {
+        'GZ_SIM_RESOURCE_PATH': resource_path,
+        'FONTCONFIG_FILE': os.environ.get('FONTCONFIG_FILE') or os.path.join(
+            config_dir, 'gazebo-fontconfig.conf'),
+        **qt_env,
+    }
 
     # ----- Gazebo server -----
     gui = context.launch_configurations.get('gui', 'true').lower()
@@ -215,6 +246,9 @@ def _launch_setup(context: LaunchContext):
             ('/lhr/vehicle/odom', '/lhr/vehicle/odom_truth'),
             ('/tf', '/tf_truth'),
         ]
+
+    if lidar_source == 'mid360':
+        bridge_remaps.append(('/lhr/lidar/points', '/lhr/lidar/gazebo_points'))
 
     bridge = Node(
         package='ros_gz_bridge',
@@ -302,6 +336,26 @@ def _launch_setup(context: LaunchContext):
             output='screen',
         ))
     elif perception == 'lidar':
+        if lidar_source == 'mid360':
+            perception_nodes.append(Node(
+                package='lhr_lidar_sim',
+                executable='lidar_sim',
+                name='lidar_sim',
+                parameters=[{
+                    'world_sdf': ParameterValue(world_path, value_type=str),
+                    'seed': ParameterValue(LaunchConfiguration('seed'), value_type=int),
+                    **{name: _float(f'mid360_{name}') for name in (
+                        'frame_rate_hz', 'point_rate_hz', 'max_range_m',
+                        'range_noise_std_m', 'dropout_rate')},
+                    **{name: ParameterValue(LaunchConfiguration(f'mid360_{name}'),
+                                            value_type=str)
+                       for name in ('elevation_profile', 'return_profile')},
+                    'use_sim_time': True,
+                }],
+                remappings=[('/lhr/vehicle/odom', caster_odom),
+                            *fault_remaps.get('lidar_sim', [])],
+                output='screen',
+            ))
         perception_nodes.append(Node(
             package='lhr_perception',
             executable='lidar_cone_detector',
@@ -479,6 +533,7 @@ def _launch_setup(context: LaunchContext):
             package='rviz2',
             executable='rviz2',
             name='rviz2',
+            additional_env=qt_env,
             arguments=['-d', os.path.join(
                 config_dir, 'stereo.rviz' if enable_stereo else 'default.rviz')],
             parameters=[{'use_sim_time': True}],
@@ -551,6 +606,39 @@ def _launch_setup(context: LaunchContext):
             output='screen',
         ))
 
+    # ----- Optional Foxglove viewer -----
+    viewer_nodes = []
+    if context.launch_configurations.get('foxglove', 'false').lower() == 'true':
+        viewer_nodes.append(Node(
+            package='foxglove_bridge',
+            executable='foxglove_bridge',
+            name='foxglove_bridge',
+            parameters=[{
+                'port': ParameterValue(LaunchConfiguration('foxglove_port'), value_type=int),
+                'use_sim_time': True,
+            }],
+            output='screen',
+        ))
+        viewer_nodes.append(Node(
+            package='lhr_vehicle',
+            executable='vehicle_viz',
+            name='vehicle_viz',
+            parameters=[{'use_mesh': False, 'use_sim_time': True}],
+            output='screen',
+        ))
+        viewer_nodes.append(Node(
+            package='lhr_gazebo',
+            executable='world_viz',
+            name='world_viz',
+            parameters=[{
+                # Fixed to the rendered world, not the scoring override.
+                'world_sdf': ParameterValue(world_path, value_type=str),
+                'acceleration': mission == 'acceleration',
+                'use_sim_time': True,
+            }],
+            output='screen',
+        ))
+
     return [
         SetEnvironmentVariable('GZ_SIM_RESOURCE_PATH', resource_path),
         *resource_cleanup,
@@ -567,6 +655,7 @@ def _launch_setup(context: LaunchContext):
         *safety_nodes,
         *fault_nodes,
         *rviz_nodes,
+        *viewer_nodes,
     ]
 
 
@@ -582,6 +671,21 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'perception', default_value='sim',
             description='Perception mode: "sim" or "lidar"'),
+        DeclareLaunchArgument(
+            'lidar_source', default_value='gazebo', choices=['gazebo', 'mid360'],
+            description='Raw cloud source; mid360 requires perception:=lidar'),
+        DeclareLaunchArgument('foxglove', default_value='false', choices=['true', 'false']),
+        DeclareLaunchArgument('foxglove_port', default_value='8765'),
+        DeclareLaunchArgument('mid360_frame_rate_hz', default_value='10.0'),
+        DeclareLaunchArgument('mid360_point_rate_hz', default_value='200000.0'),
+        DeclareLaunchArgument('mid360_max_range_m', default_value='40.0'),
+        DeclareLaunchArgument('mid360_range_noise_std_m',
+                              default_value=str(load_vehicle().lidar_range_noise_std_m)),
+        DeclareLaunchArgument('mid360_dropout_rate', default_value='0.0'),
+        DeclareLaunchArgument('mid360_elevation_profile', default_value='livox',
+                              choices=['livox', 'rosette', 'uniform']),
+        DeclareLaunchArgument('mid360_return_profile', default_value='baseline',
+                              choices=['baseline', 'acceptance_overcast']),
         DeclareLaunchArgument(
             'lidar_classify_sides', default_value='false',
             description='Infer LiDAR cone sides (opt in; false publishes unlabeled cones)'),
