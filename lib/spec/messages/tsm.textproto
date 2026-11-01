@@ -6,6 +6,7 @@ message {
   can_id: 416
   from_board: "TSM"
   to_boards: "Pi"
+  to_boards: "VCU"
   bus: "Data Acq"
   dlc: 8
   frequency_hz: 10.0

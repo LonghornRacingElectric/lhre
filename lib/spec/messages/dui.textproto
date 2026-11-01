@@ -39,3 +39,35 @@ message {
     description: "DUI Shutdown Faults"
   }
 }
+message {
+  name: "DUI_DRIVER_INPUTS"
+  can_id: 290
+  from_board: "DUI"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 2
+  frequency_hz: 10.0
+  description: "Steering wheel inputs. The DUI makes no safety decisions; fault_reset only clears the VCU\'s brake comparator soft latch."
+  signal {
+    name: "fault_reset"
+    encoding {
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    description: "Driver fault reset button held"
+  }
+  signal {
+    name: "rockers"
+    encoding {
+      start_bit: 8
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Raw rocker switch bits"
+  }
+}

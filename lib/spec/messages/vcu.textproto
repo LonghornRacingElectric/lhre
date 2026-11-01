@@ -852,7 +852,7 @@ message {
   from_board: "VCU"
   to_boards: "Pi"
   bus: "Critical"
-  dlc: 7
+  dlc: 8
   frequency_hz: 333.0
   description: "VCU State"
   signal {
@@ -956,6 +956,17 @@ message {
       wire_type: PROTO_FLOAT
     }
     description: "Event Mode"
+  }
+  signal {
+    name: "line_lock_request"
+    encoding {
+      start_bit: 56
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    description: "Firmware line lock request (Linelock_Ctrl) before the hard-brake gate"
   }
 }
 message {
@@ -1090,5 +1101,611 @@ message {
       id: 45
     }
     description: "Torque Traction Controlled"
+  }
+}
+message {
+  name: "VCU_FAULTS"
+  can_id: 459
+  from_board: "VCU"
+  to_boards: "DUI"
+  to_boards: "Pi"
+  bus: "Critical"
+  dlc: 8
+  frequency_hz: 10.0
+  description: "Active VCU faults for the dash. Brake comparator faults stay latched until DUI_DRIVER_INPUTS.fault_reset."
+  signal {
+    name: "active_faults"
+    encoding {
+      bit_length: 32
+    }
+    logical {
+      bitfield {
+        bitfield_type: "VcuFaultBits"
+      }
+    }
+    description: "Active faults"
+  }
+  signal {
+    name: "primary_fault"
+    encoding {
+      start_bit: 32
+      bit_length: 8
+    }
+    logical {
+      enum_type: "VcuFaultCode"
+    }
+    description: "Highest-priority active fault"
+  }
+  signal {
+    name: "state"
+    encoding {
+      start_bit: 40
+      bit_length: 8
+    }
+    logical {
+      enum_type: "VcuStateMachine"
+    }
+    description: "VCU state"
+  }
+  signal {
+    name: "brake_flags_latched"
+    encoding {
+      start_bit: 48
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    description: "Brake comparator soft latch set"
+  }
+  signal {
+    name: "fault_resets"
+    encoding {
+      start_bit: 56
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Accepted dash fault resets since boot (wraps)"
+  }
+}
+message {
+  name: "VCU_ADC_COUNTS_A"
+  can_id: 464
+  from_board: "VCU"
+  to_boards: "Pi"
+  bus: "Data Acq"
+  dlc: 8
+  frequency_hz: 100.0
+  description: "Raw ADC counts (12-bit, 16x oversampled) for the pedal channels."
+  signal {
+    name: "apps1"
+    encoding {
+      bit_length: 16
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "APPS1_Filtered counts"
+  }
+  signal {
+    name: "apps2"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "APPS2_Filtered counts"
+  }
+  signal {
+    name: "bse1"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "BSE1_Filtered counts"
+  }
+  signal {
+    name: "bse2"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "BSE2_Filtered counts"
+  }
+}
+message {
+  name: "VCU_ADC_COUNTS_B"
+  can_id: 465
+  from_board: "VCU"
+  to_boards: "Pi"
+  bus: "Data Acq"
+  dlc: 8
+  frequency_hz: 100.0
+  description: "Raw ADC counts for steering, shutdown taps, and VREFINT."
+  signal {
+    name: "steering"
+    encoding {
+      bit_length: 16
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Steering_Filtered counts"
+  }
+  signal {
+    name: "shutdown_in"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Shutdown_in_S counts"
+  }
+  signal {
+    name: "shutdown_out"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Shutdown_out_S counts"
+  }
+  signal {
+    name: "vrefint"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "VREFINT counts"
+  }
+}
+message {
+  name: "VCU_ADC_VOLTS_A"
+  can_id: 466
+  from_board: "VCU"
+  to_boards: "Pi"
+  bus: "Data Acq"
+  dlc: 8
+  frequency_hz: 100.0
+  description: "VREFINT-corrected MCU pin voltages for the pedal channels."
+  signal {
+    name: "apps1"
+    encoding {
+      bit_length: 16
+      scale: 0.0001
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    description: "APPS1_Filtered pin voltage"
+  }
+  signal {
+    name: "apps2"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      scale: 0.0001
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    description: "APPS2_Filtered pin voltage"
+  }
+  signal {
+    name: "bse1"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      scale: 0.0001
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    description: "BSE1_Filtered pin voltage"
+  }
+  signal {
+    name: "bse2"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      scale: 0.0001
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    description: "BSE2_Filtered pin voltage"
+  }
+}
+message {
+  name: "VCU_ADC_VOLTS_B"
+  can_id: 467
+  from_board: "VCU"
+  to_boards: "Pi"
+  bus: "Data Acq"
+  dlc: 8
+  frequency_hz: 100.0
+  description: "Steering pin voltage, shutdown loop voltages, and the measured ADC reference."
+  signal {
+    name: "steering"
+    encoding {
+      bit_length: 16
+      scale: 0.0001
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    description: "Steering_Filtered pin voltage"
+  }
+  signal {
+    name: "shutdown_in_loop"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    description: "Loop voltage upstream of the BSPD relay"
+  }
+  signal {
+    name: "shutdown_out_loop"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    description: "Loop voltage downstream of the BSPD relay"
+  }
+  signal {
+    name: "vdda"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      scale: 0.0001
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    description: "ADC reference (VDDA) from VREFINT"
+  }
+}
+message {
+  name: "VCU_DIGITAL_IO"
+  can_id: 468
+  from_board: "VCU"
+  to_boards: "Pi"
+  bus: "Data Acq"
+  dlc: 8
+  frequency_hz: 100.0
+  description: "Digital inputs, commanded outputs, and loop state."
+  signal {
+    name: "inputs"
+    encoding {
+      bit_length: 16
+    }
+    logical {
+      bitfield {
+        bitfield_type: "VcuDigitalInputs"
+      }
+    }
+    description: "Debounced digital inputs"
+  }
+  signal {
+    name: "outputs"
+    encoding {
+      start_bit: 16
+      bit_length: 8
+    }
+    logical {
+      bitfield {
+        bitfield_type: "VcuDigitalOutputs"
+      }
+    }
+    description: "Commanded digital outputs"
+  }
+  signal {
+    name: "shutdown_loop"
+    encoding {
+      start_bit: 24
+      bit_length: 8
+    }
+    logical {
+      enum_type: "ShutdownLoopState"
+    }
+    description: "Shutdown loop state"
+  }
+  signal {
+    name: "firmware_hard_brake"
+    encoding {
+      start_bit: 32
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    description: "Firmware\'s own hard-brake view from BSE1/BSE2"
+  }
+  signal {
+    name: "hard_brake_mismatch"
+    encoding {
+      start_bit: 40
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    description: "Firmware view disagrees with hard_braking beyond the debounce"
+  }
+}
+message {
+  name: "VCU_DIAG"
+  can_id: 469
+  from_board: "VCU"
+  to_boards: "Pi"
+  bus: "Data Acq"
+  dlc: 8
+  frequency_hz: 10.0
+  description: "Reset cause, uptime, and CAN bus health."
+  signal {
+    name: "reset_cause"
+    encoding {
+      bit_length: 8
+    }
+    logical {
+      enum_type: "ResetCause"
+    }
+    description: "Cause of the last reset"
+  }
+  signal {
+    name: "uptime"
+    encoding {
+      start_bit: 8
+      bit_length: 16
+    }
+    logical {
+      physical {
+        unit: "s"
+      }
+    }
+    description: "Seconds since boot, saturating at 65535"
+  }
+  signal {
+    name: "critical_bus_off_count"
+    encoding {
+      start_bit: 32
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Critical bus-off recoveries (saturates)"
+  }
+  signal {
+    name: "data_bus_off_count"
+    encoding {
+      start_bit: 40
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Data bus-off recoveries (saturates)"
+  }
+  signal {
+    name: "critical_tx_dropped"
+    encoding {
+      start_bit: 48
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Critical frames dropped on a full TX queue (saturates)"
+  }
+  signal {
+    name: "data_tx_dropped"
+    encoding {
+      start_bit: 56
+      bit_length: 8
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Data frames dropped on a full TX queue (saturates)"
+  }
+}
+message {
+  name: "VCU_CALIBRATED_A"
+  can_id: 470
+  from_board: "VCU"
+  to_boards: "Pi"
+  bus: "Data Acq"
+  dlc: 8
+  frequency_hz: 100.0
+  description: "Calibrated pedal values (unclamped, so out-of-range shows)."
+  signal {
+    name: "apps1_travel"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.0001
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "APPS1 travel fraction"
+  }
+  signal {
+    name: "apps2_travel"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.0001
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "APPS2 travel fraction"
+  }
+  signal {
+    name: "bse1_pressure"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "psi"
+      }
+    }
+    description: "BSE1 pressure"
+  }
+  signal {
+    name: "bse2_pressure"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.1
+    }
+    logical {
+      physical {
+        unit: "psi"
+      }
+    }
+    description: "BSE2 pressure"
+  }
+}
+message {
+  name: "VCU_CALIBRATED_B"
+  can_id: 471
+  from_board: "VCU"
+  to_boards: "Pi"
+  bus: "Data Acq"
+  dlc: 4
+  frequency_hz: 100.0
+  description: "Calibrated steering."
+  signal {
+    name: "steering_angle"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.004
+    }
+    logical {
+      physical {
+        unit: "deg"
+      }
+    }
+    description: "Steering column angle"
+  }
+  signal {
+    name: "steering_travel"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.0001
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Steering sensor fraction of its 0.5-4.5 V span"
+  }
+}
+message {
+  name: "VCU_ECHO_REPLY_CRITICAL"
+  can_id: 474
+  from_board: "VCU"
+  to_boards: "Bench"
+  bus: "Critical"
+  dlc: 8
+  description: "Bring-up image: echo of BENCH_ECHO_REQUEST_CRITICAL."
+  signal {
+    name: "payload"
+    encoding {
+      bit_length: 64
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Echoed payload"
+  }
+}
+message {
+  name: "VCU_ECHO_REPLY_DATA"
+  can_id: 474
+  from_board: "VCU"
+  to_boards: "Bench"
+  bus: "Data Acq"
+  dlc: 8
+  description: "Bring-up image: echo of BENCH_ECHO_REQUEST_DATA."
+  signal {
+    name: "payload"
+    encoding {
+      bit_length: 64
+    }
+    logical {
+      physical {
+      }
+    }
+    description: "Echoed payload"
   }
 }
