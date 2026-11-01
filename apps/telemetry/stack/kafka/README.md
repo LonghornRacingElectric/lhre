@@ -18,6 +18,19 @@ Gazelle. After a dependency edit, update the Go module checksums and commit the
 resulting `MODULE.bazel.lock` change. Protobuf Go packages are build outputs;
 they are not checked into `proto/`.
 
+Orion's Go library compiles `//lib/codegen/telemetry:orion_proto` from the same
+textproto-generated protobuf used by BEVO and ingest. `sensor.proto` now holds
+only the separate historical-car definitions. The bridge enumerates current
+Orion fields and seed groups from generated descriptors instead of a copied
+schema/field list. Existing derived GPS, power and cell-statistics metrics
+remain application logic, and the gRPC/MQTT payload contracts are unchanged.
+The standalone Dockerfile was removed; build images through Bazel only.
+
+The image also packages the generated contract/descriptor under `/schema/`
+for the [deployed authority](../../schema_registry/README.md). That metadata
+must match the running ingest image before the authority advertises a schema
+to BEVO. This does not change the bridge's decoding or RPC behavior.
+
 Compose expects both `lhre/telemetry-kafka:4.1.0` and
 `lhre/telemetry-kafka-bridge:dev` to be loaded. The root
 `//apps/telemetry:load_core_images` target does both.

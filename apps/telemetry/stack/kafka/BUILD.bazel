@@ -10,6 +10,7 @@ exports_files([
     "docker-compose.yml",
     "go.mod",
     "go.sum",
+    "proto/bridge.proto",
 ])
 
 proto_library(
@@ -38,19 +39,28 @@ go_proto_library(
     target_compatible_with = NOT_WINDOWS,
 )
 
+go_proto_library(
+    name = "orion_go_proto",
+    importpath = "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/proto/orion",
+    proto = "//lib/codegen/telemetry:orion_proto",
+    target_compatible_with = NOT_WINDOWS,
+)
+
 go_binary(
     name = "kafka_bridge_binary",
-    srcs = ["cmd/bridge/main.go"],
+    srcs = ["cmd/bridge/main.go", "cmd/bridge/orion.go"],
     importpath = "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/cmd/bridge",
     pure = "on",
     target_compatible_with = NOT_WINDOWS,
     deps = [
         ":bridge_go_proto",
         ":sensor_go_proto",
+        ":orion_go_proto",
         "@com_github_ibm_sarama//:sarama",
         "@org_golang_google_grpc//:grpc",
         "@org_golang_google_grpc//keepalive",
         "@org_golang_google_protobuf//proto",
+        "@org_golang_google_protobuf//reflect/protoreflect",
     ],
     visibility = ["//visibility:public"],
 )
@@ -64,6 +74,7 @@ telemetry_service_image(
         "kafka-bridge:latest",
     ],
     repository = "ghcr.io/longhornracingelectric/telemetry-kafka-bridge",
+    tars = ["//apps/telemetry:current_schema_tar"],
     visibility = ["//visibility:public"],
 )
 

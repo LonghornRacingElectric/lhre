@@ -8,6 +8,20 @@ on:
   schedule:
     - cron: "23 7 * * 1"
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish BEVO to GHCR after verification, only if the generated schema or CAN mapping changed
+        type: boolean
+        default: false
+      schema_base:
+        description: Last released commit or ref to compare against (HEAD^ compares with the selected commit's parent)
+        type: string
+        default: HEAD^
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: read
 
 # A new push to a PR cancels that PR's older run. Every other run gets its
 # own group, so no push, schedule or manual run is dropped.
@@ -65,9 +79,9 @@ jobs:
             area car '^(vehicle/|simulation/bobsim$|simulation/tools/|simulation/Makefile$|simulation/docker-compose\.yml$|\.github/workflows/ci\.yml$)'
           fi
           area autonomy '^(autonomy/|simulation/bobsim$|vehicle/|\.github/workflows/ci\.yml$)'
-          area bevo '^(apps/BEVO/|lib/spec/|lib/codegen/telemetry/|platforms/|toolchains/|MODULE\.bazel$|MODULE\.bazel\.lock$|\.github/workflows/ci\.yml$)'
+          area bevo '^(apps/BEVO/|lib/spec/|lib/codegen/telemetry/|lib/telemetry/|platforms/|toolchains/|MODULE\.bazel$|MODULE\.bazel\.lock$|\.github/workflows/ci\.yml$)'
           area docs '(\.md$|^docs/|^mkdocs\.yml$|^pyproject\.toml$|^uv\.lock$|^\.github/workflows/ci\.yml$)'
-          area telemetry '^(apps/telemetry/|apps/BEVO/|lib/spec/|lib/codegen/telemetry/|\.github/workflows/ci\.yml$)'
+          area telemetry '^(apps/telemetry/|apps/BEVO/|lib/spec/|lib/codegen/telemetry/|lib/telemetry/|\.github/workflows/ci\.yml$)'
 
   format:
     name: Format
@@ -348,8 +362,12 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.bevo != 'false' }}
     runs-on: ubuntu-latest
+    outputs:
+      schema_changed: ${{ steps.schema.outputs.changed }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       # With a BuildBuddy key, builds use the remote cache + executors and
       # stream results. Fork PRs don't get secrets, so they fall back to a
@@ -366,10 +384,49 @@ jobs:
           echo "common --config=ci" >> .bazelrc.user
 
       - name: Cross-compile core daemons for Raspberry Pi OS
-        run: bazel build //apps/BEVO:pi_core_binaries
+        run: bazel build //apps/BEVO:pi_core_binaries //apps/BEVO:pi_core_manifest //apps/BEVO:pi_core_image //apps/BEVO/updater:standalone
 
       - name: Verify static AArch64 executables
-        run: bazel test //apps/BEVO:pi_core_binary_test --test_output=errors
+        run: bazel test //apps/BEVO:pi_core_binary_test //apps/BEVO:release_metadata_test //apps/BEVO/schema_tests:schema_propagation_test //apps/BEVO/updater:updater_test //apps/BEVO/updater:package_test //apps/telemetry/schema_registry:registry_test //lib/telemetry:contract_test --test_output=errors
+
+      - name: Compare generated schema and CAN mapping with the release baseline
+        id: schema
+        if: github.event_name == 'workflow_dispatch' && inputs.publish
+        env:
+          SCHEMA_BASE: ${{ inputs.schema_base }}
+        run: |
+          BASE_SHA=$(git rev-parse --verify --end-of-options "$SCHEMA_BASE^{commit}")
+          BASE_DIR="$RUNNER_TEMP/bevo-schema-baseline"
+          BASE_OUTPUT="$RUNNER_TEMP/bevo-schema-baseline-bazel"
+          git worktree add --detach "$BASE_DIR" "$BASE_SHA"
+          trap 'git worktree remove --force "$BASE_DIR"' EXIT
+          cp .bazelrc.user "$BASE_DIR/.bazelrc.user"
+          (
+            cd "$BASE_DIR"
+            bazel --output_base="$BASE_OUTPUT" build //lib/codegen/telemetry:schema_contract //lib/codegen/telemetry:can_json
+          )
+          BASE_BIN=$(cd "$BASE_DIR" && bazel --output_base="$BASE_OUTPUT" info bazel-bin)
+          CURRENT_BIN=$(bazel info bazel-bin)
+          export BASE_BIN CURRENT_BIN
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          base = Path(os.environ["BASE_BIN"]) / "lib/codegen/telemetry"
+          current = Path(os.environ["CURRENT_BIN"]) / "lib/codegen/telemetry"
+          def definitions(directory):
+              return {name: json.loads((directory / name).read_bytes())
+                      for name in ("schema_contract.json", "can.json")}
+
+          changed = definitions(base) != definitions(current)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"changed={str(changed).lower()}\n")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as output:
+              output.write(f"Generated schema/CAN mapping changed: **{changed}**.\n")
+              if not changed:
+                  output.write("GHCR publication skipped: generated definitions match the selected baseline.\n")
+          PY
 
   # On main, docs.yml builds and publishes the site instead.
   docs:
@@ -402,6 +459,8 @@ jobs:
       HAVE_SECRETS: ${{ secrets.POSTGRES_USER != '' && secrets.POSTGRES_PASSWORD != '' && secrets.ELECTRIC_PWD != '' && secrets.GRAFANA_PWD != '' && secrets.ANALYSIS_PWD != '' }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Configure BuildBuddy
         env:
@@ -416,6 +475,15 @@ jobs:
 
       - name: Build all telemetry images
         run: bazel build //apps/telemetry:all_images //lib/codegen/telemetry:server_schema
+
+      - name: Check deployed wire compatibility
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git show "$BASE_SHA:lib/spec/wire.lock" > "$RUNNER_TEMP/baseline-wire.lock"
+          bazel run //tools/spec:check_wire_compat -- \
+            --baseline "$RUNNER_TEMP/baseline-wire.lock" --current "$GITHUB_WORKSPACE/lib/spec/wire.lock"
 
       - name: Load and smoke-test core images
         run: bazel test //apps/telemetry:core_smoke_tests --test_output=errors
@@ -476,11 +544,60 @@ jobs:
           docker network rm telemetry_network || true
           rm -f .env
 
+  publish:
+    name: Publish BEVO to GHCR
+    needs: [changes, format, bazel, bazel-windows, sim-fast, four-post, autonomy, bevo, docs, telemetry]
+    if: github.event_name == 'workflow_dispatch' && inputs.publish && needs.bevo.outputs.schema_changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      DOCKER_CONFIG: ${{ github.workspace }}/.bevo-ghcr-auth
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Configure BuildBuddy
+        env:
+          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
+        run: |
+          if [ -n "$BUILDBUDDY_API_KEY" ]; then
+            echo "common --remote_header=x-buildbuddy-api-key=$BUILDBUDDY_API_KEY" > .bazelrc.user
+          else
+            echo "common --config=local" > .bazelrc.user
+          fi
+          echo "common --config=ci" >> .bazelrc.user
+
+      - name: Authenticate to GHCR
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GHCR_USER" --password-stdin
+
+      - name: Publish the Bazel-built core release
+        run: |
+          bazel run //apps/BEVO:pi_core_push -- --tag "sha-$GITHUB_SHA"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          image = Path("bazel-bin/apps/BEVO/pi_core_image")
+          digest = json.loads((image / "index.json").read_bytes())["manifests"][0]["digest"]
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as output:
+              output.write(f"Published `ghcr.io/longhornracingelectric/bevo-core@{digest}`\n\n")
+              output.write("Add this digest to the deployed server's approved release list to make it selectable by BEVO.\n")
+          PY
+
+      - name: Remove registry credentials
+        if: always()
+        run: rm -rf "$DOCKER_CONFIG"
+
   # The only required check, so the ruleset names one check, not ten.
   # Jobs skip only on an untouched area, and run if Changes fails.
   all-checks:
     name: All checks passed
-    needs: [changes, format, bazel, bazel-windows, sim-fast, four-post, autonomy, bevo, docs, telemetry]
+    needs: [changes, format, bazel, bazel-windows, sim-fast, four-post, autonomy, bevo, docs, telemetry, publish]
     if: always()
     runs-on: ubuntu-latest
     steps:

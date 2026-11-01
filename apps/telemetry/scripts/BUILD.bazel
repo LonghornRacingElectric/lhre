@@ -1,0 +1,7 @@
+load("@rules_python//python:defs.bzl", "py_library")
+
+py_library(
+    name = "schema_helpers",
+    srcs = ["generate_schema.py"],
+    visibility = ["//visibility:public"],
+)

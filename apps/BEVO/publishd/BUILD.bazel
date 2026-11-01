@@ -12,6 +12,7 @@ rust_binary(
         "//conditions:default": [],
     }),
     deps = [
+        "//apps/BEVO:sensor_proto",
         "@crates//:anyhow",
         "@crates//:rumqttc",
         "@crates//:serde_json",

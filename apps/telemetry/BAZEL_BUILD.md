@@ -95,6 +95,12 @@ that software.
 
 ## Server workflow
 
+`//apps/telemetry:current_schema_tar` packages the current contract and
+descriptor under `/schema/` in ingest and bridge images. The
+[authority's deployed mode](schema_registry/README.md) reads these artifacts
+from the running containers and checks their agreement, independently of
+the source checkout. GitHub deployment is not required.
+
 [`stack/server_devtool.sh`](stack/README.md) maps every Bazel-managed component
 to its `_load` target. `build`, `rebuild`, and `enable` run that target before
 starting Compose; `up` only reuses already loaded tags. This keeps rebuilds
@@ -107,17 +113,34 @@ for a branch image or a registry digest without editing YAML.
 ## Schema boundary and branch testing
 
 Services consume `//apps/telemetry:current_schema_bundle`, not a physical
-generator path. That target selects the protobuf, CAN JSON, and Orion database
-DDL generated from `//lib/spec`; a spec edit therefore invalidates every
+generator path. That target selects the protobuf, CAN JSON, Orion database
+DDL, canonical schema manifest and descriptor generated from `//lib/spec`;
+a spec edit therefore invalidates every
 server-side artifact in the same Bazel graph. It remains a dependency seam,
-not a schema registry or multi-version decoder.
+not a runtime schema registry or multi-version decoder.
 
-A future registry can replace the selection behind this target and generate
-board-specific libraries without changing every service BUILD file. Deployed
-messages still need an explicit schema identity before a main-branch server can
-safely decode traffic from a board branch. Until that protocol is designed,
-test a schema-changing board branch with a matching branch of the server/image;
-branching only the firmware is safe when the wire schema is unchanged.
+The [schema metadata](../../lib/telemetry/README.md) and BEVO's
+`//apps/BEVO:pi_core_manifest` expose the same source schema identity for a
+separate [BEVO updater](../BEVO/updater/README.md). They do not change MQTT topics/payloads, packet-ID
+handshakes or bridge RPCs. Ingest/bridge protobuf bindings and Orion ORM/DDL
+definitions are generated from that same source, not manually synchronized.
+Use the deployed server's manifest as the reference and test schema-changing
+branches with a matching server/image. Definition comparison is not runtime
+filtering. Database migrations remain operator-managed.
+
+BEVO compiles typed CAN decode tables and CSV columns into its executables;
+runtime JSON schema paths are no longer used. The `can.json` output remains a
+build intermediate/audit artifact. The viewer reads the generated protobuf;
+its optional Prisma schema derives from the same textproto plus shared SQL
+metadata. Historical-car schemas and application-derived metrics remain
+separate from current-car codegen.
+
+The optional [server schema authority](schema_registry/README.md) exposes the
+deployed server schema and approved digest-pinned BEVO releases independently
+of ingest. Run its dedicated Bazel/Compose targets; it is not automatically
+enabled in the core stack. Admins can override server image references and the
+authority's schema directory explicitly; BEVO also supports persistent local
+release overrides. Neither override changes protobuf compatibility rules.
 
 ## Dependencies and CI
 

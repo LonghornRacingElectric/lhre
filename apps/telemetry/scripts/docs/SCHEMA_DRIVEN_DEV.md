@@ -1,8 +1,10 @@
 # Schema Driven Development (SDD) Overhaul
 
-This is a historical design. Current Orion protobuf, CAN JSON and SQL are
-Bazel outputs from textproto; use the [current workflow](../README.md).
-`sync_schema.sh` no longer runs the source-patching steps described below.
+The current implementation uses authoritative `lib/spec/*.textproto` and
+[Bazel schema generation](../../../../lib/codegen/telemetry/README.md).
+Orion protobuf bindings, ORM/DDL/Prisma and BEVO compiled CAN tables derive
+from that source. The older source-patching workflow discussed below has been
+removed and is not an alternative build path.
 
 ## 1. Motivation & Problem Statement
 

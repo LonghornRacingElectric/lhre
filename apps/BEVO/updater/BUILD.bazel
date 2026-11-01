@@ -1,0 +1,102 @@
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+
+package(default_visibility = ["//apps/BEVO:__subpackages__"])
+
+exports_files(["updater.py", "oci.py", "package.py"])
+
+py_library(
+    name = "updater_lib",
+    srcs = ["updater.py", "oci.py"],
+    deps = ["//lib/telemetry:contract"],
+)
+
+py_binary(
+    name = "updater",
+    srcs = ["updater.py"],
+    deps = [":updater_lib"],
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
+)
+
+py_binary(
+    name = "package",
+    srcs = ["package.py"],
+)
+
+genrule(
+    name = "standalone",
+    srcs = ["updater.py", "oci.py", "//lib/telemetry:contract.py"],
+    outs = ["bevo_updater.pyz"],
+    tools = [":package"],
+    cmd = "$(execpath :package) updater --out $@ --source $(location updater.py) --oci $(location oci.py) --contract $(location //lib/telemetry:contract.py)",
+    visibility = ["//visibility:public"],
+)
+
+py_test(
+    name = "updater_test",
+    srcs = ["updater_test.py"],
+    deps = [":updater_lib", "//lib/telemetry:testing"],
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
+)
+
+py_test(
+    name = "package_test",
+    srcs = ["package_test.py"],
+    args = ["$(rootpath :standalone)", "$(rootpath //apps/BEVO:pi_core_metadata_layer)", "$(rootpath //apps/BEVO:pi_core_executables_layer)", "$(rootpath //apps/BEVO:pi_core_image)"],
+    data = [":standalone", "//apps/BEVO:pi_core_metadata_layer", "//apps/BEVO:pi_core_executables_layer", "//apps/BEVO:pi_core_image"],
+    deps = [":updater_lib", "//lib/telemetry:contract", "//apps/telemetry/schema_registry:registry_lib"],
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
+)
+
+py_test(
+    name = "live_server_test",
+    size = "large",
+    timeout = "long",
+    srcs = ["live_server_test.py"],
+    args = ["$(rootpath :standalone)"],
+    data = [":standalone"],
+    deps = [":updater_lib"],
+    tags = ["manual", "local", "external", "integration"],
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
+)
+
+_DOCKER_TEST_INPUTS = [
+    "//apps/telemetry/stack/ingest:ingest_load",
+    "//apps/telemetry/stack/kafka:kafka_bridge_load",
+    "//apps/telemetry:kafka_load",
+    "//apps/telemetry:postgres_load",
+    "//apps/telemetry:mqtt_load",
+    "//apps/BEVO:pi_core_metadata_layer",
+    "//apps/BEVO:pi_core_executables_layer",
+    "//apps/telemetry:current_schema_sql",
+    "//apps/telemetry/stack/ingest:nightwatch_db_init.sql",
+    "//apps/telemetry/stack/ingest:angelique_db_init.sql",
+    "//apps/telemetry/stack/ingest:mosquitto.conf",
+    ":standalone",
+]
+
+py_test(
+    name = "docker_updater_test",
+    size = "large",
+    timeout = "long",
+    srcs = ["docker_updater_test.py"],
+    args = ["$(rootpath %s)" % label for label in _DOCKER_TEST_INPUTS],
+    data = _DOCKER_TEST_INPUTS,
+    deps = [":updater_lib", "//apps/telemetry/schema_registry:registry_lib"],
+    tags = ["manual", "local", "external", "docker", "integration"],
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
+)

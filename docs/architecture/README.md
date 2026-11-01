@@ -25,6 +25,9 @@ three years after everyone who made the decision graduated.
 | [014](014-deployed-telemetry-schema.md) | Generate server artifacts while preserving the deployed telemetry schema | Accepted |
 | [015](015-study-layout.md) | A study is a README, a study.yml and a run.py | Accepted |
 | [016](016-fmu-artifact-boundary.md) | Identified full-vehicle FMU artifact for autonomy | Accepted |
+| [017](017-schema-release-metadata.md) | Generate schema compatibility metadata without changing telemetry transport | Accepted |
+| [018](018-bevo-release-intersection.md) | BEVO projects its installed release against the authoritative deployed server | Accepted; extends ADR-017 |
+| [019](019-running-server-schema-authority.md) | Read the authoritative schema from matching running server images | Accepted |
 
 ## ADRs vs. READMEs
 

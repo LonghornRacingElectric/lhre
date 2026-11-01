@@ -268,6 +268,10 @@ fn write_startup_semaphore(packet_id: u64) -> Result<()> {
 
 fn main() -> Result<()> {
     let _ = std::fs::remove_file(STARTUP_SEMAPHORE_PATH);
+    let release = std::env::var("BEVO_CORE_RELEASE_ROOT")
+        .map_err(|_| anyhow::anyhow!("publishd requires a managed release and reconciliation plan"))?;
+    let projection = sensor_proto::projection::Projection::from_release(std::path::Path::new(&release))
+        .map_err(anyhow::Error::msg)?;
     // let _ = std::fs::remove_file(OTA_SEMAPHORE_PATH);
     let mqtt_host = env_or_default("PUBLISHD_MQTT_HOST", MQTT_HOST);
     let mqtt_port = std::env::var("PUBLISHD_MQTT_PORT")
@@ -344,7 +348,14 @@ fn main() -> Result<()> {
                         }
                     }
 
-                    if let Err(error) = mqtt_client.publish_sensor_bytes(&message_buffer) {
+                    let projected = match projection.project(&message_buffer) {
+                        Ok(payload) => payload,
+                        Err(error) => {
+                            eprintln!("publishd rejected malformed protobuf: {error}");
+                            continue;
+                        }
+                    };
+                    if let Err(error) = mqtt_client.publish_sensor_bytes(&projected) {
                         eprintln!("publishd mqtt publish error: {error}");
                     }
                     last_published = Some(Instant::now());

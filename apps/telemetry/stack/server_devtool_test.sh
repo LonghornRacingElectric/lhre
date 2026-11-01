@@ -134,3 +134,12 @@ docker_root() {
     printf '/var/lib/docker\n'
 }
 [[ "$(free_gb)" == "12" ]]
+
+require_docker() { SUDO="${test_sudo:-}"; }
+bazel() { printf '%s\n' "$@"; }
+for test_sudo in "" sudo; do
+    expected="$(printf '%s\n' run --config=local //apps/telemetry/schema_registry:deployed_registry_binary --)"
+    if [[ -n "$test_sudo" ]]; then expected="$expected"$'\n''--docker-sudo'; fi
+    expected="$expected"$'\n'"$(printf '%s\n' --config "$override")"
+    [[ "$(run_command schema-serve --config "$override")" == "$expected" ]]
+done

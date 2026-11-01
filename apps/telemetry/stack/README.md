@@ -13,8 +13,16 @@ database, and Grafana images. Commands are detached by default:
 ./server_devtool.sh build ingest   # rebuild/load only the ingest project
 ./server_devtool.sh up             # reuse already loaded images
 ./server_devtool.sh enable gg_plot # build/load and start one processor
+./server_devtool.sh schema-serve --config /absolute/releases.json # foreground schema authority
 ./server_devtool.sh logs
 ```
+
+The [schema authority](../schema_registry/README.md)'s `schema-serve` mode
+reads the actual running ingest and bridge images, rather than the checkout
+or a newly generated output. Rebuild both with `build kafka ingest` for a
+schema deployment. The authority refuses mixed schemas during a rollout and
+observes matching replacements on its next request. Its approved GHCR list
+remains operator-owned; this command does not publish images or update BEVO.
 
 For Bazel-managed components, `build` invokes each component's `_load` target
 and then `docker compose up --no-build`. Logsync and the PM2 viewer retain their
@@ -44,6 +52,10 @@ Existing database volumes are not migrated by rebuilding this initialization
 file. Integration tests do not create missing tables to conceal a failed init.
 See the [integration runner notes](tests/README.md) before using its
 volume-removing cleanup.
+
+Starting/rebuilding/reloading the viewer also builds the shared schema bundle
+and exports `ORION_PROTO_PATH`. Node/PM2 remains outside Bazel, but the viewer's
+Orion protobuf and optional Prisma definitions are Bazel outputs.
 
 Disk preflight uses Docker's data root on Linux. On macOS, that path exists
 inside Docker Desktop's VM, so the devtool reports free space on the host

@@ -16,6 +16,22 @@ network configuration opened by path at runtime. The generated
 never edit or check in the Bazel output. The legacy `ingest_tarball` label is an
 alias of `ingest_load` for one migration cycle.
 
+`/schema/schema_contract.json` and `/schema/schema_descriptor.pb` are packaged
+from those same inputs for the [deployed authority](../../schema_registry/README.md).
+They describe this image's compiled schema; they are not runtime overrides
+or definitions loaded by the MQTT handler. Rebuild the bridge alongside
+ingest when deploying a schema change.
+
+Orion database models also come from `//lib/codegen/telemetry:orion_models`;
+analysis re-exports their existing class names. The CSV header's group list is
+derived from those models. No MQTT routing, packet-ID handshake or ingest
+queue logic changes are needed to adopt a schema edit.
+
+The checked-in Orion DDL and Python bindings were removed. Both Python and Go
+bridge bindings are generated from the one bridge RPC definition by Bazel;
+the RPC contract itself is unchanged. The old workspace-copy target and
+standalone Dockerfile are no longer supported build paths.
+
 `docker-compose.yml` also defines Mosquitto, PostgreSQL, and Grafana. Their
 local tags come from the root `_load` targets, so Compose must be run with
 `--no-build` after `bazel run //apps/telemetry:load_core_images`.

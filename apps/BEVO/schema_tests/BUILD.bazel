@@ -1,0 +1,56 @@
+load("@rules_python//python:defs.bzl", "py_binary", "py_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
+load("//apps/BEVO:sensor_proto.bzl", "sensor_proto_library")
+load(":fixtures.bzl", "schema_fixture")
+
+package(default_testonly = True)
+
+py_binary(
+    name = "append_fields",
+    srcs = ["append_fields.py"],
+    deps = ["//lib/spec:ir"],
+)
+
+genrule(
+    name = "append_spec",
+    srcs = ["base.textproto", "addition.textproto"],
+    outs = ["appended.textproto"],
+    tools = [":append_fields"],
+    cmd = "$(execpath :append_fields) $(location base.textproto) $(location addition.textproto) $@",
+)
+
+schema_fixture(name = "baseline", spec = "base.textproto")
+schema_fixture(name = "appended", spec = ":append_spec")
+
+sensor_proto_library(
+    name = "appended_sensor_proto",
+    proto = ":appended_proto",
+    can_json = ":appended_json",
+    contract = ":appended_contract",
+    testonly = True,
+)
+
+rust_binary(
+    name = "encode_fixture",
+    srcs = ["encode_fixture.rs"],
+    edition = "2021",
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
+    deps = [":appended_sensor_proto", "@crates//:prost", "@crates//:serde_json"],
+)
+
+py_test(
+    name = "schema_propagation_test",
+    size = "small",
+    srcs = ["schema_propagation_test.py"],
+    args = ["$(rootpath :baseline_contract)", "$(rootpath :appended_contract)", "$(rootpath :encode_fixture)"],
+    data = [":baseline_contract", ":appended_contract", ":baseline_artifacts", ":appended_artifacts", ":encode_fixture"],
+    deps = ["//lib/telemetry:contract", requirement("SQLAlchemy")],
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
+)
