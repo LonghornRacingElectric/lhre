@@ -54,6 +54,7 @@ nav:
       - Overview: autonomy/README.md
       - Getting Started: autonomy/ros2/GETTING-STARTED.md
       - ROS 2 Workspace: autonomy/ros2/README.md
+      - Foxglove Layouts: autonomy/ros2/foxglove/README.md
       - Docker (macOS): autonomy/ros2/docker/README.md
       - Vehicle Parameters: autonomy/ros2/src/lhr_vehicle/README.md
       - Vehicle Mesh: autonomy/ros2/src/lhr_vehicle/meshes/README.md

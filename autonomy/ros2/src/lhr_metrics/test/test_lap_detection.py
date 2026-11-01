@@ -3,6 +3,7 @@
 import math
 import time
 
+from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus
 from geometry_msgs.msg import PoseStamped
 from lhr_metrics.metrics_node import MetricsNode
 from lhr_mission_manager.mission_manager_node import MissionManager
@@ -60,6 +61,48 @@ def metrics(tmp_path, request):
     yield node
     node.destroy_node()
     rclpy.shutdown()
+
+
+def test_live_metrics_mirror_score_without_advancing_it(metrics):
+    metrics._reference_cb(reference())
+    metrics._status_cb(String(data='DRIVING'))
+    metrics._score_odom(odom(0., 0., 1.))
+    metrics._score_odom(odom(1., 0., 1.2))
+    before = metrics._build_row()
+    messages = []
+    subscription = metrics.create_subscription(
+        DiagnosticArray, '/lhr/metrics/live', messages.append, 1)
+    try:
+        deadline = time.monotonic() + 3.
+        while not messages and time.monotonic() < deadline:
+            metrics._publish_live()
+            rclpy.spin_once(metrics, timeout_sec=.02)
+        assert messages
+        status = messages[-1].status[0]
+        assert status.level == DiagnosticStatus.OK
+        assert status.message == 'running'
+        values = {value.key: value.value for value in status.values}
+        assert all(value == before[key] for key, value in values.items())
+        assert values['mean_pos_error'] == ''  # No truth comparison, not zero error.
+        assert metrics._build_row() == before
+        metrics.finish('invalid_lap')
+        deadline = time.monotonic() + 3.
+        while messages[-1].status[0].message != 'invalid_lap' and time.monotonic() < deadline:
+            rclpy.spin_once(metrics, timeout_sec=.02)
+        assert messages[-1].status[0].level == DiagnosticStatus.WARN
+    finally:
+        metrics.destroy_subscription(subscription)
+
+
+def test_shutdown_skips_viewer_publication_but_records_outcome(metrics, monkeypatch):
+    def unexpected_publish(_):
+        pytest.fail('Shutdown must not publish through an invalid ROS context')
+
+    monkeypatch.setattr(metrics.context, 'ok', lambda: False)
+    monkeypatch.setattr(metrics._live_pub, 'publish', unexpected_publish)
+    metrics.finish('interrupted')
+    assert metrics.finished
+    assert metrics._build_row()['outcome'] == 'interrupted'
 
 
 def test_full_square_with_rolling_planner_and_mission_agreement(metrics):

@@ -626,6 +626,18 @@ def _launch_setup(context: LaunchContext):
             parameters=[{'use_mesh': False, 'use_sim_time': True}],
             output='screen',
         ))
+        viewer_nodes.append(Node(
+            package='lhr_gazebo',
+            executable='world_viz',
+            name='world_viz',
+            parameters=[{
+                # Fixed to the rendered world, not the scoring override.
+                'world_sdf': ParameterValue(world_path, value_type=str),
+                'acceleration': mission == 'acceleration',
+                'use_sim_time': True,
+            }],
+            output='screen',
+        ))
 
     return [
         SetEnvironmentVariable('GZ_SIM_RESOURCE_PATH', resource_path),

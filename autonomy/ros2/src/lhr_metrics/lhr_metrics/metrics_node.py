@@ -8,6 +8,7 @@ import sys
 import time
 from typing import Optional, Tuple
 
+from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 from lhr_metrics.alignment import TruthAligner
 from lhr_metrics.course import CourseEnvelope, FOOTPRINT_MODEL, SWEEP_STEP_M
 from lhr_metrics.reference import (
@@ -206,6 +207,10 @@ class MetricsNode(Node):
         # --- Publisher ---
         self._lap_pub = self.create_publisher(
             Bool, '/lhr/metrics/lap_complete', 10)
+        self._live_pub = self.create_publisher(
+            DiagnosticArray, '/lhr/metrics/live', 1)
+        # Mirror existing scoring state for viewers; never score a second time.
+        self.create_timer(0.5, self._publish_live)
 
         # --- Subscribers ---
         self._truth_topic = self.get_parameter('truth_odom_topic').value
@@ -416,6 +421,28 @@ class MetricsNode(Node):
     # ------------------------------------------------------------------
     # Reporting
     # ------------------------------------------------------------------
+    def _publish_live(self):
+        """Expose the existing score without changing progress or lifecycle."""
+        # SIGINT can invalidate the context before main records 'interrupted'.
+        if not self.context.ok():
+            return
+        row = self._build_row()
+        status = DiagnosticStatus(name='Run metrics', hardware_id=self._run_id)
+        status.message = self._outcome if self.finished else (
+            'running' if self._cte.samples else 'waiting for scored odometry')
+        status.level = DiagnosticStatus.OK
+        if not self._cte.samples:
+            status.level = DiagnosticStatus.STALE
+        elif self.finished and self._outcome not in CLEAN_OUTCOMES:
+            status.level = DiagnosticStatus.WARN
+        fields = ('duration_s', 'samples', 'mean_cte', 'max_cte', 'off_track_dist_m',
+                  'cones_hit', 'lap_progress_m', 'lap_completed', 'lap_invalid_reason',
+                  'mean_pos_error', 'max_pos_error', 'mean_yaw_error')
+        status.values = [KeyValue(key=key, value=str(row[key])) for key in fields]
+        message = DiagnosticArray(status=[status])
+        message.header.stamp = self.get_clock().now().to_msg()
+        self._live_pub.publish(message)
+
     def _build_row(self) -> dict:
         samples = self._cte.samples
         duration = (
@@ -523,6 +550,7 @@ class MetricsNode(Node):
             return
         self._outcome = outcome
         self.finished = True
+        self._publish_live()
         self.get_logger().info(f'Run ended: {outcome}')
 
     def finalize(self) -> int:

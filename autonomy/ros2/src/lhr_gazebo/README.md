@@ -178,10 +178,20 @@ ros2 launch lhr_gazebo gazebo_demo.launch.py \
   lidar_source:=mid360 gui:=false rviz:=false foxglove:=true foxglove_port:=8767
 ```
 
-Connect to `ws://localhost:8767` and import `autonomy/ros2/foxglove/lhr_sim.json`.
-The viewer includes primitive car markers; no mesh server is needed.
-`/lhr/track/cones` is absent in LiDAR mode. Foxglove works in either perception
-mode and defaults to `foxglove:=false foxglove_port:=8765`.
+Connect to `ws://localhost:8767` and import `autonomy/ros2/foxglove/lhr_gazebo.json`.
+See the [Gazebo layout guide](../../foxglove/README.md) for panel meanings,
+recording, validation and a visual checklist. The viewer includes primitive
+car markers; no mesh server is needed. RViz is optional.
+
+With `foxglove:=true`, `world_viz` reads the selected rendered world and
+publishes translucent nominal cone envelopes on `/lhr/viewer/cones_truth`
+and the fixed reference path on `/lhr/viewer/centerline_truth`.
+These are viewer-only topics: LiDAR perception and planning still use
+`/lhr/sensor/cones_detected`, and `/lhr/track/cones` remains absent in LiDAR
+mode. World/acceleration selection is fixed by launch, not an independent
+viewer setting. Foxglove works in either perception mode and defaults to
+`foxglove:=false foxglove_port:=8765`. The pose comparison layout expects
+`estimator:=ekf`, and its metrics panel expects `enable_metrics:=true`.
 
 Custom WebSocket clients should offer `foxglove.sdk.v1` as well as the legacy
 `foxglove.websocket.v1`. The installed SDK-based bridge accepted the former

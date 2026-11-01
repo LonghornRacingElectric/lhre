@@ -463,7 +463,11 @@ itself carries `run_id`, `git_sha`, `scenario` and `seed` as rosbag2
 `custom_data`. Recording is off by default: a lap is roughly 6 MiB and
 the gate runs many seeds.
 
-Load [`foxglove/lhr_sim.json`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/ros2/foxglove/lhr_sim.json)
+For Gazebo, use the [Gazebo layout and recording steps](foxglove/README.md).
+That layout includes viewer-only truth cones, estimated versus true pose,
+and live run metrics. It expects `estimator:=ekf foxglove:=true`.
+
+For the kinematic demo, load [`foxglove/lhr_sim.json`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/ros2/foxglove/lhr_sim.json)
 as the layout so everyone is looking at the same panels: a 3D view of
 the track and cloud, command against actual speed, steering, and
 mission state.

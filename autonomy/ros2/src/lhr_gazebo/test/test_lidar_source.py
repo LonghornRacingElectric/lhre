@@ -199,14 +199,18 @@ def test_lidar_drop_intercepts_the_selected_source(monkeypatch, source, estimato
     assert 'fault_injector' in nodes
 
 
-@pytest.mark.parametrize('perception, source', [('sim', 'gazebo'), ('lidar', 'mid360')])
+@pytest.mark.parametrize('perception, source', [
+    ('sim', 'gazebo'), ('lidar', 'gazebo'), ('lidar', 'mid360'),
+])
 def test_foxglove_only_adds_viewer_nodes(monkeypatch, perception, source):
     baseline = launch_nodes(monkeypatch, perception=perception, lidar_source=source)
     selected = launch_nodes(monkeypatch, perception=perception, lidar_source=source,
                             foxglove='true', foxglove_port='8767')
-    assert set(selected) - set(baseline) == {'foxglove_bridge', 'vehicle_viz'}
+    assert set(selected) - set(baseline) == {'foxglove_bridge', 'vehicle_viz', 'world_viz'}
     assert all(selected[name] == config for name, config in baseline.items())
     assert selected['vehicle_viz']['parameters'][0]['use_mesh'] is False
+    assert selected['world_viz']['parameters'][0]['world_sdf'] == str(WORLD)
+    assert 'publish_cones' not in selected or perception == 'sim'
 
 
 def test_foxglove_rejects_misspelled_boolean():
