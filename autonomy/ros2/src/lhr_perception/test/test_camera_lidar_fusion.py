@@ -225,11 +225,34 @@ def test_zero_stamp_bad_image_and_replay_restart_do_not_reuse_evidence(node):
     node._image_cb(image)
     node._process()
     assert node._evidence.labels() == {7: 'blue'}
-    image, _ = camera_pair(1)
+    node._map_cb(snapshot(1))
+    assert node._evidence.labels() == {7: None}
+    assert len(node._map_history) == 1
+    assert node._map_history[0][0] == 1_000_000_000
+
+
+@pytest.mark.parametrize('seconds,nanoseconds', [(11, 900_000_000), (1, 0), (12, 0)])
+def test_late_or_duplicate_image_preserves_map_votes_tf_and_orange(node, seconds, nanoseconds):
+    """A delayed frame must not erase the map or let known orange enter pairing."""
+    from rclpy.time import Time
+    for stamp in (10, 11, 12):
+        observe(node, stamp, color=(255, 100, 0))
+    original = deepcopy(node._current_map)
+    history = list(node._map_history)
+    image, _ = camera_pair(seconds)
+    image.header.stamp.nanosec = nanoseconds
     node._image_cb(image)
-    assert not node._current_map
-    assert node._evidence.labels() == {}
-    assert not node._map_history
+    assert node._current_map == original
+    assert node._evidence.labels() == {7: 'orange'}
+    assert list(node._map_history) == history
+    assert node._last_image_stamp == node._processed_stamp == 12_000_000_000
+    assert not node._images
+    assert node._tf_buffer.can_transform('camera_optical', 'map', Time(seconds=12))
+    assert node._classified_keys == {('orange_cones', 7)}
+    # The next valid frame continues the same map and color evidence.
+    observe(node, 13, color=(255, 100, 0))
+    assert node._processed_stamp == 13_000_000_000
+    assert node._evidence.labels() == {7: 'orange'}
 
 
 def test_histories_are_bounded_even_when_tf_is_missing(node):
@@ -275,7 +298,7 @@ def test_late_subscriber_receives_complete_colored_map(node):
         viewer.destroy_node()
 
 
-@pytest.mark.parametrize('reset_kind', ['image', 'map', 'clock'])
+@pytest.mark.parametrize('reset_kind', ['map', 'clock'])
 def test_reset_discards_previous_epoch_dynamic_tf_and_keeps_static_mount(node, reset_kind):
     """Reused timestamps must wait for the new pose, while rigid mounts survive."""
     from geometry_msgs.msg import TransformStamped
@@ -288,10 +311,7 @@ def test_reset_discards_previous_epoch_dynamic_tf_and_keeps_static_mount(node, r
     observe(node, 11)
     node.get_clock().set_ros_time_override(Time(seconds=11.))
     node._process()
-    if reset_kind == 'image':
-        image, _ = camera_pair(10)
-        node._image_cb(image)
-    elif reset_kind == 'map':
+    if reset_kind == 'map':
         node._map_cb(snapshot(10))
     else:
         # Less than a second: TF's automatic jump callback does not clear this.

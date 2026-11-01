@@ -535,3 +535,9 @@ Celina subsequently confirmed the camera-color visual check in RViz and
 reported that the manual autocross/EKF test looked good. This is user-reported
 visual confirmation; no scored accuracy or driving metrics were recorded.
 A separate outcome for live camera pause/resume has not been recorded here.
+
+Review follow-up: a single late camera image now drops without clearing the
+map, confirmed-orange evidence, or dynamic TF. Regression tests cover small
+and large delays, duplicate frames, and continued processing of fresh frames;
+map and ROS-clock regressions still reset the previous epoch. The affected
+ROS suites passed **467 tests, zero errors/failures/skips** after this fix.

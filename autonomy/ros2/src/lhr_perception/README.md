@@ -345,8 +345,10 @@ absence from the next snapshot removes an ID. Empty snapshots and DELETEALL
 clear state. Mixed frames/timestamps, nonfinite positions, and conflicting ADDs
 for an ID are rejected atomically. Label changes/removals delete the old output
 namespace. Output ADDs retain the source map timestamp, pose, type, and scale;
-the timestamp describes map positions, not camera exposure. Camera/map time
-regression or a backward ROS-clock jump clears queued inputs and evidence.
+the timestamp describes map positions, not camera exposure. Images older than
+the last received image are dropped without changing the map, votes, orange
+exclusions, or TF history. Map timestamp regression or a backward ROS-clock
+jump clears queued inputs and evidence.
 An ID moving more than `id_reset_distance_m` from its evidence origin also
 starts unknown, and queued old snapshots cannot revive the old evidence.
 A restart reusing IDs at almost identical positions cannot be distinguished

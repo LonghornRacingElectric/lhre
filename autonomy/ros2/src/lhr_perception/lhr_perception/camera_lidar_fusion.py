@@ -154,7 +154,8 @@ class CameraLidarFusion(Node):
             self._warn('Fusion requires positive image stamps and an optical frame')
             return
         if stamp < self._last_image_stamp:
-            self._reset()
+            # A late image is not evidence that the map or ROS clock restarted.
+            return
         self._last_image_stamp = stamp
         if stamp > self._processed_stamp:
             self._images.append((stamp, msg))

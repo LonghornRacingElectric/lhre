@@ -40,3 +40,9 @@ Fallback checks distinguish persistent physical-color history from current
 camera eligibility. Pure tests cover priority, timeout boundaries, latest-frame
 visibility/conflicts and ID generations; ROS tests check the separate classified
 output, deletion markers and timer expiration with no new map.
+
+Delayed-image regression checks preserve the map, votes, confirmed-orange
+exclusion, and dynamic TF for both small and large image timestamp regressions,
+and verify that subsequent fresh frames still process. Map/clock regression
+checks separately verify that actual epoch changes discard previous evidence
+and dynamic poses while retaining the static mount.

@@ -115,8 +115,10 @@ two-second history. Once processed, its timestamp cannot vote again. Older
 images skipped in favor of a newer eligible image are discarded. Limit fusion
 work to one image per processing-timer tick.
 
-On image/map timestamp regression, or a backward ROS-clock jump, clear
-queued messages, map association, votes, and published fused markers. Start
+Drop images whose timestamps precede the last received image; they do not
+clear the map, votes, confirmed orange, or TF history. On map timestamp
+regression or a backward ROS-clock jump, clear queued messages, map
+association, votes, dynamic TF, and published fused markers. Start
 again from fresh inputs. A detector restart without a clock reset is handled
 by snapshot disappearance and the per-ID position-jump guard below. The
 MarkerArray contract has no epoch identifier; a restart reusing the same IDs
