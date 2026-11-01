@@ -84,6 +84,7 @@ nav:
           - Gazebo Integration: autonomy/docs/plans/gazebo-integration.md
           - Gazebo Change Notes: autonomy/docs/plans/gazebo-change-notes.md
           - Camera Fusion: autonomy/docs/plans/camera-fusion.md
+          - Colored Map Fusion Design: autonomy/docs/plans/camera-lidar-fusion-design.md
           - ZED 2i Stereo: autonomy/docs/plans/zed2i-stereo.md
           - ZED 2i Implementation: autonomy/docs/plans/zed2i-stereo-implementation.md
           - On-Car Architecture: autonomy/docs/plans/on-car-architecture.md

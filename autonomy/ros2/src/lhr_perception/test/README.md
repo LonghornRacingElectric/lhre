@@ -27,3 +27,16 @@ checks that `classify_sides:=false` still deduplicates and publishes every
 cone. `test_cone_color.py` covers the camera color regions, thresholds and
 image decoding; `test_camera_color_classifier.py` checks that the node keeps
 the image header and drops malformed frames.
+
+Camera fusion adds ROS-independent projection, region-association and vote tests
+in `test_camera_lidar_geometry.py`. `test_camera_lidar_fusion.py` uses actual
+ROS camera/map messages and TF to check timing, resets, marker lifecycle, and
+late-subscriber behavior. Its ROS checks skip when `rclpy` is unavailable;
+a skipped test does not verify integration. Gazebo's
+`test_camera_lidar_fusion_launch.py` evaluates defaults/overrides and starts
+fusion with those parameters in truth and EKF modes.
+
+Fallback checks distinguish persistent physical-color history from current
+camera eligibility. Pure tests cover priority, timeout boundaries, latest-frame
+visibility/conflicts and ID generations; ROS tests check the separate classified
+output, deletion markers and timer expiration with no new map.

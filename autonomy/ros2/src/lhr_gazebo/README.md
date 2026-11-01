@@ -331,8 +331,8 @@ The 30 Hz configured rate is in simulation time. Software rendering can
 reduce wall-clock throughput. The lazy bridges stop requesting images without
 subscribers, but enabled cameras still render in Gazebo. Disable stereo to
 remove that load entirely.
-Camera color segmentation can now consume the left stream; LiDAR fusion
-remains later work.
+Camera color segmentation and opt-in LiDAR inspection-map fusion consume the
+left stream. In fusion mode, classified camera/LiDAR labels feed boundary planning.
 
 ### Camera color debug view
 
@@ -363,6 +363,45 @@ the cone map or driving behavior.
 The model explicitly publishes vehicle TF on `/model/fsae_vehicle/tf` to
 match the bridge. Harmonic's default is `/model/fsae_vehicle/pose`; leaving
 that implicit prevents `map -> base_link` from reaching ROS in truth mode.
+
+### Camera–LiDAR inspection map
+
+After rebuilding, run:
+
+```bash
+./scripts/run_gazebo_demo.sh perception:=lidar estimator:=truth \
+  enable_stereo_camera:=true enable_camera_lidar_fusion:=true
+```
+
+`enable_camera_lidar_fusion` defaults to `false`. It requires stereo and
+`perception:=lidar`, works with truth or EKF estimation, and independently
+consumes raw left images, matching CameraInfo, stamped TF, and LiDAR maps.
+It does not require the debug classifier. Enable **CameraFusedCones** in the
+stereo RViz config to display `/lhr/perception/cones_fused`; its default is
+hidden, with reliable/transient-local QoS. Hide the original cone display
+when inspecting the colored markers. In fusion mode the planner reads
+`/lhr/perception/cones_classified` with color-aware boundary pairing. This
+output prioritizes fresh confirmed camera observations and falls back to
+the current LiDAR side.
+Enable **ClassifiedCones** to inspect it. Fusion automatically enables the
+existing geometry classifier for fallback, including when the explicit
+`lidar_classify_sides` argument is false. Without fusion, the planner topic
+and pairing/side-inference choices retain their previous behavior. Confirmed
+orange cones remain excluded from boundary planning during camera loss.
+
+All node settings are exposed with `fusion_` prefixes; color thresholds and
+minimum area reuse `cone_color_*` with or without the debug classifier.
+For example, add `fusion_pixel_margin:=3 fusion_max_color_range_m:=12`.
+`fusion_camera_max_age_sec` defaults to `0.5` ROS seconds; after this interval
+without a usable camera match, the timer republishes the LiDAR fallback even
+without a new map. Missing/ambiguous matches use the current LiDAR side sooner.
+See the [fusion contract and complete parameter table](../lhr_perception/README.md#cameralidar-inspection-map).
+Launch tests cover disabled behavior, invalid combinations, and typed defaults
+and overrides through actual node startup with both estimators. ROS launch
+checks and synthetic image/TF/DDS-to-planner integration run in the isolated
+Docker environment. Manual camera-color and autocross/EKF visuals were also
+confirmed; the [validation record](#fusion-planner-validation-2026-11-01) states
+the remaining limits.
 
 ## Stereo validation
 
@@ -471,3 +510,28 @@ Metrics counts conservative geometric contacts against nominal cone bases,
 including orange cones, and checks the whole YAML vehicle envelope against the
 selected world boundaries. This uses truth poses, not Gazebo contact forces;
 see the [scoring model](../lhr_metrics/README.md#footprint-boundaries-and-contacts).
+
+### Fusion planner validation (2026-11-01)
+
+An isolated Docker ROS 2 Jazzy workspace built the 11 packages through
+`lhr_gazebo`. `colcon test` for `lhr_perception`, `lhr_track_builder`,
+`lhr_gazebo`, and `lhr_vehicle` reported **465 tests, zero errors/failures/skips**.
+This includes actual launch parameter evaluation/node startup in truth/EKF
+modes and synthetic image/TF callbacks whose classified output travels over
+DDS into the planner. The input callbacks are exercised directly in that test;
+it does not verify camera/LiDAR ingress QoS or `/clock` delivery by itself.
+
+A separate 40-second stationary oval check used `auto_go:=false`,
+`perception:=lidar enable_stereo_camera:=true enable_camera_lidar_fusion:=true`,
+truth odometry, software rendering on an isolated virtual display, and no
+Gazebo GUI/RViz windows. The observer received 448 images, 985 calibrations,
+617 inspection maps, 631 classified maps, and 162 planner paths. Inspection
+maps included `blue_cones`, `yellow_cones`, and `unknown_cones`. Occasional
+future-TF requests retried while map/path output continued. These are message
+counts, not scored color accuracy or a throughput guarantee. The run was
+stationary and did not verify moving-track or live camera-interruption behavior.
+
+Celina subsequently confirmed the camera-color visual check in RViz and
+reported that the manual autocross/EKF test looked good. This is user-reported
+visual confirmation; no scored accuracy or driving metrics were recorded.
+A separate outcome for live camera pause/resume has not been recorded here.

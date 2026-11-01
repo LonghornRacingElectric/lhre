@@ -14,7 +14,7 @@ fourth, `boundary_graph`, has [its own section](#local-unclassified-corridor).
 - `classified` computes a minimum-cost one-to-one left/right assignment within
   `track_width +/- track_width_tolerance`, leaving unmatched cones unused.
   Both demo launches select it with
-  `perception:=lidar lidar_classify_sides:=true`. It depends on correct side
+  `perception:=lidar lidar_classify_sides:=true` when camera fusion is off. It depends on correct side
   labels; sparse detections can cause the experimental classifier to mislabel
   a boundary and leave gaps or an incorrect path.
 - `boundary` (default) Delaunay-triangulates all cone positions without considering
@@ -48,6 +48,33 @@ All candidate midpoints are ordered with the configured `chaining_alg` before
 the published path is capped by `max_points`. With odometry, chaining starts
 at the midpoint nearest the vehicle, even when it lies beyond the first
 `max_points` candidates. Without odometry, it starts at midpoint zero.
+
+## Camera fusion in Gazebo
+
+With `perception:=lidar enable_stereo_camera:=true
+enable_camera_lidar_fusion:=true`, Gazebo launch connects `cone_topic` to
+`/lhr/perception/cones_classified` and selects `pairing_strategy:=boundary`
+with `boundary_use_color:=true`. Camera blue/yellow arrive as `left_cones`/
+`right_cones`; same-known-color Delaunay edges are rejected, while edges
+involving unknown `cones` keep the width filter. Confirmed orange uses
+`orange_cones`, which this consumer excludes from pairing, including during
+camera dropout. Orange identity lasts until evidence changes or the ID resets.
+
+Fusion automatically enables the existing LiDAR side classifier as fallback,
+even if `lidar_classify_sides:=false` was supplied. Camera labels override those
+sides only with confirmed fresh evidence. Losing a match or exceeding the
+camera-age limit returns to the current LiDAR side; if that side is unknown,
+boundary pairing still uses geometry. The fallback classifier is experimental:
+its errors can still affect the path during camera loss.
+
+Without fusion, Gazebo keeps `/lhr/sensor/cones_detected` and its existing
+boundary/default or opt-in classified pairing. The `sim` perception branch is
+unchanged. Fusion launch tests check actual node subscription topics in both
+estimators and a real image/TF/DDS integration exercises camera priority,
+conflicts, dropout, recovery, pairing results and orange exclusion. Live
+Gazebo autocross/EKF visuals were confirmed manually; see the
+[validation record](../lhr_gazebo/README.md#fusion-planner-validation-2026-11-01)
+for the stationary run and remaining live-interruption evidence.
 
 ## Chaining
 

@@ -336,6 +336,32 @@ This opt-in debug classifier does not yet attach colors to the LiDAR map.
 See [camera classification](src/lhr_perception/README.md#camera-color-classification)
 for HSV thresholds, area filtering, and launch overrides.
 
+### Camera–LiDAR inspection map
+
+The Gazebo stack can attach measured camera colors to a separate copy of the
+LiDAR map. After rebuilding, run from this workspace:
+
+```bash
+./scripts/run_gazebo_demo.sh perception:=lidar enable_stereo_camera:=true \
+  enable_camera_lidar_fusion:=true
+```
+
+Fusion defaults off and supports truth/EKF estimation. Enable
+**CameraFusedCones** in stereo RViz to inspect `/lhr/perception/cones_fused`.
+Cone positions/IDs come from LiDAR; unknown cones remain gray. A second output,
+`/lhr/perception/cones_classified`, uses fresh confirmed camera labels with
+LiDAR side fallback. Enable **ClassifiedCones** to inspect the planner input.
+Fusion mode automatically enables LiDAR side inference for fallback.
+`fusion_camera_max_age_sec` (default `0.5`) bounds boundary-color freshness.
+The planner reads the classified output with color-aware boundary pairing;
+unknown cones retain geometry checks and confirmed orange cones are excluded. See the
+[perception contract and tuning parameters](src/lhr_perception/README.md#cameralidar-inspection-map)
+and [Gazebo usage](src/lhr_gazebo/README.md#cameralidar-inspection-map).
+ROS launch/startup and synthetic image-to-planner checks run in Docker.
+Celina confirmed manual autocross/EKF visuals; see the
+[validation record](src/lhr_gazebo/README.md#fusion-planner-validation-2026-11-01)
+for the stationary live check and remaining live-interruption evidence.
+
 ### Vehicle model
 
 The FSAE vehicle (`models/fsae_vehicle/model.sdf`) uses STL meshes (`meshes/carBody.stl`, `meshes/carTire.stl`) for visuals with simplified collision geometry. **`model.sdf` is generated**: `scripts/generate_vehicle_model.py` renders `templates/model.sdf.in` from [`lhr_vehicle/config/vehicle.yaml`](src/lhr_vehicle/README.md), so the numbers below are Orion's and shared with the controller, the kinematic sim and perception:
@@ -407,7 +433,7 @@ flowchart TB
 | Cone source | `publish_cones` | `publish_cones` (reused) | Gazebo GPU LiDAR |
 | Perception | `sensor_sim` (FOV filter) | `sensor_sim` (reused) | `lidar_cone_detector` (pointcloud clustering) |
 | Physics / vehicle | `sim_kinematic` | Gazebo | Gazebo |
-| `track_builder` pairing | boundary (Delaunay) | boundary (Delaunay) | boundary by default; classified when `lidar_classify_sides:=true` |
+| `track_builder` pairing | boundary (Delaunay) | boundary (Delaunay) | boundary by default and in camera fusion; classified with side inference alone |
 | Actuation | `/lhr/vehicle/cmd` directly | `joint_cmd_adapter` → 6 joints | `joint_cmd_adapter` → 6 joints |
 
 All paths produce the same ROS 2 topic interfaces. Boundary pairing uses color when available and falls back to geometry for unclassified LiDAR cones.
@@ -537,6 +563,8 @@ reproducible exactly. Gate on a tolerance band, not on equality.
 | `/lhr/sensor/zed2i/{left,right}/image_rect` | `sensor_msgs/Image` | ZED 2i rectified images, best-effort (Gazebo, `enable_stereo_camera:=true`) |
 | `/lhr/sensor/zed2i/{left,right}/camera_info` | `sensor_msgs/CameraInfo` | Their calibration, under the same conditions |
 | `/lhr/perception/cone_colors/debug_image` | `sensor_msgs/Image` | Color-region labels on the left ZED image (`enable_camera_color_classifier:=true`) |
+| `/lhr/perception/cones_fused` | `visualization_msgs/MarkerArray` | Camera-colored LiDAR inspection map (`enable_camera_lidar_fusion:=true`), reliable/transient-local; visualization of remembered physical colors |
+| `/lhr/perception/cones_classified` | `visualization_msgs/MarkerArray` | Camera-priority side labels with LiDAR fallback; same QoS and enablement as the inspection map; planner input in Gazebo fusion mode |
 | `/clock` | `rosgraph_msgs/Clock` | Sim time, from the kinematic stack's plant or bridged from Gazebo. See [Simulation clock](#simulation-clock) |
 
 ## TF tree
