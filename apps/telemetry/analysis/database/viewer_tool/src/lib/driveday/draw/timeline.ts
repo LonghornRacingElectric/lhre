@@ -11,7 +11,7 @@ export const TOPH = 58;
 export const STRIP_Y = 62;
 export const STRIP_H = 24;
 
-export const timeX = (p: Player, ms: number, w: number) => TPAD + ((ms - p.timelineRange.start) / p.timelineRange.span) * (w - 2 * TPAD);
+export const timeX = (p: Player, ms: number, w: number) => TPAD + ((p.timelineTime(ms) - p.timelineRange.start) / p.timelineRange.span) * (w - 2 * TPAD);
 
 export function drawTimeline(p: Player, canvas: HTMLCanvasElement) {
   const c = setupCanvas(canvas);
@@ -22,12 +22,15 @@ export function drawTimeline(p: Player, canvas: HTMLCanvasElement) {
   const stripH = h < 70 ? 16 : 24;
   const topH = h < 70 ? Math.max(14, h - stripH - 18) : h - 50, stripY = topH + 4;
   const { session: s, analysis: a } = p;
-  const { TLAPS, T0, laps, base } = s;
+  const { TLAPS, T0, laps } = s;
+  const ranked = laps.filter(l => l.kind === "lap" && a.valid(l));
+  const slowest = Math.max(...ranked.map(l => l.dur));
   const vmaxMph = Math.max(1, s.vmaxMph);
   const cur = laps[p.sel];
   const range = p.timelineRange;
-  const tx = (ms: number) => TPAD + (ms - range.start) / range.span * (w - 2 * TPAD);
-  const traces = TLAPS.filter(l => l.t1 - T0 >= range.start && l.t0 - T0 <= range.end).map(l => ({ l, indices: speedEnvelope(l.ch.t, l.ch.spd, range.start - l.t0 + T0, range.end - l.t0 + T0, w) }));
+  const tx = (ms: number) => timeX(p, ms, w);
+  const visibleLaps = TLAPS.filter(l => l.kind !== "out");
+  const traces = visibleLaps.filter(l => p.timelineTime(l.t1 - T0) >= range.start && p.timelineTime(l.t0 - T0) <= range.end).map(l => ({ l, indices: speedEnvelope(l.ch.t, l.ch.spd, p.timelineSessionTime(range.start) - l.t0 + T0, p.timelineSessionTime(range.end) - l.t0 + T0, w) }));
   g.save(); g.beginPath(); g.rect(TPAD, 0, w - 2 * TPAD, h); g.clip();
 
   /* speed profile, like a heat strip behind the chapters */
@@ -76,14 +79,14 @@ export function drawTimeline(p: Player, canvas: HTMLCanvasElement) {
   /* chapters */
   g.textAlign = "center";
   g.textBaseline = "middle";
-  TLAPS.forEach((l) => {
-    if (l.t1 - T0 < range.start || l.t0 - T0 > range.end) return;
+  visibleLaps.forEach((l) => {
+    if (p.timelineTime(l.t1 - T0) < range.start || p.timelineTime(l.t0 - T0) > range.end) return;
     const x0 = tx(l.t0 - T0);
     const x1 = tx(l.t1 - T0);
     const isCur = l === cur;
     let col = pal.track;
-    if (l.kind === "lap") col = Math.abs(l.dur - a.bestLap) < 1 ? pal.purple : l.dur <= base.dur ? pal.green : pal.yellow;
-    g.globalAlpha = isCur ? 1 : 0.5;
+    if (l.kind === "lap") col = Math.abs(l.dur - a.bestLap) < 1 ? pal.purple : Math.abs(l.dur - slowest) < 1 ? pal.yellow : pal.green;
+    g.globalAlpha = isCur ? 1 : 0.85;
     g.fillStyle = col;
     g.fillRect(x0 + 0.5, stripY, Math.max(1, x1 - x0 - 1), stripH);
     g.globalAlpha = 1;
@@ -135,7 +138,8 @@ export function drawTimeline(p: Player, canvas: HTMLCanvasElement) {
   const tick = range.span <= 10000 ? 1 : range.span <= 60000 ? 5 : range.span <= 300000 ? 15 : 60;
   for (let sec = Math.ceil(range.start / 1000 / tick) * tick; sec * 1000 <= range.end; sec += tick) {
     g.textAlign = sec === 0 ? "left" : "center";
-    g.fillText(Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0"), tx(sec * 1000), h - 4);
+    const sourceSec = Math.floor(p.timelineSessionTime(sec * 1000) / 1000);
+    g.fillText(Math.floor(sourceSec / 60) + ":" + String(sourceSec % 60).padStart(2, "0"), TPAD + (sec * 1000 - range.start) / range.span * (w - 2 * TPAD), h - 4);
   }
   /* hover and playhead */
   if (p.hoverT != null) {
@@ -226,28 +230,36 @@ function drawExtras(p: Player, g: CanvasRenderingContext2D, w: number, pal: Retu
     }
   }
   /* cone hits, as orange dots above the lap strip */
-  p.user.ce.forEach((e) => {
+  p.user.ce.filter(e => p.timelineAxis.includes(e.t)).forEach((e) => {
     g.fillStyle = pal.s2;
     g.strokeStyle = pal.panel;
-    g.lineWidth = 1.5;
+    g.lineWidth = 2;
     g.beginPath();
-    g.arc(tx(e.t), stripY - 6, 4.5, 0, 7);
+    g.arc(tx(e.t), stripY - 7, 6, 0, 7);
     g.fill();
     g.stroke();
   });
-  p.user.marks.forEach((m) => {
+  p.user.marks.filter(m => p.timelineAxis.includes(m.t)).forEach((m) => {
     const x = tx(m.t);
     const y = stripY - 9;
     g.fillStyle = pal.purple;
+    g.strokeStyle = pal.panel;
+    g.lineWidth = 2;
     g.beginPath();
-    g.moveTo(x, y - 5);
-    g.lineTo(x + 5, y);
-    g.lineTo(x, y + 5);
-    g.lineTo(x - 5, y);
-    g.closePath();
+    g.roundRect(x - 7, y - 6, 14, 10, 3);
     g.fill();
+    g.stroke();
+    g.beginPath();
+    g.moveTo(x - 3, y + 3);
+    g.lineTo(x - 3, y + 7);
+    g.lineTo(x + 2, y + 3);
+    g.fill();
+    g.fillStyle = pal.ink;
+    [-3, 0, 3].forEach(dx => {
+      g.beginPath(); g.arc(x + dx, y - 1, 0.8, 0, 7); g.fill();
+    });
   });
-  a.alerts.forEach((al) => {
+  a.alerts.filter(al => p.timelineAxis.includes(al.t)).forEach((al) => {
     const x = tx(al.t);
     const y = stripY + stripH;
     g.fillStyle = pal.red;

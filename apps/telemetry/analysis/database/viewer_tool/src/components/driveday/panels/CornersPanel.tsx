@@ -24,7 +24,6 @@ export function CornersPanel() {
   const sp = (v: number) => cvS(p.units, v).toFixed(0);
   return (
     <>
-      <p className="pdesc">Times and speeds through each segment on the lap you are watching. The gap is against the ghost lap. Click a row to zoom the map there and jump the playhead to it.</p>
       <div className="scroll">
         <table className="tb2">
           <thead>
@@ -80,7 +79,6 @@ export function CornersPanel() {
           </tbody>
         </table>
       </div>
-      <div className="note2">Corners are where the base path turns tighter than about 18 m radius for at least 6 m. Braking zones are stretches above 8% brake pressure that repeat on at least a quarter of the timed laps. With GPS at about 1.8 Hz some zones are only one or two fixes long, so treat their exact start as a few metres either way.</div>
     </>
   );
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { timelineWindow, zoomWindow, speedEnvelope } from "../../src/lib/driveday/timeline-window";
+import { lapTimelineAxis, timelineWindow, zoomWindow, speedEnvelope } from "../../src/lib/driveday/timeline-window";
 
 describe("timeline zoom", () => {
   it("zooms around the cursor and clamps panning to session bounds", () => {
@@ -16,5 +16,29 @@ describe("timeline zoom", () => {
     const points = speedEnvelope(times, speeds, 0, 10000, 10);
     expect(points).toContain(201); expect(points).toContain(202);
     expect(points.length).toBeLessThan(50); expect(times).toHaveLength(500);
+  });
+});
+
+describe("lap-only timeline axis", () => {
+  const laps = [{start:10000,end:20000},{start:40000,end:55000}];
+  it("removes waiting time and maps scrub positions back to source timestamps", () => {
+    const axis = lapTimelineAxis(80000,laps,false);
+    expect(axis.duration).toBe(25000);
+    expect(axis.toDisplay(45000)).toBe(15000);
+    expect(axis.toSession(15000)).toBe(45000);
+    expect(axis.toSession(10000)).toBe(40000);
+    expect(axis.toDisplay(30000)).toBe(10000);
+    expect(axis.includes(30000)).toBe(false);
+    expect(axis.toSession(999999)).toBe(55000);
+    expect(axis.toSession(-100)).toBe(10000);
+  });
+  it("preserves the full session when enabled or no laps exist", () => {
+    for (const axis of [lapTimelineAxis(80000,laps,true),lapTimelineAxis(80000,[],false)]) {
+      expect(axis.duration).toBe(80000);expect(axis.toSession(30000)).toBe(30000);expect(axis.toDisplay(30000)).toBe(30000);expect(axis.includes(30000)).toBe(true);
+    }
+  });
+  it("merges overlapping intervals without dropping a sample interval twice", () => {
+    const axis=lapTimelineAxis(50000,[{start:10000,end:30000},{start:20000,end:40000}],false);
+    expect(axis.duration).toBe(30000);expect(axis.toSession(25000)).toBe(35000);
   });
 });

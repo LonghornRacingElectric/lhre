@@ -42,6 +42,6 @@ export function ExternalComparison() {
         {data.laps.map((l, i) => l.kind === "lap" && <option key={i} value={i}>{l.name} · {fmt(l.dur)}</option>)}
       </select>
     </label>}
-    {!runs.length && <p className="note2">Import another session from this route first. Different directions and courses stay separate.</p>}
+    {!runs.length && <p className="note2">No other runs on this route.</p>}
   </div>;
 }
