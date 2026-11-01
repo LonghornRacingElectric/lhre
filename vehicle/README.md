@@ -91,9 +91,11 @@ files. Do not upload them as CI artifacts. Record their hashes instead.
 
 ### The current bundle
 
-`orion-baseline-1` is a `candidate`. `vehicle.yml` equals the BobSim
-`4da577a` baseline ("Orion" in BobSim) except `paths` and
-`modelica_initialization`. No record gives a suspension revision, CAD or
+`orion-baseline-2` is a `candidate`. `vehicle.yml` equals the BobSim
+`4da577a` baseline ("Orion" in BobSim) except `paths`,
+`modelica_initialization` and `diff_kineticFrictionRatio`. That ratio is 1,
+the BobLib default since BobLib #61. 0.85 drove a stick-slip limit cycle in
+steady cornering. `orion-baseline-1` had 0.85. No record gives a suspension revision, CAD or
 SVN reference, z datum, setup name, tire license, tire source or torque
 reaction. The driven axle and the regen axle are `assumed` rear from the
 BobSim driveline record. Run `make check-vehicle` to list every open entry.

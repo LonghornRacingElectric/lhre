@@ -14,8 +14,8 @@ METRICS = "generated_results/four_post_eval_report_metrics.csv"
 MANIFESTS = "runs/FourPostSim/*/manifest.json"
 FOUR_POST_CONFIG = "four_post_eval_config.yml"
 AXLES = {"front": "Fr", "rear": "Rr"}
-BAR_RATE_KEY = re.compile(r"(?:pVehicle\.)?p(Fr|Rr)Stabar\.barRate")
-SPRING_TABLE_KEY = re.compile(r"pVehicle\.p(Fr|Rr)AxleDW\.springTable\[\d+,\d+\]")
+BAR_RATE_KEY = re.compile(r"p(?P<tag>Fr|Rr)Stabar\.barRate|pVehicle\.chassis\.(?P<axle>front|rear)Axle\.stabilizer\.barRate")
+SPRING_TABLE_KEY = re.compile(r"pVehicle\.chassis\.(?P<axle>front|rear)Axle\.actuation\.springTable\[\d+,\d+\]")
 CONFIG_BAR_RATE_KEYS = ("stabar_rate_n_m_per_rad", "bar_rate_n_m_per_rad", "arb_rate")
 TARGETS = ("standard-eval-four-post", "standard-eval-all")
 ANTI_KEY = "avg_longitudinal_jacking_coeff_{axle}"
@@ -59,7 +59,6 @@ VEHICLE_STAMP = "vehicle_sha256"
 CHECKED_METRICS = (*REQUIRED_METRICS, *BALANCE_METRICS, VEHICLE_STAMP)
 BALANCE_CLAUSES = {"closure": "closure", "corner": "corner load", "spring": "spring force"}
 BOBSIM_117 = "BobSim #117 (https://github.com/BobDyn/BobSim/pull/117)"
-CLOSURE_DRIFT = "BobLib issue 'FourPostSim: axle force closure residual grows with simulated time at a fixed pose'"
 PASS, FAIL, UNAVAILABLE, KNOWN_UPSTREAM = "PASS", "FAIL", "UNAVAILABLE", "KNOWN-UPSTREAM"
 
 
@@ -162,11 +161,11 @@ def _vehicle_setup(vehicle):
         actuation = _mapping(data, axle, "actuation")
         stabar = actuation.get("stabar")
         rate = stabar.get("rate_n_m_per_rad") if isinstance(stabar, dict) else None
-        setup[f"p{tag}Stabar.barRate"] = setup[f"pVehicle.p{tag}Stabar.barRate"] = rate
+        setup[f"p{tag}Stabar.barRate"] = setup[f"pVehicle.chassis.{axle}Axle.stabilizer.barRate"] = rate
         table = _mapping(actuation, "shock", "spring_table").get("table") or []
         for i, row in enumerate(table, 1):
             for j, value in enumerate(row, 1):
-                setup[f"pVehicle.p{tag}AxleDW.springTable[{i},{j}]"] = value
+                setup[f"pVehicle.chassis.{axle}Axle.actuation.springTable[{i},{j}]"] = value
     return setup
 
 
@@ -214,10 +213,11 @@ def _compare(cases, pattern, expected):
             match = pattern.fullmatch(key)
             if not match:
                 continue
-            compared.add(match.group(1))
+            tag = match.groupdict().get("tag") or AXLES[match.group("axle")]
+            compared.add(tag)
             want = expected.get(key)
             if want is None or not _same(value, want):
-                mismatches[key] = (_number(value), match.group(1), want)
+                mismatches[key] = (_number(value), tag, want)
     return compared, mismatches
 
 
@@ -382,18 +382,7 @@ def _measured_balance_checks(rows):
             f"Every zero-command row closes within the BobSim tolerance, the design pose too: {closure}.",
         ))
     else:
-        checks.append(_check(
-            "static balance: design-pose closure",
-            UNAVAILABLE,
-            "The metrics CSV gives only the largest closure residual over all zero-command rows. It does not give "
-            "the closure at the design pose apart from the time drift.",
-        ))
-        checks.append(_check(
-            "static balance: closure drift",
-            KNOWN_UPSTREAM,
-            f"BobSim reports a closure failure: {closure}. Known defect: {CLOSURE_DRIFT}. It makes this residual "
-            "grow with simulated time. The CSV cannot show that the drift is the only cause.",
-        ))
+        checks.append(_check("static balance: closure", FAIL, f"BobSim reports a closure failure: {closure}."))
     return checks
 
 
