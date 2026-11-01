@@ -20,6 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'skidpad_acquisition = lhr_track_builder.skidpad_acquisition:main',
             'track_builder = lhr_track_builder.track_builder_node:main',
         ],
     },

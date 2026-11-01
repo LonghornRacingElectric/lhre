@@ -577,13 +577,28 @@ With `enable_stereo_camera:=true`, Gazebo adds static transforms from
 | `seed` | `1` | Random seed for track generation |
 | `frame_id` | `"map"` | TF frame |
 | `publish_hz` | `5.0` | Publishing rate (Hz) |
-| `track_style` | `"autocross"` | Generator: `autocross` (Catmull-Rom spline), `simple` (original oval), `oval` (dedicated oval generator), or `acceleration` (fixed rules layout: 75 m start to finish, 4.9 m clear between cone bases, large orange cones flanking both lines, a 75 m small-orange exit lane; only `cone_spacing_m` applies) |
+| `track_style` | `"autocross"` | Generator: `autocross` (Catmull-Rom spline), `simple` (original oval), `oval` (dedicated oval generator), `skidpad` (fixed rules geometry with orange lanes/gates), or `acceleration` (fixed rules layout: 75 m start to finish, 4.9 m clear between cone bases, large orange cones flanking both lines, a 75 m small-orange exit lane; only `cone_spacing_m` applies) |
+
 | `num_waypoints` | `10` | Number of waypoints around the loop (autocross only) |
 | `radius_m` | `25.0` | Base radius of the track (autocross only) |
 | `jitter_m` | `10.0` | Radial jitter per waypoint (autocross only) |
 | `width_m` | `3.5` | Track width in meters |
 | `cone_spacing_m` | `2.0` | Distance between cones along the track (autocross only) |
-| `start_finish_cones` | `false` | Add four large orange cones around the first centerline pair (namespace `start_finish`); ignored on `acceleration`, which has its own gates |
+| `start_finish_cones` | `false` | Add four large orange cones around the first centerline pair (namespace `start_finish`); ignored on `acceleration` and `skidpad`, which have their own gates |
+
+The `skidpad` generator uses the 2026 FSAE D.10.1 dimensions: centers
+18.25 m apart, inner diameter 15.25 m, outer diameter 21.25 m. Each circle
+has 17 inner cones (DD.4.3) and 13 outer cones with the crossing left open.
+Entry runs along +y at x=0. Blue/yellow boundaries match clockwise travel
+on the right circle and counterclockwise travel on the left. Generic seed,
+width, radius, spacing and jitter options do not alter this rules layout.
+Orange lanes/gates are generated separately from the circular boundaries.
+Their spacing and lengths are illustrative simulation choices.
+`mission:=skidpad track_style:=skidpad` selects the dedicated
+[skidpad planner](src/lhr_track_builder/README.md#skidpad-planning),
+with 15 m / 240-degree detection and bounded creep to validate the colored
+entry and timing gates. It then follows two right/two left laps, exits, stops
+and signals mission completion through the existing pure-pursuit follower.
 
 Cone IDs: left cones use IDs `0..N-1`, right cones use IDs `10000..10000+N-1`. IDs identify markers but do not determine pairing.
 
@@ -591,8 +606,9 @@ Cone IDs: left cones use IDs `0..N-1`, right cones use IDs `10000..10000+N-1`. I
 
 | Param | Default | Description |
 |-------|---------|-------------|
-| `fov_deg` | `200.0` | Total field of view (degrees) |
-| `max_range_m` | `20.0` | Max detection range (m) |
+| `accumulate_detections` | `true` | Retain previously observed cones; skidpad launch defaults to false |
+| `fov_deg` | `200.0` | Total field of view (degrees); skidpad launch defaults to 240 |
+| `max_range_m` | `20.0` | Max detection range (m); skidpad launch defaults to 15 |
 | `min_range_m` | `0.5` | Min detection range (m) |
 | `detection_hz` | `10.0` | Publish rate (Hz) |
 | `noise_std_m` | `0.0` | Gaussian position noise std-dev (0 = off) |
@@ -739,8 +755,9 @@ emergency and trips Ready again.
 Mission completion triggers:
 - **autocross**: lap detected by `lhr_metrics` (via `/lhr/metrics/lap_complete`)
 - **inspection**: 28 seconds elapsed
+- **skidpad**: acquire geometry and colored gates, drive two right/two left laps, exit and stop; planner completion transitions the mission to `FINISHED`
 - **acceleration**: odometry says the car has gone 75.30 m along the heading it had when it first began Driving in this launch (the course is fixed, so re-arming after an emergency mid-course keeps the same finish). The staged nose is 0.30 m behind the start line and the finish is 75 m past it, so that's the moment the nose crosses the finish, whatever the overhang
-- **skidpad, ebs_test, manual**: not yet implemented
+- **ebs_test, manual**: not yet implemented
 
 The control node (`pursuit_node`) subscribes to `/lhr/mission/status` and `/lhr/mission/complete`. It sends drive commands only while status is `DRIVING` and the mission is not complete; otherwise it commands speed 0. Finished means stopped, so the braking after the finish happens in Driving. With no mission manager it drives freely, but only while `wait_for_mission` is false (the node default); both demo launches set it true, so there the car stays stopped until the manager says `DRIVING`.
 

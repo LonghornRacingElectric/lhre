@@ -165,3 +165,123 @@ does not replace the default color-aware `boundary` pairing or its configurable
 chaining algorithms.
 
 Node cleanup tolerates an already-stopped ROS context after launch shutdown.
+
+
+## Skidpad planning
+
+`mission:=skidpad` in the Gazebo launch replaces this package's autocross
+planner with `skidpad_acquisition` (the executable name is retained). It
+acquires the layout, validates colored entry/gate observations, and follows
+`ENTRY -> RIGHT_1 -> RIGHT_2 -> LEFT_1 -> LEFT_2 -> EXIT -> STOPPED`. The rigid template's dimensions live
+in `lhr_trackgen.skidpad_geometry`, shared with world generation. Inputs are
+`/lhr/sensor/cones_detected` and `/lhr/vehicle/odom`, both in `map`.
+
+The planner filters every candidate to a rear-axle-centered radius of 15 m
+and a forward 240-degree FOV (including after vehicle motion). Smaller views
+are supported. Larger views are rejected. Sim perception additionally disables
+accumulation, so its output contains only currently visible cones. LiDAR's map
+is filtered again at the planner; this does not change the physical sensor FOV.
+
+Only translation and orientation are fitted. Initial guesses come from cone
+chords: two points and a known boundary radius give two candidate centers.
+Candidates are scored against both radii, merged within twice the inlier
+distance, and paired when their separation is within four times the inlier
+distance of the published center separation. The initial vehicle heading
+resolves the template's symmetry; template +y points along entry. No staging
+translation, world SDF, or generated cone coordinates enter the fitter.
+
+At most 48 spatially spread observations generate chords; all unique input
+observations score candidates and participate in refinement. The best bounded
+set of rigid-pose hypotheses, including the previous fit when competitive,
+is refined using `soft_l1` nonlinear least squares and an analytic Jacobian.
+Each solve holds boundary assignments fixed; reassignment occurs between
+solves, with at most five rounds. Translation is unrestricted, while yaw stays
+within the configured heading prior. Fits on a yaw bound, rank-deficient fits,
+insufficient angular/boundary support and comparable conflicting fits are
+rejected. Unique cone positions must support both circles and both radii.
+Known blue/yellow labels constrain assignments: left inner/right outer are
+blue, left outer/right inner are yellow. Uncolored observations can support
+geometry acquisition, but route authorization also requires at least two
+colored inliers on each boundary. Experimental side inference is not a
+substitute for verified color perception. Orange markers are excluded from
+circle fitting.
+
+Acquisition phases are `ACQUIRE`, `APPROACH`, `HOLD`, and `ACQUIRED`.
+A robust parallel-line fit to the observed small orange lane cones can
+supply a finite approach path while the layout fit stabilizes. It requires
+three cones per side spanning at least 4 m, width 2.8-3.2 m, heading within
+15 degrees of the car, side slopes within 5 degrees, and 0.2 m residuals.
+Vehicle footprint clearance and stopping room shorten the supported path.
+No orange classification means no approach authorization: today's uncolored
+LiDAR pipeline can fit circles but must hold if initial support is insufficient.
+
+Only mission `DRIVING` permits a nonzero speed cap. Creep is bounded by
+0.5 m/s and 5 m accumulated odometry travel. A conservative simulation envelope
+uses 0.5 m/s² braking, 0.5 s latency and a 0.5 m margin. These are simulation
+assumptions, not validated hardware braking performance. Stale inputs,
+invalid frames, insufficient corridor support or exhausted travel cause a hold;
+odometry jumps latch a fault until node restart. `ACQUIRED` requires a stable
+fit, observed large orange markers bracketing the center timing line,
+verified colored boundaries, an entry corridor, and speed below 0.05 m/s
+for one second. Route following starts only under mission `DRIVING`.
+
+The fit is evaluated at 5 Hz, counting only new observation messages.
+Persistence is a stability check, not independent statistical evidence.
+The ideal sim view fits the circles from staging. It still creeps until the
+large timing markers are observed; this never uses hidden world coordinates.
+All thresholds below are initial simulation values, not measured vehicle limits.
+Every parameter is exposed by the Gazebo launch with the same name and type.
+
+| Parameter | Default | Meaning |
+| --- | --- | --- |
+| `fov_deg` | `240.0` | Forward total view, degrees; maximum 240 |
+| `max_range_m` | `15.0` | Maximum view radius, m; maximum 15 |
+| `acquisition_speed` | `0.5` | Creep cap, m/s; maximum 0.5 |
+| `acquisition_distance` | `5.0` | Total travel budget, m; maximum 5 |
+| `acquisition_timeout` | `0.5` | Input receipt freshness, seconds |
+| `fit_rms_limit` | `0.10` | Maximum inlier radial RMS, m |
+| `fit_inlier_distance` | `0.25` | Inlier radial distance, m |
+| `fit_inlier_fraction` | `0.8` | Minimum fraction of circular candidates explained |
+| `fit_min_cones_per_circle` | `6` | Unique cones per center; also two per radius |
+| `fit_min_arc_deg` | `60.0` | Minimum angular coverage per center |
+| `fit_stable_frames` | `5` | Consecutive consistent fits (0.1 m / 1 degree) |
+| `fit_min_chord_m` | `2.0` | Minimum cone-pair separation for center proposals, m |
+| `fit_max_centers` | `12` | Maximum spatially distinct center candidates, at least 2 |
+| `fit_max_hypotheses` | `6` | Maximum rigid-pose hypotheses to refine |
+| `fit_heading_tolerance_deg` | `45.0` | Allowed template yaw deviation from entry-heading prior; less than 90 |
+| `skidpad_speed` | `3.0` | Route speed cap, m/s; maximum 5 |
+| `skidpad_max_cte` | `0.65` | Maximum local route projection error, m; maximum 0.75 |
+| `skidpad_exit_distance` | `12.0` | Rear-axle stop target after the center finish line, m; front envelope must remain within 25 m |
+
+The route stores an increasing arc length and a segment identity alongside
+sampled positions. Four circle traversals have distinct progress values even
+where coordinates repeat. The accepted layout is frozen for that run. Each
+update projects only near prior progress, bounded by speed and elapsed time,
+and requires forward tangent agreement. Backward motion subtracts progress.
+Lap transitions require signed angular progress, all four sectors, and a
+forward center-line crossing near x=0; gate hysteresis prevents double counts.
+Position jumps, excessive CTE or stale inputs during a route latch a hold
+until node restart. There is no fallback to autocross chaining.
+
+`/lhr/track/centerline` contains only a short local forward route window, so
+pure pursuit never searches duplicate laps. `/lhr/planning/speed_limit` caps
+its speed. In the exit, observed orange sides must validate the straight lane;
+the available observation extent, vehicle front envelope and a margin bound
+the stop target. A conservative 0.5 m/s² stopping profile lowers the cap to
+zero. Speed below 0.05 m/s for one second after all four laps publishes
+`/lhr/skidpad/complete` (`Bool`), allowing the mission manager to finish.
+The 12 m default target leaves room inside the 25 m exit requirement.
+
+`/lhr/skidpad/acquisition` remains the JSON status topic and includes phase,
+fit support, traveled approach distance, route progress, laps, directed
+crossings, CTE and faults. `/lhr/skidpad/layout` displays fitted middle circles;
+`/lhr/skidpad/visible_cones` displays the current accepted view. Orange lane
+and gate observations are retained within a run to build its route; they are
+not loaded from the generator or reused across restarts.
+
+Restart from fresh simulator state for another trial. Functional tests cover
+transformed/noisy fits, labels, missing support, view limits, stale inputs,
+Go gating, approach travel limits, analytic derivatives, four ordered laps,
+repeated coordinates, reverse/jittered crossings, jumps and stopping.
+The ideal sim/truth demo validates route integration, not real perception,
+EKF drift, cone-contact scoring or the no-shortcuts MVP gate.

@@ -7,6 +7,8 @@ from typing import List, Tuple
 
 from geometry_msgs.msg import Point
 from lhr_trackgen.cone_geometry import CONE_SPECS, cone_triangles, start_finish_gates
+from lhr_trackgen.skidpad_geometry import (
+    CENTER_SEPARATION, generate_skidpad_lanes, INNER_RADIUS, OUTER_RADIUS)
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
@@ -337,6 +339,48 @@ def pairing_width_m(style: str, width_m: float = 3.5) -> float:
 
 
 # ---------------------------------------------------------------------------
+# Skidpad generator
+# ---------------------------------------------------------------------------
+
+def generate_skidpad_track(
+    seed: int = 0,
+    **_kw,
+) -> Tuple[ConeList, ConeList]:
+    """
+    Generate the circular boundaries from FSAE D.10.1 and DD.4.3.
+
+    Entry is along +y between the circles. Blue marks the left boundary
+    in the prescribed direction (right circle clockwise, left circle
+    counterclockwise). Orange entry/exit lanes and gates are published separately.
+    The rules geometry is fixed; seed and generic track options are ignored.
+    """
+    left: ConeList = []
+    right: ConeList = []
+    for cx in (-CENTER_SEPARATION / 2.0, CENTER_SEPARATION / 2.0):
+        # Seventeen inner cones, including the cone beside the crossing.
+        phase = 0.0 if cx < 0.0 else math.pi
+        inner = []
+        for i in range(17):
+            angle = phase + 2.0 * math.pi * i / 17
+            inner.append((cx + INNER_RADIUS * math.cos(angle),
+                          INNER_RADIUS * math.sin(angle)))
+
+        # Thirteen outer cones at 22.5-degree intervals. Omit the inward
+        # quarter-circle so the crossing and its 3 m entry lane stay open.
+        phase = math.pi / 4.0 if cx < 0.0 else -3.0 * math.pi / 4.0
+        outer = []
+        for i in range(13):
+            angle = phase + math.pi * i / 8.0
+            outer.append((cx + OUTER_RADIUS * math.cos(angle),
+                          OUTER_RADIUS * math.sin(angle)))
+
+        left.extend(inner if cx < 0.0 else outer)
+        right.extend(outer if cx < 0.0 else inner)
+
+    return left, right
+
+
+# ---------------------------------------------------------------------------
 # Dispatcher
 # ---------------------------------------------------------------------------
 
@@ -344,6 +388,7 @@ GENERATORS = {
     'simple': generate_simple_track,
     'autocross': generate_autocross_track,
     'oval': generate_oval_track,
+    'skidpad': generate_skidpad_track,
     'acceleration': generate_acceleration_track,
 }
 
@@ -414,6 +459,8 @@ class ConePublisher(Node):
         self.left_kinds, self.right_kinds = cone_kinds(
             style, self.left, self.right, spacing)
 
+        self._orange = generate_skidpad_lanes() if style == 'skidpad' else ([], [])
+
         # --- Publisher ---
         qos = QoSProfile(depth=1)
         qos.reliability = ReliabilityPolicy.RELIABLE
@@ -474,8 +521,16 @@ class ConePublisher(Node):
                 base + i, 'right_cones', x, y, *CONE_SPECS[kind].color,
                 kind=kind))
 
+        for group, (points, ns) in enumerate(zip(
+            self._orange, ('orange_small', 'orange_large'),
+        )):
+            for i, (x, y) in enumerate(points):
+                marker = self.make_cone_marker(
+                    20000 + group * 10000 + i, ns, x, y,
+                    *CONE_SPECS[ns].color, kind=ns)
+                arr.markers.append(marker)
         # The acceleration layout already has its gates.
-        if self.start_finish_cones and self.style != 'acceleration':
+        if self.start_finish_cones and self.style not in ('acceleration', 'skidpad'):
             for i, (x, y) in enumerate(start_finish_gates(self.left, self.right)):
                 arr.markers.append(self.make_cone_marker(
                     20000 + i, 'start_finish', x, y, 1., .35, 0., kind='orange_large'))
