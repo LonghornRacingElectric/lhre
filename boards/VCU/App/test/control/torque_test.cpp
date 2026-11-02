@@ -35,7 +35,8 @@ constexpr float kPi = 3.14159265358979f;
 float Omega(float rpm) { return rpm * kPi / 30.0f; }
 
 // A car whose inverter reports `true_ratio` x torque x omega as DC power.
-// Current samples arrive every 10 ms; the controller runs every 3 ms.
+// Current samples arrive every 100 ms, as INVERTER_CURRENT does at 10 Hz. The
+// controller runs every 3 ms.
 struct PowerPlant {
   vcu::TorquePath path;
   vcu::TorqueInputs in;
@@ -52,7 +53,7 @@ struct PowerPlant {
   }
   vcu::TorqueOutputs Tick() {
     now += 3;
-    if (now % 10 < 3) {
+    if (now % 100 < 3) {
       in.power_sample_ms = now;
       in.dc_bus_voltage = 500.0f;
       in.dc_bus_current =
