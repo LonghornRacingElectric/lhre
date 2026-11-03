@@ -25,8 +25,10 @@ if os.path.isdir(_trackgen_pkg):
     sys.path.insert(0, _trackgen_pkg)
 
 from lhr_trackgen.cone_geometry import CONE_SPECS  # noqa: E402
+from lhr_trackgen.extreme_autocross import SCENARIOS  # noqa: E402
 from lhr_trackgen.publish_cones import (  # noqa: E402
     ACCEL_STAGING_M, cone_kinds, GENERATORS)
+from lhr_trackgen.rules_autocross import check_envelope  # noqa: E402
 
 # Gazebo model for each lhr_trackgen cone kind (the CONE_SPECS keys).
 CONE_MODELS = {
@@ -53,13 +55,13 @@ def _vehicle_nose_m() -> float:
 
 
 def _cone_include(model_name: str, instance_name: str,
-                  x: float, y: float, z: float) -> str:
+                  x: float, y: float, z: float, precision: int = 4) -> str:
     """Return an SDF <include> block for a cone."""
     return textwrap.dedent(f"""\
     <include>
       <uri>model://{model_name}</uri>
       <name>{instance_name}</name>
-      <pose>{x:.4f} {y:.4f} {z:.4f} 0 0 0</pose>
+      <pose>{x:.{precision}f} {y:.{precision}f} {z:.4f} 0 0 0</pose>
     </include>""")
 
 
@@ -107,6 +109,7 @@ def generate_world_sdf(
     model_dir: str = '',
     left_kinds=None,
     right_kinds=None,
+    coordinate_precision: int = 4,
 ) -> str:
     """Build a complete Gazebo world SDF string."""
     # Auto-compute spawn from track geometry if not explicitly set
@@ -131,7 +134,7 @@ def generate_world_sdf(
             counts[model] = index + 1
             cone_blocks.append(_cone_include(
                 model, f'{model}_{index}', cx, cy,
-                CONE_SPECS[kind].height_m / 2.0))
+                CONE_SPECS[kind].height_m / 2.0, coordinate_precision))
 
     cones_xml = '\n'.join(cone_blocks)
     # Long legal courses can extend beyond the legacy 200 m ground plane.
@@ -280,6 +283,11 @@ def main():
         vy = 0.0 if vy is None else vy
         vyaw = 0.0 if vyaw is None else vyaw
 
+    precision = 12 if args.style in SCENARIOS else 4
+    if args.style in SCENARIOS:
+        saved = [[[round(v, precision) for v in p] for p in side] for side in (left, right)]
+        print(f'Rules envelope: {check_envelope(*saved)}')
+
     sdf = generate_world_sdf(
         left, right,
         vehicle_x=vx,
@@ -287,6 +295,7 @@ def main():
         vehicle_yaw=vyaw,
         left_kinds=left_kinds,
         right_kinds=right_kinds,
+        coordinate_precision=precision,
     )
 
     if args.output is None:
