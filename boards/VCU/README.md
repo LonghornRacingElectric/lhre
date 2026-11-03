@@ -360,8 +360,14 @@ FDCAN on PCLK1, ADC on HCLK/2 = 48 MHz, USB on PLLQ.
 - Coolant overtemp limit (`CoolingParams::overtemp_c`, a 60 C placeholder)
   and whether the fault should cut torque. The TSM's loop sensor wiring and
   scaling are unchecked on the car.
-- Rule text for every threshold marked `TODO(verify rule)`. The RTD sound
-  needs measuring against its 80-90 dBA band.
+- RTD sound level. EV.10.7.2 (2027 rules) requires 80 dBA minimum for
+  1-3 s. The duration is set, but the level needs measuring on the car.
+- APPS transfer functions. T.4.2.3 requires the two sensors to have
+  different gradients or offsets. The `AppsParams` endpoints are
+  placeholders until `/cal` captures them.
+- Brake threshold for brake-over-throttle (EV.4.7). It uses
+  `BseParams::pressed_on_psi` (300 psi). Inspection may test with a lighter
+  press.
 
 ## USB serial monitor
 

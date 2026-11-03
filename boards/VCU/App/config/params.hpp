@@ -23,7 +23,8 @@ struct AnalogParams {
 };
 
 struct AppsParams {
-  // TODO(verify): capture sensor-side pedal endpoints with /cal.
+  // TODO(verify): capture sensor-side pedal endpoints with /cal. T.4.2.3
+  // requires the two sensors to have different transfer functions.
   float apps1_v_at_0 = 0.5f;
   float apps1_v_at_100 = 4.5f;
   float apps2_v_at_0 = 0.5f;
@@ -31,7 +32,7 @@ struct AppsParams {
   // Sensor-side open/short limits.
   float window_low_v = 0.25f;
   float window_high_v = 4.75f;
-  // TODO(verify rule T.4.2): 10% deviation for 100 ms cuts torque.
+  // T.4.2.4, T.4.2.7: over 10% deviation for over 100 ms cuts torque.
   float max_deviation = 0.10f;
   uint32_t implausible_ms = 100;
 
@@ -47,7 +48,7 @@ struct BseParams {
   float full_scale_psi = 3000.0f;
   float window_low_v = 0.25f;
   float window_high_v = 4.75f;
-  // TODO(verify rule): brake sensor range-fault persistence.
+  // T.4.3.3: a BSE fault lasting over 100 ms cuts torque.
   uint32_t range_fault_ms = 100;
 
   float ema_alpha = 0.10f;
@@ -108,7 +109,8 @@ struct DriveParams {
 };
 
 struct BuzzerParams {
-  // TODO(verify rule): measure RTD sound level and duration on the car.
+  // EV.10.7.2: 1-3 s at 80 dBA minimum. TODO(verify): measure the level on
+  // the car.
   float frequency_hz = 1000.0f;
   float amplitude = 1.0f;  // fraction of DAC full scale
   uint32_t duration_ms = 1200;

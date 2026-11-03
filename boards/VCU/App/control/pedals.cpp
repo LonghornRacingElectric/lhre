@@ -32,7 +32,7 @@ PedalOutputs PedalProcessor::Update(const PedalInputs& in, uint32_t now_ms,
   out.apps1_travel = longhorn::Clamp(out.apps1_travel_unclamped, 0.0f, 1.0f);
   out.apps2_travel = longhorn::Clamp(out.apps2_travel_unclamped, 0.0f, 1.0f);
 
-  // Open/short window checks on each sensor (T.4.2, TODO(verify rule)).
+  // Open/short window checks on each sensor (T.4.2.9, T.4.2.10).
   out.apps1_disconnect = in.apps1_v < apps.window_low_v;
   out.apps2_disconnect = in.apps2_v < apps.window_low_v;
   out.apps1_out_of_range = in.apps1_v > apps.window_high_v;
@@ -40,8 +40,8 @@ PedalOutputs PedalProcessor::Update(const PedalInputs& in, uint32_t now_ms,
   const bool apps_range = out.apps1_disconnect || out.apps2_disconnect ||
                           out.apps1_out_of_range || out.apps2_out_of_range;
 
-  // T.4.2: deviation over 10 points, or a sensor out of range, for more
-  // than 100 ms is an implausibility (TODO(verify rule) text).
+  // T.4.2.4, T.4.2.7: deviation over 10 points, or a sensor out of range, for
+  // more than 100 ms is an implausibility.
   out.apps_mismatch =
       std::fabs(out.apps1_travel - out.apps2_travel) > apps.max_deviation;
   out.apps_implausible = apps_implausible_timer_.Update(
@@ -64,7 +64,7 @@ PedalOutputs PedalProcessor::Update(const PedalInputs& in, uint32_t now_ms,
   out.bse2_psi =
       longhorn::Clamp(out.bse2_psi_unclamped, 0.0f, bse.full_scale_psi);
 
-  // Open/short window checks (TODO(verify rule) T.4.3 / EV brake sensor).
+  // Open/short window checks (T.4.3.3, T.4.3.4).
   out.bse1_disconnect = in.bse1_v < bse.window_low_v;
   out.bse2_disconnect = in.bse2_v < bse.window_low_v;
   out.bse1_out_of_range = in.bse1_v > bse.window_high_v;
