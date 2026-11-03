@@ -140,7 +140,8 @@ def _launch_setup(context: LaunchContext):
     elif mission == 'acceleration':
         raise RuntimeError('mission:=acceleration needs track_style:=acceleration')
     from lhr_trackgen.publish_cones import pairing_width_m
-    track_width = pairing_width_m(track_style)
+    track_width = pairing_width_m(
+        track_style, float(context.launch_configurations.get('width_m', '3.5')))
 
     pkg_share = get_package_share_directory('lhr_gazebo')
     models_dir = os.path.join(pkg_share, 'models')
@@ -335,6 +336,8 @@ def _launch_setup(context: LaunchContext):
                     LaunchConfiguration('track_style'), value_type=str),
                 'num_waypoints': ParameterValue(
                     LaunchConfiguration('num_waypoints'), value_type=int),
+                'width_m': _float('width_m'),
+                'cone_spacing_m': _float('cone_spacing_m'),
                 'use_sim_time': True,
             }],
             output='screen',
@@ -721,6 +724,8 @@ def generate_launch_description():
             description='Simulated rolling-radius error (1.0 = exact)'),
         DeclareLaunchArgument('seed', default_value='1'),
         DeclareLaunchArgument('num_waypoints', default_value='10'),
+        DeclareLaunchArgument('width_m', default_value='3.5'),
+        DeclareLaunchArgument('cone_spacing_m', default_value='2.0'),
         DeclareLaunchArgument(
             'enable_stereo_camera', default_value='false',
             choices=['true', 'false'],

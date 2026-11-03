@@ -25,6 +25,12 @@ RUN_S=${RUN_S:-180}                # wall-second cap per run
 SETTLE_S=${SETTLE_S:-3}            # keep recording this long after FINISHED
 OUT=${OUT:-$HOME/lhr-test-data/$(date +%F)-mvp-gate}
 EXTRA=${EXTRA:-}
+TRACK_STYLE=${TRACK_STYLE:-autocross}
+case "$TRACK_STYLE" in
+    autocross|rules_autocross) ;;
+    *) echo "unsupported gate TRACK_STYLE=$TRACK_STYLE" >&2; exit 2 ;;
+esac
+ROS2=$(cd "$HERE/../../../ros2" && pwd)
 
 TOPICS="/clock /lhr/mission/status /lhr/mission/complete /lhr/metrics/lap_complete
 /lhr/vehicle/odom /lhr/vehicle/odom_truth /lhr/safety/status"
@@ -70,6 +76,17 @@ one_run() {  # id [launch args...]
     shift
     local dir="$OUT/runs/$id"
     echo "=== $id $(date +%T)"
+    local world=''
+    if [[ "$id" == *rules_autocross* ]]; then
+        local seed
+        for arg in "$@"; do
+            case "$arg" in seed:=*) seed=${arg#seed:=} ;; esac
+        done
+        mkdir -p "$OUT/worlds"
+        world="$OUT/worlds/rules_autocross_seed${seed}.sdf"
+        python3 "$ROS2/src/lhr_gazebo/scripts/generate_world.py" \
+            --style rules_autocross --seed "$seed" --output "$world" || return 1
+    fi
     # args.txt is written last, so it marks a run that finished.
     if [ -e "$dir/args.txt" ]; then
         echo "$id is done, skipping (move $dir aside to rerun)" >&2
@@ -88,7 +105,7 @@ one_run() {  # id [launch args...]
     # launch is stopped with TERM, which it handles the same way.
     timeout -s TERM "$RUN_S" ros2 launch lhr_gazebo gazebo_demo.launch.py \
         gui:=false rviz:=false safety:=true output_csv:="$dir/metrics.csv" \
-        $EXTRA "$@" > "$dir/launch.log" 2>&1 &
+        ${world:+"world:=$world"} $EXTRA "$@" > "$dir/launch.log" 2>&1 &
     LAUNCH=$!
     # End the run once the mission is over, after the car has had time to
     # stop on the recording.
@@ -106,10 +123,10 @@ one_run() {  # id [launch args...]
 plan() {  # one line per run: the id, then its launch arguments
     for s in $SEEDS; do
         if [ "$BASELINE" != 0 ]; then
-            echo "baseline_autocross_s$s track_style:=autocross seed:=$s perception:=sim estimator:=truth"
+            echo "baseline_${TRACK_STYLE}_s$s track_style:=$TRACK_STYLE seed:=$s perception:=sim estimator:=truth"
         fi
         for r in $(seq 1 "$REPEATS"); do
-            echo "autocross_s${s}_r$r track_style:=autocross seed:=$s perception:=lidar estimator:=ekf"
+            echo "${TRACK_STYLE}_s${s}_r$r track_style:=$TRACK_STYLE seed:=$s perception:=lidar estimator:=ekf"
         done
     done
     for r in $(seq 1 "${ACCEL_REPEATS:-0}"); do
