@@ -1,0 +1,8 @@
+(fp_lib_table
+	(version 7)
+	(lib (name "lhre_connectors") (type "KiCad") (uri "${KICAD_LHRE_LIB_DIR}/footprints/lhre_connectors.pretty") (options "") (descr ""))
+	(lib (name "lhre_ics") (type "KiCad") (uri "${KICAD_LHRE_LIB_DIR}/footprints/lhre_ics.pretty") (options "") (descr ""))
+	(lib (name "lhre_mechanical") (type "KiCad") (uri "${KICAD_LHRE_LIB_DIR}/footprints/lhre_mechanical.pretty") (options "") (descr ""))
+	(lib (name "lhre_passives") (type "KiCad") (uri "${KICAD_LHRE_LIB_DIR}/footprints/lhre_passives.pretty") (options "") (descr ""))
+	(lib (name "lhre_power") (type "KiCad") (uri "${KICAD_LHRE_LIB_DIR}/footprints/lhre_power.pretty") (options "") (descr ""))
+)
