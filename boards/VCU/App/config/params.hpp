@@ -32,7 +32,7 @@ struct AppsParams {
   // Sensor-side open/short limits.
   float window_low_v = 0.25f;
   float window_high_v = 4.75f;
-  // T.4.2.4, T.4.2.7: over 10% deviation for over 100 ms cuts torque.
+  // T.4.2.4, T.4.2.5: over 10% deviation for over 100 ms cuts torque.
   float max_deviation = 0.10f;
   uint32_t implausible_ms = 100;
 
