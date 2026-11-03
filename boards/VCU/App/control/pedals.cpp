@@ -40,7 +40,7 @@ PedalOutputs PedalProcessor::Update(const PedalInputs& in, uint32_t now_ms,
   const bool apps_range = out.apps1_disconnect || out.apps2_disconnect ||
                           out.apps1_out_of_range || out.apps2_out_of_range;
 
-  // T.4.2.4, T.4.2.7: deviation over 10 points, or a sensor out of range, for
+  // T.4.2.4, T.4.2.5: deviation over 10 points, or a sensor out of range, for
   // more than 100 ms is an implausibility.
   out.apps_mismatch =
       std::fabs(out.apps1_travel - out.apps2_travel) > apps.max_deviation;
