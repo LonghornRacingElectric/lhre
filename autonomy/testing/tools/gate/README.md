@@ -116,3 +116,31 @@ Longer courses need a larger wall timeout, particularly with CPU rendering.
 These runs still use the existing MVP scorer thresholds; inclusion and changed
 thresholds in the official Sim v2 gate belong to
 [#201](https://github.com/LonghornRacingElectric/lhre/issues/201).
+
+## Fixed extreme-course matrix
+
+`EXTREMES=all` adds the seven
+[named extreme courses](../../../ros2/src/lhr_gazebo/worlds/README.md#extreme-autocross-set)
+to the planned matrix. It defaults to empty, preserving the MVP campaign.
+Use a quoted space-separated subset, for example
+`EXTREMES="extreme_hairpin extreme_500m"`, to run fewer cases; an unknown
+name fails before recording or process cleanup. Each case uses its committed
+seed-1 world, `REPEATS` LiDAR/EKF rows, and one simplified-perception/truth
+baseline when `BASELINE=1`. Run IDs and CSV styles distinguish every fixture;
+only the baseline for that same style and seed can satisfy its lap-time check.
+
+From `autonomy/ros2`, to run the set alone:
+
+```bash
+SEEDS= EXTREMES=all REPEATS=1 ACCEL_REPEATS=0 SKIDPAD_REPEATS=0 \
+  RUN_S=900 OUT="$HOME/lhr-test-data/extreme-autocross" \
+  ../testing/tools/gate/run_gate.sh
+```
+
+Build `lhr_gazebo` first to install all seven worlds. Longer courses and CPU
+rendering need a larger wall cap. The usual `EXTRA` settings still pass to
+every launch. Every planned missing result fails; none is silently omitted
+because it has a new style name. Use a fresh output directory when selecting
+a different matrix, since the scorer also reads completed folders there.
+The extension uses existing MVP thresholds. Official Sim v2 adoption and
+criteria remain [#201](https://github.com/LonghornRacingElectric/lhre/issues/201).
