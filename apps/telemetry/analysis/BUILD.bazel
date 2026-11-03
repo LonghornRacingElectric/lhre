@@ -13,6 +13,7 @@ py_library(
     imports = [".", "..", "../.."],
     target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
+    deps = ["//lib/codegen/telemetry:orion_models"],
 )
 
 # Platform-aware pip requirements compilation

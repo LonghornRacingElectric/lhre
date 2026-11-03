@@ -15,14 +15,12 @@ NOT_WINDOWS = select({
 rust_binary(
     name = "cand",
     srcs = ["main.rs"],
-    data = ["//apps/BEVO:can_json"],
     edition = "2021",
     target_compatible_with = NOT_WINDOWS,
     deps = [
         "//apps/BEVO:sensor_proto",
         "@crates//:anyhow",
         "@crates//:prost",
-        "@crates//:serde_json",
     ] + select({
         "@platforms//os:linux": ["@crates//:socketcan"],
         "//conditions:default": [],
@@ -34,14 +32,12 @@ rust_binary(
 rust_binary(
     name = "mock_main",
     srcs = ["mock_main.rs"],
-    data = ["//apps/BEVO:can_json"],
     edition = "2021",
     target_compatible_with = NOT_WINDOWS,
     deps = [
         "//apps/BEVO:sensor_proto",
         "@crates//:anyhow",
         "@crates//:prost",
-        "@crates//:serde_json",
     ],
 )
 
@@ -57,7 +53,6 @@ sh_binary(
     srcs = ["run_can_stack.sh"],
     data = [
         ":cand",
-        "//apps/BEVO:can_json",
         "//apps/BEVO/dashd",
         "//apps/BEVO/loggerd",
         "//apps/BEVO/publishd",
@@ -72,7 +67,6 @@ sh_binary(
     data = [
         ":cand",
         ":mock_can",
-        "//apps/BEVO:can_json",
         "//apps/BEVO/dashd",
         "//apps/BEVO/loggerd",
     ],
