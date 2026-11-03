@@ -194,6 +194,12 @@ struct Bench {
     if (coolant_alive) logger.Send(t.ToFrame());
   }
 
+  void SendInverterCurrent() {
+    lhre::can::inverter::InverterCurrent current;
+    current.set_dc_bus_current(dc_bus_current);
+    if (inverter_alive && current_alive) car.Send(current.ToFrame());
+  }
+
   void Energize() {
     hvc_state = lhre::can::HvcState::kEnergized;
     contactors = true;
@@ -227,11 +233,6 @@ struct Bench {
       inverter::InverterSpeed hs;
       hs.motor_speed = motor_rpm;
       if (speed_alive) car.Send(hs.ToFrame());
-      if (current_alive) {
-        inverter::InverterCurrent current;
-        current.set_dc_bus_current(dc_bus_current);
-        car.Send(current.ToFrame());
-      }
       if (voltage_alive) {
         inverter::InverterVoltage voltage;
         voltage.set_dc_bus_voltage(dc_bus_voltage);
@@ -250,7 +251,8 @@ struct Bench {
     }
   }
 
-  // Advances `ms` in 1 ms steps, feeding the car's frames every 5 ms.
+  // Advances `ms` in 1 ms steps, feeding most frames every 5 ms and the
+  // inverter current every 100 ms, its real rate.
   template <class AppT>
   void Run(AppT& app, uint32_t ms) {
     for (uint32_t i = 0; i < ms; ++i) {
@@ -259,6 +261,7 @@ struct Bench {
       if (clock.Millis() % 5 == 0) {
         SendCarFrames();
       }
+      if (clock.Millis() % 100 == 0) SendInverterCurrent();
       if (clock.Millis() % 3 == 0) SendWheelFrames();
       if (clock.Millis() % 100 == 0) SendCoolantFrame();
       app.Step();

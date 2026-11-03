@@ -32,6 +32,7 @@ void CarTaskLoop(void*) {
     if (t == 1500) b.SetPedalTravel(0.5f);
     if (t == 3000) b.SetLoop(24.0f, 0.0f);
     if (t % 5 == 0) b.SendCarFrames();
+    if (t % 100 == 0) b.SendInverterCurrent();
     b.clock.Advance(1);
     const lhre::can::VcuStateMachine s = g_app->state();
     if (s != last || t % 500 == 0) {
