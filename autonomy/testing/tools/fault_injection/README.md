@@ -101,3 +101,22 @@ SharePoint ([testing/README.md](../../README.md)).
 
 Any run that is not `caught` (or `clean`), or has `within_pdr` false, gets
 an issue.
+
+## Rules-compliant courses
+
+`TRACK=rules_autocross` runs fault cases on the new generated course style.
+`CLEAN_TRACK=rules_autocross` selects it for clean laps too (default remains
+`autocross`). Missing worlds are generated with the shared generator into
+`$OUT/worlds`; the analyzer records the selected style. For example:
+
+```bash
+TRACK=rules_autocross CLEAN_TRACK=rules_autocross CASES=lidar_drop SPEEDS=5 \
+  REPEATS=1 CLEAN_SEEDS=1 CLEAN_S=600 OUT="$HOME/lhr-test-data/rules-faults" \
+  ../testing/tools/fault_injection/run_faults.sh
+```
+
+Use a separate output directory when changing styles, since fault/clean run
+IDs retain their existing format. The courses are longer than MVP autocross;
+allow enough wall time for clean runs. Their geometry checks do not guarantee
+the controller can complete them. See
+[the course contract](../../../ros2/src/lhr_trackgen/README.md#rules-compliant-autocross).

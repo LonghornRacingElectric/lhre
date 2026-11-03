@@ -38,12 +38,12 @@ STOPPED = 0.1  # m/s
 MOVED = 0.5  # m/s: rolling again after the stop fails the run
 
 CHECKS = ['completes', 'stops', 'off_course', 'cones', 'cte', 'ekf', 'lap_time', 'health']
-FIELDS = (['id', 'kind', 'event', 'seed', 'outcome', 'lap_time_s', 'baseline_lap_s',
+FIELDS = (['id', 'kind', 'event', 'track_style', 'seed', 'outcome', 'lap_time_s', 'baseline_lap_s',
            'lap_ratio', 'max_cte', 'off_track_count', 'cones_hit', 'max_pos_error',
            'stop_dist_m', 'stop_time_s', 'max_v_after_stop', 'finished', 'emergency',
            'early_exits', 'invalid_reason'] + CHECKS + ['passed'])
 RUN_ID = re.compile(
-    r'^(baseline_)?(autocross|acceleration|skidpad)(?:_s(\d+))?(?:_r(\d+))?$')
+    r'^(baseline_)?(autocross|rules_autocross|acceleration|skidpad)(?:_s(\d+))?(?:_r(\d+))?$')
 
 
 def read(bag):
@@ -132,9 +132,10 @@ def score(run_dir, run_id):
     match = RUN_ID.match(run_id)
     if not match:
         return None
-    baseline, event, seed, _ = match.groups()
+    baseline, style, seed, _ = match.groups()
+    event = 'autocross' if style == 'rules_autocross' else style
     row = {'id': run_id, 'kind': 'baseline' if baseline else 'gate', 'event': event,
-           'seed': seed or ''}
+           'seed': seed or '', 'track_style': style}
     if not os.path.isdir(run_dir):
         # Planned but never run: a campaign cut short must not read as a pass.
         return {**row, 'outcome': 'missing', 'early_exits': ''}
@@ -179,7 +180,8 @@ def judge(row, baselines):
         'health': not row['early_exits'] and not row.get('emergency'),
     }
     if event == 'autocross':
-        lap, base = number(row.get('lap_time_s')), baselines.get(row['seed'])
+        lap = number(row.get('lap_time_s'))
+        base = baselines.get((row.get('track_style', event), row['seed']))
         row['baseline_lap_s'] = '' if base is None else f'{base:.2f}'
         if lap is not None and base:
             row['lap_ratio'] = f'{lap / base:.2f}'
@@ -198,7 +200,7 @@ def main(out):
         with open(expected_path) as f:
             ids |= {line.strip() for line in f if line.strip()}
     rows = [r for r in (score(os.path.join(runs, d), d) for d in sorted(ids)) if r]
-    baselines = {r['seed']: number(r['lap_time_s']) for r in rows
+    baselines = {(r['track_style'], r['seed']): number(r['lap_time_s']) for r in rows
                  if r['kind'] == 'baseline' and r['outcome'] == 'lap'}
     gate = [r for r in rows if r['kind'] == 'gate']
     for row in gate:
@@ -233,9 +235,9 @@ def main(out):
             f'{r.get("cones_hit", "")} ({r["cones"]}) | {r.get("max_cte", "")} ({r["cte"]}) | '
             f'{r.get("max_pos_error", "")} ({r["ekf"]}) | {ratio} ({r["lap_time"]}) | '
             f'{r["health"]} | {"yes" if r["passed"] else "**no**"} |')
-    lines += ['', '## Truth-stack baselines', '', '| Seed | Outcome | Lap time (s) |',
-              '| --- | --- | --- |']
-    lines += [f'| {r["seed"]} | {r["outcome"]} | {r.get("lap_time_s", "")} |'
+    lines += ['', '## Truth-stack baselines', '', '| Style | Seed | Outcome | Lap time (s) |',
+              '| --- | --- | --- | --- |']
+    lines += [f'| {r["track_style"]} | {r["seed"]} | {r["outcome"]} | {r.get("lap_time_s", "")} |'
               for r in rows if r['kind'] == 'baseline']
     if waived:
         lines += ['', '## Waived', ''] + [f'- {w}' for w in waived]

@@ -93,3 +93,26 @@ stops the wheels outright.
 The gate passes only when every run passes. Per the pass criteria, a failed
 run gets an issue in the milestone and is repeated after the fix, never
 dropped.
+
+## Rules-compliant autocross campaigns
+
+Set `TRACK_STYLE=rules_autocross` to replace the autocross rows and their
+truth baselines with the new seeded course style. The runner generates each
+matching world under `$OUT/worlds` and passes it explicitly to launch. Default
+`TRACK_STYLE=autocross` preserves the MVP matrix and its layouts. Run IDs and
+the results CSV's `track_style` distinguish the styles; baseline matching uses
+both style and seed, so a short MVP baseline cannot score a longer course.
+Use a separate `OUT` for each campaign. For example, from `autonomy/ros2`:
+
+```bash
+TRACK_STYLE=rules_autocross SEEDS=1 REPEATS=1 ACCEL_REPEATS=0 SKIDPAD_REPEATS=0 \
+  RUN_S=600 OUT="$HOME/lhr-test-data/rules-smoke" ../testing/tools/gate/run_gate.sh
+```
+
+The runner uses default width/spacing; for custom dimensions generate a world
+and run the launch directly as described in
+[lhr_trackgen](../../../ros2/src/lhr_trackgen/README.md#rules-compliant-autocross).
+Longer courses need a larger wall timeout, particularly with CPU rendering.
+These runs still use the existing MVP scorer thresholds; inclusion and changed
+thresholds in the official Sim v2 gate belong to
+[#201](https://github.com/LonghornRacingElectric/lhre/issues/201).
