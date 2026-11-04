@@ -1,0 +1,26 @@
+load("@rules_python//python:defs.bzl", "py_binary")
+load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
+load("//apps/telemetry:compatibility.bzl", "NOT_WINDOWS")
+load("//apps/telemetry:container.bzl", "telemetry_service_image")
+
+package(default_visibility = ["//apps/telemetry:__subpackages__"])
+
+py_binary(
+    name = "csv_logger_binary",
+    srcs = ["main.py"],
+    main = "main.py",
+    imports = ["../../.."],
+    data = ["//apps/telemetry/stack/ingest:protobuf_files"],
+    deps = [requirement("kafka-python"), requirement("protobuf")],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+telemetry_service_image(
+    name = "csv_logger",
+    binary = ":csv_logger_binary",
+    base = "@python312_linux_amd64",
+    env = {"PYTHONUNBUFFERED": "1", "PYTHONPATH": "/app"},
+    repo_tags = ["lhre/telemetry-csv-logger:dev"],
+    repository = "ghcr.io/longhornracingelectric/telemetry-csv-logger",
+    workdir = "/app",
+)

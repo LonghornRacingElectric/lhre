@@ -1,7 +1,10 @@
 # Ingest
 
 Ingest accepts MQTT telemetry, decodes the selected protobuf schema, persists
-packets to PostgreSQL, and forwards the raw stream to Kafka.
+packets to PostgreSQL, and forwards the raw stream to Kafka. The independent
+[CSV logger](../processors/csv_logger/README.md) reads `sensor_data` and writes
+schema-ordered Orion CSV rows. It runs in this Compose project with the existing
+logs mount; MQTT no longer creates files or maintains a CSV queue.
 
 ```bash
 bazel build //apps/telemetry/stack/ingest:ingest_binary

@@ -17,6 +17,7 @@ display telemetry:
 | Kafka | live event transport | pinned upstream |
 | Grafana | dashboards | pinned upstream |
 | ingest | MQTT decode, database write, Kafka forward | this repo |
+| csv_logger | Orion CSV logging from Kafka | this repo |
 | kafka_bridge | gRPC-to-Kafka bridge | this repo |
 | field_enricher | configured derived fields | this repo |
 
