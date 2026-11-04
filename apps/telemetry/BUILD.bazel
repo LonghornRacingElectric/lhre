@@ -295,6 +295,7 @@ test_suite(
         ":postgres_smoke_test",
         "//apps/telemetry/stack/ingest:ingest_smoke_test",
         "//apps/telemetry/stack/kafka:kafka_bridge_smoke_test",
+        "//apps/telemetry/stack/processors/csv_logger:csv_logger_smoke_test",
         "//apps/telemetry/stack/processors/field_enricher:field_enricher_smoke_test",
     ],
     target_compatible_with = NOT_WINDOWS,

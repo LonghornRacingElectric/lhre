@@ -8,6 +8,7 @@ from pathlib import Path
 import signal
 
 from google.protobuf.json_format import MessageToDict
+from google.protobuf.message import DecodeError
 from kafka import KafkaConsumer
 from stack.ingest.protobuf import can_packets_pb2
 
@@ -53,7 +54,13 @@ def main():
                     for record in records:
                         if dict(record.headers or []).get("car_type") != b"Orion":
                             continue
-                        message.ParseFromString(record.value)
+                        # A bad frame would otherwise crash-loop the logger on
+                        # replay, opening a fresh CSV every restart.
+                        try:
+                            message.ParseFromString(record.value)
+                        except DecodeError:
+                            logging.warning("Skipping undecodable frame at offset %d", record.offset)
+                            continue
                         decoded = MessageToDict(message, preserving_proto_field_name=True,
                                                 always_print_fields_with_no_presence=True)
                         row = []
