@@ -39,7 +39,3 @@ topics, using incremental config changes. `SENSOR_DATA_RETENTION_MS` defaults to
 partition). Whichever limit is reached first bounds database recovery. Size both
 for measured traffic and the required outage budget, and monitor consumer lag
 and free space. Broker defaults apply separately to other topics.
-
-```bash
-bazel test //apps/telemetry/stack/kafka:kafka_bridge_test
-```

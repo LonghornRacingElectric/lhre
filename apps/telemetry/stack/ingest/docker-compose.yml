@@ -50,7 +50,6 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_GROUP_ID: telemetry-db-writer-v1
       DB_BATCH_PACKETS: ${DB_BATCH_PACKETS:-500}
-      DB_BATCH_BYTES: ${DB_BATCH_BYTES:-8388608}
       DB_BATCH_SECONDS: ${DB_BATCH_SECONDS:-0.25}
     networks:
       - telemetry_network

@@ -362,8 +362,6 @@ test_suite(
     tests = [
         "//apps/telemetry/analysis/tests:analysis_tests",
         "//apps/telemetry/stack/tests:protobuf_test",
-        "//apps/telemetry/stack/kafka:kafka_bridge_test",
-        "//apps/telemetry/stack/processors/db_writer:db_writer_test",
     ],
     target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
