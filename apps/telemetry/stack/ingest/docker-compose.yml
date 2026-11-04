@@ -28,10 +28,21 @@ services:
       SERVER_TARGET: 'LOCAL'
       DB_CONN_TYPE: 6
       LOGLEVEL: 'DEBUG'
-      LOG_BASE_DIR: /app/logs
     volumes:
       - ../../../../.env:/.env
       - ../../net_configs.json:/app/net_configs.json
+    networks:
+      - telemetry_network
+
+  csv_logger:
+    image: ${TELEMETRY_CSV_LOGGER_IMAGE:-lhre/telemetry-csv-logger:dev}
+    container_name: csv-logger
+    restart: unless-stopped
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_GROUP_ID: telemetry-csv-logger-v1
+      LOG_BASE_DIR: /app/logs
+    volumes:
       - ../../logs:/app/logs
     networks:
       - telemetry_network

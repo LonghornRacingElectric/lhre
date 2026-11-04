@@ -33,7 +33,8 @@ Local and CI runs use Docker-managed volumes by default. On the production
 server, export `TELEMETRY_STORAGE_ROOT=/mnt/server_ssd` before running the
 devtool to bind Postgres, Kafka, and logsync storage onto the SSD.
 
-The core is Kafka/bridge, ingest with Mosquitto/PostgreSQL/Grafana, and the
+The core is Kafka/bridge, ingest with Mosquitto/PostgreSQL/Grafana and the
+[CSV logger](stack/processors/csv_logger/README.md), and the
 field enricher. Optional processors are GPS classifier, lap timer, track
 mapper, Kafka test, GG plot, and car status.
 
