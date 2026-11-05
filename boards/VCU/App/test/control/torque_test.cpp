@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <vector>
 
 #include "config/params.hpp"
 #include "control/torque.hpp"
@@ -9,7 +10,11 @@ namespace {
 
 const vcu::Params& P() { return vcu::ParamsFor(vcu::kDefaultEventMode); }
 
-TEST(Torque, MapPowerLimitAndDerate) {
+constexpr float kPi = 3.14159265358979f;
+
+float Omega(float rpm) { return rpm * kPi / 30.0f; }
+
+TEST(Torque, PedalFunctionPeakAndDerate) {
   vcu::TorquePath path;
   vcu::TorqueInputs in;
   in.pedal_travel = 1.0f;
@@ -18,21 +23,75 @@ TEST(Torque, MapPowerLimitAndDerate) {
   in.ocv_min_cell_v = 3.0f;  // halfway into the 2.8-3.2 V derate
   vcu::TorqueOutputs out =
       path.Update(in, P().torque, P().power_limit, P().traction);
-  EXPECT_FLOAT_EQ(out.lookup, 210.0f);
+  EXPECT_FLOAT_EQ(out.pedal, 210.0f);
   EXPECT_NEAR(out.derated, 105.0f, 0.01f);
   // Derate not applied (ported behavior), no power: no trim.
   EXPECT_FLOAT_EQ(out.power_limited, 210.0f);
 
-  // Half pedal: 0.5^1.5 of the 6000 rpm row.
+  // Half demand: 0.5^touchiness of peak, whatever the speed. Speed only
+  // enters through the power cap.
   in.pedal_travel = 0.5f;
   in.motor_rpm = 6000.0f;
   out = path.Update(in, P().torque, P().power_limit, P().traction);
-  EXPECT_NEAR(out.lookup, 103.0f * 0.35355f, 0.01f);
+  EXPECT_NEAR(out.pedal, 210.0f * 0.35355f, 0.01f);
 }
 
-constexpr float kPi = 3.14159265358979f;
+// Sweeps demand at one speed and returns each step's torque after the cap.
+std::vector<float> Sweep(const vcu::Params& p, float rpm) {
+  vcu::TorquePath path;
+  vcu::TorqueInputs in;
+  in.motor_rpm = rpm;
+  in.motor_speed_valid = true;
+  in.dt_ms = 3;
+  std::vector<float> torque;
+  for (int i = 0; i <= 100; ++i) {
+    in.pedal_travel = static_cast<float>(i) / 100.0f;
+    torque.push_back(
+        path.Update(in, p.torque, p.power_limit, p.traction).power_limited);
+  }
+  return torque;
+}
 
-float Omega(float rpm) { return rpm * kPi / 30.0f; }
+TEST(Torque, MonotonicInDemandWithAndWithoutTheCap) {
+  for (float rpm : {0.0f, 1000.0f, 3000.0f, 4500.0f, 6000.0f, 7000.0f}) {
+    const auto t = Sweep(P(), rpm);
+    EXPECT_EQ(t.front(), 0.0f) << rpm;
+    for (size_t i = 1; i < t.size(); ++i) {
+      EXPECT_GE(t[i], t[i - 1]) << rpm << " rpm, step " << i;
+    }
+  }
+}
+
+TEST(Torque, FullDemandIsPeakUntilThePowerCapTakesOver) {
+  const auto& pl = P().power_limit;
+  // The cap meets the 210 Nm peak at P / (ratio x peak).
+  const float corner_rpm =
+      pl.limit_w / (pl.dc_power_ratio * 210.0f) * 30.0f / kPi;
+  EXPECT_FLOAT_EQ(Sweep(P(), 0.9f * corner_rpm).back(), 210.0f);
+  for (float rpm : {1.1f * corner_rpm, 5000.0f, 6000.0f, 7000.0f}) {
+    EXPECT_NEAR(Sweep(P(), rpm).back(),
+                pl.limit_w / (pl.dc_power_ratio * Omega(rpm)), 0.01f)
+        << rpm;
+  }
+}
+
+TEST(Torque, MotorSpinCapsTorqueAndFadesItToZeroBeforeTheSpeedCeiling) {
+  const vcu::Params& spin = vcu::ParamsFor(lhre::can::EventMode::kMotorSpin);
+  EXPECT_EQ(spin.inverter.torque_limit_nm, spin.torque.peak_torque_nm);
+  EXPECT_FLOAT_EQ(Sweep(spin, 0.0f).back(), 20.0f);
+  EXPECT_FLOAT_EQ(Sweep(spin, 1200.0f).back(), 20.0f);
+  EXPECT_NEAR(Sweep(spin, 1350.0f).back(), 10.0f, 0.01f);
+  EXPECT_NEAR(Sweep(spin, -1350.0f).back(), 10.0f, 0.01f);
+  for (float rpm : {1500.0f, 2000.0f, 6000.0f}) {
+    for (float t : Sweep(spin, rpm)) EXPECT_EQ(t, 0.0f) << rpm;
+  }
+}
+
+TEST(Torque, SpeedFadeIsOffByDefault) {
+  const auto& pl = P().power_limit;
+  EXPECT_NEAR(Sweep(P(), 20000.0f).back(),
+              pl.limit_w / (pl.dc_power_ratio * Omega(20000.0f)), 0.01f);
+}
 
 // A car whose inverter reports `true_ratio` x torque x omega as DC power.
 // Current samples arrive every 100 ms, as INVERTER_CURRENT does at 10 Hz. The
@@ -74,7 +133,7 @@ TEST(PowerLimit, CapsTorqueFromSpeedBeforeAnyFeedback) {
   const auto out = car.Tick();
   EXPECT_NEAR(out.power_limited,
               40000.0f / (car.pl.dc_power_ratio * Omega(4000.0f)), 0.01f);
-  EXPECT_LT(out.power_limited, out.lookup);
+  EXPECT_LT(out.power_limited, out.pedal);
 }
 
 TEST(PowerLimit, TrimRemovesRatioErrorWithoutOvershoot) {
@@ -111,29 +170,33 @@ TEST(PowerLimit, TrimHoldsWhileTheCapIsNotLimiting) {
   vcu::TorqueOutputs out;
   for (int i = 0; i < 300; ++i) out = car.Tick();
   EXPECT_FLOAT_EQ(out.power_trim_w, 0.0f);
-  EXPECT_FLOAT_EQ(out.power_limited, out.lookup);
+  EXPECT_FLOAT_EQ(out.power_limited, out.pedal);
 }
 
 TEST(PowerLimit, NoCapNearStandstillOrWithoutSpeed) {
   PowerPlant car(50.0f);  // about 5 rad/s
   car.pl.limit_w = 1000.0f;
   auto out = car.Tick();
-  EXPECT_FLOAT_EQ(out.power_limited, out.lookup);
+  EXPECT_FLOAT_EQ(out.power_limited, out.pedal);
   car.in.motor_rpm = 4000.0f;
   car.in.motor_speed_valid = false;
   out = car.Tick();
-  EXPECT_FLOAT_EQ(out.power_limited, out.lookup);
+  EXPECT_FLOAT_EQ(out.power_limited, out.pedal);
 }
 
-TEST(Torque, SkidpadParamsSaturateAt70Percent) {
+TEST(Torque, SkidpadParamsAreLinearTo70Percent) {
   const vcu::Params& skid = vcu::ParamsFor(lhre::can::EventMode::kSkidpad);
   vcu::TorquePath path;
   vcu::TorqueInputs in;
-  in.pedal_travel = 1.0f;
   in.dt_ms = 3;
-  const vcu::TorqueOutputs out =
-      path.Update(in, skid.torque, skid.power_limit, skid.traction);
-  EXPECT_NEAR(out.lookup, 210.0f * 0.70f, 0.01f);
+  in.pedal_travel = 1.0f;
+  EXPECT_NEAR(
+      path.Update(in, skid.torque, skid.power_limit, skid.traction).pedal,
+      210.0f * 0.70f, 0.01f);
+  in.pedal_travel = 0.5f;
+  EXPECT_NEAR(
+      path.Update(in, skid.torque, skid.power_limit, skid.traction).pedal,
+      0.5f * 210.0f * 0.70f, 0.01f);
 }
 
 TEST(Traction, SampleTimingFilterAndHeldTrimSurviveRepeatedControlTicks) {

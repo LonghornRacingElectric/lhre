@@ -37,8 +37,13 @@ struct AppsParams {
   uint32_t implausible_ms = 100;
 
   float ema_alpha = 0.35f;
-  float min_travel_deadzone = 0.09f;
-  float max_travel_deadzone = 0.74f;
+  // Driver knobs, with TorqueParams::touchiness: filtered pedal travel at
+  // which torque starts and at which it is full. Torque demand is 0 below
+  // throttle_start and 1 above throttle_full, linear between. Travel at or
+  // below throttle_start also counts as a released pedal (RTD, regen,
+  // launch). TODO(verify): the inherited 9% and 74%; check with /analog.
+  float throttle_start = 0.09f;
+  float throttle_full = 0.74f;
 };
 
 struct BseParams {
@@ -58,7 +63,7 @@ struct BseParams {
   float brake_light_duty = 0.30f;
   // Brake bias holds its last value below this total (vcu_can.c:331-341).
   float bias_min_total_psi = 1000.0f;
-  // EV.4.7: unfiltered normalized APPS travel, before the torque deadzone.
+  // EV.4.7: unfiltered normalized APPS travel, before throttle_start/full.
   float bot_pedal_on = 0.25f;
   float bot_pedal_off = 0.05f;
   // TODO(verify): match the BSPD trimmer (0.595-0.976 V at the pin).
@@ -101,7 +106,7 @@ struct DigitalParams {
 };
 
 struct DriveParams {
-  // Require a fully released pedal after the deadzone.
+  // Require a fully released pedal: travel at or below throttle_start.
   float rtd_max_pedal = 0.0f;
   // TODO(verify): assumes a toggle RTD switch; use false for a momentary
   // button.
@@ -124,15 +129,26 @@ struct InverterParams {
   uint16_t fault_clear_address = 20;
 };
 
+// Pedal to torque is one function instead of the 2026 pedal-map and
+// torque-vs-rpm tables:
+//
+//   torque = peak_torque_nm * demand^touchiness * fade(rpm),
+//            then capped at PowerLimitParams' P / (ratio * omega)
+//
+// where demand is AppsParams' throttle_start..throttle_full travel scaled to
+// 0..1. The 2026 rpm table only approximated a ~65 kW cap at the motor; the
+// power cap now does that job directly. fade(rpm) is 1 unless
+// zero_torque_rpm is set, then it falls linearly to 0 between
+// fade_start_rpm and zero_torque_rpm and stays 0 above.
 struct TorqueParams {
-  // Available torque vs |motor rpm| at 0, 600, ..., 6000 rpm.
-  float max_rpm = 6000.0f;
-  float power_limit_torque[kLookupPoints] = {210, 210, 210, 210, 210, 192,
-                                             166, 145, 129, 115, 103};
-  // Pedal remap at 0, 0.1, ..., 1.0 travel, then raised to the exponent.
-  float pedal_map[kLookupPoints] = {0.0f, 0.1f, 0.2f, 0.3f, 0.4f, 0.5f,
-                                    0.6f, 0.7f, 0.8f, 0.9f, 1.0f};
-  float pedal_curve_exponent = 1.5f;
+  float peak_torque_nm = 210.0f;
+  // Exponent on demand. 1 is linear; above 1 gives less torque for the same
+  // small travel, so the pedal feels less touchy off the line. 2026 used 1.5.
+  float touchiness = 1.5f;
+  // 0 disables the fade. The car relies on the power cap and the inverter's
+  // own overspeed limit; the motor spin set uses it.
+  float fade_start_rpm = 0.0f;
+  float zero_torque_rpm = 0.0f;
   // Low-cell derate on the OCV estimate (TorqueMap.c:78-85).
   float low_cell_derate_start_v = 3.2f;
   float low_cell_cutoff_v = 2.8f;

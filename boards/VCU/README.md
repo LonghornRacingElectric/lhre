@@ -42,8 +42,8 @@ The DUI is a plain CAN peripheral this year.
     pins, `Peripherals` and `BoardServices`. `digital_io.hpp` applies pin
     polarity. `analog` converts counts to volts with VREFINT correction.
   - `control/`: `pedals` (APPS/BSE plausibility, brake-over-throttle,
-    hard-brake cross-check), `steering`, `brake_bias`, `torque` (ported
-    2026 torque map, power limit, motor-acceleration limiter), `wheel_slip`,
+    hard-brake cross-check), `steering`, `brake_bias`, `torque` (pedal
+    function, power limit, motor-acceleration limiter), `wheel_slip`,
     `regen`, `launch`, `battery` (SoE, energy).
   - `safety/`: `faults` (fault bits, brake comparator soft latch, BMS/IMD
     lamp policy), `shutdown_loop`, `state_machine`.
@@ -170,8 +170,9 @@ The DUI is a plain CAN peripheral this year.
   configuration along with regen. `VCU_DRIVE_STATE` carries the gated
   `linelock_out` (byte 5, which the PDU acts on) and the request (byte 7).
 - **Event modes**: `VCU_MODE_COMMAND` (0x029) or `/mode` selects the
-  acceleration, skidpad, autocross or endurance parameters. The change
-  applies only outside DRIVE and is echoed in `VCU_DRIVE_STATE.event_mode`.
+  acceleration, skidpad, autocross, endurance or motor spin parameters. The
+  change applies only outside DRIVE and is echoed in
+  `VCU_DRIVE_STATE.event_mode`. Every boot starts in endurance.
 - **Bootloader**: raw `update.` over USB works with or without a newline,
   across USB packet boundaries, with no vehicle CAN or sensor prerequisite,
   as in last year's shared DFU helper. USB reception detects the token
@@ -187,9 +188,58 @@ The DUI is a plain CAN peripheral this year.
 
 ## Control commissioning
 
-The inherited pedal calibration, map and event tables remain unchanged.
-Confirm endpoints with `/cal`: the inherited upper deadzone maps 74% of
-calibrated sensor travel to full pedal demand.
+### Pedal to torque
+
+One function replaces the 2026 pedal-map and torque-vs-rpm tables:
+
+```
+torque = peak_torque_nm * demand^touchiness * fade(rpm),
+         then capped at limit_w / (dc_power_ratio * omega)
+demand = 0 below throttle_start, 1 above throttle_full, linear between
+```
+
+The three driver knobs are `AppsParams::throttle_start` (9%) and
+`throttle_full` (74%), on filtered, calibrated pedal travel, and
+`TorqueParams::touchiness` (1.5). `peak_torque_nm` is 210 Nm. Each event
+mode can set its own; skidpad is linear to 70% of peak, full at 32% travel,
+which stays within 10 Nm of the 2026 skidpad map. Travel at or below
+`throttle_start` is also what RTD, regen and launch treat as a released
+pedal; brake-over-throttle uses raw travel instead (see below).
+
+The 2026 rpm table only approximated a power limit: 103 Nm at 6000 rpm is
+about 65 kW at the motor, so full pedal never reached the 70 kW cap. Now the
+power cap below is what shapes torque at speed. Above 2400 rpm, where the
+table started falling, full pedal now gets more torque than it did: the
+full 210 Nm to about 3350 rpm, then whatever the 70 kW estimate allows. `fade_start_rpm`/`zero_torque_rpm` add a linear fade to zero
+torque with speed; it is off on the car, which leaves overspeed to the
+inverter, and on in motor spin mode.
+
+Pedal sensor endpoints are still the inherited placeholders. Read the real
+volts with `/analog` before trusting the knob values.
+
+### Motor spin
+
+`/mode 5` (or `VCU_MODE_COMMAND` 5) selects bench parameters for spinning
+the motor unloaded: 20 Nm peak, also sent to the inverter as its torque
+limit, fading to zero between 1200 and 1500 rpm, after which the motor
+coasts. With no load, the car's 210 Nm would reach the motor's top speed in
+well under a second. Select it before RTD, and check `/state` shows
+`mode=MOTOR_SPIN`: the mode is not kept across a reset.
+
+Every DRIVE prerequisite still applies, so the bench needs:
+
+- the HVC on the Critical bus reporting energized with both AIRs closed;
+- the shutdown loop closed at both VCU taps, and the BSPD latch clear;
+- the inverter's status, fault, current and voltage frames, and either
+  speed frame;
+- `PDU_BSE3` from the PDU;
+- both APPS and both BSE sensors connected and in range, with the brake
+  pressed for the RTD press;
+- `motor_disconnect` (PE6) low.
+
+The dash, TSM and wheel speeds aren't needed, except that a latched brake
+comparator flag (`/faults`) only clears with the dash's `fault_reset`. The 20 Nm and 1500 rpm are
+first-spin values, not the motor's limits.
 
 Four independent wheel speeds are subscribed on the **Data** CAN bus,
 not GPIO: `0x402` FL, `0x403` FR, `0x404` RL and `0x405` RR. This matches

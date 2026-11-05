@@ -15,7 +15,7 @@ void App::RegisterShellCommands(longhorn::Shell& shell) {
       {"io", "digital inputs/outputs, loop", &App::IoCommand, this});
   shell.AddCommand(
       {"analog", "ADC counts, volts, calibrated", &App::AnalogCommand, this});
-  shell.AddCommand({"mode", "event mode [0-4] (applied outside DRIVE)",
+  shell.AddCommand({"mode", "event mode [0-5] (applied outside DRIVE)",
                     &App::ModeCommand, this});
   shell.AddCommand({"launch", "launch arm (opt-in acceleration ramp)",
                     &App::LaunchCommand, this});
@@ -101,12 +101,12 @@ void App::AnalogCommand(void* ctx, longhorn::Console& out, const char*) {
 
 void App::ModeCommand(void* ctx, longhorn::Console& out, const char* args) {
   auto* app = static_cast<App*>(ctx);
-  if (args[0] >= '0' && args[0] <= '4' && args[1] == '\0') {
+  if (args[0] >= '0' && args[0] <= '5' && args[1] == '\0') {
     app->shell_mode_request_.store(args[0] - '0');
     out.Println("mode request queued (applies outside DRIVE)");
     return;
   }
-  out.Printf("mode=%s; usage: /mode 0..4",
+  out.Printf("mode=%s; usage: /mode 0..5",
              lhre::can::ToString(app->snapshot().event_mode));
 }
 
