@@ -7,7 +7,7 @@
 namespace vcu {
 namespace {
 
-float Deadzone(float x, float lo, float hi) {
+float Demand(float x, float lo, float hi) {
   if (x <= lo) {
     return 0.0f;
   }
@@ -48,9 +48,8 @@ PedalOutputs PedalProcessor::Update(const PedalInputs& in, uint32_t now_ms,
       out.apps_mismatch || apps_range, now_ms, apps.implausible_ms);
 
   const float average = 0.5f * (out.apps1_travel + out.apps2_travel);
-  out.pedal_travel =
-      Deadzone(pedal_filter_.Update(average, apps.ema_alpha),
-               apps.min_travel_deadzone, apps.max_travel_deadzone);
+  out.pedal_travel = Demand(pedal_filter_.Update(average, apps.ema_alpha),
+                            apps.throttle_start, apps.throttle_full);
 
   // BSE
   out.bse1_psi_unclamped =
@@ -89,7 +88,7 @@ PedalOutputs PedalProcessor::Update(const PedalInputs& in, uint32_t now_ms,
 
   // EV.4.7 brake-over-throttle: latch with brake pressed and pedal > 25%,
   // release below 5%. Rule travel is mechanical, so use the raw average,
-  // not the filtered, deadzoned torque input.
+  // not the filtered torque demand.
   if (brake_pressed_ && average > bse.bot_pedal_on) {
     bot_latched_ = true;
   } else if (average < bse.bot_pedal_off) {

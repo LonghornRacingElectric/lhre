@@ -85,7 +85,7 @@ class ClosedLoopTest : public ::testing::Test {
 
       EXPECT_EQ(app_->state(), VcuState::kDrive);
       const auto s = app_->snapshot();
-      t.cap_ever_limited |= s.torque.power_limited < s.torque.lookup;
+      t.cap_ever_limited |= s.torque.power_limited < s.torque.pedal;
       t.peak_power_w = std::max(t.peak_power_w, car_.DcPowerW(torque_nm));
       t.final_power_w = car_.DcPowerW(torque_nm);
       if (i > 200) {
@@ -104,12 +104,19 @@ class ClosedLoopTest : public ::testing::Test {
   std::unique_ptr<vcu::App> app_;
 };
 
-TEST_F(ClosedLoopTest, StockMapStaysUnderTheLimitWithoutTheCap) {
+// The 2026 torque-vs-rpm table kept full pedal under 70 kW on its own, so
+// the cap never acted. The pedal function leaves that job to the cap.
+TEST_F(ClosedLoopTest, StockLimitIsHeldByTheCapAtTheP99Ratio) {
   car_.ratio = kRatioP99;
   Start();
-  const Trace t = FullPedal(3000);  // stays under the map's 6000 rpm row
-  EXPECT_FALSE(t.cap_ever_limited);
-  EXPECT_LT(t.peak_power_w, b_.params.power_limit.limit_w);
+  const float limit_w = b_.params.power_limit.limit_w;
+  const Trace t = FullPedal(4000);
+  EXPECT_TRUE(t.cap_ever_limited);
+  EXPECT_LT(
+      t.peak_power_w,
+      limit_w * kRatioP99 / b_.params.power_limit.dc_power_ratio + 1000.0f);
+  EXPECT_NEAR(t.final_power_w, limit_w, 700.0f);
+  EXPECT_LT(t.max_torque_drop_nm, 5.0f);
   EXPECT_GT(car_.speed_m_s, 20.0f);
 }
 

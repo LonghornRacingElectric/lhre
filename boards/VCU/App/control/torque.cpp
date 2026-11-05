@@ -23,6 +23,22 @@ float LowCellDerate(float ocv, const TorqueParams& p) {
          (p.low_cell_derate_start_v - p.low_cell_cutoff_v);
 }
 
+// 1 below fade_start_rpm, 0 at and above zero_torque_rpm, linear between.
+// Off (always 1) unless zero_torque_rpm is set.
+float SpeedFade(float rpm, const TorqueParams& p) {
+  if (p.zero_torque_rpm <= 0.0f) {
+    return 1.0f;
+  }
+  const float speed = std::fabs(rpm);
+  if (speed >= p.zero_torque_rpm) {
+    return 0.0f;
+  }
+  if (speed <= p.fade_start_rpm || p.fade_start_rpm >= p.zero_torque_rpm) {
+    return 1.0f;
+  }
+  return (p.zero_torque_rpm - speed) / (p.zero_torque_rpm - p.fade_start_rpm);
+}
+
 }  // namespace
 
 void TorquePath::Reset() {
@@ -76,19 +92,13 @@ TorqueOutputs TorquePath::Update(const TorqueInputs& in,
                                  const TractionParams& tc) {
   TorqueOutputs out;
 
-  // Torque map (TorqueMap.c:67-85).
-  const float apps = longhorn::Clamp(in.pedal_travel, 0.0f, 1.0f);
-  const float rpm =
-      longhorn::Clamp(std::fabs(in.motor_rpm), 0.0f, torque.max_rpm);
-  const float available = longhorn::Lookup1D(
-      torque.power_limit_torque, kLookupPoints, 0.0f, torque.max_rpm, rpm);
-  const float remapped =
-      longhorn::Lookup1D(torque.pedal_map, kLookupPoints, 0.0f, 1.0f, apps);
-  out.lookup = available * std::pow(longhorn::Clamp(remapped, 0.0f, 1.0f),
-                                    torque.pedal_curve_exponent);
-  out.derated = out.lookup * LowCellDerate(in.ocv_min_cell_v, torque);
+  // One function of pedal demand and motor speed; see TorqueParams.
+  const float demand = longhorn::Clamp(in.pedal_travel, 0.0f, 1.0f);
+  out.pedal = torque.peak_torque_nm * std::pow(demand, torque.touchiness) *
+              SpeedFade(in.motor_rpm, torque);
+  out.derated = out.pedal * LowCellDerate(in.ocv_min_cell_v, torque);
 
-  const float base = torque.apply_low_cell_derate ? out.derated : out.lookup;
+  const float base = torque.apply_low_cell_derate ? out.derated : out.pedal;
   out.power_limited = LimitPower(in, pl, base, &out);
 
   // Last year's motor-acceleration limiter remains opt-in. Differentiate

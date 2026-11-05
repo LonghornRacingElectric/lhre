@@ -288,7 +288,7 @@ Runtime VCU parameter-table selection command.
 
 | Signal | Start Bit | Bit Length | Byte Order | Value Type | Scale | Offset | Bounds [Min, Max] | Unit | Telemetry Binding | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `event_mode` | 0 | 8 | LITTLE_ENDIAN | Physical (unsigned) | 1.0 | 0.0 | - | - | *Bus only* | Event mode: acceleration, skidpad, autocross, or endurance. |
+| `event_mode` | 0 | 8 | LITTLE_ENDIAN | Physical (unsigned) | 1.0 | 0.0 | - | - | *Bus only* | Event mode: acceleration, skidpad, autocross, endurance, or motor spin. |
 
 ### `HVC_BOUNDS_PARAMETERS` {: #msg-hvc-bounds-parameters }
 **Base ID:** `0x030 (48)` &bull; **Transmitter:** `Pi` &bull; **Bus:** `Critical` &bull; **DLC:** `0 bytes` &bull; **Rate:** `0.0 Hz`
@@ -824,7 +824,7 @@ Torque Path
 
 | Signal | Start Bit | Bit Length | Byte Order | Value Type | Scale | Offset | Bounds [Min, Max] | Unit | Telemetry Binding | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `torque_lookup` | 0 | 16 | LITTLE_ENDIAN | Physical (unsigned) | 0.1 | 0.0 | - | Nm | `Controls.torque_lookup` (#42) | Torque Lookup |
+| `torque_lookup` | 0 | 16 | LITTLE_ENDIAN | Physical (unsigned) | 0.1 | 0.0 | - | Nm | `Controls.torque_lookup` (#42) | Pedal function torque before limits (2026 name) |
 | `torque_derated` | 16 | 16 | LITTLE_ENDIAN | Physical (unsigned) | 0.1 | 0.0 | - | Nm | `Controls.torque_derated` (#43) | Torque Derated |
 | `torque_power_limited` | 32 | 16 | LITTLE_ENDIAN | Physical (unsigned) | 0.1 | 0.0 | - | Nm | `Controls.torque_power_limited` (#44) | Torque Power Limited |
 | `torque_traction_controlled` | 48 | 16 | LITTLE_ENDIAN | Physical (unsigned) | 0.1 | 0.0 | - | Nm | `Controls.torque_traction_controlled` (#45) | Torque Traction Controlled |
@@ -1193,6 +1193,7 @@ Dynamic event parameter set selected on the VCU.
 | `SKIDPAD` | `2` | Skidpad |
 | `AUTOCROSS` | `3` | Autocross |
 | `ENDURANCE` | `4` | Endurance |
+| `MOTOR_SPIN` | `5` | Bench motor spin: low torque cap and a motor speed fade |
 
 ### Enum `HvcState` {: #enum-hvcstate }
 HVC state machine state as broadcast in HVC_CONTACTOR_STATUS.

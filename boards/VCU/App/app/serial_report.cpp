@@ -135,8 +135,8 @@ void PrintSerialReport(longhorn::Console& out, const ControlSnapshot& s,
              s.inverter_enable, static_cast<int>(s.torque_command * 1000),
              static_cast<long>(s.motor_rpm),
              s.motor_speed_valid ? "fresh" : "STALE");
-  out.Printf("  Torque mNm: map=%d derated=%d power_limited=%d traction=%d",
-             static_cast<int>(s.torque.lookup * 1000),
+  out.Printf("  Torque mNm: pedal=%d derated=%d power_limited=%d traction=%d",
+             static_cast<int>(s.torque.pedal * 1000),
              static_cast<int>(s.torque.derated * 1000),
              static_cast<int>(s.torque.power_limited * 1000),
              static_cast<int>(s.torque.traction * 1000));
