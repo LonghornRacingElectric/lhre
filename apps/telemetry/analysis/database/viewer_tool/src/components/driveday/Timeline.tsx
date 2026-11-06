@@ -40,7 +40,7 @@ export function Timeline() {
 
   const posOf = (e: { clientX: number; currentTarget: EventTarget }) => {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    return Math.max(range.start, Math.min(range.end, range.start + ((e.clientX - r.left - TPAD) / (r.width - 2 * TPAD)) * range.span));
+    return p.timelineSessionTime(Math.max(range.start, Math.min(range.end, range.start + ((e.clientX - r.left - TPAD) / (r.width - 2 * TPAD)) * range.span)));
   };
   const onMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const t = posOf(e);
@@ -55,9 +55,9 @@ export function Timeline() {
     let text = `${clock(t)} · ${nm}${sec} · ${cvS(p.units, interp(l.ch.t, l.ch.spd, Math.max(0, rel))).toFixed(0)} ${sU(p.units)}`;
     const r = e.currentTarget.getBoundingClientRect();
     const cx0 = e.clientX - r.left;
-    const mk = p.user.marks.find((m) => Math.abs(timeX(p, m.t, r.width) - cx0) < 7);
-    const al = p.analysis.alerts.find((a) => Math.abs(timeX(p, a.t, r.width) - cx0) < 6);
-    const ce = p.user.ce.find((c) => Math.abs(timeX(p, c.t, r.width) - cx0) < 6);
+    const mk = p.user.marks.find((m) => p.timelineAxis.includes(m.t) && Math.abs(timeX(p, m.t, r.width) - cx0) < 7);
+    const al = p.analysis.alerts.find((a) => p.timelineAxis.includes(a.t) && Math.abs(timeX(p, a.t, r.width) - cx0) < 6);
+    const ce = p.user.ce.find((c) => p.timelineAxis.includes(c.t) && Math.abs(timeX(p, c.t, r.width) - cx0) < 6);
     if (mk) text = "Note · " + clock(mk.t) + " · " + mk.text;
     else if (ce) text = "Cone · " + p.lapLabelAt(ce.t) + " · " + clock(ce.t);
     else if (al) text = "Alert · " + al.d.label + " " + fmtLimit(p.units, al.d, al.val) + " (limit " + fmtLimit(p.units, al.d, al.lim) + ") · " + clock(al.t);
@@ -80,7 +80,7 @@ export function Timeline() {
         aria-valuemax={Math.round(p.TD / 1000)}
         aria-valuenow={Math.round(p.T / 1000)}
         tabIndex={0}
-        onDoubleClick={() => p.setTimelineWindow(0, p.TD)}
+        onDoubleClick={() => p.setTimelineWindow(0, p.timelineDuration)}
         onKeyDown={e => { if (e.key === "+" || e.key === "=") p.zoomTimeline(2); else if (e.key === "-") p.zoomTimeline(0.5); else if (e.key === "ArrowLeft" || e.key === "ArrowRight") { const delta = range.span * (e.key === "ArrowLeft" ? -0.2 : 0.2); p.setTimelineWindow(range.start + delta, range.end + delta); } else return; e.preventDefault(); e.stopPropagation(); }}
         onPointerDown={(e) => {
           down.current = true;
@@ -96,7 +96,7 @@ export function Timeline() {
           p.schedule();
         }}
       />
-      {range.span < p.TD && <input className="timeline-pan" type="range" aria-label="Timeline window start" min={0} max={p.TD - range.span} step={20} value={range.start} onInput={e => p.setTimelineWindow(+e.currentTarget.value, +e.currentTarget.value + range.span)} />}
+      {range.span < p.timelineDuration && <input className="timeline-pan" type="range" aria-label="Timeline window start" min={0} max={p.timelineDuration - range.span} step={20} value={range.start} onInput={e => p.setTimelineWindow(+e.currentTarget.value, +e.currentTarget.value + range.span)} />}
       <div className="tltip" id="tltip" ref={tip} hidden />
     </div>
   );

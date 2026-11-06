@@ -91,6 +91,7 @@ export function Transport({ height = 108, onHeight, docked = false, onPlacement 
         onPointerUp={() => { resize.current = null; }} onPointerCancel={() => { resize.current = null; }} onDoubleClick={() => onHeight(48)}
         onKeyDown={e => { if (e.key === "ArrowUp" || e.key === "ArrowDown") { onHeight(Math.max(48, Math.min(240, height + (e.key === "ArrowUp" ? 12 : -12)))); e.preventDefault(); e.stopPropagation(); } }}><span /></div>}
       <div className="trow">
+        <span className="timeline-legend" aria-label="Lap colours: purple fastest, yellow slowest, green other laps"><span className="best">Best</span><span className="slowest">Slowest</span><span className="other">Other</span></span>
         <button className="btn" type="button" title="Previous lap (Shift+Left)" aria-label="Previous lap" onClick={() => p.stepLap(-1)}>⏮</button>
         <button className="btn play" type="button" title="Play or pause (Space)" onClick={() => p.play(!p.playing)}>{p.playing ? "Pause" : "Play"}</button>
         <button className="btn" type="button" title="Next lap (Shift+Right)" aria-label="Next lap" onClick={() => p.stepLap(1)}>⏭</button>
@@ -105,7 +106,7 @@ export function Transport({ height = 108, onHeight, docked = false, onPlacement 
         {p.cmp === "lap" && (
           <span className="rivalpick">
             <select aria-label="Lap to use as the ghost" value={p.ghostLapI} onChange={(e) => p.set("ghostLapI", +e.target.value)}>
-              {TLAPS.filter((l) => l.kind !== "partial").map((l) => {
+              {TLAPS.filter((l) => l.kind === "lap").map((l) => {
                 const i = laps.indexOf(l);
                 return <option key={i} value={i}>{l.kind === "out" ? "Out lap" : l.name} · {fmt(l.dur)}</option>;
               })}
@@ -133,6 +134,7 @@ export function Transport({ height = 108, onHeight, docked = false, onPlacement 
           </div>
         </Menu>
         <Menu label={p.loopA != null || p.loopB != null ? "More •" : "More"} right>
+          <label className="chk"><input type="checkbox" checked={p.showBetweenLaps} onChange={e => p.setShowBetweenLaps(e.target.checked)} />Show between laps</label>
           {onPlacement && <button className="btn" aria-label={docked ? "Expand timeline across workspace" : "Dock timeline into track"} onClick={onPlacement}>{docked ? "Undock timeline" : "Dock timeline into track"}</button>}
           <div className="mrow">
             <span className="lab">Loop</span>

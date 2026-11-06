@@ -53,7 +53,7 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
   const zr = p.sc / p.scFit;
   const wS = Math.min(3, Math.sqrt(zr));
   const tw = Math.min(2.2, Math.sqrt(zr));
-  const BL = roadOf(s.laps[p.baseIdx]);
+  const ghost = p.refLap();
   const path = (pts: ArrayLike<number>[]) => {
     ctx.beginPath();
     pts.forEach((q, i) => (i ? ctx.lineTo(X(q[0]), Y(q[1])) : ctx.moveTo(X(q[0]), Y(q[1]))));
@@ -91,7 +91,7 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
     const ref = s.D.ref;
     const cum = s.D.cum;
     ctx.strokeStyle = pal.track;
-    ctx.lineWidth = 15 * wS;
+    ctx.lineWidth = 11.5 * 0.3048 * p.sc;
     path(ref);
     ctx.stroke();
     ctx.lineWidth = 7 * wS;
@@ -123,20 +123,18 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
 
   /* Shared layout stays continuous; a measured overlay may begin/end at different manual presses. */
   ctx.strokeStyle = pal.track;
-  ctx.lineWidth = 15 * wS;
+  ctx.lineWidth = 11.5 * 0.3048 * p.sc;
   path(s.D.ref);
   ctx.stroke();
-  ctx.lineWidth = 5 * wS;
-  for (let i = 0; i < s.D.ref.length - 1; i++) {
-    const k = s.sectorAt(s.D.cum[i]);
-    ctx.strokeStyle = pal.sector[k];
-    ctx.globalAlpha = p.mode === "sec" ? 0.9 : 0.18;
-    ctx.beginPath();
-    ctx.moveTo(X(s.D.ref[i][0]), Y(s.D.ref[i][1]));
-    ctx.lineTo(X(s.D.ref[i + 1][0]), Y(s.D.ref[i + 1][1]));
-    ctx.stroke();
-  }
-  ctx.globalAlpha = 1;
+  // A neutral guide distinguishes the reference layout from measured lap traces.
+  ctx.save();
+  ctx.strokeStyle = pal.mute;
+  ctx.globalAlpha = 0.5;
+  ctx.lineWidth = 1.25;
+  ctx.setLineDash([7, 6]);
+  path(s.D.ref);
+  ctx.stroke();
+  ctx.restore();
   /* focus glow, brake zone bands */
   if (p.focus) {
     ctx.strokeStyle = p.focus.type === "c" ? pal.s2 : p.focus.type === "s" ? pal.blue : pal.red;
@@ -168,14 +166,16 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
     });
     ctx.globalAlpha = 1;
   }
-  ctx.strokeStyle = pal.base;
-  ctx.globalAlpha = 0.55;
-  ctx.lineWidth = 1;
-  ctx.setLineDash([2, 3]);
-  path(BL);
-  ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.globalAlpha = 1;
+  if (ghost && ghost !== L) {
+    ctx.save();
+    ctx.strokeStyle = pal.ink;
+    ctx.globalAlpha = 0.65;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([2, 4]);
+    path(roadOf(ghost));
+    ctx.stroke();
+    ctx.restore();
+  }
   const pts = L.pts;
   const ct = L.ch.t;
   if (p.ghostAll && paint) {
@@ -194,13 +194,13 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
   if (L.kind === "out") ctx.setLineDash([6, 4]);
   // A solid casing separates the selected lap from the road, ghosts and zone bands.
   ctx.strokeStyle = pal.panel;
-  ctx.lineWidth = 10 * tw;
+  ctx.lineWidth = 7 * tw;
   for (const curve of L.curve) segCurve(curve);
   for (let i = 0; i < pts.length - 1; i++) {
     const pp = segPaint(p, L, i, pal);
     ctx.globalAlpha = pp[1] * (ct[i + 1] <= rel ? 1 : 0.8);
     ctx.strokeStyle = pp[0];
-    ctx.lineWidth = 6.5 * tw;
+    ctx.lineWidth = 4 * tw;
     segCurve(L.curve[i]);
   }
   ctx.globalAlpha = 1;
@@ -367,7 +367,7 @@ export function drawMap(p: Player, canvas: HTMLCanvasElement) {
     ctx.font = "600 10px " + pal.fMono; ctx.textAlign = "left"; ctx.textBaseline = "bottom";
     ctx.fillText(marker.label, x + 8, y - 6);
   }
-  const R = p.refLap();
+  const R = ghost;
   if (R && R !== L) {
     const gp = p.replayPosition(R, rel);
     ctx.strokeStyle = pal.mute;

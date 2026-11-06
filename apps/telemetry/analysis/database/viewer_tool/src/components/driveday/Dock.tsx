@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { lsGet, lsSet } from "@/lib/driveday/storage";
+import { AnalysisWindow } from "./AnalysisWindow";
 import { Menu } from "./Menu";
 import { usePlayer, useUi } from "./context";
 import { CarPanel } from "./panels/CarPanel";
@@ -10,8 +11,9 @@ import { ChartPanel, CHARTS } from "./panels/ChartPanels";
 import { ComparePanel } from "./panels/ComparePanel";
 import { CornersPanel } from "./panels/CornersPanel";
 import { EnergyPanel } from "./panels/EnergyPanel";
+import { DriverPanel } from "./panels/DriverPanel";
 import { LapsPanel } from "./panels/LapsPanel";
-import { AboutPanel, AlertsPanel, DebriefPanel, NotesPanel, SetupPanel } from "./panels/TextPanels";
+import { AlertsPanel, DebriefPanel, NotesPanel, SetupPanel } from "./panels/TextPanels";
 import { TracePanel } from "./panels/TracePanel";
 import { DrivingReviewPanel, QualityPanel, ReportPanel, SetupComparePanel } from "./panels/ReviewPanels";
 
@@ -22,9 +24,10 @@ interface PanelDef {
   body: ReactNode;
 }
 
-const MAIN = ["laps", "trace", "corners", "debrief"];
+const MAIN = ["driver", "laps", "trace", "corners"];
 
 const PANELS: PanelDef[] = [
+  { id: "driver", chip: "Driver", title: "Driver view", body: <DriverPanel /> },
   { id: "laps", chip: "Laps", title: "Laps and cones", body: <LapsPanel /> },
   { id: "trace", chip: "Telemetry", title: "Telemetry by distance", body: <TracePanel /> },
   { id: "corners", chip: "Corners", title: "Corners, straights and braking", body: <CornersPanel /> },
@@ -46,24 +49,34 @@ const PANELS: PanelDef[] = [
     body: <ChartPanel id={c.id} />,
   })),
   { id: "alerts", chip: "Alerts", title: "Limit alerts", body: <AlertsPanel /> },
-  { id: "about", chip: "How it works", title: "How it works", body: <AboutPanel /> },
 ];
 
-/** The panel chips and the one open panel beside the map. */
+/** Independent analysis panels share one playback clock. */
 export function Dock() {
+  const [axis, setAxis] = useState<"vertical" | "horizontal">(() => lsGet("analysis-axis", "vertical"));
+  const changeAxis = (next: "vertical" | "horizontal") => { setAxis(next); lsSet("analysis-axis", next); };
   const p = usePlayer();
   useUi(p);
-  const [open, setOpen] = useState<string | null>(() => { const saved = lsGet<string | null>("panel", "laps"); return saved === "video" ? "laps" : saved; });
+  const [open, setOpen] = useState<string[]>(() => {
+    const saved = lsGet<string | null>("panel", "driver");
+    const stored = lsGet<string[]>("panels", saved ? [saved === "video" ? "laps" : saved] : []);
+    const valid = [...new Set(stored)].filter(id => PANELS.some(panel => panel.id === id));
+    return valid.length || !stored.includes("replay3d") ? valid : ["driver"];
+  });
   useEffect(() => {
-    const select = (event: Event) => { const id = (event as CustomEvent<string | null>).detail; setOpen(id == null || PANELS.some(panel => panel.id === id) ? id : "laps"); p.schedule(true); };
-    window.addEventListener("driveday:panel", select);
-    return () => window.removeEventListener("driveday:panel", select);
+    const select = (event: Event) => {
+      const detail = (event as CustomEvent<string[] | string | null>).detail;
+      const next = [...new Set(Array.isArray(detail) ? detail : detail ? [detail] : [])].filter(id => PANELS.some(panel => panel.id === id));
+      setOpen(next); lsSet("panels", next); p.schedule(true);
+    };
+    window.addEventListener("driveday:panel", select); window.addEventListener("driveday:panels", select);
+    return () => { window.removeEventListener("driveday:panel", select); window.removeEventListener("driveday:panels", select); };
   }, [p]);
   const toggle = (id: string) => {
-    const next = open === id ? null : id;
-    setOpen(next);
-    lsSet("panel", next);
-    p.schedule(true);
+    setOpen(current => {
+      const next = current.includes(id) ? current.filter(value => value !== id) : [...current, id];
+      lsSet("panels", next); lsSet("panel", next[0] ?? null); return next;
+    }); p.schedule(true);
   };
   const label = (d: PanelDef) => {
     if (d.id === "alerts" && p.analysis.alerts.length) return `${d.chip} (${p.analysis.alerts.length})`;
@@ -71,27 +84,26 @@ export function Dock() {
     return d.chip;
   };
   const chip = (d: PanelDef) => (
-    <button key={d.id} className="chip" type="button" aria-pressed={open === d.id} onClick={() => toggle(d.id)}>{label(d)}</button>
+    <button key={d.id} className="chip" type="button" aria-pressed={open.includes(d.id)} onClick={() => toggle(d.id)}>{label(d)}</button>
   );
-  const cur = PANELS.find((d) => d.id === open);
+  const selected = open.map(id => PANELS.find(d => d.id === id)!).filter(Boolean);
   return (
     <aside className="dock" aria-label="Panels">
       <div className="chips" id="chips">
-        {MAIN.map((id) => chip(PANELS.find((d) => d.id === id)!))}
+        {[...new Set([...MAIN, ...open.filter(id => PANELS.some(panel => panel.id === id))])].map((id) => chip(PANELS.find((d) => d.id === id)!))}
+        <button className="chip" type="button" aria-label="Arrange analysis panels side by side" aria-pressed={axis === "horizontal"} onClick={() => changeAxis(axis === "horizontal" ? "vertical" : "horizontal")}>⇄</button>
         <Menu label={p.analysis.alerts.length ? "More •" : "More"} chip wide>
-          {PANELS.filter((d) => !MAIN.includes(d.id)).map(chip)}
+          {PANELS.filter((d) => !MAIN.includes(d.id) && !open.includes(d.id)).map(chip)}
         </Menu>
       </div>
-      <div className="panels" id="panels">
-        {cur ? (
-          <section className="pn panel" id={"pn-" + cur.id} key={cur.id}>
-            <div className="pnh">
-              <h3>{cur.title}</h3>
-              <button className="x" type="button" aria-label={"Close " + cur.title} onClick={() => toggle(cur.id)}>×</button>
-            </div>
-            <div className="pnb">{cur.body}</div>
-          </section>
-        ) : (
+      <div className={"panels" + (selected.length > 1 ? " multi-panels" : "")} id="panels" data-axis={axis}>
+        {selected.length ? selected.map(cur => (
+          <AnalysisWindow key={cur.id} id={cur.id} title={cur.title} layoutKey={axis + open.join(",")} onClose={() => toggle(cur.id)} onMove={(source, side) => { if (side) changeAxis("horizontal"); setOpen(current => {
+            const next = [...current]; const from = next.indexOf(source), to = next.indexOf(cur.id);
+            if (from < 0 || to < 0) return current;
+            next.splice(from, 1); const target = next.indexOf(cur.id); next.splice(target + (side === "right" ? 1 : 0), 0, source); lsSet("panels", next); return next;
+          }); }}>{cur.body}</AnalysisWindow>
+        )) : (
           <div className="empty">No panels open. Pick one above.</div>
         )}
       </div>
