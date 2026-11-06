@@ -31,6 +31,19 @@ def _str(name: str, default: str) -> str:
     return raw
 
 
+def _bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return default
+    val = raw.strip().lower()
+    if val in ("1", "true", "yes", "on"):
+        return True
+    if val in ("0", "false", "no", "off"):
+        return False
+    # Refuse to guess: these switches arm a delete on the car.
+    raise ValueError(f"{name} must be true or false, got {raw!r}")
+
+
 @dataclass(frozen=True)
 class Config:
     # --- HTTP server ---
@@ -66,6 +79,17 @@ class Config:
     # Cap on the (linear) backoff between retries. Transient "car unreachable"
     # failures retry forever, so this bounds how often they poll for the Pi.
     rsync_max_backoff_s: float = _float("LOGSYNC_RSYNC_MAX_BACKOFF_S", 60.0)
+
+    # --- Delete from the car after a verified sync (off by default) ---
+    # When on, a job that completes removes from the Pi each of its files whose
+    # server copy is byte-identical (same size + sha256). See pi.delete_verified.
+    delete_after_sync: bool = _bool("LOGSYNC_DELETE_AFTER_SYNC", False)
+    # Dry run: verify and record what would be deleted, but remove nothing.
+    # On by default, so turning the flag above on is not destructive by itself.
+    delete_dry_run: bool = _bool("LOGSYNC_DELETE_DRY_RUN", True)
+    # Never delete a file modified within this many seconds (by the Pi's own
+    # clock): the logger may still be writing it.
+    delete_min_age_s: int = _int("LOGSYNC_DELETE_MIN_AGE_S", 300)
 
     # --- Motion detection (Postgres orion DB) ---
     pg_dsn: str = _str("LOGSYNC_PG_DSN", "")  # if set, overrides the parts below

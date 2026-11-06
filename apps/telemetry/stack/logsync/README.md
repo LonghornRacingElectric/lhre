@@ -94,6 +94,31 @@ See the repository-root `.env.example`. Key knobs: `LOGSYNC_SPEED_THRESHOLD_MPS`
 `LOGSYNC_MOTION_STALENESS_MS`, `LOGSYNC_DEFAULT_BWLIMIT_KBPS`,
 `BEVO_SSH_TARGET`, `BEVO_LOG_DIR`.
 
+### Delete from the car after sync (optional, off by default)
+By default nothing is ever removed from the car. With
+`LOGSYNC_DELETE_AFTER_SYNC=true`, a job that reaches **completed** then checks
+each of its files on the Pi and removes the ones whose server copy is
+byte-identical (same size and sha256, hashed on the Pi right before the `rm`).
+Failed, canceled and paused jobs delete nothing.
+
+- `LOGSYNC_DELETE_DRY_RUN` (default `true`): run the checks and record what
+  would be deleted, remove nothing. Set it to `false` to really delete.
+- `LOGSYNC_DELETE_MIN_AGE_S` (default `300`): a log modified more recently than
+  this (by the Pi's clock) is kept, as is the newest log on the car: the logger
+  may still be writing them.
+
+Set these in `apps/telemetry/stack/logsync/.env` (next to `docker-compose.yml`)
+or in the shell that starts the container, then re-create the container. Not in
+the repository-root `.env`: the compose file's own defaults override values from
+there. Run with the dry run on first and read a job's `deletions` before turning
+it off.
+
+The outcome is recorded per file in the job's `deletions` list (`GET /jobs/{id}`):
+`deleted`, `would_delete`, `skipped` or `failed`, each with a reason. A delete
+that fails shows as the job's error text; the job stays completed. Hashing reads
+every file in full on the Pi, so the worker stays busy for a while after a large
+job completes.
+
 ### Storage
 Staging + state are bind-mounted from `${LOGSYNC_DATA_DIR}/{staging,state}`
 (default `./data` locally; the dev tool sets it to the SSD on the deploy box).
