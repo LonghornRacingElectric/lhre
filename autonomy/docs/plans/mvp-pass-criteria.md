@@ -96,7 +96,7 @@ the hardware half of the loop exists.
   the gate scorer (`testing/tools/gate/score_gate.py`), not by metrics.
 - Once the mission completes, pursuit ramps the speed command down at
   `max_decel` and Gazebo's wheels follow it exactly, so sim stop distances
-  are optimistic until #116 adds a regen and spring-brake model.
+  are optimistic until #199 adds a regen and spring-brake model.
 
 ## Waivers if something misses 10/28
 
@@ -125,7 +125,7 @@ No waiver for EKF, LiDAR, or the reference metrics. Those are the MVP.
   [testing/README.md](../../testing/README.md): the table and chosen plots.
   Raw recordings go to SharePoint.
 - **Regression after 10/28:** #91's `run_headless.sh` on the kinematic
-  stack, cheap enough for CI. Whether it gates PRs in `autonomy.yml` is a
+  stack, cheap enough for CI. Whether it gates PRs in `ci.yml` is a
   separate decision.
 
 ## Open questions

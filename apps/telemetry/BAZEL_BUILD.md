@@ -129,7 +129,7 @@ bazel run //apps/telemetry/stack:requirements.update
 ```
 
 The Kafka bridge keeps `go.mod` and `go.sum` for Go tooling; rules_go and
-Gazelle use those files for the Bazel graph. The telemetry workflow builds
+Gazelle use those files for the Bazel graph. The telemetry CI job builds
 `all_images`, runs `core_smoke_tests`, then starts the core with Compose
 `--no-build` before integration tests. Docker-backed tests are tagged `manual`
 and `local`, so normal remote `bazel test //...` stays hermetic.

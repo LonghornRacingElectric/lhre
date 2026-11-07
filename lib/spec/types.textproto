@@ -1,6 +1,327 @@
 # proto-file: lib/spec/proto/can_spec.proto
 # proto-message: lhre.canspec.SpecFile
 
+enum_type {
+  name: "BenchCommand"
+  description: "Bring-up test image command."
+  value {
+    name: "NONE"
+    description: "No-op"
+  }
+  value {
+    name: "SET_OUTPUTS"
+    number: 1
+    description: "Drive the outputs selected by output_mask to output_values"
+  }
+  value {
+    name: "PLAY_TONE"
+    number: 2
+    description: "Play tone_frequency at tone_amplitude for tone_duration through the amp"
+  }
+  value {
+    name: "STOP_TONE"
+    number: 3
+    description: "Stop the tone and disable the amp"
+  }
+  value {
+    name: "WATCHDOG_TEST"
+    number: 4
+    description: "Stop feeding the watchdog so it resets the MCU"
+  }
+  value {
+    name: "RELEASE_OUTPUTS"
+    number: 5
+    description: "Return every output to its safe state"
+  }
+}
+enum_type {
+  name: "EventMode"
+  description: "Dynamic event parameter set selected on the VCU."
+  value {
+    name: "UNASSIGNED"
+    description: "Firmware default parameter set"
+  }
+  value {
+    name: "ACCELERATION"
+    number: 1
+    description: "Acceleration"
+  }
+  value {
+    name: "SKIDPAD"
+    number: 2
+    description: "Skidpad"
+  }
+  value {
+    name: "AUTOCROSS"
+    number: 3
+    description: "Autocross"
+  }
+  value {
+    name: "ENDURANCE"
+    number: 4
+    description: "Endurance"
+  }
+}
+enum_type {
+  name: "HvcState"
+  description: "HVC state machine state as broadcast in HVC_CONTACTOR_STATUS."
+  value {
+    name: "NOT_ENERGIZED"
+    description: "Contactors open"
+  }
+  value {
+    name: "PRECHARGING"
+    number: 1
+    description: "Precharge in progress"
+  }
+  value {
+    name: "ENERGIZED"
+    number: 2
+    description: "Precharge done, AIRs closed"
+  }
+  value {
+    name: "CHARGING_PRECHARGING"
+    number: 3
+    description: "Precharging for the charger"
+  }
+  value {
+    name: "CHARGING"
+    number: 4
+    description: "Charging"
+  }
+}
+enum_type {
+  name: "ResetCause"
+  description: "Why the VCU last reset (lhal::ResetCause)."
+  value {
+    name: "UNKNOWN"
+    description: "No flag set"
+  }
+  value {
+    name: "POWER_ON"
+    number: 1
+    description: "Power-on or brown-out"
+  }
+  value {
+    name: "PIN"
+    number: 2
+    description: "NRST pin (button, debugger)"
+  }
+  value {
+    name: "SOFTWARE"
+    number: 3
+    description: "Software reset"
+  }
+  value {
+    name: "INDEPENDENT_WATCHDOG"
+    number: 4
+    description: "IWDG timeout"
+  }
+  value {
+    name: "WINDOW_WATCHDOG"
+    number: 5
+    description: "WWDG timeout"
+  }
+  value {
+    name: "LOW_POWER"
+    number: 6
+    description: "Low-power reset"
+  }
+  value {
+    name: "OPTION_BYTE_LOAD"
+    number: 7
+    description: "Option byte load"
+  }
+}
+enum_type {
+  name: "ShutdownLoopState"
+  description: "Shutdown loop state from the VCU\'s taps either side of the BSPD relay."
+  value {
+    name: "UNKNOWN"
+    description: "Not yet sampled"
+  }
+  value {
+    name: "CLOSED"
+    number: 1
+    description: "Upstream live and BSPD relay closed"
+  }
+  value {
+    name: "BSPD_RELAY_OPEN"
+    number: 2
+    description: "Upstream live, downstream dead: BSPD relay open"
+  }
+  value {
+    name: "UPSTREAM_OPEN"
+    number: 3
+    description: "No voltage reaching the VCU: loop open upstream"
+  }
+  value {
+    name: "IMPLAUSIBLE"
+    number: 4
+    description: "Downstream live with upstream dead: sense or harness fault"
+  }
+}
+enum_type {
+  name: "VcuFaultCode"
+  description: "Highest-priority active VCU fault (bit index + 1 of VcuFaultBits)."
+  value {
+    name: "NONE"
+    description: "No active fault"
+  }
+  value {
+    name: "APPS_IMPLAUSIBLE"
+    number: 1
+    description: "APPS1/APPS2 deviation > 10% for > 100 ms (T.4.2)"
+  }
+  value {
+    name: "APPS1_RANGE"
+    number: 2
+    description: "APPS1 outside its open/short window"
+  }
+  value {
+    name: "APPS2_RANGE"
+    number: 3
+    description: "APPS2 outside its open/short window"
+  }
+  value {
+    name: "BSE1_RANGE"
+    number: 4
+    description: "BSE1 outside its open/short window"
+  }
+  value {
+    name: "BSE2_RANGE"
+    number: 5
+    description: "BSE2 outside its open/short window"
+  }
+  value {
+    name: "STEERING_RANGE"
+    number: 6
+    description: "Steering sensor outside its window (diagnostic only)"
+  }
+  value {
+    name: "BRAKE_FLAG_LATCHED"
+    number: 7
+    description: "Board brake comparator flag (B1/B2 disconnect/overvoltage) seen; latched until a dash reset"
+  }
+  value {
+    name: "BRAKE_OVER_THROTTLE"
+    number: 8
+    description: "Brake pressed with APPS > 25%; torque cut until APPS < 5% (EV.4.7)"
+  }
+  value {
+    name: "SHUTDOWN_OPEN"
+    number: 9
+    description: "Shutdown loop not closed per the VCU sense taps"
+  }
+  value {
+    name: "HVC_TIMEOUT"
+    number: 10
+    description: "HVC contactor status timed out"
+  }
+  value {
+    name: "INVERTER_TIMEOUT"
+    number: 11
+    description: "Required inverter status, speed, current or voltage feedback timed out"
+  }
+  value {
+    name: "PDU_TIMEOUT"
+    number: 12
+    description: "PDU BSE3 timed out"
+  }
+  value {
+    name: "INVERTER_FAULT"
+    number: 13
+    description: "Inverter reports POST or run faults"
+  }
+  value {
+    name: "BSPD_TRIPPED"
+    number: 14
+    description: "Hardware BSPD latch set (power cycle to clear)"
+  }
+  value {
+    name: "HARD_BRAKE_MISMATCH"
+    number: 15
+    description: "Firmware hard-brake view disagrees with the BSPD comparators (diagnostic)"
+  }
+  value {
+    name: "DUI_TIMEOUT"
+    number: 16
+    description: "DUI driver inputs timed out (diagnostic)"
+  }
+  value {
+    name: "BSE3_UNAVAILABLE"
+    number: 17
+    description: "BSE3 from the PDU unavailable; regen blending disabled"
+  }
+  value {
+    name: "CONTACTORS_OPEN"
+    number: 18
+    description: "HVC not energized or a contactor reads open while driving"
+  }
+  value {
+    name: "MOTOR_DISCONNECT"
+    number: 19
+    description: "motor_disconnect input asserted; torque cut and DRIVE exit"
+  }
+  value {
+    name: "SHUTDOWN_SENSE_IMPLAUSIBLE"
+    number: 20
+    description: "Shutdown out tap high with in tap low (diagnostic)"
+  }
+  value {
+    name: "ADC_STALE"
+    number: 21
+    description: "An ADC bank stopped completing scans; torque cut"
+  }
+  value {
+    name: "COOLANT_OVERTEMP"
+    number: 22
+    description: "TSM coolant loop at or above the overtemp limit; latched until a dash reset (diagnostic)"
+  }
+}
+enum_type {
+  name: "VcuStateMachine"
+  description: "Top-level VCU state machine state."
+  value {
+    name: "INIT"
+    description: "Booting; outputs safe"
+  }
+  value {
+    name: "IDLE"
+    number: 1
+    description: "LV on, tractive system off (LV_ON)"
+  }
+  value {
+    name: "DRIVE"
+    number: 2
+    description: "Ready to drive; torque commands live"
+  }
+  value {
+    name: "FAULT"
+    number: 3
+    description: "Left DRIVE on a fault; torque zero until the cause clears and RTD is repeated"
+  }
+  value {
+    name: "PRECHARGE"
+    number: 4
+    description: "HVC precharging"
+  }
+  value {
+    name: "TS_ACTIVE"
+    number: 5
+    description: "Tractive system energized; drive preconditions not all met"
+  }
+  value {
+    name: "RTD_WAIT"
+    number: 6
+    description: "All drive preconditions met; waiting for the RTD press"
+  }
+  value {
+    name: "BSPD_TRIPPED"
+    number: 7
+    description: "Hardware BSPD latched; terminal until power cycle"
+  }
+}
 bitfield_type {
   name: "AppsFaults"
   description: "Legacy apps_faults flags from lhre-2026."
@@ -256,6 +577,178 @@ bitfield_type {
       field: "temp_output_2"
       id: 34
     }
+  }
+}
+bitfield_type {
+  name: "VcuDigitalInputs"
+  description: "VCU digital inputs as read (true = asserted)."
+  bit {
+    name: "b1_disconnect"
+    description: "BSE1 below the BSPD disconnect threshold"
+  }
+  bit {
+    name: "b1_overvoltage"
+    description: "BSE1 above the BSPD overvoltage threshold"
+  }
+  bit {
+    name: "b2_disconnect"
+    description: "BSE2 below the BSPD disconnect threshold"
+  }
+  bit {
+    name: "b2_overvoltage"
+    description: "BSE2 above the BSPD overvoltage threshold"
+  }
+  bit {
+    name: "hard_braking"
+    description: "BSPD hard braking (both BSE above threshold)"
+  }
+  bit {
+    name: "combined_condition"
+    description: "BSPD hard braking AND motor power"
+  }
+  bit {
+    name: "fault_confirmed"
+    description: "BSPD timer elapsed"
+  }
+  bit {
+    name: "latch_state"
+    description: "BSPD latch set: relay open"
+  }
+  bit {
+    name: "linelock_out"
+    description: "Gated line lock output (Linelock_Ctrl AND NOT hard braking)"
+  }
+  bit {
+    name: "motor_power"
+    description: "Motor power above the 5 kW signal"
+  }
+  bit {
+    name: "motor_disconnect"
+    description: "Motor disconnect signal"
+  }
+  bit {
+    name: "rtd_switch"
+    description: "Ready-to-drive switch pressed"
+  }
+}
+bitfield_type {
+  name: "VcuDigitalOutputs"
+  description: "VCU digital outputs as commanded (true = pin high)."
+  bit {
+    name: "linelock_ctrl"
+    description: "Line lock request into the hardware gate"
+  }
+  bit {
+    name: "amp_enable"
+    description: "PAM8302 enabled (Amp_Shutdown_SW high)"
+  }
+  bit {
+    name: "bms_led"
+    description: "BMS error LED on"
+  }
+  bit {
+    name: "imd_led"
+    description: "IMD error LED on"
+  }
+  bit {
+    name: "crit_stb"
+    description: "Critical CAN transceiver in standby"
+  }
+  bit {
+    name: "data_stb"
+    description: "Data CAN transceiver in standby"
+  }
+}
+bitfield_type {
+  name: "VcuFaultBits"
+  description: "Active VCU faults. Bit i of the wire value is entry i."
+  bit {
+    name: "apps_implausible"
+    description: "APPS1/APPS2 deviation > 10% for > 100 ms (T.4.2)"
+  }
+  bit {
+    name: "apps1_range"
+    description: "APPS1 outside its open/short window"
+  }
+  bit {
+    name: "apps2_range"
+    description: "APPS2 outside its open/short window"
+  }
+  bit {
+    name: "bse1_range"
+    description: "BSE1 outside its open/short window"
+  }
+  bit {
+    name: "bse2_range"
+    description: "BSE2 outside its open/short window"
+  }
+  bit {
+    name: "steering_range"
+    description: "Steering sensor outside its window (diagnostic only)"
+  }
+  bit {
+    name: "brake_flag_latched"
+    description: "Board brake comparator flag (B1/B2 disconnect/overvoltage) seen; latched until a dash reset"
+  }
+  bit {
+    name: "brake_over_throttle"
+    description: "Brake pressed with APPS > 25%; torque cut until APPS < 5% (EV.4.7)"
+  }
+  bit {
+    name: "shutdown_open"
+    description: "Shutdown loop not closed per the VCU sense taps"
+  }
+  bit {
+    name: "hvc_timeout"
+    description: "HVC contactor status timed out"
+  }
+  bit {
+    name: "inverter_timeout"
+    description: "Required inverter status, speed, current or voltage feedback timed out"
+  }
+  bit {
+    name: "pdu_timeout"
+    description: "PDU BSE3 timed out"
+  }
+  bit {
+    name: "inverter_fault"
+    description: "Inverter reports POST or run faults"
+  }
+  bit {
+    name: "bspd_tripped"
+    description: "Hardware BSPD latch set (power cycle to clear)"
+  }
+  bit {
+    name: "hard_brake_mismatch"
+    description: "Firmware hard-brake view disagrees with the BSPD comparators (diagnostic)"
+  }
+  bit {
+    name: "dui_timeout"
+    description: "DUI driver inputs timed out (diagnostic)"
+  }
+  bit {
+    name: "bse3_unavailable"
+    description: "BSE3 from the PDU unavailable; regen blending disabled"
+  }
+  bit {
+    name: "contactors_open"
+    description: "HVC not energized or a contactor reads open while driving"
+  }
+  bit {
+    name: "motor_disconnect"
+    description: "motor_disconnect input asserted; torque cut and DRIVE exit"
+  }
+  bit {
+    name: "shutdown_sense_implausible"
+    description: "Shutdown out tap high with in tap low (diagnostic)"
+  }
+  bit {
+    name: "adc_stale"
+    description: "An ADC bank stopped completing scans; torque cut"
+  }
+  bit {
+    name: "coolant_overtemp"
+    description: "TSM coolant loop at or above the overtemp limit; latched until a dash reset (diagnostic)"
   }
 }
 bitfield_type {

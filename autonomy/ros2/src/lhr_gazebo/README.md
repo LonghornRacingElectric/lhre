@@ -14,8 +14,8 @@ vehicle physics.
 Gazebo preserves main's level LiDAR mount at z=0.55 m and its generated
 cloud frame. The detector reads that mount from vehicle YAML rather than
 requiring a new static TF. Its height band stays in the sensor frame.
-The Mid-360 path uses scan-time TF and base-frame heights instead; do not
-copy its detector thresholds into Gazebo without running a Gazebo gate.
+The kinematic demo uses scan-time TF and base-frame heights by default;
+Gazebo keeps the values below for either cloud source.
 
 These LiDAR-only arguments preserve Gazebo's existing values and are typed
 before node startup. They have no effect in `perception:=sim`.
@@ -39,8 +39,33 @@ and a published scan-time mount transform; select `lidar_height_filter_frame:=ba
 when using ground-relative thresholds. These opt-in configurations need
 Gazebo acceptance testing before changing defaults.
 
-Gazebo still uses its existing uniform-grid VLP-16 model. The imported Livox
-pattern belongs to the kinematic [Mid-360 simulator](../lhr_lidar_sim/README.md).
+The default `lidar_source:=gazebo` retains main's repeating VLP-16-style grid:
+1800 × 16 rays at 10 Hz, 360° horizontal and −15° to +15° vertical coverage,
+0.9–100 m range and 0.003 m range resolution. Select the caster below for
+imported Livox scan directions. Vendor-pattern GPU sampling is deferred to a
+separate experiment.
+
+### GPU grid rollback
+
+**The experimental GPU grid has been reverted.** The 500 × 40 grid contacted
+`cone_blue_10` in two isolated autocross seed-2 runs; the previous main GPU
+model and the vendor-pattern caster passed that same world. The historical
+official bounded gate also reports cone contacts on GPU seeds 2 and 3, while
+the caster passes seeds 1–3 and acceleration. PR #133 now preserves main's
+GPU sampling geometry; the underlying observation failure remains undiagnosed.
+The historical failures use whole-vehicle/cone-base scoring, not measured
+collision forces. Planner and detector defaults are retained. The local
+integrated rollback passes focused seed-2 and seed-3 driving checks with the
+diagnostic timeout; see the [integration results and retained failures](../../../testing/2026-10-24-pr133-integration/README.md#integrated-main-verification-2026-10-25).
+
+The unchanged 0.3 s LiDAR timeout still trips `LIDAR_STALE` locally on both
+the integrated rollback and clean main `0ab0357`, with 0.4–0.5 s acquisition
+gaps. GPU runs using
+`safety_lidar_timeout_s:=1.5` are diagnostics and do not pass the default-timeout
+gate. The integrated tree retains main's camera-free default model and
+startup-readiness gating; the remaining local delivery cause is not established. See
+[#123](https://github.com/LonghornRacingElectric/lhre/issues/123) and the
+[validation record](../../../testing/2026-10-24-pr133-integration/README.md).
 
 ### Range noise
 
@@ -51,7 +76,7 @@ before publishing the point cloud. Its standard deviation comes from
 test's 0.9-1.9 cm floor-patch residuals and matches the existing
 [Mid-360 simulator](../lhr_lidar_sim/README.md)'s range-noise setting.
 Floor-plane residuals are not a direct along-beam calibration; this is a
-provisional noise scale, while Gazebo retains its VLP-16 sampling geometry.
+provisional noise scale, not a calibration of the GPU grid or caster.
 See the [acceptance log](../../../testing/2026-10-04-mid360-acceptance/log.md#outdoors-driveway-in-front-of-the-garage-from-1637).
 
 The setting must be finite and non-negative. Set it to `0.0` for an ideal-range
@@ -61,7 +86,8 @@ limits still apply; angular error, dropout and reflectivity are separate models.
 
 #### Validation (2026-10-23)
 
-Checked against main `1f694cc` in the ROS 2 Jazzy / Gazebo Harmonic container
+Historical VLP-16-grid checks against main `1f694cc`, before the default
+GPU grid replacement, in the ROS 2 Jazzy / Gazebo Harmonic container
 on Apple Silicon with software OpenGL. In the stationary target fixture,
 100 repeated central-beam ranges at 5 m had measured standard deviation
 0.01966 m with the 0.02 m setting and zero with noise disabled.
@@ -83,7 +109,8 @@ not a measured completion probability or validation of the real sensor.
 
 Edit the template or vehicle YAML, then run
 `python3 src/lhr_gazebo/scripts/generate_vehicle_model.py` from the ROS workspace.
-Commit the regenerated model alongside the source. The model consistency tests
+Commit both regenerated models (`model.sdf` and `model_stereo.sdf`) alongside
+the source. The model consistency tests
 run with `colcon test --packages-select lhr_gazebo` and need no GUI.
 
 ## Competition cone assets
@@ -139,6 +166,87 @@ occlusion and sparse returns.
 The launch starts graphical Gazebo and RViz by default. Use `gui:=false` or
 `rviz:=false` for a headless run. See the workspace
 [README](../../README.md) for all launch arguments and topic diagrams.
+
+## Mid-360 cloud source and Foxglove
+
+`lidar_source:=gazebo` selects the GPU sensor by default. To use the loaded
+world with vendor-pattern casting and an optional viewer:
+
+```bash
+ros2 launch lhr_gazebo gazebo_demo.launch.py \
+  track_style:=autocross perception:=lidar estimator:=ekf \
+  lidar_source:=mid360 gui:=false rviz:=false foxglove:=true foxglove_port:=8767
+```
+
+Connect to `ws://localhost:8767` and import `autonomy/ros2/foxglove/lhr_gazebo.json`.
+See the [Gazebo layout guide](../../foxglove/README.md) for panel meanings,
+recording, validation and a visual checklist. The viewer includes primitive
+car markers; no mesh server is needed. RViz is optional.
+
+With `foxglove:=true`, `world_viz` reads the selected rendered world and
+publishes translucent nominal cone envelopes on `/lhr/viewer/cones_truth`
+and the fixed reference path on `/lhr/viewer/centerline_truth`.
+These are viewer-only topics: LiDAR perception and planning still use
+`/lhr/sensor/cones_detected`, and `/lhr/track/cones` remains absent in LiDAR
+mode. World/acceleration selection is fixed by launch, not an independent
+viewer setting. Foxglove works in either perception mode and defaults to
+`foxglove:=false foxglove_port:=8765`. The pose comparison layout expects
+`estimator:=ekf`, and its metrics panel expects `enable_metrics:=true`.
+
+Custom WebSocket clients should offer `foxglove.sdk.v1` as well as the legacy
+`foxglove.websocket.v1`. The installed SDK-based bridge accepted the former
+and streamed PointCloud2; a legacy-only probe received HTTP 400. The
+[upstream handshake](https://github.com/foxglove/foxglove-sdk/blob/main/rust/foxglove/src/websocket/handshake.rs)
+rejects clients without a supported subprotocol. This protocol check does not
+verify the graphical layout.
+
+`mid360` requires `perception:=lidar`. The caster reads the resolved SDF and
+Gazebo truth pose; perception still receives estimated odometry under EKF.
+Unsupported caster worlds fail in launch setup before processes start; the
+standalone sensor also validates them. Flat ground and nominal upright cone
+includes are supported, not arbitrary obstacles or terrain.
+An explicit missing `world:=...` fails instead of falling back to another track.
+With truth-mode odometry faults the caster reads the bridge's clean
+`/lhr/vehicle/odom_raw`; with EKF it reads `/lhr/vehicle/odom_truth`.
+Only the driving odometry passes through the fault injector, so an odometry
+fault cannot remove cones from the synthetic sensor's input scene.
+Only the selected cloud owns `/lhr/lidar/points`; the GPU comparison moves to
+`/lhr/lidar/gazebo_points`. The existing driving nodes and defaults are retained.
+`lidar_drop` intercepts the selected producer, including Mid-360.
+
+The internal read-only `world_sdf` is bound to launch's `world`, and `seed`
+reaches the caster as an integer. Mount, motion and clutter study settings are
+fixed in world mode; see [sensor limits](../lhr_lidar_sim/README.md#gazebo-world-input).
+
+The following typed startup arguments affect only `lidar_source:=mid360`:
+
+| Argument | Default |
+| --- | --- |
+| `mid360_frame_rate_hz` | `10.0` |
+| `mid360_point_rate_hz` | `200000.0` |
+| `mid360_max_range_m` | `40.0` |
+| `mid360_range_noise_std_m` | vehicle YAML, currently `0.02` m |
+| `mid360_dropout_rate` | `0.0` |
+| `mid360_elevation_profile` | `livox` (`rosette` / `uniform` are approximations) |
+| `mid360_return_profile` | `baseline` (`acceptance_overcast` is an empirical profile) |
+
+For example, `mid360_range_noise_std_m:=0 mid360_max_range_m:=30` starts the
+caster with ideal ranges limited to 30 m. The noise default shares the GPU
+sensor's vehicle-YAML value; this override affects only the caster. GPU noise
+still requires model regeneration. Record the source and effective settings
+with comparison results; the generic `max_range_m` controls `sensor_sim`, not
+the caster. These modes do not share a physical accuracy guarantee.
+
+World mode intentionally exposes no mount, motion-distortion or clutter launch
+controls: they are fixed to the shared mount, snapshot scans and no synthetic
+clutter. The internal world path follows `world`; the 0.1 m sensor minimum is
+fixed. Study those alternatives in marker mode instead.
+
+On Wayland with X11 available, Gazebo/RViz select `xcb` unless another backend
+is explicitly chosen. Gazebo uses the packaged Fontconfig configuration;
+an explicit `FONTCONFIG_FILE` takes precedence. These overrides are scoped
+to the launched processes. The packaged font configuration caches under the
+user's XDG cache directory rather than rescanning without a cache on each start.
 
 Every argument the launch forwards to a node carries the node's declared
 type, so a whole number like `v_max:=8` still reaches `pure_pursuit` as a
@@ -217,7 +325,7 @@ driving.
 | `ekf_kill`, `controller_kill` | `pkill -9` the node |
 | `controller_pause` | `SIGSTOP` the controller, `SIGCONT` after `fault_duration_s` (with the default 0 it stays frozen) |
 | `odom_nan`, `odom_spike` | The odometry producer (the EKF, or the bridge under `estimator:=truth`) publishes `/lhr/vehicle/odom_raw`; the injector relays it, corrupted |
-| `lidar_drop` | The bridge publishes `/lhr/lidar/points_raw`; the injector stops relaying |
+| `lidar_drop` | The selected source publishes `/lhr/lidar/points_raw`; the injector stops relaying |
 | `cmd_nan` | `pure_pursuit` publishes `/lhr/vehicle/cmd_raw`; the injector relays it with NaN steering |
 | `steer_freeze` | `joint_cmd_adapter` reads `/lhr/vehicle/cmd_actuated`, which the injector holds at the fault's steering angle |
 
@@ -284,11 +392,32 @@ separation, rather than assuming a center from the staging distance. It uses
 the initial vehicle heading to resolve orientation. Acquisition reports include
 the number of retained center candidates and refined pose hypotheses.
 
-`perception:=lidar` applies the same planner view filter and detector range;
-there is no orange classification in that pipeline, so acquisition cannot
-creep or authorize event laps without independently verified orange and
-blue/yellow classifications. The demo above uses
-ideal labelled detections and truth odometry; it is not the no-shortcuts gate.
+For LiDAR perception, enable the existing camera fusion and stereo rig:
+
+```bash
+ros2 launch lhr_gazebo gazebo_demo.launch.py mission:=skidpad track_style:=skidpad \
+  perception:=lidar estimator:=truth enable_stereo_camera:=true \
+  enable_camera_lidar_fusion:=true gui:=false rviz:=false enable_metrics:=false
+```
+
+LiDAR skidpad launch requires fusion and `require_camera_colors:=true`.
+`cone_topic` defaults to `/lhr/perception/cones_verified` under LiDAR and the
+simulated sensor topic otherwise. Only fresh confirmed camera colors reach
+acquisition; inferred sides remain available to other missions. A repeated
+exposure cannot satisfy another stable frame. Camera loss stops approach and
+latches a hold if a route has started. Orange event roles are validated by
+position in the fitted layout; physical small/large size is not measured.
+A measured pair across the lane beside the fitted timing line is required;
+the farther orange row may be occluded by the nearer row.
+
+Skidpad uses `lidar_cluster_radius:=0.15` and `lidar_dedup_radius:=0.3` to
+keep its timing cones separate from the nearby inner-circle cones. Both are
+typed launch arguments; other missions retain 0.5 and 1.5 respectively.
+The camera samples the lower cone body at `fusion_sample_height_m:=0.1`
+with `fusion_pixel_margin:=2.0`, avoiding the small cone's white stripe and
+ambiguous nearby patches. Other missions retain 0.1625 m and 6 pixels.
+These are simulation settings, not validated physical detector tuning.
+The sim/truth demo above remains the baseline, not a no-shortcuts gate claim.
 
 All [acquisition thresholds](../lhr_track_builder/README.md#skidpad-planning)
 are launch arguments with matching defaults/types. `fov_deg` / `max_range_m`
@@ -315,7 +444,15 @@ colcon test --packages-select lhr_gazebo
 colcon test-result --verbose
 ```
 
+Source tests cover typed startup, truth/EKF wiring, unique TF ownership,
+cloud-to-detector output, supported geometry and active-source fault injection.
+Culling tests match unculled intersections exactly. Live checks cover motion,
+Foxglove and emergency stops; they do not establish full-lap acceptance.
+Reported scan rates use simulation time; wall-time rates depend on Gazebo speed.
+
 Node cleanup tolerates an already-stopped ROS context after launch shutdown.
+Interrupt-time callback tracebacks remain observable in unchanged main-branch
+nodes, including the default GPU source configuration.
 
 Camera classifier launch tests cover defaults and overrides in both perception
 and estimator modes. Evaluated parameters use JSON encoding for ROS CLI startup
@@ -385,8 +522,8 @@ The 30 Hz configured rate is in simulation time. Software rendering can
 reduce wall-clock throughput. The lazy bridges stop requesting images without
 subscribers, but enabled cameras still render in Gazebo. Disable stereo to
 remove that load entirely.
-Camera color segmentation can now consume the left stream; LiDAR fusion
-remains later work.
+Camera color segmentation and opt-in LiDAR inspection-map fusion consume the
+left stream. In fusion mode, classified camera/LiDAR labels feed boundary planning.
 
 ### Camera color debug view
 
@@ -417,6 +554,47 @@ the cone map or driving behavior.
 The model explicitly publishes vehicle TF on `/model/fsae_vehicle/tf` to
 match the bridge. Harmonic's default is `/model/fsae_vehicle/pose`; leaving
 that implicit prevents `map -> base_link` from reaching ROS in truth mode.
+
+### Camera–LiDAR inspection map
+
+After rebuilding, run:
+
+```bash
+./scripts/run_gazebo_demo.sh perception:=lidar estimator:=truth \
+  enable_stereo_camera:=true enable_camera_lidar_fusion:=true
+```
+
+`enable_camera_lidar_fusion` defaults to `false`. It requires stereo and
+`perception:=lidar`, works with truth or EKF estimation, and independently
+consumes raw left images, matching CameraInfo, stamped TF, and LiDAR maps.
+It does not require the debug classifier. Enable **CameraFusedCones** in the
+stereo RViz config to display `/lhr/perception/cones_fused`; its default is
+hidden, with reliable/transient-local QoS. Hide the original cone display
+when inspecting the colored markers. In fusion mode the planner reads
+`/lhr/perception/cones_classified` with color-aware boundary pairing. This
+output prioritizes fresh confirmed camera observations and falls back to
+the current LiDAR side.
+Enable **ClassifiedCones** to inspect it. Fusion automatically enables the
+existing geometry classifier for fallback, including when the explicit
+`lidar_classify_sides` argument is false. Without fusion, the planner topic
+and pairing/side-inference choices retain their previous behavior. Confirmed
+orange cones keep their LiDAR side/unknown namespace in planning, including
+during camera loss. Their physical color remains orange on the inspection map;
+finish and exit-lane cones are not removed from the acceleration path.
+
+All node settings are exposed with `fusion_` prefixes; color thresholds and
+minimum area reuse `cone_color_*` with or without the debug classifier.
+For example, add `fusion_pixel_margin:=3 fusion_max_color_range_m:=12`.
+`fusion_camera_max_age_sec` defaults to `0.5` ROS seconds; after this interval
+without a usable camera match, the timer republishes the LiDAR fallback even
+without a new map. Missing/ambiguous matches use the current LiDAR side sooner.
+See the [fusion contract and complete parameter table](../lhr_perception/README.md#cameralidar-inspection-map).
+Launch tests cover disabled behavior, invalid combinations, and typed defaults
+and overrides through actual node startup with both estimators. ROS launch
+checks and synthetic image/TF/DDS-to-planner integration run in the isolated
+Docker environment. Manual camera-color and autocross/EKF visuals were also
+confirmed; the [validation record](#fusion-planner-validation-2026-11-01) states
+the remaining limits.
 
 ## Stereo validation
 
@@ -525,3 +703,74 @@ Metrics counts conservative geometric contacts against nominal cone bases,
 including orange cones, and checks the whole YAML vehicle envelope against the
 selected world boundaries. This uses truth poses, not Gazebo contact forces;
 see the [scoring model](../lhr_metrics/README.md#footprint-boundaries-and-contacts).
+
+### Fusion planner validation (2026-11-01)
+
+An isolated Docker ROS 2 Jazzy workspace built the 11 packages through
+`lhr_gazebo`. `colcon test` for `lhr_perception`, `lhr_track_builder`,
+`lhr_gazebo`, and `lhr_vehicle` reported **465 tests, zero errors/failures/skips**.
+This includes actual launch parameter evaluation/node startup in truth/EKF
+modes and synthetic image/TF callbacks whose classified output travels over
+DDS into the planner. The input callbacks are exercised directly in that test;
+it does not verify camera/LiDAR ingress QoS or `/clock` delivery by itself.
+
+A separate 40-second stationary oval check used `auto_go:=false`,
+`perception:=lidar enable_stereo_camera:=true enable_camera_lidar_fusion:=true`,
+truth odometry, software rendering on an isolated virtual display, and no
+Gazebo GUI/RViz windows. The observer received 448 images, 985 calibrations,
+617 inspection maps, 631 classified maps, and 162 planner paths. Inspection
+maps included `blue_cones`, `yellow_cones`, and `unknown_cones`. Occasional
+future-TF requests retried while map/path output continued. These are message
+counts, not scored color accuracy or a throughput guarantee. The run was
+stationary and did not verify moving-track or live camera-interruption behavior.
+
+Celina subsequently confirmed the camera-color visual check in RViz and
+reported that the manual autocross/EKF test looked good. This is user-reported
+visual confirmation; no scored accuracy or driving metrics were recorded.
+A separate outcome for live camera pause/resume has not been recorded here.
+
+Review follow-up: a single late camera image now drops without clearing the
+map, confirmed-orange evidence, or dynamic TF. Regression tests cover small
+and large delays, duplicate frames, and continued processing of fresh frames;
+map and ROS-clock regressions still reset the previous epoch. The affected
+ROS suites passed **467 tests, zero errors/failures/skips** after this fix.
+
+### Acceleration orange-geometry correction
+
+The initial fusion planner output excluded confirmed orange cones. On the
+acceleration course this removed the finish gate and the exit-lane corridor:
+a generated-course regression reproduced a path endpoint at x=72.027 m,
+before the 75 m finish. Orange now retains the detector's `left_cones`,
+`right_cones`, or `cones` namespace for planning; its physical color remains
+orange on the inspection topic. Blue/yellow camera priority is unchanged.
+
+The regression confirms colors on the full generated acceleration layout and
+checks that the path continues beyond the finish with both side-classified
+and unclassified orange inputs. In a separate headless acceleration/EKF run
+with fusion enabled, the mission reached `FINISHED` in 70.7 wall seconds. The
+observer saw up to 18 confirmed orange cones on the inspection map, no
+`orange_cones` on the classified topic, and planner paths extending to x=96 m.
+Final estimated speed was 0.0024 m/s. This was one moving completion check
+with safety/metrics disabled, not a repeated/scored MVP gate campaign; the
+reviewer's full acceleration gate rerun is still needed.
+
+## Skidpad perception validation (2026-11-06)
+
+Built the 12 ROS packages through `lhr_gazebo` in an isolated Jazzy Docker
+container. The seven affected package suites passed 620 tests with no errors,
+failures or skips, including ament lint, typed launch defaults/overrides,
+image/TF-to-skidpad delivery over DDS, stale/duplicate observations, occlusion,
+map identity changes and timing-pair validation. Strict MkDocs passed.
+
+One headless seed-1 run used `perception:=lidar`, `estimator:=truth`, stereo
+and camera fusion, with `ready_hold_sec:=0.5`. It acquired after 4.38 m of
+bounded approach, at 0.0161 m fit RMS with eight inliers per circle and two
+camera-colored inliers per boundary. Its reported crossing sequence was
+`ENTRY -> RIGHT_1 -> RIGHT_2 -> LEFT_1 -> LEFT_2`; it then exited, reached
+`STOPPED`, and the mission reached `FINISHED` without a planner fault.
+No generated cone labels were supplied to fusion or acquisition.
+
+This checks perception and route integration on truth odometry. Metrics and
+safety were disabled; independent cone-contact scoring and the EKF driving
+campaign remain unverified. Bounded-run teardown is not a clean-shutdown
+acceptance check.

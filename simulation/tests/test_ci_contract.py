@@ -6,7 +6,10 @@ import pytest
 import yaml
 
 SIM = Path(__file__).resolve().parents[1]
-WORKFLOW = SIM.parent / ".github" / "workflows" / "simulation.yml"
+WORKFLOWS = SIM.parent / ".github" / "workflows"
+CI = WORKFLOWS / "ci.yml"
+WORKFLOW = WORKFLOWS / "simulation.yml"
+FAST_JOB = "sim-fast"
 SMOKE_STEP = "Check that BobSim loads the vehicle"
 FAST_MAKE_TARGETS = {"build", "smoke", "unit", "check-vehicle"}
 CAR_JOBS = ("four-post", "full-regeneration")
@@ -18,7 +21,7 @@ STANDARD_EVALS = {
     "standard-eval-four-post",
     "standard-eval-all",
 }
-CAR_INPUTS = ["vehicle/vehicle.yml", "simulation/bobsim", "simulation/tools/car.sh", ".github/workflows/simulation.yml"]
+CAR_INPUTS = ["vehicle/vehicle.yml", "simulation/bobsim", "simulation/tools/car.sh", ".github/workflows/ci.yml"]
 NOT_CAR_INPUTS = ["simulation/docs/bobsim.md", "simulation/studies/front-ackermann/README.md", "simulation/bobsim.md"]
 
 
@@ -63,14 +66,20 @@ def workflow():
 
 
 @pytest.fixture(scope="module")
-def jobs(workflow):
-    return workflow["jobs"]
+def ci_jobs():
+    return yaml.safe_load(CI.read_text(encoding="utf-8"))["jobs"]
 
 
 @pytest.fixture(scope="module")
-def fast_job(jobs):
-    assert "fast" in jobs, f"{WORKFLOW.name} has no fast job. It has {sorted(jobs)}."
-    return jobs["fast"]
+def jobs(workflow, ci_jobs):
+    assert not set(workflow["jobs"]) & set(ci_jobs), "simulation.yml and ci.yml share a job id."
+    return {**workflow["jobs"], **ci_jobs}
+
+
+@pytest.fixture(scope="module")
+def fast_job(ci_jobs):
+    assert FAST_JOB in ci_jobs, f"{CI.name} has no {FAST_JOB} job. It has {sorted(ci_jobs)}."
+    return ci_jobs[FAST_JOB]
 
 
 def test_make_smoke_only_loads_the_vehicle():
@@ -145,7 +154,7 @@ def test_four_post_job_runs_only_when_the_car_inputs_change(jobs):
     job = jobs["four-post"]
     assert job["needs"] == "changes"
     assert "needs.changes.outputs.car != 'false'" in job["if"]
-    pattern = re.search(r"paths='([^']+)'", jobs["changes"]["steps"][0]["run"])[1]
+    pattern = re.search(r"area car '([^']+)'", jobs["changes"]["steps"][0]["run"])[1]
     for path in CAR_INPUTS:
         assert re.search(pattern, path), f"The four-post job does not run when {path} changes."
     for path in NOT_CAR_INPUTS:

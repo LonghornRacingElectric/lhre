@@ -1,0 +1,511 @@
+name: CI
+
+# Every check runs from here: on PRs, on pushes to main, weekly and by hand.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "23 7 * * 1"
+  workflow_dispatch:
+
+# A new push to a PR cancels that PR's older run. Every other run gets its
+# own group, so no push, schedule or manual run is dropped.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Jobs skip only when this job says their paths are untouched. Weekly and
+  # manual runs, and pushes too large to list, run everything, except that
+  # the weekly run leaves FourPost to simulation.yml's full regeneration. If this job
+  # fails, every job runs and all-checks still fails.
+  changes:
+    name: Changes
+    runs-on: ubuntu-latest
+    outputs:
+      bazel: ${{ steps.check.outputs.bazel }}
+      sim: ${{ steps.check.outputs.sim }}
+      car: ${{ steps.check.outputs.car }}
+      autonomy: ${{ steps.check.outputs.autonomy }}
+      bevo: ${{ steps.check.outputs.bevo }}
+      docs: ${{ steps.check.outputs.docs }}
+      telemetry: ${{ steps.check.outputs.telemetry }}
+    steps:
+      - name: Find the areas this change touches
+        id: check
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          everything=false
+          case "$EVENT" in
+            pull_request)
+              files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" \
+                --jq '.[] | .filename, (.previous_filename // empty)') ;;
+            push)
+              compare=$(gh api "repos/$GITHUB_REPOSITORY/compare/$BEFORE...$GITHUB_SHA")
+              files=$(jq -r '.files[] | .filename, (.previous_filename // empty)' <<< "$compare")
+              [ "$(jq '.files | length' <<< "$compare")" -lt 300 ] || everything=true ;;
+            *)
+              files=""
+              everything=true ;;
+          esac
+          area() {
+            if [ "$everything" = true ] || grep -qE "$2" <<< "$files"; then echo "$1=true"; else echo "$1=false"; fi | tee -a "$GITHUB_OUTPUT"
+          }
+          if [ "$everything" = true ] || grep -qvE '^(autonomy|simulation)/' <<< "$files"; then echo "bazel=true"; else echo "bazel=false"; fi | tee -a "$GITHUB_OUTPUT"
+          area sim '^(simulation/|vehicle/|\.gitmodules$|\.github/workflows/ci\.yml$)'
+          if [ "$EVENT" = schedule ]; then
+            echo "car=false" | tee -a "$GITHUB_OUTPUT"
+          else
+            area car '^(vehicle/|simulation/bobsim$|simulation/tools/|simulation/Makefile$|simulation/docker-compose\.yml$|\.github/workflows/ci\.yml$)'
+          fi
+          area autonomy '^(autonomy/|simulation/bobsim$|vehicle/|\.github/workflows/ci\.yml$)'
+          area bevo '^(apps/BEVO/|lib/spec/|lib/codegen/telemetry/|platforms/|toolchains/|MODULE\.bazel$|MODULE\.bazel\.lock$|\.github/workflows/ci\.yml$)'
+          area docs '(\.md$|^docs/|^mkdocs\.yml$|^pyproject\.toml$|^uv\.lock$|^\.github/workflows/ci\.yml$)'
+          area telemetry '^(apps/telemetry/|apps/BEVO/|lib/spec/|lib/codegen/telemetry/|\.github/workflows/ci\.yml$)'
+
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # With a BuildBuddy key, builds use the remote cache + executors and
+      # stream results. Fork PRs don't get secrets, so they fall back to a
+      # fully local build (hermetic toolchains make that work anywhere).
+      - name: Configure BuildBuddy
+        env:
+          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
+        run: |
+          if [ -n "$BUILDBUDDY_API_KEY" ]; then
+            echo "common --remote_header=x-buildbuddy-api-key=$BUILDBUDDY_API_KEY" > .bazelrc.user
+          else
+            echo "common --config=local" > .bazelrc.user
+          fi
+          echo "common --config=ci" >> .bazelrc.user
+
+      - name: Check formatting
+        run: bazel run //tools/format:check
+
+  bazel:
+    name: Bazel (Linux)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.bazel != 'false' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      # With a BuildBuddy key, builds use the remote cache + executors and
+      # stream results. Fork PRs don't get secrets, so they fall back to a
+      # fully local build (hermetic toolchains make that work anywhere).
+      - name: Configure BuildBuddy
+        env:
+          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
+        run: |
+          if [ -n "$BUILDBUDDY_API_KEY" ]; then
+            echo "common --remote_header=x-buildbuddy-api-key=$BUILDBUDDY_API_KEY" > .bazelrc.user
+          else
+            echo "common --config=local" > .bazelrc.user
+          fi
+          echo "common --config=ci" >> .bazelrc.user
+
+      - name: Build everything
+        run: bazel build //...
+
+      - name: Test everything
+        run: bazel test //... 2>&1 | tee bazel-test.log
+
+      - name: List failed tests
+        if: failure()
+        run: bash tools/ci/failed_tests_summary.sh bazel-test.log >> "$GITHUB_STEP_SUMMARY"
+
+      # Each image's per-region memory table, copied from its size test's
+      # log onto the run's summary page. !cancelled() so an over-budget
+      # failure still shows which region blew it.
+      - name: Summarize firmware memory use
+        if: ${{ !cancelled() }}
+        run: |
+          for label in $(bazel query 'attr(tags, firmware_size, tests(//...))'); do
+            log="bazel-testlogs/${label#//}"
+            log="${log/://}/test.log"
+            [ -f "$log" ] || continue
+            printf '#### `%s`\n\n' "$label"
+            grep '^|' "$log" || true
+            echo
+          done | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Host C++ tests again with undefined behavior trapping. trap_test is
+      # the canary that proves the sanitizer is on (tools/ubsan/README.md).
+      - name: Test host C++ under UBSan
+        run: >-
+          bazel test --config=ubsan
+          //boards/... //drivers/... //lib/codegen/cpp/... //tools/ubsan:trap_test
+
+  # Windows builds run fully locally (see .bazelrc: Bazel can't drive the
+  # Linux remote executors from a Windows client) but still share the
+  # remote cache. The short --output_user_root keeps Python codegen tools
+  # under Windows' 260-char MAX_PATH — same setup the .bazelrc.user.example
+  # asks of Windows dev machines.
+  bazel-windows:
+    name: Bazel (Windows)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.bazel != 'false' }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Configure Bazel
+        env:
+          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
+        run: |
+          echo "startup --output_user_root=C:/_bzl" > .bazelrc.user
+          if [ -n "$BUILDBUDDY_API_KEY" ]; then
+            echo "common --remote_header=x-buildbuddy-api-key=$BUILDBUDDY_API_KEY" >> .bazelrc.user
+          else
+            echo "common --config=local" >> .bazelrc.user
+          fi
+          echo "common --config=ci" >> .bazelrc.user
+
+      # Runs on main write the cache that PRs restore: GitHub scopes
+      # PR-created caches to their own branch, but caches created on main
+      # are visible to every PR. Keyed on the files that pin external deps,
+      # NOT the commit: an
+      # exact hit skips the multi-GB re-upload at job end (GitHub caps the
+      # whole repo at 10 GB, LRU-evicted). Stale bazel-out contents from
+      # older commits are safe — Bazel's action cache invalidates
+      # correctly — and action results come from BuildBuddy anyway; this
+      # cache exists to skip re-downloading and re-extracting toolchains.
+      - name: Cache Bazel
+        uses: actions/cache@v6
+        with:
+          path: "C:/_bzl"
+          key: ${{ runner.os }}-bazel-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'requirements_lock.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-bazel-
+
+      - name: Build everything
+        run: bazel build //...
+
+      - name: Test everything
+        run: bazel test //... 2>&1 | tee bazel-test.log
+
+      - name: List failed tests
+        if: failure()
+        run: bash tools/ci/failed_tests_summary.sh bazel-test.log >> "$GITHUB_STEP_SUMMARY"
+
+      # The post-job cache save tars C:/_bzl; the Bazel server must not be
+      # holding locks/open files in it when that happens.
+      - name: Shut down Bazel
+        if: always()
+        run: bazel shutdown
+
+  sim-fast:
+    name: Simulation fast checks
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.sim != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      LHRE_REQUIRE_GIT: "1"
+    defaults:
+      run:
+        working-directory: simulation
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: simulation/bobsim
+          file: simulation/bobsim/Dockerfile
+          tags: lhre-simulation:local
+          load: true
+          cache-from: type=gha,scope=lhre-simulation
+          cache-to: type=gha,mode=max,scope=lhre-simulation
+
+      - name: Check that BobSim loads the vehicle
+        run: make smoke
+
+      - name: Check that a changed bundle member has a new bundle_id
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin "+refs/heads/$GITHUB_BASE_REF:refs/remotes/origin/$GITHUB_BASE_REF"
+          make check-vehicle BASE="origin/$GITHUB_BASE_REF"
+
+      - name: Run the unit and contract tests
+        run: make unit
+
+  four-post:
+    name: FourPost
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.car != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: simulation
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Build the image
+        run: make build
+
+      - name: Run FourPost on our car
+        run: make car T=standard-eval-four-post
+
+      - name: Check the FourPost acceptance
+        run: make four-post-acceptance T=standard-eval-four-post
+
+      - name: Upload the run record
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: four-post-${{ github.run_id }}
+          if-no-files-found: warn
+          path: |
+            simulation/out/car/*/identity.json
+            simulation/out/car/*/four_post_acceptance.json
+            simulation/out/car/*/vehicle.yml
+            simulation/out/car/*/*.log
+            simulation/out/car/*/generated_results/*metrics*
+            simulation/out/car/*/runs/*/*/manifest.json
+            simulation/out/car/*/runs/*/*/overrides.txt
+            simulation/out/car/*/runs/*/*/run.log
+            simulation/out/car/*/runs/*/*/*_res.csv
+            !simulation/out/car/**/*.tir
+
+  autonomy:
+    name: Autonomy (colcon)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.autonomy != 'false' }}
+    runs-on: ubuntu-latest
+    container: ros:jazzy-ros-base
+    defaults:
+      run:
+        shell: bash
+        working-directory: autonomy/ros2
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Initialize dynamics dependency
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git -C "$GITHUB_WORKSPACE" submodule update --init --recursive simulation/bobsim
+          echo "BOBSIM_ROOT=$GITHUB_WORKSPACE/simulation/bobsim" >> "$GITHUB_ENV"
+          echo "BOBSIM_VEHICLE=$GITHUB_WORKSPACE/vehicle/vehicle.yml" >> "$GITHUB_ENV"
+
+      # Dependencies come from each package.xml, so declaring one there is
+      # enough. ros_gz is skipped: it pulls in all of Gazebo Harmonic and
+      # nothing in CI launches a simulator (the demos need a display).
+      # `rosdep update` pulls half a dozen YAML files from GitHub and fails
+      # the whole command on one reset connection, hence the retries.
+      - name: Install dependencies
+        run: |
+          apt-get update
+          for attempt in 1 2 3; do
+            rosdep update --rosdistro jazzy && break
+            echo "rosdep update failed (attempt $attempt), retrying"
+            sleep 10
+          done
+          rosdep install --from-paths src --ignore-src -y \
+            --skip-keys "ros_gz_sim ros_gz_bridge ros_gz_interfaces"
+
+      - name: Build
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          colcon build
+
+      - name: Test
+        id: test
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          colcon test --return-code-on-test-failure --event-handlers console_cohesion+
+
+      - name: Report test results
+        if: ${{ !cancelled() && steps.test.outcome != 'skipped' }}
+        run: colcon test-result --verbose
+
+  bevo:
+    name: BEVO Pi binaries
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.bevo != 'false' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # With a BuildBuddy key, builds use the remote cache + executors and
+      # stream results. Fork PRs don't get secrets, so they fall back to a
+      # fully local build (hermetic toolchains make that work anywhere).
+      - name: Configure BuildBuddy
+        env:
+          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
+        run: |
+          if [ -n "$BUILDBUDDY_API_KEY" ]; then
+            echo "common --remote_header=x-buildbuddy-api-key=$BUILDBUDDY_API_KEY" > .bazelrc.user
+          else
+            echo "common --config=local" > .bazelrc.user
+          fi
+          echo "common --config=ci" >> .bazelrc.user
+
+      - name: Cross-compile core daemons for Raspberry Pi OS
+        run: bazel build //apps/BEVO:pi_core_binaries
+
+      - name: Verify static AArch64 executables
+        run: bazel test //apps/BEVO:pi_core_binary_test --test_output=errors
+
+  # On main, docs.yml builds and publishes the site instead.
+  docs:
+    name: Docs
+    needs: changes
+    if: ${{ !cancelled() && github.event_name != 'push' && needs.changes.outputs.docs != 'false' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v9.0.0
+
+      - name: Build site
+        run: uv run --group docs mkdocs build --strict
+
+  # The server stack's integration tests need Kafka, Postgres and MQTT next
+  # to them, which the remote executors cannot provide, so they are tagged
+  # `manual` + `local` and run here against Docker Compose. Telemetry's
+  # build and unit tests run in the Bazel jobs. The services need the
+  # POSTGRES_USER, POSTGRES_PASSWORD, ELECTRIC_PWD, GRAFANA_PWD and
+  # ANALYSIS_PWD repo secrets. The init scripts create databases, not
+  # roles, so POSTGRES_USER must be "electric" and ELECTRIC_PWD must equal
+  # POSTGRES_PASSWORD.
+  telemetry:
+    name: Telemetry
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.telemetry != 'false' }}
+    runs-on: ubuntu-latest
+    env:
+      HAVE_SECRETS: ${{ secrets.POSTGRES_USER != '' && secrets.POSTGRES_PASSWORD != '' && secrets.ELECTRIC_PWD != '' && secrets.GRAFANA_PWD != '' && secrets.ANALYSIS_PWD != '' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Configure BuildBuddy
+        env:
+          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
+        run: |
+          if [ -n "$BUILDBUDDY_API_KEY" ]; then
+            echo "common --remote_header=x-buildbuddy-api-key=$BUILDBUDDY_API_KEY" > .bazelrc.user
+          else
+            echo "common --config=local" > .bazelrc.user
+          fi
+          echo "common --config=ci" >> .bazelrc.user
+
+      - name: Build all telemetry images
+        run: bazel build //apps/telemetry:all_images //lib/codegen/telemetry:server_schema
+
+      - name: Load and smoke-test core images
+        run: bazel test //apps/telemetry:core_smoke_tests --test_output=errors
+
+      - name: Warn that the integration tests cannot run
+        if: env.HAVE_SECRETS != 'true'
+        run: echo "::warning::Not every telemetry secret is set in this run, so the integration tests are skipped. Only the images and smoke tests ran."
+
+      - name: Start services
+        if: env.HAVE_SECRETS == 'true'
+        env:
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          ELECTRIC_PWD: ${{ secrets.ELECTRIC_PWD }}
+          GRAFANA_PWD: ${{ secrets.GRAFANA_PWD }}
+          ANALYSIS_PWD: ${{ secrets.ANALYSIS_PWD }}
+        run: |
+          docker network create telemetry_network || true
+          docker volume create grafana_storage || true
+          docker volume create telemetry_db || true
+          docker volume create kafka_data || true
+          ORION_DB_INIT_SQL="$GITHUB_WORKSPACE/bazel-bin/lib/codegen/telemetry/orion_db_init.sql"
+          export ORION_DB_INIT_SQL
+          {
+            echo "POSTGRES_USER=$POSTGRES_USER"
+            echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD"
+            echo "ELECTRIC_PWD=$ELECTRIC_PWD"
+            echo "GRAFANA_PWD=$GRAFANA_PWD"
+            echo "ANALYSIS_PWD=$ANALYSIS_PWD"
+            echo "ORION_DB_INIT_SQL=$ORION_DB_INIT_SQL"
+          } > .env
+          (cd apps/telemetry/stack/kafka && docker compose up -d --no-build --wait)
+          (cd apps/telemetry/stack/ingest && docker compose up -d --no-build --wait)
+          sleep 10
+          docker ps
+
+      # `local`-tagged tests run on this runner, not on the remote executors.
+      - name: Integration tests
+        if: env.HAVE_SECRETS == 'true'
+        env:
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          ELECTRIC_PWD: ${{ secrets.ELECTRIC_PWD }}
+          GRAFANA_PWD: ${{ secrets.GRAFANA_PWD }}
+          ANALYSIS_PWD: ${{ secrets.ANALYSIS_PWD }}
+        run: |
+          bazel test //apps/telemetry:integration_tests --test_output=errors \
+            --test_env=POSTGRES_USER --test_env=POSTGRES_PASSWORD \
+            --test_env=ELECTRIC_PWD --test_env=GRAFANA_PWD --test_env=ANALYSIS_PWD
+
+      - name: Stop services
+        if: always() && env.HAVE_SECRETS == 'true'
+        env:
+          ORION_DB_INIT_SQL: ${{ github.workspace }}/bazel-bin/lib/codegen/telemetry/orion_db_init.sql
+        run: |
+          (cd apps/telemetry/stack/ingest && docker compose down -v --remove-orphans) || true
+          (cd apps/telemetry/stack/kafka && docker compose down -v --remove-orphans) || true
+          docker network rm telemetry_network || true
+          rm -f .env
+
+  # The only required check, so the ruleset names one check, not ten.
+  # Jobs skip only on an untouched area, and run if Changes fails.
+  all-checks:
+    name: All checks passed
+    needs: [changes, format, bazel, bazel-windows, sim-fast, four-post, autonomy, bevo, docs, telemetry]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/workflows
+
+      - name: Fail unless every job passed or skipped an untouched area
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          {
+            echo "| Job | Result |"
+            echo "|---|---|"
+            jq -r 'to_entries[] | "| \(.key) | \(.value.result) |"' <<< "$NEEDS"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          status=0
+          for job in $(sed -n '/^jobs:/,$p' .github/workflows/ci.yml | grep -E '^  [A-Za-z0-9_-]+:[[:space:]]*$' | tr -d ' :'); do
+            [ "$job" = all-checks ] || jq -e --arg j "$job" 'has($j)' <<< "$NEEDS" > /dev/null \
+              || { echo "::error::$job is not in the needs of all-checks, so nothing checks it"; status=1; }
+          done
+          jq -e '.changes.result == "success"' <<< "$NEEDS" > /dev/null \
+            || { echo "::error::Changes failed, so a skipped job cannot be trusted"; status=1; }
+          for job in $(jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | .key' <<< "$NEEDS"); do
+            echo "::error::$job: $(jq -r --arg j "$job" '.[$j].result' <<< "$NEEDS")"
+            status=1
+          done
+          exit $status

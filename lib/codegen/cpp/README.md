@@ -10,7 +10,7 @@ library per source board:
 | `:can_lib` | Umbrella over the whole bus, for tests, sims, and the gateway |
 
 Firmware depends on the per-source targets for what it sends and listens
-to. `boards/VCU/BUILD.bazel` lists `:can_vcu` and `:can_hvc`. The source
+to. `boards/VCU/BUILD.bazel` is the worked example. The source
 list is `CAN_BOARDS` in this package's BUILD file; the generator errors
 with instructions when `lib/spec/messages/` gains or loses a file.
 
@@ -91,3 +91,14 @@ name.
 Indexed array blocks (`quantity` > 1, e.g. `CELL_TEMPERATURES`) are plain
 structs: fill the slots and call `ToFrame(i)` per frame. Element index
 math lives with [lib/spec](../../spec/README.md) and the gateway.
+
+## Recipient dispatch
+
+`:can_rx_<board>` exports `lhre_can_rx_<board>.hpp`. For each bus subscribed
+through `CanMessage.to_boards` (including `*`), it generates
+`lhre::can::rx::<Board><Bus>Rx`, containing one longhorn `RxSlot` per message
+(named with the lower-case spec name) and `Dispatch(frame, now_ms)`.
+Separate bus structs prevent cross-bus decoding. Board policy can derive
+from them to add freshness predicates without maintaining a decode chain.
+The RX target depends on source libraries and longhorn; existing packer
+libraries keep their original dependencies. No generated files are committed.

@@ -110,14 +110,12 @@ Three services live in [drivers/longhorn](../drivers/longhorn/README.md) for UAR
 
 In order of likelihood:
 
-1. **The file isn't directly in `App/`.** Only top-level `App/*_test.cpp`
-   files become test targets. A `*_test.cpp` in a subdirectory
-   (`App/foo/bar_test.cpp`) is worse than not found: it's excluded from the
-   app library *and* doesn't become a test, so it silently isn't compiled
-   at all. Move it up to `App/`.
-2. **The name doesn't end in `_test.cpp`** (or `_sim.cpp` for simulators).
-   Targets are synthesized purely from file names; the target is named by
-   the file's stem (`App/vcu_app_test.cpp` → `:vcu_app_test`).
+1. **The name doesn't end in `_test.cpp`** (or `_sim.cpp` for simulators).
+   Targets are synthesized purely from file names, at any depth under
+   `App/`. The target is named by the file's stem
+   (`App/control/pedals_test.cpp` → `:pedals_test`).
+2. **Two files share a stem.** `App/a/foo_test.cpp` and `App/b/foo_test.cpp`
+   both want `:foo_test`, and Bazel rejects the package. Rename one.
 3. **The board opted out** — `enable_tests = False` (or `enable_sims =
    False`) in its `firmware_project` call keeps the files but stops
    synthesizing the targets.

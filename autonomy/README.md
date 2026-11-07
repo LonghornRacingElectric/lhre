@@ -71,7 +71,9 @@ flowchart LR
   run; geometry-only side inference still mislabels sparse cone fragments and
   the car leaves the course
 - ZED 2i stereo inputs implemented; camera color-region classification is
-  available as an opt-in debug image. LiDAR color fusion remains future work
+  available as an opt-in debug image. Camera–LiDAR inspection-map fusion is
+  implemented with LiDAR side fallback and planner wiring; ROS checks pass and
+  manual autocross/EKF visuals were confirmed ([usage](ros2/src/lhr_perception/README.md#cameralidar-inspection-map))
 - Acceleration event runs in sim, from the staged start through the 75 m
   mission to a stop in the exit lane
 - `safety_node` trips the mission on stack faults (Gazebo, `safety:=true`)

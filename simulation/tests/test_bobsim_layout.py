@@ -14,7 +14,10 @@ BOBSIM = SIM / "bobsim"
 VEHICLE = Path(os.environ.get("BOBSIM_VEHICLE", REPO / "vehicle" / "vehicle.yml"))
 MAP_HINT = "See the old to new map in docs/bobsim.md."
 
-OLD_LAYOUT = re.compile(r"\b_[0-5]_(Utils|VisualSim|EnvelopeSim|StandardSim|OptSim|App)\b|external/BobLib")
+OLD_LAYOUT = re.compile(
+    r"\b_[0-5]_(Utils|VisualSim|EnvelopeSim|StandardSim|OptSim|App)\b|external/BobLib"
+    r"|\bTemplates[/.](Vehicle|FourPost)\b|\bp(Fr|Rr)AxleDW\b|\bpVehicle\.p(Fr|Rr)Stabar\b|\bvcu\.[a-z]"
+)
 LAYOUT_MAP = SIM / "docs" / "bobsim.md"
 SKIP_DIRS = {"bobsim", "out", "__pycache__", ".pytest_cache"}
 
@@ -94,14 +97,17 @@ def test_makefile_records_use_the_bobsim_boblib():
 
 
 def test_records_plan_writes_into_existing_boblib_folders():
-    from app.modelica_generator import plan_modelica_stack
+    from app.modelica_generator import TEMPLATE_PACKAGE, plan_modelica_stack
 
     plan = plan_modelica_stack(VEHICLE, root=BOBSIM)
     assert plan.initialization_error is None, plan.initialization_error
     boblib = (BOBSIM / _boblib_submodule()).resolve()
-    planned = [path for path, _ in plan.contents] + list(plan.result.package_orders)
+    planned = [path for path, _ in plan.contents] + [path for path, _ in plan.result.package_orders]
     for path in planned:
-        assert path.parent.is_dir(), f"make records would create a new folder {path.parent}"
+        folder = path.parent
+        if folder.name == TEMPLATE_PACKAGE:
+            folder = folder.parent
+        assert folder.is_dir(), f"make records would create a new folder {folder}"
         assert path.is_relative_to(boblib), f"make records would write {path} outside {boblib}"
 
 

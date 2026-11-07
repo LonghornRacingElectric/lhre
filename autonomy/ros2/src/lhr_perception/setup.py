@@ -20,6 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'camera_lidar_fusion = lhr_perception.camera_lidar_fusion:main',
             'camera_color_classifier = lhr_perception.camera_color_classifier:main',
             'lidar_cone_detector = lhr_perception.lidar_cone_detector:main',
             'evaluate_recordings = lhr_perception.evaluate_recordings:main',

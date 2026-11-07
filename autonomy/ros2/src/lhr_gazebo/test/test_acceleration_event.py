@@ -51,9 +51,9 @@ def test_acceleration_track_runs_its_mission_at_its_width(monkeypatch, perceptio
 
 @pytest.mark.parametrize('perception', ['sim', 'lidar'])
 def test_other_tracks_keep_their_mission_and_width(monkeypatch, perception):
-    context, nodes = _launch(monkeypatch, perception=perception, mission='skidpad')
-    assert _params(context, nodes, 'mission_manager')['mission'] == 'skidpad'
-    assert _params(context, nodes, 'metrics_node')['mission'] == 'skidpad'
+    context, nodes = _launch(monkeypatch, perception=perception, mission='inspection')
+    assert _params(context, nodes, 'mission_manager')['mission'] == 'inspection'
+    assert _params(context, nodes, 'metrics_node')['mission'] == 'inspection'
     assert _params(context, nodes, 'track_builder')['track_width'] == pytest.approx(3.5)
 
 

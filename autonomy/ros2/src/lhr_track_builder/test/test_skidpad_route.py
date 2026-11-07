@@ -86,3 +86,16 @@ def test_route_rejects_missing_gate_or_lane_and_latches_position_jump():
     assert route.update([0, 0, math.pi / 2], 2, 0.1, 0.1, small) == 0
     assert route.fault
     assert route.update([0, -13.5, math.pi / 2], 0, 0.1, 0.2, small) == 0
+
+
+def test_timing_pair_must_span_lane_but_farther_row_may_be_occluded():
+    small, large = generate_skidpad_lanes()
+    front = [(x, y) for x, y in large if y < 0]
+    route = SkidpadRoute([0, 0, 0], [0, -13.5, math.pi / 2], small, front,
+                         1.875, .682, ROUTE_DEFAULTS)
+    assert route.segment == 0
+    for invalid in (front[:1], [(-1.5, -.2), (1.5, -.8)],
+                    [(-1.5, -8.), (1.5, -8.)]):
+        with pytest.raises(ValueError, match='observed pair'):
+            SkidpadRoute([0, 0, 0], [0, -13.5, math.pi / 2], small, invalid,
+                         1.875, .682, ROUTE_DEFAULTS)

@@ -47,8 +47,8 @@ default `3 5 8`), `REPEATS` (2), `TRACK` (for the fault cases, `oval`),
 `DRIVING`, 25), `RUN_S` (60), `CLEAN_S` (150), `OUT` and `EXTRA` (more launch
 arguments). `AFTER` is sim time but `RUN_S` and `CLEAN_S` are wall time, so
 raise them on a machine that runs well below real time; runs that end before
-the fault show up as `no_fault`. The full matrix is about 60 runs, roughly
-2.5 hours. A quick check:
+the fault show up as `no_fault`. The full matrix is 59 runs, 71 minutes in
+the Mac container on 11/1. A quick check:
 
 ```bash
 CASES="ekf_kill steer_freeze" SPEEDS=5 REPEATS=1 CLEAN_SEEDS= \
@@ -59,6 +59,12 @@ On a CPU-rendered machine (the Mac container) Gazebo still drops LiDAR
 frames, with gaps up to about 0.7 s even with the cameras off (#160), so
 add `EXTRA="safety_lidar_timeout_s:=1.5"` or every run trips `LIDAR_STALE`
 first.
+
+Every run launches with `enable_metrics:=false`. Since #132 a finished lap
+ends the mission, and `safety_node` only arms in `READY` and `DRIVING`, so
+a fault after the first lap would score `missed`. An 8 m/s oval lap takes
+about 24 s, under `AFTER`. The clean laps then keep driving for all of
+`CLEAN_S`, which gives false trips more time to show.
 
 Output goes to `~/lhr-test-data/<date>-fault-injection/`: `bags/` (one bag
 plus launch and recorder logs per run), `worlds/` (generated seeds),
@@ -86,7 +92,7 @@ SharePoint ([testing/README.md](../../README.md)).
 - `trip_latency_s`: fault to latched trip, in sim time.
 - `stop_dist_m`: path length from the fault to standstill, from ground
   truth. Stops are optimistic until the regen and spring-brake model lands
-  (the rest of [#116](https://github.com/LonghornRacingElectric/lhre/issues/116)):
+  ([#199](https://github.com/LonghornRacingElectric/lhre/issues/199)):
   the sim stops the wheels outright.
 - `within_pdr`: the stop fits the formula with the measured latency, and
   the car stayed stopped (`max_v_after_stop` at most 0.5 m/s). A run that

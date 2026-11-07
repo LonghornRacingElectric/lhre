@@ -26,13 +26,16 @@ class SkidpadRoute:
         self.half_width = half_width
         self.limits = limits
         local = (np.asarray(gates).reshape(-1, 2) - self.layout[:2]) @ self.rotation
-        # Large orange markers must bracket the shared y=0 timing line.
+        # The fitted circles locate y=0. Require an observed cross-lane orange
+        # pair next to it; the nearer row can occlude the farther row in a camera.
         for ysign in (-1, 1):
             pair = local[(ysign * local[:, 1] > 0.1) & (ysign * local[:, 1] < 1.0)]
-            if (len(pair) < 2 or not any(pair[:, 0] < -1.2)
-                    or not any(pair[:, 0] > 1.2)
-                    or np.max(np.abs(pair[:, 0])) > 2.0):
-                raise ValueError('Center timing gate is not observed on both sides')
+            if (len(pair) >= 2 and any(pair[:, 0] < -1.2)
+                    and any(pair[:, 0] > 1.2) and np.max(np.abs(pair[:, 0])) <= 2.0
+                    and np.ptp(pair[:, 1]) <= 0.2):
+                break
+        else:
+            raise ValueError('Center timing gate needs an observed pair across the lane')
         local_pose = (np.asarray(pose[:2]) - self.layout[:2]) @ self.rotation
         lane = self._lane_support(orange, entry=True)
         if lane is None or local_pose[1] >= -1.0:
@@ -76,7 +79,7 @@ class SkidpadRoute:
         sides = []
         for sign in (-1, 1):
             side = local[(sign * local[:, 0] > 0.8) & (sign * local[:, 0] < 2.2)]
-            if len(side) < 3 or np.ptp(side[:, 1]) < 4.0:
+            if len(side) < 3 or np.ptp(side[:, 1]) < 3.8:
                 return None
             fit = least_squares(lambda ab: side[:, 0] - ab[0] * side[:, 1] - ab[1],
                                 [0, sign * 1.5], loss='soft_l1', f_scale=0.1)

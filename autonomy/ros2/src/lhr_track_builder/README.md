@@ -14,7 +14,7 @@ fourth, `boundary_graph`, has [its own section](#local-unclassified-corridor).
 - `classified` computes a minimum-cost one-to-one left/right assignment within
   `track_width +/- track_width_tolerance`, leaving unmatched cones unused.
   Both demo launches select it with
-  `perception:=lidar lidar_classify_sides:=true`. It depends on correct side
+  `perception:=lidar lidar_classify_sides:=true` when camera fusion is off. It depends on correct side
   labels; sparse detections can cause the experimental classifier to mislabel
   a boundary and leave gaps or an incorrect path.
 - `boundary` (default) Delaunay-triangulates all cone positions without considering
@@ -48,6 +48,34 @@ All candidate midpoints are ordered with the configured `chaining_alg` before
 the published path is capped by `max_points`. With odometry, chaining starts
 at the midpoint nearest the vehicle, even when it lies beyond the first
 `max_points` candidates. Without odometry, it starts at midpoint zero.
+
+## Camera fusion in Gazebo
+
+With `perception:=lidar enable_stereo_camera:=true
+enable_camera_lidar_fusion:=true`, Gazebo launch connects `cone_topic` to
+`/lhr/perception/cones_classified` and selects `pairing_strategy:=boundary`
+with `boundary_use_color:=true`. Camera blue/yellow arrive as `left_cones`/
+`right_cones`; same-known-color Delaunay edges are rejected, while edges
+involving unknown `cones` keep the width filter. For orange, fusion preserves
+the LiDAR namespace (`left_cones`, `right_cones`, or `cones`) so geometry can
+still pair acceleration finish/exit cones. Physical orange is retained on the
+separate inspection map; it is not an exclusion from planning.
+
+Fusion automatically enables the existing LiDAR side classifier as fallback,
+even if `lidar_classify_sides:=false` was supplied. Camera labels override those
+sides only with confirmed fresh evidence. Losing a match or exceeding the
+camera-age limit returns to the current LiDAR side; if that side is unknown,
+boundary pairing still uses geometry. The fallback classifier is experimental:
+its errors can still affect the path during camera loss.
+
+Without fusion, Gazebo keeps `/lhr/sensor/cones_detected` and its existing
+boundary/default or opt-in classified pairing. The `sim` perception branch is
+unchanged. Fusion launch tests check actual node subscription topics in both
+estimators and a real image/TF/DDS integration exercises camera priority,
+conflicts, dropout, recovery, pairing results and orange geometry fallback. Live
+Gazebo autocross/EKF visuals were confirmed manually; see the
+[validation record](../lhr_gazebo/README.md#fusion-planner-validation-2026-11-01)
+for the stationary run and remaining live-interruption evidence.
 
 ## Chaining
 
@@ -174,7 +202,23 @@ planner with `skidpad_acquisition` (the executable name is retained). It
 acquires the layout, validates colored entry/gate observations, and follows
 `ENTRY -> RIGHT_1 -> RIGHT_2 -> LEFT_1 -> LEFT_2 -> EXIT -> STOPPED`. The rigid template's dimensions live
 in `lhr_trackgen.skidpad_geometry`, shared with world generation. Inputs are
-`/lhr/sensor/cones_detected` and `/lhr/vehicle/odom`, both in `map`.
+`cone_topic` and `/lhr/vehicle/odom`, both in `map`. Simulated
+perception uses `/lhr/sensor/cones_detected`. LiDAR uses the fusion node's
+`/lhr/perception/cones_verified` and `require_camera_colors:=true`, which
+accepts only physical camera blue/yellow/orange namespaces. Inferred sides
+cannot authorize a route. Camera exposure timestamps must be fresh, and a
+repeated exposure cannot increase the stable-frame count. Confirmed circular
+and orange positions from the sensor map are retained within the run across
+camera occlusion, even before they enter the planner ROI. Circle fitting,
+approach and gate authorization filter that measured history to the current
+planner range/FOV after motion; a remembered out-of-ROI gate cannot authorize
+entry. A later confirmed color
+replaces an ID's prior role. Removed map IDs and IDs displaced by more than
+twice `fit_inlier_distance` lose their retained observations. Unknown LiDAR positions can support the circle geometry, but never count
+toward the required camera-colored support on each boundary. This uses
+measured history, never inferred sides.
+Empty or stale
+camera input stops approach; loss during a route latches the existing hold.
 
 The planner filters every candidate to a rear-axle-centered radius of 15 m
 and a forward 240-degree FOV (including after vehicle motion). Smaller views
@@ -204,16 +248,24 @@ blue, left outer/right inner are yellow. Uncolored observations can support
 geometry acquisition, but route authorization also requires at least two
 colored inliers on each boundary. Experimental side inference is not a
 substitute for verified color perception. Orange markers are excluded from
-circle fitting.
+circle fitting. The fitted circle centers locate the timing line. At least
+one orange row next to that line must have measured cones on both lateral
+sides, aligned within 0.2 m. The nearer row can hide the farther row from the
+camera; unobserved cones are not invented or required to be visible.
+Camera orange supplies observations to both role validators:
+the route's fitted-frame checks separate the entry/exit lane from the pairs
+bracketing the timing line. This infers event role, not physical cone size;
+size classification is not supplied by the current camera classifier.
 
 Acquisition phases are `ACQUIRE`, `APPROACH`, `HOLD`, and `ACQUIRED`.
 A robust parallel-line fit to the observed small orange lane cones can
 supply a finite approach path while the layout fit stabilizes. It requires
-three cones per side spanning at least 4 m, width 2.8-3.2 m, heading within
+three cones per side spanning at least 3.8 m (a 4 m nominal span with
+0.2 m allowance for measured cone centroids), width 2.8-3.2 m, heading within
 15 degrees of the car, side slopes within 5 degrees, and 0.2 m residuals.
 Vehicle footprint clearance and stopping room shorten the supported path.
-No orange classification means no approach authorization: today's uncolored
-LiDAR pipeline can fit circles but must hold if initial support is insufficient.
+No fresh orange camera observations means no LiDAR approach authorization.
+The raw uncolored LiDAR map cannot authorize entry.
 
 Only mission `DRIVING` permits a nonzero speed cap. Creep is bounded by
 0.5 m/s and 5 m accumulated odometry travel. A conservative simulation envelope
@@ -221,7 +273,7 @@ uses 0.5 m/s² braking, 0.5 s latency and a 0.5 m margin. These are simulation
 assumptions, not validated hardware braking performance. Stale inputs,
 invalid frames, insufficient corridor support or exhausted travel cause a hold;
 odometry jumps latch a fault until node restart. `ACQUIRED` requires a stable
-fit, observed large orange markers bracketing the center timing line,
+fit, an observed orange pair across the lane next to the center timing line,
 verified colored boundaries, an entry corridor, and speed below 0.05 m/s
 for one second. Route following starts only under mission `DRIVING`.
 
@@ -236,6 +288,8 @@ Every parameter is exposed by the Gazebo launch with the same name and type.
 | --- | --- | --- |
 | `fov_deg` | `240.0` | Forward total view, degrees; maximum 240 |
 | `max_range_m` | `15.0` | Maximum view radius, m; maximum 15 |
+| `cone_topic` | `/lhr/sensor/cones_detected` | Cone input; LiDAR launch selects `/lhr/perception/cones_verified` |
+| `require_camera_colors` | `false` | Require fresh measured camera namespaces; LiDAR skidpad launch requires true |
 | `acquisition_speed` | `0.5` | Creep cap, m/s; maximum 0.5 |
 | `acquisition_distance` | `5.0` | Total travel budget, m; maximum 5 |
 | `acquisition_timeout` | `0.5` | Input receipt freshness, seconds |
@@ -273,7 +327,8 @@ zero. Speed below 0.05 m/s for one second after all four laps publishes
 The 12 m default target leaves room inside the 25 m exit requirement.
 
 `/lhr/skidpad/acquisition` remains the JSON status topic and includes phase,
-fit support, traveled approach distance, route progress, laps, directed
+fit and camera-colored support, any route rejection reason, traveled approach
+distance, route progress, laps, directed
 crossings, CTE and faults. `/lhr/skidpad/layout` displays fitted middle circles;
 `/lhr/skidpad/visible_cones` displays the current accepted view. Orange lane
 and gate observations are retained within a run to build its route; they are

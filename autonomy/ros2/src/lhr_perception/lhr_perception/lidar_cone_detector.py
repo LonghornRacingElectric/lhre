@@ -29,6 +29,7 @@ from lhr_perception.cone_side_classifier import (
     vehicle_relative_side_vote,
 )
 from lhr_perception.pose_history import Pose2D
+from lhr_perception.transforms import rigid_transform_matrix
 from lhr_vehicle import load_vehicle
 from nav_msgs.msg import Odometry
 import numpy as np
@@ -53,19 +54,8 @@ GROUND_CLEARANCE_M = 0.05
 
 def transform_points(points: np.ndarray, transform) -> np.ndarray:
     """Apply a full rigid transform to an Nx3 array."""
-    q = transform.rotation
-    quat = np.array([q.x, q.y, q.z, q.w], dtype=np.float64)
-    norm = np.linalg.norm(quat)
-    if not np.isfinite(norm) or norm == 0.0:
-        raise ValueError('Transform quaternion must be finite and nonzero')
-    x, y, z, w = quat / norm
-    rotation = np.array([
-        [1 - 2 * (y*y + z*z), 2 * (x*y - z*w), 2 * (x*z + y*w)],
-        [2 * (x*y + z*w), 1 - 2 * (x*x + z*z), 2 * (y*z - x*w)],
-        [2 * (x*z - y*w), 2 * (y*z + x*w), 1 - 2 * (x*x + y*y)],
-    ])
-    t = transform.translation
-    return points @ rotation.T + np.array([t.x, t.y, t.z])
+    matrix = rigid_transform_matrix(transform)
+    return points @ matrix[:3, :3].T + matrix[:3, 3]
 
 
 def _quat_to_yaw(q) -> float:

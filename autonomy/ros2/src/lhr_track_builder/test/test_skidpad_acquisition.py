@@ -265,3 +265,146 @@ def test_frozen_odometry_does_not_refresh_watchdog(acquisition):
     node._cones_cb(_observations(False))
     node._tick()
     assert node._limit_pub.publish.call_args.args[0].data == 0.0
+
+
+def test_camera_acquisition_rejects_inferred_sides_stale_and_duplicate_frames(acquisition):
+    node = acquisition
+    node._require_camera_colors = True
+    raw = _observations()
+    node._cones_cb(raw)
+    node._tick()
+    assert not node._circular and not node._orange
+    assert node._limit_pub.publish.call_args.args[0].data == 0
+    observed = _observations()
+    for index, marker in enumerate(observed.markers):
+        marker.id = index
+        marker.ns = {'left_cones': 'blue_cones', 'right_cones': 'yellow_cones',
+                     'orange_small': 'orange_cones', 'orange_large': 'orange_cones'}[marker.ns]
+        marker.header.stamp = Time(seconds=10.).to_msg()
+    node._cones_cb(observed)
+    node._tick()
+    frame = node._frame
+    stable = node._stable
+    for _ in range(6):
+        node._cones_cb(observed)
+        node._tick()
+    assert node._frame == frame
+    assert node._stable == stable == 1
+    assert node._gates and node._lane_map
+    node._test_time = 11.
+    node._cones_cb(observed)
+    node._tick()
+    assert node._cone_time == 10.
+    assert node._limit_pub.publish.call_args.args[0].data == 0
+
+
+def test_camera_orange_roles_are_validated_by_route_geometry(acquisition):
+    node = acquisition
+    node._require_camera_colors = True
+    observed = _observations()
+    observed.markers = [m for m in observed.markers
+                        if m.ns != 'orange_large' or m.pose.position.y < 0]
+    for index, marker in enumerate(observed.markers):
+        marker.id = index
+        marker.ns = {'left_cones': 'blue_cones', 'right_cones': 'yellow_cones',
+                     'orange_small': 'orange_cones', 'orange_large': 'orange_cones'}[marker.ns]
+    for _ in range(15):
+        node._test_time += .2
+        node._odom_time = node.get_clock().now().nanoseconds / 1e9
+        for marker in observed.markers:
+            marker.header.stamp = Time(seconds=node._test_time).to_msg()
+        node._cones_cb(observed)
+        node._tick()
+    assert node._route is not None
+    assert node._phase == 'ENTRY'
+    assert node._limit_pub.publish.call_args.args[0].data > 0
+
+
+def test_entry_span_tolerates_centroid_error_without_relaxing_side_support():
+    points = [(x, y) for x in (-1.5, 1.5) for y in (-12.02, -10.02, -8.04)]
+    pose = np.array([0., -16.8747, math.pi / 2])
+    assert _entry_corridor(points, pose, 1.875, .682) is not None
+    assert _entry_corridor(points[:-1], pose, 1.875, .682) is None
+    short = [(x, y) for x in (-1.5, 1.5) for y in (-11.5, -10., -8.)]
+    assert _entry_corridor(short, pose, 1.875, .682) is None
+
+
+def test_camera_history_survives_occlusion_but_not_map_removal_or_id_displacement(acquisition):
+    node = acquisition
+    node._require_camera_colors = True
+    observed = _observations()
+    for index, marker in enumerate(observed.markers):
+        marker.id = index
+        marker.ns = {'left_cones': 'blue_cones', 'right_cones': 'yellow_cones',
+                     'orange_small': 'orange_cones', 'orange_large': 'orange_cones'}[marker.ns]
+        marker.header.stamp = Time(seconds=10.).to_msg()
+    node._cones_cb(observed)
+    key = next(iter(node._circle_map))
+    target = next(m for m in observed.markers if m.id == key)
+    target.ns = 'unknown_cones'
+    node._test_time = 10.1
+    for marker in observed.markers:
+        marker.header.stamp = Time(seconds=10.1).to_msg()
+    node._cones_cb(observed)
+    assert key in node._circle_map
+    target.pose.position.x += .6
+    node._cones_cb(observed)
+    assert key not in node._circle_map
+    orange_key = next(iter(node._lane_map))
+    observed.markers = [m for m in observed.markers if m.id != orange_key]
+    node._cones_cb(observed)
+    assert orange_key not in node._lane_map
+    assert orange_key not in node._gates
+
+
+def test_unknown_lidar_geometry_does_not_become_measured_color(acquisition):
+    node = acquisition
+    node._require_camera_colors = True
+    observed = _observations()
+    for index, marker in enumerate(observed.markers):
+        marker.id = index
+        marker.ns = {'left_cones': 'blue_cones', 'right_cones': 'yellow_cones',
+                     'orange_small': 'orange_cones', 'orange_large': 'orange_cones'}[marker.ns]
+        if marker.ns in ('blue_cones', 'yellow_cones') and index % 3 == 0:
+            marker.ns = 'unknown_cones'
+        marker.header.stamp = Time(seconds=10.).to_msg()
+    node._cones_cb(observed)
+    node._tick()
+    assert -1 in node._circular_colors
+    assert node._fit is not None
+    assert all(color in (0, 1) for _, color in node._circle_map.values())
+
+
+def test_measured_gate_history_is_used_only_after_entering_planner_view(acquisition):
+    node = acquisition
+    node._require_camera_colors = True
+    node._pose[1] = -17.
+    observed = _observations()
+    for index, marker in enumerate(observed.markers):
+        marker.id = index
+        marker.ns = {'left_cones': 'blue_cones', 'right_cones': 'yellow_cones',
+                     'orange_small': 'orange_cones', 'orange_large': 'orange_cones'}[marker.ns]
+        marker.header.stamp = Time(seconds=10.).to_msg()
+    node._cones_cb(observed)
+    assert node._gates
+    for _ in range(15):
+        node._test_time += .2
+        node._odom_time = node.get_clock().now().nanoseconds / 1e9
+        for marker in observed.markers:
+            marker.header.stamp = Time(seconds=node._test_time).to_msg()
+        node._cones_cb(observed)
+        node._tick()
+    assert node._route is None
+    # The now-visible timing cones are occluded; their measured positions survive.
+    node._pose[1] = -13.5
+    for marker in observed.markers:
+        if abs(marker.pose.position.y) < 1.:
+            marker.ns = 'unknown_cones'
+    for _ in range(15):
+        node._test_time += .2
+        node._odom_time = node.get_clock().now().nanoseconds / 1e9
+        for marker in observed.markers:
+            marker.header.stamp = Time(seconds=node._test_time).to_msg()
+        node._cones_cb(observed)
+        node._tick()
+    assert node._route is not None

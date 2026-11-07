@@ -47,6 +47,29 @@ bazel run //tools/format                # clang-format everything (CI enforces :
 uv run --group docs mkdocs build --strict   # docs must build cleanly
 ```
 
+## CI
+
+All checks live in one workflow,
+[`ci.yml`](https://github.com/LonghornRacingElectric/lhre/blob/main/.github/workflows/ci.yml).
+It runs on every PR, on every push to `main`, weekly, and by hand.
+
+- `Changes` lists the files a PR touches, renamed files' old paths
+  included. Each area's job runs only when its paths changed: Bazel on
+  Linux and Windows, simulation fast checks, FourPost, autonomy (colcon),
+  BEVO, docs and telemetry. `Format` always runs.
+- `All checks passed` is the only required check. It fails if any job failed or
+  was cancelled, or if `Changes` failed. A job skips only when `Changes`
+  says its paths are untouched. If `Changes` fails, every job runs.
+- To read a failure, open the run's summary page: `All checks passed` lists every
+  job's result, and a failed Bazel job lists each failed test with the end
+  of its log.
+- To add a check, add a job to `ci.yml`, an area for it in `Changes` if it
+  is path-gated, and the job to the `needs` of `all-checks`. `All checks passed` fails
+  if a job is missing from its `needs`.
+- The telemetry job builds the images, smoke-tests them and runs the
+  integration tests against Docker Compose. Without the repo secrets it
+  skips the integration tests with a warning.
+
 Firmware for a board: `bazel build //boards/VCU:vcu`. Flashing targets
 (`:openocd`, `:dfu`) and the VS Code debug launches need hardware attached —
 don't run them.

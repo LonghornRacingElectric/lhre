@@ -53,6 +53,7 @@ message {
   name: "ACCELERATION_VECTOR_UNSPRUNG_WHEEL_SPEED_FL"
   can_id: 1026
   from_board: "USM"
+  to_boards: "VCU"
   to_boards: "Pi"
   bus: "Data Acq"
   dlc: 8
@@ -147,6 +148,7 @@ message {
   name: "ACCELERATION_VECTOR_UNSPRUNG_WHEEL_SPEED_FR"
   can_id: 1027
   from_board: "USM"
+  to_boards: "VCU"
   to_boards: "Pi"
   bus: "Data Acq"
   dlc: 8
@@ -241,6 +243,7 @@ message {
   name: "ACCELERATION_VECTOR_UNSPRUNG_WHEEL_SPEED_RL"
   can_id: 1028
   from_board: "USM"
+  to_boards: "VCU"
   to_boards: "Pi"
   bus: "Data Acq"
   dlc: 8
@@ -335,6 +338,7 @@ message {
   name: "ACCELERATION_VECTOR_UNSPRUNG_WHEEL_SPEED_RR"
   can_id: 1029
   from_board: "USM"
+  to_boards: "VCU"
   to_boards: "Pi"
   bus: "Data Acq"
   dlc: 8

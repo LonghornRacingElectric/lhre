@@ -249,7 +249,7 @@ def _entry_corridor(points, pose, front_extent, half_width):
     for sign in (-1, 1):
         side = local[(local[:, 0] >= -2) & (sign * local[:, 1] >= 0.8)
                      & (sign * local[:, 1] <= 2.2)]
-        if len(side) < 3 or np.ptp(side[:, 0]) < 4.0:
+        if len(side) < 3 or np.ptp(side[:, 0]) < 3.8:
             return None
         fit = least_squares(
             lambda ab: side[:, 1] - ab[0] * side[:, 0] - ab[1],
@@ -280,6 +280,10 @@ class SkidpadAcquisition(Node):
         super().__init__('skidpad_acquisition')
         self.declare_parameter('fov_deg', 240.0)
         self.declare_parameter('max_range_m', 15.0)
+        self.declare_parameter('cone_topic', '/lhr/sensor/cones_detected')
+        self.declare_parameter('require_camera_colors', False)
+        self._require_camera_colors = self.get_parameter('require_camera_colors').value
+        self._camera_stamp = None
         for name, value in ACQUISITION_DEFAULTS.items():
             self.declare_parameter(name, value)
         self._limits = {name: self.get_parameter(name).value
@@ -320,6 +324,7 @@ class SkidpadAcquisition(Node):
         self._reported_phase = None
         self._circular = []
         self._circular_colors = []
+        self._circle_map = {}
         self._orange = []
         self._gates = {}
         self._lane_map = {}
@@ -335,7 +340,8 @@ class SkidpadAcquisition(Node):
         self.create_subscription(String, '/lhr/mission/status', self._status_cb, 10)
         qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                          durability=DurabilityPolicy.TRANSIENT_LOCAL)
-        self.create_subscription(MarkerArray, '/lhr/sensor/cones_detected', self._cones_cb, qos)
+        self.create_subscription(
+            MarkerArray, self.get_parameter('cone_topic').value, self._cones_cb, qos)
         self._path_pub = self.create_publisher(Path, '/lhr/track/centerline', 10)
         self._limit_pub = self.create_publisher(Float32, '/lhr/planning/speed_limit', 10)
         self._state_pub = self.create_publisher(String, '/lhr/skidpad/acquisition', 10)
@@ -380,13 +386,60 @@ class SkidpadAcquisition(Node):
         visible.markers.append(Marker(action=Marker.DELETEALL))
         if self._pose is None:
             return
+        camera_stamp = None
+        if self._require_camera_colors:
+            # Unknown entries retain map identity without supplying color evidence.
+            current = {m.id: (m.pose.position.x, m.pose.position.y) for m in msg.markers
+                       if m.action == Marker.ADD and m.header.frame_id == 'map'
+                       and m.ns in ('blue_cones', 'yellow_cones', 'orange_cones', 'unknown_cones')
+                       and np.isfinite((m.pose.position.x, m.pose.position.y)).all()}
+            for key, (point, _) in list(self._circle_map.items()):
+                if (key not in current or np.linalg.norm(np.asarray(point) - current[key])
+                        > 2 * self._limits['fit_inlier_distance']):
+                    del self._circle_map[key]
+            for retained in (self._lane_map, self._gates):
+                for key, point in list(retained.items()):
+                    if (key not in current or np.linalg.norm(np.asarray(point) - current[key])
+                            > 2 * self._limits['fit_inlier_distance']):
+                        del retained[key]
+            observed = [m for m in msg.markers if m.action == Marker.ADD
+                        and m.ns in ('blue_cones', 'yellow_cones', 'orange_cones')]
+            stamps = {(m.header.stamp.sec * 1_000_000_000 + m.header.stamp.nanosec) / 1e9
+                      for m in observed}
+            now = self.get_clock().now().nanoseconds / 1e9
+            if len(stamps) != 1:
+                self._view_pub.publish(visible)
+                return
+            camera_stamp = stamps.pop()
+            if (camera_stamp <= 0
+                    or (self._camera_stamp is not None and camera_stamp < self._camera_stamp)
+                    or not 0 <= now - camera_stamp
+                    <= self._limits['acquisition_timeout']):
+                self._view_pub.publish(visible)
+                return
         for marker in msg.markers:
             if marker.action not in (Marker.ADD, Marker.MODIFY) or marker.header.frame_id != 'map':
                 continue
             point = (marker.pose.position.x, marker.pose.position.y)
-            if not len(_visible([point], self._pose, self._range, self._fov)):
+            in_view = bool(len(_visible([point], self._pose, self._range, self._fov)))
+            if not in_view and not self._require_camera_colors:
                 continue
-            if marker.ns in ('left_cones', 'right_cones', 'cones'):
+            if self._require_camera_colors:
+                if marker.ns in ('blue_cones', 'yellow_cones'):
+                    self._circle_map[marker.id] = (
+                        point, 0 if marker.ns == 'blue_cones' else 1)
+                    self._lane_map.pop(marker.id, None)
+                    self._gates.pop(marker.id, None)
+                elif marker.ns == 'orange_cones':
+                    self._circle_map.pop(marker.id, None)
+                    # The route validates lane/gate roles in its fitted frame.
+                    # Camera orange does not measure the physical cone size.
+                    self._orange.append(point)
+                    self._lane_map[marker.id] = point
+                    self._gates[marker.id] = point
+                else:
+                    continue
+            elif marker.ns in ('left_cones', 'right_cones', 'cones'):
                 self._circular.append(point)
                 self._circular_colors.append(
                     {'left_cones': 0, 'right_cones': 1, 'cones': -1}[marker.ns])
@@ -397,10 +450,26 @@ class SkidpadAcquisition(Node):
                 self._gates[marker.id] = point
             else:
                 continue
-            visible.markers.append(marker)
+            if in_view:
+                visible.markers.append(marker)
         self._view_pub.publish(visible)
-        self._cone_time = self.get_clock().now().nanoseconds / 1e9
-        self._frame += 1
+        if self._require_camera_colors:
+            retained = dict(self._circle_map)
+            for key, point in current.items():
+                if key not in retained and key not in self._lane_map and key not in self._gates:
+                    retained[key] = (point, -1)
+            visible_circles = [(point, color) for point, color in retained.values()
+                               if len(_visible([point], self._pose, self._range, self._fov))]
+            self._circular = [point for point, _ in visible_circles]
+            self._circular_colors = [color for _, color in visible_circles]
+        if self._require_camera_colors:
+            self._cone_time = camera_stamp
+            if camera_stamp != self._camera_stamp:
+                self._frame += 1
+                self._camera_stamp = camera_stamp
+        else:
+            self._cone_time = self.get_clock().now().nanoseconds / 1e9
+            self._frame += 1
 
     def _tick(self):
         now = self.get_clock().now().nanoseconds / 1e9
@@ -408,6 +477,7 @@ class SkidpadAcquisition(Node):
         path.header.frame_id = 'map'
         path.header.stamp = self.get_clock().now().to_msg()
         speed = 0.0
+        route_rejection = None
         fresh = (self._pose is not None and self._cone_time is not None
                  and 0 <= now - self._cone_time <= self._limits['acquisition_timeout']
                  and 0 <= now - self._odom_time <= self._limits['acquisition_timeout'])
@@ -417,7 +487,9 @@ class SkidpadAcquisition(Node):
                     for point in self._circular]
             circular = np.asarray(self._circular).reshape(-1, 2)[keep]
             colors = np.asarray(self._circular_colors)[keep]
-            orange = _visible(self._orange, self._pose, self._range, self._fov)
+            # Keep measured observations across occlusion, as the route already does.
+            orange = _visible(list(self._lane_map.values()) if self._require_camera_colors
+                              else self._orange, self._pose, self._range, self._fov)
             if self._frame != self._last_frame and self._route is None:
                 self._last_frame = self._frame
                 fit = _fit_layout(
@@ -434,9 +506,13 @@ class SkidpadAcquisition(Node):
             if ready and self._route is None:
                 try:
                     candidate_route = SkidpadRoute(
-                        self._fit['pose'], self._pose, list(self._lane_map.values()),
-                        list(self._gates.values()), self._front, self._half_width, self._limits)
-                except ValueError:
+                        self._fit['pose'], self._pose,
+                        _visible(list(self._lane_map.values()), self._pose,
+                                 self._range, self._fov),
+                        _visible(list(self._gates.values()), self._pose, self._range, self._fov),
+                        self._front, self._half_width, self._limits)
+                except ValueError as error:
+                    route_rejection = str(error)
                     ready = False
             corridor = _entry_corridor(orange, self._pose, self._front, self._half_width)
             if self._route is not None:
@@ -517,9 +593,12 @@ class SkidpadAcquisition(Node):
                           crossings=self._route.crossings, cte_m=self._route.cte)
         if self._fit is not None:
             report.update(rms_m=self._fit['rms'], support=self._fit['support'],
+                          colored_support=self._fit['colored_support'],
                           layout_pose=self._fit['pose'].tolist(),
                           hypotheses=self._fit['hypotheses'],
                           center_candidates=self._fit['center_candidates'])
+        if route_rejection is not None:
+            report['route_rejection'] = route_rejection
         self._state_pub.publish(String(data=json.dumps(report)))
         if self._phase != self._reported_phase:
             self.get_logger().info(json.dumps(report))

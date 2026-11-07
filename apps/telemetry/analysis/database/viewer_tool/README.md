@@ -123,8 +123,8 @@ test it are in [src/lib/driveday/README.md](src/lib/driveday/README.md);
 
 Trackside Retro includes the current LAPDOG video/track/analysis workspace,
 wheel-zoom timeline, route-matched cross-file comparisons, GPS-quality checks
-and driving debrief tools. Existing server-cache import and Trackside event
-notes remain available. See [the retro guide](src/lib/driveday/README.md).
+and driving debrief tools. Drive days load only from the database; Trackside
+event notes come with them. See [the retro guide](src/lib/driveday/README.md).
 
 Video playback copies are made locally using `ffmpeg-static`.
 `npm run dev` and `npm start` launch the loopback helper; remote users run

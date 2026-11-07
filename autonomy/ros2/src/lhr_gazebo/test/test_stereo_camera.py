@@ -88,7 +88,9 @@ def test_launch_camera_actions_and_rviz(perception, estimator, enabled, monkeypa
     """Stereo is independently opt-in and never redirects its TF to truth TF."""
     pytest.importorskip('launch_ros')
     launch = pytest.importorskip('launch')
-    from launch.actions import DeclareLaunchArgument, RegisterEventHandler, SetEnvironmentVariable
+    from launch.actions import (
+        DeclareLaunchArgument, ExecuteProcess, RegisterEventHandler, SetEnvironmentVariable,
+    )
     from launch.events import Shutdown
     from launch.utilities import normalize_to_list_of_substitutions, perform_substitutions
     from launch_ros.actions import Node
@@ -111,6 +113,12 @@ def test_launch_camera_actions_and_rviz(perception, estimator, enabled, monkeypa
         if isinstance(action, SetEnvironmentVariable):
             action.execute(context)
     resource_path = context.environment['GZ_SIM_RESOURCE_PATH'].split(':')[0]
+    gazebo = next(a for a in actions if type(a) is ExecuteProcess)
+    gazebo_env = {
+        perform_substitutions(context, key): perform_substitutions(context, value)
+        for key, value in gazebo.additional_env
+    }
+    assert gazebo_env['GZ_SIM_RESOURCE_PATH'] == context.environment['GZ_SIM_RESOURCE_PATH']
     model = ET.parse(Path(resource_path) / 'fsae_vehicle' / 'model.sdf')
     assert len(model.findall(".//sensor[@type='camera']")) == (2 if enabled == 'true' else 0)
     nodes = [a for a in actions if isinstance(a, Node)]
@@ -145,7 +153,14 @@ def test_stereo_rviz_preserves_existing_displays():
     stereo = yaml.safe_load(path.read_text())['Visualization Manager']['Displays']
     original = yaml.safe_load((PKG / 'config' / 'default.rviz').read_text())
     images = [d for d in stereo if d['Class'] == 'rviz_default_plugins/Image']
-    driving = [d for d in stereo if d['Class'] != 'rviz_default_plugins/Image']
+    fusion_topics = {'/lhr/perception/cones_fused', '/lhr/perception/cones_classified'}
+    fusion_displays = [d for d in stereo if d.get('Topic', {}).get('Value') in fusion_topics]
+    driving = [d for d in stereo if d['Class'] != 'rviz_default_plugins/Image'
+               and d not in fusion_displays]
+    assert {d['Topic']['Value'] for d in fusion_displays} == fusion_topics
+    assert all(d['Enabled'] is False and d['Value'] is False for d in fusion_displays)
+    assert all(d['Topic']['Durability Policy'] == 'Transient Local'
+               and d['Topic']['Reliability Policy'] == 'Reliable' for d in fusion_displays)
     assert driving == original['Visualization Manager']['Displays']
     assert [d['Topic']['Value'] for d in images] == [
         '/lhr/sensor/zed2i/left/image_rect', '/lhr/sensor/zed2i/right/image_rect',

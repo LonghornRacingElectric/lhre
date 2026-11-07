@@ -1,0 +1,5 @@
+id,source,estimator,fault,lidar_timeout_s,passed,case,result,expected,tripped,drove_m,match,false_trip,v_at_fault,trip_latency_s,emergency_latency_s,pdr_dist_m,within_pdr,stop_time_s,stop_dist_m,max_v_after_stop,final_speed_mps,sampled_above_ground_after
+prfix_gpu_lidar_drop,gazebo,ekf,lidar_drop,1.5,True,lidar_drop,caught,LIDAR_STALE,LIDAR_STALE,11.1,True,False,0.96,1.331,0.050,1.55,True,1.46,0.69,0.01,0.0,0
+prfix_mid360_lidar_drop,mid360,ekf,lidar_drop,0.3,True,lidar_drop,caught,LIDAR_STALE,LIDAR_STALE,27.5,True,False,5.03,0.230,0.049,4.28,True,0.98,3.20,0.00,0.0,0
+prfix_mid360_truth_nan,mid360,truth,odom_nan,0.3,False,odom_nan,no_drive,,LIDAR_STALE,0.0,False,False,,,,,,,,,0.0,0
+prfix_mid360_truth_nan_repeat,mid360,truth,odom_nan,0.3,True,odom_nan,caught,EKF_DIVERGED,EKF_DIVERGED,27.5,True,False,5.03,0.031,0.049,3.27,True,0.78,2.33,0.00,0.0,423

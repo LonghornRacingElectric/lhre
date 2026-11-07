@@ -208,7 +208,7 @@ helpers that cannot be analyzed by the native Windows Bazel client. The containe
 server ingestion targets declare `target_compatible_with = NOT_WINDOWS` to ensure native
 Windows builds automatically skip them during recursive builds and tests (`//...`), while
 cross-platform targets like schema definitions and protobuf codegen (`can_packets_pb2`)
-remain buildable on Windows. The Linux CI jobs and dedicated telemetry workflow retain full
+remain buildable on Windows. The Linux CI jobs and the telemetry CI job retain full
 build and test coverage for the entire telemetry subtree.
 
 `--bes_upload_mode=fully_async` and `--remote_cache_async` keep builds

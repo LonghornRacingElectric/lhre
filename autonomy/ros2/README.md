@@ -198,9 +198,10 @@ unit tests, and generated-track regressions for the LiDAR centerline. These
 regressions use idealized cone visibility; they do not establish that the
 vehicle completes a live Gazebo autocross lap.
 
-CI runs the same build and test
-([`.github/workflows/autonomy.yml`](https://github.com/LonghornRacingElectric/lhre/blob/main/.github/workflows/autonomy.yml))
-on the `ros:jazzy-ros-base` image for every PR that touches `autonomy/`.
+CI runs the same build and test (the `Autonomy (colcon)` job in
+[`.github/workflows/ci.yml`](https://github.com/LonghornRacingElectric/lhre/blob/main/.github/workflows/ci.yml))
+on the `ros:jazzy-ros-base` image for every PR that touches `autonomy/`,
+`vehicle/` or the BobSim pin. It is part of the required `All checks passed` check.
 Dependencies are installed from each package's `package.xml` with `rosdep`,
 so declare new ones there. Gazebo (`ros_gz_*`) is skipped in CI since
 nothing there launches a simulator.
@@ -265,6 +266,10 @@ The `lhr_gazebo` package provides an alternative simulation backend using Gazebo
 ```
 
 RViz launches automatically alongside Gazebo (disable with `rviz:=false`). The RViz config shows centerline, cones, odometry trail, lookahead point, and FOV visualization.
+
+Gazebo also supports `perception:=lidar lidar_source:=mid360` and optional
+`foxglove:=true`. See [source selection and viewer setup](src/lhr_gazebo/README.md#mid-360-cloud-source-and-foxglove)
+for defaults, headless usage and model limits.
 
 Launch arguments pass through and are typed the same way as `run_demo.sh`'s,
 but each launch declares its own set. `ros2 launch` silently ignores a name
@@ -335,6 +340,33 @@ This opt-in debug classifier does not yet attach colors to the LiDAR map.
 See [camera classification](src/lhr_perception/README.md#camera-color-classification)
 for HSV thresholds, area filtering, and launch overrides.
 
+### Camera–LiDAR inspection map
+
+The Gazebo stack can attach measured camera colors to a separate copy of the
+LiDAR map. After rebuilding, run from this workspace:
+
+```bash
+./scripts/run_gazebo_demo.sh perception:=lidar enable_stereo_camera:=true \
+  enable_camera_lidar_fusion:=true
+```
+
+Fusion defaults off and supports truth/EKF estimation. Enable
+**CameraFusedCones** in stereo RViz to inspect `/lhr/perception/cones_fused`.
+Cone positions/IDs come from LiDAR; unknown cones remain gray. A second output,
+`/lhr/perception/cones_classified`, uses fresh confirmed camera labels with
+LiDAR side fallback. Enable **ClassifiedCones** to inspect the planner input.
+Fusion mode automatically enables LiDAR side inference for fallback.
+`fusion_camera_max_age_sec` (default `0.5`) bounds boundary-color freshness.
+The planner reads the classified output with color-aware boundary pairing;
+unknown and orange cones retain geometry-based pairing. Physical orange stays
+on the inspection map; the planner keeps its LiDAR side/unknown namespace. See the
+[perception contract and tuning parameters](src/lhr_perception/README.md#cameralidar-inspection-map)
+and [Gazebo usage](src/lhr_gazebo/README.md#cameralidar-inspection-map).
+ROS launch/startup and synthetic image-to-planner checks run in Docker.
+Celina confirmed manual autocross/EKF visuals; see the
+[validation record](src/lhr_gazebo/README.md#fusion-planner-validation-2026-11-01)
+for the stationary live check and remaining live-interruption evidence.
+
 ### Vehicle model
 
 The FSAE vehicle (`models/fsae_vehicle/model.sdf`) uses STL meshes (`meshes/carBody.stl`, `meshes/carTire.stl`) for visuals with simplified collision geometry. **`model.sdf` is generated**: `scripts/generate_vehicle_model.py` renders `templates/model.sdf.in` from [`lhr_vehicle/config/vehicle.yaml`](src/lhr_vehicle/README.md), so the numbers below are Orion's and shared with the controller, the kinematic sim and perception:
@@ -403,10 +435,10 @@ flowchart TB
 
 | Component | Kinematic | Gazebo (`perception:=sim`) | Gazebo (`perception:=lidar`) |
 |-----------|-----------|----------------------------|------------------------------|
-| Cone source | `publish_cones` | `publish_cones` (reused) | Gazebo GPU LiDAR |
+| Cone source | `publish_cones` | `publish_cones` (reused) | Gazebo GPU LiDAR or world-backed Mid-360 caster |
 | Perception | `sensor_sim` (FOV filter) | `sensor_sim` (reused) | `lidar_cone_detector` (pointcloud clustering) |
 | Physics / vehicle | `sim_kinematic` | Gazebo | Gazebo |
-| `track_builder` pairing | boundary (Delaunay) | boundary (Delaunay) | boundary by default; classified when `lidar_classify_sides:=true` |
+| `track_builder` pairing | boundary (Delaunay) | boundary (Delaunay) | boundary by default and in camera fusion; classified with side inference alone |
 | Actuation | `/lhr/vehicle/cmd` directly | `joint_cmd_adapter` → 6 joints | `joint_cmd_adapter` → 6 joints |
 
 All paths produce the same ROS 2 topic interfaces. Boundary pairing uses color when available and falls back to geometry for unclassified LiDAR cones.
@@ -459,7 +491,11 @@ itself carries `run_id`, `git_sha`, `scenario` and `seed` as rosbag2
 `custom_data`. Recording is off by default: a lap is roughly 6 MiB and
 the gate runs many seeds.
 
-Load [`foxglove/lhr_sim.json`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/ros2/foxglove/lhr_sim.json)
+For Gazebo, use the [Gazebo layout and recording steps](foxglove/README.md).
+That layout includes viewer-only truth cones, estimated versus true pose,
+and live run metrics. It expects `estimator:=ekf foxglove:=true`.
+
+For the kinematic demo, load [`foxglove/lhr_sim.json`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/ros2/foxglove/lhr_sim.json)
 as the layout so everyone is looking at the same panels: a 3D view of
 the track and cloud, command against actual speed, steering, and
 mission state.
@@ -536,6 +572,8 @@ reproducible exactly. Gate on a tolerance band, not on equality.
 | `/lhr/sensor/zed2i/{left,right}/image_rect` | `sensor_msgs/Image` | ZED 2i rectified images, best-effort (Gazebo, `enable_stereo_camera:=true`) |
 | `/lhr/sensor/zed2i/{left,right}/camera_info` | `sensor_msgs/CameraInfo` | Their calibration, under the same conditions |
 | `/lhr/perception/cone_colors/debug_image` | `sensor_msgs/Image` | Color-region labels on the left ZED image (`enable_camera_color_classifier:=true`) |
+| `/lhr/perception/cones_fused` | `visualization_msgs/MarkerArray` | Camera-colored LiDAR inspection map (`enable_camera_lidar_fusion:=true`), reliable/transient-local; visualization of remembered physical colors |
+| `/lhr/perception/cones_classified` | `visualization_msgs/MarkerArray` | Camera-priority side labels with LiDAR fallback; same QoS and enablement as the inspection map; planner input in Gazebo fusion mode |
 | `/clock` | `rosgraph_msgs/Clock` | Sim time, from the kinematic stack's plant or bridged from Gazebo. See [Simulation clock](#simulation-clock) |
 
 ## TF tree

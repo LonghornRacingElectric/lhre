@@ -2,6 +2,7 @@
 // Trackside session export (laps and flags from `classifier`, samples from the packet tables), so the viewer
 // imports it the same way as a JSON file.
 import { NextRequest, NextResponse } from "next/server";
+import { getToken } from "next-auth/jwt";
 import { gzipSync } from "zlib";
 import pool from "@/lib/db-telemetry";
 import { DB_CHANNELS, dbSessionExport, isTimedLap, type DbDay, type DbMark, type DbRow } from "@/lib/driveday/db";
@@ -52,6 +53,8 @@ const SAMPLES_SQL = `
   limit 200000`;
 
 export async function GET(req: NextRequest) {
+  // Same sign-in as the pages: the middleware skips /api (see src/app/api/logsync).
+  if (!(await getToken({ req }))) return NextResponse.json({ error: "sign in required" }, { status: 401 });
   const day = req.nextUrl.searchParams.get("day");
   try {
     if (day === null) {

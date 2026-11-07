@@ -223,7 +223,6 @@
 .ddv .welcome>div{max-width:480px;text-align:center;padding:32px;border:1px dashed var(--track);border-radius:10px;background:var(--panel)}
 .ddv .welcome h2{font:600 26px/1.1 var(--f-disp);letter-spacing:.02em;text-transform:uppercase;margin:0 0 10px}
 .ddv .welcome p{color:var(--mute);margin:0 0 18px;line-height:1.5}
-.ddv .dropzone{position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bg) 82%,transparent);border:3px dashed var(--s1);font:600 24px var(--f-disp);letter-spacing:.04em;text-transform:uppercase;pointer-events:none}
 
 /* ---- v3: resizable split, flags, notes, debrief, alerts, loops ---- */
 .ddv .main{grid-template-columns:minmax(0,1fr) 12px min(var(--dock,520px),60%);gap:0}

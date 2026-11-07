@@ -55,12 +55,9 @@
         <topic>/imu/data</topic>
       </sensor>
 
-      <!-- LiDAR sensor (VLP-16 Puck, front-mounted)
-           Matches real Velodyne VLP-16 datasheet specs:
-           - 16 channels, +/-15 deg vertical FOV, 2.0 deg spacing
-           - 1800 horizontal samples at 10 Hz = 0.2 deg resolution
-           - 0.9 m min range, 100 m max range
-           - ~300,000 pts/sec single return -->
+      <!-- Retain main's VLP-16-style grid. The 500 x 40 Mid-360 approximation
+           regressed cone-contact gates; vendor-pattern GPU sampling belongs
+           in a separate experiment. -->
       <sensor name="lidar" type="gpu_lidar">
         <pose>1.0253 0 0.2 0 0 0</pose>
         <always_on>true</always_on>

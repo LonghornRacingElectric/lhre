@@ -550,6 +550,7 @@ message {
   name: "INDICATORS_SHUTDOWN_STATUS"
   can_id: 308
   from_board: "HVC"
+  to_boards: "VCU"
   to_boards: "PDU"
   bus: "Critical"
   dlc: 6

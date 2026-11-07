@@ -156,3 +156,19 @@ def test_default_mount_uses_vehicle_config():
 
     mount = MountPose()
     assert (mount.x_m, mount.y_m, mount.z_m) == load_vehicle().lidar_position_m
+
+
+def test_vehicle_height_and_attitude_preserve_world_ground():
+    mount = MountPose(pitch_rad=.12)
+    sensor = Mid360Sensor(config=NO_NOISE, mount=mount)
+    points, labels = sensor.frame_labeled(
+        .1, 3., -2., .8, np.empty((0, 2)),
+        vehicle_z=.08, vehicle_roll=.04, vehicle_pitch=-.03)
+    vehicle_rotation = rotation_zyx(.04, -.03, .8)
+    sensor_rotation = vehicle_rotation @ mount.rotation()
+    origin = np.array([3., -2., .08]) + vehicle_rotation @ np.array(
+        [mount.x_m, mount.y_m, mount.z_m])
+    world = points @ sensor_rotation.T + origin
+    assert len(world) > 100
+    assert not labels.any()
+    assert world[:, 2] == pytest.approx(np.zeros(len(world)), abs=1e-9)

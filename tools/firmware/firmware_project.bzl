@@ -412,6 +412,7 @@ def firmware_project(
         enable_usb = False,
         enable_dfu = False,
         locations = [],
+        variants = {},
         enable_printf_float = False,
         size_budget_percent = 85,
         size_budget_overrides = {},
@@ -435,9 +436,9 @@ def firmware_project(
         App/**/*.cpp|hpp    → cc_library {name}_app (LHAL + raw FreeRTOS
                               API), linked into the firmware and built for
                               the host
-        App/*_test.cpp      → one small cc_test each, named by file stem,
+        App/**/*_test.cpp   → one small cc_test each, named by file stem,
                               against {name}_app + the LHAL host fakes
-        App/*_sim.cpp       → one host cc_binary each, named by file stem
+        App/**/*_sim.cpp    → one host cc_binary each, named by file stem
 
     Args:
         name (string): name of the project
@@ -460,12 +461,12 @@ def firmware_project(
             for a board that outgrows the convention and hand-writes its app
             library, tests, and sims. Defaults to True.
         enable_tests (bool, optional): Synthesize a cc_test per
-            App/*_test.cpp. Set False to keep the app library but skip the
+            App/**/*_test.cpp. Set False to keep the app library but skip the
             host tests — the escape hatch for boards that don't maintain
             them (the files, if present, simply stop being compiled).
             Defaults to True.
         enable_sims (bool, optional): Synthesize a host cc_binary per
-            App/*_sim.cpp. Same escape hatch as enable_tests, for the
+            App/**/*_sim.cpp. Same escape hatch as enable_tests, for the
             sims. Defaults to True.
         enable_freertos (bool, optional): Whether or not to use FreeRTOS. Defaults to False.
         enable_usb (bool, optional): Wire in USB CDC (virtual COM port): ST's USB Device
@@ -475,6 +476,13 @@ def firmware_project(
             USB_DEVICE/ directory exists. Defaults to False.
         enable_dfu (bool, optional): Whether or not to accept strings to go into DFU. Defaults to False.
         locations (list, optional): A list of location identifiers (e.g., ["FR", "FL"]).
+        variants (dict, optional): Extra firmware images built from the same
+            sources, as {"suffix": ["DEFINE", ...]}. Each variant adds
+            :{name}_{suffix} (+ .elf/.bin/.hex), :openocd_{suffix} and
+            :dfu_{suffix}, compiled with the extra defines, alongside the
+            plain image (and per location, if any). For build-time image
+            selection in Board/ code, e.g. a bring-up test image. Defaults
+            to {}.
         enable_printf_float (bool, optional): Whether to link -u _printf_float (adds ~10KB). Defaults to False.
         size_budget_percent (int, optional): Each image gets a
             {image}_size_test that fails when any MEMORY region of the
@@ -558,9 +566,9 @@ def firmware_project(
             deps = final_app_deps,
         )
 
-        for test_src in native.glob(["App/*_test.cpp"], allow_empty = True) if enable_tests else []:
+        for test_src in native.glob(["App/**/*_test.cpp"], allow_empty = True) if enable_tests else []:
             cc_test(
-                name = test_src[len("App/"):-len(".cpp")],
+                name = test_src.split("/")[-1][:-len(".cpp")],
                 size = "small",
                 srcs = [test_src],
                 deps = [
@@ -570,9 +578,9 @@ def firmware_project(
                 ],
             )
 
-        for sim_src in native.glob(["App/*_sim.cpp"], allow_empty = True) if enable_sims else []:
+        for sim_src in native.glob(["App/**/*_sim.cpp"], allow_empty = True) if enable_sims else []:
             cc_binary(
-                name = sim_src[len("App/"):-len(".cpp")],
+                name = sim_src.split("/")[-1][:-len(".cpp")],
                 srcs = [sim_src],
                 deps = [
                     ":" + app_name,
@@ -651,12 +659,22 @@ def firmware_project(
     else:
         locations_to_build = locations
 
-    for location in locations_to_build:
-        target_name = name
-        location_defines = []
+    # (suffix, defines) per image: the plain image plus one per variant.
+    images = [(None, [])] + sorted(variants.items())
 
+    for location, (variant, variant_defines) in [
+        (loc, image)
+        for loc in locations_to_build
+        for image in images
+    ]:
+        target_name = name
+        location_defines = list(variant_defines)
+        flash_suffix = "_".join([part for part in [variant, location] if part])
+
+        if variant:
+            target_name = "{}_{}".format(target_name, variant)
         if location:
-            target_name = "{}_{}".format(name, location)
+            target_name = "{}_{}".format(target_name, location)
             location_defines.append("BOARD_{}".format(location))
 
         _firmware_binary(
@@ -716,14 +734,14 @@ def firmware_project(
         release_srcs.append("{}.hex".format(target_name))
 
         openocd_flash_target(
-            name = "openocd_{}".format(location) if location else "openocd",
+            name = "openocd_{}".format(flash_suffix) if flash_suffix else "openocd",
             elf = ":{}.elf".format(target_name),
             cfg = "//drivers/stm32/{}:openocd_cfg".format(family),
             tags = ["local", "flasher"],
         )
 
         dfu_flash_target(
-            name = "dfu_{}".format(location) if location else "dfu",
+            name = "dfu_{}".format(flash_suffix) if flash_suffix else "dfu",
             bin_file = ":{}.bin".format(target_name),
             tags = ["local", "flasher"],
         )

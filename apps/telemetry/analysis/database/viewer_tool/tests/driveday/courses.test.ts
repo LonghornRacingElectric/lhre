@@ -5,6 +5,7 @@ import { Session } from "../../src/lib/driveday/session";
 import { segAt } from "../../src/lib/driveday/segments";
 import { COURSE_LEN, synthCourses } from "./fixtures/courses";
 import { synthSession, TRACK_LEN } from "./fixtures/synth";
+import type { LiveSample, SessionExport } from "../../src/lib/driveday/types";
 
 const J = synthCourses();
 const courses = convertSession(J, "courses.json", []);
@@ -90,5 +91,37 @@ describe("the start and finish lines", () => {
   });
   it("leave an open course as it was imported", () => {
     courses.forEach((c) => expect(rebuildRun(c.D)).toBe(c.D));
+  });
+});
+
+describe("a finish line beside the start line", () => {
+  /* one 10 m/s run: north up the start straight, round, then east across it on y = 25 to finish at x = endX */
+  const run = (endX: number) => {
+    const KY = (6378137 * Math.PI) / 180;
+    const KX = KY * Math.cos((30.3865 * Math.PI) / 180);
+    const corners = [[0, 0], [0, 150], [-150, 150], [-150, 25], [endX, 25]];
+    const sampleTail: LiveSample[] = [];
+    let t = 1_700_200_000_000;
+    corners.slice(1).forEach(([x, y], i) => {
+      const [x0, y0] = corners[i];
+      const n = Math.round(Math.hypot(x - x0, y - y0));
+      for (let k = 0; k < n; k++, t += 100) {
+        sampleTail.push({ t, lat: 30.3865 + (y0 + ((y - y0) * k) / n) / KY, lon: -97.7242 + (x0 + ((x - x0) * k) / n) / KX, speed: 10, hv_pack_v: 500, values: {} });
+      }
+    });
+    const startMs = sampleTail[0].t;
+    const endMs = sampleTail[sampleTail.length - 1].t;
+    const laps = [{ label: "Run 1", startMs, endMs, durationMs: endMs - startMs, samples: [] }];
+    return convertSession({ version: 1, source: "orion", laps, sampleTail } as unknown as SessionExport, "finish.json", [])[0].D;
+  };
+
+  it("is an open course when the run ends driving away from the start, with no chord closing it", () => {
+    const D = run(15);
+    expect(D.open).toBe(true);
+    expect(Math.hypot(D.ref[0][0] - D.ref[D.ref.length - 1][0], D.ref[0][1] - D.ref[D.ref.length - 1][1])).toBeGreaterThan(20);
+  });
+
+  it("stays a loop when the run ends heading back to its start (an early press)", () => {
+    expect(run(-15).open).toBeUndefined();
   });
 });

@@ -13,8 +13,8 @@ export const metadata: Metadata = {
   icons: { icon: "/lapdog-logo.webp" },
 };
 
-// Drive day viewer (analysis/driveday_data_viewer). Runs are imported in the browser
-// and kept in IndexedDB; nothing here talks to the database.
+// Drive day viewer (analysis/driveday_data_viewer). Drive days load from the orion
+// database (/api/driveday/db) and are kept in IndexedDB.
 export default function TracksideRetroPage() {
   return (
     <div className={`ddv ${disp.variable} ${body.variable} ${mono.variable}`}>
