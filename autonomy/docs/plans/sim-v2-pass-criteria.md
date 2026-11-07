@@ -136,8 +136,10 @@ Each joins the matrix with its check.
 - The FMU drives a rigid, planar sensor rig: suspension travel, roll and pitch
   stay inside the model and are not rendered. Cone contacts are geometric
   checks, not modeled impacts.
-- The safety geofence is a 150 m radius around where the car arms. The 500 m
-  extreme scenario and the real layouts may reach past it.
+- Every gate course has to fit inside the safety geofence, a fixed radius
+  around where the car arms. The 150 m default may not reach the 500 m extreme
+  scenario or the real layouts, so it is being sized to the largest course
+  ([#229](https://github.com/LonghornRacingElectric/lhre/issues/229)).
 - Our rules checker is stricter than at least two real layouts. Generated
   courses stay inside it; the stack is held to the real layouts too.
 - Off course and cone contact use the conservative car box from the MVP,
@@ -163,7 +165,5 @@ issue, and the write-up reports what passed.
   11/4.
 - Does 0.5 m of EKF error hold on 500 m laps once IMU noise and bias land,
   with no GNSS?
-- Should the geofence come from the course's extent, or stay one fixed radius
-  that every course has to fit?
 - Should the rules checker loosen to admit the real layouts' 4.0 m radius
   and 2.8 m width, so generated courses can be as tight as real ones?
