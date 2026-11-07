@@ -22,6 +22,7 @@ SPEEDS=${SPEEDS:-"3 5 8"}
 REPEATS=${REPEATS:-2}
 CLEAN_SEEDS=${CLEAN_SEEDS-"1 2 3 4 5"}   # clean autocross laps: false trips
 TRACK=${TRACK:-oval}
+CLEAN_TRACK=${CLEAN_TRACK:-autocross}
 AFTER=${AFTER:-25}          # fault starts this many seconds after DRIVING
 RUN_S=${RUN_S:-60}          # wall seconds per faulted run
 CLEAN_S=${CLEAN_S:-150}
@@ -109,7 +110,7 @@ for kind in $CASES; do
     done
 done
 for s in $CLEAN_SEEDS; do
-    one_run "clean_s$s" clean autocross "$s" 5 "$CLEAN_S"
+    one_run "clean_s$s" clean "$CLEAN_TRACK" "$s" 5 "$CLEAN_S"
 done
 python3 "$HERE/summarize.py" "$OUT/results.csv" > "$OUT/summary.md"
 if [ -n "$failed" ]; then

@@ -678,3 +678,20 @@ observer saw up to 18 confirmed orange cones on the inspection map, no
 Final estimated speed was 0.0024 m/s. This was one moving completion check
 with safety/metrics disabled, not a repeated/scored MVP gate campaign; the
 reviewer's full acceleration gate rerun is still needed.
+
+## Rules-compliant courses
+
+`track_style:=rules_autocross` uses the seeded piece-based
+[track generator](../lhr_trackgen/README.md#rules-compliant-autocross).
+Generate the matching world with `generate_world.py --style rules_autocross`
+and pass its absolute path as `world:=...`. `width_m` (default 3.5) and
+`cone_spacing_m` (default 2.0) reach the simplified cone publisher as typed
+floats. Match them to the world's `--width` and `--cone-spacing` values.
+For this style width is clear space between cone bases; both perception
+branches give the planner the corresponding cone-center pairing width.
+Legacy styles keep their width conventions and defaults. The generated
+ground plane grows when necessary to contain long courses. Existing worlds
+within the original 200 m plane serialize unchanged.
+Metrics scores the actual world's paired centerline without a style-specific
+route shortcut. These courses can expose failures in perception and planning;
+passing the geometry checks does not imply the autonomy gate passes.
