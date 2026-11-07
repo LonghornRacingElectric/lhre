@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Render the default and stereo vehicle SDFs from lhr_vehicle's vehicle.yaml.
+Render the Gazebo/FMU and stereo vehicle SDFs from lhr_vehicle's vehicle.yaml.
 
-Run after editing vehicle.yaml and commit both regenerated SDFs:
+Run after editing vehicle.yaml and commit all four regenerated SDFs:
 
     python3 src/lhr_gazebo/scripts/generate_vehicle_model.py
 
-``--check`` renders without writing and fails if either committed SDF is
+``--check`` renders without writing and fails if any committed SDF is
 out of date; lhr_gazebo's tests run the same comparison so CI catches a
 YAML edit that forgot the regenerate step.
 """
@@ -16,6 +16,7 @@ import math
 from pathlib import Path
 from string import Template
 import sys
+import xml.etree.ElementTree as ET
 
 PKG_DIR = Path(__file__).resolve().parents[1]
 SRC_DIR = PKG_DIR.parent
@@ -61,7 +62,7 @@ def _fmt(value: float) -> str:
     return f'{value:.4f}'.rstrip('0').rstrip('.')
 
 
-def render(veh, *, enable_stereo_camera=False) -> str:
+def render(veh, *, enable_stereo_camera=False, external_plant=False) -> str:
     body_ratio = veh.wheelbase_m / MESH_REF_WHEELBASE_M
     tire_ratio = veh.wheel_radius_m / MESH_REF_WHEEL_RADIUS_M
     m, L, W, H = (veh.chassis_mass_kg, veh.body_length_m,
@@ -122,19 +123,45 @@ def render(veh, *, enable_stereo_camera=False) -> str:
         Template(STEREO_TEMPLATE.read_text(encoding='utf-8')).substitute(substitutions).rstrip()
         if enable_stereo_camera else '')
     template = Template(TEMPLATE.read_text(encoding='utf-8'))
-    return template.substitute(substitutions)
+    rendered = template.substitute(substitutions)
+    if not external_plant:
+        return rendered
+    # Preserve all render geometry, but never let a second plant move it.
+    root = ET.fromstring(rendered)
+    model = root.find('model')
+    ET.SubElement(model, 'static').text = 'true'
+    for plugin in list(model.findall('plugin')):
+        model.remove(plugin)
+    for link in model.findall('link'):
+        for element in list(link.findall('collision')) + list(link.findall("sensor[@type='imu']")):
+            link.remove(element)
+    # Static joints cannot articulate; fixed transforms retain the spawn geometry.
+    for joint in model.findall('joint'):
+        joint.set('type', 'fixed')
+        for axis in list(joint.findall('axis')):
+            joint.remove(axis)
+    plugin = ET.SubElement(model, 'plugin', {
+        'filename': 'gz-sim-pose-publisher-system', 'name': 'gz::sim::systems::PosePublisher'})
+    for tag, value in (('publish_model_pose', 'true'), ('publish_link_pose', 'false'),
+                       ('use_pose_vector_msg', 'true'), ('update_frequency', '50')):
+        ET.SubElement(plugin, tag).text = value
+    ET.indent(root, space='  ')
+    return '<?xml version="1.0" ?>\n' + ET.tostring(root, encoding='unicode') + '\n'
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
     parser.add_argument('--check', action='store_true',
-                        help='fail if either committed vehicle SDF is out of date')
+                        help='fail if any committed vehicle SDF is out of date')
     args = parser.parse_args(argv)
 
     veh = load_source_vehicle()
     stale = False
-    for output, stereo in ((OUTPUT, False), (STEREO_OUTPUT, True)):
-        rendered = render(veh, enable_stereo_camera=stereo)
+    for output, stereo, external in (
+            (OUTPUT, False, False), (STEREO_OUTPUT, True, False),
+            (OUTPUT.with_name('model_fmu.sdf'), False, True),
+            (OUTPUT.with_name('model_fmu_stereo.sdf'), True, True)):
+        rendered = render(veh, enable_stereo_camera=stereo, external_plant=external)
         rel = output.relative_to(SRC_DIR.parent)
         if args.check:
             current = output.read_text(encoding='utf-8') if output.exists() else ''

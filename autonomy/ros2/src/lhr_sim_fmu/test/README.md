@@ -4,7 +4,8 @@ Run `colcon test --packages-select lhr_sim_fmu --return-code-on-test-failure`
 from the built ROS workspace. Contract cases cover rejected/nonfinite native
 steps, resource release, map transforms, bounded driver pedals, provenance
 mismatches and incompatible FMI versions/types/units. A ROS failure case
-checks that rejected physics cannot publish time or odometry.
+checks that rejected physics cannot publish time or odometry. External-clock
+cases check fixed-step timestamps, pauses, duplicate samples and rewind rejection.
 Provenance tests force Git's different-owner check and verify that the
 selected checkout remains readable. Failed Git reads retain their diagnostic.
 
