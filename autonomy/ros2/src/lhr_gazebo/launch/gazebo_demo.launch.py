@@ -14,6 +14,7 @@ Usage:
 """
 
 import os
+from uuid import uuid4
 import xml.etree.ElementTree as ET
 
 from ament_index_python.packages import get_package_share_directory
@@ -21,6 +22,7 @@ from launch import LaunchContext, LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
     ExecuteProcess,
+    LogInfo,
     OpaqueFunction,
     RegisterEventHandler,
     SetEnvironmentVariable,
@@ -240,8 +242,11 @@ def _launch_setup(context: LaunchContext):
         resource_path = os.pathsep.join((resources.name, models_dir))
         resource_cleanup.append(RegisterEventHandler(OnShutdown(
             on_shutdown=lambda event, context: resources.cleanup())))
+    partition = (context.environment.get('GZ_PARTITION') or 'lhr-fmu-'+uuid4().hex
+                 if external_plant else '')
     _gz_env = {
         'GZ_SIM_RESOURCE_PATH': resource_path,
+        **({'GZ_PARTITION': partition} if partition else {}),
         'FONTCONFIG_FILE': os.environ.get('FONTCONFIG_FILE') or os.path.join(
             config_dir, 'gazebo-fontconfig.conf'),
         **qt_env,
@@ -253,6 +258,10 @@ def _launch_setup(context: LaunchContext):
         gz_cmd = ['gz', 'sim', '-r', world_path]
     else:
         gz_cmd = ['gz', 'sim', '-r', '-s', world_path]
+
+    if external_plant and context.launch_configurations.get(
+            'fmu_lockstep', 'true').lower() == 'true':
+        gz_cmd.remove('-r')
 
     gz_sim = ExecuteProcess(
         cmd=gz_cmd,
@@ -674,6 +683,8 @@ def _launch_setup(context: LaunchContext):
 
     return [
         SetEnvironmentVariable('GZ_SIM_RESOURCE_PATH', resource_path),
+        *([SetEnvironmentVariable('GZ_PARTITION', partition),
+           LogInfo(msg=f'FMU Gazebo transport partition: {partition}')] if partition else []),
         *resource_cleanup,
         gz_sim,
         bridge,
@@ -697,6 +708,8 @@ def generate_launch_description():
         # ----- Launch arguments -----
         DeclareLaunchArgument('plant', default_value='gazebo', choices=['gazebo', 'fmu']),
         DeclareLaunchArgument('fmu_path', default_value=''),
+        DeclareLaunchArgument('fmu_lockstep', default_value='true', choices=['true', 'false']),
+        DeclareLaunchArgument('fmu_step_sec', default_value='0.02'),
         DeclareLaunchArgument('fmu_pedal_gain', default_value='0.1'),
         DeclareLaunchArgument('fmu_command_timeout_sec', default_value='0.5'),
         DeclareLaunchArgument('fmu_pose_timeout_sec', default_value='5.0'),

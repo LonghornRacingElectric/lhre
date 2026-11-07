@@ -68,8 +68,9 @@ flowchart LR
     ekf -- "/lhr/vehicle/odom + TF" --> upper["track_builder · pure_pursuit<br>mission_manager · metrics"]
 ```
 
-In Gazebo the IMU is the bridged physics sensor rather than a synthesized
-one, so `inertial_sim` only supplies wheel speeds there. Details and the
+With `plant:=gazebo`, Gazebo bridges its physics IMU and `inertial_sim` only
+supplies wheel speeds. With `plant:=fmu`, the adapter temporarily synthesizes
+both from FMU truth until native outputs land in #205. Details and the
 measured drift figures are in
 [`lhr_state_estimation`](src/lhr_state_estimation/README.md). Viz-only topics (`/lhr/sensor/cones_viz`,
 `/lhr/sensor/fov_viz`, `/lhr/track/centerline_markers`, `/lhr/control/lookahead`)
@@ -572,7 +573,9 @@ reproducible exactly. Gate on a tolerance band, not on equality.
 | `/lhr/lidar/sensor` | `visualization_msgs/MarkerArray` | Latched Mid-360 marker, from `lhr_lidar_sim` |
 | `/lhr/scene/clutter` | `visualization_msgs/MarkerArray` | Latched trackside clutter boxes the caster hits, from `lhr_lidar_sim` with `clutter_profile:=trackside` |
 | `/lhr/vehicle/body` | `visualization_msgs/MarkerArray` | Latched car body for viewers, from `vehicle_viz` (kinematic stack) |
-| `/lhr/sim/provenance` | `std_msgs/String` | Latched JSON naming the BobSim commit and vehicle-file hashes (`plant:=bobsim`) |
+| `/lhr/sim/provenance` | `std_msgs/String` | Latched BobSim/vehicle identity; FMU mode also records the artifact manifest |
+| `/lhr/sim/fmu_step_timing` | `std_msgs/String` | Accepted FMU call duration, simulation interval and speed |
+| `/lhr/sim/fmu_pose_lag` | `std_msgs/String` | Observed Gazebo sensor pose age and match status |
 | `/lhr/sim/fault` | `std_msgs/String` | Latched fault start and end events (`<edge> <kind> <expect>`) from `fault_injector` (Gazebo, `fault:=<kind>`) |
 | `/lhr/sensor/zed2i/{left,right}/image_rect` | `sensor_msgs/Image` | ZED 2i rectified images, best-effort (Gazebo, `enable_stereo_camera:=true`) |
 | `/lhr/sensor/zed2i/{left,right}/camera_info` | `sensor_msgs/CameraInfo` | Their calibration, under the same conditions |
@@ -590,8 +593,9 @@ flowchart LR
 ```
 
 `map -> base_link` is broadcast by the kinematic stack's plant
-(`sim_kinematic`, or `sim_bobsim` under `plant:=bobsim`); in Gazebo by the
-`OdometryPublisher` plugin, bridged from `/model/fsae_vehicle/tf` to `/tf`.
+(`sim_kinematic`, `sim_bobsim` under `plant:=bobsim`, or `sim_fmu` under
+`plant:=fmu`). The default Gazebo plant instead uses `OdometryPublisher`,
+bridged from `/model/fsae_vehicle/tf` to `/tf`; Gazebo FMU mode uses FMU truth.
 Under `estimator:=ekf`, `ekf_node` broadcasts it from the estimate and the
 simulator's copy is remapped to `/tf_truth`, so tf never holds two
 disagreeing poses for one frame.
@@ -1064,5 +1068,8 @@ for what a trip does.
 The MVS launcher also accepts `plant:=fmu` for the optional
 [full BobLib vehicle](src/lhr_sim_fmu/README.md). Build its identified artifact
 with `make -C simulation fmu`. `fmu_path` selects the artifact and
-`fmu_pedal_gain` (0.1) sets the proportional driver gain. This is separate
-from Gazebo dynamics and does not change the MVP plant choice.
+`fmu_pedal_gain` (0.1) sets the proportional driver gain. The Gazebo launcher
+also accepts `plant:=fmu`: the FMU owns motion and Gazebo renders sensors.
+`fmu_lockstep:=true` (default in FMU mode) holds Gazebo between accepted
+20 ms plant steps. See the [timing setting and Mac measurements](src/lhr_sim_fmu/README.md#gazebo-timing-report).
+The default Gazebo plant choice is unchanged.

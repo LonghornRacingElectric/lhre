@@ -16,3 +16,7 @@ canonical aero references and front brake bias, which differ from the upstream d
 The aero test sets up its own import path and can run alone with `-k aero`.
 There is no fallback or substitute native model. See the
 [package guide](../README.md) for the artifact build and known upstream limits.
+
+`test_timing_report.py` rejects missing streams, unmeasured gate speeds and
+pose-age violations. Slow compute steps pass only when observed age stays
+below one LiDAR frame.

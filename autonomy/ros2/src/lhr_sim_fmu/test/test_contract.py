@@ -110,7 +110,8 @@ def test_ros_step_failure_cannot_publish_new_time_or_odometry(monkeypatch):
     rclpy.init(args=['--ros-args', '-p', 'publish_clock:=true'])
     node = SimFmu()
     messages = []
-    node._odom_pub = node._clock_pub = SimpleNamespace(publish=messages.append)
+    node._odom_pub = node._clock_pub = node._timing_pub = SimpleNamespace(
+        publish=messages.append)
     stamp = node._sim_ns
     try:
         with pytest.raises(RuntimeError, match='native solver failed'):

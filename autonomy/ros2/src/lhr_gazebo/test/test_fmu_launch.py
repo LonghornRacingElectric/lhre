@@ -6,7 +6,9 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 
 from launch import LaunchContext
-from launch.actions import DeclareLaunchArgument, RegisterEventHandler, SetEnvironmentVariable
+from launch.actions import (
+    DeclareLaunchArgument, ExecuteProcess, RegisterEventHandler, SetEnvironmentVariable,
+)
 from launch.events import Shutdown
 from launch_ros.actions import Node
 from launch_ros.utilities import evaluate_parameters
@@ -35,8 +37,13 @@ def test_fmu_launch_owns_truth_and_sensor_model(
                                          enable_stereo_camera=stereo)
     if override:
         context.launch_configurations.update(fmu_path='/tmp/a.fmu', fmu_pedal_gain='1',
-                                             fmu_command_timeout_sec='2', fmu_pose_timeout_sec='9')
+                                             fmu_command_timeout_sec='2', fmu_pose_timeout_sec='9',
+                                             fmu_lockstep='false', fmu_step_sec='0.04')
     actions = module._launch_setup(context)
+    from launch.utilities import perform_substitutions
+    gazebo = next(a for a in actions if type(a) is ExecuteProcess)
+    command = [perform_substitutions(context, arg) for arg in gazebo.cmd]
+    assert ('-r' in command) == override
     nodes = {n._Node__node_name: n for n in actions if isinstance(n, Node)}
     assert 'joint_cmd_adapter' not in nodes
     plant = evaluate_parameters(context, nodes['sim_fmu']._Node__parameters)[0]
@@ -47,6 +54,7 @@ def test_fmu_launch_owns_truth_and_sensor_model(
     assert (('/tf', '/tf_truth') in remaps) == (estimator == 'ekf')
     assert plant['external_clock'] is True and plant['publish_clock'] is False
     assert plant['use_sim_time'] is True
+    assert plant['update_hz'] == (25. if override else 50.)
     assert plant['pedal_gain'] == (1. if override else .1)
     assert type(plant['pedal_gain']) is float
     assert plant['command_timeout_sec'] == (2. if override else .5)
@@ -72,6 +80,21 @@ def test_fmu_launch_owns_truth_and_sensor_model(
         rclpy.shutdown()
     pose = evaluate_parameters(context, nodes['fmu_pose']._Node__parameters)[0]
     assert pose['request_timeout_sec'] == (9. if override else 5.)
+    assert pose['lockstep'] is (not override)
+    assert pose['step_sec'] == (.04 if override else .02)
+    assert pose['physics_step_sec'] == .001
+    from lhr_gazebo.fmu_pose import FmuPose
+    args = ['--ros-args']
+    for name, value in pose.items():
+        args.extend(['-p', f'{name}:={json.dumps(value)}'])
+    rclpy.init(args=args)
+    pose_node = FmuPose()
+    try:
+        for name in ('lockstep', 'step_sec', 'physics_step_sec', 'request_timeout_sec'):
+            assert pose_node.get_parameter(name).value == pose[name]
+    finally:
+        pose_node.destroy_node()
+        rclpy.shutdown()
     assert pose['truth_topic'] == ('/lhr/vehicle/odom_truth' if estimator == 'ekf'
                                    else '/lhr/vehicle/odom')
     metrics = evaluate_parameters(context, nodes['metrics_node']._Node__parameters)[0]
@@ -86,6 +109,7 @@ def test_fmu_launch_owns_truth_and_sensor_model(
     for action in actions:
         if isinstance(action, SetEnvironmentVariable):
             action.execute(context)
+    assert context.environment['GZ_PARTITION']
     model_path = Path(context.environment['GZ_SIM_RESOURCE_PATH'].split(':')[0])
     model = ET.parse(model_path/'fsae_vehicle/model.sdf')
     assert model.findtext('model/static') == 'true'
@@ -102,3 +126,27 @@ def test_spawn_is_the_saved_world_pose():
     world, pose = world_spawn(PKG/'worlds/autocross_seed1.sdf')
     assert world == 'fsae_world'
     assert pose == pytest.approx((18.1095, -14.7442, .9405))
+
+
+def test_fmu_launch_preserves_requested_transport_partition(monkeypatch):
+    spec = importlib.util.spec_from_file_location(
+        'partition_launch', PKG/'launch/gazebo_demo.launch.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module, 'get_package_share_directory', lambda _: str(PKG))
+    monkeypatch.setenv('GZ_PARTITION', 'operator-selected')
+    context = LaunchContext()
+    for action in module.generate_launch_description().entities:
+        if isinstance(action, DeclareLaunchArgument):
+            action.execute(context)
+    context.launch_configurations['plant'] = 'fmu'
+    actions = module._launch_setup(context)
+    for action in actions:
+        if isinstance(action, SetEnvironmentVariable):
+            action.execute(context)
+    assert context.environment['GZ_PARTITION'] == 'operator-selected'
+    for action in actions:
+        if isinstance(action, RegisterEventHandler):
+            from launch.event_handlers import OnShutdown
+            if isinstance(action.event_handler, OnShutdown):
+                action.event_handler.handle(Shutdown(reason='test'), context)

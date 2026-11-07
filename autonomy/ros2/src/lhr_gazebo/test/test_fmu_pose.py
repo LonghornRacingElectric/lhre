@@ -13,7 +13,7 @@ from tf2_msgs.msg import TFMessage
 
 @pytest.fixture
 def node():
-    rclpy.init()
+    rclpy.init(args=['--ros-args', '-p', 'lockstep:=false'])
     result = FmuPose()
     yield result
     result.destroy_node()
@@ -107,3 +107,71 @@ def test_missing_pose_service_cannot_wait_forever_on_paused_clock(node):
     node._started -= 10.
     with pytest.raises(RuntimeError, match='unavailable'):
         node._send()
+
+
+@pytest.fixture
+def coordinated():
+    rclpy.init()
+    result = FmuPose()
+    result._client, result._control = Client(), Client()
+    yield result
+    result.destroy_node()
+    rclpy.shutdown()
+
+
+def test_world_waits_for_fmu_readiness_and_applied_pose(coordinated):
+    from ros_gz_interfaces.srv import ControlWorld, SetEntityPose
+    from std_msgs.msg import String
+    node = coordinated
+    node._send()
+    assert node._control.requests == []
+    node._provenance(String(data='{"plant":"fmu"}'))
+    assert len(node._control.requests) == 1
+    assert node._control.requests[0].world_control.pause
+    node._control.futures[0].set_result(ControlWorld.Response(success=True))
+    node._send()
+    assert not node._client.requests
+    assert len(node._control.requests) == 1
+    node._truth(odom(.001, 0.))
+    assert len(node._client.requests) == 1
+    assert len(node._control.requests) == 1
+    node._client.futures[0].set_result(SetEntityPose.Response(success=True))
+    node._send()
+    assert len(node._control.requests) == 2
+    assert node._control.requests[0].world_control.multi_step == 2
+    assert node._control.requests[-1].world_control.multi_step == 20
+    assert node._cycle_target_ns == 21_000_000
+    node._control.futures[-1].set_result(ControlWorld.Response(success=True))
+    node._send()
+    assert len(node._control.requests) == 2
+    node._cycle_started -= 10.
+    with pytest.raises(RuntimeError, match='did not produce'):
+        node._send()
+
+
+def test_external_unpause_cannot_silently_run_ahead(coordinated):
+    node = coordinated
+    node._cycle_target_ns = 21_000_000
+    node._bootstrap = False
+    with pytest.raises(RuntimeError, match='ran ahead'):
+        node._truth(odom(.041, 1.))
+
+
+def test_rejected_world_control_stops_the_coordinator(coordinated):
+    from ros_gz_interfaces.srv import ControlWorld
+    node = coordinated
+    node._control_future = Future()
+    node._control_future.set_result(ControlWorld.Response(success=False))
+    with pytest.raises(RuntimeError, match='rejected the coordinated'):
+        node._send()
+
+
+def test_bootstrap_accepts_latest_clock_in_initial_two_ticks(coordinated):
+    from ros_gz_interfaces.srv import ControlWorld
+    from std_msgs.msg import String
+    node = coordinated
+    node._provenance(String(data='{"plant":"fmu"}'))
+    node._control.futures[0].set_result(ControlWorld.Response(success=True))
+    node._truth(odom(.002, 0.))
+    assert node._cycle_target_ns == 2_000_000
+    assert len(node._client.requests) == 1

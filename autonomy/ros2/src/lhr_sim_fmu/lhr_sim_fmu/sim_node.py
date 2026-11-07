@@ -2,7 +2,9 @@
 
 import json
 import math
+import os
 from pathlib import Path
+import time
 
 from lhr_sim_bobsim.plant import dependency_paths
 from lhr_sim_fmu.plant import FmuPlant
@@ -38,10 +40,17 @@ class SimFmu(SimKinematic):
         artifact = self.get_parameter('fmu_path').value or root.parent/'out/fmu/OrionFMI.fmu'
         self._plant = FmuPlant(load_vehicle(), (self._x, self._y, self._yaw), Path(artifact),
                                pedal_gain=self.get_parameter('pedal_gain').value)
+        self._timing_count, self._timing_sum, self._timing_max = 0, 0., 0.
+        self._timing_overruns = 0
+        self._timing_last_log = -math.inf
+        self._timing_pub = self.create_publisher(String, '/lhr/sim/fmu_step_timing', 10)
         provenance = {**self._plant.provenance, 'plant': 'fmu',
                       'fmu_pedal_gain': self.get_parameter('pedal_gain').value,
                       'command_timeout_sec': self.get_parameter('command_timeout_sec').value,
-                      'autonomy_vehicle_sha256': vehicle_sha256()}
+                      'autonomy_vehicle_sha256': vehicle_sha256(),
+                      'external_clock': self.get_parameter('external_clock').value,
+                      'gazebo_partition': os.environ.get('GZ_PARTITION', ''),
+                      'step_sec': self._dt}
         qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self._provenance_pub = self.create_publisher(String, '/lhr/sim/provenance', qos)
         self._provenance_pub.publish(String(data=json.dumps(provenance)))
@@ -75,8 +84,25 @@ class SimFmu(SimKinematic):
         target = self._target_speed
         if self._plant.time-self._command_time > self.get_parameter('command_timeout_sec').value:
             target = 0.
+        start = time.perf_counter()
         (self._x, self._y, self._yaw, self._v, self._vy,
          self._yaw_rate) = self._plant.step(self._dt, target, self._target_steer)
+        elapsed = time.perf_counter()-start
+        self._timing_count += 1
+        self._timing_sum += elapsed
+        self._timing_max = max(self._timing_max, elapsed)
+        self._timing_overruns += elapsed > self._dt
+        self._timing_pub.publish(String(data=json.dumps({
+            'fmu_time_sec': self._plant.time, 'step_sec': self._dt,
+            'clock_origin_sec': (self._clock_origin_ns*1e-9
+                                 if self._clock_origin_ns is not None else None),
+            'wall_sec': elapsed, 'speed_mps': self._v})))
+        if self._plant.time-self._timing_last_log >= 1.:
+            self._timing_last_log = self._plant.time
+            self.get_logger().info(
+                f'FMU step timing samples={self._timing_count} step_ms={self._dt*1000:.3f} '
+                f'mean_ms={1000*self._timing_sum/self._timing_count:.3f} '
+                f'max_ms={self._timing_max*1000:.3f} overruns={self._timing_overruns}')
 
     def destroy_node(self):
         """Free native model resources before releasing ROS entities."""
