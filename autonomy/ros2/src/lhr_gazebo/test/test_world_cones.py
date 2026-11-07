@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 
 from lhr_trackgen.publish_cones import cone_kinds, GENERATORS
+from lhr_trackgen.skidpad_geometry import generate_skidpad_lanes
 import pytest
 
 PKG = Path(__file__).parents[1]
@@ -45,6 +46,12 @@ def test_world_matches_the_published_cones(world):
 
     want = sorted(((models[kind], x, y) for (x, y), kind in zip(
         left + right, left_kinds + right_kinds)), key=key)
+    if style == 'skidpad':
+        small, large = generate_skidpad_lanes()
+        orange = [(models[kind], x, y)
+                  for kind, points in (('orange_small', small), ('orange_large', large))
+                  for x, y in points]
+        want = sorted(want + orange, key=key)
     got = sorted(((model, float(x), float(y))
                   for model, x, y in CONE.findall(world.read_text())), key=key)
     assert len(got) == len(want)

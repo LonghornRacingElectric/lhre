@@ -7,7 +7,7 @@ manager enter READY. Go, emergency and reset commands arrive on the matching
 
 Completion depends on the mission: autocross waits for metrics' verified lap
 on `/lhr/metrics/lap_complete`, acceleration for 75.30 m of travel along the
-start heading (the nose on the finish line), inspection for 28 s. Skidpad,
+start heading (the nose on the finish line), inspection for 28 s. Skidpad waits for its ordered route planner;
 ebs_test and manual never complete yet. Once complete, the manager publishes
 `true` on `/lhr/mission/complete` every tick and stays in DRIVING so pursuit
 can brake; FINISHED means the car is below 0.5 m/s.
@@ -36,3 +36,10 @@ skidpad and autocross. The state machine uses the node clock; demo launches
 select simulated time. `/lhr/debug/mission_state` publishes the numeric state
 for plotting. Node cleanup tolerates an already-stopped ROS context after
 launch shutdown.
+
+Skidpad completion is accepted only during `DRIVING`. The planner confirms
+all four laps, exit and a one-second standstill before publishing it; the
+manager also checks vehicle speed before entering `FINISHED`. Autocross's
+lap flag cannot finish skidpad. Emergency reset clears completion, but the
+skidpad planner itself requires a fresh simulation/node restart after a
+latched route fault or a completed run.

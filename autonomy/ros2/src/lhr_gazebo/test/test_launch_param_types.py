@@ -43,7 +43,7 @@ OVERRIDES = {
     'v_max': ('8', 8.0),
     'max_accel': ('3', 3.0),
     'max_decel': ('4', 4.0),
-    'mission': ('skidpad', 'skidpad'),
+    'mission': ('inspection', 'inspection'),
     'auto_go': ('false', False),
     'ready_hold_sec': ('0', 0.0),
     'gyro_bias': ('1', 1.0),

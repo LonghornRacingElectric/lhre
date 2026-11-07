@@ -442,3 +442,28 @@ missing matches, duplicate stamps, and ID replacement. ROS tests cover output
 namespace transitions and timer-driven expiration. ROS checks run in Docker;
 see the [validation record](../lhr_gazebo/README.md#fusion-planner-validation-2026-11-01)
 for manual confirmation and remaining live-interruption evidence.
+
+
+### Verified observations for skidpad
+
+`/lhr/perception/cones_verified` is a separate reliable/transient-local,
+depth-one snapshot for consumers that require measured physical color.
+Its blue, yellow and orange IDs are confirmed by the existing vote rules
+and uniquely matched in the latest fresh camera exposure. Other current
+LiDAR IDs remain `unknown_cones` solely to track map removals/replacements;
+they never supply color evidence. Namespaces
+are `blue_cones`, `yellow_cones` and `orange_cones`. Inferred LiDAR sides and
+remembered inspection colors never enter this stream. A blank, ambiguous or
+expired camera observation removes eligibility; the timer removes all
+color eligibility on camera loss even if LiDAR keeps publishing. Map removal and ID
+replacement revoke the same evidence as on the other outputs.
+
+Positions/IDs come from LiDAR. ADD marker timestamps record the supporting
+camera exposure, so republishing or updating the LiDAR map cannot masquerade
+as another camera frame. Each snapshot starts with DELETEALL. The existing
+inspection and boundary-planning outputs retain their contracts.
+
+Orange here means measured color, not measured cone height. Skidpad validates
+lane and timing-gate roles geometrically against its fitted layout; this
+pipeline does not distinguish small and large physical orange cones. See
+[skidpad planning](../lhr_track_builder/README.md#skidpad-planning).
