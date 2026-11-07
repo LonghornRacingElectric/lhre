@@ -18,6 +18,7 @@ Events listed in <out>/waived.txt are named in the summary, not scored.
 
 import bisect
 import csv
+import json
 import math
 import os
 import re
@@ -43,7 +44,7 @@ FIELDS = (['id', 'kind', 'event', 'track_style', 'seed', 'outcome', 'lap_time_s'
            'stop_dist_m', 'stop_time_s', 'max_v_after_stop', 'finished', 'emergency',
            'early_exits', 'invalid_reason'] + CHECKS + ['passed'])
 RUN_ID = re.compile(
-    r'^(baseline_)?(autocross|rules_autocross|acceleration|skidpad)(?:_s(\d+))?(?:_r(\d+))?$')
+    r'^(baseline_)?(autocross|rules_autocross|amz_fsg|amz_fsi|acceleration|skidpad)(?:_s(\d+))?(?:_r(\d+))?$')
 
 
 def read(bag):
@@ -133,7 +134,7 @@ def score(run_dir, run_id):
     if not match:
         return None
     baseline, style, seed, _ = match.groups()
-    event = 'autocross' if style == 'rules_autocross' else style
+    event = 'autocross' if style in ('rules_autocross', 'amz_fsg', 'amz_fsi') else style
     row = {'id': run_id, 'kind': 'baseline' if baseline else 'gate', 'event': event,
            'seed': seed or '', 'track_style': style}
     if not os.path.isdir(run_dir):
@@ -239,6 +240,16 @@ def main(out):
               '| --- | --- | --- | --- |']
     lines += [f'| {r["track_style"]} | {r["seed"]} | {r["outcome"]} | {r.get("lap_time_s", "")} |'
               for r in rows if r['kind'] == 'baseline']
+    audit_path = os.path.join(out, 'course_audits.json')
+    if os.path.exists(audit_path):
+        with open(audit_path) as f:
+            audits = json.load(f)
+        if audits:
+            lines += ['', '## Imported course audits', '',
+                      'Diagnostic additions only; official v2 adoption is decided in #201.', '']
+            for name, audit in sorted(audits.items()):
+                flags = '; '.join(audit['violations']) or 'no envelope violations'
+                lines.append(f'- {name}: **{audit["status"]}** — {flags}')
     if waived:
         lines += ['', '## Waived', ''] + [f'- {w}' for w in waived]
     failed = [r for r in gate if not r['passed']]

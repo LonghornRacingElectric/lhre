@@ -26,15 +26,25 @@ SETTLE_S=${SETTLE_S:-3}            # keep recording this long after FINISHED
 OUT=${OUT:-$HOME/lhr-test-data/$(date +%F)-mvp-gate}
 EXTRA=${EXTRA:-}
 TRACK_STYLE=${TRACK_STYLE:-autocross}
+REAL_TRACKS=${REAL_TRACKS:-}       # opt-in fixed imported layouts, seed 1
+ALLOW_NONCOMPLIANT=${ALLOW_NONCOMPLIANT:-0}
+PLAN_ONLY=${PLAN_ONLY:-0}         # print the audited matrix, do not launch or clean up
 case "$TRACK_STYLE" in
     autocross|rules_autocross) ;;
     *) echo "unsupported gate TRACK_STYLE=$TRACK_STYLE" >&2; exit 2 ;;
 esac
 ROS2=$(cd "$HERE/../../../ros2" && pwd)
 
+# Validate imported references before creating output or stopping any processes.
+AUDIT='{}'
+if [ -n "$REAL_TRACKS" ]; then
+    audit_args=()
+    [ "$ALLOW_NONCOMPLIANT" = 1 ] && audit_args+=(--allow-noncompliant)
+    AUDIT=$(python3 -m lhr_gazebo.imported_tracks "${audit_args[@]}" $REAL_TRACKS) || exit 2
+fi
+
 TOPICS="/clock /lhr/mission/status /lhr/mission/complete /lhr/metrics/lap_complete
 /lhr/vehicle/odom /lhr/vehicle/odom_truth /lhr/safety/status"
-mkdir -p "$OUT/runs"
 
 REC='' LAUNCH='' WATCH=''
 
@@ -116,7 +126,7 @@ one_run() {  # id [launch args...]
     WATCH=$!
     wait "$LAUNCH"
     stop_run
-    printf '%s\n' "$@" > "$dir/args.txt"
+    printf '%s\n' ${world:+"world:=$world"} $EXTRA "$@" > "$dir/args.txt"
     cleanup
 }
 
@@ -127,6 +137,16 @@ plan() {  # one line per run: the id, then its launch arguments
         fi
         for r in $(seq 1 "$REPEATS"); do
             echo "${TRACK_STYLE}_s${s}_r$r track_style:=$TRACK_STYLE seed:=$s perception:=lidar estimator:=ekf"
+        done
+    done
+    for style in $REAL_TRACKS; do
+        local acknowledge=''
+        [ "$ALLOW_NONCOMPLIANT" = 1 ] && acknowledge='allow_noncompliant_track:=true'
+        if [ "$BASELINE" != 0 ]; then
+            echo "baseline_${style}_s1 track_style:=$style seed:=1 perception:=sim estimator:=truth $acknowledge"
+        fi
+        for r in $(seq 1 "$REPEATS"); do
+            echo "${style}_s1_r$r track_style:=$style seed:=1 perception:=lidar estimator:=ekf $acknowledge"
         done
     done
     for r in $(seq 1 "${ACCEL_REPEATS:-0}"); do
@@ -143,6 +163,12 @@ plan() {  # one line per run: the id, then its launch arguments
 # criteria record it as a waiver, which the summary states, not as missing
 # runs.
 SKIDPAD_WORLD=$HERE/../../../ros2/src/lhr_gazebo/worlds/skidpad_seed1.sdf
+if [ "$PLAN_ONLY" = 1 ]; then
+    plan
+    exit 0
+fi
+mkdir -p "$OUT/runs"
+printf '%s\n' "$AUDIT" > "$OUT/course_audits.json"
 {
     if [ "${SKIDPAD_REPEATS:-0}" != 0 ] && [ ! -e "$SKIDPAD_WORLD" ]; then
         echo "skidpad: no skidpad_seed1.sdf world in this checkout (#114)"

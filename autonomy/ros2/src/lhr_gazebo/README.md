@@ -695,3 +695,21 @@ within the original 200 m plane serialize unchanged.
 Metrics scores the actual world's paired centerline without a style-specific
 route shortcut. These courses can expose failures in perception and planning;
 passing the geometry checks does not imply the autonomy gate passes.
+
+## Imported competition worlds
+
+`track_style:=amz_fsg` and `track_style:=amz_fsi` select fixed source layouts
+(`seed:=1` only). See [competition data](worlds/competition/README.md) for
+provenance, normalization, importer commands and measured envelope flags.
+`allow_noncompliant_track:=false` rejects flagged imports by default; set it
+to `true` to acknowledge the logged violations for diagnostic runs.
+
+The world and its hash-bound `.reference.json` must stay together. An explicit
+`world:=...` import must use its metadata's `layout_id` as `track_style`.
+In `perception:=sim`, `world_cones` replaces the procedural publisher and
+publishes only the original physical cones to `/lhr/track/cones`, where
+`sensor_sim` applies visibility. Its typed `world_sdf` node parameter derives
+from the existing `world` selection rather than a second, independent launch
+argument. LiDAR mode does not start this publisher. The inferred centerline
+is available only to metrics and viewer truth. Imported nominal width is the
+median aligned gate width; procedural width/spacing knobs do not move cones.

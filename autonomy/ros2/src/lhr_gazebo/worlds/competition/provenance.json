@@ -1,0 +1,20 @@
+{
+  "repository": "https://github.com/AMZ-Racing/fssim",
+  "revision": "cf652d8d3f1e13031dad3fb75eb3d4e6fbaaeff4",
+  "source_directory": "fssim_gazebo/models/track/tracks_yaml",
+  "license": "MIT",
+  "license_url": "https://github.com/AMZ-Racing/fssim/blob/cf652d8d3f1e13031dad3fb75eb3d4e6fbaaeff4/LICENSE.md",
+  "copyright": "Copyright (c) 2019 Akademischer Motorsportverein Z\u00fcrich",
+  "source_names": {
+    "amz_fsg": "FSG.yaml",
+    "amz_fsi": "FSI.yaml"
+  },
+  "qualifier": "Upstream venue-named competition layouts. Individual YAML files have no event-year or survey-accuracy statement. The upstream README reports FSG 2018 validation of the simulator; that does not certify these coordinates.",
+  "edits": [
+    "Retain original YAML bytes. Convert ordered side labels to CSV: left to blue, right to yellow, orange to orange_small, orange_big to orange_large. This is our current color convention; the upstream legacy SDF uses different cone-model assignments.",
+    "Remove only a repeated final vertex equal to the first vertex on a closed side. Do not move, scale, add or respread cone positions.",
+    "Write world XY to twelve decimal places in metres. Use the repository's canonical FSAE cone meshes and dimensions.",
+    "Convert starting_pose_front_wing to our rear-axle base_link using the canonical car nose offset. Preserve upstream yaw and coordinate axes. With --fit-spawn, align the car at the nearest reference vertex within 5 m that clears the full canonical footprint and cones with 5 cm reserve. Store both requested alignment pose and executed spawn.",
+    "Derive a scoring-only closed reference by monotone ordered-boundary alignment, 0.5 m arc sampling and periodic Gaussian smoothing at a 2 m spatial scale. Do not feed it to perception or control."
+  ]
+}

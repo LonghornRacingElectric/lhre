@@ -318,3 +318,16 @@ scored scheduling, since a 0.1 s stall at 5 m/s reads as 0.5 m of error
 ([#165](https://github.com/LonghornRacingElectric/lhre/issues/165)).
 
 Node cleanup tolerates an already-stopped ROS context after launch shutdown.
+
+## Imported circuit references
+
+[Competition worlds](../lhr_gazebo/worlds/competition/README.md) carry a
+hash-bound `.reference.json`. `world_centerline` reads its explicit inferred
+route; `world_geometry` repeats source boundary indices to express unequal
+cone counts as contiguous road strips. All original physical cones remain
+in the collision list exactly once. Metrics uses that road and the explicit
+route independently; it never pairs perceived cones to create truth.
+
+Missing sidecars, mismatched world bytes or edited reference metadata are
+errors, rather than a fallback to a different centerline. Legacy generated
+worlds retain their paired-midpoint reference and need no sidecar.
