@@ -34,8 +34,8 @@ Set `start_finish_cones:=true` on the MVS launch to place four large orange
 cones around the first centerline pair, in namespace `start_finish`. They
 appear in the LiDAR scene with their own dimensions; neither their IDs nor
 colors reach the detector. The default is false to preserve existing track
-fixtures. It is ignored on `acceleration`, whose layout already has its
-gates. This marks a scene gate, not an implemented lap timing system or
+fixtures. It is ignored on `acceleration` and `skidpad`, whose layouts already have
+their own gates. This marks a scene gate, not an implemented lap timing system or
 an assertion that the generated track is event compliant. Entry/exit layouts
 for the closed courses remain future work (acceleration has both); all four
 cone asset types are available in Gazebo.
@@ -72,5 +72,10 @@ orange cones flank both lines and small orange marks the exit lane; they
 stay in the left/right lists, with the kind on each marker. Only
 `cone_spacing_m` applies, not the seed or `width_m`.
 `test/test_acceleration.py` checks the layout.
+
+`skidpad` retains its fixed circular layout and separate `orange_small` and
+`orange_large` namespaces. Its orange markers use the same shared cone meshes
+and dimensions as Gazebo. See [skidpad planning](../lhr_track_builder/README.md#skidpad-planning)
+for geometry, acquisition requirements and route order.
 
 Node cleanup tolerates an already-stopped ROS context after launch shutdown.

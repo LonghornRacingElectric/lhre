@@ -101,6 +101,7 @@ class MissionManager(Node):
         self._emergency_received = False
         self._reset_received = False
         self._lap_complete = False
+        self._skidpad_complete = False
         self._complete = False
         self._current_speed = 0.0
         self._pose = None        # (x, y, yaw) from odometry
@@ -122,6 +123,8 @@ class MissionManager(Node):
             Odometry, '/lhr/vehicle/odom', self._odom_cb, 10)
         self.create_subscription(
             Bool, '/lhr/metrics/lap_complete', self._lap_complete_cb, 10)
+        self.create_subscription(
+            Bool, '/lhr/skidpad/complete', self._skidpad_complete_cb, 10)
         if self._require_safety:
             self.create_subscription(
                 UInt32, '/lhr/safety/heartbeat', self._heartbeat_cb, 10)
@@ -174,6 +177,11 @@ class MissionManager(Node):
     def _lap_complete_cb(self, msg: Bool):
         if msg.data:
             self._lap_complete = True
+
+    def _skidpad_complete_cb(self, msg: Bool):
+        """Accept only a stopped, completed skidpad sequence during driving."""
+        if self._state == STATE_DRIVING and msg.data:
+            self._skidpad_complete = True
 
     def _heartbeat_cb(self, _msg: UInt32):
         now = self._now()
@@ -280,6 +288,7 @@ class MissionManager(Node):
             self._reset_received = False
             self._emergency_received = False
             self._lap_complete = False
+            self._skidpad_complete = False
             self._complete = False
             self._path_available = False
             self._transition(STATE_OFF)
@@ -292,6 +301,9 @@ class MissionManager(Node):
         if self._mission == 'autocross':
             return self._lap_complete
 
+        if self._mission == 'skidpad':
+            return self._skidpad_complete
+
         if self._mission == 'inspection':
             if self._driving_enter_time is None:
                 return False
@@ -302,7 +314,7 @@ class MissionManager(Node):
         if self._mission == 'acceleration':
             return self._distance_driven() >= ACCEL_FINISH_M
 
-        # skidpad, ebs_test, manual: not yet implemented
+        # ebs_test, manual: not yet implemented
         return False
 
     def _distance_driven(self) -> float:

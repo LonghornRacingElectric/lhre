@@ -353,6 +353,81 @@ than being its own argument: without `safety_node` there is no heartbeat.
 
 ## Visual check
 
+For a stationary preview of the skidpad circular boundaries (no autonomy
+nodes), source ROS and run from `autonomy/ros2`:
+
+```bash
+export GZ_SIM_RESOURCE_PATH="$PWD/src/lhr_gazebo/models${GZ_SIM_RESOURCE_PATH:+:$GZ_SIM_RESOURCE_PATH}"
+gz sim src/lhr_gazebo/worlds/skidpad_seed1.sdf
+```
+
+The preview has 17 inner and 13 outer cones per circle, small orange entry/
+exit lanes and large orange gates. Orange cone spacing and lane lengths are
+illustrative sim choices. The spawn's foremost vehicle envelope is 15 m before
+the center line, using the current `lhr_vehicle` model footprint. Do not use
+the autocross planner to drive this world.
+
+## Skidpad event
+
+After building and sourcing the workspace:
+
+```bash
+ros2 launch lhr_gazebo gazebo_demo.launch.py mission:=skidpad track_style:=skidpad \
+  perception:=sim estimator:=truth enable_metrics:=false
+```
+
+The view defaults to 15 m / 240 degrees, sim cone accumulation is off, and
+only one planner owns the path. After Go, the car creeps until colored lane
+and timing-gate observations validate entry, stops for acquisition, then
+drives two clockwise right laps and two counterclockwise left laps. It exits
+and stops, then the mission reaches `FINISHED`. RViz shows the visible cones,
+fitted circles and the short active path sent to pure pursuit.
+
+The large orange pairs now bracket the shared center timing line at y=0.
+Their +/-0.5 m offsets and small-cone lane spacing are simulation placement
+choices; the center timing line itself comes from D.10.1.3. These pairs no
+longer mark illustrative gates at y=+/-7 m.
+The fitter now initializes from detected cone chords and the known center
+separation, rather than assuming a center from the staging distance. It uses
+the initial vehicle heading to resolve orientation. Acquisition reports include
+the number of retained center candidates and refined pose hypotheses.
+
+For LiDAR perception, enable the existing camera fusion and stereo rig:
+
+```bash
+ros2 launch lhr_gazebo gazebo_demo.launch.py mission:=skidpad track_style:=skidpad \
+  perception:=lidar estimator:=truth enable_stereo_camera:=true \
+  enable_camera_lidar_fusion:=true gui:=false rviz:=false enable_metrics:=false
+```
+
+LiDAR skidpad launch requires fusion and `require_camera_colors:=true`.
+`cone_topic` defaults to `/lhr/perception/cones_verified` under LiDAR and the
+simulated sensor topic otherwise. Only fresh confirmed camera colors reach
+acquisition; inferred sides remain available to other missions. A repeated
+exposure cannot satisfy another stable frame. Camera loss stops approach and
+latches a hold if a route has started. Orange event roles are validated by
+position in the fitted layout; physical small/large size is not measured.
+A measured pair across the lane beside the fitted timing line is required;
+the farther orange row may be occluded by the nearer row.
+
+Skidpad uses `lidar_cluster_radius:=0.15` and `lidar_dedup_radius:=0.3` to
+keep its timing cones separate from the nearby inner-circle cones. Both are
+typed launch arguments; other missions retain 0.5 and 1.5 respectively.
+The camera samples the lower cone body at `fusion_sample_height_m:=0.1`
+with `fusion_pixel_margin:=2.0`, avoiding the small cone's white stripe and
+ambiguous nearby patches. Other missions retain 0.1625 m and 6 pixels.
+These are simulation settings, not validated physical detector tuning.
+The sim/truth demo above remains the baseline, not a no-shortcuts gate claim.
+
+All [acquisition thresholds](../lhr_track_builder/README.md#skidpad-planning)
+are launch arguments with matching defaults/types. `fov_deg` / `max_range_m`
+retain 200 / 20 defaults for other missions. `accumulate_detections` defaults
+to true elsewhere; skidpad defaults to false. Gazebo sets `closed_path` to
+false for all missions. `require_planner_limit` defaults to true for skidpad
+and false otherwise; `planner_timeout_sec` is 0.5. Do not disable the required
+cap for acquisition. Chaining parameters apply only to the autocross planner.
+
+
 In RViz, inferred left cones are blue, inferred right cones are yellow, and
 cones awaiting evidence are orange. During a sharp turn:
 
@@ -678,3 +753,24 @@ observer saw up to 18 confirmed orange cones on the inspection map, no
 Final estimated speed was 0.0024 m/s. This was one moving completion check
 with safety/metrics disabled, not a repeated/scored MVP gate campaign; the
 reviewer's full acceleration gate rerun is still needed.
+
+## Skidpad perception validation (2026-11-06)
+
+Built the 12 ROS packages through `lhr_gazebo` in an isolated Jazzy Docker
+container. The seven affected package suites passed 620 tests with no errors,
+failures or skips, including ament lint, typed launch defaults/overrides,
+image/TF-to-skidpad delivery over DDS, stale/duplicate observations, occlusion,
+map identity changes and timing-pair validation. Strict MkDocs passed.
+
+One headless seed-1 run used `perception:=lidar`, `estimator:=truth`, stereo
+and camera fusion, with `ready_hold_sec:=0.5`. It acquired after 4.38 m of
+bounded approach, at 0.0161 m fit RMS with eight inliers per circle and two
+camera-colored inliers per boundary. Its reported crossing sequence was
+`ENTRY -> RIGHT_1 -> RIGHT_2 -> LEFT_1 -> LEFT_2`; it then exited, reached
+`STOPPED`, and the mission reached `FINISHED` without a planner fault.
+No generated cone labels were supplied to fusion or acquisition.
+
+This checks perception and route integration on truth odometry. Metrics and
+safety were disabled; independent cone-contact scoring and the EKF driving
+campaign remain unverified. Bounded-run teardown is not a clean-shutdown
+acceptance check.

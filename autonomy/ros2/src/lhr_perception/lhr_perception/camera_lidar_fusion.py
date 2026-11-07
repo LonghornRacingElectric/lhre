@@ -65,6 +65,7 @@ class CameraLidarFusion(Node):
         self._current_map = {}
         self._published_keys = set()
         self._classified_keys = set()
+        self._verified_keys = set()
         self._last_image_stamp = self._last_map_stamp = self._processed_stamp = 0
         self._newest_stamp = 0
         self._last_clock = self.get_clock().now().nanoseconds
@@ -75,6 +76,8 @@ class CameraLidarFusion(Node):
             MarkerArray, '/lhr/perception/cones_fused', map_qos)
         self._classified_pub = self.create_publisher(
             MarkerArray, '/lhr/perception/cones_classified', map_qos)
+        self._verified_pub = self.create_publisher(
+            MarkerArray, '/lhr/perception/cones_verified', map_qos)
         self.create_subscription(
             MarkerArray, '/lhr/sensor/cones_detected', self._map_cb, map_qos)
         self.create_subscription(
@@ -206,8 +209,14 @@ class CameraLidarFusion(Node):
         # Camera loss must update the latched fallback even if LiDAR is idle.
         self._publish_classified()
 
-    def _output_snapshot(self, *, classified=False):
-        if classified:
+    def _output_snapshot(self, *, classified=False, verified=False):
+        if verified:
+            labels = self._evidence.visible_labels(
+                self.get_clock().now().nanoseconds, self._settings['camera_max_age_sec'] * 1e9)
+            namespaces = {key: f'{labels.get(key) or "unknown"}_cones'
+                          for key in self._current_map}
+            published_keys = self._verified_keys
+        elif classified:
             labels = self._evidence.visible_labels(
                 self.get_clock().now().nanoseconds, self._settings['camera_max_age_sec'] * 1e9)
             namespaces = {key: resolve_cone_namespace(labels.get(key), source.ns)
@@ -226,8 +235,12 @@ class CameraLidarFusion(Node):
             marker.header.frame_id, marker.header.stamp = 'map', stamp
             marker.ns, marker.id, marker.action = namespace, cone_id, Marker.DELETE
             output.markers.append(marker)
-        for cone_id, source in self._current_map.items():
+        for cone_id, namespace in namespaces.items():
+            source = self._current_map[cone_id]
             marker = deepcopy(source)
+            if verified:
+                # This stream represents camera observations, not a remembered map label.
+                marker.header.stamp = Time(nanoseconds=self._processed_stamp).to_msg()
             marker.ns = namespaces[cone_id]
             r, g, b = MARKER_COLORS[marker.ns]
             marker.color = ColorRGBA(r=r, g=g, b=b, a=1.)
@@ -245,6 +258,9 @@ class CameraLidarFusion(Node):
         output = self._output_snapshot(classified=True)
         self._publish_snapshot(self._classified_pub, output)
         self._classified_keys = {(m.ns, m.id) for m in output.markers if m.action == Marker.ADD}
+        verified = self._output_snapshot(verified=True)
+        self._publish_snapshot(self._verified_pub, verified)
+        self._verified_keys = {(m.ns, m.id) for m in verified.markers if m.action == Marker.ADD}
 
     @staticmethod
     def _publish_snapshot(publisher, output):

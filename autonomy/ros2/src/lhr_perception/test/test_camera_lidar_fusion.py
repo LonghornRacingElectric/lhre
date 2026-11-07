@@ -461,3 +461,29 @@ def test_slow_viewer_can_replace_map_from_latest_snapshot_alone(node, topic):
     finally:
         executor.shutdown()
         viewer.destroy_node()
+
+
+def test_verified_stream_uses_only_fresh_camera_observations_and_exposure_stamp(node):
+    """Skidpad must never mistake inferred sides or remembered colors for observations."""
+    from rclpy.time import Time
+    from visualization_msgs.msg import Marker
+    node._map_cb(snapshot())
+    assert node._output_snapshot(verified=True).markers[-1].ns == 'unknown_cones'
+    for stamp in (10, 11, 12):
+        observe(node, stamp, color=(255, 100, 0))
+    node.get_clock().set_ros_time_override(Time(seconds=12.))
+    marker = node._output_snapshot(verified=True).markers[-1]
+    assert (marker.ns, marker.id, marker.header.stamp.sec) == ('orange_cones', 7, 12)
+    source = snapshot(12, namespace='right_cones')
+    source.markers[0].header.stamp.nanosec = 100_000_000
+    node._map_cb(source)
+    # A new LiDAR snapshot cannot refresh the camera exposure timestamp.
+    marker = node._output_snapshot(verified=True).markers[-1]
+    assert marker.header.stamp.nanosec == 0
+    node.get_clock().set_ros_time_override(Time(seconds=12.6))
+    output = node._output_snapshot(verified=True)
+    assert all(m.action == Marker.DELETE or m.ns == 'unknown_cones' for m in output.markers)
+    node._process()
+    assert node._verified_keys == {('unknown_cones', 7)}
+    assert node._output_snapshot().markers[-1].ns == 'orange_cones'
+    assert node._output_snapshot(classified=True).markers[-1].ns == 'right_cones'

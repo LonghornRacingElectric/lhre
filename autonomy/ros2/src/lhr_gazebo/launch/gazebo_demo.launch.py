@@ -29,6 +29,7 @@ from launch.event_handlers import OnShutdown
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+from lhr_track_builder.skidpad_acquisition import ACQUISITION_DEFAULTS
 from lhr_vehicle import load_vehicle
 import yaml
 
@@ -146,6 +147,11 @@ def _launch_setup(context: LaunchContext):
     models_dir = os.path.join(pkg_share, 'models')
     config_dir = os.path.join(pkg_share, 'config')
 
+    skidpad = context.launch_configurations.get('mission', 'autocross') == 'skidpad'
+    if skidpad and (
+        context.launch_configurations.get('require_planner_limit', 'true').lower() != 'true'
+    ):
+        raise ValueError('Skidpad acquisition requires an open path and planner speed limit')
     perception = context.launch_configurations.get('perception', 'sim')
     lidar_source = context.launch_configurations.get('lidar_source', 'gazebo')
     if lidar_source not in ('gazebo', 'mid360'):
@@ -179,6 +185,12 @@ def _launch_setup(context: LaunchContext):
     if enable_fusion and (not enable_stereo or perception != 'lidar'):
         raise RuntimeError(
             'Camera fusion requires enable_stereo_camera:=true and perception:=lidar')
+    if skidpad and perception == 'lidar' and not enable_fusion:
+        raise RuntimeError('Skidpad LiDAR requires enable_camera_lidar_fusion:=true')
+    if skidpad and perception == 'lidar' and (
+        context.launch_configurations.get('require_camera_colors', 'true').lower() != 'true'
+    ):
+        raise RuntimeError('Skidpad LiDAR requires require_camera_colors:=true')
     # Fusion needs inferred sides whenever camera evidence is unavailable.
     classify_sides = classify_sides or enable_fusion
     if enable_color and not enable_stereo:
@@ -346,6 +358,8 @@ def _launch_setup(context: LaunchContext):
             parameters=[{
                 'fov_deg': _float('fov_deg'),
                 'max_range_m': _float('max_range_m'),
+                'accumulate_detections': ParameterValue(
+                    LaunchConfiguration('accumulate_detections'), value_type=bool),
                 'use_sim_time': True,
             }],
             output='screen',
@@ -377,9 +391,9 @@ def _launch_setup(context: LaunchContext):
             name='lidar_cone_detector',
             parameters=[{
                 'use_sim_time': True,
-                'max_range': 20.0,
+                'max_range': ParameterValue(LaunchConfiguration('max_range_m'), value_type=float),
                 'min_range': 0.8,
-                'cluster_radius': 0.5,
+                'cluster_radius': _float('lidar_cluster_radius'),
                 'ground_z_min': ParameterValue(
                     LaunchConfiguration('lidar_ground_z_min'), value_type=float),
                 'ground_z_max': ParameterValue(
@@ -405,8 +419,22 @@ def _launch_setup(context: LaunchContext):
             output='screen',
         ))
 
-    # ----- Track builder -----
-    if perception == 'lidar':
+    # ----- Track builder (one owner of the path topic) -----
+    if skidpad:
+        centerline = Node(
+            package='lhr_track_builder', executable='skidpad_acquisition',
+            name='skidpad_acquisition', parameters=[{
+                'use_sim_time': True,
+                'fov_deg': ParameterValue(LaunchConfiguration('fov_deg'), value_type=float),
+                'max_range_m': ParameterValue(
+                    LaunchConfiguration('max_range_m'), value_type=float),
+                **{name: ParameterValue(LaunchConfiguration(name), value_type=type(default))
+                   for name, default in ACQUISITION_DEFAULTS.items()},
+                'cone_topic': ParameterValue(LaunchConfiguration('cone_topic'), value_type=str),
+                'require_camera_colors': ParameterValue(
+                    LaunchConfiguration('require_camera_colors'), value_type=bool),
+            }], output='screen')
+    elif perception == 'lidar':
         centerline = Node(
             package='lhr_track_builder',
             executable='track_builder',
@@ -474,6 +502,10 @@ def _launch_setup(context: LaunchContext):
         executable='pursuit_node',
         name='pure_pursuit',
         parameters=[{
+            'require_planner_limit': ParameterValue(
+                LaunchConfiguration('require_planner_limit'), value_type=bool),
+            'planner_timeout_sec': ParameterValue(
+                LaunchConfiguration('planner_timeout_sec'), value_type=float),
             'lookahead_dist': _float('lookahead_dist'),
             'lookahead_min': _float('lookahead_min'),
             'lookahead_curvature_gain': _float('lookahead_curvature_gain'),
@@ -553,7 +585,8 @@ def _launch_setup(context: LaunchContext):
             name='rviz2',
             additional_env=qt_env,
             arguments=['-d', os.path.join(
-                config_dir, 'stereo.rviz' if enable_stereo else 'default.rviz')],
+                config_dir, 'skidpad.rviz' if skidpad
+                else 'stereo.rviz' if enable_stereo else 'default.rviz')],
             parameters=[{'use_sim_time': True}],
             output='screen',
         ))
@@ -709,7 +742,8 @@ def generate_launch_description():
             description='Infer LiDAR sides; always enabled when camera fusion is enabled'),
         DeclareLaunchArgument(
             'track_style', default_value='autocross',
-            description='Track style: "autocross", "oval", or "simple"'),
+            description=('Track style: "autocross", "oval", "simple", '
+                         '"acceleration", or "skidpad"')),
         DeclareLaunchArgument(
             'estimator', default_value='truth',
             description='Odometry source: "truth" (Gazebo) or "ekf"'),
@@ -719,6 +753,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'wheel_scale_error', default_value='1.0',
             description='Simulated rolling-radius error (1.0 = exact)'),
+        DeclareLaunchArgument('mission', default_value='autocross'),
         DeclareLaunchArgument('seed', default_value='1'),
         DeclareLaunchArgument('num_waypoints', default_value='10'),
         DeclareLaunchArgument(
@@ -738,9 +773,7 @@ def generate_launch_description():
               ('process_hz', 10.0, 'Maximum fusion processing frequency'),
               ('map_max_age_sec', 0.5, 'Maximum map age at image time, at most 2 seconds'),
               ('camera_max_age_sec', 0.5, 'Maximum camera age before using LiDAR sides'),
-              ('sample_height_m', 0.1625, 'Height above planar map points to sample color'),
               ('max_color_range_m', 20.0, 'Maximum 3D camera-to-sample distance'),
-              ('pixel_margin', 6.0, 'Region bounding-box expansion in pixels'),
               ('vote_window', 5, 'Maximum accepted color votes per cone'),
               ('min_color_votes', 3, 'Minimum matching votes to confirm a color'),
               ('min_color_fraction', 0.7, 'Minimum fraction of matching color votes'),
@@ -758,14 +791,34 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'cone_color_orange_hsv', default_value='[5, 100, 50, 19, 255, 255]',
             description='Orange HSV bounds [h_min, s_min, v_min, h_max, s_max, v_max]'),
+        DeclareLaunchArgument('fusion_sample_height_m', default_value=PythonExpression([
+            "0.1 if '", LaunchConfiguration('mission'), "' == 'skidpad' else 0.1625"]),
+            description='Sample the lower cone body for skidpad instead of its white stripe'),
+        DeclareLaunchArgument('fusion_pixel_margin', default_value=PythonExpression([
+            "2.0 if '", LaunchConfiguration('mission'), "' == 'skidpad' else 6.0"]),
+            description='Camera association margin; smaller for closely spaced skidpad cones'),
         # Sensor sim
-        DeclareLaunchArgument('fov_deg', default_value='200.0'),
-        DeclareLaunchArgument('max_range_m', default_value='20.0'),
+        DeclareLaunchArgument('fov_deg', default_value=PythonExpression([
+            "240.0 if '", LaunchConfiguration('mission'), "' == 'skidpad' else 200.0"])),
+        DeclareLaunchArgument('max_range_m', default_value=PythonExpression([
+            "15.0 if '", LaunchConfiguration('mission'), "' == 'skidpad' else 20.0"])),
+        DeclareLaunchArgument('accumulate_detections', default_value=PythonExpression([
+            "'false' if '", LaunchConfiguration('mission'), "' == 'skidpad' else 'true'"])),
+        *[DeclareLaunchArgument(name, default_value=str(default))
+          for name, default in ACQUISITION_DEFAULTS.items()],
+        DeclareLaunchArgument('cone_topic', default_value=PythonExpression([
+            "'/lhr/perception/cones_verified' if '", LaunchConfiguration('perception'),
+            "' == 'lidar' else '/lhr/sensor/cones_detected'"])),
+        DeclareLaunchArgument('require_camera_colors', default_value=PythonExpression([
+            "'true' if '", LaunchConfiguration('perception'), "' == 'lidar' else 'false'"])),
         # Gazebo keeps its sensor-frame detector defaults.
         DeclareLaunchArgument('lidar_ground_z_min', default_value='-0.40'),
         DeclareLaunchArgument('lidar_ground_z_max', default_value='0.5'),
         DeclareLaunchArgument('lidar_min_cluster_points', default_value='1'),
-        DeclareLaunchArgument('lidar_dedup_radius', default_value='1.5'),
+        DeclareLaunchArgument('lidar_cluster_radius', default_value=PythonExpression([
+            "0.15 if '", LaunchConfiguration('mission'), "' == 'skidpad' else 0.5"])),
+        DeclareLaunchArgument('lidar_dedup_radius', default_value=PythonExpression([
+            "0.3 if '", LaunchConfiguration('mission'), "' == 'skidpad' else 1.5"])),
         DeclareLaunchArgument('lidar_max_cluster_points', default_value='50'),
         DeclareLaunchArgument('lidar_stack_window_sec', default_value='0.0'),
         DeclareLaunchArgument('lidar_stack_max_frames', default_value='10'),
@@ -782,6 +835,9 @@ def generate_launch_description():
         DeclareLaunchArgument('beam_width', default_value='3'),
         DeclareLaunchArgument('beam_depth', default_value='10'),
         # Control
+        DeclareLaunchArgument('require_planner_limit', default_value=PythonExpression([
+            "'true' if '", LaunchConfiguration('mission'), "' == 'skidpad' else 'false'"])),
+        DeclareLaunchArgument('planner_timeout_sec', default_value='0.5'),
         DeclareLaunchArgument('path_timeout_sec', default_value='1.0'),
         DeclareLaunchArgument('lookahead_dist', default_value='5.0'),
         DeclareLaunchArgument('lookahead_min', default_value='2.0'),
@@ -804,7 +860,6 @@ def generate_launch_description():
         DeclareLaunchArgument('max_odom_gap_sec', default_value='1.0'),
 
         # Mission
-        DeclareLaunchArgument('mission', default_value='autocross'),
         DeclareLaunchArgument(
             'reference_closed', default_value=PythonExpression([
                 "'false' if '", LaunchConfiguration('mission'),

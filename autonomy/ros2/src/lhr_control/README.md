@@ -66,3 +66,25 @@ they do not measure DDS delivery or physical tracking. The closed-path speed
 floor remains `v_min`, including startup and curves whose lateral budget would
 otherwise demand a lower speed. Open paths can command below that floor to
 accelerate from rest or stop at their endpoint.
+
+## Acquisition mode
+
+The Gazebo skidpad mission selects `closed_path:=false` and
+`require_planner_limit:=true`. Open paths clamp lookahead and curvature
+sampling to their endpoints instead of wrapping to the start. The controller
+honors `/lhr/planning/speed_limit` even below `v_min`, including zero.
+Missing or stale path, odometry or speed-limit input commands zero speed;
+mission `DRIVING` is also required. A missing planner cannot leave the last
+creep command active. Zero commands model a simulator stop, not a verified
+hardware brake maneuver.
+
+| Parameter | Node default | Description |
+| --- | --- | --- |
+| `closed_path` | `true` | Wrap path indices; false for the skidpad planner's local route windows |
+| `require_planner_limit` | `false` | Require a fresh planner cap and input watchdogs |
+| `planner_timeout_sec` | `0.5` | Maximum receipt age for required inputs |
+
+The Gazebo launch sets `closed_path` to false in both perception branches.
+It exposes `require_planner_limit` and `planner_timeout_sec` as launch arguments.
+Autocross keeps planner limiting off and uses the existing open-path Gazebo default.
+Other steering and speed parameters are in the [workspace reference](../../README.md).
