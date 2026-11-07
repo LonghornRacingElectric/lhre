@@ -74,6 +74,9 @@ class Job:
     error: Optional[str] = None
     # Last motion reading that affected this job, for UI display.
     last_motion: Optional[dict] = None
+    # Delete-after-sync outcome, one {"name", "action", "reason"} per file
+    # (see pi.delete_verified). Empty unless LOGSYNC_DELETE_AFTER_SYNC is on.
+    deletions: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         d = asdict(self)
