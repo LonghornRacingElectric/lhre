@@ -9,7 +9,9 @@ from lhr_sim_fmu.plant import FmuPlant
 from lhr_sim_kinematic.sim_node import SimKinematic
 from lhr_vehicle import load_vehicle, vehicle_sha256
 import rclpy
-from rclpy.qos import DurabilityPolicy, QoSProfile
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from rclpy.time import Time
+from rosgraph_msgs.msg import Clock
 from std_msgs.msg import String
 
 
@@ -18,9 +20,18 @@ class SimFmu(SimKinematic):
 
     def __init__(self):
         super().__init__('sim_fmu')
+        self.declare_parameter('external_clock', False)
         self.declare_parameter('fmu_path', '')
         self.declare_parameter('pedal_gain', .1)
         self.declare_parameter('command_timeout_sec', .5)
+        self._clock_origin_ns = None
+        self._last_clock_ns = None
+        if self.get_parameter('external_clock').value:
+            if self._publish_clock:
+                raise ValueError('external_clock and publish_clock are mutually exclusive')
+            self._timer.cancel()
+            clock_qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT)
+            self.create_subscription(Clock, '/clock', self._clock_cb, clock_qos)
         self._target_speed, self._target_steer = 0., 0.
         self._command_time = -math.inf
         root, _ = dependency_paths()
@@ -35,6 +46,22 @@ class SimFmu(SimKinematic):
         self._provenance_pub = self.create_publisher(String, '/lhr/sim/provenance', qos)
         self._provenance_pub.publish(String(data=json.dumps(provenance)))
         self.get_logger().info('BobLib co-simulation ready: '+json.dumps(provenance))
+
+    def _clock_cb(self, message):
+        """Integrate fixed steps up to Gazebo time, never ahead of its clock."""
+        stamp = Time.from_msg(message.clock).nanoseconds
+        if self._last_clock_ns is not None and stamp < self._last_clock_ns:
+            raise RuntimeError('Gazebo clock reset; restart the FMU with the world')
+        self._last_clock_ns = stamp
+        if self._clock_origin_ns is None:
+            if stamp == 0:
+                return
+            self._clock_origin_ns = self._sim_ns = stamp
+            self._publish_state(message.clock)
+        while self._sim_ns + self._step_ns <= stamp:
+            self._advance()
+            self._sim_ns += self._step_ns
+            self._publish_state(Time(nanoseconds=self._sim_ns).to_msg())
 
     def _cmd_cb(self, message):
         if not all(math.isfinite(v) for v in (message.drive.speed, message.drive.steering_angle)):

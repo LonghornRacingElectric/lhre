@@ -23,23 +23,27 @@ def _generator():
 
 @pytest.mark.parametrize('stereo, filename', [
     (False, 'model.sdf'), (True, 'model_stereo.sdf'),
+    (False, 'model_fmu.sdf'), (True, 'model_fmu_stereo.sdf'),
 ])
 def test_model_sdf_is_in_sync_with_vehicle_yaml(stereo, filename):
     gen = _generator()
-    rendered = gen.render(gen.load_source_vehicle(), enable_stereo_camera=stereo)
+    rendered = gen.render(gen.load_source_vehicle(), enable_stereo_camera=stereo,
+                          external_plant='fmu' in filename)
     committed = (gen.OUTPUT.parent / filename).read_text(encoding='utf-8')
     assert committed == rendered, (
         f'models/fsae_vehicle/{filename} is out of date: '
         'run scripts/generate_vehicle_model.py and commit the result')
 
 
-@pytest.mark.parametrize('filename', ['model.sdf', 'model_stereo.sdf'])
+@pytest.mark.parametrize('filename', [
+    'model.sdf', 'model_stereo.sdf', 'model_fmu.sdf', 'model_fmu_stereo.sdf'])
 def test_model_sdf_uses_lf_line_endings(filename):
     gen = _generator()
     assert b'\r' not in (gen.OUTPUT.parent / filename).read_bytes()
 
 
-@pytest.mark.parametrize('filename', ['model.sdf', 'model_stereo.sdf'])
+@pytest.mark.parametrize('filename', [
+    'model.sdf', 'model_stereo.sdf', 'model_fmu.sdf', 'model_fmu_stereo.sdf'])
 def test_check_rejects_either_stale_model(filename, tmp_path, monkeypatch):
     """Fail the CLI check even when only the opt-in variant is stale."""
     gen = _generator()
@@ -167,3 +171,18 @@ def test_generated_lidar_preserves_main_gpu_sampling_geometry(filename):
     assert lidar.findtext('noise/type') == 'gaussian'
     assert float(lidar.findtext('noise/stddev')) == (
         gen.load_source_vehicle().lidar_range_noise_std_m)
+
+
+@pytest.mark.parametrize('stereo', [False, True])
+def test_fmu_model_is_sensor_only(stereo):
+    gen = _generator()
+    root = ET.fromstring(gen.render(gen.load_source_vehicle(),
+                                    enable_stereo_camera=stereo, external_plant=True))
+    assert root.findtext('model/static') == 'true'
+    assert not root.findall('.//collision')
+    assert not root.findall(".//sensor[@type='imu']")
+    assert root.find(".//sensor[@type='gpu_lidar']") is not None
+    assert len(root.findall(".//sensor[@type='camera']")) == 2*stereo
+    assert all(joint.get('type') == 'fixed' for joint in root.findall('model/joint'))
+    assert [p.get('name') for p in root.findall('model/plugin')] == [
+        'gz::sim::systems::PosePublisher']

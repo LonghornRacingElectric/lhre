@@ -188,6 +188,11 @@ ros2 topic pub --once /lhr/mission/go std_msgs/msg/Bool "{data: true}"
 
 ## Tests and CI
 
+CI installs `ros_gz_interfaces` for the FMU pose-follower message/service tests.
+It skips `ros_gz_sim` and `ros_gz_bridge`, so these unit tests do not launch
+Gazebo or need a display. Native FMU and rendered-sensor checks remain opt-in.
+
+
 ```bash
 colcon test                     # from ros2/, after a build
 colcon test-result --verbose    # prints the failures

@@ -8,22 +8,25 @@ The output stays in ignored `out/fmu/`.
 ## Source and build
 
 `make fmu-source` clones BobLib into `out/fmu/boblib-source` and checks out
-`4741a5ec6201635051031ed356a1bb55932df89c`, the merged VehicleFMI exporter.
+`75b6e031d8f9cb49acdb62b536c41c22e566a020`, the merged VehicleFMI exporter.
 This step needs GitHub access. It refuses local source changes. The subsequent
 container build has no network, as with the rest of simulation. The build
 refuses a modified BobSim checkout or a different upstream Modelica tree,
 so a future dependency update needs review instead of silently mixing models.
 
-The export pin matched BobSim `22c5056` and its nested BobLib `1bd6d78`.
-Both `BobLib/` model trees were Git tree
-`bb8379ca9fe8cbae57a47d3af441d40110d839ba`. BobSim `f58f932` moves the
-nested BobLib to `75b6e03`, which has another model tree and nested
-records. So `make fmu` refuses at this pin until a reviewed exporter
-commit moves `FMU_BOBLIB_SHA`.
+The exporter and BobSim `f58f932` now use the same BobLib `75b6e03` model
+tree. This pin contains the public VehicleFMI exporter and nested calibration
+records. The wrapper reads the rear-axle reference from
+`pVehicle.chassis.rearAxle.geometry`. The parent binds the selected vehicle's
+chassis record. The wrapper also binds `brake.front_bias` to
+`pVehicle.brakes.frontBrakeBias`; this value is not stored in the generated
+vehicle record. No BobSim or BobLib source changes are required.
 
 The build calls public `app.modelica_generator.plan_modelica_stack` on
 `vehicle/vehicle.yml` with the pinned BobSim root. It writes the generated
-records and package orders only into a temporary copy of BobLib. Tire data
+records and every `(path, name)` package-order entry from the public plan
+only into a temporary copy of BobLib. It creates missing package orders and
+does not add duplicate entries. Tire data
 comes from the canonical vehicle directory. It creates a small Modelica
 binding wrapper for driver commands and rear-axle outputs, then calls the
 upstream `Tests/modelica_fmu_export.py` public `export_fmu` function.
@@ -56,3 +59,12 @@ that PR. See [ADR-016](../../docs/architecture/016-fmu-artifact-boundary.md)
 for the dependency boundary. BobLib's known motor-latch failure on some
 brake-hold/relaunch profiles remains upstream; do not treat one passing
 profile as a general solver or hardware acceptance result.
+
+## Current native result (2026-11-06)
+
+The matching-pin artifact builds on Linux arm64. Its compiled aero reference
+points and front brake bias match the canonical vehicle. The native drive
+profile still fails on pull-away at FMU time 5.02 s. OpenModelica names a
+battery/inverter nonlinear system; the cause is not confirmed. The test stays
+failing when selected. See the [Gazebo checks](../../autonomy/ros2/src/lhr_gazebo/README.md#current-car-checks-2026-11-06)
+for hashes and closed-loop results. A successful build is not solver acceptance.
