@@ -107,8 +107,8 @@ LHR_TEST_FMU=/opt/lhr/simulation/out/fmu/OrionFMI.fmu \
 CI runs interface/error/provenance tests without building a large native FMU.
 The native test skips unless `LHR_TEST_FMU` is set; if set, a missing or stale
 artifact fails. It covers waiting, launch, both steering directions, stopping and
-relaunch. It also checks that compiled aero references match our car rather
-than the different BobLib defaults. Launch tests evaluate flags and start the node with an injected
+relaunch. It also checks that compiled aero references and front brake bias match our
+car rather than the BobLib defaults. Launch tests evaluate flags and start the node with an injected
 plant to check types and EKF routing without pretending to test physics.
 
 Any rejected FMI step or nonfinite state fails the process. Native resources

@@ -313,8 +313,8 @@ jobs:
           echo "BOBSIM_VEHICLE=$GITHUB_WORKSPACE/vehicle/vehicle.yml" >> "$GITHUB_ENV"
 
       # Dependencies come from each package.xml, so declaring one there is
-      # enough. ros_gz is skipped: it pulls in all of Gazebo Harmonic and
-      # nothing in CI launches a simulator (the demos need a display).
+      # enough. Skip Gazebo runtime packages; CI does not launch a simulator.
+      # The pose-follower tests need ros_gz_interfaces messages and services.
       # `rosdep update` pulls half a dozen YAML files from GitHub and fails
       # the whole command on one reset connection, hence the retries.
       - name: Install dependencies
@@ -326,7 +326,7 @@ jobs:
             sleep 10
           done
           rosdep install --from-paths src --ignore-src -y \
-            --skip-keys "ros_gz_sim ros_gz_bridge ros_gz_interfaces"
+            --skip-keys "ros_gz_sim ros_gz_bridge"
 
       - name: Build
         run: |

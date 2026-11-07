@@ -12,7 +12,7 @@ selected checkout remains readable. Failed Git reads retain their diagnostic.
 `test_native_fmu.py` skips unless `LHR_TEST_FMU` names the built artifact.
 When set, it executes the actual model through wait, launch, both turn
 directions, braking and relaunch. It checks the axle midpoint and compiled
-canonical aero references, which differ from the upstream default car.
+canonical aero references and front brake bias, which differ from the upstream default car.
 The aero test sets up its own import path and can run alone with `-k aero`.
 There is no fallback or substitute native model. See the
 [package guide](../README.md) for the artifact build and known upstream limits.

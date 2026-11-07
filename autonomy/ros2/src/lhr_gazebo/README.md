@@ -85,11 +85,60 @@ These are bounded transport checks, not complete laps or a gate pass. They
 used the existing historical artifact (`93654e50…`) with its matching BobSim
 `22c5056` and vehicle hash `e024a5e3…` in an isolated temporary checkout;
 provenance checks stayed enabled. They do **not** validate current main's
-vehicle. Current inputs correctly reject that stale artifact. As documented
-in the [FMU build guide](../../../../simulation/docs/fmu.md#source-and-build),
-main's newer BobLib tree also requires a reviewed exporter-pin/build update
-before a current-car artifact can be built. Current-car acceptance and native
-IMU/wheel fidelity (#205) remain outstanding.
+vehicle. The current-car build update below replaces that artifact for new runs.
+
+### Current-car checks (2026-11-06)
+
+The matching exporter now builds the current vehicle without changing BobSim
+or BobLib source. The artifact hash is
+`fe1aadc873f7852993faf0691467093d78e83f9730f4efc52f79f83ceed2328b`.
+It uses BobSim `f58f932`, BobLib `75b6e03` and canonical vehicle hash
+`c4dc19eb29749755054802385e6930261e6ec3720bc7e4730fb217cdc4acaaa0`.
+Native tests verify the current aero ride-height references and front brake
+bias (0.84). The model's public record layout and package-order API are now
+handled by the [build tool](../../../../simulation/docs/fmu.md).
+
+The native wait/step-steer/brake/relaunch profile fails on initial pull-away:
+after 5 s waiting, its second 20 ms drive step returns FMI error status 3 at
+FMU time 5.02 s. OpenModelica reports nonlinear system 12286, whose variables
+are `battery.v` and `inverter.inverter.V_abs`, at 5.033734645 s. The root cause
+is unconfirmed. This is not assumed to be the motor-latch defect in BobLib
+#32. The failure remains in the native test; no retry, altered tolerance or
+substitute plant hides it.
+
+The default seed-1 gate subset completed its truth baseline in 35.2144 s,
+with 0 cone contacts and 0.2268 m maximum CTE. Its LiDAR/EKF run failed in
+READY on `LIDAR_STALE`, so the subset failed. Baseline sampled pose age
+reached 198 ms during stopping; #203's pacing target is not established.
+A completed baseline is not a full gate pass or a native solver acceptance.
+Native IMU/wheel outputs still depend on #205.
+
+A separate seed-1 diagnostic with the documented CPU-rendering override
+`safety_lidar_timeout_s:=1.5` passed all selected MVP checks:
+
+| Run | Lap | Cone contacts | Maximum CTE | Maximum EKF position error |
+| --- | --- | --- | --- | --- |
+| Truth baseline | 35.2149 s | 0 | 0.2269 m | — |
+| LiDAR/EKF | 35.2048 s | 0 | 0.2345 m | 0.1934 m |
+
+LiDAR/EKF stopped within 1.85 m after finish. Its last logged cumulative pose
+age was 24.35 ms mean and 158 ms maximum, including stopping. This is one
+seed with a timeout override, not the full MVP matrix or a default-configuration
+pass. Run it from the built ROS workspace with a display available to Gazebo:
+
+```bash
+SEEDS=1 REPEATS=1 ACCEL_REPEATS=0 SKIDPAD_REPEATS=0 RUN_S=240 \
+  EXTRA="plant:=fmu safety_lidar_timeout_s:=1.5" \
+  OUT="$HOME/lhr-test-data/fmu-gazebo-seed1-cpu" \
+  ../testing/tools/gate/run_gate.sh
+```
+
+A 70 s wall-time stereo smoke run used the same current artifact, LiDAR/EKF
+and CPU timeout override. It reached DRIVING without a safety trip. Last
+logged cumulative pose-age measurements were 37.14 ms mean / 218 ms maximum
+for LiDAR, 52.63 ms / 237 ms for left images, and 53.13 ms / 237 ms for right
+images. It was bounded before a full lap and did not collect lap metrics.
+These spikes also leave #203's 100 ms pacing target unmet on this Mac.
 
 ## LiDAR coordinates
 

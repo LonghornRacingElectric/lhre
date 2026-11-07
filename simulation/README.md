@@ -38,7 +38,7 @@ make test    # check that BobSim loads //vehicle, then run the fast tests
 | `make unit` | Run the fast unit and contract tests in `tests/`. Then check that `bobsim/` has no local changes. See [docs/tests.md](docs/tests.md). |
 | `make records` | Write `vehicle/vehicle.yml` into BobLib's Modelica records. `VEHICLE=<path>` writes a candidate copy instead. |
 | `make records-undo` | Put back only the files `make records` wrote |
-| `make fmu` | Build the identified Orion FMU with the merged upstream exporter; see [FMU](docs/fmu.md) |
+| `make fmu` | Build the identified Orion FMU with the exporter matching the pinned nested BobLib; see [FMU](docs/fmu.md) |
 | `make fmu-source` | Fetch the separately pinned exporter source into ignored build space |
 | `make bobsim T=<target>` | Run a BobSim make target on BobSim's own car. `T=help` lists them. |
 | `make car T=<target>` | Run a BobSim make target on `vehicle/vehicle.yml`, then restore `bobsim/`. Outputs and `identity.json` go to `out/car/<target>/`. `VEHICLE=out/<name>/vehicle.yml` runs a candidate copy to `out/car/<target>--<name>/`. See [docs/bobsim.md](docs/bobsim.md#run-a-bobsim-target-on-our-car). |
