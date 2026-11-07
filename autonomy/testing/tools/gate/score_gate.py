@@ -13,7 +13,9 @@ Course scoring (completion, off course, cones, CTE, EKF error) is
 lhr_metrics' verdict. The bag adds what metrics does not record: distance
 from the finish to standstill, that the mission reached FINISHED and that
 the car stayed stopped. Times are sim seconds, mapped through /clock.
-Events listed in <out>/waived.txt are named in the summary, not scored.
+end.txt (from watch_run.py) says how the run ended; a hung sim fails
+health. Events listed in <out>/waived.txt are named in the summary, not
+scored.
 """
 
 import bisect
@@ -41,7 +43,7 @@ CHECKS = ['completes', 'stops', 'off_course', 'cones', 'cte', 'ekf', 'lap_time',
 FIELDS = (['id', 'kind', 'event', 'track_style', 'seed', 'outcome', 'lap_time_s', 'baseline_lap_s',
            'lap_ratio', 'max_cte', 'off_track_count', 'cones_hit', 'max_pos_error',
            'stop_dist_m', 'stop_time_s', 'max_v_after_stop', 'finished', 'emergency',
-           'early_exits', 'invalid_reason'] + CHECKS + ['passed'])
+           'early_exits', 'end', 'sim_s', 'wall_s', 'invalid_reason'] + CHECKS + ['passed'])
 RUN_ID = re.compile(
     r'^(baseline_)?(autocross|rules_autocross|acceleration|skidpad)(?:_s(\d+))?(?:_r(\d+))?$')
 
@@ -121,6 +123,16 @@ def early_exits(log_path):
     return died
 
 
+def run_end(path):
+    """Return watch_run.py's key=value line as a dict; runs from before #227 have none."""
+    if not os.path.exists(path):
+        return {}
+    with open(path) as f:
+        fields = dict(kv.split('=', 1) for kv in f.read().split() if '=' in kv)
+    return {'end': fields.get('reason', ''), 'sim_s': fields.get('sim_s', ''),
+            'wall_s': fields.get('wall_s', '')}
+
+
 def number(value):
     try:
         return float(value)
@@ -160,6 +172,7 @@ def score(run_dir, run_id):
         except Exception as error:  # an unreadable bag fails the run, it never crashes the score
             row['invalid_reason'] = f'bag: {error}'
     row['early_exits'] = ';'.join(early_exits(os.path.join(run_dir, 'launch.log')))
+    row.update(run_end(os.path.join(run_dir, 'end.txt')))
     return row
 
 
@@ -177,7 +190,9 @@ def judge(row, baselines):
         'cones': row.get('cones_hit') == '0',
         'cte': cte is not None and cte <= MAX_CTE_M,
         'ekf': ekf is not None and ekf <= MAX_EKF_ERROR_M,
-        'health': not row['early_exits'] and not row.get('emergency'),
+        # A hung sim proves nothing, whatever its metrics say.
+        'health': (not row['early_exits'] and not row.get('emergency')
+                   and row.get('end') != 'hung'),
     }
     if event == 'autocross':
         lap = number(row.get('lap_time_s'))
@@ -235,6 +250,12 @@ def main(out):
             f'{r.get("cones_hit", "")} ({r["cones"]}) | {r.get("max_cte", "")} ({r["cte"]}) | '
             f'{r.get("max_pos_error", "")} ({r["ekf"]}) | {ratio} ({r["lap_time"]}) | '
             f'{r["health"]} | {"yes" if r["passed"] else "**no**"} |')
+    # Results must not depend on this; it says how long the campaign took.
+    speeds = [number(r['sim_s']) / number(r['wall_s']) for r in rows
+              if number(r.get('sim_s')) and number(r.get('wall_s'))]
+    if speeds:
+        lines += ['', f'Sim speed: {min(speeds):.2f} to {max(speeds):.2f} times real time '
+                  '(sim seconds per wall second, startup included).']
     lines += ['', '## Truth-stack baselines', '', '| Style | Seed | Outcome | Lap time (s) |',
               '| --- | --- | --- | --- |']
     lines += [f'| {r["track_style"]} | {r["seed"]} | {r["outcome"]} | {r.get("lap_time_s", "")} |'
@@ -246,8 +267,10 @@ def main(out):
         lines += ['', '## Failures', '']
         for r in failed:
             why = [c for c in CHECKS if r[c] == 'FAIL']
-            extra = '; '.join(x for x in (r.get('invalid_reason'), r['early_exits'] and
-                                          f'early exits: {r["early_exits"]}') if x)
+            extra = '; '.join(x for x in (
+                r.get('invalid_reason'),
+                r['early_exits'] and f'early exits: {r["early_exits"]}',
+                r.get('end') == 'hung' and f'sim clock stopped at {r["sim_s"]} s') if x)
             lines.append(f'- {r["id"]}: {", ".join(why)}' + (f' ({extra})' if extra else ''))
     summary = '\n'.join(lines) + '\n'
     with open(os.path.join(out, 'summary.md'), 'w') as f:

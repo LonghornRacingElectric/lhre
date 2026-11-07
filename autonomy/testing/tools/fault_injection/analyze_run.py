@@ -48,6 +48,7 @@ FIELDS = [
 #   false_trip   a clean lap that tripped
 #   no_drive     never reached DRIVING, or barely moved before the fault
 #   no_fault     drove, but the fault never started (RUN_S too short?)
+#   hung         the sim clock stopped (watch_run.py), so the run proves nothing
 #   error        the bag could not be read
 
 
@@ -186,15 +187,23 @@ def main():
     ap.add_argument('--seed', default='')
     ap.add_argument('--v-max', default='')
     ap.add_argument('--fence', type=float, default=20.0)
+    ap.add_argument('--end', default='', help="watch_run.py's end file")
     ap.add_argument('--csv', required=True)
     args = ap.parse_args()
 
     status = 0
+    end = ''
+    if args.end and os.path.exists(args.end):
+        with open(args.end) as f:
+            end = f.read()
     try:
         row = score(read(args.bag), args.case, args.fence)
     except Exception as e:  # a bad bag still gets a row, so it is not lost
         print(f'analyze_run: {args.bag}: {e}', file=sys.stderr)
         row, status = {'case': args.case, 'result': 'error'}, 1
+    if 'reason=hung' in end.split():
+        # Whatever the bag shows stopped with the sim, not with the car.
+        row = {'case': args.case, 'result': 'hung'}
     row.update({'id': args.id, 'track': args.track, 'seed': args.seed,
                 'v_max': args.v_max})
     save(args.csv, row)

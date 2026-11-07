@@ -23,9 +23,10 @@ REPEATS=${REPEATS:-2}
 CLEAN_SEEDS=${CLEAN_SEEDS-"1 2 3 4 5"}   # clean autocross laps: false trips
 TRACK=${TRACK:-oval}
 CLEAN_TRACK=${CLEAN_TRACK:-autocross}
-AFTER=${AFTER:-25}          # fault starts this many seconds after DRIVING
-RUN_S=${RUN_S:-60}          # wall seconds per faulted run
-CLEAN_S=${CLEAN_S:-150}
+AFTER=${AFTER:-25}          # fault starts this many sim seconds after DRIVING
+RUN_S=${RUN_S:-60}          # sim seconds per faulted run
+CLEAN_S=${CLEAN_S:-150}     # sim seconds per clean lap
+HANG_S=${HANG_S:-60}        # wall seconds of a stopped /clock: hung (#227)
 FENCE=${FENCE:-20}          # geofence case: radius well inside the track
 OUT=${OUT:-$HOME/lhr-test-data/$(date +%F)-fault-injection}
 EXTRA=${EXTRA:-}
@@ -74,19 +75,32 @@ one_run() {  # id kind track seed v_max seconds [launch args...]
     # Metrics off: a finished lap ends the mission (#132) and safety only
     # arms in READY and DRIVING, so a fault after the first lap would score
     # missed. An 8 m/s oval lap is shorter than AFTER.
-    timeout -s INT "$secs" ros2 launch lhr_gazebo gazebo_demo.launch.py \
+    ros2 launch lhr_gazebo gazebo_demo.launch.py \
         gui:=false rviz:=false track_style:="$track" seed:="$seed" \
         perception:=lidar estimator:=ekf safety:=true \
         v_max:="$vmax" ${world:+"$world"} enable_metrics:=false \
-        $EXTRA "$@" > "$OUT/bags/$id.launch.log" 2>&1
+        $EXTRA "$@" > "$OUT/bags/$id.launch.log" 2>&1 &
+    local launch=$!
+    # The run lasts $secs sim seconds however slow the machine; only a
+    # stopped /clock ends it early, as hung.
+    local code=0
+    python3 "$HERE/../gate/watch_run.py" --cap "$secs" --hang "$HANG_S" \
+        --pid "$launch" --out "$OUT/bags/$id.end.txt" || code=$?
     # A background job ignores SIGINT in a non-interactive shell; TERM is
-    # what makes the recorder close the bag.
+    # what stops the launch and makes the recorder close the bag.
+    kill -TERM "$launch" 2>/dev/null
+    wait "$launch" 2>/dev/null
     kill -TERM "$rec"
     wait "$rec" 2>/dev/null
     cleanup
+    if [ "$code" = 130 ]; then
+        echo "interrupted during $id" >&2
+        exit 130
+    fi
     python3 "$HERE/analyze_run.py" "$bag" --id "$id" --case "$kind" \
         --track "$track" --seed "$seed" --v-max "$vmax" --fence "$FENCE" \
-        --csv "$OUT/results.csv" || failed="$failed $id"
+        --end "$OUT/bags/$id.end.txt" --csv "$OUT/results.csv" \
+        || failed="$failed $id"
 }
 
 cleanup
