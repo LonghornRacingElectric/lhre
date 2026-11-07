@@ -63,10 +63,11 @@ Allowed truth, and only this:
 | MVP regression | `autocross` seeds 1 to 5 | 1 | 5 |
 | **Gate total** | | | **35** |
 
-The 21-run core keeps the MVP's shape on harder courses. The extreme
-scenarios each push one rules limit (3 m width, an 80 m straight into a
-minimum-diameter hairpin, decreasing radius, slalom and chicane, a doubled-back
-section, a 500 m lap, and a combined one). The MVP seeds stay as a regression
+The 21-run core keeps the MVP's shape on harder courses. The 7 extreme
+scenarios each push one rules limit: 3 m width, an 80 m straight into a
+minimum-diameter hairpin, a decreasing-radius turn, one course with a slalom
+and a chicane, a doubled-back section, a 500 m lap, and one that combines
+several limits. The MVP seeds stay as a regression
 check, once each.
 
 The real layouts are AMZ's FSG and FSI cone files, imported unchanged. They
@@ -108,9 +109,10 @@ milestone and is repeated after the fix, never dropped.
 
 ## Fault matrix
 
-Gating in Sim v2: 9 cases at `v_max` 3, 5 and 8 m/s, twice each, on the FMU
-plant with the stack above, plus 5 clean laps on `rules_autocross` seeds 1 to
-5. Run with the [fault tools](../../testing/tools/fault_injection/README.md).
+Gating in Sim v2, and separate from the 35 gate runs: each of the 9 fault
+cases at `v_max` 3, 5 and 8 m/s, twice each (54 runs), plus 5 clean laps on
+`rules_autocross` seeds 1 to 5, so 59 runs, on the FMU plant with the stack
+above. Run with the [fault tools](../../testing/tools/fault_injection/README.md).
 
 | Check | Threshold |
 | --- | --- |
