@@ -80,6 +80,59 @@ def test_robust_fit_handles_outliers_and_uses_previous_pose():
     assert min(fit['support']) >= 25
 
 
+@pytest.mark.parametrize('ring', range(4))
+@pytest.mark.parametrize('partial', [False, True])
+@pytest.mark.parametrize('displacement', [-0.6, 1.2])
+def test_displaced_cone_matches_fit_with_that_cone_omitted(ring, partial, displacement):
+    left, right = generate_skidpad_track()
+    points = np.array(left + right)
+    colors = np.array([0] * len(left) + [1] * len(right))
+    rings = np.array([0] * 17 + [3] * 13 + [1] * 13 + [2] * 17)
+    centers = np.column_stack([np.where(rings < 2, -9.125, 9.125), np.zeros(len(points))])
+    if partial:
+        keep = [bool(len(_visible([point], np.array([0., -13.5, math.pi / 2]), 15, 240)))
+                for point in points]
+        points, colors, rings, centers = points[keep], colors[keep], rings[keep], centers[keep]
+    candidates = np.flatnonzero(rings == ring)
+    moved = candidates[np.argmin(points[candidates, 1])]
+    radial = points[moved] - centers[moved]
+    radial /= np.linalg.norm(radial)
+    points += np.random.default_rng(23).normal(0, .015, points.shape)
+    yaw = .7
+    rotation = np.array([[math.cos(yaw), -math.sin(yaw)],
+                         [math.sin(yaw), math.cos(yaw)]])
+    translation = np.array([30., -20.])
+    points = points @ rotation.T + translation
+    reference = _fit_layout(np.delete(points, moved, axis=0), [0, 0, yaw],
+                            ACQUISITION_DEFAULTS, colors=np.delete(colors, moved))
+    assert reference is not None
+    points[moved] += displacement * (radial @ rotation.T)
+    fit = _fit_layout(points, [0, 0, yaw], ACQUISITION_DEFAULTS, colors=colors)
+    assert fit is not None
+    assert fit['pose'][:2] == pytest.approx(reference['pose'][:2], abs=1e-5)
+    assert fit['pose'][2] == pytest.approx(reference['pose'][2], abs=1e-6)
+    assert sum(fit['support']) == len(points) - 1
+    assert fit['colored_support'] == reference['colored_support']
+
+
+def test_trimming_cannot_hide_the_original_outlier_fraction():
+    left, right = generate_skidpad_track()
+    points = np.array(left + right)
+    points[0, 0] += .6
+    assert _fit_layout(points, [0, 0, 0], ACQUISITION_DEFAULTS) is not None
+    limits = dict(ACQUISITION_DEFAULTS, fit_inlier_fraction=.99)
+    assert _fit_layout(points, [0, 0, 0], limits) is None
+
+
+def test_trimming_cannot_remove_required_boundary_support():
+    left, right = generate_skidpad_track()
+    points = np.array(left[:2] + left[17:] + right)
+    colors = np.array([0] * (2 + 13) + [1] * len(right))
+    assert _fit_layout(points, [0, 0, 0], ACQUISITION_DEFAULTS, colors=colors) is not None
+    points[0, 0] += .6
+    assert _fit_layout(points, [0, 0, 0], ACQUISITION_DEFAULTS, colors=colors) is None
+
+
 def test_fit_rejects_narrow_arcs_and_wrong_entry_direction():
     angles = np.linspace(-0.15, 0.15, 8)
     points = [(cx + radius * math.cos(angle), radius * math.sin(angle))

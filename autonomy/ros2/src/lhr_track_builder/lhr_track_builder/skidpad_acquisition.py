@@ -98,7 +98,7 @@ def _fit_layout(points, origin, limits, previous=None, colors=None):
         return residual[np.arange(len(points)), assignment], assignment
 
     # Bound pair generation using spatially spread observations, rather than
-    # IDs or input order. All observations still participate in scoring/fitting.
+    # IDs or input order. All observations still participate in candidate scoring.
     selected = [0]
     nearest = np.linalg.norm(points - points[0], axis=1)
     for _ in range(min(48, len(points)) - 1):
@@ -181,22 +181,34 @@ def _fit_layout(points, origin, limits, previous=None, colors=None):
     fits = []
     for initial in starts:
         pose = initial
-        # Keep associations fixed during each differentiable optimization.
+        inliers = np.ones(len(points), dtype=bool)
+        converged = False
+        # Bootstrap robustly, then fit only retained cones. Both the boundary
+        # assignments and retained set stay fixed during each solve.
         for _ in range(5):
+            if np.count_nonzero(inliers) < 2 * limits['fit_min_cones_per_circle']:
+                break
             _, assignment = errors(pose)
+            retained_points = points[inliers]
+            retained_assignment = assignment[inliers]
             result = least_squares(
-                lambda value: _layout_residuals(value, points, assignment)[0], pose,
-                jac=lambda value: _layout_residuals(value, points, assignment)[1],
+                lambda value: _layout_residuals(value, retained_points, retained_assignment)[0],
+                pose,
+                jac=lambda value: _layout_residuals(
+                    value, retained_points, retained_assignment)[1],
                 bounds=([-np.inf, -np.inf, heading - heading_limit],
                         [np.inf, np.inf, heading + heading_limit]),
                 loss='soft_l1', f_scale=0.1, max_nfev=80)
             pose = result.x
             residual, updated = errors(pose)
-            if np.array_equal(updated, assignment):
+            updated_inliers = np.abs(residual) <= threshold
+            if (np.array_equal(updated, assignment)
+                    and np.array_equal(updated_inliers, inliers)):
+                converged = True
                 break
-        else:
+            inliers = updated_inliers
+        if not converged:
             continue
-        inliers = np.abs(residual) <= threshold
         if (not result.success or np.any(result.active_mask)
                 or np.mean(inliers) < limits['fit_inlier_fraction']):
             continue

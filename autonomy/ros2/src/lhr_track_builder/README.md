@@ -235,14 +235,28 @@ resolves the template's symmetry; template +y points along entry. No staging
 translation, world SDF, or generated cone coordinates enter the fitter.
 
 At most 48 spatially spread observations generate chords; all unique input
-observations score candidates and participate in refinement. The best bounded
+observations score candidates and participate in the initial refinement. The best bounded
 set of rigid-pose hypotheses, including the previous fit when competitive,
 is refined using `soft_l1` nonlinear least squares and an analytic Jacobian.
-Each solve holds boundary assignments fixed; reassignment occurs between
-solves, with at most five rounds. Translation is unrestricted, while yaw stays
+After the first solve, cones outside `fit_inlier_distance` are excluded from
+both the residual vector and analytic Jacobian of the next solve. Assignments
+and the inlier mask are recomputed against all original unique observations
+after each solve, so a cone can re-enter if the refined pose supports it.
+Each solve holds both assignments and the mask fixed. Acceptance requires
+both to stabilize within five rounds, including the initial solve; otherwise
+that hypothesis is rejected. The final pose, RMS, rank and support checks use
+the same retained set. `fit_inlier_fraction` still uses the original unique
+observation count as its denominator, so trimming cannot hide poor coverage.
+Translation is unrestricted, while yaw stays
 within the configured heading prior. Fits on a yaw bound, rank-deficient fits,
 insufficient angular/boundary support and comparable conflicting fits are
 rejected. Unique cone positions must support both circles and both radii.
+Displaced-cone regressions compare the accepted pose and support with a fit
+omitting that cone, across all four boundaries, inward/outward offsets and
+partial views of a noisy transformed layout. Distance rejection cannot identify
+a displaced cone that still lies on another compatible boundary. Rejected
+cones have no contribution to the final solve, but can affect initialization
+and which hypothesis is selected.
 Known blue/yellow labels constrain assignments: left inner/right outer are
 blue, left outer/right inner are yellow. Uncolored observations can support
 geometry acquisition, but route authorization also requires at least two
