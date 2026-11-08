@@ -1,4 +1,4 @@
-"""Publish Orion fault transitions from sensor_data to fault_events."""
+"""Publish raised/cleared Orion fault events from telemetry snapshots."""
 
 import json
 import logging
@@ -6,9 +6,41 @@ import os
 import signal
 from threading import Event
 
+from google.protobuf.message import DecodeError
 from kafka import KafkaConsumer, KafkaProducer
+from stack.ingest.protobuf import can_packets_pb2
 
-from processor import FaultProcessor
+from faults import detect_active_faults, diff_faults
+
+
+def process_record(record, producer, active_faults, output_topic):
+    """Decode one Orion frame and publish changes from its previous fault set."""
+    try:
+        car = None
+        for key, value in record.headers or []:
+            key = key.decode("utf-8") if isinstance(key, bytes) else key
+            if key.lower() == "car_type":
+                car = value.decode("utf-8") if isinstance(value, bytes) else value
+                break
+        if car is None or car.strip().lower() != "orion":
+            return []
+
+        frame = can_packets_pb2.OrionSensorData()
+        frame.ParseFromString(record.value)
+        if not frame.HasField("diagnostics_high"):
+            return []
+        current = detect_active_faults(frame.diagnostics_high)
+    except (DecodeError, ValueError, TypeError, AttributeError) as error:
+        logging.warning("Skipping invalid telemetry: %s", error)
+        return []
+
+    car = "orion"
+    events = diff_faults(active_faults.get(car, set()), current, car, frame.time)
+    for event in events:
+        producer.send(output_topic, value=event).get(timeout=10)
+        logging.info("%s %s %s", car, event["kind"], event["fault"])
+    active_faults[car] = current
+    return events
 
 
 def main():
@@ -26,7 +58,6 @@ def main():
         input_topic,
         bootstrap_servers=bootstrap,
         group_id=group_id,
-        max_poll_records=20,
         enable_auto_commit=False,
         auto_offset_reset="latest",
     )
@@ -36,13 +67,16 @@ def main():
             bootstrap_servers=bootstrap,
             value_serializer=lambda value: json.dumps(value).encode("utf-8"),
             acks="all",
-            retries=3,
-            max_in_flight_requests_per_connection=1,
         )
-        processor = FaultProcessor(producer, output_topic)
+        active_faults = {}
         logging.info("events_faults ready. in=%s out=%s", input_topic, output_topic)
         while not stop.is_set():
-            processor.process_batch(consumer, consumer.poll(timeout_ms=1000))
+            batch = consumer.poll(timeout_ms=1000)
+            for records in batch.values():
+                for record in records:
+                    process_record(record, producer, active_faults, output_topic)
+            if batch:
+                consumer.commit()
     finally:
         try:
             if producer is not None:
