@@ -24,10 +24,14 @@ float LowCellDerate(float ocv, const TorqueParams& p) {
 }
 
 // 1 below fade_start_rpm, 0 at and above zero_torque_rpm, linear between.
-// Off (always 1) unless zero_torque_rpm is set.
-float SpeedFade(float rpm, const TorqueParams& p) {
+// Off (always 1) unless zero_torque_rpm is set. When the fade is the only
+// overspeed limit, an unknown speed must not read as zero speed.
+float SpeedFade(float rpm, bool speed_valid, const TorqueParams& p) {
   if (p.zero_torque_rpm <= 0.0f) {
     return 1.0f;
+  }
+  if (!speed_valid) {
+    return 0.0f;
   }
   const float speed = std::fabs(rpm);
   if (speed >= p.zero_torque_rpm) {
@@ -103,8 +107,8 @@ TorqueOutputs TorquePath::Update(const TorqueInputs& in,
   // One function of pedal demand and motor speed; see TorqueParams.
   const float demand = longhorn::Clamp(in.pedal_travel, 0.0f, 1.0f);
   out.pedal = AvailableTorque(in.motor_rpm, torque) *
-              std::pow(demand, torque.touchiness) *
-              SpeedFade(in.motor_rpm, torque);
+              (demand > 0.0f ? std::pow(demand, torque.touchiness) : 0.0f) *
+              SpeedFade(in.motor_rpm, in.motor_speed_valid, torque);
   out.derated = out.pedal * LowCellDerate(in.ocv_min_cell_v, torque);
 
   const float base = torque.apply_low_cell_derate ? out.derated : out.pedal;

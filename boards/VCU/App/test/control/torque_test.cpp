@@ -90,6 +90,34 @@ TEST(Torque, MotorSpinCapsTorqueAndFadesItToZeroBeforeTheSpeedCeiling) {
   }
 }
 
+TEST(Torque, MotorSpinGivesNoTorqueWithoutAFreshSpeed) {
+  const vcu::Params& spin = vcu::ParamsFor(lhre::can::EventMode::kMotorSpin);
+  vcu::TorquePath path;
+  vcu::TorqueInputs in;
+  in.pedal_travel = 1.0f;
+  in.motor_rpm = 0.0f;
+  in.motor_speed_valid = false;
+  in.dt_ms = 3;
+  EXPECT_EQ(path.Update(in, spin.torque, spin.power_limit, spin.traction).pedal,
+            0.0f);
+  // Without a fade, an unknown speed is left to the app's feedback faults.
+  EXPECT_FLOAT_EQ(
+      path.Update(in, P().torque, P().power_limit, P().traction).pedal, 210.0f);
+}
+
+TEST(Torque, ReleasedPedalGivesNoTorqueForAnyTouchiness) {
+  vcu::TorqueParams t = P().torque;
+  vcu::TorquePath path;
+  vcu::TorqueInputs in;
+  in.pedal_travel = 0.0f;
+  in.dt_ms = 3;
+  for (float touchiness : {0.0f, -1.0f, 1.0f}) {
+    t.touchiness = touchiness;
+    EXPECT_EQ(path.Update(in, t, P().power_limit, P().traction).pedal, 0.0f)
+        << touchiness;
+  }
+}
+
 TEST(Torque, EnduranceDemandScalesTheTorqueItsPowerAllows) {
   const vcu::Params& endu = vcu::ParamsFor(lhre::can::EventMode::kEndurance);
   const float p_w = endu.torque.pedal_power_w;
