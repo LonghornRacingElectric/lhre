@@ -7,12 +7,15 @@ import pytest
 
 WHEELBASE = 1.5494
 CFG = SafetyConfig(wheelbase_m=WHEELBASE, max_speed_mps=15.0)
+# The yaw-rate rule only runs for a plant with no steering measurement.
+YAW_CFG = SafetyConfig(wheelbase_m=WHEELBASE, max_speed_mps=15.0, require_steer_measurement=False)
 
 
 def _healthy(monitor, t, x=0.0, y=0.0, speed=5.0, steer=0.0):
-    """Feed one consistent tick: fresh LiDAR, odom and a matching command."""
+    """Feed one consistent tick: fresh LiDAR, odom, steering and a matching command."""
     monitor.on_lidar(t)
     monitor.on_command(t, steer)
+    monitor.on_steering(t, steer)
     yaw_rate = speed * math.tan(steer) / WHEELBASE
     monitor.on_odom(t, x, y, speed, 0.0, yaw_rate, 0.01, 0.01)
 
@@ -67,6 +70,7 @@ def test_lidar_check_can_be_off():
                        monitor_lidar=False)
     m = SafetyMonitor(cfg, now=0.0)
     m.on_command(1.0, 0.0)
+    m.on_steering(1.0, 0.0)
     m.on_odom(1.0, 0.0, 0.0, 5.0, 0.0, 0.0, 0.01, 0.01)
     assert m.check(1.0) == Fault.NONE
 
@@ -131,7 +135,7 @@ def test_geofence_anchors_where_the_car_arms():
 
 
 def test_steering_that_does_not_track_trips_after_the_window():
-    m = SafetyMonitor(CFG, now=0.0)
+    m = SafetyMonitor(YAW_CFG, now=0.0)
     # Commanding a hard turn while the car drives dead straight.
     t = 0.0
     while t < CFG.steer_window_s - 0.1:
@@ -149,7 +153,7 @@ def test_steering_that_does_not_track_trips_after_the_window():
 
 
 def test_brief_steering_lag_does_not_trip():
-    m = SafetyMonitor(CFG, now=0.0)
+    m = SafetyMonitor(YAW_CFG, now=0.0)
     m.on_lidar(0.0)
     m.on_command(0.0, 0.3)
     m.on_odom(0.0, 0.0, 0.0, 5.0, 0.0, 0.0, 0.01, 0.01)
@@ -159,7 +163,7 @@ def test_brief_steering_lag_does_not_trip():
 
 
 def test_steering_is_ignored_at_low_speed():
-    m = SafetyMonitor(CFG, now=0.0)
+    m = SafetyMonitor(YAW_CFG, now=0.0)
     t = 0.0
     while t < 3.0:
         m.on_lidar(t)
@@ -231,7 +235,7 @@ def test_one_sample_outside_the_fence_is_caught():
 
 
 def test_reversing_does_not_trip_steering():
-    m = SafetyMonitor(CFG, now=0.0)
+    m = SafetyMonitor(YAW_CFG, now=0.0)
     t = 0.0
     while t < 3.0:
         m.on_lidar(t)
@@ -333,7 +337,9 @@ def test_losing_the_measured_angle_trips():
     t = 1.0
     while t < 1.0 + CFG.steer_angle_timeout_s + 0.1:
         t += 0.02
-        _healthy(m, t)
+        m.on_lidar(t)
+        m.on_command(t, 0.0)
+        m.on_odom(t, 5.0 * t, 0.0, 5.0, 0.0, 0.0, 0.01, 0.01)
     assert m.check(t) == Fault.STEER_TRACKING
 
 
@@ -341,3 +347,21 @@ def test_non_finite_measured_angle_trips():
     m = SafetyMonitor(CFG, now=0.0)
     trip = _steer_run(m, lambda t: 0.0, lambda t: math.nan if t >= 1.0 else 0.0, 2.0)
     assert trip == pytest.approx(1.0 + CFG.steer_angle_window_s, abs=0.05)
+
+
+def test_a_measured_angle_that_never_arrives_trips_by_default():
+    # A wrong topic or a dead encoder at boot must not fall back to the yaw rate.
+    m = SafetyMonitor(CFG, now=0.0)
+    t = 0.0
+    while t < CFG.steer_angle_timeout_s + 0.1:
+        m.on_lidar(t)
+        m.on_command(t, 0.0)
+        m.on_odom(t, 0.0, 0.0, 5.0, 0.0, 0.0, 0.01, 0.01)
+        t += 0.02
+    assert m.check(t) == Fault.STEER_TRACKING
+
+
+def test_without_a_requirement_the_yaw_rate_rule_takes_over():
+    m = SafetyMonitor(YAW_CFG, now=0.0)
+    last = _drive(m, 0.0, 3.0, steer=0.1)
+    assert m.check(last) == Fault.NONE

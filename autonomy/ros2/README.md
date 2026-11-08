@@ -1050,15 +1050,17 @@ for the contact model and off-track-distance uncertainty.
 | `steering_measured_topic` | `"/lhr/vehicle/steering_measured"` | Measured steering angle (`sensor_msgs/JointState`, one joint) |
 | `steer_angle_tol_rad` | `0.035` | Measured-vs-commanded steering error (rad) that counts, after the actuator's rate limit |
 | `steer_angle_window_s` | `0.2` | How long (s) that error must last before it trips |
-| `steer_angle_timeout_s` | `0.25` | Measured-angle age (s) that trips, once one has arrived |
-| `steer_min_speed_mps` | `2.0` | Yaw-rate fallback (no measured angle): speed (m/s) below which it is skipped |
+| `steer_angle_timeout_s` | `0.25` | Measured-angle age (s) that trips, counted from startup until the first one |
+| `require_steer_measurement` | `true` | Trip when the measured angle never arrives instead of falling back to the yaw-rate rule; not a Gazebo launch argument |
+| `steer_min_speed_mps` | `2.0` | Yaw-rate fallback (`require_steer_measurement` off): speed (m/s) below which it is skipped |
 | `steer_yaw_rate_tol` | `0.15` | Yaw-rate fallback: smallest mismatch (rad/s) that counts |
 | `steer_rel_tol` | `0.5` | Yaw-rate fallback: mismatch allowed as a fraction of the expected yaw rate |
 | `steer_window_s` | `1.0` | Yaw-rate fallback: how long (s) a mismatch must last before it trips |
 
 The Gazebo launch exposes every threshold as `safety_<param>` and starts
 the node only with `safety:=true`. `monitor_lidar` follows `perception`, and
-`rate_hz` and `lidar_topic` are not launch arguments; the package README says
+`rate_hz`, `lidar_topic`, `steering_measured_topic` and
+`require_steer_measurement` are not launch arguments; the package README says
 why. See [lhr_safety](src/lhr_safety/README.md)
 for what a trip does.
 

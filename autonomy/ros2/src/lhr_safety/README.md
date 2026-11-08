@@ -23,7 +23,7 @@ a fault, a crash or a hang all look the same to whatever is listening.
 | `CMD_INVALID` | A non-finite steering command, which the Gazebo adapter would clamp to full lock | `/lhr/vehicle/cmd` |
 | `LIDAR_STALE` | No cloud for `lidar_timeout_s` (only with `monitor_lidar`) | `/lhr/lidar/points` |
 | `GEOFENCE` | Further than `geofence_radius_m` from where the car armed (entered `READY`) | `/lhr/vehicle/odom` |
-| `STEER_TRACKING` | The measured steering angle differs from the command by more than `steer_angle_tol_rad` for `steer_angle_window_s`, after allowing the actuator `vehicle.yaml`'s rate limit to get there; or the measured angle stops arriving for `steer_angle_timeout_s`. With no measured angle ever, the yaw-rate fallback below | `/lhr/vehicle/cmd`, `/lhr/vehicle/steering_measured` (`/lhr/vehicle/odom` for the fallback) |
+| `STEER_TRACKING` | The measured steering angle differs from the command by more than `steer_angle_tol_rad` for `steer_angle_window_s`, after allowing the actuator `vehicle.yaml`'s rate limit to get there; or the measured angle stops arriving, or never arrives, for `steer_angle_timeout_s`. The yaw-rate fallback below runs only with `require_steer_measurement` off | `/lhr/vehicle/cmd`, `/lhr/vehicle/steering_measured` (`/lhr/vehicle/odom` for the fallback) |
 
 The order above is the priority when several fire at once: a dead or
 diverged pose explains everything downstream of it, so it is reported
@@ -50,16 +50,21 @@ clamped to `vehicle.yaml`'s steering lock and rate-limited at its
 `max_rate_rad_s` before the comparison, so a saturated actuator or a step it
 is still following is not a fault. 0.035 rad (about 2°)
 for 0.2 s is ten 50 Hz samples' worth of a stuck actuator, not transport
-delay. Once a measured angle has arrived, losing it trips too, since the
-steering can no longer be checked.
+delay. A measured angle that stops arriving, or never arrives, trips too, since
+the steering can no longer be checked. `require_steer_measurement` (on by
+default) makes a missing measurement stale from startup like every other
+stream, so a wrong topic name or an encoder that is dead at boot keeps the
+car from arming instead of quietly handing the check to the weaker rule.
+It is not a Gazebo launch argument: Gazebo always publishes the measured
+angle, so requiring it is never optional there.
 
 The 11/1 fault matrix showed why the yaw rate was not enough. The old rule
 compared it with v·tan(δ)/L inside a band of 0.15 rad/s or half the
 expected rate, for 1 s: a freeze mid-corner kept widening the band while
 the controller asked for more steering, and at 5.3 m/s the car left the
 course before the 1 s window filled. That rule remains only as the
-fallback for a plant with no steering measurement (the kinematic demo),
-from `steer_min_speed_mps` up. It reads the yaw rate in `/lhr/vehicle/odom`,
+fallback for a plant with no steering measurement, with
+`require_steer_measurement` off, from `steer_min_speed_mps` up. It reads the yaw rate in `/lhr/vehicle/odom`,
 which under `estimator:=ekf` is the EKF's estimate, not the gyro itself, so
 it freezes if the IMU dies. IMU and wheel-speed dropouts are not caught yet
 ([#126](https://github.com/LonghornRacingElectric/lhre/issues/126)).
@@ -131,7 +136,7 @@ add `safety_lidar_timeout_s:=1.5` there:
 `safety:=true` is off by default until the fault-injection runs
 ([#117](https://github.com/LonghornRacingElectric/lhre/issues/117)) have
 tuned the thresholds. Every threshold is a `safety_*` launch argument with
-the same default as the node. Three parameters are deliberately not
+the same default as the node. Five parameters are deliberately not
 arguments:
 
 - `monitor_lidar` follows `perception`: the Gazebo LiDAR always publishes,
@@ -140,6 +145,9 @@ arguments:
 - `rate_hz` (20) is the check and heartbeat rate, not a threshold; the
   timeouts are what get tuned.
 - `lidar_topic` is fixed by the bridge config.
+- `steering_measured_topic` is fixed by `joint_cmd_adapter`.
+- `require_steer_measurement` stays on: Gazebo always publishes the measured
+  steering angle, so a run without it is a broken run, not an option.
 
 ## Not done here
 

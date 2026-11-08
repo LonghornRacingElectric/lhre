@@ -47,6 +47,9 @@ class SafetyNode(Node):
         self.declare_parameter('steer_angle_tol_rad', defaults.steer_angle_tol_rad)
         self.declare_parameter('steer_angle_window_s', defaults.steer_angle_window_s)
         self.declare_parameter('steer_angle_timeout_s', defaults.steer_angle_timeout_s)
+        # Not a Gazebo launch argument on purpose: Gazebo always publishes the
+        # measured angle, so requiring it is never optional there.
+        self.declare_parameter('require_steer_measurement', defaults.require_steer_measurement)
         self.declare_parameter('steer_min_speed_mps', defaults.steer_min_speed_mps)
         self.declare_parameter('steer_yaw_rate_tol', defaults.steer_yaw_rate_tol)
         self.declare_parameter('steer_rel_tol', defaults.steer_rel_tol)
@@ -70,6 +73,7 @@ class SafetyNode(Node):
             steer_angle_tol_rad=float(param('steer_angle_tol_rad')),
             steer_angle_window_s=float(param('steer_angle_window_s')),
             steer_angle_timeout_s=float(param('steer_angle_timeout_s')),
+            require_steer_measurement=bool(param('require_steer_measurement')),
             steer_min_speed_mps=float(param('steer_min_speed_mps')),
             steer_yaw_rate_tol=float(param('steer_yaw_rate_tol')),
             steer_rel_tol=float(param('steer_rel_tol')),
