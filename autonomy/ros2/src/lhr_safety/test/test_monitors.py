@@ -361,7 +361,16 @@ def test_a_measured_angle_that_never_arrives_trips_by_default():
     assert m.check(t) == Fault.STEER_TRACKING
 
 
-def test_without_a_requirement_the_yaw_rate_rule_takes_over():
+@pytest.mark.parametrize('turning, expected', [(True, Fault.NONE), (False, Fault.STEER_TRACKING)])
+def test_without_a_requirement_the_yaw_rate_rule_takes_over(turning, expected):
+    # No measured angle at all: a missing measurement is not a fault here,
+    # and the yaw rate alone decides whether a 0.3 rad command is followed.
     m = SafetyMonitor(YAW_CFG, now=0.0)
-    last = _drive(m, 0.0, 3.0, steer=0.1)
-    assert m.check(last) == Fault.NONE
+    yaw_rate = 5.0 * math.tan(0.3) / WHEELBASE if turning else 0.0
+    t = 0.0
+    while t < 3.0:
+        m.on_lidar(t)
+        m.on_command(t, 0.3)
+        m.on_odom(t, 0.0, 0.0, 5.0, 0.0, yaw_rate, 0.01, 0.01)
+        t += 0.05
+    assert m.check(t - 0.05) == expected
