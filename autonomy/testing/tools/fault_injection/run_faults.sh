@@ -43,6 +43,18 @@ cleanup() {
     sleep 2
 }
 
+stop_launch() {  # pid of a setsid launch: stop it and every node it started
+    # TERM to ros2 launch alone leaves its nodes running, still publishing
+    # into the next run, so the whole process group gets it.
+    kill -TERM -- -"$1" 2>/dev/null
+    ( sleep 15; kill -KILL -- -"$1" ) 2>/dev/null &
+    local guard=$!
+    wait "$1" 2>/dev/null
+    kill "$guard" 2>/dev/null
+    sleep 1
+    kill -KILL -- -"$1" 2>/dev/null  # whatever ignored TERM
+}
+
 world_for() {  # track seed: prints world:=<sdf>, or nothing if one is committed
     # Without a committed <track>_seed<N>.sdf the launch refuses to start,
     # so generate the one the seed asks for.
@@ -74,8 +86,9 @@ one_run() {  # id kind track seed v_max seconds [launch args...]
     local rec=$!
     # Metrics off: a finished lap ends the mission (#132) and safety only
     # arms in READY and DRIVING, so a fault after the first lap would score
-    # missed. An 8 m/s oval lap is shorter than AFTER.
-    ros2 launch lhr_gazebo gazebo_demo.launch.py \
+    # missed. An 8 m/s oval lap is shorter than AFTER. setsid gives the
+    # launch its own process group for stop_launch.
+    setsid ros2 launch lhr_gazebo gazebo_demo.launch.py \
         gui:=false rviz:=false track_style:="$track" seed:="$seed" \
         perception:=lidar estimator:=ekf safety:=true \
         v_max:="$vmax" ${world:+"$world"} enable_metrics:=false \
@@ -87,9 +100,8 @@ one_run() {  # id kind track seed v_max seconds [launch args...]
     python3 "$HERE/../gate/watch_run.py" --cap "$secs" --hang "$HANG_S" \
         --pid "$launch" --out "$OUT/bags/$id.end.txt" || code=$?
     # A background job ignores SIGINT in a non-interactive shell; TERM is
-    # what stops the launch and makes the recorder close the bag.
-    kill -TERM "$launch" 2>/dev/null
-    wait "$launch" 2>/dev/null
+    # what makes the recorder close the bag.
+    stop_launch "$launch"
     kill -TERM "$rec"
     wait "$rec" 2>/dev/null
     cleanup
