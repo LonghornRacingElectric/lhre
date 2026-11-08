@@ -17,12 +17,14 @@ import (
 	sensor "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/proto/sensor"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 )
 
 type SensorMessage struct {
-	Payload []byte
-	CarType string
+	Payload    []byte
+	CarType    string
+	CSVSession string
 }
 
 var (
@@ -39,6 +41,11 @@ func (s *bridgeServer) SendSensorData(ctx context.Context, req *pb.SensorDataReq
 	msg := SensorMessage{
 		Payload: req.Payload,
 		CarType: req.CarType,
+	}
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		if sessions := md.Get("csv-session-id"); len(sessions) > 0 {
+			msg.CSVSession = sessions[0]
+		}
 	}
 
 	// Non-blocking send to both channels
@@ -215,6 +222,7 @@ func rawDataWorker(producer sarama.SyncProducer) {
 			Value: sarama.ByteEncoder(msg.Payload),
 			Headers: []sarama.RecordHeader{
 				{Key: []byte("car_type"), Value: []byte(msg.CarType)},
+				{Key: []byte("csv_session_id"), Value: []byte(msg.CSVSession)},
 			},
 		}
 

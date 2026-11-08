@@ -8,6 +8,7 @@ import sys
 import time
 import queue
 import threading
+import uuid
 import numpy as np
 import copy
 import grpc
@@ -65,6 +66,7 @@ class MQTTHandler:
         self.scalar_or_list = lambda val, scalar: val.tolist()[0] if scalar else val.tolist()
         self.cache = []
         self.cache_enable = cache_enable
+        self.orion_csv_session = ''
         self._shutdown = False
         self.partition_manager = PartitionManager(gap_seconds=300)
         self.partition_enabled_cars = {"Angelique", "Orion"}
@@ -278,6 +280,9 @@ class MQTTHandler:
                 userdata.client.publish('server-communication', welcome_msg)
                 logging.info(f'\t\tBEVO-Angelique connected. Sent welcome message with next packet_id: {next_packet_id}')
             elif connected_client_id in {'BEVO-Orion', 'BEVO_ORION'}:
+                self.orion_csv_session = (
+                    datetime.datetime.now().strftime('%Y%m%d_%H%M%S_%f') + '_' + uuid.uuid4().hex
+                )
                 logging.warning('\t\tBEVO-Orion has connected. Querying database for latest packet_id to send welcome message...')
                 try:
                     with QueryBuilder("Orion") as qb:
@@ -387,7 +392,7 @@ class MQTTHandler:
         :param car:         str         car type ("Orion" / "Nightwatch" / "Angelique")
         '''
         try:
-            self.bridge_queue.put_nowait((payload, car))
+            self.bridge_queue.put_nowait((payload, car, self.orion_csv_session if car == 'Orion' else ''))
         except queue.Full:
             logging.error(f'Bridge queue full; dropping realtime forward for {car}')
 
@@ -403,10 +408,12 @@ class MQTTHandler:
             if item is None:
                 self.bridge_queue.task_done()
                 break
-            payload, car = item
+            payload, car, csv_session = item
             try:
                 request = bridge_pb2.SensorDataRequest(payload=payload, car_type=car)
-                response = self.bridge_stub.SendSensorData(request, timeout=2)
+                response = self.bridge_stub.SendSensorData(
+                    request, timeout=2, metadata=(('csv-session-id', csv_session),)
+                )
                 if not response.success:
                     logging.warning(f'Bridge returned failure: {response.message}')
             except grpc.RpcError as e:
