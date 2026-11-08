@@ -29,3 +29,8 @@ Times are America/Chicago on 2026-11-08; runner console times use UTC.
 - Post-merge acceleration smoke passes every check with the new watcher:
   `reason=finished mission=FINISHED sim_s=30.9 wall_s=53.3`, stop 1.45 m.
   Raw output: `2026-11-08-issue206-sim-time-merge`.
+- User campaign `2026-11-08-170935-autocross-check`: seeds 1–5, three repeats
+  each and five baselines. All 15 gate runs pass; zero cones/off-course/safety
+  trips, max CTE 0.2535 m, max EKF error 0.0763 m, stops 1.37–1.85 m and
+  lap ratios 1.00. Exact arguments confirm the combined stack and Mac 1.5 s
+  timeout. Raw output retained in the container.

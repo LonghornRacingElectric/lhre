@@ -110,6 +110,27 @@ Its rows are in
 [`sim-time-merge-results.csv`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/testing/2026-11-08-side-classifier-fixes/sim-time-merge-results.csv),
 with raw data at `~/lhr-test-data/2026-11-08-issue206-sim-time-merge/`.
 
+### Five-seed autocross campaign
+
+On branch `874e0a15` after #230 integration, the user ran autocross seeds
+1–5 three times each with one sim/truth baseline per seed. **All 15 scored
+runs pass every check.** Every run completed a lap, reached `FINISHED`,
+stayed stopped, hit zero cones, had zero off-course events and retained a
+healthy stack. The worst max CTE was 0.2535 m and max EKF error 0.0763 m;
+stop distances ranged from 1.37 to 1.85 m. All lap ratios were 1.00.
+
+The actual arguments confirm Mid-360, stereo/fusion, EKF and safety with the
+1.5 s Mac diagnostic timeout. Sim speed ranged from 0.66 to 0.93 times real
+time including startup. All 15 gate rows and five completed baselines are in
+[`autocross-repeat-results.csv`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/testing/2026-11-08-side-classifier-fixes/autocross-repeat-results.csv).
+Raw bags, logs and exact arguments remain at
+`~/lhr-test-data/2026-11-08-170935-autocross-check/` in `lhr-autonomy`.
+
+Together with the acceleration repeats, this completes the local scored
+MVP-autocross/acceleration coverage for the combined stack. Live camera
+interruption/recovery, skidpad and gate-machine rates/default-timeout checks
+remain separate acceptance items.
+
 ## Data and limits
 
 Raw bags, logs, exact arguments and the comparison harness remain in

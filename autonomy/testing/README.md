@@ -22,7 +22,7 @@ testing/
 | [2026-10-28 MVP gate](2026-10-28-mvp-gate/README.md) | Does the full stack, with no ground-truth shortcuts, pass every gate run in Gazebo? | Pass, 18 of 18 (11/1), and 18 of 18 again with camera fusion; skidpad waived | Upload pending |
 | [2026-11-07 FMU on red-mesa](2026-11-07-fmu-gazebo-red-mesa/README.md) | Can the FMU drive the Gazebo car fast and reliably enough for the Sim v2 gate? | Not yet: completes laps with #222 pacing, but about one sixth of real time and parallel runs fail on one machine | On red-mesa, upload pending |
 | [2026-11-08 Mid-360 and fusion](2026-11-08-mid360-fusion-gate/README.md) | Does the gate select both sensors and preserve baselines? | Automated checks pass; Mac default timeout fails. At 1.5 s seed 1 passes, acceleration fails stay-stopped. Official machine evidence pending | In the Mac container, upload pending |
-| [2026-11-08 side classifier fixes](2026-11-08-side-classifier-fixes/README.md) | Do narrow boundaries stay separate and bad initial labels recover? | Regressions pass; seed-1 inference-only and fusion driving both pass at the Mac diagnostic timeout | In the Mac container, upload pending |
+| [2026-11-08 side classifier fixes](2026-11-08-side-classifier-fixes/README.md) | Do narrow boundaries stay separate and bad initial labels recover? | Regressions pass; combined stack passes 15/15 autocross and 3/3 acceleration repeats at the Mac diagnostic timeout | In the Mac container, upload pending |
 
 ## Simulator validation
 

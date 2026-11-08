@@ -19,6 +19,12 @@ pass; the earlier single-run failure was not reproduced. The
 retain both campaigns; official acceptance and sustained gate-machine rates
 remain unchecked below.
 
+**Local driving update:** after #230 integration (`874e0a15`), all 15
+autocross runs (seeds 1–5, three repeats each) pass, in addition to the three
+acceleration repeats. Actual arguments confirm the combined sensor stack and
+Mac 1.5 s timeout. Live camera interruption/recovery, skidpad and gate-machine
+rate/default-timeout evidence remain pending.
+
 **Goal:** Close [#206](https://github.com/LonghornRacingElectric/lhre/issues/206) by selecting Mid-360 and camera fusion for gate runs, verifying the planner and LiDAR fallback, and recording sensor rates on red-mesa.
 
 **Architecture:** Select the sensor stack in the existing gate runner, which the issue explicitly permits. Keep standalone Gazebo launch defaults and truth baselines intact. Reuse the existing fusion, planner wiring, scorer and regression tests; change perception algorithms only if a reproduced failure requires it.
