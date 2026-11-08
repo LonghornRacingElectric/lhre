@@ -49,3 +49,14 @@ Backend is stdlib `http.server`. A localhost form tool does not need a
 framework, and extra pip wheels cost us Windows path length.
 
 Planned: `migrate_csv`, a one-time importer from the lhre-2026 CSVs.
+
+## Signal catalog publishing
+
+`bazel run //tools/spec:publish_signals` builds the current signal catalog and
+publishes its immutable content-hash version, then atomically activates it for
+that car. `-- --catalog-root /absolute/path` selects persistent archive storage;
+otherwise `SIGNAL_CATALOG_DIR` or `apps/telemetry/catalogs` is used. Repeating a
+publish with unchanged content changes no files. `--source /absolute/file.json`
+publishes a separately generated catalog or reactivates an archived version.
+The input's content hash and car identity are validated before any write.
+See the [catalog format](../../lib/codegen/telemetry/README.md).

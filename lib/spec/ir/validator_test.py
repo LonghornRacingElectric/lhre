@@ -52,6 +52,11 @@ def _external_errors(metadata="", field_type="PROTO_FLOAT", repeated=False):
 
 
 class ValidatorTest(unittest.TestCase):
+    def test_car_identity_is_unique_and_safe(self):
+        self.assertEqual(_validate('car: "artemis"', REGISTRY, MESSAGE)[0], [])
+        self.assert_error(_validate('car: "../artemis"', REGISTRY, MESSAGE)[0], "car slug")
+        self.assert_error(_validate('car: "orion"', 'car: "artemis"', REGISTRY, MESSAGE)[0], "exactly one")
+
     def test_external_scalar_unit_presence(self):
         self.assert_error(_external_errors("uplink_rate_hz: 50"), "numeric external scalars require unit")
         for unit in ('unit: "m"', 'unit: ""'):

@@ -6,7 +6,6 @@ export type Signal = {
   group: string;
   value_type: string;
   repeated: boolean;
-  schema_version: string;
   module: string | null;
   unit: string | null;
   rate_hz: number | null;
@@ -22,15 +21,16 @@ export class CatalogError extends Error {
 const HASH = /^[a-f0-9]{64}$/;
 const CAR = /^[a-z][a-z0-9_-]*$/;
 
-function isSignal(value: unknown, version: string): value is Signal {
+function isSignal(value: unknown): value is Signal {
   if (!value || typeof value !== "object") return false;
   const row = value as Record<string, unknown>;
+  if ("schema_version" in row) return false;
   const nullableString = (v: unknown) => v === null || typeof v === "string";
   const rate = (v: unknown, minimum: number) => v === null ||
     (typeof v === "number" && Number.isFinite(v) && v >= minimum);
   return typeof row.signal === "string" && /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/.test(row.signal) &&
     typeof row.group === "string" && typeof row.value_type === "string" &&
-    typeof row.repeated === "boolean" && row.schema_version === version &&
+    typeof row.repeated === "boolean" &&
     nullableString(row.module) && nullableString(row.unit) &&
     rate(row.rate_hz, 0) &&
     ["telemetry", "event", "health"].includes(String(row.channel_type));
@@ -72,7 +72,7 @@ export async function readSignalCatalog(car: string, version: string | null) {
     const catalog = content as Record<string, unknown>;
     if (catalog.car !== car || catalog.schema_version !== selected ||
         !Array.isArray(catalog.signals) ||
-        !catalog.signals.every(row => isSignal(row, catalog.schema_version as string)) ||
+        !catalog.signals.every(isSignal) ||
         new Set(catalog.signals.map(row => row.signal)).size !== catalog.signals.length) {
       throw new Error("Invalid signal catalog.");
     }

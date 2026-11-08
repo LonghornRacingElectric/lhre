@@ -5,7 +5,7 @@ import unittest
 
 from runfiles import Runfiles
 
-from lib.codegen.telemetry import gen_telemetry
+from lib.codegen.telemetry import catalog, gen_telemetry
 from lib.spec.ir import wire
 
 
@@ -24,6 +24,18 @@ class TelemetryGeneratorTest(unittest.TestCase):
         self.assertIn("repeated float gps = 1;", proto)
         self.assertIn("BoardStatus board_status = 9;", proto)
 
+    def test_catalog_hash_ignores_paths_and_file_order(self):
+        from lib.spec.ir import loader
+        original = json.loads(gen_telemetry.render_signals_json(self.spec))
+        relocated = loader.Spec({f"elsewhere/{i}.textproto": value
+                                 for i, value in enumerate(reversed(list(self.spec.files.values())))})
+        self.assertEqual(json.loads(gen_telemetry.render_signals_json(relocated)), original)
+
+    def test_catalog_generation_requires_car_identity(self):
+        from lib.spec.ir import loader
+        with self.assertRaisesRegex(ValueError, "exactly one"):
+            gen_telemetry.render_signals_json(loader.Spec({}))
+
     def test_json_tracks_every_can_message(self):
         packets = json.loads(gen_telemetry.render_can_json(self.spec))
         messages = [message for _, message in sorted(self.spec.messages(), key=lambda item: item[1].can_id)]
@@ -37,7 +49,7 @@ class TelemetryGeneratorTest(unittest.TestCase):
             self.assertEqual(packet["bus"], message.bus)
 
     def test_signals_cover_every_snapshot_field_once(self):
-        catalog = json.loads(gen_telemetry.render_signals_json(self.spec, "test"))
+        catalog = json.loads(gen_telemetry.render_signals_json(self.spec))
         rows = {row["signal"]: row for row in catalog["signals"]}
         expected = {f"{gen_telemetry.snake_case(group)}.{field}"
                     for group, field in wire.field_types(self.spec)}
@@ -47,8 +59,9 @@ class TelemetryGeneratorTest(unittest.TestCase):
             self.assertIn("rate_hz", row)
             self.assertNotIn("native_rate_hz", row)
             self.assertNotIn("uplink_rate_hz", row)
-        self.assertEqual(catalog["schema_version"], "test")
-        self.assertTrue(all(row["schema_version"] == "test" for row in rows.values()))
+        self.assertEqual(catalog["car"], "orion")
+        self.assertRegex(catalog["schema_version"], r"^[a-f0-9]{64}$")
+        self.assertTrue(all("schema_version" not in row for row in rows.values()))
         self.assertEqual(rows["dynamics.gps"]["unit"], "deg")
         self.assertEqual(rows["dynamics.gps_speed"]["unit"], "kn")
         self.assertIsNone(rows["dynamics.gps_precise"]["unit"])
@@ -63,13 +76,14 @@ class TelemetryGeneratorTest(unittest.TestCase):
     def test_catalog_preserves_event_and_uplink_metadata(self):
         from lib.spec.ir import loader
         parsed = loader.parse_file('''
+car: "test"
 groups { group { name: "Events" snapshot_id: 3 next_free_id: 2
   external_field { name: "fault" id: 1 type: PROTO_BOOL
     uplink_rate_hz: 5 channel_type: EVENT }
 } }
 ''')
         spec = loader.Spec({"test.textproto": parsed})
-        row = json.loads(gen_telemetry.render_signals_json(spec, "test"))["signals"][0]
+        row = json.loads(gen_telemetry.render_signals_json(spec))["signals"][0]
         self.assertEqual(row["channel_type"], "event")
         self.assertEqual(row["rate_hz"], 5)
 
@@ -78,6 +92,7 @@ groups { group { name: "Events" snapshot_id: 3 next_free_id: 2
         for frequency, override, expected in ((100, "", 100), (100, "uplink_rate_hz: 10", 10), (0, "", 0)):
             with self.subTest(frequency=frequency, override=override):
                 parsed = loader.parse_file(f'''
+car: "test"
 bus {{ name: "Critical" bitrate_bps: 1000000 }}
 groups {{ group {{ name: "Vehicle" snapshot_id: 3 next_free_id: 2 }} }}
 message {{ name: "STATUS" can_id: 256 from_board: "VCU" bus: "Critical" dlc: 1
@@ -88,7 +103,7 @@ message {{ name: "STATUS" can_id: 256 from_board: "VCU" bus: "Critical" dlc: 1
 ''')
                 spec = loader.Spec({"test.textproto": parsed})
                 self.assertEqual(gen_telemetry.validator.validate(spec)[0], [])
-                row = json.loads(gen_telemetry.render_signals_json(spec, "test"))["signals"][0]
+                row = json.loads(gen_telemetry.render_signals_json(spec))["signals"][0]
                 self.assertEqual(row["rate_hz"], expected)
 
     def test_sql_tracks_every_snapshot_field(self):

@@ -4,9 +4,15 @@ load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
 load(":telemetry_artifact.bzl", "telemetry_artifact")
 
 py_library(
+    name = "catalog_lib",
+    srcs = ["catalog.py"],
+    visibility = ["//visibility:public"],
+)
+
+py_library(
     name = "gen_telemetry_lib",
     srcs = ["gen_telemetry.py"],
-    deps = ["//lib/spec:ir"],
+    deps = [":catalog_lib", "//lib/spec:ir"],
 )
 
 py_binary(
@@ -67,6 +73,7 @@ py_test(
     args = ["$(rlocationpaths //lib/spec:files)"],
     data = ["//lib/spec:files"],
     deps = [
+        ":catalog_lib",
         ":gen_telemetry_lib",
         "@lhre_pypi//bazel_runfiles",
     ],

@@ -55,3 +55,31 @@ py_binary(
         "//lib/spec:ir",
     ],
 )
+
+py_library(
+    name = "publish_signals_lib",
+    srcs = ["publish_signals.py"],
+    deps = [
+        "//lib/codegen/telemetry:catalog_lib",
+        "@lhre_pypi//bazel_runfiles",
+    ],
+)
+
+py_binary(
+    name = "publish_signals",
+    srcs = ["publish_signals.py"],
+    args = ["--source-runfile", "$(rlocationpath //apps/telemetry:current_schema_signals)"],
+    data = ["//apps/telemetry:current_schema_signals"],
+    visibility = ["//visibility:public"],
+    deps = [":publish_signals_lib"],
+)
+
+py_test(
+    name = "publish_signals_test",
+    size = "small",
+    srcs = ["publish_signals_test.py"],
+    deps = [
+        ":publish_signals_lib",
+        "//lib/codegen/telemetry:catalog_lib",
+    ],
+)

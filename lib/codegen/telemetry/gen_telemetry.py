@@ -6,6 +6,7 @@ import json
 import re
 from pathlib import Path
 
+from lib.codegen.telemetry import catalog
 from lib.spec.ir import loader, validator, wire
 from lib.spec.proto import can_spec_pb2
 
@@ -170,7 +171,7 @@ def render_can_json(spec):
     return json.dumps(packets, indent=2) + "\n"
 
 
-def render_signals_json(spec, digest):
+def render_signals_json(spec):
     """One catalog row per snapshot field, including non-CAN producers."""
     types = wire.field_types(spec)
     candidates = {}
@@ -202,10 +203,9 @@ def render_signals_json(spec, digest):
             "group": snake_case(group),
             "value_type": field_type.removeprefix("repeated "),
             "repeated": field_type.startswith("repeated "),
-            "schema_version": digest,
             **metadata,
         })
-    return json.dumps({"schema_version": digest, "signals": signals}, indent=2) + "\n"
+    return json.dumps(catalog.build(spec.car(), signals), indent=2, ensure_ascii=False) + "\n"
 
 
 def render_sql(spec, digest, common_sql):
@@ -269,7 +269,7 @@ def main():
     elif args.kind == "can_json":
         output = render_can_json(spec)
     elif args.kind == "signals_json":
-        output = render_signals_json(spec, digest)
+        output = render_signals_json(spec)
     else:
         if args.common_sql is None:
             parser.error("--common-sql is required for SQL generation")

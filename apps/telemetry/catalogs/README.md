@@ -23,6 +23,7 @@ ignores catalog JSON, and Bazel cannot reproduce unpublished historical input
 versions by itself. No catalog is committed as a generated source file.
 
 Each catalog contains `car`, a content-based `schema_version`, and `signals`.
+The version appears only at the top level, not in individual signal rows.
 The hash excludes version fields and includes car identity. Metadata changes
 produce a new version; formatting and input-file paths do not. `current.json`
 is an explicit selection, not a hash/timestamp ordering. Publishing an older

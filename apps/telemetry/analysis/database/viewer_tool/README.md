@@ -38,7 +38,8 @@ With the viewer running, `GET /api/cars/orion/signals` returns its signal array,
 including CAN, GPS, and board-status fields.
 `?schema_version=<64-character-lowercase-hash>` selects an exact version in that
 car's folder; omitting it follows that car's `current.json` pointer.
-The response carries the schema hash in every row and `X-Schema-Version`.
+The catalog file stores its schema hash only at the top level. The API returns
+the signal array, with the hash in `X-Schema-Version` rather than in each row.
 Every car uses the same catalog shape but its own archive; there is no cross-car
 fallback. No Kafka or
 database connection is needed for discovery. This v0 read endpoint has no

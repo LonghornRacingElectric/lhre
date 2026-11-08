@@ -26,6 +26,7 @@ three years after everyone who made the decision graduated.
 | [015](015-study-layout.md) | A study is a README, a study.yml and a run.py | Accepted |
 | [016](016-fmu-artifact-boundary.md) | Identified full-vehicle FMU artifact for autonomy | Accepted |
 | [017](017-explicit-native-rates.md) | CAN timing uses explicit native rates instead of tiers | Accepted |
+| [018](018-per-car-signal-catalogs.md) | Immutable per-car signal catalogs with explicit current selection | Accepted |
 
 ## ADRs vs. READMEs
 

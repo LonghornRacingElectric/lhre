@@ -60,6 +60,15 @@ Spec files carry no comments. Textproto comments do not survive the
 canonical serializer, so prose goes in `description` fields, which the
 generators forward into generated code and docs.
 
+## Car identity
+
+Declare `car: "orion"` once in the spec bundle, currently in `groups.textproto`.
+The current definitions belong to Orion; `OrionSensorData` and Orion SQL target
+names remain compatibility names, not catalog identity. Catalog generation
+requires exactly one lowercase car slug. Independent cars need independent spec
+input bundles; never relabel a generated artifact to manufacture another car's
+schema. Partial specs used by validation tooling may omit car identity.
+
 ## Signal discovery metadata
 
 CAN `Signal` entries map into telemetry through `Telemetry`; non-CAN signals

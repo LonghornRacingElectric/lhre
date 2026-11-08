@@ -116,6 +116,11 @@ class _Report:
 
 def _check_registries(spec, report):
     """Duplicate names in registries and messages (rule 5 groundwork)."""
+    if any(file.car for file in spec.files.values()):
+        try:
+            spec.car()
+        except ValueError as error:
+            report.error("spec", 5, str(error))
     for kind, entries in (
         ("bus", spec.buses()),
         ("enum_type", spec.enum_types()),

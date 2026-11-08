@@ -20,6 +20,7 @@ message SpecFile {
   repeated EnumType enum_type = 3;
   repeated BitfieldType bitfield_type = 4;
   GroupRegistry groups = 5;
+  string car = 6;  // declared once per spec bundle, e.g. in groups.textproto
 }
 
 message CanMessage {
