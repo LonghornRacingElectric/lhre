@@ -127,9 +127,33 @@ Raw bags, logs and exact arguments remain at
 `~/lhr-test-data/2026-11-08-170935-autocross-check/` in `lhr-autonomy`.
 
 Together with the acceleration repeats, this completes the local scored
-MVP-autocross/acceleration coverage for the combined stack. Live camera
-interruption/recovery, skidpad and gate-machine rates/default-timeout checks
-remain separate acceptance items.
+MVP-autocross/acceleration coverage for the combined stack. The separate live
+camera interruption check follows below; skidpad and gate-machine
+rates/default-timeout checks remain outstanding.
+
+### Live camera interruption
+
+The user reported that the live camera interruption check looked good on
+seed 2, after receiving the camera-bridge pause/resume and ROS timestamp
+monitoring procedure. This is an operator-reported functional observation;
+the pause duration and camera/LiDAR timestamp transition were not captured
+as an automated trace.
+
+The interrupted run independently **passes every course-scoring check**:
+lap completed, `FINISHED`, zero cone hits/off-course events, healthy stack,
+max CTE 0.2542 m, max EKF error 0.0481 m and stop distance 1.37 m. Lap ratio
+is 1.00 against the 33.8252 s seed-2 baseline. Actual arguments confirm
+Mid-360, stereo/fusion, EKF and safety, RViz enabled, and the 1.5 s Mac
+diagnostic timeout. This fault check stays separate from the clean 15-run
+campaign.
+
+The gate row and baseline are in
+[`camera-interruption-seed2-results.csv`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/testing/2026-11-08-side-classifier-fixes/camera-interruption-seed2-results.csv).
+Raw data remains at
+`~/lhr-test-data/2026-11-08-175111-seed2-camera-fallback-check/` in the
+development container. Exact camera-priority/expiry behavior is covered by
+the automated fusion tests; this live check adds the operator observation
+and the completed driving outcome.
 
 ## Data and limits
 

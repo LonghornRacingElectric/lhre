@@ -403,8 +403,12 @@ marker transitions, reset, bounded queues, and late subscribers; launch tests
 evaluate defaults/overrides through node startup in truth/EKF modes. ROS launch/startup and image-to-planner integration checks run in the
 isolated Docker environment. A stationary live-stream smoke check also runs;
 see [recorded validation](../lhr_gazebo/README.md#fusion-planner-validation-2026-11-01).
-Manual autocross/EKF visuals were confirmed; a separate live camera
-pause/resume outcome and scored accuracy were not recorded.
+Manual autocross/EKF visuals were confirmed. A later seed-2 live camera
+interruption check was reported successful by the operator and passed its
+course scoring; see the
+[development validation](../../../testing/2026-11-08-side-classifier-fixes/README.md#live-camera-interruption).
+No automated timestamp-transition trace or scored camera-classification
+accuracy was recorded for that check.
 The map does not establish physical-camera accuracy or driving improvement;
 planar vehicle TF omits physics roll/pitch. See the
 [detailed design](../../../docs/plans/camera-lidar-fusion-design.md) for live

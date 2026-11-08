@@ -22,8 +22,14 @@ remain unchecked below.
 **Local driving update:** after #230 integration (`874e0a15`), all 15
 autocross runs (seeds 1–5, three repeats each) pass, in addition to the three
 acceleration repeats. Actual arguments confirm the combined sensor stack and
-Mac 1.5 s timeout. Live camera interruption/recovery, skidpad and gate-machine
-rate/default-timeout evidence remain pending.
+Mac 1.5 s timeout. The local interruption update follows; skidpad and
+gate-machine rate/default-timeout evidence remain pending.
+
+**Live interruption update:** the user reported a successful seed-2 camera
+pause/resume check, and its course scoring independently passes 1/1. This is
+local operator-observed functional evidence with the Mac timeout; no automated
+camera-age transition trace was captured. Skidpad and official gate-machine
+rate/default-timeout validation remain pending.
 
 **Goal:** Close [#206](https://github.com/LonghornRacingElectric/lhre/issues/206) by selecting Mid-360 and camera fusion for gate runs, verifying the planner and LiDAR fallback, and recording sensor rates on red-mesa.
 

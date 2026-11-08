@@ -34,3 +34,8 @@ Times are America/Chicago on 2026-11-08; runner console times use UTC.
   trips, max CTE 0.2535 m, max EKF error 0.0763 m, stops 1.37–1.85 m and
   lap ratios 1.00. Exact arguments confirm the combined stack and Mac 1.5 s
   timeout. Raw output retained in the container.
+- User camera-interruption check on seed 2: user reports it looked good.
+  Final scorer independently passes 1/1, with zero cones/off-course/health
+  failures, max CTE 0.2542 m, EKF error 0.0481 m and stop 1.37 m. Retained
+  separately at `2026-11-08-175111-seed2-camera-fallback-check`; no automated
+  camera/LiDAR timestamp trace or measured pause duration was captured.
