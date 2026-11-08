@@ -11,8 +11,10 @@ issues. Official red-mesa validation remains pending access; skidpad and the
 FMU/gate integration dependencies below remain outstanding. The Mac
 development smoke tripped `LIDAR_STALE` at the unchanged 0.3 s timeout and is
 retained as a failure, not acceptance evidence. With the documented 1.5 s Mac
-diagnostic timeout, seed 1 passes, but acceleration fails the stay-stopped
-check (0.69 m/s after its first stop). The
+diagnostic timeout, the initial acceleration check failed stay-stopped
+(0.69 m/s after its first stop). After the classifier fixes, three
+[acceleration repeats](../../testing/2026-11-08-side-classifier-fixes/README.md#acceleration-follow-up)
+pass; the earlier single-run failure was not reproduced. The
 [development results](../../testing/2026-11-08-mid360-fusion-gate/README.md)
 retain both campaigns; official acceptance and sustained gate-machine rates
 remain unchecked below.
@@ -42,7 +44,7 @@ remain unchecked below.
 - Earlier campaigns passed Mid-360 and camera fusion separately. They do not establish that the combined stack passes with the FMU on the gate machine.
 - There is no committed skidpad world yet: [#114](https://github.com/LonghornRacingElectric/lhre/issues/114) blocks that acceptance row. The old MVP runner waives it; that waiver cannot establish completion of #206 or Sim v2.
 - [#85](https://github.com/LonghornRacingElectric/lhre/issues/85) and [#86](https://github.com/LonghornRacingElectric/lhre/issues/86) remain open fallback risks: cross-track links on narrow courses and first-scan side labels that lock in errors. Reproduce failures before deciding whether their fixes must precede acceptance.
-- FMU integration/pacing (#202/#203, PRs #221/#222), gate timing [#227](https://github.com/LonghornRacingElectric/lhre/issues/227), and the revised scorer/matrix must land before claiming full Sim v2 acceptance. The current runner uses wall-time stop settling and truth-baseline lap scoring; it is still an MVP scorer.
+- FMU integration/pacing (#202/#203, PRs #221/#222) and the revised course-derived scorer/matrix remain dependencies for full Sim v2 acceptance. Gate timing [#227](https://github.com/LonghornRacingElectric/lhre/issues/227) landed through #230 on 2026-11-08: run caps and five-second settling now use simulation time, with a wall-time hang guard. The runner still uses the MVP matrix and truth-baseline lap reference.
 
 ## Review focus
 

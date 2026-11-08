@@ -7,9 +7,10 @@
 # safety on, the Mid-360 caster and stereo camera fusion (#206).
 # Each autocross seed also gets one truth-stack
 # baseline (perception:=sim estimator:=truth) for the lap time check. A run
-# ends a few seconds after the mission reaches FINISHED or EMERGENCY, or at
-# RUN_S wall seconds. score_gate.py then writes $OUT/results.csv and
-# $OUT/summary.md.
+# ends SETTLE_S sim seconds after the mission reaches FINISHED or EMERGENCY,
+# or at RUN_S sim seconds, so a slow machine runs the same campaign, only
+# longer. Wall time only catches a hung sim: /clock stopped for HANG_S
+# (#227). score_gate.py then writes $OUT/results.csv and $OUT/summary.md.
 #
 #   ../testing/tools/gate/run_gate.sh
 #   SEEDS=1 REPEATS=1 ACCEL_REPEATS=1 SKIDPAD_REPEATS=1 ../testing/tools/gate/run_gate.sh
@@ -22,8 +23,9 @@ REPEATS=${REPEATS:-3}
 ACCEL_REPEATS=${ACCEL_REPEATS-3}   # empty or 0 skips acceleration
 SKIDPAD_REPEATS=${SKIDPAD_REPEATS-3}  # empty or 0 skips skidpad
 BASELINE=${BASELINE:-1}            # 0 skips the truth-stack baselines
-RUN_S=${RUN_S:-180}                # wall-second cap per run
-SETTLE_S=${SETTLE_S:-3}            # keep recording this long after FINISHED
+RUN_S=${RUN_S:-180}                # sim-second cap per run
+SETTLE_S=${SETTLE_S:-5}            # sim seconds recorded after FINISHED
+HANG_S=${HANG_S:-60}               # wall seconds of a stopped /clock: hung
 OUT=${OUT:-$HOME/lhr-test-data/$(date +%F)-mid360-fusion-gate}
 EXTRA=${EXTRA:-}
 TRACK_STYLE=${TRACK_STYLE:-autocross}
@@ -57,8 +59,7 @@ cleanup() {
 }
 
 stop_run() {  # the watcher, then the launch, then the recorder
-    [ -n "$WATCH" ] && kill "$WATCH" 2>/dev/null
-    pkill -f "[r]os2 topic echo --field data /lhr/mission/status"
+    [ -n "$WATCH" ] && kill -TERM "$WATCH" 2>/dev/null && wait "$WATCH" 2>/dev/null
     [ -n "$LAUNCH" ] && kill -TERM "$LAUNCH" 2>/dev/null && wait "$LAUNCH" 2>/dev/null
     [ -n "$REC" ] && kill -TERM "$REC" 2>/dev/null && wait "$REC" 2>/dev/null
     REC='' LAUNCH='' WATCH=''
@@ -107,16 +108,15 @@ one_run() {  # id [launch args...]
     REC=$!
     # A background job ignores SIGINT in a non-interactive shell, so the
     # launch is stopped with TERM, which it handles the same way.
-    timeout -s TERM "$RUN_S" "${launch_cmd[@]}" > "$dir/launch.log" 2>&1 &
+    "${launch_cmd[@]}" > "$dir/launch.log" 2>&1 &
     LAUNCH=$!
-    # End the run once the mission is over, after the car has had time to
-    # stop on the recording.
-    # The explicit type lets the echo subscribe before the launch publishes.
-    ( timeout "$RUN_S" ros2 topic echo --field data /lhr/mission/status \
-          std_msgs/msg/String 2>/dev/null | grep -q -m1 -E 'FINISHED|EMERGENCY' \
-      && sleep "$SETTLE_S" && kill -TERM "$LAUNCH" 2>/dev/null ) &
+    # The watcher ends the run in sim time, once the car has had time to
+    # stop on the recording, and writes why to end.txt for the scorer.
+    python3 "$HERE/watch_run.py" --cap "$RUN_S" --settle "$SETTLE_S" \
+        --hang "$HANG_S" --pid "$LAUNCH" --out "$dir/end.txt" &
     WATCH=$!
-    wait "$LAUNCH"
+    wait "$WATCH"
+    WATCH=''
     stop_run
     printf '%s\n' "${launch_cmd[@]}" > "$dir/args.txt"
     cleanup

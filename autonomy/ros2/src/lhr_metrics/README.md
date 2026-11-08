@@ -211,7 +211,7 @@ Beyond `RUN_PARAMS`, which only ever reach the CSV:
 | `lap_start_speed` | 0.1 | Minimum speed to start the simulation-time timer, m/s |
 | `max_odom_gap_sec` | 1.0 | Largest gap allowed during a scored circuit |
 | `min_lap_time` | 5.0 | Reject a lap shorter than this |
-| `timeout_sec` | 0.0 | Optional wall-clock watchdog; zero disables it |
+| `timeout_sec` | 0.0 | Optional watchdog in node-clock (sim) seconds, with a wall-time hang guard; zero disables it |
 | `truth_odom_topic` | empty | Truth odometry to score; the estimate on `/lhr/vehicle/odom` then only feeds the error columns |
 | `output_csv` | `data/metrics.csv` | Where the row goes |
 | `run_id` | wall clock | Row identifier |
@@ -234,19 +234,27 @@ still exiting zero.
 | `lap` | A lap completed | 0 |
 | `mission_finished` | Mission state reached `FINISHED` | 0 |
 | `emergency` | Mission state reached `EMERGENCY` | 1 |
-| `timeout` | `timeout_sec` watchdog fired | 1 |
+| `timeout` | `timeout_sec` of sim time passed | 1 |
+| `hung` | The clock stood still for `timeout_sec` wall seconds | 1 |
 | `interrupted` | Ctrl+C | 1 |
 | `invalid_completion` | Autocross finished without a verified circuit | 1 |
 | `invalid_lap` | Scoring continuity or course check invalidated the run | 1 |
 
-`timeout_sec` is deliberately **wall** time, not sim time: its job is to
-stop a headless run hanging when the simulator dies and sim time freezes.
-It is disabled by default so a slow Gazebo run can finish.
+`timeout_sec` counts the node's clock, which is sim time under
+`use_sim_time`, so a run on a slow machine gets the same sim seconds before
+it times out
+([#227](https://github.com/LonghornRacingElectric/lhre/issues/227)). Wall
+time only catches a simulator that died: if the clock stands still for
+`timeout_sec` wall seconds, counting from startup so a clock that never
+starts counts too, the run ends `hung`
+([`watchdog.py`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/ros2/src/lhr_metrics/lhr_metrics/watchdog.py)).
+It is disabled by default.
 `scripts/run_headless.sh` explicitly enables a 120 s deadline; a later
 `timeout_sec:=...` launch argument overrides that deadline. The driving study
 runner disables metrics and enforces its own `--wall-timeout`.
-`scripts/check_stability.sh` also sets a 120 s deadline; pass
-`timeout_sec:=...` to either script when using a slower plant.
+`scripts/check_stability.sh` also sets a 120 s deadline. Neither needs
+changing for a slower plant; pass `timeout_sec:=...` only for a run that
+needs more than 120 sim seconds.
 
 `mission_finished` is what lets missions with no lap record a row, which
 the 75 m acceleration run needs.

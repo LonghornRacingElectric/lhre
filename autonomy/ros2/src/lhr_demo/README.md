@@ -28,7 +28,7 @@ Beyond the node parameters listed in
 | Argument | Default | What it does |
 | --- | --- | --- |
 | `use_sim_time` | `true` | Every node but the plant (`sim_kinematic` or `sim_bobsim`) follows `/clock`. Off means wall time, and averaged metrics wander |
-| `timeout_sec` | `0.0` | Optional wall-clock watchdog; disabled by default. `run_headless.sh` sets 120 s |
+| `timeout_sec` | `0.0` | Optional metrics watchdog in sim seconds, with a wall-time hang guard; disabled by default. `run_headless.sh` sets 120 s |
 | `output_csv` | `data/metrics.csv` | Where the metrics row goes |
 | `run_id` | timestamp | Shared by the metrics row and the bag directory |
 | `record` | `false` | Record an MCAP bag of the contract topics |
@@ -170,7 +170,7 @@ in `lhr_metrics`, the process exits, and its exit emits `Shutdown`. About
 `enable_metrics:=false` removes that. Nothing then publishes
 `/lhr/metrics/lap_complete`, so `mission_manager` never leaves `DRIVING`,
 the car keeps lapping, and no process exit tears the launch down. It runs
-until Ctrl-C. `timeout_sec:=0.0` disables only the wall-clock deadline
+until Ctrl-C. `timeout_sec:=0.0` disables only the watchdog deadline
 and leaves lap completion in place, so it is not enough on its own.
 
 ```bash

@@ -83,6 +83,33 @@ The baseline and both scored rows are in
 This is a two-mode development comparison with a relaxed Mac timeout, not
 an official gate pass.
 
+### Acceleration follow-up
+
+Three user-run acceleration repeats on the same runtime source (branch
+`2794ec7c`, before integrating #230) **all pass**. All reached
+`mission_finished` and `FINISHED`, hit zero cones, stayed on course and
+remained stopped after finishing. Stop distances were 1.45, 1.47 and 1.45 m;
+maximum speeds after the first stop were 0.09, 0.00 and 0.09 m/s, below the
+0.5 m/s limit. Max CTE was 0.0100 m and max EKF error 0.0595 m.
+
+These repeats used Mid-360, stereo/fusion, EKF and safety with the documented
+1.5 s Mac LiDAR timeout. The complete rows are in
+[`acceleration-repeat-results.csv`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/testing/2026-11-08-side-classifier-fixes/acceleration-repeat-results.csv).
+Raw data remains under `~/lhr-test-data/2026-11-08-165212-accel-check/` in the
+development container. The earlier single-run rolling failure was not
+reproduced here; its cause was not isolated, so these results do not establish
+which change removed it.
+
+After integrating [#230](https://github.com/LonghornRacingElectric/lhre/pull/230),
+one additional acceleration smoke run also passes every check: stop 1.45 m,
+max CTE 0.0055 m, max EKF error 0.0501 m, zero cones/off-course/safety trips.
+The new watcher wrote `reason=finished mission=FINISHED sim_s=30.9
+wall_s=53.3`; settling is now five simulation seconds and the run cap also
+uses simulation time. This run used the same Mac 1.5 s LiDAR timeout.
+Its rows are in
+[`sim-time-merge-results.csv`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/testing/2026-11-08-side-classifier-fixes/sim-time-merge-results.csv),
+with raw data at `~/lhr-test-data/2026-11-08-issue206-sim-time-merge/`.
+
 ## Data and limits
 
 Raw bags, logs, exact arguments and the comparison harness remain in
@@ -93,4 +120,5 @@ These checks do not establish physical-car reliability, all-course gate
 acceptance, sustained gate-machine sensor rates or skidpad support. Red-mesa
 validation remains deferred at the user's request. The earlier
 [default-timeout and acceleration stop failures](../2026-11-08-mid360-fusion-gate/README.md)
-remain recorded; no acceleration repair is claimed by these classifier fixes.
+remain historical evidence. The acceleration follow-up passes three repeats;
+no causal acceleration repair is claimed by these classifier fixes.

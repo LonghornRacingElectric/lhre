@@ -17,6 +17,7 @@ require the remaining gate work.
 |---|---|
 | `run_gate.sh` | Runs the matrix: autocross seeds 1 to 5 three times each, acceleration three times and skidpad three times on the no-shortcuts stack, plus one truth-stack baseline per autocross seed. One headless launch per run, recorded to a bag |
 | `score_gate.py` | Reads every run folder and writes `results.csv` (one row per run) and `summary.md` (the pass/fail table). Rerunnable, it only reads |
+| `watch_run.py` | Ends each run in sim time and writes how it ended to `end.txt`. The fault tools use it too |
 
 Every gate run is `perception:=lidar estimator:=ekf safety:=true
 lidar_source:=mid360 enable_stereo_camera:=true enable_camera_lidar_fusion:=true`.
@@ -25,8 +26,8 @@ remain unchanged. Fusion supplies `/lhr/perception/cones_classified` to the
 planner and enables LiDAR side inference for camera fallback.
 The baselines use `perception:=sim estimator:=truth lidar_source:=gazebo`,
 with stereo and fusion explicitly disabled, as the lap-time reference.
-A run ends `SETTLE_S` seconds after the mission reaches `FINISHED` or
-`EMERGENCY`, so the bag holds the stop, or at `RUN_S` wall seconds.
+A run ends `SETTLE_S` sim seconds after the mission reaches `FINISHED` or
+`EMERGENCY`, so the bag holds the stop, or at `RUN_S` sim seconds.
 Skidpad joins the matrix on its own once
 `lhr_gazebo/worlds/skidpad_seed1.sdf` is in the tree
 ([#114](https://github.com/LonghornRacingElectric/lhre/issues/114)). Until
@@ -52,7 +53,8 @@ container:
 Environment variables pick the matrix: `SEEDS` (`1 2 3 4 5`), `REPEATS` (3),
 `ACCEL_REPEATS` and `SKIDPAD_REPEATS` (3 each, empty or 0 for none),
 `BASELINE` (1, 0 to skip the
-truth-stack runs), `RUN_S` (180), `SETTLE_S` (3), `OUT` and `EXTRA` (more
+truth-stack runs), `RUN_S` (180 sim seconds), `SETTLE_S` (5 sim seconds),
+`HANG_S` (60 wall seconds), `OUT` and `EXTRA` (more
 launch arguments, split on whitespace). The runner's per-run arguments follow
 `EXTRA`, so gate sensor selection and baseline exclusions take precedence.
 The full matrix without skidpad is 23 runs. Historical MVP timing predates
@@ -64,12 +66,35 @@ SEEDS=1 REPEATS=1 ACCEL_REPEATS=1 SKIDPAD_REPEATS=1 ../testing/tools/gate/run_ga
 
 On a CPU-rendered machine (the Mac container) Gazebo still drops LiDAR
 frames, with gaps up to about 0.7 s even with the cameras off (#160), so
-add `EXTRA="safety_lidar_timeout_s:=1.5"` or runs trip `LIDAR_STALE`
+add `EXTRA="safety_lidar_timeout_s:=1.5"` or runs trip `LIDAR_STALE`.
 Say so next to the results, since it is not a launch default.
 
+### Sim time, not wall time
+
+Every duration that decides a result is in sim seconds
+([#227](https://github.com/LonghornRacingElectric/lhre/issues/227)), so a
+machine that runs the sim at one sixth of real time (the FMU plant on
+red-mesa) runs the same campaign and gets the same answer, only six times
+later. `watch_run.py` reads `/clock` and the mission state and ends the run
+at `SETTLE_S` after `FINISHED` or `EMERGENCY`, at the `RUN_S` cap, or when
+the launch exits on its own.
+
+Wall time is only a hang guard: if `/clock` stands still for `HANG_S`
+seconds, counting from launch so a sim that never starts counts too, the
+run ends as hung and fails `health`. Raise `HANG_S` only if startup on a
+machine takes longer than a minute. `summary.md` reports the sim speed each
+campaign ran at, which says how long it took and nothing about the result.
+
+Wall clocks left in the path, and why they stay:
+
+- The cleanup waits between runs (process exit, `sleep 2`). They separate
+  runs and never touch a scored run.
+- `lhr_demo`'s driving study runner (`--wall-timeout`) is not part of the
+  gate.
+
 Output goes to `~/lhr-test-data/<date>-mid360-fusion-gate/`: `runs/<id>/` (bag,
-`metrics.csv`, launch and recorder logs, the complete ROS launch command in
-`args.txt`, one argument per line), then
+`metrics.csv`, `end.txt`, launch and recorder logs, the complete ROS launch
+command in `args.txt`, one argument per line), then
 `results.csv` and `summary.md`. `expected.txt` lists every planned run, and
 the scorer fails any planned run with no result, so a campaign cut short
 (a laptop sleeping, an SSH drop) never reads as a pass. Rerunning resumes:
@@ -133,7 +158,7 @@ Each gate run gets a pass or fail per check:
 | `cte` | `max_cte` at most 1.0 m | metrics |
 | `ekf` | `max_pos_error` at most 0.5 m | metrics |
 | `lap_time` | at most 1.5 times the same seed's baseline; always passes for acceleration and skidpad | metrics |
-| `health` | no node other than metrics dies or exits before teardown, and no `EMERGENCY` | launch log, bag |
+| `health` | no node other than metrics dies or exits before teardown, no `EMERGENCY`, and the sim did not hang | launch log, bag, `end.txt` |
 
 The finish is the reference gate for autocross (`/lhr/metrics/lap_complete`)
 and the mission's own completion for acceleration and skidpad
@@ -158,13 +183,14 @@ Use a separate `OUT` for each campaign. For example, from `autonomy/ros2`:
 
 ```bash
 TRACK_STYLE=rules_autocross SEEDS=1 REPEATS=1 ACCEL_REPEATS=0 SKIDPAD_REPEATS=0 \
-  RUN_S=600 OUT="$HOME/lhr-test-data/rules-smoke" ../testing/tools/gate/run_gate.sh
+  OUT="$HOME/lhr-test-data/rules-smoke" ../testing/tools/gate/run_gate.sh
 ```
 
 The runner uses default width/spacing; for custom dimensions generate a world
 and run the launch directly as described in
 [lhr_trackgen](../../../ros2/src/lhr_trackgen/README.md#rules-compliant-autocross).
-Longer courses need a larger wall timeout, particularly with CPU rendering.
+`RUN_S` is sim seconds, so a slow machine needs no change; raise it only for
+a course whose lap takes longer than 180 sim seconds.
 These runs still use the existing MVP scorer thresholds; inclusion and changed
 thresholds in the official Sim v2 gate belong to
 [#201](https://github.com/LonghornRacingElectric/lhre/issues/201).

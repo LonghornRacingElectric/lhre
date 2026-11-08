@@ -934,7 +934,7 @@ its limits.
 | `min_lap_time` | `5.0` | Minimum seconds before a lap return is accepted |
 | `output_csv` | `"data/metrics.csv"` | Path for CSV output (relative to cwd). Also a launch argument on both demos, so a runner can redirect it |
 | `run_id` | `""` | Run identifier; auto-generates timestamp if empty |
-| `timeout_sec` | `0.0` | Optional wall-clock watchdog (0 = off); `run_headless.sh` sets 120 s |
+| `timeout_sec` | `0.0` | Optional watchdog in sim seconds, ending `hung` if the clock stops that many wall seconds (0 = off); `run_headless.sh` sets 120 s |
 | `truth_odom_topic` | `""` | Ground-truth odometry to score `/lhr/vehicle/odom` against; empty leaves the error columns blank |
 
 ### Metrics output

@@ -55,17 +55,27 @@ def test_gate_plan_selects_fusion_without_changing_truth_baselines(tmp_path, sty
 def test_completed_run_records_executed_arguments_and_resumes(tmp_path, style, extra):
     """Provenance includes common/world/extra arguments and is written after launch."""
     out = tmp_path / 'campaign with spaces'
-    env = dict(os.environ, OUT=str(out), EXTRA=extra)
+    env = dict(os.environ, OUT=str(out), EXTRA=extra,
+               RUN_S='12', SETTLE_S='5', HANG_S='30')
     # Replace only external commands. Keep one_run(), its background jobs and
     # completion/resume logic real; never let this test invoke process cleanup.
     stubs = r"""
 cleanup() { :; }
 pkill() { :; }
-python3() { touch "$OUT/worlds/rules_autocross_seed9.sdf"; }
-timeout() {
-    if [ "$1" = -s ]; then shift 3; else shift; fi
-    "$@"
+python3() {
+    case "$1" in
+        */generate_world.py) touch "$OUT/worlds/rules_autocross_seed9.sdf" ;;
+        */watch_run.py)
+            printf '%s\n' "$@" > "$OUT/watcher.txt"
+            for _ in $(seq 100); do
+                [ -e "$OUT/executed.txt" ] && break
+                sleep .01
+            done
+            [ ! -e "$OUT/runs/$RUN_ID/args.txt" ] || touch "$OUT/early-marker"
+            ;;
+    esac
 }
+timeout() { return 97; }
 ros2() {
     if [ "$1" = launch ]; then
         printf '%s\n' ros2 "$@" > "$OUT/executed.txt"
@@ -92,3 +102,11 @@ one_run "$RUN_ID" track_style:="$1" seed:=9
                       if style == 'rules_autocross' else [])
     assert not (out / 'early-marker').exists()
     assert (out / 'launches.txt').read_text().splitlines() == ['launch']
+    watcher = (out / 'watcher.txt').read_text().splitlines()
+    assert watcher[0] == str(TOOLS / 'watch_run.py')
+    options = dict(zip(watcher[1::2], watcher[2::2]))
+    assert options['--cap'] == '12'
+    assert options['--settle'] == '5'
+    assert options['--hang'] == '30'
+    assert int(options['--pid']) > 0
+    assert options['--out'] == str(out / 'runs' / f'{style}_s9_r1' / 'end.txt')

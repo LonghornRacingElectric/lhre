@@ -19,3 +19,13 @@ Times are America/Chicago on 2026-11-08; runner console times use UTC.
 - Both runs scored a lap and passed all eight existing checks. Inference-only:
   max CTE 0.2464 m, EKF error 0.0578 m, stop 1.44 m. Fusion: 0.2462 m,
   0.0568 m and 1.45 m. Zero cones/off-course events and no safety trips.
+- User follow-up: `2026-11-08-165212-accel-check`, three acceleration repeats
+  before pulling #230. All pass every scorer check; stop distances 1.45,
+  1.47 and 1.45 m, max post-stop speeds 0.09, 0.00 and 0.09 m/s. Retained
+  separately from the earlier failed single run.
+- Integrated #230 (`06d23796`) into the fixing branch, preserving gate sensor
+  defaults and complete-command provenance. Gate/metrics tests pass; aggregate
+  results are 1,089 tests, zero errors/failures, two native-FMU skips.
+- Post-merge acceleration smoke passes every check with the new watcher:
+  `reason=finished mission=FINISHED sim_s=30.9 wall_s=53.3`, stop 1.45 m.
+  Raw output: `2026-11-08-issue206-sim-time-merge`.
