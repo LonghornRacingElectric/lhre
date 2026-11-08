@@ -542,6 +542,10 @@ def _launch_setup(context: LaunchContext):
                 'wheel_scale_error': ParameterValue(
                     LaunchConfiguration('wheel_scale_error'), value_type=float),
                 'lidar_classify_sides': classify_sides,
+                # What pure_pursuit drives under, recorded so a row says what
+                # it ran with and the gate can compute its reference lap (#232).
+                **{name: _float(name) for name in (
+                    'lookahead_dist', 'a_lat_max', 'v_min', 'v_max', 'max_accel', 'max_decel')},
                 'use_sim_time': True,
             }],
             output='screen',
