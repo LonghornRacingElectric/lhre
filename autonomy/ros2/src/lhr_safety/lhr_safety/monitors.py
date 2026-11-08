@@ -61,8 +61,11 @@ class SafetyConfig:
     # STEER_TRACKING compares the measured steering angle (the steering
     # encoder; Gazebo's steering joints in sim) with the command, once the
     # actuator has had time to get there at max_steer_rate_rad_s (#208).
-    # The node fills the rate in from vehicle.yaml.
+    # The node fills the rate and the lock in from vehicle.yaml. The
+    # actuator clamps a command past the lock, so the reference does too: a
+    # saturated actuator is not a stuck one.
     max_steer_rate_rad_s: float = math.inf
+    max_steer_rad: float = math.inf
     # About 2 degrees, held for ten 50 Hz samples: a stuck actuator, not
     # transport delay.
     steer_angle_tol_rad: float = 0.035
@@ -167,7 +170,8 @@ class SafetyMonitor:
                 # No time passed, no movement, even at an unlimited rate.
                 dt = now - previous
                 step = cfg.max_steer_rate_rad_s * dt if dt > 0.0 else 0.0
-                self._steer_ref += max(-step, min(step, self._steer_cmd - self._steer_ref))
+                target = max(-cfg.max_steer_rad, min(cfg.max_steer_rad, self._steer_cmd))
+                self._steer_ref += max(-step, min(step, target - self._steer_ref))
             ok = abs(angle - self._steer_ref) <= cfg.steer_angle_tol_rad
         if ok:
             self._angle_mismatch_since = None

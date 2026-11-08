@@ -46,8 +46,9 @@ car the angle comes from the steering motor's encoder; in Gazebo,
 `joint_cmd_adapter` publishes the steering joints' actual angles as the
 same single bicycle-model angle (`/lhr/vehicle/steering_measured`,
 `sensor_msgs/JointState`, one joint named `steering`). The command is
-rate-limited at `vehicle.yaml`'s `max_rate_rad_s` before the comparison, so
-a step the actuator is still following is not a fault. 0.035 rad (about 2°)
+clamped to `vehicle.yaml`'s steering lock and rate-limited at its
+`max_rate_rad_s` before the comparison, so a saturated actuator or a step it
+is still following is not a fault. 0.035 rad (about 2°)
 for 0.2 s is ten 50 Hz samples' worth of a stuck actuator, not transport
 delay. Once a measured angle has arrived, losing it trips too, since the
 steering can no longer be checked.

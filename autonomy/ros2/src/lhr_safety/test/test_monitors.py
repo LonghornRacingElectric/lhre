@@ -304,6 +304,13 @@ def test_rate_limited_step_is_not_a_fault():
     assert trip is None
 
 
+def test_command_past_the_lock_is_not_a_fault():
+    # The adapter clamps 0.7 rad to the 0.55 rad lock; wheels held there are right.
+    lock_cfg = SafetyConfig(wheelbase_m=WHEELBASE, max_speed_mps=15.0, max_steer_rad=0.55)
+    m = SafetyMonitor(lock_cfg, now=0.0)
+    assert _steer_run(m, lambda t: 0.7, lambda t: 0.55, 3.0) is None
+
+
 def test_actuator_slower_than_its_limit_trips():
     m = SafetyMonitor(RATE_CFG, now=0.0)
     trip = _steer_run(m, lambda t: 0.5 if t >= 1.0 else 0.0,

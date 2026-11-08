@@ -66,6 +66,7 @@ class SafetyNode(Node):
             max_speed_factor=float(param('max_speed_factor')),
             geofence_radius_m=float(param('geofence_radius_m')),
             max_steer_rate_rad_s=vehicle.max_steer_rate_rad_s,
+            max_steer_rad=vehicle.max_steer_rad,
             steer_angle_tol_rad=float(param('steer_angle_tol_rad')),
             steer_angle_window_s=float(param('steer_angle_window_s')),
             steer_angle_timeout_s=float(param('steer_angle_timeout_s')),
