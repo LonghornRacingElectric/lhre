@@ -26,7 +26,7 @@ telemetry_artifact = rule(
     implementation = _telemetry_artifact_impl,
     attrs = {
         "common_sql": attr.label(allow_single_file = [".sql"]),
-        "kind": attr.string(mandatory = True, values = ["json", "proto", "sql"]),
+        "kind": attr.string(mandatory = True, values = ["json", "proto", "sql", "contract", "orm", "prisma"]),
         "out": attr.output(mandatory = True),
         "spec": attr.label(
             mandatory = True,

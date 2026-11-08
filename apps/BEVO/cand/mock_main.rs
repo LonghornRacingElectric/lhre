@@ -17,7 +17,6 @@ const MOCK_PORT_0: &str = "127.0.0.1:5005";
 const MOCK_PORT_1: &str = "127.0.0.1:5006";
 const SOCKET_PATH: &str = "/tmp/BEVO_cand.sock";
 const PUBLISHD_SOCKET_PATH: &str = "/tmp/BEVO_cand_publishd.sock";
-const DEFAULT_CAN_JSON_PATH: &str = "lib/codegen/telemetry/can.json";
 const DEFAULT_PUBLISH_HZ: u64 = 100;
 
 #[derive(Debug)]
@@ -64,12 +63,6 @@ fn selected_publish_targets() -> Vec<PublishTarget> {
             .collect(),
         None => DEFAULT_PUBLISH_TARGETS.to_vec(),
     }
-}
-
-fn load_can_config_json() -> Result<String> {
-    let configured_path = std::env::var("CAND_CAN_JSON_PATH").unwrap_or_else(|_| DEFAULT_CAN_JSON_PATH.to_string());
-    let config_json = fs::read_to_string(&configured_path)?;
-    Ok(config_json)
 }
 
 fn repeated_field_span(config: &PacketConfig) -> usize {
@@ -243,8 +236,7 @@ fn main() -> Result<()> {
         .filter(|value| *value > 0)
         .unwrap_or(DEFAULT_PUBLISH_HZ);
 
-    let config_json = load_can_config_json()?;
-    let packets: Vec<PacketConfig> = serde_json::from_str(&config_json)?;
+    let packets = sensor_proto::config::packets();
     let packet_map: HashMap<u32, PacketConfig> = packets.into_iter().map(|packet| (packet.packet_id, packet)).collect();
 
     let sensor_data = Arc::new(Mutex::new(OrionSensorData::default()));

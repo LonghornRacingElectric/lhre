@@ -191,7 +191,7 @@ async function getOrionMessageType(): Promise<protobuf.Type | null> {
   if (!orionTypePromise) {
     orionTypePromise = (async () => {
       try {
-        const protoPath = path.join(process.cwd(), "protobuf", "orion.proto");
+        const protoPath = process.env.ORION_PROTO_PATH || path.resolve(process.cwd(), "../../../../../bazel-bin/lib/codegen/telemetry/can_packets.proto");
         const root = await protobuf.load(protoPath);
         return root.lookupType("orion.OrionSensorData");
       } catch (e) {

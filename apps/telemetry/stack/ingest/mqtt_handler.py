@@ -21,7 +21,7 @@ sys.path.append(str(Path(__file__).parents[2]))
 
 from analysis.sql_utils.db_session import get_db, engine_nightwatch, engine_angelique, engine_orion
 from analysis.sql_utils.query_builder import QueryBuilder
-from analysis.sql_utils.models import AngeliquePacket, OrionPacket, BaseTelemetry, BaseAngelique, BaseOrion
+from analysis.sql_utils.models import AngeliquePacket, OrionPacket, BaseTelemetry, BaseAngelique, BaseOrion, ORION_MODELS
 from stack.ingest.partition_manager import PartitionManager
 from stack.ingest.protobuf import template_pb2, angelique_pb2, can_packets_pb2, bridge_pb2, bridge_pb2_grpc
 
@@ -329,7 +329,7 @@ class MQTTHandler:
                     cols = []
                     # Qualify columns with table name so similarly named fields map correctly.
                     for table, col_spec in self.table_specs["Orion"].items():
-                        if (table in {"packet", "dynamics", "controls", "pack", "diagnostics_low", "diagnostics_high", "thermal", "board_status"}):
+                        if table in {model.__tablename__ for model in ORION_MODELS.values()}:
                             cols.extend(f"{table}.{col}" for col in col_spec.keys())
                     with open(log_file, 'w', newline='') as f:
                         csv.writer(f).writerow(cols)
@@ -359,7 +359,7 @@ class MQTTHandler:
             self._b64_ingest(msg.payload, freq)
         # Handle bare data topic as Orion protobuf stream
         elif (topic_split := msg.topic.split('/'))[0] == 'data':
-            if (topic_split[-1] in {'packet', 'dynamics', 'controls', 'pack', 'diagnostics_low', 'thermal'}):
+            if topic_split[-1] in {model.__tablename__ for model in ORION_MODELS.values()}:
                 self._data_ingest(msg.payload, topic_split[-1], cache_enable=self.cache_enable, car="Orion")
             else:
                 self._send_to_bridge(payload=msg.payload, car="Orion")
@@ -655,19 +655,6 @@ class MQTTHandler:
             row = template_pb2.SensorData()
         row.ParseFromString(payload)
         row = MessageToDict(row, preserving_proto_field_name=True, always_print_fields_with_no_presence=True)
-        if car == "Orion" and isinstance(row.get("dynamics"), dict):
-            # The Orion proto names these fields blw_speed/brw_speed/flw_speed/frw_speed,
-            # but the dynamics table columns are bl_wheel_speed/.../fr_wheel_speed.
-            # Remap so the live insert populates the columns instead of writing NULL.
-            dyn = row["dynamics"]
-            for proto_name, db_name in (
-                ("blw_speed", "bl_wheel_speed"),
-                ("brw_speed", "br_wheel_speed"),
-                ("flw_speed", "fl_wheel_speed"),
-                ("frw_speed", "fr_wheel_speed"),
-            ):
-                if proto_name in dyn:
-                    dyn[db_name] = dyn.pop(proto_name)
         # logging.debug(row)
         return row
 

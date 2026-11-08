@@ -1,23 +1,19 @@
 use anyhow::Result;
 use prost::Message;
 use serde_json::Value;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::fs::{File, OpenOptions};
 use std::io::Read;
 use std::io::BufWriter;
 use std::io::Write;
 use std::os::unix::net::UnixStream;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::mpsc::{self, SyncSender, TrySendError};
 use std::thread;
 use std::time::SystemTime;
 use std::time::Duration;
 
-use sensor_proto::proto::orion::{
-    BoardStatus, Controls, DiagnosticsHigh, DiagnosticsLow, Dynamics, OrionSensorData, Pack,
-    Thermal,
-};
-use sensor_proto::config::PacketConfig;
+use sensor_proto::proto::orion::OrionSensorData;
 
 const SOCKET_PATH: &str = "/tmp/BEVO_cand.sock";
 const DEFAULT_LOG_DIR: &str = "apps/BEVO/loggerd/logs";
@@ -32,8 +28,8 @@ struct CsvLogger {
 }
 
 impl CsvLogger {
-    fn new(csv_path: String, schema_path: &Path) -> Result<Self> {
-        let headers = canonical_csv_headers(schema_path)?;
+    fn new(csv_path: String) -> Result<Self> {
+        let headers = canonical_csv_headers();
         let file = OpenOptions::new()
             .create(true)
             .write(true)
@@ -86,113 +82,8 @@ fn workspace_root() -> PathBuf {
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
 }
 
-/// Path to the generated CAN schema (`can.json`). Mirrors cand's resolution so
-/// loggerd reads the same artifact the rest of BEVO does. Override with
-/// LOGGERD_CAN_JSON_PATH for tests or non-standard deployments.
-fn can_json_path() -> PathBuf {
-    if let Ok(path) = std::env::var("LOGGERD_CAN_JSON_PATH") {
-        return PathBuf::from(path);
-    }
-    let mut path = workspace_root();
-    path.push("lib/codegen/telemetry/can.json");
-    path
-}
-
-fn load_packet_configs(path: &Path) -> Result<Vec<PacketConfig>> {
-    let contents = std::fs::read_to_string(path)
-        .map_err(|error| anyhow::anyhow!("reading {}: {error}", path.display()))?;
-    let packets: Vec<PacketConfig> = serde_json::from_str(&contents)?;
-    Ok(packets)
-}
-
-/// Derive the length of every repeated proto field straight from the generated
-/// CAN schema, so the CSV header is sized from the artifact instead of magic
-/// numbers. A repeated field spans `quantity * cells_per_frame`, where
-/// `cells_per_frame` is the number of slots packed into one CAN frame
-/// (max field_index + 1). e.g. Cell Voltages = 33 frames x 4 cells = 132.
-///
-/// `gps` / `gps_imu` aren't described in can.json (cand fills them from the NMEA
-/// stream), so they're supplied as constants.
-fn repeated_field_lengths(packets: &[PacketConfig]) -> HashMap<String, usize> {
-    let mut lengths: HashMap<String, usize> = HashMap::new();
-
-    for packet in packets {
-        let quantity = packet.quantity.max(1) as usize;
-        // cells-per-frame is tracked per repeated field within this
-        // packet, then multiplied by how many frames the series has.
-        let mut cells_per_frame: HashMap<&str, usize> = HashMap::new();
-        for signal in &packet.bytes {
-            if let Some(pb) = &signal.protobuf {
-                if pb.repeated {
-                    if let Some(index) = pb.field_index {
-                        let span = cells_per_frame.entry(pb.field_name.as_str()).or_insert(0);
-                        *span = (*span).max(index + 1);
-                    }
-                }
-            }
-        }
-        for (name, span) in cells_per_frame {
-            let total = quantity * span;
-            let entry = lengths.entry(name.to_string()).or_insert(0);
-            *entry = (*entry).max(total);
-        }
-    }
-
-    // NMEA-populated fields that don't appear in can.json.
-    lengths.entry("gps".to_string()).or_insert(2);
-    lengths.entry("gps_imu".to_string()).or_insert(3);
-    lengths.entry("gps_precise".to_string()).or_insert(6);
-
-    lengths
-}
-
-fn canonical_csv_headers(schema_path: &Path) -> Result<Vec<String>> {
-    let packets = load_packet_configs(schema_path)?;
-    // Build a fully-populated OrionSensorData template (all sub-messages present
-    // as Some(default)) so flatten_json_value enumerates every reachable scalar
-    // key once. Repeated fields start as empty vecs; expand_repeated_arrays then
-    // grows each to its schema-derived length so flatten emits the per-index
-    // columns (e.g. `pack.cells_v[0..131]`). Without this, repeated arrays stay
-    // empty at file creation, the header locks without indexed columns, and
-    // every per-cell value is silently dropped from the CSV at runtime.
-    let template = OrionSensorData {
-        time: 0,
-        packet_id: 0,
-        dynamics: Some(Dynamics::default()),
-        controls: Some(Controls::default()),
-        pack: Some(Pack::default()),
-        diagnostics_high: Some(DiagnosticsHigh::default()),
-        diagnostics_low: Some(DiagnosticsLow::default()),
-        thermal: Some(Thermal::default()),
-        board_status: Some(BoardStatus::default()),
-    };
-
-    let mut value = serde_json::to_value(&template)?;
-    let lengths = repeated_field_lengths(&packets);
-    expand_repeated_arrays("", &mut value, &lengths);
-
-    let mut row = BTreeMap::new();
-    flatten_json_value("", &value, &mut row);
-    Ok(order_headers(row.keys().cloned().collect()))
-}
-
-/// Grow each empty repeated-field array in the serialized template to its
-/// schema-derived length (looked up by the field's leaf name), filling with 0.0
-/// so flatten_json_value emits one indexed column per slot.
-fn expand_repeated_arrays(leaf: &str, value: &mut Value, lengths: &HashMap<String, usize>) {
-    match value {
-        Value::Object(map) => {
-            for (key, child) in map.iter_mut() {
-                expand_repeated_arrays(key, child, lengths);
-            }
-        }
-        Value::Array(items) if items.is_empty() => {
-            if let Some(&len) = lengths.get(leaf) {
-                *items = vec![Value::from(0.0); len];
-            }
-        }
-        _ => {}
-    }
+fn canonical_csv_headers() -> Vec<String> {
+    order_headers(sensor_proto::config::CSV_HEADERS.iter().map(|name| name.to_string()).collect())
 }
 
 /// Order the CSV columns: `time` first, then `packet_id`, then every other
@@ -355,7 +246,7 @@ fn default_log_file_path() -> Result<String> {
 }
 
 fn spawn_logger_thread(csv_path: String) -> Result<SyncSender<OrionSensorData>> {
-    let mut logger = CsvLogger::new(csv_path, &can_json_path())?;
+    let mut logger = CsvLogger::new(csv_path)?;
     let (tx, rx) = mpsc::sync_channel::<OrionSensorData>(LOGGER_QUEUE_CAPACITY);
 
     thread::spawn(move || {
@@ -436,26 +327,7 @@ mod tests {
     use super::*;
 
     fn headers() -> Vec<String> {
-        canonical_csv_headers(&can_json_path()).expect("generated CAN schema must be readable")
-    }
-
-    #[test]
-    fn missing_schema_prevents_logger_initialization() {
-        let log_path = std::env::temp_dir()
-            .join(format!("loggerd-missing-schema-{}.csv", std::process::id()));
-        let missing_schema = can_json_path().join("missing.json");
-        assert!(CsvLogger::new(log_path.to_string_lossy().into_owned(), &missing_schema).is_err());
-        assert!(!log_path.exists());
-    }
-
-    #[test]
-    fn malformed_schema_is_rejected() {
-        let invalid_schema = std::env::temp_dir()
-            .join(format!("loggerd-invalid-schema-{}.json", std::process::id()));
-        std::fs::write(&invalid_schema, "invalid JSON").expect("write invalid schema");
-        let result = canonical_csv_headers(&invalid_schema);
-        std::fs::remove_file(&invalid_schema).expect("remove invalid schema");
-        assert!(result.is_err());
+        canonical_csv_headers()
     }
 
     fn indexed(headers: &[String], prefix: &str) -> Vec<usize> {
@@ -476,16 +348,14 @@ mod tests {
 
     #[test]
     fn cells_v_sized_from_schema_and_ordered_numerically() {
-        let packets = load_packet_configs(&can_json_path()).expect("generated CAN schema");
-        let lengths = repeated_field_lengths(&packets);
+        let lengths: std::collections::HashMap<_, _> = sensor_proto::config::REPEATED_FIELDS.iter().copied().collect();
         let cells = indexed(&headers(), "pack.cells_v[");
         assert_eq!(cells, (0..lengths["cells_v"]).collect::<Vec<_>>());
     }
 
     #[test]
     fn cells_temps_sized_from_schema() {
-        let packets = load_packet_configs(&can_json_path()).expect("generated CAN schema");
-        let lengths = repeated_field_lengths(&packets);
+        let lengths: std::collections::HashMap<_, _> = sensor_proto::config::REPEATED_FIELDS.iter().copied().collect();
         let temps = indexed(&headers(), "pack.cells_temps[");
         assert_eq!(temps, (0..lengths["cells_temps"]).collect::<Vec<_>>());
     }
