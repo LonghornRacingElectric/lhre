@@ -66,7 +66,9 @@ class MQTTHandler:
         self.scalar_or_list = lambda val, scalar: val.tolist()[0] if scalar else val.tolist()
         self.cache = []
         self.cache_enable = cache_enable
-        self.orion_csv_session = ''
+        self.orion_csv_session = (
+            datetime.datetime.now().strftime('%Y%m%d_%H%M%S_%f') + '_' + uuid.uuid4().hex
+        )
         self._shutdown = False
         self.partition_manager = PartitionManager(gap_seconds=300)
         self.partition_enabled_cars = {"Angelique", "Orion"}
