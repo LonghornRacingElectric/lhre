@@ -4,7 +4,8 @@
 # Run from autonomy/ros2 after ./scripts/build.sh, on Ubuntu or inside the
 # Docker container. Every gate run uses the no-shortcuts stack from
 # docs/plans/mvp-pass-criteria.md: perception:=lidar estimator:=ekf with
-# safety on and launch defaults. Each autocross seed also gets one truth-stack
+# safety on, the Mid-360 caster and stereo camera fusion (#206).
+# Each autocross seed also gets one truth-stack
 # baseline (perception:=sim estimator:=truth) for the lap time check. A run
 # ends a few seconds after the mission reaches FINISHED or EMERGENCY, or at
 # RUN_S wall seconds. score_gate.py then writes $OUT/results.csv and
@@ -23,7 +24,7 @@ SKIDPAD_REPEATS=${SKIDPAD_REPEATS-3}  # empty or 0 skips skidpad
 BASELINE=${BASELINE:-1}            # 0 skips the truth-stack baselines
 RUN_S=${RUN_S:-180}                # wall-second cap per run
 SETTLE_S=${SETTLE_S:-3}            # keep recording this long after FINISHED
-OUT=${OUT:-$HOME/lhr-test-data/$(date +%F)-mvp-gate}
+OUT=${OUT:-$HOME/lhr-test-data/$(date +%F)-mid360-fusion-gate}
 EXTRA=${EXTRA:-}
 TRACK_STYLE=${TRACK_STYLE:-autocross}
 case "$TRACK_STYLE" in
@@ -98,14 +99,15 @@ one_run() {  # id [launch args...]
         echo "$id was cut short last time, moved aside and rerunning" >&2
     fi
     mkdir -p "$dir"
+    local launch_cmd=(ros2 launch lhr_gazebo gazebo_demo.launch.py
+        gui:=false rviz:=false safety:=true output_csv:="$dir/metrics.csv"
+        ${world:+"world:=$world"} $EXTRA "$@")
     ros2 bag record -s mcap -o "$dir/bag" --topics $TOPICS \
         > "$dir/record.log" 2>&1 &
     REC=$!
     # A background job ignores SIGINT in a non-interactive shell, so the
     # launch is stopped with TERM, which it handles the same way.
-    timeout -s TERM "$RUN_S" ros2 launch lhr_gazebo gazebo_demo.launch.py \
-        gui:=false rviz:=false safety:=true output_csv:="$dir/metrics.csv" \
-        ${world:+"world:=$world"} $EXTRA "$@" > "$dir/launch.log" 2>&1 &
+    timeout -s TERM "$RUN_S" "${launch_cmd[@]}" > "$dir/launch.log" 2>&1 &
     LAUNCH=$!
     # End the run once the mission is over, after the car has had time to
     # stop on the recording.
@@ -116,25 +118,26 @@ one_run() {  # id [launch args...]
     WATCH=$!
     wait "$LAUNCH"
     stop_run
-    printf '%s\n' "$@" > "$dir/args.txt"
+    printf '%s\n' "${launch_cmd[@]}" > "$dir/args.txt"
     cleanup
 }
 
 plan() {  # one line per run: the id, then its launch arguments
+    local sensors='lidar_source:=mid360 enable_stereo_camera:=true enable_camera_lidar_fusion:=true'
     for s in $SEEDS; do
         if [ "$BASELINE" != 0 ]; then
-            echo "baseline_${TRACK_STYLE}_s$s track_style:=$TRACK_STYLE seed:=$s perception:=sim estimator:=truth"
+            echo "baseline_${TRACK_STYLE}_s$s track_style:=$TRACK_STYLE seed:=$s perception:=sim estimator:=truth lidar_source:=gazebo enable_stereo_camera:=false enable_camera_lidar_fusion:=false"
         fi
         for r in $(seq 1 "$REPEATS"); do
-            echo "${TRACK_STYLE}_s${s}_r$r track_style:=$TRACK_STYLE seed:=$s perception:=lidar estimator:=ekf"
+            echo "${TRACK_STYLE}_s${s}_r$r track_style:=$TRACK_STYLE seed:=$s perception:=lidar estimator:=ekf $sensors"
         done
     done
     for r in $(seq 1 "${ACCEL_REPEATS:-0}"); do
-        echo "acceleration_r$r track_style:=acceleration perception:=lidar estimator:=ekf"
+        echo "acceleration_r$r track_style:=acceleration perception:=lidar estimator:=ekf $sensors"
     done
     if [ -e "$SKIDPAD_WORLD" ]; then
         for r in $(seq 1 "${SKIDPAD_REPEATS:-0}"); do
-            echo "skidpad_r$r track_style:=skidpad mission:=skidpad perception:=lidar estimator:=ekf"
+            echo "skidpad_r$r track_style:=skidpad mission:=skidpad perception:=lidar estimator:=ekf $sensors"
         done
     fi
 }

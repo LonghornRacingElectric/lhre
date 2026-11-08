@@ -33,7 +33,7 @@ def launch_nodes(monkeypatch, **overrides):
     monkeypatch.setattr(
         module, '_find_world', lambda context: context.launch_configurations.get('world')
         or str(WORLD))
-    monkeypatch.setattr(module, 'get_package_share_directory', lambda _: '/tmp/share')
+    monkeypatch.setattr(module, 'get_package_share_directory', lambda _: str(path.parents[1]))
     context = LaunchContext()
     for action in module.generate_launch_description().entities:
         if isinstance(action, DeclareLaunchArgument):
@@ -77,6 +77,29 @@ def test_source_changes_only_cloud_wiring(monkeypatch, estimator, classified):
                                      else '/lhr/vehicle/odom')]
     assert 'sensor_sim' not in selected
     assert 'publish_cones' not in selected
+
+
+@pytest.mark.parametrize('estimator', ['truth', 'ekf'])
+def test_mid360_fusion_keeps_sensor_pose_separate_from_driving(monkeypatch, estimator):
+    """The combined gate graph uses one cloud source and classified planner input."""
+    monkeypatch.setattr('launch_ros.actions.Node', NodeConfig)
+    nodes = launch_nodes(monkeypatch, perception='lidar', estimator=estimator,
+                         lidar_source='mid360', enable_stereo_camera='true',
+                         enable_camera_lidar_fusion='true', lidar_classify_sides='false',
+                         safety='true')
+    pose_topic = '/lhr/vehicle/odom_truth' if estimator == 'ekf' else '/lhr/vehicle/odom'
+    assert nodes['lidar_sim']['remappings'] == [('/lhr/vehicle/odom', pose_topic)]
+    assert ('/lhr/lidar/points', '/lhr/lidar/gazebo_points') in (
+        nodes['ros_gz_bridge']['remappings'])
+    assert nodes['lidar_sim']['parameters'][0]['world_sdf'] == str(WORLD)
+    assert nodes['lidar_cone_detector']['parameters'][0]['classify_sides'] is True
+    planner = nodes['track_builder']['parameters'][0]
+    assert planner['cone_topic'] == '/lhr/perception/cones_classified'
+    assert planner['pairing_strategy'] == 'boundary'
+    assert planner['boundary_use_color'] is True
+    assert {'camera_lidar_fusion', 'zed2i_bridge', 'safety_node'} <= nodes.keys()
+    assert ('ekf_node' in nodes) is (estimator == 'ekf')
+    assert 'sensor_sim' not in nodes
 
 
 @pytest.mark.parametrize('port', [None, '8771'])

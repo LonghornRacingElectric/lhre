@@ -18,7 +18,7 @@ def launch_context(monkeypatch):
         'gazebo_fusion_launch', path / 'launch/gazebo_demo.launch.py')
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    monkeypatch.setattr(module, '_find_world', lambda _: '/tmp/world.sdf')
+    monkeypatch.setattr(module, '_find_world', lambda _: str(path / 'worlds/autocross_seed1.sdf'))
     monkeypatch.setattr(module, 'get_package_share_directory', lambda _: str(path))
     context = launch.LaunchContext()
     for action in module.generate_launch_description().entities:
@@ -107,8 +107,9 @@ def test_fusion_parameters_reach_node(launch_context, estimator, debug_classifie
 @pytest.mark.parametrize('estimator', ['truth', 'ekf'])
 @pytest.mark.parametrize('fusion', [False, True])
 @pytest.mark.parametrize('side_argument', ['false', 'true'])
+@pytest.mark.parametrize('lidar_source', ['gazebo', 'mid360'])
 def test_fusion_wires_planner_and_enables_fallback(
-        launch_context, estimator, fusion, side_argument):
+        launch_context, estimator, fusion, side_argument, lidar_source):
     """Evaluated planner inputs must select fusion, boundary pairing and fallback together."""
     rclpy = pytest.importorskip('rclpy')
     from launch_ros.actions import Node
@@ -116,7 +117,7 @@ def test_fusion_wires_planner_and_enables_fallback(
     from lhr_track_builder.track_builder_node import TrackBuilder
     module, context = launch_context
     context.launch_configurations.update(
-        perception='lidar', estimator=estimator,
+        perception='lidar', estimator=estimator, lidar_source=lidar_source,
         enable_stereo_camera=str(fusion).lower(), enable_camera_lidar_fusion=str(fusion).lower(),
         lidar_classify_sides=side_argument)
     nodes = [n for n in module._launch_setup(context) if isinstance(n, Node)]

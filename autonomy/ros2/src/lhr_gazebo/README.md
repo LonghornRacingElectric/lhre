@@ -9,6 +9,15 @@ a forward prefix, so lookahead and curvature must not connect its ends.
 See [the workspace reference](../../README.md) for launch arguments and
 vehicle physics.
 
+The [gate runner](../../../testing/tools/gate/README.md) explicitly selects
+`perception:=lidar estimator:=ekf safety:=true lidar_source:=mid360
+enable_stereo_camera:=true enable_camera_lidar_fusion:=true`. This is the
+gate's sensor configuration; standalone launch defaults remain the GPU
+source with stereo and fusion off. Truth-stack baselines explicitly keep
+those sensors off because Mid-360 and fusion require LiDAR perception.
+Combined-source launch tests check both truth/EKF modes, the caster's clean
+plant pose, single cloud ownership, classified planner input and side fallback.
+
 ## LiDAR coordinates
 
 Gazebo preserves main's level LiDAR mount at z=0.55 m and its generated

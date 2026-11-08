@@ -91,6 +91,7 @@ nav:
           - On-Car Architecture: autonomy/docs/plans/on-car-architecture.md
           - MVP Pass Criteria: autonomy/docs/plans/mvp-pass-criteria.md
           - Sim v2 Pass Criteria: autonomy/docs/plans/sim-v2-pass-criteria.md
+          - Mid-360 Fusion Gate Plan: autonomy/docs/plans/2026-11-07-mid360-fusion-gate-plan.md
       - Testing:
           - Overview: autonomy/testing/README.md
           - Mid-360 Acceptance 2026-10-04: autonomy/testing/2026-10-04-mid360-acceptance/README.md
