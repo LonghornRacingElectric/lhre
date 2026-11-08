@@ -256,24 +256,32 @@ TEST_F(VcuAppTest, RtdReleaseReturnsToTractiveActive) {
   EXPECT_EQ(app_->state(), VcuState::kRtdWait);  // via TS_ACTIVE
 }
 
-TEST_F(VcuAppTest, BrakeFlagLatchSurvivesPowerCycleUntilDashReset) {
+TEST_F(VcuAppTest, BrakeFlagLatchClearsOnPowerCycleWhenFlagsAreLow) {
   b_.b1_disconnect.Write(true);
   b_.Run(*app_, 30);
   b_.b1_disconnect.Write(false);
   b_.Run(*app_, 30);
   EXPECT_NE(app_->faults() & vcu::kFaultBrakeFlagLatched, 0u);
-  EXPECT_EQ(b_.board.stored, vcu::BrakeFlagLatch::kPersistedSet);
 
-  // "Power cycle": a new app restores the latch from storage.
+  // "Power cycle": the latch is not restored, so it comes back clear.
+  app_ = std::make_unique<vcu::App>(b_.peripherals());
+  b_.Run(*app_, 30);
+  EXPECT_EQ(app_->faults() & vcu::kFaultBrakeFlagLatched, 0u);
+
+  // A flag still high at boot latches it again.
+  b_.b1_disconnect.Write(true);
   app_ = std::make_unique<vcu::App>(b_.peripherals());
   b_.Run(*app_, 30);
   EXPECT_NE(app_->faults() & vcu::kFaultBrakeFlagLatched, 0u);
 
-  // Dash reset clears it (edge), and the cleared state is persisted.
+  // Within a power cycle only the dash reset clears it, and only with the
+  // flag low.
+  b_.b1_disconnect.Write(false);
+  b_.Run(*app_, 30);
+  EXPECT_NE(app_->faults() & vcu::kFaultBrakeFlagLatched, 0u);
   b_.fault_reset = true;
   b_.Run(*app_, 30);
   EXPECT_EQ(app_->faults() & vcu::kFaultBrakeFlagLatched, 0u);
-  EXPECT_EQ(b_.board.stored, 0u);
 }
 
 TEST_F(VcuAppTest, DashResetIgnoredWhileFlagActive) {
@@ -291,50 +299,6 @@ TEST_F(VcuAppTest, DashResetIgnoredWhileFlagActive) {
   b_.fault_reset = true;
   b_.Run(*app_, 30);
   EXPECT_EQ(app_->faults() & vcu::kFaultBrakeFlagLatched, 0u);
-}
-
-TEST_F(VcuAppTest, CoolantOvertempLatchesWithoutCuttingTorque) {
-  b_.coolant_alive = true;
-  ReachDrive();
-  b_.SetPedalTravel(0.5f);
-  b_.Run(*app_, 200);
-  EXPECT_EQ(app_->faults() & vcu::kFaultCoolantOvertemp, 0u);
-
-  // Either loop sensor at the limit latches the fault, reported on CAN.
-  b_.coolant_after_inverter_c = vcu::CoolingParams{}.overtemp_c;
-  b_.Run(*app_, 200);
-  EXPECT_NE(app_->faults() & vcu::kFaultCoolantOvertemp, 0u);
-  msg::VcuFaults vf;
-  ASSERT_TRUE(b_.LastFrame(b_.car, &vf));
-  EXPECT_TRUE(vf.active_faults_coolant_overtemp);
-  // Diagnostic only: the car keeps driving.
-  EXPECT_EQ(app_->state(), VcuState::kDrive);
-  EXPECT_GT(app_->torque_command(), 0.0f);
-
-  // Cooling down or the TSM going silent does not clear it, and neither does
-  // a dash reset while the TSM is silent: nothing shows the loop has cooled.
-  b_.coolant_after_inverter_c = 30.0f;
-  b_.Run(*app_, 200);
-  b_.coolant_alive = false;
-  b_.Run(*app_, 500);
-  EXPECT_NE(app_->faults() & vcu::kFaultCoolantOvertemp, 0u);
-  b_.fault_reset = true;
-  b_.Run(*app_, 30);
-  EXPECT_NE(app_->faults() & vcu::kFaultCoolantOvertemp, 0u);
-
-  // A reset with a fresh reading under the limit clears it.
-  b_.fault_reset = false;
-  b_.coolant_alive = true;
-  b_.Run(*app_, 200);
-  EXPECT_NE(app_->faults() & vcu::kFaultCoolantOvertemp, 0u);
-  b_.fault_reset = true;
-  b_.Run(*app_, 30);
-  EXPECT_EQ(app_->faults() & vcu::kFaultCoolantOvertemp, 0u);
-}
-
-TEST_F(VcuAppTest, SilentTsmRaisesNoCoolantFault) {
-  b_.Run(*app_, 500);
-  EXPECT_EQ(app_->faults() & vcu::kFaultCoolantOvertemp, 0u);
 }
 
 TEST_F(VcuAppTest, ErrorLedsOnlyAddIndication) {

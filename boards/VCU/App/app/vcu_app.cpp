@@ -26,9 +26,6 @@ App::App(const Peripherals& peripherals, const Params* initial_params)
   if (p_.audio_dac != nullptr) {
     p_.audio_dac->Stop(kDacMidScale);
   }
-  if (p_.board != nullptr) {
-    brake_latch_.Restore(p_.board->LoadFaultLatch());
-  }
   critical_inbox_.Attach(p_.critical_can);
   data_inbox_.Attach(p_.data_can);
   live_.event_mode = params_->event_mode;
@@ -40,9 +37,6 @@ App::App(const Peripherals& peripherals, const Params* initial_params)
   vcp_dfu_.AttachByteHook(vcp_shell_);
   vcp_shell_.PrintBanner();
   logger_.Info("reset cause: %s", lhal::ToString(p_.reset_cause));
-  if (brake_latch_.latched()) {
-    logger_.Warning("brake comparator latch restored: dash reset required");
-  }
 }
 
 void App::StartTasks() {

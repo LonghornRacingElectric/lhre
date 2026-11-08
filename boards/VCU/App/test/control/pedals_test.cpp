@@ -134,7 +134,7 @@ TEST(Pedals, HardBrakeCrossCheck) {
   vcu::PedalProcessor pp;
   uint32_t t = 0;
   vcu::PedalInputs in = Pedal(0.0f);
-  in.bse1_pin_v = in.bse2_pin_v = 0.9f;  // above the 0.8 V default
+  in.bse1_pin_v = in.bse2_pin_v = 1.1f;  // clearly above 0.8 V + 0.2 V margin
   in.hard_braking_hw = true;
   vcu::PedalOutputs out = Settle(pp, in, &t, 200);
   EXPECT_TRUE(out.firmware_hard_brake);
@@ -142,6 +142,29 @@ TEST(Pedals, HardBrakeCrossCheck) {
   in.hard_braking_hw = false;
   EXPECT_FALSE(Settle(pp, in, &t, 30).hard_brake_mismatch);
   EXPECT_TRUE(Settle(pp, in, &t, 30).hard_brake_mismatch);
+
+  // Clearly below the band with the hardware asserted is also a mismatch.
+  in.hard_braking_hw = true;
+  EXPECT_FALSE(Settle(pp, in, &t, 200).hard_brake_mismatch);  // agree again
+  in.bse1_pin_v = in.bse2_pin_v = 0.3f;
+  EXPECT_FALSE(Settle(pp, in, &t, 30).hard_brake_mismatch);
+  EXPECT_TRUE(Settle(pp, in, &t, 30).hard_brake_mismatch);
+}
+
+TEST(Pedals, HardBrakeMismatchToleratesTrimmerInsideMargin) {
+  vcu::PedalProcessor pp;
+  uint32_t t = 0;
+  vcu::PedalInputs in = Pedal(0.0f);
+  // Anywhere in 0.6-1.0 V either comparator state is fine, even though the
+  // firmware's own view flips at 0.8 V.
+  for (float pin_v : {0.61f, 0.755f, 0.79f, 0.81f, 0.95f}) {
+    in.bse1_pin_v = in.bse2_pin_v = pin_v;
+    for (bool hw : {false, true}) {
+      in.hard_braking_hw = hw;
+      EXPECT_FALSE(Settle(pp, in, &t, 200).hard_brake_mismatch)
+          << pin_v << " hw=" << hw;
+    }
+  }
 }
 
 }  // namespace

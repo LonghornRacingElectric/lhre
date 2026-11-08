@@ -1,5 +1,8 @@
 #include "app/serial_report.hpp"
 
+#include <cstdio>
+#include <cstdlib>
+
 namespace vcu {
 namespace {
 
@@ -8,6 +11,22 @@ void AnalogRow(longhorn::Console& out, const char* name,
   out.Printf("  %-13s %5u    %6d    %7d", name, c.counts,
              static_cast<int>(c.pin_v * 1000),
              static_cast<int>(c.source_v * 1000));
+}
+
+// Console printf has no float support, so volts print as V.mmm from integers.
+struct Volts {
+  explicit Volts(float v) {
+    const long mv = static_cast<long>(v * 1000.0f + (v < 0 ? -0.5f : 0.5f));
+    const long a = mv < 0 ? -mv : mv;
+    std::snprintf(text, sizeof(text), "%s%ld.%03ld", mv < 0 ? "-" : "",
+                  a / 1000, a % 1000);
+  }
+  char text[16];
+};
+
+// Console printf has no float support; print Nm to one decimal as integers.
+int Tenths(float x) {
+  return static_cast<int>(x * 10.0f + (x < 0 ? -0.5f : 0.5f));
 }
 
 void CanRow(longhorn::Console& out, const char* name, const lhal::CanStats& s,
@@ -30,16 +49,16 @@ void PrintCompactSerialReport(longhorn::Console& out,
   const auto& o = s.outputs;
   out.Printf("--- [%lu ms] state=%s ---", static_cast<unsigned long>(s.now_ms),
              lhre::can::ToString(s.state));
-  out.Printf("ADC count/mV | APPS1=%u/%d APPS2=%u/%d BSE1=%u/%d BSE2=%u/%d",
-             a.apps1.counts, static_cast<int>(a.apps1.pin_v * 1000),
-             a.apps2.counts, static_cast<int>(a.apps2.pin_v * 1000),
-             a.bse1.counts, static_cast<int>(a.bse1.pin_v * 1000),
-             a.bse2.counts, static_cast<int>(a.bse2.pin_v * 1000));
-  out.Printf("ADC count/mV | STEER=%u/%d SD_IN=%u/%d SD_OUT=%u/%d",
-             a.steering.counts, static_cast<int>(a.steering.pin_v * 1000),
-             a.shutdown_in.counts, static_cast<int>(a.shutdown_in.pin_v * 1000),
-             a.shutdown_out.counts,
-             static_cast<int>(a.shutdown_out.pin_v * 1000));
+  // Sensor-side volts: 5 V scale for APPS, BSE and steering, 24 V scale for
+  // the shutdown loop taps.
+  const Volts apps1(a.apps1.source_v), apps2(a.apps2.source_v);
+  const Volts bse1(a.bse1.source_v), bse2(a.bse2.source_v);
+  const Volts steer(a.steering.source_v);
+  const Volts sd_in(a.shutdown_in.source_v), sd_out(a.shutdown_out.source_v);
+  out.Printf("ADC volts | APPS1=%s APPS2=%s BSE1=%s BSE2=%s", apps1.text,
+             apps2.text, bse1.text, bse2.text);
+  out.Printf("ADC volts | STEER=%s SD_IN=%s SD_OUT=%s", steer.text, sd_in.text,
+             sd_out.text);
   out.Printf("ADC reference | VREFINT=%u counts VDDA=%dmV", a.vrefint_counts,
              static_cast<int>(a.vdda * 1000));
   out.Printf("GPIO IN | B1disc=%d B1ov=%d B2disc=%d B2ov=%d", i.b1_disconnect,
@@ -52,6 +71,13 @@ void PrintCompactSerialReport(longhorn::Console& out,
   out.Printf("GPIO OUT | LL=%d amp=%d BMS=%d IMD=%d CritSTB=%d DataSTB=%d",
              o.linelock_ctrl, o.amp_enable, o.bms_led, o.imd_led, o.crit_stb,
              o.data_stb);
+  const int cmd = Tenths(s.torque_command);
+  out.Printf("TORQUE   | enable=%d cmd=%s%d.%d Nm pedal=%d%% rpm=%ld",
+             s.inverter_enable, cmd < 0 ? "-" : "", std::abs(cmd) / 10,
+             std::abs(cmd) % 10, static_cast<int>(s.pedals.pedal_travel * 100),
+             static_cast<long>(s.motor_rpm));
+  out.Printf("AUDIO    | amp=%d playing=%d play_calls=%u last_status=%u (0=ok)",
+             o.amp_enable, s.dac_playing, s.dac_play_calls, s.dac_play_status);
 }
 
 void PrintSerialReport(longhorn::Console& out, const ControlSnapshot& s,

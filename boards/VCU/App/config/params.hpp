@@ -68,6 +68,10 @@ struct BseParams {
   float bot_pedal_off = 0.05f;
   // TODO(verify): match the BSPD trimmer (0.595-0.976 V at the pin).
   float hard_brake_pin_v = 0.80f;
+  // The trimmer moves, so the firmware/hardware mismatch fault ignores the
+  // band hard_brake_pin_v +/- this margin (the default spans the whole
+  // trimmer range). It only judges the firmware view, never the BSPD.
+  float hard_brake_margin_v = 0.20f;
   uint32_t hard_brake_mismatch_ms = 50;
 };
 
@@ -93,12 +97,6 @@ struct ShutdownParams {
   uint32_t debounce_ms = 10;
 };
 
-struct CoolingParams {
-  // TODO(verify): 60 C is the old reference app's HVC coolant limit, carried
-  // over as a placeholder. Pick the limit for the TSM loop sensors.
-  float overtemp_c = 60.0f;
-};
-
 struct DigitalParams {
   uint32_t brake_flag_debounce_ms = 10;
   uint32_t motor_debounce_ms = 15;
@@ -117,7 +115,7 @@ struct BuzzerParams {
   // EV.10.7.2: 1-3 s at 80 dBA minimum. TODO(verify): measure the level on
   // the car.
   float frequency_hz = 1000.0f;
-  float amplitude = 1.0f;  // fraction of DAC full scale
+  float amplitude = 0.3f;  // fraction of DAC full scale
   uint32_t duration_ms = 1200;
   // Hard ceiling independent of the requested duration.
   uint32_t max_on_ms = 1500;
@@ -229,6 +227,18 @@ struct LaunchParams {
   uint32_t timeout_ms = 5000;
 };
 
+// Software line lock (no driver button): requested when every condition below
+// holds. Regen can also request it (RegenParams).
+struct LineLockParams {
+  bool enabled = false;  // TODO(verify): off until the PDU response is checked
+  // TODO(tune): placeholder. Minimum state of charge to request line lock.
+  float min_soc_pct = 20.0f;
+  // Minimum motor speed (the same figure RegenParams uses, from lhre-2026).
+  float min_motor_rpm = 219.49f;
+  // Rear brake pressure must be under this on both sides to start.
+  float engage_max_psi = 10.0f;
+};
+
 struct WheelControlParams {
   bool enabled = false;  // opt-in until slip targets/gains are measured
   // vehicle/vehicle.yml: same loaded wheel radius on both axles.
@@ -249,7 +259,6 @@ struct Params {
   BseParams bse;
   SteeringParams steering;
   ShutdownParams shutdown;
-  CoolingParams cooling;
   DigitalParams digital;
   DriveParams drive;
   BuzzerParams buzzer;
@@ -259,6 +268,7 @@ struct Params {
   TractionParams traction;
   BatteryParams battery;
   RegenParams regen;
+  LineLockParams linelock;
   LaunchParams launch;
   WheelControlParams wheel_control;
 };

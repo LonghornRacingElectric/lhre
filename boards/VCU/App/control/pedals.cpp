@@ -100,9 +100,16 @@ PedalOutputs PedalProcessor::Update(const PedalInputs& in, uint32_t now_ms,
   // diagnostic only: the BSPD acts on its own.
   out.firmware_hard_brake = in.bse1_pin_v > bse.hard_brake_pin_v &&
                             in.bse2_pin_v > bse.hard_brake_pin_v;
+  // Only a clear disagreement counts: inside the margin the trimmer may
+  // legitimately flip the comparator on either side of the firmware's guess.
+  const float hi = bse.hard_brake_pin_v + bse.hard_brake_margin_v;
+  const float lo = bse.hard_brake_pin_v - bse.hard_brake_margin_v;
+  const bool clearly_hard = in.bse1_pin_v > hi && in.bse2_pin_v > hi;
+  const bool clearly_not_hard = in.bse1_pin_v <= lo || in.bse2_pin_v <= lo;
   out.hard_brake_mismatch = hard_brake_mismatch_timer_.Update(
-      out.firmware_hard_brake != in.hard_braking_hw, now_ms,
-      bse.hard_brake_mismatch_ms);
+      (in.hard_braking_hw && clearly_not_hard) ||
+          (!in.hard_braking_hw && clearly_hard),
+      now_ms, bse.hard_brake_mismatch_ms);
 
   return out;
 }

@@ -104,6 +104,10 @@ manually-advanced `TestClock`.
   trigger). `Start()` calibrates (G4) and starts the DMA.
 - DAC (`lhal::stm32::DmaDac`): a DAC channel fed by circular DMA and paced
   by a basic timer's TRGO; `Play()` retunes the timer to the sample rate.
+  The board's DMA channel must use a **word-wide peripheral width** for the
+  DAC data register (samples stay halfwords in RAM): halfword writes to
+  `DHR12R1` fault the DMA on G4 (transfer error, channel disabled, output
+  stuck at mid-scale).
 - Watchdog (`lhal::stm32::Iwdg`) and `lhal::stm32::ReadAndClearResetCause()`
   are register-level (no HAL module needed), guarded on the peripheral.
 - USB virtual COM port: `lhal::stm32::UsbCdc` implements `lhal::Uart` over

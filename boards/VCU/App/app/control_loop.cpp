@@ -20,7 +20,7 @@ void App::ControlTick(uint32_t now) {
 
   DrainCan(now);
   const bool rtd_edge = ReadInputs(now);
-  UpdateCoolantLatch(now, UpdateBrakeLatch(now));
+  UpdateBrakeLatch(now);
 
   const bool inverter_fresh = rx_.InverterFresh(now);
   const bool inverter_faulted = rx_.InverterFaulted(now);
@@ -95,7 +95,7 @@ bool App::ReadInputs(uint32_t now) {
   return rtd_edge;
 }
 
-bool App::UpdateBrakeLatch(uint32_t now) {
+void App::UpdateBrakeLatch(uint32_t now) {
   const DigitalInputs& in = live_.inputs;
   // Brake comparator soft latch: cleared only by the dash's reset.
   const bool dui_fresh = rx_.dui_driver_inputs.Fresh(now);
@@ -115,18 +115,6 @@ bool App::UpdateBrakeLatch(uint32_t now) {
   live_.bse3_available = rx_.bse_3.Fresh(now);
   live_.bse3_psi =
       live_.bse3_available ? rx_.bse_3.msg.brake_pressure_3() : 0.0f;
-  return reset_edge;
-}
-
-void App::UpdateCoolantLatch(uint32_t now, bool reset_edge) {
-  // A silent TSM leaves the latch as it is: it raises nothing, since the TSM
-  // is not needed to drive, and it clears nothing, since a reset needs a
-  // fresh reading under the limit.
-  const auto& coolant = wheels_.coolant_loop_temps;
-  if (!coolant.Fresh(now)) return;
-  const float hottest_c = std::max(coolant.msg.loop_temp_after_motor(),
-                                   coolant.msg.loop_temp_after_inverter());
-  coolant_latch_.Update(hottest_c >= params_->cooling.overtemp_c, reset_edge);
 }
 
 uint32_t App::ComputeFaults(uint32_t now, bool inverter_fresh,
@@ -141,7 +129,6 @@ uint32_t App::ComputeFaults(uint32_t now, bool inverter_fresh,
   if (ped.bse2_fault) f |= kFaultBse2Range;
   if (live_.steering.range_fault) f |= kFaultSteeringRange;
   if (brake_latch_.latched()) f |= kFaultBrakeFlagLatched;
-  if (coolant_latch_.latched()) f |= kFaultCoolantOvertemp;
   if (ped.brake_over_throttle) f |= kFaultBrakeOverThrottle;
   if (!shutdown_loop_.closed()) f |= kFaultShutdownOpen;
   if (!rx_.contactor_status.Fresh(now)) f |= kFaultHvcTimeout;
@@ -150,7 +137,8 @@ uint32_t App::ComputeFaults(uint32_t now, bool inverter_fresh,
   if (inverter_faulted) f |= kFaultInverterFault;
   if (live_.inputs.latch_state) f |= kFaultBspdTripped;
   if (ped.hard_brake_mismatch) f |= kFaultHardBrakeMismatch;
-  if (!rx_.dui_driver_inputs.Fresh(now)) f |= kFaultDuiTimeout;
+  // A missing DUI is not a fault: the car drives without it (kFaultDuiTimeout
+  // stays defined for the dash message but is never raised).
   if (live_.inputs.motor_disconnect) f |= kFaultMotorDisconnect;
   if (live_.loop == ShutdownLoopState::kImplausible) {
     f |= kFaultShutdownSenseImplausible;
@@ -361,7 +349,17 @@ void App::ArbitrateTorque(uint32_t now, uint32_t dt_ms, bool torque_allowed,
   live_.inverter_enable =
       sm_.state() == VcuState::kDrive && (faults_ & kTorqueCutFaults) == 0 &&
       !bootloader_entered_.load() && !bootloader_request_.load();
-  live_.linelock_request = torque_allowed && regen.linelock_request;
+  LineLockInputs lin;
+  lin.drive = torque_allowed;
+  lin.hard_braking = rin.hard_braking;
+  lin.soc_pct = live_.battery.soe_pct;
+  lin.speed_valid = live_.motor_speed_valid;
+  lin.motor_rpm = fb.rpm;
+  lin.rear_pre_psi = ped.bse2_psi;
+  lin.rear_post_psi = live_.bse3_psi;
+  const bool policy_request = linelock_.Update(lin, P.linelock);
+  live_.linelock_request =
+      torque_allowed && (regen.linelock_request || policy_request);
 }
 
 // Fills the status fields before the frames that report them go out.
@@ -391,12 +389,16 @@ void App::DriveOutputs(uint32_t now) {
       BuildSineTable(sine_, kSineSamples, P.buzzer.amplitude);
       const auto rate = static_cast<uint32_t>(P.buzzer.frequency_hz *
                                               static_cast<float>(kSineSamples));
-      dac_playing_ = lhal::IsOk(p_.audio_dac->Play(sine_, kSineSamples, rate));
+      const lhal::Status played = p_.audio_dac->Play(sine_, kSineSamples, rate);
+      dac_playing_ = lhal::IsOk(played);
+      live_.dac_play_status = static_cast<uint8_t>(played);
+      ++live_.dac_play_calls;
     } else if (!sound && dac_playing_) {
       p_.audio_dac->Stop(kDacMidScale);
       dac_playing_ = false;
     }
   }
+  live_.dac_playing = dac_playing_;
   out.amp_enable = sound;
 
   // BMS/IMD LEDs only ever add indication over the board default (on).

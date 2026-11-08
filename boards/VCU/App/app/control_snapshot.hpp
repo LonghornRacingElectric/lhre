@@ -38,6 +38,11 @@ struct ControlSnapshot {
   bool inverter_enable = false;
   BatteryOutputs battery;
   bool buzzer = false;
+  // Audio path diagnostics: a Play() that keeps failing restarts every tick
+  // and sounds like static.
+  bool dac_playing = false;
+  uint8_t dac_play_status = 0;  // lhal::Status of the last Play()
+  uint16_t dac_play_calls = 0;
   bool linelock_request = false;
   bool brake_flags_latched = false;
   uint8_t fault_resets = 0;

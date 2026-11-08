@@ -147,27 +147,25 @@ The DUI is a plain CAN peripheral this year.
   BSPD_TRIPPED. Only a power cycle clears it, in hardware and in firmware.
 - **Brake comparator flags**: B1 disconnect, B2 disconnect, B1 overvoltage
   and B2 overvoltage each cut torque, disable the inverter and exit DRIVE
-  after the 10 ms input debounce. They share a soft latch stored in flash,
-  so a power cycle doesn't clear it; only the dash's
-  `DUI_DRIVER_INPUTS.fault_reset`, pressed while no flag is active, does.
-- **Coolant overtemp**: the VCU reads the TSM's `COOLANT_LOOP_TEMPS` from
-  the Data bus. Either the after-motor or after-inverter loop temperature at
-  or above `CoolingParams::overtemp_c` raises `COOLANT_OVERTEMP` (fault code
-  22). It latches until a `fault_reset` press with the loop back under the
-  limit, but only warns: it doesn't cut torque or leave DRIVE, because the
-  60 C limit is a placeholder from the old reference app and the inverter
-  has its own temperature faults. A silent TSM raises nothing, since the
-  car doesn't need the TSM to drive, and clears nothing, since a reset
-  needs a fresh reading under the limit. Confirm the limit, and whether it
-  should cut torque, before relying on it.
+  after the 10 ms input debounce. They share a soft latch that a power
+  cycle clears, as long as no flag is still active at boot; within a power
+  cycle only the dash's `DUI_DRIVER_INPUTS.fault_reset`, pressed while no
+  flag is active, clears it. (The latch is still written to flash but no
+  longer restored at boot.)
 - **RTD sound**: a 1 kHz sine from the DAC for 1.2 s on entering DRIVE.
   There is a local 1.5 s ceiling, and the amp is cut immediately if the
   shutdown loop opens.
 - **BMS/IMD lamps**: firmware only ever adds indication. A flag in
   `HVC_INDICATORS` latches the lamp until power cycle, and a silent HVC
   lights both lamps.
-- **Line lock**: controlled over CAN to the PDU. Disabled in the default
-  configuration along with regen. `VCU_DRIVE_STATE` carries the gated
+- **Line lock**: controlled over CAN to the PDU. There is no driver button;
+  the VCU requests it from conditions (`control/linelock`, `LineLockParams`):
+  in DRIVE, state of charge at or above `min_soc_pct`, motor speed at or above
+  `min_motor_rpm`, no hard braking, and the rear brake line under
+  `engage_max_psi` on both sides to start. Once requested it holds through
+  braking until a condition drops. Off by default (`enabled = false`), and
+  the SOC threshold is a placeholder to tune. Regen can also request it, and
+  both are off in the default configuration. `VCU_DRIVE_STATE` carries the gated
   `linelock_out` (byte 5, which the PDU acts on) and the request (byte 7).
 - **Event modes**: `VCU_MODE_COMMAND` (0x029) or `/mode` selects the
   acceleration, skidpad, autocross, endurance or motor spin parameters. The
@@ -392,7 +390,8 @@ lamps high right after `MX_GPIO_Init`).
    - ADC1 ranks for IN4 and VREFINT, and ADC2 rank IN11 with DMA on
      DMA1_Ch2;
    - drop the unused AWD3.
-3. DAC1 CH1 triggered by TIM7 TRGO, with DMA on DMA1_Ch3. TIM6/TIM7 as
+3. DAC1 CH1 triggered by TIM7 TRGO, with DMA on DMA1_Ch3 (memory
+   halfword, peripheral **word**: see `lhal::stm32::DmaDac`). TIM6/TIM7 as
    basic timers with TRGO on update.
 4. IWDG. Today the LHAL adapter drives it at register level.
 5. GPIO user labels, and initial level high on PE12/PE13 (BMS/IMD lamps
@@ -413,13 +412,13 @@ FDCAN on PCLK1, ADC on HCLK/2 = 48 MHz, USB on PLLQ.
 - APPS and BSE sensor ranges and pedal endpoints. Defaults assume 0.5-4.5 V
   sensors; capture the real values with `/cal`.
 - Steering mapping constants (carried from the 2026 sensor), and the
-  hard-brake trimmer set point (`BseParams::hard_brake_pin_v`).
+  hard-brake trimmer set point (`BseParams::hard_brake_pin_v`). The
+  hard-brake mismatch fault only fires when firmware and the BSPD comparator
+  disagree by more than `hard_brake_margin_v` (0.2 V at the pin, spanning the
+  trimmer's range), so a moving trimmer doesn't raise it.
 - Polarity of `motor_disconnect`. Neither motor cable has a pull resistor,
   so an unplugged cable reads undefined. `motor_power` remains diagnostic;
   `motor_disconnect` now cuts torque when high after debounce.
-- Coolant overtemp limit (`CoolingParams::overtemp_c`, a 60 C placeholder)
-  and whether the fault should cut torque. The TSM's loop sensor wiring and
-  scaling are unchecked on the car.
 - RTD sound level. EV.10.7.2 (2027 rules) requires 80 dBA minimum for
   1-3 s. The duration is set, but the level needs measuring on the car.
 - APPS transfer functions. T.4.2.3 requires the two sensors to have

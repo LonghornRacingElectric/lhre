@@ -23,7 +23,6 @@
 #include "lhre_can_inverter.hpp"
 #include "lhre_can_pdu.hpp"
 #include "lhre_can_pi.hpp"
-#include "lhre_can_tsm.hpp"
 #include "lhre_can_usm.hpp"
 #include "lhre_can_vcu.hpp"
 
@@ -168,9 +167,6 @@ struct Bench {
   int16_t motor_rpm = 0;
   bool wheel_alive[4] = {};
   float wheel_rad_s[4] = {};
-  bool coolant_alive = false;
-  float coolant_after_motor_c = 30.0f;
-  float coolant_after_inverter_c = 30.0f;
 
   void SendWheelFrames() {
     lhre::can::usm::AccelerationVectorUnsprungWheelSpeedFl fl;
@@ -185,13 +181,6 @@ struct Bench {
     if (wheel_alive[1]) logger.Send(fr.ToFrame());
     if (wheel_alive[2]) logger.Send(rl.ToFrame());
     if (wheel_alive[3]) logger.Send(rr.ToFrame());
-  }
-
-  void SendCoolantFrame() {
-    lhre::can::tsm::CoolantLoopTemps t;
-    t.set_loop_temp_after_motor(coolant_after_motor_c);
-    t.set_loop_temp_after_inverter(coolant_after_inverter_c);
-    if (coolant_alive) logger.Send(t.ToFrame());
   }
 
   void SendInverterCurrent() {
@@ -263,7 +252,6 @@ struct Bench {
       }
       if (clock.Millis() % 100 == 0) SendInverterCurrent();
       if (clock.Millis() % 3 == 0) SendWheelFrames();
-      if (clock.Millis() % 100 == 0) SendCoolantFrame();
       app.Step();
       clock.Advance(1);
     }
