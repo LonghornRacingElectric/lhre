@@ -4,6 +4,7 @@
 filegroup(
     name = "all_firmware",
     srcs = [
+        "//boards/HVC:release",
         "//boards/VCU:release",
     ],
     visibility = ["//visibility:public"],

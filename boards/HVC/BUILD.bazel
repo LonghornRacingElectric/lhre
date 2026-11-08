@@ -1,0 +1,28 @@
+load("//tools/firmware:firmware_project.bzl", "firmware_project")
+
+# The whole board: firmware image, flash targets, and — synthesized
+# from the App/ file names — the app library, host tests, and sims.
+# Everything else is derived from mcu or the CubeMX layout; see
+# tools/firmware/README.md. State only what this board adds.
+firmware_project(
+    name = "hvc",
+    # RGB status LED driver (rainbow animation); TIM2 CH1-3 on PA0/PA1/PA2.
+    # Debug shell (bench commands) over USB-C CDC.
+    app_deps = [
+        "//drivers/longhorn:led",
+        "//drivers/longhorn:shell",
+    ],
+    enable_freertos = True,
+    # The ADBMS library prints its results with printf("%f").
+    enable_printf_float = True,
+    enable_usb = True,
+    # Analog Devices' ADBMS6830 driver, vendored from the 2026 HVC. It calls
+    # ST HAL directly (mcuWrapper.c: hspi2, CS on PB13), so it builds with the
+    # firmware image, not the LHAL-only app library.
+    extra_includes = ["adbms6830/inc"],
+    mcu = "stm32g474xx",
+    srcs = glob([
+        "adbms6830/inc/*.h",
+        "adbms6830/src/*.c",
+    ]),
+)

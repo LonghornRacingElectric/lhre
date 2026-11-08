@@ -65,6 +65,68 @@
         "//boards/VCU:${input:flashMethod-vcu}"
       ],
       "problemMatcher": []
+    },
+    {
+      "label": "build-hvc-debug",
+      "detail": "Build HVC firmware and stage the hermetic debug tools",
+      "type": "shell",
+      "command": "bazel",
+      "args": [
+        "build",
+        "//boards/HVC:hvc.elf",
+        "//tools/debug:debug_tools"
+      ],
+      "group": "build",
+      "problemMatcher": [
+        "$gcc"
+      ]
+    },
+    {
+      "label": "flash-hvc",
+      "detail": "Flash the HVC over ST-Link without starting a debug session",
+      "type": "shell",
+      "command": "bazel",
+      "args": [
+        "run",
+        "//boards/HVC:openocd"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "flash-hvc-dfu",
+      "detail": "Flash the HVC over USB DFU",
+      "type": "shell",
+      "command": "bazel",
+      "args": [
+        "run",
+        "//boards/HVC:dfu"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "monitor-hvc",
+      "detail": "Open serial monitor for HVC",
+      "type": "shell",
+      "command": "bazel",
+      "args": [
+        "run",
+        "//tools/monitor"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "flash-and-monitor-hvc",
+      "detail": "Flash the HVC (prompts for ST-Link vs DFU) and open serial monitor",
+      "type": "shell",
+      "command": "bazel",
+      "args": [
+        "run",
+        "//tools/monitor",
+        "--",
+        "--flash",
+        "//boards/HVC:${input:flashMethod-hvc}"
+      ],
+      "problemMatcher": []
     }
   ],
   "inputs": [
@@ -72,6 +134,22 @@
       "id": "flashMethod-vcu",
       "type": "pickString",
       "description": "Select flash method for VCU",
+      "options": [
+        {
+          "label": "ST-Link (OpenOCD)",
+          "value": "openocd"
+        },
+        {
+          "label": "DFU (USB)",
+          "value": "dfu"
+        }
+      ],
+      "default": "openocd"
+    },
+    {
+      "id": "flashMethod-hvc",
+      "type": "pickString",
+      "description": "Select flash method for HVC",
       "options": [
         {
           "label": "ST-Link (OpenOCD)",

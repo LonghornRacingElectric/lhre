@@ -58,6 +58,61 @@
         "gdbPath": "${workspaceFolder}/bazel-bin/tools/debug/gdb/bin/arm-none-eabi-gdb.exe",
         "serverpath": "${workspaceFolder}/bazel-bin/tools/debug/openocd/bin/openocd.exe"
       }
+    },
+    {
+      "name": "Debug HVC (ST-Link)",
+      "type": "cortex-debug",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "executable": "${workspaceFolder}/bazel-bin/boards/HVC/hvc.elf",
+      "device": "STM32G474",
+      "svdFile": "${workspaceFolder}/bazel-bin/tools/debug/svd/STM32G474.svd",
+      "servertype": "openocd",
+      "serverpath": "${workspaceFolder}/bazel-bin/tools/debug/openocd/bin/openocd",
+      "gdbPath": "${workspaceFolder}/bazel-bin/tools/debug/gdb/bin/arm-none-eabi-gdb",
+      "searchDir": [
+        "${workspaceFolder}/bazel-bin/tools/debug/openocd/openocd/scripts"
+      ],
+      "configFiles": [
+        "${workspaceFolder}/drivers/stm32/stm32g4/stm32g4_openocd.cfg"
+      ],
+      "preLaunchTask": "build-hvc-debug",
+      "liveWatch": {
+        "enabled": true,
+        "samplesPerSecond": 4
+      },
+      "windows": {
+        "gdbPath": "${workspaceFolder}/bazel-bin/tools/debug/gdb/bin/arm-none-eabi-gdb.exe",
+        "serverpath": "${workspaceFolder}/bazel-bin/tools/debug/openocd/bin/openocd.exe"
+      },
+      "runToEntryPoint": "main"
+    },
+    {
+      "name": "Attach HVC (ST-Link)",
+      "type": "cortex-debug",
+      "request": "attach",
+      "cwd": "${workspaceFolder}",
+      "executable": "${workspaceFolder}/bazel-bin/boards/HVC/hvc.elf",
+      "device": "STM32G474",
+      "svdFile": "${workspaceFolder}/bazel-bin/tools/debug/svd/STM32G474.svd",
+      "servertype": "openocd",
+      "serverpath": "${workspaceFolder}/bazel-bin/tools/debug/openocd/bin/openocd",
+      "gdbPath": "${workspaceFolder}/bazel-bin/tools/debug/gdb/bin/arm-none-eabi-gdb",
+      "searchDir": [
+        "${workspaceFolder}/bazel-bin/tools/debug/openocd/openocd/scripts"
+      ],
+      "configFiles": [
+        "${workspaceFolder}/drivers/stm32/stm32g4/stm32g4_openocd.cfg"
+      ],
+      "preLaunchTask": "build-hvc-debug",
+      "liveWatch": {
+        "enabled": true,
+        "samplesPerSecond": 4
+      },
+      "windows": {
+        "gdbPath": "${workspaceFolder}/bazel-bin/tools/debug/gdb/bin/arm-none-eabi-gdb.exe",
+        "serverpath": "${workspaceFolder}/bazel-bin/tools/debug/openocd/bin/openocd.exe"
+      }
     }
   ]
 }
