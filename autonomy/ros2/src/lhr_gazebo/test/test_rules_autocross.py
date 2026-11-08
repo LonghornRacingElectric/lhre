@@ -117,6 +117,27 @@ def test_course_reference_lap_comes_from_the_metrics_row(tmp_path):
     assert (row['lap_reference'], row['lap_ratio'], row['lap_time']) == ('course', '1.25', 'pass')
 
 
+def test_a_corrupt_world_fails_its_run_not_the_score(tmp_path):
+    scorer = load('corrupt_gate', Path(__file__).parents[4]/'testing/tools/gate/score_gate.py')
+    world = tmp_path/'worlds/autocross_seed9.sdf'
+    world.parent.mkdir()
+    world.write_text('<sdf><world><include>')  # truncated mid-write
+    run = tmp_path/'runs/autocross_s9_r1'
+    run.mkdir(parents=True)
+    fields = {'outcome': 'invalid_lap', 'lap_invalid_reason': 'vehicle_off_course',
+              'reference_world': str(world), 'v_max': '5.0', 'v_min': '1.0',
+              'a_lat_max': '3.0', 'max_accel': '1.0', 'max_decel': '2.0',
+              'lap_gate_x_m': '0', 'lap_gate_y_m': '0', 'lap_gate_tangent_x': '1',
+              'lap_gate_tangent_y': '0'}
+    (run/'metrics.csv').write_text(','.join(fields) + '\n' + ','.join(fields.values()) + '\n')
+    row = scorer.score(str(run), 'autocross_s9_r1')
+    assert row['reference_lap_s'] == ''
+    # The lap's own reason survives next to the reference error.
+    reasons = row['invalid_reason'].split('; ')
+    assert reasons[0] == 'vehicle_off_course'
+    assert reasons[1].startswith('reference lap: ')
+
+
 def test_fault_runner_generates_the_requested_rules_world(tmp_path):
     tools = Path(__file__).parents[4]/'testing/tools/fault_injection'
     script = (tools/'run_faults.sh').read_text().split('\ncleanup\nfor kind')[0]

@@ -195,8 +195,12 @@ def score(run_dir, run_id):
             if event == 'autocross':
                 try:
                     ref = course_reference(m, os.path.dirname(os.path.dirname(run_dir)))
-                except (OSError, ValueError) as error:  # a bad world fails lap_time, not the score
-                    ref, row['invalid_reason'] = None, f'reference lap: {error}'
+                # A bad world fails lap_time, not the score. ElementTree's
+                # ParseError is a SyntaxError, not a ValueError.
+                except (OSError, ValueError, SyntaxError) as error:
+                    ref = None
+                    row['invalid_reason'] = '; '.join(
+                        x for x in (row['invalid_reason'], f'reference lap: {error}') if x)
                 row['reference_lap_s'] = '' if ref is None else f'{ref:.2f}'
     row.setdefault('outcome', 'no_metrics')
     if not os.path.exists(os.path.join(run_dir, 'args.txt')):
