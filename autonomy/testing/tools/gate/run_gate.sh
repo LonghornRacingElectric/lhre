@@ -4,9 +4,10 @@
 # Run from autonomy/ros2 after ./scripts/build.sh, on Ubuntu or inside the
 # Docker container. Every gate run uses the no-shortcuts stack from
 # docs/plans/mvp-pass-criteria.md: perception:=lidar estimator:=ekf with
-# safety on and launch defaults. Lap time is scored against a reference lap
-# computed from the course (#232); BASELINE=1 adds one truth-stack run per
-# seed (perception:=sim estimator:=truth) for comparison only. A run
+# safety on, the Mid-360 caster and stereo camera fusion (#206). Lap time
+# is scored against a reference lap computed from the course (#232).
+# BASELINE=1 adds one truth-stack run per seed (perception:=sim
+# estimator:=truth) for comparison only. A run
 # ends SETTLE_S sim seconds after the mission reaches FINISHED or EMERGENCY,
 # or at RUN_S sim seconds, so a slow machine runs the same campaign, only
 # longer. Wall time only catches a hung sim: /clock stopped for HANG_S
@@ -26,7 +27,7 @@ BASELINE=${BASELINE:-0}            # 1 adds the truth-stack runs, for comparison
 RUN_S=${RUN_S:-180}                # sim-second cap per run
 SETTLE_S=${SETTLE_S:-5}            # sim seconds recorded after FINISHED
 HANG_S=${HANG_S:-60}               # wall seconds of a stopped /clock: hung
-OUT=${OUT:-$HOME/lhr-test-data/$(date +%F)-mvp-gate}
+OUT=${OUT:-$HOME/lhr-test-data/$(date +%F)-mid360-fusion-gate}
 EXTRA=${EXTRA:-}
 TRACK_STYLE=${TRACK_STYLE:-autocross}
 case "$TRACK_STYLE" in
@@ -100,14 +101,15 @@ one_run() {  # id [launch args...]
         echo "$id was cut short last time, moved aside and rerunning" >&2
     fi
     mkdir -p "$dir"
+    local launch_cmd=(ros2 launch lhr_gazebo gazebo_demo.launch.py
+        gui:=false rviz:=false safety:=true output_csv:="$dir/metrics.csv"
+        ${world:+"world:=$world"} $EXTRA "$@")
     ros2 bag record -s mcap -o "$dir/bag" --topics $TOPICS \
         > "$dir/record.log" 2>&1 &
     REC=$!
     # A background job ignores SIGINT in a non-interactive shell, so the
     # launch is stopped with TERM, which it handles the same way.
-    ros2 launch lhr_gazebo gazebo_demo.launch.py \
-        gui:=false rviz:=false safety:=true output_csv:="$dir/metrics.csv" \
-        ${world:+"world:=$world"} $EXTRA "$@" > "$dir/launch.log" 2>&1 &
+    "${launch_cmd[@]}" > "$dir/launch.log" 2>&1 &
     LAUNCH=$!
     # The watcher ends the run in sim time, once the car has had time to
     # stop on the recording, and writes why to end.txt for the scorer.
@@ -117,25 +119,26 @@ one_run() {  # id [launch args...]
     wait "$WATCH"
     WATCH=''
     stop_run
-    printf '%s\n' "$@" > "$dir/args.txt"
+    printf '%s\n' "${launch_cmd[@]}" > "$dir/args.txt"
     cleanup
 }
 
 plan() {  # one line per run: the id, then its launch arguments
+    local sensors='lidar_source:=mid360 enable_stereo_camera:=true enable_camera_lidar_fusion:=true'
     for s in $SEEDS; do
         if [ "$BASELINE" != 0 ]; then
-            echo "baseline_${TRACK_STYLE}_s$s track_style:=$TRACK_STYLE seed:=$s perception:=sim estimator:=truth"
+            echo "baseline_${TRACK_STYLE}_s$s track_style:=$TRACK_STYLE seed:=$s perception:=sim estimator:=truth lidar_source:=gazebo enable_stereo_camera:=false enable_camera_lidar_fusion:=false"
         fi
         for r in $(seq 1 "$REPEATS"); do
-            echo "${TRACK_STYLE}_s${s}_r$r track_style:=$TRACK_STYLE seed:=$s perception:=lidar estimator:=ekf"
+            echo "${TRACK_STYLE}_s${s}_r$r track_style:=$TRACK_STYLE seed:=$s perception:=lidar estimator:=ekf $sensors"
         done
     done
     for r in $(seq 1 "${ACCEL_REPEATS:-0}"); do
-        echo "acceleration_r$r track_style:=acceleration perception:=lidar estimator:=ekf"
+        echo "acceleration_r$r track_style:=acceleration perception:=lidar estimator:=ekf $sensors"
     done
     if [ -e "$SKIDPAD_WORLD" ]; then
         for r in $(seq 1 "${SKIDPAD_REPEATS:-0}"); do
-            echo "skidpad_r$r track_style:=skidpad mission:=skidpad perception:=lidar estimator:=ekf"
+            echo "skidpad_r$r track_style:=skidpad mission:=skidpad perception:=lidar estimator:=ekf $sensors"
         done
     fi
 }

@@ -91,6 +91,7 @@ nav:
           - On-Car Architecture: autonomy/docs/plans/on-car-architecture.md
           - MVP Pass Criteria: autonomy/docs/plans/mvp-pass-criteria.md
           - Sim v2 Pass Criteria: autonomy/docs/plans/sim-v2-pass-criteria.md
+          - Mid-360 Fusion Gate Plan: autonomy/docs/plans/2026-11-07-mid360-fusion-gate-plan.md
       - Testing:
           - Overview: autonomy/testing/README.md
           - Mid-360 Acceptance 2026-10-04: autonomy/testing/2026-10-04-mid360-acceptance/README.md
@@ -98,6 +99,8 @@ nav:
           - FMU Seeds 2026-10-26: autonomy/testing/2026-10-26-fmu-seeds/README.md
           - MVP Gate 2026-10-28: autonomy/testing/2026-10-28-mvp-gate/README.md
           - FMU on red-mesa 2026-11-07: autonomy/testing/2026-11-07-fmu-gazebo-red-mesa/README.md
+          - Mid-360 Fusion Checks 2026-11-08: autonomy/testing/2026-11-08-mid360-fusion-gate/README.md
+          - Side Classifier Fixes 2026-11-08: autonomy/testing/2026-11-08-side-classifier-fixes/README.md
           - Livox Test Tools: autonomy/testing/tools/livox/README.md
           - Fault Injection Tools: autonomy/testing/tools/fault_injection/README.md
           - MVP Gate Tools: autonomy/testing/tools/gate/README.md

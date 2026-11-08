@@ -38,14 +38,16 @@ class Capture:
 
 @pytest.mark.parametrize(
     'mode,cloud_only', [('sim', 'false'), ('sim', 'true'), ('lidar', 'false')])
-def test_launch_selects_exactly_one_cone_source(mode, cloud_only):
+@pytest.mark.parametrize('classify_sides', ['false', 'true'])
+def test_launch_selects_exactly_one_cone_source(mode, cloud_only, classify_sides):
     path = Path(__file__).parents[1] / 'launch' / 'mvs_demo.launch.py'
     spec = importlib.util.spec_from_file_location('mvs_launch', path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     description = module.generate_launch_description()
     context = LaunchContext()
-    context.launch_configurations.update(perception=mode, lidar=cloud_only)
+    context.launch_configurations.update(
+        perception=mode, lidar=cloud_only, lidar_classify_sides=classify_sides)
     for action in description.entities:
         if isinstance(action, DeclareLaunchArgument):
             action.execute(context)

@@ -133,8 +133,10 @@ flowchart LR
 
 The upper stack (track_builder, control, mission_manager, metrics) is identical in both modes. The `perception` launch argument selects between the sim pipeline and LiDAR-based detection.
 MVS LiDAR mapping publishes unclassified orange cones and uses `boundary_graph` pairing
-by default. Set `lidar_classify_sides:=true` to infer left/right sides and use
-one-to-one `classified` pairing. That mode remains experimental on autocross.
+by default. Set `lidar_classify_sides:=true` to infer left/right sides while
+retaining geometry-based `boundary_graph` planning. It can start on unknown
+cones while labels wait for independent travelled observations. Side inference
+remains experimental on autocross.
 
 To bypass the sensor sim and use all cones directly (god-mode), override the cone topic:
 ```bash
@@ -281,7 +283,7 @@ launch lists what it takes:
 ./scripts/run_gazebo_demo.sh gui:=false          # headless Gazebo (no Gazebo GUI)
 ./scripts/run_gazebo_demo.sh rviz:=false         # disable RViz
 ./scripts/run_gazebo_demo.sh perception:=lidar   # LiDAR-based cone detection
-./scripts/run_gazebo_demo.sh perception:=lidar lidar_classify_sides:=true  # opt into side inference and classified pairing
+./scripts/run_gazebo_demo.sh perception:=lidar lidar_classify_sides:=true  # side inference with boundary pairing
 ./scripts/run_gazebo_demo.sh track_style:=oval   # oval track (also: autocross, simple)
 ./scripts/run_gazebo_demo.sh track_style:=oval perception:=lidar  # LiDAR on oval (best LiDAR experience)
 ./scripts/run_gazebo_demo.sh track_style:=acceleration  # 75 m straight, runs the acceleration mission, stops in the exit lane
@@ -438,7 +440,7 @@ flowchart TB
 | Cone source | `publish_cones` | `publish_cones` (reused) | Gazebo GPU LiDAR or world-backed Mid-360 caster |
 | Perception | `sensor_sim` (FOV filter) | `sensor_sim` (reused) | `lidar_cone_detector` (pointcloud clustering) |
 | Physics / vehicle | `sim_kinematic` | Gazebo | Gazebo |
-| `track_builder` pairing | boundary (Delaunay) | boundary (Delaunay) | boundary by default and in camera fusion; classified with side inference alone |
+| `track_builder` pairing | boundary (Delaunay) | boundary (Delaunay) | boundary, including side inference and camera fusion |
 | Actuation | `/lhr/vehicle/cmd` directly | `joint_cmd_adapter` → 6 joints | `joint_cmd_adapter` → 6 joints |
 
 All paths produce the same ROS 2 topic interfaces. Boundary pairing uses color when available and falls back to geometry for unclassified LiDAR cones.
@@ -692,7 +694,7 @@ and the measured drift figures are in
 
 Cone pairing strategies:
 - **nearest**: Pairs each left cone with its nearest unpaired right cone.
-- **classified**: Computes a minimum-cost one-to-one left/right assignment within the track-width band, leaving unmatched cones unused. Opt-in for LiDAR perception.
+- **classified**: Computes a minimum-cost one-to-one left/right assignment within the track-width band, leaving unmatched cones unused. Available on the standalone track builder; the demo launchers retain geometry planning for uncertain LiDAR sides.
 - **boundary** (default): Delaunay-triangulates all cone positions independently of color. It rejects blue-blue and yellow-yellow edges, then retains blue-yellow edges and edges involving unknown colors when they are approximately `track_width` (3.5 m +/- `track_width_tolerance`) apart.
 
 Set `boundary_use_color:=false` with `pairing_strategy:=boundary` to use the
@@ -901,7 +903,7 @@ Side inference remains opt-in through `lidar_classify_sides:=true`. It uses geom
 | `side_vote_max_lateral` | `5.0` | Lateral classification corridor (m) |
 | `side_vote_deadband` | `0.5` | Lateral no-vote band around the vehicle axis (m) |
 | `side_update_distance` | `1.0` | Travel between independent side updates (m) |
-| `side_confirmations` | `2` | Consistent traveled viewpoints before a later label locks |
+| `side_confirmations` | `2` | Consistent traveled viewpoints to acquire a label; twice this count to reverse |
 | `boundary_link_distance` | `3.0` | Direct same-boundary link distance (m) |
 | `boundary_gap_distance` | `3.3` | Maximum aligned boundary gap (m) |
 | `boundary_gap_angle_deg` | `40.0` | Maximum direction error across a boundary gap (degrees) |
@@ -910,9 +912,11 @@ The default LiDAR mode publishes unclassified `cones` (orange). With
 `lidar_classify_sides:=true`, it infers track sides from geometry and publishes
 `left_cones` (blue) and `right_cones` (yellow), with `cones` (orange) for
 unknown sides. LiDAR does not measure cone colour. The side classifier is
-experimental: in a live Gazebo autocross run, sparse initial detections caused
-an entire right-boundary fragment to be locked as left, and the car left the
-course. The timestamp-aligned cone map remained accurate in that run. See
+experimental. Short links now reject strong opposing component votes; labels
+wait for independent travelled viewpoints and can recover with sustained
+correction. The earlier live failure locked a sparse initial right-boundary
+fragment as left. Regressions cover that mechanism and partial-map replay,
+while both launchers retain geometry planning for unknown startup cones. See
 [the perception package](src/lhr_perception/README.md) for the pipeline and
 its limits.
 
