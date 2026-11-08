@@ -26,8 +26,16 @@ telemetry_artifact(
 
 telemetry_artifact(
     name = "can_json",
-    kind = "json",
+    kind = "can_json",
     out = "can.json",
+    spec = "//lib/spec:files",
+    visibility = ["//visibility:public"],
+)
+
+telemetry_artifact(
+    name = "signals_json",
+    kind = "signals_json",
+    out = "signals.json",
     spec = "//lib/spec:files",
     visibility = ["//visibility:public"],
 )
@@ -47,6 +55,7 @@ filegroup(
         ":can_json",
         ":can_packets_proto",
         ":orion_db_init",
+        ":signals_json",
     ],
     visibility = ["//visibility:public"],
 )

@@ -24,6 +24,11 @@ Opens a browser tab with three views:
 - **Groups**: telemetry groups, their ledger state, and which fields are
   bound to them.
 
+Message timing is entered directly as **Hz** (`frequency_hz`); 0 means
+aperiodic. There are no default-tier or per-signal tier selectors. The CAN
+Matrix and CSV keep their existing frequency column names while reading the
+message frequency field.
+
 Every edit re-validates against the real `//lib/spec` invariants, so
 errors show up in the right panel before you save. Saving writes through
 the canonical serializer and refuses if the files changed on disk since

@@ -1,4 +1,4 @@
-"""Generate the deployed telemetry proto, CAN decode JSON, and Orion DDL."""
+"""Generate telemetry bindings, CAN decoding, signal discovery, and Orion DDL."""
 
 import argparse
 import hashlib
@@ -107,7 +107,7 @@ def signal_conv_type(signal):
     return f"{prefix}{width}"
 
 
-def render_json(spec):
+def render_can_json(spec):
     field_types = wire.field_types(spec)
     bitfields = {bitfield.name: bitfield for _, bitfield in spec.bitfield_types()}
     packets = []
@@ -170,6 +170,44 @@ def render_json(spec):
     return json.dumps(packets, indent=2) + "\n"
 
 
+def render_signals_json(spec, digest):
+    """One catalog row per snapshot field, including non-CAN producers."""
+    types = wire.field_types(spec)
+    candidates = {}
+    for _, message, signal, bit, telemetry in validator.telemetry_bindings(spec):
+        unit = signal.logical.physical.unit if signal.logical.WhichOneof("kind") == "physical" else ""
+        candidates.setdefault((telemetry.group, telemetry.field), []).append({
+            "module": message.from_board.lower() or None,
+            "unit": unit,
+            "rate_hz": telemetry.uplink_rate_hz if telemetry.HasField("uplink_rate_hz") else message.frequency_hz,
+            "channel_type": can_spec_pb2.ChannelType.Name(telemetry.channel_type).lower(),
+        })
+    for _, group in spec.groups():
+        for field in group.external_field:
+            candidates[(group.name, field.name)] = [{
+                "module": "gateway",
+                "unit": field.unit if field.HasField("unit") else None,
+                "rate_hz": field.uplink_rate_hz if field.HasField("uplink_rate_hz") else None,
+                "channel_type": can_spec_pb2.ChannelType.Name(field.channel_type).lower(),
+            }]
+    signals = []
+    for (group, field), (field_type, _) in sorted(types.items()):
+        sources = candidates[(group, field)]
+        # Shared producers and array slots still describe one protobuf field.
+        # A single rate or module would be misleading when sources differ.
+        metadata = {key: sources[0][key] if all(s[key] == sources[0][key] for s in sources) else None
+                    for key in sources[0]}
+        signals.append({
+            "signal": f"{snake_case(group)}.{field}",
+            "group": snake_case(group),
+            "value_type": field_type.removeprefix("repeated "),
+            "repeated": field_type.startswith("repeated "),
+            "schema_version": digest,
+            **metadata,
+        })
+    return json.dumps({"schema_version": digest, "signals": signals}, indent=2) + "\n"
+
+
 def render_sql(spec, digest, common_sql):
     fields = snapshot_fields(spec)
     groups = sorted((group for _, group in spec.groups()), key=lambda group: group.snapshot_id)
@@ -219,7 +257,7 @@ def render_sql(spec, digest, common_sql):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--kind", choices=("proto", "json", "sql"), required=True)
+    parser.add_argument("--kind", choices=("proto", "can_json", "signals_json", "sql"), required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--common-sql", type=Path)
     parser.add_argument("spec", nargs="+")
@@ -228,8 +266,10 @@ def main():
     digest = provenance(args.spec)
     if args.kind == "proto":
         output = render_proto(spec, digest)
-    elif args.kind == "json":
-        output = render_json(spec)
+    elif args.kind == "can_json":
+        output = render_can_json(spec)
+    elif args.kind == "signals_json":
+        output = render_signals_json(spec, digest)
     else:
         if args.common_sql is None:
             parser.error("--common-sql is required for SQL generation")

@@ -25,6 +25,43 @@ Still pending:
 - `kafka.routes.json` handles pass-through routing for derived topics (`gg-plot`, `track-mapper`).
 - `sensor_data` normalization is handled directly in `src/lib/kafka/kafkaConsumer.ts`.
 
+## Signal discovery (v0)
+
+Generate the Orion catalog from the repo root:
+
+```bash
+bazel build --config=local //apps/telemetry:current_schema_signals
+```
+
+With the viewer running, `GET /api/cars/orion/signals` returns the generated
+signal array, including CAN,
+GPS, and board-status fields. `?schema_version=<64-character-lowercase-hash>`
+selects an exact schema; omitting it selects the currently deployed catalog.
+The response carries the schema hash in every row and `X-Schema-Version`.
+Other cars return 404 until their own catalogs are provided. No Kafka or
+database connection is needed for discovery. This v0 read endpoint has no
+API-key authentication; adding reader/admin keys remains a later phase.
+
+The default file is `bazel-bin/lib/codegen/telemetry/signals.json`, resolved
+from the viewer's working directory. For deployment, set `SIGNAL_CATALOG_DIR`
+to an absolute directory and copy the generated file there as `signals.json`.
+Preserve older artifacts as `<schema_hash>.json` in the same directory to
+serve historical versions. Codegen does not archive automatically. Use atomic
+file replacement when updating a running server. Missing current artifacts
+return 503; missing requested versions return 404; malformed hashes return 400.
+No rates are guessed and mixed-unit GPS arrays have a null unit. CAN shared
+sources and repeated array slots appear once per protobuf field.
+
+External telemetry must declare an uplink limit; the four GPS fields declare
+50 Hz, matching publishd's default snapshot limit. This is a declared policy,
+not a measured acquisition rate or a per-signal limit currently enforced by
+publishd. The catalog exposes only `rate_hz`: the explicit uplink rate, otherwise
+the CAN message frequency. External signals have no native-frequency fallback;
+their rate is null when no uplink rate is declared. Numeric scalar
+external signals require explicit units; mixed-unit arrays may omit them.
+
+Catalog serving tests: `npx vitest run tests/signals/catalog.test.ts`.
+
 ## Environment variables
 
 Example viewer-side Kafka/env values:

@@ -16,7 +16,7 @@ three years after everyone who made the decision graduated.
 | [006](006-pi-binary-deploys.md) | The Pi gets static binary bundles, not the repo | Accepted |
 | [007](007-can-schema-in-repo.md) | CAN schema source in-repo; generated files never checked in | Accepted |
 | 005–007 | Reserved by the in-flight `bevo-migration` branch (telemetry in monorepo, Pi deploys, CAN schema) | Pending merge |
-| [008](008-can-spec-pipeline.md) | One CAN spec in textproto; all derived artifacts generated | Accepted |
+| [008](008-can-spec-pipeline.md) | One CAN spec in textproto; all derived artifacts generated | Accepted; ADR-017 replaces rate tiers |
 | [009](009-autonomy-outside-bazel.md) | Autonomy (ROS 2) builds with colcon, outside Bazel | Accepted |
 | [010](010-telemetry-stack-in-bazel.md) | Telemetry server stack builds in Bazel, its tests run beside Docker | Superseded by ADR-011 |
 | [011](011-bazel-owned-telemetry-images.md) | Bazel owns every telemetry stack image; Compose only runs loaded tags | Accepted |
@@ -25,6 +25,7 @@ three years after everyone who made the decision graduated.
 | [014](014-deployed-telemetry-schema.md) | Generate server artifacts while preserving the deployed telemetry schema | Accepted |
 | [015](015-study-layout.md) | A study is a README, a study.yml and a run.py | Accepted |
 | [016](016-fmu-artifact-boundary.md) | Identified full-vehicle FMU artifact for autonomy | Accepted |
+| [017](017-explicit-native-rates.md) | CAN timing uses explicit native rates instead of tiers | Accepted |
 
 ## ADRs vs. READMEs
 

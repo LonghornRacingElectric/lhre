@@ -25,7 +25,7 @@ class TelemetryGeneratorTest(unittest.TestCase):
         self.assertIn("BoardStatus board_status = 9;", proto)
 
     def test_json_tracks_every_can_message(self):
-        packets = json.loads(gen_telemetry.render_json(self.spec))
+        packets = json.loads(gen_telemetry.render_can_json(self.spec))
         messages = [message for _, message in sorted(self.spec.messages(), key=lambda item: item[1].can_id)]
         self.assertEqual(len(packets), len(messages))
         for packet, message in zip(packets, messages, strict=True):
@@ -35,6 +35,61 @@ class TelemetryGeneratorTest(unittest.TestCase):
             self.assertEqual(packet["data_length"], message.dlc)
             self.assertEqual(packet["quantity"], gen_telemetry.validator.effective_quantity(message))
             self.assertEqual(packet["bus"], message.bus)
+
+    def test_signals_cover_every_snapshot_field_once(self):
+        catalog = json.loads(gen_telemetry.render_signals_json(self.spec, "test"))
+        rows = {row["signal"]: row for row in catalog["signals"]}
+        expected = {f"{gen_telemetry.snake_case(group)}.{field}"
+                    for group, field in wire.field_types(self.spec)}
+        self.assertEqual(set(rows), expected)
+        self.assertEqual(len(rows), len(catalog["signals"]))
+        for row in rows.values():
+            self.assertIn("rate_hz", row)
+            self.assertNotIn("native_rate_hz", row)
+            self.assertNotIn("uplink_rate_hz", row)
+        self.assertEqual(catalog["schema_version"], "test")
+        self.assertTrue(all(row["schema_version"] == "test" for row in rows.values()))
+        self.assertEqual(rows["dynamics.gps"]["unit"], "deg")
+        self.assertEqual(rows["dynamics.gps_speed"]["unit"], "kn")
+        self.assertIsNone(rows["dynamics.gps_precise"]["unit"])
+        self.assertTrue(rows["dynamics.gps"]["repeated"])
+        for field in ("gps", "gps_imu", "gps_speed", "gps_precise"):
+            row = rows[f"dynamics.{field}"]
+            self.assertEqual(row["rate_hz"], 50)
+        health = rows["board_status.hvc_last_seen_s"]
+        self.assertEqual((health["module"], health["unit"], health["channel_type"]),
+                         ("gateway", "s", "health"))
+
+    def test_catalog_preserves_event_and_uplink_metadata(self):
+        from lib.spec.ir import loader
+        parsed = loader.parse_file('''
+groups { group { name: "Events" snapshot_id: 3 next_free_id: 2
+  external_field { name: "fault" id: 1 type: PROTO_BOOL
+    uplink_rate_hz: 5 channel_type: EVENT }
+} }
+''')
+        spec = loader.Spec({"test.textproto": parsed})
+        row = json.loads(gen_telemetry.render_signals_json(spec, "test"))["signals"][0]
+        self.assertEqual(row["channel_type"], "event")
+        self.assertEqual(row["rate_hz"], 5)
+
+    def test_can_uplink_rate_override_and_native_fallback(self):
+        from lib.spec.ir import loader
+        for frequency, override, expected in ((100, "", 100), (100, "uplink_rate_hz: 10", 10), (0, "", 0)):
+            with self.subTest(frequency=frequency, override=override):
+                parsed = loader.parse_file(f'''
+bus {{ name: "Critical" bitrate_bps: 1000000 }}
+groups {{ group {{ name: "Vehicle" snapshot_id: 3 next_free_id: 2 }} }}
+message {{ name: "STATUS" can_id: 256 from_board: "VCU" bus: "Critical" dlc: 1
+  frequency_hz: {frequency}
+  signal {{ name: "speed" encoding {{ bit_length: 8 }} logical {{ physical {{ unit: "m/s" }} }}
+    telemetry {{ group: "Vehicle" field: "speed" id: 1 {override} }} }}
+}}
+''')
+                spec = loader.Spec({"test.textproto": parsed})
+                self.assertEqual(gen_telemetry.validator.validate(spec)[0], [])
+                row = json.loads(gen_telemetry.render_signals_json(spec, "test"))["signals"][0]
+                self.assertEqual(row["rate_hz"], expected)
 
     def test_sql_tracks_every_snapshot_field(self):
         sql = gen_telemetry.render_sql(self.spec, "test", "-- common")
@@ -46,7 +101,7 @@ class TelemetryGeneratorTest(unittest.TestCase):
 
     def test_legacy_inverter_sources_keep_the_same_snapshot_fields(self):
         messages = {message.name: message for _, message in self.spec.messages()}
-        packets = {packet["packet_id"]: packet for packet in json.loads(gen_telemetry.render_json(self.spec))}
+        packets = {packet["packet_id"]: packet for packet in json.loads(gen_telemetry.render_can_json(self.spec))}
         proto = gen_telemetry.render_proto(self.spec, "test")
         for message_name, field in (
             ("INVERTER_STATUS", "motor_speed"),

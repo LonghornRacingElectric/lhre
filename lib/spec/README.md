@@ -60,6 +60,39 @@ Spec files carry no comments. Textproto comments do not survive the
 canonical serializer, so prose goes in `description` fields, which the
 generators forward into generated code and docs.
 
+## Signal discovery metadata
+
+CAN `Signal` entries map into telemetry through `Telemetry`; non-CAN signals
+use `ExternalSignal` in a group's `external_field` entries. The message type
+was previously named `SnapshotField`; textproto field names and deployed
+snapshot wire numbers/types are unchanged.
+
+Channel types are `TELEMETRY` (the default), `EVENT`, and `HEALTH`.
+External telemetry signals must declare a positive, finite `uplink_rate_hz`;
+events and health signals need no rate because they bypass telemetry trimming.
+CAN telemetry bindings default their uplink limit to the parent message's
+`frequency_hz` when no explicit override is set. An inherited 0 means no
+rate trimming; explicit overrides must still be positive and finite. All bindings of one
+shared or repeated CAN field must agree on this metadata. The four GPS external
+fields declare a 50 Hz uplink limit, matching publishd's current default snapshot
+limit. These are policy declarations; publishd does not yet read per-signal
+schema limits, and its runtime environment can override the snapshot limit.
+
+CAN native rates come from message `frequency_hz`.
+The value must be finite and nonnegative; 0 means aperiodic/event-driven.
+Rate-tier enums, overrides, and derived FAST/MEDIUM/SLOW classifications are removed. External signals have no
+native-rate declaration; catalog `rate_hz` uses their uplink rate, or null
+when no rate is declared (for example, health signals).
+An uplink limit does not establish the rate of fresh source observations.
+Numeric external scalars must explicitly declare `unit`; an empty string means
+dimensionless. Repeated fields may omit units for mixed or uncertain components;
+boolean, string, and bytes fields do not require physical units. These rules use
+proto3 optional presence checks in the validator, not protobuf required fields.
+Heartbeat ages are health signals measured in seconds. GPS coordinates use
+degrees and GPS speed uses knots, matching the current gateway producer.
+Mixed-unit GPS arrays and uncertain IMU units leave `unit` unset; per-component
+metadata is future work. No external production rates are assumed.
+
 ## Editing
 
 Use `bazel run //tools/spec:editor`, or edit the files and run
@@ -179,7 +212,7 @@ when IDs are scarce.
 
 - `physical = raw * scale + offset`, applied once at the gateway.
   Firmware works in raw integers, servers see physical values.
-- Rate tiers never affect proto structure or ids. Changing a tier is a
-  one-line diff.
+- Native CAN rates and uplink limits never affect snapshot proto structure
+  or ids. Native rates belong to messages; all their signals share that rate.
 - Telemetry ids are append-only. Bit layout is not, so moving bits around
   is fine since firmware and gateway regenerate together.

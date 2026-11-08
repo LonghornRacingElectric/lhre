@@ -43,7 +43,44 @@ def _validate(*files):
     return validator.validate(loader.Spec(parsed))
 
 
+def _external_errors(metadata="", field_type="PROTO_FLOAT", repeated=False):
+    text = f'''groups {{ group {{ name: "External" snapshot_id: 3 next_free_id: 2
+      external_field {{ name: "sample" id: 1 type: {field_type}
+        repeated: {str(repeated).lower()} {metadata} }}
+    }} }}'''
+    return _validate(text)[0]
+
+
 class ValidatorTest(unittest.TestCase):
+    def test_external_scalar_unit_presence(self):
+        self.assert_error(_external_errors("uplink_rate_hz: 50"), "numeric external scalars require unit")
+        for unit in ('unit: "m"', 'unit: ""'):
+            self.assertEqual(_external_errors(f"{unit} uplink_rate_hz: 50"), [])
+
+    def test_external_unit_exceptions(self):
+        self.assertEqual(_external_errors("uplink_rate_hz: 50", repeated=True), [])
+        for kind in ("PROTO_BOOL", "PROTO_STRING", "PROTO_BYTES"):
+            self.assertEqual(_external_errors("uplink_rate_hz: 50", field_type=kind), [])
+
+    def test_external_telemetry_uplink_is_required(self):
+        self.assert_error(_external_errors('unit: "m"'), "external telemetry signals require uplink_rate_hz")
+        self.assertEqual(_external_errors('unit: "m" uplink_rate_hz: 50'), [])
+        for channel in ("EVENT", "HEALTH"):
+            self.assertEqual(_external_errors(f'unit: "m" channel_type: {channel}'), [])
+
+    def test_external_invalid_uplink_rates(self):
+        for rate in ("-1", "0", "nan", "inf"):
+            self.assert_error(_external_errors(f'unit: "m" uplink_rate_hz: {rate}'),
+                              "uplink_rate_hz must be finite and positive")
+
+    def test_invalid_uplink_rates(self):
+        for rate in ("-1", "0", "nan", "inf"):
+            with self.subTest(rate=rate):
+                message = MESSAGE.replace('field: "speed" id: 1',
+                                          f'field: "speed" id: 1 uplink_rate_hz: {rate}')
+                errors, _ = _validate(REGISTRY, message)
+                self.assert_error(errors, "uplink_rate_hz must be finite and positive")
+
     def assert_error(self, errors, fragment):
         self.assertTrue(any(fragment in e for e in errors),
                         f"no error contains {fragment!r}; got: {errors}")
@@ -192,7 +229,7 @@ message {
         registry = REGISTRY.replace(
             'next_free_id: 2 snapshot_id: 3',
             'next_free_id: 3 snapshot_id: 3 '
-            'external_field { name: "gps" id: 2 type: PROTO_FLOAT repeated: true }')
+            'external_field { name: "gps" id: 2 type: PROTO_FLOAT repeated: true uplink_rate_hz: 50 }')
         errors, _ = _validate(registry, MESSAGE)
         self.assertEqual(errors, [])
 
@@ -223,18 +260,15 @@ message {
         errors, _ = _validate(registry, message)
         self.assert_error(errors, "does not fit in 3 bits")
 
-    # Rule 7: tier resolution (totality + precedence).
-    def test_tier_resolution(self):
-        message = can_spec_pb2.CanMessage(frequency_hz=100)
-        self.assertEqual(validator.resolve_tier(message, can_spec_pb2.Telemetry()), can_spec_pb2.FAST)
-        message.frequency_hz = 10
-        self.assertEqual(validator.resolve_tier(message, can_spec_pb2.Telemetry()), can_spec_pb2.MEDIUM)
-        message.frequency_hz = 0
-        self.assertEqual(validator.resolve_tier(message, can_spec_pb2.Telemetry()), can_spec_pb2.SLOW)
-        message.default_rate_tier = can_spec_pb2.FAST
-        self.assertEqual(validator.resolve_tier(message, can_spec_pb2.Telemetry()), can_spec_pb2.FAST)
-        explicit = can_spec_pb2.Telemetry(rate_tier=can_spec_pb2.SLOW)
-        self.assertEqual(validator.resolve_tier(message, explicit), can_spec_pb2.SLOW)
+    # Rule 7: explicit native rates.
+    def test_native_rate_validation(self):
+        for rate in ("-1", "nan", "inf"):
+            with self.subTest(rate=rate):
+                errors, _ = _validate(REGISTRY, MESSAGE.replace("frequency_hz: 10", f"frequency_hz: {rate}"))
+                self.assert_error(errors, "frequency_hz must be finite and nonnegative")
+        for rate in ("0", "1", "333"):
+            errors, _ = _validate(REGISTRY, MESSAGE.replace("frequency_hz: 10", f"frequency_hz: {rate}"))
+            self.assertEqual(errors, [])
 
     # Rule 8: bus-load advisory.
     def test_bus_load_warning(self):

@@ -39,7 +39,6 @@ message CanMessage {
   uint32 dlc = 7;                // classic: 0..8; FD: valid DLC values only
   double frequency_hz = 8;       // 0 = aperiodic/event-driven
   string description = 9;
-  RateTier default_rate_tier = 10;  // per-message tier default
   repeated Signal signal = 11;
 }
 
@@ -112,8 +111,6 @@ message Telemetry {
   string field = 2;      // snapshot proto field name; globally unique
   uint32 id = 3;         // proto field number within group; ledger rules
                          // are in spec/validator.py
-  RateTier rate_tier = 4;  // TIER_UNSPECIFIED => inherit message default,
-                           // else derive from frequency_hz
   // Indexed arrays: several signals in one message may bind the same
   // repeated field with distinct array_index values ("slots"). When the
   // message has quantity > 1, every frame in the ID block carries the
@@ -127,6 +124,14 @@ message Telemetry {
                                   // deployed protobuf field; new fields derive
                                   // their type from the logical/encoding layers
   bool shared_source = 8;
+  optional double uplink_rate_hz = 9;  // unset = inherit CAN message frequency_hz; 0 fallback = no trimming
+  ChannelType channel_type = 10;
+}
+
+enum ChannelType {
+  TELEMETRY = 0;  // default for existing measurements
+  EVENT = 1;     // individual occurrences, not periodically sampled state
+  HEALTH = 2;    // status and liveness
 }
 
 enum ProtoScalarType {
@@ -140,13 +145,6 @@ enum ProtoScalarType {
   PROTO_BOOL = 7;
   PROTO_STRING = 8;
   PROTO_BYTES = 9;
-}
-
-enum RateTier {
-  TIER_UNSPECIFIED = 0;
-  FAST = 1;
-  MEDIUM = 2;
-  SLOW = 3;
 }
 
 message Bus {
@@ -197,14 +195,17 @@ message Group {
   string description = 5;
   uint32 snapshot_id = 6;         // field number of this group in the root
                                   // telemetry snapshot message
-  repeated SnapshotField external_field = 7;  // fields produced outside CAN,
+  repeated ExternalSignal external_field = 7;  // fields produced outside CAN,
                                                // such as GPS and board liveness
 }
 
-message SnapshotField {
+message ExternalSignal {
   string name = 1;
   uint32 id = 2;
   ProtoScalarType type = 3;
   bool repeated = 4;
   string description = 5;
+  optional string unit = 6;  // required for numeric scalars; "" = dimensionless
+  optional double uplink_rate_hz = 7;  // required for TELEMETRY; presence checked by validator
+  ChannelType channel_type = 8;
 }
