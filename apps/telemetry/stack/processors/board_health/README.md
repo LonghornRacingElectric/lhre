@@ -11,8 +11,8 @@ state independently for eight boards, and publishes one JSON event to
 
 ## Input and states
 
-Input is assumed to be Orion protobuf, without header filtering. A shared topic
-containing other car schemas needs a `car_type` filter before decoding. The
+Only frames with a `car_type: Orion` header are decoded. Frames from other cars
+and untagged frames are skipped and do not count as a live feed. The
 `board_status` block contains `<board>_last_seen_s` for `csm`, `dui`, `hvc`,
 `inverter`, `pdu`, `tsm`, `usm`, and `vcu`.
 
@@ -52,16 +52,30 @@ events stay ordered if the topic ever has more than one partition:
 
 ```json
 {"car": "orion", "board": "vcu", "state": "STALE", "previous": "LIVE",
- "last_seen_s": 9.0, "cause": "frame", "t_ms": 1767225600000}
+ "last_seen_s": 9.0, "cause": "frame", "t_ms": 1767225600000, "t_source": "car"}
 ```
 
 | Field | Meaning |
 | --- | --- |
-| `car` | Always `orion`: input is assumed to be Orion (see above). |
+| `car` | Always `orion`: only Orion frames are processed (see above). |
 | `state`, `previous` | States from the table above. |
 | `last_seen_s` | The value that caused the change; `null` for timeouts, missing blocks, and invalid values. |
 | `cause` | `frame` (a decoded frame changed it) or `telemetry_timeout` (no frames for `BOARD_TELEMETRY_TIMEOUT_S`). |
-| `t_ms` | Processor wall-clock time at publish, epoch ms. Not the car's time. |
+| `t_ms` | Event time, epoch ms. See `t_source`. |
+| `t_source` | `car`: the frame's `time` field, set by `cand` when it built the snapshot. `server`: this processor's clock, used for timeout events and for frames whose car time looks unsynced. |
+
+Frame events use the car's time so late or replayed frames keep the time they
+happened. The car's CM5 sets its clock over the network, so a car that boots
+without a network or an RTC backup battery can report a wrong time until it
+syncs. A frame time before 2025-01-01 or more than 5 minutes ahead of the
+server clock is treated as unsynced, and the event carries server time with
+`t_source: server`. A wrong but plausible car time cannot be detected here.
+
+Delivery is at least once. Each event is sent with `acks="all"` and the
+processor waits for Kafka to acknowledge it; input offsets are committed only
+after every event from a poll is acknowledged. A failed send stops the
+processor, and on restart it reprocesses the uncommitted frames, so an event
+can repeat but is never silently dropped.
 
 The first frame after startup publishes `UNKNOWN -> ...` for every board; that
 is the policy, so a consumer gets an initial state without a separate snapshot.

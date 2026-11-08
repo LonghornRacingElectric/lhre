@@ -1,7 +1,8 @@
 import json
 import unittest
 
-from classifier import BOARDS, BoardStateTracker, change_events, classify
+from classifier import (BOARDS, MAX_FUTURE_SKEW_MS, MIN_VALID_FRAME_TIME_MS,
+                        BoardStateTracker, change_events, classify, event_time_ms)
 
 
 class BoardStateTests(unittest.TestCase):
@@ -66,10 +67,11 @@ class BoardStateTests(unittest.TestCase):
 class ChangeEventTests(unittest.TestCase):
     def test_frame_change_event(self):
         events = change_events({"vcu": ("LIVE", "STALE")},
-                               {"vcu_last_seen_s": 9.0}, "frame", 1000)
+                               {"vcu_last_seen_s": 9.0}, "frame", 1000, "car")
         self.assertEqual(events, [{
             "car": "orion", "board": "vcu", "state": "STALE",
-            "previous": "LIVE", "last_seen_s": 9.0, "cause": "frame", "t_ms": 1000,
+            "previous": "LIVE", "last_seen_s": 9.0, "cause": "frame",
+            "t_ms": 1000, "t_source": "car",
         }])
 
     def test_no_changes_no_events(self):
@@ -96,6 +98,32 @@ class ChangeEventTests(unittest.TestCase):
     def test_missing_status_frame(self):
         [event] = change_events({"vcu": ("LIVE", "UNKNOWN")}, None, "frame", 0)
         self.assertIsNone(event["last_seen_s"])
+
+
+class EventTimeTests(unittest.TestCase):
+    NOW = 1_767_225_600_000  # server clock, 2026-01-01 UTC
+
+    def test_synced_car_time_is_used(self):
+        # MessageToDict renders int64 as a string; plain ints work too.
+        for value in (str(self.NOW - 500), self.NOW - 500):
+            with self.subTest(value=value):
+                self.assertEqual(event_time_ms(value, self.NOW), (self.NOW - 500, "car"))
+
+    def test_replayed_frames_keep_their_car_time(self):
+        hour_ago = self.NOW - 3_600_000
+        self.assertEqual(event_time_ms(str(hour_ago), self.NOW), (hour_ago, "car"))
+
+    def test_unsynced_or_missing_car_time_falls_back_to_server(self):
+        for value in ("0", 0, str(MIN_VALID_FRAME_TIME_MS - 1),
+                      str(self.NOW + MAX_FUTURE_SKEW_MS + 1), None, "", "-5",
+                      "abc", 1.5, True):
+            with self.subTest(value=value):
+                self.assertEqual(event_time_ms(value, self.NOW), (self.NOW, "server"))
+
+    def test_bounds_are_inclusive(self):
+        for value in (MIN_VALID_FRAME_TIME_MS, self.NOW + MAX_FUTURE_SKEW_MS):
+            with self.subTest(value=value):
+                self.assertEqual(event_time_ms(value, self.NOW), (value, "car"))
 
 
 if __name__ == "__main__":

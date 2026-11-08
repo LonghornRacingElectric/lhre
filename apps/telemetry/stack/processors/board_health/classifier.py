@@ -4,6 +4,15 @@ import math
 
 BOARDS = ("csm", "dui", "hvc", "inverter", "pdu", "tsm", "usm", "vcu")
 
+# Earliest frame time accepted as a real clock reading (2025-01-01 UTC). The
+# car's CM5 sets its clock over the network; booting without a network or an
+# RTC backup battery can leave it at 1970 or another wrong date until it syncs.
+MIN_VALID_FRAME_TIME_MS = 1_735_689_600_000
+# A frame stamped further than this ahead of the server clock is treated as a
+# wrong car clock. Frames behind the server clock are kept: replayed backlog is
+# legitimately old.
+MAX_FUTURE_SKEW_MS = 5 * 60 * 1000
+
 
 def classify(last_seen_s, stale_after_s):
     if isinstance(last_seen_s, bool) or not isinstance(last_seen_s, (int, float)):
@@ -58,7 +67,32 @@ def _finite_or_none(value):
     return value if math.isfinite(value) else None
 
 
-def change_events(changes, board_status, cause, t_ms, car="orion"):
+def _int_or_none(value):
+    # MessageToDict renders int64 fields such as `time` as decimal strings.
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return None
+
+
+def event_time_ms(frame_time, server_now_ms):
+    """Pick an event timestamp: (t_ms, "car") or (t_ms, "server").
+
+    The car's frame time says when the car built the snapshot, and stays right
+    when frames arrive late or are replayed. It is used when it looks like a
+    synced clock; otherwise the server's time is used and labelled as such.
+    """
+    car_ms = _int_or_none(frame_time)
+    if (car_ms is not None
+            and MIN_VALID_FRAME_TIME_MS <= car_ms <= server_now_ms + MAX_FUTURE_SKEW_MS):
+        return car_ms, "car"
+    return server_now_ms, "server"
+
+
+def change_events(changes, board_status, cause, t_ms, t_source="server", car="orion"):
     """One JSON-ready event per changed board, in board order.
 
     Timeout changes have no frame behind them, so their last_seen_s is null.
@@ -75,6 +109,7 @@ def change_events(changes, board_status, cause, t_ms, car="orion"):
             "last_seen_s": _finite_or_none(board_status.get(f"{board}_last_seen_s")),
             "cause": cause,
             "t_ms": t_ms,
+            "t_source": t_source,
         }
         for board, (previous, current) in sorted(changes.items())
     ]
