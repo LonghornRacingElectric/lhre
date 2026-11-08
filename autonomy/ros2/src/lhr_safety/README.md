@@ -133,7 +133,17 @@ arguments:
   distance against the PDR table with
   [the fault injection tools](../../../testing/tools/fault_injection/README.md).
 - The geofence is a radius around where the car armed. The car's will be
-  the surveyed test-area boundary from RTK.
+  the surveyed test-area boundary from RTK. In sim it defaults to 300 m so
+  one fence holds every gate course
+  ([#229](https://github.com/LonghornRacingElectric/lhre/issues/229)): no
+  point on a closed course is farther from the start than half its lap, the
+  rules checker caps laps at 500 m, and acceleration reaches 152 m with its
+  braking zone. Measured from spawn, the farthest cones are 184 m on the
+  500 m extreme scenario, 147 m on the worst of 1000 generated
+  rules-compliant seeds, and 79 m on AMZ's FSG layout. `lhr_gazebo`'s
+  `test_geofence_reach.py` fails on any committed world or generated gate
+  course that comes within 20 m of the fence. The fault matrix's `geofence`
+  case still shrinks it to 20 m on purpose.
 
 ## Tests
 

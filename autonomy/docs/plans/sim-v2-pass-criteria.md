@@ -137,8 +137,9 @@ Each joins the matrix with its check.
   stay inside the model and are not rendered. Cone contacts are geometric
   checks, not modeled impacts.
 - Every gate course has to fit inside the safety geofence, a fixed radius
-  around where the car arms. The 150 m default may not reach the 500 m extreme
-  scenario or the real layouts, so it is being sized to the largest course
+  around where the car arms. It defaults to 300 m, which holds any course the
+  rules checker accepts (laps of at most 500 m) and acceleration's braking
+  zone, and a test fails on any gate course that comes within 20 m of it
   ([#229](https://github.com/LonghornRacingElectric/lhre/issues/229)).
 - Our rules checker is stricter than at least two real layouts. Generated
   courses stay inside it; the stack is held to the real layouts too.

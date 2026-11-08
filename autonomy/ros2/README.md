@@ -1044,7 +1044,7 @@ for the contact model and off-track-distance uncertainty.
 | `cmd_timeout_s` | `0.25` | Control command age (s) that counts as stale; the controller publishes at 20 Hz once it has a mission status |
 | `max_position_std_m` | `0.0` | Largest pose standard deviation (m) before the EKF counts as diverged; 0 is off, the default until GNSS bounds the EKF's covariance |
 | `max_speed_factor` | `1.5` | Speed above this multiple of `vehicle.yaml`'s top speed counts as diverged |
-| `geofence_radius_m` | `150.0` | Distance (m) from where the car armed (entered Ready) that trips the geofence |
+| `geofence_radius_m` | `300.0` | Distance (m) from where the car armed (entered Ready) that trips the geofence. Holds every legal sim course (see [lhr_safety](src/lhr_safety/README.md)) |
 | `steer_min_speed_mps` | `2.0` | Speed (m/s) below which the steering check is skipped |
 | `steer_yaw_rate_tol` | `0.15` | Smallest yaw-rate mismatch (rad/s) that counts |
 | `steer_rel_tol` | `0.5` | Mismatch allowed as a fraction of the expected yaw rate |
