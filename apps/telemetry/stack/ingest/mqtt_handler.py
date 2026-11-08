@@ -2,13 +2,13 @@ import datetime
 import os
 import logging
 import json
-import csv
 import pickle
 import base64
 import sys
 import time
 import queue
 import threading
+import uuid
 import numpy as np
 import copy
 import grpc
@@ -58,9 +58,6 @@ class MQTTHandler:
         self.target = target
         self.sessions = db_sessions
         self.client = mqtt_client.Client(client_id = name)
-        # logging state for Orion csv output
-        self.orion_log_path: Path | None = None
-        self.orion_cols: list[str] = []
         self.client.username_pw_set(name)
         self.client.user_data_set(self)  # Pass self to callbacks
         self.client.on_connect = self.on_connect
@@ -69,6 +66,9 @@ class MQTTHandler:
         self.scalar_or_list = lambda val, scalar: val.tolist()[0] if scalar else val.tolist()
         self.cache = []
         self.cache_enable = cache_enable
+        self.orion_csv_session = (
+            datetime.datetime.now().strftime('%Y%m%d_%H%M%S_%f') + '_' + uuid.uuid4().hex
+        )
         self._shutdown = False
         self.partition_manager = PartitionManager(gap_seconds=300)
         self.partition_enabled_cars = {"Angelique", "Orion"}
@@ -79,7 +79,7 @@ class MQTTHandler:
         }
 
         # Non-blocking producer/consumer queues.
-        # MQTT callback enqueues jobs, workers perform blocking DB and CSV IO.
+        # MQTT callback enqueues jobs; workers perform blocking database IO.
         self.db_queues = {
             "Nightwatch": queue.Queue(maxsize=4096),
             "Angelique": queue.Queue(maxsize=4096),
@@ -92,11 +92,6 @@ class MQTTHandler:
         for worker in self.db_workers.values():
             worker.start()
 
-        # Single CSV worker preserves append order for Orion log output.
-        self.csv_queue = queue.Queue(maxsize=15000)
-        self.csv_worker = threading.Thread(target=self._csv_worker, daemon=True)
-        self.csv_worker.start()
-        
         # gRPC bridge client instead of Kafka. A single startup channel used to
         # wedge silently after an MQTT reconnect (DB kept flowing, realtime feed
         # stalled), so the channel now uses keepalive and is recreated on error by
@@ -178,10 +173,6 @@ class MQTTHandler:
                 self.db_queues[car].put_nowait(None)
             except queue.Full:
                 pass
-        try:
-            self.csv_queue.put_nowait(None)
-        except queue.Full:
-            pass
         try:
             self.bridge_queue.put_nowait(None)
         except queue.Full:
@@ -269,22 +260,6 @@ class MQTTHandler:
                         self.db_queues[car].task_done()
                         pending_acks -= 1
 
-    def _csv_worker(self):
-        while True:
-            item = self.csv_queue.get()
-            if item is None:
-                self.csv_queue.task_done()
-                break
-
-            file_path, row_vals = item
-            try:
-                with open(file_path, 'a', newline='') as f:
-                    csv.writer(f).writerow(row_vals)
-            except Exception as e:
-                logging.error(f"CSV worker write failed for {file_path}: {e}")
-            finally:
-                self.csv_queue.task_done()
-
     def on_message(self, client: mqtt_client.Client, userdata, msg):
         if msg.topic == 'client-connections':
             connected_client_id = msg.payload.decode().strip()
@@ -307,6 +282,9 @@ class MQTTHandler:
                 userdata.client.publish('server-communication', welcome_msg)
                 logging.info(f'\t\tBEVO-Angelique connected. Sent welcome message with next packet_id: {next_packet_id}')
             elif connected_client_id in {'BEVO-Orion', 'BEVO_ORION'}:
+                self.orion_csv_session = (
+                    datetime.datetime.now().strftime('%Y%m%d_%H%M%S_%f') + '_' + uuid.uuid4().hex
+                )
                 logging.warning('\t\tBEVO-Orion has connected. Querying database for latest packet_id to send welcome message...')
                 try:
                     with QueryBuilder("Orion") as qb:
@@ -316,27 +294,6 @@ class MQTTHandler:
                         else:
                             next_packet_id = 1
 
-                    # determine log base directory: allow override for mounted volume
-                    base_env = os.getenv("LOG_BASE_DIR")
-                    if base_env:
-                        log_base = Path(base_env)
-                    else:
-                        repo_root = Path(__file__).parents[2]
-                        log_base = repo_root / "logs"
-                    log_dir = log_base / "orion"
-                    log_dir.mkdir(parents=True, exist_ok=True)
-                    log_file = log_dir / f"orion_log_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-                    cols = []
-                    # Qualify columns with table name so similarly named fields map correctly.
-                    for table, col_spec in self.table_specs["Orion"].items():
-                        if (table in {"packet", "dynamics", "controls", "pack", "diagnostics_low", "diagnostics_high", "thermal", "board_status"}):
-                            cols.extend(f"{table}.{col}" for col in col_spec.keys())
-                    with open(log_file, 'w', newline='') as f:
-                        csv.writer(f).writerow(cols)
-                    logging.info(f'\t\tCreated new log file for Orion at {log_file}')
-                    # record path and header columns for later appends
-                    self.orion_log_path = log_file
-                    self.orion_cols = cols
                 except Exception as e:
                     logging.error(f'\t\tUnable to fetch latest Orion packet_id: {e}')
                     next_packet_id = 1
@@ -437,7 +394,7 @@ class MQTTHandler:
         :param car:         str         car type ("Orion" / "Nightwatch" / "Angelique")
         '''
         try:
-            self.bridge_queue.put_nowait((payload, car))
+            self.bridge_queue.put_nowait((payload, car, self.orion_csv_session if car == 'Orion' else ''))
         except queue.Full:
             logging.error(f'Bridge queue full; dropping realtime forward for {car}')
 
@@ -453,10 +410,12 @@ class MQTTHandler:
             if item is None:
                 self.bridge_queue.task_done()
                 break
-            payload, car = item
+            payload, car, csv_session = item
             try:
                 request = bridge_pb2.SensorDataRequest(payload=payload, car_type=car)
-                response = self.bridge_stub.SendSensorData(request, timeout=2)
+                response = self.bridge_stub.SendSensorData(
+                    request, timeout=2, metadata=(('csv-session-id', csv_session),)
+                )
                 if not response.success:
                     logging.warning(f'Bridge returned failure: {response.message}')
             except grpc.RpcError as e:
@@ -587,34 +546,6 @@ class MQTTHandler:
                 self.db_queues[car].put_nowait(insert_jobs)
             except queue.Full:
                 logging.error(f"DB queue full for {car}; dropping message packet_id={message_dict.get('packet_id')}")
-
-        if car == "Orion" and self.orion_log_path is not None:
-            flat = {}
-            for table in table_specs.keys():
-                model = builder._models.get(self._model_key(table))
-                if not model:
-                    continue
-
-                data = {col.name: message_dict[col.name] for col in model.__table__.columns if col.name in message_dict} if table == "packet" else None
-                if data is None:
-                    data = ({col.name: message_dict[table][col.name] for col in model.__table__.columns if col.name in message_dict[table]}
-                            | {"packet_id": message_dict["packet_id"]}) if table in message_dict else None
-
-                if data is not None:
-                    for col_name, val in data.items():
-                        flat[f"{table}.{col_name}"] = val
-
-            row_vals = []
-            for col in self.orion_cols:
-                val = flat.get(col, "")
-                if isinstance(val, (list, dict)):
-                    val = json.dumps(val)
-                row_vals.append(val)
-            try:
-                self.csv_queue.put_nowait((self.orion_log_path, row_vals))
-            except queue.Full:
-                logging.error("CSV queue full for Orion log; dropping row")
-
 
     def _b64_ingest(self, payload: str, high_freq: bool):
         '''
