@@ -7,15 +7,15 @@ and scores every run against the
 table of passes and failures rather than a judgment call. The runner now
 selects the Mid-360 and camera-fusion sensor stack for
 [#206](https://github.com/LonghornRacingElectric/lhre/issues/206).
-It still uses the MVP matrix and scorer; the expanded matrix, course-derived
-lap reference and FMU checks in the [Sim v2 criteria](../../../docs/plans/sim-v2-pass-criteria.md)
+It uses the MVP matrix with course-derived reference-lap scoring; the expanded
+matrix and FMU checks in the [Sim v2 criteria](../../../docs/plans/sim-v2-pass-criteria.md)
 require the remaining gate work.
 
 ## Files
 
 | File | What it does |
 |---|---|
-| `run_gate.sh` | Runs the matrix: autocross seeds 1 to 5 three times each, acceleration three times and skidpad three times on the no-shortcuts stack, plus one truth-stack baseline per autocross seed. One headless launch per run, recorded to a bag |
+| `run_gate.sh` | Runs the matrix: autocross seeds 1 to 5 three times each, acceleration three times and skidpad three times on the no-shortcuts stack. One headless launch per run, recorded to a bag |
 | `score_gate.py` | Reads every run folder and writes `results.csv` (one row per run) and `summary.md` (the pass/fail table). Rerunnable, it only reads |
 | `watch_run.py` | Ends each run in sim time and writes how it ended to `end.txt`. The fault tools use it too |
 
@@ -24,8 +24,9 @@ lidar_source:=mid360 enable_stereo_camera:=true enable_camera_lidar_fusion:=true
 Sensor selection belongs to the runner; standalone Gazebo launch defaults
 remain unchanged. Fusion supplies `/lhr/perception/cones_classified` to the
 planner and enables LiDAR side inference for camera fallback.
-The baselines use `perception:=sim estimator:=truth lidar_source:=gazebo`,
-with stereo and fusion explicitly disabled, as the lap-time reference.
+Optional baselines use `perception:=sim estimator:=truth lidar_source:=gazebo`,
+with stereo and fusion explicitly disabled, for comparison only. Lap time is
+scored against a [reference lap](#the-reference-lap) computed from the course.
 A run ends `SETTLE_S` sim seconds after the mission reaches `FINISHED` or
 `EMERGENCY`, so the bag holds the stop, or at `RUN_S` sim seconds.
 Skidpad joins the matrix on its own once
@@ -52,13 +53,13 @@ container:
 
 Environment variables pick the matrix: `SEEDS` (`1 2 3 4 5`), `REPEATS` (3),
 `ACCEL_REPEATS` and `SKIDPAD_REPEATS` (3 each, empty or 0 for none),
-`BASELINE` (1, 0 to skip the
-truth-stack runs), `RUN_S` (180 sim seconds), `SETTLE_S` (5 sim seconds),
-`HANG_S` (60 wall seconds), `OUT` and `EXTRA` (more
-launch arguments, split on whitespace). The runner's per-run arguments follow
-`EXTRA`, so gate sensor selection and baseline exclusions take precedence.
-The full matrix without skidpad is 23 runs. Historical MVP timing predates
-the combined Mid-360/camera stack. A quick check:
+`BASELINE` (0; 1 adds one truth-stack run per seed, for comparison only),
+`RUN_S` (180 sim seconds), `SETTLE_S` (5 sim seconds), `HANG_S` (60 wall
+seconds), `OUT` and `EXTRA` (more launch arguments, split on whitespace).
+The runner's per-run arguments follow `EXTRA`, so gate sensor selection and
+baseline exclusions take precedence. The full matrix without skidpad is
+18 runs. Historical MVP timing predates the combined Mid-360/camera stack.
+A quick check:
 
 ```bash
 SEEDS=1 REPEATS=1 ACCEL_REPEATS=1 SKIDPAD_REPEATS=1 ../testing/tools/gate/run_gate.sh
@@ -157,7 +158,7 @@ Each gate run gets a pass or fail per check:
 | `cones` | `cones_hit` is 0 | metrics (#156) |
 | `cte` | `max_cte` at most 1.0 m | metrics |
 | `ekf` | `max_pos_error` at most 0.5 m | metrics |
-| `lap_time` | at most 1.5 times the same seed's baseline; always passes for acceleration and skidpad | metrics |
+| `lap_time` | at most 1.5 times the course's reference lap; always passes for acceleration and skidpad | metrics, world |
 | `health` | no node other than metrics dies or exits before teardown, no `EMERGENCY`, and the sim did not hang | launch log, bag, `end.txt` |
 
 The finish is the reference gate for autocross (`/lhr/metrics/lap_complete`)
@@ -171,14 +172,40 @@ The gate passes only when every run passes. Per the pass criteria, a failed
 run gets an issue in the milestone and is repeated after the fix, never
 dropped.
 
+### The reference lap
+
+`lap_time` compares the lap with the fastest standing-start lap of the
+world's reference centerline under the run's own speed limits: `v_max`,
+`a_lat_max` (floored at `v_min`, as the planner is), `max_accel` and
+`max_decel` ([#232](https://github.com/LonghornRacingElectric/lhre/issues/232)).
+`lhr_metrics/reference_lap.py` computes it from the world and the limits in
+the run's `metrics.csv`, starting at rest on the start/finish gate. It
+depends only on the course and those numbers, so it is the same on every
+machine. It replaced the truth-stack baseline, which laps 11 to 20% slower
+on red-mesa than on the Mac and fails outright on some rules-compliant
+seeds.
+
+On every lap recorded on red-mesa through 11/8, the no-shortcuts stack
+lapped at 0.99 to 1.00 times the reference on the Gazebo plant (autocross
+seeds 1 to 5 and rules-compliant seeds 1 to 3) and 1.04 on the FMU plant.
+The car can beat the reference slightly because pure pursuit cuts inside
+the centerline. The truth stack lapped at 1.10 to 1.19, and 1.70 on
+rules-compliant seed 1. So 1.5 leaves room for honest variation and still
+catches a car that crawls or stalls.
+
+`results.csv` gives `reference_lap_s` and `lap_reference` (`course`) for each
+autocross run, and the summary lists each course's reference. A campaign
+recorded before the Gazebo launch logged the speed limits to metrics falls
+back to its truth-stack baselines (`lap_reference` reads `truth baseline`).
+
 ## Rules-compliant autocross campaigns
 
-Set `TRACK_STYLE=rules_autocross` to replace the autocross rows and their
-truth baselines with the new seeded course style. The runner generates each
-matching world under `$OUT/worlds` and passes it explicitly to launch. Default
-`TRACK_STYLE=autocross` preserves the MVP matrix and its layouts. Run IDs and
-the results CSV's `track_style` distinguish the styles; baseline matching uses
-both style and seed, so a short MVP baseline cannot score a longer course.
+Set `TRACK_STYLE=rules_autocross` to replace the autocross rows with the new
+seeded course style. The runner generates each matching world under
+`$OUT/worlds` and passes it explicitly to launch, and the scorer reads the
+reference lap from that world. Default `TRACK_STYLE=autocross` preserves the
+MVP matrix and its layouts. Run IDs and the results CSV's `track_style`
+distinguish the styles.
 Use a separate `OUT` for each campaign. For example, from `autonomy/ros2`:
 
 ```bash

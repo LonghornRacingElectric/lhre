@@ -632,7 +632,10 @@ with truth or EKF estimation. EKF mode scores `/lhr/vehicle/odom_truth`; truth
 mode scores the plant-owned `/lhr/vehicle/odom`. Estimates only feed error
 measurements. Rows also record the mission the launch actually runs (always
 acceleration on the acceleration track), Gazebo's scenario, plant, seed, track style,
-waypoints, perception, estimator, and selected estimator perturbations. `reference_closed:=false` scores an open course
+waypoints, perception, estimator, selected estimator perturbations, and the
+speed limits `pure_pursuit` drives under (`lookahead_dist`, `a_lat_max`,
+`v_min`, `v_max`, `max_accel`, `max_decel`), which the gate's reference lap
+reads. `reference_closed:=false` scores an open course
 without inventing a return segment or a circuit lap. Missing or invalid world
 geometry fails rather than silently using a different course. See the
 [metrics contract](../lhr_metrics/README.md#reference-and-lap-contract).

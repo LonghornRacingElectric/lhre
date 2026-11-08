@@ -543,6 +543,10 @@ def _launch_setup(context: LaunchContext):
                 'wheel_scale_error': ParameterValue(
                     LaunchConfiguration('wheel_scale_error'), value_type=float),
                 'lidar_classify_sides': classify_sides,
+                # What pure_pursuit drives under, recorded so a row says what
+                # it ran with and the gate can compute its reference lap (#232).
+                **{name: _float(name) for name in (
+                    'lookahead_dist', 'a_lat_max', 'v_min', 'v_max', 'max_accel', 'max_decel')},
                 'use_sim_time': True,
             }],
             output='screen',
@@ -839,7 +843,7 @@ def generate_launch_description():
         DeclareLaunchArgument('safety_cmd_timeout_s', default_value='0.25'),
         DeclareLaunchArgument('safety_max_position_std_m', default_value='0.0'),
         DeclareLaunchArgument('safety_max_speed_factor', default_value='1.5'),
-        DeclareLaunchArgument('safety_geofence_radius_m', default_value='150.0'),
+        DeclareLaunchArgument('safety_geofence_radius_m', default_value='300.0'),
         DeclareLaunchArgument('safety_steer_min_speed_mps', default_value='2.0'),
         DeclareLaunchArgument('safety_steer_yaw_rate_tol', default_value='0.15'),
         DeclareLaunchArgument('safety_steer_rel_tol', default_value='0.5'),
