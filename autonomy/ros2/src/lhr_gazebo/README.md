@@ -774,3 +774,39 @@ This checks perception and route integration on truth odometry. Metrics and
 safety were disabled; independent cone-contact scoring and the EKF driving
 campaign remain unverified. Bounded-run teardown is not a clean-shutdown
 acceptance check.
+
+### Follow-up validation (2026-11-08)
+
+With explicit outlier rejection/refitting, 833 tests across the 11 relevant
+ROS packages passed with no errors, failures or skips. This includes the
+displaced-cone regressions, route, controller, mission, perception, launch,
+metrics, safety, EKF and Mid-360 simulator checks.
+
+Six seed-1 driving runs at the normal freshness settings did not complete:
+three Mid-360/camera/EKF/safety repeats held at acquisition with insufficient
+measured color and entry support; the ideal-cone/truth baseline repeatedly
+reset acquisition stability; the Gazebo-LiDAR/camera/truth run completed two
+right laps before faulting on the first left lap; and the corresponding
+EKF/safety run faulted immediately after entering the route. All six reached
+the 180 s simulation cap with the mission still `DRIVING`. Safety-enabled
+runs used the CPU diagnostic override `safety_lidar_timeout_s:=1.5`.
+
+Profiling the ideal sensor found approximately 0.76–0.95 s per detection
+callback despite its configured 10 Hz rate, including approximately 0.61 s
+building/publishing cone visualization. Cone receipt ages exceeded the
+planner's 0.5 s freshness allowance and reset the stable-frame count.
+`rviz:=false` does not suppress that visualization work. An additional
+diagnostic ideal-cone/truth run with `acquisition_timeout:=1000000.0`
+completed two right laps, two left laps, exit and stop, reaching `FINISHED`
+at approximately 101.3 s. The override effectively disables both cone and
+odometry expiry for that bounded run; the default remains 0.5 s.
+
+Independent truth analysis confirmed the diagnostic run's directed lap
+sequence, zero conservative swept nominal-cone contacts and zero final
+speed. It retained five simulation seconds after completion. Metrics and
+safety were disabled for that run. There is still no independent Skidpad
+off-course verdict, and this does not establish a scored sensor/EKF or
+Sim v2 gate pass. Input throughput/freshness, realistic actuator/braking
+behavior and the repeated scored campaign remain follow-up work. Latched
+planner faults leave the mission in `DRIVING`; escalation and recovery are
+tracked in [#236](https://github.com/LonghornRacingElectric/lhre/issues/236).
