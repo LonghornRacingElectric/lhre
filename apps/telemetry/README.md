@@ -37,6 +37,9 @@ The core is Kafka/bridge, ingest with Mosquitto/PostgreSQL/Grafana, and the
 field enricher. Optional processors are GPS classifier, lap timer, track
 mapper, Kafka test, GG plot, car status, and
 [events/faults](stack/processors/events_faults/README.md).
+Events/faults publishes Orion fault transitions and includes a demo that runs
+without Kafka. Its state is in memory; see its README before relying on restart
+or replay behavior. Its service-free tests are included in `:unit_tests`.
 
 ## Logsync
 

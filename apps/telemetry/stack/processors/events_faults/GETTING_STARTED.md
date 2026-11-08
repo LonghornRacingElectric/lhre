@@ -1,82 +1,82 @@
 # Getting started: events_faults
 
-The [README](README.md) describes the proposed events and fault inputs.
-The Kafka loop currently logs frames;
-`detect_active_faults` is implemented but decoding, change detection, and event
-publishing are still TODOs.
+Start with the demo, then follow the three implementation files. The
+[README](README.md) describes the event contract and delivery limits.
+
+## Demo without Kafka
+
+From the repository root:
+
+```bash
+bazel run --config=local //apps/telemetry/stack/processors/events_faults:demo
+```
+
+The demo serializes six actual Orion protobuf frames and passes them through
+`FaultProcessor` with a producer stub that prints JSON. It does not connect to
+a broker. The sequence is:
+
+| Frame | Diagnostics | Output |
+| --- | --- | --- |
+| 1 | No active faults | None |
+| 2 | Stomp fault active | `fault_raised: stomp_fault` |
+| 3 | Same fault still active | None |
+| 4 | Stomp fault clear | `fault_cleared: stomp_fault` |
+| 5 | Inverter run mask `4` | `fault_raised: run_faults[2]` |
+| 6 | Inverter run mask `0` | `fault_cleared: run_faults[2]` |
+
+## Follow the implementation
+
+1. `faults.py`: `detect_active_faults` reads diagnostics and returns fault names.
+   `diff_faults` compares sets: `current - previous` raises faults and
+   `previous - current` clears faults.
+2. `processor.py`: validate the car header, decode generated `OrionSensorData`,
+   and reject missing/invalid diagnostics or timestamps. Send changes as JSON
+   events, wait for acknowledgments, then remember the accepted state. After
+   the batch succeeds, commit its Kafka offsets.
+3. `main.py`: configure the consumer/producer and poll until SIGTERM or SIGINT.
+   A publishing failure propagates and exits without advancing input offsets.
+
+Tests run without any services:
+
+```bash
+bazel test --config=local //apps/telemetry/stack/processors/events_faults:faults_test //apps/telemetry/stack/processors/events_faults:processor_test
+```
+
+The processor tests serialize real generated protobufs and use mocked Kafka
+clients. They check duplicate state, raised/cleared transitions, malformed and
+non-Orion input, invalid masks, older frames, acknowledgment ordering, and
+publish failures.
 
 ## Where the fault signals come from (decided)
 
-The processor consumes fault signals from the generated CAN schema, independently
-of `car_status`'s advisory `active_faults` list. The current detector accepts
-`diagnostics_high` pedal/stomp booleans and inverter bitmasks as stand-in inputs.
-When dedicated fault signals are defined, update the detector to use them.
-
-The shared [lib/spec](../../../../../lib/spec/README.md) is the
-schema source. Bazel generates the telemetry protobuf and Python bindings;
-there is no checked-in CSV/protobuf regeneration workflow on this branch.
+The detector reads the schema's explicit diagnostics signals, independently
+of `car_status`'s advisory fault list. [lib/spec](../../../../../lib/spec/README.md)
+is authoritative; Bazel generates the protobuf and Python bindings.
 Follow the [telemetry codegen guide](../../../../../lib/codegen/telemetry/README.md)
 and [BEVO schema notes](../../../../BEVO/schema/README.md) when changing fields.
-Do not copy old CSVs or generated bindings from the source branch.
+Do not copy old CSVs or generated bindings into the source tree.
 
-## Run the scaffold
+## Run against Kafka
 
-From the repository root, with Docker running:
+With the core running, enable the processor:
 
 ```bash
-bazel build --config=local //apps/telemetry/stack/processors/events_faults:events_faults_binary
-bazel run --config=local //apps/telemetry/stack/processors/events_faults:events_faults_load
-./apps/telemetry/stack/server_devtool.sh up
 ./apps/telemetry/stack/server_devtool.sh enable events_faults
 ./apps/telemetry/stack/server_devtool.sh logs events_faults
 ```
 
-`--config=local` avoids requiring a BuildBuddy key for the explicit Bazel
-commands. The devtool also builds/loads the registered image before enabling
-it. Compose runs the loaded tag with `--no-build`; reload it after source edits.
-The core creates the external `telemetry_network` used by the processor.
-
-A healthy start logs `events_faults ready. in=sensor_data out=fault_events`.
-It starts at the latest offset for a new consumer group, so publish new frames
-to see activity. No events are published yet. The existing consumer uses its
-default automatic commits; reliable output delivery needs a deliberate
-publish/acknowledgment and offset-commit strategy before deployment.
-
-Environment variables are set in `docker-compose.yml`:
-
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `KAFKA_BOOTSTRAP_SERVERS` | `kafka:9092` | Broker inside Docker |
-| `KAFKA_INPUT_TOPIC` | `sensor_data` | Protobuf frames in |
-| `KAFKA_OUTPUT_TOPIC` | `fault_events` | Proposed JSON events out |
-| `KAFKA_GROUP_ID` | `events-faults-group` | Consumer group |
-| `LOGLEVEL` | `INFO` | Set to `DEBUG` while investigating |
-
-## Finish the channel
-
-The TODOs in `main.py` mark the remaining work:
-
-1. Decode the selected car's protobuf from `record.value`. Use the Kafka
-   `car_type` header to avoid interpreting another car's payload as Orion.
-2. Pass the diagnostics block to `detect_active_faults`. It returns stable
-   fault names; it does not publish events.
-3. Compare the active set with the previous set for that car. Publish one
-   `fault_raised` for an added fault and one `fault_cleared` for a removed fault.
-   Repeated unchanged state should publish nothing.
-
-The existing
-[car-status processor](../car_status/README.md) provides examples of protobuf
-decoding and Kafka JSON publishing. Keep detector/change logic testable without
-Kafka, and add a Bazel `py_test` when implementing those steps. Cover no faults,
-a raised fault, repeated state, a cleared fault, and invalid bitmask inputs.
-
-Once publishing works, exercise it with synthetic protobuf frames on an
-isolated test broker. Inspect the resulting events with:
+Inspect live JSON events:
 
 ```bash
 docker exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
   --bootstrap-server localhost:29092 --topic fault_events --from-beginning
 ```
 
-The current scaffold will not create output for that consumer. Update the
-README and this guide as the remaining steps become functional.
+A new group starts at the latest offset, so send new frames after it connects.
+Each Orion input needs one `car_type: Orion` header, a positive `time` in
+milliseconds, and a populated `diagnostics_high` block. An explicit empty
+block represents healthy state. Use an isolated broker/topics for fake data.
+
+State is local to the process and is not restored after restart. This demo
+proves live transitions and acknowledgment ordering; it does not prove durable
+fault history, replay correctness after losing state, or production readiness.

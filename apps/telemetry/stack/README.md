@@ -17,9 +17,10 @@ database, and Grafana images. Commands are detached by default:
 ```
 
 The optional [events/faults processor](processors/events_faults/README.md) is
-available with `./server_devtool.sh enable events_faults`. It currently logs
-incoming frames and provides a fault detector; decoding and event publishing
-remain unfinished.
+available with `./server_devtool.sh enable events_faults`. It decodes Orion
+diagnostics and publishes raised/cleared events to `fault_events`, waiting for
+output acknowledgments before committing input offsets. Fault state is held in
+memory; it is a live channel rather than a durable fault ledger.
 
 For Bazel-managed components, `build` invokes each component's `_load` target
 and then `docker compose up --no-build`. Logsync and the PM2 viewer retain their

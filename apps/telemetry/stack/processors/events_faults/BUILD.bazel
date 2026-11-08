@@ -1,4 +1,4 @@
-load("@rules_python//python:defs.bzl", "py_binary")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
 load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
 load("//apps/telemetry:compatibility.bzl", "NOT_WINDOWS")
 load("//apps/telemetry:container.bzl", "telemetry_service_image")
@@ -7,18 +7,61 @@ package(default_visibility = ["//apps/telemetry:__subpackages__"])
 
 exports_files(["docker-compose.yml"])
 
-py_binary(
-    name = "events_faults_binary",
-    srcs = ["main.py"],
-    imports = ["../../..", "../../../.."],
-    main = "main.py",
+py_library(
+    name = "faults_lib",
+    srcs = ["faults.py"],
+    imports = ["."],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_library(
+    name = "processor_lib",
+    srcs = ["processor.py"],
+    imports = [".", "../../..", "../../../.."],
     deps = [
+        ":faults_lib",
         "//apps/telemetry/stack/ingest:ingest_lib",
-        requirement("kafka-python"),
         requirement("protobuf"),
     ],
     target_compatible_with = NOT_WINDOWS,
+)
+
+py_binary(
+    name = "events_faults_binary",
+    srcs = ["main.py"],
+    imports = [".", "../../..", "../../../.."],
+    main = "main.py",
+    deps = [
+        ":processor_lib",
+        requirement("kafka-python"),
+    ],
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
+)
+
+py_binary(
+    name = "demo",
+    srcs = ["demo.py"],
+    main = "demo.py",
+    deps = [":processor_lib"],
+    target_compatible_with = NOT_WINDOWS,
+    visibility = ["//visibility:public"],
+)
+
+py_test(
+    name = "faults_test",
+    srcs = ["test_faults.py"],
+    main = "test_faults.py",
+    deps = [":faults_lib"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_test(
+    name = "processor_test",
+    srcs = ["test_processor.py"],
+    main = "test_processor.py",
+    deps = [":processor_lib"],
+    target_compatible_with = NOT_WINDOWS,
 )
 
 telemetry_service_image(

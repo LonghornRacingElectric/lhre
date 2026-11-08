@@ -1,107 +1,119 @@
 # Events and faults processor
 
-Starter project for new members. The processor connects to Kafka and logs
-incoming frames; its fault detection logic is being developed in stages. New to
-it? Start with [GETTING_STARTED.md](GETTING_STARTED.md).
+Consumes Orion telemetry from Kafka's `sensor_data` topic and publishes JSON
+`fault_raised` / `fault_cleared` events to `fault_events`. Repeated unchanged
+fault state produces no event. This is an optional live processor; it does not
+write to PostgreSQL or change the telemetry schema.
 
-## What it should do
+See [GETTING_STARTED.md](GETTING_STARTED.md) for the demo and development flow.
 
-Turn the car's fault signals into discrete *raised* / *cleared* events, so
-something downstream can react to "a fault just happened" instead of polling
-every frame.
+## Inputs and detection
 
-It reads frames from the `sensor_data` topic. The signals to start from are in
-Orion's `diagnostics_high` block in the generated telemetry schema selected by
-`//apps/telemetry:current_schema_proto`:
+Only messages with one explicit `car_type: Orion` header are decoded. Other
+cars, missing/ambiguous car tags, malformed protobuf, missing diagnostics, and
+non-positive timestamps are skipped. Invalid frames are logged and their input
+offsets can advance; there is no dead-letter topic.
 
-- `post_faults` and `run_faults`: inverter fault bitmasks, one bit per fault.
-- Pedal-sensor booleans ending in `_disconnect`, `_out_range`, `_implause`, or `_mismatch` (APPS / BPPS / BSE).
+The generated `OrionSensorData.diagnostics_high` supplies:
+
+- APPS/BPPS/BSE disconnect, out-of-range, mismatch, and implausibility booleans.
 - `stomp_fault`.
+- Individual bits 0–23 of `post_faults` and `run_faults`, named by field and bit
+  index (for example, `run_faults[2]`). Inverter bit-name definitions are not
+  available here.
 
-The detector treats asserted pedal and stomp booleans as active faults. It
-decodes set bits 0–23 of `post_faults` and `run_faults`, labeling them by field
-and bit index (for example, `run_faults[2]`) because this repo has no inverter
-bit-name table. Fuse, contactor, and shutdown/status fields are omitted because
-their asserted polarity is not documented. Bits above 23 are omitted because
-the fields are float32 and cannot reliably preserve higher integer bits.
+Fuse, contactor, and shutdown/status booleans are excluded because their asserted
+polarity is not documented. Inverter masks are float32 on the wire. Negative,
+fractional, non-finite, or values at least `2**24` reject the whole frame rather
+than clearing previously active faults using rounded or invalid data.
 
-The finished processor keeps the set of active faults and publishes to
-`fault_events` whenever that set changes:
+A valid frame is a complete diagnostics snapshot. An absent diagnostics block
+never means that all faults cleared. Frames older than the latest accepted
+telemetry timestamp are ignored. Equal timestamps are allowed. Event `t_ms`
+is the packet's timestamp in milliseconds, not the precise CAN transition time;
+it is never replaced with server wall-clock time.
+
+## Events
 
 ```json
-{"kind": "fault_raised", "fault": "run_faults[2]", "car": "orion", "t_ms": 1767225600000}
+{"kind":"fault_raised","fault":"stomp_fault","car":"orion","t_ms":1767225601000,"packet_id":2,"event_id":"sensor_data:0:1:fault_raised:stomp_fault"}
 ```
 
-`fault_events` is the proposed output topic (this processor does not publish yet), so the
-event shape is yours to settle with whoever will read it.
+`fault_cleared` uses the same fields. Kafka's message key is `orion`, keeping
+output for the car on one partition. `event_id` combines input topic, partition,
+offset, event kind, and fault name, so retries of the same transition have the
+same identity. It is not a global CAN sample ID. Consumers can deduplicate by
+this field.
 
-"Events" here means fault events. Race start/end (`event_id`) travels over MQTT
-and is handled by `ingest`; no events or faults topic exists on Kafka today.
+Each frame compares the detected fault set with the previously accepted set.
+The first valid frame starts from an empty set and raises every asserted fault.
+Events are ordered by kind (raised before cleared), then fault name.
 
-**Input signals (decided):** this processor consumes new CAN fault signals that
-come out of SDD generation. It does not reuse `car_status`'s `active_faults`.
-Those signals will show up in the generated schema and code once they are
-defined in [lib/spec](../../../../../lib/spec/README.md). Until then, the
-`diagnostics_high` fields above are the stand-in. See
-[GETTING_STARTED.md](GETTING_STARTED.md#where-the-fault-signals-come-from-decided).
+## Delivery and limits
 
-## Quick start
+The producer requires `acks=all`, retries failed sends, and waits for each send
+acknowledgment before input offsets are committed. A publish or commit failure
+exits the process; Compose restarts it. A crash between publishing and committing
+can produce duplicates. This is not exactly-once delivery; see the
+[Kafka delivery semantics](https://kafka.apache.org/42/design/design/).
 
-Needs the core stack (Kafka) running first. From the repo root:
+Fault state is held in memory. Restarting can announce existing active faults
+again, and cannot reconstruct a cleared transition when its previous active
+state was lost. Do not use this stream as a durable fault ledger or as the only
+source of an authoritative current-fault display. Persistent state and recovery
+across restarts/rebalances are future work. Run one processor instance with the
+current one-partition input topic; distributing a car's frames over partitions
+is not supported. No debounce, heartbeat, or fault-event database is provided.
+
+Fault definitions are generated from [lib/spec](../../../../../lib/spec/README.md).
+The detector is independent of `car_status`'s advisory `active_faults` list.
+Dedicated future CAN fault signals should be added through the shared schema
+workflow, then mapped in `faults.py`.
+
+## Run and verify
+
+From the repository root:
 
 ```bash
-./apps/telemetry/stack/server_devtool.sh up                      # core stack, if not already up
-./apps/telemetry/stack/server_devtool.sh enable events_faults    # build + start this processor
-./apps/telemetry/stack/server_devtool.sh logs events_faults      # watch it work
+# No Kafka, Docker, database, or car required.
+bazel test --config=local //apps/telemetry/stack/processors/events_faults:faults_test //apps/telemetry/stack/processors/events_faults:processor_test
+bazel run --config=local //apps/telemetry/stack/processors/events_faults:demo
+
+# Live processor: requires the core stack and its Kafka broker.
+./apps/telemetry/stack/server_devtool.sh up
+./apps/telemetry/stack/server_devtool.sh enable events_faults
+./apps/telemetry/stack/server_devtool.sh logs events_faults
 ```
 
-You should see `events_faults ready` and, once frames flow, a `frame #...` line
-every 100 frames. Nothing flows until something publishes to `sensor_data`; the
-processor starts at the latest offset and does not replay history. To see a
-topic from the host (Kafka is published on `localhost:29092`):
+For a new consumer group, consumption starts at the latest offset. Existing
+groups resume their committed position. Publish new Orion frames after startup.
+The output topic must already exist or broker topic auto-creation must be enabled.
+The source topic is also used by real telemetry; synthetic broker demos belong
+on a separate test broker or isolated input/output topics.
 
-```bash
-python -c "
-from kafka import KafkaConsumer
-for m in KafkaConsumer('fault_events', bootstrap_servers='localhost:29092'): print(m.value.decode())"
-```
-
-## Your task
-
-The TODOs in `main.py` mark the steps:
-
-1. **Decode.** Turn `record.value` into an `OrionSensorData` using the generated code in `stack/ingest/protobuf/`. `car_status/main.py` does this; note it picks the car from the `car_type` header.
-2. **Detect.** Call the existing `detect_active_faults` helper on its
-   `diagnostics_high` block. The helper is implemented but is not connected to
-   the consumer loop yet.
-3. **Diff and publish.** Compare with the previous frame and emit raised/cleared events only on change.
-4. **Test it.** Put the detect/diff logic in a small pure function so it can be tested without Kafka, and add a `py_test`. `car_status/` (`classifier.py`, `test_classifier.py`, `BUILD.bazel`) is the example.
-
-Things to figure out along the way:
-
-- `post_faults` / `run_faults` are `float32` in the proto, which cannot hold more than 24 bits exactly. Which bits can you trust?
-- Which bit is which fault? Find the inverter's fault table so events have names instead of `run_faults[2]`.
-- For the fuse, contactor, and shutdown booleans, does `true` mean ok or tripped? Nothing documents it; find out before including them.
-- Angelique's `current_errors` / `latching_faults` are opaque bytes/JSON. Skip them or reverse-engineer them?
-- What happens when a sensor flickers? You will get a raised/cleared pair per flicker unless you debounce.
-
-Update this README when you finish: replace the task list with what the
-processor actually does, and document any new environment variables.
+Container targets follow the `events_faults_binary`, `_image`, `_load`, `_push`,
+and `_smoke_test` contract. Compose runs Bazel-loaded tags; reload after edits.
+The old Dockerfile is retained for legacy use and is not the supported build path.
 
 ## Configuration
 
-Set in `docker-compose.yml`.
+Set these in `docker-compose.yml`:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `KAFKA_BOOTSTRAP_SERVERS` | `kafka:9092` | Broker address inside `telemetry_network` |
+| `KAFKA_BOOTSTRAP_SERVERS` | `kafka:9092` | Broker address |
 | `KAFKA_INPUT_TOPIC` | `sensor_data` | Raw protobuf frames |
-| `KAFKA_OUTPUT_TOPIC` | `fault_events` | Where your events go |
+| `KAFKA_OUTPUT_TOPIC` | `fault_events` | JSON transition events |
 | `KAFKA_GROUP_ID` | `events-faults-group` | Consumer group |
+| `LOGLEVEL` | `INFO` | Logging verbosity |
 
 ## Files
 
-`main.py` the skeleton. `Dockerfile` / `docker-compose.yml` the legacy Docker
-path. `BUILD.bazel` the Bazel path: targets follow the standard
-`events_faults_binary`, `_image`, `_load`, `_push`, and `_smoke_test` contract. It
-is optional and never part of `core_images`.
+- `faults.py`: pure fault detection and set comparison.
+- `processor.py`: header validation, generated protobuf decoding, acknowledged
+  publishing, and batch offset commits.
+- `main.py`: Kafka configuration, polling, and shutdown.
+- `test_faults.py` / `test_processor.py`: detection, decoding, transitions,
+  skipped input, timestamp ordering, and publish-failure checks.
+- `demo.py`: real serialized protobuf inputs with a printing producer stub;
+  demonstrates the application logic, not Kafka broker delivery.

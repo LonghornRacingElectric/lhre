@@ -359,6 +359,8 @@ test_suite(
     name = "unit_tests",
     tests = [
         "//apps/telemetry/analysis/tests:analysis_tests",
+        "//apps/telemetry/stack/processors/events_faults:faults_test",
+        "//apps/telemetry/stack/processors/events_faults:processor_test",
         "//apps/telemetry/stack/tests:protobuf_test",
     ],
     target_compatible_with = NOT_WINDOWS,
