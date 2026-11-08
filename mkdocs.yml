@@ -99,6 +99,7 @@ nav:
           - FMU Seeds 2026-10-26: autonomy/testing/2026-10-26-fmu-seeds/README.md
           - MVP Gate 2026-10-28: autonomy/testing/2026-10-28-mvp-gate/README.md
           - FMU on red-mesa 2026-11-07: autonomy/testing/2026-11-07-fmu-gazebo-red-mesa/README.md
+          - Mid-360 Fusion Checks 2026-11-08: autonomy/testing/2026-11-08-mid360-fusion-gate/README.md
           - Livox Test Tools: autonomy/testing/tools/livox/README.md
           - Fault Injection Tools: autonomy/testing/tools/fault_injection/README.md
           - MVP Gate Tools: autonomy/testing/tools/gate/README.md

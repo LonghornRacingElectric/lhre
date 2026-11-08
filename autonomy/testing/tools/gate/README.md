@@ -93,9 +93,9 @@ these three topics with the installed ROS tools, saving their output beside
 the campaign's raw data:
 
 ```bash
-ros2 topic hz /lhr/lidar/points
-ros2 topic hz /lhr/sensor/zed2i/left/image_rect
-ros2 topic hz /lhr/sensor/zed2i/right/image_rect
+ros2 topic hz --wall-time /lhr/lidar/points
+ros2 topic hz --wall-time /lhr/sensor/zed2i/left/image_rect
+ros2 topic hz --wall-time /lhr/sensor/zed2i/right/image_rect
 ```
 
 Use separate terminals so their observation intervals overlap. `ros2 topic

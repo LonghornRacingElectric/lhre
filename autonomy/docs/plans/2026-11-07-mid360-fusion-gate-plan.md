@@ -1,6 +1,21 @@
 # Mid-360 and camera fusion gate implementation plan
 
-> **For agentic workers:** Use `superpowers:executing-plans` to implement this plan task by task. Steps use checkboxes for tracking. This document is a plan; no runtime changes or new campaign results accompany it.
+> **For agentic workers:** Use `superpowers:executing-plans` to implement this plan task by task. Steps use checkboxes for tracking.
+
+**Implementation status, 2026-11-08:** Gate selection, complete launch-command
+provenance and regression coverage are implemented. The full colcon run
+reports 1,056 tests, zero failures and two native-FMU tests skipped because no
+FMU artifact was supplied. All 286 Gazebo checks pass, including both cloud
+sources and estimator modes. Independent review found no implementation
+issues. Official red-mesa validation remains pending access; skidpad and the
+FMU/gate integration dependencies below remain outstanding. The Mac
+development smoke tripped `LIDAR_STALE` at the unchanged 0.3 s timeout and is
+retained as a failure, not acceptance evidence. With the documented 1.5 s Mac
+diagnostic timeout, seed 1 passes, but acceleration fails the stay-stopped
+check (0.69 m/s after its first stop). The
+[development results](../../testing/2026-11-08-mid360-fusion-gate/README.md)
+retain both campaigns; official acceptance and sustained gate-machine rates
+remain unchecked below.
 
 **Goal:** Close [#206](https://github.com/LonghornRacingElectric/lhre/issues/206) by selecting Mid-360 and camera fusion for gate runs, verifying the planner and LiDAR fallback, and recording sensor rates on red-mesa.
 
@@ -39,15 +54,15 @@
 
 ## Task 1: Select and test the gate sensor stack
 
-**Modify:** `autonomy/testing/tools/gate/run_gate.sh`, its adjacent `README.md`, `autonomy/ros2/src/lhr_gazebo/test/test_rules_autocross.py`, `test_camera_lidar_fusion_launch.py`, and the Gazebo package `README.md`.
+**Modify:** `autonomy/testing/tools/gate/run_gate.sh`, its adjacent `README.md`, `autonomy/ros2/src/lhr_gazebo/test/test_lidar_source.py`, `test_camera_lidar_fusion_launch.py`, and the Gazebo package `README.md`. Shell-only runner checks live in the new `test_gate_runner.py`, so they can also run without ROS; the existing rules-course scoring checks remain intact.
 
 **Interface:** `plan()` continues emitting `run_id launch_argument...` rows. Each non-baseline row includes the three new sensor arguments; baseline rows retain their existing compatible stack. `args.txt` records the complete launch command, including common arguments, generated world and `EXTRA`, while remaining the marker written last for completed runs.
 
-- [ ] Extend the existing runner-plan test to assert Mid-360, stereo and fusion on every gate row for both autocross styles, acceleration and a fixture skidpad world. Assert that baseline rows retain sim/truth and do not enable the incompatible sensor stack. Run the test and confirm it fails before implementation.
-- [ ] Add the shared sensor arguments to the gate rows only. Preserve run IDs, expected-run accounting, resume behavior and baseline matching. Document that the runner now selects #206's sensors and use a fresh `OUT` for all validation; old runs in an existing output directory are skipped by design.
-- [ ] Record the full executed arguments in `args.txt`, preserving its write-last completion contract. Exercise `one_run()` with stubbed ROS/process commands to compare the invoked arguments with the saved arguments without launching Gazebo or running real cleanup commands.
-- [ ] Extend launch evaluation for `lidar_source:=mid360` plus stereo/fusion in truth and EKF modes. Assert that `lidar_sim` exists, the GPU cloud is remapped away from `/lhr/lidar/points`, the caster uses clean plant odometry, the detector has `classify_sides=True`, and the planner consumes `/lhr/perception/cones_classified` with `boundary` pairing. Preserve the existing typed-override/startup checks.
-- [ ] Run the focused tests in the ROS environment, then the full `lhr_gazebo` tests. Update the adjacent READMEs with gate-specific selection, baseline behavior and the fresh-output requirement. Commit this as the gate configuration change.
+- [x] Add runner-plan checks for Mid-360, stereo and fusion on every gate row for both autocross styles, acceleration and a fixture skidpad world. Assert that baseline rows retain sim/truth and do not enable the incompatible sensor stack. Run the tests and confirm they fail before implementation.
+- [x] Add the shared sensor arguments to the gate rows only. Preserve run IDs, expected-run accounting, resume behavior and baseline matching. Document that the runner now selects #206's sensors and use a fresh `OUT` for all validation; old runs in an existing output directory are skipped by design.
+- [x] Record the full executed arguments in `args.txt`, preserving its write-last completion contract. Exercise `one_run()` with stubbed ROS/process commands to compare the invoked arguments with the saved arguments without launching Gazebo or running real cleanup commands.
+- [x] Extend launch evaluation for `lidar_source:=mid360` plus stereo/fusion in truth and EKF modes. Assert that `lidar_sim` exists, the GPU cloud is remapped away from `/lhr/lidar/points`, the caster uses clean plant odometry, the detector has `classify_sides=True`, and the planner consumes `/lhr/perception/cones_classified` with `boundary` pairing. Preserve the existing typed-override/startup checks.
+- [x] Run the focused tests in the ROS environment, then the full `lhr_gazebo` tests. Update the adjacent READMEs with gate-specific selection, baseline behavior and the fresh-output requirement. Commit this as the gate configuration change.
 
 From `autonomy/ros2`, with the ROS environment and built overlay sourced:
 
@@ -66,8 +81,8 @@ Expected: the focused assertions pass, shell syntax passes, and colcon reports n
 
 **Interface:** The planner's classified topic preserves cone IDs and geometry. Fresh confirmed blue/yellow evidence supplies sides; expired/unusable evidence uses the latest LiDAR side or unknown namespace. Orange preserves source geometry rather than disappearing from the planner input.
 
-- [ ] Run the existing fusion-to-planner camera-loss/recovery and orange-finish tests on the selected combined stack. Extend coverage only where the Mid-360 combination exposes a gap; avoid duplicating existing expiry and ambiguity tests.
-- [ ] Reproduce #85 using a 3.0 m straight with 2 m cone spacing, and #86 using a deliberately wrong initial side proposal followed by motion and consistent corrective observations. Keep these failures visible as dependencies; put their algorithm fixes in their owning issues if they are required for reliable fallback.
+- [x] Run the existing fusion-to-planner camera-loss/recovery and orange-finish tests, plus combined-source launch checks. No additional expiry or ambiguity tests were needed.
+- [x] Reproduce #85 using a 3.0 m straight with 2 m cone spacing, and #86 using a deliberately wrong initial side proposal followed by independent corrective proposals. The first labels 20 of 40 cones incorrectly with votes +1/-0.9. The second retains seeded `[LEFT, RIGHT]` after ten `[RIGHT, LEFT]` proposals. These pure reproductions establish the algorithm limitations, not closed-loop behavior under motion; their fixes remain in the owning issues.
 - [ ] On red-mesa, perform a separate controlled camera interruption and restoration. Record planner input before loss, after the configured camera-age limit, and after recovery, alongside the resulting centerline. Keep this deliberate interruption separate from the clean campaign. Verify orange/unknown cones survive the transitions.
 - [ ] If a failure is new to this integration, add a failing regression, apply the smallest shared fix, update the adjacent README, and rerun the owning tests before the campaign.
 
@@ -95,14 +110,14 @@ Expected: integration checks pass; pre-existing #85/#86 failures remain identifi
 
 ## Task 4: Verify and prepare the change for review
 
-- [ ] In Ubuntu/ROS or the Mac development container, run `./scripts/build.sh`, `colcon test`, then `colcon test-result --verbose` from `autonomy/ros2`. Confirm the new tests are discovered and no relevant test silently skips.
-- [ ] Run `uv run --group docs mkdocs build --strict` from the repo root. Check the gate README, Gazebo README, plan and campaign links. Bazel does not build or test autonomy.
+- [x] In Ubuntu/ROS or the Mac development container, run `./scripts/build.sh`, `colcon test`, then `colcon test-result --verbose` from `autonomy/ros2`. The new tests are discovered and pass. Only the two artifact-dependent native-FMU tests skip.
+- [x] Run `uv run --group docs mkdocs build --strict` from the repo root. Check the gate README, Gazebo README, plan and campaign links. Bazel does not build or test autonomy.
 - [ ] Review the diff and campaign results against all three #206 requirements. Title the eventual PR `Autonomous: Make Mid-360 and camera fusion the gate stack`; describe remaining dependencies explicitly. Close #206 only after its course/fallback and red-mesa rate evidence exist, including skidpad.
 
 ## Completion checklist
 
-- [ ] Default gate runs select Mid-360, stereo and fusion; truth baselines still launch.
+- [x] Default gate runs select Mid-360, stereo and fusion; truth baselines still launch.
 - [ ] Combined-stack planner wiring and live fallback/recovery are verified.
 - [ ] Seeds 1–5, acceleration and skidpad have recorded, passing evidence.
 - [ ] Camera and LiDAR rates are recorded on red-mesa with machine, load and time basis.
-- [ ] Documentation and tests pass; remaining Sim v2 work is accurately distinguished from this issue's results.
+- [x] Documentation and automated tests pass (two native-FMU tests require an artifact); remaining acceptance work and development-run failures are explicitly recorded.
