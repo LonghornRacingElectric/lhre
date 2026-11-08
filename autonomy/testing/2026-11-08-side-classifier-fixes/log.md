@@ -39,3 +39,15 @@ Times are America/Chicago on 2026-11-08; runner console times use UTC.
   failures, max CTE 0.2542 m, EKF error 0.0481 m and stop 1.37 m. Retained
   separately at `2026-11-08-175111-seed2-camera-fallback-check`; no automated
   camera/LiDAR timestamp trace or measured pause duration was captured.
+- Provisional integration of draft skidpad #137 head `938d96c4` with #206
+  `f02f206f`, local detached merge `503024c2`: all 16 packages build and
+  seven affected suites pass 800 tests with no errors/failures/skips.
+- The one Mid-360/stereo/fusion/EKF/safety skidpad attempt failed at the
+  180.0 sim-second cap (264.2 wall seconds), still `DRIVING` with acquisition
+  holding and the plant stationary at the start. No final metrics CSV was
+  emitted, so the scorer reports `no_metrics` and 0/1 pass. Captured camera
+  support is below the acquisition requirements; replay of the observed
+  orange points rejects the entry corridor. The existing autocross reference
+  also places the valid skidpad start 10.586 m off its polyline. No acceptance
+  repeats were attempted with these blockers. Raw output is preserved in
+  both containers at `2026-11-08-issue206-skidpad-smoke`.

@@ -33,6 +33,14 @@ rate/default-timeout validation remain pending.
 
 **Goal:** Close [#206](https://github.com/LonghornRacingElectric/lhre/issues/206) by selecting Mid-360 and camera fusion for gate runs, verifying the planner and LiDAR fallback, and recording sensor rates on red-mesa.
 
+**Skidpad diagnostic update:** a temporary integration with draft #137 head
+`938d96c4` builds and passes 800 affected-package tests. Its combined-stack
+attempt stays in acquisition `HOLD`; observed color support and entry-lane
+support are insufficient. The existing autocross reference also mis-scores
+the skidpad entry/exit, so independent skidpad scoring must be implemented
+before acceptance repeats. See the
+[provisional validation](../../testing/2026-11-08-side-classifier-fixes/README.md#provisional-skidpad-validation).
+
 **Architecture:** Select the sensor stack in the existing gate runner, which the issue explicitly permits. Keep standalone Gazebo launch defaults and truth baselines intact. Reuse the existing fusion, planner wiring, scorer and regression tests; change perception algorithms only if a reproduced failure requires it.
 
 **Tech stack:** Bash, Python/pytest, ROS 2 Jazzy, Gazebo Harmonic, colcon, MkDocs.

@@ -155,6 +155,51 @@ development container. Exact camera-priority/expiry behavior is covered by
 the automated fusion tests; this live check adds the operator observation
 and the completed driving outcome.
 
+### Provisional skidpad validation
+
+Skidpad is absent from this branch and remains on draft
+[#137](https://github.com/LonghornRacingElectric/lhre/pull/137), head
+`938d96c4e6f568543ebfacc00f3fd2dd848035da`. A detached temporary worktree
+combined that head with `f02f206f` as local merge `503024c2`. The two merge
+conflicts retained both the rules-autocross and skidpad imports/documentation;
+no skidpad implementation was added to the #206 branch.
+
+All 16 packages built. The seven affected package suites passed **800 tests,
+zero errors/failures/skips**. One headless skidpad diagnostic used the gate
+runner with `SEEDS="" BASELINE=0 ACCEL_REPEATS=0 SKIDPAD_REPEATS=1` and
+`EXTRA="safety_lidar_timeout_s:=1.5"`, preserving Mid-360, stereo/fusion, EKF
+and safety. It ran in a separate container, `lhr-skidpad-206`, on ROS domain
+112 and Gazebo partition `issue206-skidpad`.
+
+The attempt **failed, 0/1**, ending at the 180.0 s simulation cap after
+264.2 wall seconds, still in `DRIVING`. It never completed the mission, so
+metrics did not emit a final CSV; the scorer reports `no_metrics`, not a
+measured CTE, cone-contact or EKF result. The failed row is retained in
+[`skidpad-diagnostic-results.csv`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/testing/2026-11-08-side-classifier-fixes/skidpad-diagnostic-results.csv).
+Raw bag, launch/record logs, watcher result and exact arguments are preserved
+at `~/lhr-test-data/2026-11-08-issue206-skidpad-smoke/` in both
+`lhr-skidpad-206` and `lhr-autonomy`. SharePoint upload remains pending.
+
+The live attempt did not acquire the route: mission state reached `DRIVING`
+but acquisition stayed `HOLD` and truth position stayed at the start,
+approximately `(0, -16.8747)`. A captured acquisition report had fit RMS
+0.0173 m, circle support `[9, 9]`, and camera-colored ring support
+`[4, 1, 4, 1]`; route acquisition requires at least two per ring. The verified
+stream contained five orange detections: two near y=-12 m, two near y=-10 m,
+and one near y=-0.557 m. Replaying those observed points through
+`_entry_corridor` returned `None`; it requires at least three points spanning
+3.8 m on each side. These observations identify the immediate unmet
+acquisition checks, not the underlying reason for missing color evidence.
+
+Independent scoring also needs skidpad support. The existing scorer pairs
+blue/yellow cone indices as an autocross polyline. On this world it reports
+reference distances of 10.586 m at the valid start and 6.224 m at `(0, 12)`
+on the exit. Its paired road strips likewise omit the orange entry/exit
+lanes. CTE/off-course results from this reference cannot establish skidpad
+acceptance. Preserve the failed attempt; fix acquisition and add a correct
+independent skidpad reference/envelope before the three scored repeats.
+Draft #137's outlier rejection and planner-fault work also remain open.
+
 ## Data and limits
 
 Raw bags, logs, exact arguments and the comparison harness remain in
