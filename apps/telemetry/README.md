@@ -35,7 +35,8 @@ devtool to bind Postgres, Kafka, and logsync storage onto the SSD.
 
 The core is Kafka/bridge, ingest with Mosquitto/PostgreSQL/Grafana, and the
 field enricher. Optional processors are GPS classifier, lap timer, track
-mapper, Kafka test, GG plot, and car status.
+mapper, Kafka test, GG plot, car status, and
+[events/faults](stack/processors/events_faults/README.md).
 
 ## Logsync
 
