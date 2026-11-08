@@ -44,10 +44,11 @@ runs can be compared without guessing which geometry or gate was used.
 `git_sha` comes from the launch file and carries a `-dirty` suffix when the
 tree has uncommitted changes, since a clean-looking id on a modified tree
 is worse than no id. Only `mvs_demo.launch.py` fills `git_sha` and the
-Sensor and Control columns. `gazebo_demo.launch.py` passes neither, so
-Gazebo rows read `unknown` and the node's MVS defaults there (`lidar`
-false, `min_cluster_points` 3 while Gazebo runs 1); take a Gazebo run's
-commit and settings from its launch arguments. `vehicle_sha256` hashes `lhr_vehicle`'s config file
+Sensor columns. `gazebo_demo.launch.py` passes neither, so Gazebo rows read
+`unknown` and the node's MVS defaults there (`lidar` false,
+`min_cluster_points` 3 while Gazebo runs 1); take a Gazebo run's commit and
+sensor settings from its launch arguments. Both launches fill the Control
+columns, which the gate's reference lap reads (below). `vehicle_sha256` hashes `lhr_vehicle`'s config file
 with the same formula the study harness in `simulation/tools` uses, so a
 sim run and a BobDyn study are comparable on that field.
 
@@ -127,6 +128,20 @@ the mission manager latches. Autocross `FINISHED` without a verified lap is
 recorded as `invalid_completion` and fails. The mission manager then
 publishes `/lhr/mission/complete` and pursuit brakes to a stop before
 FINISHED; this node never feeds reference geometry to control.
+
+## Reference lap
+
+[`reference_lap.py`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/ros2/src/lhr_metrics/lhr_metrics/reference_lap.py)
+computes the time to drive the reference centerline once around, from rest
+at the start/finish gate, under the Control columns' limits: `v_max`, the
+lateral-acceleration limit `a_lat_max` floored at `v_min` (as `pursuit_node`
+floors it), `max_accel` and `max_decel`. Curvature at each 0.5 m sample is
+the circle through the points 3 m either side, so cone jitter between
+vertices does not read as a corner. The Sim v2 gate scores lap time against
+it ([#232](https://github.com/LonghornRacingElectric/lhre/issues/232)); see
+the [gate tools](../../../testing/tools/gate/README.md#the-reference-lap).
+The node itself does not use it: it is plain Python for the scorer, tested
+against closed-form circle laps.
 
 ## Footprint, boundaries and contacts
 

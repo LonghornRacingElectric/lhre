@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Score an MVP gate campaign against docs/plans/mvp-pass-criteria.md.
+Score a gate campaign against the pass criteria (docs/plans/).
 
 Reads every run folder run_gate.sh wrote under <out>/runs (metrics.csv from
 lhr_metrics, the bag and the launch log) and writes <out>/results.csv, one
@@ -13,6 +13,9 @@ Course scoring (completion, off course, cones, CTE, EKF error) is
 lhr_metrics' verdict. The bag adds what metrics does not record: distance
 from the finish to standstill, that the mission reached FINISHED and that
 the car stayed stopped. Times are sim seconds, mapped through /clock.
+Lap time is scored against the reference lap lhr_metrics computes from the
+course and the run's own speed limits (#232); a campaign recorded before
+metrics logged those limits falls back to its truth-stack baselines.
 end.txt (from watch_run.py) says how the run ended; a hung sim fails
 health. Events listed in <out>/waived.txt are named in the summary, not
 scored.
@@ -25,6 +28,8 @@ import os
 import re
 import sys
 
+from lhr_metrics.reference import paired_centerline, world_geometry
+from lhr_metrics.reference_lap import reference_lap
 from rclpy.serialization import deserialize_message
 from rosbag2_py import ConverterOptions, SequentialReader, StorageOptions
 from rosidl_runtime_py.utilities import get_message
@@ -36,12 +41,16 @@ MAX_EKF_ERROR_M = 0.5
 LAP_TIME_RATIO = 1.5
 COMPLETE = {'autocross': 'lap', 'acceleration': 'mission_finished',
             'skidpad': 'mission_finished'}
+SPEED_LIMITS = ('v_max', 'v_min', 'a_lat_max', 'max_accel', 'max_decel')
+WORLDS = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                      '../../../ros2/src/lhr_gazebo/worlds')
 STOPPED = 0.1  # m/s
 MOVED = 0.5  # m/s: rolling again after the stop fails the run
 
 CHECKS = ['completes', 'stops', 'off_course', 'cones', 'cte', 'ekf', 'lap_time', 'health']
-FIELDS = (['id', 'kind', 'event', 'track_style', 'seed', 'outcome', 'lap_time_s', 'baseline_lap_s',
-           'lap_ratio', 'max_cte', 'off_track_count', 'cones_hit', 'max_pos_error',
+FIELDS = (['id', 'kind', 'event', 'track_style', 'seed', 'outcome', 'lap_time_s',
+           'reference_lap_s', 'baseline_lap_s', 'lap_reference', 'lap_ratio', 'max_cte',
+           'off_track_count', 'cones_hit', 'max_pos_error',
            'stop_dist_m', 'stop_time_s', 'max_v_after_stop', 'finished', 'emergency',
            'early_exits', 'end', 'sim_s', 'wall_s', 'invalid_reason'] + CHECKS + ['passed'])
 RUN_ID = re.compile(
@@ -105,6 +114,28 @@ def finish_and_stop(topics, event):
     return result
 
 
+def course_reference(metrics, out):
+    """Return the reference lap for a metrics row, or None if the row cannot give one."""
+    try:
+        limits = {name: float(metrics.get(name) or 0.0) for name in SPEED_LIMITS}
+        gate = [float(metrics[k]) for k in ('lap_gate_x_m', 'lap_gate_y_m',
+                                            'lap_gate_tangent_x', 'lap_gate_tangent_y')]
+    except (KeyError, ValueError):
+        return None
+    if limits['v_max'] <= 0.0:
+        return None  # recorded before the Gazebo launch forwarded the limits
+    world = metrics.get('reference_world', '')
+    # The path is from the machine that ran; the same world is in the
+    # campaign's worlds/ (generated) or the source tree (committed).
+    for candidate in (world, os.path.join(out, 'worlds', os.path.basename(world)),
+                      os.path.join(WORLDS, os.path.basename(world))):
+        if world and os.path.isfile(candidate):
+            left, right, _ = world_geometry(candidate)
+            return reference_lap(paired_centerline(left, right), start=gate[:2],
+                                 tangent=gate[2:], **limits)
+    return None
+
+
 def early_exits(log_path):
     """Return nodes that exited before teardown began; metrics ending a run is not one."""
     if not os.path.exists(log_path):
@@ -161,6 +192,12 @@ def score(run_dir, run_id):
                 'outcome', 'lap_time_s', 'max_cte', 'off_track_count', 'cones_hit',
                 'max_pos_error')})
             row['invalid_reason'] = m.get('lap_invalid_reason', '')
+            if event == 'autocross':
+                try:
+                    ref = course_reference(m, os.path.dirname(os.path.dirname(run_dir)))
+                except (OSError, ValueError) as error:  # a bad world fails lap_time, not the score
+                    ref, row['invalid_reason'] = None, f'reference lap: {error}'
+                row['reference_lap_s'] = '' if ref is None else f'{ref:.2f}'
     row.setdefault('outcome', 'no_metrics')
     if not os.path.exists(os.path.join(run_dir, 'args.txt')):
         # run_gate.sh writes args.txt last, so the run was cut short.
@@ -198,9 +235,14 @@ def judge(row, baselines):
         lap = number(row.get('lap_time_s'))
         base = baselines.get((row.get('track_style', event), row['seed']))
         row['baseline_lap_s'] = '' if base is None else f'{base:.2f}'
-        if lap is not None and base:
-            row['lap_ratio'] = f'{lap / base:.2f}'
-        checks['lap_time'] = lap is not None and bool(base) and lap <= LAP_TIME_RATIO * base
+        ref = number(row.get('reference_lap_s'))
+        if ref:
+            row['lap_reference'] = 'course'
+        elif base:
+            ref, row['lap_reference'] = base, 'truth baseline'
+        if lap is not None and ref:
+            row['lap_ratio'] = f'{lap / ref:.2f}'
+        checks['lap_time'] = lap is not None and bool(ref) and lap <= LAP_TIME_RATIO * ref
     else:
         checks['lap_time'] = True  # no lap to compare on a straight
     row.update({k: 'pass' if v else 'FAIL' for k, v in checks.items()})
@@ -234,16 +276,18 @@ def main(out):
     if os.path.exists(waived_path):
         with open(waived_path) as f:
             waived = [line.strip() for line in f if line.strip()]
-    lines = [f'# MVP gate: {"PASS" if gate and passed == len(gate) else "FAIL"}, '
+    lines = [f'# Gate: {"PASS" if gate and passed == len(gate) else "FAIL"}, '
              f'{passed} of {len(gate)} runs pass'
              + (f', {", ".join(w.split(":")[0] for w in waived)} waived' if waived else ''),
              '',
              '| Run | Outcome | Stop after finish | Off course | Cones | Max CTE | '
-             'Max EKF error | Lap / baseline | Health | Pass |',
+             'Max EKF error | Lap / reference | Health | Pass |',
              '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |']
     for r in gate:
         stop = f'{r["stop_dist_m"]} m' if r.get('stop_dist_m') else 'never stopped'
-        ratio = r.get('lap_ratio') or ('n/a' if r['event'] != 'autocross' else 'no baseline')
+        ratio = r.get('lap_ratio') or (
+            'n/a' if r['event'] != 'autocross'
+            else 'no lap' if number(r.get('lap_time_s')) is None else 'no reference')
         lines.append(
             f'| {r["id"]} | {r["outcome"]} | {stop} ({r["stops"]}) | '
             f'{r.get("off_track_count", "")} ({r["off_course"]}) | '
@@ -256,10 +300,19 @@ def main(out):
     if speeds:
         lines += ['', f'Sim speed: {min(speeds):.2f} to {max(speeds):.2f} times real time '
                   '(sim seconds per wall second, startup included).']
-    lines += ['', '## Truth-stack baselines', '', '| Style | Seed | Outcome | Lap time (s) |',
-              '| --- | --- | --- | --- |']
-    lines += [f'| {r["track_style"]} | {r["seed"]} | {r["outcome"]} | {r.get("lap_time_s", "")} |'
-              for r in rows if r['kind'] == 'baseline']
+    references = sorted({(r['track_style'], r['seed'], r['reference_lap_s']) for r in gate
+                         if r.get('lap_reference') == 'course'})
+    if references:
+        lines += ['', '## Reference laps', '',
+                  "Computed from each course and the run's speed limits (#232).", '',
+                  '| Style | Seed | Reference lap (s) |', '| --- | --- | --- |']
+        lines += [f'| {style} | {seed} | {ref} |' for style, seed, ref in references]
+    baseline_rows = [r for r in rows if r['kind'] == 'baseline']
+    if baseline_rows:
+        lines += ['', '## Truth-stack baselines', '', '| Style | Seed | Outcome | Lap time (s) |',
+                  '| --- | --- | --- | --- |']
+        lines += [f'| {r["track_style"]} | {r["seed"]} | {r["outcome"]} | '
+                  f'{r.get("lap_time_s", "")} |' for r in baseline_rows]
     if waived:
         lines += ['', '## Waived', ''] + [f'- {w}' for w in waived]
     failed = [r for r in gate if not r['passed']]

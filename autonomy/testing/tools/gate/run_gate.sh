@@ -4,8 +4,9 @@
 # Run from autonomy/ros2 after ./scripts/build.sh, on Ubuntu or inside the
 # Docker container. Every gate run uses the no-shortcuts stack from
 # docs/plans/mvp-pass-criteria.md: perception:=lidar estimator:=ekf with
-# safety on and launch defaults. Each autocross seed also gets one truth-stack
-# baseline (perception:=sim estimator:=truth) for the lap time check. A run
+# safety on and launch defaults. Lap time is scored against a reference lap
+# computed from the course (#232); BASELINE=1 adds one truth-stack run per
+# seed (perception:=sim estimator:=truth) for comparison only. A run
 # ends SETTLE_S sim seconds after the mission reaches FINISHED or EMERGENCY,
 # or at RUN_S sim seconds, so a slow machine runs the same campaign, only
 # longer. Wall time only catches a hung sim: /clock stopped for HANG_S
@@ -21,7 +22,7 @@ SEEDS=${SEEDS-"1 2 3 4 5"}
 REPEATS=${REPEATS:-3}
 ACCEL_REPEATS=${ACCEL_REPEATS-3}   # empty or 0 skips acceleration
 SKIDPAD_REPEATS=${SKIDPAD_REPEATS-3}  # empty or 0 skips skidpad
-BASELINE=${BASELINE:-1}            # 0 skips the truth-stack baselines
+BASELINE=${BASELINE:-0}            # 1 adds the truth-stack runs, for comparison
 RUN_S=${RUN_S:-180}                # sim-second cap per run
 SETTLE_S=${SETTLE_S:-5}            # sim seconds recorded after FINISHED
 HANG_S=${HANG_S:-60}               # wall seconds of a stopped /clock: hung

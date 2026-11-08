@@ -101,8 +101,8 @@ setting.
 under the launch's own speed limits (`v_max`, the lateral-acceleration limit
 and the longitudinal limits), computed by the scorer from the course alone.
 It depends only on the course and the parameters, so it is the same on every
-machine and cannot fail the way the truth stack does. The gate scorer has to
-compute it before the 11/14 run.
+machine and cannot fail the way the truth stack does. `score_gate.py`
+computes it ([#232](https://github.com/LonghornRacingElectric/lhre/issues/232)).
 
 The gate passes when **all 35 runs pass**. A failed run gets an issue in the
 milestone and is repeated after the fix, never dropped.

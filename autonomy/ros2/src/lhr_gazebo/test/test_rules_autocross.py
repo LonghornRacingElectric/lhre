@@ -81,14 +81,40 @@ def test_gate_plan_and_scoring_keep_course_styles_separate(tmp_path):
     script = (tools/'run_gate.sh').read_text().split('# Skidpad joins the matrix')[0]
     script = script.replace('HERE=$(cd "$(dirname "$0")" && pwd)', f'HERE="{tools}"')
     for style in ('autocross', 'rules_autocross'):
-        env = dict(os.environ, TRACK_STYLE=style, SEEDS='1', REPEATS='1',
-                   ACCEL_REPEATS='0', SKIDPAD_REPEATS='0', OUT=str(tmp_path))
-        result = subprocess.run(['bash', '-c', script+'\nSKIDPAD_WORLD=/missing\nplan'],
-                                env=env, text=True, capture_output=True, check=True)
-        lines = result.stdout.splitlines()
-        assert len(lines) == 2
-        assert lines[0].startswith(f'baseline_{style}_s1 track_style:={style}')
-        assert lines[1].startswith(f'{style}_s1_r1 track_style:={style}')
+        # Truth-stack baselines are opt-in since the reference lap (#232).
+        for baseline in ('', '1'):
+            env = {k: v for k, v in os.environ.items() if k != 'BASELINE'}
+            env.update(TRACK_STYLE=style, SEEDS='1', REPEATS='1', ACCEL_REPEATS='0',
+                       SKIDPAD_REPEATS='0', OUT=str(tmp_path))
+            if baseline:
+                env['BASELINE'] = baseline
+            result = subprocess.run(['bash', '-c', script+'\nSKIDPAD_WORLD=/missing\nplan'],
+                                    env=env, text=True, capture_output=True, check=True)
+            expected = ([f'baseline_{style}_s1 track_style:={style}'] if baseline else []
+                        ) + [f'{style}_s1_r1 track_style:={style}']
+            lines = result.stdout.splitlines()
+            assert len(lines) == len(expected)
+            for line, start in zip(lines, expected):
+                assert line.startswith(start)
+
+
+def test_course_reference_lap_comes_from_the_metrics_row(tmp_path):
+    scorer = load('reference_gate', Path(__file__).parents[4]/'testing/tools/gate/score_gate.py')
+    # A path from the machine that ran: the scorer finds the same world in the tree.
+    metrics = {'reference_world': '/elsewhere/autocross_seed1.sdf', 'v_max': '5.0',
+               'v_min': '1.0', 'a_lat_max': '3.0', 'max_accel': '1.0', 'max_decel': '2.0',
+               'lap_gate_x_m': '18.109467', 'lap_gate_y_m': '-14.744176',
+               'lap_gate_tangent_x': '0.589390', 'lap_gate_tangent_y': '0.807848'}
+    assert scorer.course_reference(metrics, str(tmp_path)) == pytest.approx(33.91, abs=0.01)
+    # Rows from before the Gazebo launch forwarded the limits logged zeros.
+    assert scorer.course_reference(dict(metrics, v_max='0.0'), str(tmp_path)) is None
+    row = {'id': 'autocross_s1_r1', 'event': 'autocross', 'track_style': 'autocross',
+           'seed': '1', 'outcome': 'lap', 'stop_dist_m': 1., 'finished': True,
+           'max_v_after_stop': 0., 'max_cte': 0., 'max_pos_error': 0., 'off_track_count': '0',
+           'cones_hit': '0', 'early_exits': '', 'lap_time_s': '50', 'reference_lap_s': '40.00'}
+    # The course reference wins over a baseline that would fail the lap.
+    scorer.judge(row, {('autocross', '1'): 10.})
+    assert (row['lap_reference'], row['lap_ratio'], row['lap_time']) == ('course', '1.25', 'pass')
 
 
 def test_fault_runner_generates_the_requested_rules_world(tmp_path):
