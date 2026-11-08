@@ -53,7 +53,11 @@ class SafetyConfig:
     max_position_std_m: float = 0.0
     # Speed above this multiple of the car's top speed is a broken estimate.
     max_speed_factor: float = 1.5
-    geofence_radius_m: float = 150.0
+    # Holds any course the rules checker accepts: no point on a closed loop
+    # is farther from another than half the lap, and laps are at most 500 m.
+    # Acceleration reaches 152 m with its braking zone. Sim gate runs then
+    # share one fence; the car gets the surveyed venue boundary (#229).
+    geofence_radius_m: float = 300.0
     # Yaw rate is noise-dominated near standstill, so the steering check
     # only runs above this speed.
     steer_min_speed_mps: float = 2.0

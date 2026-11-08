@@ -842,7 +842,7 @@ def generate_launch_description():
         DeclareLaunchArgument('safety_cmd_timeout_s', default_value='0.25'),
         DeclareLaunchArgument('safety_max_position_std_m', default_value='0.0'),
         DeclareLaunchArgument('safety_max_speed_factor', default_value='1.5'),
-        DeclareLaunchArgument('safety_geofence_radius_m', default_value='150.0'),
+        DeclareLaunchArgument('safety_geofence_radius_m', default_value='300.0'),
         DeclareLaunchArgument('safety_steer_min_speed_mps', default_value='2.0'),
         DeclareLaunchArgument('safety_steer_yaw_rate_tol', default_value='0.15'),
         DeclareLaunchArgument('safety_steer_rel_tol', default_value='0.5'),
