@@ -39,7 +39,7 @@ No autonomy node may read ground truth. Truth is for scoring only.
 | Cones | `perception:=lidar lidar_source:=mid360` |
 | Cone color | `enable_stereo_camera:=true enable_camera_lidar_fusion:=true` |
 | Safety | `safety:=true`, default `safety_lidar_timeout_s` (0.3 s) |
-| Parameters | Launch defaults, identical for every run. Settings that #202 to #206 make the defaults need no extra arguments |
+| Parameters | The gate and fault tools set the rows above for every run ([#237](https://github.com/LonghornRacingElectric/lhre/issues/237)); everything else stays at launch defaults. No run gets its own settings |
 
 Allowed truth, and only this:
 
@@ -119,7 +119,7 @@ above. Run with the [fault tools](../../testing/tools/fault_injection/README.md)
 | Caught | Every fault trips its expected check, never a different one |
 | Trip time, stale streams (`ODOM_STALE`, `CMD_STALE`, `LIDAR_STALE`) | At most the check's timeout plus 0.2 s |
 | Trip time, invalid or diverged values (`EKF_DIVERGED`, `CMD_INVALID`, `GEOFENCE`) | At most 0.2 s |
-| Trip time, `STEER_TRACKING` | At most 1.0 s ([#208](https://github.com/LonghornRacingElectric/lhre/issues/208)) |
+| Trip time, `STEER_TRACKING` | At most 1.0 s from when the command moves 0.035 rad off the frozen angle: a stuck actuator is invisible until then ([#208](https://github.com/LonghornRacingElectric/lhre/issues/208)) |
 | Stop distance | Within d = v(T + 0.2 s) + v²/2a, with T the check's trip-time limit above (not the measured trip time) and a the spring brake's 6 m/s² floor |
 | Top tier speed | The 8 m/s tier is at 7.5 m/s or more when the fault fires ([#207](https://github.com/LonghornRacingElectric/lhre/issues/207)) |
 | Clean laps | 0 false trips |

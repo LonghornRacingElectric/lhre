@@ -28,7 +28,7 @@ The faults themselves come from `lhr_gazebo`'s `fault_injector`
 | `odom_spike` | One estimated-odometry sample at 410 m/s | `EKF_DIVERGED` |
 | `lidar_drop` | Stop forwarding the point cloud | `LIDAR_STALE` |
 | `cmd_nan` | NaN steering in every command | `CMD_INVALID` |
-| `steer_freeze` | The actuators keep the steering angle from the fault on; `safety_node` still sees the real command | `STEER_TRACKING` |
+| `steer_freeze` | The actuators keep the steering angle from the fault on; `safety_node` still sees the real command, and the measured angle stops following it | `STEER_TRACKING` |
 | `geofence` | No injection: the fence shrinks to `FENCE` m (20) | `GEOFENCE` |
 | `clean` | None, on autocross seeds (a seed with no committed world gets one generated into `$OUT/worlds`) | Nothing |
 
@@ -95,6 +95,14 @@ SharePoint ([testing/README.md](../../README.md)).
     wrong. These are listed under the
     summary table, not counted in it. Rerun them.
 - `trip_latency_s`: fault to latched trip, in sim time.
+- `visible_after_s` and `latency_from_visible_s` (`steer_freeze` only): a
+  frozen actuator is invisible until the command moves
+  `steer_angle_tol_rad` off the frozen angle, so these split the latency at
+  that moment. A trip before the freeze shows scores 0, and a freeze that
+  never shows reads `never` with 0. The `STEER_TRACKING` budget in the Sim
+  v2 pass criteria applies to `latency_from_visible_s`
+  ([#208](https://github.com/LonghornRacingElectric/lhre/issues/208)); the
+  summary prints both.
 - `stop_dist_m`: path length from the fault to standstill, from ground
   truth. Stops are optimistic until the regen and spring-brake model lands
   ([#199](https://github.com/LonghornRacingElectric/lhre/issues/199)):

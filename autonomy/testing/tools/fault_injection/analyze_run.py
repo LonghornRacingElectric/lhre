@@ -19,6 +19,7 @@ import math
 import os
 import sys
 
+from lhr_safety.monitors import SafetyConfig
 from rclpy.serialization import deserialize_message
 from rosbag2_py import ConverterOptions, SequentialReader, StorageOptions
 from rosidl_runtime_py.utilities import get_message
@@ -30,12 +31,16 @@ DECEL = 6.0
 STOPPED = 0.1  # m/s
 MOVED = 0.5  # m/s: rolling again after the stop fails the run
 MIN_DRIVE_M = 10.0  # less than this before the fault and the run proves nothing
+# A frozen actuator is invisible while the command still asks for the
+# frozen angle; STEER_TRACKING's budget runs from when the two differ by
+# its tolerance (#208).
+STEER_TOL_RAD = SafetyConfig.steer_angle_tol_rad
 
 FIELDS = [
     'id', 'case', 'track', 'seed', 'v_max', 'result', 'expected', 'tripped',
     'match', 'v_at_fault', 'trip_latency_s', 'emergency_latency_s',
     'stop_time_s', 'stop_dist_m', 'pdr_dist_m', 'within_pdr',
-    'max_v_after_stop', 'false_trip', 'drove_m',
+    'max_v_after_stop', 'false_trip', 'drove_m', 'visible_after_s', 'latency_from_visible_s',
 ]
 
 # result: what the run shows. Only the first four (and the two clean ones)
@@ -140,6 +145,17 @@ def score(data, case, fence):
     if result not in ('caught', 'wrong_check') or fault_t is None:
         return row
 
+    if case == 'steer_freeze':
+        # The injector freezes the first command after the fault starts.
+        steer = [(to_sim(t), m.drive.steering_angle) for t, m in data.get('/lhr/vehicle/cmd', [])]
+        frozen = next((a for t, a in steer if t >= fault_t), None)
+        visible = next((t for t, a in steer if t >= fault_t and frozen is not None
+                        and abs(a - frozen) > STEER_TOL_RAD), None)
+        # A trip before the freeze shows (or one that never shows) beat the
+        # budget outright: 0, never negative and never blank.
+        row['visible_after_s'] = 'never' if visible is None else f'{visible - fault_t:.3f}'
+        after = 0.0 if visible is None else max(0.0, trip[0] - visible)
+        row['latency_from_visible_s'] = f'{after:.3f}'
     v = next((s for t, _, _, s in reversed(truth) if t <= fault_t), math.nan)
     stop = next((t for t, _, _, s in truth if t > trip[0] and s < STOPPED), None)
     latency = trip[0] - fault_t

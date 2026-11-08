@@ -71,7 +71,7 @@ FAULTS = {
     'cmd_nan': FaultKind(
         'CMD_INVALID', CMD + '_raw', CMD, AckermannDriveStamped),
     # Only the actuators see the frozen command; safety_node still reads
-    # the real one, so the yaw rate stops matching it.
+    # the real one, so the measured steering angle stops following it.
     'steer_freeze': FaultKind(
         'STEER_TRACKING', CMD, CMD + '_actuated', AckermannDriveStamped),
 }

@@ -350,6 +350,19 @@ ${stereo_camera}
       <cmd_min>-10.0</cmd_min>
     </plugin>
 
+    <!-- ===== STEERING FEEDBACK: the joints' actual angles, standing in for
+         the car's steering encoder. joint_cmd_adapter turns them into
+         /lhr/vehicle/steering_measured for safety_node (#208). 50 Hz, not
+         every physics step. ===== -->
+    <plugin
+      filename="gz-sim-joint-state-publisher-system"
+      name="gz::sim::systems::JointStatePublisher">
+      <joint_name>front_left_steering_joint</joint_name>
+      <joint_name>front_right_steering_joint</joint_name>
+      <topic>/model/fsae_vehicle/steering_joint_state</topic>
+      <update_rate>50</update_rate>
+    </plugin>
+
     <!-- ===== DRIVE: direct velocity control ===== -->
     <plugin
       filename="gz-sim-joint-controller-system"

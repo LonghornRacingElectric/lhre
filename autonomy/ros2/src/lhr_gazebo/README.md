@@ -317,6 +317,17 @@ brakes the car in the exit lane once the nose crosses the finish:
 ./scripts/run_gazebo_demo.sh track_style:=acceleration perception:=lidar estimator:=ekf
 ```
 
+## Measured steering
+
+The vehicle model's joint state publisher reports both steering joints'
+actual angles at 50 Hz, bridged to `/lhr/vehicle/steering_joint_states`.
+`joint_cmd_adapter` turns them into the one bicycle-model angle the car's
+steering encoder will report, `/lhr/vehicle/steering_measured`
+(`sensor_msgs/JointState`, joint `steering`), which `safety_node`'s
+`STEER_TRACKING` compares with the command
+([#208](https://github.com/LonghornRacingElectric/lhre/issues/208)). The
+plugin lives in `templates/model.sdf.in`, so both generated models carry it.
+
 ## Command timeout
 
 `joint_cmd_adapter` stops the wheels when `/lhr/vehicle/cmd` has been silent
@@ -355,7 +366,7 @@ The matrix runner and scoring are in
 
 `safety:=true` adds `lhr_safety`'s `safety_node`, which trips the mission
 on stale odometry, commands or LiDAR, a diverged EKF, leaving the geofence,
-or steering that does not track. It is off by default while the thresholds
+or a measured steering angle that does not follow the command. It is off by default while the thresholds
 are tuned; each one is a `safety_*` launch argument. See
 [lhr_safety](../lhr_safety/README.md).
 
