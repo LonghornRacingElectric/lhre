@@ -39,6 +39,14 @@ float SpeedFade(float rpm, const TorqueParams& p) {
   return (p.zero_torque_rpm - speed) / (p.zero_torque_rpm - p.fade_start_rpm);
 }
 
+float AvailableTorque(float rpm, const TorqueParams& p) {
+  const float omega = std::fabs(rpm) * kPi / 30.0f;
+  if (p.pedal_power_w <= 0.0f || omega * p.peak_torque_nm <= p.pedal_power_w) {
+    return p.peak_torque_nm;
+  }
+  return p.pedal_power_w / omega;
+}
+
 }  // namespace
 
 void TorquePath::Reset() {
@@ -94,7 +102,8 @@ TorqueOutputs TorquePath::Update(const TorqueInputs& in,
 
   // One function of pedal demand and motor speed; see TorqueParams.
   const float demand = longhorn::Clamp(in.pedal_travel, 0.0f, 1.0f);
-  out.pedal = torque.peak_torque_nm * std::pow(demand, torque.touchiness) *
+  out.pedal = AvailableTorque(in.motor_rpm, torque) *
+              std::pow(demand, torque.touchiness) *
               SpeedFade(in.motor_rpm, torque);
   out.derated = out.pedal * LowCellDerate(in.ocv_min_cell_v, torque);
 

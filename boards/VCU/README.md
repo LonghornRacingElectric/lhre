@@ -210,7 +210,17 @@ The 2026 rpm table only approximated a power limit: 103 Nm at 6000 rpm is
 about 65 kW at the motor, so full pedal never reached the 70 kW cap. Now the
 power cap below is what shapes torque at speed. Above 2400 rpm, where the
 table started falling, full pedal now gets more torque than it did: the
-full 210 Nm to about 3350 rpm, then whatever the 70 kW estimate allows. `fade_start_rpm`/`zero_torque_rpm` add a linear fade to zero
+full 210 Nm to about 3350 rpm, then whatever the 70 kW estimate allows.
+Part pedal changes more: the table scaled it down with speed, and the bare
+function holds it until the cap.
+
+Endurance keeps the 2026 behavior, because 2026 finished endurance with 2%
+energy left. It sets `TorqueParams::pedal_power_w` to 65 kW, so demand
+scales the torque that 65 kW allows at the current speed, up to peak. That
+is within 17 Nm of the 2026 table up to 6500 rpm, at every pedal position.
+Acceleration, autocross and skidpad leave it at 0.
+
+`fade_start_rpm`/`zero_torque_rpm` add a linear fade to zero
 torque with speed; it is off on the car, which leaves overspeed to the
 inverter, and on in motor spin mode.
 

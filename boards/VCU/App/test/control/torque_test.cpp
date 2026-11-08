@@ -8,7 +8,10 @@
 
 namespace {
 
-const vcu::Params& P() { return vcu::ParamsFor(vcu::kDefaultEventMode); }
+// Autocross runs the bare pedal function; endurance adds pedal_power_w.
+const vcu::Params& P() {
+  return vcu::ParamsFor(lhre::can::EventMode::kAutocross);
+}
 
 constexpr float kPi = 3.14159265358979f;
 
@@ -84,6 +87,35 @@ TEST(Torque, MotorSpinCapsTorqueAndFadesItToZeroBeforeTheSpeedCeiling) {
   EXPECT_NEAR(Sweep(spin, -1350.0f).back(), 10.0f, 0.01f);
   for (float rpm : {1500.0f, 2000.0f, 6000.0f}) {
     for (float t : Sweep(spin, rpm)) EXPECT_EQ(t, 0.0f) << rpm;
+  }
+}
+
+TEST(Torque, EnduranceDemandScalesTheTorqueItsPowerAllows) {
+  const vcu::Params& endu = vcu::ParamsFor(lhre::can::EventMode::kEndurance);
+  const float p_w = endu.torque.pedal_power_w;
+  ASSERT_GT(p_w, 0.0f);
+  const float corner_rpm = p_w / 210.0f * 30.0f / kPi;
+  EXPECT_FLOAT_EQ(Sweep(endu, 0.9f * corner_rpm).back(), 210.0f);
+  for (float rpm : {1.1f * corner_rpm, 4500.0f, 6000.0f}) {
+    const auto t = Sweep(endu, rpm);
+    EXPECT_NEAR(t.back(), p_w / Omega(rpm), 0.01f) << rpm;
+    // The 2026 table's shape: part pedal falls with speed too.
+    EXPECT_NEAR(t[50], Sweep(P(), 0.0f)[50] * p_w / (210.0f * Omega(rpm)),
+                0.01f)
+        << rpm;
+  }
+}
+
+TEST(Torque, EnduranceStaysWithin17NmOfThe2026Table) {
+  const float table[] = {210, 210, 210, 210, 210, 192, 166, 145, 129, 115, 103};
+  const vcu::Params& endu = vcu::ParamsFor(lhre::can::EventMode::kEndurance);
+  for (float rpm = 0.0f; rpm <= 6500.0f; rpm += 50.0f) {
+    const float old_nm = std::min(
+        longhorn::Lookup1D(table, 11, 0.0f, 6000.0f, rpm),
+        rpm > 100.0f ? endu.power_limit.limit_w /
+                           (endu.power_limit.dc_power_ratio * Omega(rpm))
+                     : 1e9f);
+    EXPECT_NEAR(Sweep(endu, rpm).back(), old_nm, 17.0f) << rpm;
   }
 }
 

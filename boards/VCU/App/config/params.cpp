@@ -40,9 +40,12 @@ Params MakeAutocross() {
 
 // Last year's endurance enabled regen. Keep the new board's pressure and
 // valve commissioning opt-in; see RegenParams before enabling it here.
+// pedal_power_w keeps the 2026 rpm table's torque per pedal position, so
+// endurance energy use stays where it was.
 Params MakeEndurance() {
   Params p = MakeDefaults();
   p.event_mode = EventMode::kEndurance;
+  p.torque.pedal_power_w = 65000.0f;
   return p;
 }
 

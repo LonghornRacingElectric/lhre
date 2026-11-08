@@ -105,8 +105,9 @@ class ClosedLoopTest : public ::testing::Test {
 };
 
 // The 2026 torque-vs-rpm table kept full pedal under 70 kW on its own, so
-// the cap never acted. The pedal function leaves that job to the cap.
+// the cap never acted. The bare pedal function leaves that job to the cap.
 TEST_F(ClosedLoopTest, StockLimitIsHeldByTheCapAtTheP99Ratio) {
+  b_.params = vcu::ParamsFor(lhre::can::EventMode::kAutocross);
   car_.ratio = kRatioP99;
   Start();
   const float limit_w = b_.params.power_limit.limit_w;
@@ -117,6 +118,16 @@ TEST_F(ClosedLoopTest, StockLimitIsHeldByTheCapAtTheP99Ratio) {
       limit_w * kRatioP99 / b_.params.power_limit.dc_power_ratio + 1000.0f);
   EXPECT_NEAR(t.final_power_w, limit_w, 700.0f);
   EXPECT_LT(t.max_torque_drop_nm, 5.0f);
+  EXPECT_GT(car_.speed_m_s, 20.0f);
+}
+
+TEST_F(ClosedLoopTest, EnduranceStaysUnderTheLimitWithoutTheCapAtTheP99Ratio) {
+  b_.params = vcu::ParamsFor(lhre::can::EventMode::kEndurance);
+  car_.ratio = kRatioP99;
+  Start();
+  const Trace t = FullPedal(4000);
+  EXPECT_FALSE(t.cap_ever_limited);
+  EXPECT_LT(t.peak_power_w, b_.params.power_limit.limit_w);
   EXPECT_GT(car_.speed_m_s, 20.0f);
 }
 

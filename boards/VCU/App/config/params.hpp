@@ -132,8 +132,10 @@ struct InverterParams {
 // Pedal to torque is one function instead of the 2026 pedal-map and
 // torque-vs-rpm tables:
 //
-//   torque = peak_torque_nm * demand^touchiness * fade(rpm),
+//   torque = available(rpm) * demand^touchiness * fade(rpm),
 //            then capped at PowerLimitParams' P / (ratio * omega)
+//   available = peak_torque_nm, or min(peak_torque_nm, pedal_power_w / omega)
+//               when pedal_power_w is set
 //
 // where demand is AppsParams' throttle_start..throttle_full travel scaled to
 // 0..1. The 2026 rpm table only approximated a ~65 kW cap at the motor; the
@@ -149,6 +151,10 @@ struct TorqueParams {
   // own overspeed limit; the motor spin set uses it.
   float fade_start_rpm = 0.0f;
   float zero_torque_rpm = 0.0f;
+  // 0 disables. Otherwise demand scales the torque that this much motor power
+  // allows, up to peak, so part-pedal torque falls with speed instead of
+  // holding until the power cap.
+  float pedal_power_w = 0.0f;
   // Low-cell derate on the OCV estimate (TorqueMap.c:78-85).
   float low_cell_derate_start_v = 3.2f;
   float low_cell_cutoff_v = 2.8f;
