@@ -127,9 +127,8 @@ def test_fusion_wires_planner_and_enables_fallback(
     detector_params = evaluate_parameters(context, detector_action._Node__parameters)[0]
     topic = '/lhr/perception/cones_classified' if fusion else '/lhr/sensor/cones_detected'
     assert params.get('cone_topic', '/lhr/sensor/cones_detected') == topic
-    assert params['pairing_strategy'] == (
-        'classified' if not fusion and side_argument == 'true' else 'boundary')
-    assert params.get('boundary_use_color', True) is True
+    assert params['pairing_strategy'] == 'boundary'
+    assert params['boundary_use_color'] is fusion
     assert detector_params['classify_sides'] is (fusion or side_argument == 'true')
     args = ['--ros-args']
     for name, value in params.items():
@@ -141,7 +140,7 @@ def test_fusion_wires_planner_and_enables_fallback(
         subscriptions = list(planner.subscriptions)
         assert any(s.topic_name == topic for s in subscriptions)
         assert planner._pairing_strategy == params['pairing_strategy']
-        assert planner._boundary_use_color is True
+        assert planner._boundary_use_color is fusion
     finally:
         if planner is not None:
             planner.destroy_node()

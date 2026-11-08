@@ -156,7 +156,7 @@ cones by default. The track builder uses `boundary` pairing. Use
 `estimator:=truth` to check perception without EKF drift, then repeat with
 `estimator:=ekf`.
 
-To opt into left/right inference and one-to-one `classified` pairing, run:
+To opt into left/right inference while keeping geometry-only `boundary` pairing, run:
 
 ```bash
 ./scripts/run_gazebo_demo.sh track_style:=autocross perception:=lidar lidar_classify_sides:=true estimator:=truth
@@ -166,11 +166,15 @@ By default, mapped cones appear orange in RViz. The unclassified `boundary`
 strategy can produce incorrect centerlines on sharp autocross turns; the
 classifier remains opt-in while its sparse-map failures are investigated.
 
-The geometry-based side classifier is experimental. In a live autocross run,
-the cone map had no duplicate cones, but sparse early detections caused a
-right-side boundary fragment to be labelled left and the car departed the
-course. The generated-track regression does not reproduce the LiDAR's
-occlusion and sparse returns.
+The geometry-based side classifier remains experimental. It now rejects
+strong opposing boundary links and waits for independent travelled evidence
+before accepting a side; sustained contrary evidence can correct it.
+Planning stays in `boundary` mode with `boundary_use_color=false` so unknown
+startup cones and temporarily wrong inferred labels cannot block that motion.
+Camera fusion still sets `boundary_use_color=true` to use its measured colors.
+The old live sparse-map failure is retained as historical evidence;
+partial-map and marker-recovery regressions cover its mechanisms, while
+physical sensing and occlusions still require driving validation.
 
 The launch starts graphical Gazebo and RViz by default. Use `gui:=false` or
 `rviz:=false` for a headless run. See the workspace

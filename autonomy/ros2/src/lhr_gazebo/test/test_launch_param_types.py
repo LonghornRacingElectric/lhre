@@ -171,7 +171,7 @@ def test_every_forwarded_argument_is_typed(monkeypatch, config, expected):
     if config.get('lidar_classify_sides') == 'true':
         (builder,) = [n for n in nodes if n.node_executable == 'track_builder']
         params = evaluate_parameters(context, builder._Node__parameters)[0]
-        assert params['pairing_strategy'] == 'classified'
+        assert params['pairing_strategy'] == 'boundary'
     # Per node, not per executable: several share one (parameter_bridge).
     untyped = [(n.node_executable, _untyped(n)) for n in nodes]
     assert [(exe, names) for exe, names in untyped if names] == []

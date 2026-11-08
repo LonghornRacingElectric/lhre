@@ -159,16 +159,34 @@ remain active when classification is off.
 The detector accumulates a side vote from each cone's lateral position in a
 short local corridor beside the car. Short Delaunay edges share those votes
 along a boundary. A slightly longer gap is joined only when it follows the
-boundary's local direction. The starting straight seeds the initial labels;
-later labels require consistent proposals from poses separated by one metre
-and are immutable once accepted. A wrong initial proposal can therefore remain
-locked even after better observations arrive.
+boundary's local direction. Links are considered shortest first and cannot
+join fragments with opposing accumulated votes of magnitude at least 0.1
+on each side, even through an endpoint with no direct vote. Weaker outliers
+can still inherit a boundary's majority. This also applies to aligned gaps;
+a 3 m link limit cannot silently join the two sides of a 3 m track.
+The first pose only anchors the motion check; stationary startup scans do
+not seed labels. Side proposals require a fresh scan stamp and at least
+`side_update_distance` of travel since the previous viewpoint. A new label
+needs `side_confirmations` consistent proposals. Reversing an accepted label
+needs twice as many (four by default), so one contradictory glimpse cannot
+flip it. Missing or supporting evidence clears a pending reversal.
+
+Each cone's accumulated vote is halved before adding a new direct observation.
+Old evidence is bounded and can be corrected; cones outside the current
+corridor retain their previous evidence. A connected fragment needs a current
+direct side observation to propose any labels, so fresh evidence on a distant
+fragment cannot confirm stale votes. Both demo launchers keep geometry-based planning
+while sides are unknown, so waiting for independent evidence does not prevent
+the initial motion needed to obtain it. Inference-only planning also ignores
+side labels when forming geometry, so a bad accepted label cannot stop the
+motion needed for correction. Camera fusion retains its color-aware filter.
 
 LiDAR still does not observe cone colour. These labels describe the inferred
 track side, not a measured blue or yellow cone. A cone stays in the `cones`
 namespace until there is evidence, then moves to `left_cones` or
-`right_cones`. Namespace changes include a marker deletion so RViz does not
-leave a stale orange copy behind.
+`right_cones`. A later correction preserves the cone's ID and position and
+deletes its previous namespace before adding the replacement, so viewers
+and planner snapshots do not retain the old side.
 
 Set `classify_sides:=false` on the node to skip side voting and publish every
 mapped cone in the orange `cones` namespace. Scan-time TF registration,
@@ -184,7 +202,7 @@ The setting is read at startup; restart the node to change it.
 | `side_vote_max_lateral` | `5.0` | Lateral extent of the classification corridor |
 | `side_vote_deadband` | `0.5` | Lateral region that contributes no side vote |
 | `side_update_distance` | `1.0` | Vehicle travel required between independent side proposals |
-| `side_confirmations` | `2` | Consistent traveled viewpoints required before locking a later label |
+| `side_confirmations` | `2` | Consistent traveled viewpoints to acquire a label; reversal requires twice this count |
 | `boundary_link_distance` | `3.0` | Maximum direct same-boundary link length |
 | `boundary_gap_distance` | `3.3` | Maximum aligned boundary-gap link length |
 | `boundary_gap_angle_deg` | `40.0` | Largest direction change across a boundary gap |
@@ -194,14 +212,19 @@ The setting is read at startup; restart the node to change it.
 
 Unit tests cover pose interpolation through angle wrap, simulation clock
 resets, sharp-turn reprojection, nearest-cone selection, one-to-one scan
-association, side voting, label locking, and rejection of cross-track links.
-The Gazebo package also replays selected generated autocross tracks as
-progressively discovered maps through side inference and one-to-one centerline
-pairing with injected pose error. That replay assumes all cones in range are
-visible. Live Gazebo scans are sparser: an initial partial map incorrectly
-locked several right-side cones as left and the vehicle left the course. Treat
-the side-classification tests as algorithm checks, not evidence of autocross
-driving reliability.
+association, motion-gated side voting, correction hysteresis, namespace
+replacement and rejection of cross-track links. The Gazebo package retains
+its progressively discovered generated-course replay with injected pose
+error. It also exercises the real detector on seeds 1–5 at 3 m width with
+25% discovery probability per in-range cone and two independent laps of
+viewpoints, then checks side labels and one-to-one centerline pairing.
+Another check carries unknown startup and corrected marker snapshots into
+the actual geometry planner.
+
+The previous live failure locked sparse initial right-boundary detections as
+left. These regressions cover its link and lock mechanisms, but idealized
+replay does not reproduce every LiDAR occlusion or prove physical-car
+reliability. Classification remains opt-in outside fusion mode.
 
 ```bash
 cd autonomy/ros2
