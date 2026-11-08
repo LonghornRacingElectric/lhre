@@ -228,8 +228,9 @@ Only the selected cloud owns `/lhr/lidar/points`; the GPU comparison moves to
 `lidar_drop` intercepts the selected producer, including Mid-360.
 
 The internal read-only `world_sdf` is bound to launch's `world`, and `seed`
-reaches the caster as an integer. Mount, motion and clutter study settings are
-fixed in world mode; see [sensor limits](../lhr_lidar_sim/README.md#gazebo-world-input).
+reaches the caster as an integer. Motion and clutter study settings are fixed
+in world mode, and the mount is fixed once the run starts; see
+[sensor limits](../lhr_lidar_sim/README.md#gazebo-world-input).
 
 The following typed startup arguments affect only `lidar_source:=mid360`:
 
@@ -242,6 +243,8 @@ The following typed startup arguments affect only `lidar_source:=mid360`:
 | `mid360_dropout_rate` | `0.0` |
 | `mid360_elevation_profile` | `livox` (`rosette` / `uniform` are approximations) |
 | `mid360_return_profile` | `baseline` (`acceptance_overcast` is an empirical profile) |
+| `mid360_mount_x_m`, `_y_m`, `_z_m` | vehicle YAML, currently `(1.8, 0, 0.55)` m in `base_link` |
+| `mid360_mount_roll_rad`, `_pitch_rad`, `_yaw_rad` | `0.0`; roll π is upside down, positive pitch is nose down |
 
 For example, `mid360_range_noise_std_m:=0 mid360_max_range_m:=30` starts the
 caster with ideal ranges limited to 30 m. The noise default shares the GPU
@@ -250,10 +253,29 @@ still requires model regeneration. Record the source and effective settings
 with comparison results; the generic `max_range_m` controls `sensor_sim`, not
 the caster. These modes do not share a physical accuracy guarantee.
 
-World mode intentionally exposes no mount, motion-distortion or clutter launch
-controls: they are fixed to the shared mount, snapshot scans and no synthetic
-clutter. The internal world path follows `world`; the 0.1 m sensor minimum is
-fixed. Study those alternatives in marker mode instead.
+A mount other than the vehicle YAML one only starts if the detector reads it:
+`lidar_sensor_transform_source:=tf lidar_height_filter_frame:=base_link` and a
+height band above the ground, such as `lidar_ground_z_min:=0.05
+lidar_ground_z_max:=0.55`. The detector's defaults place the cloud at the vehicle
+YAML mount, unrotated, and cut height in the sensor frame, so a flipped or
+pitched cloud would land in the wrong place with no error. Upside down at 7°
+nose down, just inside the main hoop:
+
+```bash
+ros2 launch lhr_gazebo gazebo_demo.launch.py perception:=lidar lidar_source:=mid360 \
+  mid360_mount_x_m:=0.609 mid360_mount_z_m:=1.06 \
+  mid360_mount_roll_rad:=3.14159 mid360_mount_pitch_rad:=0.1222 \
+  lidar_sensor_transform_source:=tf lidar_height_filter_frame:=base_link \
+  lidar_ground_z_min:=0.05 lidar_ground_z_max:=0.55
+```
+
+These arguments are for the mount study. The measured mount goes in
+`vehicle.yaml`. The caster does not model the car's own body, so a mount behind
+the nose sees the near field the real car hides.
+
+World mode exposes no motion-distortion or clutter launch controls: scans are
+snapshots with no synthetic clutter. The internal world path follows `world`; the
+0.1 m sensor minimum is fixed. Study those alternatives in marker mode instead.
 
 On Wayland with X11 available, Gazebo/RViz select `xcb` unless another backend
 is explicitly chosen. Gazebo uses the packaged Fontconfig configuration;

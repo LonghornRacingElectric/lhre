@@ -1,5 +1,6 @@
 """Feed real caster clouds through the unchanged cone detector."""
 
+import math
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -13,17 +14,19 @@ import rclpy
 from rclpy.parameter import Parameter
 from sensor_msgs_py import point_cloud2
 
+CONE_PAIR_WORLD = """<sdf version="1.9"><world name="test">
+  <model name="ground_plane"><link name="link"><collision name="ground">
+    <geometry><plane><normal>0 0 1</normal></plane></geometry>
+  </collision></link></model>
+  <include><uri>model://cone_blue</uri><pose>8 1.75 .1625 0 0 0</pose></include>
+  <include><uri>model://cone_yellow</uri><pose>8 -1.75 .1625 0 0 0</pose></include>
+  </world></sdf>"""
+
 
 def test_world_clouds_reach_existing_detector_without_labels(tmp_path, monkeypatch):
     """Check stamps, paused truth, mount ownership, and actual geometric detections."""
     world = tmp_path / 'custom.sdf'
-    world.write_text("""<sdf version="1.9"><world name="test">
-      <model name="ground_plane"><link name="link"><collision name="ground">
-        <geometry><plane><normal>0 0 1</normal></plane></geometry>
-      </collision></link></model>
-      <include><uri>model://cone_blue</uri><pose>8 1.75 .1625 0 0 0</pose></include>
-      <include><uri>model://cone_yellow</uri><pose>8 -1.75 .1625 0 0 0</pose></include>
-      </world></sdf>""")
+    world.write_text(CONE_PAIR_WORLD)
     rclpy.init(args=['--ros-args', '-p', f'world_sdf:={world}',
                      '-p', 'range_noise_std_m:=0.0', '-p', 'classify_sides:=false',
                      '-p', 'seed:=9', '-p', 'sensor_transform_source:=vehicle_config',
@@ -84,6 +87,49 @@ def test_world_clouds_reach_existing_detector_without_labels(tmp_path, monkeypat
         forwarded = sensor._sensor.frame_labeled.call_args.kwargs
         assert forwarded['vehicle_z'] == .08
         assert forwarded['vehicle_roll'] == pytest.approx(.04)
+    finally:
+        detector.destroy_node()
+        sensor.destroy_node()
+        rclpy.shutdown()
+
+
+def test_flipped_pitched_hoop_mount_puts_cones_where_they_stand(tmp_path, monkeypatch):
+    """An upside-down caster on the hoop, read through tf, still lands both cones."""
+    world = tmp_path / 'custom.sdf'
+    world.write_text(CONE_PAIR_WORLD)
+    rclpy.init(args=['--ros-args', '-p', f'world_sdf:={world}',
+                     '-p', 'range_noise_std_m:=0.0', '-p', 'classify_sides:=false',
+                     '-p', 'mount_x_m:=0.609', '-p', 'mount_z_m:=1.06',
+                     '-p', f'mount_roll_rad:={math.pi}', '-p', 'mount_pitch_rad:=0.1222',
+                     '-p', 'sensor_transform_source:=tf', '-p', 'height_filter_frame:=base_link',
+                     '-p', 'ground_z_min:=0.05', '-p', 'ground_z_max:=0.55',
+                     '-p', 'min_cluster_points:=1', '-p', 'stack_window_sec:=0.0'])
+    sensor = LidarSimNode()
+    detector = LidarConeDetector()
+    clouds, transforms = [], []
+    monkeypatch.setattr(sensor._cloud_pub, 'publish', clouds.append)
+    monkeypatch.setattr(sensor._tf, 'sendTransform', transforms.append)
+    try:
+        assert sensor._sensor.mount.roll_rad == math.pi
+        for index in range(40):
+            odom = Odometry()
+            odom.header.frame_id, odom.child_frame_id = 'map', 'base_link'
+            odom.pose.pose.orientation.w = 1.
+            odom.header.stamp.sec, tenth = divmod(index, 10)
+            odom.header.stamp.sec += 1
+            odom.header.stamp.nanosec = tenth * 100_000_000
+            sensor._odom_cb(odom)
+            detector._odom_cb(odom)
+            sensor._tick()
+            detector._tf_buffer.set_transform(transforms[-1], 'test')
+            detector._cloud_cb(clouds[-1])
+            detector._process()
+        # A flipped mount whose tf disagreed with the cast would put the
+        # cones metres away, or under the ground and out of the band.
+        assert len(detector._cone_map) == 2
+        actual = np.array([c[:2] for c in detector._cone_map])
+        expected = np.array([[8., 1.75], [8., -1.75]])
+        assert np.linalg.norm(actual[:, None] - expected, axis=2).min(axis=0).max() < .15
     finally:
         detector.destroy_node()
         sensor.destroy_node()

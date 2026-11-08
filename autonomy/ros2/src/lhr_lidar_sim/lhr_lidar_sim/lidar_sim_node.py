@@ -133,8 +133,9 @@ class LidarSimNode(Node):
         self._world_sdf = str(param('world_sdf'))
         if self._world_sdf:
             self._cones = load_world_cones(self._world_sdf)
-            if mount != MountPose():
-                raise ValueError('World input requires the fixed vehicle.yaml mount')
+            # A world run may start at any mount: the Gazebo launch then
+            # has the detector read it from tf. It cannot move mid-run,
+            # so every frame of a scored run comes from one mount.
             if param('motion_distortion') or param('clutter_profile') != 'none':
                 raise ValueError('World input requires snapshot scans and no synthetic clutter')
 
@@ -220,7 +221,7 @@ class LidarSimNode(Node):
             if self._world_sdf:
                 return SetParametersResult(
                     successful=False,
-                    reason='World mode uses the fixed vehicle.yaml mount for perception')
+                    reason='World mode keeps its startup mount for the whole run')
             if param.type_ not in (Parameter.Type.DOUBLE,
                                    Parameter.Type.INTEGER):
                 return SetParametersResult(
