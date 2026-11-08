@@ -113,9 +113,11 @@ camera interruption/recovery check separate from the clean course matrix;
 inspect `/lhr/perception/cones_classified` and the centerline before loss,
 after `fusion_camera_max_age_sec` and after restoration. Physical colors on
 `/lhr/perception/cones_fused` may persist while the planner uses LiDAR sides.
-Retain the known [#85](https://github.com/LonghornRacingElectric/lhre/issues/85)
-and [#86](https://github.com/LonghornRacingElectric/lhre/issues/86) fallback
-limitations when interpreting a run. Follow the
+The [#85](https://github.com/LonghornRacingElectric/lhre/issues/85) and
+[#86](https://github.com/LonghornRacingElectric/lhre/issues/86) fallback
+failure mechanisms, regression fixes and development driving checks are
+recorded in the [side-classifier validation](../../2026-11-08-side-classifier-fixes/README.md).
+Follow the
 [testing rules](../../README.md) for storing and verifying raw recordings.
 
 ## Reading the results
