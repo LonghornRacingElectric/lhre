@@ -52,6 +52,11 @@
       "markedAt": 1794177306620
     },
     {
+      "relativePath": "/Users/dumast/LHR/lhre/lib/spec/ir/loader.py",
+      "contentHash": "1b633dc568a8390c05305946b5506aba992cbd05",
+      "markedAt": 1794179782510
+    },
+    {
       "relativePath": "/Users/dumast/LHR/lhre/lib/spec/ir/validator_test.py",
       "contentHash": "d566bf951396b813c1215ff60ac3d5d8ad3838b0",
       "markedAt": 1794177273797
@@ -67,9 +72,29 @@
       "markedAt": 1794176247723
     },
     {
+      "relativePath": "/Users/dumast/LHR/lhre/tools/spec/BUILD.bazel",
+      "contentHash": "181a001f54ebcfefd92321aa7c2dd811eeca0f8e",
+      "markedAt": 1794179769791
+    },
+    {
       "relativePath": "/Users/dumast/LHR/lhre/tools/spec/editor_index.html",
       "contentHash": "c2c239391966f8146351764db9bb4a8dd0070d11",
       "markedAt": 1794177260524
+    },
+    {
+      "relativePath": "/Users/dumast/LHR/lhre/tools/spec/publish_signals_test.py",
+      "contentHash": "55304457624f79e3bf252331d0f770a829243514",
+      "markedAt": 1794179709357
+    },
+    {
+      "relativePath": "/Users/dumast/LHR/lhre/tools/spec/publish_signals.py",
+      "contentHash": "4eb024694c29e319ed9f756cec1ae44ffb5bba81",
+      "markedAt": 1794179702259
+    },
+    {
+      "relativePath": "/Users/dumast/LHR/lhre/tools/spec/README.md",
+      "contentHash": "6ec14f994e8e4fc8a00573cfd7e245f673aa2a93",
+      "markedAt": 1794179621802
     },
     {
       "relativePath": "analysis/database/viewer_tool/README.md",

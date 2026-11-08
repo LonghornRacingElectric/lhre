@@ -27,28 +27,33 @@ Still pending:
 
 ## Signal discovery (v0)
 
-Generate the Orion catalog from the repo root:
+Build and publish the current car's catalog from the repo root:
 
 ```bash
-bazel build --config=local //apps/telemetry:current_schema_signals
+bazel run --config=local //tools/spec:publish_signals
 ```
 
-With the viewer running, `GET /api/cars/orion/signals` returns the generated
-signal array, including CAN,
-GPS, and board-status fields. `?schema_version=<64-character-lowercase-hash>`
-selects an exact schema; omitting it selects the currently deployed catalog.
+The current spec declares `car: "orion"` in `groups.textproto`.
+With the viewer running, `GET /api/cars/orion/signals` returns its signal array,
+including CAN, GPS, and board-status fields.
+`?schema_version=<64-character-lowercase-hash>` selects an exact version in that
+car's folder; omitting it follows that car's `current.json` pointer.
 The response carries the schema hash in every row and `X-Schema-Version`.
-Other cars return 404 until their own catalogs are provided. No Kafka or
+Every car uses the same catalog shape but its own archive; there is no cross-car
+fallback. No Kafka or
 database connection is needed for discovery. This v0 read endpoint has no
 API-key authentication; adding reader/admin keys remains a later phase.
 
-The default file is `bazel-bin/lib/codegen/telemetry/signals.json`, resolved
-from the viewer's working directory. For deployment, set `SIGNAL_CATALOG_DIR`
-to an absolute directory and copy the generated file there as `signals.json`.
-Preserve older artifacts as `<schema_hash>.json` in the same directory to
-serve historical versions. Codegen does not archive automatically. Use atomic
-file replacement when updating a running server. Missing current artifacts
-return 503; missing requested versions return 404; malformed hashes return 400.
+The archive root defaults to `apps/telemetry/catalogs`. For deployment, set
+`SIGNAL_CATALOG_DIR` in both the publisher and viewer, or pass
+`-- --catalog-root /absolute/path` to the publishing command. It stores
+`<car>/<hash>.json` and atomically updates `<car>/current.json`. An identical
+publish is a no-op; old versions are immutable. Hashes identify canonical
+catalog contents, including car, independently of paths or textproto formatting.
+Build outputs still live in `bazel-bin` and are not used as the archive.
+See the [archive guide](../../../catalogs/README.md) for storage, backups, and
+rollback. Unpublished current versions return 503; unknown cars or missing
+requested versions return 404; malformed car slugs/hashes return 400.
 No rates are guessed and mixed-unit GPS arrays have a null unit. CAN shared
 sources and repeated array slots appear once per protobuf field.
 

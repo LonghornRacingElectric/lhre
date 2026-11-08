@@ -1,22 +1,24 @@
 # Signal catalogs
 
-Reads the generated Orion catalog for DISCOVER. This is schema metadata,
-not observed values or a live-device registry. Unknown cars are never served
-Orion's schema as a fallback.
+DISCOVER reads immutable published catalogs from the requested car's folder.
+The current spec declares Orion; other cars use the same format and need
+their own published artifacts. There is no Orion fallback or hardcoded car list.
 
-The catalog exposes one `rate_hz`: the uplink override, otherwise the CAN
-message frequency. A rate of 0 means no trimming; null means unknown or conflicting
-shared-source rates. External signals use their uplink rate or null.
+The archive root is `SIGNAL_CATALOG_DIR`, defaulting to `apps/telemetry/catalogs`
+relative to the viewer working directory. `<car>/current.json` selects the
+default hash; `?schema_version=<hash>` bypasses the pointer and reads that exact
+`<car>/<hash>.json`. Hash order and modification timestamps never select a version.
+Files are read each request, so activation and rollback need no viewer restart.
 
-`SIGNAL_CATALOG_DIR` contains `signals.json` for the current schema and optional
-`<schema_hash>.json` archives. Without an override, the reader uses the repo's
-`bazel-bin/lib/codegen/telemetry` directory relative to the viewer working
-directory. Files are read on each request so deploying an updated catalog does
-not require a process restart; deploy files by atomic rename.
+Car slugs and hashes are validated before becoming paths. Loaded catalog car,
+top-level version, row versions, and requested filename must agree; signal names
+must be unique. An unknown car folder returns 404, an unpublished/broken current
+reference 503, a missing explicit version 404, and malformed JSON or mismatched
+identity 500. Publishers validate the content hash before storing immutable files.
 
-The hash is validated before it can become a filename. Every loaded catalog
-must have matching top-level/row versions and unique signal names. Missing
-current catalogs return 503, unavailable requested versions 404, and corrupt
-files 500. Archival is explicit; codegen does not retain old builds.
+The catalog exposes one `rate_hz`: uplink override, otherwise CAN frequency.
+Zero means no trimming; null means unknown or conflicting sources. External
+signals use their uplink rate or null.
 
-See the [viewer setup](../../../README.md) for generation and endpoint usage.
+See the [archive guide](../../../../../../catalogs/README.md) and
+[viewer setup](../../../README.md#signal-discovery-v0).

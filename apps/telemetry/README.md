@@ -55,7 +55,7 @@ and tuning details.
 ## Viewer
 
 The viewer serves schema-generated signal discovery at `/api/cars/orion/signals`.
-Build `//apps/telemetry:current_schema_signals` first; serving archived versions
+Run `//tools/spec:publish_signals` first; serving per-car archived versions
 and deployment paths are covered in the
 [viewer README](analysis/database/viewer_tool/README.md#signal-discovery-v0).
 

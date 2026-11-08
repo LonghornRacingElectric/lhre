@@ -112,6 +112,12 @@ DDL generated from `//lib/spec`; a spec edit therefore invalidates every
 server-side artifact in the same Bazel graph. It remains a dependency seam,
 not a schema registry or multi-version decoder.
 
+DISCOVER catalogs have a separate content-based version and declare car identity
+in textproto (currently Orion). `bazel run //tools/spec:publish_signals` archives
+the selected generated catalog outside `bazel-bin` and atomically updates that
+car's current pointer. This stores catalog history, not runtime CAN decoding
+history. See the [archive guide](catalogs/README.md).
+
 A future registry can replace the selection behind this target and generate
 board-specific libraries without changing every service BUILD file. Deployed
 messages still need an explicit schema identity before a main-branch server can
