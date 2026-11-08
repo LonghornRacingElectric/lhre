@@ -160,6 +160,8 @@ message EnumType {
   string name = 1;  // UpperCamel; referenced by Logical.enum_type
   string description = 2;
   repeated EnumValue value = 3;
+  repeated uint32 reserved_numbers = 4;
+  repeated string reserved_names = 5;
 }
 
 message EnumValue {
@@ -187,6 +189,9 @@ message BitfieldBit {
 // live_ids ∪ reserved_ids must equal exactly {1, …, next_free_id − 1}.
 message GroupRegistry {
   repeated Group group = 1;
+  uint32 next_snapshot_id = 2;
+  repeated uint32 reserved_snapshot_ids = 3;
+  repeated string reserved_snapshot_names = 4;
 }
 
 message Group {
@@ -207,4 +212,6 @@ message SnapshotField {
   ProtoScalarType type = 3;
   bool repeated = 4;
   string description = 5;
+  string unit = 6;
+  repeated string element_names = 7;
 }

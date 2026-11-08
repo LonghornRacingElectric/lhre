@@ -1,0 +1,27 @@
+bitfield_type {
+  name: "StatusFlags"
+  bit {
+    name: "active"
+    telemetry { group: "Controls" field: "active" id: 3 }
+  }
+}
+message {
+  name: "STATUS"
+  can_id: 257
+  quantity: 2
+  from_board: "VCU"
+  to_boards: "BEVO"
+  bus: "Critical"
+  dlc: 2
+  signal {
+    name: "samples"
+    encoding { bit_length: 8 }
+    logical { physical {} }
+    telemetry { group: "Controls" field: "samples" id: 2 repeated: true }
+  }
+  signal {
+    name: "flags"
+    encoding { start_bit: 8 bit_length: 8 }
+    logical { bitfield { bitfield_type: "StatusFlags" } }
+  }
+}

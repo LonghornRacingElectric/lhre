@@ -1,8 +1,12 @@
 # SDD System Usage Guide
 
-For Orion use the [Bazel schema workflow](../README.md). The legacy guide
-below describes source-patching tools; `sync_schema.sh` now only builds Bazel
-outputs and does not update checked-in SQL, protobuf or models.
+**Current Orion workflow:** edit `lib/spec/*.textproto` and run
+`bazel build //lib/codegen/telemetry:server_schema`. Python/Go protobuf bindings,
+Orion ORM/DDL/Prisma and BEVO compiled tables consume those outputs directly;
+do not edit `.proto` copies or patch generated classes into the source tree.
+See the [current generator guide](../../../../lib/codegen/telemetry/README.md).
+The older source-writing workflow below is historical documentation, not an
+available build path; `sync_schema.sh` now only forwards to Bazel.
 
 The Schema Driven Development (SDD) system automates the synchronization of database schemas, ORM models, and frontend Prisma definitions. 
 

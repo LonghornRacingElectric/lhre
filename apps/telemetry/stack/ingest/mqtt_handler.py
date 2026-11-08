@@ -21,7 +21,7 @@ sys.path.append(str(Path(__file__).parents[2]))
 
 from analysis.sql_utils.db_session import get_db, engine_nightwatch, engine_angelique, engine_orion
 from analysis.sql_utils.query_builder import QueryBuilder
-from analysis.sql_utils.models import AngeliquePacket, OrionPacket, BaseTelemetry, BaseAngelique, BaseOrion
+from analysis.sql_utils.models import AngeliquePacket, OrionPacket, BaseTelemetry, BaseAngelique, BaseOrion, ORION_MODELS
 from stack.ingest.partition_manager import PartitionManager
 from stack.ingest.sensor_decode import decode_sensor
 from stack.ingest.packet_ids import retained_packet_high_water
@@ -299,10 +299,65 @@ class MQTTHandler:
                 if msg.payload in self.control_pending:
                     return
                 try:
+<<<<<<< HEAD
                     self.control_queue.put_nowait(msg)
                     self.control_pending.add(msg.payload)
                 except queue.Full:
                     logging.error("Control queue full; client must retry welcome request")
+=======
+                    with QueryBuilder("Angelique") as qb:
+                        result = qb.session.query(AngeliquePacket.packet_id).order_by(AngeliquePacket.packet_id.desc()).first()
+                        if result:
+                            next_packet_id = result[0] + 1
+                        else:
+                            next_packet_id = 1  # If no packets, start from 1
+                except Exception as e:
+                    logging.error(f'\t\tUnable to fetch latest Angelique packet_id: {e}')
+                    next_packet_id = 1
+                welcome_msg = json.dumps({
+                    "packet_id": next_packet_id,
+                })
+                userdata.client.publish('server-communication', welcome_msg)
+                logging.info(f'\t\tBEVO-Angelique connected. Sent welcome message with next packet_id: {next_packet_id}')
+            elif connected_client_id in {'BEVO-Orion', 'BEVO_ORION'}:
+                logging.warning('\t\tBEVO-Orion has connected. Querying database for latest packet_id to send welcome message...')
+                try:
+                    with QueryBuilder("Orion") as qb:
+                        result = qb.session.query(OrionPacket.packet_id).order_by(OrionPacket.packet_id.desc()).first()
+                        if result:
+                            next_packet_id = result[0] + 1
+                        else:
+                            next_packet_id = 1
+
+                    # determine log base directory: allow override for mounted volume
+                    base_env = os.getenv("LOG_BASE_DIR")
+                    if base_env:
+                        log_base = Path(base_env)
+                    else:
+                        repo_root = Path(__file__).parents[2]
+                        log_base = repo_root / "logs"
+                    log_dir = log_base / "orion"
+                    log_dir.mkdir(parents=True, exist_ok=True)
+                    log_file = log_dir / f"orion_log_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                    cols = []
+                    # Qualify columns with table name so similarly named fields map correctly.
+                    for table, col_spec in self.table_specs["Orion"].items():
+                        if table in {model.__tablename__ for model in ORION_MODELS.values()}:
+                            cols.extend(f"{table}.{col}" for col in col_spec.keys())
+                    with open(log_file, 'w', newline='') as f:
+                        csv.writer(f).writerow(cols)
+                    logging.info(f'\t\tCreated new log file for Orion at {log_file}')
+                    # record path and header columns for later appends
+                    self.orion_log_path = log_file
+                    self.orion_cols = cols
+                except Exception as e:
+                    logging.error(f'\t\tUnable to fetch latest Orion packet_id: {e}')
+                    next_packet_id = 1
+
+                welcome_msg = json.dumps({"packet_id": next_packet_id})
+                userdata.client.publish('server-communication', welcome_msg)
+                logging.info(f'\t\tBEVO-Orion connected. Sent welcome message with next packet_id: {next_packet_id}')
+>>>>>>> samuel/BEVO-schema-registry
             return
         if msg.topic == 'server-communication':
             logging.debug('Ignoring server-communication control message on ingest subscriber')
@@ -318,7 +373,7 @@ class MQTTHandler:
             self._b64_ingest(msg.payload, freq)
         # Handle bare data topic as Orion protobuf stream
         elif (topic_split := msg.topic.split('/'))[0] == 'data':
-            if (topic_split[-1] in {'packet', 'dynamics', 'controls', 'pack', 'diagnostics_low', 'thermal'}):
+            if topic_split[-1] in {model.__tablename__ for model in ORION_MODELS.values()}:
                 self._data_ingest(msg.payload, topic_split[-1], cache_enable=self.cache_enable, car="Orion")
             else:
                 self._send_to_bridge(payload=msg.payload, car="Orion")
@@ -661,7 +716,20 @@ class MQTTHandler:
 
     def _proto_decode(self, payload: str, car = "Nightwatch") -> dict:
         # logging.debug('Data Received via Protobuf')
+<<<<<<< HEAD
         return decode_sensor(payload, car)
+=======
+        if (car == "Angelique"):
+            row = angelique_pb2.AngeliqueSensorData()
+        elif (car == "Orion"):
+            row = can_packets_pb2.OrionSensorData()
+        else:
+            row = template_pb2.SensorData()
+        row.ParseFromString(payload)
+        row = MessageToDict(row, preserving_proto_field_name=True, always_print_fields_with_no_presence=True)
+        # logging.debug(row)
+        return row
+>>>>>>> samuel/BEVO-schema-registry
 
     def _base64_decode(self, payload: str, high_freq: bool) -> dict:
         '''
