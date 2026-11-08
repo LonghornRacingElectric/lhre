@@ -151,9 +151,11 @@ def score(data, case, fence):
         frozen = next((a for t, a in steer if t >= fault_t), None)
         visible = next((t for t, a in steer if t >= fault_t and frozen is not None
                         and abs(a - frozen) > STEER_TOL_RAD), None)
-        if visible is not None:
-            row['visible_after_s'] = f'{visible - fault_t:.3f}'
-            row['latency_from_visible_s'] = f'{trip[0] - visible:.3f}'
+        # A trip before the freeze shows (or one that never shows) beat the
+        # budget outright: 0, never negative and never blank.
+        row['visible_after_s'] = 'never' if visible is None else f'{visible - fault_t:.3f}'
+        after = 0.0 if visible is None else max(0.0, trip[0] - visible)
+        row['latency_from_visible_s'] = f'{after:.3f}'
     v = next((s for t, _, _, s in reversed(truth) if t <= fault_t), math.nan)
     stop = next((t for t, _, _, s in truth if t > trip[0] and s < STOPPED), None)
     latency = trip[0] - fault_t

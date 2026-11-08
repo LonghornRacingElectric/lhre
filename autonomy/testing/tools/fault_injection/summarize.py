@@ -14,8 +14,16 @@ FAULT_RESULTS = ('caught', 'wrong_check', 'missed', 'early_trip')
 CLEAN_RESULTS = ('clean', 'false_trip')
 
 
+def number(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def fmt(values, how):
-    nums = [float(v) for v in values if v not in ('', 'nan')]
+    # Markers such as 'never' are not numbers; leave them out of the statistic.
+    nums = [n for n in (number(v) for v in values) if n is not None and n == n]
     return f'{how(nums):.2f}' if nums else '-'
 
 

@@ -98,8 +98,9 @@ SharePoint ([testing/README.md](../../README.md)).
 - `visible_after_s` and `latency_from_visible_s` (`steer_freeze` only): a
   frozen actuator is invisible until the command moves
   `steer_angle_tol_rad` off the frozen angle, so these split the latency at
-  that moment. The `STEER_TRACKING` budget in the Sim v2 pass criteria
-  applies to `latency_from_visible_s`
+  that moment. A trip before the freeze shows scores 0, and a freeze that
+  never shows reads `never` with 0. The `STEER_TRACKING` budget in the Sim
+  v2 pass criteria applies to `latency_from_visible_s`
   ([#208](https://github.com/LonghornRacingElectric/lhre/issues/208)); the
   summary prints both.
 - `stop_dist_m`: path length from the fault to standstill, from ground
