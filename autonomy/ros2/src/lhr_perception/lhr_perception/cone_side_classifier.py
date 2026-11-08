@@ -77,10 +77,9 @@ class _DisjointSet:
         second = self.find(second)
         if first == second:
             return True
-        # A nominal 7m observation weighs about 0.12; ignore weaker noise,
-        # but never let a short edge erase independently observed sides.
         if (self._votes[first] * self._votes[second] < 0
-                and min(abs(self._votes[first]), abs(self._votes[second])) >= 0.1):
+                and min(abs(self._votes[first]), abs(self._votes[second]))
+                >= MIN_OPPOSING_SIDE_VOTE):
             return False
         if self._sizes[first] < self._sizes[second]:
             first, second = second, first
@@ -88,6 +87,11 @@ class _DisjointSet:
         self._sizes[first] += self._sizes[second]
         self._votes[first] += self._votes[second]
         return True
+
+
+# Keep below a nominal 7m vote (~0.12); retune with the observation weights
+# or corridor limits so weak noise can merge without erasing opposing sides.
+MIN_OPPOSING_SIDE_VOTE = 0.1
 
 
 def vehicle_relative_side_vote(

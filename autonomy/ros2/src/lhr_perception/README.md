@@ -161,6 +161,7 @@ short local corridor beside the car. Short Delaunay edges share those votes
 along a boundary. A slightly longer gap is joined only when it follows the
 boundary's local direction. Links are considered shortest first and cannot
 join fragments with opposing accumulated votes of magnitude at least 0.1
+(`MIN_OPPOSING_SIDE_VOTE`, tuned alongside the observation weighting and corridor limits)
 on each side, even through an endpoint with no direct vote. Weaker outliers
 can still inherit a boundary's majority. This also applies to aligned gaps;
 a 3 m link limit cannot silently join the two sides of a 3 m track.
