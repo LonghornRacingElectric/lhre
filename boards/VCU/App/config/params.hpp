@@ -109,6 +109,9 @@ struct DriveParams {
   // TODO(verify): assumes a toggle RTD switch; use false for a momentary
   // button.
   bool rtd_release_exits_drive = true;
+  // The PDU's BSE_3 gates RTD_WAIT and DRIVE, and its timeout cuts torque.
+  // Only the unloaded motor spin turns this off.
+  bool require_pdu = true;
 };
 
 struct BuzzerParams {

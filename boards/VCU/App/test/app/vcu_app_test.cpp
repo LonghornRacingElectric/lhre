@@ -361,6 +361,28 @@ TEST_F(VcuAppTest, MotorSpinModeCapsTorqueAndStopsPushingAtTheSpeedCeiling) {
   EXPECT_EQ(app_->state(), VcuState::kDrive) << "coasts, no fault";
 }
 
+TEST_F(VcuAppTest, MotorSpinModeNeedsNoPduButOtherModesDo) {
+  b_.pdu_alive = false;
+  b_.Energize();
+  b_.SetBrakePsi(500.0f);
+  b_.Run(*app_, 200);
+  EXPECT_EQ(app_->state(), VcuState::kTsActive)
+      << "endurance waits for the PDU";
+  EXPECT_NE(app_->faults() & vcu::kFaultPduTimeout, 0u);
+
+  lhre::can::pi::VcuModeCommand m;
+  m.event_mode = static_cast<uint8_t>(EventMode::kMotorSpin);
+  b_.car.Send(m.ToFrame());
+  b_.Run(*app_, 200);
+  ASSERT_EQ(app_->snapshot().event_mode, EventMode::kMotorSpin);
+  EXPECT_EQ(app_->faults() & vcu::kFaultPduTimeout, 0u);
+  EXPECT_EQ(app_->faults() & vcu::kFaultBse3Unavailable, 0u);
+  ASSERT_EQ(app_->state(), VcuState::kRtdWait);
+  b_.PressRtd(true);
+  b_.Run(*app_, 50);
+  EXPECT_EQ(app_->state(), VcuState::kDrive);
+}
+
 TEST_F(VcuAppTest, LineLockRequestStaysZeroAndActualIsReported) {
   ReachDrive();
   EXPECT_FALSE(b_.linelock_ctrl.Read());

@@ -63,6 +63,8 @@ Params MakeMotorSpin() {
   p.torque.zero_torque_rpm = 1500.0f;
   // The inverter enforces the same cap on its side of the command.
   p.inverter.torque_limit_nm = p.torque.peak_torque_nm;
+  // TEMP: the bench spin has no PDU on the bus, so don't wait for its BSE_3.
+  p.drive.require_pdu = false;
   return p;
 }
 

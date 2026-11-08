@@ -240,14 +240,15 @@ Every DRIVE prerequisite still applies, so the bench needs:
 - the shutdown loop closed at both VCU taps, and the BSPD latch clear;
 - the inverter's status, fault, current and voltage frames, and either
   speed frame;
-- `PDU_BSE3` from the PDU;
 - both APPS and both BSE sensors connected and in range, with the brake
   pressed for the RTD press;
 - `motor_disconnect` (PE6) low.
 
-The dash, TSM and wheel speeds aren't needed, except that a latched brake
-comparator flag (`/faults`) only clears with the dash's `fault_reset`. The 20 Nm and 1500 rpm are
-first-spin values, not the motor's limits.
+The PDU (`PDU_BSE3`), the dash and the wheel speeds aren't needed. Motor spin
+is the one mode that doesn't wait for the PDU (`DriveParams::require_pdu`):
+every other mode still does, and a silent PDU cuts torque there. A latched
+brake comparator flag (`/faults`) clears on a power cycle with all four flags
+low. The 20 Nm and 1500 rpm are first-spin values, not the motor's limits.
 
 Four independent wheel speeds are subscribed on the **Data** CAN bus,
 not GPIO: `0x402` FL, `0x403` FR, `0x404` RL and `0x405` RR. This matches

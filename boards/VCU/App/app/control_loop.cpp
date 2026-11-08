@@ -133,7 +133,9 @@ uint32_t App::ComputeFaults(uint32_t now, bool inverter_fresh,
   if (!shutdown_loop_.closed()) f |= kFaultShutdownOpen;
   if (!rx_.contactor_status.Fresh(now)) f |= kFaultHvcTimeout;
   if (!inverter_fresh) f |= kFaultInverterTimeout;
-  if (!rx_.bse_3.Fresh(now)) f |= kFaultPduTimeout | kFaultBse3Unavailable;
+  if (params_->drive.require_pdu && !rx_.bse_3.Fresh(now)) {
+    f |= kFaultPduTimeout | kFaultBse3Unavailable;
+  }
   if (inverter_faulted) f |= kFaultInverterFault;
   if (live_.inputs.latch_state) f |= kFaultBspdTripped;
   if (ped.hard_brake_mismatch) f |= kFaultHardBrakeMismatch;
@@ -170,7 +172,7 @@ void App::UpdateState(uint32_t now, bool rtd_edge, bool inverter_fresh,
   si.loop_closed = shutdown_loop_.closed();
   si.torque_cut_fault = (faults_ & kTorqueCutFaults) != 0;
   si.inverter_ready = inverter_fresh && !inverter_faulted;
-  si.pdu_fresh = live_.bse3_available;
+  si.pdu_fresh = live_.bse3_available || !P.drive.require_pdu;
   si.bse_valid = !ped.bse1_fault && !ped.bse2_fault && !ped.bse1_disconnect &&
                  !ped.bse2_disconnect && !ped.bse1_out_of_range &&
                  !ped.bse2_out_of_range;
