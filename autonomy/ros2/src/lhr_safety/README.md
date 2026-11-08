@@ -23,7 +23,7 @@ a fault, a crash or a hang all look the same to whatever is listening.
 | `CMD_INVALID` | A non-finite steering command, which the Gazebo adapter would clamp to full lock | `/lhr/vehicle/cmd` |
 | `LIDAR_STALE` | No cloud for `lidar_timeout_s` (only with `monitor_lidar`) | `/lhr/lidar/points` |
 | `GEOFENCE` | Further than `geofence_radius_m` from where the car armed (entered `READY`) | `/lhr/vehicle/odom` |
-| `STEER_TRACKING` | Above `steer_min_speed_mps` forward or reverse, the odometry's yaw rate differs from v·tan(δ)/L for the commanded δ by more than `max(steer_yaw_rate_tol, steer_rel_tol x expected)` for `steer_window_s` | `/lhr/vehicle/cmd`, `/lhr/vehicle/odom` |
+| `STEER_TRACKING` | The measured steering angle differs from the command by more than `steer_angle_tol_rad` for `steer_angle_window_s`, after allowing the actuator `vehicle.yaml`'s rate limit to get there; or the measured angle stops arriving for `steer_angle_timeout_s`. With no measured angle ever, the yaw-rate fallback below | `/lhr/vehicle/cmd`, `/lhr/vehicle/steering_measured` (`/lhr/vehicle/odom` for the fallback) |
 
 The order above is the priority when several fire at once: a dead or
 diverged pose explains everything downstream of it, so it is reported
@@ -40,11 +40,33 @@ GNSS the EKF's position variance starts at 1 m² and only grows, so any bound
 trips before the car moves; the first Gazebo run on 10/18 did exactly that.
 Turn it on once GNSS keeps the covariance bounded.
 
-The steering check stands in for a steering angle sensor the sim does not
-have. It reads the yaw rate in `/lhr/vehicle/odom`, which under
-`estimator:=ekf` is the EKF's estimate, not the gyro itself, so it freezes
-if the IMU dies. IMU and wheel-speed dropouts are not caught yet
+The steering check compares the measured steering angle with the command
+([#208](https://github.com/LonghornRacingElectric/lhre/issues/208)). On the
+car the angle comes from the steering motor's encoder; in Gazebo,
+`joint_cmd_adapter` publishes the steering joints' actual angles as the
+same single bicycle-model angle (`/lhr/vehicle/steering_measured`,
+`sensor_msgs/JointState`, one joint named `steering`). The command is
+rate-limited at `vehicle.yaml`'s `max_rate_rad_s` before the comparison, so
+a step the actuator is still following is not a fault. 0.035 rad (about 2°)
+for 0.2 s is ten 50 Hz samples' worth of a stuck actuator, not transport
+delay. Once a measured angle has arrived, losing it trips too, since the
+steering can no longer be checked.
+
+The 11/1 fault matrix showed why the yaw rate was not enough. The old rule
+compared it with v·tan(δ)/L inside a band of 0.15 rad/s or half the
+expected rate, for 1 s: a freeze mid-corner kept widening the band while
+the controller asked for more steering, and at 5.3 m/s the car left the
+course before the 1 s window filled. That rule remains only as the
+fallback for a plant with no steering measurement (the kinematic demo),
+from `steer_min_speed_mps` up. It reads the yaw rate in `/lhr/vehicle/odom`,
+which under `estimator:=ekf` is the EKF's estimate, not the gyro itself, so
+it freezes if the IMU dies. IMU and wheel-speed dropouts are not caught yet
 ([#126](https://github.com/LonghornRacingElectric/lhre/issues/126)).
+
+A stuck actuator is invisible while the command still asks for the angle it
+is stuck at, and no check can see it. The fault tools time `steer_freeze`
+from when the command first moves `steer_angle_tol_rad` off the frozen
+angle, as well as from the injection.
 
 The checks live in
 [`monitors.py`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/ros2/src/lhr_safety/lhr_safety/monitors.py)

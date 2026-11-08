@@ -19,7 +19,7 @@ from nav_msgs.msg import Odometry
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
-from sensor_msgs.msg import PointCloud2
+from sensor_msgs.msg import JointState, PointCloud2
 from std_msgs.msg import Bool, String, UInt32
 
 
@@ -33,6 +33,9 @@ class SafetyNode(Node):
         defaults = SafetyConfig(wheelbase_m=vehicle.wheelbase_m,
                                 max_speed_mps=vehicle.max_speed_mps)
         self.declare_parameter('rate_hz', 20.0)
+        # The steering encoder's angle; in sim joint_cmd_adapter converts
+        # Gazebo's steering joints to it.
+        self.declare_parameter('steering_measured_topic', '/lhr/vehicle/steering_measured')
         self.declare_parameter('lidar_topic', '/lhr/lidar/points')
         self.declare_parameter('monitor_lidar', defaults.monitor_lidar)
         self.declare_parameter('lidar_timeout_s', defaults.lidar_timeout_s)
@@ -41,6 +44,9 @@ class SafetyNode(Node):
         self.declare_parameter('max_position_std_m', defaults.max_position_std_m)
         self.declare_parameter('max_speed_factor', defaults.max_speed_factor)
         self.declare_parameter('geofence_radius_m', defaults.geofence_radius_m)
+        self.declare_parameter('steer_angle_tol_rad', defaults.steer_angle_tol_rad)
+        self.declare_parameter('steer_angle_window_s', defaults.steer_angle_window_s)
+        self.declare_parameter('steer_angle_timeout_s', defaults.steer_angle_timeout_s)
         self.declare_parameter('steer_min_speed_mps', defaults.steer_min_speed_mps)
         self.declare_parameter('steer_yaw_rate_tol', defaults.steer_yaw_rate_tol)
         self.declare_parameter('steer_rel_tol', defaults.steer_rel_tol)
@@ -59,6 +65,10 @@ class SafetyNode(Node):
             max_position_std_m=float(param('max_position_std_m')),
             max_speed_factor=float(param('max_speed_factor')),
             geofence_radius_m=float(param('geofence_radius_m')),
+            max_steer_rate_rad_s=vehicle.max_steer_rate_rad_s,
+            steer_angle_tol_rad=float(param('steer_angle_tol_rad')),
+            steer_angle_window_s=float(param('steer_angle_window_s')),
+            steer_angle_timeout_s=float(param('steer_angle_timeout_s')),
             steer_min_speed_mps=float(param('steer_min_speed_mps')),
             steer_yaw_rate_tol=float(param('steer_yaw_rate_tol')),
             steer_rel_tol=float(param('steer_rel_tol')),
@@ -86,6 +96,8 @@ class SafetyNode(Node):
         self.create_subscription(
             AckermannDriveStamped, '/lhr/vehicle/cmd', self._cmd_cb, 10)
         self.create_subscription(
+            JointState, param('steering_measured_topic'), self._steering_cb, 10)
+        self.create_subscription(
             String, '/lhr/mission/status', self._status_cb, 10)
         self.create_subscription(
             Bool, '/lhr/mission/reset', self._reset_cb, 10)
@@ -104,6 +116,10 @@ class SafetyNode(Node):
 
     def _cmd_cb(self, msg: AckermannDriveStamped):
         self._monitor.on_command(self._now(), msg.drive.steering_angle)
+
+    def _steering_cb(self, msg: JointState):
+        if msg.position:
+            self._monitor.on_steering(self._now(), msg.position[0])
 
     def _odom_cb(self, msg: Odometry):
         pose, twist = msg.pose, msg.twist.twist

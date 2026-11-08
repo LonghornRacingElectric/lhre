@@ -267,3 +267,70 @@ def test_fault_codes_are_stable():
     assert [f.name for f in Fault] == [
         'NONE', 'ODOM_STALE', 'EKF_DIVERGED', 'LIDAR_STALE', 'GEOFENCE',
         'STEER_TRACKING', 'CMD_STALE', 'CMD_INVALID']
+
+
+# --- Measured steering angle (#208) ---
+
+RATE_CFG = SafetyConfig(wheelbase_m=WHEELBASE, max_speed_mps=15.0, max_steer_rate_rad_s=1.0)
+
+
+def _steer_run(monitor, commands, measured, end, dt=0.02):
+    """Drive straight with fresh streams; commands(t) and measured(t) give the angles."""
+    t, first_trip = 0.0, None
+    while t <= end + 1e-9:
+        monitor.on_lidar(t)
+        monitor.on_command(t, commands(t))
+        # A car that does not turn: the yaw-rate rule would trip, the angle rule must decide.
+        monitor.on_odom(t, 5.0 * t, 0.0, 5.0, 0.0, 0.0, 0.01, 0.01)
+        monitor.on_steering(t, measured(t))
+        if first_trip is None and monitor.check(t) == Fault.STEER_TRACKING:
+            first_trip = t
+        t += dt
+    return first_trip
+
+
+def test_measured_steering_that_follows_never_trips():
+    # A sweep the actuator follows exactly: the yaw rate disagrees, but the
+    # measured angle owns the check once it arrives.
+    m = SafetyMonitor(CFG, now=0.0)
+    assert _steer_run(m, lambda t: 0.3 * math.sin(t), lambda t: 0.3 * math.sin(t), 10.0) is None
+
+
+def test_rate_limited_step_is_not_a_fault():
+    # A 0.5 rad step that the wheels follow at their 1 rad/s limit.
+    m = SafetyMonitor(RATE_CFG, now=0.0)
+    trip = _steer_run(m, lambda t: 0.5 if t >= 1.0 else 0.0,
+                      lambda t: min(0.5, max(0.0, t - 1.0)), 4.0)
+    assert trip is None
+
+
+def test_actuator_slower_than_its_limit_trips():
+    m = SafetyMonitor(RATE_CFG, now=0.0)
+    trip = _steer_run(m, lambda t: 0.5 if t >= 1.0 else 0.0,
+                      lambda t: min(0.5, max(0.0, 0.5 * (t - 1.0))), 4.0)
+    assert trip is not None
+
+
+def test_frozen_steering_trips_one_window_after_it_shows():
+    # Frozen at 0.1 rad while the command ramps away at 0.1 rad/s: the gap
+    # passes the tolerance at 0.35 s, then the window runs.
+    m = SafetyMonitor(CFG, now=0.0)
+    trip = _steer_run(m, lambda t: 0.1 + 0.1 * t, lambda t: 0.1, 3.0)
+    visible = CFG.steer_angle_tol_rad / 0.1
+    assert trip == pytest.approx(visible + CFG.steer_angle_window_s, abs=0.05)
+
+
+def test_losing_the_measured_angle_trips():
+    m = SafetyMonitor(CFG, now=0.0)
+    assert _steer_run(m, lambda t: 0.0, lambda t: 0.0, 1.0) is None
+    t = 1.0
+    while t < 1.0 + CFG.steer_angle_timeout_s + 0.1:
+        t += 0.02
+        _healthy(m, t)
+    assert m.check(t) == Fault.STEER_TRACKING
+
+
+def test_non_finite_measured_angle_trips():
+    m = SafetyMonitor(CFG, now=0.0)
+    trip = _steer_run(m, lambda t: 0.0, lambda t: math.nan if t >= 1.0 else 0.0, 2.0)
+    assert trip == pytest.approx(1.0 + CFG.steer_angle_window_s, abs=0.05)

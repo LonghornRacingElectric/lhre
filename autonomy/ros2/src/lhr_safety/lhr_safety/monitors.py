@@ -58,8 +58,22 @@ class SafetyConfig:
     # Acceleration reaches 152 m with its braking zone. Sim gate runs then
     # share one fence; the car gets the surveyed venue boundary (#229).
     geofence_radius_m: float = 300.0
-    # Yaw rate is noise-dominated near standstill, so the steering check
-    # only runs above this speed.
+    # STEER_TRACKING compares the measured steering angle (the steering
+    # encoder; Gazebo's steering joints in sim) with the command, once the
+    # actuator has had time to get there at max_steer_rate_rad_s (#208).
+    # The node fills the rate in from vehicle.yaml.
+    max_steer_rate_rad_s: float = math.inf
+    # About 2 degrees, held for ten 50 Hz samples: a stuck actuator, not
+    # transport delay.
+    steer_angle_tol_rad: float = 0.035
+    steer_angle_window_s: float = 0.2
+    # Once a measured angle has arrived, losing it means the steering can
+    # no longer be checked, so it trips too.
+    steer_angle_timeout_s: float = 0.25
+    # Fallback while no measured angle has ever arrived (the kinematic
+    # demo): compare the yaw rate with what the command should produce.
+    # Yaw rate is noise-dominated near standstill, so this only runs above
+    # steer_min_speed_mps.
     steer_min_speed_mps: float = 2.0
     steer_yaw_rate_tol: float = 0.15
     steer_rel_tol: float = 0.5
@@ -87,6 +101,12 @@ class SafetyMonitor:
         self._steer_cmd: Optional[float] = None
         self._mismatch_since: Optional[float] = None
         self._steer_fault = False
+        # Measured-angle rule: the reference the actuator should have
+        # reached by now, and when the measurement last arrived.
+        self._last_steer_measured: Optional[float] = None
+        self._steer_ref: Optional[float] = None
+        self._angle_mismatch_since: Optional[float] = None
+        self._angle_fault = False
 
     def on_lidar(self, now: float):
         self._last_lidar = now
@@ -129,9 +149,39 @@ class SafetyMonitor:
 
         self._check_steering(now, vx, yaw_rate)
 
+    def on_steering(self, now: float, angle: float):
+        """Feed one measured steering angle (rad, bicycle-equivalent)."""
+        cfg = self._config
+        previous = self._last_steer_measured
+        self._last_steer_measured = now
+        if not math.isfinite(angle):
+            ok = False
+        elif self._steer_cmd is None:
+            # Nothing to follow: the reference sits where the wheels are.
+            self._steer_ref = angle
+            ok = True
+        else:
+            if self._steer_ref is None or previous is None or now < previous:
+                self._steer_ref = angle
+            else:
+                # No time passed, no movement, even at an unlimited rate.
+                dt = now - previous
+                step = cfg.max_steer_rate_rad_s * dt if dt > 0.0 else 0.0
+                self._steer_ref += max(-step, min(step, self._steer_cmd - self._steer_ref))
+            ok = abs(angle - self._steer_ref) <= cfg.steer_angle_tol_rad
+        if ok:
+            self._angle_mismatch_since = None
+            self._angle_fault = False
+            return
+        if self._angle_mismatch_since is None or self._angle_mismatch_since > now:
+            self._angle_mismatch_since = now
+        self._angle_fault = now - self._angle_mismatch_since >= cfg.steer_angle_window_s
+
     def _check_steering(self, now: float, forward: float, yaw_rate: float):
         """Compare measured yaw rate with what the command should produce."""
         cfg = self._config
+        if self._last_steer_measured is not None:
+            return  # the measured-angle rule owns STEER_TRACKING
         # Signed forward speed: reversing flips the sign of the yaw rate a
         # given steering angle produces.
         if self._steer_cmd is None or abs(forward) < cfg.steer_min_speed_mps:
@@ -178,6 +228,10 @@ class SafetyMonitor:
             return Fault.LIDAR_STALE
         if outside:
             return Fault.GEOFENCE
-        if self._steer_fault:
+        if self._last_steer_measured is not None:
+            if (self._angle_fault or self._age(self._last_steer_measured, now)
+                    > cfg.steer_angle_timeout_s):
+                return Fault.STEER_TRACKING
+        elif self._steer_fault:
             return Fault.STEER_TRACKING
         return Fault.NONE

@@ -857,6 +857,8 @@ outer = atan(wheelbase / (R + track_width/2))
 
 **Wheel velocity differential:** Each wheel's angular velocity accounts for its distance from the instantaneous center of rotation. Outer wheels travel farther and spin faster than inner wheels in a turn.
 
+**Measured steering:** the model's joint state publisher sends both steering joints' actual angles at 50 Hz (`/lhr/vehicle/steering_joint_states`). The adapter inverts the Ackermann split (tan of the center angle is the harmonic mean of the wheels' tangents) and publishes the one angle the car's steering encoder will report, `/lhr/vehicle/steering_measured`, which `safety_node` checks against the command.
+
 **Command timeout:** Gazebo's joint controllers hold their last target, so a dead controller would otherwise leave the car driving. With no command for `cmd_timeout_s` the adapter sets all four wheel speeds to 0 (steering holds), the way the real car's actuators stop when commands stop. It acts once per dropout and resumes on the next command; a sim clock that jumps backwards counts as a dropout.
 
 | Param | Default | Description |
@@ -1045,10 +1047,14 @@ for the contact model and off-track-distance uncertainty.
 | `max_position_std_m` | `0.0` | Largest pose standard deviation (m) before the EKF counts as diverged; 0 is off, the default until GNSS bounds the EKF's covariance |
 | `max_speed_factor` | `1.5` | Speed above this multiple of `vehicle.yaml`'s top speed counts as diverged |
 | `geofence_radius_m` | `300.0` | Distance (m) from where the car armed (entered Ready) that trips the geofence. Holds every legal sim course (see [lhr_safety](src/lhr_safety/README.md)) |
-| `steer_min_speed_mps` | `2.0` | Speed (m/s) below which the steering check is skipped |
-| `steer_yaw_rate_tol` | `0.15` | Smallest yaw-rate mismatch (rad/s) that counts |
-| `steer_rel_tol` | `0.5` | Mismatch allowed as a fraction of the expected yaw rate |
-| `steer_window_s` | `1.0` | How long (s) a mismatch must last before it trips |
+| `steering_measured_topic` | `"/lhr/vehicle/steering_measured"` | Measured steering angle (`sensor_msgs/JointState`, one joint) |
+| `steer_angle_tol_rad` | `0.035` | Measured-vs-commanded steering error (rad) that counts, after the actuator's rate limit |
+| `steer_angle_window_s` | `0.2` | How long (s) that error must last before it trips |
+| `steer_angle_timeout_s` | `0.25` | Measured-angle age (s) that trips, once one has arrived |
+| `steer_min_speed_mps` | `2.0` | Yaw-rate fallback (no measured angle): speed (m/s) below which it is skipped |
+| `steer_yaw_rate_tol` | `0.15` | Yaw-rate fallback: smallest mismatch (rad/s) that counts |
+| `steer_rel_tol` | `0.5` | Yaw-rate fallback: mismatch allowed as a fraction of the expected yaw rate |
+| `steer_window_s` | `1.0` | Yaw-rate fallback: how long (s) a mismatch must last before it trips |
 
 The Gazebo launch exposes every threshold as `safety_<param>` and starts
 the node only with `safety:=true`. `monitor_lidar` follows `perception`, and

@@ -43,6 +43,16 @@ def main():
               f"{fmt([r['pdr_dist_m'] for r in rs], max)} | "
               f'{within}/{len(rs)} |')
 
+    freezes = [r for r in faulted
+               if r['case'] == 'steer_freeze' and r.get('latency_from_visible_s')]
+    if freezes:
+        # A frozen actuator only shows once the command moves off the
+        # frozen angle; the STEER_TRACKING budget runs from there (#208).
+        print()
+        print(f'`steer_freeze`: visible {fmt([r["visible_after_s"] for r in freezes], median)} s '
+              f'after the freeze (median), then tripped within '
+              f'{fmt([r["latency_from_visible_s"] for r in freezes], max)} s.')
+
     if clean:
         trips = [r for r in clean if r['result'] == 'false_trip']
         print()

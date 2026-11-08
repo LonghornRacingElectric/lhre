@@ -32,7 +32,8 @@ OUT=${OUT:-$HOME/lhr-test-data/$(date +%F)-fault-injection}
 EXTRA=${EXTRA:-}
 
 TOPICS="/clock /lhr/safety/status /lhr/safety/heartbeat /lhr/mission/status
-/lhr/vehicle/odom /lhr/vehicle/odom_truth /lhr/vehicle/cmd /lhr/sim/fault"
+/lhr/vehicle/odom /lhr/vehicle/odom_truth /lhr/vehicle/cmd /lhr/sim/fault
+/lhr/vehicle/steering_measured"
 mkdir -p "$OUT/bags"
 failed=''
 
