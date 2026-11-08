@@ -170,7 +170,6 @@ class LidarConeDetector(Node):
         self._side_confirmations = side_confirmations
         self._stable_sides = StableSideLabels(side_confirmations)
         self._last_side_pose: Pose2D | None = None
-        self._seeded_sides = False
         self._published_namespaces: list[str] = []
 
         # --- QoS ---
@@ -317,7 +316,6 @@ class LidarConeDetector(Node):
             self._cone_sides.clear()
             self._stable_sides = StableSideLabels(self._side_confirmations)
             self._last_side_pose = None
-            self._seeded_sides = False
         if self._last_scan_ns == stamp_ns:
             # Republishing one scan must never satisfy the evidence threshold.
             self._scan_history.pop()
@@ -368,16 +366,20 @@ class LidarConeDetector(Node):
             self._side_votes.append(0.0)
 
         self._cone_sides = self._stable_sides.labels(len(self._cone_map))
-        if self._last_side_pose is not None:
-            travelled = math.hypot(
-                pose.x - self._last_side_pose.x,
-                pose.y - self._last_side_pose.y,
-            )
-            if travelled < self._side_update_distance:
-                return
+        if self._last_side_pose is None:
+            self._last_side_pose = pose
+            return
+        travelled = math.hypot(
+            pose.x - self._last_side_pose.x,
+            pose.y - self._last_side_pose.y,
+        )
+        if (pose.stamp_ns <= self._last_side_pose.stamp_ns
+                or travelled < self._side_update_distance):
+            return
+        self._last_side_pose = pose
 
-        for index, entry in enumerate(self._cone_map):
-            self._side_votes[index] += vehicle_relative_side_vote(
+        observations = [
+            vehicle_relative_side_vote(
                 entry[0],
                 entry[1],
                 pose,
@@ -387,6 +389,16 @@ class LidarConeDetector(Node):
                 max_lateral=self._side_vote_max_lateral,
                 lateral_deadband=self._side_vote_deadband,
             )
+            for entry in self._cone_map
+        ]
+        # Old evidence must not grow indefinitely or confirm itself after
+        # the car has passed every observed cone.
+        if not any(observations):
+            self._cone_sides = self._stable_sides.update([UNKNOWN] * len(self._cone_map))
+            return
+        for index, vote in enumerate(observations):
+            if vote:
+                self._side_votes[index] = 0.5 * self._side_votes[index] + vote
 
         proposed = classify_cone_sides(
             self._cone_map,
@@ -394,11 +406,9 @@ class LidarConeDetector(Node):
             link_distance=self._boundary_link_distance,
             gap_distance=self._boundary_gap_distance,
             max_gap_angle=self._boundary_gap_angle,
+            fresh_votes=observations,
         )
-        self._cone_sides = self._stable_sides.update(
-            proposed, seed=not self._seeded_sides)
-        self._seeded_sides = True
-        self._last_side_pose = pose
+        self._cone_sides = self._stable_sides.update(proposed)
 
     # ------------------------------------------------------------------
     # Publishing
