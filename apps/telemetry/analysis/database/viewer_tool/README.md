@@ -25,6 +25,66 @@ Still pending:
 - `kafka.routes.json` handles pass-through routing for derived topics (`gg-plot`, `track-mapper`).
 - `sensor_data` normalization is handled directly in `src/lib/kafka/kafkaConsumer.ts`.
 
+## Signal discovery (v0)
+
+Build and publish the current car's catalog from the repo root:
+
+```bash
+bazel run --config=local //tools/spec:publish_signals
+```
+
+The current spec declares `car: "orion"` in `groups.textproto`.
+With the viewer running, `GET /api/cars/orion/signals` returns its signal array,
+including CAN, GPS, and board-status fields.
+`?schema_version=<64-character-lowercase-hash>` selects an exact version in that
+car's folder; omitting it follows that car's `current.json` pointer.
+The catalog file stores its schema hash only at the top level. The API returns
+the signal array, with the hash in `X-Schema-Version` rather than in each row.
+Every car uses the same catalog shape but its own archive; there is no cross-car
+fallback. No Kafka or
+database connection is needed for discovery. This v0 read endpoint has no
+API-key authentication; adding reader/admin keys remains a later phase.
+
+The archive root defaults to `apps/telemetry/catalogs`. For deployment, set
+`SIGNAL_CATALOG_DIR` in both the publisher and viewer, or pass
+`-- --catalog-root /absolute/path` to the publishing command. It stores
+`<car>/<hash>.json` and atomically updates `<car>/current.json`. An identical
+publish is a no-op; old versions are immutable. Hashes identify canonical
+catalog contents, including car, independently of paths or textproto formatting.
+Build outputs still live in `bazel-bin` and are not used as the archive.
+See the [archive guide](../../../catalogs/README.md) for storage, backups, and
+rollback. Unpublished current versions return 503; unknown cars or missing
+requested versions return 404; malformed car slugs/hashes return 400.
+No rates are guessed and mixed-unit GPS arrays have a null unit. CAN shared
+sources and repeated array slots appear once per protobuf field.
+
+External telemetry must declare an uplink limit; the four GPS fields declare
+50 Hz, matching publishd's default snapshot limit. This is a declared policy,
+not a measured acquisition rate or a per-signal limit currently enforced by
+publishd. The catalog exposes only `rate_hz`: the explicit uplink rate, otherwise
+the CAN message frequency. External signals have no native-frequency fallback;
+their rate is null when no uplink rate is declared. Numeric scalar
+external signals require explicit units; mixed-unit arrays may omit them.
+
+Catalog serving tests: `npx vitest run tests/signals/catalog.test.ts`.
+
+## Historical queries
+
+`POST /api/query` reads Orion packet-based PostgreSQL history through the shared
+MoTeC read-only database helper using signal definitions from its published catalog. It supports raw
+JSON/CSV pages; time buckets and downsampling are not implemented yet.
+Artemis retains its separate time-bucket read interfaces. This packet adapter
+returns `unsupported_storage` for Artemis when its catalog is published;
+Artemis query adaptation and reconciliation are deferred.
+
+Use the existing `ORION_DB_*` settings and set
+`QUERY_CURSOR_SECRET` to a stable secret shared by viewer processes. See the
+[query guide](src/lib/query/README.md) for the full request/response contract,
+limits, pagination behavior, and deployment configuration.
+
+`npm run test:query` runs the unit and HTTP checks; the optional real PostgreSQL
+checks are described in the [test guide](tests/query/README.md).
+
 ## Environment variables
 
 Example viewer-side Kafka/env values:

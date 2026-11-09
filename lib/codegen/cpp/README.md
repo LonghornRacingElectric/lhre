@@ -14,6 +14,9 @@ to. `boards/VCU/BUILD.bazel` is the worked example. The source
 list is `CAN_BOARDS` in this package's BUILD file; the generator errors
 with instructions when `lib/spec/messages/` gains or loses a file.
 
+Message timing uses the spec's `frequency_hz` (0 means aperiodic). Generated
+`kFrequencyHz` and `MessageMeta.frequency_hz` keep their existing C++ names.
+
 Only the wire and logical layers reach this code. Telemetry attributes
 stay invisible to firmware.
 

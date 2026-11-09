@@ -92,6 +92,12 @@ alias(
     visibility = ["//visibility:public"],
 )
 
+alias(
+    name = "current_schema_signals",
+    actual = "//lib/codegen/telemetry:signals_json",
+    visibility = ["//visibility:public"],
+)
+
 filegroup(
     name = "current_schema_bundle",
     srcs = [
@@ -100,6 +106,7 @@ filegroup(
         ":current_schema_sql",
         ":current_schema_contract",
         ":current_schema_descriptor",
+        ":current_schema_signals",
     ],
     visibility = ["//visibility:public"],
 )

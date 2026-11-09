@@ -18,6 +18,14 @@ class Spec:
     def __init__(self, files):
         self.files = dict(files)
 
+    def car(self):
+        """Catalog identity is declared once; partial specs may omit it until generation."""
+        import re
+        names = [file.car for file in self.files.values() if file.car]
+        if len(names) != 1 or not re.fullmatch(r"[a-z][a-z0-9_-]*", names[0]):
+            raise ValueError("spec bundle must declare exactly one lowercase car slug")
+        return names[0]
+
     def messages(self):
         """Yields (filename, CanMessage) across all files."""
         for name, spec_file in self.files.items():

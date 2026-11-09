@@ -25,6 +25,11 @@ Opens a browser tab with three views:
 - **Groups**: telemetry groups, their ledger state, and which fields are
   bound to them.
 
+Message timing is entered directly as **Hz** (`frequency_hz`); 0 means
+aperiodic. There are no default-tier or per-signal tier selectors. The CAN
+Matrix and CSV keep their existing frequency column names while reading the
+message frequency field.
+
 Every edit re-validates against the real `//lib/spec` invariants, so
 errors show up in the right panel before you save. Saving writes through
 the canonical serializer and refuses if the files changed on disk since
@@ -52,3 +57,13 @@ Backend is stdlib `http.server`. A localhost form tool does not need a
 framework, and extra pip wheels cost us Windows path length.
 
 The in-repo textproto is authoritative; current builds have no CSV fallback.
+## Signal catalog publishing
+
+`bazel run //tools/spec:publish_signals` builds the current signal catalog and
+publishes its immutable content-hash version, then atomically activates it for
+that car. `-- --catalog-root /absolute/path` selects persistent archive storage;
+otherwise `SIGNAL_CATALOG_DIR` or `apps/telemetry/catalogs` is used. Repeating a
+publish with unchanged content changes no files. `--source /absolute/file.json`
+publishes a separately generated catalog or reactivates an archived version.
+The input's content hash and car identity are validated before any write.
+See the [catalog format](../../lib/codegen/telemetry/README.md).

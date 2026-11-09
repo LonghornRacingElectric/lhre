@@ -12,48 +12,64 @@ groups {
       id: 1
       type: PROTO_FLOAT
       description: "Seconds since the gateway received a CSM frame."
+      unit: "s"
+      channel_type: HEALTH
     }
     external_field {
       name: "dui_last_seen_s"
       id: 2
       type: PROTO_FLOAT
       description: "Seconds since the gateway received a DUI frame."
+      unit: "s"
+      channel_type: HEALTH
     }
     external_field {
       name: "hvc_last_seen_s"
       id: 3
       type: PROTO_FLOAT
       description: "Seconds since the gateway received an HVC frame."
+      unit: "s"
+      channel_type: HEALTH
     }
     external_field {
       name: "inverter_last_seen_s"
       id: 4
       type: PROTO_FLOAT
       description: "Seconds since the gateway received an inverter frame."
+      unit: "s"
+      channel_type: HEALTH
     }
     external_field {
       name: "pdu_last_seen_s"
       id: 5
       type: PROTO_FLOAT
       description: "Seconds since the gateway received a PDU frame."
+      unit: "s"
+      channel_type: HEALTH
     }
     external_field {
       name: "tsm_last_seen_s"
       id: 6
       type: PROTO_FLOAT
       description: "Seconds since the gateway received a TSM frame."
+      unit: "s"
+      channel_type: HEALTH
     }
     external_field {
       name: "usm_last_seen_s"
       id: 7
       type: PROTO_FLOAT
       description: "Seconds since the gateway received a USM frame."
+      unit: "s"
+      channel_type: HEALTH
     }
     external_field {
       name: "vcu_last_seen_s"
       id: 8
       type: PROTO_FLOAT
       description: "Seconds since the gateway received a VCU frame."
+      unit: "s"
+      channel_type: HEALTH
     }
   }
   group {
@@ -96,6 +112,7 @@ groups {
       unit: "deg"
       element_names: "latitude"
       element_names: "longitude"
+      uplink_rate_hz: 50.0
     }
     external_field {
       name: "gps_imu"
@@ -106,6 +123,7 @@ groups {
       element_names: "x"
       element_names: "y"
       element_names: "z"
+      uplink_rate_hz: 50.0
     }
     external_field {
       name: "gps_speed"
@@ -113,6 +131,7 @@ groups {
       type: PROTO_FLOAT
       description: "NMEA ground speed populated by the gateway."
       unit: "knots"
+      uplink_rate_hz: 50.0
     }
     external_field {
       name: "gps_precise"
@@ -126,6 +145,7 @@ groups {
       element_names: "sigma_h_m"
       element_names: "source"
       element_names: "fix_time_s"
+      uplink_rate_hz: 50.0
     }
   }
   group {
@@ -142,3 +162,4 @@ groups {
   }
   next_snapshot_id: 10
 }
+car: "orion"

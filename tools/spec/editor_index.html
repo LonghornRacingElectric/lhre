@@ -135,7 +135,6 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const PALETTE = ["#4e79a7","#f28e2b","#59a14f","#e15759","#b07aa1",
                  "#76b7b2","#edc948","#ff9da7","#9c755f","#bab0ac"];
-const TIERS = ["TIER_UNSPECIFIED","FAST","MEDIUM","SLOW"];
 const TYPES_FILE = "lib/spec/types.textproto";
 
 let spec = null;        // {files, digest}
@@ -358,8 +357,6 @@ function renderMessage(main) {
         `<option ${b === msg.bus ? "selected" : ""}>${esc(b)}</option>`).join("")}</select></div>
       <div><label>From board</label><input data-f="from_board" value="${esc(msg.from_board)}"></div>
       <div><label>To boards</label><input data-f="to_boards" value="${esc((msg.to_boards || []).join(","))}"></div>
-      <div><label>Default tier</label><select data-f="default_rate_tier">${TIERS.map(t =>
-        `<option ${t === (msg.default_rate_tier || "TIER_UNSPECIFIED") ? "selected" : ""}>${t}</option>`).join("")}</select></div>
       <div class="wide"><label>Description</label><input data-f="description" value="${esc(msg.description)}"></div>
     </div>
     <h2>Frame</h2>
@@ -496,8 +493,6 @@ function signalForm(msg, sig) {
              `<option ${g === tel.group ? "selected" : ""}>${esc(g)}</option>`).join("")}</select></div>
            <div><label>Field</label><input data-s="tel.field" value="${esc(tel.field)}"></div>
            <div><label>Proto id</label><input value="${tel.id ?? ""}" disabled></div>
-           <div><label>Tier</label><select data-s="tel.rate_tier">${TIERS.map(t =>
-             `<option ${t === (tel.rate_tier || "TIER_UNSPECIFIED") ? "selected" : ""}>${t === "TIER_UNSPECIFIED" ? "inherit" : t}</option>`).join("")}</select></div>
          </div>` : ""}`}
     <div style="text-align:right"><button id="delSig" class="danger small">Delete signal</button></div>
   </div>`;

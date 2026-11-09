@@ -8,6 +8,7 @@ __pycache__/
 *.csv
 .DS_store
 events.png
+.vscode/
 
 !stack/ingest/common_schema.sql
 

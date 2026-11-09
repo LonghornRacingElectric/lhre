@@ -115,8 +115,8 @@ for a branch image or a registry digest without editing YAML.
 
 Services consume `//apps/telemetry:current_schema_bundle`, not a physical
 generator path. That target selects the protobuf, CAN JSON, Orion database
-DDL, canonical schema manifest and descriptor generated from `//lib/spec`;
-a spec edit therefore invalidates every
+DDL, signal catalog, canonical schema manifest and descriptor generated from
+`//lib/spec`; a spec edit therefore invalidates every
 server-side artifact in the same Bazel graph. It remains a dependency seam,
 not a runtime schema registry or multi-version decoder.
 
@@ -142,6 +142,12 @@ of ingest. Run its dedicated Bazel/Compose targets; it is not automatically
 enabled in the core stack. Admins can override server image references and the
 authority's schema directory explicitly; BEVO also supports persistent local
 release overrides. Neither override changes protobuf compatibility rules.
+
+DISCOVER catalogs have a separate content-based version. The current spec
+bundle declares Orion. `bazel run //tools/spec:publish_signals` publishes that
+catalog independently of database initialization and BEVO release metadata.
+Artemis retains its own database and build targets; its catalog and query
+adapter can be supplied later. See the [archive guide](catalogs/README.md).
 
 ## Dependencies and CI
 

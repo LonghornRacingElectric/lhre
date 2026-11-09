@@ -6,10 +6,17 @@ load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
 load(":telemetry_artifact.bzl", "telemetry_artifact")
 
 py_library(
+    name = "catalog_lib",
+    srcs = ["catalog.py"],
+    visibility = ["//visibility:public"],
+)
+
+py_library(
     name = "gen_telemetry_lib",
     visibility = ["//apps/telemetry/stack/ingest:__pkg__"],
     srcs = ["gen_telemetry.py", "storage.py"],
     deps = [
+        ":catalog_lib",
         "//lib/spec:ir",
         "//lib/telemetry:contract",
         "//apps/telemetry/scripts:schema_helpers",
@@ -33,8 +40,16 @@ telemetry_artifact(
 
 telemetry_artifact(
     name = "can_json",
-    kind = "json",
+    kind = "can_json",
     out = "can.json",
+    spec = "//lib/spec:files",
+    visibility = ["//visibility:public"],
+)
+
+telemetry_artifact(
+    name = "signals_json",
+    kind = "signals_json",
+    out = "signals.json",
     spec = "//lib/spec:files",
     visibility = ["//visibility:public"],
 )
@@ -61,6 +76,7 @@ filegroup(
         ":artemis_schema",
         ":storage_contract",
         ":storage_sql",
+        ":signals_json",
     ],
     visibility = ["//visibility:public"],
 )
@@ -118,6 +134,7 @@ py_test(
     args = ["$(rlocationpaths //lib/spec:files)"],
     data = ["//lib/spec:files"],
     deps = [
+        ":catalog_lib",
         ":gen_telemetry_lib",
         "@lhre_pypi//bazel_runfiles",
     ],
