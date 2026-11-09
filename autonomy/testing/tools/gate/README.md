@@ -4,9 +4,10 @@ Runs the 10/28 Software MVP gate
 ([#109](https://github.com/LonghornRacingElectric/lhre/issues/109)) in Gazebo
 and scores every run against the
 [pass criteria](../../../docs/plans/mvp-pass-criteria.md), so the gate is a
-table of passes and failures rather than a judgment call. The runner now
-selects the Mid-360 and camera-fusion sensor stack for
-[#206](https://github.com/LonghornRacingElectric/lhre/issues/206).
+table of passes and failures rather than a judgment call. Every gated run
+launches with the gate stack in [`stack.args`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/testing/tools/gate/stack.args),
+which the [fault tools](../fault_injection/README.md) share
+([#237](https://github.com/LonghornRacingElectric/lhre/issues/237)).
 It uses the MVP matrix with course-derived reference-lap scoring; the expanded
 matrix and FMU checks in the [Sim v2 criteria](../../../docs/plans/sim-v2-pass-criteria.md)
 require the remaining gate work.
@@ -15,17 +16,23 @@ require the remaining gate work.
 
 | File | What it does |
 |---|---|
-| `run_gate.sh` | Runs the matrix: autocross seeds 1 to 5 three times each, acceleration three times and skidpad three times on the no-shortcuts stack. One headless launch per run, recorded to a bag |
+| `run_gate.sh` | Runs the matrix: autocross seeds 1 to 5 three times each, acceleration three times and skidpad three times on the gate stack. One headless launch per run, recorded to a bag |
+| `stack.args` | The gate stack: the launch arguments every gated run of this runner and `run_faults.sh` adds, one per line |
+| `stack.sh` | Reads `stack.args` for both runners, and refuses a line that is not one `name:=value` argument |
 | `score_gate.py` | Reads every run folder and writes `results.csv` (one row per run) and `summary.md` (the pass/fail table). Rerunnable, it only reads |
 | `watch_run.py` | Ends each run in sim time and writes how it ended to `end.txt`. The fault tools use it too |
 
-Every gate run is `perception:=lidar estimator:=ekf safety:=true
-lidar_source:=mid360 enable_stereo_camera:=true enable_camera_lidar_fusion:=true`.
-Sensor selection belongs to the runner; standalone Gazebo launch defaults
-remain unchanged. Fusion supplies `/lhr/perception/cones_classified` to the
-planner and enables LiDAR side inference for camera fallback.
-Optional baselines use `perception:=sim estimator:=truth lidar_source:=gazebo`,
-with stereo and fusion explicitly disabled, for comparison only. Lap time is
+The gate stack today is `perception:=lidar estimator:=ekf safety:=true
+lidar_source:=mid360 enable_stereo_camera:=true enable_camera_lidar_fusion:=true`;
+`plant:=fmu` joins it once #221 and #222 land. Change it in `stack.args` and
+both runners follow, so the gate and the fault matrix cannot drift apart.
+Standalone Gazebo launch defaults stay light. Fusion supplies
+`/lhr/perception/cones_classified` to the planner and enables LiDAR side
+inference for camera fallback. Optional baselines are the one run that opts
+out: they name `perception:=sim estimator:=truth safety:=true
+lidar_source:=gazebo`, with stereo and fusion explicitly disabled, for
+comparison only. `test_gate_runner.py` in `lhr_gazebo` fails if any other
+planned run of either runner leaves out part of the stack. Lap time is
 scored against a [reference lap](#the-reference-lap) computed from the course.
 A run ends `SETTLE_S` sim seconds after the mission reaches `FINISHED` or
 `EMERGENCY`, so the bag holds the stop, or at `RUN_S` sim seconds.
@@ -56,8 +63,8 @@ Environment variables pick the matrix: `SEEDS` (`1 2 3 4 5`), `REPEATS` (3),
 `BASELINE` (0; 1 adds one truth-stack run per seed, for comparison only),
 `RUN_S` (180 sim seconds), `SETTLE_S` (5 sim seconds), `HANG_S` (60 wall
 seconds), `OUT` and `EXTRA` (more launch arguments, split on whitespace).
-The runner's per-run arguments follow `EXTRA`, so gate sensor selection and
-baseline exclusions take precedence. The full matrix without skidpad is
+The runner's per-run arguments, the gate stack among them, follow `EXTRA`,
+so the stack and baseline exclusions take precedence. The full matrix without skidpad is
 18 runs. Historical MVP timing predates the combined Mid-360/camera stack.
 A quick check:
 

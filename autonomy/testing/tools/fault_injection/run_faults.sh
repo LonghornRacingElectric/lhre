@@ -2,8 +2,9 @@
 # Run the #117 fault-injection matrix in Gazebo and score every run.
 #
 # Run from autonomy/ros2 after ./scripts/build.sh, on Ubuntu or inside the
-# Docker container. Each run is one headless launch with safety:=true and at
-# most one fault from fault_injector. Bags go to $OUT/bags (never into git,
+# Docker container. Each run is one headless launch of the gate stack in
+# ../gate/stack.args, shared with run_gate.sh (#237), with at most one fault
+# from fault_injector. Bags go to $OUT/bags (never into git,
 # see testing/README.md) and analyze_run.py writes one row per run to
 # $OUT/results.csv (a rerun replaces its row); summarize.py turns that into
 # $OUT/summary.md.
@@ -15,6 +16,8 @@
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROS2=$(cd "$HERE/../../../ros2" && pwd)
+source "$HERE/../gate/stack.sh"
+STACK=$(gate_stack) || exit 2
 
 # Empty means none, like CLEAN_SEEDS: CASES= runs only the clean laps.
 CASES=${CASES-"ekf_kill controller_kill controller_pause odom_nan odom_spike lidar_drop cmd_nan steer_freeze geofence"}
@@ -91,7 +94,6 @@ one_run() {  # id kind track seed v_max seconds [launch args...]
     # launch its own process group for stop_launch.
     setsid ros2 launch lhr_gazebo gazebo_demo.launch.py \
         gui:=false rviz:=false track_style:="$track" seed:="$seed" \
-        perception:=lidar estimator:=ekf safety:=true \
         v_max:="$vmax" ${world:+"$world"} enable_metrics:=false \
         $EXTRA "$@" > "$OUT/bags/$id.launch.log" 2>&1 &
     local launch=$!
@@ -116,29 +118,32 @@ one_run() {  # id kind track seed v_max seconds [launch args...]
         || failed="$failed $id"
 }
 
-cleanup
-for kind in $CASES; do
-    for v in $SPEEDS; do
-        for r in $(seq 1 "$REPEATS"); do
-            id="${kind}_v${v}_r${r}"
-            case $kind in
-                geofence)
-                    one_run "$id" "$kind" "$TRACK" 1 "$v" "$RUN_S" \
-                        safety_geofence_radius_m:="$FENCE" ;;
-                controller_pause)
-                    one_run "$id" "$kind" "$TRACK" 1 "$v" "$RUN_S" \
-                        fault:="$kind" fault_after_s:="$AFTER" \
-                        fault_duration_s:=3 ;;
-                *)
-                    one_run "$id" "$kind" "$TRACK" 1 "$v" "$RUN_S" \
-                        fault:="$kind" fault_after_s:="$AFTER" ;;
-            esac
+plan() {  # one line per run: id kind track seed v_max seconds, then launch arguments
+    local kind v r s args
+    for kind in $CASES; do
+        for v in $SPEEDS; do
+            for r in $(seq 1 "$REPEATS"); do
+                case $kind in
+                    geofence) args="safety_geofence_radius_m:=$FENCE" ;;
+                    controller_pause)
+                        args="fault:=$kind fault_after_s:=$AFTER fault_duration_s:=3" ;;
+                    *) args="fault:=$kind fault_after_s:=$AFTER" ;;
+                esac
+                echo "${kind}_v${v}_r${r} $kind $TRACK 1 $v $RUN_S $STACK $args"
+            done
         done
     done
-done
-for s in $CLEAN_SEEDS; do
-    one_run "clean_s$s" clean "$CLEAN_TRACK" "$s" 5 "$CLEAN_S"
-done
+    for s in $CLEAN_SEEDS; do
+        echo "clean_s$s clean $CLEAN_TRACK $s 5 $CLEAN_S $STACK"
+    done
+}
+
+# The campaign. Tests load the functions above without running it.
+cleanup
+while read -r id kind track seed v secs args <&3; do
+    # $args is split on purpose: one launch argument per word.
+    one_run "$id" "$kind" "$track" "$seed" "$v" "$secs" $args
+done 3< <(plan)
 python3 "$HERE/summarize.py" "$OUT/results.csv" > "$OUT/summary.md"
 if [ -n "$failed" ]; then
     printf '\nRuns with no world or a failed analysis:%s\n' "$failed" \
