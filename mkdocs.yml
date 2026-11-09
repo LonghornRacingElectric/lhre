@@ -24,11 +24,13 @@ nav:
       - ADR-014 Deployed Telemetry Schema: docs/architecture/014-deployed-telemetry-schema.md
       - ADR-015 Study Layout: docs/architecture/015-study-layout.md
       - ADR-016 FMU Artifact Boundary: docs/architecture/016-fmu-artifact-boundary.md
+      - ADR-020 VCU SIL FMU Host: docs/architecture/020-vcu-sil-fmu-host.md
       - Build System: docs/build-system.md
       - Cookbook: docs/cookbook.md
   - Boards:
       - Overview: boards/README.md
       - VCU (Reference): boards/VCU/README.md
+      - VCU SIL: boards/VCU/Sil/README.md
   - Drivers:
       - Overview: drivers/README.md
       - LHAL: drivers/lhal/README.md

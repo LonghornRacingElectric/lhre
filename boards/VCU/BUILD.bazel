@@ -1,3 +1,6 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
 load("//tools/firmware:firmware_project.bzl", "firmware_project")
 
 firmware_project(
@@ -31,4 +34,109 @@ firmware_project(
     enable_freertos = True,
     enable_usb = True,
     mcu = "stm32g474xx",
+)
+
+# Software-in-the-loop rig (Sil/README.md). These targets live here, not in a
+# Sil/ package, because :vcu_app is private to this package. They link the
+# bench's LHAL fakes, so they never build for the MCU.
+SIL_HOST_ONLY = select({
+    "@platforms//os:none": ["@platforms//:incompatible"],
+    "//conditions:default": [],
+})
+
+SIL_COPTS = [
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+]
+
+cc_library(
+    name = "vcu_sil_rig",
+    srcs = [
+        "Sil/rig.cpp",
+        "Sil/sensors.cpp",
+    ],
+    hdrs = [
+        "Sil/rig.hpp",
+        "Sil/sensors.hpp",
+    ],
+    copts = SIL_COPTS,
+    strip_include_prefix = "/boards/VCU",
+    target_compatible_with = SIL_HOST_ONLY,
+    deps = [
+        ":vcu_app",
+        "//drivers/lhal:host",
+        "//drivers/longhorn:math",
+        "//drivers/longhorn:period",
+        "//lib/codegen/cpp:can_dui",
+        "//lib/codegen/cpp:can_hvc",
+        "//lib/codegen/cpp:can_inverter",
+        "//lib/codegen/cpp:can_pdu",
+        "//lib/codegen/cpp:can_usm",
+        "//lib/codegen/cpp:can_vcu",
+    ],
+)
+
+cc_test(
+    name = "vcu_sil_rig_test",
+    size = "small",
+    srcs = ["Sil/rig_test.cpp"],
+    copts = SIL_COPTS,
+    target_compatible_with = SIL_HOST_ONLY,
+    deps = [
+        ":vcu_app",
+        ":vcu_sil_rig",
+        "//drivers/lhal:host",
+        "//lib/codegen/cpp:can_dui",
+        "//lib/codegen/cpp:can_hvc",
+        "//lib/codegen/cpp:can_inverter",
+        "//lib/codegen/cpp:can_pdu",
+        "//lib/codegen/cpp:can_usm",
+        "//lib/codegen/cpp:can_vcu",
+        "@googletest//:gtest_main",
+    ],
+)
+
+# The C ABI for co-simulation hosts. Linux only: the version script and the
+# hosts that load it (fmpy beside an OpenModelica FMU) are Linux.
+cc_library(
+    name = "vcu_sil_api",
+    hdrs = ["Sil/vcu_sil.h"],
+    strip_include_prefix = "/boards/VCU",
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+cc_binary(
+    name = "libvcu_sil.so",
+    srcs = ["Sil/vcu_sil.cpp"],
+    additional_linker_inputs = ["Sil/vcu_sil.lds"],
+    copts = SIL_COPTS,
+    linkopts = [
+        "-Wl,--version-script=$(location Sil/vcu_sil.lds)",
+        "-Wl,-z,defs",
+    ],
+    linkshared = True,
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":vcu_app",
+        ":vcu_sil_api",
+        ":vcu_sil_rig",
+        "//tools/firmware:build_info",
+    ],
+)
+
+cc_test(
+    name = "vcu_sil_test",
+    size = "small",
+    srcs = [
+        "Sil/vcu_sil_test.cpp",
+        ":libvcu_sil.so",
+    ],
+    copts = SIL_COPTS,
+    linkopts = ["-ldl"],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":vcu_sil_api",
+        "@googletest//:gtest_main",
+    ],
 )
