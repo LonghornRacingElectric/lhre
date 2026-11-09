@@ -30,7 +30,8 @@ def test_world_clouds_reach_existing_detector_without_labels(tmp_path, monkeypat
     rclpy.init(args=['--ros-args', '-p', f'world_sdf:={world}',
                      '-p', 'range_noise_std_m:=0.0', '-p', 'classify_sides:=false',
                      '-p', 'seed:=9', '-p', 'sensor_transform_source:=vehicle_config',
-                     '-p', 'height_filter_frame:=sensor', '-p', 'ground_z_min:=-0.4',
+                     '-p', 'height_filter_frame:=base_link', '-p', 'ground_z_min:=0.15',
+                     '-p', 'ground_z_max:=1.05',
                      '-p', 'min_cluster_points:=1', '-p', 'stack_window_sec:=0.0'])
     sensor = LidarSimNode()
     detector = LidarConeDetector()

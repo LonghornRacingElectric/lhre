@@ -31,17 +31,17 @@ def test_gazebo_detector_defaults_and_overrides(perception, override, monkeypatc
             action.execute(context)
     context.launch_configurations['perception'] = perception
     expected = {
-        'ground_z_min': -0.4, 'ground_z_max': 0.5, 'min_cluster_points': 1,
+        'ground_z_min': 0.15, 'ground_z_max': 1.05, 'min_cluster_points': 1,
         'dedup_radius': 1.5, 'max_cluster_points': 50, 'stack_window_sec': 0.0,
         'stack_max_frames': 10, 'transform_wait_sec': 0.5,
-        'sensor_transform_source': 'vehicle_config', 'height_filter_frame': 'sensor',
+        'sensor_transform_source': 'vehicle_config', 'height_filter_frame': 'base_link',
     }
     if override:
         expected.update(
-            ground_z_min=0.05, ground_z_max=0.6, min_cluster_points=2,
+            ground_z_min=-0.4, ground_z_max=0.5, min_cluster_points=2,
             dedup_radius=0.8, max_cluster_points=100, stack_window_sec=0.2,
             stack_max_frames=5, transform_wait_sec=1.0,
-            sensor_transform_source='tf', height_filter_frame='base_link')
+            sensor_transform_source='tf', height_filter_frame='sensor')
         context.launch_configurations.update({
             'lidar_' + name: str(value) for name, value in expected.items()})
     nodes = [action for action in module._launch_setup(context) if isinstance(action, Node)]
