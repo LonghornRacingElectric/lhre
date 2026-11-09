@@ -14,14 +14,17 @@ HERE_LINE = 'HERE=$(cd "$(dirname "$0")" && pwd)'
 
 def runner_prefix():
     """Load the runner's functions without executing its campaign or cleanup."""
-    script = (TOOLS / 'run_gate.sh').read_text().split('# Skidpad joins the matrix')[0]
-    return script.replace(HERE_LINE, f'HERE="{TOOLS}"')
+    script = (TOOLS / 'run_gate.sh').read_text()
+    # Without the marker the whole campaign would run, cleanup included.
+    assert '# Skidpad joins the matrix' in script
+    return script.split('# Skidpad joins the matrix')[0].replace(HERE_LINE, f'HERE="{TOOLS}"')
 
 
 def fault_prefix():
     """Load the fault runner's functions without running its campaign."""
-    script = (FAULT_TOOLS / 'run_faults.sh').read_text().split('# The campaign.')[0]
-    return script.replace(HERE_LINE, f'HERE="{FAULT_TOOLS}"')
+    script = (FAULT_TOOLS / 'run_faults.sh').read_text()
+    assert '# The campaign.' in script
+    return script.split('# The campaign.')[0].replace(HERE_LINE, f'HERE="{FAULT_TOOLS}"')
 
 
 def gate_stack():
