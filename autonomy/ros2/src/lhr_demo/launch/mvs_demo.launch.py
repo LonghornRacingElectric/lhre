@@ -17,6 +17,7 @@ from launch.utilities.type_utils import coerce_to_type
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from lhr_trackgen.publish_cones import GENERATORS
+from lhr_vehicle import load_vehicle
 import numpy as np
 
 
@@ -305,9 +306,9 @@ def generate_launch_description():
         description='Publish a synthetic Livox Mid-360 cloud on '
                     '/lhr/lidar/points alongside the stack')
     lidar_pitch_arg = DeclareLaunchArgument(
-        'mount_pitch_rad', default_value='0.0',
-        description='Mid-360 mount pitch, positive is nose down. The '
-                    'mount study has not settled this yet')
+        'mount_pitch_rad', default_value=str(load_vehicle().lidar_rpy_rad[1]),
+        description='Mid-360 mount pitch, positive is nose down. Defaults '
+                    'to vehicle.yaml, the 11/8 mount study design')
     return_profile_arg = DeclareLaunchArgument(
         'return_profile', default_value='baseline',
         choices=['baseline', 'acceptance_overcast'],

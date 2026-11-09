@@ -16,7 +16,6 @@ from lhr_lidar_sim.sensor import Mid360Sensor, MountPose
 from lhr_perception.lidar_cone_detector import LidarConeDetector
 from lhr_track_builder.track_builder_node import TrackBuilder
 from lhr_trackgen.publish_cones import generate_autocross_track
-from lhr_vehicle import load_vehicle
 from nav_msgs.msg import Odometry
 import numpy as np
 import pytest
@@ -85,7 +84,7 @@ def test_imported_cloud_drives_boundary_path_and_command_without_cone_ids():
         builder._pairing_algorithm = builder._get_pairing_algorithm()
         detections, paths, commands = Capture(), Capture(), Capture()
         detector._det_pub, builder._path_pub, control._cmd_pub = detections, paths, commands
-        mount = MountPose(*load_vehicle().lidar_position_m, pitch_rad=0.25)
+        mount = MountPose()   # vehicle.yaml: upside down inside the main hoop
         sensor = Mid360Sensor(Mid360Config(range_noise_std_m=0.0), mount, seed=1)
         tf = TransformStamped()
         tf.header.frame_id, tf.child_frame_id = 'base_link', 'lidar'

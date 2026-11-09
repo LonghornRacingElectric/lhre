@@ -39,24 +39,25 @@ def _float(name):
 
 
 MID360_MOUNT = ('x_m', 'y_m', 'z_m', 'roll_rad', 'pitch_rad', 'yaw_rad')
-# The base_link cut the default sensor-frame band gives at the default mount.
+# The base_link cut the old sensor-frame band (-0.40 m) gave at the old nose mount.
 # At 0.05 m, range noise on ground hits near the car became 123 false cones
 # on one lap (testing/2026-11-08-lidar-mount-study).
 MID360_MIN_GROUND_CUT_M = 0.15
 
 
 def _mid360_mount_default():
-    """Return the mount the detector assumes without tf: vehicle.yaml, unrotated."""
-    return dict(zip(MID360_MOUNT, (*load_vehicle().lidar_position_m, 0.0, 0.0, 0.0)))
+    """Return the mount the detector assumes without tf: vehicle.yaml's."""
+    vehicle = load_vehicle()
+    return dict(zip(MID360_MOUNT, (*vehicle.lidar_position_m, *vehicle.lidar_rpy_rad)))
 
 
 def _check_mid360_mount(configs):
     """
     Refuse a moved Mid-360 unless the detector reads the move.
 
-    By default the detector places the cloud at the vehicle.yaml mount with
-    no rotation and cuts height in the sensor frame, so a caster that is
-    pitched, flipped or moved would hand it a cloud it misplaces, silently.
+    By default the detector places the cloud at the vehicle.yaml mount, so a
+    caster moved, pitched or flipped away from it would hand the detector a
+    cloud it misplaces, silently.
     """
     moved = any(float(configs.get(f'mid360_mount_{name}', value)) != value
                 for name, value in _mid360_mount_default().items())
@@ -810,9 +811,11 @@ def generate_launch_description():
         # Sensor sim
         DeclareLaunchArgument('fov_deg', default_value='200.0'),
         DeclareLaunchArgument('max_range_m', default_value='20.0'),
-        # Gazebo keeps its sensor-frame detector defaults.
-        DeclareLaunchArgument('lidar_ground_z_min', default_value='-0.40'),
-        DeclareLaunchArgument('lidar_ground_z_max', default_value='0.5'),
+        # Height is cut in base_link, at ground level, because the sensor
+        # is mounted upside down and pitched (vehicle.yaml): its own z is
+        # not height. 0.15 m keeps range noise on near ground hits out.
+        DeclareLaunchArgument('lidar_ground_z_min', default_value=str(MID360_MIN_GROUND_CUT_M)),
+        DeclareLaunchArgument('lidar_ground_z_max', default_value='1.05'),
         DeclareLaunchArgument('lidar_min_cluster_points', default_value='1'),
         DeclareLaunchArgument('lidar_dedup_radius', default_value='1.5'),
         DeclareLaunchArgument('lidar_max_cluster_points', default_value='50'),
@@ -820,7 +823,7 @@ def generate_launch_description():
         DeclareLaunchArgument('lidar_stack_max_frames', default_value='10'),
         DeclareLaunchArgument('lidar_transform_wait_sec', default_value='0.5'),
         DeclareLaunchArgument('lidar_sensor_transform_source', default_value='vehicle_config'),
-        DeclareLaunchArgument('lidar_height_filter_frame', default_value='sensor'),
+        DeclareLaunchArgument('lidar_height_filter_frame', default_value='base_link'),
         # Track builder chaining (both perception modes)
         DeclareLaunchArgument('chaining_alg', default_value='constrained_greedy'),
         DeclareLaunchArgument('min_step_m', default_value='0.3'),
