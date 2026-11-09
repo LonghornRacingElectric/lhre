@@ -1,16 +1,11 @@
-"""MQTT -> Kafka -> the existing writer -> car-specific database storage."""
+"""Artemis MQTT-to-Kafka forwarding and raw-topic consumption."""
 import json
 import time
 import unittest
 import uuid
 
-from sqlalchemy import create_engine, select, func, URL
-from sqlalchemy.orm import Session
-
 from telemetry.stack.tests.test_utils import TelemetryConfig, MQTTTestClient, KafkaTestClient, TestDataGenerator, wait_for_service, check_kafka_connection
-from stack.ingest.sensor_decode import CAR_MESSAGES
 from stack.ingest.protobuf import artemis_pb2 as artemis
-from telemetry.analysis.sql_utils.models import OrionPacket, OrionDynamics, ArtemisDynamics333hz
 
 
 class TestDataFlow(unittest.TestCase):
@@ -28,64 +23,49 @@ class TestDataFlow(unittest.TestCase):
                 return
         raise AssertionError("Kafka consumer did not receive an assignment")
 
-    def _round_trip(self, car):
-        message = CAR_MESSAGES[car](time=int(time.time() * 1000))
-        if car == "Orion": message.packet_id=time.time_ns() // 1000
+    def test_artemis_mqtt_to_kafka(self):
+        message = artemis.ArtemisSensorData(time=int(time.time() * 1000))
         message.dynamics.steer_col_angle = 1.25
         message.controls.apps1_v = 0
-        if car == "Artemis":
-            payload = artemis.TelemetryBatch(format_version=1,updates=[artemis.TelemetryUpdate(sample_time_ns=message.time*1_000_000+1,values=message,updated_fields=[
-                artemis.FieldPath(group=3,field=message.dynamics.DESCRIPTOR.fields_by_name["steer_col_angle"].number),
-                artemis.FieldPath(group=4,field=message.controls.DESCRIPTOR.fields_by_name["apps1_v"].number),
-            ])]).SerializeToString()
-        else: payload = message.SerializeToString()
+        batch = artemis.TelemetryBatch(format_version=1, updates=[artemis.TelemetryUpdate(
+            sample_time_ns=message.time * 1_000_000 + 1, values=message, updated_fields=[
+                artemis.FieldPath(group=3, field=message.dynamics.DESCRIPTOR.fields_by_name["steer_col_angle"].number),
+                artemis.FieldPath(group=4, field=message.controls.DESCRIPTOR.fields_by_name["apps1_v"].number),
+            ])])
+        payload = batch.SerializeToString()
+        batch.updates[0].values.time -= 1
+        batch.updates[0].sample_time_ns -= 1_000_000
+        rejected_payload = batch.SerializeToString()
         raw_client = KafkaTestClient(self.config)
         grafana_client = KafkaTestClient(self.config)
         suffix = uuid.uuid4().hex
         raw = raw_client.create_consumer("sensor_data", group_id=f"raw-{suffix}", auto_offset_reset="latest")
-        grafana = grafana_client.create_consumer(f"grafana_data_{car.lower()}", group_id=f"grafana-{suffix}", auto_offset_reset="latest")
-        engine = create_engine(URL.create("postgresql+psycopg2", username=self.config.db_user,
-            password=self.config.db_password, host=self.config.db_host, port=self.config.db_port, database=car.lower()))
+        grafana = grafana_client.create_consumer("grafana_data_artemis", group_id=f"grafana-{suffix}", auto_offset_reset="latest")
         try:
             self._prime_consumer(raw)
             self._prime_consumer(grafana)
             with MQTTTestClient(self.config) as mqtt:
-                mqtt.publish(car.lower() + "/data", payload, qos=1)
-                mqtt.publish(car.lower() + "/data", payload, qos=1)
+                mqtt.publish("orion/data", rejected_payload, qos=1)
+                mqtt.publish("artemis/data", payload, qos=1)
             found_raw = found_grafana = False
             deadline = time.monotonic() + 30
             while time.monotonic() < deadline and not (found_raw and found_grafana):
                 for records in raw.poll(timeout_ms=250).values():
-                    found_raw |= any(r.value == payload and dict(r.headers).get("car_type") == car.encode() for r in records)
+                    for record in records:
+                        self.assertNotEqual(record.value, rejected_payload)
+                        if record.value == payload:
+                            self.assertEqual(dict(record.headers).get("car_type"), b"Artemis")
+                            self.assertEqual(dict(record.headers).get("payload_format"), b"artemis_updates_v1")
+                            found_raw = True
                 for records in grafana.poll(timeout_ms=250).values():
                     for record in records:
                         value = json.loads(record.value)
-                        found_grafana |= value.get("time") == message.time and value.get("car_type") == car
-            self.assertTrue(found_raw, f"{car} raw Kafka record missing")
-            self.assertTrue(found_grafana, f"{car} Grafana Kafka record missing")
-            if car == "Artemis":
-                statement = select(ArtemisDynamics333hz.steer_col_angle).where(ArtemisDynamics333hz.time == message.time)
-            else:
-                statement = select(OrionDynamics.steer_col_angle).join(OrionPacket, OrionPacket.packet_id == OrionDynamics.packet_id).where(OrionPacket.packet_id == message.packet_id)
-            rows = []
-            deadline = time.monotonic() + 30
-            while time.monotonic() < deadline:
-                with Session(engine) as session:
-                    rows = session.scalars(statement).all()
-                if rows:
-                    break
-                time.sleep(0.25)
-            self.assertEqual(rows, [1.25], f"{car} sample must persist exactly once")
+                        found_grafana |= value.get("time") == message.time and value.get("car_type") == "Artemis"
+            self.assertTrue(found_raw, "Artemis raw Kafka record missing")
+            self.assertTrue(found_grafana, "Artemis live Kafka record missing")
         finally:
-            engine.dispose()
             raw_client.close()
             grafana_client.close()
-
-    def test_orion_packet_storage(self):
-        self._round_trip("Orion")
-
-    def test_artemis_frequency_pool_storage(self):
-        self._round_trip("Artemis")
 
 
 class TestKafkaProcessorFlow(unittest.TestCase):

@@ -8,14 +8,12 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
 	"github.com/IBM/sarama"
 	artemis "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/proto/artemis"
 	pb "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/proto/bridge"
-	orion "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/proto/orion"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/protobuf/proto"
@@ -38,22 +36,11 @@ type bridgeServer struct {
 }
 
 func (s *bridgeServer) SendSensorData(ctx context.Context, req *pb.SensorDataRequest) (*pb.SensorDataResponse, error) {
-	if req.CarType != "Orion" && req.CarType != "Artemis" {
-		return &pb.SensorDataResponse{Success: false, Message: "unsupported car type"}, nil
+	if req.CarType != "Artemis" || req.PayloadFormat != "artemis_updates_v1" {
+		return &pb.SensorDataResponse{Success: false, Message: "requires Artemis artemis_updates_v1"}, nil
 	}
-	if req.CarType == "Artemis" && req.PayloadFormat != "artemis_updates_v1" {
-		return &pb.SensorDataResponse{Success: false, Message: "Artemis requires artemis_updates_v1"}, nil
-	}
-	if req.CarType == "Artemis" {
-		if _, err := nativeSnapshot(req.Payload, &artemis.ArtemisSensorData{}, map[string]int64{}); err != nil {
-			return &pb.SensorDataResponse{Success: false, Message: err.Error()}, nil
-		}
-	}
-	if req.CarType == "Orion" && req.PayloadFormat == "" {
-		req.PayloadFormat = "snapshot_v1"
-	}
-	if req.CarType == "Orion" && req.PayloadFormat != "snapshot_v1" {
-		return &pb.SensorDataResponse{Success: false, Message: "invalid Orion format"}, nil
+	if _, err := nativeSnapshot(req.Payload, &artemis.ArtemisSensorData{}, map[string]int64{}); err != nil {
+		return &pb.SensorDataResponse{Success: false, Message: err.Error()}, nil
 	}
 	log.Printf("Received SensorDataRequest: CarType=%s, PayloadSize=%d", req.CarType, len(req.Payload))
 	msg := SensorMessage{
@@ -197,31 +184,17 @@ func ensureTopicExists(admin sarama.ClusterAdmin, topic string) error {
 	return nil
 }
 
-// defaultSeedMap returns a zero-valued map for the given car type, populated
-// via the same protobuf -> map converters used in the hot path. This ensures
-// every column Grafana expects is present (not just time/packet_id) so that
-// dashboards render on an empty topic.
-func defaultSeedMap(carType string) map[string]interface{} {
-	var m map[string]interface{}
-	switch strings.ToLower(strings.TrimSpace(carType)) {
-	case "orion":
-		m = orionToMap(orionSeedData())
-	case "artemis":
-		m = artemisToMap(artemisSeedData())
-	default:
-		return nil
-	}
-	m["time"] = time.Now().UnixMilli()
-	if strings.EqualFold(carType, "orion") {
-		m["packet_id"] = 0
-	}
-	m["car_type"] = carType
-	return m
+// Seed the same generated fields used by the live Artemis converter.
+func defaultSeedMap() map[string]interface{} {
+	data := artemisToMap(artemisSeedData())
+	data["time"] = time.Now().UnixMilli()
+	data["car_type"] = "Artemis"
+	return data
 }
 
 // Init method for kafka grafana datasource
-func seedTopic(producer sarama.SyncProducer, topic, carType string) {
-	jsonData, err := json.Marshal(defaultSeedMap(carType))
+func seedTopic(producer sarama.SyncProducer, topic string) {
+	jsonData, err := json.Marshal(defaultSeedMap())
 	if err != nil {
 		log.Printf("Failed to marshal seed data: %v", err)
 		return
@@ -249,28 +222,19 @@ func grafanaDataWorker(producer sarama.SyncProducer) {
 	for msg := range grafanaDataChan {
 		var jsonData []byte
 		var err error
-		if msg.CarType == "Artemis" {
-			var snapshot *artemis.ArtemisSensorData
-			snapshot, err = nativeSnapshot(msg.Payload, state, clocks)
-			if err == nil {
-				data := artemisToMap(snapshot)
-				data["car_type"] = "Artemis"
-				jsonData, err = json.Marshal(data)
-			}
-		} else {
-			jsonData, err = deserializeToJSON(msg.Payload, msg.CarType)
+		var snapshot *artemis.ArtemisSensorData
+		snapshot, err = nativeSnapshot(msg.Payload, state, clocks)
+		if err == nil {
+			data := artemisToMap(snapshot)
+			data["car_type"] = "Artemis"
+			jsonData, err = json.Marshal(data)
 		}
 		if err != nil {
 			log.Printf("Error deserializing protobuf for car %s: %v", msg.CarType, err)
 			continue
 		}
 
-		normalizedCarType := strings.ToLower(strings.TrimSpace(msg.CarType))
-		if normalizedCarType == "" {
-			normalizedCarType = "unknown"
-			log.Printf("Warning: Empty CarType received, using 'grafana_data_unknown' topic")
-		}
-		topic := fmt.Sprintf("grafana_data_%s", normalizedCarType)
+		topic := "grafana_data_artemis"
 
 		kafkaMsg := &sarama.ProducerMessage{
 			Topic: topic,
@@ -336,31 +300,6 @@ func nativeSnapshot(payload []byte, state *artemis.ArtemisSensorData, clocks map
 		}
 	}
 	return state, nil
-}
-
-func deserializeToJSON(payload []byte, carType string) ([]byte, error) {
-	var data map[string]interface{}
-	normalizedCarType := strings.ToLower(strings.TrimSpace(carType))
-
-	switch normalizedCarType {
-	case "orion":
-		msg := &orion.OrionSensorData{}
-		if err := proto.Unmarshal(payload, msg); err != nil {
-			return nil, err
-		}
-		data = orionToMap(msg)
-	case "artemis":
-		msg := &artemis.ArtemisSensorData{}
-		if err := proto.Unmarshal(payload, msg); err != nil {
-			return nil, err
-		}
-		data = artemisToMap(msg)
-	default:
-		return nil, fmt.Errorf("unsupported car type %q", carType)
-	}
-
-	data["car_type"] = carType
-	return json.Marshal(data)
 }
 
 // statsFromInt32Slice returns average, min and max for a slice of int32.
@@ -433,31 +372,6 @@ func statsFromFloat32SliceNonZero(vals []float32) (avg float64, min float32, max
 	return sum / float64(n), min, max
 }
 
-func orionToMap(msg *orion.OrionSensorData) map[string]interface{} {
-	output := schemaFields(msg.ProtoReflect())
-	if dynamics := msg.Dynamics; dynamics != nil && len(dynamics.Gps) >= 2 {
-		output["latitude"] = dynamics.Gps[0]
-		output["longitude"] = dynamics.Gps[1]
-	}
-	if pack := msg.Pack; pack != nil {
-		output["power_kw"] = float64(pack.HvPackV) * float64(pack.HvC) / 1000.0
-		if len(pack.CellsV) > 0 {
-			average, minimum, maximum := statsFromFloat32SliceNonZero(pack.CellsV)
-			output["avg_cell_v_stat"] = average
-			output["max_cell_v"] = maximum
-			output["min_cell_v"] = minimum
-			output["cell_v_delta"] = float64(maximum - minimum)
-		}
-		if len(pack.CellsTemps) > 0 {
-			average, minimum, maximum := statsFromFloat32Slice(pack.CellsTemps)
-			output["avg_cell_temp_stat"] = average
-			output["max_cell_temp"] = maximum
-			output["min_cell_temp"] = minimum
-		}
-	}
-	return output
-}
-
 func artemisToMap(msg *artemis.ArtemisSensorData) map[string]interface{} {
 	output := schemaFields(msg.ProtoReflect())
 	if dynamics := msg.Dynamics; dynamics != nil && len(dynamics.Gps) >= 2 {
@@ -486,8 +400,7 @@ func artemisToMap(msg *artemis.ArtemisSensorData) map[string]interface{} {
 func main() {
 	log.Println("Starting Kafka Bridge Service...")
 
-	// Cars we support
-	cars := []string{"orion", "artemis"}
+	cars := []string{"artemis"}
 
 	// Create admin and ensure topics exist
 	admin, err := newKafkaAdmin()
@@ -530,7 +443,7 @@ func main() {
 
 	// Seed topics to ensure they are viewable in grafana
 	for _, car := range cars {
-		seedTopic(producer, fmt.Sprintf("grafana_data_%s", car), car)
+		seedTopic(producer, fmt.Sprintf("grafana_data_%s", car))
 	}
 
 	// Start worker goroutines

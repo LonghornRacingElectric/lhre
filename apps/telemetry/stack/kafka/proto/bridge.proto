@@ -11,8 +11,8 @@ service BridgeService {
 
 message SensorDataRequest {
   bytes payload = 1;        // Raw protobuf bytes
-  string payload_format = 3; // artemis_updates_v1 or snapshot_v1
-  string car_type = 2;      // "Orion" or "Artemis"
+  string payload_format = 3; // artemis_updates_v1
+  string car_type = 2;      // "Artemis"
 }
 
 message SensorDataResponse {

@@ -2,22 +2,8 @@ package main
 
 import (
 	artemis "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/proto/artemis"
-	orion "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/proto/orion"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
-
-func orionSeedData() *orion.OrionSensorData {
-	data := &orion.OrionSensorData{}
-	message := data.ProtoReflect()
-	fields := message.Descriptor().Fields()
-	for index := 0; index < fields.Len(); index++ {
-		field := fields.Get(index)
-		if field.Kind() == protoreflect.MessageKind {
-			message.Mutable(field)
-		}
-	}
-	return data
-}
 
 func artemisSeedData() *artemis.ArtemisSensorData {
 	data := &artemis.ArtemisSensorData{}

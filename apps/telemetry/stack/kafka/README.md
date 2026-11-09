@@ -18,12 +18,10 @@ Gazelle. After a dependency edit, update the Go module checksums and commit the
 resulting `MODULE.bazel.lock` change. Protobuf Go packages are build outputs;
 they are not checked into `proto/`.
 
-Orion's Go library compiles `//lib/codegen/telemetry:orion_proto` from the same
-legacy textproto-generated protobuf used by Orion ingest. Artemis compiles `:artemis_proto` with the same current fields and a distinct
-wire identity. Retired car proto inputs and dispatch are removed. The bridge enumerates current
-Orion/Artemis fields and seed groups from generated descriptors instead of a copied
-schema/field list. Existing derived GPS, power and cell-statistics metrics
-remain application logic. Artemis now uses explicit native-update batches.
+The bridge compiles `//lib/codegen/telemetry:artemis_proto`, generated from the
+textproto. It accepts only `car_type: Artemis` with
+`payload_format: artemis_updates_v1`. Generated descriptors supply field names
+and seed groups. GPS, power and cell statistics remain application logic.
 The standalone Dockerfile was removed; build images through Bazel only.
 
 The image also packages the generated contract/descriptor under `/schema/`
@@ -41,7 +39,7 @@ A successful `SendSensorData` RPC means Kafka acknowledged the raw protobuf
 record on `sensor_data` with its `car_type` and `payload_format` headers. Producer errors return failure;
 there is no intermediate raw-data channel that can drop a successful request.
 An uncertain RPC may be retried, producing duplicates; the
-[database writer](../processors/db_writer/README.md) admits each packet once.
+[database writer](../processors/db_writer/README.md) handles replayed Artemis observations.
 The Grafana queue remains best effort and cannot prevent raw persistence.
 The single-broker deployment uses all available replica acknowledgments but does
 not provide resilience to loss of that broker's disk.

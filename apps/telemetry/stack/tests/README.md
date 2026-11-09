@@ -47,8 +47,8 @@ The viewer's `tests/storage/artemisStorage.test.ts` similarly opts in with
 `ARTEMIS_STORAGE_TEST=1` and `ARTEMIS_DATABASE_URL`. It inserts/deletes temporary
 fixture rows; do not point it at a live recording database.
 
-The ordinary `data_flow_test` verifies both paths: Orion packet/FK persistence
-and Artemis timestamp-based raw pools, including duplicate delivery.
+The ordinary `data_flow_test` verifies Artemis MQTT forwarding to raw and live
+Kafka topics, including rejection of the former-car topic.
 
 For an isolated stack, `MQTT_HOST`/`MQTT_PORT`, `POSTGRES_HOST`/`POSTGRES_PORT`
 and `KAFKA_BROKERS` select published test ports. Database credentials come from
@@ -66,6 +66,6 @@ shared-recording pool CSVs and graceful flush. Reserve local UDP 5005/5006 and
 The test creates a temporary identity reconciliation plan for its compiled
 Artemis schema. It never opens a physical CAN interface.
 
-`data_flow_test` checks explicit Artemis batches and legacy Orion independently,
-including replay through MQTT, Kafka and the existing writer. These integration
+`data_flow_test` checks explicit Artemis batches through MQTT and Kafka,
+including rejection of the former-car topic. These integration
 targets require a running disposable stack; unit tests alone do not prove it.
