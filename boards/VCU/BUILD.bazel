@@ -38,6 +38,11 @@ firmware_project(
     mcu = "stm32g474xx",
 )
 
+alias(
+    name = "VCU",
+    actual = ":vcu",
+)
+
 # Software-in-the-loop rig (Sil/README.md). These targets live here, not in a
 # Sil/ package, because :vcu_app is private to this package. They link the
 # bench's LHAL fakes, so they never build for the MCU.
