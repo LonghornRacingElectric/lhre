@@ -24,6 +24,7 @@ testing/
 | [2026-11-08 Mid-360 and fusion](2026-11-08-mid360-fusion-gate/README.md) | Does the gate select both sensors and preserve baselines? | Automated checks pass; Mac default timeout fails. At 1.5 s seed 1 passes, acceleration fails stay-stopped. Official machine evidence pending | In the Mac container, upload pending |
 | [2026-11-08 side classifier fixes](2026-11-08-side-classifier-fixes/README.md) | Do narrow boundaries stay separate and bad initial labels recover? | Regressions pass; combined stack passes 15/15 autocross and 3/3 acceleration repeats at the Mac diagnostic timeout | In the Mac container, upload pending |
 | [2026-11-08 LiDAR mount study](2026-11-08-lidar-mount-study/README.md) | Where on Orion should the Mid-360 go, and at what angle? | Upside down inside the main hoop at 7° nose down, bracket 4 to 10°. Sim A/B: all mounts pass 6/6; 6 and 7° tie, 8° maps cones 3 m later. Field check pending | 10/4 capture on SharePoint; sim A/B on red-mesa, upload pending |
+| [2026-11-08 camera mount study](2026-11-08-camera-mount-study/README.md) | Where should the ZED 2i sit relative to the hoop-mounted Mid-360? | Proposed shared bracket below LiDAR, about 12 cm drop to camera top, centre 0.92 m, 5° down. Driver obstruction, CAD clearance, calibration and field/sim checks pending | Notion study and published viewer; source archive pending |
 
 ## Simulator validation
 

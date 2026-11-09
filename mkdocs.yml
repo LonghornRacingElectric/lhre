@@ -102,6 +102,7 @@ nav:
           - Mid-360 Fusion Checks 2026-11-08: autonomy/testing/2026-11-08-mid360-fusion-gate/README.md
           - Side Classifier Fixes 2026-11-08: autonomy/testing/2026-11-08-side-classifier-fixes/README.md
           - LiDAR Mount Study 2026-11-08: autonomy/testing/2026-11-08-lidar-mount-study/README.md
+          - Camera Mount Study 2026-11-08: autonomy/testing/2026-11-08-camera-mount-study/README.md
           - Livox Test Tools: autonomy/testing/tools/livox/README.md
           - Fault Injection Tools: autonomy/testing/tools/fault_injection/README.md
           - MVP Gate Tools: autonomy/testing/tools/gate/README.md
