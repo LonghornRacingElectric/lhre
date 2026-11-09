@@ -2,8 +2,6 @@
 
 import math
 
-BOARDS = ("csm", "dui", "hvc", "inverter", "pdu", "tsm", "usm", "vcu")
-
 # Earliest frame time accepted as a real clock reading (2025-01-01 UTC). The
 # car's CM5 sets its clock over the network; booting without a network or an
 # RTC backup battery can leave it at 1970 or another wrong date until it syncs.
@@ -27,14 +25,15 @@ def classify(last_seen_s, stale_after_s):
 
 
 class BoardStateTracker:
-    def __init__(self, stale_after_s, telemetry_timeout_s):
+    def __init__(self, stale_after_s, telemetry_timeout_s, board_fields):
         for value in (stale_after_s, telemetry_timeout_s):
             if not math.isfinite(value) or value <= 0:
                 raise ValueError("Timeouts must be finite, positive seconds")
         self.stale_after_s = stale_after_s
         self.telemetry_timeout_s = telemetry_timeout_s
-        self.states = {board: "UNKNOWN" for board in BOARDS}
-        self.last_frame_at = None
+        self.board_fields = dict(board_fields)
+        self.states = {board: "UNKNOWN" for board in self.board_fields}
+        self.last_observed_at = {}
 
     def _set_states(self, states):
         changes = {
@@ -46,19 +45,22 @@ class BoardStateTracker:
         return changes
 
     def observe(self, board_status, now):
-        self.last_frame_at = now
         if not isinstance(board_status, dict):
-            board_status = {}
-        return self._set_states({
-            board: classify(board_status.get(f"{board}_last_seen_s"), self.stale_after_s)
-            for board in BOARDS
-        })
+            return {}
+        states = {}
+        for board, field in self.board_fields.items():
+            if field not in board_status:
+                continue
+            self.last_observed_at[board] = now
+            states[board] = classify(board_status[field], self.stale_after_s)
+        return self._set_states(states)
 
     def expire(self, now):
-        # Silence produces no records, so the poll loop must also call this when empty.
-        if self.last_frame_at is None or now - self.last_frame_at < self.telemetry_timeout_s:
-            return {}
-        return self._set_states({board: "UNKNOWN" for board in BOARDS})
+        # Only actual health observations refresh a board's arrival timeout.
+        return self._set_states({
+            board: "UNKNOWN" for board, observed in self.last_observed_at.items()
+            if now - observed >= self.telemetry_timeout_s
+        })
 
 
 def _finite_or_none(value):
@@ -81,8 +83,7 @@ def _int_or_none(value):
 def event_time_ms(frame_time, server_now_ms):
     """Pick an event timestamp: (t_ms, "car") or (t_ms, "server").
 
-    The car's frame time says when the car built the snapshot, and stays right
-    when frames arrive late or are replayed. It is used when it looks like a
+    BEVO's observation time is retained when updates arrive late or are replayed. It is used when it looks like a
     synced clock; otherwise the server's time is used and labelled as such.
     """
     car_ms = _int_or_none(frame_time)
@@ -92,7 +93,7 @@ def event_time_ms(frame_time, server_now_ms):
     return server_now_ms, "server"
 
 
-def change_events(changes, board_status, cause, t_ms, t_source="server", car="orion"):
+def change_events(changes, board_status, cause, t_ms, t_source="server", car="artemis"):
     """One JSON-ready event per changed board, in board order.
 
     Timeout changes have no frame behind them, so their last_seen_s is null.

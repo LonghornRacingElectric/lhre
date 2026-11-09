@@ -1,8 +1,12 @@
 import json
 import unittest
 
-from classifier import (BOARDS, MAX_FUTURE_SKEW_MS, MIN_VALID_FRAME_TIME_MS,
+from classifier import (MAX_FUTURE_SKEW_MS, MIN_VALID_FRAME_TIME_MS,
                         BoardStateTracker, change_events, classify, event_time_ms)
+
+
+BOARDS = ("csm", "dui", "hvc", "vcu")
+BOARD_FIELDS = {board: f"{board}_last_seen_s" for board in BOARDS}
 
 
 class BoardStateTests(unittest.TestCase):
@@ -18,7 +22,7 @@ class BoardStateTests(unittest.TestCase):
                 self.assertEqual(classify(value, 5), expected)
 
     def test_dropout_recovery_and_duplicate_suppression(self):
-        tracker = BoardStateTracker(5, 10)
+        tracker = BoardStateTracker(5, 10, BOARD_FIELDS)
         expected = ["LIVE", "STALE", None, "LIVE", "STALE"]
         for now, (value, state) in enumerate(zip([0.2, 9, 10, 0, 5], expected)):
             changes = tracker.observe({"vcu_last_seen_s": value}, now)
@@ -28,7 +32,7 @@ class BoardStateTests(unittest.TestCase):
                 self.assertEqual(changes["vcu"][1], state)
 
     def test_independent_and_simultaneous_boards(self):
-        tracker = BoardStateTracker(5, 10)
+        tracker = BoardStateTracker(5, 10, BOARD_FIELDS)
         frame = {f"{board}_last_seen_s": 0 for board in BOARDS}
         tracker.observe(frame, 0)
         frame["vcu_last_seen_s"] = 5
@@ -38,7 +42,7 @@ class BoardStateTests(unittest.TestCase):
         self.assertEqual(tracker.states["dui"], "LIVE")
 
     def test_initial_stale_and_reader_reset(self):
-        tracker = BoardStateTracker(5, 10)
+        tracker = BoardStateTracker(5, 10, BOARD_FIELDS)
         self.assertEqual(tracker.observe({"vcu_last_seen_s": 9}, 0),
                          {"vcu": ("UNKNOWN", "STALE")})
         self.assertEqual(tracker.observe({"vcu_last_seen_s": -1}, 1),
@@ -46,22 +50,25 @@ class BoardStateTests(unittest.TestCase):
         self.assertEqual(tracker.observe({"vcu_last_seen_s": -1}, 100), {})
 
     def test_missing_status_and_timeout(self):
-        tracker = BoardStateTracker(5, 10)
+        tracker = BoardStateTracker(5, 10, BOARD_FIELDS)
         self.assertEqual(tracker.expire(100), {})
         tracker.observe({"vcu_last_seen_s": 0}, 101)
         self.assertEqual(tracker.expire(110.9), {})
         self.assertEqual(tracker.expire(111), {"vcu": ("LIVE", "UNKNOWN")})
         self.assertEqual(tracker.expire(112), {})
         tracker.observe({"vcu_last_seen_s": 0}, 113)
-        self.assertEqual(tracker.observe(None, 114), {"vcu": ("LIVE", "UNKNOWN")})
+        self.assertEqual(tracker.observe(None, 114), {})
         self.assertEqual(tracker.observe([], 115), {})
+        tracker.observe({"hvc_last_seen_s": 0}, 120)
+        self.assertEqual(tracker.expire(123), {"vcu": ("LIVE", "UNKNOWN")})
+        self.assertEqual(tracker.states["hvc"], "LIVE")
 
     def test_invalid_configuration(self):
         for value in (0, -1, float("nan"), float("inf")):
             with self.assertRaises(ValueError):
-                BoardStateTracker(value, 10)
+                BoardStateTracker(value, 10, BOARD_FIELDS)
             with self.assertRaises(ValueError):
-                BoardStateTracker(5, value)
+                BoardStateTracker(5, value, BOARD_FIELDS)
 
 
 class ChangeEventTests(unittest.TestCase):
@@ -69,7 +76,7 @@ class ChangeEventTests(unittest.TestCase):
         events = change_events({"vcu": ("LIVE", "STALE")},
                                {"vcu_last_seen_s": 9.0}, "frame", 1000, "car")
         self.assertEqual(events, [{
-            "car": "orion", "board": "vcu", "state": "STALE",
+            "car": "artemis", "board": "vcu", "state": "STALE",
             "previous": "LIVE", "last_seen_s": 9.0, "cause": "frame",
             "t_ms": 1000, "t_source": "car",
         }])
@@ -78,7 +85,7 @@ class ChangeEventTests(unittest.TestCase):
         self.assertEqual(change_events({}, {"vcu_last_seen_s": 0}, "frame", 0), [])
 
     def test_timeout_events_have_no_last_seen(self):
-        tracker = BoardStateTracker(5, 10)
+        tracker = BoardStateTracker(5, 10, BOARD_FIELDS)
         tracker.observe({f"{board}_last_seen_s": 0 for board in BOARDS}, 0)
         events = change_events(tracker.expire(10), None, "telemetry_timeout", 0)
         self.assertEqual([e["board"] for e in events], sorted(BOARDS))

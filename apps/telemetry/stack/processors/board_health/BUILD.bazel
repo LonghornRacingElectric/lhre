@@ -27,7 +27,7 @@ py_binary(
     main = "main.py",
     deps = [
         ":classifier",
-        "//apps/telemetry/stack/ingest:ingest_lib",
+        "//apps/telemetry/stack/ingest:sensor_decode",
         requirement("kafka-python"),
         requirement("protobuf"),
     ],

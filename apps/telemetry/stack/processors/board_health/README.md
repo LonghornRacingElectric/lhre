@@ -5,16 +5,16 @@ data once "Per-board health packet" lands. Last-seen establishes recent
 communication; health packets report the board's health. A board can be live
 while reporting a fault.
 
-Currently, the processor decodes Orion frames from `sensor_data`, tracks communication
-state independently for eight boards, and publishes one JSON event to
+Currently, the processor decodes Artemis frames from `sensor_data`, tracks communication
+state independently for the boards declared by the generated schema, and publishes one JSON event to
 `board_health` per state change. Start with [GETTING_STARTED.md](GETTING_STARTED.md).
 
 ## Input and states
 
-Only frames with a `car_type: Orion` header are decoded. Frames from other cars
-and untagged frames are skipped and do not count as a live feed. The
-`board_status` block contains `<board>_last_seen_s` for `csm`, `dui`, `hvc`,
-`inverter`, `pdu`, `tsm`, `usm`, and `vcu`.
+Only frames with a `car_type: Artemis` header are decoded. Frames from other cars
+and untagged frames are skipped and do not count as a live feed. The board list comes from the Bazel-generated `ArtemisSensorData` descriptor:
+`board_status.<board>_last_seen_s` fields define the tracked boards. Input uses
+`TelemetryBatch` with `payload_format: artemis_updates_v1`.
 
 | State | Rule |
 | --- | --- |
@@ -26,17 +26,16 @@ and untagged frames are skipped and do not count as a live feed. The
 `last_seen_s` is elapsed seconds since communication, or `-1` for never seen.
 `stale_after_s` is the allowed silence, configured by `BOARD_STALE_AFTER_S`.
 Negative values other than `-1`, booleans, nonnumeric values, NaN, and infinity
-are invalid. An absent block is unknown; individual unset protobuf scalar
-fields can decode to zero and cannot be distinguished from explicit zeroes.
-Malformed protobuf frames mark all boards unknown without stopping the loop.
+are invalid. Only fields in an update's presence mask are observations, including zero.
+Absent fields and malformed batches do not refresh a board's arrival timeout.
 
 States start unknown. First live/stale/never-seen observations and later changes
 are logged and published once; unchanged states are quiet. A reset to `-1` is
 never seen, not recovery.
 
 The poll loop checks for silence even when no messages arrive, using a monotonic
-clock. After `BOARD_TELEMETRY_TIMEOUT_S` without a processed frame, all boards
-become unknown. This measures local arrival freshness only: delayed/replayed
+clock. After `BOARD_TELEMETRY_TIMEOUT_S` without an observation for a board, that
+board becomes unknown. This measures local arrival freshness only: delayed/replayed
 frames are not rejected, and a valid-looking old frame can change state. Source
 freshness needs a timestamp/session policy before production use.
 
@@ -51,18 +50,18 @@ One JSON message per board per state change, keyed by board name so a board's
 events stay ordered if the topic ever has more than one partition:
 
 ```json
-{"car": "orion", "board": "vcu", "state": "STALE", "previous": "LIVE",
+{"car": "artemis", "board": "vcu", "state": "STALE", "previous": "LIVE",
  "last_seen_s": 9.0, "cause": "frame", "t_ms": 1767225600000, "t_source": "car"}
 ```
 
 | Field | Meaning |
 | --- | --- |
-| `car` | Always `orion`: only Orion frames are processed (see above). |
+| `car` | Always `artemis`: only Artemis frames are processed (see above). |
 | `state`, `previous` | States from the table above. |
 | `last_seen_s` | The value that caused the change; `null` for timeouts, missing blocks, and invalid values. |
-| `cause` | `frame` (a decoded frame changed it) or `telemetry_timeout` (no frames for `BOARD_TELEMETRY_TIMEOUT_S`). |
+| `cause` | `frame` (a decoded frame changed it) or `telemetry_timeout` (no observation for that board for `BOARD_TELEMETRY_TIMEOUT_S`). |
 | `t_ms` | Event time, epoch ms. See `t_source`. |
-| `t_source` | `car`: the frame's `time` field, set by `cand` when it built the snapshot. `server`: this processor's clock, used for timeout events and for frames whose car time looks unsynced. |
+| `t_source` | `car`: the frame's `time` field, set by `cand` when it timestamped the observation. `server`: this processor's clock, used for timeout events and for frames whose car time looks unsynced. |
 
 Frame events use the car's time so late or replayed frames keep the time they
 happened. The car's CM5 sets its clock over the network, so a car that boots
@@ -77,16 +76,14 @@ after every event from a poll is acknowledged. A failed send stops the
 processor, and on restart it reprocesses the uncommitted frames, so an event
 can repeat but is never silently dropped.
 
-The first frame after startup publishes `UNKNOWN -> ...` for every board; that
+The first observation after startup publishes `UNKNOWN -> ...` for that board; that
 is the policy, so a consumer gets an initial state without a separate snapshot.
 Nothing is re-sent while states hold, so a consumer that starts later sees
 nothing until the next change. A heartbeat like `car_status`'s would fix that.
 
 Timeout events come from the poll loop's silence check, not from a frame, so
 they are the only signal that the whole feed died. A per-board `UNKNOWN` with
-`cause: frame` instead means that board's value was missing or invalid. One
-malformed frame flips every board to `UNKNOWN` and back on the next good frame
-(16 events). After a restart the tracker has seen no frames, so a feed that is
+`cause: frame` instead means that board's observed value was invalid. Malformed batches are skipped; boards still expire normally. After a restart the tracker has seen no frames, so a feed that is
 already dead produces no timeout event; consumers keep their last state.
 
 ## Future work
@@ -99,7 +96,7 @@ from communication state so a live board's faults remain visible.
 measured from when it becomes expected to send. It is not implemented.
 `WAITING`, `NOT_EXPECTED`, and startup-timeout detection need reliable
 startup/power signals. Until those exist, `-1` remains `NEVER_SEEN`.
-Shared decoding, normalization, and header parsing also remain to be consolidated.
+Native updates use the shared Artemis decoder.
 
 ## Quick start
 

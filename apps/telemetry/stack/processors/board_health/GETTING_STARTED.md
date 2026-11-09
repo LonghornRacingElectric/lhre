@@ -7,7 +7,7 @@ covers getting it running and getting unstuck.
 ## What it is and why
 
 During a run, someone watching telemetry needs to know right away when a board
-drops off the CAN bus. Scrolling eight `<board>_last_seen_s` graphs is too
+drops off the CAN bus. Scrolling the generated `<board>_last_seen_s` graphs is too
 slow for that. `board_health` watches those values and publishes an event
 when a board goes stale or comes back.
 
@@ -17,8 +17,8 @@ It is a Kafka processor like every other one in `stack/processors/`:
 car ──MQTT──▶ ingest ──▶ kafka-bridge ──▶ [sensor_data] ──▶ board_health ──▶ [board_health]
 ```
 
-- **Reads** `sensor_data`: one protobuf-encoded `OrionSensorData` per Kafka
-  message, with a `car_type` header (`Orion`, `Angelique`, ...).
+- **Reads** `sensor_data`: one protobuf-encoded Artemis `TelemetryBatch` per Kafka
+  message, with `car_type: Artemis` and `payload_format: artemis_updates_v1`.
 - **Writes** `board_health`: small JSON events, one per board state change.
   The format is in [README.md](README.md#output-events).
 
@@ -66,7 +66,7 @@ something new is published. See the hints below for how to feed it.
 
 ## What you fill in
 
-TODO 1 decodes Orion input. TODO 2 calls the state tracker in `classifier.py`;
+TODO 1 decodes Artemis input. TODO 2 calls the state tracker in `classifier.py`;
 see [README.md](README.md) for states, experimental thresholds, and limitations.
 Tests are registered as `:classifier_test` and run without Kafka.
 
@@ -86,7 +86,7 @@ docker exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
 
 `sensor_data` is binary protobuf, so reading it that way prints garbage. To
 check that frames are arriving at all, add `--property print.headers=true` and
-look for `car_type:Orion`. To list every topic, run
+look for `car_type:Artemis`. To list every topic, run
 `docker exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:29092 --list`.
 
 **No car, no CAN hardware?** You don't need either.
@@ -96,18 +96,27 @@ look for `car_type:Orion`. To list every topic, run
   by hand, e.g. one board at 0.2 s, one at 9 s, one missing, and run
   `bazel test --config=local //apps/telemetry/stack/processors/board_health/...`. That covers
   most of the logic without Docker.
-- *Fake frames on the real pipeline.* Publish your own `OrionSensorData` to
-  `sensor_data` from the host with the same header ingest adds. Run from
-  `apps/telemetry/` so `stack.ingest.protobuf` imports:
+- *Fake frames on the real pipeline.* Publish your own Artemis `TelemetryBatch` to
+  `sensor_data` from the host with the same headers ingest adds. Use the
+  Bazel-generated binding:
 
   ```bash
-  cd apps/telemetry && uv run --no-project --with kafka-python --with 'protobuf>=7.35' python -c "
+  bazel build --config=local //apps/telemetry/stack/ingest:artemis_pb2
+  PYTHONPATH=bazel-bin/apps/telemetry/stack/ingest/protobuf \
+    uv run --no-project --with kafka-python --with 'protobuf>=7.35' python -c "
   from kafka import KafkaProducer
-  from stack.ingest.protobuf import can_packets_pb2
-  f = can_packets_pb2.OrionSensorData(packet_id=1)
+  import artemis_pb2
+  import time
+  ns = time.time_ns()
+  f = artemis_pb2.ArtemisSensorData(time=ns // 1_000_000)
   f.board_status.vcu_last_seen_s = 9.0
+  batch = artemis_pb2.TelemetryBatch(format_version=1, updates=[artemis_pb2.TelemetryUpdate(
+      sample_time_ns=ns, values=f, updated_fields=[artemis_pb2.FieldPath(
+          group=f.DESCRIPTOR.fields_by_name['board_status'].number,
+          field=f.board_status.DESCRIPTOR.fields_by_name['vcu_last_seen_s'].number)])])
   KafkaProducer(bootstrap_servers='localhost:29092').send(
-      'sensor_data', f.SerializeToString(), headers=[('car_type', b'Orion')]).get(10)"
+      'sensor_data', batch.SerializeToString(), headers=[
+          ('car_type', b'Artemis'), ('payload_format', b'artemis_updates_v1')]).get(10)"
   ```
 
   Change the numbers between sends to walk a board from fresh to stale and
@@ -115,17 +124,9 @@ look for `car_type:Orion`. To list every topic, run
   [`stack/tests/test_data_flow.py`](https://github.com/LonghornRacingElectric/lhre/blob/main/apps/telemetry/stack/tests/test_data_flow.py)
   does the same thing at a larger scale.
 
-**Import errors on `can_packets_pb2`, or a field that isn't there?** The
-checked-in Python bindings can lag the schema. Regenerate them from the
-current proto:
-
-```bash
-bazel run --config=local //apps/telemetry/stack/ingest:update_can_packets_pb2
-```
-
-This only matters for code you run on your host, like the fake-frame snippet
-above. The image that `enable` builds always gets freshly generated bindings.
-Don't commit the regenerated file as part of your processor work.
+**Import errors on `artemis_pb2`, or a field that isn't there?** Bindings are
+Bazel outputs generated from the textproto. Rebuild the image with `enable` or
+`:board_health_load`; do not copy generated bindings into the source tree.
 
 **Nothing in the logs at all?** Check `server_devtool.sh status`. Kafka has to
 be healthy before the processor starts, and a processor that crashed on import

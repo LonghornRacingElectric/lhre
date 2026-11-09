@@ -1,7 +1,7 @@
 """Board communication-state processor.
 
-Decodes Orion sensor_data, tracks per-board communication states, and publishes
-one JSON event to board_health per state change. Health-packet interpretation is
+Decodes Artemis native updates, tracks per-board communication states, and
+publishes one event per state change. Health-packet interpretation is
 future work. See README.md.
 """
 
@@ -12,8 +12,8 @@ import signal
 import time
 
 from kafka import KafkaConsumer, KafkaProducer
-from stack.ingest.protobuf import can_packets_pb2
-from google.protobuf.json_format import MessageToDict
+from stack.ingest.protobuf import artemis_pb2
+from stack.ingest.sensor_decode import decode_updates, payload_format
 from google.protobuf.message import DecodeError
 
 from classifier import BoardStateTracker, change_events, event_time_ms
@@ -25,7 +25,14 @@ BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 INPUT_TOPIC = os.getenv("KAFKA_INPUT_TOPIC", "sensor_data")
 OUTPUT_TOPIC = os.getenv("KAFKA_OUTPUT_TOPIC", "board_health")
 GROUP_ID = os.getenv("KAFKA_GROUP_ID", "board-health-group")
-CAR = "orion"  # the only car whose frames carry board_status
+SENSOR_TYPE = artemis_pb2.ArtemisSensorData
+AGE_SUFFIX = "_last_seen_s"
+BOARD_FIELDS = {
+    field.name.removesuffix(AGE_SUFFIX): field.name
+    for field in SENSOR_TYPE.DESCRIPTOR.fields_by_name["board_status"].message_type.fields
+    if field.name.endswith(AGE_SUFFIX)
+}
+CAR = SENSOR_TYPE.DESCRIPTOR.file.package
 
 # Experimental settings for sim data
 STALE_AFTER_S = float(os.getenv("BOARD_STALE_AFTER_S", "5"))
@@ -39,15 +46,6 @@ def _request_stop(signum, _frame):
     # container is killed after the timeout.
     global stop
     stop = True
-
-def _decode_sensor_payload(payload: bytes) -> dict:
-    row = can_packets_pb2.OrionSensorData()
-    row.ParseFromString(payload)
-    return MessageToDict(
-        row,
-        preserving_proto_field_name=True,
-        always_print_fields_with_no_presence=True,
-    )
 
 
 def _car_type(headers):
@@ -64,7 +62,7 @@ def _server_now_ms():
 
 
 def _publish(producer, changes, board_status, cause, t_ms, t_source):
-    for event in change_events(changes, board_status, cause, t_ms, t_source):
+    for event in change_events(changes, board_status, cause, t_ms, t_source, car=CAR):
         logging.info("board=%s state=%s -> %s (%s)",
                      event["board"], event["previous"], event["state"], cause)
         # Keyed by board so one board's events stay ordered on a multi-partition topic.
@@ -74,7 +72,7 @@ def _publish(producer, changes, board_status, cause, t_ms, t_source):
 
 
 def main():
-    tracker = BoardStateTracker(STALE_AFTER_S, TELEMETRY_TIMEOUT_S)
+    tracker = BoardStateTracker(STALE_AFTER_S, TELEMETRY_TIMEOUT_S, BOARD_FIELDS)
     signal.signal(signal.SIGTERM, _request_stop)
     signal.signal(signal.SIGINT, _request_stop)
     consumer = KafkaConsumer(
@@ -101,29 +99,23 @@ def main():
                     if seen % 100 == 1:  # sensor_data is fast; don't log every frame
                         logging.info("frame #%d: %d bytes, headers=%s", seen, len(record.value), record.headers)
 
-                    # Only Orion frames carry board_status. Other cars and untagged
-                    # frames are skipped and never count as a live feed.
                     car = _car_type(record.headers)
                     if car != CAR:
-                        logging.debug("Skipping frame with car_type=%s", car)
+                        continue
+                    try:
+                        payload_format(record.headers, "Artemis")
+                        updates = decode_updates(record.value)
+                    except (DecodeError, ValueError) as error:
+                        logging.warning("Invalid Artemis sensor payload: %s", error)
                         continue
 
-                    # TODO 1: decode record.value into an OrionSensorData (car_status/main.py shows how).
-                    try:
-                        decoded_message = _decode_sensor_payload(payload=record.value)
-                    except DecodeError as error:
-                        logging.warning("Invalid sensor payload: %s", error)
-                        decoded_message = {}
-                    logging.debug("Decoded Message: %s", decoded_message)
-
-                    # TODO 2: read its board_status and decide which boards are stale.
-                    board_status = decoded_message.get("board_status")
-                    changes = tracker.observe(board_status, time.monotonic())
-
-                    # TODO 3: when a board changes state, publish an event to OUTPUT_TOPIC.
-                    # Stamp with the car's frame time when its clock looks synced.
-                    t_ms, t_source = event_time_ms(decoded_message.get("time"), _server_now_ms())
-                    _publish(producer, changes, board_status, "frame", t_ms, t_source)
+                    for update in updates:
+                        board_status = update.get("board_status")
+                        if not board_status:
+                            continue
+                        changes = tracker.observe(board_status, time.monotonic())
+                        t_ms, t_source = event_time_ms(update["time"], _server_now_ms())
+                        _publish(producer, changes, board_status, "frame", t_ms, t_source)
 
             # A dead feed produces no records, so this is the only place a car
             # going silent is noticed. It runs after every poll, empty or not.
