@@ -26,7 +26,7 @@ const toNum = (v: string | number | bigint | null): number | null =>
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const carParam = (url.searchParams.get("car") || "orion").trim().toLowerCase();
-  const car = carParam === "angelique" ? "angelique" : "orion";
+  const car = carParam === "artemis" ? "artemis" : "orion";
 
   const now = Date.now();
   const toMs = Number(url.searchParams.get("to")) || now;

@@ -1,7 +1,7 @@
 import json
 from google.protobuf.descriptor import FieldDescriptor
 
-from stack.ingest.protobuf import angelique_pb2, can_packets_pb2
+from stack.ingest.protobuf import can_packets_pb2, artemis_pb2
 
 
 def _as_list(value):
@@ -103,13 +103,6 @@ def _build_payload(row_dict_list, idx, table_names):
     return payload
 
 
-def build_angelique_sensor_data_proto(row_dict_list, idx):
-    msg = angelique_pb2.AngeliqueSensorData()
-    payload = _build_payload(row_dict_list, idx, ["dynamics", "controls", "pack", "diagnostics", "thermal"])
-    _assign_message(msg, payload)
-    return msg
-
-
 def build_orion_sensor_data_proto(row_dict_list, idx):
     msg = can_packets_pb2.OrionSensorData()
     payload = _build_payload(
@@ -117,5 +110,12 @@ def build_orion_sensor_data_proto(row_dict_list, idx):
         idx,
         ["dynamics", "controls", "pack", "diagnostics_high", "diagnostics_low", "thermal", "board_status"],
     )
+    _assign_message(msg, payload)
+    return msg
+
+
+def build_artemis_sensor_data_proto(row_dict_list, idx):
+    msg = artemis_pb2.ArtemisSensorData()
+    payload = _build_payload(row_dict_list, idx, ["dynamics", "controls", "pack", "diagnostics_high", "diagnostics_low", "thermal", "board_status"])
     _assign_message(msg, payload)
     return msg

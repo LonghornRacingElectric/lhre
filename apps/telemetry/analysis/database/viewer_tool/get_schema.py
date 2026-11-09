@@ -12,8 +12,8 @@ from analysis.sql_utils.db_handler import DBHandler, DBTarget, get_table_column_
 
 def main():
     try:
-        with DBHandler(unsafe=True, target=DBTarget.get(car="Nightwatch")) as handler:
-            table_specs = get_table_column_specs(force=True, verbose=True, handler=handler, target=DBTarget.get(car='Nightwatch'))
+        with DBHandler(unsafe=True, target=DBTarget.get(car="Orion")) as handler:
+            table_specs = get_table_column_specs(force=True, verbose=True, handler=handler, target=DBTarget.get(car='Orion'))
             logging.debug("--- SCHEMA START ---")
             logging.debug(table_specs)
             logging.debug("--- SCHEMA END ---")

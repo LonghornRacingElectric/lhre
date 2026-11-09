@@ -60,8 +60,8 @@ class TestDatabaseConnectivity(unittest.TestCase):
         except Exception as e:
             self.fail(f"Database query failed: {e}")
     
-    def test_nightwatch_database_exists(self):
-        """Test that the Nightwatch database exists (used by telemetry)."""
+    def test_metadata_database_exists(self):
+        """Test that the metadata database exists (used by telemetry)."""
         import psycopg2
 
         conn = psycopg2.connect(
@@ -73,8 +73,8 @@ class TestDatabaseConnectivity(unittest.TestCase):
         )
         conn.close()
     
-    def test_angelique_database_exists(self):
-        """Test that the Angelique database exists (used by telemetry)."""
+    def test_artemis_database_exists(self):
+        """Test that the Artemis database exists (used by telemetry)."""
         import psycopg2
 
         conn = psycopg2.connect(
@@ -82,7 +82,7 @@ class TestDatabaseConnectivity(unittest.TestCase):
             port=self.config.db_port,
             user=os.getenv("POSTGRES_USER", "postgres"),
             password=os.getenv("POSTGRES_PASSWORD", "postgres"),
-            database="angelique",
+            database="artemis",
         )
         conn.close()
 
@@ -103,7 +103,7 @@ class TestDatabaseConnectivity(unittest.TestCase):
         """Test SQLAlchemy connection to the database."""
         from analysis.sql_utils.db_session import get_db
 
-        with get_db("Nightwatch") as session:
+        with get_db("Orion") as session:
             result = session.execute(text("SELECT 1"))
             self.assertEqual(result.scalar(), 1)
 

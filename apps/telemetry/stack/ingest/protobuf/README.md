@@ -1,18 +1,17 @@
 # Ingest protobuf bindings
 
-Current Orion bindings are Bazel outputs only:
+Orion, Artemis and bridge bindings are Bazel outputs only:
 
 ```bash
-bazel build //apps/telemetry/stack/ingest:can_packets_pb2
-bazel build //apps/telemetry/stack/ingest:bridge_pb2
+bazel build //apps/telemetry/stack/ingest:can_packets_pb2 //apps/telemetry/stack/ingest:artemis_pb2 //apps/telemetry/stack/ingest:bridge_pb2
 ```
 
-The first compiles `//apps/telemetry:current_schema_proto`, generated from the
-authoritative textproto. The second compiles the existing Kafka bridge RPC
-schema, shared with Go. Outputs retain the import paths
-`stack.ingest.protobuf.can_packets_pb2` and `stack.ingest.protobuf.bridge_pb2`.
+Orion uses `current_schema_proto`; Artemis uses `new_car_schema_proto`.
+Both derive from the current textproto fields with distinct protobuf packages
+and root messages. Orion's deployed wire identity is unchanged. The Artemis
+producer is implemented separately; this branch supplies server bindings.
 
-There are no checked-in Orion or bridge Python fallback copies, and no target
-that writes generated bindings into the workspace. The historical Nightwatch
-and Angelique inputs/bindings remain separate; they are not the current car's
-textproto schema.
+Import paths are `stack.ingest.protobuf.can_packets_pb2`,
+`stack.ingest.protobuf.artemis_pb2` and `stack.ingest.protobuf.bridge_pb2`.
+There are no checked-in fallback copies. Angelique/Nightwatch bindings are
+removed rather than shipped in the ingest image.

@@ -18,6 +18,7 @@ export const MAX_LAP_MS = 15 * 60_000;
 const MAX_COUNTER_KW = 200;
 
 export interface DbDay {
+  car_name?: string | null;
   day_id: number;
   date: string;
   track_name: string | null;

@@ -14,6 +14,7 @@ py_binary(
     deps = [
         "//apps/telemetry/analysis:analysis_lib",
         "//apps/telemetry/stack/ingest:partition_manager",
+        "//apps/telemetry/stack/ingest:pool_storage",
         "//apps/telemetry/stack/ingest:sensor_decode",
         requirement("kafka-python"),
         requirement("numpy"),

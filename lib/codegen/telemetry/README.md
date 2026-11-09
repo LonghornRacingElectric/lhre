@@ -14,6 +14,9 @@ protobuf, JSON, and SQL copies by hand.
 | `:schema_descriptor` | self-contained descriptor set | Build-time metadata validation |
 | `:orion_models` | generated Python ORM classes | Analysis/ingest database mappings |
 | `:orion_prisma` | generated Prisma schema | Optional viewer client generation |
+| `:artemis_proto_source` | `artemis.proto` | Separate Artemis protobuf identity |
+| `:artemis_db_init` | `artemis_db_init.sql` | Artemis Timescale initialization |
+| `:artemis_models` / `:artemis_prisma` | ORM / Prisma | Artemis pools and read views |
 | `:server_schema` | proto, CAN JSON, DDL, ORM, Prisma, contract, descriptor | CI and aggregate builds |
 
 The generated protobuf preserves the deployed `lhre-2026` package, root
@@ -47,16 +50,13 @@ seed groups from the generated descriptors while preserving its application
 metrics. BEVO compiles typed CAN tables and logger columns from these outputs;
 it does not read a mutable JSON file on the Pi.
 
-Prisma telemetry models follow generated DDL. Group tables without declared
-primary keys are marked `@@ignore`, rather than inventing uniqueness or a
-migration; packet and common models with keys remain available. Set
-`ORION_PRISMA_OUTPUT` to the desired client output directory when generating
-the optional viewer client. Existing database volumes require operator-managed
-migrations; initialization SQL and ORM generation do not migrate stored data.
+Orion ORM and Prisma models retain packet-based storage. Artemis models follow
+the pool DDL and session/time read views. Set `<CAR>_PRISMA_OUTPUT` when generating
+a client; model generation does not apply database DDL.
 
 Shared drive-day/event/track tables come from `common_schema.sql`, not CAN
-telemetry fields. Historical Nightwatch/Angelique schemas are separate from
-the current Orion textproto source and are not rewritten by this generator.
+telemetry fields. Only Orion and Artemis are supported; Nightwatch/Angelique runtime schemas are
+retired. Both current car schemas derive from the current textproto fields.
 
 ## Regression checks
 
@@ -76,3 +76,44 @@ BEVO Rust macro. It checks database artifacts and decodes a compiled BEVO
 packet using the generated server descriptor. Both targets are part of normal
 `bazel test //...`; no GitHub, registry, image pull or service is needed.
 Test fixtures and generated outputs never replace the deployed schema.
+
+## Frequency-pool storage
+
+Artemis uses TimescaleDB. Orion keeps its existing packet/FK storage. The generator assigns each measurement to its existing
+subsystem and exact CAN frequency: `dynamics_333hz` for motion,
+`dynamics_100hz` for suspension, `controls_333hz` for pedals/torque,
+`thermal_10hz` for temperatures, `pack_1hz` for cells, and the other declared
+rates. Shared-source fields have one home at their fastest producer rate.
+Gateway fields without a declared rate use an `external` pool; no frequency
+is invented for GPS or board heartbeats.
+
+Every pool has a `(session_start_ms, time)` primary key; `time` is BEVO Unix
+milliseconds. Floating columns and arrays use double precision. Protobuf
+numbers, types, units and array ordering are unchanged. There is no Artemis
+packet table, packet foreign key, or packet compatibility view.
+
+Additional outputs are `:storage_contract` (`storage_contract.json`) and
+`:storage_sql` (`storage_update.sql`). They are included in `:server_schema`.
+The storage hash includes field paths, pool membership, SQL types and bucket
+rules; it is separate from the wire schema ID used by the BEVO updater.
+Generated ORM/Prisma models describe the physical pools and read views.
+
+The subsystem views expose 100 ms buckets keyed by session and time. For
+cross-rate analysis, call the generated `<subsystem>_buckets` function with a
+common integer bucket width and `[from_ms, to_ms)` bounds. Each pool aggregates
+before the join, so independently sampled rows cannot multiply one another.
+Floating scalars support `avg` (default), `min`, `max`, and `last`; arrays,
+states and other scalar types use `last`. Missing samples remain NULL; there
+is no implicit interpolation. Bucket boundaries are epoch-aligned.
+
+Choose a bucket at least as wide as the slowest requested periodic pool. The
+viewer does this from the generated contract; including cell arrays makes a
+cross-group bucket at least one second. `min`/`max` retain peaks for conditional
+analysis. Queries remain scoped to the recording session even when two
+subsystems have the same timestamp. Raw pool rows retain every received
+snapshot and its actual timestamp: the 50 Hz uplink does not become 333 Hz
+merely because a source is assigned to that pool.
+
+Apply future additions with the [schema command](../../../apps/telemetry/scripts/README.md).
+The [storage decision](../../../docs/architecture/021-artemis-storage-scope.md)
+records the boundary between wire metadata and database layout.

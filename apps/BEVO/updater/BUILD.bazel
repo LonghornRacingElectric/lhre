@@ -80,8 +80,8 @@ _DOCKER_TEST_INPUTS = [
     "//apps/BEVO:pi_core_metadata_layer",
     "//apps/BEVO:pi_core_executables_layer",
     "//apps/telemetry:current_schema_sql",
-    "//apps/telemetry/stack/ingest:nightwatch_db_init.sql",
-    "//apps/telemetry/stack/ingest:angelique_db_init.sql",
+    "//apps/telemetry/stack/ingest:common_schema.sql",
+    "//apps/telemetry:new_car_schema_sql",
     "//apps/telemetry/stack/ingest:mosquitto.conf",
     ":standalone",
 ]

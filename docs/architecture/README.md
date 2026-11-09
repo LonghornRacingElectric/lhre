@@ -28,6 +28,8 @@ three years after everyone who made the decision graduated.
 | [017](017-schema-release-metadata.md) | Generate schema compatibility metadata without changing telemetry transport | Accepted |
 | [018](018-bevo-release-intersection.md) | BEVO projects its installed release against the authoritative deployed server | Accepted; extends ADR-017 |
 | [019](019-running-server-schema-authority.md) | Read the authoritative schema from matching running server images | Accepted |
+| [020](020-frequency-pool-telemetry.md) | Generated Timescale frequency pools, session/time identity, explicit additive schema updates | Superseded by ADR-021 |
+| [021](021-artemis-storage-scope.md) | Preserve Orion; scope frequency pools to Artemis; retire old-car runtime paths | Accepted |
 
 ## ADRs vs. READMEs
 

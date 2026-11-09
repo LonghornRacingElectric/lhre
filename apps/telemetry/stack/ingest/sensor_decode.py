@@ -1,10 +1,9 @@
 """Decode the raw Kafka/MQTT wire format without starting ingest workers."""
 from google.protobuf.json_format import MessageToDict
-from stack.ingest.protobuf import angelique_pb2, can_packets_pb2, template_pb2
+from stack.ingest.protobuf import can_packets_pb2, artemis_pb2
 
 CAR_MESSAGES = {
-    "Nightwatch": template_pb2.SensorData,
-    "Angelique": angelique_pb2.AngeliqueSensorData,
+    "Artemis": artemis_pb2.ArtemisSensorData,
     "Orion": can_packets_pb2.OrionSensorData,
 }
 SENSOR_TABLES = (
@@ -23,11 +22,11 @@ def car_from_headers(headers):
 def decode_sensor(payload, car):
     row = CAR_MESSAGES[car]()
     row.ParseFromString(payload)
-    if row.packet_id <= 0 or row.time <= 0:
-        raise ValueError("sensor packet requires positive time and packet_id")
+    if row.time <= 0 or (car == "Orion" and row.packet_id <= 0):
+        raise ValueError("sensor packet requires positive BEVO time (and packet_id for Orion)")
     result = MessageToDict(row, preserving_proto_field_name=True,
-                           always_print_fields_with_no_presence=True)
-    if car == "Orion":
+                           always_print_fields_with_no_presence=True, use_integers_for_enums=True)
+    if car in CAR_MESSAGES:
         dynamics = result.get("dynamics", {})
         for corner in ("bl", "br", "fl", "fr"):
             source = f"{corner}w_speed"

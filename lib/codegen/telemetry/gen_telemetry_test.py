@@ -38,16 +38,35 @@ class TelemetryGeneratorTest(unittest.TestCase):
             self.assertEqual(packet["bus"], message.bus)
 
     def test_sql_tracks_every_snapshot_field(self):
+        sql = gen_telemetry.render_artemis_sql(self.spec, "test", "-- common")
+        orm = gen_telemetry.render_artemis_orm(self.spec)
+        prisma = gen_telemetry.render_artemis_prisma(self.spec, "-- common")
+        pools = gen_telemetry.storage.contract(self.spec)["pools"]
+        emitted = []
+        for pool in pools:
+            self.assertIn(f"CREATE TABLE IF NOT EXISTS public.{pool['table']}", sql)
+            for field in pool["fields"]:
+                emitted.append(tuple(field["path"]))
+                self.assertIn(f"{field['name']} {field['sql_type']}", sql)
+                self.assertIn(f"{field['name']} = Column(", orm)
+                self.assertRegex(prisma, rf"(?m)^\s+{field['name']}\s+")
+        self.assertEqual(len(emitted), len(set(emitted)))
+        self.assertIn("gps double precision[]", sql)
+        self.assertNotIn("CREATE TABLE public.packet", sql)
+        self.assertNotIn("REFERENCES packet", sql)
+        self.assertNotIn("AS packet_id", sql)
+        fast = next(pool for pool in pools if pool["table"] == "controls_333hz")
+        self.assertTrue({"motor_speed", "torque_feedback"} <= {f["name"] for f in fast["fields"]})
+
+
+    def test_orion_retains_packet_storage_and_artemis_has_its_own_identity(self):
         sql = gen_telemetry.render_sql(self.spec, "test", "-- common")
-        orm = gen_telemetry.render_orm(self.spec)
-        prisma = gen_telemetry.render_prisma(self.spec, "-- common")
-        for group, fields in gen_telemetry.snapshot_fields(self.spec).items():
-            self.assertIn(f"CREATE TABLE public.{gen_telemetry.snake_case(group)}", sql)
-            for _, field, _ in fields:
-                self.assertRegex(sql, rf"(?m)^\s+{field}\s+")
-                self.assertIn(f"{field} = Column(", orm)
-                self.assertRegex(prisma, rf"(?m)^\s+{field}\s+")
-        self.assertRegex(sql, r"(?m)^\s+gps\s+real\[\],")
+        self.assertIn("CREATE TABLE public.packet", sql)
+        self.assertIn("REFERENCES packet(packet_id)", sql)
+        self.assertNotIn("create_hypertable", sql)
+        self.assertIn("OrionPacket", gen_telemetry.render_orm(self.spec))
+        self.assertIn("package artemis;", gen_telemetry.render_proto(self.spec, "test", "Artemis"))
+        self.assertIn("ArtemisSensorData", gen_telemetry.schema_manifest(self.spec, "Artemis")["root"])
 
     def test_legacy_inverter_sources_keep_the_same_snapshot_fields(self):
         messages = {message.name: message for _, message in self.spec.messages()}

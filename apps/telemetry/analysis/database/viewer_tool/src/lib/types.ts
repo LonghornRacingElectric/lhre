@@ -57,7 +57,7 @@ export interface DriveDayState {
   rearWingPitch?: string;
   regenOn?: boolean;
   undertrayOn?: boolean;
-  // Specialty springs (Angelique only)
+  // Specialty springs (Artemis only)
   frontRollSpringRate?: string;
   frontHeaveSpringRate?: string;
   rearRollSpringRate?: string;

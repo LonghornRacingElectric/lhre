@@ -4,23 +4,19 @@ import signal
 
 from google.protobuf.json_format import MessageToDict
 from kafka import KafkaConsumer
-from stack.ingest.protobuf import angelique_pb2, can_packets_pb2, template_pb2
+from stack.ingest.sensor_decode import CAR_MESSAGES
 
 logging.basicConfig(level=os.getenv("LOGLEVEL", "INFO"))
 logging.getLogger("kafka").setLevel(logging.WARNING)
 
-CAR_NAME_MAP = {
-    "angelique": "Angelique",
-    "orion": "Orion",
-    "nightwatch": "Nightwatch",
-}
+CAR_NAME_MAP = {"orion": "Orion", "artemis": "Artemis"}
 
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 INPUT_TOPIC = os.getenv("KAFKA_INPUT_TOPIC", "sensor_data")
 CONSUMER_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "kafka-base-group")
 
-default_car_env = os.getenv("KAFKA_DEFAULT_CAR", "Angelique")
-DEFAULT_CAR = CAR_NAME_MAP.get(default_car_env.strip().lower(), "Angelique")
+default_car_env = os.getenv("KAFKA_DEFAULT_CAR", "Orion")
+DEFAULT_CAR = CAR_NAME_MAP.get(default_car_env.strip().lower(), "Orion")
 
 
 def _normalize_car_name(raw_car: str | None) -> str | None:
@@ -43,20 +39,13 @@ def _get_car_type_from_headers(headers: list[tuple[str, bytes]] | None) -> str |
         if normalized:
             return normalized
 
-        logging.warning("Unknown car_type header '%s'; using default car '%s'", value_str, DEFAULT_CAR)
-        return None
+        raise ValueError(f"Unsupported car_type header: {value_str}")
 
     return None
 
 
 def _decode_sensor_payload(payload: bytes, car_type: str) -> dict:
-    if car_type == "Angelique":
-        row = angelique_pb2.AngeliqueSensorData()
-    elif car_type == "Orion":
-        row = can_packets_pb2.OrionSensorData()
-    else:
-        row = template_pb2.SensorData()
-
+    row = CAR_MESSAGES[car_type]()
     row.ParseFromString(payload)
     return MessageToDict(
         row,

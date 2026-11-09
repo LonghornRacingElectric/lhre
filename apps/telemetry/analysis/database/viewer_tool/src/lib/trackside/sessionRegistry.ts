@@ -29,7 +29,7 @@ export type EventType = (typeof EVENT_TYPES)[number];
 export interface TracksideSessionInfo {
   id: string;
   name: string;
-  car: string; // "orion" | "angelique"
+  car: string; // "orion" | "artemis"
   driver: string;
   eventType: string;
   venue: string; // track / venue name

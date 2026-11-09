@@ -7,24 +7,20 @@ from collections import defaultdict
 
 from google.protobuf.json_format import MessageToDict
 from kafka import KafkaConsumer, KafkaProducer
-from stack.ingest.protobuf import angelique_pb2, can_packets_pb2, template_pb2
+from stack.ingest.sensor_decode import CAR_MESSAGES
 
 logging.basicConfig(level=os.getenv("LOGLEVEL", "INFO"))
 logging.getLogger("kafka").setLevel(logging.WARNING)
 
-CAR_NAME_MAP = {
-    "angelique": "Angelique",
-    "orion": "Orion",
-    "nightwatch": "Nightwatch",
-}
+CAR_NAME_MAP = {"orion": "Orion", "artemis": "Artemis"}
 
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 INPUT_TOPIC = os.getenv("KAFKA_INPUT_TOPIC", "sensor_data")
 OUTPUT_TOPIC = os.getenv("KAFKA_OUTPUT_TOPIC", "gg-plot")
 CONSUMER_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "gg-plot-group")
 
-default_car_env = os.getenv("KAFKA_DEFAULT_CAR", "Angelique")
-DEFAULT_CAR = CAR_NAME_MAP.get(default_car_env.strip().lower(), "Angelique")
+default_car_env = os.getenv("KAFKA_DEFAULT_CAR", "Orion")
+DEFAULT_CAR = CAR_NAME_MAP.get(default_car_env.strip().lower(), "Orion")
 
 try:
     ALPHA = float(os.getenv("GG_PLOT_ALPHA", "0.1"))
@@ -53,20 +49,13 @@ def _get_car_type_from_headers(headers: list[tuple[str, bytes]] | None) -> str |
         if normalized:
             return normalized
 
-        logging.warning("Unknown car_type header '%s'; using default car '%s'", value_str, DEFAULT_CAR)
-        return None
+        raise ValueError(f"Unsupported car_type header: {value_str}")
 
     return None
 
 
 def _decode_sensor_payload(payload: bytes, car_type: str) -> dict:
-    if car_type == "Angelique":
-        row = angelique_pb2.AngeliqueSensorData()
-    elif car_type == "Orion":
-        row = can_packets_pb2.OrionSensorData()
-    else:
-        row = template_pb2.SensorData()
-
+    row = CAR_MESSAGES[car_type]()
     row.ParseFromString(payload)
     return MessageToDict(
         row,
@@ -80,7 +69,7 @@ def _extract_xy_accel(decoded_message: dict, car_type: str) -> tuple[float, floa
     if not isinstance(dynamics, dict):
         return None
 
-    if car_type == "Orion":
+    if car_type in {"Orion", "Artemis"}:
         corner_keys = ["fl_sprung_accel", "fr_sprung_accel", "bl_sprung_accel", "br_sprung_accel"]
         corner_samples: list[tuple[float, float]] = []
 

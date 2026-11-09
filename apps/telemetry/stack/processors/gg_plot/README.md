@@ -7,3 +7,6 @@ Targets follow the standard `gg_plot_binary`, `_image`, `_load`, `_push`, and
 `_smoke_test` contract. It consumes the same selected schema bundle as ingest,
 so a schema-changing board branch must use a matching server image until
 version negotiation exists.
+
+Raw telemetry decoding supports only explicit Orion and Artemis car headers.
+Unknown headers are rejected rather than decoded as the default car.

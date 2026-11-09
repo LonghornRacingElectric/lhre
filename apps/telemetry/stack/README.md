@@ -32,13 +32,14 @@ and then `docker compose up --no-build`. Logsync and the PM2 viewer retain their
 existing non-Bazel workflows. The Linux devtool is authoritative for the new
 image path; the Windows script has not yet been ported to the Bazel loader.
 Before creating ingest containers (`up`, `create`, `run`, or `watch`), the devtool resolves
-`//apps/telemetry:current_schema_sql` and mounts that generated Orion DDL into
+`//apps/telemetry:current_schema_sql` and `//apps/telemetry:new_car_schema_sql`,
+and mounts generated Orion and Artemis DDL into
 Postgres. A `lib/spec` edit therefore reaches a newly initialized server
 database without rewriting `orion_db_init.sql` in the source tree.
 For these commands the devtool invokes Bazel even when the DDL output already exists, so Bazel
 checks spec dependencies instead of reusing a file merely because it is
 present. Compose receives the selected path explicitly after `sudo` as well
-as without sudo. An explicit `ORION_DB_INIT_SQL` override must be an existing
+as without sudo. An explicit `ORION_DB_INIT_SQL` or `ARTEMIS_DB_INIT_SQL` override must be an existing
 absolute file; missing overrides fail rather than falling back.
 
 The shared `orion_schema.sh` path setup is also used by the integration runner.
@@ -49,16 +50,16 @@ therefore works while the spec is invalid or Bazel is unavailable. No dummy SQL
 or checked-in fallback is mounted. The Windows tool applies the same path and
 startup checks, but still requires images loaded through the Bazel workflow.
 
-Direct Compose use must also set `ORION_DB_INIT_SQL`. The mount is read-only,
+Direct Compose use must also set `ORION_DB_INIT_SQL` and `ARTEMIS_DB_INIT_SQL`. The mount is read-only,
 does not create missing host paths and has no checked-in Orion SQL fallback.
 Existing database volumes are not migrated by rebuilding this initialization
-file. Integration tests do not create missing tables to conceal a failed init.
+file. Apply Artemis additions with the [schema command](../scripts/README.md). Integration tests do not create missing tables to conceal a failed init.
 See the [integration runner notes](tests/README.md) before using its
 volume-removing cleanup.
 
 Starting/rebuilding/reloading the viewer also builds the shared schema bundle
-and exports `ORION_PROTO_PATH`. Node/PM2 remains outside Bazel, but the viewer's
-Orion protobuf and optional Prisma definitions are Bazel outputs.
+and exports `ORION_PROTO_PATH` and `ARTEMIS_PROTO_PATH`. Node/PM2 remains outside Bazel, but the viewer's
+Orion and Artemis protobuf and Prisma definitions are Bazel outputs.
 
 Disk preflight uses Docker's data root on Linux. On macOS, that path exists
 inside Docker Desktop's VM, so the devtool reports free space on the host
@@ -89,3 +90,19 @@ manual/local targets because they require Docker and credentials. The data-flow
 test generates an Orion protobuf packet through the Paho test generator and
 requires that exact packet in raw Kafka, decoded Grafana Kafka, and Postgres;
 successful publishing alone is not considered a pass.
+
+## Adding Artemis to an existing database volume
+
+Initialization scripts run only for a new Postgres volume. Keep existing Orion
+data. Build `//apps/telemetry:new_car_schema_sql`, create an empty `artemis`
+database with the database owner, and apply that generated initialization file:
+
+```bash
+docker exec db sh -c 'createdb -U "$POSTGRES_USER" artemis'
+docker exec -i db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d artemis' < bazel-bin/lib/codegen/telemetry/artemis_db_init.sql
+```
+
+Run `npm run prisma-cars-register` from the viewer directory against the shared
+metadata database (`TELEMETRY_DATABASE_URL`). This adds Orion ID 5 and Artemis
+ID 6 through Prisma, refusing conflicting IDs and preserving historical rows.
+Subsequent Artemis field additions use the explicit schema apply command.

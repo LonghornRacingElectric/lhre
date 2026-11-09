@@ -147,7 +147,7 @@ compose_in() {  # compose_in <dir> <args...>
     fi
     if [[ "$(basename "$dir")" == "ingest" ]]; then
         prepare_orion_schema "$REPO_ROOT" "${1:-}" || return 1
-        ( cd "$dir" && $SUDO env "ORION_DB_INIT_SQL=$ORION_DB_INIT_SQL" docker compose "$@" )
+        ( cd "$dir" && $SUDO env "ORION_DB_INIT_SQL=$ORION_DB_INIT_SQL" "ARTEMIS_DB_INIT_SQL=$ARTEMIS_DB_INIT_SQL" docker compose "$@" )
         return
     fi
     ( cd "$dir" && $SUDO docker compose "$@" )
@@ -175,7 +175,9 @@ ensure_viewer_schema() {
     ( cd "$REPO_ROOT" && bazel build --config=local //lib/codegen/telemetry:server_schema ) || return 1
     ORION_PROTO_PATH="${ORION_PROTO_PATH:-$REPO_ROOT/bazel-bin/lib/codegen/telemetry/can_packets.proto}"
     [[ -f "$ORION_PROTO_PATH" ]] || { err "Selected viewer protobuf does not exist: $ORION_PROTO_PATH"; return 1; }
-    export ORION_PROTO_PATH
+    ARTEMIS_PROTO_PATH="${ARTEMIS_PROTO_PATH:-$REPO_ROOT/bazel-bin/lib/codegen/telemetry/artemis.proto}"
+    [[ -f "$ARTEMIS_PROTO_PATH" ]] || { err "Selected Artemis protobuf does not exist: $ARTEMIS_PROTO_PATH"; return 1; }
+    export ORION_PROTO_PATH ARTEMIS_PROTO_PATH
 }
 
 bazel_load_component() {

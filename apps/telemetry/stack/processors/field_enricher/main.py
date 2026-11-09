@@ -11,9 +11,10 @@ from kafka import KafkaConsumer, KafkaProducer
 logging.basicConfig(level=os.getenv("LOGLEVEL", "INFO"))
 
 CAR = os.getenv("KAFKA_CAR", "orion")
-SOURCE_TOPIC = os.getenv("KAFKA_SOURCE_TOPIC", f"grafana_data_{CAR}")
+SOURCE_TOPIC = os.getenv("KAFKA_SOURCE_TOPIC")
+SOURCE_TOPICS = [SOURCE_TOPIC] if SOURCE_TOPIC else ["grafana_data_orion", "grafana_data_artemis"]
 OUTPUT_TOPIC = os.getenv("KAFKA_OUTPUT_TOPIC", f"grafana_data_{CAR}_derived")
-CONFIG_PATH = os.getenv("ENRICHER_CONFIG", f"/app/stack/processors/field_enricher/config/{CAR}.yaml")
+CONFIG_PATH = os.getenv("ENRICHER_CONFIG", "/app/stack/processors/field_enricher/config/orion.yaml")
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 
 _MATH_NS = {k: getattr(math, k) for k in dir(math) if not k.startswith("_")}
@@ -71,10 +72,10 @@ def _on_signal(signum, _frame):
 signal.signal(signal.SIGTERM, _on_signal)
 signal.signal(signal.SIGINT, _on_signal)
 
-logging.info("field_enricher starting. car=%s source=%s output=%s", CAR, SOURCE_TOPIC, OUTPUT_TOPIC)
+logging.info("field_enricher starting. sources=%s", SOURCE_TOPICS)
 
 consumer = KafkaConsumer(
-    SOURCE_TOPIC,
+    *SOURCE_TOPICS,
     bootstrap_servers=KAFKA_BOOTSTRAP,
     group_id=f"field-enricher-{CAR}",
     auto_offset_reset="latest",
@@ -87,7 +88,7 @@ producer = KafkaProducer(
     value_serializer=lambda v: json.dumps(v).encode("utf-8"),
 )
 
-logging.info("Connected to Kafka. Consuming from '%s', publishing to '%s'.", SOURCE_TOPIC, OUTPUT_TOPIC)
+logging.info("Connected to Kafka. Consuming from %s.", SOURCE_TOPICS)
 
 try:
     while not shutdown_requested:
@@ -100,7 +101,8 @@ try:
                 try:
                     raw = json.loads(record.value.decode("utf-8"))
                     enriched = _enrich(raw, fields)
-                    producer.send(OUTPUT_TOPIC, enriched, headers=record.headers)
+                    output_topic = OUTPUT_TOPIC if SOURCE_TOPIC else record.topic + "_derived"
+                    producer.send(output_topic, enriched, headers=record.headers)
                 except Exception as e:
                     logging.error("Error processing message: %s", e)
         consumer.commit()

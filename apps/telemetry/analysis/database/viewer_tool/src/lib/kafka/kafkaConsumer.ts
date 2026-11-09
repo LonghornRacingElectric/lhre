@@ -3,7 +3,6 @@ import path from "path";
 import protobuf from "protobufjs";
 
 import type { Admin, Kafka } from "kafkajs";
-import { AngeliqueSensorData } from "@protobuf/angelique";
 
 import { bus, KafkaEvent } from "./bus";
 import { getKafka } from "./kafka";
@@ -44,7 +43,7 @@ const subscribedRegex = new Set<string>();
 let consumer: import("kafkajs").Consumer | null = null;
 let kafkaInstance: Kafka | null = null;
 let adminPromise: Promise<Admin> | null = null;
-let orionTypePromise: Promise<protobuf.Type | null> | null = null;
+const schemaPromises: Partial<Record<"orion" | "artemis", Promise<protobuf.Type | null>>> = {};
 
 function normalizeRouteConfig(raw: unknown): Record<string, RouteRule[]> {
   if (!raw || typeof raw !== "object") return {};
@@ -170,13 +169,10 @@ function camelizeKeysDeep<T>(value: T): T {
   return value;
 }
 
-function normalizeCarType(rawCarType: unknown): "angelique" | "orion" | "nightwatch" | null {
-  if (typeof rawCarType !== "string") return null;
-  const v = rawCarType.trim().toLowerCase();
-  if (v === "angelique") return "angelique";
-  if (v === "orion") return "orion";
-  if (v === "nightwatch") return "nightwatch";
-  return null;
+function normalizeCarType(raw: unknown): "orion" | "artemis" | null {
+  if (typeof raw !== "string") return null;
+  const value = raw.trim().toLowerCase();
+  return value === "orion" || value === "artemis" ? value : null;
 }
 
 function parsePossiblyJson(payload: string): unknown {
@@ -187,61 +183,28 @@ function parsePossiblyJson(payload: string): unknown {
   }
 }
 
-async function getOrionMessageType(): Promise<protobuf.Type | null> {
-  if (!orionTypePromise) {
-    orionTypePromise = (async () => {
+async function decodeSensorMessageByCar(value: Buffer, car: "orion" | "artemis" | null): Promise<ParsedRecord | null> {
+  if (!car) return null;
+  if (!schemaPromises[car]) {
+    schemaPromises[car] = (async () => {
       try {
-        const protoPath = process.env.ORION_PROTO_PATH || path.resolve(process.cwd(), "../../../../../bazel-bin/lib/codegen/telemetry/can_packets.proto");
+        const filename = car === "orion" ? "can_packets.proto" : "artemis.proto";
+        const protoPath = process.env[`${car.toUpperCase()}_PROTO_PATH`] || path.resolve(process.cwd(), "../../../../../bazel-bin/lib/codegen/telemetry/", filename);
         const root = await protobuf.load(protoPath);
-        return root.lookupType("orion.OrionSensorData");
-      } catch (e) {
-        console.error("Failed to load Orion protobuf schema", e);
+        return root.lookupType(`${car}.${car === "orion" ? "Orion" : "Artemis"}SensorData`);
+      } catch (error) {
+        console.error(`Failed to load ${car} protobuf schema`, error);
         return null;
       }
     })();
   }
-  return orionTypePromise;
-}
-
-function tryDecodeAngelique(value: Buffer): ParsedRecord | null {
+  const type = await schemaPromises[car];
+  if (!type) return null;
   try {
-    const decoded = AngeliqueSensorData.decode(new Uint8Array(value));
-    return AngeliqueSensorData.toJSON(decoded) as ParsedRecord;
-  } catch {
-    return null;
-  }
-}
-
-async function tryDecodeOrion(value: Buffer): Promise<ParsedRecord | null> {
-  const orionType = await getOrionMessageType();
-  if (!orionType) return null;
-
-  try {
-    const decoded = orionType.decode(new Uint8Array(value));
-    const asObject = orionType.toObject(decoded, {
-      longs: Number,
-      enums: String,
-      defaults: true,
-      arrays: true,
-      objects: true,
-    });
-    return camelizeKeysDeep(asObject) as ParsedRecord;
-  } catch {
-    return null;
-  }
-}
-
-async function decodeSensorMessageByCar(
-  value: Buffer,
-  preferredCar: "angelique" | "orion" | "nightwatch" | null,
-): Promise<ParsedRecord | null> {
-  if (preferredCar === "angelique") {
-    return tryDecodeAngelique(value) ?? (await tryDecodeOrion(value));
-  }
-  if (preferredCar === "orion") {
-    return (await tryDecodeOrion(value)) ?? tryDecodeAngelique(value);
-  }
-  return tryDecodeAngelique(value) ?? (await tryDecodeOrion(value));
+    return camelizeKeysDeep(type.toObject(type.decode(new Uint8Array(value)), {
+      longs: Number, enums: String, defaults: true, arrays: true, objects: true,
+    })) as ParsedRecord;
+  } catch { return null; }
 }
 
 function firstDefined(obj: unknown, paths: string[]): unknown {
@@ -586,7 +549,7 @@ export async function startKafkaConsumer(): Promise<void> {
     // ensureSubscribe after run() is a silent no-op, so it must be in this set too.
     // Best-effort: a missing or uncreatable topic (e.g. a car with no enricher) must
     // never break the core feed. Override the set via KAFKA_LIVE_TOPICS.
-    const liveTopics = (process.env.KAFKA_LIVE_TOPICS || "grafana_data_orion_derived,grafana_data_angelique_derived,car_status")
+    const liveTopics = (process.env.KAFKA_LIVE_TOPICS || "grafana_data_orion_derived,grafana_data_artemis_derived,car_status")
       .split(",")
       .map((t) => t.trim())
       .filter((t) => t && !defaultTopics.includes(t));

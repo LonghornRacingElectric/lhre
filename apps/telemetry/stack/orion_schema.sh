@@ -26,4 +26,19 @@ prepare_orion_schema() {
     esac
     ORION_DB_INIT_SQL="$selected"
     export ORION_DB_INIT_SQL
+    local artemis_generated="$repo_root/bazel-bin/lib/codegen/telemetry/artemis_db_init.sql"
+    local artemis_selected="${ARTEMIS_DB_INIT_SQL:-$artemis_generated}"
+    case "$compose_command" in
+        up|create|run|watch)
+            if [[ "$artemis_selected" == "$artemis_generated" ]]; then
+                ( cd "$repo_root" && bazel build --config=local //apps/telemetry:new_car_schema_sql ) || return 1
+            fi
+            [[ "$artemis_selected" == /* && -f "$artemis_selected" ]] || {
+                printf 'ARTEMIS_DB_INIT_SQL must name an existing absolute file: %s\n' "$artemis_selected" >&2
+                return 1
+            }
+            ;;
+    esac
+    ARTEMIS_DB_INIT_SQL="$artemis_selected"
+    export ARTEMIS_DB_INIT_SQL
 }

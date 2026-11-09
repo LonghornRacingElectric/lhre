@@ -1,156 +1,45 @@
-"""
-telemetry/stack/tests/test_protobuf.py
-
-Unit tests for protobuf serialization/deserialization.
-These tests do not require Docker containers to be running.
-"""
-
+"""Wire routing for the two supported cars; no database service is required."""
 import unittest
-import os
-import sys
-import time
 
-# Add the workspace root to the path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
+from stack.ingest.sensor_decode import CAR_MESSAGES, car_from_headers, decode_sensor
 
 
 class TestProtobufSerialization(unittest.TestCase):
-    """Unit tests for protobuf message handling."""
-    
-    def test_template_protobuf_import(self):
-        """Test that template protobuf can be imported."""
-        from stack.ingest.protobuf.template_pb2 import SensorData
+    def test_supported_car_identities_are_explicit(self):
+        self.assertEqual(set(CAR_MESSAGES), {"Orion", "Artemis"})
+        for car in CAR_MESSAGES:
+            self.assertEqual(car_from_headers([("car_type", car.encode())]), car)
+        for retired in ("Angelique", "Nightwatch"):
+            with self.assertRaises(ValueError):
+                car_from_headers([("car_type", retired.encode())])
 
-        self.assertIsNotNone(SensorData, "SensorData should be importable")
-    
-    def test_angelique_protobuf_import(self):
-        """Test that Angelique protobuf can be imported."""
-        from stack.ingest.protobuf.angelique_pb2 import AngeliqueSensorData
+    def test_each_wire_type_round_trips_zero_false_and_arrays(self):
+        for car, message_type in CAR_MESSAGES.items():
+            with self.subTest(car=car):
+                message = message_type(time=1000, packet_id=42)
+                message.controls.apps1_v = 0
+                message.controls.enable = False
+                message.dynamics.gps_precise.extend([30.123456789, -97.123456789])
+                result = decode_sensor(message.SerializeToString(), car)
+                self.assertEqual(int(result["time"]), 1000)
+                self.assertEqual(result["controls"]["apps1_v"], 0)
+                self.assertFalse(result["controls"]["enable"])
+                self.assertEqual(result["dynamics"]["gps_precise"], [30.123456789, -97.123456789])
+                self.assertEqual(message.DESCRIPTOR.full_name, f"{car.lower()}.{car}SensorData")
 
-        self.assertIsNotNone(AngeliqueSensorData, "AngeliqueSensorData should be importable")
-    
-    def test_sensor_data_serialization(self):
-        """Test SensorData protobuf serialization."""
-        from stack.ingest.protobuf.template_pb2 import SensorData
+    def test_only_orion_requires_packet_identity(self):
+        for car, message_type in CAR_MESSAGES.items():
+            message = message_type(time=1000)
+            if car == "Orion":
+                with self.assertRaises(ValueError):
+                    decode_sensor(message.SerializeToString(), car)
+            else:
+                self.assertEqual(int(decode_sensor(message.SerializeToString(), car)["time"]), 1000)
 
-        data = SensorData()
-        data.packet_id = 12345
-        data.time = int(time.time() * 1000)
-
-        serialized = data.SerializeToString()
-        self.assertIsInstance(serialized, bytes, "Serialized data should be bytes")
-        self.assertGreater(len(serialized), 0, "Serialized data should not be empty")
-
-        data2 = SensorData()
-        data2.ParseFromString(serialized)
-
-        self.assertEqual(data.packet_id, data2.packet_id, "packet_id should match after deserialization")
-        self.assertEqual(data.time, data2.time, "time should match after deserialization")
-    
-    def test_sensor_data_to_dict(self):
-        """Test SensorData conversion to dictionary (as used in MQTTHandler)."""
-        from google.protobuf.json_format import MessageToDict
-        from stack.ingest.protobuf.template_pb2 import SensorData
-
-        data = SensorData()
-        data.packet_id = 67890
-        data.time = int(time.time() * 1000)
-
-        data_dict = MessageToDict(
-            data,
-            preserving_proto_field_name=True,
-            always_print_fields_with_no_presence=True,
-        )
-
-        self.assertIsInstance(data_dict, dict, "Should convert to dict")
-        self.assertIn("packet_id", data_dict, "Dict should have packet_id")
-        self.assertIn("time", data_dict, "Dict should have time")
-    
-    def test_angelique_sensor_data_serialization(self):
-        """Test AngeliqueSensorData protobuf serialization."""
-        from stack.ingest.protobuf.angelique_pb2 import AngeliqueSensorData
-
-        data = AngeliqueSensorData()
-        data.packet_id = 11111
-        data.time = int(time.time() * 1000)
-
-        serialized = data.SerializeToString()
-        data2 = AngeliqueSensorData()
-        data2.ParseFromString(serialized)
-
-        self.assertEqual(data.packet_id, data2.packet_id, "packet_id should match")
-    
-    def test_nested_message_fields(self):
-        """Test protobuf nested message fields (dynamics, controls, etc.)."""
-        from stack.ingest.protobuf.template_pb2 import SensorData
-
-        data = SensorData()
-        data.packet_id = 22222
-        data.time = int(time.time() * 1000)
-
-        if hasattr(data.dynamics, "f_gps_velocity"):
-            data.dynamics.f_gps_velocity = 50.5
-        if hasattr(data.dynamics, "f_gps_heading"):
-            data.dynamics.f_gps_heading = 180.0
-        if hasattr(data.controls, "accel_pedal_t"):
-            data.controls.accel_pedal_t = 0.75
-
-        serialized = data.SerializeToString()
-        data2 = SensorData()
-        data2.ParseFromString(serialized)
-
-        self.assertEqual(data.packet_id, data2.packet_id)
-
-
-class TestDataTesterPatterns(unittest.TestCase):
-    """
-    Tests for data generation patterns used in paho_testing.py.
-    These validate that the test data generator creates valid data.
-    """
-    
-    def test_random_data_generation(self):
-        """Test random data generation for various types."""
-        from telemetry.stack.tests.test_utils import TestDataGenerator
-        
-        generator = TestDataGenerator(seed=42)
-        
-        # Generate sensor data
-        data = generator.generate_sensor_data(packet_id=1)
-        
-        self.assertIsInstance(data, dict, "Should generate a dictionary")
-        self.assertIn("packet_id", data, "Should have packet_id")
-        self.assertIn("time", data, "Should have time")
-        self.assertEqual(data["packet_id"], 1, "packet_id should match")
-    
-    def test_protobuf_message_generation(self):
-        """Test protobuf message generation."""
-        from telemetry.stack.tests.test_utils import TestDataGenerator
-        
-        generator = TestDataGenerator(seed=42)
-        
-        # Generate protobuf message
-        message = generator.generate_protobuf_message(packet_id=100)
-        
-        self.assertIsNotNone(message, "Protobuf generation should be available")
-        self.assertIsInstance(message, bytes, "Should generate bytes")
-        self.assertGreater(len(message), 0, "Should not be empty")
-    
-    def test_deterministic_with_seed(self):
-        """Test that data generation is deterministic with same seed."""
-        from telemetry.stack.tests.test_utils import TestDataGenerator
-        
-        gen1 = TestDataGenerator(seed=123)
-        gen2 = TestDataGenerator(seed=123)
-        
-        data1 = gen1.generate_sensor_data(packet_id=1)
-        data2 = gen2.generate_sensor_data(packet_id=1)
-        
-        # GPS coordinates should be the same with same seed
-        self.assertEqual(
-            data1["dynamics"]["f_gps_velocity"],
-            data2["dynamics"]["f_gps_velocity"],
-            "Same seed should produce same velocity"
-        )
+    def test_invalid_time_is_rejected_for_both_cars(self):
+        for car, message_type in CAR_MESSAGES.items():
+            with self.assertRaises(ValueError):
+                decode_sensor(message_type(packet_id=42).SerializeToString(), car)
 
 
 if __name__ == "__main__":

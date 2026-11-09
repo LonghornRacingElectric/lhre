@@ -10,7 +10,7 @@ export type ChannelDef = {
 };
 
 export type SourceDef = {
-  key: "orion" | "angelique";
+  key: "orion" | "artemis";
   label: string;
 };
 

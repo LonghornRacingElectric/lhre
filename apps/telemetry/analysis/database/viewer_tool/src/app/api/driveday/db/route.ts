@@ -1,27 +1,33 @@
 // LAPDOG's database source. GET lists the drive days that have laps; GET ?day=<day_id> returns that day as a
-// Trackside session export (laps and flags from `classifier`, samples from the packet tables), so the viewer
+// Trackside session export (laps and flags from `classifier`, samples aligned from frequency pools), so the viewer
 // imports it the same way as a JSON file.
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { gzipSync } from "zlib";
 import pool from "@/lib/db-telemetry";
+import { readBuckets } from "@/lib/motec/artemisStorage";
+import { ReadOnlyDatabase } from "@/lib/motec/db";
+import { getSettings } from "@/lib/motec/config";
 import { DB_CHANNELS, dbSessionExport, isTimedLap, type DbDay, type DbMark, type DbRow } from "@/lib/driveday/db";
 
 export const dynamic = "force-dynamic";
 
 const DAYS_SQL = `
-  select d.day_id::int, d.date::text, d.track_name, e.event_type, dr.driver_name,
+  select d.day_id::int, d.date::text, d.track_name, e.event_type, dr.driver_name, car.car_name,
     (select count(*) from classifier c where c.day_id = d.day_id and c.type = 'lap')::int as laps,
     (select count(*) from classifier c where c.day_id = d.day_id and c.type = 'event_flag')::int as flags
   from drive_day d
+  left join lut_car car on car.car_id = d.car_id
   left join lut_event_type e on e.type_id = d.event_type
   left join lut_driver dr on dr.driver_id = d.driver_id
-  where exists (select 1 from classifier c where c.day_id = d.day_id and c.type = 'lap')
+  where car.car_name in ('Orion', 'Artemis')
+    and exists (select 1 from classifier c where c.day_id = d.day_id and c.type = 'lap')
   order by d.day_id desc limit 200`;
 
 const DAY_SQL = `
-  select d.day_id::int, d.date::text, d.track_name, e.event_type, dr.driver_name
+  select d.day_id::int, d.date::text, d.track_name, e.event_type, dr.driver_name, car.car_name
   from drive_day d
+  left join lut_car car on car.car_id = d.car_id
   left join lut_event_type e on e.type_id = d.event_type
   left join lut_driver dr on dr.driver_id = d.driver_id
   where d.day_id = $1`;
@@ -30,7 +36,7 @@ const MARKS_SQL = `
   select type, start_time::float8 as start_time, end_time::float8 as end_time, notes
   from classifier where day_id = $1 and type in ('lap', 'event_flag') order by start_time`;
 
-// One packet per 100 ms (10 Hz), inside the lap windows only. GPS prefers the double-precision fix.
+// Align requested subsystems within the lap windows. GPS prefers the double-precision fix.
 const COLUMNS: Record<(typeof DB_CHANNELS)[number], string> = {
   accel_pedal_travel: "d", steer_col_angle: "d", gps_speed: "d",
   brake_pressure_f: "c", brake_pressure_rbll: "c", motor_speed: "c", torque_feedback: "c", net_energy: "c", regen_energy: "c",
@@ -38,7 +44,8 @@ const COLUMNS: Record<(typeof DB_CHANNELS)[number], string> = {
   motor_temp: "th", inverter_hotspot_temp: "th", gate_driver_temp: "th", coolant_temp: "th",
   min_cell_voltage: "th", max_cell_voltage: "th", module_a_temp: "th", module_b_temp: "th", module_c_temp: "th",
 };
-const SAMPLES_SQL = `
+
+const ORION_SAMPLES_SQL = `
   select distinct on (p.time / 100) p.time::float8 as t,
     coalesce(d.gps_precise[1], d.gps[1]) as lat, coalesce(d.gps_precise[2], d.gps[2]) as lon, k.cells_temps,
     ${DB_CHANNELS.map((k) => `${COLUMNS[k]}.${k}`).join(", ")}
@@ -69,10 +76,31 @@ export async function GET(req: NextRequest) {
     if (!info) return NextResponse.json({ error: "No drive day " + day + "." }, { status: 404 });
     const laps = marks.filter(isTimedLap);
     if (!laps.length) return NextResponse.json({ error: "Drive day " + day + " has no timed laps." }, { status: 404 });
-    const { rows } = await pool.query<DbRow>(SAMPLES_SQL, [
-      Math.min(...laps.map((l) => l.start_time)), Math.max(...laps.map((l) => l.end_time)),
-      laps.map((l) => l.start_time), laps.map((l) => l.end_time),
-    ]);
+    let rows: DbRow[];
+    if (info.car_name === "Artemis") {
+    const buckets = await readBuckets(["dynamics", "controls", "pack", "thermal"],
+      Math.min(...laps.map(l => l.start_time)), Math.max(...laps.map(l => l.end_time)) + 1);
+    rows = buckets.filter(row => laps.some(l => Number(row.time) >= l.start_time && Number(row.time) <= l.end_time)).map(row => {
+      const dynamics = (row.dynamics || {}) as Record<string, any>;
+      const pack = (row.pack || {}) as Record<string, any>;
+      const result: Record<string, any> = {
+        t: Number(row.time), lat: dynamics.gps_precise?.[0] ?? dynamics.gps?.[0] ?? null,
+        lon: dynamics.gps_precise?.[1] ?? dynamics.gps?.[1] ?? null, cells_temps: pack.cells_temps ?? null,
+      };
+      const groupForAlias: Record<string, string> = { d: "dynamics", c: "controls", k: "pack", th: "thermal" };
+      for (const channel of DB_CHANNELS) {
+        result[channel] = (row[groupForAlias[COLUMNS[channel]]] as Record<string, unknown> | undefined)?.[channel] ?? null;
+      }
+      return result as DbRow;
+    });
+    } else if (info.car_name === "Orion") {
+      rows = await new ReadOnlyDatabase(getSettings("orion")).query<DbRow>(ORION_SAMPLES_SQL, [
+        Math.min(...laps.map(l => l.start_time)), Math.max(...laps.map(l => l.end_time)),
+        laps.map(l => l.start_time), laps.map(l => l.end_time),
+      ]);
+    } else {
+      return NextResponse.json({ error: "Unsupported car" }, { status: 400 });
+    }
     const body = JSON.stringify(dbSessionExport(info, marks, rows));
     // A day is tens of MB of JSON and next start does not compress (compress: false keeps SSE unbuffered).
     const gzip = /\bgzip\b/.test(req.headers.get("accept-encoding") || "");

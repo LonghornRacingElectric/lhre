@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
         status: 2,
         creation_time: now,
         start_time: now,
-        packet_start,
+        packet_start: toInt(car_id) === 5 ? packet_start : null,
         car_id: toInt(car_id) ?? null,
         driver_id: toInt(driver_id) ?? null,
         location_id: toInt(location_id) ?? 0,

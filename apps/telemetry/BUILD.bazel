@@ -122,9 +122,9 @@ telemetry_upstream_image(
 
 telemetry_upstream_image(
     name = "postgres",
-    executable = "/usr/lib/postgresql/17/bin/postgres",
+    executable = "/usr/local/bin/postgres",
     image = "@telemetry_postgres_linux_amd64",
-    repo_tags = ["lhre/telemetry-postgres:17.11"],
+    repo_tags = ["lhre/telemetry-postgres:2.31.0-pg17"],
     visibility = ["//visibility:public"],
 )
 
@@ -465,4 +465,28 @@ py_library(
         "//apps/telemetry/stack:stack_lib",
     ],
     target_compatible_with = ["@platforms//os:linux"],
+)
+
+alias(
+    name = "schema_apply",
+    actual = "//apps/telemetry/scripts:schema_apply",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "new_car_schema_proto",
+    actual = "//lib/codegen/telemetry:artemis_proto_source",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "new_car_schema_sql",
+    actual = "//lib/codegen/telemetry:artemis_db_init",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "new_car_schema_bundle",
+    actual = "//lib/codegen/telemetry:artemis_schema",
+    visibility = ["//visibility:public"],
 )

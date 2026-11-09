@@ -11,17 +11,17 @@ const FORBIDDEN_RE = /\b(insert|update|delete|merge|alter|drop|create|truncate|g
 const pools = new Map<string, Pool>();
 
 function poolFor(settings: Settings): Pool {
-  const key = `${settings.orionDbHost}:${settings.orionDbPort}/${settings.orionDbName}/${settings.orionDbUser}`;
+  const key = `${settings.dbHost}:${settings.dbPort}/${settings.dbName}/${settings.dbUser}`;
   let pool = pools.get(key);
   if (!pool) {
     pool = new Pool({
-      host: settings.orionDbHost,
-      port: settings.orionDbPort,
-      database: settings.orionDbName,
-      user: settings.orionDbUser,
-      password: settings.orionDbPassword,
-      ssl: settings.orionDbSslmode && settings.orionDbSslmode !== "disable" ? { rejectUnauthorized: false } : undefined,
-      connectionTimeoutMillis: settings.orionDbConnectTimeout * 1000,
+      host: settings.dbHost,
+      port: settings.dbPort,
+      database: settings.dbName,
+      user: settings.dbUser,
+      password: settings.dbPassword,
+      ssl: settings.dbSslmode && settings.dbSslmode !== "disable" ? { rejectUnauthorized: false } : undefined,
+      connectionTimeoutMillis: settings.dbConnectTimeout * 1000,
       max: 4,
     });
     pools.set(key, pool);
@@ -39,7 +39,7 @@ export class ReadOnlyDatabase {
 
   async query<T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> {
     assertReadOnly(sql);
-    if (!this.settings.orionDbPassword) throw new Error("ORION_DB_PASSWORD is not set.");
+    if (!this.settings.dbPassword) throw new Error(`${(this.settings.car || "orion").toUpperCase()}_DB_PASSWORD is not set.`);
     const pool = poolFor(this.settings);
     const client: PoolClient = await pool.connect();
     try {

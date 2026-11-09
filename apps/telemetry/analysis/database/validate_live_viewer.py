@@ -262,7 +262,7 @@ def main() -> int:
     parser.add_argument("--base-url", default="http://127.0.0.1:3001", help="Viewer base URL.")
     parser.add_argument(
         "--car",
-        choices=["Orion", "Angelique", "Both"],
+        choices=["Orion", "Artemis", "Both"],
         default="Both",
         help="Car stream(s) to validate.",
     )
@@ -288,7 +288,7 @@ def main() -> int:
         print("ERROR: Required commands 'curl' and 'timeout' must be available.")
         return 2
 
-    cars = ["Orion", "Angelique"] if args.car == "Both" else [args.car]
+    cars = ["Orion", "Artemis"] if args.car == "Both" else [args.car]
     script_path = Path(__file__).parent / "paho_testing.py"
     if not script_path.exists():
         print(f"ERROR: Missing publisher script: {script_path}")

@@ -1,6 +1,7 @@
 package main
 
 import (
+	artemis "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/proto/artemis"
 	orion "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/proto/orion"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
@@ -18,7 +19,20 @@ func orionSeedData() *orion.OrionSensorData {
 	return data
 }
 
-func orionSchemaFields(message protoreflect.Message) map[string]interface{} {
+func artemisSeedData() *artemis.ArtemisSensorData {
+	data := &artemis.ArtemisSensorData{}
+	message := data.ProtoReflect()
+	fields := message.Descriptor().Fields()
+	for index := 0; index < fields.Len(); index++ {
+		field := fields.Get(index)
+		if field.Kind() == protoreflect.MessageKind {
+			message.Mutable(field)
+		}
+	}
+	return data
+}
+
+func schemaFields(message protoreflect.Message) map[string]interface{} {
 	output := make(map[string]interface{})
 	fields := message.Descriptor().Fields()
 	for index := 0; index < fields.Len(); index++ {
@@ -26,7 +40,7 @@ func orionSchemaFields(message protoreflect.Message) map[string]interface{} {
 		value := message.Get(field)
 		if field.Kind() == protoreflect.MessageKind {
 			if message.Has(field) {
-				for name, child := range orionSchemaFields(value.Message()) {
+				for name, child := range schemaFields(value.Message()) {
 					output[name] = child
 				}
 			}

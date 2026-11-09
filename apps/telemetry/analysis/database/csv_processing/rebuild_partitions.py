@@ -11,7 +11,7 @@ from analysis.database.csv_processing.CSV_to_DB import CSVToDB
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Rebuild telemetry partitions from packet timestamp gaps.")
-    parser.add_argument("--car", default="Orion", help="Car database to target (Orion, Angelique, Nightwatch)")
+    parser.add_argument("--car", default="Orion", help="Car database to target (Orion)")
     parser.add_argument("--gap-seconds", type=int, default=300, help="Gap threshold in seconds used to start a new partition")
     args = parser.parse_args()
 

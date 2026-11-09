@@ -19,9 +19,9 @@ resulting `MODULE.bazel.lock` change. Protobuf Go packages are build outputs;
 they are not checked into `proto/`.
 
 Orion's Go library compiles `//lib/codegen/telemetry:orion_proto` from the same
-textproto-generated protobuf used by BEVO and ingest. `sensor.proto` now holds
-only the separate historical-car definitions. The bridge enumerates current
-Orion fields and seed groups from generated descriptors instead of a copied
+textproto-generated protobuf used by BEVO and ingest. Artemis compiles `:artemis_proto` with the same current fields and a distinct
+wire identity. Retired car proto inputs and dispatch are removed. The bridge enumerates current
+Orion/Artemis fields and seed groups from generated descriptors instead of a copied
 schema/field list. Existing derived GPS, power and cell-statistics metrics
 remain application logic, and the gRPC/MQTT payload contracts are unchanged.
 The standalone Dockerfile was removed; build images through Bazel only.

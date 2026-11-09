@@ -7,7 +7,8 @@ load(":telemetry_artifact.bzl", "telemetry_artifact")
 
 py_library(
     name = "gen_telemetry_lib",
-    srcs = ["gen_telemetry.py"],
+    visibility = ["//apps/telemetry/stack/ingest:__pkg__"],
+    srcs = ["gen_telemetry.py", "storage.py"],
     deps = [
         "//lib/spec:ir",
         "//lib/telemetry:contract",
@@ -57,6 +58,9 @@ filegroup(
         ":schema_descriptor",
         ":orm_source",
         ":orion_prisma",
+        ":artemis_schema",
+        ":storage_contract",
+        ":storage_sql",
     ],
     visibility = ["//visibility:public"],
 )
@@ -128,7 +132,91 @@ py_test(
     deps = [
         "//lib/spec:ir",
         "//lib/telemetry:contract",
-        ":orion_models",
+        ":artemis_models",
         "//apps/telemetry/scripts:schema_helpers",
     ],
+)
+
+telemetry_artifact(
+    name = "storage_contract",
+    car = "Artemis",
+    kind = "storage",
+    out = "storage_contract.json",
+    spec = "//lib/spec:files",
+    visibility = ["//visibility:public"],
+)
+
+telemetry_artifact(
+    name = "storage_sql",
+    car = "Artemis",
+    kind = "storage_sql",
+    out = "storage_update.sql",
+    spec = "//lib/spec:files",
+    visibility = ["//visibility:public"],
+)
+
+telemetry_artifact(
+    name = "artemis_proto_source",
+    kind = "proto",
+    car = "Artemis",
+    out = "artemis.proto",
+    spec = "//lib/spec:files",
+    visibility = ["//visibility:public"],
+)
+
+telemetry_artifact(
+    name = "artemis_db_init",
+    kind = "sql",
+    car = "Artemis",
+    out = "artemis_db_init.sql",
+    common_sql = "//apps/telemetry/stack/ingest:common_schema.sql",
+    spec = "//lib/spec:files",
+    visibility = ["//visibility:public"],
+)
+
+telemetry_artifact(
+    name = "artemis_orm_source",
+    kind = "orm",
+    car = "Artemis",
+    out = "artemis_models.py",
+    spec = "//lib/spec:files",
+    visibility = ["//visibility:public"],
+)
+
+telemetry_artifact(
+    name = "artemis_prisma",
+    kind = "prisma",
+    car = "Artemis",
+    out = "artemis.prisma",
+    common_sql = "//apps/telemetry/stack/ingest:common_schema.sql",
+    spec = "//lib/spec:files",
+    visibility = ["//visibility:public"],
+)
+
+telemetry_artifact(
+    name = "artemis_schema_contract",
+    kind = "contract",
+    car = "Artemis",
+    out = "artemis_schema_contract.json",
+    spec = "//lib/spec:files",
+    visibility = ["//visibility:public"],
+)
+
+py_library(
+    name = "artemis_models",
+    srcs = [":artemis_orm_source"],
+    deps = [requirement("SQLAlchemy")],
+    visibility = ["//visibility:public"],
+)
+
+proto_library(
+    name = "artemis_proto",
+    srcs = [":artemis_proto_source"],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "artemis_schema",
+    srcs = [":artemis_proto_source", ":artemis_db_init", ":artemis_orm_source", ":artemis_prisma", ":artemis_schema_contract", ":storage_contract", ":storage_sql"],
+    visibility = ["//visibility:public"],
 )

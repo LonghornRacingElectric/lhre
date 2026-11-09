@@ -5,7 +5,7 @@ Use this folder as the baseline for new Kafka processors that consume `sensor_da
 ## What this template includes
 
 - Kafka consumer loop with manual offset commits
-- `car_type` header handling (`Angelique`/`Orion`/`Nightwatch`)
+- `car_type` header handling (`Orion`/`Artemis`)
 - Direct protobuf decode (no dependency on ingest runtime modules)
 - Docker + docker-compose scaffolding
 
@@ -43,5 +43,8 @@ docker logs -f <your_container_name>
 - `KAFKA_BOOTSTRAP_SERVERS` (default: `kafka:9092`)
 - `KAFKA_INPUT_TOPIC` (default: `sensor_data`)
 - `KAFKA_GROUP_ID` (default in template: `kafka-base-group`)
-- `KAFKA_DEFAULT_CAR` (default: `Angelique`)
+- `KAFKA_DEFAULT_CAR` (default: `Orion`)
 - `LOGLEVEL` (default: `INFO`)
+
+Raw telemetry decoding supports only explicit Orion and Artemis car headers.
+Unknown headers are rejected rather than decoded as the default car.

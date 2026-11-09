@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/IBM/sarama"
+	artemis "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/proto/artemis"
 	pb "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/proto/bridge"
 	orion "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/proto/orion"
-	sensor "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/proto/sensor"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/protobuf/proto"
@@ -36,6 +36,9 @@ type bridgeServer struct {
 }
 
 func (s *bridgeServer) SendSensorData(ctx context.Context, req *pb.SensorDataRequest) (*pb.SensorDataResponse, error) {
+	if req.CarType != "Orion" && req.CarType != "Artemis" {
+		return &pb.SensorDataResponse{Success: false, Message: "unsupported car type"}, nil
+	}
 	log.Printf("Received SensorDataRequest: CarType=%s, PayloadSize=%d", req.CarType, len(req.Payload))
 	msg := SensorMessage{
 		Payload: req.Payload,
@@ -184,24 +187,12 @@ func ensureTopicExists(admin sarama.ClusterAdmin, topic string) error {
 func defaultSeedMap(carType string) map[string]interface{} {
 	var m map[string]interface{}
 	switch strings.ToLower(strings.TrimSpace(carType)) {
-	case "angelique":
-		m = angeliqueToMap(&sensor.AngeliqueSensorData{
-			Dynamics:    &sensor.AngeliqueDynamics{},
-			Controls:    &sensor.AngeliqueControls{},
-			Pack:        &sensor.AngeliquePack{},
-			Diagnostics: &sensor.AngeliqueDiagnostics{},
-			Thermal:     &sensor.AngeliqueThermal{},
-		})
 	case "orion":
 		m = orionToMap(orionSeedData())
+	case "artemis":
+		m = artemisToMap(artemisSeedData())
 	default:
-		m = nightwatchToMap(&sensor.SensorData{
-			Dynamics:       &sensor.Dynamics{},
-			Controls:       &sensor.Controls{},
-			Pack:           &sensor.Pack{},
-			DiagnosticsLow: &sensor.DiagnosticsLow{},
-			Thermal:        &sensor.Thermal{},
-		})
+		return nil
 	}
 	m["time"] = time.Now().UnixMilli()
 	m["packet_id"] = 0
@@ -270,37 +261,20 @@ func deserializeToJSON(payload []byte, carType string) ([]byte, error) {
 	normalizedCarType := strings.ToLower(strings.TrimSpace(carType))
 
 	switch normalizedCarType {
-	case "angelique":
-		msg := &sensor.AngeliqueSensorData{}
-		if err := proto.Unmarshal(payload, msg); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal Angelique payload: %w", err)
-		}
-		data = angeliqueToMap(msg)
 	case "orion":
 		msg := &orion.OrionSensorData{}
 		if err := proto.Unmarshal(payload, msg); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal Orion payload (size %d): %w", len(payload), err)
-		}
-		// Debug: Log if sub-blocks are present
-		if msg.Controls == nil {
-			log.Println("Debug: Orion Controls sub-block is MISSING in protobuf")
-		} else {
-			log.Printf("Debug: Orion Controls sub-block PRESENT. Apps1V: %v", msg.Controls.Apps1V)
+			return nil, err
 		}
 		data = orionToMap(msg)
-	case "nightwatch":
-		msg := &sensor.SensorData{}
-		if err := proto.Unmarshal(payload, msg); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal Nightwatch payload: %w", err)
-		}
-		data = nightwatchToMap(msg)
-	default:
-		log.Printf("Warning: Unknown car type '%s', falling back to Nightwatch unmarshaling", carType)
-		msg := &sensor.SensorData{}
+	case "artemis":
+		msg := &artemis.ArtemisSensorData{}
 		if err := proto.Unmarshal(payload, msg); err != nil {
 			return nil, err
 		}
-		data = nightwatchToMap(msg)
+		data = artemisToMap(msg)
+	default:
+		return nil, fmt.Errorf("unsupported car type %q", carType)
 	}
 
 	data["car_type"] = carType
@@ -377,288 +351,33 @@ func statsFromFloat32SliceNonZero(vals []float32) (avg float64, min float32, max
 	return sum / float64(n), min, max
 }
 
-func nightwatchToMap(msg *sensor.SensorData) map[string]interface{} {
-	m := make(map[string]interface{})
-	m["time"] = msg.Time
-	m["packet_id"] = msg.PacketId
-
-	if d := msg.Dynamics; d != nil {
-		m["steer_col_angle"] = d.SteerColAngle
-		m["fl_steer_angle"] = d.FlSteerAngle
-		m["fr_steer_angle"] = d.FrSteerAngle
-		m["fl_sprung_accel"] = d.FlSprungAccel
-		m["fr_sprung_accel"] = d.FrSprungAccel
-		m["bl_sprung_accel"] = d.BlSprungAccel
-		m["br_sprung_accel"] = d.BrSprungAccel
-		m["fl_unsprung_accel"] = d.FlUnsprungAccel
-		m["fr_unsprung_accel"] = d.FrUnsprungAccel
-		m["bl_unsprung_accel"] = d.BlUnsprungAccel
-		m["br_unsprung_accel"] = d.BrUnsprungAccel
-		m["fl_sprung_ang_rate"] = d.FlSprungAngRate
-		m["fr_sprung_ang_rate"] = d.FrSprungAngRate
-		m["bl_sprung_ang_rate"] = d.BlSprungAngRate
-		m["br_sprung_ang_rate"] = d.BrSprungAngRate
-		m["cent_mass_accel"] = d.CentMassAccel
-		m["cent_mass_ang_rate"] = d.CentMassAngRate
-		m["flw_speed"] = d.FlwSpeed
-		m["frw_speed"] = d.FrwSpeed
-		m["blw_speed"] = d.BlwSpeed
-		m["brw_speed"] = d.BrwSpeed
-		m["fl_ride_height"] = d.FlRideHeight
-		m["fr_ride_height"] = d.FrRideHeight
-		m["bl_ride_height"] = d.BlRideHeight
-		m["br_ride_height"] = d.BrRideHeight
-		m["fl_strain_gauge_v"] = d.FlStrainGaugeV
-		m["fr_strain_gauge_v"] = d.FrStrainGaugeV
-		m["bl_strain_gauge_v"] = d.BlStrainGaugeV
-		m["br_strain_gauge_v"] = d.BrStrainGaugeV
-		m["fl_pushrod_stress"] = d.FlPushrodStress
-		m["fr_pushrod_stress"] = d.FrPushrodStress
-		m["bl_pushrod_stress"] = d.BlPushrodStress
-		m["br_pushrod_stress"] = d.BrPushrodStress
-		m["fl_spring_displace"] = d.FlSpringDisplace
-		m["fr_spring_displace"] = d.FrSpringDisplace
-		m["bl_spring_displace"] = d.BlSpringDisplace
-		m["br_spring_displace"] = d.BrSpringDisplace
-		m["dash_speed"] = d.DashSpeed
-		m["f_gps"] = d.FGps
-		m["b_gps"] = d.BGps
-		m["f_gps_velocity"] = d.FGpsVelocity
-		m["b_gps_velocity"] = d.BGpsVelocity
-		m["f_gps_heading"] = d.FGpsHeading
-		m["b_gps_heading"] = d.BGpsHeading
-		if len(d.FGps) >= 2 {
-			m["latitude"] = d.FGps[0]
-			m["longitude"] = d.FGps[1]
-		}
-	}
-
-	if c := msg.Controls; c != nil {
-		m["apps1_v"] = c.Apps1V
-		m["apps2_v"] = c.Apps2V
-		m["apps1_t"] = c.Apps1T
-		m["apps2_t"] = c.Apps2T
-		m["accel_pedal_t"] = c.AccelPedalT
-		m["bpps1_v"] = c.Bpps1V
-		m["bpps2_v"] = c.Bpps2V
-		m["bpps1_t"] = c.Bpps1T
-		m["bpps2_t"] = c.Bpps2T
-		m["brake_pedal_t"] = c.BrakePedalT
-		m["bse1_v"] = c.Bse1V
-		m["bse2_v"] = c.Bse2V
-		m["bse3_v"] = c.Bse3V
-		m["brake_pressure_f"] = c.BrakePressureF
-		m["brake_pressure_rbll"] = c.BrakePressureRbll
-		m["brake_pressure_rall"] = c.BrakePressureRall
-		m["brake_bias"] = c.BrakeBias
-	}
-
-	if p := msg.Pack; p != nil {
-		m["hv_pack_v"] = p.HvPackV
-		m["hv_tractive_v"] = p.HvTractiveV
-		m["hv_c"] = p.HvC
-		m["lv_v"] = p.LvV
-		m["lv_c"] = p.LvC
-		m["contactor_state"] = p.ContactorState
-		m["avg_cell_v"] = p.AvgCellV
-		m["avg_cell_temp"] = p.AvgCellTemp
-	}
-
-	if dh := msg.DiagnosticsHigh; dh != nil {
-		m["apps1_disconnect"] = dh.Apps1Disconnect
-		m["apps2_disconnect"] = dh.Apps2Disconnect
-		m["apps1_out_range"] = dh.Apps1OutRange
-		m["apps2_out_range"] = dh.Apps2OutRange
-		m["apps_mismatch"] = dh.AppsMismatch
-		m["apps_implause"] = dh.AppsImplause
-		m["bpps1_disconnect"] = dh.Bpps1Disconnect
-		m["bpps2_disconnect"] = dh.Bpps2Disconnect
-		m["bpps1_out_range"] = dh.Bpps1OutRange
-		m["bpps2_out_range"] = dh.Bpps2OutRange
-		m["bpps_mismatch"] = dh.BppsMismatch
-		m["bse1_disconnect"] = dh.Bse1Disconnect
-		m["bse2_disconnect"] = dh.Bse2Disconnect
-		m["bse1_out_range"] = dh.Bse1OutRange
-		m["bse2_out_range"] = dh.Bse2OutRange
-	}
-
-	if dl := msg.DiagnosticsLow; dl != nil {
-		m["batt_over_c"] = dl.BattOverC
-		m["cell_over_v"] = dl.CellOverV
-		m["cell_under_v"] = dl.CellUnderV
-		m["cell_open_wire"] = dl.CellOpenWire
-		m["cell_damaged"] = dl.CellDamaged
-		m["thermistor_damaged"] = dl.ThermistorDamaged
-		m["bmb_comm_error"] = dl.BmbCommError
-		m["imd_gnd_isolation_error"] = dl.ImdGndIsolationError
-		m["tractive_contactor_error"] = dl.TractiveContactorError
-		m["precharge_fail"] = dl.PrechargeFail
-		m["cells_v_balanced"] = dl.CellsVBalanced
-		m["cell_min_v"] = dl.CellMinV
-		m["cell_max_v"] = dl.CellMaxV
-		m["batt_v"] = dl.BattV
-		m["batt_c"] = dl.BattC
-		m["hv_soc"] = dl.HvSoc
-		m["shutdown_leg1"] = dl.ShutdownLeg1
-		m["shutdown_leg2"] = dl.ShutdownLeg2
-		m["shutdown_leg3"] = dl.ShutdownLeg3
-		m["shutdown_leg4"] = dl.ShutdownLeg4
-		m["shutdown_leg5"] = dl.ShutdownLeg5
-		m["shutdown_leg6"] = dl.ShutdownLeg6
-		m["shutdown_leg7"] = dl.ShutdownLeg7
-		m["shutdown_leg8"] = dl.ShutdownLeg8
-		m["shutdown_leg9"] = dl.ShutdownLeg9
-		m["shutdown_leg10"] = dl.ShutdownLeg10
-		m["shutdown_leg11"] = dl.ShutdownLeg11
-		m["shutdown_leg12"] = dl.ShutdownLeg12
-		m["cells_temps"] = dl.CellsTemps
-		m["cells_v"] = dl.CellsV
-		if len(dl.CellsTemps) > 0 {
-			avg, min, max := statsFromFloat32Slice(dl.CellsTemps)
-			m["avg_cell_temp_stat"] = avg
-			m["max_cell_temp"] = max
-			m["min_cell_temp"] = min
-		}
-	}
-
-	if t := msg.Thermal; t != nil {
-		m["motor_loop_flow_rate"] = t.MotorLoopFlowRate
-		m["motor_loop_motor_temp"] = t.MotorLoopMotorTemp
-		m["motor_loop_inverter_temp"] = t.MotorLoopInverterTemp
-		m["motor_loop_rad_temp"] = t.MotorLoopRadTemp
-		m["motor_loop_rad_fan_speed"] = t.MotorLoopRadFanSpeed
-		m["ambient_temp"] = t.AmbientTemp
-		m["batt_loop_batt_temp"] = t.BattLoopBattTemp
-		m["batt_loop_rad_temp"] = t.BattLoopRadTemp
-		m["batt_loop_rad_fan_speed"] = t.BattLoopRadFanSpeed
-		m["motor_temp"] = t.MotorTemp
-		m["inverter_temp"] = t.InverterTemp
-		m["bus_bar_temp1"] = t.BusBarTemp1
-		m["bus_bar_temp2"] = t.BusBarTemp2
-		m["bus_bar_temp3"] = t.BusBarTemp3
-		m["precharge_r_temp"] = t.PrechargeRTemp
-		m["discharge_r_temp"] = t.DischargeRTemp
-		m["batt_over_temp"] = t.BattOverTemp
-	}
-
-	return m
-}
-
-func angeliqueToMap(msg *sensor.AngeliqueSensorData) map[string]interface{} {
-	m := make(map[string]interface{})
-	m["time"] = msg.Time
-	m["packet_id"] = msg.PacketId
-
-	if d := msg.Dynamics; d != nil {
-		m["torque_request"] = d.TorqueRequest
-		m["vcu_position"] = d.VcuPosition
-		m["vcu_velocity"] = d.VcuVelocity
-		m["vcu_accel"] = d.VcuAccel
-		m["gps"] = d.Gps
-		m["gps_velocity"] = d.GpsVelocity
-		m["gps_heading"] = d.GpsHeading
-		m["body1_accel"] = d.Body1Accel
-		m["body2_accel"] = d.Body2Accel
-		m["body3_accel"] = d.Body3Accel
-		m["flw_accel"] = d.FlwAccel
-		m["frw_accel"] = d.FrwAccel
-		m["blw_accel"] = d.BlwAccel
-		m["brw_accel"] = d.BrwAccel
-		m["body1_gyro"] = d.Body1Gyro
-		m["body2_gyro"] = d.Body2Gyro
-		m["body3_gyro"] = d.Body3Gyro
-		m["flw_speed"] = d.FlwSpeed
-		m["frw_speed"] = d.FrwSpeed
-		m["blw_speed"] = d.BlwSpeed
-		m["brw_speed"] = d.BrwSpeed
-		m["front_speed"] = (d.FlwSpeed + d.FrwSpeed) / 2
-		m["rear_speed"] = (d.BlwSpeed + d.BrwSpeed) / 2
-		m["inverter_v"] = d.InverterV
-		m["inverter_c"] = d.InverterC
-		m["inverter_rpm"] = d.InverterRpm
-		m["inverter_torque"] = d.InverterTorque
-		electricalPower := d.InverterV * float32(d.InverterC)
-		mechanicalPower := float32(d.InverterRpm) * float32(d.InverterTorque) / 9.5490
-		m["inverter_electrical_power"] = electricalPower
-		m["inverter_mechanical_power"] = mechanicalPower
-		if electricalPower != 0 {
-			m["efficiency"] = mechanicalPower / electricalPower
-		} else {
-			m["efficiency"] = float32(0)
-		}
-		if len(d.Gps) >= 2 {
-			m["latitude"] = d.Gps[0]
-			m["longitude"] = d.Gps[1]
-		}
-	}
-
-	if c := msg.Controls; c != nil {
-		m["vcu_flags"] = c.VcuFlags
-		m["vcu_flags_json"] = c.VcuFlagsJson
-		m["apps1_v"] = c.Apps1V
-		m["apps2_v"] = c.Apps2V
-		m["bse1_v"] = c.Bse1V
-		m["bse2_v"] = c.Bse2V
-		m["sus1_v"] = c.Sus1V
-		m["sus2_v"] = c.Sus2V
-		m["steer_v"] = c.SteerV
-	}
-
-	if p := msg.Pack; p != nil {
-		m["hv_pack_v"] = p.HvPackV
-		m["hv_tractive_v"] = p.HvTractiveV
-		m["hv_c"] = p.HvC
-		m["lv_v"] = p.LvV
-		m["lv_c"] = p.LvC
-		m["contactor_state"] = p.ContactorState
-		m["avg_cell_v"] = p.AvgCellV
-		m["avg_cell_temp"] = p.AvgCellTemp
-		m["hv_power"] = p.HvPackV * float32(p.HvC)
-		m["lv_power"] = p.LvV * float32(p.LvC)
-	}
-
-	if dg := msg.Diagnostics; dg != nil {
-		m["current_errors"] = dg.CurrentErrors
-		m["current_errors_json"] = dg.CurrentErrorsJson
-		m["latching_faults"] = dg.LatchingFaults
-		m["latching_faults_json"] = dg.LatchingFaultsJson
-		m["cells_v"] = dg.CellsV
-		m["hv_charge_state"] = dg.HvChargeState
-		m["lv_charge_state"] = dg.LvChargeState
-		if len(dg.CellsV) > 0 {
-			avg, min, max := statsFromFloat32SliceNonZero(dg.CellsV)
-			m["avg_cell_v_stat"] = avg
-			m["max_cell_v"] = max
-			m["min_cell_v"] = min
-		}
-	}
-
-	if t := msg.Thermal; t != nil {
-		m["cells_temp"] = t.CellsTemp
-		m["ambient_temp"] = t.AmbientTemp
-		m["inverter_temp"] = t.InverterTemp
-		m["motor_temp"] = t.MotorTemp
-		m["water_motor_temp"] = t.WaterMotorTemp
-		m["water_inverter_temp"] = t.WaterInverterTemp
-		m["water_rad_temp"] = t.WaterRadTemp
-		m["rad_fan_set"] = t.RadFanSet
-		m["rad_fan_rpm"] = t.RadFanRpm
-		m["batt_fan_set"] = t.BattFanSet
-		m["batt_fan_rpm"] = t.BattFanRpm
-		m["flow_rate"] = t.FlowRate
-		if len(t.CellsTemp) > 0 {
-			avg, min, max := statsFromInt32Slice(t.CellsTemp)
-			m["avg_cell_temp_stat"] = avg
-			m["max_cell_temp"] = max
-			m["min_cell_temp"] = min
-		}
-	}
-
-	return m
-}
-
 func orionToMap(msg *orion.OrionSensorData) map[string]interface{} {
-	output := orionSchemaFields(msg.ProtoReflect())
+	output := schemaFields(msg.ProtoReflect())
+	if dynamics := msg.Dynamics; dynamics != nil && len(dynamics.Gps) >= 2 {
+		output["latitude"] = dynamics.Gps[0]
+		output["longitude"] = dynamics.Gps[1]
+	}
+	if pack := msg.Pack; pack != nil {
+		output["power_kw"] = float64(pack.HvPackV) * float64(pack.HvC) / 1000.0
+		if len(pack.CellsV) > 0 {
+			average, minimum, maximum := statsFromFloat32SliceNonZero(pack.CellsV)
+			output["avg_cell_v_stat"] = average
+			output["max_cell_v"] = maximum
+			output["min_cell_v"] = minimum
+			output["cell_v_delta"] = float64(maximum - minimum)
+		}
+		if len(pack.CellsTemps) > 0 {
+			average, minimum, maximum := statsFromFloat32Slice(pack.CellsTemps)
+			output["avg_cell_temp_stat"] = average
+			output["max_cell_temp"] = maximum
+			output["min_cell_temp"] = minimum
+		}
+	}
+	return output
+}
+
+func artemisToMap(msg *artemis.ArtemisSensorData) map[string]interface{} {
+	output := schemaFields(msg.ProtoReflect())
 	if dynamics := msg.Dynamics; dynamics != nil && len(dynamics.Gps) >= 2 {
 		output["latitude"] = dynamics.Gps[0]
 		output["longitude"] = dynamics.Gps[1]
@@ -686,7 +405,7 @@ func main() {
 	log.Println("Starting Kafka Bridge Service...")
 
 	// Cars we support
-	cars := []string{"angelique", "orion", "nightwatch"}
+	cars := []string{"orion", "artemis"}
 
 	// Create admin and ensure topics exist
 	admin, err := newKafkaAdmin()

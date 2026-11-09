@@ -29,6 +29,11 @@ printf 'stale\n' > "$generated"
 printf 'first edit\n' > "$REPO_ROOT/spec"
 
 bazel() {
+    if [[ "$*" == "build --config=local //apps/telemetry:new_car_schema_sql" ]]; then
+        [[ "${fail_build:-0}" == 0 ]] || return 9
+        cat "$REPO_ROOT/spec" > "$REPO_ROOT/bazel-bin/lib/codegen/telemetry/artemis_db_init.sql"
+        return
+    fi
     [[ "$*" == "build --config=local //apps/telemetry:current_schema_sql" ]] || return 1
     printf 'build\n' >> "$build_log"
     [[ "${fail_build:-0}" == 0 ]] || return 9
@@ -39,11 +44,11 @@ cat > "$fixture/bin/docker" <<'DOCKER'
 #!/usr/bin/env bash
 set -euo pipefail
 case "$*" in
-    "compose up"|"compose create"|"compose run") [[ -f "$ORION_DB_INIT_SQL" ]] ;;
+    "compose up"|"compose create"|"compose run") [[ -f "$ORION_DB_INIT_SQL" && -f "$ARTEMIS_DB_INIT_SQL" ]] ;;
     "compose down"|"compose logs"|"compose ps"|"compose config"|"compose restart"|"compose start") ;;
     *) exit 1 ;;
 esac
-[[ "$ORION_DB_INIT_SQL" == /* ]]
+[[ "$ORION_DB_INIT_SQL" == /* && "$ARTEMIS_DB_INIT_SQL" == /* ]]
 printf '%s\n' "$ORION_DB_INIT_SQL"
 DOCKER
 chmod +x "$fixture/bin/docker"
@@ -53,7 +58,7 @@ sudo() {
     command env -i "PATH=$PATH" "$@"
 }
 
-unset ORION_DB_INIT_SQL
+unset ORION_DB_INIT_SQL ARTEMIS_DB_INIT_SQL
 prepare_orion_schema "$REPO_ROOT" up
 [[ "$(cat "$generated")" == "first edit" ]]
 printf 'second edit\n' > "$REPO_ROOT/spec"
@@ -79,7 +84,7 @@ for SUDO in "" sudo; do
     for compose_command in down logs ps config restart start; do
         (
             REPO_ROOT="$missing_repo"
-            unset ORION_DB_INIT_SQL
+            unset ORION_DB_INIT_SQL ARTEMIS_DB_INIT_SQL
             fail_build=1
             [[ "$(compose_in "$ingest_dir" "$compose_command")" == "$REPO_ROOT/bazel-bin/lib/codegen/telemetry/orion_db_init.sql" ]]
         )
@@ -90,7 +95,7 @@ done
 (
     source "$integration_runner"
     REPO_ROOT="$missing_repo"
-    unset ORION_DB_INIT_SQL
+    unset ORION_DB_INIT_SQL ARTEMIS_DB_INIT_SQL
     fail_build=1
     docker-compose() {
         [[ -n "$ORION_DB_INIT_SQL" ]]
@@ -109,7 +114,8 @@ for selected_schema in "" "$override"; do
     (
         export TEST_SRCDIR="$fixture"
         ORION_DB_INIT_SQL="$selected_schema"
-        source "$integration_runner" "bazel schema.sql"
+        ARTEMIS_DB_INIT_SQL="$fixture/bazel schema.sql"
+        source "$integration_runner" "bazel schema.sql" "bazel schema.sql"
         fail_build=1
         prepare_orion_schema "$REPO_ROOT" up
         [[ "$ORION_DB_INIT_SQL" == "${selected_schema:-$fixture/bazel schema.sql}" ]]
@@ -117,8 +123,9 @@ for selected_schema in "" "$override"; do
 done
 build_count="$(wc -l < "$build_log")"
 for SUDO in "" sudo; do
-    unset ORION_DB_INIT_SQL
+    unset ORION_DB_INIT_SQL ARTEMIS_DB_INIT_SQL
     ORION_DB_INIT_SQL="$override"
+    ARTEMIS_DB_INIT_SQL="$override"
     [[ "$(compose_in "$ingest_dir" up)" == "$override" ]]
 done
 [[ "$(wc -l < "$build_log")" == "$build_count" ]]

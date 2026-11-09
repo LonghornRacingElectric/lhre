@@ -2,29 +2,27 @@ function Invoke-TelemetryCompose {
     $composeArguments = @($args)
     if ((Split-Path (Get-Location).Path -Leaf) -eq "ingest") {
         $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\.."))
-        $generated = Join-Path $repoRoot "bazel-bin\lib\codegen\telemetry\orion_db_init.sql"
-        $selected = $env:ORION_DB_INIT_SQL
-        if (-not $selected) { $selected = $generated }
-        if ($composeArguments[0] -in @("up", "create", "run", "watch")) {
-            if ($selected -ne $generated) {
-                if ($selected -notmatch '^(?:[A-Za-z]:[\\/]|\\\\)' -or -not (Test-Path -LiteralPath $selected -PathType Leaf)) {
-                    throw "Explicit ORION_DB_INIT_SQL must name an existing absolute file: $selected"
+        foreach ($car in @("orion", "artemis")) {
+            $variable = $car.ToUpper() + "_DB_INIT_SQL"
+            $target = if ($car -eq "orion") { "current_schema_sql" } else { "new_car_schema_sql" }
+            $generated = Join-Path $repoRoot "bazel-bin\lib\codegen\telemetry\${car}_db_init.sql"
+            $selected = [Environment]::GetEnvironmentVariable($variable)
+            if (-not $selected) { $selected = $generated }
+            if ($composeArguments[0] -in @("up", "create", "run", "watch")) {
+                if ($selected -eq $generated) {
+                    Get-Command bazel -ErrorAction Stop | Out-Null
+                    Push-Location $repoRoot
+                    try {
+                        & bazel build --config=local "//apps/telemetry:$target"
+                        if ($LASTEXITCODE -ne 0) { throw "Bazel failed to generate the $car database schema" }
+                    } finally { Pop-Location }
                 }
-            } else {
-                Get-Command bazel -ErrorAction Stop | Out-Null
-                Push-Location $repoRoot
-                try {
-                    & bazel build --config=local //apps/telemetry:current_schema_sql
-                    if ($LASTEXITCODE -ne 0) { throw "Bazel failed to generate the Orion database schema" }
-                } finally {
-                    Pop-Location
-                }
-                if (-not (Test-Path -LiteralPath $generated -PathType Leaf)) {
-                    throw "Bazel did not produce Orion database schema: $generated"
+                if (-not [System.IO.Path]::IsPathRooted($selected) -or -not (Test-Path -LiteralPath $selected -PathType Leaf)) {
+                    throw "$variable must name an existing absolute file: $selected"
                 }
             }
+            [Environment]::SetEnvironmentVariable($variable, $selected)
         }
-        $env:ORION_DB_INIT_SQL = $selected
     }
     & docker-compose @composeArguments
 }

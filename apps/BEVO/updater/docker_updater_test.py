@@ -61,11 +61,11 @@ class DockerUpdaterTest(unittest.TestCase):
         self.checked("network", "create", "--internal", self.network)
         self.addCleanup(self.cleanup)
         password = "isolated-schema-test"
-        database = self.start("db", "lhre/telemetry-postgres:17.11", {
+        database = self.start("db", "lhre/telemetry-postgres:2.31.0-pg17", {
             "POSTGRES_USER": "electric", "POSTGRES_PASSWORD": password,
         }, extra=("--tmpfs", "/var/lib/postgresql/data"))
         self.ready(database, command=("pg_isready", "-h", "127.0.0.1", "-U", "electric"))
-        for database_name, source in (("telemetry", "nightwatch_sql"), ("angelique", "angelique_sql"), ("orion", "sql")):
+        for database_name, source in (("telemetry", "metadata_sql"), ("artemis", "artemis_sql"), ("orion", "sql")):
             self.checked("exec", database, "createdb", "-U", "electric", database_name)
             self.checked("exec", "--interactive", database, "psql", "-v", "ON_ERROR_STOP=1", "-U", "electric", "-d", database_name,
                          input=ARTIFACTS[source].read_text())
@@ -141,6 +141,6 @@ class DockerUpdaterTest(unittest.TestCase):
 
 if __name__ == "__main__":
     ARTIFACTS = dict(zip(("ingest_load", "bridge_load", "kafka_load", "postgres_load", "mqtt_load", "metadata", "executables",
-                          "sql", "nightwatch_sql", "angelique_sql", "mosquitto_conf", "updater"),
+                          "sql", "metadata_sql", "artemis_sql", "mosquitto_conf", "updater"),
                          (Path(argument).resolve() for argument in sys.argv[1:])))
     unittest.main(argv=[sys.argv[0]])

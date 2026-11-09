@@ -8,3 +8,6 @@ Container targets follow the standard `car_status_binary`, `_image`, `_load`,
 `_push`, and `_smoke_test` contract. The image contains the generated schema
 runfiles and shared network configuration. Start it explicitly with
 `./apps/telemetry/stack/server_devtool.sh enable car_status`.
+
+Raw telemetry decoding supports only explicit Orion and Artemis car headers.
+Unknown headers are rejected rather than decoded as the default car.

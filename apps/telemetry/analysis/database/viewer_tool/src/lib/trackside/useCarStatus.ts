@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 /**
  * Real car state from the central classifier (telemetry/car-status, PR #282),
- * surfaced over `GET /api/car-status/stream?car=<orion|angelique>` (SSE).
+ * surfaced over `GET /api/car-status/stream?car=<orion|artemis>` (SSE).
  *
  * This is deliberately decoupled from "is telemetry arriving" — the classifier
  * knows whether the car is physically OFF / idling / ready-to-drive / moving,

@@ -32,7 +32,7 @@ class TestKafkaBridgeSeed(unittest.TestCase):
         )
 
     def test_grafana_topics_seeded(self):
-        cars = ["angelique", "orion", "nightwatch"]
+        cars = ["orion", "artemis"]
         suffix = uuid.uuid4().hex
 
         for car in cars:
