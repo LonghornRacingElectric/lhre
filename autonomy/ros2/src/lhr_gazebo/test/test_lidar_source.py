@@ -21,7 +21,7 @@ WORLD = Path(__file__).parents[1] / 'worlds/autocross_seed1.sdf'
 HOOP = {'mid360_mount_x_m': '0.609', 'mid360_mount_z_m': '1.06',
         'mid360_mount_roll_rad': str(math.pi), 'mid360_mount_pitch_rad': '0.1222'}
 TF_DETECTOR = {'lidar_sensor_transform_source': 'tf', 'lidar_height_filter_frame': 'base_link',
-               'lidar_ground_z_min': '0.05', 'lidar_ground_z_max': '0.55'}
+               'lidar_ground_z_min': '0.15', 'lidar_ground_z_max': '1.05'}
 
 
 class NodeConfig:

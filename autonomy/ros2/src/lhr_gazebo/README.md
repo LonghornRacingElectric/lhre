@@ -255,18 +255,21 @@ the caster. These modes do not share a physical accuracy guarantee.
 
 A mount other than the vehicle YAML one only starts if the detector reads it:
 `lidar_sensor_transform_source:=tf lidar_height_filter_frame:=base_link` and a
-height band above the ground, such as `lidar_ground_z_min:=0.05
-lidar_ground_z_max:=0.55`. The detector's defaults place the cloud at the vehicle
-YAML mount, unrotated, and cut height in the sensor frame, so a flipped or
-pitched cloud would land in the wrong place with no error. Upside down at 7°
-nose down, just inside the main hoop:
+height band above the ground. The detector's defaults place the cloud at the
+vehicle YAML mount, unrotated, and cut height in the sensor frame, so a flipped
+or pitched cloud would land in the wrong place with no error. Use
+`lidar_ground_z_min:=0.15 lidar_ground_z_max:=1.05`, the band the default
+sensor-frame cut gives at the default mount. A cut at 0.05 m lets range noise
+on the many ground returns near the car through, and with one point per
+cluster each becomes a cone. Upside down at 7° nose down, just inside the main
+hoop:
 
 ```bash
 ros2 launch lhr_gazebo gazebo_demo.launch.py perception:=lidar lidar_source:=mid360 \
   mid360_mount_x_m:=0.609 mid360_mount_z_m:=1.06 \
   mid360_mount_roll_rad:=3.14159 mid360_mount_pitch_rad:=0.1222 \
   lidar_sensor_transform_source:=tf lidar_height_filter_frame:=base_link \
-  lidar_ground_z_min:=0.05 lidar_ground_z_max:=0.55
+  lidar_ground_z_min:=0.15 lidar_ground_z_max:=1.05
 ```
 
 These arguments are for the mount study. The measured mount goes in

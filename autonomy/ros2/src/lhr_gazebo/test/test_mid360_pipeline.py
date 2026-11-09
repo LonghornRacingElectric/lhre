@@ -102,7 +102,7 @@ def test_flipped_pitched_hoop_mount_puts_cones_where_they_stand(tmp_path, monkey
                      '-p', 'mount_x_m:=0.609', '-p', 'mount_z_m:=1.06',
                      '-p', f'mount_roll_rad:={math.pi}', '-p', 'mount_pitch_rad:=0.1222',
                      '-p', 'sensor_transform_source:=tf', '-p', 'height_filter_frame:=base_link',
-                     '-p', 'ground_z_min:=0.05', '-p', 'ground_z_max:=0.55',
+                     '-p', 'ground_z_min:=0.15', '-p', 'ground_z_max:=1.05',
                      '-p', 'min_cluster_points:=1', '-p', 'stack_window_sec:=0.0'])
     sensor = LidarSimNode()
     detector = LidarConeDetector()
