@@ -89,7 +89,7 @@ straight ahead. Distances are metres past the nose tip, sensor centre 1.06 m up.
 
 | Pitch | Dense peak lands | Reach, 1 pt/frame | Reach, 0.3 pt/frame | Far cone tops cut off past | Peak at body pitch -1° / +1° |
 | --- | --- | --- | --- | --- | --- |
-| 5° | 38.6 | 14.8 | 32.0 | never | sky / 22.4 |
+| 5° | 38.6 | 14.8 | 32.0 | never | 119.6 / 22.4 |
 | 6° | 22.4 | 14.5 | 25.8 | never | 38.6 / 15.4 |
 | 6.5° | 18.3 | 16.0 | 22.8 | never | 28.5 / 13.3 |
 | **7°** | **15.4** | **15.0** | **21.8** | **never** | **22.4 / 11.6** |
@@ -120,7 +120,9 @@ measures how far past the nose each cone first enters the detector's map.
 Ranges are over each arm's runs; CTE over its five autocross laps. Per-run
 rows: [detection_range.csv](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/testing/2026-11-08-lidar-mount-study/detection_range.csv).
 Seed 3 is the hardest course for every mount: a tenth of its cones are first
-mapped within a metre of the nose.
+mapped within 0.4 m (6 and 7°) to 2.6 m (nose) of the nose. A false cone is a
+map entry more than 0.5 m from any world cone, counted anywhere on the course.
+The scorer finds 123 on the discarded 0.05 m run below, so 0 is a real result.
 
 - **The gate cannot tell the mounts apart.** Every arm laps at 0.99 to 1.00
   times the reference with the same cross-track error. At these speeds the

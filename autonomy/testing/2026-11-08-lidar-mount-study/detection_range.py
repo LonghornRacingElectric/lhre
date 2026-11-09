@@ -8,9 +8,11 @@ Each arm is a run_gate.sh OUT folder recorded with /lhr/sensor/cones_detected
 added to its TOPICS. The detector's map only grows, and marker i is map
 entry i, so a cone enters the map the first time its marker id appears. That
 cone counts when it lands within MATCH_M of a world cone, and its distance is
-measured along the car from the nose at that moment. Cones that appear while
-the car is still within START_M of where it started are left out: they are
-the start box, which every arm sees from standstill.
+measured along the car from the nose at that moment. Cones first mapped while
+the car is still within START_M of where it started are left out of the
+distances: they are the start box, which every arm sees from standstill. A
+map entry with no world cone within MATCH_M is a false cone wherever it
+appears.
 
 Run it where the bags are, with ROS sourced (rosbag2_py, lhr_lidar_sim).
 """
@@ -65,23 +67,26 @@ def first_sightings(topics, cones):
                       2 * math.atan2(m.pose.pose.orientation.z, m.pose.pose.orientation.w))
                      for _, m in odom])
     start = pose[0, :2]
-    seen_ids, first = set(), {}
+    seen_ids, first, start_box = set(), {}, set()
     false_cones = 0
     for t, msg in topics['/lhr/sensor/cones_detected']:
         for marker in msg.markers:
             if marker.action != 0 or marker.id in seen_ids:
                 continue
             seen_ids.add(marker.id)
-            x, y, yaw = pose[min(np.searchsorted(ot, t), len(ot) - 1)]
-            if np.hypot(x - start[0], y - start[1]) < START_M:
-                continue
             p = np.array([marker.pose.position.x, marker.pose.position.y])
             d = np.hypot(*(cones[:, :2] - p).T)
             k = int(np.argmin(d))
+            # Matched before the start-box skip: ground-noise ghosts are
+            # densest near the car, so they must count wherever they appear.
             if d[k] > MATCH_M:
                 false_cones += 1
                 continue
-            if k in first:
+            if k in first or k in start_box:
+                continue
+            x, y, yaw = pose[min(np.searchsorted(ot, t), len(ot) - 1)]
+            if np.hypot(x - start[0], y - start[1]) < START_M:
+                start_box.add(k)
                 continue
             dx, dy = cones[k, 0] - x, cones[k, 1] - y
             first[k] = (dx * math.cos(yaw) + dy * math.sin(yaw) - NOSE_X,
