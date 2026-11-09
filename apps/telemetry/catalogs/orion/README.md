@@ -1,5 +1,5 @@
 # Orion catalogs
 
-The current `lib/spec` bundle identifies Orion. Run the publisher documented
-in the [archive guide](../README.md) to populate this folder. JSON versions are
-immutable and ignored by Git.
+Legacy published Orion versions remain reference data for existing integrations.
+The current spec and query gateway target Artemis. Publishing the current bundle
+does not overwrite or select an Orion version. See the [archive guide](../README.md).

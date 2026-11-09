@@ -33,6 +33,8 @@ three years after everyone who made the decision graduated.
 | [022](022-explicit-native-rates.md) | CAN timing uses explicit native rates instead of tiers | Accepted |
 | [023](023-per-car-signal-catalogs.md) | Immutable per-car signal catalogs with explicit current selection | Accepted |
 
+| [024](024-artemis-query-gateway.md) | Current Artemis catalog and session/time query gateway; preserve Orion legacy paths | Accepted |
+
 ## ADRs vs. READMEs
 
 Both exist, on purpose, and they don't overlap:

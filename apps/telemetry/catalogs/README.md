@@ -1,7 +1,7 @@
 # Per-car signal catalog archive
 
 Published catalogs are runtime data, separate from replaceable Bazel outputs.
-The current textproto bundle declares `car: "orion"`. Generate and publish it
+The current textproto bundle declares `car: "artemis"`. Generate and publish it
 from the repo root:
 
 ```bash
@@ -14,7 +14,7 @@ are never overwritten or deleted. Reactivate one explicitly:
 
 ```bash
 bazel run --config=local //tools/spec:publish_signals -- \
-  --source /absolute/path/to/catalogs/orion/HASH.json
+  --source /absolute/path/to/catalogs/artemis/HASH.json
 ```
 
 Use `--catalog-root /absolute/path` or `SIGNAL_CATALOG_DIR` for persistent server
@@ -31,8 +31,8 @@ catalog intentionally selects it again.
 
 Car folders are independent. A car with no published current pointer returns
 503; a car with no folder returns 404. A requested version must exist inside
-that car's folder, and the JSON car/version must match. Orion's definitions
-are not a substitute for Artemis's missing catalog.
+that car's folder, and the JSON car/version must match. Orion archives remain legacy reference data; publishing the current Artemis
+bundle neither overwrites nor selects an Orion catalog.
 
 See the [generator](../../../lib/codegen/telemetry/README.md) and
 [viewer](../analysis/database/viewer_tool/README.md#signal-discovery-v0).

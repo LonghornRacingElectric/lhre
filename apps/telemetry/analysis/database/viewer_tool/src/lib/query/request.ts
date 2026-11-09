@@ -27,6 +27,7 @@ const querySchema = z.strictObject({
 export function parseQuery(value: unknown): QueryRequest {
   const result = querySchema.safeParse(value);
   if (!result.success) throw new QueryError(400, "invalid_request", result.error.issues[0].message);
+  if (result.data.car !== "artemis") throw new QueryError(400, "unsupported_car", "The query gateway reads Artemis history.");
   if (result.data.agg !== "raw" || result.data.rate !== null) {
     throw new QueryError(400, "unsupported_downsampling", "Only raw queries are supported; omit rate and use agg: raw.");
   }

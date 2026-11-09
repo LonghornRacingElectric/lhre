@@ -144,10 +144,10 @@ authority's schema directory explicitly; BEVO also supports persistent local
 release overrides. Neither override changes protobuf compatibility rules.
 
 DISCOVER catalogs have a separate content-based version. The current spec
-bundle declares Orion. `bazel run //tools/spec:publish_signals` publishes that
+bundle declares Artemis. `bazel run //tools/spec:publish_signals` publishes that
 catalog independently of database initialization and BEVO release metadata.
-Artemis retains its own database and build targets; its catalog and query
-adapter can be supplied later. See the [archive guide](catalogs/README.md).
+The Artemis query gateway reads its generated frequency pools by session/time.
+Orion keeps its legacy database and wire targets for integration continuity. See the [archive guide](catalogs/README.md).
 
 ## Dependencies and CI
 

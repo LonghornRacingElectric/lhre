@@ -1,13 +1,10 @@
-# QUERY
+# Artemis QUERY
 
-`POST /api/query` exposes the historical query service in the Node runtime.
+`POST /api/query` exposes the Artemis history service in the Node runtime.
+The route connects the generated frequency-pool reader, published Artemis
+catalog and signed session/time cursors. Other car names return `unsupported_car`.
 It uses the existing `/api/*` middleware exclusion; API-key authentication is
-not part of this v0 endpoint. PostgreSQL connection URLs remain server-only.
+outside this v0 endpoint. Database connection URLs remain server-only.
 
 See [query semantics and configuration](../../../lib/query/README.md) for the
-request shape, JSON/CSV formats, downsampling, and cursor guarantees. The route
-only wires the service to the PostgreSQL source and published catalog reader.
-
-The current adapter reads Orion packet tables. Artemis keeps its independent
-Timescale path; a published Artemis query is rejected with `unsupported_storage`
-until a dedicated adapter is supplied.
+request shape, JSON/CSV formats, raw-only scope and pagination guarantees.

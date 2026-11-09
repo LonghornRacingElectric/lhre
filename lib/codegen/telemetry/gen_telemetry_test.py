@@ -61,7 +61,7 @@ class TelemetryGeneratorTest(unittest.TestCase):
             self.assertIn("rate_hz", row)
             self.assertNotIn("native_rate_hz", row)
             self.assertNotIn("uplink_rate_hz", row)
-        self.assertEqual(catalog["car"], "orion")
+        self.assertEqual(catalog["car"], "artemis")
         self.assertRegex(catalog["schema_version"], r"^[a-f0-9]{64}$")
         self.assertTrue(all("schema_version" not in row for row in rows.values()))
         self.assertEqual(rows["dynamics.gps"]["unit"], "deg")
@@ -107,6 +107,12 @@ message {{ name: "STATUS" can_id: 256 from_board: "VCU" bus: "Critical" dlc: 1
                 self.assertEqual(gen_telemetry.validator.validate(spec)[0], [])
                 row = json.loads(gen_telemetry.render_signals_json(spec))["signals"][0]
                 self.assertEqual(row["rate_hz"], expected)
+
+    def test_current_catalog_matches_artemis_pool_fields(self):
+        value = json.loads(gen_telemetry.render_signals_json(self.spec))
+        self.assertEqual(value["car"], "artemis")
+        fields = {f"{pool['group']}.{field['name']}" for pool in gen_telemetry.storage.contract(self.spec)["pools"] for field in pool["fields"]}
+        self.assertEqual({row["signal"] for row in value["signals"]}, fields)
 
     def test_uplink_metadata_does_not_reconcile_database_or_wire_layout(self):
         changed = loader.Spec(copy.deepcopy(self.spec.files))

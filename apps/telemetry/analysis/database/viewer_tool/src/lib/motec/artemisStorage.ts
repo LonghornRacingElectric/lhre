@@ -1,24 +1,10 @@
-import fs from "node:fs";
-import path from "node:path";
 import { Prisma } from "../../../.prisma/artemis-client";
 import prisma from "@/lib/prisma/artemis";
+import { storageContract } from "./artemisContract";
+export { storageContract } from "./artemisContract";
 
-type Field = { name: string; sql_type: string; aggregate: "avg" | "last" };
-type Pool = { table: string; group: string; frequency_hz: number; fields: Field[] };
-type Contract = { storage_id: string; pools: Pool[] };
 export type BucketAggregate = "avg" | "min" | "max" | "last";
 export type BucketRow = Record<string, unknown> & { session_start_ms: bigint; time: bigint };
-let cached: Contract | undefined;
-
-export function storageContract(): Contract {
-  if (!cached) {
-    const filename = process.env.ARTEMIS_STORAGE_CONTRACT_PATH || path.resolve(
-      process.cwd(), "../../../../../bazel-bin/lib/codegen/telemetry/storage_contract.json",
-    );
-    cached = JSON.parse(fs.readFileSync(filename, "utf8")) as Contract;
-  }
-  return cached;
-}
 
 export function bucketWidth(groups: string[], requestedMs = 100, fields?: string[]): number {
   const periods = storageContract().pools

@@ -158,7 +158,8 @@ erase the archive. Configure `--catalog-root /absolute/path` or
 `SIGNAL_CATALOG_DIR` for persistent deployment storage. Reactivate an older
 version using `--source /absolute/path/to/<schema_hash>.json`.
 
-The current spec declares Orion. Other car folders can hold catalogs generated
+The current spec declares Artemis. Orion outputs retain their legacy wire and
+database identities for integration continuity. Other car folders can hold catalogs generated
 from their own bundles, with the same JSON shape. Never choose the current schema
 by hash order or filesystem timestamps; only the pointer selects it.
 

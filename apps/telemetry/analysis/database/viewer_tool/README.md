@@ -33,8 +33,8 @@ Build and publish the current car's catalog from the repo root:
 bazel run --config=local //tools/spec:publish_signals
 ```
 
-The current spec declares `car: "orion"` in `groups.textproto`.
-With the viewer running, `GET /api/cars/orion/signals` returns its signal array,
+The current spec declares `car: "artemis"` in `groups.textproto`.
+With the viewer running, `GET /api/cars/artemis/signals` returns its signal array,
 including CAN, GPS, and board-status fields.
 `?schema_version=<64-character-lowercase-hash>` selects an exact version in that
 car's folder; omitting it follows that car's `current.json` pointer.
@@ -70,17 +70,16 @@ Catalog serving tests: `npx vitest run tests/signals/catalog.test.ts`.
 
 ## Historical queries
 
-`POST /api/query` reads Orion packet-based PostgreSQL history through the shared
-MoTeC read-only database helper using signal definitions from its published catalog. It supports raw
-JSON/CSV pages; time buckets and downsampling are not implemented yet.
-Artemis retains its separate time-bucket read interfaces. This packet adapter
-returns `unsupported_storage` for Artemis when its catalog is published;
-Artemis query adaptation and reconciliation are deferred.
+`POST /api/query` reads Artemis's generated Timescale frequency pools using its
+published signal catalog. It returns raw JSON/CSV pages ordered by timestamp,
+recording session and signal. Its cursor has no packet identifier. Other car
+names are rejected; Orion's existing telemetry readers remain separate legacy
+integration paths. The gateway does not migrate or reconcile databases.
 
-Use the existing `ORION_DB_*` settings and set
+Use `ARTEMIS_DATABASE_URL` or the `ARTEMIS_DB_*` settings and set
 `QUERY_CURSOR_SECRET` to a stable secret shared by viewer processes. See the
-[query guide](src/lib/query/README.md) for the full request/response contract,
-limits, pagination behavior, and deployment configuration.
+[query guide](src/lib/query/README.md) for limits and pagination behavior.
+Existing bucketed Artemis analysis remains available through the MoTeC interfaces.
 
 `npm run test:query` runs the unit and HTTP checks; the optional real PostgreSQL
 checks are described in the [test guide](tests/query/README.md).
@@ -96,7 +95,7 @@ KAFKA_GROUP_ID=viewer-tool-group
 KAFKA_TOPICS=status,sensor_data,gg-plot,track-mapper
 KAFKA_ROUTES_FILE=./kafka.routes.json
 KAFKA_SENSOR_TOPIC=sensor_data
-NEXT_PUBLIC_DEFAULT_LIVE_CAR=orion
+NEXT_PUBLIC_DEFAULT_LIVE_CAR=artemis
 NEXT_PUBLIC_VIEWER_MULTI_CAR=true
 ```
 

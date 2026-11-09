@@ -1,7 +1,7 @@
 # Car signal discovery
 
 `GET /api/cars/{car}/signals` serves generated signal metadata. It uses the
-existing `/api/*` middleware exclusion. The current spec generates Orion's
+existing `/api/*` middleware exclusion. The current spec generates Artemis's
 catalog; any car with its own published archive can use the endpoint.
 
 The optional `schema_version` query parameter selects an exact catalog-content

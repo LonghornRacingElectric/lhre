@@ -1,13 +1,23 @@
 # Historical telemetry queries
 
-`POST /api/query` validates names against the published car catalog and reads
-raw observations through a `TelemetrySource`. `service.ts` owns validation,
-catalog selection, pagination, and response limits. `http.ts` handles JSON/CSV.
-`postgres.ts` builds parameterized SELECTs for catalog-approved group fields.
-It uses the existing MoTeC `getSettings(car)` and `ReadOnlyDatabase` helpers,
-sharing their per-car configuration, connection pools, read-only transactions,
-and 30-second statement timeout. SQL selection and pagination live in QUERY;
-the existing MoTeC code is unchanged.
+`POST /api/query` reads Artemis history from its generated frequency pools.
+`service.ts` owns validation, catalog selection, pagination and response limits;
+`artemis.ts` maps approved signals to physical pools using the generated storage
+contract. Pool placement follows native CAN frequency, independent of uplink
+limits. Orion remains a legacy reference with its existing telemetry readers;
+this gateway rejects other car names before catalog or database access.
+
+Raw reads preserve each pool's received timestamps. Each selected pool supplies
+ordered observations, merged by timestamp, recording session and signal name.
+There are no cross-pool raw joins and no packet table or packet identifier.
+Existing bucketed Artemis interfaces continue to serve aligned analysis;
+adding aggregation to this endpoint is separate from raw history retrieval.
+
+The reader uses the existing `ReadOnlyDatabase` helper for read-only transactions,
+connection pooling and the 30-second statement timeout. Identifiers are validated
+against the generated contract and all bounds are parameters. This small SELECT
+boundary preserves SQL NULL arrays: Prisma turns those into empty arrays, which
+would incorrectly present an unrecorded sensor as a recorded empty sample.
 
 Zod validates requests/cursors and ISO timestamps. `negotiator`, `raw-body`, and
 `csv-stringify` handle HTTP format selection, bounded bodies, and CSV output.
@@ -19,30 +29,22 @@ HTTP and pagination do not depend on PostgreSQL.
 QUERY uses the same environment variables as the existing MoTeC/history routes:
 
 ```env
-ORION_DB_HOST=localhost
-ORION_DB_PORT=5432
-ORION_DB_NAME=orion
-ORION_DB_USER=analysis
-ORION_DB_PASSWORD=replace-me
+ARTEMIS_DB_HOST=localhost
+ARTEMIS_DB_PORT=5432
+ARTEMIS_DB_NAME=artemis
+ARTEMIS_DB_USER=analysis
+ARTEMIS_DB_PASSWORD=replace-me
 QUERY_CURSOR_SECRET=replace-with-a-random-secret-shared-by-all-viewer-processes
 ```
 
-This packet-based adapter supports Orion. Artemis's separate Timescale database
-continues to use its existing time-bucket interfaces. A query for Artemis with a
-published catalog returns 503 `unsupported_storage` before opening a database;
-without a catalog, discovery reports the missing catalog first. An Artemis
-query adapter and cross-layout reconciliation are deferred. Retired cars have
-no database configuration. `ORION_DB_CONNECT_TIMEOUT` defaults to 5 seconds;
-the shared pool allows four connections per database identity.
+Set `ARTEMIS_DATABASE_URL` or the `ARTEMIS_DB_*` settings above. Existing shared
+host/credential defaults still apply. A published Artemis catalog is required;
+Orion catalogs are never substituted. Missing pools or columns return 503.
+No database migration or cross-car reconciliation runs as part of a query.
 
-Group tables must join to `packet` through `packet_id`, with one row per
-packet. Fields are selected from the published catalog, with validated and
-quoted identifiers; values and cursor bounds use SQL parameters. Missing
-tables/columns return 503. No generated Prisma client is needed for QUERY.
-
-Each page checks a 30-second budget between packet batches; an in-flight
-statement has the shared helper's own 30-second timeout. This is not a strict
-30-second deadline for the entire HTTP request.
+Each page checks a 30-second budget between pool batches; an in-flight statement
+has the shared helper's own 30-second timeout. This is not a strict 30-second
+deadline for the entire HTTP request.
 
 Set the same `QUERY_CURSOR_SECRET` on all deployed viewer processes. Without
 one, a process-local random key is used, so tokens expire on restart or fail
@@ -52,7 +54,7 @@ when sent to a different process. No credentials are returned or logged.
 
 ```json
 {
-  "car": "orion",
+  "car": "artemis",
   "signals": ["pack.hv_pack_v", "dynamics.gps"],
   "t0": "2026-11-08T12:00:00Z",
   "t1": "2026-11-08T12:01:00Z",
@@ -99,11 +101,12 @@ uses the existing `/api/*` middleware exclusion; API-key auth is future work.
 
 ## Pagination and limits
 
-Results are ordered by timestamp, numeric packet ID, then qualified signal
-name. SQL reads packets in time/ID order; the adapter expands selected
-fields into observations. It includes the cursor's packet again when needed,
-then skips already-delivered signals, so a page can end within a packet.
-Batch continuation uses strict time/ID predicates, never OFFSET.
+Results are ordered by timestamp, numeric `session_start_ms`, then qualified
+signal name. Database batches use time/session predicates, never OFFSET. A page
+can end between signals at the same session/time; continuation includes that
+sample and skips only observations already delivered. The signed cursor carries
+a session key and never a packet identifier. Cursor format 2 rejects older
+packet-based tokens.
 
 Tokens are HMAC signed, expire after 24 hours, and bind the normalized request
 and catalog version. Keep the same filters and page size. Activating a new
@@ -116,8 +119,8 @@ bounded using the complete serialized JSON response, including the actual
 cursor and metadata, with a 2 MiB limit. No fixed metadata allowance is used;
 short pages can still have a continuation token. CSV uses the same page of rows.
 Individual values over 64 KiB return 413. Values are checked after PostgreSQL returns
-them; there is no SQL-side size projection. Packets are fetched in batches of
-32. A page may scan at most 10000 packets to find requested observations; an
+them; there is no SQL-side size projection. Pool rows are fetched in batches of
+32. A page may scan at most 10000 rows across the selected pools to find requested observations; an
 excessively sparse request returns 413 `query_scan_limit` so callers can narrow
 the range. Database unavailability and timeouts return 503.
 

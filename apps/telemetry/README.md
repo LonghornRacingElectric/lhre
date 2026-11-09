@@ -55,16 +55,15 @@ and tuning details.
 
 ## Viewer
 
-The viewer serves schema-generated signal discovery at `/api/cars/orion/signals`.
+The viewer serves schema-generated signal discovery at `/api/cars/artemis/signals`.
 Run `//tools/spec:publish_signals` first; serving per-car archived versions
 and deployment paths are covered in the
 [viewer README](analysis/database/viewer_tool/README.md#signal-discovery-v0).
 
 The viewer remains an npm/PM2 application rather than a Bazel image:
 
-Orion historical reads are available through `POST /api/query`. Artemis keeps
-its separate Timescale time-bucket interfaces; adapting QUERY to those pools is
-deferred. Configure it using the
+Artemis history is available through `POST /api/query`, using frequency pools
+and session/time pagination. Orion remains a legacy integration reference. Configure it using the
 [query guide](analysis/database/viewer_tool/src/lib/query/README.md).
 
 ```bash

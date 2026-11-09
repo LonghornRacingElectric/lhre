@@ -1,7 +1,7 @@
 # Signal catalogs
 
 DISCOVER reads immutable published catalogs from the requested car's folder.
-The current spec declares Orion; other cars use the same format and need
+The current spec declares Artemis; other cars use the same format and need
 their own published artifacts. There is no Orion fallback or hardcoded car list.
 
 The archive root is `SIGNAL_CATALOG_DIR`, defaulting to `apps/telemetry/catalogs`

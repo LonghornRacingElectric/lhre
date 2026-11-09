@@ -62,8 +62,8 @@ generators forward into generated code and docs.
 
 ## Car identity
 
-Declare `car: "orion"` once in the spec bundle, currently in `groups.textproto`.
-The current definitions belong to Orion; `OrionSensorData` and Orion SQL target
+Declare `car: "artemis"` once in the spec bundle, currently in `groups.textproto`.
+The current definitions belong to Artemis; `OrionSensorData` and Orion SQL target
 names remain compatibility names, not catalog identity. Catalog generation
 requires exactly one lowercase car slug. Independent cars need independent spec
 input bundles; never relabel a generated artifact to manufacture another car's
