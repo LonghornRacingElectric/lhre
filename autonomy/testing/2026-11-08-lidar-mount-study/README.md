@@ -18,7 +18,9 @@ Just inside the main hoop and a little forward, **upside down, pitched
   the detector's 20 m range. Past 7.5° the top of the field of view starts to
   cut off far cones. A ±1° change in body pitch moves the band 12 to 22 m at
   7°, but 15 to 39 m at 6°.
-- **Sim A/B:** SIM_AB_PENDING
+- **Sim A/B:** at 7° the full stack passes 6 of 6 gate runs with no false
+  cones, and maps cones a median 12 to 16 m past the nose. The 6°, 8° and
+  nose-mount arms are still running.
 
 The real angle still needs a field check with the sensor at hoop height (see
 [Zeroing in](#zeroing-in)).
@@ -101,7 +103,22 @@ depend on the choice.
 
 ## Sim A/B
 
-SIM_AB_PENDING
+The full Gazebo stack (Mid-360 caster, camera fusion, EKF, safety) ran the
+rules-compliant autocross seeds 1 to 5 and one acceleration run per mount. The
+Mid-360 sits at `base_link` (0.609, 0, 1.06), upside down, pitched 6, 7 or 8°
+nose down. The control is today's sim mount in the nose. `detection_range.py`
+measures how far past the nose each cone first enters the detector's map.
+
+| Mount | Gate | Lap / reference | Max CTE (m) | Cones hit | False cones | First mapped, median past the nose (m) | Mapped by 12 m past the nose |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Upside down, 7° | 6 of 6 | 0.99 to 1.00 | 0.51 to 0.57 | 0 | 0 | 12.3 to 15.9 | 51 to 97% |
+| Upside down, 6° | running | | | | | | |
+| Upside down, 8° | running | | | | | | |
+| Nose (today's sim) | running | | | | | | |
+
+The detector stops at 20 m from the sensor, which is 18.1 m past the nose from
+the hoop, so a band that lands farther out than that (6°) cannot help it.
+Ranges are per run, over the six runs of each arm.
 
 ## Zeroing in
 
@@ -135,7 +152,17 @@ SIM_AB_PENDING
 - **Real profile:** 10/4 garage run `cone_05m_level`, from the
   [Mid-360 acceptance](../2026-10-04-mid360-acceptance/README.md) raw data on
   SharePoint.
-- **Sim A/B:** SIM_AB_PROVENANCE
+- **Sim A/B:** this branch's mount arguments, on red-mesa from 18:07 CST on
+  11/8. `run_gate.sh` with `TRACK_STYLE=rules_autocross SEEDS="1 2 3 4 5"
+  REPEATS=1 ACCEL_REPEATS=1 SKIDPAD_REPEATS=0`, its `TOPICS` extended locally
+  with `/lhr/sensor/cones_detected` and `/lhr/perception/cones_classified`, and
+  `EXTRA` set to `mid360_mount_x_m:=0.609 mid360_mount_z_m:=1.06
+  mid360_mount_roll_rad:=3.14159… mid360_mount_pitch_rad:=<pitch>
+  lidar_sensor_transform_source:=tf lidar_height_filter_frame:=base_link
+  lidar_ground_z_min:=0.15 lidar_ground_z_max:=1.05`. A first 7° try with a
+  0.05 m ground cut was discarded: range noise on ground hits near the car made
+  123 false cones on one lap. Data is on red-mesa under
+  `~/lhr-test-data/2026-11-08-lidar-mount-ab`, upload pending.
 
 ## Limits
 
