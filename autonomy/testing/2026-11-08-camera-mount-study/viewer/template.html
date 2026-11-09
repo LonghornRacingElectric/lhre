@@ -1,0 +1,752 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}</style>
+<title>Orion Camera Placement</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: sibling of the LiDAR placement page. The real car fills a working viewport with a control rail beside it; below, how the image rows land and how many pixels a track-edge cone gets, per pitch. On phones everything stacks. */
+:root {
+  --bg: #eef0ee;
+  --panel: #ffffff;
+  --ink: #1b2124;
+  --muted: #5a666b;
+  --line: #d3d9d7;
+  --scene: #e4e8e6;
+  --car: #9ba7ae;
+  --accent: #d9481a;
+  --seen: #2a9a66;
+  --part: #c99416;
+  --blind: #7d878c;
+  --sky: #c3ccd0;
+  --seq: #2a78d6;
+  --cone-blue: #2457c5;
+  --cone-yellow: #f0c02c;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4;
+  --font-display: 'Barlow Semi Condensed', 'Arial Narrow', 'Helvetica Neue', sans-serif;
+  --font-body: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121618; --panel: #1a1f22; --ink: #e4e9ea; --muted: #97a3a8; --line: #2b3236;
+    --scene: #0e1113; --car: #6b7880; --accent: #ff7440; --seen: #3cc285; --part: #e6b63a; --blind: #59646a;
+    --sky: #3a4347; --seq: #3987e5; --cone-blue: #3d72e0; --cone-yellow: #e6b63a;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121618; --panel: #1a1f22; --ink: #e4e9ea; --muted: #97a3a8; --line: #2b3236;
+  --scene: #0e1113; --car: #6b7880; --accent: #ff7440; --seen: #3cc285; --part: #e6b63a; --blind: #59646a;
+  --sky: #3a4347; --seq: #3987e5; --cone-blue: #3d72e0; --cone-yellow: #e6b63a;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181;
+  color-scheme: dark;
+}
+html, body { background: var(--bg); color: var(--ink); }
+body {
+  font-family: var(--font-body); font-size: 14px; line-height: 1.5;
+  padding-block: 20px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1320px; margin: 0 auto; display: grid; gap: 16px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 24px; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: 30px; letter-spacing: 0.01em; margin: 0; text-wrap: balance; }
+.sub { color: var(--muted); margin: 0; max-width: 72ch; }
+.frame { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+@media (max-width: 980px) { .main { grid-template-columns: minmax(0, 1fr); } }
+
+.stage { position: relative; background: var(--scene); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; min-width: 0; }
+.stage canvas { display: block; width: 100%; height: clamp(360px, 62vh, 720px); touch-action: none; }
+.views { position: absolute; top: 10px; left: 10px; display: flex; flex-wrap: wrap; gap: 4px; max-width: calc(100% - 20px); }
+.views button, .seg button {
+  font: 600 13px var(--font-display); letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 4px;
+  padding: 5px 10px; cursor: pointer;
+}
+.views button[aria-pressed="true"], .seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.legend { position: absolute; left: 10px; bottom: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 12px; max-width: calc(100% - 20px);
+  background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--line); border-radius: 4px; padding: 5px 9px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 11px; height: 11px; border-radius: 2px; display: inline-block; flex: none; }
+.ramp { width: 120px; height: 10px; border-radius: 2px; background: linear-gradient(90deg, color-mix(in srgb, var(--seq) 8%, transparent), var(--seq)); }
+.tag { position: absolute; pointer-events: none; font: 600 12px var(--font-display); letter-spacing: 0.03em; color: var(--ink);
+  background: color-mix(in srgb, var(--panel) 85%, transparent); border: 1px solid var(--line); border-radius: 3px; padding: 1px 6px;
+  transform: translate(-50%, -140%); white-space: nowrap; }
+.tag.sensor { color: var(--accent); border-color: var(--accent); }
+.busy { position: absolute; right: 10px; top: 10px; font: 500 12px var(--font-mono); color: var(--muted); }
+
+.rail { display: grid; gap: 12px; min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; display: grid; gap: 10px; min-width: 0; }
+.card h2 { font-family: var(--font-display); font-size: 15px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; margin: 0; color: var(--muted); }
+.card .lede { margin: 0; color: var(--muted); font-size: 13px; max-width: 80ch; }
+.seg { display: flex; flex-wrap: wrap; gap: 4px; }
+.field { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; font-size: 13px; }
+.field input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+.field output { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.check { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.check input { accent-color: var(--accent); }
+dl.read { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; margin: 0; font-size: 13px; }
+dl.read dt { color: var(--muted); }
+dl.read dd { margin: 0; font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+dl.read .sep { grid-column: 1 / -1; border-top: 1px solid var(--line); margin: 2px 0; }
+.flag[hidden] { display: none; }
+.flag { font-size: 12px; padding: 6px 8px; border-radius: 4px; border: 1px solid var(--accent); color: var(--accent); display: grid; gap: 4px; }
+.yaml { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: start; }
+.yaml pre { margin: 0; font: 12px/1.5 var(--font-mono); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; overflow-x: auto; user-select: all; }
+.yaml button { font: 600 12px var(--font-display); letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 5px 9px; cursor: pointer; }
+
+.charts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 980px) { .charts { grid-template-columns: minmax(0, 1fr); } }
+.chart { position: relative; min-width: 0; }
+.chart svg { display: block; width: 100%; height: 260px; overflow: visible; }
+.chart text { font-family: var(--font-mono); font-size: 11px; fill: var(--muted); }
+.chart .grid line { stroke: var(--line); stroke-width: 1; }
+.keys { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink); }
+.keys span { display: inline-flex; align-items: center; gap: 6px; }
+.keys .cur { font-weight: 600; }
+.tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px;
+  font-size: 12px; box-shadow: 0 2px 8px color-mix(in srgb, var(--ink) 14%, transparent); white-space: nowrap; z-index: 2; }
+.tip b { font-weight: 600; }
+.tip .row { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+details summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 6px 9px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--font-display); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); font-size: 12px; }
+td.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.cur td { font-weight: 600; }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px 24px; font-size: 13px; color: var(--muted); }
+.notes p { margin: 0; max-width: 62ch; }
+.notes strong { color: var(--ink); font-weight: 600; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Orion Camera Placement</h1>
+      <p class="sub">ZED 2i on Orion's own CAD geometry, with the same pinhole model the stack uses. See what the left image sees for each mount and pitch, and whether a track-edge cone gets enough pixels for the camera–LiDAR fusion to colour it.</p>
+    </div>
+    <span class="frame">Frame: front axle centreline at ground, x forward, z up. base_link x = CAD x + 1.5494 m</span>
+  </header>
+
+  <div class="main">
+    <div class="stage" id="stage">
+      <canvas id="view" aria-label="3D view of Orion with the stereo camera mount, its image edges and the ground it can colour cones on"></canvas>
+      <div class="views" role="group" aria-label="Camera view">
+        <button id="v-side" aria-pressed="true">Side</button>
+        <button id="v-top" aria-pressed="false">Top</button>
+        <button id="v-front" aria-pressed="false">Front</button>
+        <button id="v-iso" aria-pressed="false">3/4</button>
+        <button id="v-img" aria-pressed="false">Left image</button>
+      </div>
+      <div class="busy" id="busy">Loading the car…</div>
+      <div class="legend" id="legend"></div>
+      <div id="tags"></div>
+    </div>
+
+    <aside class="rail">
+      <section class="card">
+        <h2>Mount</h2>
+        <div class="seg" role="group" aria-label="Mount position">
+          <button id="m-nose" aria-pressed="true">Sim today</button>
+          <button id="m-hoop" aria-pressed="false">Hoop, front face</button>
+          <button id="m-top" aria-pressed="false">On the hoop top</button>
+        </div>
+        <div class="field"><label for="px">Forward (CAD x)</label><output id="px-o"></output>
+          <input type="range" id="px" min="-1.30" max="1.00" step="0.005"></div>
+        <div class="field"><label for="pz">Height above ground</label><output id="pz-o"></output>
+          <input type="range" id="pz" min="0.30" max="1.40" step="0.005"></div>
+      </section>
+
+      <section class="card">
+        <h2>Pitch</h2>
+        <div class="seg" role="group" aria-label="Pitch preset" id="o-seg"></div>
+        <div class="field"><label for="pitch">Pitch (nose down)</label><output id="pitch-o"></output>
+          <input type="range" id="pitch" min="-10" max="30" step="0.5"></div>
+      </section>
+
+      <section class="card">
+        <h2>Show</h2>
+        <div class="seg" role="group" aria-label="Ground map">
+          <button id="g-vis" aria-pressed="true">Can colour a cone</button>
+          <button id="g-pts" aria-pressed="false">Pixels on a cone</button>
+        </div>
+        <label class="check"><input type="checkbox" id="edges" checked> Image edges</label>
+        <label class="check"><input type="checkbox" id="cones" checked> Track cones, 3 m track</label>
+      </section>
+
+      <section class="card">
+        <h2>What the left image sees</h2>
+        <dl class="read">
+          <dt>Image centre, ahead</dt><dd id="r-mid">…</dd>
+          <dt>Bottom edge, ahead</dt><dd id="r-bot">…</dd>
+          <dt>Horizon</dt><dd id="r-hor">…</dd>
+          <dt>Image blocked by the car</dt><dd id="r-car">…</dd>
+          <dt>Image that is sky</dt><dd id="r-sky">…</dd>
+          <div class="sep"></div>
+          <dt>Edge cone pixels, 4 m past nose</dt><dd id="r-p4">…</dd>
+          <dt>8 m past nose</dt><dd id="r-p8">…</dd>
+          <dt>12 m past nose</dt><dd id="r-p12">…</dd>
+          <div class="sep"></div>
+          <dt>Edge cone in the left image from</dt><dd id="r-left">…</dd>
+          <dt>In both lenses from</dt><dd id="r-both">…</dd>
+          <dt>Fusion can colour it</dt><dd id="r-ok">…</dd>
+          <dt>Ground ahead it can colour, to 15 m</dt><dd id="r-fwd">…</dd>
+          <div class="sep"></div>
+          <dt>Camera top vs hoop top</dt><dd id="r-hoop">…</dd>
+        </dl>
+        <div class="flag" id="flag" hidden></div>
+      </section>
+
+      <section class="card">
+        <h2>vehicle.yaml</h2>
+        <div class="yaml"><pre id="yaml"></pre><button id="copy" type="button">Copy</button></div>
+      </section>
+    </aside>
+  </div>
+
+  <div class="charts">
+    <section class="card">
+      <h2>Where each image row looks, straight ahead</h2>
+      <p class="lede">The centre column of the left image, top row to bottom row. Bar height is how far past the nose that row meets the ground. Sky and car rows fill the column so they read at a glance.</p>
+      <div class="keys" id="row-keys"></div>
+      <div class="chart" id="row-chart"></div>
+    </section>
+    <section class="card">
+      <h2>Pixels on a track-edge cone</h2>
+      <p class="lede">Left-image pixels a small cone 1.5 m left of the centreline covers, by distance past the nose, for every pitch at the current mount. The car blocking the view is included. The fusion ignores colour patches under 25 px.</p>
+      <div class="keys" id="line-keys"></div>
+      <div class="chart" id="line-chart"></div>
+      <details><summary>Show as a table</summary><div class="scroll" id="line-table"></div></details>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>At this mount, by pitch</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Pitch</th><th>Edge cone px, 4 m</th><th>8 m</th><th>12 m</th><th>In left image from</th><th>In both lenses from</th><th>Fusion can colour it</th><th>Car in image</th><th>Ground ahead colourable, to 15 m</th></tr></thead>
+        <tbody id="cmp"><tr><td colspan="9">Computing…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="notes">
+    <p><strong>Camera model.</strong> The ideal rectified pinhole from <code>lhr_vehicle/config/vehicle.yaml</code>: 1280 × 720, 110° horizontal, square pixels, so fx = fy = 448 px and 77.5° vertical. Stereolabs quotes 110° × 70° for the 2.1 mm lens, so the real image is a little shorter than this. Lenses sit 60 mm either side of the rig centre.</p>
+    <p><strong>Colouring a cone.</strong> <code>camera_lidar_fusion</code> projects each LiDAR-mapped cone at 0.1625 m into the left image. It needs that point in frame and unblocked, within 20 m (<code>max_color_range_m</code>), and an HSV patch of at least 25 px (<code>min_region_area</code>). Pixels here are the whole cone silhouette, so they are an upper bound: stripes, shading and motion blur shrink the patch.</p>
+    <p><strong>Car geometry.</strong> <code>orion.stl</code> in <code>lhr_vehicle/meshes</code>, from the SOLIDWORKS full-car assembly. No driver, helmet or head restraint, and no camera bracket or cable. Cones do not block each other. The real space claim belongs in the SOLIDWORKS assembly.</p>
+    <p><strong>Rules and reference points.</strong> DT.2.3 keeps driverless parts inside the primary-structure volume, so the camera top is checked against the main hoop top at 1.115 m (front face x = −0.995 m). Distances are along the ground past the nose tip (x = 0.955 m). The 1.5 m edge offset is half the 3 m minimum track width.</p>
+  </section>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+  "three-mesh-bvh": "https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.7.3/build/index.module.js"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { MeshBVH } from 'three-mesh-bvh';
+
+// ---- Embedded car mesh: orion.stl, CAD frame, int16 mm, welded on a 1 mm grid ----
+const V64 = '__V64__';
+const I64 = '__I64__';
+const INDEX_BYTES = 2;
+function bytes(b64) { const s = atob(b64); const a = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; }
+const vmm = new Int16Array(bytes(V64).buffer);
+const faces = INDEX_BYTES === 2 ? new Uint16Array(bytes(I64).buffer) : new Uint32Array(bytes(I64).buffer);
+
+// three.js frame: x forward, y up, z right (CAD y is left).
+const pos = new Float32Array(vmm.length);
+for (let i = 0; i < vmm.length; i += 3) { pos[i] = vmm[i] / 1000; pos[i + 1] = vmm[i + 2] / 1000; pos[i + 2] = -vmm[i + 1] / 1000; }
+const indexed = new THREE.BufferGeometry();
+indexed.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+indexed.setIndex(new THREE.BufferAttribute(faces, 1));
+const bvh = new MeshBVH(indexed);
+const shaded = indexed.toNonIndexed(); shaded.computeVertexNormals();
+
+const D2R = Math.PI / 180, R2D = 180 / Math.PI;
+const NOSE_X = 0.955, HOOP_TOP = 1.115, HOOP_FACE = -0.995, WHEELBASE = 1.5494;
+const CONE_H = 0.325, CONE_BASE = 0.228, CONE_TOP = 0.04, SLICES = 5;
+// vehicle.yaml stereo_camera and camera_lidar_fusion defaults.
+const IMG_W = 1280, IMG_H = 720, HFOV = 110, BASELINE = 0.12;
+const FX = IMG_W / 2 / Math.tan(HFOV / 2 * D2R), FY = FX, CX = IMG_W / 2, CY = IMG_H / 2;
+const VFOV = 2 * Math.atan(CY / FY) * R2D;
+const MIN_AREA = 25, MAX_RANGE = 20, EDGE_Y = 1.5;   // sample height 0.1625 m is slice 2's centre
+const BODY = { x: 0.043, y: 0.030, z: 0.175 };       // ZED 2i: 175 wide, 30 tall, 43 deep (mm)
+const MOUNTS = {
+  nose: { x: 1.8 - WHEELBASE, z: 0.65 },             // vehicle.yaml today, ASSUMED
+  hoop: { x: -0.97, z: 1.085 },
+  top: { x: -1.0, z: 1.14 },
+};
+const ORIENT = [0, 5, 10, 15, 20].map((p, i) => ({ key: 'p' + p, label: p ? `${p}° down` : 'Level', pitch: p, color: `--s${i + 1}` }));
+
+const css = () => getComputedStyle(document.documentElement);
+const cssv = name => css().getPropertyValue(name).trim() || '#888';
+const tok = name => new THREE.Color(cssv(name));
+
+// ---- Scene ----
+const canvas = document.getElementById('view');
+if (!window.WebGLRenderingContext) document.getElementById('busy').textContent = 'This browser has no WebGL, so the 3D view cannot draw.';
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const scene = new THREE.Scene();
+scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.1));
+const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(3, 6, -4); scene.add(sun);
+const carMat = new THREE.MeshStandardMaterial({ roughness: 0.75, metalness: 0.05, side: THREE.DoubleSide });
+scene.add(new THREE.Mesh(shaded, carMat));
+
+const GROUND_HALF = 26, TEX = 2048, CENTER_X = -0.5;
+const groundCanvas = document.createElement('canvas'); groundCanvas.width = groundCanvas.height = TEX;
+const groundTex = new THREE.CanvasTexture(groundCanvas); groundTex.colorSpace = THREE.SRGBColorSpace; groundTex.anisotropy = 8;
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(2 * GROUND_HALF, 2 * GROUND_HALF),
+  new THREE.MeshBasicMaterial({ map: groundTex, transparent: true, depthWrite: false }));
+ground.rotation.x = -Math.PI / 2; ground.position.set(CENTER_X, 0.001, 0); scene.add(ground);
+
+const sensorMat = new THREE.MeshStandardMaterial({ roughness: 0.5 });
+const sensor = new THREE.Mesh(new THREE.BoxGeometry(BODY.x, BODY.y, BODY.z), sensorMat); scene.add(sensor);
+const edgeLines = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ vertexColors: true })); scene.add(edgeLines);
+
+// Display-only track: blue left, yellow right. Not in the ray model.
+const coneGeo = new THREE.CylinderGeometry(CONE_TOP / 2, CONE_BASE / 2, CONE_H, 20);
+const blueMat = new THREE.MeshStandardMaterial({ roughness: 0.6 }), yellowMat = new THREE.MeshStandardMaterial({ roughness: 0.6 });
+const coneGroup = new THREE.Group(); scene.add(coneGroup);
+for (let d = 2; d <= 22; d += 2.5) for (const [z, m] of [[-EDGE_Y, blueMat], [EDGE_Y, yellowMat]]) {
+  const c = new THREE.Mesh(coneGeo, m); c.position.set(NOSE_X + d, CONE_H / 2, z); coneGroup.add(c);
+}
+
+// ---- Cameras ----
+const persp = new THREE.PerspectiveCamera(40, 1, 0.01, 200);
+const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, -100, 200);
+const imgCam = new THREE.PerspectiveCamera(VFOV, IMG_W / IMG_H, 0.02, 200);
+const LOOK_X = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 2);   // three cameras look down -z
+let camera = persp, controls = null, view = 'side', letterbox = new THREE.Color();
+const CAR_C = new THREE.Vector3(-0.48, 0.55, 0);
+function setView(name) {
+  view = name;
+  for (const v of ['side', 'top', 'front', 'iso', 'img']) document.getElementById('v-' + v).setAttribute('aria-pressed', String(v === name));
+  if (controls) { controls.dispose(); controls = null; }
+  edgeLines.visible = state.edges && name !== 'img';
+  stageLegend();
+  if (name === 'img') { camera = imgCam; resize(); return; }
+  if (name === 'side' || name === 'top' || name === 'front') {
+    camera = ortho; ortho.userData.span = name === 'top' ? 9 : 2.2; ortho.up.set(0, 1, 0); ortho.zoom = 1;
+    if (name === 'side') ortho.position.set(CAR_C.x + 1.5, CAR_C.y, -20);
+    if (name === 'front') ortho.position.set(20, CAR_C.y, 0);
+    if (name === 'top') ortho.position.set(CAR_C.x + 3 - 0.001, 40, 0);   // a hair behind, so forward is up the screen
+  } else { camera = persp; persp.up.set(0, 1, 0); persp.fov = 40; persp.position.set(3.6, 2.9, -4.6); }
+  resize();
+  controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
+  if (name === 'top') controls.target.set(CAR_C.x + 3, 0, 0);
+  else if (name === 'side') controls.target.set(CAR_C.x + 1.5, CAR_C.y, 0);
+  else controls.target.copy(CAR_C);
+  controls.update();
+}
+function resize() {
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  renderer.setSize(w, h, false);
+  persp.aspect = w / h; persp.updateProjectionMatrix();
+  const span = ortho.userData.span || 2, a = w / h;
+  Object.assign(ortho, { left: -span * a, right: span * a, top: span, bottom: -span }); ortho.updateProjectionMatrix();
+}
+new ResizeObserver(() => { resize(); }).observe(canvas);
+
+// ---- State and rig ----
+const state = { x: MOUNTS.nose.x, z: MOUNTS.nose.z, pitch: 0, edges: true, cones: true, map: 'vis' };
+const orientation = p => new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -p * D2R);
+function rig(s, quat) {
+  return { s: s.clone(), quat: quat.clone(), inv: quat.clone().invert(),
+    L: new THREE.Vector3(0, 0, -BASELINE / 2).applyQuaternion(quat).add(s),   // left lens is on CAD +y, three -z
+    R: new THREE.Vector3(0, 0, BASELINE / 2).applyQuaternion(quat).add(s) };
+}
+let cur = rig(new THREE.Vector3(state.x, state.z, 0), orientation(state.pitch));
+
+// ---- Rays and projection ----
+const ray = new THREE.Ray(), tmp = new THREE.Vector3();
+function blocked(o, x, y, z) {
+  const dx = x - o.x, dy = y - o.y, dz = z - o.z, len = Math.hypot(dx, dy, dz);
+  ray.origin.copy(o); ray.direction.set(dx / len, dy / len, dz / len);
+  const hit = bvh.raycastFirst(ray, THREE.DoubleSide);
+  return !!hit && hit.distance < len - 0.02;
+}
+// Point in the image and not hidden by the car: returns range and cosine off the optical axis.
+function sees(rg, lens, x, y, z) {
+  tmp.set(x - lens.x, y - lens.y, z - lens.z);
+  const len = tmp.length(); tmp.applyQuaternion(rg.inv);
+  if (tmp.x <= 1e-6) return null;
+  const u = CX + FX * tmp.z / tmp.x, v = CY - FY * tmp.y / tmp.x;
+  if (u < 0 || u >= IMG_W || v < 0 || v >= IMG_H) return null;
+  const cos = tmp.x / len;
+  return blocked(lens, x, y, z) ? null : { len, cos };
+}
+// Pixels a small cone at (gx, gz) covers in the left image, and whether the fusion could colour it.
+function coneCam(rg, gx, gz, both) {
+  let px = 0, seen = 0, mid = null;
+  const dz = CONE_H / SLICES;
+  for (let k = 0; k < SLICES; k++) {
+    const h = (k + 0.5) * dz, p = sees(rg, rg.L, gx, h, gz);
+    if (!p) continue;
+    seen++; if (k === 2) mid = p;
+    const w = CONE_BASE - (CONE_BASE - CONE_TOP) * h / CONE_H;
+    px += w * dz / (p.len * p.len) * FX * FY / (p.cos * p.cos * p.cos);   // solid angle to pixels, wide-angle stretch included
+  }
+  const range = Math.hypot(gx - rg.L.x, 0.1625 - rg.L.y, gz - rg.L.z);
+  return { px, seen, mid: !!mid, range, right: both ? !!sees(rg, rg.R, gx, 0.1625, gz) : null,
+    ok: !!mid && px >= MIN_AREA && range <= MAX_RANGE };
+}
+const pixelDir = (rg, u, v) => new THREE.Vector3(1, -(v - CY) / FY, (u - CX) / FX).normalize().applyQuaternion(rg.quat);
+function landing(o, d) {
+  ray.origin.copy(o); ray.direction.copy(d);
+  const hit = bvh.raycastFirst(ray, THREE.DoubleSide);
+  const tCar = hit ? hit.distance : Infinity, tGround = d.y < -1e-6 ? -o.y / d.y : Infinity;
+  if (tCar < tGround) return { kind: 'car', t: tCar, d };
+  if (tGround < Infinity) return { kind: 'ground', t: tGround, d, past: o.x + d.x * tGround - NOSE_X };
+  return { kind: 'sky', t: Infinity, d };
+}
+function imageShares(rg) {
+  let car = 0, sky = 0, n = 0;
+  for (let j = 0; j < 36; j++) for (let i = 0; i < 64; i++) {
+    const k = landing(rg.L, pixelDir(rg, (i + 0.5) * 20, (j + 0.5) * 20)).kind;
+    n++; if (k === 'car') car++; else if (k === 'sky') sky++;
+  }
+  return { car: car / n, sky: sky / n };
+}
+
+// ---- Surveys ----
+function survey(rg, az = 2, rs = 0.25, rmax = 22) {
+  const cells = [], s = rg.s; let fA = 0, fS = 0;
+  for (let a = -90; a <= 90; a += az) {
+    const ca = Math.cos(a * D2R), sa = Math.sin(a * D2R);
+    for (let r = rs / 2; r < rmax; r += rs) {
+      const gx = s.x + r * ca, gz = s.z + r * sa, c = coneCam(rg, gx, gz, false);
+      const st = c.ok ? 2 : c.seen > 0 ? 1 : 0;
+      cells.push(a, r, st, c.px);
+      // Polar cells grow with range; weight by area so shares are of ground, not of cells.
+      if (gx > NOSE_X && Math.hypot(gx - NOSE_X, gz) <= 15) { fA += r; if (st === 2) fS += r; }
+    }
+  }
+  return { cells, az, rs, fwd: fA ? fS / fA : 0 };
+}
+const LINE_D = []; for (let d = 0; d <= 22.001; d += 0.25) LINE_D.push(+d.toFixed(2));
+const coneLine = rg => LINE_D.map(d => coneCam(rg, NOSE_X + d, -EDGE_Y, true));
+const at = (line, d) => line[Math.round(d / 0.25)];
+function lineStats(line) {
+  const first = f => { const i = line.findIndex(f); return i < 0 ? null : LINE_D[i]; };
+  const ok = line.map((c, i) => c.ok ? i : -1).filter(i => i >= 0);
+  return { left: first(c => c.mid), both: first(c => c.mid && c.right),
+    okFrom: ok.length ? LINE_D[ok[0]] : null, okTo: ok.length ? LINE_D[ok[ok.length - 1]] : null,
+    rangeEnd: first(c => c.range > MAX_RANGE) };
+}
+
+// ---- Painting ----
+function paintGround(s, res) {
+  const g = groundCanvas.getContext('2d'), k = TEX / (2 * GROUND_HALF);
+  const toPx = (x, z) => [(x - (CENTER_X - GROUND_HALF)) * k, (z + GROUND_HALF) * k];
+  g.clearRect(0, 0, TEX, TEX);
+  const seq = cssv('--seq'), blind = cssv('--blind'), seen = cssv('--seen'), part = cssv('--part');
+  const { cells, az, rs } = res;
+  for (let i = 0; i < cells.length; i += 4) {
+    const a = cells[i], r = cells[i + 1], st = cells[i + 2], p = cells[i + 3];
+    if (state.map === 'pts') {
+      if (st === 0) { g.globalAlpha = 0.22; g.fillStyle = blind; }
+      else { g.globalAlpha = 0.08 + 0.82 * Math.min(1, Math.log1p(p) / Math.log1p(400)); g.fillStyle = seq; }
+    } else { g.globalAlpha = [0.30, 0.55, 0.55][st]; g.fillStyle = [blind, part, seen][st]; }
+    const a0 = (a - az / 2) * D2R, a1 = (a + az / 2) * D2R, r0 = r - rs / 2, r1 = r + rs / 2;
+    const P = [[r0, a0], [r1, a0], [r1, a1], [r0, a1]].map(([rr, aa]) => toPx(s.x + rr * Math.cos(aa), s.z + rr * Math.sin(aa)));
+    g.beginPath(); g.moveTo(...P[0]); for (let j = 1; j < 4; j++) g.lineTo(...P[j]); g.closePath(); g.fill();
+  }
+  g.globalAlpha = 0.9; g.strokeStyle = cssv('--muted'); g.fillStyle = g.strokeStyle; g.lineWidth = 2;
+  g.font = `${Math.round(0.45 * k)}px ${getComputedStyle(document.body).fontFamily}`;
+  for (let d = 5; d <= 20; d += 5) {   // rings from the nose tip, the distances the readouts use
+    const [cx, cz] = toPx(NOSE_X, 0); g.beginPath(); g.arc(cx, cz, d * k, -Math.PI / 2, Math.PI / 2); g.stroke();
+    g.fillText(`${d} m`, cx + d * k + 6, cz - 6);
+  }
+  g.globalAlpha = 1; groundTex.needsUpdate = true;
+}
+// Rays from the left lens through points round the image border, to where each lands.
+function drawEdges(rg) {
+  const pts = [], cols = [], carC = tok('--blind'), edge = tok('--accent'), sky = tok('--muted'), o = rg.L;
+  const border = [];
+  for (let u = 0; u <= IMG_W; u += 80) border.push([Math.min(u, IMG_W - 0.01), 0], [Math.min(u, IMG_W - 0.01), IMG_H - 0.01]);
+  for (let v = 60; v < IMG_H; v += 60) border.push([0, v], [IMG_W - 0.01, v]);
+  for (const [u, v] of border) {
+    const L = landing(o, pixelDir(rg, u, v)), t = Math.min(L.t, 12), c = L.kind === 'car' ? carC : L.kind === 'ground' ? edge : sky;
+    pts.push(o.x, o.y, o.z, o.x + L.d.x * t, o.y + L.d.y * t, o.z + L.d.z * t); cols.push(c.r, c.g, c.b, c.r, c.g, c.b);
+  }
+  edgeLines.geometry.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  edgeLines.geometry.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+  edgeLines.visible = state.edges && view !== 'img';
+}
+function stageLegend() {
+  const el = document.getElementById('legend');
+  if (view === 'img') { el.innerHTML = `<span>Left lens, rectified ${IMG_W} × ${IMG_H}, ${HFOV}° × ${VFOV.toFixed(1)}°, fx ${FX.toFixed(0)} px</span>`; return; }
+  el.innerHTML = state.map === 'pts'
+    ? `<span>Pixels on a cone</span><span>0</span><i class="ramp" aria-hidden="true"></i><span>400+</span><span><i class="sw" style="background:var(--blind);opacity:.5"></i>Out of view</span><span><i class="sw" style="background:var(--accent)"></i>Image edge on the ground</span>`
+    : `<span><i class="sw" style="background:var(--seen)"></i>Fusion can colour it</span><span><i class="sw" style="background:var(--part)"></i>In view, too small, far or cut off</span><span><i class="sw" style="background:var(--blind)"></i>Out of view</span><span><i class="sw" style="background:var(--accent)"></i>Image edge on the ground</span>`;
+}
+
+// ---- Readouts ----
+const m1 = v => v === null || v === undefined ? 'not within 22 m' : `${v.toFixed(1)} m past the nose`;
+const pct = v => v === null ? '–' : `${Math.round(v * 100)}%`;
+const pxs = c => !c || c.px < 0.5 ? '0' : c.px >= 100 ? c.px.toFixed(0) : c.px.toFixed(1);
+const okText = st => st.okFrom === null ? 'nowhere within 22 m' : `${st.okFrom.toFixed(1)}–${st.okTo.toFixed(1)} m past the nose`;
+function landText(L) {
+  if (L.kind === 'car') return 'on the car';
+  if (L.kind === 'sky') return 'sky';
+  return L.past >= 0 ? `ground ${L.past.toFixed(1)} m past the nose` : 'ground beside the car';
+}
+function horizonRow(p) { return CY - FY * Math.tan(p * D2R); }
+let yamlText = '';
+function readouts(rg, res, line, shares) {
+  const st = lineStats(line);
+  document.getElementById('r-mid').textContent = landText(landing(rg.L, pixelDir(rg, CX, CY)));
+  document.getElementById('r-bot').textContent = landText(landing(rg.L, pixelDir(rg, CX, IMG_H - 0.5)));
+  const hr = horizonRow(state.pitch);
+  document.getElementById('r-hor').textContent = hr < 0 ? 'above the image' : hr >= IMG_H ? 'below the image' : `row ${Math.round(hr)} of ${IMG_H}`;
+  document.getElementById('r-car').textContent = pct(shares.car);
+  document.getElementById('r-sky').textContent = pct(shares.sky);
+  document.getElementById('r-p4').textContent = pxs(at(line, 4)) + ' px';
+  document.getElementById('r-p8').textContent = pxs(at(line, 8)) + ' px';
+  document.getElementById('r-p12').textContent = pxs(at(line, 12)) + ' px';
+  document.getElementById('r-left').textContent = m1(st.left);
+  document.getElementById('r-both').textContent = m1(st.both);
+  document.getElementById('r-ok').textContent = okText(st);
+  document.getElementById('r-fwd').textContent = pct(res.fwd);
+  const gap = HOOP_TOP - (state.z + BODY.y / 2);
+  document.getElementById('r-hoop').textContent = `${Math.abs(gap * 1000).toFixed(0)} mm ${gap >= 0 ? 'below' : 'above'}`;
+  yamlText = `stereo_camera:\n  position_m: [${(state.x + WHEELBASE).toFixed(3)}, 0.0, ${state.z.toFixed(3)}]\n  rpy_rad: [0.0, ${(state.pitch * D2R).toFixed(4)}, 0.0]`;
+  document.getElementById('yaml').textContent = yamlText;
+  const notes = [];
+  if (gap < 0) notes.push('Above the hoop top: outside the DT.2.3 primary-structure volume.');
+  const c = new THREE.Vector3(state.x, state.z, 0);
+  const upHit = bvh.raycastFirst(new THREE.Ray(c, new THREE.Vector3(0, 1, 0)), THREE.DoubleSide);
+  const downHit = bvh.raycastFirst(new THREE.Ray(c.clone(), new THREE.Vector3(0, -1, 0)), THREE.DoubleSide);
+  if (upHit && downHit && upHit.distance < 0.6 && downHit.distance < 0.6 && upHit.face && upHit.face.normal.y > 0.2) notes.push('The camera centre is inside the car body here.');
+  if (state.x < HOOP_FACE + 0.4) notes.push('No driver in the model. With a driver aboard, the helmet sits just ahead of and below this lens and will cover part of the lower image.');
+  const f = document.getElementById('flag'); f.hidden = !notes.length; f.innerHTML = notes.map(n => `<span>${n}</span>`).join('');
+}
+document.getElementById('copy').addEventListener('click', e => {
+  const btn = e.currentTarget;
+  const selectIt = () => { const r = document.createRange(); r.selectNodeContents(document.getElementById('yaml')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); btn.textContent = 'Selected'; };
+  try { navigator.clipboard.writeText(yamlText).then(() => { btn.textContent = 'Copied'; }, selectIt); } catch { selectIt(); }
+  setTimeout(() => { btn.textContent = 'Copy'; }, 1600);
+});
+
+// ---- Charts (SVG) ----
+const SVGNS = 'http://www.w3.org/2000/svg';
+const mk = (tag, attrs, parent) => { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+function frameChart(host, o) {
+  host.querySelectorAll('svg').forEach(n => n.remove());
+  const W = host.clientWidth || 600, H = 260, M = { l: 44, r: 12, t: 26, b: 34 };
+  const svg = mk('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': o.aria }); host.appendChild(svg);
+  const X = v => M.l + (v - o.xMin) / (o.xMax - o.xMin) * (W - M.l - M.r);
+  const Y = v => H - M.b - o.yNorm(v) * (H - M.t - M.b);
+  const grid = mk('g', { class: 'grid' }, svg);
+  for (const t of o.yTicks) { mk('line', { x1: M.l, x2: W - M.r, y1: Y(t), y2: Y(t) }, grid); mk('text', { x: M.l - 6, y: Y(t) + 4, 'text-anchor': 'end' }, svg).textContent = t; }
+  for (const t of o.xTicks) mk('text', { x: X(t), y: H - M.b + 16, 'text-anchor': 'middle' }, svg).textContent = t;
+  mk('text', { x: (M.l + W - M.r) / 2, y: H - 4, 'text-anchor': 'middle' }, svg).textContent = o.xLabel;
+  mk('text', { x: 4, y: 11, 'text-anchor': 'start' }, svg).textContent = o.yLabel;
+  return { svg, X, Y, W, H, M };
+}
+function tipAt(host, html, x, y) {
+  let t = host.querySelector('.tip'); if (!t) { t = document.createElement('div'); t.className = 'tip'; host.appendChild(t); }
+  t.innerHTML = html; t.hidden = false;
+  const w = t.offsetWidth; t.style.left = `${Math.min(Math.max(0, x + 12), host.clientWidth - w)}px`; t.style.top = `${Math.max(0, y - 10)}px`;
+}
+const hideTip = host => { const t = host.querySelector('.tip'); if (t) t.hidden = true; };
+const local = (host, ev) => { const r = host.getBoundingClientRect(); return [ev.clientX - r.left, ev.clientY - r.top]; };
+
+const ROWS = [
+  { key: 'near', label: `Ground within ${MAX_RANGE} m colour range`, color: '--seen' },
+  { key: 'far', label: `Ground beyond ${MAX_RANGE} m`, color: '--part' },
+  { key: 'car', label: 'On the car', color: '--blind' },
+  { key: 'sky', label: 'Sky', color: '--sky' },
+];
+const ROW_STEP = 10, ROW_CAP = 25;
+function rowChart(rg) {
+  const host = document.getElementById('row-chart');
+  document.getElementById('row-keys').innerHTML = ROWS.map(b => `<span><i class="sw" style="background:var(${b.color})"></i>${b.label}</span>`).join('');
+  const bins = [];
+  for (let v = 0; v < IMG_H; v += ROW_STEP) {
+    const L = landing(rg.L, pixelDir(rg, CX, v + ROW_STEP / 2));
+    const kind = L.kind === 'ground' ? (Math.hypot(L.t, 0) <= MAX_RANGE ? 'near' : 'far') : L.kind;
+    bins.push({ v, kind, L, h: L.kind === 'ground' ? Math.min(ROW_CAP, Math.max(0, L.past)) : ROW_CAP });
+  }
+  const c = frameChart(host, { aria: 'Where each row of the left image meets the ground, straight ahead', xMin: 0, xMax: IMG_H, xTicks: [0, 120, 240, 360, 480, 600, 720],
+    xLabel: 'Image row (0 is the top)', yLabel: 'm past the nose', yTicks: [0, 5, 10, 15, 20, 25], yNorm: v => v / ROW_CAP });
+  const bw = c.X(ROW_STEP) - c.X(0), colorOf = k => `var(${ROWS.find(b => b.key === k).color})`;
+  for (const b of bins) mk('rect', { x: c.X(b.v) + 0.5, y: c.Y(b.h), width: Math.max(1, bw - 1), height: Math.max(0, c.Y(0) - c.Y(b.h)), fill: colorOf(b.kind) }, c.svg);
+  const hr = horizonRow(state.pitch);
+  if (hr >= 0 && hr < IMG_H) {
+    mk('line', { x1: c.X(hr), x2: c.X(hr), y1: c.M.t, y2: c.Y(0), stroke: 'var(--ink)', 'stroke-width': 1.5, 'stroke-dasharray': '4 3' }, c.svg);
+    mk('text', { x: c.X(hr) + 4, y: c.M.t + 10, fill: 'var(--ink)' }, c.svg).textContent = 'horizon';
+  }
+  const hit = mk('rect', { x: c.M.l, y: c.M.t, width: c.W - c.M.l - c.M.r, height: c.H - c.M.t - c.M.b, fill: 'transparent' }, c.svg);
+  hit.addEventListener('pointermove', ev => {
+    const r = c.svg.getBoundingClientRect(), px = (ev.clientX - r.left) * c.W / r.width;
+    const i = Math.max(0, Math.min(bins.length - 1, Math.floor((px - c.M.l) / bw))), b = bins[i];
+    tipAt(host, `<b>Rows ${b.v}–${b.v + ROW_STEP - 1}</b><div class="row">Lands: ${landText(b.L)}</div>`, ...local(host, ev));
+  });
+  hit.addEventListener('pointerleave', () => hideTip(host));
+}
+
+let presetLines = null;
+function currentKey() { const o = ORIENT.find(o => o.pitch === state.pitch); return o ? o.key : null; }
+const LOG_MIN = 5;
+function lineChart(curLine) {
+  const host = document.getElementById('line-chart'), ck = currentKey();
+  const series = ORIENT.map(o => ({ ...o, line: presetLines[o.key] }));
+  if (!ck) series.push({ key: 'cur', label: `Current (${state.pitch}° ${state.pitch >= 0 ? 'down' : 'up'})`, color: '--ink', line: curLine, dash: true });
+  document.getElementById('line-keys').innerHTML = series.map(sr => `<span class="${sr.key === ck || sr.key === 'cur' ? 'cur' : ''}"><i class="sw" style="background:var(${sr.color})"></i>${sr.label}${sr.key === ck ? ' (current)' : ''}</span>`).join('');
+  const yMax = 2500, yTicks = [5, 10, 25, 50, 100, 250, 500, 1000, 2500];   // closer than ~2 m every pitch is far above the limit
+  const yNorm = v => (Math.log(Math.max(LOG_MIN, v)) - Math.log(LOG_MIN)) / (Math.log(yMax) - Math.log(LOG_MIN));
+  const c = frameChart(host, { aria: 'Pixels on a track-edge cone by distance past the nose, per pitch', xMin: 0, xMax: 22, xTicks: [0, 4, 8, 12, 16, 20],
+    xLabel: 'Distance past the nose tip (m)', yLabel: 'px on the cone (log)', yTicks, yNorm });
+  mk('line', { x1: c.M.l, x2: c.W - c.M.r, y1: c.Y(MIN_AREA), y2: c.Y(MIN_AREA), stroke: 'var(--accent)', 'stroke-width': 1.5, 'stroke-dasharray': '5 4' }, c.svg);
+  mk('text', { x: c.W - c.M.r, y: c.Y(MIN_AREA) - 5, 'text-anchor': 'end', fill: 'var(--accent)' }, c.svg).textContent = '25 px minimum patch';
+  const re = lineStats(curLine).rangeEnd;
+  if (re !== null) {
+    mk('line', { x1: c.X(re), x2: c.X(re), y1: c.M.t, y2: c.Y(LOG_MIN), stroke: 'var(--muted)', 'stroke-width': 1, 'stroke-dasharray': '3 3' }, c.svg);
+    mk('text', { x: c.X(re) - 4, y: c.M.t + 10, 'text-anchor': 'end' }, c.svg).textContent = '20 m colour range';
+  }
+  for (const sr of series) {
+    const d = sr.line.map((v, i) => `${i ? 'L' : 'M'}${c.X(LINE_D[i]).toFixed(1)},${c.Y(Math.min(v.px, yMax)).toFixed(1)}`).join('');
+    const isCur = sr.key === ck || sr.key === 'cur';
+    mk('path', { d, fill: 'none', stroke: `var(${sr.color})`, 'stroke-width': isCur ? 3 : 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round',
+      'stroke-dasharray': sr.dash ? '6 4' : 'none', opacity: ck && !isCur ? 0.55 : 1 }, c.svg);
+  }
+  const cross = mk('line', { y1: c.M.t, y2: c.H - c.M.b, stroke: 'var(--muted)', 'stroke-width': 1, visibility: 'hidden' }, c.svg);
+  const hit = mk('rect', { x: c.M.l, y: c.M.t, width: c.W - c.M.l - c.M.r, height: c.H - c.M.t - c.M.b, fill: 'transparent' }, c.svg);
+  hit.addEventListener('pointermove', ev => {
+    const r = c.svg.getBoundingClientRect(), px = (ev.clientX - r.left) * c.W / r.width;
+    const d = Math.max(0, Math.min(22, (px - c.M.l) / (c.W - c.M.l - c.M.r) * 22)), i = Math.round(d / 0.25);
+    cross.setAttribute('x1', c.X(LINE_D[i])); cross.setAttribute('x2', c.X(LINE_D[i])); cross.setAttribute('visibility', 'visible');
+    const rows = series.map(sr => `<div class="row"><i class="sw" style="background:var(${sr.color})"></i>${pxs(sr.line[i]).padStart(5)} px ${sr.label}</div>`).join('');
+    tipAt(host, `<b>${LINE_D[i].toFixed(2)} m past the nose</b>${rows}`, ...local(host, ev));
+  });
+  hit.addEventListener('pointerleave', () => { hideTip(host); cross.setAttribute('visibility', 'hidden'); });
+  const ds = [1, 2, 3, 4, 6, 8, 10, 12, 15, 18, 22];
+  document.getElementById('line-table').innerHTML = `<table><thead><tr><th>Pitch</th>${ds.map(d => `<th>${d} m</th>`).join('')}</tr></thead><tbody>${
+    series.map(sr => `<tr class="${sr.key === ck || sr.key === 'cur' ? 'cur' : ''}"><td>${sr.label}</td>${ds.map(d => `<td class="num">${pxs(at(sr.line, d))}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+}
+
+// ---- Comparison table (coarser grid, filled in one pitch at a time) ----
+let cmpTicket = 0;
+function compareTable() {
+  const ticket = ++cmpTicket, s = new THREE.Vector3(state.x, state.z, 0), rows = [];
+  const body = document.getElementById('cmp'), ck = currentKey();
+  body.innerHTML = `<tr><td colspan="9">Computing…</td></tr>`;
+  ORIENT.forEach((o, i) => setTimeout(() => {
+    if (ticket !== cmpTicket) return;
+    const rg = rig(s, orientation(o.pitch)), res = survey(rg, 3, 0.3, 20), line = presetLines[o.key], st = lineStats(line), sh = imageShares(rg);
+    rows[i] = `<tr class="${o.key === ck ? 'cur' : ''}"><td><i class="sw" style="background:var(${o.color})"></i> ${o.label}</td><td class="num">${pxs(at(line, 4))}</td><td class="num">${pxs(at(line, 8))}</td><td class="num">${pxs(at(line, 12))}</td><td class="num">${m1(st.left)}</td><td class="num">${m1(st.both)}</td><td class="num">${okText(st)}</td><td class="num">${pct(sh.car)}</td><td class="num">${pct(res.fwd)}</td></tr>`;
+    const done = rows.filter(Boolean);
+    body.innerHTML = done.join('') + (done.length < ORIENT.length ? `<tr><td colspan="9">Computing…</td></tr>` : '');
+  }, 60 + i * 30));
+}
+
+// ---- Update pipeline ----
+document.getElementById('o-seg').innerHTML = ORIENT.map(o => `<button id="o-${o.key}" aria-pressed="false">${o.label}</button>`).join('');
+let pending = 0, lastMount = '';
+function update() {
+  const s = new THREE.Vector3(state.x, state.z, 0);
+  cur = rig(s, orientation(state.pitch));
+  sensor.position.copy(s); sensor.quaternion.copy(cur.quat);
+  imgCam.position.copy(cur.L); imgCam.quaternion.copy(cur.quat).multiply(LOOK_X);
+  coneGroup.visible = state.cones;
+  document.getElementById('px-o').textContent = `${state.x.toFixed(3)} m`;
+  document.getElementById('pz-o').textContent = `${state.z.toFixed(3)} m`;
+  document.getElementById('pitch-o').textContent = `${state.pitch}°`;
+  document.getElementById('px').value = state.x; document.getElementById('pz').value = state.z; document.getElementById('pitch').value = state.pitch;
+  for (const m of Object.keys(MOUNTS)) document.getElementById('m-' + m).setAttribute('aria-pressed', String(Math.abs(MOUNTS[m].x - state.x) < 1e-6 && Math.abs(MOUNTS[m].z - state.z) < 1e-6));
+  const ck = currentKey(); for (const o of ORIENT) document.getElementById('o-' + o.key).setAttribute('aria-pressed', String(o.key === ck));
+  document.getElementById('g-pts').setAttribute('aria-pressed', String(state.map === 'pts'));
+  document.getElementById('g-vis').setAttribute('aria-pressed', String(state.map === 'vis'));
+  stageLegend(); drawEdges(cur);
+  const mountKey = `${state.x.toFixed(4)},${state.z.toFixed(4)}`;
+  if (mountKey !== lastMount) {
+    lastMount = mountKey; presetLines = {};
+    for (const o of ORIENT) presetLines[o.key] = coneLine(rig(s, orientation(o.pitch)));
+    compareTable();
+  }
+  const curLine = ck ? presetLines[ck] : coneLine(cur);
+  rowChart(cur); lineChart(curLine);
+  const ticket = ++pending, rg = cur;
+  document.getElementById('busy').textContent = 'Tracing rays…';
+  setTimeout(() => {
+    if (ticket !== pending) return;
+    const res = survey(rg);
+    paintGround(rg.s, res); readouts(rg, res, curLine, imageShares(rg));
+    document.getElementById('busy').textContent = '';
+  }, 30);
+}
+for (const m of Object.keys(MOUNTS)) document.getElementById('m-' + m).addEventListener('click', () => { state.x = MOUNTS[m].x; state.z = MOUNTS[m].z; update(); });
+for (const o of ORIENT) document.getElementById('o-' + o.key).addEventListener('click', () => { state.pitch = o.pitch; update(); });
+document.getElementById('px').addEventListener('input', e => { state.x = +e.target.value; update(); });
+document.getElementById('pz').addEventListener('input', e => { state.z = +e.target.value; update(); });
+document.getElementById('pitch').addEventListener('input', e => { state.pitch = +e.target.value; update(); });
+document.getElementById('edges').addEventListener('change', e => { state.edges = e.target.checked; edgeLines.visible = state.edges && view !== 'img'; });
+document.getElementById('cones').addEventListener('change', e => { state.cones = e.target.checked; coneGroup.visible = state.cones; });
+document.getElementById('g-pts').addEventListener('click', () => { state.map = 'pts'; update(); });
+document.getElementById('g-vis').addEventListener('click', () => { state.map = 'vis'; update(); });
+for (const v of ['side', 'top', 'front', 'iso', 'img']) document.getElementById('v-' + v).addEventListener('click', () => setView(v));
+
+// ---- Labels projected from 3D ----
+const tagsEl = document.getElementById('tags');
+function mkTag(text, cls) { const e = document.createElement('div'); e.className = 'tag' + (cls ? ' ' + cls : ''); e.textContent = text; tagsEl.appendChild(e); return e; }
+const tags = [
+  { el: mkTag('ZED 2i', 'sensor'), at: () => sensor.position.clone().add(new THREE.Vector3(0, 0.04, 0)) },
+  { el: mkTag('Main hoop 1.115 m'), at: () => new THREE.Vector3(HOOP_FACE - 0.01, HOOP_TOP + 0.02, 0) },
+  { el: mkTag('Nose tip'), at: () => new THREE.Vector3(NOSE_X, 0.45, 0) },
+];
+function layoutTags() {
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  for (const t of tags) {
+    const p = t.at().project(camera), show = view !== 'img' && p.z < 1 && Math.abs(p.x) < 1 && Math.abs(p.y) < 1;
+    t.el.hidden = !show; if (show) { t.el.style.left = `${(p.x + 1) / 2 * w}px`; t.el.style.top = `${(1 - p.y) / 2 * h}px`; }
+  }
+}
+
+function applyTheme() {
+  scene.background = tok('--scene'); carMat.color = tok('--car'); sensorMat.color = tok('--accent');
+  blueMat.color = tok('--cone-blue'); yellowMat.color = tok('--cone-yellow'); letterbox = tok('--bg');
+  update();
+}
+new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+let resizeTimer = 0;
+window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { rowChart(cur); lineChart(currentKey() ? presetLines[currentKey()] : coneLine(cur)); }, 150); });
+
+applyTheme();
+setView('side');
+(function loop() {
+  requestAnimationFrame(loop);
+  if (controls) controls.update();
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (view === 'img') {
+    // Letterbox to the sensor's 16:9 so the frame edges are the real image edges.
+    let vw = w, vh = w * IMG_H / IMG_W; if (vh > h) { vh = h; vw = h * IMG_W / IMG_H; }
+    const x0 = (w - vw) / 2, y0 = (h - vh) / 2;
+    renderer.setScissorTest(false); renderer.setViewport(0, 0, w, h); renderer.setClearColor(letterbox); renderer.clear();
+    renderer.setViewport(x0, y0, vw, vh); renderer.setScissor(x0, y0, vw, vh); renderer.setScissorTest(true);
+    renderer.render(scene, imgCam);
+  } else {
+    renderer.setScissorTest(false); renderer.setViewport(0, 0, w, h);
+    renderer.render(scene, camera);
+  }
+  layoutTags();
+})();
+</script>
+
+</html>

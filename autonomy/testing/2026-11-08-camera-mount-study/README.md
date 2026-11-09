@@ -38,9 +38,19 @@ It uses the stack's assumed 1280 × 720, 110° horizontal pinhole model.
 
 The tables below are the viewer results recorded in the source study on
 11/8. They have not been independently reproduced in this import. The
-published artifact is linked here; its source is not yet archived in this
-directory, so there is no local rebuild command. The LiDAR study's viewer
-source is separate and does not reproduce this camera artifact.
+original viewer source is archived in [viewer/](viewer/README.md); rebuild
+it with Python 3 and NumPy:
+
+```bash
+cd autonomy/testing/2026-11-08-camera-mount-study/viewer
+python3 build.py ../../../ros2/src/lhr_vehicle/meshes/orion.stl \
+    template.html orion-camera-placement.html
+```
+
+Open the generated page in a browser with internet access for its pinned
+Three.js/BVH dependencies and fonts. The shared car mesh is embedded. The
+generated HTML is ignored by git. This rebuild matches the Notion attachment
+byte for byte; see [viewer provenance](viewer/README.md) for its SHA-256.
 
 ## Above or below the LiDAR
 
@@ -179,8 +189,9 @@ the envelope in this layout. The viewer alone cannot settle this packaging.
   created/updated 2026-11-08, imported 2026-11-09. Notion remains the live
   design source; this page preserves its recommendation and reported results.
 - **Artifact:** [Orion Camera Placement](https://claude.ai/artifact/ATy1MdmPQi7G36eYykjWZd),
-  source study's 11/8 viewer. No local artifact rebuild or independent sweep
-  was performed for this import; no raw sim/field campaign is claimed.
+  source study's 11/8 viewer, archived from its Notion HTML attachment on
+  2026-11-09. Local rebuild matches the original bytes. No browser-based
+  sweep or raw sim/field campaign was performed for this import.
 - **Car geometry:** the shared `orion.stl` mesh described in the
   [LiDAR study](../2026-11-08-lidar-mount-study/README.md#method-and-provenance).
   No driver, helmet, head restraint, bracket or cables are included.
