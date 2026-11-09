@@ -18,9 +18,10 @@ Just inside the main hoop and a little forward, **upside down, pitched
   the detector's 20 m range. Past 7.5° the top of the field of view starts to
   cut off far cones. A ±1° change in body pitch moves the band 12 to 22 m at
   7°, but 15 to 39 m at 6°.
-- **Sim A/B:** at 7° the full stack passes 6 of 6 gate runs with no false
-  cones, and maps cones a median 12 to 16 m past the nose. The 6°, 8° and
-  nose-mount arms are still running.
+- **Sim A/B:** every mount passes the gate 6 of 6 with no false cones. 6 and
+  7° map cones equally early, as early as today's nose mount: about two thirds
+  of autocross cones by 12 m past the nose. 8° maps them about 3 m later, only
+  a quarter by 12 m. The sim has no body pitch, which is where 7° beats 6°.
 
 The real angle still needs a field check with the sensor at hoop height (see
 [Zeroing in](#zeroing-in)).
@@ -109,23 +110,41 @@ Mid-360 sits at `base_link` (0.609, 0, 1.06), upside down, pitched 6, 7 or 8°
 nose down. The control is today's sim mount in the nose. `detection_range.py`
 measures how far past the nose each cone first enters the detector's map.
 
-| Mount | Gate | Lap / reference | Max CTE (m) | Cones hit | False cones | First mapped, median past the nose (m) | Mapped by 12 m past the nose |
+| Mount | Gate | Lap / reference | Max CTE (m) | Cones hit | False cones | First mapped, median past the nose (m) | Mapped by 12 m past the nose, autocross |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Upside down, 7° | 6 of 6 | 0.99 to 1.00 | 0.51 to 0.57 | 0 | 0 | 12.3 to 15.9 | 51 to 97% |
-| Upside down, 6° | running | | | | | | |
-| Upside down, 8° | running | | | | | | |
-| Nose (today's sim) | running | | | | | | |
+| Upside down, 6° | 6 of 6 | 0.99 to 1.00 | 0.51 to 0.59 | 0 | 0 | 12.2 to 16.2 | 67% (51 to 83%) |
+| **Upside down, 7°** | **6 of 6** | **0.99 to 1.00** | **0.51 to 0.57** | **0** | **0** | **12.3 to 15.9** | **68% (51 to 86%)** |
+| Upside down, 8° | 6 of 6 | 0.99 to 1.00 | 0.50 to 0.59 | 0 | 0 | 10.0 to 12.3 | 27% (21 to 30%) |
+| Nose (today's sim) | 6 of 6 | 0.99 to 1.00 | 0.50 to 0.58 | 0 | 0 | 11.6 to 16.2 | 65% (49 to 80%) |
 
-The detector stops at 20 m from the sensor, which is 18.1 m past the nose from
-the hoop, so a band that lands farther out than that (6°) cannot help it.
-Ranges are per run, over the six runs of each arm.
+Ranges are over each arm's runs; CTE over its five autocross laps. Per-run
+rows: [detection_range.csv](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/testing/2026-11-08-lidar-mount-study/detection_range.csv).
+Seed 3 is the hardest course for every mount: a tenth of its cones are first
+mapped within a metre of the nose.
+
+- **The gate cannot tell the mounts apart.** Every arm laps at 0.99 to 1.00
+  times the reference with the same cross-track error. At these speeds the
+  planner needs only a few metres of mapped track.
+- **6 and 7° tie in the sim** because one point makes a cone
+  (`lidar_min_cluster_points:=1`). First sightings come from sparse beams near
+  the detector's 20 m limit (18.1 m past the nose from the hoop), not from the
+  dense band, and both pitches reach about 15 m at one point per frame.
+- **8° loses range** because it tips the far field onto the sparse bottom
+  edge of the scan. At 15 m past the nose a cone gets 0.56 beams per frame
+  at 8°, against about 1 at 6 or 7° (pitch sweep).
+- **The hoop costs nothing** against today's nose mount at 6 or 7°.
+
+So 7° stands: as good as 6° in the sim, steadier when the body pitches, and
+well clear of 8°'s loss. The sim cannot test the body-pitch argument, since
+Gazebo odometry is planar.
 
 ## Zeroing in
 
 1. **Set the range requirement.** Latency plus braking distance at autocross
    speed says how far ahead a cone must be mapped. That sets where the band
    should land.
-2. **Sim A/B** (above), in the full stack at 6, 7 and 8°.
+2. **Sim A/B** (above), in the full stack at 6, 7 and 8°. Done: 6 and 7°
+   tie, 8° maps cones later.
 3. **Static field test.** Sensor at hoop height (1.06 m) on a stand, upside
    down, small cones at 5, 10, 15 and 20 m. Read pitch off the Mid-360's own
    IMU, step through 6, 7 and 8°, and count points per cone.
@@ -142,7 +161,7 @@ Ranges are per run, over the six runs of each arm.
 | `viewer/check_estimate.py` | Checks the viewer's points-on-cone estimate against `lhr_lidar_sim`'s full model |
 | `real_profile.py` | Real returns by elevation from the 10/4 capture against Livox's table |
 | `pitch_sweep.py` | Writes [results.csv](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/testing/2026-11-08-lidar-mount-study/results.csv), the upside-down pitch sweep |
-| `detection_range.py` | Scores the sim A/B: where each cone first enters the detector's map |
+| `detection_range.py` | Scores the sim A/B: where each cone first enters the detector's map. Writes `detection_range.csv` |
 
 ## Method and provenance
 
