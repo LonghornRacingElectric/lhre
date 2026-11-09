@@ -1,4 +1,4 @@
-"""Keep Gazebo's sensor-frame defaults and verify typed detector overrides."""
+"""Keep Gazebo's detector defaults and verify typed detector overrides."""
 
 import importlib.util
 import json
@@ -8,8 +8,10 @@ from launch import LaunchContext
 from launch.actions import DeclareLaunchArgument
 from launch_ros.actions import Node
 from launch_ros.utilities import evaluate_parameters
+from lhr_lidar_sim.sensor import MountPose
 from lhr_perception.lidar_cone_detector import LidarConeDetector
 from nav_msgs.msg import Odometry
+import numpy as np
 import pytest
 import rclpy
 from sensor_msgs_py import point_cloud2
@@ -65,8 +67,9 @@ def test_gazebo_detector_defaults_and_overrides(perception, override, monkeypatc
         for name, value in expected.items():
             assert detector.get_parameter(name).value == value
         if not override:
-            # Use Gazebo's generated frame without inserting a mount TF.
-            # Ground at -0.55 is rejected; a cone at -0.30 is retained.
+            # Use Gazebo's generated frame without inserting a mount TF: the
+            # detector places the cloud at vehicle.yaml's mount. Ground is
+            # rejected; a point 0.25 m up is retained.
             odom = Odometry()
             odom.header.frame_id, odom.child_frame_id = 'map', 'base_link'
             odom.header.stamp.sec = 10
@@ -74,12 +77,14 @@ def test_gazebo_detector_defaults_and_overrides(perception, override, monkeypatc
             detector._odom_cb(odom)
             header = Header(frame_id='fsae_vehicle/chassis/lidar')
             header.stamp.sec = 10
-            cloud = point_cloud2.create_cloud_xyz32(
-                header, [[6., 2., -0.55], [6., -2., -0.30]])
+            mount = MountPose()
+            base = np.array([[8., 2., 0.], [8., -2., 0.25]])
+            sensor = (base - [mount.x_m, mount.y_m, mount.z_m]) @ mount.rotation()
+            cloud = point_cloud2.create_cloud_xyz32(header, sensor.tolist())
             detector._cloud_cb(cloud)
             detector._process()
             assert len(detector._cone_map) == 1
-            assert detector._cone_map[0][:2] == pytest.approx((7.8, -2.0))
+            assert detector._cone_map[0][:2] == pytest.approx((8.0, -2.0))
     finally:
         detector.destroy_node()
         rclpy.shutdown()
