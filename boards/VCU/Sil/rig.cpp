@@ -1,5 +1,6 @@
 #include "Sil/rig.hpp"
 
+#include <cstring>
 #include <vector>
 
 #include "Sil/sensors.hpp"
@@ -171,8 +172,17 @@ RigOutputs Rig::Advance(const RigInputs& in, uint32_t ms) {
 void Rig::Drain(RigOutputs* out) {
   using Command = can::vcu::InverterTorqueCommand;
   bench::Bench& b = *bench_;
+  // The rig's frames for this pass went out before Step(), the VCU's during
+  // it, so record them in that order.
+  for (const lhal::CanFrame& sent : b.car.sent()) {
+    Capture(sent, CapturedFrame::kCritical, false);
+  }
+  for (const lhal::CanFrame& sent : b.logger.sent()) {
+    Capture(sent, CapturedFrame::kData, false);
+  }
   lhal::CanFrame f;
   while (b.car.Receive(&f)) {
+    Capture(f, CapturedFrame::kCritical, true);
     if (Command::Matches(f.id) && f.len >= Command::kDlc) {
       const Command c = Command::FromFrame(f);
       out->command.enable = c.enable;
@@ -183,6 +193,7 @@ void Rig::Drain(RigOutputs* out) {
     }
   }
   while (b.logger.Receive(&f)) {
+    Capture(f, CapturedFrame::kData, true);
   }
   // The host fakes keep every frame and byte; a long run would grow
   // without bound.
@@ -198,6 +209,29 @@ void Rig::Drain(RigOutputs* out) {
     console_dropped_ += drop;
   }
   b.usb.TakeTx();
+}
+
+void Rig::Capture(const lhal::CanFrame& f, CapturedFrame::Bus bus,
+                  bool from_vcu) {
+  if (frames_.size() >= kFrameLimit) {
+    frames_.pop_front();
+    ++frames_dropped_;
+  }
+  CapturedFrame c;
+  c.t_ms = bench_->clock.Millis();
+  c.id = f.id;
+  c.bus = bus;
+  c.from_vcu = from_vcu;
+  c.len = f.len < sizeof(c.data) ? f.len : sizeof(c.data);
+  std::memcpy(c.data, f.data, c.len);
+  frames_.push_back(c);
+}
+
+std::vector<CapturedFrame> Rig::TakeFrames(size_t max) {
+  const size_t n = frames_.size() < max ? frames_.size() : max;
+  std::vector<CapturedFrame> out(frames_.begin(), frames_.begin() + n);
+  frames_.erase(frames_.begin(), frames_.begin() + n);
+  return out;
 }
 
 std::string Rig::TakeConsole() {

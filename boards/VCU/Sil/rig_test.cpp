@@ -4,6 +4,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <map>
 #include <memory>
 #include <vector>
@@ -611,6 +612,53 @@ TEST(SilRig, LineLockReadbackIsGatedByHardBraking) {
   Hold(rig, in, 30);
   EXPECT_FALSE(b.linelock_ctrl.Read());
   EXPECT_FALSE(b.linelock_out.Read());
+}
+
+// The capture holds both directions with their payloads: the VCU's torque
+// command as sent, and the rig's speed frame as the VCU received it.
+TEST(SilRig, CapturedFramesCarryBothDirections) {
+  Rig rig;
+  RigInputs in = ReachDrive(rig);
+  rig.TakeFrames();
+  in.accelerator_travel = 1.0f;
+  in.motor_speed_rad_s = 300.0f;
+  const RigOutputs out = rig.Advance(in, 3);
+  const std::vector<CapturedFrame> first = rig.TakeFrames(5);
+  EXPECT_EQ(first.size(), 5u);
+  std::vector<CapturedFrame> frames = rig.TakeFrames();
+  frames.insert(frames.begin(), first.begin(), first.end());
+  EXPECT_TRUE(rig.TakeFrames().empty());
+  int commands = 0, speeds = 0;
+  for (const CapturedFrame& f : frames) {
+    EXPECT_GE(f.t_ms, out.now_ms - 3);
+    EXPECT_LT(f.t_ms, out.now_ms);
+    lhal::CanFrame raw;
+    raw.id = f.id;
+    raw.len = f.len;
+    std::memcpy(raw.data, f.data, f.len);
+    // Both messages put a signal in bytes 6-7, so the whole payload is
+    // checked, not just its start.
+    if (f.from_vcu && f.id == lhre::can::vcu::InverterTorqueCommand::kFrameId) {
+      ASSERT_EQ(f.len, 8u);
+      const auto c = lhre::can::vcu::InverterTorqueCommand::FromFrame(raw);
+      EXPECT_EQ(c.torque_request(), out.command.torque_request_nm);
+      EXPECT_EQ(c.enable, out.command.enable);
+      EXPECT_EQ(c.torque_limit(), out.command.torque_limit_nm);
+      EXPECT_GT(c.torque_limit(), 0.0f);
+      ++commands;
+    }
+    if (!f.from_vcu && f.id == lhre::can::inverter::InverterSpeed::kFrameId) {
+      EXPECT_EQ(f.bus, CapturedFrame::kCritical);
+      ASSERT_EQ(f.len, 8u);
+      const auto speed = lhre::can::inverter::InverterSpeed::FromFrame(raw);
+      EXPECT_EQ(speed.motor_speed, std::lround(300.0f * 30.0f / kPi));
+      EXPECT_NEAR(speed.bus_voltage(), in.dc_bus_voltage_v, 0.05f);
+      ++speeds;
+    }
+  }
+  EXPECT_EQ(commands, 1);
+  EXPECT_EQ(speeds, 1);
+  EXPECT_EQ(rig.frames_dropped(), 0u);
 }
 
 }  // namespace

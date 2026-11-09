@@ -51,6 +51,46 @@ OUTPUTS = {
     'wheelSpeedRR': 'rad/s',
 }
 
+# Model truth the car's sensors cannot see, logged for comparison: log key ->
+# FMU variable. These are internal variables, not the FMU's interface, so a
+# rebuild may rename or drop them; Plant looks each up and records the ones
+# it could not find instead of failing.
+_CORNERS = {'FL': ('frAxleDW', 'left'), 'FR': ('frAxleDW', 'right'),
+            'RL': ('rrAxleDW', 'left'), 'RR': ('rrAxleDW', 'right')}
+TRUTH = {
+    'velX': 'velX', 'velY': 'velY', 'accX': 'accX', 'accY': 'accY',
+    'vehicleSpeed': 'vehicleSpeed', 'sideslip': 'sideslip', 'roll': 'roll',
+    'pitchRate': 'chassis.bodyAngularVelocity[2]',
+    **{f'Fz_{c}': f'Fz_{c}' for c in _CORNERS},
+    **{f'slipU_{c}': f'chassis.detailedChassis.{axle}.{side}Tire.slipModel.u'
+       for c, (axle, side) in _CORNERS.items()},
+    **{f'slipV_{c}': f'chassis.detailedChassis.{axle}.{side}Tire.slipModel.v'
+       for c, (axle, side) in _CORNERS.items()},
+    'steerAngleL': 'leftSteerAngle', 'steerAngleR': 'rightSteerAngle',
+    'halfshaftTorqueL': 'driveline.leftHalfshaftTorque',
+    'halfshaftTorqueR': 'driveline.rightHalfshaftTorque',
+    # One corner each; BobLib splits the front and rear torque equally left
+    # and right, so FR and RR read the same.
+    'brakeTorqueFL': 'brakes.brakeTorque_1', 'brakeTorqueRL': 'brakes.brakeTorque_3',
+    'soc': 'battery.SOC', 'soe': 'battery.SOE', 'packOcv': 'battery.battery.v_oc_pack',
+    'packPolarizationV': 'battery.battery.v_rc', 'packR0': 'battery.battery.R0_pack',
+    'packDischargeLimitA': 'battery.battery.I_dis_max',
+    'packChargeLimitA': 'battery.battery.I_chg_max',
+    'inverterPowerRequest': 'inverter.P_req', 'inverterPowerOut': 'inverter.P_out',
+    'inverterLoss': 'inverter.P_loss', 'inverterMotoringLimit': 'inverter.P_mot_max_active',
+    'inverterRegenLimit': 'inverter.P_reg_max_active',
+    'motorModelTorqueCommand': 'motor.tau_cmd', 'motorTorqueLimit': 'motor.tau_lim',
+    'motorMechPower': 'motor.P_mech', 'motorDcCurrent': 'motor.I_dc',
+    'plantVcuTorque': 'vcu.tau_cmd_limited', 'driveDirection': 'vcu.driveDirection',
+}
+
+# BobLib's transient slip model (TransientSlip.mo) relaxes slip over a 0.5 m
+# default length when the tire's PTX1/PTY1 are 0. Only then are kappa and
+# alpha derived from the deformation states.
+RELAXATION = ('pVehicle.pFrTireModel.relaxation.PTX1', 'pVehicle.pFrTireModel.relaxation.PTY1',
+              'pVehicle.pRrTireModel.relaxation.PTX1', 'pVehicle.pRrTireModel.relaxation.PTY1')
+RELAXATION_LENGTH_M = 0.5
+
 # Fixed parameters: (name, FMI type). Set in initialization mode or read back.
 SOC_START = ('pVehicle.pBattery.SOC_start', 'Real')
 INITIAL_VEL = ('initialVel', 'Real')
@@ -171,6 +211,7 @@ class Plant:
         if not 0.0 <= soc_start <= 1.0:
             raise ValueError(f'soc_start {soc_start} is not a fraction in [0, 1]')
         self.messages: list[tuple[int, str, str]] = []
+        self.truth: dict[str, float | None] = {}
         self.step_s = step_s
         self._slave = None
         self._instantiated = self._initialized = False
@@ -180,6 +221,17 @@ class Plant:
         except Exception as exc:
             raise InterfaceError(f'{fmu_path} is not a readable FMU: {exc}') from exc
         self.refs = check_interface(description)
+        variables = {v.name: v for v in description.modelVariables}
+        self.truth_units, self.truth_missing, truth_refs = {}, [], []
+        for key, name in TRUTH.items():
+            v = variables.get(name)
+            if v is None or v.type != 'Real' or v.causality not in ('local', 'output'):
+                self.truth_missing.append(key)
+                continue
+            self.truth_units[key] = v.unit or ''
+            truth_refs.append(v.valueReference)
+        self._truth_keys = [k for k in TRUTH if k not in self.truth_missing]
+        relaxation = [variables.get(name) for name in RELAXATION]
         model_identifier = description.coSimulation.modelIdentifier
         check_binary(fmu_path, model_identifier)
         self.guid = description.guid
@@ -213,6 +265,13 @@ class Plant:
             self.series_cells = self._slave.getInteger([self.refs[SERIES_CELLS[0]]])[0]
             self.peak_timer = bool(self._slave.getBoolean([self.refs[PEAK_TIMER[0]]])[0])
             self.soc_start = self._slave.getReal([self.refs[SOC_START[0]]])[0]
+            self.slip_from_states = all(v is not None for v in relaxation) and all(
+                x == 0.0 for x in self._slave.getReal([v.valueReference for v in relaxation]))
+            if self.slip_from_states:
+                for c in _CORNERS:
+                    self.truth_units[f'kappa_{c}'] = '1'
+                    self.truth_units[f'alpha_{c}'] = 'rad'
+
             if not 100 <= self.series_cells <= 200:
                 raise InterfaceError(f'implausible pack: {self.series_cells} cells in series')
         except (InterfaceError, OSError):
@@ -226,15 +285,29 @@ class Plant:
             raise
         self._out_refs = [self.refs[name] for name in OUTPUTS]
         self._in_refs = [self.refs[name] for name in INPUTS]
+        # One getReal for outputs and truth: after the first read in a step
+        # the runtime only copies, so the extra values cost nothing in
+        # accuracy (checked bit for bit over a launch).
+        self._read_refs = self._out_refs + truth_refs
 
     def read(self) -> dict[str, float]:
         """Outputs at the current communication point. Read before setting
         inputs: several outputs feed through directly from them."""
-        values = self._slave.getReal(self._out_refs)
+        values = self._slave.getReal(self._read_refs)
         out = dict(zip(OUTPUTS, values))
         bad = [name for name, v in out.items() if not math.isfinite(v)]
         if bad:
             raise PlantError(f'non-finite plant output: {", ".join(bad)}')
+        truth = {k: (v if math.isfinite(v) else None)
+                 for k, v in zip(self._truth_keys, values[len(OUTPUTS):])}
+        if self.slip_from_states:
+            for c in _CORNERS:
+                u, v = truth.get(f'slipU_{c}'), truth.get(f'slipV_{c}')
+                truth[f'kappa_{c}'] = (None if u is None else
+                                       max(-2.0, min(2.0, u / RELAXATION_LENGTH_M)))
+                truth[f'alpha_{c}'] = (None if v is None else
+                                       max(-1.2, min(1.2, math.atan2(v, RELAXATION_LENGTH_M))))
+        self.truth = truth
         return out
 
     def step(self, k: int, u: PlantInputs) -> None:

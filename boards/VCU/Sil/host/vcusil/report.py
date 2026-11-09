@@ -14,20 +14,31 @@ _STATE_AXIS = ((0, 'INIT'), (1, 'IDLE'), (4, 'PRECHARGE'), (5, 'TS_ACTIVE'), (6,
                (2, 'DRIVE'), (3, 'FAULT'), (7, 'BSPD_TRIPPED'))
 
 
+def _cell(value) -> object:
+    if value is None:
+        return ''
+    return repr(value) if isinstance(value, float) else value
+
+
 def write_trace(result: Result, path: Path) -> None:
-    """One row per 3 ms step. Floats are written with repr, which round-trips
-    exactly, so two traces compare bit for bit."""
+    """One row per 3 ms step: COLUMNS, then the model truth as truth_<key>.
+    Floats are written with repr, which round-trips exactly, so two traces
+    compare bit for bit. A truth value the model did not produce is empty."""
+    truth_keys = list(dict.fromkeys(k for t in result.truth for k in t))
     with open(path, 'w', newline='') as f:
         writer = csv.writer(f, lineterminator='\n')
-        writer.writerow(COLUMNS)
-        for row in result.rows:
-            writer.writerow(repr(row[c]) if isinstance(row[c], float) else row[c]
-                            for c in COLUMNS)
+        writer.writerow([*COLUMNS, *(f'truth_{k}' for k in truth_keys)])
+        for i, row in enumerate(result.rows):
+            truth = result.truth[i] if i < len(result.truth) else {}
+            writer.writerow([*(_cell(row[c]) for c in COLUMNS),
+                             *(_cell(truth.get(k)) for k in truth_keys)])
 
 
 def read_trace(path: Path) -> list[dict[str, float]]:
+    """Every cell as a float; an empty cell is NaN."""
     with open(path, newline='') as f:
-        return [{k: float(v) for k, v in row.items()} for row in csv.DictReader(f)]
+        return [{k: float(v) if v != '' else float('nan') for k, v in row.items()}
+                for row in csv.DictReader(f)]
 
 
 def write_meta(meta: dict[str, object], path: Path) -> None:
@@ -89,9 +100,12 @@ def plot(result: Result, path: Path, title: str) -> None:
     plt.close(fig)
 
 
-def summary_text(summary: dict[str, object], result: Result, meta: dict[str, object]) -> str:
+def summary_text(summary: dict[str, object], result: Result, meta: dict[str, object],
+                 wall_time: bool = True) -> str:
+    """The summary; without wall_time it is a function of the run alone."""
     lines = [f'scenario {result.scenario}: {result.status} after '
-             f'{result.steps * STEP_MS / 1000:.3f} s simulated in {result.wall_s:.1f} s']
+             f'{result.steps * STEP_MS / 1000:.3f} s simulated'
+             + (f' in {result.wall_s:.1f} s' if wall_time else '')]
     if result.failure:
         kind = 'plant failure' if result.status == 'plant_failed' else 'harness error'
         lines.append(f'  {kind}: {result.failure}')

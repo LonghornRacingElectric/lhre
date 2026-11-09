@@ -95,6 +95,12 @@ class SilentFirmware:
         out.now_ms = self.now
         return out
 
+    def read_snapshot(self):
+        return {}
+
+    def read_frames(self):
+        return []
+
 
 def test_a_missing_torque_command_is_a_harness_error():
     result = cosim.run(Short(), SilentFirmware(), ToyCar())
@@ -114,6 +120,12 @@ class LaterFailingFirmware:
         if self.calls > 400:
             raise firmware.FirmwareError('vcu_sil_advance failed: ERR_INTERNAL (-5)')
         return self.fw.advance(inputs, ms)
+
+    def read_snapshot(self):
+        return self.fw.read_snapshot()
+
+    def read_frames(self):
+        return self.fw.read_frames()
 
 
 def test_a_harness_error_mid_run_keeps_the_rows_so_far(lib):

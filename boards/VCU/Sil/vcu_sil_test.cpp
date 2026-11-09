@@ -11,6 +11,8 @@
 #include <cstring>
 #include <map>
 #include <string>
+#include <tuple>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -100,9 +102,14 @@ TEST(SilAbi, LayoutTableCoversEveryStructExactly) {
   EXPECT_EQ(sizes["config"], sizeof(vcu_sil_config));
   EXPECT_EQ(sizes["inputs"], sizeof(vcu_sil_inputs));
   EXPECT_EQ(sizes["outputs"], sizeof(vcu_sil_outputs));
+  EXPECT_EQ(sizes["snapshot"], sizeof(vcu_sil_snapshot));
+  EXPECT_EQ(sizes["frame"], sizeof(vcu_sil_frame));
+  EXPECT_EQ(sizes.size(), 5u);
   EXPECT_EQ(fields["config"].size(), 2u);
   EXPECT_EQ(fields["inputs"].size(), 16u);
-  EXPECT_EQ(fields["outputs"].size(), 38u);
+  EXPECT_EQ(fields["outputs"].size(), 39u);
+  EXPECT_EQ(fields["snapshot"].size(), 112u);  // struct_size + 111
+  EXPECT_EQ(fields["frame"].size(), 6u);
   for (auto& [name, list] : fields) {
     std::sort(list.begin(), list.end(),
               [](const vcu_sil_field& a, const vcu_sil_field& b) {
@@ -110,15 +117,26 @@ TEST(SilAbi, LayoutTableCoversEveryStructExactly) {
               });
     uint32_t end = 0;
     for (const vcu_sil_field& field : list) {
-      // Every member is a 4-byte integer or an 8-byte double (or array of
-      // them), naturally aligned: any other gap is a missing field.
-      const uint32_t align = field.size % 8 == 0 ? 8 : 4;
-      const uint32_t expected = (end + align - 1) / align * align;
+      // Members are naturally aligned scalars or arrays of them, so any
+      // other gap is a field the table misses.
+      const uint32_t element = field.type == VCU_SIL_TYPE_DOUBLE  ? 8
+                               : field.type == VCU_SIL_TYPE_UINT8 ? 1
+                                                                  : 4;
+      EXPECT_NE(field.type, static_cast<uint32_t>(VCU_SIL_TYPE_STRUCT))
+          << name << "." << field.field;
+      EXPECT_EQ(field.size, field.count * element)
+          << name << "." << field.field;
+      const bool array = std::string(field.field) == "wheel_speed_rad_s" ||
+                         std::string(field.field) == "data";
+      EXPECT_EQ(field.count,
+                array ? (field.type == VCU_SIL_TYPE_UINT8 ? 8u : 4u) : 1u)
+          << name << "." << field.field;
+      const uint32_t expected = (end + element - 1) / element * element;
       EXPECT_EQ(field.offset, expected) << name << "." << field.field;
       end = field.offset + field.size;
     }
-    EXPECT_EQ((end + 7) / 8 * 8, (sizes[name] + 7) / 8 * 8) << name;
     EXPECT_LE(end, sizes[name]) << name;
+    EXPECT_LT(sizes[name] - end, 8u) << name;  // only tail padding
   }
 }
 
@@ -318,6 +336,193 @@ TEST_F(Sil, AcceptsEveryHvcState) {
     vcu_sil_outputs out = Outputs();
     EXPECT_EQ(vcu_sil_advance(handle_, &in, 3, &out), VCU_SIL_OK) << hvc;
   }
+}
+
+// The full snapshot carries the same values as the short outputs, plus the
+// rest of ControlSnapshot.
+TEST_F(Sil, SnapshotHasEveryPublishedField) {
+  vcu_sil_snapshot snap{};
+  snap.struct_size = sizeof(snap);
+  ASSERT_EQ(vcu_sil_read_snapshot(handle_, &snap), VCU_SIL_OK);
+  EXPECT_EQ(snap.state, 0);  // INIT before the first advance
+  EXPECT_EQ(snap.last_transition_id, -1);
+  EXPECT_STREQ(vcu_sil_transition_reason(snap.last_transition_id), "boot");
+
+  vcu_sil_inputs in = ParkedCar();
+  Hold(in, 300);
+  in.rtd_pressed = 1;
+  Hold(in, 60);
+  in.brake_front_psi = in.brake_rear_psi = 0.0;
+  Hold(in, 60);
+  in.accelerator_travel = 0.5;
+  in.motor_speed_rad_s = 300.0;
+  in.dc_bus_current_a = 50.0;
+  const vcu_sil_outputs out = Hold(in, 240);
+  ASSERT_EQ(vcu_sil_read_snapshot(handle_, &snap), VCU_SIL_OK);
+  EXPECT_EQ(snap.now_ms, out.control_ms);
+  EXPECT_EQ(snap.state, kDrive);
+  EXPECT_STREQ(vcu_sil_transition_reason(snap.last_transition_id),
+               "ready to drive");
+  EXPECT_EQ(snap.faults, out.faults);
+  EXPECT_EQ(snap.pedals_pedal_travel, out.pedal_travel);
+  EXPECT_EQ(snap.motor_rpm, out.motor_rpm);
+  EXPECT_EQ(snap.torque_command_nm, out.torque_command_nm);
+  EXPECT_EQ(snap.inverter_enable, 1);
+  EXPECT_EQ(snap.din_rtd_pressed, 1);
+  EXPECT_EQ(snap.dout_bms_led, 0);
+  EXPECT_NEAR(snap.analog_apps1_source_v, 2.5, 0.002);  // 0.5 travel
+  EXPECT_NEAR(snap.analog_vdda, 3.3, 1e-6);
+  EXPECT_EQ(snap.analog_vdda_from_vrefint, 1);
+  EXPECT_NEAR(snap.torque_power_w, 574.0 * 50.0, 10.0);
+  EXPECT_EQ(snap.pedals_brake_over_throttle, 0);
+  EXPECT_GT(snap.battery_net_energy_wh, 0.0);
+
+  snap.struct_size += 8;
+  EXPECT_EQ(vcu_sil_read_snapshot(handle_, &snap), VCU_SIL_ERR_SIZE);
+  EXPECT_EQ(vcu_sil_read_snapshot(handle_, nullptr), VCU_SIL_ERR_NULL);
+  EXPECT_EQ(vcu_sil_read_snapshot(nullptr, &snap), VCU_SIL_ERR_NULL);
+  EXPECT_STREQ(vcu_sil_transition_reason(-2), "?");
+  EXPECT_STREQ(vcu_sil_transition_reason(1000), "?");
+}
+
+// The snapshot and the outputs are filled by separate code, so where they
+// overlap each checks the other. The run is set up so that the torque path's
+// first three stages and the wheel reference and slip all differ, and none
+// is 0: a swap among them, or a field left unfilled, cannot pass. Under the
+// stock params traction control and wheel-slip control are off, so
+// power_limited, traction, the command and wheel_positive_nm are one value;
+// this test checks each of those against its output twin only.
+TEST_F(Sil, SnapshotAgreesWithTheOutputs) {
+  vcu_sil_inputs in = ParkedCar();
+  // The OCV estimate updates only after 1 s under 5 A, and seeds at the
+  // first rested sample: 3.0 V is halfway into the 2.8-3.2 V low-cell derate.
+  in.min_cell_v = 3.0;
+  Hold(in, 1500);
+  in.rtd_pressed = 1;
+  Hold(in, 60);
+  in.brake_front_psi = in.brake_rear_psi = 0.0;
+  Hold(in, 60);
+  // The stock map stays under the 70 kW cap up to its 6000 rpm end, so the
+  // cap binds only past it: 103 N.m > 70 kW / (0.95 x 1000 rad/s).
+  in.accelerator_travel = 1.0;
+  in.motor_speed_rad_s = 1000.0;
+  in.dc_bus_current_a = 300.0;  // 172 kW measured: the trim winds up
+  // Rears 5% faster than the fronts: a real drive slip, not a rounding
+  // residue that is 0 on one CPU and not on another.
+  in.wheel_speed_rad_s[0] = in.wheel_speed_rad_s[1] = 60.0;
+  in.wheel_speed_rad_s[2] = in.wheel_speed_rad_s[3] = 63.0;
+  const vcu_sil_outputs out = Hold(in, 240);
+  vcu_sil_snapshot snap{};
+  snap.struct_size = sizeof(snap);
+  ASSERT_EQ(vcu_sil_read_snapshot(handle_, &snap), VCU_SIL_OK);
+  ASSERT_EQ(snap.state, kDrive);
+  EXPECT_NEAR(snap.battery_ocv_min_cell_v, 3.0, 1e-3);
+  // Twins first: a wrong copy in vcu_sil.cpp shows up here by name.
+  EXPECT_EQ(snap.torque_lookup, out.torque_lookup_nm);
+  EXPECT_EQ(snap.torque_derated, out.torque_derated_nm);
+  EXPECT_EQ(snap.torque_power_limited, out.torque_power_limited_nm);
+  EXPECT_EQ(snap.torque_traction, out.torque_traction_nm);
+  EXPECT_EQ(snap.torque_command_nm, out.torque_command_nm);
+  EXPECT_EQ(snap.wheel_reference_m_s, out.wheel_reference_m_s);
+  EXPECT_EQ(snap.wheel_drive_slip, out.wheel_drive_slip);
+  EXPECT_EQ(snap.wheel_valid, out.wheel_control_valid);
+  const std::vector<std::pair<const char*, double>> values = {
+      {"torque_lookup", snap.torque_lookup},
+      {"torque_derated", snap.torque_derated},
+      {"torque_power_limited", snap.torque_power_limited},
+      {"wheel_reference_m_s", snap.wheel_reference_m_s},
+      {"wheel_drive_slip", snap.wheel_drive_slip}};
+  for (size_t i = 0; i < values.size(); ++i) {
+    EXPECT_NE(values[i].second, 0.0)
+        << values[i].first << " is 0: either vcu_sil.cpp leaves it unfilled "
+        << "or the controls changed and the inputs no longer reach it";
+    for (size_t j = i + 1; j < values.size(); ++j) {
+      EXPECT_NE(values[i].second, values[j].second)
+          << values[i].first << " and " << values[j].first << " coincide: "
+          << "either vcu_sil.cpp copies the wrong field (see the twin checks "
+          << "above) or the controls changed and the inputs need to separate "
+          << "them again";
+    }
+  }
+  EXPECT_NE(snap.torque_traction, 0.0);
+  // Wheel control never raises the traction torque it is given.
+  EXPECT_LE(snap.wheel_positive_nm, snap.torque_traction);
+  EXPECT_GT(snap.wheel_reference_m_s, 1.0);
+  EXPECT_NEAR(snap.wheel_drive_slip, 0.05, 0.005);
+  EXPECT_GT(snap.torque_derated, 0.0);
+  EXPECT_LT(snap.torque_derated, snap.torque_lookup);
+  EXPECT_LT(snap.torque_power_limited, snap.torque_lookup);
+}
+
+// Every frame on both buses comes out, in order, at its spec rate.
+TEST_F(Sil, FramesComeOutInSendOrder) {
+  const vcu_sil_inputs in = ParkedCar();
+  Hold(in, 999);  // ms 0..998
+  std::vector<vcu_sil_frame> frames;
+  std::vector<vcu_sil_frame> chunk(100);
+  uint32_t n = 0;
+  do {
+    ASSERT_EQ(vcu_sil_read_frames(handle_, chunk.data(), sizeof(vcu_sil_frame),
+                                  static_cast<uint32_t>(chunk.size()), &n),
+              VCU_SIL_OK);
+    frames.insert(frames.end(), chunk.begin(), chunk.begin() + n);
+  } while (n > 0);
+  std::map<std::tuple<int32_t, int32_t, uint32_t>, int> counts;
+  uint32_t last_ms = 0;
+  int32_t last_from_vcu = 0;
+  for (const vcu_sil_frame& f : frames) {
+    ASSERT_GE(f.t_ms, last_ms);
+    if (f.t_ms == last_ms) {
+      // Within a pass the rig sends before Step(), the VCU during it.
+      ASSERT_GE(f.from_vcu, last_from_vcu) << f.t_ms;
+    }
+    last_ms = f.t_ms;
+    last_from_vcu = f.from_vcu;
+    ASSERT_LE(f.len, 8u);
+    ++counts[{f.bus, f.from_vcu, f.id}];
+    if (!f.from_vcu && f.id == 0x131) {  // CONTACTOR_STATUS: 4 bytes
+      ASSERT_EQ(f.len, 4u);
+    }
+    if (!f.from_vcu && f.id == 0x0B0) {  // INVERTER_SPEED
+      // bus_voltage, 0.1 V counts in bytes 6-7: the payload comes out whole.
+      ASSERT_EQ(f.len, 8u);
+      EXPECT_EQ(f.data[6] | f.data[7] << 8, 5740) << f.t_ms;
+    }
+  }
+  EXPECT_EQ(last_ms, 996u);  // the last 3 ms tick; nothing runs at 1 ms
+  EXPECT_EQ((counts[{VCU_SIL_BUS_CRITICAL, 0, 0x0B0}]), 333);  // INVERTER_SPEED
+  EXPECT_EQ((counts[{VCU_SIL_BUS_CRITICAL, 0, 0x131}]),
+            100);                                          // CONTACTOR_STATUS
+  EXPECT_EQ((counts[{VCU_SIL_BUS_DATA, 0, 0x404}]), 333);  // wheel RL
+  EXPECT_EQ((counts[{VCU_SIL_BUS_CRITICAL, 1, 0x0C0}]), 333);  // torque command
+  EXPECT_EQ((counts[{VCU_SIL_BUS_CRITICAL, 1, 0x1C7}]), 333);  // VCU_STATE
+  EXPECT_EQ((counts[{VCU_SIL_BUS_DATA, 1, 0x1D0}]), 100);      // ADC counts A
+  EXPECT_EQ((counts[{VCU_SIL_BUS_CRITICAL, 1, 0x1CB}]), 10);   // VCU_FAULTS
+  ASSERT_EQ(
+      vcu_sil_read_frames(handle_, chunk.data(), sizeof(vcu_sil_frame), 1, &n),
+      VCU_SIL_OK);
+  EXPECT_EQ(n, 0u);
+  EXPECT_EQ(vcu_sil_read_frames(handle_, chunk.data(), 12, 1, &n),
+            VCU_SIL_ERR_SIZE);
+  EXPECT_EQ(vcu_sil_read_frames(handle_, nullptr, sizeof(vcu_sil_frame), 1, &n),
+            VCU_SIL_ERR_NULL);
+  EXPECT_EQ(vcu_sil_read_frames(handle_, nullptr, sizeof(vcu_sil_frame), 0, &n),
+            VCU_SIL_OK);
+}
+
+// A host that never reads loses the oldest frames, and is told so.
+TEST_F(Sil, UnreadFramesAreBoundedAndCounted) {
+  const vcu_sil_inputs in = ParkedCar();
+  vcu_sil_outputs out = Hold(in, 15000);  // ~6 frames/ms, over 65536
+  EXPECT_GT(out.frames_dropped, 0u);
+  std::vector<vcu_sil_frame> all(70000);
+  uint32_t n = 0;
+  ASSERT_EQ(vcu_sil_read_frames(handle_, all.data(), sizeof(vcu_sil_frame),
+                                static_cast<uint32_t>(all.size()), &n),
+            VCU_SIL_OK);
+  EXPECT_EQ(n, 65536u);
+  EXPECT_EQ(all[n - 1].t_ms, 14997u);  // the newest are kept: last tick
+  EXPECT_GT(all[0].t_ms, 0u);
 }
 
 TEST(SilAbi, NamesComeFromTheSpec) {

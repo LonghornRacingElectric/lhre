@@ -7,12 +7,13 @@ its inputs are wrong (nothing about the firmware can be concluded).
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import sys
 import traceback
 from pathlib import Path
 
-from . import cosim, firmware, plant, provenance, report
+from . import candecode, cosim, events, firmware, mcaplog, plant, provenance, report
 from .scenario import SCENARIOS
 
 EXIT_COMPLETED, EXIT_PLANT_FAILED, EXIT_HARNESS = 0, 1, 2
@@ -23,7 +24,8 @@ EXIT_FOR_STATUS = {'completed': EXIT_COMPLETED, 'plant_failed': EXIT_PLANT_FAILE
 REPO = Path(__file__).resolve().parents[5]
 
 # What a run writes; a reused --out loses the previous run's copies first.
-OUTPUT_FILES = ('meta.json', 'trace.csv', 'plot.png', 'summary.txt', 'console.log', 'fmu.log')
+OUTPUT_FILES = ('meta.json', 'trace.csv', 'run.mcap', 'plot.png', 'summary.txt', 'console.log',
+                'fmu.log')
 
 
 def _fraction(text: str) -> float:
@@ -46,6 +48,9 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     p.add_argument('--lib', type=Path, required=True, help='libvcu_sil.so')
     p.add_argument('--fmu', type=Path, required=True, help='OrionTorqueFMI.fmu')
     p.add_argument('--out', type=Path, required=True, help='run directory (created)')
+    p.add_argument('--can-table', type=Path,
+                   help='vcu_sil_can.json from //boards/VCU:vcu_sil_can_table; without it '
+                        'run.mcap keeps CAN frames undecoded')
     p.add_argument('--scenario', choices=sorted(SCENARIOS), default='launch')
     p.add_argument('--soc', type=_fraction, default=0.9,
                    help='initial state of charge, 0..1 (default 0.9; at 1.0 the model '
@@ -94,8 +99,12 @@ def _run(args: argparse.Namespace, meta: dict[str, object]) -> int:
     try:
         meta['fmu'] = provenance.fmu_provenance(args.fmu, args.allow_unverified_fmu)
         lib = firmware.load_library(args.lib)
-    except (provenance.ProvenanceError, firmware.FirmwareError, OSError) as exc:
+        table = candecode.CanTable(args.can_table) if args.can_table else None
+    except (provenance.ProvenanceError, firmware.FirmwareError, OSError, ValueError,
+            KeyError) as exc:
         return _fail(meta, args.out, 'harness_error', str(exc))
+    meta['can_table'] = ({'path': str(args.can_table), 'spec_sha256': table.spec_sha256,
+                          'unsupported': table.unsupported} if table else None)
     meta['library'] = {'path': str(args.lib), 'sha256': provenance.sha256(args.lib),
                        'abi_version': firmware.ABI_VERSION}
     meta['repo'] = provenance.repo_state(args.repo, meta['fmu']['manifest'])
@@ -109,7 +118,10 @@ def _run(args: argparse.Namespace, meta: dict[str, object]) -> int:
             with plant.capture_output(fmu_log):
                 with plant.Plant(args.fmu, soc_start=args.soc) as car:
                     meta['plant'] = {'soc_start': car.soc_start, 'series_cells': car.series_cells,
-                                     'peak_timer': car.peak_timer, 'guid': car.guid}
+                                     'peak_timer': car.peak_timer, 'guid': car.guid,
+                                     'truth_units': car.truth_units,
+                                     'truth_missing': car.truth_missing,
+                                     'slip_from_states': car.slip_from_states}
                     result = cosim.run(scenario, fw, car, args.brake_psi_full)
         except plant.InterfaceError as exc:
             return _fail(meta, args.out, 'harness_error', str(exc))
@@ -118,17 +130,34 @@ def _run(args: argparse.Namespace, meta: dict[str, object]) -> int:
                          _log_lines(fmu_log))
         (args.out / 'console.log').write_text(fw.read_console())
         summary = cosim.summarize(result, fw.state_name, fw.fault_names)
+        marks = events.derive(result, fw.state_name, fw.fault_name, fw.transition_reason)
 
     meta.update(status=result.status, failure=result.failure, wall_s=result.wall_s,
                 failure_lines=result.failure_lines + _log_lines(fmu_log) if result.failure else [],
-                summary=summary)
+                summary=summary,
+                events=[{'t_ms': e.t_ms, 'level': e.level, 'name': e.name, 'message': e.message}
+                        for e in marks],
+                frames_dropped=int(result.rows[-1]['fw_frames_dropped']) if result.rows else 0)
     report.write_trace(result, args.out / 'trace.csv')
+    text = report.summary_text(summary, result, meta)
+    # run.mcap carries no wall-clock time, so the same run gives the same bytes.
+    logged_meta = {k: v for k, v in meta.items() if k != 'wall_s'}
+    meta['mcap'] = mcaplog.write(
+        args.out / 'run.mcap', result, marks, fw.state_name, fw.fault_name,
+        fw.transition_reason, table,
+        metadata={'scenario': scenario.name, 'status': result.status,
+                  'firmware': meta['library']['build']['git_describe'],
+                  'firmware_dirty': meta['library']['build']['dirty'],
+                  'fmu_sha256': meta['fmu']['fmu_sha256']},
+        attachments={
+            'summary.txt': (report.summary_text(summary, result, meta, wall_time=False)
+                            + '\n').encode(),
+            'meta.json': json.dumps(logged_meta, indent=2, sort_keys=True).encode()})
     report.write_meta(meta, args.out / 'meta.json')
     if not args.no_plot and result.rows:
         report.plot(result, args.out / 'plot.png',
                     f'VCU firmware {meta["library"]["build"]["git_describe"]} '
                     f'driving the car model: {scenario.name}')
-    text = report.summary_text(summary, result, meta)
     (args.out / 'summary.txt').write_text(text + '\n')
     print(text)
     return EXIT_FOR_STATUS[result.status]

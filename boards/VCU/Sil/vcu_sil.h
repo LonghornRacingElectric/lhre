@@ -3,9 +3,9 @@
 /* C ABI of libvcu_sil.so: the unmodified VCU app on host fakes, stepped in
  * 1 ms passes by a co-simulation host. See README.md next to this file.
  *
- * config, inputs and outputs start with struct_size, which the caller sets
- * to sizeof(struct). Functions returning int32_t return VCU_SIL_OK or a
- * negative error; a call rejected for its arguments (NULL, size, range,
+ * config, inputs, outputs and snapshot start with struct_size, which the
+ * caller sets to sizeof(struct). Functions returning int32_t return VCU_SIL_OK
+ * or a negative error; a call rejected for its arguments (NULL, size, range,
  * non-finite) changes nothing. vcu_sil_layout() lists every field's offset
  * so a binding in another language can check its mirror field by field.
  * Bump VCU_SIL_ABI_VERSION on any change to this file.
@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-#define VCU_SIL_ABI_VERSION 1
+#define VCU_SIL_ABI_VERSION 2
 
 enum {
   VCU_SIL_OK = 0,
@@ -79,9 +79,10 @@ typedef struct {
 /* The firmware's view after the last 1 ms pass of an advance. */
 typedef struct {
   uint32_t struct_size;
-  uint32_t now_ms;        /* simulated time after the advance */
-  uint32_t control_ms;    /* time of the last control tick */
-  uint32_t torque_frames; /* INVERTER_TORQUE_COMMAND frames this advance */
+  uint32_t now_ms;         /* simulated time after the advance */
+  uint32_t control_ms;     /* time of the last control tick */
+  uint32_t torque_frames;  /* INVERTER_TORQUE_COMMAND frames this advance */
+  uint32_t frames_dropped; /* captured frames lost to the buffer limit, ever */
   /* Last INVERTER_TORQUE_COMMAND of the advance, decoded from the bus */
   int32_t inverter_enable;
   int32_t direction;
@@ -120,11 +121,167 @@ typedef struct {
   double wheel_drive_slip;
 } vcu_sil_outputs;
 
+/* Everything the firmware's control tick published (ControlSnapshot), field
+ * for field: bools and enums as int32_t, floats as double. Read it with
+ * vcu_sil_read_snapshot() after an advance. */
 typedef struct {
-  const char* structure; /* "config", "inputs" or "outputs" */
-  const char* field;     /* "" for the whole struct */
+  uint32_t struct_size;
+  /* Status */
+  uint32_t now_ms;
+  int32_t state;
+  /* The last transition's reason as an id for vcu_sil_transition_reason():
+   * the first state-machine table row with that text, so two transitions
+   * worded alike share an id. Not a row index; -1 is "boot". */
+  int32_t last_transition_id;
+  uint32_t faults;
+  int32_t primary_fault;
+  int32_t event_mode;
+  int32_t loop_state;
+  int32_t motor_speed_valid;
+  int32_t adc_fresh;
+  int32_t inverter_enable;
+  int32_t buzzer;
+  int32_t linelock_request;
+  int32_t brake_flags_latched;
+  int32_t fault_resets;
+  int32_t bse3_available;
+  int32_t launch_armed;
+  int32_t regen_current_cut;
+  double motor_rpm;
+  double torque_command_nm;
+  double brake_bias;
+  double bse3_psi;
+  /* Analog front end: raw counts, MCU pin volts, sensor-side volts */
+  int32_t analog_apps1_counts;
+  int32_t analog_apps2_counts;
+  int32_t analog_bse1_counts;
+  int32_t analog_bse2_counts;
+  int32_t analog_steering_counts;
+  int32_t analog_shutdown_in_counts;
+  int32_t analog_shutdown_out_counts;
+  int32_t analog_vrefint_counts;
+  int32_t analog_vdda_from_vrefint;
+  double analog_apps1_pin_v;
+  double analog_apps1_source_v;
+  double analog_apps2_pin_v;
+  double analog_apps2_source_v;
+  double analog_bse1_pin_v;
+  double analog_bse1_source_v;
+  double analog_bse2_pin_v;
+  double analog_bse2_source_v;
+  double analog_steering_pin_v;
+  double analog_steering_source_v;
+  double analog_shutdown_in_pin_v;
+  double analog_shutdown_in_source_v;
+  double analog_shutdown_out_pin_v;
+  double analog_shutdown_out_source_v;
+  double analog_vdda;
+  /* Pedals */
+  int32_t pedals_apps1_disconnect;
+  int32_t pedals_apps2_disconnect;
+  int32_t pedals_apps1_out_of_range;
+  int32_t pedals_apps2_out_of_range;
+  int32_t pedals_apps_mismatch;
+  int32_t pedals_apps_implausible;
+  int32_t pedals_bse1_disconnect;
+  int32_t pedals_bse2_disconnect;
+  int32_t pedals_bse1_out_of_range;
+  int32_t pedals_bse2_out_of_range;
+  int32_t pedals_bse1_fault;
+  int32_t pedals_bse2_fault;
+  int32_t pedals_brake_pressed;
+  int32_t pedals_brake_for_rtd;
+  int32_t pedals_brake_over_throttle;
+  int32_t pedals_firmware_hard_brake;
+  int32_t pedals_hard_brake_mismatch;
+  double pedals_apps1_travel_unclamped;
+  double pedals_apps2_travel_unclamped;
+  double pedals_apps1_travel;
+  double pedals_apps2_travel;
+  double pedals_pedal_travel;
+  double pedals_bse1_psi_unclamped;
+  double pedals_bse2_psi_unclamped;
+  double pedals_bse1_psi;
+  double pedals_bse2_psi;
+  double pedals_bse_psi_filtered;
+  double pedals_brake_light;
+  /* Steering */
+  int32_t steering_range_fault;
+  double steering_travel;
+  double steering_angle_deg;
+  /* Digital inputs as the firmware uses them: polarity applied (true =
+   * asserted), and debounced where it debounces (the brake flags, motor
+   * power and disconnect, RTD); the BSPD readbacks are raw. */
+  int32_t din_b1_disconnect;
+  int32_t din_b1_overvoltage;
+  int32_t din_b2_disconnect;
+  int32_t din_b2_overvoltage;
+  int32_t din_hard_braking;
+  int32_t din_combined_condition;
+  int32_t din_fault_confirmed;
+  int32_t din_latch_state;
+  int32_t din_linelock_out;
+  int32_t din_motor_power;
+  int32_t din_motor_disconnect;
+  int32_t din_rtd_pressed;
+  /* Digital outputs (true = pin high) */
+  int32_t dout_linelock_ctrl;
+  int32_t dout_amp_enable;
+  int32_t dout_bms_led;
+  int32_t dout_imd_led;
+  int32_t dout_crit_stb;
+  int32_t dout_data_stb;
+  /* Torque path */
+  double torque_lookup;
+  double torque_derated;
+  double torque_power_limited;
+  double torque_traction;
+  double torque_power_w;
+  double torque_power_trim_w;
+  /* Battery estimate */
+  double battery_ocv_min_cell_v;
+  double battery_ocv_max_cell_v;
+  double battery_soe_pct;
+  double battery_net_energy_wh;
+  double battery_regen_energy_wh;
+  /* Wheel-slip control */
+  int32_t wheel_valid;
+  int32_t wheel_regen_allowed;
+  double wheel_positive_nm;
+  double wheel_reference_m_s;
+  double wheel_drive_slip;
+  double wheel_braking_slip;
+} vcu_sil_snapshot;
+
+/* One CAN frame on the rig's buses, as vcu_sil_read_frames() returns it. */
+typedef struct {
+  uint32_t t_ms;    /* simulated time it was sent */
+  uint32_t id;      /* standard 11-bit ID */
+  int32_t bus;      /* VCU_SIL_BUS_* */
+  int32_t from_vcu; /* 1: the VCU sent it; 0: the rig, as the rest of the car */
+  uint32_t len;     /* 0..8 */
+  uint8_t data[8];
+} vcu_sil_frame;
+
+enum { VCU_SIL_BUS_CRITICAL = 0, VCU_SIL_BUS_DATA = 1 };
+
+/* vcu_sil_field.type */
+enum {
+  VCU_SIL_TYPE_STRUCT = 0,
+  VCU_SIL_TYPE_UINT32 = 1,
+  VCU_SIL_TYPE_INT32 = 2,
+  VCU_SIL_TYPE_DOUBLE = 3,
+  VCU_SIL_TYPE_UINT8 = 4
+};
+
+typedef struct {
+  const char*
+      structure;     /* "config", "inputs", "outputs", "snapshot", "frame" */
+  const char* field; /* "" for the whole struct */
   uint32_t offset;
   uint32_t size;
+  uint32_t type;  /* VCU_SIL_TYPE_* of one element */
+  uint32_t count; /* elements: 1, or the array length */
 } vcu_sil_field;
 
 int32_t vcu_sil_abi_version(void);
@@ -145,6 +302,20 @@ int32_t vcu_sil_advance(vcu_sil_handle* handle, const vcu_sil_inputs* inputs,
 int32_t vcu_sil_read_console(vcu_sil_handle* handle, char* buffer,
                              uint32_t capacity, uint32_t* length);
 
+/* The control snapshot after the last advance; before the first, the
+ * firmware's defaults (INIT, last_transition_id -1). */
+int32_t vcu_sil_read_snapshot(vcu_sil_handle* handle, vcu_sil_snapshot* out);
+
+/* Moves up to `capacity` captured frames, oldest first, into `frames` and
+ * sets *count; `frame_size` is sizeof(vcu_sil_frame). Call until *count is
+ * 0. Every frame on both buses is captured, in send order: in each 1 ms pass
+ * the rig's frames go out before App::Step() and the VCU's during it. The
+ * rig keeps the newest 65536 between reads; outputs.frames_dropped counts
+ * the rest. */
+int32_t vcu_sil_read_frames(vcu_sil_handle* handle, vcu_sil_frame* frames,
+                            uint32_t frame_size, uint32_t capacity,
+                            uint32_t* count);
+
 /* Entry `index` of the layout table; VCU_SIL_ERR_RANGE past the end. */
 int32_t vcu_sil_layout(uint32_t index, vcu_sil_field* out);
 
@@ -158,6 +329,9 @@ int32_t vcu_sil_build_dirty(void);
 const char* vcu_sil_state_name(int32_t state);
 const char* vcu_sil_fault_name(int32_t fault_code);
 const char* vcu_sil_error_name(int32_t error);
+/* The state machine's reason for snapshot.last_transition_id: "boot" for
+ * -1, "?" when out of range. Static strings. */
+const char* vcu_sil_transition_reason(int32_t id);
 
 #ifdef __cplusplus
 }

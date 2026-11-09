@@ -25,7 +25,9 @@ The DUI is a plain CAN peripheral this year.
 | `:vcu_sim`                | Scripted drive under the simulator (`bazel run --config=local`). |
 | `:release`                | Vehicle elf/bin/hex for CI artifacts.              |
 | `:vcu_sil_rig`, `:libvcu_sil.so` | Software-in-the-loop: the app driven by a car model ([Sil/](Sil/README.md)). Host only; the `.so` is Linux only. |
-| `:vcu_sil_rig_test`, `:vcu_sil_test` | The SIL rig against the real app, and its C ABI.      |
+| `:vcu_sil_rig_test`, `:vcu_sil_test` | The SIL rig against the real app (host only), and its C ABI (`:vcu_sil_test`, Linux only). |
+| `:vcu_sil_can_table`      | The CAN spec as a JSON decode table for the SIL's run log. Linux only. |
+| `:vcu_sil_gen_can_table_test` | The decode-table generator, including specs it cannot fully decode. Linux only. |
 
 ## Layout
 

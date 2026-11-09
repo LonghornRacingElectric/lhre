@@ -32,7 +32,7 @@ WHEELS = ('wheelSpeedFL', 'wheelSpeedFR', 'wheelSpeedRL', 'wheelSpeedRR')
 
 # Firmware outputs copied into the trace, in this order.
 FIRMWARE_COLUMNS = (
-    'control_ms', 'state', 'faults', 'primary_fault', 'torque_frames',
+    'control_ms', 'state', 'faults', 'primary_fault', 'torque_frames', 'frames_dropped',
     'inverter_enable', 'torque_request_nm', 'torque_limit_nm', 'saturated',
     'pedal_travel', 'apps1_travel', 'bse1_psi', 'bse2_psi', 'bse_filtered_psi',
     'bse3_psi', 'steering_angle_deg', 'motor_rpm', 'torque_lookup_nm',
@@ -58,6 +58,7 @@ class HarnessError(RuntimeError):
 
 class PlantLike(Protocol):
     series_cells: int
+    truth: dict[str, float | None]  # model truth read with the last outputs
 
     def read(self) -> dict[str, float]: ...
     def step(self, k: int, u: PlantInputs) -> None: ...
@@ -75,6 +76,11 @@ class Scenario(Protocol):
 class Result:
     scenario: str
     rows: list[dict[str, float | int]] = field(default_factory=list)
+    # Per row: the firmware's full control snapshot and the model's truth.
+    snapshots: list[dict[str, int | float]] = field(default_factory=list)
+    truth: list[dict[str, float | None]] = field(default_factory=list)
+    # Every CAN frame on both buses: (t_ms, bus, id, from_vcu, data).
+    frames: list[tuple[int, int, int, bool, bytes]] = field(default_factory=list)
     status: str = 'completed'  # 'plant_failed', or 'harness_error'
     failure: str | None = None
     failure_lines: list[str] = field(default_factory=list)
@@ -149,6 +155,9 @@ def run(scenario: Scenario, firmware: Firmware, plant: PlantLike,
                 raise HarnessError(f'{out.torque_frames} torque commands at {t_ms} ms, want 1')
             u = plant_inputs(driver, out, brake_psi_full)
             result.rows.append(_row(t_ms, y, plant.series_cells, driver, car, out, u))
+            result.snapshots.append(firmware.read_snapshot())
+            result.truth.append(dict(plant.truth))
+            result.frames.extend(firmware.read_frames())
             plant.step(k, u)
             if progress is not None:
                 progress(k + 1, steps)

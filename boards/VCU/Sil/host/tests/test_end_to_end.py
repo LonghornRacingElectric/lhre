@@ -2,6 +2,7 @@
 
 import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -10,13 +11,16 @@ from vcusil import cosim, report
 from vcusil.firmware import STATE_DRIVE, Firmware
 from vcusil.plant import OUTPUTS, Plant, PlantInputs
 from vcusil.scenario import Launch
+from test_mcaplog import read_all
+
+LAYOUT = Path(__file__).resolve().parents[2] / 'foxglove' / 'vcu_sil.json'
 
 
 @pytest.fixture(scope='module')
-def launch_run(lib, fmu_path, tmp_path_factory):
+def launch_run(lib, fmu_path, can_table_path, tmp_path_factory):
     out = tmp_path_factory.mktemp('launch')
     status = cli.main(['--lib', os.environ['VCU_SIL_LIB'], '--fmu', str(fmu_path),
-                       '--out', str(out)])
+                       '--can-table', str(can_table_path), '--out', str(out)])
     return status, out
 
 
@@ -41,7 +45,7 @@ def test_launch_completes_and_the_car_accelerates(launch_run):
     assert 60.0 < s['peak_dc_power_kw'] < 70.0
     assert meta['plant']['series_cells'] == 140
     assert meta['fmu']['verified'] is True
-    for name in ('trace.csv', 'plot.png', 'console.log', 'fmu.log', 'summary.txt'):
+    for name in ('trace.csv', 'run.mcap', 'plot.png', 'console.log', 'fmu.log', 'summary.txt'):
         assert (out / name).stat().st_size > 0, name
 
 
@@ -105,3 +109,90 @@ def test_model_time_runs_at_firmware_time(launch_run):
     distance = rows[-1]['rearX'] - rows[0]['rearX']
     integral = sum(r['rearU'] for r in rows[:-1]) * cosim.STEP_MS / 1000
     assert distance == pytest.approx(integral, rel=0.01)
+
+
+def test_the_run_log_holds_firmware_frames_and_model_truth(launch_run):
+    _, out = launch_run
+    meta = json.loads((out / 'meta.json').read_text())
+    assert meta['plant']['truth_missing'] == []
+    assert meta['plant']['slip_from_states'] is True
+    assert meta['frames_dropped'] == 0
+    assert meta['can_table']['spec_sha256']
+    messages, schemas, attachments, _ = read_all(out / 'run.mcap')
+    rows = report.read_trace(out / 'trace.csv')
+    truth = messages['/model/truth']
+    assert len(truth) == len(rows)
+    for key in ('velX', 'Fz_RL', 'kappa_RL', 'alpha_FL', 'soc', 'inverterPowerOut'):
+        assert key in truth[0][1], key
+    # The trace and the log carry the same truth, to the bit.
+    assert [m['velX'] for _, m in truth] == [r['truth_velX'] for r in rows]
+    # Model truth sees what the firmware's |w| sensors cannot: slip at launch.
+    kappa = [m['kappa_RL'] for _, m in truth]
+    assert None not in kappa  # a real run's slip states are finite throughout
+    assert max(kappa) > 0.02
+    units = meta['plant']['truth_units']
+    assert (units['kappa_RL'], units['alpha_FL']) == ('1', 'rad')
+    # Brake truth is one corner per axle: BobLib halves each circuit, so twice
+    # FL plus twice RL is the whole brake torque, and the bias favours the front.
+    outputs = messages['/model/outputs']
+    assert [t for t, _ in outputs] == [t for t, _ in truth]
+    held = [(m, y) for (t_ns, m), (_, y) in zip(truth, outputs)
+            if 300 <= t_ns // 1_000_000 < 1500]
+    assert held and all(y['mechanicalBrakeTorque'] > 0 for _, y in held)
+    for m, y in held:
+        assert 2 * (m['brakeTorqueFL'] + m['brakeTorqueRL']) == pytest.approx(
+            y['mechanicalBrakeTorque'])
+        assert m['brakeTorqueFL'] > m['brakeTorqueRL']
+    # The model's motor command comes after its own torque limit.
+    assert all(abs(m['motorModelTorqueCommand']) <= m['motorTorqueLimit'] + 1e-9
+               for _, m in truth)
+    soc = [m['soc'] for _, m in truth]
+    assert soc[0] == pytest.approx(0.9) and soc[-1] < soc[0]
+    # The rig's speed frames carry the model's motor speed as the inverter
+    # would report it.
+    for t_ns, msg in messages['/can/car/INVERTER_SPEED'][::50]:
+        row = next(r for r in rows if r['t_ms'] == t_ns // 1_000_000)
+        assert msg['motor_speed'] == round(row['motorSpeed'] * 30 / 3.141592653589793)
+    states = {m['state_name'] for _, m in messages['/can/vcu/VCU_FAULTS']}
+    assert 'DRIVE' in states
+    assert set(attachments) == {'meta.json', 'summary.txt'}
+    levels = [m['level'] for _, m in messages['/events']]
+    assert max(levels) == 3  # warnings (boot fault, launch ring), no errors
+
+
+def _field_exists(schema: dict, path: list[str]) -> bool:
+    for key in path:
+        props = schema.get('properties', {})
+        if key not in props:
+            return False
+        schema = props[key]
+    return True
+
+
+def test_every_layout_path_exists_in_a_run(launch_run):
+    """A renamed topic or field shows up in Foxglove only as an empty panel,
+    so check the committed layout against what a real run writes."""
+    _, out = launch_run
+    _, schemas, _, _ = read_all(out / 'run.mcap')
+    layout = json.loads(LAYOUT.read_text())
+    seen = 0
+    for panel_id, config in layout['configById'].items():
+        refs = [p['value'] for p in config.get('paths', [])]
+        refs += [config[k] for k in ('topicPath', 'topicToRender') if k in config]
+        for ref in refs:
+            topic, _, field = ref.partition('.')
+            assert topic in schemas, f'{panel_id}: no topic {topic}'
+            if field:
+                assert _field_exists(schemas[topic][1], field.split('.')), f'{panel_id}: {ref}'
+            seen += 1
+    assert seen >= 20
+    placed = []
+
+    def walk(node):
+        if isinstance(node, str):
+            placed.append(node)
+        else:
+            walk(node['first'])
+            walk(node['second'])
+    walk(layout['layout'])
+    assert sorted(placed) == sorted(layout['configById'])

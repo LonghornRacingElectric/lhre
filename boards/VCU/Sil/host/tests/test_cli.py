@@ -17,6 +17,7 @@ class FakePlant(ToyCar):
     def __init__(self, fmu_path, soc_start=0.9):
         super().__init__(fail_at_step=FakePlant.fail_at)
         self.soc_start, self.peak_timer, self.guid = soc_start, True, 'fake'
+        self.truth_units, self.truth_missing, self.slip_from_states = {}, [], False
         FakePlant.made.append(self)
 
     def __enter__(self):
@@ -40,10 +41,10 @@ def run_cli(lib, monkeypatch, tmp_path):
     fmu = tmp_path / 'car.fmu'
     fmu.write_bytes(b'not an fmu')
 
-    def run(*args, fail_at=None, lib_path=None):
+    def run(*args, fail_at=None, lib_path=None, out_name='out'):
         FakePlant.fail_at, FakePlant.made = fail_at, []
         modes.clear()
-        out = tmp_path / 'out'
+        out = tmp_path / out_name
         status = cli.main(['--lib', lib_path or os.environ['VCU_SIL_LIB'], '--fmu', str(fmu),
                            '--out', str(out), '--allow-unverified-fmu', '--no-plot', *args])
         meta = json.loads((out / 'meta.json').read_text())
@@ -57,9 +58,29 @@ def test_a_completed_run_exits_0_and_writes_everything(run_cli):
     assert meta['summary']['first_drive_ms'] is not None
     assert meta['fmu']['verified'] is False  # the fake has no manifest
     assert meta['library']['build']['git_sha']
-    for name in ('trace.csv', 'summary.txt', 'console.log'):
+    for name in ('trace.csv', 'summary.txt', 'console.log', 'run.mcap'):
         assert (out / name).stat().st_size > 0, name
+    # Without --can-table the frames stay raw, and the run says so.
+    assert meta['can_table'] is None
+    assert meta['mcap']['per_topic']['/can/raw'] > 0
     assert modes == [0] and [p.soc_start for p in made] == [0.9]
+
+
+def test_the_same_run_writes_the_same_run_log(run_cli, tmp_path):
+    from mcap.reader import make_reader
+    _, out, meta, _, _ = run_cli()
+    first = (out / 'run.mcap').read_bytes()
+    _, out, _, _, _ = run_cli(out_name='elsewhere')  # nor where it is written
+    assert (out / 'run.mcap').read_bytes() == first
+    # The log carries the run's metadata, but no wall-clock time.
+    with open(out / 'run.mcap', 'rb') as f:
+        reader = make_reader(f)
+        attached = {a.name: a.data for a in reader.iter_attachments()}
+        tags = {m.name: m.metadata for m in reader.iter_metadata()}
+    logged = json.loads(attached['meta.json'])
+    assert 'wall_s' not in logged and logged['summary'] == meta['summary']
+    assert ' simulated\n' in attached['summary.txt'].decode()
+    assert tags['vcusil']['firmware_dirty'] in ('True', 'False')
 
 
 def test_a_failed_car_model_exits_1(run_cli):

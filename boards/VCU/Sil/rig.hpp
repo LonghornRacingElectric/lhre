@@ -5,10 +5,13 @@
 // timing and signal contract. Host only.
 
 #include <cstdint>
+#include <deque>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "app/control_snapshot.hpp"
+#include "lhal/can.hpp"
 #include "lhre_can_types.hpp"
 
 namespace vcu {
@@ -63,6 +66,17 @@ struct TorqueCommand {
   float torque_limit_nm = 0.0f;
 };
 
+// A frame on one of the rig's buses.
+struct CapturedFrame {
+  enum Bus : uint8_t { kCritical = 0, kData = 1 };
+  uint32_t t_ms = 0;
+  uint32_t id = 0;
+  Bus bus = kCritical;
+  bool from_vcu = false;  // else the rig, playing the rest of the car
+  uint8_t len = 0;        // 0..8: both buses are classic CAN
+  uint8_t data[8] = {};
+};
+
 struct RigOutputs {
   uint32_t now_ms = 0;
   uint32_t torque_frames = 0;  // frames received during this advance
@@ -88,6 +102,12 @@ class Rig {
   std::string TakeConsole();
   uint64_t console_dropped() const { return console_dropped_; }
 
+  // Up to `max` of the oldest frames captured on both buses, in send order.
+  // At most kFrameLimit are kept; older frames are dropped first and counted.
+  static constexpr size_t kFrameLimit = 1u << 16;
+  std::vector<CapturedFrame> TakeFrames(size_t max = kFrameLimit);
+  uint64_t frames_dropped() const { return frames_dropped_; }
+
   // For tests: the fakes and the app under test.
   bench::Bench& bench() { return *bench_; }
   App& app() { return *app_; }
@@ -95,12 +115,16 @@ class Rig {
  private:
   // Reads the VCU's frames and empties every host buffer.
   void Drain(RigOutputs* out);
+  void Capture(const lhal::CanFrame& f, CapturedFrame::Bus bus, bool from_vcu);
 
   // Declared before app_: the app holds pointers into the bench.
   std::unique_ptr<bench::Bench> bench_;
   std::unique_ptr<App> app_;
+
   std::string console_;
   uint64_t console_dropped_ = 0;
+  std::deque<CapturedFrame> frames_;
+  uint64_t frames_dropped_ = 0;
 };
 
 }  // namespace sil

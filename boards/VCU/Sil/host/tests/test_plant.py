@@ -75,12 +75,39 @@ def test_non_finite_outputs_and_inputs_are_plant_failures():
     p._slave = SimpleNamespace(getReal=lambda refs: [0.0] * (len(refs) - 1) + [math.nan],
                                setReal=lambda *_: None, doStep=lambda **_: None)
     p._out_refs = list(range(len(OUTPUTS)))
+    p._read_refs = p._out_refs
+    p._truth_keys = []
+    p.slip_from_states = False
     p._in_refs = list(range(len(INPUTS)))
     p.step_s = 0.003
     with pytest.raises(plant.PlantError, match='wheelSpeedRR'):
         p.read()
     with pytest.raises(plant.PlantError, match='non-finite plant input'):
         p.step(0, PlantInputs(motor_torque_nm=math.inf))
+
+
+def test_truth_keeps_non_finite_values_as_gaps():
+    """A NaN in truth is a gap in the log, never a failed run; the slip
+    derived from a NaN state is a gap too, under the same key."""
+    keys = ['velX', 'slipU_FL', 'slipV_FL', 'slipU_RL', 'slipV_RL']
+    truth = [12.5, math.nan, 0.1, 0.05, math.inf]
+    p = Plant.__new__(Plant)
+    p._slave = SimpleNamespace(getReal=lambda refs: [1.0] * len(OUTPUTS) + truth)
+    p._read_refs = list(range(len(OUTPUTS) + len(keys)))
+    p._truth_keys = keys
+    p.slip_from_states = True
+    out = p.read()
+    assert out == dict.fromkeys(OUTPUTS, 1.0)
+    t = p.truth
+    assert t['velX'] == 12.5 and t['slipU_FL'] is None and t['slipV_RL'] is None
+    assert t['kappa_FL'] is None and t['alpha_FL'] == pytest.approx(math.atan2(0.1, 0.5))
+    assert t['kappa_RL'] == pytest.approx(0.1) and t['alpha_RL'] is None
+    # Corners the FMU does not expose read as gaps, so every run has the same keys.
+    assert t['kappa_FR'] is None and t['alpha_RR'] is None
+    # Without the zero-relaxation check passing, slip is not derived at all.
+    p.slip_from_states = False
+    p.read()
+    assert not any(k.startswith(('kappa_', 'alpha_')) for k in p.truth)
 
 
 def test_real_fmu_initializes_as_documented(fmu_path):

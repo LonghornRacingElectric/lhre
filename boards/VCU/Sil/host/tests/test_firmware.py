@@ -23,7 +23,7 @@ def hold(fw: Firmware, inputs: Inputs, ms: int):
 def test_binding_mirrors_the_library_field_by_field(lib):
     layout = library_layout(lib)
     check_mirror(layout)
-    assert set(layout) == {'config', 'inputs', 'outputs'}
+    assert set(layout) == {'config', 'inputs', 'outputs', 'snapshot', 'frame'}
     assert len(layout['outputs']) == len(firmware.Outputs._fields_) + 1
 
 
@@ -90,3 +90,39 @@ def test_fault_bits_are_named_from_the_spec(lib):
         assert fw.fault_names(0) == []
         assert fw.fault_names(1 | 1 << 7) == ['APPS_IMPLAUSIBLE', 'BRAKE_OVER_THROTTLE']
         assert fw.state_name(99) == '?'
+
+
+def test_the_snapshot_struct_is_built_from_the_library(lib):
+    struct = lib.snapshot_struct
+    layout = firmware.library_layout(lib)
+    assert ctypes.sizeof(struct) == layout['snapshot'][''][1]
+    named = [n for n, _ in struct._fields_ if not n.startswith('_pad')]
+    assert len(named) == 112 and named[0] == 'struct_size'
+    for name in named:
+        offset, size, _, _ = layout['snapshot'][name]
+        assert (getattr(struct, name).offset, getattr(struct, name).size) == (offset, size)
+
+
+def test_snapshot_frames_and_reasons_read_through_the_binding(lib):
+    with Firmware(lib) as fw:
+        snap = fw.read_snapshot()
+        assert snap['state'] == 0 and snap['last_transition_id'] == -1
+        assert fw.transition_reason(-1) == 'boot'
+        assert len(snap) == 111
+        inputs = parked()
+        out = hold(fw, inputs, 300)
+        snap = fw.read_snapshot()
+        assert snap['now_ms'] == out.control_ms
+        assert fw.transition_reason(snap['last_transition_id']) == 'drive preconditions met'
+        assert isinstance(snap['analog_vdda'], float) and isinstance(snap['din_rtd_pressed'], int)
+        frames = fw.read_frames()
+        assert frames == sorted(frames, key=lambda f: f[0])
+        assert {(bus, fid, from_vcu) for _, bus, fid, from_vcu, _ in frames} >= {
+            (firmware.BUS_CRITICAL, 0x0C0, True), (firmware.BUS_CRITICAL, 0x0B0, False),
+            (firmware.BUS_DATA, 0x404, False)}
+        assert all(len(data) <= 8 for *_, data in frames)
+        # A frame keeps its own length: CONTACTOR_STATUS is 4 bytes.
+        contactors = [data for _, _, fid, from_vcu, data in frames if fid == 0x131 and not from_vcu]
+        assert contactors and {len(d) for d in contactors} == {4}
+        assert fw.read_frames() == []
+        assert out.frames_dropped == 0

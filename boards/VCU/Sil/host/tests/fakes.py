@@ -16,6 +16,7 @@ class ToyCar:
     series_cells = 140
 
     def __init__(self, fail_at_step: int | None = None, nan_at_step: int | None = None):
+        self.truth: dict[str, float | None] = {}
         self.v = 0.0
         self.torque = 0.0
         self.calls: list[tuple[str, int]] = []
@@ -34,6 +35,7 @@ class ToyCar:
                  wheelSpeedRR=wheel, motorSpeed=wheel * FINAL_DRIVE,
                  motorTorqueActual=self.torque, dcBusVoltage=574.0,
                  dcBusCurrent=self.torque * wheel * FINAL_DRIVE / 0.9 / 574.0)
+        self.truth = {'velX': self.v, 'kappa_RL': 0.0, 'sideslip': None}
         return y
 
     def step(self, k: int, u: PlantInputs) -> None:

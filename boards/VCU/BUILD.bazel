@@ -1,6 +1,8 @@
 load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("@rules_python//python:defs.bzl", "py_binary", "py_test")
+load("//boards/VCU:Sil/can_table.bzl", "vcu_sil_can_table")
 load("//tools/firmware:firmware_project.bzl", "firmware_project")
 
 firmware_project(
@@ -139,4 +141,38 @@ cc_test(
         ":vcu_sil_api",
         "@googletest//:gtest_main",
     ],
+)
+
+# The decode table the Python host reads captured frames with. Linux only,
+# like the host that reads it.
+py_binary(
+    name = "vcu_sil_gen_can_table",
+    srcs = ["Sil/gen_can_table.py"],
+    main = "Sil/gen_can_table.py",
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = ["//lib/spec:ir"],
+)
+
+py_test(
+    name = "vcu_sil_gen_can_table_test",
+    size = "small",
+    srcs = [
+        "Sil/gen_can_table.py",
+        "Sil/gen_can_table_test.py",
+    ],
+    args = ["$(rlocationpaths //lib/spec:files)"],
+    data = ["//lib/spec:files"],
+    main = "Sil/gen_can_table_test.py",
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        "//lib/spec:ir",
+        "@lhre_pypi//bazel_runfiles",
+    ],
+)
+
+vcu_sil_can_table(
+    name = "vcu_sil_can_table",
+    out = "vcu_sil_can.json",
+    spec = "//lib/spec:files",
+    target_compatible_with = ["@platforms//os:linux"],
 )
