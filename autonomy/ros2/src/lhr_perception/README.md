@@ -12,15 +12,15 @@ The full stamped odometry pose is also inserted into the TF buffer, so
 Gazebo's odometry bridge does not need to provide a duplicate map transform.
 The sensor mount must be published through TF; no mount position or
 orientation is guessed in the default `sensor_transform_source=tf` mode.
-Gazebo explicitly selects `vehicle_config` for its existing level mount;
-that mode reads the translation from vehicle YAML and does not require a
-sensor TF or a renamed cloud frame. It must not be used for a pitched mount.
+Gazebo explicitly selects `vehicle_config`; that mode reads the mount,
+position and rotation, from vehicle YAML and does not require a sensor TF or a
+renamed cloud frame. It must not be used for a mount other than vehicle YAML's.
 
 Ground removal and vehicle exclusion operate in `base_link`, whose origin
 is at ground level. `ground_z_min` now means height above that origin,
-**not sensor-frame z**. Gazebo preserves its sensor-frame band by selecting
-`height_filter_frame=sensor`; its thresholds are not interchangeable with
-base-frame values.
+**not sensor-frame z**. `height_filter_frame=sensor` cuts in the sensor frame
+instead; its thresholds are not interchangeable with base-frame values, and it
+is wrong for a flipped or pitched mount.
 Changing sensor roll, pitch, yaw, or height therefore changes visibility
 without changing the ground threshold. Each filtered scan is transformed into `map` at its own timestamp, including
 all three rotation axes, before clustering the accumulated points.
@@ -52,7 +52,7 @@ switch to `classified` when sides are on.
 
 | Parameter | Default | Meaning |
 | --- | --- | --- |
-| `sensor_transform_source` | `tf` | Scan-time mount TF; `vehicle_config` selects the level YAML mount |
+| `sensor_transform_source` | `tf` | Scan-time mount TF; `vehicle_config` selects the YAML mount, position and rotation |
 | `height_filter_frame` | `base_link` | Frame for the height band: `base_link` or `sensor` |
 | `ground_z_min` | `0.05` | Minimum height in the selected filter frame, metres |
 | `ground_z_max` | `0.55` | Maximum height in the selected filter frame, metres |

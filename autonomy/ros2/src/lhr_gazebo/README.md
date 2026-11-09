@@ -20,19 +20,23 @@ plant pose, single cloud ownership, classified planner input and side fallback.
 
 ## LiDAR coordinates
 
-Gazebo preserves main's level LiDAR mount at z=0.55 m and its generated
-cloud frame. The detector reads that mount from vehicle YAML rather than
-requiring a new static TF. Its height band stays in the sensor frame.
-The kinematic demo uses scan-time TF and base-frame heights by default;
-Gazebo keeps the values below for either cloud source.
+The LiDAR sits where vehicle YAML puts it: the 11/8 study's design mount,
+just inside the main hoop at `base_link` (0.609, 0, 1.06), upside down and 7°
+nose down ([mount study](../../../testing/2026-11-08-lidar-mount-study/README.md)).
+The GPU sensor in the generated model and the Mid-360 caster both use that pose.
+The detector reads it, position and rotation, from vehicle YAML rather than
+requiring a static TF, and cuts height in `base_link` at ground level: the
+sensor's own z is not height when it is flipped and pitched. The kinematic
+demo uses scan-time TF and base-frame heights too. The values below apply to
+either cloud source.
 
-These LiDAR-only arguments preserve Gazebo's existing values and are typed
-before node startup. They have no effect in `perception:=sim`.
+These LiDAR-only arguments are typed before node startup. They have no effect
+in `perception:=sim`.
 
 | Argument | Default |
 | --- | --- |
-| `lidar_ground_z_min` | `-0.40` |
-| `lidar_ground_z_max` | `0.5` |
+| `lidar_ground_z_min` | `0.15` (launch refuses less for a moved Mid-360) |
+| `lidar_ground_z_max` | `1.05` |
 | `lidar_min_cluster_points` | `1` |
 | `lidar_dedup_radius` | `1.5` |
 | `lidar_max_cluster_points` | `50` |
@@ -40,13 +44,12 @@ before node startup. They have no effect in `perception:=sim`.
 | `lidar_stack_max_frames` | `10` |
 | `lidar_transform_wait_sec` | `0.5` |
 | `lidar_sensor_transform_source` | `vehicle_config` |
-| `lidar_height_filter_frame` | `sensor` |
+| `lidar_height_filter_frame` | `base_link` |
 
 For example, `perception:=lidar lidar_min_cluster_points:=2` overrides the
-cluster threshold. A pitched mount requires `lidar_sensor_transform_source:=tf`
-and a published scan-time mount transform; select `lidar_height_filter_frame:=base_link`
-when using ground-relative thresholds. These opt-in configurations need
-Gazebo acceptance testing before changing defaults.
+cluster threshold. A mount other than vehicle YAML's requires
+`lidar_sensor_transform_source:=tf` and a published scan-time mount transform,
+which the Mid-360 caster provides.
 
 The default `lidar_source:=gazebo` retains main's repeating VLP-16-style grid:
 1800 × 16 rays at 10 Hz, 360° horizontal and −15° to +15° vertical coverage,
@@ -243,8 +246,8 @@ The following typed startup arguments affect only `lidar_source:=mid360`:
 | `mid360_dropout_rate` | `0.0` |
 | `mid360_elevation_profile` | `livox` (`rosette` / `uniform` are approximations) |
 | `mid360_return_profile` | `baseline` (`acceptance_overcast` is an empirical profile) |
-| `mid360_mount_x_m`, `_y_m`, `_z_m` | vehicle YAML, currently `(1.8, 0, 0.55)` m in `base_link` |
-| `mid360_mount_roll_rad`, `_pitch_rad`, `_yaw_rad` | `0.0`; roll π is upside down, positive pitch is nose down |
+| `mid360_mount_x_m`, `_y_m`, `_z_m` | vehicle YAML, currently `(0.609, 0, 1.06)` m in `base_link` |
+| `mid360_mount_roll_rad`, `_pitch_rad`, `_yaw_rad` | vehicle YAML, currently `(π, 0.1222, 0)`: upside down, 7° nose down |
 
 For example, `mid360_range_noise_std_m:=0 mid360_max_range_m:=30` starts the
 caster with ideal ranges limited to 30 m. The noise default shares the GPU
@@ -253,28 +256,25 @@ still requires model regeneration. Record the source and effective settings
 with comparison results; the generic `max_range_m` controls `sensor_sim`, not
 the caster. These modes do not share a physical accuracy guarantee.
 
-A mount other than the vehicle YAML one only starts if the detector reads it:
-`lidar_sensor_transform_source:=tf lidar_height_filter_frame:=base_link` and a
-`lidar_ground_z_min` of at least 0.15 m. The detector's defaults place the cloud
-at the vehicle YAML mount, unrotated, and cut height in the sensor frame, so a
-flipped or pitched cloud would land in the wrong place with no error. Use
-`lidar_ground_z_min:=0.15 lidar_ground_z_max:=1.05`, the band the default
-sensor-frame cut gives at the default mount. A cut at 0.05 m lets range noise
-on the many ground returns near the car through, and with one point per
-cluster each becomes a cone, which is why launch refuses a lower cut. Upside
-down at 7° nose down, just inside the main hoop:
+A Mid-360 mount other than the vehicle YAML one only starts if the detector
+reads it from tf: `lidar_sensor_transform_source:=tf`, with
+`lidar_height_filter_frame:=base_link` and a `lidar_ground_z_min` of at least
+0.15 m (both defaults). With `vehicle_config` the detector places the cloud at
+the vehicle YAML mount, so a moved caster's cloud would land in the wrong place
+with no error. A cut at 0.05 m lets range noise on the many ground returns near
+the car through, and with one point per cluster each becomes a cone, which is
+why launch refuses a lower cut. The old sim mount, upright and level in the nose:
 
 ```bash
 ros2 launch lhr_gazebo gazebo_demo.launch.py perception:=lidar lidar_source:=mid360 \
-  mid360_mount_x_m:=0.609 mid360_mount_z_m:=1.06 \
-  mid360_mount_roll_rad:=3.14159 mid360_mount_pitch_rad:=0.1222 \
-  lidar_sensor_transform_source:=tf lidar_height_filter_frame:=base_link \
-  lidar_ground_z_min:=0.15 lidar_ground_z_max:=1.05
+  mid360_mount_x_m:=1.8 mid360_mount_z_m:=0.55 \
+  mid360_mount_roll_rad:=0 mid360_mount_pitch_rad:=0 \
+  lidar_sensor_transform_source:=tf
 ```
 
-These arguments are for the mount study. The measured mount goes in
-`vehicle.yaml`. The caster does not model the car's own body, so a mount behind
-the nose sees the near field the real car hides.
+These arguments are for mount studies. The as-built mount goes in
+`vehicle.yaml` once the bracket exists. The caster does not model the car's own
+body, so a mount behind the nose sees the near field the real car hides.
 
 World mode exposes no motion-distortion or clutter launch controls: scans are
 snapshots with no synthetic clutter. The internal world path follows `world`; the

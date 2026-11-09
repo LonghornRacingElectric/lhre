@@ -9,8 +9,9 @@ Where on Orion should the Livox Mid-360 go, and at what angle?
 Just inside the main hoop and a little forward, **upside down, pitched
 7° nose down**, on a bracket that adjusts from 4 to 10° in 1° steps.
 
-- **The hoop is the only feasible mount** (Gray, 11/8). The sim's mount at
-  `base_link` (1.8, 0, 0.55) is inside the nose.
+- **The hoop is the only feasible mount** (Gray, 11/8). The sim's old mount at
+  `base_link` (1.8, 0, 0.55) was inside the nose. `vehicle.yaml` now holds this
+  design mount, `ASSUMED` until the bracket is built and measured.
 - **Upside down** keeps the ground beside and just ahead of the car in view.
   The densest band of beams then points just below the horizon, ahead of the
   car. The team picked this over an upright mount tipped down.
@@ -19,7 +20,7 @@ Just inside the main hoop and a little forward, **upside down, pitched
   cut off far cones. A ±1° change in body pitch moves the band 12 to 22 m at
   7°, but 15 to 39 m at 6°.
 - **Sim A/B:** every mount passes the gate 6 of 6 with no false cones. 6 and
-  7° map cones equally early, as early as today's nose mount: about two thirds
+  7° map cones equally early, as early as the old nose mount: about two thirds
   of autocross cones by 12 m past the nose. 8° maps them about 3 m later, only
   a quarter by 12 m. The sim has no body pitch, which is where 7° beats 6°.
 
@@ -107,7 +108,7 @@ depend on the choice.
 The full Gazebo stack (Mid-360 caster, camera fusion, EKF, safety) ran the
 rules-compliant autocross seeds 1 to 5 and one acceleration run per mount. The
 Mid-360 sits at `base_link` (0.609, 0, 1.06), upside down, pitched 6, 7 or 8°
-nose down. The control is today's sim mount in the nose. `detection_range.py`
+nose down. The control is the sim's old mount in the nose. `detection_range.py`
 measures how far past the nose each cone first enters the detector's map.
 
 | Mount | Gate | Lap / reference | Max CTE (m) | Cones hit | False cones | First mapped, median past the nose (m) | Mapped by 12 m past the nose, autocross |
@@ -115,7 +116,7 @@ measures how far past the nose each cone first enters the detector's map.
 | Upside down, 6° | 6 of 6 | 0.99 to 1.00 | 0.51 to 0.59 | 0 | 0 | 12.2 to 16.2 | 67% (51 to 83%) |
 | **Upside down, 7°** | **6 of 6** | **0.99 to 1.00** | **0.51 to 0.57** | **0** | **0** | **12.3 to 15.9** | **68% (51 to 86%)** |
 | Upside down, 8° | 6 of 6 | 0.99 to 1.00 | 0.50 to 0.59 | 0 | 0 | 10.0 to 12.3 | 27% (21 to 30%) |
-| Nose (today's sim) | 6 of 6 | 0.99 to 1.00 | 0.50 to 0.58 | 0 | 0 | 11.6 to 16.2 | 65% (49 to 80%) |
+| Nose (old sim mount) | 6 of 6 | 0.99 to 1.00 | 0.50 to 0.58 | 0 | 0 | 11.6 to 16.2 | 65% (49 to 80%) |
 
 Ranges are over each arm's runs; CTE over its five autocross laps. Per-run
 rows: [detection_range.csv](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/testing/2026-11-08-lidar-mount-study/detection_range.csv).
@@ -135,7 +136,7 @@ The scorer finds 123 on the discarded 0.05 m run below, so 0 is a real result.
 - **8° loses range** because it tips the far field onto the sparse bottom
   edge of the scan. At 15 m past the nose a cone gets 0.56 beams per frame
   at 8°, against about 1 at 6 or 7° (pitch sweep).
-- **The hoop matches today's nose mount in the median** at 6 or 7°. Its
+- **The hoop matches the old nose mount in the median** at 6 or 7°. Its
   latest cones on seed 3's tight corners come about 2 m later, from 1.2 m
   farther back, and the sim does not model the nose blocking the near field,
   so the real car is no better there.
