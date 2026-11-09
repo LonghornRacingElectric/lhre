@@ -7,6 +7,11 @@ daemon.
 
 ## Image sets
 
+The [storage pilot](storage_pilot/README.md) has a separate `:images` /
+`:load_images` pair under `//apps/telemetry/storage_pilot`. Its pinned PostgreSQL
+17.7 and TimescaleDB 2.24.0 images are deliberately outside the core/optional
+aggregates; running the normal telemetry stack does not start the experiment.
+
 The core is the minimum path that can receive, transport, enrich, persist, and
 display telemetry:
 

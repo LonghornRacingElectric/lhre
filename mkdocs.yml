@@ -157,6 +157,8 @@ plugins:
         - "bazel-*/**" # convenience symlinks into the output base
         - "site/**" # mkdocs build output
         - "external/**" # third-party staging
+        - "**/node_modules/**" # installed frontend dependencies
+        - "**/.next/**" # generated viewer build output
         - "patches/**"
         - "autonomy/ros2/build/**" # colcon outputs on dev machines
         - "autonomy/ros2/install/**"

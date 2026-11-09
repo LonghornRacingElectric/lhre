@@ -1,0 +1,10 @@
+apiVersion: 1
+providers:
+  - name: Telemetry storage pilot
+    orgId: 1
+    folder: Telemetry pilot
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards

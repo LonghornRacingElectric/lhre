@@ -5,6 +5,10 @@ and the Next.js viewer. Server containers are built with Bazel; the complete
 target reference and the build/load distinction are in
 [BAZEL_BUILD.md](BAZEL_BUILD.md).
 
+The isolated [storage pilot](storage_pilot/README.md) generates mixed-rate dummy
+observations, stores them in PostgreSQL/TimescaleDB, and plots them in Grafana.
+It includes a three-way benchmark and does not change the live ingest path.
+
 ## Running the server
 
 Copy the repository-root `.env.example` to `.env` and replace its local-only

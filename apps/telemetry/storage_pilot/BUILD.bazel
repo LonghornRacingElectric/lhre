@@ -1,0 +1,104 @@
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
+load("//apps/telemetry:compatibility.bzl", "NOT_WINDOWS")
+load("//apps/telemetry:container.bzl", "telemetry_service_image", "telemetry_upstream_image")
+
+package(default_visibility = ["//visibility:public"])
+
+py_library(
+    name = "workload_lib",
+    srcs = ["workload.py"],
+    imports = ["."],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_library(
+    name = "storage_lib",
+    srcs = ["storage.py"],
+    data = [
+        "measurements.sql",
+        "metadata.sql",
+        "postgres.sql",
+        "timescale.sql",
+        "//apps/telemetry/stack/ingest:db_init_scripts",
+    ],
+    deps = [":workload_lib", requirement("psycopg2-binary")],
+    imports = ["."],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_binary(
+    name = "pilot_binary",
+    srcs = ["pilot.py"],
+    main = "pilot.py",
+    deps = [":storage_lib"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_test(
+    name = "workload_test",
+    srcs = ["test_workload.py"],
+    main = "test_workload.py",
+    deps = [":workload_lib"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_test(
+    name = "report_test",
+    srcs = ["pilot.py", "test_pilot.py"],
+    main = "test_pilot.py",
+    deps = [":storage_lib"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_test(
+    name = "storage_integration_test",
+    srcs = ["test_storage_integration.py"],
+    main = "test_storage_integration.py",
+    deps = [":storage_lib"],
+    tags = ["manual", "local", "integration"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+telemetry_upstream_image(
+    name = "postgres17",
+    image = "@pilot_postgres17_linux_amd64",
+    repo_tags = ["lhre/pilot-postgres:17.7"],
+    executable = "/usr/local/bin/postgres",
+)
+
+telemetry_upstream_image(
+    name = "timescale",
+    image = "@pilot_timescale_linux_amd64",
+    repo_tags = ["lhre/pilot-timescale:2.24.0-pg17"],
+    executable = "/usr/local/bin/postgres",
+)
+
+telemetry_service_image(
+    name = "pilot",
+    binary = ":pilot_binary",
+    base = "@python312_linux_amd64",
+    repo_tags = ["lhre/telemetry-storage-pilot:dev"],
+    repository = "ghcr.io/longhornracingelectric/telemetry-storage-pilot",
+    env = {"PYTHONUNBUFFERED": "1"},
+)
+
+filegroup(
+    name = "images",
+    srcs = [":postgres17_image", ":timescale_image", ":pilot_image", "//apps/telemetry:grafana_image"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+sh_binary(
+    name = "load_images",
+    srcs = ["//apps/telemetry:load_images.sh"],
+    args = [
+        "$(rootpath :postgres17_load)",
+        "$(rootpath :timescale_load)",
+        "$(rootpath :pilot_load)",
+        "$(rootpath //apps/telemetry:grafana_load)",
+    ],
+    data = [":postgres17_load", ":timescale_load", ":pilot_load", "//apps/telemetry:grafana_load"],
+    target_compatible_with = NOT_WINDOWS,
+)

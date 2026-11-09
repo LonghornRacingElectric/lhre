@@ -251,6 +251,18 @@ oci.pull(
     platforms = ["linux/amd64"],
 )
 oci.pull(
+    name = "pilot_postgres17",
+    digest = "sha256:bb377b7239d2774ac8cc76f481596ce96c5a6b5e9d141f6d0a0ee371a6e7c0f2",
+    image = "docker.io/library/postgres",
+    platforms = ["linux/amd64"],
+)
+oci.pull(
+    name = "pilot_timescale",
+    digest = "sha256:8ab414f7f73fd47dfa643097f1a753e2ac009c70fcb0de5717d0e79d21e7b7d6",
+    image = "docker.io/timescale/timescaledb",
+    platforms = ["linux/amd64"],
+)
+oci.pull(
     name = "telemetry_grafana",
     digest = "sha256:a0f881232a6fb71a0554a47d0fe2203b6888fe77f4cefb7ea62bed7eb54e13c3",
     image = "docker.io/grafana/grafana-oss",
@@ -258,6 +270,10 @@ oci.pull(
 )
 use_repo(
     oci,
+    "pilot_postgres17",
+    "pilot_postgres17_linux_amd64",
+    "pilot_timescale",
+    "pilot_timescale_linux_amd64",
     "python312",
     "python312_linux_amd64",
     "telemetry_grafana",

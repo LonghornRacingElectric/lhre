@@ -1,0 +1,29 @@
+apiVersion: 1
+datasources:
+  - name: Pilot PostgreSQL
+    uid: pilot-postgres
+    type: postgres
+    url: postgres:5432
+    user: pilot_reader
+    secureJsonData:
+      password: pilot_readonly
+    jsonData:
+      database: pilot
+      sslmode: disable
+      postgresVersion: 1700
+      timescaledb: false
+    editable: false
+  - name: Pilot TimescaleDB
+    uid: pilot-timescale
+    type: postgres
+    url: timescale:5432
+    user: pilot_reader
+    secureJsonData:
+      password: pilot_readonly
+    jsonData:
+      database: pilot
+      sslmode: disable
+      postgresVersion: 1700
+      timescaledb: true
+    isDefault: true
+    editable: false

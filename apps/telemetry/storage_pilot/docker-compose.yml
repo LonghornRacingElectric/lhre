@@ -1,0 +1,118 @@
+name: lhre-storage-pilot
+
+x-database: &database
+  platform: linux/amd64
+  environment: &database-environment
+    POSTGRES_USER: pilot
+    POSTGRES_PASSWORD: pilot_local
+    POSTGRES_DB: pilot
+    NO_TS_TUNE: "true"
+    TIMESCALEDB_TELEMETRY: "off"
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U pilot -d pilot"]
+    interval: 2s
+    timeout: 5s
+    retries: 30
+  shm_size: 256mb
+  mem_limit: 1g
+  cpus: 1
+  command: &database-command
+    - postgres
+    - -c
+    - shared_buffers=128MB
+    - -c
+    - max_connections=50
+    - -c
+    - synchronous_commit=on
+    - -c
+    - fsync=on
+    - -c
+    - full_page_writes=on
+
+x-pilot: &pilot
+  image: lhre/telemetry-storage-pilot:dev
+  platform: linux/amd64
+  environment:
+    PILOT_POSTGRES_DSN: host=postgres dbname=pilot user=pilot password=pilot_local
+    PILOT_TIMESCALE_DSN: host=timescale dbname=pilot user=pilot password=pilot_local
+    PILOT_SNAPSHOT_DSN: host=snapshot dbname=pilot user=pilot password=pilot_local
+
+services:
+  postgres:
+    <<: *database
+    image: lhre/pilot-postgres:17.7
+    ports: ["127.0.0.1:55432:5432"]
+    volumes: ["postgres-data:/var/lib/postgresql/data"]
+
+  timescale:
+    <<: *database
+    image: lhre/pilot-timescale:2.24.0-pg17
+    ports: ["127.0.0.1:55433:5432"]
+    volumes: ["timescale-data:/var/lib/postgresql/data"]
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - max_connections=50
+      - -c
+      - synchronous_commit=on
+      - -c
+      - fsync=on
+      - -c
+      - full_page_writes=on
+      - -c
+      - shared_preload_libraries=timescaledb
+
+  snapshot:
+    <<: *database
+    image: lhre/pilot-postgres:17.7
+    ports: ["127.0.0.1:55434:5432"]
+    volumes: ["snapshot-data:/var/lib/postgresql/data"]
+
+  setup:
+    <<: *pilot
+    command: ["init", "--target", "all"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      timescale: {condition: service_healthy}
+      snapshot: {condition: service_healthy}
+
+  sender:
+    <<: *pilot
+    profiles: ["demo"]
+    command: ["send", "--target", "both", "--seconds", "3600", "--realtime"]
+    depends_on:
+      setup: {condition: service_completed_successfully}
+
+  benchmark:
+    <<: *pilot
+    profiles: ["benchmark"]
+    command: ["benchmark", "--seconds", "300", "--repeats", "100"]
+    depends_on:
+      setup: {condition: service_completed_successfully}
+
+  grafana:
+    image: lhre/telemetry-grafana:11.3.0
+    platform: linux/amd64
+    ports: ["127.0.0.1:3301:3000"]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_DASHBOARDS_MIN_REFRESH_INTERVAL: 1s
+    volumes:
+      - ./grafana-datasources.yml:/etc/grafana/provisioning/datasources/pilot.yml:ro
+      - ./grafana-dashboards.yml:/etc/grafana/provisioning/dashboards/pilot.yml:ro
+      - ./dashboard.json:/var/lib/grafana/dashboards/pilot.json:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      setup: {condition: service_completed_successfully}
+
+volumes:
+  postgres-data:
+  timescale-data:
+  snapshot-data:
+  grafana-data:
