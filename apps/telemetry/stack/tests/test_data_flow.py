@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from telemetry.stack.tests.test_utils import TelemetryConfig, MQTTTestClient, KafkaTestClient, TestDataGenerator, wait_for_service, check_kafka_connection
 from stack.ingest.sensor_decode import CAR_MESSAGES
+from stack.ingest.protobuf import artemis_pb2 as artemis
 from telemetry.analysis.sql_utils.models import OrionPacket, OrionDynamics, ArtemisDynamics333hz
 
 
@@ -28,10 +29,16 @@ class TestDataFlow(unittest.TestCase):
         raise AssertionError("Kafka consumer did not receive an assignment")
 
     def _round_trip(self, car):
-        message = CAR_MESSAGES[car](time=int(time.time() * 1000), packet_id=time.time_ns() // 1000)
+        message = CAR_MESSAGES[car](time=int(time.time() * 1000))
+        if car == "Orion": message.packet_id=time.time_ns() // 1000
         message.dynamics.steer_col_angle = 1.25
         message.controls.apps1_v = 0
-        payload = message.SerializeToString()
+        if car == "Artemis":
+            payload = artemis.TelemetryBatch(format_version=1,updates=[artemis.TelemetryUpdate(sample_time_ns=message.time*1_000_000+1,values=message,updated_fields=[
+                artemis.FieldPath(group=3,field=message.dynamics.DESCRIPTOR.fields_by_name["steer_col_angle"].number),
+                artemis.FieldPath(group=4,field=message.controls.DESCRIPTOR.fields_by_name["apps1_v"].number),
+            ])]).SerializeToString()
+        else: payload = message.SerializeToString()
         raw_client = KafkaTestClient(self.config)
         grafana_client = KafkaTestClient(self.config)
         suffix = uuid.uuid4().hex
@@ -53,7 +60,7 @@ class TestDataFlow(unittest.TestCase):
                 for records in grafana.poll(timeout_ms=250).values():
                     for record in records:
                         value = json.loads(record.value)
-                        found_grafana |= value.get("packet_id") == message.packet_id and value.get("car_type") == car
+                        found_grafana |= value.get("time") == message.time and value.get("car_type") == car
             self.assertTrue(found_raw, f"{car} raw Kafka record missing")
             self.assertTrue(found_grafana, f"{car} Grafana Kafka record missing")
             if car == "Artemis":

@@ -59,9 +59,8 @@ No rates are guessed and mixed-unit GPS arrays have a null unit. CAN shared
 sources and repeated array slots appear once per protobuf field.
 
 External telemetry must declare an uplink limit; the four GPS fields declare
-50 Hz, matching publishd's default snapshot limit. This is a declared policy,
-not a measured acquisition rate or a per-signal limit currently enforced by
-publishd. The catalog exposes only `rate_hz`: the explicit uplink rate, otherwise
+50 Hz. Publishd applies that explicit per-field limit while preserving the
+newest pending receipt; CAN fields without a lower limit publish as received. The catalog exposes only `rate_hz`: the explicit uplink rate, otherwise
 the CAN message frequency. External signals have no native-frequency fallback;
 their rate is null when no uplink rate is declared. Numeric scalar
 external signals require explicit units; mixed-unit arrays may omit them.
@@ -72,7 +71,8 @@ Catalog serving tests: `npx vitest run tests/signals/catalog.test.ts`.
 
 `POST /api/query` reads Artemis's generated Timescale frequency pools using its
 published signal catalog. It returns raw JSON/CSV pages ordered by timestamp,
-recording session and signal. Its cursor has no packet identifier. Other car
+recording session, nanosecond receipt time and signal. Its cursor has no packet
+identifier; `sample_time_ns` is a decimal string in JSON/CSV. Other car
 names are rejected; Orion's existing telemetry readers remain separate legacy
 integration paths. The gateway does not migrate or reconcile databases.
 

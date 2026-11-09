@@ -177,9 +177,9 @@ export function findSessionForTimestamp(ms: number): TracksideSessionInfo | null
   return findSessionForTimestampIn(loadSessionRegistry(), ms);
 }
 
-/** Parse the loggerd start epoch (ms) from a CSV name like `orion_1717612345678.csv`. */
+/** Parse the loggerd start epoch (ms) from a CSV name like `artemis_1717612345678_controls_333hz.csv`. */
 export function parseLogStartMs(fileName: string): number | null {
-  const m = fileName.match(/_(\d{10,13})\./);
+  const m = fileName.match(/_(\d{10,13})(?:_[a-z][a-z0-9_]*)?\./);
   if (!m) return null;
   const n = Number(m[1]);
   if (!Number.isFinite(n)) return null;

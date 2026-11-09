@@ -12,8 +12,8 @@ from sqlalchemy.dialects.postgresql import insert
 from analysis.sql_utils.db_session import get_db
 from analysis.sql_utils.query_builder import QueryBuilder
 from stack.ingest.partition_manager import PartitionManager
-from stack.ingest.pool_storage import write_snapshots
-from stack.ingest.sensor_decode import CAR_MESSAGES, car_from_headers, decode_sensor, sensor_rows
+from stack.ingest.pool_storage import write_updates
+from stack.ingest.sensor_decode import CAR_MESSAGES, car_from_headers, decode_sensor, decode_updates, payload_format, sensor_rows
 
 
 def write_batch(records, models, specs):
@@ -21,15 +21,16 @@ def write_batch(records, models, specs):
     artemis = []
     for record in records:
         car = car_from_headers(record.headers)
-        message = decode_sensor(record.value, car)
+        payload_format(record.headers, car)
         if car == "Artemis":
-            artemis.append(message)
+            artemis.extend(decode_updates(record.value))
             continue
+        message = decode_sensor(record.value, car)
         rows = sensor_rows(message, models[car])
         packets[car].setdefault(rows["packet"]["packet_id"], rows)
     if artemis:
         with get_db("Artemis") as session, session.begin():
-            write_snapshots(session, artemis)
+            write_updates(session, artemis)
     for car, rows_by_id in packets.items():
         with get_db(car) as session, session.begin():
             packet = models[car]["packet"].__table__

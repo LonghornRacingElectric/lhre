@@ -19,11 +19,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 type SensorMessage struct {
 	Payload []byte
 	CarType string
+	Format  string
 }
 
 var (
@@ -39,10 +41,25 @@ func (s *bridgeServer) SendSensorData(ctx context.Context, req *pb.SensorDataReq
 	if req.CarType != "Orion" && req.CarType != "Artemis" {
 		return &pb.SensorDataResponse{Success: false, Message: "unsupported car type"}, nil
 	}
+	if req.CarType == "Artemis" && req.PayloadFormat != "artemis_updates_v1" {
+		return &pb.SensorDataResponse{Success: false, Message: "Artemis requires artemis_updates_v1"}, nil
+	}
+	if req.CarType == "Artemis" {
+		if _, err := nativeSnapshot(req.Payload, &artemis.ArtemisSensorData{}, map[string]int64{}); err != nil {
+			return &pb.SensorDataResponse{Success: false, Message: err.Error()}, nil
+		}
+	}
+	if req.CarType == "Orion" && req.PayloadFormat == "" {
+		req.PayloadFormat = "snapshot_v1"
+	}
+	if req.CarType == "Orion" && req.PayloadFormat != "snapshot_v1" {
+		return &pb.SensorDataResponse{Success: false, Message: "invalid Orion format"}, nil
+	}
 	log.Printf("Received SensorDataRequest: CarType=%s, PayloadSize=%d", req.CarType, len(req.Payload))
 	msg := SensorMessage{
 		Payload: req.Payload,
 		CarType: req.CarType,
+		Format:  req.PayloadFormat,
 	}
 
 	// A successful RPC means Kafka acknowledged the raw packet. The client may
@@ -50,7 +67,7 @@ func (s *bridgeServer) SendSensorData(ctx context.Context, req *pb.SensorDataReq
 	_, _, err := s.producer.SendMessage(&sarama.ProducerMessage{
 		Topic:   "sensor_data",
 		Value:   sarama.ByteEncoder(msg.Payload),
-		Headers: []sarama.RecordHeader{{Key: []byte("car_type"), Value: []byte(msg.CarType)}},
+		Headers: []sarama.RecordHeader{{Key: []byte("car_type"), Value: []byte(msg.CarType)}, {Key: []byte("payload_format"), Value: []byte(msg.Format)}},
 	})
 	if err != nil {
 		return &pb.SensorDataResponse{Success: false, Message: err.Error()}, nil
@@ -195,7 +212,9 @@ func defaultSeedMap(carType string) map[string]interface{} {
 		return nil
 	}
 	m["time"] = time.Now().UnixMilli()
-	m["packet_id"] = 0
+	if strings.EqualFold(carType, "orion") {
+		m["packet_id"] = 0
+	}
 	m["car_type"] = carType
 	return m
 }
@@ -225,8 +244,22 @@ func seedTopic(producer sarama.SyncProducer, topic, carType string) {
 
 // grafanaDataWorker deserializes protobuf and publishes JSON to car-specific grafana_data topics
 func grafanaDataWorker(producer sarama.SyncProducer) {
+	state := &artemis.ArtemisSensorData{}
+	clocks := map[string]int64{}
 	for msg := range grafanaDataChan {
-		jsonData, err := deserializeToJSON(msg.Payload, msg.CarType)
+		var jsonData []byte
+		var err error
+		if msg.CarType == "Artemis" {
+			var snapshot *artemis.ArtemisSensorData
+			snapshot, err = nativeSnapshot(msg.Payload, state, clocks)
+			if err == nil {
+				data := artemisToMap(snapshot)
+				data["car_type"] = "Artemis"
+				jsonData, err = json.Marshal(data)
+			}
+		} else {
+			jsonData, err = deserializeToJSON(msg.Payload, msg.CarType)
+		}
 		if err != nil {
 			log.Printf("Error deserializing protobuf for car %s: %v", msg.CarType, err)
 			continue
@@ -254,6 +287,55 @@ func grafanaDataWorker(producer sarama.SyncProducer) {
 			log.Printf("Successfully sent message to topic %s (partition: %d, offset: %d)", topic, partition, offset)
 		}
 	}
+}
+
+// Copy only observed fields, including protobuf defaults and empty lists.
+func nativeSnapshot(payload []byte, state *artemis.ArtemisSensorData, clocks map[string]int64) (*artemis.ArtemisSensorData, error) {
+	batch := &artemis.TelemetryBatch{}
+	if err := proto.Unmarshal(payload, batch); err != nil {
+		return nil, err
+	}
+	if batch.FormatVersion != 1 || len(batch.Updates) == 0 || len(batch.Updates) > 64 {
+		return nil, fmt.Errorf("invalid Artemis batch")
+	}
+	for _, update := range batch.Updates {
+		if update.Values == nil || update.SampleTimeNs <= 0 || update.Values.Time != update.SampleTimeNs/1000000 || len(update.UpdatedFields) == 0 {
+			return nil, fmt.Errorf("invalid Artemis timestamp or presence")
+		}
+		root := update.Values.ProtoReflect()
+		seen := map[string]bool{}
+		for _, path := range update.UpdatedFields {
+			group := root.Descriptor().Fields().ByNumber(protoreflect.FieldNumber(path.Group))
+			if group == nil || group.Message() == nil || !root.Has(group) {
+				return nil, fmt.Errorf("invalid Artemis group")
+			}
+			field := group.Message().Fields().ByNumber(protoreflect.FieldNumber(path.Field))
+			key := fmt.Sprintf("%d.%d", path.Group, path.Field)
+			if field == nil || seen[key] {
+				return nil, fmt.Errorf("invalid Artemis field")
+			}
+			seen[key] = true
+			if update.SampleTimeNs >= clocks[key] {
+				target := state.ProtoReflect().Mutable(group).Message()
+				value := root.Get(group).Message().Get(field)
+				if field.IsList() {
+					list := target.Mutable(field).List()
+					list.Truncate(0)
+					source := value.List()
+					for i := 0; i < source.Len(); i++ {
+						list.Append(source.Get(i))
+					}
+				} else {
+					target.Set(field, value)
+				}
+				clocks[key] = update.SampleTimeNs
+			}
+		}
+		if update.Values.Time > state.Time {
+			state.Time = update.Values.Time
+		}
+	}
+	return state, nil
 }
 
 func deserializeToJSON(payload []byte, carType string) ([]byte, error) {

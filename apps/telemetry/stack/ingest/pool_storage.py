@@ -7,7 +7,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from lib.codegen.telemetry.artemis_models import POOLS, STORAGE_ID
 from analysis.sql_utils.models import (ARTEMIS_MODELS, ArtemisGpsPrecise, ArtemisRecordingSession,
-                                       ArtemisTransportState, ArtemisStorageMigration)
+                                       ArtemisStorageMigration)
 
 
 POOL_MODELS = {model.__tablename__: model for model in ARTEMIS_MODELS.values()
@@ -49,29 +49,35 @@ def assign_sessions(session, times):
 
 
 def insert_rows(session, table, rows):
-    """Identical replay succeeds; differing values at one sample time fail closed."""
+    """Merge disjoint fields; reject conflicting replay atomically."""
+    keys = ("session_start_ms", "time", "sample_time_ns")
     unique = {}
     for row in rows:
-        key = (row["session_start_ms"], row["time"])
-        if key in unique and unique[key] != row:
-            raise ValueError(f"Conflicting {table.name} samples at {key}")
-        unique[key] = row
+        key = tuple(row[name] for name in keys)
+        merged = unique.setdefault(key, {})
+        for name, value in row.items():
+            if value is None:
+                continue
+            if name in merged and merged[name] != value:
+                raise ValueError(f"Conflicting {table.name} samples at {key}")
+            merged[name] = value
     if not unique:
         return
-    # Equal column sets allow one executemany-shaped statement for each pool.
     names = sorted({name for row in unique.values() for name in row})
     values = [{name: row.get(name) for name in names} for row in unique.values()]
     statement = insert(table).values(values)
-    equal = and_(*(table.c[name].is_not_distinct_from(statement.excluded[name]) for name in names))
+    fields = [name for name in names if name not in keys]
+    equal = and_(*(table.c[name].is_(None) | statement.excluded[name].is_(None) |
+                   table.c[name].is_not_distinct_from(statement.excluded[name]) for name in fields))
     admitted = session.execute(statement.on_conflict_do_update(
-        index_elements=[table.c.session_start_ms, table.c.time],
-        set_={"time": statement.excluded.time}, where=equal,
+        index_elements=[table.c[name] for name in keys],
+        set_={name: func.coalesce(statement.excluded[name], table.c[name]) for name in fields}, where=equal,
     ).returning(table.c.time)).all()
     if len(admitted) != len(values):
         raise ValueError(f"Conflicting stored {table.name} sample; batch rolled back")
 
 
-def write_snapshots(session, messages):
+def write_updates(session, messages):
     require_schema(session)
     sessions = assign_sessions(session, [int(message["time"]) for message in messages])
     jobs = defaultdict(list)
@@ -81,14 +87,13 @@ def write_snapshots(session, messages):
             source = message.get(pool["group"])
             if source is None:
                 continue
-            row = {field["name"]: source.get(field["name"]) for field in pool["fields"]}
-            row.update(time=stamp, session_start_ms=sessions[stamp])
+            row = {field["name"]: source[field["name"]] for field in pool["fields"] if field["name"] in source}
+            if not row:
+                continue
+            row.update(time=stamp, sample_time_ns=int(message["sample_time_ns"]), session_start_ms=sessions[stamp])
             jobs[pool["table"]].append(row)
     for name, rows in jobs.items():
         insert_rows(session, POOL_MODELS[name].__table__, rows)
-    if messages:
-        session.execute(update(ArtemisTransportState).where(ArtemisTransportState.singleton).values(
-            last_packet_id=func.greatest(ArtemisTransportState.last_packet_id, max(int(m.get("packet_id", 0)) for m in messages))))
 
 
 def write_gps(session, rows):
@@ -96,5 +101,5 @@ def write_gps(session, rows):
     sessions = assign_sessions(session, [int(row["time"]) for row in rows])
     columns = ArtemisGpsPrecise.__table__.columns
     values = [{**{name: row.get(name) for name in columns.keys() if name != "session_start_ms"},
-               "session_start_ms": sessions[int(row["time"])], "time": int(row["time"])} for row in rows]
+               "session_start_ms": sessions[int(row["time"])], "time": int(row["time"]), "sample_time_ns": int(row.get("sample_time_ns", int(row["time"]) * 1_000_000))} for row in rows]
     insert_rows(session, ArtemisGpsPrecise.__table__, values)

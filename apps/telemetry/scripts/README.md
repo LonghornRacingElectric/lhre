@@ -43,3 +43,7 @@ Deploy order: build schema and server images, apply additions, then restart the
 existing Kafka database writer and viewer. The writer checks its generated
 storage hash before writing and leaves Kafka offsets uncommitted if the schema
 has not been applied. Reapplying a matching schema preserves all measurements.
+
+The native-update layout requires the three-column raw primary key
+`(session_start_ms, time, sample_time_ns)`. This command refuses older keys;
+initialize a fresh Artemis database instead of rewriting existing history.

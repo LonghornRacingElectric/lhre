@@ -1,25 +1,15 @@
 use anyhow::Result;
 use prost::Message;
+use sensor_proto::native::{self, TelemetryUpdate};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::fs::{File, OpenOptions};
-use std::io::Read;
-use std::io::BufWriter;
-use std::io::Write;
+use std::io::{BufWriter, Write};
 use std::os::unix::net::UnixStream;
-use std::path::PathBuf;
-use std::sync::mpsc::{self, SyncSender, TrySendError};
+use std::path::{Path, PathBuf};
+use std::sync::mpsc;
 use std::thread;
-use std::time::SystemTime;
-use std::time::Duration;
-
-use sensor_proto::proto::orion::OrionSensorData;
-
-const SOCKET_PATH: &str = "/tmp/BEVO_cand.sock";
-const DEFAULT_LOG_DIR: &str = "apps/BEVO/loggerd/logs";
-const LOGGER_ENABLED: bool = true;
-const LOGGER_QUEUE_CAPACITY: usize = 4096;
-const LOGGER_FLUSH_EVERY_ROWS: usize = 100;
+use std::time::{Duration, Instant};
 
 struct CsvLogger {
     writer: BufWriter<File>,
@@ -27,85 +17,140 @@ struct CsvLogger {
     rows_since_flush: usize,
 }
 
+fn pool_headers(pool: &str) -> Vec<String> {
+    let mut columns = Vec::new();
+    for field in native::FIELDS.iter().filter(|f| f.pool == pool) {
+        let name = format!("{}.{}", field.group_name, field.name);
+        if field.repeated {
+            columns.extend((0..field.length).map(|i| format!("{name}[{i}]")));
+        } else {
+            columns.push(name);
+        }
+    }
+    columns.sort_by(|a, b| natural_cmp(a, b));
+    let mut headers = vec![
+        "time".into(),
+        "sample_time_ns".into(),
+        "updated_fields".into(),
+    ];
+    headers.extend(columns);
+    headers
+}
+
 impl CsvLogger {
-    fn new(csv_path: String) -> Result<Self> {
-        let headers = canonical_csv_headers();
-        let file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(&csv_path)?;
-        let mut writer = BufWriter::new(file);
-
-        // Pre-populate the header from the full proto schema rather than the
-        // first-seen row. Without this, if the first packet has any nested
-        // sub-message as None, flatten_json_value emits a bare top-level key
-        // (e.g. "pack") instead of the per-field keys (e.g. "pack.hv_pack_v")
-        // that later populated packets produce. The header would lock to the
-        // bare form and silently drop every nested value thereafter.
-        write_csv_record(&mut writer, headers.iter().map(|s| s.as_str()))?;
-
+    fn new(path: &Path, pool: &str) -> Result<Self> {
+        let headers = pool_headers(pool);
+        let mut writer =
+            BufWriter::new(OpenOptions::new().write(true).create_new(true).open(path)?);
+        write_csv_record(&mut writer, headers.iter().map(String::as_str))?;
         Ok(Self {
             writer,
             headers,
             rows_since_flush: 0,
         })
     }
-
-    fn log_message(&mut self, data: &OrionSensorData) -> Result<()> {
-        let value = serde_json::to_value(data)?;
-        let mut row = BTreeMap::new();
-        flatten_json_value("", &value, &mut row);
-
-        let values = self
-            .headers
-            .iter()
-            .map(|header| row.get(header).map_or("", String::as_str));
-        write_csv_record(&mut self.writer, values)?;
-
+    fn row(&mut self, row: &BTreeMap<String, String>) -> Result<()> {
+        write_csv_record(
+            &mut self.writer,
+            self.headers
+                .iter()
+                .map(|key| row.get(key).map_or("", String::as_str)),
+        )?;
         self.rows_since_flush += 1;
-        if self.rows_since_flush >= LOGGER_FLUSH_EVERY_ROWS {
-            self.writer.flush()?;
-            self.rows_since_flush = 0;
+        if self.rows_since_flush >= 100 {
+            self.flush()?;
         }
-
+        Ok(())
+    }
+    fn flush(&mut self) -> Result<()> {
+        self.writer.flush()?;
+        self.rows_since_flush = 0;
         Ok(())
     }
 }
 
-/// Resolve the BEVO workspace root the same way the rest of the daemon does:
-/// the Bazel-provided workspace dir if present, else the current directory.
-fn workspace_root() -> PathBuf {
-    std::env::var("BUILD_WORKSPACE_DIRECTORY")
-        .ok()
+fn rows(update: &TelemetryUpdate) -> Result<BTreeMap<&'static str, BTreeMap<String, String>>> {
+    let Some(values) = &update.values else {
+        return Ok(BTreeMap::new());
+    };
+    let value = serde_json::to_value(values)?;
+    let mut pools: BTreeMap<_, BTreeMap<String, String>> = BTreeMap::new();
+    let mut masks: BTreeMap<_, Vec<String>> = BTreeMap::new();
+    for path in &update.updated_fields {
+        let Some(field) = native::definition(path) else {
+            continue;
+        };
+        let name = format!("{}.{}", field.group_name, field.name);
+        if let Some(child) = value.get(field.group_name).and_then(|g| g.get(field.name)) {
+            flatten_json_value(&name, child, pools.entry(field.pool).or_default());
+            masks.entry(field.pool).or_default().push(name);
+        }
+    }
+    for (pool, row) in &mut pools {
+        row.insert("time".into(), values.time.to_string());
+        row.insert("sample_time_ns".into(), update.sample_time_ns.to_string());
+        row.insert(
+            "updated_fields".into(),
+            serde_json::to_string(&masks[pool])?,
+        );
+    }
+    Ok(pools)
+}
+
+fn main() -> Result<()> {
+    native::install_shutdown();
+    let dir = std::env::var("LOGGERD_LOG_DIR")
         .map(PathBuf::from)
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
-}
-
-fn canonical_csv_headers() -> Vec<String> {
-    order_headers(sensor_proto::config::CSV_HEADERS.iter().map(|name| name.to_string()).collect())
-}
-
-/// Order the CSV columns: `time` first, then `packet_id`, then every other
-/// column in natural (numeric-aware) order so indexed arrays read
-/// `pack.cells_v[0], [1], [2], ... [10], ... [100]` instead of lexical
-/// `[0], [1], [10], [100], [11]`.
-fn order_headers(mut keys: Vec<String>) -> Vec<String> {
-    const LEADING: [&str; 2] = ["time", "packet_id"];
-
-    // `time`, then `packet_id`, in that order, if present.
-    let mut ordered: Vec<String> = LEADING
-        .iter()
-        .filter(|&leading| keys.iter().any(|key| key == leading))
-        .map(|leading| (*leading).to_string())
-        .collect();
-
-    // Sort the remaining columns in place (no cloning) in natural order.
-    keys.retain(|key| !LEADING.contains(&key.as_str()));
-    keys.sort_by(|a, b| natural_cmp(a, b));
-
-    ordered.extend(keys);
-    ordered
+        .unwrap_or_else(|_| {
+            PathBuf::from(std::env::var("BUILD_WORKSPACE_DIRECTORY").unwrap_or_else(|_| ".".into()))
+                .join("apps/BEVO/loggerd/logs")
+        });
+    std::fs::create_dir_all(&dir)?;
+    let start = native::now_ns() / 1_000_000;
+    let (tx, rx) = mpsc::sync_channel::<TelemetryUpdate>(native::QUEUE_CAPACITY);
+    thread::spawn(move || loop {
+        match UnixStream::connect(native::LOGGER_SOCKET) {
+            Ok(mut stream) => {
+                while let Ok(bytes) = native::read_frame(&mut stream) {
+                    if let Ok(update) = TelemetryUpdate::decode(&bytes[..]) {
+                        if tx.send(update).is_err() {
+                            return;
+                        }
+                    }
+                }
+            }
+            Err(_) => thread::sleep(Duration::from_millis(200)),
+        }
+    });
+    let mut loggers = BTreeMap::new();
+    let mut flushed = Instant::now();
+    while !native::stopping() {
+        match rx.recv_timeout(Duration::from_secs(1).saturating_sub(flushed.elapsed())) {
+            Ok(update) => {
+                for (pool, row) in rows(&update)? {
+                    if !loggers.contains_key(pool) {
+                        loggers.insert(
+                            pool,
+                            CsvLogger::new(&dir.join(format!("artemis_{start}_{pool}.csv")), pool)?,
+                        );
+                    }
+                    loggers.get_mut(pool).unwrap().row(&row)?;
+                }
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+        }
+        if flushed.elapsed() >= Duration::from_secs(1) {
+            for logger in loggers.values_mut() {
+                logger.flush()?;
+            }
+            flushed = Instant::now();
+        }
+    }
+    for logger in loggers.values_mut() {
+        logger.flush()?;
+    }
+    Ok(())
 }
 
 /// Compare two strings treating runs of digits as numbers, so
@@ -134,7 +179,11 @@ fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
                     }
                 } else if a_digit != b_digit {
                     // digits sort before non-digit characters
-                    return if a_digit { Ordering::Less } else { Ordering::Greater };
+                    return if a_digit {
+                        Ordering::Less
+                    } else {
+                        Ordering::Greater
+                    };
                 } else {
                     match ca.cmp(&cb) {
                         Ordering::Equal => {
@@ -198,7 +247,10 @@ fn flatten_json_value(prefix: &str, value: &Value, output: &mut BTreeMap<String,
     }
 }
 
-fn write_csv_record<'a>(writer: &mut BufWriter<File>, fields: impl Iterator<Item = &'a str>) -> Result<()> {
+fn write_csv_record<'a>(
+    writer: &mut BufWriter<File>,
+    fields: impl Iterator<Item = &'a str>,
+) -> Result<()> {
     let mut first = true;
     for field in fields {
         if !first {
@@ -222,164 +274,36 @@ fn csv_escape(value: &str) -> String {
     format!("\"{}\"", escaped)
 }
 
-fn default_log_file_path() -> Result<String> {
-    // LOGGERD_LOG_DIR lets binary-bundle deployments (no repo checkout on the
-    // Pi) log somewhere real; without it, resolve relative to the workspace.
-    let mut log_dir_path = match std::env::var("LOGGERD_LOG_DIR") {
-        Ok(dir) => PathBuf::from(dir),
-        Err(_) => {
-            let mut path = workspace_root();
-            path.push(DEFAULT_LOG_DIR);
-            path
-        }
-    };
-    std::fs::create_dir_all(&log_dir_path)?;
-
-    let timestamp_ms = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or(Duration::from_secs(0))
-        .as_millis();
-    let file_name = format!("orion_{}.csv", timestamp_ms);
-    log_dir_path.push(file_name);
-
-    Ok(log_dir_path.to_string_lossy().to_string())
-}
-
-fn spawn_logger_thread(csv_path: String) -> Result<SyncSender<OrionSensorData>> {
-    let mut logger = CsvLogger::new(csv_path)?;
-    let (tx, rx) = mpsc::sync_channel::<OrionSensorData>(LOGGER_QUEUE_CAPACITY);
-
-    thread::spawn(move || {
-        while let Ok(data) = rx.recv() {
-            if let Err(error) = logger.log_message(&data) {
-                eprintln!("[LOGGERD] CSV write error: {error}");
-            }
-        }
-
-        if let Err(error) = logger.writer.flush() {
-            eprintln!("[LOGGERD] CSV flush error: {error}");
-        }
-    });
-
-    Ok(tx)
-}
-
-fn main() -> Result<()> {
-    if !LOGGER_ENABLED {
-        return Ok(());
-    }
-
-    let logger_tx = if LOGGER_ENABLED {
-        let csv_path = default_log_file_path()?;
-        Some(spawn_logger_thread(csv_path)?)
-    } else {
-        None
-    };
-
-    loop {
-        match UnixStream::connect(SOCKET_PATH) {
-            Ok(mut stream) => {
-                loop {
-                    let mut length_buffer = [0u8; 4];
-                    if stream.read_exact(&mut length_buffer).is_err() {
-                        break;
-                    }
-
-                    let message_length = u32::from_be_bytes(length_buffer) as usize;
-                    let mut message_buffer = vec![0u8; message_length];
-                    if let Err(e) = stream.read_exact(&mut message_buffer) {
-                        eprintln!("[LOGGERD] Read error: {}", e);
-                        break;
-                    }
-
-                    if !LOGGER_ENABLED {
-                        continue;
-                    }
-
-                    match OrionSensorData::decode(&message_buffer[..]) {
-                        Ok(data) => {
-                            if let Some(tx) = &logger_tx {
-                                match tx.try_send(data) {
-                                    Ok(_) => {}
-                                    Err(TrySendError::Full(_)) => {
-                                        eprintln!("[LOGGERD] Logger queue full; dropping frame");
-                                    }
-                                    Err(TrySendError::Disconnected(_)) => {
-                                        eprintln!("[LOGGERD] Logger queue disconnected");
-                                    }
-                                }
-                            }
-                        }
-                        Err(e) => eprintln!("[LOGGERD] Decode error: {}", e),
-                    }
-                }
-            }
-            Err(_) => {
-                thread::sleep(Duration::from_secs(2));
-            }
-        }
-    }
-}
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn headers() -> Vec<String> {
-        canonical_csv_headers()
-    }
-
-    fn indexed(headers: &[String], prefix: &str) -> Vec<usize> {
-        headers
+    #[test]
+    fn pool_rows_only_contain_updated_fields_and_keep_empty_arrays() {
+        let mut values = native::SensorData::default();
+        values.controls = Some(Default::default());
+        values.dynamics = Some(Default::default());
+        let paths = native::FIELDS
             .iter()
-            .filter_map(|h| h.strip_prefix(prefix))
-            .filter_map(|rest| rest.strip_suffix(']'))
-            .map(|n| n.parse::<usize>().expect("numeric index"))
-            .collect()
-    }
-
-    #[test]
-    fn time_is_first_column_then_packet_id() {
-        let headers = headers();
-        assert_eq!(headers[0], "time");
-        assert_eq!(headers[1], "packet_id");
-    }
-
-    #[test]
-    fn cells_v_sized_from_schema_and_ordered_numerically() {
-        let lengths: std::collections::HashMap<_, _> = sensor_proto::config::REPEATED_FIELDS.iter().copied().collect();
-        let cells = indexed(&headers(), "pack.cells_v[");
-        assert_eq!(cells, (0..lengths["cells_v"]).collect::<Vec<_>>());
-    }
-
-    #[test]
-    fn cells_temps_sized_from_schema() {
-        let lengths: std::collections::HashMap<_, _> = sensor_proto::config::REPEATED_FIELDS.iter().copied().collect();
-        let temps = indexed(&headers(), "pack.cells_temps[");
-        assert_eq!(temps, (0..lengths["cells_temps"]).collect::<Vec<_>>());
-    }
-
-    #[test]
-    fn gyro_columns_present() {
-        let headers = headers();
-        for gyro in ["fl_gyro", "fr_gyro", "bl_gyro", "br_gyro"] {
-            let key = format!("dynamics.{gyro}[0]");
-            assert!(headers.contains(&key), "missing column {key}");
-        }
-    }
-
-    #[test]
-    fn gps_precise_has_six_columns() {
-        assert_eq!(indexed(&headers(), "dynamics.gps_precise["), (0..6).collect::<Vec<_>>());
-    }
-
-    #[test]
-    fn natural_cmp_is_numeric_not_lexical() {
-        use std::cmp::Ordering;
-        assert_eq!(natural_cmp("x[2]", "x[10]"), Ordering::Less);
-        assert_eq!(natural_cmp("x[9]", "x[10]"), Ordering::Less);
-        assert_eq!(natural_cmp("x[99]", "x[100]"), Ordering::Less);
-        // lexical sort would (wrongly) put "[10]" before "[2]"
+            .filter(|f| f.name == "apps1_travel" || f.name == "gps_precise")
+            .map(|f| native::FieldPath {
+                group: f.group,
+                field: f.field,
+            })
+            .collect();
+        let sample = native::update(&values, 1_000_000_001, paths).unwrap();
+        let rows = rows(&sample).unwrap();
+        assert_eq!(rows.len(), 2);
+        let controls = rows
+            .values()
+            .find(|r| r.contains_key("controls.apps1_travel"))
+            .unwrap();
+        assert_eq!(controls["controls.apps1_travel"], "0.0");
+        assert!(!controls.contains_key("controls.enable"));
+        let gps = rows
+            .values()
+            .find(|r| r["updated_fields"].contains("gps_precise"))
+            .unwrap();
+        assert!(!gps.contains_key("dynamics.gps_precise[0]"));
+        assert_eq!(gps["sample_time_ns"], "1000000001");
     }
 }

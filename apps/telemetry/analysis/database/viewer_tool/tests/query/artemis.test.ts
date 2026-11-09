@@ -36,11 +36,11 @@ describe("Artemis pool reader", () => {
 
   it("merges unequal sample rates and resumes within a session/time sample", async () => {
     const query = vi.fn(async <T>(sql: string) => (sql.includes('"pack_1hz"') ? [
-      { time: "1005", session_start_ms: "2", "pack.cells_v": [3.7, 3.8] },
+      { time: "1005", sample_time_ns: "1005000000", session_start_ms: "2", "pack.cells_v": [3.7, 3.8] },
     ] : [
-      { time: "1000", session_start_ms: "2", "controls.apps1_travel": 0, "controls.enable": false },
-      { time: "1010", session_start_ms: "2", "controls.apps1_travel": 10 },
-      { time: "1010", session_start_ms: "10", "controls.apps1_travel": 20 },
+      { time: "1000", sample_time_ns: "1000000000", session_start_ms: "2", "controls.apps1_travel": 0, "controls.enable": false },
+      { time: "1010", sample_time_ns: "1010000000", session_start_ms: "2", "controls.apps1_travel": 10 },
+      { time: "1010", sample_time_ns: "1010000000", session_start_ms: "10", "controls.apps1_travel": 20 },
     ]) as T[]);
     const source = new ArtemisSource(() => ({ query }), () => contract);
     const selected = { ...plan, signals: [signal, { ...signal, signal: "controls.enable", value_type: "bool" },
@@ -54,8 +54,8 @@ describe("Artemis pool reader", () => {
 
   it("preserves empty arrays and skips SQL NULL arrays", async () => {
     const query = vi.fn(async <T>() => [
-      { time: "1000", session_start_ms: "2", "pack.cells_v": null },
-      { time: "1001", session_start_ms: "2", "pack.cells_v": [] },
+      { time: "1000", sample_time_ns: "1000000000", session_start_ms: "2", "pack.cells_v": null },
+      { time: "1001", sample_time_ns: "1001000000", session_start_ms: "2", "pack.cells_v": [] },
     ] as T[]);
     const rows = await new ArtemisSource(() => ({ query }), () => contract)
       .read({ ...plan, signals: [{ ...signal, signal: "pack.cells_v", group: "pack", repeated: true }] }, null, 100);

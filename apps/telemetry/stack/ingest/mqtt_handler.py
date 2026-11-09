@@ -19,7 +19,7 @@ sys.path.append(str(Path(__file__).parents[2]))
 
 from analysis.sql_utils.db_session import get_db, engine_orion
 from analysis.sql_utils.query_builder import QueryBuilder
-from analysis.sql_utils.models import OrionPacket, ArtemisTransportState, BaseOrion, ORION_MODELS
+from analysis.sql_utils.models import OrionPacket, BaseOrion, ORION_MODELS
 from stack.ingest.partition_manager import PartitionManager
 from stack.ingest.pool_storage import write_gps
 from stack.ingest.sensor_decode import decode_sensor, CAR_MESSAGES
@@ -203,7 +203,7 @@ class MQTTHandler:
                 if car == "Artemis":
                     gps = [row for table, row in jobs if table == "gps_precise"]
                     if len(gps) != len(jobs):
-                        raise ValueError("Orion measurements must enter through the Kafka pool writer")
+                        raise ValueError("Artemis measurements must enter through the Kafka pool writer")
                     write_gps(session_obj, gps)
                 else:
                     QueryBuilder.execute_insert(session_obj, jobs, self.table_specs[car], car, commit=False)
@@ -336,14 +336,12 @@ class MQTTHandler:
 
     def _client_connected(self, msg):
         identity = msg.payload.decode().strip().replace("_", "-").lower()
-        car = {"bevo-orion": "Orion", "bevo-artemis": "Artemis"}.get(identity)
+        car = {"bevo-orion": "Orion"}.get(identity)
         if car is None:
             return
         with get_db(car) as session:
             if car == "Orion":
                 latest = session.scalar(select(OrionPacket.packet_id).order_by(OrionPacket.packet_id.desc()).limit(1)) or 0
-            else:
-                latest = session.scalar(select(ArtemisTransportState.last_packet_id).where(ArtemisTransportState.singleton)) or 0
         self.bridge_queue.join()
         next_id = retained_packet_high_water(car, int(latest)) + 1
         self.client.publish("server-communication", json.dumps({"packet_id": next_id, "car_type": car}))
@@ -427,7 +425,7 @@ class MQTTHandler:
             try:
                 while not self._shutdown:
                     try:
-                        request = bridge_pb2.SensorDataRequest(payload=payload, car_type=car)
+                        request = bridge_pb2.SensorDataRequest(payload=payload, car_type=car, payload_format="artemis_updates_v1" if car == "Artemis" else "snapshot_v1")
                         response = self.bridge_stub.SendSensorData(request, timeout=10)
                         if not response.success:
                             raise RuntimeError(response.message)

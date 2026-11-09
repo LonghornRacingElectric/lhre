@@ -66,10 +66,9 @@ def schema_manifest(spec, car="Orion"):
     for _, message, signal, bit, telemetry in validator.telemetry_bindings(spec):
         bindings.setdefault((telemetry.group, telemetry.field), []).append((message, signal, bit, telemetry))
     external = {(group.name, field.name): field for group in groups.values() for field in group.external_field}
-    fields = [
-        {"path": [1], "names": ["time"], "type": "int64", "repeated": False, "unit": "ms", "layout": [], "enum": {}},
-        {"path": [2], "names": ["packet_id"], "type": "int64", "repeated": False, "unit": "", "layout": [], "enum": {}},
-    ]
+    fields = [{"path": [1], "names": ["time"], "type": "int64", "repeated": False, "unit": "ms", "layout": [], "enum": {}}]
+    if car != "Artemis":
+        fields.append({"path": [2], "names": ["packet_id"], "type": "int64", "repeated": False, "unit": "", "layout": [], "enum": {}})
     for (group_name, name), (field_type, count) in wire.field_types(spec).items():
         group = groups[group_name]
         repeated = field_type.startswith("repeated ")
@@ -117,8 +116,8 @@ def schema_manifest(spec, car="Orion"):
              "reserved_ids": sorted(group.reserved_ids), "reserved_names": sorted(group.reserved_names)}
             for group in sorted(groups.values(), key=lambda group: group.snapshot_id)
         ],
-        "reserved_root_ids": sorted(number for spec_file in spec.files.values() for number in spec_file.groups.reserved_snapshot_ids),
-        "reserved_root_names": sorted(name for spec_file in spec.files.values() for name in spec_file.groups.reserved_snapshot_names),
+        "reserved_root_ids": sorted({number for spec_file in spec.files.values() for number in spec_file.groups.reserved_snapshot_ids} | ({2} if car == "Artemis" else set())),
+        "reserved_root_names": sorted({name for spec_file in spec.files.values() for name in spec_file.groups.reserved_snapshot_names} | ({"packet_id"} if car == "Artemis" else set())),
         "enums": [
             {"name": enum.name, "reserved_numbers": sorted(enum.reserved_numbers), "reserved_names": sorted(enum.reserved_names)}
             for enum in sorted(enums.values(), key=lambda enum: enum.name)
@@ -146,7 +145,8 @@ def render_proto(spec, digest, car="Orion"):
         "",
         f"message {car}SensorData {{",
         "  int64 time = 1;",
-        "  int64 packet_id = 2;",
+        "  reserved 2;" if car == "Artemis" else "  int64 packet_id = 2;",
+        '  reserved "packet_id";' if car == "Artemis" else "",
     ]
     for group in groups:
         lines.append(f"  {group.name} {snake_case(group.name)} = {group.snapshot_id};")
@@ -177,6 +177,12 @@ def render_proto(spec, digest, car="Orion"):
         for value in sorted(enum.value, key=lambda value: value.number):
             lines.append(f"  {value.name} = {value.number};")
         lines.extend(["}", ""])
+    if car == "Artemis":
+        lines.extend([
+            "message FieldPath { uint32 group = 1; uint32 field = 2; }",
+            "message TelemetryUpdate { int64 sample_time_ns = 1; ArtemisSensorData values = 2; repeated FieldPath updated_fields = 3; }",
+            "message TelemetryBatch { uint32 format_version = 1; repeated TelemetryUpdate updates = 2; }",
+        ])
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -228,11 +234,14 @@ def render_artemis_prisma(spec, common_sql):
     tables += [("sample_time", []), ("gps_precise", [{"name": name, "sql_type": kind} for name, kind in storage.GPS_FIELDS.items()])]
     for table, fields in tables:
         lines += [f"model {table} {{", "  session_start_ms BigInt", "  time BigInt"]
+        raw = table not in {pool["group"] for pool in value["pools"]} | {"sample_time"}
+        if raw:
+            lines.append("  sample_time_ns BigInt")
         for field in fields:
             kind = types[field["sql_type"].removesuffix("[]")]
             suffix = "[]" if field["sql_type"].endswith("[]") else "?"
             lines.append(f"  {field['name']} {kind}{suffix}")
-        lines += ["  @@id([session_start_ms, time])", "}", ""]
+        lines += ["  @@id([session_start_ms, time, sample_time_ns])" if raw else "  @@id([session_start_ms, time])", "}", ""]
     lines += ["model recording_session {", "  session_start_ms BigInt @id", "  start_time BigInt", "  end_time BigInt", "}", ""]
     return "\n".join(lines)
 
@@ -471,9 +480,29 @@ def render_sql(spec, digest, common_sql):
         lines.append(f"CREATE INDEX IF NOT EXISTS idx_{table}_packet_id ON public.{table} (packet_id);")
     return "\n".join(lines).rstrip() + "\n"
 
+def native_policy(spec):
+    manifest = schema_manifest(spec, "Artemis")
+    pools = {tuple(field["path"]): (pool["table"], pool["frequency_hz"]) for pool in storage.contract(spec)["pools"] for field in pool["fields"]}
+    metadata = {}
+    for _, _, _, _, binding in validator.telemetry_bindings(spec):
+        metadata[(binding.group, binding.field)] = (binding.uplink_rate_hz if binding.HasField("uplink_rate_hz") else None, binding.channel_type)
+    for _, group in spec.groups():
+        for field in group.external_field:
+            metadata[group.name, field.name] = (field.uplink_rate_hz if field.HasField("uplink_rate_hz") else None, field.channel_type)
+    groups = {group.snapshot_id: group.name for _, group in spec.groups()}
+    fields = []
+    for field in manifest["fields"]:
+        if len(field["path"]) != 2:
+            continue
+        rate, channel = metadata[groups[field["path"][0]], field["names"][1]]
+        fields.append(dict(field, pool=pools[tuple(field["path"])][0], native_hz=pools[tuple(field["path"])][1], uplink_hz=rate,
+                           channel=can_spec_pb2.ChannelType.Name(channel).lower()))
+    return {"schema_id": manifest["schema_id"], "fields": fields}
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--kind", choices=("proto", "json", "can_json", "signals_json", "sql", "contract", "orm", "prisma", "storage", "storage_sql"), required=True)
+    parser.add_argument("--kind", choices=("proto", "json", "can_json", "signals_json", "sql", "contract", "orm", "prisma", "storage", "storage_sql", "native_policy"), required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--car", choices=("Orion", "Artemis"), default="Orion")
     parser.add_argument("--common-sql", type=Path)
@@ -489,6 +518,8 @@ def main():
         output = render_signals_json(spec)
     elif args.kind == "contract":
         output = canonical_json(schema_manifest(spec, args.car)) + "\n"
+    elif args.kind == "native_policy":
+        output = json.dumps(native_policy(spec), sort_keys=True, indent=2) + "\n"
     elif args.kind == "storage":
         output = json.dumps(storage.contract(spec), sort_keys=True, indent=2) + "\n"
     elif args.kind == "storage_sql":

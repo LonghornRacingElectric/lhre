@@ -11,3 +11,6 @@ Persists dash layout choices under `/var/lib/bevo-dash/`.
   splash, `install.sh`/`deploy.sh` runbooks. Nonhermetic by nature.
 
 Config via `DASHD_*` env vars (MQTT host/port — see `main.rs`).
+
+The IPC schema is Artemis. The dashboard still consumes cached snapshots; fresh
+updates for storage and logging use separate cand sockets.

@@ -37,7 +37,7 @@ export function createQueryHandler(query: (body: unknown) => Promise<QueryPage>)
       if (page.next_page_token) headers["X-Next-Page-Token"] = page.next_page_token;
       const records = page.data.map(row => ({ ...row,
         value: typeof row.value === "string" ? row.value : JSON.stringify(row.value) }));
-      return new Response(stringify(records, { header: true, columns: ["ts", "signal", "value"], record_delimiter: "\r\n" }), { headers });
+      return new Response(stringify(records, { header: true, columns: ["ts", "sample_time_ns", "signal", "value"], record_delimiter: "\r\n" }), { headers });
     } catch (error) {
       if (error instanceof QueryError || error instanceof CatalogError) {
         return Response.json({ error: { code: error.code, message: error.message } }, { status: error.status });

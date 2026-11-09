@@ -13,10 +13,10 @@ all fed by `cand`:
 
 | Target | Role |
 | ------ | ---- |
-| [cand](cand/README.md) | Reads both CAN buses (SocketCAN), decodes frames per `can.json`, fans out protobuf snapshots over IPC. Linux-only for real CAN; elsewhere it compiles to a stub — use `mock_main`. |
+| [cand](cand/README.md) | Reads both CAN buses (SocketCAN), decodes frames per `can.json`, fans out fresh Artemis updates and dashboard snapshots over IPC. SocketCAN on Linux; UDP mock input on other Unix platforms. |
 | [dashd](dashd/README.md) | Driver display backend: MQTT + WebSocket server for the React kiosk frontend in `dashd/frontend/`. |
 | [loggerd](loggerd/README.md) | Writes CSV logs (schema-derived columns) to `loggerd/logs/`. |
-| [publishd](publishd/README.md) | Uplinks snapshots to the pit MQTT broker. |
+| [publishd](publishd/README.md) | Uplinks fresh Artemis batches to the pit MQTT broker. |
 | [debugd](debugd/README.md) | Dumps decoded snapshots to stdout; smoke-test tool. |
 
 ## Build and run
@@ -53,12 +53,13 @@ The executable work in this PR covers those three core daemons. Dashboard,
 debug, kiosk, and logsync build and deployment workflows are outside its scope.
 
 BEVO's prost bindings and CAN decode JSON come from the same
-`//lib/codegen/telemetry:can_packets_proto` and `:can_json` targets selected by
+`//lib/codegen/telemetry:artemis_proto_source` and `:can_json` targets selected by
 the telemetry server. Both sides therefore rebuild from `lib/spec` together;
 there is no separately generated BEVO wire schema in the Bazel path.
 
 `sensor_proto_library` in `sensor_proto.bzl` declares the protobuf, CAN JSON
-and schema contract inputs for that Rust generation action. The isolated
+and schema contract inputs for that Rust generation action. Artemis also
+requires the generated `policy` input for native pool/rate/presence metadata. The isolated
 [schema propagation regression](schema_tests/README.md) uses the same macro
 with append-only test fixtures, so it needs no registry or running stack.
 
@@ -110,7 +111,7 @@ there is no runtime CAN JSON file to copy or override.
 ## The CAN schema
 
 [`lib/spec`](../../lib/spec/README.md) is the Bazel source of truth. It
-generates `can.json`, the deployed snapshot proto, prost bindings, dispatch
+generates `can.json`, the Artemis update proto, prost bindings, dispatch
 code, and server database DDL; **no generated Bazel artifact is checked in**.
 BEVO carries no CSV or checked-in protobuf fallback; see
 [schema source](schema/README.md).
@@ -121,9 +122,8 @@ The [schema metadata](../../lib/telemetry/README.md) identifies the textproto
 definitions used to build a release. Server artifacts and BEVO executables
 depend on the same generated protobuf. A separate updater compares the
 installed or selected release with the deployed server; generated publisher
-code sends their compatible numeric field intersection. There is no new
-runtime handshake, payload envelope, MQTT topic or change to CAN acquisition
-and local logging.
+code sends their compatible numeric field intersection. Artemis uses explicit fresh-update batches on `artemis/data`; see
+[the native-observation decision](../../docs/architecture/025-artemis-native-observations.md).
 
 ```bash
 bazel build //apps/BEVO:pi_core_binaries //apps/BEVO:pi_core_manifest
@@ -133,10 +133,10 @@ bazel test //apps/BEVO:pi_core_binary_test //apps/BEVO:release_metadata_test
 `bazel-bin/apps/BEVO/pi_core_manifest.json` pins the three executable digests,
 the shared CAN JSON, descriptor and contract, source schema ID and
 `linux/arm64` platform. Its `format_version` versions only the metadata file;
-`projection_version: 1` advertises publisher support for updater plans.
+`projection_version: 2` advertises publisher support for updater plans.
 The build generates typed CAN tables, logger columns and field projection
-from the textproto-derived descriptor/contract. Acquisition, logging queues,
-IPC framing and MQTT connection/packet-ID handling retain their existing logic.
+from the textproto-derived descriptor/contract. CAN reading/decoding stays shared. Fresh updates carry nanosecond receipt times
+and explicit presence; the dashboard keeps its separate cached stream.
 
 Transfer matched executables together. The CAN JSON in registry metadata is
 an audit artifact, not a runtime input. The Pi needs no
@@ -145,8 +145,8 @@ Bazel, Cargo, source tree, compiler, or build cache. The separate
 keeps compatible releases or installs a compatible registry release, and
 supports persistent local admin overrides. The updater writes a release-bound
 plan; `publishd` applies it only to pit-bound protobuf fields. Other available
-registry images never narrow the intersection. The server schema and ingest
-remain unchanged, including proto3 scalar default behavior for omitted fields.
+registry images never narrow the intersection. The server uses the same Artemis batch contract; explicit presence distinguishes
+omitted fields from recorded scalar defaults and empty arrays.
 Server/admin schema overrides are documented in
 the [schema authority](../telemetry/schema_registry/README.md).
 

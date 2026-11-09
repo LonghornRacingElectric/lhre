@@ -26,19 +26,20 @@ symlink once at startup and launches core executables from that release;
 the dashboard remains separately installed under `BEVO_BIN_DIR`.
 `BEVO_CORE_RELEASE=/absolute/release` is an explicit admin override and takes
 precedence over `BEVO_CORE_ROOT`. Missing explicitly selected releases fail
-startup rather than falling back. A core release and `reconciliation.json`
-are required before starting the real stack. The launcher exports its resolved
+startup rather than falling back. A core release is required to start the real stack. Only publishing requires
+`reconciliation.json`; acquisition and logging remain independent of its validity. The launcher exports its resolved
 physical directory as `BEVO_CORE_RELEASE_ROOT` for `publishd`.
 No updater/network request runs inside this launcher;
 install first, then restart the stack when appropriate.
 
-The full mock stack requires `BEVO_CORE_RELEASE_ROOT` pointing to a plan for
-the same schema compiled into its separately installed mock executables.
+For mock publishing, set `BEVO_CORE_RELEASE_ROOT` to a plan for the same
+Artemis schema compiled into its installed mock executables.
 An explicit updater admin override can prepare an offline identity plan;
 the mock launcher does not invent a plan or bypass publisher validation.
 
 The CAN mapping and CSV column layout are compiled from the shared textproto
-at build time. None of these launchers reads a runtime `can.json`, and the old
+at build time. Acquisition and logging do not read runtime `can.json`; the Python mock traffic
+generator uses the current Bazel-generated CAN JSON. The old
 `CAND_CAN_JSON_PATH` / `LOGGERD_CAN_JSON_PATH` settings no longer select schemas.
 To change a schema, install the matching rebuilt executable release.
 

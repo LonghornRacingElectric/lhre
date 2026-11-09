@@ -8,7 +8,7 @@ limits. Orion remains a legacy reference with its existing telemetry readers;
 this gateway rejects other car names before catalog or database access.
 
 Raw reads preserve each pool's received timestamps. Each selected pool supplies
-ordered observations, merged by timestamp, recording session and signal name.
+ordered observations, merged by timestamp, recording session, fine receipt timestamp and signal name.
 There are no cross-pool raw joins and no packet table or packet identifier.
 Existing bucketed Artemis interfaces continue to serve aligned analysis;
 adding aggregation to this endpoint is separate from raw history retrieval.
@@ -82,7 +82,7 @@ JSON is the default (`Accept: application/json`):
 {
   "schema_version": "<catalog-content-hash>",
   "data": [
-    {"ts": "2026-11-08T12:00:00.000Z", "signal": "pack.hv_pack_v", "value": 420}
+    {"ts": "2026-11-08T12:00:00.000Z", "sample_time_ns": "1794139200000000000", "signal": "pack.hv_pack_v", "value": 420}
   ],
   "next_page_token": null
 }
@@ -91,9 +91,10 @@ JSON is the default (`Accept: application/json`):
 Booleans and arrays are preserved. Null/missing scalar values and absent groups
 are omitted; empty arrays are returned. PostgreSQL bigint/numeric values remain
 decimal strings to preserve precision; byte values use base64. Nonfinite floating values use string labels.
-Data is stored snapshot history, not reconstructed acquisition timestamps.
+Data is fresh observation history with the original BEVO receipt timestamp.
+`sample_time_ns` is a decimal string; JavaScript numbers cannot represent it exactly.
 
-`Accept: text/csv` returns `ts,signal,value` with CSV quoting and CRLF endings;
+`Accept: text/csv` returns `ts,sample_time_ns,signal,value` with CSV quoting and CRLF endings;
 array cells contain JSON. CSV continuation is in `X-Next-Page-Token`, absent at
 the end. Both formats carry `X-Schema-Version`. Unsupported formats return 406;
 errors use `{error: {code, message}}`. Responses are not cached. The v0 route
@@ -101,12 +102,11 @@ uses the existing `/api/*` middleware exclusion; API-key auth is future work.
 
 ## Pagination and limits
 
-Results are ordered by timestamp, numeric `session_start_ms`, then qualified
-signal name. Database batches use time/session predicates, never OFFSET. A page
+Results are ordered by timestamp, numeric `session_start_ms`, numeric `sample_time_ns`, then qualified
+signal name. Database batches use time/session/fine-timestamp predicates, never OFFSET. A page
 can end between signals at the same session/time; continuation includes that
 sample and skips only observations already delivered. The signed cursor carries
-a session key and never a packet identifier. Cursor format 2 rejects older
-packet-based tokens.
+a session key and never a packet identifier. Cursor format 3 rejects older tokens lacking fine receipt identity.
 
 Tokens are HMAC signed, expire after 24 hours, and bind the normalized request
 and catalog version. Keep the same filters and page size. Activating a new

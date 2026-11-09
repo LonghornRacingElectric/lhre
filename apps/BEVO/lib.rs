@@ -13,3 +13,6 @@ pub fn set_vec_index<Value: Default + Clone>(values: &mut Vec<Value>, index: usi
     if values.len() <= index { values.resize(index + 1, Value::default()); }
     values[index] = value;
 }
+
+#[cfg(artemis_native)]
+pub mod native;

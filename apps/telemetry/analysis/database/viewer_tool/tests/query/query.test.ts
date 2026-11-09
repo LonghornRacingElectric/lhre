@@ -18,7 +18,7 @@ const definitions = [signal,
   { ...signal, signal: "controls.event", value_type: "bool", channel_type: "event" as const }];
 const catalogs = vi.fn(async (car: string, selected: string | null) => ({ car, schema_version: selected || version, signals: definitions }));
 const observations: Observation[] = [1, 2, 10, 11].map(session => ({
-  position: { ts: start + 100, session: String(session), signal: signal.signal }, value: session,
+  position: { ts: start + 100, sampleTimeNs: String(BigInt(start + 100) * 1000000n), session: String(session), signal: signal.signal }, value: session,
 }));
 const compare = comparePositions;
 function sourceFor(rows = observations): TelemetrySource {
@@ -138,8 +138,8 @@ describe("HTTP formats and errors", () => {
   });
   it("escapes CSV arrays, quotes, commas, and newlines and supplies its next token", async () => {
     const handler = createQueryHandler(async () => ({ schema_version: version, next_page_token: "next", data: [
-      { ts: body.t0, signal: signal.signal, value: [1, 2] },
-      { ts: body.t0, signal: signal.signal, value: 'a,"b"\nc' },
+      { ts: body.t0, sample_time_ns: String(BigInt(start) * 1000000n), signal: signal.signal, value: [1, 2] },
+      { ts: body.t0, sample_time_ns: String(BigInt(start) * 1000000n), signal: signal.signal, value: 'a,"b"\nc' },
     ] }));
     const response = await handler(post(body, "text/csv"));
     expect(response.headers.get("X-Next-Page-Token")).toBe("next");

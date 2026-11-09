@@ -25,7 +25,7 @@ export function createQueryService(source: TelemetrySource, catalogs: typeof rea
     let bytes = Buffer.byteLength("[]");
     for (const observation of rows.slice(0, target)) {
       if (observation.oversized) throw new QueryError(413, "sample_too_large", "A stored observation exceeds the per-value size limit.");
-      const row = { ts: new Date(observation.position.ts).toISOString(), signal: observation.position.signal, value: observation.value };
+      const row = { ts: new Date(observation.position.ts).toISOString(), sample_time_ns: observation.position.sampleTimeNs, signal: observation.position.signal, value: observation.value };
       const size = Buffer.byteLength(JSON.stringify(row));
       if (size > LIMITS.sampleBytes + 1024) throw new QueryError(413, "sample_too_large", "A stored observation exceeds the per-value size limit.");
       const separatorBytes = data.length ? Buffer.byteLength(",") : 0;

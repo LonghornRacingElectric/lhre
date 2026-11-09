@@ -7,7 +7,7 @@ from collections import defaultdict
 
 from google.protobuf.json_format import MessageToDict
 from kafka import KafkaConsumer, KafkaProducer
-from stack.ingest.sensor_decode import CAR_MESSAGES
+from stack.ingest.sensor_decode import CAR_MESSAGES, LatestState, decode_updates, payload_format
 
 logging.basicConfig(level=os.getenv("LOGLEVEL", "INFO"))
 logging.getLogger("kafka").setLevel(logging.WARNING)
@@ -19,7 +19,7 @@ INPUT_TOPIC = os.getenv("KAFKA_INPUT_TOPIC", "sensor_data")
 OUTPUT_TOPIC = os.getenv("KAFKA_OUTPUT_TOPIC", "gg-plot")
 CONSUMER_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "gg-plot-group")
 
-default_car_env = os.getenv("KAFKA_DEFAULT_CAR", "Orion")
+default_car_env = os.getenv("KAFKA_DEFAULT_CAR", "Artemis")
 DEFAULT_CAR = CAR_NAME_MAP.get(default_car_env.strip().lower(), "Orion")
 
 try:
@@ -54,14 +54,15 @@ def _get_car_type_from_headers(headers: list[tuple[str, bytes]] | None) -> str |
     return None
 
 
+_latest = LatestState()
+
+
 def _decode_sensor_payload(payload: bytes, car_type: str) -> dict:
+    if car_type == "Artemis":
+        return _latest.apply(decode_updates(payload))
     row = CAR_MESSAGES[car_type]()
     row.ParseFromString(payload)
-    return MessageToDict(
-        row,
-        preserving_proto_field_name=True,
-        always_print_fields_with_no_presence=True,
-    )
+    return MessageToDict(row, preserving_proto_field_name=True, always_print_fields_with_no_presence=True)
 
 
 def _extract_xy_accel(decoded_message: dict, car_type: str) -> tuple[float, float] | None:
@@ -168,6 +169,7 @@ try:
                 logging.debug(f"  Key: {record.key}, Value: {record.value}")
                 try:
                     car_type = _get_car_type_from_headers(record.headers) or DEFAULT_CAR
+                    payload_format(record.headers, car_type)
                     decoded_message = _decode_sensor_payload(payload=record.value, car_type=car_type)
                     logging.debug(f"  Decoded Message: {decoded_message}")
 

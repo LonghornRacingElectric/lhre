@@ -3,8 +3,10 @@ import { QueryError, type JsonValue, type Position } from "./types";
 export function comparePositions(a: Position, b: Position): number {
   const left = BigInt(a.session);
   const right = BigInt(b.session);
+  const fineLeft = BigInt(a.sampleTimeNs);
+  const fineRight = BigInt(b.sampleTimeNs);
   return a.ts - b.ts || (left < right ? -1 : left > right ? 1 :
-    a.signal < b.signal ? -1 : a.signal > b.signal ? 1 : 0);
+    fineLeft < fineRight ? -1 : fineLeft > fineRight ? 1 : a.signal < b.signal ? -1 : a.signal > b.signal ? 1 : 0);
 }
 
 export function jsonValue(value: unknown): JsonValue {

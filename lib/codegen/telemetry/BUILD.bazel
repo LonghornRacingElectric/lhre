@@ -234,6 +234,24 @@ proto_library(
 
 filegroup(
     name = "artemis_schema",
-    srcs = [":artemis_proto_source", ":artemis_db_init", ":artemis_orm_source", ":artemis_prisma", ":artemis_schema_contract", ":storage_contract", ":storage_sql"],
+    srcs = [":native_policy", ":artemis_schema_descriptor", ":artemis_proto_source", ":artemis_db_init", ":artemis_orm_source", ":artemis_prisma", ":artemis_schema_contract", ":storage_contract", ":storage_sql"],
+    visibility = ["//visibility:public"],
+)
+
+telemetry_artifact(
+    name = "native_policy",
+    kind = "native_policy",
+    car = "Artemis",
+    out = "native_policy.json",
+    spec = "//lib/spec:files",
+    visibility = ["//visibility:public"],
+)
+
+genrule(
+    name = "artemis_schema_descriptor",
+    srcs = [":artemis_proto_source"],
+    outs = ["artemis_schema_descriptor.pb"],
+    cmd = "$(location //tools/protoc) --descriptor_set_out=$@ --proto_path=$$(dirname $(location :artemis_proto_source)) $(location :artemis_proto_source)",
+    tools = ["//tools/protoc"],
     visibility = ["//visibility:public"],
 )

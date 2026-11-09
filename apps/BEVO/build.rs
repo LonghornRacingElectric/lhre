@@ -31,7 +31,10 @@ fn main() {
     config.file_descriptor_set_path(&fds_path);
     config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
     config
-        .compile_protos(&[proto_path.clone()], &[proto_dir.to_string_lossy().to_string()])
+        .compile_protos(
+            &[proto_path.clone()],
+            &[proto_dir.to_string_lossy().to_string()],
+        )
         .unwrap();
 
     let can_json_path = PathBuf::from(
@@ -42,13 +45,42 @@ fn main() {
     let fds_bytes = fs::read(&fds_path).expect("reading descriptor set");
     let fds = FileDescriptorSet::decode(fds_bytes.as_slice()).expect("decoding descriptor set");
     let can_json = fs::read_to_string(&can_json_path).expect("reading can.json");
-    let mapping = generate_mapping(&fds, &can_json);
+    let contract_path =
+        env::var("SCHEMA_CONTRACT").expect("SCHEMA_CONTRACT must be supplied by Bazel");
+    let contract: Value =
+        serde_json::from_slice(&fs::read(contract_path).expect("reading schema contract"))
+            .expect("parsing schema contract");
+    let mapping = generate_mapping(
+        &fds,
+        &can_json,
+        contract["root"].as_str().expect("contract root"),
+    );
     fs::write(out_dir.join("generated_mapping.rs"), mapping).expect("writing generated_mapping.rs");
-    let contract_path = env::var("SCHEMA_CONTRACT").expect("SCHEMA_CONTRACT must be supplied by Bazel");
-    let contract: Value = serde_json::from_slice(&fs::read(contract_path).expect("reading schema contract")).expect("parsing schema contract");
-    fs::write(out_dir.join("generated_config.rs"), generate_config(&can_json, &contract)).expect("writing generated_config.rs");
-    fs::write(out_dir.join("generated_projection.rs"), generate_projection(&fds, &contract)).expect("writing generated_projection.rs");
+    fs::write(
+        out_dir.join("generated_config.rs"),
+        generate_config(&can_json, &contract),
+    )
+    .expect("writing generated_config.rs");
+    fs::write(
+        out_dir.join("generated_projection.rs"),
+        generate_projection(&fds, &contract),
+    )
+    .expect("writing generated_projection.rs");
 
+    if contract["root"] == "artemis.ArtemisSensorData" {
+        let policy_path =
+            env::var("NATIVE_POLICY").expect("Artemis requires its compiled native policy");
+        let policy: Value =
+            serde_json::from_slice(&fs::read(&policy_path).expect("reading native policy"))
+                .expect("parsing native policy");
+        fs::write(
+            out_dir.join("generated_native.rs"),
+            generate_native(&policy, &can_json),
+        )
+        .expect("writing generated_native.rs");
+        println!("cargo:rustc-cfg=artemis_native");
+        println!("cargo:rerun-if-changed={policy_path}");
+    }
     println!("cargo:rerun-if-env-changed=PROTO_FILE");
     println!("cargo:rerun-if-env-changed=CAN_JSON");
     println!("cargo:rerun-if-changed={}", proto_path);
@@ -56,31 +88,164 @@ fn main() {
 }
 
 fn rust_member(name: &str) -> String {
-    if ["type", "ref", "match", "loop", "move", "self", "mod", "pub", "use", "where", "crate", "super", "async", "await", "dyn", "in", "as", "fn", "const", "static", "struct", "enum", "trait", "impl", "return", "break", "continue", "let", "mut", "if", "else", "for", "while", "unsafe", "extern", "true", "false"].contains(&name) {
+    if [
+        "type", "ref", "match", "loop", "move", "self", "mod", "pub", "use", "where", "crate",
+        "super", "async", "await", "dyn", "in", "as", "fn", "const", "static", "struct", "enum",
+        "trait", "impl", "return", "break", "continue", "let", "mut", "if", "else", "for", "while",
+        "unsafe", "extern", "true", "false",
+    ]
+    .contains(&name)
+    {
         format!("r#{name}")
-    } else { name.to_string() }
+    } else {
+        name.to_string()
+    }
+}
+
+fn generate_native(policy: &Value, can_json: &str) -> String {
+    let fields = policy["fields"].as_array().unwrap();
+    let mut code = vec!["pub const FIELDS: &[FieldDefinition] = &[".to_string()];
+    for field in fields {
+        let path = field["path"].as_array().unwrap();
+        let names = field["names"].as_array().unwrap();
+        let hz = field["uplink_hz"]
+            .as_f64()
+            .map(|hz| format!("Some({hz:?})"))
+            .unwrap_or_else(|| "None".to_string());
+        code.push(format!("FieldDefinition {{ group: {}, field: {}, group_name: {:?}, name: {:?}, pool: {:?}, length: {}, repeated: {}, uplink_hz: {}, native_hz: {:?}, limited: {} }},",
+            path[0], path[1], names[0].as_str().unwrap(), names[1].as_str().unwrap(), field["pool"].as_str().unwrap(),
+            field["layout"].as_array().unwrap().len(), field["repeated"], hz, field["native_hz"].as_f64().unwrap(), field["channel"] == "telemetry"));
+    }
+    code.push("];".to_string());
+    code.push("pub fn copy_field(source: &SensorData, output: &mut SensorData, path: &FieldPath) -> bool { match (path.group, path.field) {".to_string());
+    for field in fields {
+        let group = rust_member(field["names"][0].as_str().unwrap());
+        let name = rust_member(field["names"][1].as_str().unwrap());
+        code.push(format!("({}, {}) => {{ if let Some(value) = &source.{group} {{ output.{group}.get_or_insert_with(Default::default).{name} = value.{name}.clone(); true }} else {{ false }} }},", field["path"][0], field["path"][1]));
+    }
+    code.push("_ => false } }".to_string());
+    code.push("pub fn project_update(source: &TelemetryUpdate, accepted: &std::collections::BTreeMap<Vec<u32>, Vec<i32>>) -> Option<TelemetryUpdate> { let values = source.values.as_ref()?; let mut output = SensorData::default(); output.time = values.time; let mut paths = Vec::new(); for path in &source.updated_fields { if !accepted.contains_key(&vec![path.group, path.field]) { continue; } let allowed = match (path.group, path.field) {".to_string());
+    for field in fields
+        .iter()
+        .filter(|field| !field["enum"].as_object().unwrap().is_empty())
+    {
+        let group = rust_member(field["names"][0].as_str().unwrap());
+        let name = rust_member(field["names"][1].as_str().unwrap());
+        let check = if field["repeated"].as_bool().unwrap() {
+            format!("group.{name}.iter().all(|value| accepted[&vec![path.group, path.field]].contains(value))")
+        } else {
+            format!("accepted[&vec![path.group, path.field]].contains(&group.{name})")
+        };
+        code.push(format!(
+            "({}, {}) => values.{group}.as_ref().is_some_and(|group| {check}),",
+            field["path"][0], field["path"][1]
+        ));
+    }
+    code.push("_ => true }; if allowed && copy_field(values, &mut output, path) { paths.push(path.clone()); } } if paths.is_empty() { None } else { Some(TelemetryUpdate { sample_time_ns: source.sample_time_ns, values: Some(output), updated_fields: paths }) } }".to_string());
+    // A repeated CAN field's span is local to its message, just like the decoder.
+    let packets: Vec<Value> = serde_json::from_str(can_json).unwrap();
+    code.push("pub const SOURCES: &[SourceDefinition] = &[".to_string());
+    for packet in packets {
+        let mut mapped: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+        for signal in packet["bytes"].as_array().unwrap() {
+            if let Some(name) = signal["protobuf"]["field"].as_str() {
+                let slots = mapped.entry(name.to_string()).or_default();
+                if let Some(index) = signal["protobuf"]["field_index"].as_u64() {
+                    slots.push(index as usize);
+                }
+            }
+            if let Some(bits) = signal["bitfield_encoding"].as_array() {
+                for bit in bits {
+                    mapped
+                        .entry(bit["protobuf_field"].as_str().unwrap().to_string())
+                        .or_default();
+                }
+            }
+        }
+        let mut entries = Vec::new();
+        for (name, slots) in mapped {
+            let field = fields
+                .iter()
+                .find(|field| field["names"][1] == name)
+                .unwrap();
+            let stride = slots.iter().max().map(|value| value + 1).unwrap_or(0);
+            entries.push(format!(
+                "SourceField {{ group: {}, field: {}, slots: &{slots:?}, stride: {stride} }}",
+                field["path"][0], field["path"][1]
+            ));
+        }
+        let hz = packet["frequency"].as_f64().unwrap_or(0.0);
+        code.push(format!("SourceDefinition {{ base_id: {}, quantity: {}, period_ns: {}, minimum_bytes: {}, fields: &[{}] }},", packet["packet_id"], packet["quantity"], if hz > 0.0 { (1e9 / hz) as u64 } else { 0 }, packet["bytes"].as_array().unwrap().iter().map(|signal| signal["start_byte"].as_u64().unwrap() + signal["length"].as_u64().unwrap()).max().unwrap_or(0), entries.join(",")));
+    }
+    code.push("];".to_string());
+    code.join("\n")
 }
 
 fn generate_projection(descriptors: &FileDescriptorSet, contract: &Value) -> String {
     let root_name = contract["root"].as_str().unwrap();
     let root_type = format!("crate::proto::{}", root_name.replace('.', "::"));
-    let mut code = vec![format!("pub const PRODUCER_SCHEMA_ID: &str = {:?};", contract["schema_id"].as_str().unwrap())];
-    let paths: Vec<Vec<u32>> = contract["fields"].as_array().unwrap().iter().map(|field|
-        field["path"].as_array().unwrap().iter().map(|number| number.as_u64().unwrap() as u32).collect()).collect();
-    code.push(format!("pub const NUMERIC_PATHS: &[&[u32]] = &[{}];", paths.iter().map(|path| format!("&{path:?}")).collect::<Vec<_>>().join(",")));
+    let mut code = vec![format!(
+        "pub const PRODUCER_SCHEMA_ID: &str = {:?};",
+        contract["schema_id"].as_str().unwrap()
+    )];
+    let paths: Vec<Vec<u32>> = contract["fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|field| {
+            field["path"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|number| number.as_u64().unwrap() as u32)
+                .collect()
+        })
+        .collect();
+    code.push(format!(
+        "pub const NUMERIC_PATHS: &[&[u32]] = &[{}];",
+        paths
+            .iter()
+            .map(|path| format!("&{path:?}"))
+            .collect::<Vec<_>>()
+            .join(",")
+    ));
     code.push(format!("pub fn project_message(source: &{root_type}, accepted: &std::collections::BTreeMap<Vec<u32>, Vec<i32>>) -> {root_type} {{ let mut output = {root_type}::default();"));
-    let root = descriptors.file.iter().flat_map(|file| file.message_type.iter().map(move |message| (file, message)))
-        .find(|(file, message)| format!("{}.{}", file.package(), message.name()) == root_name).unwrap().1;
+    let root = descriptors
+        .file
+        .iter()
+        .flat_map(|file| file.message_type.iter().map(move |message| (file, message)))
+        .find(|(file, message)| format!("{}.{}", file.package(), message.name()) == root_name)
+        .unwrap()
+        .1;
     for root_field in &root.field {
         let member = rust_member(root_field.name());
         let number = root_field.number();
         if root_field.r#type() == field_descriptor_proto::Type::Message {
-            let group_type = format!("crate::proto::{}", root_field.type_name().trim_start_matches('.').replace('.', "::"));
+            let group_type = format!(
+                "crate::proto::{}",
+                root_field
+                    .type_name()
+                    .trim_start_matches('.')
+                    .replace('.', "::")
+            );
             code.push(format!("if let Some(group) = &source.{member} {{ let mut selected = {group_type}::default(); let mut present = false;"));
-            for field in contract["fields"].as_array().unwrap().iter().filter(|field| field["path"][0].as_i64() == Some(number as i64)) {
-                let path: Vec<u32> = field["path"].as_array().unwrap().iter().map(|value| value.as_u64().unwrap() as u32).collect();
+            for field in contract["fields"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|field| field["path"][0].as_i64() == Some(number as i64))
+            {
+                let path: Vec<u32> = field["path"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|value| value.as_u64().unwrap() as u32)
+                    .collect();
                 let leaf = rust_member(field["names"][1].as_str().unwrap());
-                let condition = if field["enum"].as_object().is_some_and(|values| !values.is_empty()) {
+                let condition = if field["enum"]
+                    .as_object()
+                    .is_some_and(|values| !values.is_empty())
+                {
                     if field["repeated"].as_bool() == Some(true) {
                         format!("accepted.get(&{path:?}.to_vec()).is_some_and(|allowed| group.{leaf}.iter().all(|value| allowed.contains(value)))")
                     } else {
@@ -89,9 +254,13 @@ fn generate_projection(descriptors: &FileDescriptorSet, contract: &Value) -> Str
                 } else {
                     format!("accepted.contains_key(&{path:?}.to_vec())")
                 };
-                code.push(format!("if {condition} {{ selected.{leaf} = group.{leaf}.clone(); present = true; }}"));
+                code.push(format!(
+                    "if {condition} {{ selected.{leaf} = group.{leaf}.clone(); present = true; }}"
+                ));
             }
-            code.push(format!("if present {{ output.{member} = Some(selected); }} }}"));
+            code.push(format!(
+                "if present {{ output.{member} = Some(selected); }} }}"
+            ));
         } else {
             code.push(format!("if accepted.contains_key(&vec![{number}]) {{ output.{member} = source.{member}.clone(); }}"));
         }
@@ -104,22 +273,41 @@ fn generate_config(can_json: &str, contract: &Value) -> String {
     let packets: Vec<Value> = serde_json::from_str(can_json).expect("parsing generated CAN map");
     let mut code = vec!["pub fn packets() -> Vec<PacketConfig> { vec![".to_string()];
     for packet in packets {
-        let sources: Vec<String> = packet["from"].as_array().unwrap().iter()
-            .map(|name| format!("{:?}.to_string()", name.as_str().unwrap())).collect();
+        let sources: Vec<String> = packet["from"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|name| format!("{:?}.to_string()", name.as_str().unwrap()))
+            .collect();
         code.push(format!("PacketConfig {{ packet_id: {}, packet_name: {:?}.to_string(), from: vec![{}], quantity: {}, bytes: vec![",
             packet["packet_id"], packet["packet_name"].as_str().unwrap(), sources.join(","), packet["quantity"]));
         for signal in packet["bytes"].as_array().unwrap() {
             let protobuf = if signal["protobuf"].is_object() {
                 let mapping = &signal["protobuf"];
-                let index = mapping["field_index"].as_u64().map(|value| format!("Some({value})")).unwrap_or_else(|| "None".to_string());
+                let index = mapping["field_index"]
+                    .as_u64()
+                    .map(|value| format!("Some({value})"))
+                    .unwrap_or_else(|| "None".to_string());
                 format!("Some(ProtobufMapping {{ field_name: {:?}.to_string(), repeated: {}, field_index: {} }})",
                     mapping["field"].as_str().unwrap(), mapping["repeated"], index)
-            } else { "None".to_string() };
+            } else {
+                "None".to_string()
+            };
             let bitfield = if let Some(bits) = signal["bitfield_encoding"].as_array() {
-                let entries: Vec<String> = bits.iter().map(|bit| format!("BitfieldMapping {{ protobuf_field: {:?}.to_string(), bit_index: {} }}",
-                    bit["protobuf_field"].as_str().unwrap(), bit["bit_index"])).collect();
+                let entries: Vec<String> = bits
+                    .iter()
+                    .map(|bit| {
+                        format!(
+                            "BitfieldMapping {{ protobuf_field: {:?}.to_string(), bit_index: {} }}",
+                            bit["protobuf_field"].as_str().unwrap(),
+                            bit["bit_index"]
+                        )
+                    })
+                    .collect();
                 format!("Some(vec![{}])", entries.join(","))
-            } else { "None".to_string() };
+            } else {
+                "None".to_string()
+            };
             code.push(format!("SignalConfig {{ start_byte: {}, length: {}, name: {:?}.to_string(), conv_type: {:?}.to_string(), precision: {:?}, bitfield_encoding: {}, protobuf: {} }},",
                 signal["start_byte"], signal["length"], signal["name"].as_str().unwrap(), signal["conv_type"].as_str().unwrap(),
                 signal["precision"].as_f64().unwrap(), bitfield, protobuf));
@@ -130,16 +318,26 @@ fn generate_config(can_json: &str, contract: &Value) -> String {
     let mut headers = Vec::new();
     let mut repeated = Vec::new();
     for field in contract["fields"].as_array().unwrap() {
-        let names: Vec<&str> = field["names"].as_array().unwrap().iter().map(|name| name.as_str().unwrap()).collect();
+        let names: Vec<&str> = field["names"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|name| name.as_str().unwrap())
+            .collect();
         let name = names.join(".");
         if field["repeated"].as_bool().unwrap() {
             let count = field["layout"].as_array().unwrap().len();
             repeated.push(format!("({:?}, {count})", names.last().unwrap()));
             headers.extend((0..count).map(|index| format!("{name}[{index}]")));
-        } else { headers.push(name); }
+        } else {
+            headers.push(name);
+        }
     }
     code.push(format!("pub const CSV_HEADERS: &[&str] = &{headers:?};"));
-    code.push(format!("pub const REPEATED_FIELDS: &[(&str, usize)] = &[{}];", repeated.join(",")));
+    code.push(format!(
+        "pub const REPEATED_FIELDS: &[(&str, usize)] = &[{}];",
+        repeated.join(",")
+    ));
     code.join("\n")
 }
 
@@ -155,7 +353,7 @@ fn value_expression(field_type: &str) -> &str {
     }
 }
 
-fn generate_mapping(fds: &FileDescriptorSet, can_json: &str) -> String {
+fn generate_mapping(fds: &FileDescriptorSet, can_json: &str, root: &str) -> String {
     // Index all top-level messages by fully-qualified name.
     let mut messages: HashMap<String, &DescriptorProto> = HashMap::new();
     for file in &fds.file {
@@ -170,22 +368,8 @@ fn generate_mapping(fds: &FileDescriptorSet, can_json: &str) -> String {
         }
     }
 
-    // Resolve the sensor message the same way codegen.py did.
-    let (message_full_name, msg_desc) = ["OrionSensorData", "SensorData"]
-        .iter()
-        .find_map(|preferred| {
-            messages
-                .iter()
-                .find(|(full, m)| full.as_str() == *preferred || m.name() == *preferred)
-                .map(|(full, m)| (full.clone(), *m))
-        })
-        .or_else(|| {
-            messages
-                .iter()
-                .find(|(_, m)| m.name().ends_with("SensorData"))
-                .map(|(full, m)| (full.clone(), *m))
-        })
-        .expect("no *SensorData message in descriptor");
+    let message_full_name = root.to_string();
+    let msg_desc = *messages.get(root).expect("contract root message is absent");
 
     let preferred_var_map: HashMap<&str, &str> = [
         ("dynamics", "_d"),
@@ -267,7 +451,13 @@ fn generate_mapping(fds: &FileDescriptorSet, can_json: &str) -> String {
             }
 
             if pb.get("repeated").and_then(Value::as_bool).unwrap_or(false) {
-                rep_signals.insert(fname.to_string(), pb["type"].as_str().expect("generated protobuf type").to_string());
+                rep_signals.insert(
+                    fname.to_string(),
+                    pb["type"]
+                        .as_str()
+                        .expect("generated protobuf type")
+                        .to_string(),
+                );
             } else {
                 let ty = pb
                     .get("type")
@@ -279,7 +469,6 @@ fn generate_mapping(fds: &FileDescriptorSet, can_json: &str) -> String {
                     .to_lowercase();
                 scalar_signals.insert(fname.to_string(), ty);
             }
-
         }
     }
 
@@ -326,7 +515,9 @@ fn generate_mapping(fds: &FileDescriptorSet, can_json: &str) -> String {
             ));
         } else {
             let expression = value_expression(field_type);
-            code.push(format!("            \"{field_name}\" => {var}.{field_name} = {expression},"));
+            code.push(format!(
+                "            \"{field_name}\" => {var}.{field_name} = {expression},"
+            ));
         }
     }
     code.extend([
@@ -348,9 +539,15 @@ fn generate_mapping(fds: &FileDescriptorSet, can_json: &str) -> String {
     code.push("    match name {".to_string());
     for field_name in &bool_signals {
         let var = &field_to_var[field_name];
-        code.push(format!("        \"{field_name}\" => {var}.{field_name} = val,"));
+        code.push(format!(
+            "        \"{field_name}\" => {var}.{field_name} = val,"
+        ));
     }
-    code.extend(["        _ => (),".to_string(), "    }".to_string(), "}".to_string()]);
+    code.extend([
+        "        _ => (),".to_string(),
+        "    }".to_string(),
+        "}".to_string(),
+    ]);
 
     code.join("\n")
 }

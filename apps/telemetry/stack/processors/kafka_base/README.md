@@ -6,7 +6,7 @@ Use this folder as the baseline for new Kafka processors that consume `sensor_da
 
 - Kafka consumer loop with manual offset commits
 - `car_type` header handling (`Orion`/`Artemis`)
-- Direct protobuf decode (no dependency on ingest runtime modules)
+- Shared lightweight protobuf/presence decoder (no ingest worker startup)
 - Docker + docker-compose scaffolding
 
 The Bazel OCI packaging targets work on Linux and macOS and are intentionally
@@ -15,7 +15,7 @@ Windows.
 
 ## Best practices for new processors
 
-1. Decode protobuf directly from `stack.ingest.protobuf.*_pb2` in your processor.
+1. Use `stack.ingest.sensor_decode` and validate the raw payload-format header.
 2. Keep a dedicated consumer group ID per processor (`KAFKA_GROUP_ID`).
 3. Commit offsets only after your batch processing logic succeeds.
 4. Preserve `car_type` metadata when publishing derived topics.
@@ -48,3 +48,7 @@ docker logs -f <your_container_name>
 
 Raw telemetry decoding supports only explicit Orion and Artemis car headers.
 Unknown headers are rejected rather than decoded as the default car.
+
+Artemis input requires `payload_format: artemis_updates_v1`. The shared decode
+helper applies only observed fields to a timestamped live-state cache; older
+observations cannot replace newer values. Orion decoding remains independent.

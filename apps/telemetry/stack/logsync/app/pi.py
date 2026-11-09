@@ -1,6 +1,6 @@
 """Listing and time-range selection of Pi log files over SSH.
 
-Loggerd writes one CSV per session named ``orion_<startMs>.csv`` and keeps
+Loggerd writes CSVs named ``artemis_<startMs>_<pool>.csv`` and keeps
 appending to it for the duration of that session. So a file covers the window
 ``[startMs, mtime]``: the filename gives the start, the mtime gives the end.
 A file belongs to a requested ``[from, to]`` window iff those intervals overlap.
@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import shlex
+import re
 
 from .config import config
 from .models import RemoteFile
@@ -24,9 +25,8 @@ def _parse_start_ms(name: str) -> int | None:
     if not (name.startswith(config.log_prefix) and name.endswith(config.log_suffix)):
         return None
     core = name[len(config.log_prefix): -len(config.log_suffix)]
-    if not core.isdigit():
-        return None
-    return int(core)
+    match = re.fullmatch(r"([0-9]+)_([a-z][a-z0-9_]*)", core)
+    return int(match[1]) if match else None
 
 
 async def list_remote_logs() -> list[RemoteFile]:

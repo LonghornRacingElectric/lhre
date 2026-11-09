@@ -40,15 +40,15 @@ describe.runIf(Boolean(url))("Artemis gateway against generated Timescale pools"
     await db.$transaction([
       db.recording_session.createMany({ data: [key, second].map(session_start_ms => ({ session_start_ms, start_time: BigInt(start - 1), end_time: BigInt(start + 1000) })) }),
       db.controls_333hz.createMany({ data: [[-1, -1], [0, 0], [10, 10], [30, 20], [1000, 999]].map(([offset, value]) =>
-        ({ session_start_ms: key, time: BigInt(start + offset), apps1_travel: value, enable: offset === 10 })) }),
-      db.controls_333hz.create({ data: { session_start_ms: second, time: BigInt(start + 10), apps1_travel: 42, enable: true } }),
+        ({ session_start_ms: key, time: BigInt(start + offset), sample_time_ns: BigInt(start + offset) * 1000000n, apps1_travel: value, enable: offset === 10 })) }),
+      db.controls_333hz.create({ data: { session_start_ms: second, time: BigInt(start + 10), sample_time_ns: BigInt(start + 10) * 1000000n, apps1_travel: 42, enable: true } }),
       db.dynamics_external.createMany({ data: [
-        { session_start_ms: key, time: BigInt(start + 5), gps_precise: [30.123456789, -97.123456789] },
-        { session_start_ms: key, time: BigInt(start + 15), gps_precise: [] },
-        { session_start_ms: key, time: BigInt(start + 25) },
+        { session_start_ms: key, time: BigInt(start + 5), sample_time_ns: BigInt(start + 5) * 1000000n, gps_precise: [30.123456789, -97.123456789] },
+        { session_start_ms: key, time: BigInt(start + 15), sample_time_ns: BigInt(start + 15) * 1000000n, gps_precise: [] },
+        { session_start_ms: key, time: BigInt(start + 25), sample_time_ns: BigInt(start + 25) * 1000000n },
       ] }),
-      db.pack_1hz.create({ data: { session_start_ms: key, time: BigInt(start + 500), cells_v: [3.7, 3.8] } }),
-      db.board_status_external.create({ data: { session_start_ms: key, time: BigInt(start + 7), hvc_last_seen_s: 0 } }),
+      db.pack_1hz.create({ data: { session_start_ms: key, time: BigInt(start + 500), sample_time_ns: BigInt(start + 500) * 1000000n, cells_v: [3.7, 3.8] } }),
+      db.board_status_external.create({ data: { session_start_ms: key, time: BigInt(start + 7), sample_time_ns: BigInt(start + 7) * 1000000n, hvc_last_seen_s: 0 } }),
     ]);
   });
 
@@ -90,14 +90,14 @@ describe.runIf(Boolean(url))("Artemis gateway against generated Timescale pools"
         expect(position).not.toHaveProperty("packet");
       }
     } while (token);
-    const expected = (await source.read(plan, null, 100)).map(row => ({ ts: new Date(row.position.ts).toISOString(), signal: row.position.signal, value: row.value }));
+    const expected = (await source.read(plan, null, 100)).map(row => ({ ts: new Date(row.position.ts).toISOString(), sample_time_ns: row.position.sampleTimeNs, signal: row.position.signal, value: row.value }));
     expect(all).toEqual(expected);
   });
 
   it("continues correctly beyond the database batch size", async () => {
     try {
       await db.controls_333hz.createMany({ data: Array.from({ length: 70 }, (_, i) =>
-        ({ session_start_ms: key, time: BigInt(start + 100 + i), apps1_travel: i })) });
+        ({ session_start_ms: key, time: BigInt(start + 100 + i), sample_time_ns: BigInt(start + 100 + i) * 1000000n, apps1_travel: i })) });
       const selected = { ...plan, signals: plan.signals.filter(signal => signal.signal === names[0]), t0: start + 100, t1: start + 170 };
       const rows = await source.read(selected, null, 100);
       expect(rows.map(row => row.value)).toEqual(Array.from({ length: 70 }, (_, i) => i));

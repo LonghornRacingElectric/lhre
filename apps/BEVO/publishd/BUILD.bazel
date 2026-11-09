@@ -5,6 +5,7 @@ package(default_visibility = ["//apps/BEVO:__subpackages__"])
 rust_binary(
     name = "publishd",
     srcs = ["main.rs"],
+    visibility = ["//apps/BEVO:__subpackages__", "//apps/telemetry/stack/tests:__pkg__"],
     edition = "2021",
     # Unix-socket IPC — no Windows.
     target_compatible_with = select({
@@ -15,6 +16,6 @@ rust_binary(
         "//apps/BEVO:sensor_proto",
         "@crates//:anyhow",
         "@crates//:rumqttc",
-        "@crates//:serde_json",
+        "@crates//:prost",
     ],
 )

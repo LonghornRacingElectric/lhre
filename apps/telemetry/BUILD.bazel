@@ -113,7 +113,10 @@ filegroup(
 
 pkg_tar(
     name = "current_schema_tar",
-    srcs = [":current_schema_contract", ":current_schema_descriptor"],
+    files = {
+        "//lib/codegen/telemetry:artemis_schema_contract": "schema_contract.json",
+        "//lib/codegen/telemetry:artemis_schema_descriptor": "schema_descriptor.pb",
+    },
     package_dir = "/schema",
     target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],

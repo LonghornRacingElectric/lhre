@@ -21,7 +21,7 @@ exports_files([
 ])
 
 exports_files(
-    ["build.rs", "config.rs", "lib.rs", "projection.rs"],
+    ["build.rs", "config.rs", "lib.rs", "projection.rs", "native.rs"],
     visibility = ["//apps/BEVO:__subpackages__"],
 )
 
@@ -35,9 +35,10 @@ alias(
 # Bazel-generated protobuf and CAN JSON.
 sensor_proto_library(
     name = "sensor_proto",
-    proto = "//lib/codegen/telemetry:can_packets_proto",
+    proto = "//lib/codegen/telemetry:artemis_proto_source",
     can_json = "//lib/codegen/telemetry:can_json",
-    contract = "//lib/codegen/telemetry:schema_contract",
+    contract = "//lib/codegen/telemetry:artemis_schema_contract",
+    policy = "//lib/codegen/telemetry:native_policy",
 )
 
 # ---- Pi deployment ---------------------------------------------------------
@@ -80,11 +81,11 @@ genrule(
     srcs = [
         ":pi_core_binaries",
         "//lib/codegen/telemetry:can_json",
-        "//lib/codegen/telemetry:schema_contract",
-        "//lib/codegen/telemetry:schema_descriptor",
+        "//lib/codegen/telemetry:artemis_schema_contract",
+        "//lib/codegen/telemetry:artemis_schema_descriptor",
     ],
     outs = ["pi_core_manifest.json"],
-    cmd = "$(execpath :release_metadata) --out $@ --can-json $(location //lib/codegen/telemetry:can_json) --contract $(location //lib/codegen/telemetry:schema_contract) --descriptor $(location //lib/codegen/telemetry:schema_descriptor) $(locations :pi_core_binaries)",
+    cmd = "$(execpath :release_metadata) --out $@ --can-json $(location //lib/codegen/telemetry:can_json) --contract $(location //lib/codegen/telemetry:artemis_schema_contract) --descriptor $(location //lib/codegen/telemetry:artemis_schema_descriptor) $(locations :pi_core_binaries)",
     tools = [":release_metadata"],
     target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
@@ -98,15 +99,15 @@ py_test(
     args = [
         "$(rootpath :pi_core_manifest)",
         "$(rootpath //lib/codegen/telemetry:can_json)",
-        "$(rootpath //lib/codegen/telemetry:schema_contract)",
-        "$(rootpath //lib/codegen/telemetry:schema_descriptor)",
+        "$(rootpath //lib/codegen/telemetry:artemis_schema_contract)",
+        "$(rootpath //lib/codegen/telemetry:artemis_schema_descriptor)",
         "$(rootpaths :pi_core_binaries)",
     ],
     data = [
         ":pi_core_manifest", ":pi_core_binaries",
         "//lib/codegen/telemetry:can_json",
-        "//lib/codegen/telemetry:schema_contract",
-        "//lib/codegen/telemetry:schema_descriptor",
+        "//lib/codegen/telemetry:artemis_schema_contract",
+        "//lib/codegen/telemetry:artemis_schema_descriptor",
     ],
     target_compatible_with = NOT_WINDOWS,
 )
@@ -116,12 +117,12 @@ genrule(
     srcs = [
         ":pi_core_manifest", ":pi_core_binaries",
         "//lib/codegen/telemetry:can_json",
-        "//lib/codegen/telemetry:schema_contract",
-        "//lib/codegen/telemetry:schema_descriptor",
+        "//lib/codegen/telemetry:artemis_schema_contract",
+        "//lib/codegen/telemetry:artemis_schema_descriptor",
     ],
     outs = ["pi_core_metadata.tar.gz", "pi_core_executables.tar.gz"],
     tools = ["//apps/BEVO/updater:package"],
-    cmd = "$(execpath //apps/BEVO/updater:package) layers --manifest $(location :pi_core_manifest) --contract $(location //lib/codegen/telemetry:schema_contract) --descriptor $(location //lib/codegen/telemetry:schema_descriptor) --can-json $(location //lib/codegen/telemetry:can_json) --metadata-out $(location pi_core_metadata.tar.gz) --binaries-out $(location pi_core_executables.tar.gz) $(locations :pi_core_binaries)",
+    cmd = "$(execpath //apps/BEVO/updater:package) layers --manifest $(location :pi_core_manifest) --contract $(location //lib/codegen/telemetry:artemis_schema_contract) --descriptor $(location //lib/codegen/telemetry:artemis_schema_descriptor) --can-json $(location //lib/codegen/telemetry:can_json) --metadata-out $(location pi_core_metadata.tar.gz) --binaries-out $(location pi_core_executables.tar.gz) $(locations :pi_core_binaries)",
     target_compatible_with = NOT_WINDOWS,
 )
 

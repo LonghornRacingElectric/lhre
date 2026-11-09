@@ -28,7 +28,7 @@ telemetry_artifact = rule(
     attrs = {
         "car": attr.string(default = "Orion", values = ["Orion", "Artemis"]),
         "common_sql": attr.label(allow_single_file = [".sql"]),
-        "kind": attr.string(mandatory = True, values = ["json", "can_json", "signals_json", "proto", "sql", "contract", "orm", "prisma", "storage", "storage_sql"]),
+        "kind": attr.string(mandatory = True, values = ["json", "can_json", "signals_json", "proto", "sql", "contract", "orm", "prisma", "storage", "storage_sql", "native_policy"]),
         "out": attr.output(mandatory = True),
         "spec": attr.label(
             mandatory = True,

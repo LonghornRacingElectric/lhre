@@ -1,370 +1,125 @@
 use anyhow::Result;
-use rumqttc::{Client, Event, Incoming, MqttOptions, QoS};
-use serde_json::Value;
-use std::io::Read;
+use prost::Message;
+use rumqttc::{Client, MqttOptions, QoS};
+use sensor_proto::native::{self, TelemetryBatch, TelemetryUpdate, UplinkLimits};
 use std::os::unix::net::UnixStream;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc::{self, SyncSender, TrySendError};
-use std::sync::{Arc, Mutex};
+use std::path::Path;
+use std::sync::mpsc::{self, SyncSender};
 use std::thread;
 use std::time::{Duration, Instant};
 
-// OTA globals
-// static OTA_LINK: Mutex<Option<String>> = Mutex::new(None);
-// static OTA_DEVICE_ID: Mutex<Option<u32>> = Mutex::new(None);
+const BATCH_DELAY: Duration = Duration::from_millis(5);
+const BATCH_COUNT: usize = 64;
+const OUTBOUND_CAPACITY: usize = 2048;
 
-const IPC_SOCKET_PATH: &str = "/tmp/BEVO_cand_publishd.sock";
-const STARTUP_SEMAPHORE_PATH: &str = "/tmp/BEVO_publishd_ready";
-// const OTA_SEMAPHORE_PATH: &str = "/tmp/BEVO_ota_request";
-// // const MQTT_HOST: &str = "192.168.1.109";
-const MQTT_HOST: &str = "100.88.194.126"; // telemetry server, over Tailscale
-const MQTT_PORT: u16 = 1883;
-const MQTT_CLIENT_ID: &str = "BEVO-ORION";
-const MQTT_ANNOUNCE_CLIENT_ID: &str = "BEVO-Orion";
-const MQTT_TOPIC_PUBLISH: &str = "orion";
-const MQTT_TOPIC_SERVER_COMMUNICATION: &str = "server-communication";
-const MQTT_TOPIC_CLIENT_CONNECTIONS: &str = "client-connections";
-const MQTT_OUTBOUND_QUEUE_CAPACITY: usize = 2048;
-const INITIAL_PACKET_ID_REQUEST_INTERVAL_MS: u64 = 1000;
-
-fn env_or_default(name: &str, default: &str) -> String {
-    std::env::var(name).unwrap_or_else(|_| default.to_string())
-}
-
-/// Publish rate when `PUBLISHD_PUBLISH_HZ` is unset. 50 Hz is the GPS
-/// experiment (Locus Lock does 10/50/100 Hz; the dashboard samples at 20 ms to
-/// match); it was 20. One knob so it is easy to try and revert. The car's
-/// systemd drop-in overrides it when present.
-const DEFAULT_PUBLISH_HZ: f64 = 50.0;
-
-/// Minimum interval between *published* snapshots, from `PUBLISHD_PUBLISH_HZ`.
-///
-/// Each cand frame is a full all-subsystem snapshot at ~100 Hz, so publishing
-/// only one per interval is loss-safe per subsystem (every snapshot carries them
-/// all) — it just caps the temporal resolution on the live + DB path to keep the
-/// cellular uplink (and end-to-end latency) bounded. loggerd still logs every
-/// frame at full rate via cand's other socket. `PUBLISHD_PUBLISH_HZ=0` disables
-/// throttling (full-rate publish). Defaults to `DEFAULT_PUBLISH_HZ`.
-fn publish_min_interval() -> Option<Duration> {
-    let hz: f64 = std::env::var("PUBLISHD_PUBLISH_HZ").ok().and_then(|s| s.parse().ok()).unwrap_or(DEFAULT_PUBLISH_HZ);
-    if hz <= 0.0 {
-        None
-    } else {
-        Some(Duration::from_secs_f64(1.0 / hz))
-    }
-}
-
-fn should_require_server_packet_id() -> bool {
-    !matches!(
-        std::env::var("PUBLISHD_REQUIRE_SERVER_PACKET_ID")
-            .ok()
-            .as_deref()
-            .map(|value| value.to_ascii_lowercase()),
-        Some(value) if value == "0" || value == "false" || value == "no"
-    )
-}
-
-fn packet_id_announce_payload(client_id: &str) -> String {
-    env_or_default("PUBLISHD_CLIENT_ANNOUNCE_ID", client_id)
-}
-
-struct MqttClient {
-    client: Arc<Mutex<Client>>,
-    outbound_tx: SyncSender<Vec<u8>>,
-    packet_id: Arc<AtomicU64>,
-    initialized: Arc<std::sync::atomic::AtomicBool>,
-}
-
-impl MqttClient {
-    fn new(host: &str, port: u16, client_id: &str) -> Result<Self> {
-        let mut mqtt_options = MqttOptions::new(client_id, host, port);
-        mqtt_options.set_keep_alive(Duration::from_secs(20));
-
-        let (client, mut connection) = Client::new(mqtt_options, 64);
-        let client = Arc::new(Mutex::new(client));
-        let packet_id = Arc::new(AtomicU64::new(0));
-        let initialized = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let (outbound_tx, outbound_rx) = mpsc::sync_channel::<Vec<u8>>(MQTT_OUTBOUND_QUEUE_CAPACITY);
-
-        {
-            let lock = client.lock();
-            if let Ok(locked_client) = lock {
-                locked_client.subscribe(MQTT_TOPIC_SERVER_COMMUNICATION, QoS::AtMostOnce)?;
-            } else {
-                anyhow::bail!("mqtt client mutex poisoned during subscribe");
+fn mqtt_sender() -> SyncSender<Vec<u8>> {
+    let host = std::env::var("PUBLISHD_MQTT_HOST").unwrap_or_else(|_| "100.88.194.126".into());
+    let port = std::env::var("PUBLISHD_MQTT_PORT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1883);
+    let id = std::env::var("PUBLISHD_MQTT_CLIENT_ID").unwrap_or_else(|_| "BEVO-ARTEMIS".into());
+    let mut options = MqttOptions::new(format!("{id}-{}", std::process::id()), host, port);
+    options.set_keep_alive(Duration::from_secs(20));
+    let (client, mut connection) = Client::new(options, 64);
+    thread::spawn(move || {
+        for event in connection.iter() {
+            if let Err(error) = event {
+                eprintln!("[PUBLISHD] MQTT connection: {error}");
+                thread::sleep(Duration::from_millis(200));
             }
         }
-
-        let publish_client = Arc::clone(&client);
-        thread::spawn(move || {
-            while let Ok(payload) = outbound_rx.recv() {
-                let publish_result = publish_client
-                    .lock()
-                    .expect("mqtt client mutex poisoned")
-                    .publish(MQTT_TOPIC_PUBLISH, QoS::AtMostOnce, false, payload);
-
-                if let Err(error) = publish_result {
-                    eprintln!("publishd mqtt publish error: {error}");
-                }
+    });
+    let (tx, rx) = mpsc::sync_channel::<Vec<u8>>(OUTBOUND_CAPACITY);
+    thread::spawn(move || {
+        while let Ok(bytes) = rx.recv() {
+            if let Err(error) = client.publish("artemis/data", QoS::AtLeastOnce, false, bytes) {
+                eprintln!("[PUBLISHD] MQTT publish: {error}");
             }
-        });
-
-        let packet_id_for_loop = Arc::clone(&packet_id);
-        let initialized_for_loop = Arc::clone(&initialized);
-        thread::spawn(move || {
-            for event in connection.iter() {
-                match event {
-                    Ok(Event::Incoming(Incoming::Publish(publish))) => {
-                        if publish.topic == MQTT_TOPIC_SERVER_COMMUNICATION {
-                            handle_server_message(&packet_id_for_loop, &initialized_for_loop, &publish.payload);
-                        }
-                    }
-                    Ok(Event::Incoming(Incoming::Disconnect)) => break,
-                    Ok(_) => {}
-                    Err(error) => {
-                        eprintln!("publishd mqtt connection error: {error}");
-                        thread::sleep(Duration::from_millis(200));
-                    }
-                }
-            }
-        });
-
-        Ok(Self {
-            client,
-            outbound_tx,
-            packet_id,
-            initialized,
-        })
-    }
-
-    fn publish_sensor_bytes(&self, payload: &[u8]) -> Result<()> {
-        match self.outbound_tx.try_send(payload.to_vec()) {
-            Ok(_) => Ok(()),
-            Err(TrySendError::Full(_)) => {
-                eprintln!("publishd outbound queue full; dropping frame");
-                Ok(())
-            }
-            Err(TrySendError::Disconnected(_)) => anyhow::bail!("publishd outbound queue disconnected"),
         }
-    }
-
-    fn packet_id(&self) -> u64 {
-        self.packet_id.load(Ordering::Relaxed)
-    }
-
-    fn request_initial_packet_id(&self, announce_payload: &str) -> u64 {
-        let mut attempts: u64 = 0;
-        loop {
-            if self.initialized.load(Ordering::Relaxed) {
-                return self.packet_id();
-            }
-
-            attempts = attempts.saturating_add(1);
-
-            println!(
-                "publishd requesting packet_id on topic '{}' with payload '{}'",
-                MQTT_TOPIC_CLIENT_CONNECTIONS,
-                announce_payload
-            );
-
-            let publish_result = self
-                .client
-                .lock()
-                .expect("mqtt client mutex poisoned")
-                .publish(
-                    MQTT_TOPIC_CLIENT_CONNECTIONS,
-                    QoS::AtMostOnce,
-                    false,
-                    announce_payload.as_bytes().to_vec(),
-                );
-            if let Err(error) = publish_result {
-                eprintln!("publishd mqtt packet_id request publish error: {error}");
-            }
-
-            if attempts % 30 == 0 {
-                eprintln!(
-                    "publishd still waiting for server packet_id after {} requests",
-                    attempts
-                );
-            }
-
-            thread::sleep(Duration::from_millis(INITIAL_PACKET_ID_REQUEST_INTERVAL_MS));
-        }
-    }
+    });
+    tx
 }
 
-fn handle_server_message(
-    packet_id: &Arc<AtomicU64>,
-    initialized: &Arc<std::sync::atomic::AtomicBool>,
-    payload: &[u8],
-) {
-    let parsed: Result<Value, _> = serde_json::from_slice(payload);
-    let Ok(message) = parsed else {
+fn flush(batch: &mut TelemetryBatch, sender: &SyncSender<Vec<u8>>, dropped: &mut u64) {
+    if batch.updates.is_empty() {
         return;
-    };
-
-    // if message.get("type").and_then(Value::as_str).is_some()
-    // {
-    //     println!("publishd received server message: {}", message);
-    // }
-
-    // if message.get("packet_id").is_none() {
-    //     // Assume request for OTA
-    //     if let Some(ota_obj) = message.get("OTA_request").and_then(Value::as_object) {
-    //         if let Some(link) = ota_obj.get("OTA_link").and_then(Value::as_str) {
-    //             if let Some(device_id) = ota_obj.get("OTA_device_id").and_then(Value::as_u64) {
-    //                 let mut ota_link_lock = OTA_LINK.lock().unwrap();
-    //                 *ota_link_lock = Some(link.to_string());
-    //                 println!("publishd received OTA link: {}", link);
-    //                 let mut ota_device_id_lock = OTA_DEVICE_ID.lock().unwrap();
-    //                 *ota_device_id_lock = Some(device_id as u32);
-    //                 println!("publishd received OTA device ID: {}", device_id);
-
-    //                 // set semaphore to tell can daemon to transition to sending packets rather than sniffing CAN bus
-    //                 write_ota_semaphore(device_id as u32, link).unwrap_or_else(|error| {
-    //                     eprintln!("publishd failed to write OTA semaphore: {error}");
-    //                 });
-    //             } else {
-    //                 eprintln!("publishd received malformed OTA request: {}", message);
-    //             }
-    //         } else {
-    //             eprintln!("publishd received malformed OTA request: {}", message);
-    //         }
-    //     }
-    // }
-
-    if let Some(server_packet_id) = message.get("packet_id").and_then(Value::as_u64) {
-        let candidate = server_packet_id.saturating_add(1);
-        loop {
-            let current = packet_id.load(Ordering::Relaxed);
-            if candidate <= current {
-                break;
-            }
-            if packet_id
-                .compare_exchange(current, candidate, Ordering::Relaxed, Ordering::Relaxed)
-                .is_ok()
-            {
-                initialized.store(true, Ordering::Relaxed);
-                println!("publishd updated packet_id to {candidate} from server-communication");
-                break;
-            }
+    }
+    let bytes = batch.encode_to_vec();
+    batch.updates.clear();
+    if sender.try_send(bytes).is_err() {
+        *dropped += 1;
+        if *dropped == 1 || *dropped % 1000 == 0 {
+            eprintln!("[PUBLISHD] outbound overflow: {dropped} batches dropped");
         }
     }
 }
-
-fn write_startup_semaphore(packet_id: u64) -> Result<()> {
-    let temp_path = format!("{}.tmp", STARTUP_SEMAPHORE_PATH);
-    std::fs::write(&temp_path, packet_id.to_string())?;
-    std::fs::rename(temp_path, STARTUP_SEMAPHORE_PATH)?;
-    Ok(())
-}
-
-// fn write_ota_semaphore(device_id: u32, data_link: &str) -> Result<()> {
-//     let temp_path = format!("{}.tmp", OTA_SEMAPHORE_PATH);
-//     std::fs::write(&temp_path, format!("{}:{}", device_id, data_link))?;
-//     std::fs::rename(temp_path, OTA_SEMAPHORE_PATH)?;
-//     Ok(())
-// }
 
 fn main() -> Result<()> {
-    let _ = std::fs::remove_file(STARTUP_SEMAPHORE_PATH);
-    let release = std::env::var("BEVO_CORE_RELEASE_ROOT")
-        .map_err(|_| anyhow::anyhow!("publishd requires a managed release and reconciliation plan"))?;
-    let projection = sensor_proto::projection::Projection::from_release(std::path::Path::new(&release))
+    native::install_shutdown();
+    let release = std::env::var("BEVO_CORE_RELEASE_ROOT").map_err(|_| {
+        anyhow::anyhow!("publishd requires a managed Artemis release and reconciliation plan")
+    })?;
+    let projection = sensor_proto::projection::Projection::from_release(Path::new(&release))
         .map_err(anyhow::Error::msg)?;
-    // let _ = std::fs::remove_file(OTA_SEMAPHORE_PATH);
-    let mqtt_host = env_or_default("PUBLISHD_MQTT_HOST", MQTT_HOST);
-    let mqtt_port = std::env::var("PUBLISHD_MQTT_PORT")
-        .ok()
-        .and_then(|value| value.parse::<u16>().ok())
-        .unwrap_or(MQTT_PORT);
-    // Append PID so multiple publishd instances (e.g. orphan from a botched
-    // test kill, or dev laptop + on-car) don't collide on the same MQTT
-    // client_id and kick each other off the broker in a reconnect loop. The
-    // server-side device identity is carried in announce_payload (which keeps
-    // using MQTT_ANNOUNCE_CLIENT_ID verbatim), so this is broker-level only.
-    let mqtt_client_id_base = env_or_default("PUBLISHD_MQTT_CLIENT_ID", MQTT_CLIENT_ID);
-    let mqtt_client_id = format!("{}-{}", mqtt_client_id_base, std::process::id());
-    let announce_payload = packet_id_announce_payload(MQTT_ANNOUNCE_CLIENT_ID);
-
-    let mqtt_client = MqttClient::new(&mqtt_host, mqtt_port, &mqtt_client_id)?;
-    println!(
-        "publishd connected to mqtt broker {}:{} with client_id {}",
-        mqtt_host, mqtt_port, mqtt_client_id
-    );
-
-    let require_server_packet_id = should_require_server_packet_id();
-    println!(
-        "publishd require_server_packet_id={} (set PUBLISHD_REQUIRE_SERVER_PACKET_ID=0 to skip handshake)",
-        require_server_packet_id
-    );
-
-    let initial_packet_id = if require_server_packet_id {
-        println!(
-            "publishd requesting initial packet_id using client-connections payload '{}'",
-            announce_payload
-        );
-        mqtt_client.request_initial_packet_id(&announce_payload)
-    } else {
-        1
-    };
-    write_startup_semaphore(initial_packet_id)?;
-    println!("publishd startup complete, initial packet_id={}", initial_packet_id);
-
-    let publish_throttle = publish_min_interval();
-    match publish_throttle {
-        Some(iv) => println!(
-            "publishd: throttling published rate to ~{:.1} Hz (1 snapshot / {} ms); loggerd unaffected (full rate)",
-            1.0 / iv.as_secs_f64(),
-            iv.as_millis()
-        ),
-        None => println!("publishd: publish throttle disabled (full rate)"),
-    }
-
-    loop {
-        // check if there is incoming message from the server
-        match UnixStream::connect(IPC_SOCKET_PATH) {
+    let sender = mqtt_sender();
+    let (tx, rx) = mpsc::sync_channel::<TelemetryUpdate>(native::QUEUE_CAPACITY);
+    thread::spawn(move || loop {
+        match UnixStream::connect(native::PUBLISH_SOCKET) {
             Ok(mut stream) => {
-                // Wall-clock of the last snapshot we actually forwarded to MQTT.
-                // Frames arriving within publish_throttle of it are dropped
-                // (decimated) to bound the cellular uplink + end-to-end latency.
-                let mut last_published: Option<Instant> = None;
-                loop {
-                    let mut length_buffer = [0u8; 4];
-                    if stream.read_exact(&mut length_buffer).is_err() {
-                        break;
-                    }
-
-                    let message_length = u32::from_be_bytes(length_buffer) as usize;
-                    let mut message_buffer = vec![0u8; message_length];
-                    if stream.read_exact(&mut message_buffer).is_err() {
-                        break;
-                    }
-
-                    // Decimation: skip intermediate snapshots inside the window.
-                    if let (Some(iv), Some(last)) = (publish_throttle, last_published) {
-                        if last.elapsed() < iv {
-                            continue;
+                while let Ok(bytes) = native::read_frame(&mut stream) {
+                    match TelemetryUpdate::decode(&bytes[..]) {
+                        Ok(update) => {
+                            if tx.send(update).is_err() {
+                                return;
+                            }
                         }
+                        Err(error) => eprintln!("[PUBLISHD] malformed native update: {error}"),
                     }
-
-                    let projected = match projection.project(&message_buffer) {
-                        Ok(payload) => payload,
-                        Err(error) => {
-                            eprintln!("publishd rejected malformed protobuf: {error}");
-                            continue;
-                        }
-                    };
-                    if let Err(error) = mqtt_client.publish_sensor_bytes(&projected) {
-                        eprintln!("publishd mqtt publish error: {error}");
-                    }
-                    last_published = Some(Instant::now());
                 }
             }
-            Err(_) => {
-                let _ = mqtt_client.packet_id();
-                thread::sleep(Duration::from_millis(500));
+            Err(_) => thread::sleep(Duration::from_millis(200)),
+        }
+    });
+    let mut limits = UplinkLimits::default();
+    let mut batch = TelemetryBatch {
+        format_version: native::FORMAT_VERSION,
+        updates: Vec::new(),
+    };
+    let mut batch_deadline = Instant::now() + BATCH_DELAY;
+    let mut dropped = 0;
+    while !native::stopping() {
+        let now = Instant::now();
+        let batch_wait = if batch.updates.is_empty() {
+            now + Duration::from_secs(1)
+        } else {
+            batch_deadline
+        };
+        let deadline = limits.deadline().map_or(batch_wait, |d| d.min(batch_wait));
+        let updates = match rx.recv_timeout(deadline.saturating_duration_since(now)) {
+            Ok(update) => limits.push(update, Instant::now()),
+            Err(mpsc::RecvTimeoutError::Timeout) => limits.flush_due(Instant::now()),
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+        };
+        for update in updates {
+            if let Some(update) = projection.project_update(&update) {
+                if batch.encoded_len() + update.encoded_len() + 8 > native::MAX_FRAME_BYTES {
+                    flush(&mut batch, &sender, &mut dropped);
+                }
+                if batch.updates.is_empty() {
+                    batch_deadline = Instant::now() + BATCH_DELAY;
+                }
+                batch.updates.push(update);
+                if batch.updates.len() >= BATCH_COUNT {
+                    flush(&mut batch, &sender, &mut dropped);
+                }
             }
         }
+        if Instant::now() >= batch_deadline {
+            flush(&mut batch, &sender, &mut dropped);
+            batch_deadline = Instant::now() + BATCH_DELAY;
+        }
     }
+    flush(&mut batch, &sender, &mut dropped);
+    Ok(())
 }

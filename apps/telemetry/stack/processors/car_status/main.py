@@ -26,7 +26,7 @@ import time
 
 from google.protobuf.json_format import MessageToDict
 from kafka import KafkaConsumer, KafkaProducer
-from stack.ingest.sensor_decode import CAR_MESSAGES
+from stack.ingest.sensor_decode import CAR_MESSAGES, LatestState, decode_updates, payload_format
 
 from classifier import CarStateMachine, Thresholds
 
@@ -42,7 +42,7 @@ OUTPUT_TOPIC = os.getenv("KAFKA_OUTPUT_TOPIC", "car_status")
 CONSUMER_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "car-status-group")
 HEARTBEAT_MS = int(os.getenv("CAR_STATUS_HEARTBEAT_MS", "2000"))
 
-DEFAULT_CAR = CAR_NAME_MAP.get(os.getenv("KAFKA_DEFAULT_CAR", "Orion").strip().lower(), "Orion")
+DEFAULT_CAR = CAR_NAME_MAP.get(os.getenv("KAFKA_DEFAULT_CAR", "Artemis").strip().lower(), "Orion")
 
 
 def _normalize_car_name(raw_car):
@@ -66,14 +66,15 @@ def _car_from_headers(headers):
     return None
 
 
+_latest = LatestState()
+
+
 def _decode(payload, car_type):
+    if car_type == "Artemis":
+        return _latest.apply(decode_updates(payload))
     row = CAR_MESSAGES[car_type]()
     row.ParseFromString(payload)
-    return MessageToDict(
-        row,
-        preserving_proto_field_name=True,
-        always_print_fields_with_no_presence=True,
-    )
+    return MessageToDict(row, preserving_proto_field_name=True, always_print_fields_with_no_presence=True)
 
 
 def _frame_time_ms(frame, fallback_ms):
@@ -261,6 +262,7 @@ try:
                     # sensor_data
                     try:
                         car_type = _car_from_headers(record.headers) or DEFAULT_CAR
+                        payload_format(record.headers, car_type)
                         frame = _decode(record.value, car_type)
                     except Exception as decode_err:
                         logging.error("decode error: %s", decode_err)

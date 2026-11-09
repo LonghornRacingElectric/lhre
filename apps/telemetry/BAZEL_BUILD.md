@@ -122,8 +122,8 @@ not a runtime schema registry or multi-version decoder.
 
 The [schema metadata](../../lib/telemetry/README.md) and BEVO's
 `//apps/BEVO:pi_core_manifest` expose the same source schema identity for a
-separate [BEVO updater](../BEVO/updater/README.md). They do not change MQTT topics/payloads, packet-ID
-handshakes or bridge RPCs. Ingest/bridge protobuf bindings and Orion ORM/DDL
+separate [BEVO updater](../BEVO/updater/README.md). Artemis uses fresh-update batches with an explicit RPC/Kafka format marker;
+legacy Orion retains its separate packet transport. Ingest/bridge Artemis protobuf bindings and generated ORM/DDL
 definitions are generated from that same source, not manually synchronized.
 Use the deployed server's manifest as the reference and test schema-changing
 branches with a matching server/image. Definition comparison is not runtime

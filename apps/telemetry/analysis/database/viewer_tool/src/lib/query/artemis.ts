@@ -7,7 +7,7 @@ import { LIMITS, QueryError, type Observation, type Position, type QueryPlan, ty
 type Database = Pick<ReadOnlyDatabase, "query">;
 type Contract = ReturnType<typeof storageContract>;
 type Selection = { table: string; signals: QueryPlan["signals"] };
-type PoolRow = { time: string; session_start_ms: string; [signal: string]: unknown };
+type PoolRow = { time: string; session_start_ms: string; sample_time_ns: string; [signal: string]: unknown };
 
 function selections(plan: QueryPlan, contract: Contract): Selection[] {
   const selected = new Map<string, Selection>();
@@ -58,7 +58,7 @@ export class ArtemisSource implements TelemetrySource {
   private async *observations(db: Database, pool: Selection, plan: QueryPlan,
     after: Position | null, budget: { scanned: number; deadline: number }): AsyncGenerator<Observation> {
     const columns = pool.signals.map(signal => `"${signal.signal.split(".")[1]}" AS "${signal.signal}"`).join(", ");
-    let boundary = after ? { time: String(after.ts), session: after.session } : null;
+    let boundary = after ? { time: String(after.ts), session: after.session, ns: after.sampleTimeNs } : null;
     let inclusive = true;
     while (true) {
       if (Date.now() >= budget.deadline) throw new QueryError(503, "query_timeout", "The database query exceeded its time limit.");
@@ -67,13 +67,13 @@ export class ArtemisSource implements TelemetrySource {
       const params: unknown[] = [plan.t0, plan.t1, take];
       let predicate = "";
       if (boundary) {
-        params.push(boundary.time, boundary.session);
-        predicate = ' AND ("time" > $4 OR ("time" = $4 AND "session_start_ms" ' + (inclusive ? ">=" : ">") + ' $5))';
+        params.push(boundary.time, boundary.session, boundary.ns);
+        predicate = ' AND ("time", "session_start_ms", "sample_time_ns") ' + (inclusive ? ">=" : ">") + ' ($4, $5, $6)';
       }
       // Prisma converts SQL NULL lists into []; raw history must preserve the
       // difference from a recorded empty array. Identifiers are contract-only.
-      const rows = await db.query<PoolRow>(`SELECT "time", "session_start_ms", ${columns} FROM public."${pool.table}"` +
-        ' WHERE "time" >= $1 AND "time" < $2' + predicate + ' ORDER BY "time", "session_start_ms" LIMIT $3', params);
+      const rows = await db.query<PoolRow>(`SELECT "time", "session_start_ms", "sample_time_ns", ${columns} FROM public."${pool.table}"` +
+        ' WHERE "time" >= $1 AND "time" < $2' + predicate + ' ORDER BY "time", "session_start_ms", "sample_time_ns" LIMIT $3', params);
       for (const row of rows) {
         if (++budget.scanned > LIMITS.maxScannedRows) throw new QueryError(413, "query_scan_limit", "Too many samples scanned; narrow the time range or select a denser signal.");
         const ts = Number(row.time);
@@ -81,7 +81,7 @@ export class ArtemisSource implements TelemetrySource {
         for (const signal of pool.signals) {
           const value = row[signal.signal];
           if (value == null) continue;
-          const position = { ts, session: row.session_start_ms.toString(), signal: signal.signal };
+          const position = { ts, session: row.session_start_ms.toString(), sampleTimeNs: row.sample_time_ns.toString(), signal: signal.signal };
           if (after && comparePositions(position, after) <= 0) continue;
           const normalized = jsonValue(value);
           const oversized = Buffer.byteLength(JSON.stringify(normalized)) > LIMITS.sampleBytes;
@@ -90,7 +90,7 @@ export class ArtemisSource implements TelemetrySource {
       }
       if (rows.length < take) return;
       const last = rows[rows.length - 1];
-      boundary = { time: last.time, session: last.session_start_ms };
+      boundary = { time: last.time, session: last.session_start_ms, ns: last.sample_time_ns };
       inclusive = false;
     }
   }

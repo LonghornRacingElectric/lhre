@@ -6,8 +6,8 @@ const hash = z.string().regex(/^[a-f0-9]{64}$/);
 const rowKey = z.string().regex(/^-?\d{1,19}$/).pipe(z.string().refine(value =>
   BigInt(value) >= -(BigInt(2) ** BigInt(63)) && BigInt(value) < BigInt(2) ** BigInt(63)));
 const cursorSchema = z.strictObject({
-  v: z.literal(2), request: hash, schema: hash, expires: z.number().int(),
-  after: z.strictObject({ ts: z.number().int(), session: rowKey, signal: z.string() }),
+  v: z.literal(3), request: hash, schema: hash, expires: z.number().int(),
+  after: z.strictObject({ ts: z.number().int(), session: rowKey, sampleTimeNs: rowKey, signal: z.string() }),
 });
 type Cursor = z.infer<typeof cursorSchema>;
 const globalState = globalThis as typeof globalThis & { queryCursorSecret?: string };
@@ -27,7 +27,7 @@ export class CursorCodec {
 
   // Sign the continuation position together with its query, catalog, and expiration.
   encode(request: QueryRequest, schema: string, after: Position, expires = this.now() + 24 * 60 * 60 * 1000) {
-    const value: Cursor = { v: 2, request: fingerprint(request), schema, after, expires };
+    const value: Cursor = { v: 3, request: fingerprint(request), schema, after, expires };
     const payload = Buffer.from(JSON.stringify(value)).toString("base64url");
     const signature = createHmac("sha256", this.secret).update(payload).digest("base64url");
     return `${payload}.${signature}`;
@@ -44,7 +44,7 @@ export class CursorCodec {
       const value = cursorSchema.parse(JSON.parse(Buffer.from(payload, "base64url").toString("utf8")));
       const position = value.after;
       if (value.request !== fingerprint(request) || value.expires <= this.now() ||
-          position.ts < request.t0 || position.ts >= request.t1 ||
+          BigInt(position.sampleTimeNs) / BigInt(1000000) !== BigInt(position.ts) || position.ts < request.t0 || position.ts >= request.t1 ||
           !request.signals.includes(position.signal)) throw new Error();
       return value;
     } catch {

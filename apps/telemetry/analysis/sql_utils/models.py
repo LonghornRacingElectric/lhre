@@ -221,6 +221,7 @@ class ArtemisGpsPrecise(BaseArtemis):
     __tablename__ = 'gps_precise'
     __table_args__ = {'schema': 'public', 'extend_existing': True}
     session_start_ms = Column(BigInteger, primary_key=True)
+    sample_time_ns = Column(BigInteger, primary_key=True)
     time = Column(BigInteger, primary_key=True)
     lat_precise = Column(Float(53))
     lon_precise = Column(Float(53))
@@ -238,12 +239,6 @@ class ArtemisRecordingSession(BaseArtemis):
     start_time = Column(BigInteger, nullable=False)
     end_time = Column(BigInteger, nullable=False)
 
-
-class ArtemisTransportState(BaseArtemis):
-    __tablename__ = 'transport_state'
-    __table_args__ = {'schema': 'public'}
-    singleton = Column(Boolean, primary_key=True)
-    last_packet_id = Column(BigInteger, nullable=False)
 
 
 class ArtemisStorageMigration(BaseArtemis):

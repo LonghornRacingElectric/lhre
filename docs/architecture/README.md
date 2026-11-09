@@ -32,8 +32,9 @@ three years after everyone who made the decision graduated.
 | [021](021-artemis-storage-scope.md) | Preserve Orion; scope frequency pools to Artemis; retire old-car runtime paths | Accepted |
 | [022](022-explicit-native-rates.md) | CAN timing uses explicit native rates instead of tiers | Accepted |
 | [023](023-per-car-signal-catalogs.md) | Immutable per-car signal catalogs with explicit current selection | Accepted |
-
 | [024](024-artemis-query-gateway.md) | Current Artemis catalog and session/time query gateway; preserve Orion legacy paths | Accepted |
+
+| [025](025-artemis-native-observations.md) | Fresh Artemis observations, explicit presence and nanosecond receipt identity | Accepted |
 
 ## ADRs vs. READMEs
 

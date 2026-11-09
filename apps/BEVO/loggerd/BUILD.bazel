@@ -10,6 +10,7 @@ NOT_WINDOWS = select({
 rust_binary(
     name = "loggerd",
     srcs = ["main.rs"],
+    visibility = ["//apps/BEVO:__subpackages__", "//apps/telemetry/stack/tests:__pkg__"],
     edition = "2021",
     target_compatible_with = NOT_WINDOWS,
     deps = [

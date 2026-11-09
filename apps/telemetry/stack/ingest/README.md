@@ -15,7 +15,7 @@ The forwarding worker retries failed/uncertain sends in order until Kafka
 acknowledges the raw record. A full forwarding queue still logs and drops new
 input; car logs remain the recovery source for that pre-Kafka window.
 
-BEVO welcome lookups run on a control worker. They wait for queued bridge work,
+Legacy Orion welcome lookups run on a control worker. They wait for queued bridge work,
 then choose a packet ID above both Postgres and a snapshot of retained raw Kafka
 records, so database lag cannot reuse IDs after a producer restart. This scans
 retained history and may delay startup; it fails closed when either lookup fails.
@@ -38,7 +38,7 @@ never edit or check in the Bazel output. The legacy `ingest_tarball` label is an
 alias of `ingest_load` for one migration cycle.
 
 `/schema/schema_contract.json` and `/schema/schema_descriptor.pb` are packaged
-from those same inputs for the [deployed authority](../../schema_registry/README.md).
+from the active Artemis contract/descriptor for the [deployed authority](../../schema_registry/README.md).
 They describe this image's compiled schema; they are not runtime overrides
 or definitions loaded by the MQTT handler. Rebuild the bridge alongside
 ingest when deploying a schema change.
@@ -50,7 +50,7 @@ queue logic changes are needed to adopt a schema edit.
 
 The checked-in Orion DDL and Python bindings were removed. Both Python and Go
 bridge bindings are generated from the one bridge RPC definition by Bazel;
-the RPC contract itself is unchanged. The old workspace-copy target and
+the RPC adds explicit `payload_format` alongside the car identity. The old workspace-copy target and
 standalone Dockerfile are no longer supported build paths.
 
 `docker-compose.yml` also defines Mosquitto, PostgreSQL, and Grafana. Their
@@ -84,3 +84,13 @@ ORM `create_all` no longer mutates Artemis on startup. Use the
 [explicit schema command](../../scripts/README.md) for later additions. Orion keeps its original packet-based database logic. Angelique and Nightwatch
 schemas, decoders and provisioning are removed. Artemis uses its own generated
 protobuf identity and database; it is not an alias for a retired car.
+
+Artemis MQTT `artemis/data` forwards `TelemetryBatch` bytes unchanged with
+`payload_format: artemis_updates_v1` in the bridge request. No format guessing
+or Artemis packet-ID welcome path remains. Scalar defaults and empty arrays
+are admitted only through their explicit updated-field paths. Python live
+consumers use a per-field timestamped cache; the database helper never fills
+missing history from that cache.
+
+The existing manual `:pool_storage_test` uses `POOL_TEST_DATABASE_URL` for an
+isolated Timescale database.

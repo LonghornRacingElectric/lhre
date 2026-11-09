@@ -183,15 +183,18 @@ function parsePossiblyJson(payload: string): unknown {
   }
 }
 
-async function decodeSensorMessageByCar(value: Buffer, car: "orion" | "artemis" | null): Promise<ParsedRecord | null> {
-  if (!car) return null;
+const artemisState: ParsedRecord = {};
+const artemisClocks = new Map<string,bigint>();
+
+async function decodeSensorMessageByCar(value: Buffer, car: "orion" | "artemis" | null, format?: string): Promise<ParsedRecord | null> {
+  if (!car || (car === "artemis" && format !== "artemis_updates_v1")) return null;
   if (!schemaPromises[car]) {
     schemaPromises[car] = (async () => {
       try {
         const filename = car === "orion" ? "can_packets.proto" : "artemis.proto";
         const protoPath = process.env[`${car.toUpperCase()}_PROTO_PATH`] || path.resolve(process.cwd(), "../../../../../bazel-bin/lib/codegen/telemetry/", filename);
         const root = await protobuf.load(protoPath);
-        return root.lookupType(`${car}.${car === "orion" ? "Orion" : "Artemis"}SensorData`);
+        return root.lookupType(car === "artemis" ? "artemis.TelemetryBatch" : "orion.OrionSensorData");
       } catch (error) {
         console.error(`Failed to load ${car} protobuf schema`, error);
         return null;
@@ -201,9 +204,29 @@ async function decodeSensorMessageByCar(value: Buffer, car: "orion" | "artemis" 
   const type = await schemaPromises[car];
   if (!type) return null;
   try {
-    return camelizeKeysDeep(type.toObject(type.decode(new Uint8Array(value)), {
-      longs: Number, enums: String, defaults: true, arrays: true, objects: true,
-    })) as ParsedRecord;
+    const decoded = type.toObject(type.decode(new Uint8Array(value)), {
+      longs: String, enums: String, defaults: true, arrays: true, objects: true,
+    });
+    if (car === "orion") return camelizeKeysDeep(decoded) as ParsedRecord;
+    if (decoded.formatVersion !== 1 || !decoded.updates?.length || decoded.updates.length > 64) return null;
+    const root = type.root.lookupType("artemis.ArtemisSensorData");
+    for (const update of decoded.updates) {
+      const stamp = BigInt(update.sampleTimeNs);
+      const values = update.values;
+      if (stamp <= BigInt(0) || !values || stamp / BigInt(1000000) !== BigInt(values.time)) return null;
+      for (const path of update.updatedFields) {
+        const group = root.fieldsById[path.group];
+        const field = (group?.resolvedType as protobuf.Type)?.fieldsById[path.field];
+        if (!field || !values[group.name]) return null;
+        const key = `${path.group}.${path.field}`;
+        if (stamp >= (artemisClocks.get(key) ?? BigInt(0))) {
+          setByPath(artemisState,[group.name,field.name],values[group.name][field.name]);
+          artemisClocks.set(key,stamp);
+        }
+      }
+      artemisState.time = Math.max(Number(artemisState.time ?? 0), Number(values.time));
+    }
+    return camelizeKeysDeep(artemisState) as ParsedRecord;
   } catch { return null; }
 }
 
@@ -281,10 +304,10 @@ function buildNormalizedSensorRoutes(parsed: ParsedRecord, carType: string): Rec
 
   const steerV = toNumber(firstDefined(controls, ["steerV"]));
   const steerColAngle = toNumber(firstDefined(dynamics, ["steerColAngle"]));
-  const flwSpeed = toNumber(firstDefined(dynamics, ["flwSpeed"]));
-  const frwSpeed = toNumber(firstDefined(dynamics, ["frwSpeed"]));
-  const blwSpeed = toNumber(firstDefined(dynamics, ["blwSpeed"]));
-  const brwSpeed = toNumber(firstDefined(dynamics, ["brwSpeed"]));
+  const flwSpeed = toNumber(firstDefined(dynamics, ["flWheelSpeed", "flwSpeed"]));
+  const frwSpeed = toNumber(firstDefined(dynamics, ["frWheelSpeed", "frwSpeed"]));
+  const blwSpeed = toNumber(firstDefined(dynamics, ["blWheelSpeed", "blwSpeed"]));
+  const brwSpeed = toNumber(firstDefined(dynamics, ["brWheelSpeed", "brwSpeed"]));
   const wheelSpeedAvg = average([flwSpeed, frwSpeed, blwSpeed, brwSpeed]);
   const speed = toNumber(firstDefined(dynamics, ["dashSpeed", "wheelSpeed"])) ?? wheelSpeedAvg;
 
@@ -585,6 +608,7 @@ export async function startKafkaConsumer(): Promise<void> {
           const decoded = await decodeSensorMessageByCar(
             Buffer.from(message.value),
             headerCarType,
+            headers.payload_format,
           );
           if (decoded) {
             parsed = decoded;

@@ -18,10 +18,7 @@ if [[ -n "$CORE_RELEASE" ]]; then
   CORE_BIN_DIR="$CORE_RELEASE/bin"
   export BEVO_CORE_RELEASE_ROOT="$CORE_RELEASE"
 fi
-if [[ ! -f "$CORE_RELEASE/reconciliation.json" ]]; then
-  echo "Missing reconciliation plan in $CORE_RELEASE; run the updater before starting telemetry." >&2
-  exit 1
-fi
+
 CAN_IFACE_0="${CAND_CAN_INTERFACE_0:-can0}"
 CAN_IFACE_1="${CAND_CAN_INTERFACE_1:-can1}"
 LOGGERD_ENABLED="${LOGGERD_ENABLED:-1}"
@@ -30,7 +27,7 @@ export LOGGERD_LOG_DIR="${LOGGERD_LOG_DIR:-$BEVO_ROOT/loggerd/logs}"
 
 cleanup() {
   kill "${CAND_PID:-}" "${DASHD_PID:-}" "${PUBLISHD_PID:-}" "${LOGGERD_PID:-}" >/dev/null 2>&1 || true
-  rm -f /tmp/BEVO_publishd_ready /tmp/BEVO_cand.sock /tmp/BEVO_cand_publishd.sock
+  rm -f /tmp/BEVO_cand.sock /tmp/BEVO_cand_publishd.sock /tmp/BEVO_cand_loggerd.sock
 }
 trap cleanup EXIT INT TERM
 
@@ -42,7 +39,7 @@ for bin in "$CORE_BIN_DIR/cand" "$BIN_DIR/dashd" "$CORE_BIN_DIR/loggerd" "$CORE_
   fi
 done
 
-PUBLISHD_REQUIRE_SERVER_PACKET_ID="${PUBLISHD_REQUIRE_SERVER_PACKET_ID:-1}" "$CORE_BIN_DIR/publishd" &
+"$CORE_BIN_DIR/publishd" &
 PUBLISHD_PID=$!
 
 "$BIN_DIR/dashd" &

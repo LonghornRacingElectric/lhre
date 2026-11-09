@@ -4,6 +4,10 @@ import hashlib
 import json
 
 ROOT_PATHS = {(1,), (2,)}
+
+
+def required_roots(manifest):
+    return {(1,)} if manifest["root"] == "artemis.ArtemisSensorData" else ROOT_PATHS
 SCALAR_TYPES = {
     "double": 1, "float": 2, "int64": 3, "uint64": 4, "int32": 5,
     "bool": 8, "string": 9, "bytes": 12, "uint32": 13,
@@ -54,6 +58,8 @@ class Manifest:
             if any(type(number) is not int or not 0 < number < 536870912 or 19000 <= number <= 19999 for number in path):
                 raise ValueError("invalid protobuf field number")
         for path, name in (((1,), "time"), ((2,), "packet_id")):
+            if path not in required_roots(self.manifest):
+                continue
             field = self.fields.get(path, {})
             if field.get("names") != [name] or field.get("type") != "int64" or field.get("repeated"):
                 raise ValueError("incompatible telemetry root")
@@ -101,6 +107,8 @@ class Schema(Manifest):
             if (layout and not field["repeated"]) or len(set(layout)) != len(layout):
                 raise ValueError("invalid array layout")
         for path, name in (((1,), "time"), ((2,), "packet_id")):
+            if path not in required_roots(self.manifest):
+                continue
             field = self.fields.get(path, {})
             if field.get("names") != [name] or field.get("type") != "int64" or field.get("repeated"):
                 raise ValueError("incompatible telemetry root")
@@ -131,9 +139,9 @@ def compare(producer, server):
             rejected[path] = reason
         else:
             accepted[path] = sorted(int(number) for number in common)
-    if not ROOT_PATHS <= accepted.keys():
+    if not required_roots(producer.manifest) <= accepted.keys():
         raise ValueError("incompatible time/packet_id")
-    if not accepted.keys() - ROOT_PATHS:
+    if not accepted.keys() - required_roots(producer.manifest):
         raise ValueError("no compatible measurements")
     return accepted, rejected
 
@@ -147,7 +155,8 @@ def release_compatible(producer, server):
 
 
 def release_plan(metadata, producer, server):
-    if metadata.get("projection_version") != 1 or metadata["schema_id"] != producer.schema_id:
+    expected = 2 if producer.manifest["root"] == "artemis.ArtemisSensorData" else 1
+    if metadata.get("projection_version") != expected or metadata["schema_id"] != producer.schema_id or (expected == 2 and metadata.get("wire_format") != "artemis_updates_v1"):
         raise ValueError("release lacks numeric projection support")
     accepted, rejected = compare(producer, server)
     plan = {

@@ -11,3 +11,7 @@ runfiles and shared network configuration. Start it explicitly with
 
 Raw telemetry decoding supports only explicit Orion and Artemis car headers.
 Unknown headers are rejected rather than decoded as the default car.
+
+Artemis input requires `payload_format: artemis_updates_v1`. The shared decode
+helper applies only observed fields to a timestamped live-state cache; older
+observations cannot replace newer values. Orion decoding remains independent.

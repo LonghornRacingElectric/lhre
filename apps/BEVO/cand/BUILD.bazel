@@ -31,14 +31,19 @@ rust_binary(
 # macOS development.
 rust_binary(
     name = "mock_main",
-    srcs = ["mock_main.rs"],
+    srcs = ["mock_main.rs", "main.rs"],
+    crate_root = "mock_main.rs",
+    visibility = ["//apps/BEVO:__subpackages__", "//apps/telemetry/stack/tests:__pkg__"],
     edition = "2021",
     target_compatible_with = NOT_WINDOWS,
     deps = [
         "//apps/BEVO:sensor_proto",
         "@crates//:anyhow",
         "@crates//:prost",
-    ],
+    ] + select({
+        "@platforms//os:linux": ["@crates//:socketcan"],
+        "//conditions:default": [],
+    }),
 )
 
 # Pure-stdlib mock CAN traffic generator; feeds cand's CAND_USE_MOCK=1 UDP
@@ -46,6 +51,8 @@ rust_binary(
 py_binary(
     name = "mock_can",
     srcs = ["mock_can.py"],
+    args = ["--can-json", "$(location //lib/codegen/telemetry:can_json)"],
+    data = ["//lib/codegen/telemetry:can_json"],
 )
 
 sh_binary(

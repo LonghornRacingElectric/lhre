@@ -19,17 +19,17 @@ resulting `MODULE.bazel.lock` change. Protobuf Go packages are build outputs;
 they are not checked into `proto/`.
 
 Orion's Go library compiles `//lib/codegen/telemetry:orion_proto` from the same
-textproto-generated protobuf used by BEVO and ingest. Artemis compiles `:artemis_proto` with the same current fields and a distinct
+legacy textproto-generated protobuf used by Orion ingest. Artemis compiles `:artemis_proto` with the same current fields and a distinct
 wire identity. Retired car proto inputs and dispatch are removed. The bridge enumerates current
 Orion/Artemis fields and seed groups from generated descriptors instead of a copied
 schema/field list. Existing derived GPS, power and cell-statistics metrics
-remain application logic, and the gRPC/MQTT payload contracts are unchanged.
+remain application logic. Artemis now uses explicit native-update batches.
 The standalone Dockerfile was removed; build images through Bazel only.
 
 The image also packages the generated contract/descriptor under `/schema/`
 for the [deployed authority](../../schema_registry/README.md). That metadata
 must match the running ingest image before the authority advertises a schema
-to BEVO. This does not change the bridge's decoding or RPC behavior.
+to BEVO. Both images must advertise the active Artemis schema.
 
 Compose expects both `lhre/telemetry-kafka:4.1.0` and
 `lhre/telemetry-kafka-bridge:dev` to be loaded. The root
@@ -38,7 +38,7 @@ Compose expects both `lhre/telemetry-kafka:4.1.0` and
 ## Raw persistence contract
 
 A successful `SendSensorData` RPC means Kafka acknowledged the raw protobuf
-record on `sensor_data` with its `car_type` header. Producer errors return failure;
+record on `sensor_data` with its `car_type` and `payload_format` headers. Producer errors return failure;
 there is no intermediate raw-data channel that can drop a successful request.
 An uncertain RPC may be retried, producing duplicates; the
 [database writer](../processors/db_writer/README.md) admits each packet once.
@@ -52,3 +52,9 @@ topics, using incremental config changes. `SENSOR_DATA_RETENTION_MS` defaults to
 partition). Whichever limit is reached first bounds database recovery. Size both
 for measured traffic and the required outage budget, and monitor consumer lag
 and free space. Broker defaults apply separately to other topics.
+
+Artemis requires `artemis_updates_v1`, validates batch version/timestamps/presence,
+and reconstructs latest state only for best-effort Grafana output. Per-field
+receipt clocks prevent late updates from overwriting fresher live values.
+Arrays are replaced as whole observations, including a recorded empty array.
+The raw Kafka record always remains the original fresh batch.

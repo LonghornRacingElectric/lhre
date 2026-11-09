@@ -53,3 +53,19 @@ and Artemis timestamp-based raw pools, including duplicate delivery.
 For an isolated stack, `MQTT_HOST`/`MQTT_PORT`, `POSTGRES_HOST`/`POSTGRES_PORT`
 and `KAFKA_BROKERS` select published test ports. Database credentials come from
 `POSTGRES_USER`/`POSTGRES_PASSWORD`; no production database is required.
+
+## Artemis native BEVO integration
+
+`//apps/telemetry/stack/tests:native_bevo_flow_test` starts the actual Rust UDP
+acquisition, logger and publisher against the isolated stack configured by the
+existing test environment variables. It sends 333 Hz pedal frames, 100 Hz torque
+frames, one complete 33-frame cell scan and an incomplete next scan. Assertions
+cover fresh-only pool writes, counts, receipt timestamps, missing neighbors,
+shared-recording pool CSVs and graceful flush. Reserve local UDP 5005/5006 and
+`/tmp/BEVO_cand*.sock`; run only on a development machine without BEVO daemons.
+The test creates a temporary identity reconciliation plan for its compiled
+Artemis schema. It never opens a physical CAN interface.
+
+`data_flow_test` checks explicit Artemis batches and legacy Orion independently,
+including replay through MQTT, Kafka and the existing writer. These integration
+targets require a running disposable stack; unit tests alone do not prove it.

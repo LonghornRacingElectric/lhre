@@ -20,7 +20,7 @@ export type QueryRequest = {
   rate: number | null; agg: Aggregation; pageSize: number; pageToken: string | null;
 };
 export type QueryPlan = Omit<QueryRequest, "signals" | "pageToken" | "pageSize"> & { signals: Signal[] };
-export type Position = { ts: number; session: string; signal: string };
+export type Position = { ts: number; session: string; sampleTimeNs: string; signal: string };
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 export type Observation = { position: Position; value: JsonValue; oversized?: boolean };
 
@@ -28,5 +28,5 @@ export type Observation = { position: Position; value: JsonValue; oversized?: bo
 export interface TelemetrySource {
   read(plan: QueryPlan, after: Position | null, limit: number): Promise<Observation[]>;
 }
-export type QueryRow = { ts: string; signal: string; value: JsonValue };
+export type QueryRow = { ts: string; sample_time_ns: string; signal: string; value: JsonValue };
 export type QueryPage = { schema_version: string; data: QueryRow[]; next_page_token: string | null };

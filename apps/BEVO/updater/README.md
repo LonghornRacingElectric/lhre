@@ -94,7 +94,9 @@ numbers alone cannot establish unchanged meaning. Enum values must exist
 with the same meaning on both sides. Repeated fields retain their full
 ordered layout; elements are never renumbered or shifted.
 
-Only releases advertising `projection_version: 1` support this behavior.
+Artemis releases require `projection_version: 2` and
+`wire_format: artemis_updates_v1`, covering values and presence together.
+Legacy schema fixtures retain version 1. Active BEVO has no Orion fallback.
 Older binaries require a prebuilt supported replacement from the approved
 GHCR list. The updater never compiles a replacement. No shared measurement,
 incompatible root fields, or no usable prebuilt release is an error.

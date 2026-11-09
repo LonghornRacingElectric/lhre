@@ -45,7 +45,7 @@ func schemaFields(message protoreflect.Message) map[string]interface{} {
 				}
 			}
 		} else if field.IsList() {
-			var values []interface{}
+			values := []interface{}{}
 			list := value.List()
 			for element := 0; element < list.Len(); element++ {
 				values = append(values, list.Get(element).Interface())

@@ -26,3 +26,6 @@ Checks cover unequal rates without multiplied rows, half-open ranges,
 zero/false values, precise coordinates, empty versus NULL arrays, same-time
 session ties, continuation between fields, multiple database batches and full
 HTTP pagination without any packet table or packet identifier.
+
+Raw pagination also covers multiple receipt timestamps within one millisecond,
+including the signed cursor and decimal-string `sample_time_ns` response field.

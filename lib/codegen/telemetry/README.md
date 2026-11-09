@@ -7,7 +7,7 @@ protobuf, JSON, and SQL copies by hand.
 
 | Target | Output | Consumer |
 | --- | --- | --- |
-| `:can_packets_proto` | `can_packets.proto` | BEVO prost, ingest Python, bridge Go and viewer protobuf |
+| `:can_packets_proto` | `can_packets.proto` | Legacy Orion ingest Python, bridge Go and viewer protobuf |
 | `:can_json` | `can.json` | Build-time BEVO table generation and release auditing |
 | `:orion_db_init` | `orion_db_init.sql` | Orion PostgreSQL initialization |
 | `:schema_contract` | canonical JSON + schema ID | Registry/release compatibility metadata |
@@ -74,7 +74,7 @@ remain deployed-compatible; generated `reserved` declarations preserve the
 textproto tombstones.
 
 Metadata is not a runtime negotiation protocol. MQTT topics, protobuf payloads,
-bridge RPCs and packet-ID handshakes are unchanged. Orion ORM classes and Go
+Artemis native transport is described below; legacy Orion transport remains separate. Orion ORM classes and Go
 protobuf bindings derive from this pipeline; the bridge enumerates fields and
 seed groups from the generated descriptors while preserving its application
 metrics. BEVO compiles typed CAN tables and logger columns from these outputs;
@@ -117,8 +117,9 @@ rates. Shared-source fields have one home at their fastest producer rate.
 Gateway fields without a declared rate use an `external` pool; no frequency
 is invented for GPS or board heartbeats.
 
-Every pool has a `(session_start_ms, time)` primary key; `time` is BEVO Unix
-milliseconds. Floating columns and arrays use double precision. Protobuf
+Every pool has a `(session_start_ms, time, sample_time_ns)` primary key; `time`
+is BEVO Unix milliseconds and `sample_time_ns` is its original nanosecond receipt
+time. Storage contract format 2 requires a fresh Artemis database. Floating columns and arrays use double precision. Protobuf
 numbers, types, units and array ordering are unchanged. There is no Artemis
 packet table, packet foreign key, or packet compatibility view.
 
@@ -133,7 +134,8 @@ cross-rate analysis, call the generated `<subsystem>_buckets` function with a
 common integer bucket width and `[from_ms, to_ms)` bounds. Each pool aggregates
 before the join, so independently sampled rows cannot multiply one another.
 Floating scalars support `avg` (default), `min`, `max`, and `last`; arrays,
-states and other scalar types use `last`. Missing samples remain NULL; there
+states and other scalar types use `last`. `last` skips SQL NULL and orders by
+`sample_time_ns`, so unrelated partial rows cannot erase an observation. Missing samples remain NULL; there
 is no implicit interpolation. Bucket boundaries are epoch-aligned.
 
 Choose a bucket at least as wide as the slowest requested periodic pool. The
@@ -141,8 +143,8 @@ viewer does this from the generated contract; including cell arrays makes a
 cross-group bucket at least one second. `min`/`max` retain peaks for conditional
 analysis. Queries remain scoped to the recording session even when two
 subsystems have the same timestamp. Raw pool rows retain every received
-snapshot and its actual timestamp: the 50 Hz uplink does not become 333 Hz
-merely because a source is assigned to that pool.
+fresh observation and its actual receipt timestamp. BEVO forwards CAN updates
+as received unless the spec explicitly sets a lower uplink rate.
 
 Apply future additions with the [schema command](../../../apps/telemetry/scripts/README.md).
 The [storage decision](../../../docs/architecture/021-artemis-storage-scope.md)
@@ -168,3 +170,11 @@ move Artemis fields between pools or trigger schema application. Pool membership
 continues to use native CAN frequency. Non-CAN fields remain in external pools.
 The `ExternalSignal` metadata retains element layout at tag 7 and appends the
 uplink limit at tag 9; these are spec metadata tags, not snapshot payload tags.
+
+`:native_policy` generates `native_policy.json` from the same spec: numeric paths,
+array layouts, pools, native rates, explicit uplink limits and channel classes.
+BEVO compiles it with `:artemis_proto_source` and `:artemis_schema_contract`.
+The Artemis root reserves tag 2/name `packet_id`; `FieldPath`, `TelemetryUpdate`
+and `TelemetryBatch` carry explicit presence and receipt nanoseconds. The
+`:artemis_schema_descriptor` target includes these messages for server authority
+and release packaging. Generated outputs remain build artifacts.

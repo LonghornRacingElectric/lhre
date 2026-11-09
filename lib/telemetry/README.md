@@ -31,7 +31,7 @@ definitions to select releases against the
 `release_compatible` retains its strict whole-release check for additive
 evolution. `release_plan(metadata, producer, server)` instead records accepted
 numeric paths, shared enum numbers and reasons for excluded producer fields.
-It requires a projection-capable executable, unchanged time/packet_id and at
+It requires a projection-capable executable, unchanged required roots (Artemis time; legacy Orion time/packet_id) and at
 least one shared measurement. Group/leaf renames, incompatible types, units
 or ordered array layouts exclude affected fields without discarding unrelated
 measurements. It never mutates the server manifest or combines other releases.
@@ -44,3 +44,7 @@ Implicit proto3 scalar presence still maps omitted fields to defaults in
 existing consumers; wire exclusion does not establish database NULLs or
 per-frame availability. MQTT topics, message definitions and server ingestion
 are unchanged. See [field presence](https://protobuf.dev/programming-guides/field_presence/).
+
+Artemis release plans require projection version 2 and
+`wire_format: artemis_updates_v1`. Field projection covers the explicit presence
+mask together with typed values. Root packet identity is not required for Artemis.

@@ -1,16 +1,24 @@
 # loggerd
 
-Logs every cand IPC snapshot to CSV, independently of the uplink. Override
-the output directory with `LOGGERD_LOG_DIR`.
+Log Artemis fresh observations independently of uplink filtering. Connect to
+cand's logger socket and write one CSV per generated frequency pool:
+`artemis_<recordingStartMs>_<pool>.csv`. All files opened by one logger process
+share a recording start; only pools receiving observations get files.
+`LOGGERD_LOG_DIR` overrides the output directory.
 
-Bazel generates and compiles the CSV column names and array lengths from
-the shared textproto schema manifest, including GPS and external fields.
-Columns retain their natural numeric ordering. New groups/fields do not
-need a hand-written root-message template or hardcoded array sizes here.
+Headers come from the compiled storage policy: `time`, `sample_time_ns`,
+`updated_fields`, then qualified field columns in natural numeric order.
+Arrays use indexed columns. Unobserved fields are blank; zeros and false are
+values. `updated_fields` is a JSON list of qualified field names, so a freshly
+recorded empty array is distinguishable from a missing array. Rows retain the
+original receipt timestamp and contain only fresh fields in that pool.
 
-There is no runtime `can.json` dependency or `LOGGERD_CAN_JSON_PATH` override.
-The serializer and compiled column layout rebuild together from `lib/spec`.
-The log stream, queue, file format and flush cadence remain unchanged.
+Each file uses a buffered writer, flushed every 100 rows or one second.
+SIGINT/SIGTERM flush before exit. Forced kills or power loss can lose buffered
+rows; this is not a durable journal. Cand's bounded logger queue reports
+backpressure independently of publishing. There is no automatic CSV-to-database
+backfill in this change; logsync continues to transfer the files as CSV.
 
-Build with `bazel build //apps/BEVO:pi_core_binaries`; run the existing
-column-layout checks with `bazel test //apps/BEVO/loggerd:loggerd_test`.
+Build with `bazel build //apps/BEVO:pi_core_binaries`; run
+`bazel test //apps/BEVO/loggerd:loggerd_test`. There is no runtime schema JSON
+input and no Orion logging mode.

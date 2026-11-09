@@ -26,7 +26,7 @@ def changes(connection, expected):
     old_paths = {tuple(field["path"]): (pool["table"], field["name"], field["sql_type"])
                  for pool in (previous or {}).get("pools", []) for field in pool["fields"]}
     planned = []
-    for name in ("recording_session", "transport_state", "storage_migration", "gps_precise"):
+    for name in ("recording_session", "storage_migration", "gps_precise"):
         if name not in tables:
             planned.append(f"Create {name}")
     views = set(inspector.get_view_names(schema="public"))
@@ -39,8 +39,8 @@ def changes(connection, expected):
             planned.append(f"Create {name}")
         else:
             key = inspector.get_pk_constraint(name, schema="public")["constrained_columns"]
-            if key != ["session_start_ms", "time"]:
-                raise ValueError(f"{name}: expected primary key (session_start_ms, time)")
+            if key != ["session_start_ms", "time", "sample_time_ns"]:
+                raise ValueError(f"{name}: expected native primary key (session_start_ms, time, sample_time_ns); use a fresh Artemis database")
         for field in pool["fields"]:
             identity = (name, field["name"], field["sql_type"])
             if tuple(field["path"]) in old_paths and old_paths[tuple(field["path"])] != identity:

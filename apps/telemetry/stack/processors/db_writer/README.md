@@ -29,23 +29,22 @@ retention covers expected database outages and monitor consumer lag.
 
 This remains the single Kafka database-writer service. `ingest/pool_storage.py`
 is a SQLAlchemy persistence helper called by this consumer, not another service
-or consumer. Artemis snapshots are split by the generated pool catalogue and
-written atomically with session bounds and transport high-water state. The
-snapshot timestamp, not packet ID, identifies measurements. Replayed identical
-samples are accepted; conflicting values at the same session/pool/time roll
-back the batch and leave Kafka offsets uncommitted.
+or consumer. Artemis requires the `artemis_updates_v1` Kafka payload header,
+decodes batches with explicit numeric presence, and writes only observed fields.
+Raw identity is `(session_start_ms, time, sample_time_ns)`; receipt nanoseconds
+preserve independent samples within one millisecond. Disjoint observations with
+one key merge, identical replay is idempotent, and conflicting values roll back
+the batch without committing Kafka offsets.
 
 Recording windows split on gaps greater than five minutes. Their keys are
 fixed time-derived values; start/end bounds can expand when older data arrives.
 Late data matches historical windows and can merge windows when it closes a
 gap. Drive days are associated through time rather than required before ingest.
 
-The producer's packet ID remains only in the existing wire handshake and a
-single transport high-water row. It is never a sensor relationship. Artemis
-accepts timestamped protobuf messages without a positive packet ID; Orion
-retains its positive packet-ID requirement. Current full snapshots retain
-every received value, including repeated slow-channel values. Independent BEVO
-pool sampling is a separate producer change.
+Artemis has no packet-ID wire field, startup allocation or transport high-water
+row. Missing fields remain SQL NULL, including fields beside recorded zero or
+false values. Live-state reconstruction belongs to consumers, never history.
+Orion retains its separate packet-based legacy integration.
 
 Run the [explicit schema apply](../../../scripts/README.md) before restarting
 this service for additions. No automatic schema service, compression policy,

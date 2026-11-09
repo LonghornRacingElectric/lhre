@@ -68,7 +68,7 @@ class GeneratedContractTest(unittest.TestCase):
         seen = set()
         for pool in POOLS:
             table = by_table[pool["table"]]
-            self.assertEqual(list(table.primary_key.columns.keys()), ["session_start_ms", "time"])
+            self.assertEqual(list(table.primary_key.columns.keys()), ["session_start_ms", "time", "sample_time_ns"])
             self.assertFalse(table.foreign_keys)
             for field in pool["fields"]:
                 path = tuple(field["path"])

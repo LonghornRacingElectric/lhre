@@ -242,3 +242,26 @@ test_suite(
     ],
     target_compatible_with = NOT_WINDOWS,
 )
+
+py_test(
+    name = "native_bevo_flow_test",
+    srcs = ["test_native_bevo_flow.py"],
+    main = "test_native_bevo_flow.py",
+    imports = ["../..", "../../.."],
+    deps = [
+        ":test_utils",
+        "//lib/telemetry:contract",
+        "//apps/telemetry/analysis:analysis_lib",
+        "@lhre_pypi//bazel_runfiles",
+        requirement("SQLAlchemy"),
+        requirement("psycopg2-binary"),
+    ],
+    data = [
+        "//apps/BEVO/cand:mock_main",
+        "//apps/BEVO/loggerd",
+        "//apps/BEVO/publishd",
+        "//lib/codegen/telemetry:artemis_schema_contract",
+    ],
+    tags = ["manual", "integration", "docker", "e2e", "local"],
+    target_compatible_with = NOT_WINDOWS,
+)

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use prost::Message;
-use sensor_proto::proto::orion::OrionSensorData;
+use sensor_proto::proto::artemis::ArtemisSensorData;
 use std::io::Read;
 use std::os::unix::net::UnixStream;
 use std::thread;
@@ -25,20 +25,32 @@ fn main() -> Result<()> {
                         eprintln!("[DEBUGD] read error: {}", e);
                         break;
                     }
-                    match OrionSensorData::decode(&msg_buf[..]) {
+                    match ArtemisSensorData::decode(&msg_buf[..]) {
                         Ok(data) => {
-                            println!("[DEBUGD] packet_id={} time={}", data.packet_id, data.time);
+                            println!("[DEBUGD] time={}", data.time);
                             if let Some(pack) = data.pack {
-                                println!("  pack.hv_pack_v={} hv_soc={} dc_bus_current={}", pack.hv_pack_v, pack.hv_soc, pack.dc_bus_current);
+                                println!(
+                                    "  pack.hv_pack_v={} hv_soc={} dc_bus_current={}",
+                                    pack.hv_pack_v, pack.hv_soc, pack.dc_bus_current
+                                );
                             }
                             if let Some(dyns) = data.dynamics {
-                                println!("  dynamics.gps_speed={} accel_pedal_travel={}", dyns.gps_speed, dyns.accel_pedal_travel);
+                                println!(
+                                    "  dynamics.gps_speed={} accel_pedal_travel={}",
+                                    dyns.gps_speed, dyns.accel_pedal_travel
+                                );
                             }
                             if let Some(therm) = data.thermal {
-                                println!("  thermal.inverter_temp={} motor_temp={} ambient_temp={}", therm.inverter_temp, therm.motor_temp, therm.ambient_temp);
+                                println!(
+                                    "  thermal.inverter_temp={} motor_temp={} ambient_temp={}",
+                                    therm.inverter_temp, therm.motor_temp, therm.ambient_temp
+                                );
                             }
                             if let Some(ctrl) = data.controls {
-                                println!("  controls.apps1_v={} apps2_v={} torque_request={}", ctrl.apps1_v, ctrl.apps2_v, ctrl.torque_request);
+                                println!(
+                                    "  controls.apps1_v={} apps2_v={} torque_request={}",
+                                    ctrl.apps1_v, ctrl.apps2_v, ctrl.torque_request
+                                );
                             }
                         }
                         Err(e) => eprintln!("[DEBUGD] protobuf decode error: {}", e),

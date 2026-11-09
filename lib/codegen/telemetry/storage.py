@@ -39,7 +39,7 @@ def contract(spec):
             "sql_type": SQL_TYPES.get(scalar, "integer") + ("[]" if repeated else ""),
             "aggregate": "avg" if scalar in ("float", "double") and not repeated else "last",
         })
-    value = {"format_version": 1, "car": "Artemis", "read_bucket_ms": 100, "bucket_aggregates": ["avg", "min", "max", "last"], "pools": list(pools.values())}
+    value = {"format_version": 2, "sample_precision": "ns", "car": "Artemis", "read_bucket_ms": 100, "bucket_aggregates": ["avg", "min", "max", "last"], "pools": list(pools.values())}
     value["storage_id"] = hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     return value
 
@@ -64,11 +64,6 @@ CREATE TABLE IF NOT EXISTS public.recording_session (
 CREATE OR REPLACE VIEW public.partitions AS
 SELECT to_char(to_timestamp(start_time / 1000.0) AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS.MS') AS partition_name,
        start_time, end_time FROM public.recording_session;
-CREATE TABLE IF NOT EXISTS public.transport_state (
-    singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
-    last_packet_id bigint NOT NULL DEFAULT 0
-);
-INSERT INTO public.transport_state(singleton) VALUES (true) ON CONFLICT DO NOTHING;
 CREATE TABLE IF NOT EXISTS public.storage_migration (
     storage_id text PRIMARY KEY,
     applied_at timestamptz NOT NULL DEFAULT now(),
@@ -84,9 +79,9 @@ GPS_FIELDS = {
 
 
 def table_sql(table, fields):
-    columns = ["session_start_ms bigint NOT NULL", '"time" bigint NOT NULL CHECK ("time" > 0)']
+    columns = ["session_start_ms bigint NOT NULL", '"time" bigint NOT NULL CHECK ("time" > 0)', 'sample_time_ns bigint NOT NULL CHECK (sample_time_ns > 0)']
     columns += [f'{field["name"]} {field["sql_type"]}' for field in fields]
-    columns.append('PRIMARY KEY (session_start_ms, "time")')
+    columns.append('PRIMARY KEY (session_start_ms, "time", sample_time_ns)')
     lines = [f"CREATE TABLE IF NOT EXISTS public.{table} (\n    " + ",\n    ".join(columns) + "\n);"]
     # No defaults: existing recordings must read NULL for newly added sensors.
     lines += [f'ALTER TABLE public.{table} ADD COLUMN IF NOT EXISTS {field["name"]} {field["sql_type"]};' for field in fields]
@@ -110,10 +105,10 @@ def read_sql(value):
             selected = []
             for f in pool["fields"]:
                 names[f["name"]] = f"p{i}.{f['name']}"
-                expression = f'last({f["name"]}, "time")'
+                expression = f'last({f["name"]}, sample_time_ns) FILTER (WHERE {f["name"]} IS NOT NULL)'
                 if f["aggregate"] == "avg":
                     name = f["name"]
-                    expression = f"CASE bucket_aggregate WHEN 'min' THEN min({name}) WHEN 'max' THEN max({name}) WHEN 'last' THEN last({name}, \"time\") ELSE avg({name}) END"
+                    expression = f"CASE bucket_aggregate WHEN 'min' THEN min({name}) WHEN 'max' THEN max({name}) WHEN 'last' THEN last({name}, sample_time_ns) FILTER (WHERE {name} IS NOT NULL) ELSE avg({name}) END"
                 selected.append(f'{expression}::{f["sql_type"]} AS {f["name"]}')
             ctes.append(f'''p{i} AS (
     SELECT session_start_ms, time_bucket(bucket_ms, "time") AS "time", {", ".join(selected)}
@@ -161,6 +156,8 @@ def render_orm(value):
     tables.append(("sample_time", "ArtemisSampleTime", []))
     for table, name, fields in tables:
         lines += [f"    class {name}(base):", f"        __tablename__ = {table!r}", "        __table_args__ = {'schema': 'public'}", "        session_start_ms = Column(BigInteger, primary_key=True)", "        time = Column(BigInteger, primary_key=True)"]
+        if table in {pool["table"] for pool in value["pools"]}:
+            lines.append("        sample_time_ns = Column(BigInteger, primary_key=True)")
         for field in fields:
             kind = types[field["sql_type"].removesuffix("[]")]
             if field["sql_type"].endswith("[]"):
