@@ -85,6 +85,32 @@ def test_rejected_calls_raise_with_the_error_name(lib):
         Firmware(lib, event_mode=9)
 
 
+# One car-model value past what its sensor or CAN field can carry, per bit.
+CLAMPED = {
+    'wheel_speed': ('wheel_speed_rad_s', 400.0),
+    'motor_speed': ('motor_speed_rad_s', 4000.0),
+    'motor_torque': ('motor_torque_nm', 1e6),
+    'bus_voltage': ('dc_bus_voltage_v', 7000.0),
+    'bus_current': ('dc_bus_current_a', -5000.0),
+    'cell_voltage': ('max_cell_v', 7.0),
+    'steering': ('steering_angle_deg', 500.0),
+}
+
+
+def test_each_saturation_bit_is_the_one_its_clamp_sets(lib):
+    """SATURATION_BITS copies vcu_sil.h by hand, where the layout check cannot see it."""
+    assert set(CLAMPED) == set(firmware.SATURATION_BITS)
+    with Firmware(lib) as fw:
+        assert fw.advance(parked(), 3).saturated == 0
+        for name, (field, value) in CLAMPED.items():
+            inputs = parked()
+            if field == 'wheel_speed_rad_s':
+                inputs.wheel_speed_rad_s[2] = value
+            else:
+                setattr(inputs, field, value)
+            assert fw.advance(inputs, 3).saturated == firmware.SATURATION_BITS[name], name
+
+
 def test_fault_bits_are_named_from_the_spec(lib):
     with Firmware(lib) as fw:
         assert fw.fault_names(0) == []

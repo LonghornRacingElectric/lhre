@@ -90,6 +90,18 @@ RigInputs ToRig(const vcu_sil_inputs& in) {
   return r;
 }
 
+// FromRig() passes the rig's saturation bits through as they are.
+constexpr bool SameBit(uint32_t rig, int abi) {
+  return rig == static_cast<uint32_t>(abi);
+}
+static_assert(SameBit(vcu::sil::kSatWheelSpeed, VCU_SIL_SAT_WHEEL_SPEED));
+static_assert(SameBit(vcu::sil::kSatMotorSpeed, VCU_SIL_SAT_MOTOR_SPEED));
+static_assert(SameBit(vcu::sil::kSatMotorTorque, VCU_SIL_SAT_MOTOR_TORQUE));
+static_assert(SameBit(vcu::sil::kSatBusVoltage, VCU_SIL_SAT_BUS_VOLTAGE));
+static_assert(SameBit(vcu::sil::kSatBusCurrent, VCU_SIL_SAT_BUS_CURRENT));
+static_assert(SameBit(vcu::sil::kSatCellVoltage, VCU_SIL_SAT_CELL_VOLTAGE));
+static_assert(SameBit(vcu::sil::kSatSteering, VCU_SIL_SAT_STEERING));
+
 void FromRig(const RigOutputs& r, uint64_t frames_dropped,
              vcu_sil_outputs* out) {
   const vcu::ControlSnapshot& s = r.snapshot;

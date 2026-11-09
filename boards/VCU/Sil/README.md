@@ -269,7 +269,10 @@ reverse `direction` is refused: the model cannot take it.
 
 - Change `vcu_sil.h` and `host/vcusil/firmware.py` together, and bump
   `VCU_SIL_ABI_VERSION`. The layout check catches a missed field, not a
-  changed meaning.
+  changed meaning. The saturation bits are copied by hand three times:
+  `vcu_sil.cpp` checks the rig's `Saturation` against `VCU_SIL_SAT_*` at
+  compile time, and `test_firmware.py` checks the binding's
+  `SATURATION_BITS` against the bit each clamp sets.
 - One thread at a time, across all handles in a process: the host FreeRTOS
   port keeps process-wide state.
 - The wide `vcu_sil_snapshot` struct is not mirrored by hand: the binding
