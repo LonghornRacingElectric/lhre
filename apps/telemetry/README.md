@@ -61,6 +61,10 @@ and deployment paths are covered in the
 
 The viewer remains an npm/PM2 application rather than a Bazel image:
 
+Historical reads are available through `POST /api/query`, using an isolated
+PostgreSQL adapter and per-car connection map. Configure it using the
+[query guide](analysis/database/viewer_tool/src/lib/query/README.md).
+
 ```bash
 cd analysis/database/viewer_tool
 npm ci   # postinstall generates the Prisma clients and syncs the auth database

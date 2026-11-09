@@ -68,6 +68,22 @@ external signals require explicit units; mixed-unit arrays may omit them.
 
 Catalog serving tests: `npx vitest run tests/signals/catalog.test.ts`.
 
+## Historical queries
+
+`POST /api/query` reads the requested car's PostgreSQL history through the shared
+MoTeC read-only database helper using signal definitions from its published catalog. It supports raw
+JSON/CSV pages; time buckets and downsampling are not implemented yet.
+The storage adapter is isolated for future
+Kafka/hot-buffer support.
+
+Use the existing `ORION_DB_*` / `ANGELIQUE_DB_*` settings and set
+`QUERY_CURSOR_SECRET` to a stable secret shared by viewer processes. See the
+[query guide](src/lib/query/README.md) for the full request/response contract,
+limits, pagination behavior, and deployment configuration.
+
+`npm run test:query` runs the unit and HTTP checks; the optional real PostgreSQL
+checks are described in the [test guide](tests/query/README.md).
+
 ## Environment variables
 
 Example viewer-side Kafka/env values:
@@ -108,8 +124,6 @@ npm run prisma-auth-seed -- <username> <password> [admin]
 If the auth setup step fails, rerun it with `npm run prisma-auth-setup`. Note
 that `prisma/dev.db` is tracked in git, so the push modifies it in your working
 tree; don't commit it with your own users in it.
-
-> Note: `prisma/orion.prisma` still includes optional-list fields (`Float[]?`) that Prisma 6.x rejects, and nothing imports its client, so `prisma-orion-generate` is not part of `postinstall`.
 
 Generate protobuf TS stubs (optional helper scripts):
 
