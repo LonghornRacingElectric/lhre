@@ -196,10 +196,10 @@ every viewer draws stays where it started. A transform that can change
 is not static.
 
 ```
-map -> base_link -> lidar     (1.80, 0.00, 0.55), pitch as parameterised
+map -> base_link -> lidar     (0.609, 0.00, 1.06), roll pi, pitch 0.1222 (vehicle.yaml)
 ```
 
-Both the ROS node and offline `MountPose()` read their default position
+Both the ROS node and offline `MountPose()` read their default pose
 from vehicle YAML. The coordinates above remain assumed mount values.
 
 ### In the `lidar` frame, `z` is not height
@@ -223,9 +223,9 @@ height. To check flatness, transform into `base_link` first.
 | `mount_x_m` | `vehicle.yaml` | Mount position in `base_link`. Live |
 | `mount_y_m` | `vehicle.yaml` | Live |
 | `mount_z_m` | `vehicle.yaml` | Live |
-| `mount_roll_rad` | `0.0` | Live |
-| `mount_pitch_rad` | `0.0` | Positive is nose down. Live |
-| `mount_yaw_rad` | `0.0` | Live |
+| `mount_roll_rad` | `vehicle.yaml` | π is upside down. Live |
+| `mount_pitch_rad` | `vehicle.yaml` | Positive is nose down. Live |
+| `mount_yaw_rad` | `vehicle.yaml` | Live |
 | `seed` | `1` | Node-local stream, so a seed repeats |
 | `frame_rate_hz` | `10.0` | |
 | `point_rate_hz` | `200000.0` | Datasheet |
@@ -244,11 +244,11 @@ Passed through the launch file these are type-coerced, so
 `mount_pitch_rad:=0` works as well as `0.0`. See
 [lhr_demo](../lhr_demo/README.md) for why that is not automatic.
 
-The mount **position** comes from
+The mount **pose**, position and orientation, comes from
 [`lhr_vehicle`](../lhr_vehicle/README.md), because vehicle numbers live
-in one file. The mount **orientation** does not, because it is the
-answer the mount study owes and guessing it into `vehicle.yaml` would
-make a placeholder look like a measurement.
+in one file. It holds the
+[mount study's](../../../testing/2026-11-08-lidar-mount-study/README.md)
+design, marked `ASSUMED`, until the bracket is built and measured.
 
 ## Gotchas
 

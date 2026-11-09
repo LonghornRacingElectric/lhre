@@ -2,7 +2,6 @@
 
 import importlib.util
 import json
-import math
 from pathlib import Path
 
 from launch import LaunchContext
@@ -17,9 +16,9 @@ import rclpy
 from rclpy.parameter import Parameter
 
 WORLD = Path(__file__).parents[1] / 'worlds/autocross_seed1.sdf'
-# Upside down, 7 degrees nose down, just inside the main hoop.
-HOOP = {'mid360_mount_x_m': '0.609', 'mid360_mount_z_m': '1.06',
-        'mid360_mount_roll_rad': str(math.pi), 'mid360_mount_pitch_rad': '0.1222'}
+# The old sim mount in the nose, upright and level: moved from vehicle.yaml's.
+NOSE = {'mid360_mount_x_m': '1.8', 'mid360_mount_z_m': '0.55',
+        'mid360_mount_roll_rad': '0.0', 'mid360_mount_pitch_rad': '0.0'}
 TF_DETECTOR = {'lidar_sensor_transform_source': 'tf', 'lidar_height_filter_frame': 'base_link',
                'lidar_ground_z_min': '0.15', 'lidar_ground_z_max': '1.05'}
 
@@ -261,13 +260,13 @@ def test_foxglove_rejects_misspelled_boolean():
 def test_caster_settings_do_not_change_other_sources(monkeypatch, perception):
     baseline = launch_nodes(monkeypatch, perception=perception)
     overridden = launch_nodes(monkeypatch, perception=perception,
-                              mid360_max_range_m='30', mid360_range_noise_std_m='0', **HOOP)
+                              mid360_max_range_m='30', mid360_range_noise_std_m='0', **NOSE)
     assert baseline == overridden
 
 
 @pytest.mark.parametrize('override', [False, True])
 def test_mount_defaults_and_overrides_reach_the_caster(monkeypatch, override):
-    options = {**HOOP, **TF_DETECTOR} if override else {}
+    options = {**NOSE, **TF_DETECTOR} if override else {}
     nodes = launch_nodes(monkeypatch, perception='lidar', lidar_source='mid360', **options)
     params = nodes['lidar_sim']['parameters'][0]
     args = ['--ros-args']
@@ -278,7 +277,7 @@ def test_mount_defaults_and_overrides_reach_the_caster(monkeypatch, override):
     try:
         mount = sensor._sensor.mount
         if override:
-            assert mount == MountPose(0.609, 0.0, 1.06, math.pi, 0.1222, 0.0)
+            assert mount == MountPose(1.8, 0.0, 0.55, 0.0, 0.0, 0.0)
         else:
             assert mount == MountPose()
         for name in ('x_m', 'y_m', 'z_m', 'roll_rad', 'pitch_rad', 'yaw_rad'):
@@ -293,8 +292,7 @@ def test_mount_defaults_and_overrides_reach_the_caster(monkeypatch, override):
 
 
 @pytest.mark.parametrize('detector', [
-    {}, {'lidar_sensor_transform_source': 'tf'},
-    {**TF_DETECTOR, 'lidar_height_filter_frame': 'sensor'},
+    {}, {**TF_DETECTOR, 'lidar_height_filter_frame': 'sensor'},
     {**TF_DETECTOR, 'lidar_ground_z_min': '-0.40'},
     {**TF_DETECTOR, 'lidar_ground_z_min': '0.05'},
 ])

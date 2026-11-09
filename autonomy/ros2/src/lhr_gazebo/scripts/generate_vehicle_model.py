@@ -104,6 +104,9 @@ def render(veh, *, enable_stereo_camera=False) -> str:
     }
     substitutions = {k: _fmt(v) for k, v in values.items()}
     substitutions['lidar_range_noise_std_m'] = format(veh.lidar_range_noise_std_m, '.12g')
+    # Full precision: the detector places the cloud with these same angles.
+    substitutions.update({f'lidar_{name}': format(value, '.12g') for name, value in
+                          zip(('roll', 'pitch', 'yaw'), veh.lidar_rpy_rad)})
     camera = veh.stereo_camera
     x, y, z = camera.position_m
     roll, pitch, yaw = camera.rpy_rad

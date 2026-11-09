@@ -29,7 +29,7 @@ from lhr_perception.cone_side_classifier import (
     vehicle_relative_side_vote,
 )
 from lhr_perception.pose_history import Pose2D
-from lhr_perception.transforms import rigid_transform_matrix
+from lhr_perception.transforms import rigid_transform_matrix, rpy_quaternion
 from lhr_vehicle import load_vehicle
 from nav_msgs.msg import Odometry
 import numpy as np
@@ -117,7 +117,8 @@ class LidarConeDetector(Node):
         self._configured_mount = TransformStamped()
         position = self._configured_mount.transform.translation
         position.x, position.y, position.z = veh.lidar_position_m
-        self._configured_mount.transform.rotation.w = 1.0
+        rotation = self._configured_mount.transform.rotation
+        rotation.x, rotation.y, rotation.z, rotation.w = rpy_quaternion(*veh.lidar_rpy_rad)
         self._max_range = self.get_parameter('max_range').value
         self._min_range = self.get_parameter('min_range').value
         self._ground_z_min = self.get_parameter('ground_z_min').value

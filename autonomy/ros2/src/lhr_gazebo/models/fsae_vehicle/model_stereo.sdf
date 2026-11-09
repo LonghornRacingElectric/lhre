@@ -59,7 +59,7 @@
            regressed cone-contact gates; vendor-pattern GPU sampling belongs
            in a separate experiment. -->
       <sensor name="lidar" type="gpu_lidar">
-        <pose>1.0253 0 0.2 0 0 0</pose>
+        <pose>-0.1657 0 0.71 3.14159265359 0.1221730476 0</pose>
         <always_on>true</always_on>
         <update_rate>10</update_rate>
         <visualize>true</visualize>
