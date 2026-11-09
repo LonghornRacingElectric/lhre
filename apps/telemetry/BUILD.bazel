@@ -180,6 +180,7 @@ filegroup(
 filegroup(
     name = "optional_images",
     srcs = [
+        "//apps/telemetry/stack/processors/board_health:board_health_image",
         "//apps/telemetry/stack/processors/car_status:car_status_image",
         "//apps/telemetry/stack/processors/gg_plot:gg_plot_image",
         "//apps/telemetry/stack/processors/gps_classifier:gps_classifier_image",
@@ -232,6 +233,7 @@ sh_binary(
     name = "load_optional_images",
     srcs = ["load_images.sh"],
     args = [
+        "$(rootpath //apps/telemetry/stack/processors/board_health:board_health_load)",
         "$(rootpath //apps/telemetry/stack/processors/car_status:car_status_load)",
         "$(rootpath //apps/telemetry/stack/processors/gg_plot:gg_plot_load)",
         "$(rootpath //apps/telemetry/stack/processors/gps_classifier:gps_classifier_load)",
@@ -240,6 +242,7 @@ sh_binary(
         "$(rootpath //apps/telemetry/stack/processors/track_mapper:track_mapper_load)",
     ],
     data = [
+        "//apps/telemetry/stack/processors/board_health:board_health_load",
         "//apps/telemetry/stack/processors/car_status:car_status_load",
         "//apps/telemetry/stack/processors/gg_plot:gg_plot_load",
         "//apps/telemetry/stack/processors/gps_classifier:gps_classifier_load",
@@ -263,6 +266,7 @@ sh_binary(
         "$(rootpath //apps/telemetry/stack/processors/db_writer:db_writer_load)",
         "$(rootpath //apps/telemetry/stack/kafka:kafka_bridge_load)",
         "$(rootpath //apps/telemetry/stack/processors/field_enricher:field_enricher_load)",
+        "$(rootpath //apps/telemetry/stack/processors/board_health:board_health_load)",
         "$(rootpath //apps/telemetry/stack/processors/car_status:car_status_load)",
         "$(rootpath //apps/telemetry/stack/processors/gg_plot:gg_plot_load)",
         "$(rootpath //apps/telemetry/stack/processors/gps_classifier:gps_classifier_load)",
@@ -278,6 +282,7 @@ sh_binary(
         "//apps/telemetry/stack/ingest:ingest_load",
         "//apps/telemetry/stack/processors/db_writer:db_writer_load",
         "//apps/telemetry/stack/kafka:kafka_bridge_load",
+        "//apps/telemetry/stack/processors/board_health:board_health_load",
         "//apps/telemetry/stack/processors/car_status:car_status_load",
         "//apps/telemetry/stack/processors/field_enricher:field_enricher_load",
         "//apps/telemetry/stack/processors/gg_plot:gg_plot_load",
@@ -338,6 +343,7 @@ test_suite(
     name = "optional_smoke_tests",
     tags = ["docker", "manual"],
     tests = [
+        "//apps/telemetry/stack/processors/board_health:board_health_smoke_test",
         "//apps/telemetry/stack/processors/car_status:car_status_smoke_test",
         "//apps/telemetry/stack/processors/gg_plot:gg_plot_smoke_test",
         "//apps/telemetry/stack/processors/gps_classifier:gps_classifier_smoke_test",
@@ -448,6 +454,7 @@ filegroup(
     srcs = [
         "//apps/telemetry/stack/ingest:docker-compose.yml",
         "//apps/telemetry/stack/kafka:docker-compose.yml",
+        "//apps/telemetry/stack/processors/board_health:docker-compose.yml",
         "//apps/telemetry/stack/processors/car_status:docker-compose.yml",
         "//apps/telemetry/stack/processors/field_enricher:docker-compose.yml",
         "//apps/telemetry/stack/processors/gg_plot:docker-compose.yml",
