@@ -1,7 +1,7 @@
 load("//tools/firmware:firmware_project.bzl", "firmware_project")
 
 firmware_project(
-    name = "VCU",
+    name = "vcu",
     app_deps = [
         "//drivers/longhorn:can_inbox",
         "//drivers/longhorn:console",
@@ -31,4 +31,9 @@ firmware_project(
     enable_freertos = True,
     enable_usb = True,
     mcu = "stm32g474xx",
+)
+
+alias(
+    name = "VCU",
+    actual = ":vcu",
 )
