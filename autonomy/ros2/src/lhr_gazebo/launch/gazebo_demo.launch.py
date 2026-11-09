@@ -39,6 +39,10 @@ def _float(name):
 
 
 MID360_MOUNT = ('x_m', 'y_m', 'z_m', 'roll_rad', 'pitch_rad', 'yaw_rad')
+# The base_link cut the default sensor-frame band gives at the default mount.
+# At 0.05 m, range noise on ground hits near the car became 123 false cones
+# on one lap (testing/2026-11-08-lidar-mount-study).
+MID360_MIN_GROUND_CUT_M = 0.15
 
 
 def _mid360_mount_default():
@@ -58,10 +62,11 @@ def _check_mid360_mount(configs):
                 for name, value in _mid360_mount_default().items())
     if moved and (configs.get('lidar_sensor_transform_source') != 'tf'
                   or configs.get('lidar_height_filter_frame') != 'base_link'
-                  or float(configs.get('lidar_ground_z_min', '0')) <= 0.0):
+                  or float(configs.get('lidar_ground_z_min', '0')) < MID360_MIN_GROUND_CUT_M):
         raise ValueError(
             'A moved Mid-360 mount needs lidar_sensor_transform_source:=tf, '
-            'lidar_height_filter_frame:=base_link and a lidar_ground_z_min above the ground')
+            'lidar_height_filter_frame:=base_link and '
+            f'lidar_ground_z_min of at least {MID360_MIN_GROUND_CUT_M} m')
 
 
 def _find_world(context: LaunchContext):

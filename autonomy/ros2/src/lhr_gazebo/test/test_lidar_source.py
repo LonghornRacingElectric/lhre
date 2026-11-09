@@ -296,6 +296,7 @@ def test_mount_defaults_and_overrides_reach_the_caster(monkeypatch, override):
     {}, {'lidar_sensor_transform_source': 'tf'},
     {**TF_DETECTOR, 'lidar_height_filter_frame': 'sensor'},
     {**TF_DETECTOR, 'lidar_ground_z_min': '-0.40'},
+    {**TF_DETECTOR, 'lidar_ground_z_min': '0.05'},
 ])
 def test_moved_mount_needs_a_detector_that_reads_it(monkeypatch, detector):
     with pytest.raises(ValueError, match='moved Mid-360 mount'):
