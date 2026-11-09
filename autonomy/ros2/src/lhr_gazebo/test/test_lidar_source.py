@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import math
 from pathlib import Path
 
 from launch import LaunchContext
@@ -9,11 +10,18 @@ from launch.actions import DeclareLaunchArgument
 from launch.utilities import perform_substitutions
 from launch_ros.utilities import evaluate_parameters, normalize_parameters
 from lhr_lidar_sim.lidar_sim_node import LidarSimNode
+from lhr_lidar_sim.sensor import MountPose
 from lhr_vehicle import load_vehicle
 import pytest
 import rclpy
+from rclpy.parameter import Parameter
 
 WORLD = Path(__file__).parents[1] / 'worlds/autocross_seed1.sdf'
+# Upside down, 7 degrees nose down, just inside the main hoop.
+HOOP = {'mid360_mount_x_m': '0.609', 'mid360_mount_z_m': '1.06',
+        'mid360_mount_roll_rad': str(math.pi), 'mid360_mount_pitch_rad': '0.1222'}
+TF_DETECTOR = {'lidar_sensor_transform_source': 'tf', 'lidar_height_filter_frame': 'base_link',
+               'lidar_ground_z_min': '0.15', 'lidar_ground_z_max': '1.05'}
 
 
 class NodeConfig:
@@ -253,5 +261,44 @@ def test_foxglove_rejects_misspelled_boolean():
 def test_caster_settings_do_not_change_other_sources(monkeypatch, perception):
     baseline = launch_nodes(monkeypatch, perception=perception)
     overridden = launch_nodes(monkeypatch, perception=perception,
-                              mid360_max_range_m='30', mid360_range_noise_std_m='0')
+                              mid360_max_range_m='30', mid360_range_noise_std_m='0', **HOOP)
     assert baseline == overridden
+
+
+@pytest.mark.parametrize('override', [False, True])
+def test_mount_defaults_and_overrides_reach_the_caster(monkeypatch, override):
+    options = {**HOOP, **TF_DETECTOR} if override else {}
+    nodes = launch_nodes(monkeypatch, perception='lidar', lidar_source='mid360', **options)
+    params = nodes['lidar_sim']['parameters'][0]
+    args = ['--ros-args']
+    for key, value in params.items():
+        args += ['-p', f'{key}:={json.dumps(value)}']
+    rclpy.init(args=args)
+    sensor = LidarSimNode()
+    try:
+        mount = sensor._sensor.mount
+        if override:
+            assert mount == MountPose(0.609, 0.0, 1.06, math.pi, 0.1222, 0.0)
+        else:
+            assert mount == MountPose()
+        for name in ('x_m', 'y_m', 'z_m', 'roll_rad', 'pitch_rad', 'yaw_rad'):
+            assert type(params[f'mount_{name}']) is float
+        # One mount per scored run, moved or not.
+        assert not sensor.set_parameters([Parameter('mount_pitch_rad', value=.2)])[0].successful
+    finally:
+        sensor.destroy_node()
+        rclpy.shutdown()
+    detector = nodes['lidar_cone_detector']['parameters'][0]
+    assert detector['sensor_transform_source'] == ('tf' if override else 'vehicle_config')
+
+
+@pytest.mark.parametrize('detector', [
+    {}, {'lidar_sensor_transform_source': 'tf'},
+    {**TF_DETECTOR, 'lidar_height_filter_frame': 'sensor'},
+    {**TF_DETECTOR, 'lidar_ground_z_min': '-0.40'},
+    {**TF_DETECTOR, 'lidar_ground_z_min': '0.05'},
+])
+def test_moved_mount_needs_a_detector_that_reads_it(monkeypatch, detector):
+    with pytest.raises(ValueError, match='moved Mid-360 mount'):
+        launch_nodes(monkeypatch, perception='lidar', lidar_source='mid360',
+                     mid360_mount_pitch_rad='0.1', **detector)

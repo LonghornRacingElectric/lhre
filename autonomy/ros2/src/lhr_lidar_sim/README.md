@@ -123,9 +123,11 @@ Cloud and mount TF share the truth acquisition stamp. Duplicate stamps suppress
 extra scans and repeated mount TFs; a backward-time reset resumes both. Vehicle height/attitude and
 the shared mount are applied, although current Gazebo odometry is planar.
 
-World mode fixes the mount to `vehicle.yaml` with zero rotation and requires
-snapshot scans without synthetic clutter. Incompatible startup values and runtime
-edits are rejected. Mount/motion/clutter studies remain available in marker mode.
+World mode takes its mount at startup and keeps it for the run, so a scored
+run never mixes mounts; runtime mount edits are rejected. The Gazebo launch sets
+it with `mid360_mount_*` and then requires the detector to read it from tf. World
+mode also requires snapshot scans without synthetic clutter, and rejects other
+startup values. Motion and clutter studies remain available in marker mode.
 Gazebo exposes the supported startup rate, range, noise, dropout and profile
 settings as `mid360_*` launch arguments; its [argument table](../lhr_gazebo/README.md#mid-360-cloud-source-and-foxglove)
 also documents the fixed world-mode exceptions.

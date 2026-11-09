@@ -38,6 +38,37 @@ def _float(name):
     return ParameterValue(LaunchConfiguration(name), value_type=float)
 
 
+MID360_MOUNT = ('x_m', 'y_m', 'z_m', 'roll_rad', 'pitch_rad', 'yaw_rad')
+# The base_link cut the default sensor-frame band gives at the default mount.
+# At 0.05 m, range noise on ground hits near the car became 123 false cones
+# on one lap (testing/2026-11-08-lidar-mount-study).
+MID360_MIN_GROUND_CUT_M = 0.15
+
+
+def _mid360_mount_default():
+    """Return the mount the detector assumes without tf: vehicle.yaml, unrotated."""
+    return dict(zip(MID360_MOUNT, (*load_vehicle().lidar_position_m, 0.0, 0.0, 0.0)))
+
+
+def _check_mid360_mount(configs):
+    """
+    Refuse a moved Mid-360 unless the detector reads the move.
+
+    By default the detector places the cloud at the vehicle.yaml mount with
+    no rotation and cuts height in the sensor frame, so a caster that is
+    pitched, flipped or moved would hand it a cloud it misplaces, silently.
+    """
+    moved = any(float(configs.get(f'mid360_mount_{name}', value)) != value
+                for name, value in _mid360_mount_default().items())
+    if moved and (configs.get('lidar_sensor_transform_source') != 'tf'
+                  or configs.get('lidar_height_filter_frame') != 'base_link'
+                  or float(configs.get('lidar_ground_z_min', '0')) < MID360_MIN_GROUND_CUT_M):
+        raise ValueError(
+            'A moved Mid-360 mount needs lidar_sensor_transform_source:=tf, '
+            'lidar_height_filter_frame:=base_link and '
+            f'lidar_ground_z_min of at least {MID360_MIN_GROUND_CUT_M} m')
+
+
 def _find_world(context: LaunchContext):
     """
     Resolve the world SDF path from track_style and seed.
@@ -159,6 +190,7 @@ def _launch_setup(context: LaunchContext):
             load_world_cones(world_path)
         except (OSError, ET.ParseError, ValueError) as error:
             raise ValueError(f'Unsupported Mid-360 world {world_path!r}: {error}') from error
+        _check_mid360_mount(context.launch_configurations)
     classify_sides = context.launch_configurations.get(
         'lidar_classify_sides', 'false').lower() == 'true'
     use_ekf = context.launch_configurations.get(
@@ -365,6 +397,7 @@ def _launch_setup(context: LaunchContext):
                     **{name: _float(f'mid360_{name}') for name in (
                         'frame_rate_hz', 'point_rate_hz', 'max_range_m',
                         'range_noise_std_m', 'dropout_rate')},
+                    **{f'mount_{name}': _float(f'mid360_mount_{name}') for name in MID360_MOUNT},
                     **{name: ParameterValue(LaunchConfiguration(f'mid360_{name}'),
                                             value_type=str)
                        for name in ('elevation_profile', 'return_profile')},
@@ -715,6 +748,9 @@ def generate_launch_description():
                               choices=['livox', 'rosette', 'uniform']),
         DeclareLaunchArgument('mid360_return_profile', default_value='baseline',
                               choices=['baseline', 'acceptance_overcast']),
+        # The mount study's six numbers, in base_link; roll pi is upside down.
+        *[DeclareLaunchArgument(f'mid360_mount_{name}', default_value=str(value))
+          for name, value in _mid360_mount_default().items()],
         DeclareLaunchArgument(
             'lidar_classify_sides', default_value='false',
             description='Infer LiDAR sides; always enabled when camera fusion is enabled'),
