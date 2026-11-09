@@ -119,8 +119,9 @@ measures how far past the nose each cone first enters the detector's map.
 
 Ranges are over each arm's runs; CTE over its five autocross laps. Per-run
 rows: [detection_range.csv](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/testing/2026-11-08-lidar-mount-study/detection_range.csv).
-Seed 3 is the hardest course for every mount: a tenth of its cones are first
-mapped within 0.4 m (6 and 7°) to 2.6 m (nose) of the nose. A false cone is a
+Seed 3, the tightest course, is where the mounts differ most: its last tenth
+of cones are first mapped only 0.4 m past the nose at 6 and 7°, 1.1 m at 8°
+and 2.6 m with the nose mount. A false cone is a
 map entry more than 0.5 m from any world cone, counted anywhere on the course.
 The scorer finds 123 on the discarded 0.05 m run below, so 0 is a real result.
 
@@ -134,7 +135,10 @@ The scorer finds 123 on the discarded 0.05 m run below, so 0 is a real result.
 - **8° loses range** because it tips the far field onto the sparse bottom
   edge of the scan. At 15 m past the nose a cone gets 0.56 beams per frame
   at 8°, against about 1 at 6 or 7° (pitch sweep).
-- **The hoop costs nothing** against today's nose mount at 6 or 7°.
+- **The hoop matches today's nose mount in the median** at 6 or 7°. Its
+  latest cones on seed 3's tight corners come about 2 m later, from 1.2 m
+  farther back, and the sim does not model the nose blocking the near field,
+  so the real car is no better there.
 
 So 7° stands: as good as 6° in the sim, steadier when the body pitches, and
 well clear of 8°'s loss. The sim cannot test the body-pitch argument, since
