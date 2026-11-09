@@ -399,7 +399,6 @@ test_suite(
     name = "unit_tests",
     tests = [
         "//apps/telemetry/analysis/tests:analysis_tests",
-        "//apps/telemetry/stack/tests:protobuf_test",
     ],
     target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],

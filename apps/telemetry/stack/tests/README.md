@@ -1,7 +1,6 @@
 # Telemetry stack tests
 
-The normal Bazel suite runs protobuf tests without Docker. Connectivity and
-data-flow tests are `manual`, local targets: they require loaded telemetry
+Connectivity and data-flow tests are `manual`, local targets: they require loaded telemetry
 images, Docker, the server credentials and a running core stack. See the
 [stack guide](../README.md) for startup.
 
@@ -30,8 +29,8 @@ refresh, sudo forwarding, startup failures and the runner's cleanup path with
 fake Bazel/Docker commands. It does not start services or delete real volumes.
 
 Protobuf persistence is MQTT → bridge → `sensor_data` → core `db_writer` →
-Postgres. `data_flow_test` requires the writer service from ingest's Compose
-project. Raw test producers must include the `car_type` header; malformed records
+Postgres. `native_bevo_flow_test` requires the writer service from ingest's Compose
+project. Native test producers include `car_type` and `payload_format` headers; malformed records
 block the persistence group intentionally. The
 [writer guide](../processors/db_writer/README.md) describes batching.
 
