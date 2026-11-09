@@ -1,7 +1,7 @@
 load("//tools/firmware:firmware_project.bzl", "firmware_project")
 
 firmware_project(
-    name = "vcu",
+    name = "VCU",
     app_deps = [
         "//drivers/longhorn:can_inbox",
         "//drivers/longhorn:console",
