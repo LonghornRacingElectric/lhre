@@ -33,9 +33,9 @@ existing non-Bazel workflows. The Linux devtool is authoritative for the new
 image path; the Windows script has not yet been ported to the Bazel loader.
 Before creating ingest containers (`up`, `create`, `run`, or `watch`), the devtool resolves
 `//apps/telemetry:current_schema_sql` and `//apps/telemetry:new_car_schema_sql`,
-and mounts generated Orion and Artemis DDL into
+and mounts generated Artemis DDL into
 Postgres. A `lib/spec` edit therefore reaches a newly initialized server
-database without rewriting `orion_db_init.sql` in the source tree.
+database without checking generated SQL into the source tree.
 For these commands the devtool invokes Bazel even when the DDL output already exists, so Bazel
 checks spec dependencies instead of reusing a file merely because it is
 present. Compose receives the selected path explicitly after `sudo` as well
@@ -50,8 +50,9 @@ therefore works while the spec is invalid or Bazel is unavailable. No dummy SQL
 or checked-in fallback is mounted. The Windows tool applies the same path and
 startup checks, but still requires images loaded through the Bazel workflow.
 
-Direct Compose use must also set `ORION_DB_INIT_SQL` and `ARTEMIS_DB_INIT_SQL`. The mount is read-only,
-does not create missing host paths and has no checked-in Orion SQL fallback.
+Direct Compose use must set `ARTEMIS_DB_INIT_SQL`. The mount is read-only
+and does not create missing host paths. New volumes initialize the `artemis`
+database and shared `telemetry` metadata; no Orion database is created.
 Existing database volumes are not migrated by rebuilding this initialization
 file. Apply Artemis additions with the [schema command](../scripts/README.md). Integration tests do not create missing tables to conceal a failed init.
 See the [integration runner notes](tests/README.md) before using its
@@ -87,9 +88,8 @@ to the shared input and run `bazel run //apps/telemetry/stack:requirements.updat
 
 Integration tests under `tests/` assume the core is already running. They are
 manual/local targets because they require Docker and credentials. The data-flow
-test generates an Orion protobuf packet through the Paho test generator and
-requires that exact packet in raw Kafka, decoded Grafana Kafka, and Postgres;
-successful publishing alone is not considered a pass.
+test publishes an Artemis update batch over MQTT and requires that exact batch
+in raw Kafka plus its decoded values in the Artemis Grafana topic.
 
 ## Adding Artemis to an existing database volume
 

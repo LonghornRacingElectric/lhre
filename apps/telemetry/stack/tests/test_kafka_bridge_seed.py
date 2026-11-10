@@ -1,9 +1,4 @@
-"""
-Integration test that verifies the Kafka bridge seeds car-specific grafana_data topics.
-The bridge service seeds a minimal JSON payload via seedTopic for each car when it starts
-(implemented in cmd/bridge/main.go). This test consumes from each car's topic and
-asserts that the seed message is present.
-"""
+"""Verify the Kafka bridge publishes its Artemis Grafana seed."""
 
 import json
 import time
@@ -32,7 +27,7 @@ class TestKafkaBridgeSeed(unittest.TestCase):
         )
 
     def test_grafana_topics_seeded(self):
-        cars = ["orion", "artemis"]
+        cars = ["artemis"]
         suffix = uuid.uuid4().hex
 
         for car in cars:
@@ -56,7 +51,7 @@ class TestKafkaBridgeSeed(unittest.TestCase):
                             except Exception:
                                 continue
 
-                            if payload.get("packet_id") == 0 and payload.get("car_type") == car:
+                            if payload.get("car_type") == "Artemis" and payload.get("time", 0) > 0:
                                 seed_found = True
                                 break
                         if seed_found:
