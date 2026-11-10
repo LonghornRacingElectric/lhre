@@ -12,18 +12,14 @@ Rule numbers in parentheses refer to the design doc:
   4. CAN ID uniqueness per bus, quantity-expanded
   5. referential integrity (bus / enum_type / bitfield / group)
   6. encoding sanity
-  7. tier totality
+  7. native rate validity
   8. bus-load advisory (warning only)
 """
 
+import math
 import re
 
 from lib.spec.proto import can_spec_pb2
-
-# Tier derivation thresholds (design doc §7). Live here so every
-# generator sees the same resolved tier.
-FAST_MIN_HZ = 50.0
-MEDIUM_MIN_HZ = 5.0
 
 BUS_LOAD_WARN_FRACTION = 0.8
 
@@ -67,19 +63,6 @@ def occupied_bits(encoding):
         bits.append(byte * 8 + bit)
         byte, bit = (byte + 1, 7) if bit == 0 else (byte, bit - 1)
     return bits
-
-
-def resolve_tier(message, telemetry):
-    """Concrete RateTier for a telemetry binding (§7 resolution order)."""
-    if telemetry.rate_tier != can_spec_pb2.TIER_UNSPECIFIED:
-        return telemetry.rate_tier
-    if message.default_rate_tier != can_spec_pb2.TIER_UNSPECIFIED:
-        return message.default_rate_tier
-    if message.frequency_hz >= FAST_MIN_HZ:
-        return can_spec_pb2.FAST
-    if message.frequency_hz >= MEDIUM_MIN_HZ:
-        return can_spec_pb2.MEDIUM
-    return can_spec_pb2.SLOW
 
 
 def telemetry_bindings(spec):
@@ -133,6 +116,11 @@ class _Report:
 
 def _check_registries(spec, report):
     """Duplicate names in registries and messages (rule 5 groundwork)."""
+    if any(file.car for file in spec.files.values()):
+        try:
+            spec.car()
+        except ValueError as error:
+            report.error("spec", 5, str(error))
     for kind, entries in (
         ("bus", spec.buses()),
         ("enum_type", spec.enum_types()),
@@ -183,6 +171,19 @@ def _check_registries(spec, report):
                 report.error(where, 5, f"duplicate enum value number {value.number} (also {seen_numbers[value.number]})")
             seen_names[value.name] = value
             seen_numbers[value.number] = value.name
+            if value.number in enum_type.reserved_numbers or value.name in enum_type.reserved_names:
+                report.error(where, 1, "enum value is tombstoned")
+
+    for filename, spec_file in spec.files.items():
+        registry = spec_file.groups
+        for group in registry.group:
+            if group.snapshot_id in registry.reserved_snapshot_ids or group.name in registry.reserved_snapshot_names:
+                report.error(filename, 1, "snapshot group is tombstoned")
+        if registry.next_snapshot_id:
+            live_ids = {1, 2} | {group.snapshot_id for group in registry.group}
+            reserved = set(registry.reserved_snapshot_ids)
+            if live_ids & reserved or live_ids | reserved != set(range(1, registry.next_snapshot_id)):
+                report.error(filename, 1, "root snapshot ids must partition the append-only ledger")
 
     for filename, bitfield_type in spec.bitfield_types():
         seen_bits = set()
@@ -366,8 +367,6 @@ def _check_ledgers(spec, report):
         suffix = f".{bit.name}" if bit is not None else ""
         prefix = f"{message.name}." if message.name else ""
         where = f"{filename}: {prefix}{signal.name}{suffix}"
-        if resolve_tier(message, telemetry) == can_spec_pb2.TIER_UNSPECIFIED:
-            report.error(where, 7, "signal does not resolve to a concrete rate tier")
         if telemetry.shared_source and (telemetry.repeated or bit is not None):
             report.error(where, 1, "shared_source requires a scalar CAN signal")
         source_contract = None
@@ -387,6 +386,10 @@ def _check_ledgers(spec, report):
             where = f"{filename}: {group.name}.{field.name}"
             if field.type == can_spec_pb2.PROTO_SCALAR_TYPE_UNSPECIFIED:
                 report.error(where, 5, "external snapshot field type is required")
+            if field.element_names and not field.repeated:
+                report.error(where, 5, "element_names requires a repeated field")
+            if len(set(field.element_names)) != len(field.element_names):
+                report.error(where, 5, "array element names must be unique")
             record(group.name, field.name, field.id, field.repeated, 0, where)
 
     for group_name, (filename, group) in groups.items():
@@ -441,6 +444,46 @@ def _check_bitfield_references(spec, report):
             users.setdefault(name, where)
 
 
+def _check_signal_metadata(spec, report):
+    for filename, message in spec.messages():
+        if not math.isfinite(message.frequency_hz) or message.frequency_hz < 0:
+            report.error(f"{filename}: {message.name}", 7,
+                         "frequency_hz must be finite and nonnegative")
+    entries = []
+    contracts = {}
+    for filename, message, signal, bit, telemetry in telemetry_bindings(spec):
+        where = f"{filename}: {telemetry.group}.{telemetry.field}"
+        entries.append((where, telemetry, ("uplink_rate_hz",)))
+        key = (telemetry.group, telemetry.field)
+        contract = (telemetry.channel_type,
+                    telemetry.uplink_rate_hz if telemetry.HasField("uplink_rate_hz") else None)
+        if key in contracts and contracts[key] != contract:
+            report.error(where, 5, "all bindings of a field must share channel_type and uplink_rate_hz")
+        contracts[key] = contract
+    for filename, group in spec.groups():
+        for field in group.external_field:
+            where = f"{filename}: {group.name}.{field.name}"
+            numeric = field.type in (
+                can_spec_pb2.PROTO_FLOAT, can_spec_pb2.PROTO_DOUBLE,
+                can_spec_pb2.PROTO_INT32, can_spec_pb2.PROTO_UINT32,
+                can_spec_pb2.PROTO_INT64, can_spec_pb2.PROTO_UINT64,
+            )
+            if numeric and not field.repeated and not field.HasField("unit"):
+                report.error(where, 5, 'numeric external scalars require unit; use "" for dimensionless')
+            if field.channel_type == can_spec_pb2.TELEMETRY and not field.HasField("uplink_rate_hz"):
+                report.error(where, 5, "external telemetry signals require uplink_rate_hz")
+            entries.append((where, field, ("uplink_rate_hz",)))
+    for where, entry, rates in entries:
+        if entry.channel_type not in (can_spec_pb2.TELEMETRY, can_spec_pb2.EVENT, can_spec_pb2.HEALTH):
+            report.error(where, 5, "unknown channel_type")
+        for name in rates:
+            if not entry.HasField(name):
+                continue
+            value = getattr(entry, name)
+            if not math.isfinite(value) or value <= 0:
+                report.error(where, 5, f"{name} must be finite and positive")
+
+
 def validate(spec):
     """Runs every invariant. Returns (errors, warnings)."""
     report = _Report()
@@ -452,4 +495,5 @@ def validate(spec):
     _check_bitfield_references(spec, report)
     _check_ledgers(spec, report)
     _check_bus_load(spec, buses, report)
+    _check_signal_metadata(spec, report)
     return report.errors, report.warnings

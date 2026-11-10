@@ -1,6 +1,6 @@
 # Events and faults processor
 
-Reads Orion telemetry from Kafka's `sensor_data` topic and publishes
+Reads Artemis native updates from Kafka's `sensor_data` topic and publishes
 `fault_raised` / `fault_cleared` JSON events to `fault_events` when the active
 fault set changes. Repeated unchanged state produces no event.
 
@@ -8,7 +8,7 @@ New to the processor? Start with [GETTING_STARTED.md](GETTING_STARTED.md).
 
 ## Fault inputs
 
-The detector reads the generated `OrionSensorData.diagnostics_high` block:
+The detector reads the generated `ArtemisSensorData.diagnostics_high` fields:
 
 - APPS/BPPS/BSE disconnect, out-of-range, mismatch, and implausibility booleans.
 - `stomp_fault`.
@@ -21,20 +21,25 @@ asserted polarity is not documented. Inverter masks use float32 on the wire;
 negative, fractional, non-finite, or values at least `2**24` reject the frame
 because the low bits cannot be trusted. The previous fault set is preserved.
 
-Inputs must have a `car_type: Orion` header. Other cars, untagged frames,
-malformed protobuf, and missing diagnostics are skipped. An explicit empty
-diagnostics block means no faults; an absent block does not clear faults.
+Inputs must have `car_type: Artemis` and `payload_format: artemis_updates_v1`
+headers. The shared decoder validates each `TelemetryBatch` and extracts only
+fields listed in `updated_fields`. Other cars, untagged records, and malformed
+batches are skipped. Unobserved diagnostics retain their last values; only an
+explicit false flag or zero mask clears the corresponding faults. Updates to
+other groups do not change fault state.
 
 ## Events
 
 ```json
-{"kind":"fault_raised","fault":"run_faults[2]","car":"orion","t_ms":1767225600000}
+{"kind":"fault_raised","fault":"run_faults[2]","car":"artemis","t_ms":1767225600000}
 ```
 
 `fault_cleared` uses the same four fields. `t_ms` comes from the telemetry
-packet's `time`, in milliseconds. Each frame compares the current fault set
+update's BEVO `time`, in milliseconds. Each update compares the current fault set
 with the previous set: added faults raise events and removed faults clear them.
-The first valid frame starts from an empty set and raises any asserted faults.
+The first observed diagnostics start from an empty set and raise any asserted
+faults. Multiple updates in one batch are processed in order with their own
+timestamps. There is no packet-ID dependency.
 
 The processor waits for each published event to be acknowledged before
 remembering the new fault set and committing input offsets. Publishing failures
@@ -58,7 +63,7 @@ Needs the core Kafka stack running. From the repository root:
 ```
 
 A new consumer group starts at the latest offset; an existing group resumes its
-committed position. Publish new Orion frames after startup. The output topic
+committed position. Publish new Artemis batches after startup. The output topic
 must exist or broker topic auto-creation must be enabled.
 
 The detection, transition, and decode/publish tests need no services:
@@ -74,17 +79,17 @@ Set these in `docker-compose.yml`:
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `KAFKA_BOOTSTRAP_SERVERS` | `kafka:9092` | Broker address |
-| `KAFKA_INPUT_TOPIC` | `sensor_data` | Raw protobuf frames |
+| `KAFKA_INPUT_TOPIC` | `sensor_data` | Artemis protobuf batches |
 | `KAFKA_OUTPUT_TOPIC` | `fault_events` | JSON transition events |
 | `KAFKA_GROUP_ID` | `events-faults-group` | Consumer group |
 | `LOGLEVEL` | `INFO` | Logging verbosity |
 
 ## Files
 
-- `main.py`: decode Orion frames, compare active faults, and publish changes.
+- `main.py`: decode Artemis updates, retain diagnostics, and publish changes.
 - `faults.py`: pure fault detection and set comparison.
 - `test_faults.py` / `test_main.py`: detection, transitions, and decode/publish tests.
 - `BUILD.bazel`: standard `events_faults_binary`, `_image`, `_load`, `_push`, and
   `_smoke_test` targets, plus the test targets. The processor is optional.
-- `docker-compose.yml`: runs the Bazel-loaded image. The old Dockerfile remains
-  for legacy use; Bazel is the supported image build path.
+- `docker-compose.yml`: runs the Bazel-loaded image using the shared telemetry
+  requirements and generated schema bindings.

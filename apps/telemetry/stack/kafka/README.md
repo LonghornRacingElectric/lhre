@@ -18,6 +18,41 @@ Gazelle. After a dependency edit, update the Go module checksums and commit the
 resulting `MODULE.bazel.lock` change. Protobuf Go packages are build outputs;
 they are not checked into `proto/`.
 
+The bridge compiles `//lib/codegen/telemetry:artemis_proto`, generated from the
+textproto. It accepts only `car_type: Artemis` with
+`payload_format: artemis_updates_v1`. Generated descriptors supply field names
+and seed groups. GPS, power and cell statistics remain application logic.
+The standalone Dockerfile was removed; build images through Bazel only.
+
+The image also packages the generated contract/descriptor under `/schema/`
+for the [deployed authority](../../schema_registry/README.md). That metadata
+must match the running ingest image before the authority advertises a schema
+to BEVO. Both images must advertise the active Artemis schema.
+
 Compose expects both `lhre/telemetry-kafka:4.1.0` and
 `lhre/telemetry-kafka-bridge:dev` to be loaded. The root
 `//apps/telemetry:load_core_images` target does both.
+
+## Raw persistence contract
+
+A successful `SendSensorData` RPC means Kafka acknowledged the raw protobuf
+record on `sensor_data` with its `car_type` and `payload_format` headers. Producer errors return failure;
+there is no intermediate raw-data channel that can drop a successful request.
+An uncertain RPC may be retried, producing duplicates; the
+[database writer](../processors/db_writer/README.md) handles replayed Artemis observations.
+The Grafana queue remains best effort and cannot prevent raw persistence.
+The single-broker deployment uses all available replica acknowledgments but does
+not provide resilience to loss of that broker's disk.
+
+The bridge configures `sensor_data` retention on startup, including existing
+topics, using incremental config changes. `SENSOR_DATA_RETENTION_MS` defaults to
+604800000 (7 days), and `SENSOR_DATA_RETENTION_BYTES` to 8589934592 (8 GiB per
+partition). Whichever limit is reached first bounds database recovery. Size both
+for measured traffic and the required outage budget, and monitor consumer lag
+and free space. Broker defaults apply separately to other topics.
+
+Artemis requires `artemis_updates_v1`, validates batch version/timestamps/presence,
+and reconstructs latest state only for best-effort Grafana output. Per-field
+receipt clocks prevent late updates from overwriting fresher live values.
+Arrays are replaced as whole observations, including a recorded empty array.
+The raw Kafka record always remains the original fresh batch.

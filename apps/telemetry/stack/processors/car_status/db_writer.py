@@ -14,7 +14,7 @@ import logging
 import os
 
 # Map the processor's lowercase car id to the DBTarget car name.
-_CAR_DB_NAME = {"orion": "Orion", "angelique": "Angelique", "nightwatch": "Nightwatch"}
+_CAR_DB_NAME = {"orion": "Orion", "artemis": "Artemis"}
 
 _ENABLED = os.getenv("CAR_STATUS_PERSIST", "1") not in ("0", "false", "False")
 

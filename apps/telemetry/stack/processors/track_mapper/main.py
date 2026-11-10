@@ -12,19 +12,15 @@ from stack.ingest.mqtt_handler import MQTTHandler
 MAX_SPEED_MPS = 85.0
 MIN_DISTANCE_METERS = 2.0
 
-CAR_NAME_MAP = {
-    "angelique": "Angelique",
-    "orion": "Orion",
-    "nightwatch": "Nightwatch",
-}
+CAR_NAME_MAP = {"orion": "Orion", "artemis": "Artemis"}
 
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 INPUT_TOPIC = os.getenv("KAFKA_INPUT_TOPIC", "sensor_data")
 OUTPUT_TOPIC = os.getenv("KAFKA_OUTPUT_TOPIC", "track-mapper")
 CONSUMER_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "track-mapper-group")
 
-default_car_env = os.getenv("KAFKA_DEFAULT_CAR", "Angelique")
-DEFAULT_CAR = CAR_NAME_MAP.get(default_car_env.strip().lower(), "Angelique")
+default_car_env = os.getenv("KAFKA_DEFAULT_CAR", "Orion")
+DEFAULT_CAR = CAR_NAME_MAP.get(default_car_env.strip().lower(), "Orion")
 
 
 def _normalize_car_name(raw_car: str | None) -> str | None:
@@ -47,8 +43,7 @@ def _get_car_type_from_headers(headers: list[tuple[str, bytes]] | None) -> str |
         if normalized:
             return normalized
 
-        logging.warning("Unknown car_type header '%s'; using default car '%s'", value_str, DEFAULT_CAR)
-        return None
+        raise ValueError(f"Unsupported car_type header: {value_str}")
 
     return None
 

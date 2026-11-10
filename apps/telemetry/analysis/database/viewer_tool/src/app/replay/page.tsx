@@ -62,8 +62,6 @@ type ReplayEvent = {
   creation_time: string | number;
   start_time: string | number | null;
   end_time: string | number | null;
-  packet_start: string | number | null;
-  packet_end: string | number | null;
   day_date: string | null;
   driver_name: string | null;
   area: string | null;
@@ -95,8 +93,6 @@ type ReplaySummary = {
   track?: string | null;
   event_type?: string | null;
   car_name?: string | null;
-  packet_start: string | null;
-  packet_end: string | null;
   time_start: number | null;
   time_end: number | null;
   time_start_raw?: string | null;
@@ -110,7 +106,7 @@ type ReplaySummary = {
 type ReplayStatePayload = {
   cursor_ms: number | null;
   time_ms: number | null;
-  packet_id: string;
+  session_start_ms: string | null;
   is_end: boolean;
   car_visualization: CarVisualizationData | null;
   map_data: MapData | null;
@@ -406,8 +402,6 @@ export default function ReplayPage() {
       "creation_time",
       "start_time",
       "end_time",
-      "packet_start",
-      "packet_end",
       "car_id",
       "driver_id",
       "location_id",

@@ -20,7 +20,7 @@ py_library(
     imports = [".", "../../..", "../../../.."],
     deps = [
         ":faults_lib",
-        "//apps/telemetry/stack/ingest:ingest_lib",
+        "//apps/telemetry/stack/ingest:sensor_decode",
         requirement("kafka-python"),
         requirement("protobuf"),
     ],

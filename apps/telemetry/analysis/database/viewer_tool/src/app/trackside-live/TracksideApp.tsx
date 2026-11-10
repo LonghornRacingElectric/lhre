@@ -50,10 +50,10 @@ const DEFAULT_CHANNEL_CHART: ChannelChartDefinition = {
   notes: "Default Orion channel quantity/unit chart.",
   entries: [],
 };
-const ANGELIQUE_CHANNEL_CHART_SLUG = "angelique-channel-chart-04-14-26";
+const ARTEMIS_CHANNEL_CHART_SLUG = DEFAULT_CHANNEL_CHART.slug;
 const DEFAULT_SOURCES: SourceDef[] = [
   { key: "orion", label: "Orion" },
-  { key: "angelique", label: "Angelique" },
+  { key: "artemis", label: "Artemis" },
 ];
 const VCU_MAX_MOTOR_RPM = 6000;
 type VcuTorqueParamSet = {
@@ -226,7 +226,7 @@ const SESSION_ENDED_KEY = "motec-live-session-ended-at";
 type CarPreset = {
   id: string;
   name: string;
-  source: "orion" | "angelique";
+  source: "orion" | "artemis";
   topic: string;
   transport: KafkaTransport;
   trackSlug: string;
@@ -400,18 +400,18 @@ function defaultCarPresets(): CarPreset[] {
       },
     },
     {
-      id: "angelique",
-      name: "Angelique",
-      source: "angelique",
-      topic: "grafana_data_angelique",
+      id: "artemis",
+      name: "Artemis",
+      source: "artemis",
+      topic: "grafana_data_artemis",
       transport: "local",
       trackSlug: DEFAULT_TRACK.slug,
-      channelChartSlug: ANGELIQUE_CHANNEL_CHART_SLUG,
+      channelChartSlug: ARTEMIS_CHANNEL_CHART_SLUG,
       metadata: {
         ...EMPTY_METADATA,
-        vehicle_id: "Angelique",
+        vehicle_id: "Artemis",
         vehicle_type: "EV",
-        event: "Angelique Live Telemetry",
+        event: "Artemis Live Telemetry",
       },
     },
   ];
@@ -430,13 +430,13 @@ function loadCarPresets(): CarPreset[] {
 function normalizeCarPreset(value: unknown): CarPreset | null {
   if (!value || typeof value !== "object") return null;
   const raw = value as Partial<CarPreset>;
-  const source = raw.source === "angelique" ? "angelique" : "orion";
-  const name = String(raw.name || (source === "angelique" ? "Angelique" : "Orion")).trim();
+  const source = raw.source === "artemis" ? "artemis" : "orion";
+  const name = String(raw.name || (source === "artemis" ? "Artemis" : "Orion")).trim();
   const metadata = { ...EMPTY_METADATA, ...(raw.metadata || {}) };
   const channelChartSlug = String(raw.channelChartSlug || defaultChannelChartSlugForSource(source));
   const migratedChannelChartSlug =
-    source === "angelique" && raw.id === "angelique" && channelChartSlug === DEFAULT_CHANNEL_CHART.slug
-      ? ANGELIQUE_CHANNEL_CHART_SLUG
+    source === "artemis" && raw.id === "artemis" && channelChartSlug === DEFAULT_CHANNEL_CHART.slug
+      ? ARTEMIS_CHANNEL_CHART_SLUG
       : channelChartSlug;
   return {
     id: String(raw.id || slugifyTrackName(name) || source),
@@ -474,7 +474,7 @@ function App() {
   };
   const [health, setHealth] = useState<{ source: string; postgres_enabled: boolean } | null>(null);
   const [sources, setSources] = useState<SourceDef[]>(DEFAULT_SOURCES);
-  const [source, setSource] = useState<"orion" | "angelique">("orion");
+  const [source, setSource] = useState<"orion" | "artemis">("orion");
   const [channels, setChannels] = useState<ChannelDef[]>([]);
   const [channel, setChannel] = useState("");
   const [threshold, setThreshold] = useState(0);
@@ -1856,7 +1856,7 @@ function App() {
     setCarPresetDraft(fallback);
   }
 
-  async function startLiveData(sourceOverride?: "orion" | "angelique") {
+  async function startLiveData(sourceOverride?: "orion" | "artemis") {
     const useSource = sourceOverride ?? source;
     setEventEnded(false);
     liveSourceRef.current?.close();
@@ -1975,7 +1975,7 @@ function App() {
 
   // Start a fresh, named session: close out any prior record, clear state, stamp
   // the metadata for exports + the logsync registry, and re-arm the feed.
-  function startNewSession(draft: { name: string; car: "orion" | "angelique"; driver: string; eventType: string; venue: string }) {
+  function startNewSession(draft: { name: string; car: "orion" | "artemis"; driver: string; eventType: string; venue: string }) {
     if (isMirrorRef.current) return;
     if (sessionInfo) patchSession(sessionInfo.id, { endedAt: Date.now(), laps: liveStateRef.current.laps.length });
     clearLiveSessionState();
@@ -2855,7 +2855,7 @@ function App() {
     liveStateRef.current = restored;
     lastSavedLapCountRef.current = laps.length;
     setLiveState(restored);
-    if (saved.source === "orion" || saved.source === "angelique") setSource(saved.source);
+    if (saved.source === "orion" || saved.source === "artemis") setSource(saved.source);
     if (saved.topic) setLiveTopic(saved.topic);
     setTargetLaps(saved.targetLaps ?? 0);
     setTargetEnergyKwh(saved.targetEnergyKwh && saved.targetEnergyKwh > 0 ? saved.targetEnergyKwh : PACK_ENERGY_KWH);
@@ -3332,7 +3332,7 @@ function App() {
         <aside className="sidebar">
           <Panel title="Days" icon={<CalendarDays size={18} />}>
             <div className="sourceRow">
-              <select value={source} onChange={(e) => setSource(e.target.value as "orion" | "angelique")}>
+              <select value={source} onChange={(e) => setSource(e.target.value as "orion" | "artemis")}>
                 {sources.map((item) => (
                   <option key={item.key} value={item.key}>{item.label}</option>
                 ))}
@@ -4000,7 +4000,7 @@ function App() {
                     <select
                       value={source}
                       disabled={liveState.running}
-                      onChange={(e) => setSource(e.target.value as "orion" | "angelique")}
+                      onChange={(e) => setSource(e.target.value as "orion" | "artemis")}
                     >
                       {sources.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
                     </select>
@@ -4166,7 +4166,7 @@ function App() {
           <aside className="builderSidebar">
             <Panel title="Search Data" icon={<CalendarDays size={18} />}>
               <div className="sourceRow">
-                <select value={source} onChange={(e) => setSource(e.target.value as "orion" | "angelique")}>
+                <select value={source} onChange={(e) => setSource(e.target.value as "orion" | "artemis")}>
                   {sources.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
                 </select>
                 <button className="tool iconOnly" onClick={() => refreshCalendar()} aria-label="Refresh"><RefreshCcw size={16} /></button>
@@ -4305,7 +4305,7 @@ function App() {
               </label>
               <label>
                 <span>Source</span>
-                <select value={carPresetDraft.source} onChange={(e) => setCarPresetDraft((prev) => ({ ...prev, source: e.target.value as "orion" | "angelique" }))}>
+                <select value={carPresetDraft.source} onChange={(e) => setCarPresetDraft((prev) => ({ ...prev, source: e.target.value as "orion" | "artemis" }))}>
                   {sources.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
                 </select>
               </label>
@@ -4749,13 +4749,13 @@ function NewSessionModal({
   onClose,
 }: {
   sources: SourceDef[];
-  defaultCar: "orion" | "angelique";
+  defaultCar: "orion" | "artemis";
   defaultVenue: string;
   defaultDriver: string;
-  onStart: (draft: { name: string; car: "orion" | "angelique"; driver: string; eventType: string; venue: string }) => void;
+  onStart: (draft: { name: string; car: "orion" | "artemis"; driver: string; eventType: string; venue: string }) => void;
   onClose: () => void;
 }) {
-  const [car, setCar] = useState<"orion" | "angelique">(defaultCar);
+  const [car, setCar] = useState<"orion" | "artemis">(defaultCar);
   const [driver, setDriver] = useState(defaultDriver);
   const [eventType, setEventType] = useState<string>(EVENT_TYPES[0]);
   const [venue, setVenue] = useState(defaultVenue);
@@ -4782,7 +4782,7 @@ function NewSessionModal({
           </label>
           <label>
             <span>Car</span>
-            <select value={car} onChange={(e) => setCar(e.target.value as "orion" | "angelique")}>
+            <select value={car} onChange={(e) => setCar(e.target.value as "orion" | "artemis")}>
               {sources.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
             </select>
           </label>
@@ -6714,7 +6714,7 @@ function safeFileLabel(value: string) {
 }
 
 function defaultChannelChartSlugForSource(source: CarPreset["source"]) {
-  return source === "angelique" ? ANGELIQUE_CHANNEL_CHART_SLUG : DEFAULT_CHANNEL_CHART.slug;
+  return source === "artemis" ? ARTEMIS_CHANNEL_CHART_SLUG : DEFAULT_CHANNEL_CHART.slug;
 }
 
 function preferredChannelChart(charts: ChannelChartDefinition[], source: CarPreset["source"]) {
@@ -6847,7 +6847,7 @@ function formatDuration(seconds: number) {
 function carIdForSource(car: string): number | undefined {
   const c = (car || "").toLowerCase();
   if (c === "orion") return 5;
-  if (c === "angelique") return 3;
+  if (c === "artemis") return 6;
   return undefined;
 }
 function eventTypeIdFor(eventType: string): number {

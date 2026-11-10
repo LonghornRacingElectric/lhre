@@ -1,10 +1,7 @@
-"""Vehicle-motion detection from the Orion telemetry DB.
+"""Vehicle-motion detection from fresh Artemis speed observations.
 
-The freshest ``packet``/``dynamics`` row tells us whether the car is moving
-right now. Speed is the max magnitude across the four wheel-speed channels and
-GPS speed (any one being high means motion). A reading only counts as "moving"
-if it is also recent: if telemetry is stale or absent there is no live stream
-competing for cellular bandwidth, so transferring is safe.
+Only recent, non-NULL speed observations participate. GPS speed uses m/s after
+conversion from knots; wheel speed keeps its independent rad/s threshold.
 """
 from __future__ import annotations
 
@@ -14,22 +11,27 @@ from dataclasses import dataclass
 
 import asyncpg
 
+from sqlalchemy import BigInteger, Float, bindparam, column, literal, select, table, union_all
+from sqlalchemy.dialects.postgresql.asyncpg import dialect
+
 from .config import config
 
-# Latest sample joined across packet (time) and dynamics (speeds).
-_QUERY = """
-    SELECT p."time" AS time_ms,
-           d.wheel_speed,
-           d.gps_speed,
-           d.bl_wheel_speed,
-           d.br_wheel_speed,
-           d.fl_wheel_speed,
-           d.fr_wheel_speed
-    FROM dynamics d
-    JOIN packet p ON p.packet_id = d.packet_id
-    ORDER BY d.packet_id DESC
-    LIMIT 1
-"""
+
+def _speed_query():
+    sources = []
+    for name, fields in (("dynamics_333hz", ("bl_wheel_speed", "br_wheel_speed", "fl_wheel_speed", "fr_wheel_speed")),
+                         ("dynamics_10hz", ("wheel_speed",)), ("dynamics_external", ("gps_speed",))):
+        source = table(name, column("time", BigInteger), column("sample_time_ns", BigInteger), *(column(f, Float) for f in fields))
+        for field in fields:
+            latest = select(source.c.time.label("time_ms"), source.c[field].label("speed"),
+                            literal(field == "gps_speed").label("gps")).where(
+                source.c.time >= bindparam("since", type_=BigInteger), source.c[field].is_not(None)
+            ).order_by(source.c.time.desc(), source.c.sample_time_ns.desc()).limit(1).subquery()
+            sources.append(select(latest))
+    return union_all(*sources).compile(dialect=dialect())
+
+
+_QUERY = _speed_query()
 
 
 @dataclass
@@ -73,24 +75,21 @@ class MotionMonitor:
     async def read(self) -> Motion:
         try:
             pool = await self._get_pool()
-            row = await pool.fetchrow(_QUERY)
+            now_ms = int(time.time() * 1000)
+            values = dict(_QUERY.params, since=now_ms - config.motion_staleness_ms)
+            rows = await pool.fetch(str(_QUERY), *(values[name] for name in _QUERY.positiontup))
         except Exception as e:  # DB down, schema mismatch, etc.
             # Fail open: we can't prove the car is moving, so don't block forever.
             return Motion(moving=False, speed_mps=None, sample_age_ms=None,
                           recent=False, error=str(e))
 
-        if row is None or row["time_ms"] is None:
-            return Motion(moving=False, speed_mps=None, sample_age_ms=None, recent=False)
+        return motion_from_rows(rows, now_ms)
 
-        speeds = [
-            row["wheel_speed"], row["gps_speed"],
-            row["bl_wheel_speed"], row["br_wheel_speed"],
-            row["fl_wheel_speed"], row["fr_wheel_speed"],
-        ]
-        speed = max((abs(s) for s in speeds if s is not None), default=None)
 
-        now_ms = int(time.time() * 1000)
-        age_ms = now_ms - int(row["time_ms"])
-        recent = age_ms <= config.motion_staleness_ms
-        moving = recent and speed is not None and speed > config.speed_threshold_mps
-        return Motion(moving=moving, speed_mps=speed, sample_age_ms=age_ms, recent=recent)
+def motion_from_rows(rows, now_ms):
+    recent = [row for row in rows if 0 <= now_ms - int(row["time_ms"]) <= config.motion_staleness_ms]
+    gps = [abs(row["speed"]) * 0.514444 for row in recent if row["gps"]]
+    moving = any(abs(row["speed"]) * (0.514444 if row["gps"] else 1) >
+                 (config.speed_threshold_mps if row["gps"] else config.wheel_threshold_rad_s) for row in recent)
+    age = min((now_ms - int(row["time_ms"]) for row in recent), default=None)
+    return Motion(moving=moving, speed_mps=max(gps,default=None), sample_age_ms=age, recent=bool(recent))

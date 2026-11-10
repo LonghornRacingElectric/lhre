@@ -5,8 +5,8 @@ Next.js viewer for live telemetry and replay workflows.
 ## Current multi-car status
 
 Implemented:
-- Header-driven live routing for `Orion` and `Angelique` (`car_type` respected end-to-end).
-- Server-side car filtering in `/api/kafka-stream` via `?car=<orion|angelique>`.
+- Header-driven live routing for `Orion` and `Artemis` (`car_type` respected end-to-end).
+- Server-side car filtering in `/api/kafka-stream` via `?car=<orion|artemis>`.
 - Canonical live topics from raw `sensor_data`: `car_visualization`, `driver_input_visualizer`, `map`, `live_banner`.
 - Additional normalized live topics for remaining widgets: `dashboard_screen`, `timing_deltas`, `shutdown_screen`, `thermal_headroom`, `energy_budget`.
 - Live car selector in `LiveViewerBanner` with URL/localStorage persistence and keyboard cycling (`[` / `]`).
@@ -25,6 +25,65 @@ Still pending:
 - `kafka.routes.json` handles pass-through routing for derived topics (`gg-plot`, `track-mapper`).
 - `sensor_data` normalization is handled directly in `src/lib/kafka/kafkaConsumer.ts`.
 
+## Signal discovery (v0)
+
+Build and publish the current car's catalog from the repo root:
+
+```bash
+bazel run --config=local //tools/spec:publish_signals
+```
+
+The current spec declares `car: "artemis"` in `groups.textproto`.
+With the viewer running, `GET /api/cars/artemis/signals` returns its signal array,
+including CAN, GPS, and board-status fields.
+`?schema_version=<64-character-lowercase-hash>` selects an exact version in that
+car's folder; omitting it follows that car's `current.json` pointer.
+The catalog file stores its schema hash only at the top level. The API returns
+the signal array, with the hash in `X-Schema-Version` rather than in each row.
+Every car uses the same catalog shape but its own archive; there is no cross-car
+fallback. No Kafka or
+database connection is needed for discovery. This v0 read endpoint has no
+API-key authentication; adding reader/admin keys remains a later phase.
+
+The archive root defaults to `apps/telemetry/catalogs`. For deployment, set
+`SIGNAL_CATALOG_DIR` in both the publisher and viewer, or pass
+`-- --catalog-root /absolute/path` to the publishing command. It stores
+`<car>/<hash>.json` and atomically updates `<car>/current.json`. An identical
+publish is a no-op; old versions are immutable. Hashes identify canonical
+catalog contents, including car, independently of paths or textproto formatting.
+Build outputs still live in `bazel-bin` and are not used as the archive.
+See the [archive guide](../../../catalogs/README.md) for storage, backups, and
+rollback. Unpublished current versions return 503; unknown cars or missing
+requested versions return 404; malformed car slugs/hashes return 400.
+No rates are guessed and mixed-unit GPS arrays have a null unit. CAN shared
+sources and repeated array slots appear once per protobuf field.
+
+External telemetry must declare an uplink limit; the four GPS fields declare
+50 Hz. Publishd applies that explicit per-field limit while preserving the
+newest pending receipt; CAN fields without a lower limit publish as received. The catalog exposes only `rate_hz`: the explicit uplink rate, otherwise
+the CAN message frequency. External signals have no native-frequency fallback;
+their rate is null when no uplink rate is declared. Numeric scalar
+external signals require explicit units; mixed-unit arrays may omit them.
+
+Catalog serving tests: `npx vitest run tests/signals/catalog.test.ts`.
+
+## Historical queries
+
+`POST /api/query` reads Artemis's generated Timescale frequency pools using its
+published signal catalog. It returns raw JSON/CSV pages ordered by timestamp,
+recording session, nanosecond receipt time and signal. Its cursor has no packet
+identifier; `sample_time_ns` is a decimal string in JSON/CSV. Other car
+names are rejected; Orion's existing telemetry readers remain separate legacy
+integration paths. The gateway does not migrate or reconcile databases.
+
+Use `ARTEMIS_DATABASE_URL` or the `ARTEMIS_DB_*` settings and set
+`QUERY_CURSOR_SECRET` to a stable secret shared by viewer processes. See the
+[query guide](src/lib/query/README.md) for limits and pagination behavior.
+Existing bucketed Artemis analysis remains available through the MoTeC interfaces.
+
+`npm run test:query` runs the unit and HTTP checks; the optional real PostgreSQL
+checks are described in the [test guide](tests/query/README.md).
+
 ## Environment variables
 
 Example viewer-side Kafka/env values:
@@ -36,7 +95,7 @@ KAFKA_GROUP_ID=viewer-tool-group
 KAFKA_TOPICS=status,sensor_data,gg-plot,track-mapper
 KAFKA_ROUTES_FILE=./kafka.routes.json
 KAFKA_SENSOR_TOPIC=sensor_data
-NEXT_PUBLIC_DEFAULT_LIVE_CAR=orion
+NEXT_PUBLIC_DEFAULT_LIVE_CAR=artemis
 NEXT_PUBLIC_VIEWER_MULTI_CAR=true
 ```
 
@@ -45,8 +104,8 @@ NEXT_PUBLIC_VIEWER_MULTI_CAR=true
 The viewer, the Prisma seed scripts, and the docker compose stack all read one
 `.env` at the repository root (`cp .env.example .env`).
 
-Install deps. The `postinstall` hook generates the `auth`, `telemetry`, and
-`angelique` Prisma clients into `.prisma/` and runs `prisma db push` on the auth
+Install deps. The `postinstall` hook generates the `auth`, `telemetry`, `orion`, and
+`artemis` Prisma clients into `.prisma/` and runs `prisma db push` on the auth
 SQLite file (`AUTH_DATABASE_URL`) so it matches `prisma/auth.prisma` — there are
 no migrations, and the committed `prisma/dev.db` predates `User.isAdmin`:
 
@@ -66,12 +125,23 @@ If the auth setup step fails, rerun it with `npm run prisma-auth-setup`. Note
 that `prisma/dev.db` is tracked in git, so the push modifies it in your working
 tree; don't commit it with your own users in it.
 
-> Note: `prisma/orion.prisma` still includes optional-list fields (`Float[]?`) that Prisma 6.x rejects, and nothing imports its client, so `prisma-orion-generate` is not part of `postinstall`.
+Orion and Artemis protobuf and Prisma definitions are generated by Bazel from `lib/spec`;
+there are no editable Orion copies in this package. `npm run protobuf-orion`
+builds the shared protobuf. The Kafka consumer reads `ORION_PROTO_PATH` when
+explicitly set, otherwise the generated file under the checkout's
+`bazel-bin/lib/codegen/telemetry/`. Missing outputs must be built, not replaced
+by a checked-in fallback.
 
-Generate protobuf TS stubs (optional helper scripts):
+`npm run prisma-orion-generate` and `npm run prisma-artemis-generate` build the
+generated schemas and stage them under ignored `.prisma/` for Prisma module
+resolution. Clients are generated into `.prisma/<car>-client`. Artemis generation
+also builds its storage contract and protobuf.
+It is part of `postinstall`; it does not connect to or migrate the database.
+
+Build the protobuf artifacts:
 
 ```bash
-npm run protobuf-angelique
+bazel build //apps/telemetry:new_car_schema_proto
 npm run protobuf-orion
 ```
 
@@ -131,3 +201,44 @@ Video playback copies are made locally using `ffmpeg-static`.
 `npm run video-helper -- --origin https://your-viewer-host.example` on their
 own computer. Originals are not uploaded to the viewer server. See
 [helper setup](tools/README.md). No database setup is needed for the helper.
+
+## Database reads
+
+Orion retains packet-based reads and packet ranges. Artemis uses time windows
+and the generated frequency-pool read interfaces below. Retired cars are not
+accepted as live sources.
+
+The active Artemis database client is generated by Bazel during
+`prisma-artemis-generate` (now part of `postinstall`). It builds the storage
+contract as well as the Prisma models; generated artifacts remain outside git.
+Set `ARTEMIS_DATABASE_URL` to override the existing `ARTEMIS_DB_*` connection
+settings. `ARTEMIS_STORAGE_CONTRACT_PATH` explicitly overrides the generated
+contract path when deploying artifacts outside the checkout.
+
+Artemis replay uses drive-day start/end times and session/time sample keys.
+Trackside Retro database exports and MoTeC series use the generated Timescale
+bucket functions, aligning each pool before combining subsystems. The bucket
+widens to the slowest participating periodic pool; cell arrays require at least
+one second. Logical channel names stay the same. Live widgets continue to read
+Kafka and do not wait for database bucketing.
+
+`GET /api/motec/series` accepts `aggregate=avg|min|max|last` for Artemis floating
+channels (default `avg`). Arrays and states retain the last sample. The handshake
+returns `latest_sample_ms` and preserves `last_packet` for Orion; Artemis replay returns `session_start_ms`, not a
+packet identifier. No Artemis packet-table compatibility layer is installed.
+
+Prisma is used for normal database reads; the small parameterized call to the
+generated table-valued bucket function is the Timescale-specific SQL boundary.
+Prisma clients are generated only: never run `db push` against telemetry data.
+
+
+Database-read integration tests can run with `ARTEMIS_STORAGE_TEST=1` and
+`ARTEMIS_DATABASE_URL` set to an initialized disposable Timescale database:
+`npm run test:driveday`. They exercise actual Prisma calls and the generated
+bucket functions, including mixed-rate alignment and peak aggregation.
+Without that opt-in, database tests skip while the browser-analysis tests run.
+
+For existing shared metadata databases, `npm run prisma-cars-register` registers
+Orion ID 5 and Artemis ID 6 through Prisma without deleting old drive days or
+lookups. It refuses an ID already assigned to a different name. Fresh stack
+initialization includes both. See [existing-volume setup](../../../stack/README.md).

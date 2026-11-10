@@ -470,8 +470,7 @@ def generate_launch_description():
         parameters=[{
             'use_sim_time': _b('use_sim_time'),
             'pairing_strategy': ParameterValue(PythonExpression([
-                "('classified' if '", LaunchConfiguration('lidar_classify_sides'),
-                "' == 'true' else 'boundary_graph') if '",
+                "'boundary_graph' if '",
                 LaunchConfiguration('perception'), "' == 'lidar' else 'boundary'"
             ]), value_type=str),
         }],

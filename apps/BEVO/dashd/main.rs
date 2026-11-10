@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use sensor_proto::proto::orion::OrionSensorData;
+use sensor_proto::proto::artemis::ArtemisSensorData;
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -30,7 +30,7 @@ const MQTT_CLIENT_ID: &str = "BEVO-DASHD";
 const MQTT_TOPIC_PREFIX: &str = "lhre/dash/";
 const MQTT_STALE_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// If we haven't gotten a fresh OrionSensorData snapshot from cand within
+/// If we haven't gotten a fresh ArtemisSensorData snapshot from cand within
 /// this window, the next WebSocket frame ships an all-default CanData so
 /// the dash shows "--" instead of frozen last-known values.
 const CAN_STALE_TIMEOUT: Duration = Duration::from_secs(3);
@@ -113,7 +113,7 @@ struct CanData {
 
     // ---------------------------------------------------------------
     // Pit / extended driver-thread fields — all sourced from the same
-    // OrionSensorData snapshot cand publishes. None when cand has not
+    // ArtemisSensorData snapshot cand publishes. None when cand has not
     // received the corresponding CAN message yet.
     // ---------------------------------------------------------------
 
@@ -671,7 +671,7 @@ fn load_driving_layout() -> Option<serde_json::Value> {
 // Protobuf -> CanData extraction
 // ---------------------------------------------------------------------------
 
-fn extract_can_data(data: &OrionSensorData, last_qualified_soc: &mut Option<f32>) -> CanData {
+fn extract_can_data(data: &ArtemisSensorData, last_qualified_soc: &mut Option<f32>) -> CanData {
     let pack = data.pack.as_ref();
     let thermal = data.thermal.as_ref();
     let controls = data.controls.as_ref();
@@ -879,7 +879,7 @@ fn ipc_reader_loop(state: Arc<Mutex<DashState>>) {
                         break;
                     }
 
-                    match OrionSensorData::decode(&msg_buf[..]) {
+                    match ArtemisSensorData::decode(&msg_buf[..]) {
                         Ok(data) => {
                             // GPS comes in dynamics.gps as [lat, lon] (cand NMEA).
                             let gps = data

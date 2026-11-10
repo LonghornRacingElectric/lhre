@@ -1,19 +1,19 @@
-export type LiveCar = "orion" | "angelique";
+export type LiveCar = "orion" | "artemis";
 
-export const SUPPORTED_LIVE_CARS: LiveCar[] = ["orion", "angelique"];
+export const SUPPORTED_LIVE_CARS: LiveCar[] = ["orion", "artemis"];
 const DISABLED_FLAG_VALUES = new Set(["0", "false", "no", "off"]);
 
 export function normalizeLiveCar(value: string | null | undefined): LiveCar | null {
   if (!value) return null;
   const normalized = value.trim().toLowerCase();
   if (normalized === "orion") return "orion";
-  if (normalized === "angelique") return "angelique";
+  if (normalized === "artemis") return "artemis";
   return null;
 }
 
 export function liveCarLabel(car: LiveCar): string {
   if (car === "orion") return "Orion";
-  return "Angelique";
+  return "Artemis";
 }
 
 export function isMultiCarViewerEnabled(): boolean {

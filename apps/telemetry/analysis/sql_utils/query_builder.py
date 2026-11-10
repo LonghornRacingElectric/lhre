@@ -8,38 +8,12 @@ from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import Query, aliased
 from .db_session import get_db
 from .models import (
-    DriveDay,
-    LutDriver,
-    LutLocation,
-    LutCar,
-    LutEventType,
-    Event,
-    Packet,
-    Dynamics,
-    Controls,
-    Pack,
-    DiagnosticsHigh,
-    DiagnosticsLow,
-    Thermal,
-    Classifier,
-    Partitions,
-    CarStatusSegment,
-    AngeliquePacket,
-    AngeliqueDynamics,
-    AngeliqueControls,
-    AngeliquePack,
-    AngeliqueDiagnostics,
-    AngeliqueThermal,
-    OrionPacket,
-    OrionDynamics,
-    OrionControls,
-    OrionPack,
-    OrionDiagnosticsHigh,
-    OrionDiagnosticsLow,
-    OrionThermal,
-    OrionBoardStatus,
-    OrionGpsPrecise,
+    DriveDay, LutDriver, LutLocation, LutCar, LutEventType, Event,
+    Packet, Dynamics, Controls, Pack, DiagnosticsHigh, DiagnosticsLow, Thermal,
+    Classifier, Partitions, CarStatusSegment, ORION_MODELS, ARTEMIS_MODELS,
+    OrionGpsPrecise, ArtemisGpsPrecise,
 )
+
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import JSONB # Added for JSONB type handling
 
@@ -48,7 +22,7 @@ import os
 
 class QueryBuilder:
 
-    def __init__(self, car="Nightwatch"):
+    def __init__(self, car="Orion"):
         self._car = car # Store car name
         self._db_context_manager = get_db(car) # Store the context manager
         self.session = None # Session will be set in __enter__
@@ -68,30 +42,13 @@ class QueryBuilder:
             "CarStatusSegment": CarStatusSegment,
         }
 
-        if car == "Nightwatch":
-            self._models["Dynamics"] = Dynamics
-            self._models["Controls"] = Controls
-            self._models["Pack"] = Pack
-            self._models["DiagnosticsHigh"] = DiagnosticsHigh
-            self._models["DiagnosticsLow"] = DiagnosticsLow
-            self._models["Thermal"] = Thermal
-        elif car == "Angelique":
-            self._models["Dynamics"] = AngeliqueDynamics
-            self._models["Controls"] = AngeliqueControls
-            self._models["Pack"] = AngeliquePack
-            self._models["Diagnostics"] = AngeliqueDiagnostics
-            self._models["Thermal"] = AngeliqueThermal
-            self._models["Packet"] = AngeliquePacket
-        elif car == "Orion":
-            self._models["Dynamics"] = OrionDynamics
-            self._models["Controls"] = OrionControls
-            self._models["Pack"] = OrionPack
-            self._models["DiagnosticsHigh"] = OrionDiagnosticsHigh
-            self._models["DiagnosticsLow"] = OrionDiagnosticsLow
-            self._models["Thermal"] = OrionThermal
-            self._models["BoardStatus"] = OrionBoardStatus
-            self._models["Packet"] = OrionPacket
+        if car == "Orion":
+            self._models.update({name.removeprefix("Orion"): model for name, model in ORION_MODELS.items()})
             self._models["GpsPrecise"] = OrionGpsPrecise
+        elif car == "Artemis":
+            self._models.pop("Packet", None)
+            self._models.update({name.removeprefix("Artemis"): model for name, model in ARTEMIS_MODELS.items()})
+            self._models["GpsPrecise"] = ArtemisGpsPrecise
         else:
             raise ValueError(f"Car {car} is not supported.")
 
@@ -132,12 +89,6 @@ class QueryBuilder:
     def __enter__(self):
         self.session = self._db_context_manager.__enter__() # Get the session from the context manager
         self._query = self.session.query() # Initialize query here
-        if self._car.lower() == "angelique":
-            self.session.execute(text("SET search_path TO angelique"))
-        elif self._car.lower() == "orion":
-            self.session.execute(text("SET search_path TO orion"))
-        else:
-            self.session.execute(text("SET search_path TO telemetry"))
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -239,7 +190,7 @@ class QueryBuilder:
             raise NotImplementedError(f'Send query has not been implemented for {return_type} yet.')
 
     @staticmethod
-    def manual_query(query: str, car="Nightwatch", return_type: type = pd.DataFrame, **kwargs):
+    def manual_query(query: str, car="Orion", return_type: type = pd.DataFrame, **kwargs):
         with get_db(car) as session:
             results = session.execute(text(query)).fetchall()
             if return_type is pd.DataFrame:
@@ -346,12 +297,10 @@ class QueryBuilder:
             Classifier,
             Partitions,
         ]
-        if car == "Nightwatch":
-            return shared_models + [Packet, Dynamics, Controls, Pack, DiagnosticsHigh, DiagnosticsLow, Thermal]
-        if car == "Angelique":
-            return shared_models + [AngeliquePacket, AngeliqueDynamics, AngeliqueControls, AngeliquePack, AngeliqueDiagnostics, AngeliqueThermal]
         if car == "Orion":
-            return shared_models + [OrionPacket, OrionDynamics, OrionControls, OrionPack, OrionDiagnosticsHigh, OrionDiagnosticsLow, OrionThermal, OrionBoardStatus, OrionGpsPrecise]
+            return shared_models + list(ORION_MODELS.values()) + [OrionGpsPrecise]
+        if car == "Artemis":
+            return shared_models + list(ARTEMIS_MODELS.values()) + [ArtemisGpsPrecise]
         raise ValueError(f"Car {car} is not supported.")
 
     @staticmethod

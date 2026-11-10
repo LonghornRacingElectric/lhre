@@ -1,0 +1,39 @@
+load("@rules_python//python:defs.bzl", "py_binary")
+load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
+load("//apps/telemetry:compatibility.bzl", "NOT_WINDOWS")
+load("//apps/telemetry:container.bzl", "telemetry_service_image")
+
+package(default_visibility = ["//apps/telemetry:__subpackages__"])
+
+py_binary(
+    name = "db_writer_binary",
+    srcs = ["main.py"],
+    main = "main.py",
+    imports = ["../../.."],
+    data = ["//apps/telemetry:config_files"],
+    deps = [
+        "//apps/telemetry/analysis:analysis_lib",
+        "//apps/telemetry/stack/ingest:partition_manager",
+        "//apps/telemetry/stack/ingest:pool_storage",
+        "//apps/telemetry/stack/ingest:sensor_decode",
+        requirement("kafka-python"),
+        requirement("numpy"),
+        requirement("pandas"),
+        requirement("protobuf"),
+        requirement("psycopg2-binary"),
+        requirement("python-dotenv"),
+        requirement("SQLAlchemy"),
+    ],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+telemetry_service_image(
+    name = "db_writer",
+    binary = ":db_writer_binary",
+    base = "@python312_linux_amd64",
+    env = {"PYTHONUNBUFFERED": "1", "PYTHONPATH": "/app"},
+    repo_tags = ["lhre/telemetry-db-writer:dev"],
+    repository = "ghcr.io/longhornracingelectric/telemetry-db-writer",
+    tars = ["//apps/telemetry:runtime_config_tar"],
+    workdir = "/app",
+)

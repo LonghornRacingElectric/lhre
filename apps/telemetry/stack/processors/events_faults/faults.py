@@ -27,11 +27,11 @@ def detect_active_faults(diagnostics_high):
         return active
 
     for field in BOOLEAN_FAULTS:
-        if getattr(diagnostics_high, field, False):
+        if diagnostics_high.get(field, False):
             active.add(field)
 
     for field in ("post_faults", "run_faults"):
-        value = getattr(diagnostics_high, field, 0.0)
+        value = diagnostics_high.get(field, 0.0)
         try:
             mask = int(value)
         except (TypeError, ValueError, OverflowError) as error:

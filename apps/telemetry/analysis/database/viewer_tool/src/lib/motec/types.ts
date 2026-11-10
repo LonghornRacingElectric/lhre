@@ -1,6 +1,6 @@
 // Shared types for the MoTeC exporter (mirrors the reference pydantic models).
 
-export type CarId = "orion" | "angelique";
+export type CarId = "orion" | "artemis";
 
 export type ChannelDef = {
   key: string;

@@ -1,10 +1,15 @@
-# MVP gate tools
+# Gate tools
 
 Runs the 10/28 Software MVP gate
 ([#109](https://github.com/LonghornRacingElectric/lhre/issues/109)) in Gazebo
 and scores every run against the
 [pass criteria](../../../docs/plans/mvp-pass-criteria.md), so the gate is a
-table of passes and failures rather than a judgment call.
+table of passes and failures rather than a judgment call. The runner now
+selects the Mid-360 and camera-fusion sensor stack for
+[#206](https://github.com/LonghornRacingElectric/lhre/issues/206).
+It uses the MVP matrix with course-derived reference-lap scoring; the expanded
+matrix and FMU checks in the [Sim v2 criteria](../../../docs/plans/sim-v2-pass-criteria.md)
+require the remaining gate work.
 
 ## Files
 
@@ -14,16 +19,22 @@ table of passes and failures rather than a judgment call.
 | `score_gate.py` | Reads every run folder and writes `results.csv` (one row per run) and `summary.md` (the pass/fail table). Rerunnable, it only reads |
 | `watch_run.py` | Ends each run in sim time and writes how it ended to `end.txt`. The fault tools use it too |
 
-Every gate run is `perception:=lidar estimator:=ekf safety:=true` with launch
-defaults, which is the stack the pass criteria define. Lap time is scored
-against a [reference lap](#the-reference-lap) computed from the course.
+Every gate run is `perception:=lidar estimator:=ekf safety:=true
+lidar_source:=mid360 enable_stereo_camera:=true enable_camera_lidar_fusion:=true`.
+Sensor selection belongs to the runner; standalone Gazebo launch defaults
+remain unchanged. Fusion supplies `/lhr/perception/cones_classified` to the
+planner and enables LiDAR side inference for camera fallback.
+Optional baselines use `perception:=sim estimator:=truth lidar_source:=gazebo`,
+with stereo and fusion explicitly disabled, for comparison only. Lap time is
+scored against a [reference lap](#the-reference-lap) computed from the course.
 A run ends `SETTLE_S` sim seconds after the mission reaches `FINISHED` or
 `EMERGENCY`, so the bag holds the stop, or at `RUN_S` sim seconds.
 Skidpad joins the matrix on its own once
 `lhr_gazebo/worlds/skidpad_seed1.sdf` is in the tree
 ([#114](https://github.com/LonghornRacingElectric/lhre/issues/114)). Until
 then the runner writes it to `waived.txt` and the summary names it as
-waived, as the pass criteria allow, instead of failing three missing runs.
+waived, as the MVP pass criteria allow, instead of failing three missing runs.
+That waiver does not satisfy #206 or Sim v2, which both require skidpad.
 Skidpad scores like acceleration, so the skidpad work has to meet the same
 contract: `track_style:=skidpad` runs the mission, the mission manager
 publishes `/lhr/mission/complete` when the car crosses the exit line (not
@@ -44,8 +55,11 @@ Environment variables pick the matrix: `SEEDS` (`1 2 3 4 5`), `REPEATS` (3),
 `ACCEL_REPEATS` and `SKIDPAD_REPEATS` (3 each, empty or 0 for none),
 `BASELINE` (0; 1 adds one truth-stack run per seed, for comparison only),
 `RUN_S` (180 sim seconds), `SETTLE_S` (5 sim seconds), `HANG_S` (60 wall
-seconds), `OUT` and `EXTRA` (more launch arguments). The full matrix without
-skidpad is 18 runs. A quick check:
+seconds), `OUT` and `EXTRA` (more launch arguments, split on whitespace).
+The runner's per-run arguments follow `EXTRA`, so gate sensor selection and
+baseline exclusions take precedence. The full matrix without skidpad is
+18 runs. Historical MVP timing predates the combined Mid-360/camera stack.
+A quick check:
 
 ```bash
 SEEDS=1 REPEATS=1 ACCEL_REPEATS=1 SKIDPAD_REPEATS=1 ../testing/tools/gate/run_gate.sh
@@ -79,18 +93,58 @@ Wall clocks left in the path, and why they stay:
 - `lhr_demo`'s driving study runner (`--wall-timeout`) is not part of the
   gate.
 
-Output goes to `~/lhr-test-data/<date>-mvp-gate/`: `runs/<id>/` (bag,
-`metrics.csv`, `end.txt`, launch and recorder logs, the launch arguments), then
+Output goes to `~/lhr-test-data/<date>-mid360-fusion-gate/`: `runs/<id>/` (bag,
+`metrics.csv`, `end.txt`, launch and recorder logs, the complete ROS launch
+command in `args.txt`, one argument per line), then
 `results.csv` and `summary.md`. `expected.txt` lists every planned run, and
 the scorer fails any planned run with no result, so a campaign cut short
 (a laptop sleeping, an SSH drop) never reads as a pass. Rerunning resumes:
 a finished run (its folder has `args.txt`, written last) is skipped, a run
 that was cut short is moved to `incomplete/` and run again, and Ctrl-C stops
 the current run cleanly. Move a finished folder aside to rerun it.
-Bags never go in git. The gate's write-up goes in
-`autonomy/testing/2026-10-28-mvp-gate/` with `results.csv`, the summary and
+Always choose a fresh `OUT` after changing code or settings: resume checks
+the completion marker, not whether the saved settings match the new run.
+Old MVP folders and their evidence remain historical.
+Bags never go in git. A new campaign's write-up goes in
+`autonomy/testing/<date>-mid360-fusion-gate/` with `results.csv`, the summary and
 the chosen figures, and the bags go to SharePoint
 ([testing/README.md](../../README.md)).
+
+## Sensor-rate evidence
+
+Run one full stack at a time on red-mesa for official acceptance, with the
+default 0.3 s LiDAR timeout. Mac Docker runs are development evidence only,
+including any run with a relaxed timeout. While the car is driving, observe
+these three topics with the installed ROS tools, saving their output beside
+the campaign's raw data:
+
+```bash
+ros2 topic hz --wall-time /lhr/lidar/points
+ros2 topic hz --wall-time /lhr/sensor/zed2i/left/image_rect
+ros2 topic hz --wall-time /lhr/sensor/zed2i/right/image_rect
+```
+
+Use separate terminals so their observation intervals overlap. `ros2 topic
+info --verbose <topic>` shows publisher/subscriber QoS if a monitor receives
+no samples. Record each observed mean rate, maximum interval, window size,
+observation duration and whether the window covers driving. These are
+subscriber-observed wall-time rates, not configured sensor rates. Record
+real-time factor from the change in `/clock` over elapsed wall time too;
+wall-time intervals cannot be compared directly with a ROS-time safety
+timeout. Missing samples are missing evidence, not a zero rate or a pass.
+
+The campaign README records the commit (and any uncommitted diff), machine,
+plant, actual arguments, rate measurements and scoring results. Keep the
+camera interruption/recovery check separate from the clean course matrix;
+inspect `/lhr/perception/cones_classified` and the centerline before loss,
+after `fusion_camera_max_age_sec` and after restoration. Physical colors on
+`/lhr/perception/cones_fused` may persist while the planner uses LiDAR sides.
+The [#85](https://github.com/LonghornRacingElectric/lhre/issues/85) and
+[#86](https://github.com/LonghornRacingElectric/lhre/issues/86) fallback
+failure mechanisms, regression fixes and development driving checks are
+recorded in the [side-classifier validation](../../2026-11-08-side-classifier-fixes/README.md).
+Follow the
+[testing rules](../../README.md) for storing and verifying raw recordings.
 
 ## Reading the results
 

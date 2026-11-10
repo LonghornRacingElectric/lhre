@@ -128,11 +128,8 @@ CREATE TABLE public.lut_car (
 	car_name            text        NOT NULL,
 	CONSTRAINT lut_car_pk PRIMARY KEY (car_id)
 );
-INSERT INTO public.lut_car (car_id, car_name) VALUES (1, 'Easy Driver');
-INSERT INTO public.lut_car (car_id, car_name) VALUES (2, 'Lady Luck');
-INSERT INTO public.lut_car (car_id, car_name) VALUES (3, 'Angelique');
-INSERT INTO public.lut_car (car_id, car_name) VALUES (4, 'Nightwatch');
 INSERT INTO public.lut_car (car_id, car_name) VALUES (5, 'Orion');
+INSERT INTO public.lut_car (car_id, car_name) VALUES (6, 'Artemis');
 
 
 -- LUT for Event Types

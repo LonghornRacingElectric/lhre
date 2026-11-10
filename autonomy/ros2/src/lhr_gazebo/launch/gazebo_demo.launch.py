@@ -418,9 +418,10 @@ def _launch_setup(context: LaunchContext):
                 'use_sim_time': True,
                 'cone_topic': ('/lhr/perception/cones_classified' if enable_fusion
                                else '/lhr/sensor/cones_detected'),
-                'pairing_strategy': ('boundary' if enable_fusion else
-                                     'classified' if classify_sides else 'boundary'),
-                'boundary_use_color': True,
+                # Side inference waits for motion; geometry bootstraps unknown cones.
+                'pairing_strategy': 'boundary',
+                # Geometry-only inferred sides must not stop their own recovery motion.
+                'boundary_use_color': enable_fusion,
                 'chaining_alg': ParameterValue(
                     LaunchConfiguration('chaining_alg'), value_type=str),
                 'min_step_m': ParameterValue(

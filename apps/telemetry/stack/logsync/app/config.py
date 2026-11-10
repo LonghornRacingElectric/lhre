@@ -1,7 +1,7 @@
 """Environment-driven configuration for the logsync worker.
 
 Every operationally-interesting knob is an env var so the service can be tuned
-per deployment without code changes. Defaults target the BEVO Orion car as it
+per deployment without code changes. Defaults target the BEVO Artemis car as it
 exists today (Pi reachable over Tailscale, logs under the lhre home dir).
 """
 from __future__ import annotations
@@ -49,9 +49,9 @@ class Config:
     )
     # Remote logs dir, relative to the ssh user's home (or absolute).
     remote_log_dir: str = _str(
-        "BEVO_LOG_DIR", "Documents/lhre/lhre-2026/BEVO/loggerd/logs"
+        "BEVO_LOG_DIR", "bevo/loggerd/logs"
     )
-    log_prefix: str = _str("BEVO_LOG_PREFIX", "orion_")
+    log_prefix: str = _str("BEVO_LOG_PREFIX", "artemis_")
     log_suffix: str = _str("BEVO_LOG_SUFFIX", ".csv")
 
     # --- Local staging / state ---
@@ -67,11 +67,11 @@ class Config:
     # failures retry forever, so this bounds how often they poll for the Pi.
     rsync_max_backoff_s: float = _float("LOGSYNC_RSYNC_MAX_BACKOFF_S", 60.0)
 
-    # --- Motion detection (Postgres orion DB) ---
+    # --- Motion detection (Postgres Artemis DB) ---
     pg_dsn: str = _str("LOGSYNC_PG_DSN", "")  # if set, overrides the parts below
     pg_host: str = _str("LOGSYNC_PG_HOST", "127.0.0.1")
     pg_port: int = _int("LOGSYNC_PG_PORT", 5432)
-    pg_db: str = _str("LOGSYNC_PG_DB", "orion")
+    pg_db: str = _str("LOGSYNC_PG_DB", "artemis")
     pg_user: str = _str("LOGSYNC_PG_USER", "electric")
     # Fall back to the same secret the viewer/ingest use.
     pg_password: str = _str("LOGSYNC_PG_PASSWORD", os.environ.get("ELECTRIC_PWD", ""))
@@ -80,6 +80,7 @@ class Config:
     # speed exceeds speed_threshold. Stale/no telemetry => treated as not moving
     # (there is no live stream to protect, so transferring is safe).
     speed_threshold_mps: float = _float("LOGSYNC_SPEED_THRESHOLD_MPS", 0.5)
+    wheel_threshold_rad_s: float = _float("LOGSYNC_WHEEL_THRESHOLD_RAD_S", 1.0)
     motion_staleness_ms: int = _int("LOGSYNC_MOTION_STALENESS_MS", 10_000)
     motion_poll_interval_s: float = _float("LOGSYNC_MOTION_POLL_INTERVAL_S", 3.0)
     # Must read stationary continuously for this long before auto-resuming.

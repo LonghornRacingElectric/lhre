@@ -8,9 +8,9 @@ lateral g estimates, data-quality checks and portable HTML debriefs.
 
 ## Open a session
 
-Use **From database** to load an Orion drive day. The database is the only
+Use **From database** to load an Orion or Artemis drive day. The database is the only
 source: the viewer does not import session JSON files or the Trackside Live
-session cache. The route returns at most one packet per 100 ms, and only inside
+session cache. The route returns at most session/time buckets widened to the slowest participating pool, and only inside
 lap windows; the displayed sample and GPS rates reflect that response rather
 than assuming a fixed rate. Missing or
 frozen GPS cannot supply a route and is reported instead of drawing a false
@@ -79,7 +79,7 @@ with the same review workflow above.
   rest into timed runs and drives back as usual.
 - **Cones and flags** are the `event_flag` rows. `Hit Cone` becomes a cone
   on its lap; other notes become timeline marks.
-- **Samples** are one packet per 100 ms (10 Hz) inside the lap windows, from
+- **Samples** are session/time buckets widened to the slowest participating pool (10 Hz) inside the lap windows, from
   `dynamics`, `controls`, `pack` and `thermal`. GPS prefers
   `dynamics.gps_precise` and falls back to `dynamics.gps`. The hottest cell
   comes from `pack.cells_temps`. `avg_cell_v_stat` is not in the database,

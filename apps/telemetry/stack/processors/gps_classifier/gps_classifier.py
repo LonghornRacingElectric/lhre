@@ -175,7 +175,7 @@ class GPSClassifierProcessor:
         self.started_event: Event = None
         
         self.min_time = 0
-        self.table_specs = QueryBuilder("Nightwatch").get_table_column_specs()
+        self.table_specs = QueryBuilder("Orion").get_table_column_specs()
 
     def _start_event(self, time: int, heading:int, type: ProcessType):
         # Stop any previous process
@@ -390,11 +390,11 @@ class GPSClassifierProcessor:
 
         
 def run_processor():
-    with get_db("Nightwatch") as nightwatch_session, get_db("Angelique") as angelique_session:
-        db_sessions = {'Nightwatch': nightwatch_session, 'Angelique': angelique_session}
+    with get_db("Orion") as orion_session, get_db("Artemis") as artemis_session:
+        db_sessions = {'Orion': orion_session, 'Artemis': artemis_session}
         with MQTTHandler(name="gps_classifier_processor", target=MQTTTarget.get(), db_sessions=db_sessions) as mqtt:
             
-            processor = GPSClassifierProcessor(session=db_sessions['Nightwatch'])
+            processor = GPSClassifierProcessor(session=db_sessions['Orion'])
 
             frequency = 500
             window_size = 50

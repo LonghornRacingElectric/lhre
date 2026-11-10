@@ -32,13 +32,14 @@ from analysis.sql_utils.models import (
 from analysis.sql_utils.query_builder import QueryBuilder
 from stack.ingest.mqtt_handler import MQTTHandler, MQTTTarget
 from analysis.database.csv_processing.proto_builders import (
-    build_angelique_sensor_data_proto,
     build_orion_sensor_data_proto,
 )
 
 class CSVToDB():
 
-    def __init__(self, data_csv_folder = None, mqtt = None, db_session = None, car = "Nightwatch", MQTT_target = MQTTTarget.get()):
+    def __init__(self, data_csv_folder = None, mqtt = None, db_session = None, car = "Orion", MQTT_target = MQTTTarget.get()):
+        if car != "Orion":
+            raise ValueError("CSVToDB supports Orion packet logs; Artemis imports use timestamped protobuf through Kafka")
         self.db_session = db_session
         self.MQTT_target = MQTT_target
         self.mqtt = mqtt
@@ -195,26 +196,12 @@ class CSVToDB():
         if self.car == "Orion":
             pg_to_csv = {col: col for col in df.columns}
         else:
-            if self.car == "Angelique":
-                with open(Path(__file__).parent.joinpath("angelique_pg_to_csv.json"), "r") as pg:
-                    pg_to_csv = json.load(pg)
-            else:
-                with open(Path(__file__).parent.joinpath("pg_to_csv.json"), "r") as pg:
-                    pg_to_csv = json.load(pg)
+            with open(Path(__file__).parent.joinpath("pg_to_csv.json"), "r") as pg:
+                pg_to_csv = json.load(pg)
 
         for table in table_desc:
             convert[table] = {}
             for column, (dtype, ndim) in table_desc[table].items():
-                # Angelique logs store GPS as Latitude/Longitude columns.
-                if self.car == "Angelique" and column == "gps":
-                    lat_col = next((c for c in df.columns if c.lower() in {"latitude", "lat"} or "latitude" in c.lower()), None)
-                    lon_col = next((c for c in df.columns if c.lower() in {"longitude", "lon", "lng"} or "longitude" in c.lower()), None)
-                    if lat_col and lon_col:
-                        lat_vals = df[lat_col].astype(float).to_numpy()
-                        lon_vals = df[lon_col].astype(float).to_numpy()
-                        convert[table][column] = [[lat, lon] for lat, lon in zip(lat_vals, lon_vals)]
-                        continue
-
                 # Construct CSV column name (for Orion: table.column, others: from mapping)
                 if self.car == "Orion":
                     csv_col_name = f"{table}.{column}"
@@ -273,8 +260,6 @@ class CSVToDB():
         Adds data into the database. First adds packet table, then subsequent table using DBHandler insert function. Each iteration
         only inputs a singular row to the database, making this program the least efficient
         """
-        if self.car == "Nightwatch":
-            raise Exception("This function is not supported for the Nightwatch database. ")
         data = self.dataConvert(df, table_desc=table_desc)
         packets = data["packet"]
         packet_model = self._table_models.get("packet")
@@ -373,11 +358,7 @@ class CSVToDB():
         Publishes to database based on time delays from the csv
         """
         tables = []
-        if (self.car == "Nightwatch"):
-            tables = ['packet', 'dynamics', 'controls', 'pack', 'diagnostics_high', 'diagnostics_low', 'thermal']
-        elif (self.car == "Angelique"):
-            tables = ['packet', 'dynamics', 'controls', 'pack', 'diagnostics', 'thermal']
-        elif (self.car == "Orion"):
+        if (self.car == "Orion"):
             tables = ['packet', 'dynamics', 'controls', 'pack', 'diagnostics_high', 'diagnostics_low', 'thermal', 'board_status']
         else:
             raise Exception("DBTarget not specified")
@@ -405,10 +386,7 @@ class CSVToDB():
                     for i in range(chunk_length):
                         time.sleep((float(differences[i])/ 1000))
                         global_progress.update(1)
-                        if self.car == "Angelique" and protobuf:
-                            msg = build_angelique_sensor_data_proto(row_dict_list, i)
-                            self.mqtt.publish('angelique', msg.SerializeToString(), qos=0)
-                        elif self.car == "Orion" and protobuf:
+                        if self.car == "Orion" and protobuf:
                             msg = build_orion_sensor_data_proto(row_dict_list, i)
                             self.mqtt.publish('orion', msg.SerializeToString(), qos=0)
                         elif (i % batch_amt == 0):

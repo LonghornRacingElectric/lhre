@@ -1,7 +1,17 @@
 # Ingest
 
-Ingest accepts MQTT telemetry, decodes the selected protobuf schema, persists
-packets to PostgreSQL, and forwards the raw stream to Kafka.
+Forwards Artemis `TelemetryBatch` payloads from MQTT `artemis/data` through the
+gRPC bridge to Kafka. Other telemetry topics are rejected. The bridge request
+sets `car_type: Artemis` and `payload_format: artemis_updates_v1`.
+
+The MQTT callback queues raw bytes without blocking on network I/O. A single
+worker forwards them in order and retries failed or uncertain sends until Kafka
+acknowledges the record. The queue holds 30,000 batches; a full queue logs and
+drops new input. MQTT subscriptions are restored after reconnecting.
+
+Ingest does not allocate packet IDs, write CSVs, open database sessions or apply
+DDL. GPS travels in the native Artemis updates. There is no separate GPS JSON
+input or packet-ID welcome exchange.
 
 ```bash
 bazel build //apps/telemetry/stack/ingest:ingest_binary
@@ -10,25 +20,16 @@ bazel run //apps/telemetry/stack/ingest:ingest_load
 bazel test //apps/telemetry/stack/ingest:ingest_smoke_test
 ```
 
-The image includes its complete Python runfiles plus the car configuration and
-network configuration opened by path at runtime. The generated
-`can_packets_pb2.py` is built from `//apps/telemetry:current_schema_proto`;
-never edit or check in the Bazel output. The legacy `ingest_tarball` label is an
-alias of `ingest_load` for one migration cycle.
+`ingest_binary` uses `:mqtt_transport`, containing the MQTT/gRPC transport and
+generated bridge bindings. `:ingest_lib` also exposes the shared decoding and
+storage helpers used by consumers. These helpers are separate from the active
+ingest executable.
 
-`docker-compose.yml` also defines Mosquitto, PostgreSQL, and Grafana. Their
-local tags come from the root `_load` targets, so Compose must be run with
-`--no-build` after `bazel run //apps/telemetry:load_core_images`.
+The image packages the generated Artemis contract and descriptor under
+`/schema/` for the [schema authority](../../schema_registry/README.md). The
+bridge uses matching generated Artemis bindings. Network defaults come from
+`net_configs.json`; `AWS_MQTT_IP` overrides the broker target.
 
-The devtool and integration runner prepare this path automatically. For direct
-Compose calls, including `down` and `logs`, export the selected absolute path
-first; those non-creating commands do not need to build the file. Container
-creation must still use current Bazel-generated SQL or an explicit admin override.
-
-Build `//apps/telemetry:current_schema_sql` and set `ORION_DB_INIT_SQL` to the
-absolute `bazel-bin/lib/codegen/telemetry/orion_db_init.sql` output before a
-direct Compose invocation. Without this variable Compose fails, and a missing
-host file is not created as a directory. There is no checked-in Orion SQL
-fallback. The [devtool](../README.md) checks the Bazel target and forwards the
-path even when Docker requires sudo. Initialization applies only to a new
-database volume; migrate deployed databases explicitly.
+The [Kafka bridge](../kafka/README.md) acknowledges successful raw publication.
+The [database writer](../processors/db_writer/README.md) owns subsequent storage.
+Database/Grafana provisioning is described in the [stack guide](../README.md).

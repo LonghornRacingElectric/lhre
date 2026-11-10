@@ -80,13 +80,45 @@ alias(
     visibility = ["//visibility:public"],
 )
 
+alias(
+    name = "current_schema_contract",
+    actual = "//lib/codegen/telemetry:schema_contract",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "current_schema_descriptor",
+    actual = "//lib/codegen/telemetry:schema_descriptor",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "current_schema_signals",
+    actual = "//lib/codegen/telemetry:signals_json",
+    visibility = ["//visibility:public"],
+)
+
 filegroup(
     name = "current_schema_bundle",
     srcs = [
         ":current_schema_proto",
         ":current_schema_json",
         ":current_schema_sql",
+        ":current_schema_contract",
+        ":current_schema_descriptor",
+        ":current_schema_signals",
     ],
+    visibility = ["//visibility:public"],
+)
+
+pkg_tar(
+    name = "current_schema_tar",
+    files = {
+        "//lib/codegen/telemetry:artemis_schema_contract": "schema_contract.json",
+        "//lib/codegen/telemetry:artemis_schema_descriptor": "schema_descriptor.pb",
+    },
+    package_dir = "/schema",
+    target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )
 
@@ -100,9 +132,9 @@ telemetry_upstream_image(
 
 telemetry_upstream_image(
     name = "postgres",
-    executable = "/usr/lib/postgresql/17/bin/postgres",
+    executable = "/usr/local/bin/postgres",
     image = "@telemetry_postgres_linux_amd64",
-    repo_tags = ["lhre/telemetry-postgres:17.11"],
+    repo_tags = ["lhre/telemetry-postgres:2.31.0-pg17"],
     visibility = ["//visibility:public"],
 )
 
@@ -135,6 +167,7 @@ filegroup(
         ":mqtt_image",
         ":postgres_image",
         "//apps/telemetry/stack/ingest:ingest_image",
+        "//apps/telemetry/stack/processors/db_writer:db_writer_image",
         "//apps/telemetry/stack/kafka:kafka_bridge_image",
         "//apps/telemetry/stack/processors/field_enricher:field_enricher_image",
     ],
@@ -147,6 +180,7 @@ filegroup(
 filegroup(
     name = "optional_images",
     srcs = [
+        "//apps/telemetry/stack/processors/board_health:board_health_image",
         "//apps/telemetry/stack/processors/car_status:car_status_image",
         "//apps/telemetry/stack/processors/events_faults:events_faults_image",
         "//apps/telemetry/stack/processors/gg_plot:gg_plot_image",
@@ -178,6 +212,7 @@ sh_binary(
         "$(rootpath :mqtt_load)",
         "$(rootpath :postgres_load)",
         "$(rootpath //apps/telemetry/stack/ingest:ingest_load)",
+        "$(rootpath //apps/telemetry/stack/processors/db_writer:db_writer_load)",
         "$(rootpath //apps/telemetry/stack/kafka:kafka_bridge_load)",
         "$(rootpath //apps/telemetry/stack/processors/field_enricher:field_enricher_load)",
     ],
@@ -187,6 +222,7 @@ sh_binary(
         ":mqtt_load",
         ":postgres_load",
         "//apps/telemetry/stack/ingest:ingest_load",
+        "//apps/telemetry/stack/processors/db_writer:db_writer_load",
         "//apps/telemetry/stack/kafka:kafka_bridge_load",
         "//apps/telemetry/stack/processors/field_enricher:field_enricher_load",
     ],
@@ -198,6 +234,7 @@ sh_binary(
     name = "load_optional_images",
     srcs = ["load_images.sh"],
     args = [
+        "$(rootpath //apps/telemetry/stack/processors/board_health:board_health_load)",
         "$(rootpath //apps/telemetry/stack/processors/car_status:car_status_load)",
         "$(rootpath //apps/telemetry/stack/processors/events_faults:events_faults_load)",
         "$(rootpath //apps/telemetry/stack/processors/gg_plot:gg_plot_load)",
@@ -207,6 +244,7 @@ sh_binary(
         "$(rootpath //apps/telemetry/stack/processors/track_mapper:track_mapper_load)",
     ],
     data = [
+        "//apps/telemetry/stack/processors/board_health:board_health_load",
         "//apps/telemetry/stack/processors/car_status:car_status_load",
         "//apps/telemetry/stack/processors/events_faults:events_faults_load",
         "//apps/telemetry/stack/processors/gg_plot:gg_plot_load",
@@ -228,8 +266,10 @@ sh_binary(
         "$(rootpath :mqtt_load)",
         "$(rootpath :postgres_load)",
         "$(rootpath //apps/telemetry/stack/ingest:ingest_load)",
+        "$(rootpath //apps/telemetry/stack/processors/db_writer:db_writer_load)",
         "$(rootpath //apps/telemetry/stack/kafka:kafka_bridge_load)",
         "$(rootpath //apps/telemetry/stack/processors/field_enricher:field_enricher_load)",
+        "$(rootpath //apps/telemetry/stack/processors/board_health:board_health_load)",
         "$(rootpath //apps/telemetry/stack/processors/car_status:car_status_load)",
         "$(rootpath //apps/telemetry/stack/processors/events_faults:events_faults_load)",
         "$(rootpath //apps/telemetry/stack/processors/gg_plot:gg_plot_load)",
@@ -244,7 +284,9 @@ sh_binary(
         ":mqtt_load",
         ":postgres_load",
         "//apps/telemetry/stack/ingest:ingest_load",
+        "//apps/telemetry/stack/processors/db_writer:db_writer_load",
         "//apps/telemetry/stack/kafka:kafka_bridge_load",
+        "//apps/telemetry/stack/processors/board_health:board_health_load",
         "//apps/telemetry/stack/processors/car_status:car_status_load",
         "//apps/telemetry/stack/processors/events_faults:events_faults_load",
         "//apps/telemetry/stack/processors/field_enricher:field_enricher_load",
@@ -267,6 +309,7 @@ sh_binary(
         "$(rootpath :mqtt_load)",
         "$(rootpath :postgres_load)",
         "$(rootpath //apps/telemetry/stack/ingest:ingest_load)",
+        "$(rootpath //apps/telemetry/stack/processors/db_writer:db_writer_load)",
         "$(rootpath //apps/telemetry/stack/kafka:kafka_bridge_load)",
         "$(rootpath //apps/telemetry/stack/processors/field_enricher:field_enricher_load)",
     ],
@@ -276,6 +319,7 @@ sh_binary(
         ":mqtt_load",
         ":postgres_load",
         "//apps/telemetry/stack/ingest:ingest_load",
+        "//apps/telemetry/stack/processors/db_writer:db_writer_load",
         "//apps/telemetry/stack/kafka:kafka_bridge_load",
         "//apps/telemetry/stack/processors/field_enricher:field_enricher_load",
     ],
@@ -292,6 +336,7 @@ test_suite(
         ":mqtt_smoke_test",
         ":postgres_smoke_test",
         "//apps/telemetry/stack/ingest:ingest_smoke_test",
+        "//apps/telemetry/stack/processors/db_writer:db_writer_smoke_test",
         "//apps/telemetry/stack/kafka:kafka_bridge_smoke_test",
         "//apps/telemetry/stack/processors/field_enricher:field_enricher_smoke_test",
     ],
@@ -303,6 +348,7 @@ test_suite(
     name = "optional_smoke_tests",
     tags = ["docker", "manual"],
     tests = [
+        "//apps/telemetry/stack/processors/board_health:board_health_smoke_test",
         "//apps/telemetry/stack/processors/car_status:car_status_smoke_test",
         "//apps/telemetry/stack/processors/events_faults:events_faults_smoke_test",
         "//apps/telemetry/stack/processors/gg_plot:gg_plot_smoke_test",
@@ -361,7 +407,6 @@ test_suite(
         "//apps/telemetry/analysis/tests:analysis_tests",
         "//apps/telemetry/stack/processors/events_faults:faults_test",
         "//apps/telemetry/stack/processors/events_faults:main_test",
-        "//apps/telemetry/stack/tests:protobuf_test",
     ],
     target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
@@ -416,6 +461,7 @@ filegroup(
     srcs = [
         "//apps/telemetry/stack/ingest:docker-compose.yml",
         "//apps/telemetry/stack/kafka:docker-compose.yml",
+        "//apps/telemetry/stack/processors/board_health:docker-compose.yml",
         "//apps/telemetry/stack/processors/car_status:docker-compose.yml",
         "//apps/telemetry/stack/processors/events_faults:docker-compose.yml",
         "//apps/telemetry/stack/processors/field_enricher:docker-compose.yml",
@@ -444,4 +490,28 @@ py_library(
         "//apps/telemetry/stack:stack_lib",
     ],
     target_compatible_with = ["@platforms//os:linux"],
+)
+
+alias(
+    name = "schema_apply",
+    actual = "//apps/telemetry/scripts:schema_apply",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "new_car_schema_proto",
+    actual = "//lib/codegen/telemetry:artemis_proto_source",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "new_car_schema_sql",
+    actual = "//lib/codegen/telemetry:artemis_db_init",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "new_car_schema_bundle",
+    actual = "//lib/codegen/telemetry:artemis_schema",
+    visibility = ["//visibility:public"],
 )

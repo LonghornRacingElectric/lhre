@@ -5,6 +5,7 @@ import { Channel, DataLog, type Sample } from "./datalog";
 import { DEFAULT_CHANNEL_KEY, ORION_CHANNELS, getChannel } from "./channels";
 import type { Settings } from "./config";
 import { ReadOnlyDatabase } from "./db";
+import { readBuckets, storageContract, bucketWidth, type BucketAggregate } from "./artemisStorage";
 import { detectSplitRanges } from "./split";
 import type {
   ChannelDef, DayDetail, DriveDay, GpsResponse, SegmentSummary, SeriesPoint, SeriesResponse, SessionSummary,
@@ -179,17 +180,25 @@ export class TelemetryService {
     return sessions;
   }
 
-  async series(channelKey: string, startMs: number, endMs: number, maxPoints?: number): Promise<SeriesResponse> {
+  async series(channelKey: string, startMs: number, endMs: number, maxPoints?: number, aggregate: BucketAggregate = "avg"): Promise<SeriesResponse> {
     const channel = await this.getChannel(channelKey);
     const mp = maxPoints || this.settings.maxPreviewPoints;
     const points = this.settings.usePostgres
-      ? await this.postgresSeries(channel, startMs, endMs, mp)
+      ? await this.postgresSeries(channel, startMs, endMs, mp, aggregate)
       : [];
     return { channel: channel.key, label: channel.label, unit: channel.unit, points };
   }
 
   async gps(startMs: number, endMs: number, maxPoints = 2000): Promise<GpsResponse> {
     if (!this.settings.usePostgres) return { points: [] };
+    if (this.settings.car === "artemis") {
+      const rows = await readBuckets(["dynamics"], startMs, endMs, Math.max(100, Math.ceil((endMs - startMs) / maxPoints)));
+      return { points: rows.flatMap(row => {
+        const d = row.dynamics as Record<string, number[] | null> | undefined;
+        const gps = d?.gps_precise?.length ? d.gps_precise : d?.gps;
+        return gps && gps.length >= 2 ? [{ t: Number(row.time), lat: gps[0], lon: gps[1] }] : [];
+      }) };
+    }
     const span = Math.max(1, endMs - startMs);
     const stepMs = Math.max(1, Math.floor(span / Math.max(1, maxPoints)));
     const rows = await this.db.query<{ t: string; lat: number | null; lon: number | null }>(
@@ -300,6 +309,18 @@ export class TelemetryService {
     if (!this.settings.usePostgres) throw new Error("Telemetry database is not connected (set TELEMETRY_SOURCE=postgres).");
     const channelByKey = new Map((await this.channels()).map((c) => [c.key, c]));
     const definitions = selected.map((k) => channelByKey.get(k)).filter((d): d is ChannelDef => Boolean(d));
+    if (this.settings.car === "artemis") {
+      const rows = await readBuckets([...new Set(definitions.map(d => d.table))], startMs, endMs, 100, "avg", definitions.map(d => d.column.split("[")[0]));
+      const log = new DataLog(`${this.settings.dbName}_postgres`, { source: "postgres", start_ms: String(startMs), end_ms: String(endMs) });
+      for (const def of definitions) {
+        const samples: Sample[] = rows.flatMap(row => {
+          const value = channelValue(row[def.table], def.column);
+          return value == null ? [] : [{ t: (Number(row.time) - startMs) / 1000, value }];
+        });
+        if (samples.length) log.channels.set(def.key, new Channel(def.label, def.unit, def.quantity, samples));
+      }
+      return log;
+    }
     const tables = [...new Set(definitions.map((d) => d.table))].sort();
     const selectExprs = definitions.map((d) => `${d.table}.${d.column} as ${d.key}`);
     const joins = tables.map((t) => `left join ${t} on ${t}.packet_id = packet.packet_id`).join(" ");
@@ -308,7 +329,7 @@ export class TelemetryService {
        from packet ${joins} where packet.time between $1 and $2 order by packet.time asc`,
       [startMs, endMs],
     );
-    const log = new DataLog(`${this.settings.orionDbName}_postgres`, {
+    const log = new DataLog(`${this.settings.dbName}_postgres`, {
       source: "postgres", start_ms: String(startMs), end_ms: String(endMs),
     });
     for (const def of definitions) {
@@ -322,7 +343,21 @@ export class TelemetryService {
     return log;
   }
 
-  private async postgresSeries(channel: ChannelDef, startMs: number, endMs: number, maxPoints: number): Promise<SeriesPoint[]> {
+  private async postgresSeries(channel: ChannelDef, startMs: number, endMs: number, maxPoints: number, aggregate: BucketAggregate = "avg"): Promise<SeriesPoint[]> {
+    if (this.settings.car === "artemis") {
+      const fields = [channel.column.split("[")[0]];
+      const width = bucketWidth([channel.table], Math.max(1, Math.ceil((endMs - startMs) / maxPoints)), fields);
+      const rows = await readBuckets([channel.table], startMs, endMs, width, aggregate, fields);
+      const points: SeriesPoint[] = [];
+      rows.forEach((row, index) => {
+        const previous = rows[index - 1];
+        if (previous && (row.session_start_ms !== previous.session_start_ms || Number(row.time - previous.time) > width)) {
+          points.push({ t: Math.min(Number(row.time), Number(previous.time) + width), v: null });
+        }
+        points.push({ t: Math.max(startMs, Number(row.time)), v: channelValue(row[channel.table], channel.column) });
+      });
+      return points;
+    }
     const span = Math.max(1, endMs - startMs);
     const stepMs = Math.max(1, Math.floor(span / Math.max(1, maxPoints)));
     const rows = await this.db.query<{ t: string; v: number | null }>(
@@ -338,6 +373,12 @@ export class TelemetryService {
     if (!segments.length) return segments;
     if (!this.settings.usePostgres) {
       return segments.map((s) => ({ ...s, has_gps: true, gps_points: Math.max(1, s.gps_points) }));
+    }
+    if (this.settings.car === "artemis") {
+      return Promise.all(segments.map(async segment => {
+        const points = (await this.gps(segment.start_ms, segment.end_ms)).points.length;
+        return { ...segment, has_gps: points > 0, gps_points: points };
+      }));
     }
     const values: string[] = [];
     const params: number[] = [];
@@ -364,6 +405,15 @@ export class TelemetryService {
   ): Promise<Record<string, number>> {
     const channel = await this.getChannel(channelKey);
     const stepMs = Math.max(1, Math.floor((24 * 60 * 60 * 1000) / 20000));
+    if (this.settings.car === "artemis") {
+      const segments = await this.thresholdSegments(startMs, endMs, channelKey, threshold, 20000, minDurationS);
+      const counts: Record<string, number> = {};
+      for (const segment of segments) {
+        const date = localDateOf(segment.start_ms, this.settings.displayTimezone);
+        counts[date] = (counts[date] || 0) + 1;
+      }
+      return counts;
+    }
     const rows = await this.db.query<{ date: string; t: string }>(
       `select to_char(to_timestamp(packet.time / 1000.0) at time zone $1, 'YYYY-MM-DD') as date,
               (floor(packet.time::double precision / $2) * $2)::bigint as t
@@ -395,6 +445,18 @@ export class TelemetryService {
   }
 
   private async loadChannels(): Promise<ChannelDef[]> {
+    if (this.settings.car === "artemis") {
+      return storageContract().pools.flatMap(pool => pool.fields.flatMap(field => {
+        if (["double precision", "integer", "bigint", "smallint", "numeric"].includes(field.sql_type)) {
+          return [{ key: ORION_CHANNELS.find(c => c.table === pool.group && c.column === field.name)?.key || `${pool.group}_${field.name}`, label: labelFor(field.name), table: pool.group, column: field.name,
+            unit: unitFor(field.name), quantity: quantityFor(field.name), default: field.name === "motor_speed", split_candidate: isSplitCandidate(field.name) }];
+        }
+        if (field.name === "gps" && field.sql_type.endsWith("[]")) {
+          return ORION_CHANNELS.filter(channel => channel.table === pool.group && channel.column.startsWith("gps["));
+        }
+        return [];
+      }));
+    }
     const rows = await this.db.query<{ table_name: string; column_name: string; data_type: string }>(
       `select table_name, column_name, data_type from information_schema.columns
        where table_schema='public'
@@ -455,4 +517,12 @@ function quantityFor(column: string): string {
 function isSplitCandidate(column: string): boolean {
   const l = column.toLowerCase();
   return ["rpm", "speed", "torque", "apps", "gps_velocity"].some((t) => l.includes(t));
+}
+
+function channelValue(group: unknown, column: string): number | null {
+  const match = /^(\w+)(?:\[(\d+)\])?$/.exec(column);
+  if (!match || !group || typeof group !== "object") return null;
+  let value = (group as Record<string, unknown>)[match[1]];
+  if (match[2]) value = Array.isArray(value) ? value[Number(match[2]) - 1] : null;
+  return value == null ? null : Number(value);
 }

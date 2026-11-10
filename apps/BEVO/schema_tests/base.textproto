@@ -1,0 +1,19 @@
+bus { name: "Critical" bitrate_bps: 1000000 }
+groups {
+  group { name: "Controls" next_free_id: 2 snapshot_id: 3 }
+  next_snapshot_id: 4
+}
+message {
+  name: "SPEED"
+  can_id: 256
+  from_board: "VCU"
+  to_boards: "BEVO"
+  bus: "Critical"
+  dlc: 2
+  signal {
+    name: "speed"
+    encoding { bit_length: 16 scale: 0.01 }
+    logical { physical { unit: "kph" } }
+    telemetry { group: "Controls" field: "speed" id: 1 }
+  }
+}

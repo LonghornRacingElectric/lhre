@@ -60,6 +60,50 @@ Spec files carry no comments. Textproto comments do not survive the
 canonical serializer, so prose goes in `description` fields, which the
 generators forward into generated code and docs.
 
+## Car identity
+
+Declare `car: "artemis"` once in the spec bundle, currently in `groups.textproto`.
+The current definitions belong to Artemis; `OrionSensorData` and Orion SQL target
+names remain compatibility names, not catalog identity. Catalog generation
+requires exactly one lowercase car slug. Independent cars need independent spec
+input bundles; never relabel a generated artifact to manufacture another car's
+schema. Partial specs used by validation tooling may omit car identity.
+
+## Signal discovery metadata
+
+CAN `Signal` entries map into telemetry through `Telemetry`; non-CAN signals
+use `ExternalSignal` in a group's `external_field` entries. The message type
+was previously named `SnapshotField`; textproto field names and deployed
+snapshot wire numbers/types are unchanged.
+
+Channel types are `TELEMETRY` (the default), `EVENT`, and `HEALTH`.
+External telemetry signals must declare a positive, finite `uplink_rate_hz`;
+events and health signals need no rate because they bypass telemetry trimming.
+CAN telemetry bindings default their uplink limit to the parent message's
+`frequency_hz` when no explicit override is set. An inherited 0 means no
+rate trimming; explicit overrides must still be positive and finite. All bindings of one
+shared or repeated CAN field must agree on this metadata. The four GPS external
+fields declare a 50 Hz uplink limit, matching publishd's current default snapshot
+limit. These are policy declarations; publishd does not yet read per-signal
+schema limits, and its runtime environment can override the snapshot limit.
+
+CAN native rates come from message `frequency_hz`.
+The value must be finite and nonnegative; 0 means aperiodic/event-driven.
+Rate-tier enums, overrides, and derived FAST/MEDIUM/SLOW classifications are removed. External signals have no
+native-rate declaration; catalog `rate_hz` uses their uplink rate, or null
+when no rate is declared (for example, health signals).
+An uplink limit does not establish the rate of fresh source observations.
+Numeric external scalars must explicitly declare `unit`; an empty string means
+dimensionless. Repeated fields may omit units for mixed or uncertain components;
+boolean, string, and bytes fields do not require physical units. These rules use
+proto3 optional presence checks in the validator, not protobuf required fields.
+Heartbeat ages are health signals measured in seconds. GPS coordinates use
+degrees and GPS speed uses knots, matching the current gateway producer.
+Mixed-unit GPS arrays and uncertain IMU units leave `unit` unset. Ordered
+`element_names` remain part of the wire compatibility metadata; discovery does
+not yet expose units per component. Uplink policy does not establish native
+production frequency or alter Artemis pool membership.
+
 ## Editing
 
 Use `bazel run //tools/spec:editor`, or edit the files and run
@@ -136,6 +180,23 @@ It is generated, committed, and checked by
 Regenerate with `bazel run //tools/spec:lock` and read the diff: those
 lines are what deployed consumers and archived data can see.
 
+The lock also records root group numbers and enum mappings/tombstones.
+`GroupRegistry.next_snapshot_id` and its `reserved_snapshot_ids` /
+`reserved_snapshot_names` protect removed root groups; enum definitions use
+`reserved_numbers` and `reserved_names`. Generated protobuf emits these
+reservations. CI compares the PR-base lock with the current lock using
+`//tools/spec:check_wire_compat`; changing a deployed number, type or known
+array layout requires a new field rather than editing the old entry.
+The compatibility checker reads `snapshot_id` from group headers as well as
+explicit `Root` entries, including when the PR-base lock only has headers.
+
+External snapshot fields declare `unit` and, for arrays, ordered
+`element_names`. GPS is latitude/longitude in degrees; GPS IMU has x/y/z
+positions without an asserted physical unit. This metadata describes existing
+gateway behavior and does not renumber or retype deployed fields. The first
+registry version adds previously undocumented GPS array bounds to the lock.
+See [telemetry compatibility](../telemetry/README.md).
+
 The generated `.proto`, runtime `can.json`, and Orion database DDL stay Bazel
 outputs under `//lib/codegen/telemetry` and are never committed.
 
@@ -179,7 +240,7 @@ when IDs are scarce.
 
 - `physical = raw * scale + offset`, applied once at the gateway.
   Firmware works in raw integers, servers see physical values.
-- Rate tiers never affect proto structure or ids. Changing a tier is a
-  one-line diff.
+- Native CAN rates and uplink limits never affect snapshot proto structure
+  or ids. Native rates belong to messages; all their signals share that rate.
 - Telemetry ids are append-only. Bit layout is not, so moving bits around
   is fine since firmware and gateway regenerate together.

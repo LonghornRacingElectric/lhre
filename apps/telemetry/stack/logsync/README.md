@@ -7,14 +7,14 @@ hogging the cellular uplink during a run.
 
 ## What it does
 
-- **Time-range selection.** Loggerd writes one file per session,
-  `orion_<startMs>.csv`, appending until the session ends. A file's window is
+- **Time-range selection.** Loggerd writes one file per frequency pool,
+  `artemis_<startMs>_<pool>.csv`, with a shared recording start across files. A file's window is
   `[startMs, mtime]`; a job pulls every file whose window overlaps your request.
 - **rsync over SSH over Tailscale.** `rsync --partial --append-verify` makes
   every transfer resumable: killing and re-running continues from the byte it
   left off and correctly extends the still-growing active log.
 - **Pause when the car moves.** The worker watches the freshest
-  `dynamics` row in the Orion DB; if wheel/GPS speed is above threshold and the
+  speed observations in Artemis frequency pools; if wheel/GPS speed is above threshold and the
   sample is fresh, it kills rsync and waits. When telemetry is stale or absent
   there is no live stream to protect, so it transfers freely.
 - **Survives restarts.** Job state is persisted to SQLite; interrupted jobs are
@@ -114,3 +114,16 @@ The worker listens on `127.0.0.1` only (`LOGSYNC_HOST` in `docker-compose.yml`),
 so it is not reachable from the tailnet. Use it through the viewer at
 `/api/logsync/*`, which requires the same sign-in as the pages, or with
 `curl localhost:8090/...` on the server itself.
+
+Artemis CSV previews, column downloads, ZIPs, annotations and resumed transfers
+use the existing paths. Filename parsing includes the pool suffix. Presence is
+recorded in `updated_fields`; include it when exporting sparse array columns.
+There is no automatic log-to-database conversion or historical migration.
+
+Motion reads the latest non-NULL value of each speed channel in its native
+pool. New unrelated observations cannot refresh stale speeds. GPS knots are
+converted to m/s for `LOGSYNC_SPEED_THRESHOLD_MPS`; wheel angular speed uses
+`LOGSYNC_WHEEL_THRESHOLD_RAD_S` (default 1 rad/s), avoiding an assumed tire radius.
+`speed_mps` reports GPS speed when available. Defaults select the Artemis DB and
+`bevo/loggerd/logs`; override `BEVO_LOG_DIR` for the Pi's installed bundle path.
+SQLAlchemy builds the asyncpg read query; no packet joins remain.

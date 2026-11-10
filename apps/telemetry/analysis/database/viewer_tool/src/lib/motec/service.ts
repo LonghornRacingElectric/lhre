@@ -7,7 +7,7 @@ import type { SourceDef } from "./types";
 
 export const SOURCES: SourceDef[] = [
   { key: "orion", label: "Orion" },
-  { key: "angelique", label: "Angelique" },
+  { key: "artemis", label: "Artemis" },
 ];
 
 export function services(source?: string | null) {

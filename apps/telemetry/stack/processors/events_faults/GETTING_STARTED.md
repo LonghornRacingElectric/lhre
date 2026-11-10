@@ -4,9 +4,10 @@ The [README](README.md) describes the fault inputs and four-field event format.
 
 ## Follow the implementation
 
-1. `main.py` reads the `car_type` header and decodes Orion protobuf frames.
+1. `main.py` validates the Artemis headers and uses the shared native batch decoder.
 2. `faults.py` detects asserted diagnostics flags and inverter bits.
-3. `diff_faults` compares sets: `current - previous` raises faults and
+3. Only observed fields update the retained diagnostics. `diff_faults` compares
+   sets: `current - previous` raises faults and
    `previous - current` clears faults. Unchanged readings produce no events.
 4. `main.py` publishes the events, waits for acknowledgments, then remembers
    the new fault set and commits the input offsets.
@@ -18,7 +19,7 @@ bazel test --config=local //apps/telemetry/stack/processors/events_faults:faults
 ```
 
 They cover clean state, each supported boolean, inverter bits, repeated state,
-raised/cleared transitions, actual protobuf decoding, unsupported cars, invalid
+raised/cleared transitions, partial updates, per-update timestamps, invalid
 inputs, and publication failures.
 
 ## Where the fault signals come from (decided)
@@ -46,9 +47,12 @@ docker exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
   --bootstrap-server localhost:29092 --topic fault_events --from-beginning
 ```
 
-Use a separate test broker for synthetic frames. Each Orion message needs a
-`car_type: Orion` header, a `time` in milliseconds, and a populated
-`diagnostics_high` block. An explicit empty block represents healthy state.
+Use a separate test broker for synthetic batches. Each record needs
+`car_type: Artemis` and `payload_format: artemis_updates_v1` headers. Each
+`TelemetryUpdate` needs a receipt `sample_time_ns`, matching `values.time` in
+milliseconds, and generated numeric field paths in `updated_fields`. Only
+listed diagnostics affect fault state. Clear a flag with an explicit false
+update, or clear a mask with zero; omitted fields retain their prior values.
 Send a fault, repeat it, and then clear it: expect one raised and one cleared
 event. A new consumer group starts at the latest offset, so send frames after
 it connects.

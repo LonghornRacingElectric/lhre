@@ -1,24 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import prismaTelemetry from "@/lib/prisma/telemetry";
 import {
+  findLatestSampleTime,
   findLatestPacketId,
   normalizeCar,
   resolveCarFromCarId,
 } from "@/lib/prisma/carPrisma";
 
 export const dynamic = "force-dynamic";
-
-function isMissingPacketTableError(err: unknown): boolean {
-  const message = err instanceof Error ? err.message : String(err);
-  // Prisma can wrap Postgres errors; this keeps behavior aligned with old code.
-  return (
-    message.includes("packet") &&
-    (message.includes("does not exist") ||
-      message.includes("undefined_table") ||
-      message.includes("42P01") ||
-      message.includes("P2021"))
-  );
-}
 
 export async function GET(req: NextRequest) {
   const time = Date.now();
@@ -40,18 +29,19 @@ export async function GET(req: NextRequest) {
       car =
         normalizeCar(latestDay?.car?.car_name) ??
         (await resolveCarFromCarId(latestDay?.car_id)) ??
-        "angelique";
+        "orion";
     }
 
-    const latestPacketId = await findLatestPacketId(car);
-    const last_packet =
-      latestPacketId != null ? latestPacketId.toString() : 0;
-    return NextResponse.json({ time, last_packet, car });
+    const latestSampleTime = await findLatestSampleTime(car);
+    const latest_sample_ms =
+      latestSampleTime != null ? latestSampleTime.toString() : null;
+    if (car === "orion") {
+      const packet = await findLatestPacketId(car);
+      return NextResponse.json({ time, last_packet: packet?.toString() ?? 0, latest_sample_ms, car });
+    }
+    return NextResponse.json({ time, latest_sample_ms, car });
   } catch (e) {
     console.error("Error in handshake:", e);
-    if (isMissingPacketTableError(e)) {
-      return NextResponse.json({ time: Date.now(), last_packet: 0 });
-    }
     return NextResponse.json(
       { error: "Failed to perform handshake" },
       { status: 500 },

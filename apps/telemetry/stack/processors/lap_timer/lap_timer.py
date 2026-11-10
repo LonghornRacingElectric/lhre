@@ -20,7 +20,7 @@ class LapTimerProcessor:
         self.gate: tuple[tuple[float], tuple[float]]  = None
         self.status: int = None
         
-        self.table_specs = QueryBuilder("Nightwatch").get_table_column_specs()
+        self.table_specs = QueryBuilder("Orion").get_table_column_specs()
         
         # Initialize Kafka Consumer
         self.consumer = KafkaConsumer(
@@ -160,11 +160,11 @@ class LapTimerProcessor:
 
         
 def run_processor():
-    with get_db("Nightwatch") as nightwatch_session, get_db("Angelique") as angelique_session:
-        db_sessions = {'Nightwatch': nightwatch_session, 'Angelique': angelique_session}
+    with get_db("Orion") as orion_session, get_db("Artemis") as artemis_session:
+        db_sessions = {'Orion': orion_session, 'Artemis': artemis_session}
         with MQTTHandler(name="lap_timer_processor", target=MQTTTarget.get(), db_sessions=db_sessions) as mqtt:
         
-            session = db_sessions["Nightwatch"]
+            session = db_sessions["Orion"]
             processor = LapTimerProcessor(session=session)
             
             # Processing thread

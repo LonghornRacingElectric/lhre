@@ -1,17 +1,18 @@
 // Port of config.py — settings driven by env, defaulting to safe "sample" mode.
 import path from "path";
 
-export type CarId = "orion" | "angelique";
+export type CarId = "orion" | "artemis";
 
 export type Settings = {
+  car?: CarId;
   telemetrySource: string;
-  orionDbHost: string;
-  orionDbPort: number;
-  orionDbName: string;
-  orionDbUser: string;
-  orionDbPassword: string;
-  orionDbSslmode: string;
-  orionDbConnectTimeout: number;
+  dbHost: string;
+  dbPort: number;
+  dbName: string;
+  dbUser: string;
+  dbPassword: string;
+  dbSslmode: string;
+  dbConnectTimeout: number;
   exportDir: string;
   trackDir: string;
   channelChartDir: string;
@@ -34,14 +35,15 @@ function envNum(name: string, fallback: number): number {
 function baseSettings(): Settings {
   const telemetrySource = (process.env.TELEMETRY_SOURCE || "sample").trim().toLowerCase();
   return {
+    car: "orion",
     telemetrySource,
-    orionDbHost: process.env.ORION_DB_HOST || "192.168.1.109",
-    orionDbPort: envNum("ORION_DB_PORT", 5432),
-    orionDbName: process.env.ORION_DB_NAME || "orion",
-    orionDbUser: process.env.ORION_DB_USER || "analysis",
-    orionDbPassword: process.env.ORION_DB_PASSWORD || "",
-    orionDbSslmode: process.env.ORION_DB_SSLMODE || "disable",
-    orionDbConnectTimeout: envNum("ORION_DB_CONNECT_TIMEOUT", 5),
+    dbHost: process.env.ORION_DB_HOST || "192.168.1.109",
+    dbPort: envNum("ORION_DB_PORT", 5432),
+    dbName: process.env.ORION_DB_NAME || "orion",
+    dbUser: process.env.ORION_DB_USER || "analysis",
+    dbPassword: process.env.ORION_DB_PASSWORD || "",
+    dbSslmode: process.env.ORION_DB_SSLMODE || "disable",
+    dbConnectTimeout: envNum("ORION_DB_CONNECT_TIMEOUT", 5),
     exportDir: process.env.EXPORT_DIR || path.join(ROOT, "exports"),
     trackDir: process.env.TRACK_DIR || path.join(ROOT, "tracks"),
     channelChartDir: process.env.CHANNEL_CHART_DIR || path.join(ROOT, "channel_charts"),
@@ -55,21 +57,21 @@ function baseSettings(): Settings {
 }
 
 export function getSettings(source?: string | null): Settings {
-  const settings = baseSettings();
-  const normalized = (source || "orion").trim().toLowerCase();
-  if (normalized !== "orion" && normalized !== "angelique") {
-    throw new Error(`Unknown telemetry source: ${source}`);
-  }
-  if (normalized === "angelique") {
-    return {
-      ...settings,
-      orionDbHost: process.env.ANGELIQUE_DB_HOST || settings.orionDbHost,
-      orionDbPort: envNum("ANGELIQUE_DB_PORT", settings.orionDbPort),
-      orionDbName: process.env.ANGELIQUE_DB_NAME || "angelique",
-      orionDbUser: process.env.ANGELIQUE_DB_USER || settings.orionDbUser,
-      orionDbPassword: process.env.ANGELIQUE_DB_PASSWORD || settings.orionDbPassword,
-      orionDbSslmode: process.env.ANGELIQUE_DB_SSLMODE || settings.orionDbSslmode,
-    };
+  const car = (source || "orion").trim().toLowerCase();
+  if (car !== "orion" && car !== "artemis") throw new Error(`Unknown telemetry source: ${source}`);
+  const base = baseSettings();
+  const prefix = car.toUpperCase();
+  const settings: Settings = { ...base, car, dbHost: process.env[`${prefix}_DB_HOST`] || base.dbHost,
+    dbPort: envNum(`${prefix}_DB_PORT`, base.dbPort), dbName: process.env[`${prefix}_DB_NAME`] || car,
+    dbUser: process.env[`${prefix}_DB_USER`] || base.dbUser,
+    dbPassword: process.env[`${prefix}_DB_PASSWORD`] || base.dbPassword,
+    dbSslmode: process.env[`${prefix}_DB_SSLMODE`] || base.dbSslmode };
+  const connection = process.env[`${prefix}_DATABASE_URL`];
+  if (connection) {
+    const url = new URL(connection);
+    return { ...settings, dbHost: url.hostname, dbPort: Number(url.port || 5432),
+      dbName: decodeURIComponent(url.pathname.slice(1)), dbUser: decodeURIComponent(url.username),
+      dbPassword: decodeURIComponent(url.password), dbSslmode: url.searchParams.get("sslmode") || settings.dbSslmode };
   }
   return settings;
 }

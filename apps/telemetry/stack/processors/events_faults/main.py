@@ -1,4 +1,4 @@
-"""Publish raised/cleared Orion fault events from telemetry snapshots."""
+"""Publish raised/cleared Artemis fault events from native updates."""
 
 import json
 import logging
@@ -8,38 +8,40 @@ from threading import Event
 
 from google.protobuf.message import DecodeError
 from kafka import KafkaConsumer, KafkaProducer
-from stack.ingest.protobuf import can_packets_pb2
+from stack.ingest.sensor_decode import car_from_headers, decode_updates, payload_format
 
 from faults import detect_active_faults, diff_faults
 
 
-def process_record(record, producer, active_faults, output_topic):
-    """Decode one Orion frame and publish changes from its previous fault set."""
+def process_record(record, producer, diagnostics, output_topic):
+    """Apply observed fault fields after their transition events are acknowledged."""
     try:
-        car = None
-        for key, value in record.headers or []:
-            key = key.decode("utf-8") if isinstance(key, bytes) else key
-            if key.lower() == "car_type":
-                car = value.decode("utf-8") if isinstance(value, bytes) else value
-                break
-        if car is None or car.strip().lower() != "orion":
+        car = car_from_headers(record.headers)
+        if car != "Artemis":
             return []
-
-        frame = can_packets_pb2.OrionSensorData()
-        frame.ParseFromString(record.value)
-        if not frame.HasField("diagnostics_high"):
-            return []
-        current = detect_active_faults(frame.diagnostics_high)
-    except (DecodeError, ValueError, TypeError, AttributeError) as error:
+        payload_format(record.headers, car)
+        updates = decode_updates(record.value)
+    except (DecodeError, ValueError, TypeError) as error:
         logging.warning("Skipping invalid telemetry: %s", error)
         return []
 
-    car = "orion"
-    events = diff_faults(active_faults.get(car, set()), current, car, frame.time)
-    for event in events:
-        producer.send(output_topic, value=event).get(timeout=10)
-        logging.info("%s %s %s", car, event["kind"], event["fault"])
-    active_faults[car] = current
+    events = []
+    for update in updates:
+        observed = update.get("diagnostics_high")
+        if not observed:
+            continue
+        try:
+            previous = detect_active_faults(diagnostics)
+            current = detect_active_faults(diagnostics | observed)
+        except ValueError as error:
+            logging.warning("Skipping invalid diagnostics: %s", error)
+            continue
+        changes = diff_faults(previous, current, "artemis", update["time"])
+        for event in changes:
+            producer.send(output_topic, value=event).get(timeout=10)
+            logging.info("artemis %s %s", event["kind"], event["fault"])
+        diagnostics.update(observed)
+        events.extend(changes)
     return events
 
 
@@ -68,13 +70,13 @@ def main():
             value_serializer=lambda value: json.dumps(value).encode("utf-8"),
             acks="all",
         )
-        active_faults = {}
+        diagnostics = {}
         logging.info("events_faults ready. in=%s out=%s", input_topic, output_topic)
         while not stop.is_set():
             batch = consumer.poll(timeout_ms=1000)
             for records in batch.values():
                 for record in records:
-                    process_record(record, producer, active_faults, output_topic)
+                    process_record(record, producer, diagnostics, output_topic)
             if batch:
                 consumer.commit()
     finally:
