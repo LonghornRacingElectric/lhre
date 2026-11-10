@@ -63,8 +63,22 @@ def committed_baseline(config: Path) -> dict[str, list[str]]:
     return {path: sorted(codes) for path, codes in table.items()}
 
 
+def ref_exists(root: Path, ref: str) -> bool:
+    found = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
+        cwd=root,
+        capture_output=True,
+        check=False,
+    )
+    return found.returncode == 0
+
+
 def baseline_at(root: Path, ref: str) -> dict[str, list[str]] | None:
-    """The baseline committed at a git ref, or None if ruff.toml isn't there."""
+    """The baseline committed at a git ref, or None if ruff.toml isn't there.
+
+    Only call this for a ref that exists: a missing ref would read as "no
+    baseline yet" and skip the growth check.
+    """
     shown = subprocess.run(
         ["git", "show", f"{ref}:ruff.toml"],
         cwd=root,
@@ -131,6 +145,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     root = args.root.resolve()
     config = root / "ruff.toml"
+
+    # A failed fetch or a typo must not quietly turn the growth check off.
+    if args.no_growth_from and not ref_exists(root, args.no_growth_from):
+        print(f"error: can't read {args.no_growth_from}; fetch it before checking growth.")
+        return 1
 
     actual = actual_violations(root)
     if args.write:

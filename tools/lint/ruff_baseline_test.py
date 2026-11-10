@@ -71,3 +71,9 @@ def test_no_baseline_at_the_base_ref_is_not_growth(tmp_path: Path) -> None:
     (tmp_path / "y.py").write_text("import os\n")
     ruff_baseline.main(["--root", str(tmp_path), "--write"])
     assert ruff_baseline.main(["--root", str(tmp_path), "--no-growth-from", "HEAD"]) == 0
+
+
+def test_unreadable_base_ref_fails_instead_of_skipping_growth(repo: Path, capsys) -> None:
+    # A failed fetch or a typo must not read as "no baseline at the base".
+    assert ruff_baseline.main(["--root", str(repo), "--no-growth-from", "origin/nope"]) == 1
+    assert "can't read origin/nope" in capsys.readouterr().out

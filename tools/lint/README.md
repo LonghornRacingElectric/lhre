@@ -40,6 +40,8 @@ The baseline may only shrink ([ADR-017](../../docs/architecture/017-tests-gate-m
   (`--no-growth-from`).
 - **File only moved?** Its entry moves with it and counts as growth. A
   maintainer adds the `lint-baseline-ok` label to the PR and re-runs the
-  `Lint` job.
+  `Lint` job; the job reads the labels when it runs, so a re-run sees it.
+- **Base branch unreadable?** The growth check fails rather than skip
+  itself, so a failed fetch can't let a grown baseline through.
 
 Never edit the generated section by hand.

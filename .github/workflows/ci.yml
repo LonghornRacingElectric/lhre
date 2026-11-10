@@ -114,10 +114,22 @@ jobs:
         run: git fetch --no-tags --depth=1 origin "+refs/heads/$GITHUB_BASE_REF:refs/remotes/origin/$GITHUB_BASE_REF"
 
       # A grown baseline is how a new violation sneaks past the check above,
-      # so PRs can't grow it without the lint-baseline-ok label.
-      - name: Python baseline only shrinks
+      # so PRs can't grow it without the lint-baseline-ok label. The labels
+      # are read now, not from the event, so adding the label and re-running
+      # the job takes effect. If the lookup fails, the growth check stays on.
+      - name: Decide whether baselines may grow
+        if: github.event_name == 'pull_request'
         env:
-          GROWTH_FROM: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'lint-baseline-ok') && format('origin/{0}', github.base_ref) || '' }}
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if gh api "repos/$GITHUB_REPOSITORY/issues/$PR/labels" --jq '.[].name' | grep -qx lint-baseline-ok; then
+            echo "::notice::lint-baseline-ok: baselines may grow in this PR"
+          else
+            echo "GROWTH_FROM=origin/$GITHUB_BASE_REF" >> "$GITHUB_ENV"
+          fi
+
+      - name: Python baseline only shrinks
         run: uv run --group lint tools/lint/ruff_baseline.py ${GROWTH_FROM:+--no-growth-from "$GROWTH_FROM"}
 
   bazel:
