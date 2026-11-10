@@ -61,12 +61,6 @@ services:
       - telemetry_db:/var/lib/postgresql/data
       - ./common_schema.sql:/app/common_schema.sql:ro
       - type: bind
-        source: ${ORION_DB_INIT_SQL:?Build //apps/telemetry:current_schema_sql and set its absolute output path}
-        target: /app/orion_db_init.sql
-        read_only: true
-        bind:
-          create_host_path: false
-      - type: bind
         source: ${ARTEMIS_DB_INIT_SQL:?Build //apps/telemetry:new_car_schema_sql and set its absolute output path}
         target: /app/artemis_db_init.sql
         read_only: true

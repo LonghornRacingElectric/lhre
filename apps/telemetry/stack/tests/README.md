@@ -3,6 +3,8 @@
 Connectivity and data-flow tests are `manual`, local targets: they require loaded telemetry
 images, Docker, the server credentials and a running core stack. See the
 [stack guide](../README.md) for startup.
+CI provisions Artemis and shared metadata; the integration suite requires no
+Orion database and publishes only Artemis telemetry to Kafka.
 
 ```bash
 bazel test --config=local //apps/telemetry/stack/tests:integration_tests

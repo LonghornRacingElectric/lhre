@@ -122,7 +122,7 @@ py_test(
     target_compatible_with = NOT_WINDOWS,
 )
 
-# BEVO handshake + database model query integration test
+# Artemis database model query integration test
 py_test(
     name = "bevo_db_integration_test",
     target_compatible_with = NOT_WINDOWS,
