@@ -25,6 +25,7 @@ from pathlib import Path
 BEGIN = "# --- ruff baseline (generated) ---"
 END = "# --- end ruff baseline ---"
 SECTION = "[lint.per-file-ignores]"
+TOOL = "tools/lint/ruff_baseline.py"
 
 
 def actual_violations(root: Path) -> dict[str, list[str]]:
@@ -69,6 +70,13 @@ def ref_exists(root: Path, ref: str) -> bool:
         cwd=root,
         capture_output=True,
         check=False,
+    )
+    return found.returncode == 0
+
+
+def exists_at(root: Path, ref: str, path: str) -> bool:
+    found = subprocess.run(
+        ["git", "cat-file", "-e", f"{ref}:{path}"], cwd=root, capture_output=True, check=False
     )
     return found.returncode == 0
 
@@ -161,6 +169,11 @@ def main(argv: list[str] | None = None) -> int:
     status = 0
     if args.no_growth_from:
         base = baseline_at(root, args.no_growth_from)
+        # No baseline at the base is fine only while this checker is new
+        # there too; otherwise a base without one would let anything in.
+        if base is None and exists_at(root, args.no_growth_from, TOOL):
+            print(f"error: ruff.toml is missing at {args.no_growth_from}; can't check growth.")
+            return 1
         grown = growth(base, committed) if base is not None else []
         if grown:
             print(f"The ruff baseline grew since {args.no_growth_from}:")

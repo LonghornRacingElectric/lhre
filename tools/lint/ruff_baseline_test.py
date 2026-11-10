@@ -77,3 +77,17 @@ def test_unreadable_base_ref_fails_instead_of_skipping_growth(repo: Path, capsys
     # A failed fetch or a typo must not read as "no baseline at the base".
     assert ruff_baseline.main(["--root", str(repo), "--no-growth-from", "origin/nope"]) == 1
     assert "can't read origin/nope" in capsys.readouterr().out
+
+
+def test_base_with_the_checker_but_no_baseline_fails(tmp_path: Path, capsys) -> None:
+    # Only the PR that adds the checker may start from no baseline.
+    git(tmp_path, "init", "-q")
+    (tmp_path / ruff_baseline.TOOL).parent.mkdir(parents=True)
+    (tmp_path / ruff_baseline.TOOL).write_text("")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-q", "-m", "checker, baseline deleted")
+    (tmp_path / "ruff.toml").write_text(CONFIG)
+    (tmp_path / "y.py").write_text("import os\n")
+    ruff_baseline.main(["--root", str(tmp_path), "--write"])
+    assert ruff_baseline.main(["--root", str(tmp_path), "--no-growth-from", "HEAD"]) == 1
+    assert "ruff.toml is missing at HEAD" in capsys.readouterr().out
