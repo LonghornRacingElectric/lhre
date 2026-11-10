@@ -10,5 +10,5 @@
 ## Checklist
 
 - [ ] Behavior changes come with a test that fails without them ([testing.md](https://github.com/LonghornRacingElectric/lhre/blob/main/docs/testing.md))
-- [ ] No test deleted, skipped or loosened, and no lint baseline grown, to get green (or the PR says why)
+- [ ] No test deleted, skipped or loosened, and no lint suppression added without a reason, to get green (or the PR says why)
 - [ ] Adjacent `README.md` updated
