@@ -21,3 +21,10 @@ docs = [
     "mkdocs-material>=9.6",
     "mkdocs-simple-plugin>=3.2",
 ]
+# Linters CI runs on every PR (`uv run --group lint ...`, see
+# tools/lint/README.md). Exact pins: a linter upgrade can add findings, so it
+# lands on purpose, with its baseline update, never by drift.
+lint = [
+    "pytest==9.0.3",
+    "ruff==0.17.4",
+]

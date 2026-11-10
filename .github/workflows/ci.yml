@@ -92,6 +92,34 @@ jobs:
       - name: Check formatting
         run: bazel run //tools/format:check
 
+  # Linters for code outside Bazel's view, pinned in pyproject's lint group.
+  # Cheap, so it always runs. Each linter grandfathers today's violations in
+  # a baseline that may only shrink; see tools/lint/README.md.
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v9.0.0
+
+      - name: Test the lint tooling
+        run: uv run --group lint pytest -q tools/lint
+
+      - name: Python (ruff)
+        run: uv run --group lint ruff check --output-format=github
+
+      - name: Fetch the base branch for the baseline growth check
+        if: github.event_name == 'pull_request'
+        run: git fetch --no-tags --depth=1 origin "+refs/heads/$GITHUB_BASE_REF:refs/remotes/origin/$GITHUB_BASE_REF"
+
+      # A grown baseline is how a new violation sneaks past the check above,
+      # so PRs can't grow it without the lint-baseline-ok label.
+      - name: Python baseline only shrinks
+        env:
+          GROWTH_FROM: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'lint-baseline-ok') && format('origin/{0}', github.base_ref) || '' }}
+        run: uv run --group lint tools/lint/ruff_baseline.py ${GROWTH_FROM:+--no-growth-from "$GROWTH_FROM"}
+
   bazel:
     name: Bazel (Linux)
     needs: changes
@@ -480,7 +508,7 @@ jobs:
   # Jobs skip only on an untouched area, and run if Changes fails.
   all-checks:
     name: All checks passed
-    needs: [changes, format, bazel, bazel-windows, sim-fast, four-post, autonomy, bevo, docs, telemetry]
+    needs: [changes, format, lint, bazel, bazel-windows, sim-fast, four-post, autonomy, bevo, docs, telemetry]
     if: always()
     runs-on: ubuntu-latest
     steps:

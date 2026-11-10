@@ -48,6 +48,7 @@ nav:
       - VS Code & Hardware Debug: tools/debug/README.md
       - Firmware Project Macro: tools/firmware/README.md
       - Code Formatting: tools/format/README.md
+      - Lint: tools/lint/README.md
       - OpenOCD: tools/openocd/README.md
       - DFU Util: tools/dfu/README.md
       - CAN Spec Tools: tools/spec/README.md

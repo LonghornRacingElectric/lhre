@@ -48,6 +48,7 @@ no network. Concretely:
 | UBSan | Undefined behavior in host C++ (overflow, bad shifts, misaligned access) | `bazel test --config=ubsan //boards/... //drivers/... //lib/codegen/cpp/...` |
 | `-Wall -Wextra -Werror` on app code | Warnings in firmware application code | part of `bazel build //...` |
 | Format | Unformatted C/C++ | `bazel run //tools/format:check` |
+| Lint: Python (ruff) | Undefined names, unused imports, swallowed exceptions, unchecked subprocesses, unsafe calls. Baseline only shrinks. | `uv run --group lint ruff check` |
 | Simulation fast checks | lhre's simulation tools, vehicle bundle and study contracts (BobSim itself is tested in BobDyn) | `make -C simulation test`; on a PR also `make -C simulation check-vehicle BASE=origin/<base>` |
 | Docs | Broken links, missing nav entries | `uv run --group docs mkdocs build --strict` |
 
