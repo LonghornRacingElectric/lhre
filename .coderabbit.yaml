@@ -22,7 +22,7 @@ reviews:
         Apply docs/testing.md. Flag a behavior change that has no test which
         would fail without it. Flag any test that is deleted, skipped,
         loosened (wider tolerance, bigger size budget, flaky = True) or any
-        lint baseline that grows, unless the PR explains why. Flag tests
+        new lint suppression (noqa, shellcheck disable) without a reason. Flag tests
         that touch the network, the wall clock, unseeded randomness, or
         absolute or home paths.
     - path: "boards/*/App/**"

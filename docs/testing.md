@@ -12,8 +12,8 @@ test" means here, and which gate catches what.
   get a regression test; new logic gets tests for its edges (limits,
   saturation, faults, units), not only the happy path.
 - **Tests are never weakened to get green.** Don't delete, skip, loosen a
-  tolerance, widen a size budget, add `flaky = True`, or add an entry to a
-  lint baseline to make CI pass. If a test is wrong, fix it in its own
+  tolerance, widen a size budget, add `flaky = True`, or add a lint
+  suppression to make CI pass. If a test is wrong, fix it in its own
   commit and say why in the PR.
 - **Tests are hermetic.** See below. A test that passes on your machine
   and fails on CI (or the other way round) is a broken test.
@@ -51,10 +51,10 @@ no network. Concretely:
 | Simulation fast checks | lhre's simulation tools, vehicle bundle and study contracts (BobSim itself is tested in BobDyn) | `make -C simulation test`; on a PR also `make -C simulation check-vehicle BASE=origin/<base>` |
 | Docs | Broken links, missing nav entries | `uv run --group docs mkdocs build --strict` |
 
-## Ratchets, not cleanups
+## No baselines
 
-New gates start strict for new code and grandfather what's already there
-in a committed baseline, instead of landing one huge cleanup diff. A
-baseline only ever shrinks: fixing an old violation means deleting its
-baseline entry in the same change. Adding to a baseline needs a reason in
-the PR, and a reviewer should push back on it.
+Gates have no grandfather lists. An existing violation is fixed, or
+suppressed on its own line (`# noqa: <code>`, `# shellcheck disable=<code>`)
+with the reason next to it, so every exception sits where a reviewer sees
+it. A suppression that no longer matches anything fails lint. Coverage is
+judged on the lines a PR changes, not on whole files.

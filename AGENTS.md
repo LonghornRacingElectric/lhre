@@ -47,7 +47,7 @@ Follow [docs/testing.md](docs/testing.md); the rules that matter most:
 - A behavior change ships with a test that fails without it. Cover the
   edges (limits, saturation, faults, units), not only the happy path.
 - Never delete, skip or loosen a test, widen a size budget, mark a test
-  flaky, or add a lint baseline entry to get CI green. If a test is
+  flaky, or add a lint suppression to get CI green. If a test is
   genuinely wrong, fix it in its own commit and say why in the PR.
 - Tests are hermetic: no network, no wall clock, seeded randomness, no
   absolute or home paths, writes only under the test's temp dir.
