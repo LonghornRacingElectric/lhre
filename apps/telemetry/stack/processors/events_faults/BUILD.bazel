@@ -55,6 +55,29 @@ py_test(
     target_compatible_with = NOT_WINDOWS,
 )
 
+py_test(
+    name = "kafka_integration_test",
+    srcs = ["test_kafka_integration.py"],
+    main = "test_kafka_integration.py",
+    args = [
+        "$(rlocationpath //apps/telemetry:kafka_load)",
+        "$(rlocationpath :events_faults_load)",
+        "$(rlocationpath //apps/telemetry/stack/processors/board_health:board_health_load)",
+    ],
+    data = [
+        "//apps/telemetry:kafka_load",
+        ":events_faults_load",
+        "//apps/telemetry/stack/processors/board_health:board_health_load",
+    ],
+    deps = [
+        "//apps/telemetry/stack/ingest:sensor_decode",
+        "@lhre_pypi//bazel_runfiles",
+        requirement("kafka-python"),
+    ],
+    tags = ["manual", "integration", "docker", "local"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
 telemetry_service_image(
     name = "events_faults",
     base = "@python312_linux_amd64",

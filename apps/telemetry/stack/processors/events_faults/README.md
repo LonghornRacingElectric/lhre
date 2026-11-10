@@ -72,6 +72,17 @@ The detection, transition, and decode/publish tests need no services:
 bazel test --config=local //apps/telemetry/stack/processors/events_faults:faults_test //apps/telemetry/stack/processors/events_faults:main_test
 ```
 
+The opt-in Kafka integration test loads the Bazel-built broker, fault processor,
+and board-health images. It creates an isolated Docker network and publishes
+generated Artemis batches. It checks fault raises/clears, partial updates,
+unchanged readings, board stale/recovery events, telemetry timeout, and committed
+input offsets. Cleanup removes only the test containers and network. No server
+credentials or running core stack are required.
+
+```bash
+bazel test --config=local //apps/telemetry/stack/processors/events_faults:kafka_integration_test --nocache_test_results --test_output=errors
+```
+
 ## Configuration
 
 Set these in `docker-compose.yml`:
@@ -89,6 +100,7 @@ Set these in `docker-compose.yml`:
 - `main.py`: decode Artemis updates, retain diagnostics, and publish changes.
 - `faults.py`: pure fault detection and set comparison.
 - `test_faults.py` / `test_main.py`: detection, transitions, and decode/publish tests.
+- `test_kafka_integration.py`: real Kafka input/output through both processor images.
 - `BUILD.bazel`: standard `events_faults_binary`, `_image`, `_load`, `_push`, and
   `_smoke_test` targets, plus the test targets. The processor is optional.
 - `docker-compose.yml`: runs the Bazel-loaded image using the shared telemetry
