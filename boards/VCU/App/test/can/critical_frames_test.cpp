@@ -105,7 +105,7 @@ TEST(FaultClearFrame, WritesZeroToTheFaultClearAddress) {
 TEST(FaultsFrame, EachFaultBitSetsExactlyItsOwnField) {
   struct Case {
     uint32_t bit;
-    bool msg::VcuFaults::*field;
+    bool msg::VcuFaults::* field;
   };
   const Case cases[] = {
       {vcu::kFaultAppsImplausible,

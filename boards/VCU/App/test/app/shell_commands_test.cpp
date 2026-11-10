@@ -106,10 +106,12 @@ TEST_F(ShellCommandsTest, ModeSwitchesOutsideDriveAndReachesTheInverter) {
   EXPECT_TRUE(Contains(Shell("/mode 5"), "queued"));
   b_.Run(*app_, 30);
   EXPECT_EQ(app_->snapshot().event_mode, EventMode::kMotorSpin);
-  EXPECT_NEAR(InverterTorqueLimit(), 20.0f, 0.1f);
+  // LastFrame drains the node, so each frame type gets its own run.
   msg::VcuState ds;
   ASSERT_TRUE(b_.LastFrame(b_.car, &ds));
   EXPECT_EQ(ds.event_mode, static_cast<uint8_t>(EventMode::kMotorSpin));
+  b_.Run(*app_, 30);
+  EXPECT_NEAR(InverterTorqueLimit(), 20.0f, 0.1f);
 }
 
 // Parameters never change under the driver's foot; the request waits.
