@@ -36,7 +36,10 @@ devtool to bind Postgres, Kafka, and logsync storage onto the SSD.
 The core is Kafka/bridge, ingest with Mosquitto/PostgreSQL/Grafana and the
 [Kafka database writer](stack/processors/db_writer/README.md), and the field
 enricher. Optional processors are GPS classifier, lap timer, track
-mapper, Kafka test, GG plot, and car status.
+mapper, Kafka test, GG plot, car status, board health, and
+[events/faults](stack/processors/events_faults/README.md).
+Events/faults publishes Artemis fault transitions. Its service-free tests are
+included in `:unit_tests`.
 
 ## Logsync
 

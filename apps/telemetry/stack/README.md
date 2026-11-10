@@ -20,6 +20,12 @@ images. Commands are detached by default:
 ./server_devtool.sh logs
 ```
 
+The optional [events/faults processor](processors/events_faults/README.md) is
+available with `./server_devtool.sh enable events_faults`. It decodes Artemis
+diagnostics and publishes raised/cleared events to `fault_events`, waiting for
+output acknowledgments before committing input offsets. Fault state is held in
+memory; it is a live channel rather than a durable fault ledger.
+
 The [schema authority](../schema_registry/README.md)'s `schema-serve` mode
 reads the actual running ingest and bridge images, rather than the checkout
 or a newly generated output. Rebuild both with `build kafka ingest` for a

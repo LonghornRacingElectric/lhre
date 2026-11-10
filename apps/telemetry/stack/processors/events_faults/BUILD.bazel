@@ -1,0 +1,97 @@
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
+load("//apps/telemetry:compatibility.bzl", "NOT_WINDOWS")
+load("//apps/telemetry:container.bzl", "telemetry_service_image")
+
+package(default_visibility = ["//apps/telemetry:__subpackages__"])
+
+exports_files(["docker-compose.yml"])
+
+py_library(
+    name = "faults_lib",
+    srcs = ["faults.py"],
+    imports = ["."],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_library(
+    name = "events_faults_lib",
+    srcs = ["main.py"],
+    imports = [".", "../../..", "../../../.."],
+    deps = [
+        ":faults_lib",
+        "//apps/telemetry/stack/ingest:sensor_decode",
+        requirement("kafka-python"),
+        requirement("protobuf"),
+    ],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_binary(
+    name = "events_faults_binary",
+    srcs = ["main.py"],
+    imports = [".", "../../..", "../../../.."],
+    main = "main.py",
+    deps = [
+        ":events_faults_lib",
+    ],
+    target_compatible_with = NOT_WINDOWS,
+    visibility = ["//visibility:public"],
+)
+
+py_test(
+    name = "faults_test",
+    srcs = ["test_faults.py"],
+    main = "test_faults.py",
+    deps = [":faults_lib"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_test(
+    name = "main_test",
+    srcs = ["test_main.py"],
+    main = "test_main.py",
+    deps = [":events_faults_lib"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_test(
+    name = "kafka_integration_test",
+    srcs = ["test_kafka_integration.py"],
+    main = "test_kafka_integration.py",
+    args = [
+        "$(rlocationpath //apps/telemetry:kafka_load)",
+        "$(rlocationpath :events_faults_load)",
+        "$(rlocationpath //apps/telemetry/stack/processors/board_health:board_health_load)",
+    ],
+    data = [
+        "//apps/telemetry:kafka_load",
+        ":events_faults_load",
+        "//apps/telemetry/stack/processors/board_health:board_health_load",
+    ],
+    deps = [
+        "//apps/telemetry/stack/ingest:sensor_decode",
+        "@lhre_pypi//bazel_runfiles",
+        requirement("kafka-python"),
+    ],
+    tags = ["manual", "integration", "docker", "local"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+telemetry_service_image(
+    name = "events_faults",
+    base = "@python312_linux_amd64",
+    binary = ":events_faults_binary",
+    env = {
+        "PYTHONPATH": "/app",
+        "PYTHONUNBUFFERED": "1",
+    },
+    repo_tags = [
+        "lhre/telemetry-events-faults:dev",
+        "events_faults_processor:latest",
+    ],
+    repository = "ghcr.io/longhornracingelectric/telemetry-events-faults",
+    tars = ["//apps/telemetry:runtime_config_tar"],
+    visibility = ["//visibility:public"],
+    workdir = "/app/stack/processors/events_faults",
+)
