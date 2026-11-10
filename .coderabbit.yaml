@@ -10,3 +10,21 @@ reviews:
   auto_review:
     ignore_title_keywords:
       - "Autonomous:"
+  # The testing contract (docs/testing.md, ADR-017): CI is the gate, so the
+  # review checks that the tests actually pin the change.
+  path_instructions:
+    - path: "**"
+      instructions: >-
+        Apply docs/testing.md. Flag a behavior change that has no test which
+        would fail without it. Flag any test that is deleted, skipped,
+        loosened (wider tolerance, bigger size budget, flaky = True) or any
+        lint baseline that grows, unless the PR explains why. Flag tests
+        that touch the network, the wall clock, unseeded randomness, or
+        absolute or home paths.
+    - path: "boards/*/App/**"
+      instructions: >-
+        Firmware application code runs on the car. Flag heap allocation
+        after startup, unbounded loops or recursion, float/double mixing on
+        the Cortex-M4F, unchecked sensor inputs, and missing fault or
+        saturation handling. Tests for this code live in App/test/ and
+        should cover limits and faults, not just the nominal case.

@@ -38,6 +38,24 @@ afterthought:
   own page. Prefer the adjacent README for anything structural; use
   embedded blocks for docs that would go stale if separated from the code.
 
+## Tests are the gate
+
+Agent-written code is reviewed less closely than it's written, so CI has to
+catch what a reviewer would have ([ADR-017](docs/architecture/017-tests-gate-merges.md)).
+Follow [docs/testing.md](docs/testing.md); the rules that matter most:
+
+- A behavior change ships with a test that fails without it. Cover the
+  edges (limits, saturation, faults, units), not only the happy path.
+- Never delete, skip or loosen a test, widen a size budget, mark a test
+  flaky, or add a lint baseline entry to get CI green. If a test is
+  genuinely wrong, fix it in its own commit and say why in the PR.
+- Tests are hermetic: no network, no wall clock, seeded randomness, no
+  absolute or home paths, writes only under the test's temp dir.
+- In `simulation/`, test lhre's own tools, vehicle files and study
+  plumbing. BobSim and BobLib are tested in BobDyn; don't re-test them here.
+- Fill in the PR template's "How it's tested" with the test that pins the
+  change.
+
 ## Build, test, verify
 
 ```bash
