@@ -122,7 +122,7 @@ py_test(
     target_compatible_with = NOT_WINDOWS,
 )
 
-# BEVO handshake + database model query integration test
+# Artemis database model query integration test
 py_test(
     name = "bevo_db_integration_test",
     target_compatible_with = NOT_WINDOWS,
@@ -162,24 +162,6 @@ py_test(
     target_compatible_with = NOT_WINDOWS,
 )
 
-# Protobuf serialization test (tests paho_testing.py patterns)
-py_test(
-    name = "protobuf_test",
-    imports = ["../..", "../../.."],
-    srcs = ["test_protobuf.py"],
-    main = "test_protobuf.py",
-    deps = [
-        ":test_utils",
-        "//apps/telemetry/analysis:analysis_lib",
-        "//apps/telemetry/stack/ingest:ingest_lib",
-        requirement("numpy"),
-        requirement("protobuf"),
-        requirement("python-dotenv"),
-    ],
-    tags = ["unit"],
-    target_compatible_with = NOT_WINDOWS,
-)
-
 # Export shell scripts and docker-compose files
 exports_files([
     "run_integration_test.sh",
@@ -190,9 +172,10 @@ exports_files([
 sh_test(
     name = "stack_integration_test",
     srcs = ["run_integration_test.sh"],
-    args = ["$(rlocationpath //apps/telemetry:current_schema_sql)"],
+    args = ["$(rlocationpath //apps/telemetry:current_schema_sql)", "$(rlocationpath //apps/telemetry:new_car_schema_sql)"],
     data = [
         "//apps/telemetry:current_schema_sql",
+        "//apps/telemetry:new_car_schema_sql",
         "//apps/telemetry/stack:orion_schema.sh",
         ":stack_test_client",
         "//apps/telemetry/stack/ingest:docker-compose.yml",
@@ -221,23 +204,35 @@ test_suite(
     target_compatible_with = NOT_WINDOWS,
 )
 
-# Test suite for unit tests (no Docker required)
-test_suite(
-    name = "unit_tests",
-    tags = ["unit"],
-    tests = [
-        ":protobuf_test",
-    ],
-    target_compatible_with = NOT_WINDOWS,
-)
-
 # All telemetry stack tests
 test_suite(
     name = "all_tests",
     tags = ["manual"],  # includes the Docker-backed suite; see //apps/telemetry:unit_tests for presubmit
     tests = [
         ":integration_tests",
-        ":unit_tests",
     ],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_test(
+    name = "native_bevo_flow_test",
+    srcs = ["test_native_bevo_flow.py"],
+    main = "test_native_bevo_flow.py",
+    imports = ["../..", "../../.."],
+    deps = [
+        ":test_utils",
+        "//lib/telemetry:contract",
+        "//apps/telemetry/analysis:analysis_lib",
+        "@lhre_pypi//bazel_runfiles",
+        requirement("SQLAlchemy"),
+        requirement("psycopg2-binary"),
+    ],
+    data = [
+        "//apps/BEVO/cand:mock_main",
+        "//apps/BEVO/loggerd",
+        "//apps/BEVO/publishd",
+        "//lib/codegen/telemetry:artemis_schema_contract",
+    ],
+    tags = ["manual", "integration", "docker", "e2e", "local"],
     target_compatible_with = NOT_WINDOWS,
 )

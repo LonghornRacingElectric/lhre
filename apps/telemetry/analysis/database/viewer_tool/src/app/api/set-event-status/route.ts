@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
         data: {
           end_time: BigInt(now),
           status: 0,
-          packet_end,
+          packet_end: car === "orion" ? packet_end : null,
         },
       });
     } else {

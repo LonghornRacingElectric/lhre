@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import prismaTelemetry from "@/lib/prisma/telemetry";
 import {
-  findNextPacketIdInRange,
-  findReplayPacketAtOrAfter,
+  findNextSampleTime,
+  replayBounds,
+  findReplaySampleAtOrAfter,
   normalizeCar,
   SupportedCar,
   resolveCarFromCarId,
@@ -37,7 +38,9 @@ async function buildReplayState(
   const ev = await prismaTelemetry.drive_day.findUnique({
     where: { day_id: eventId },
     select: {
+      start_time: true,
       packet_start: true,
+      end_time: true,
       packet_end: true,
       car_id: true,
       car: { select: { car_name: true } },
@@ -45,18 +48,15 @@ async function buildReplayState(
   });
 
   if (!ev) return { status: 404 as const, body: { error: "Drive day not found" } };
-  if (ev.packet_start == null || ev.packet_end == null) {
-    return { status: 409 as const, body: { error: "Drive day has no packet range" } };
-  }
-
-  const packetStart = BigInt(ev.packet_start as any);
-  const packetEnd = BigInt(ev.packet_end as any);
   const car =
     preferredCar ??
     normalizeCar(ev.car?.car_name) ??
     (await resolveCarFromCarId(ev.car_id)) ??
     "orion";
-  const packet = await findReplayPacketAtOrAfter(
+  const bounds = await replayBounds(car, ev);
+  if (!bounds) return { status: 409 as const, body: { error: "Drive day has no time range" } };
+  const [packetStart, packetEnd] = bounds;
+  const packet = await findReplaySampleAtOrAfter(
     car,
     packetStart,
     packetEnd,
@@ -67,11 +67,11 @@ async function buildReplayState(
     return { status: 404 as const, body: { error: "No packet found at/after time" } };
   }
 
-  const packetId = BigInt(packet.packet_id as any);
+  const sampleTime = BigInt(packet.time);
   const packetTimeMs = packet.time != null ? BigInt(packet.time as any) : null;
 
-  const nextPacketId = await findNextPacketIdInRange(car, packetId, packetEnd);
-  const isEnd = nextPacketId == null || packetId >= packetEnd;
+  const nextPacketId = await findNextSampleTime(car, sampleTime, packetEnd);
+  const isEnd = nextPacketId == null || sampleTime >= packetEnd;
 
   const d: any = (packet as any).dynamics || {};
   const c: any = (packet as any).controls || {};
@@ -80,13 +80,14 @@ async function buildReplayState(
     status: 200 as const,
     body: {
       cursor_ms: bigintToSafeNumber(packetTimeMs),
-      packet_id: packetId.toString(),
+      ...(car === "orion" ? { packet_id: packet.packet_id?.toString() } :
+        { session_start_ms: packet.session_start_ms?.toString() ?? null }),
       time_ms: bigintToSafeNumber(packetTimeMs),
       car_type: car,
       is_end: isEnd,
       car_visualization: {
         dynamics: {
-          // Orion uses fl/fr/bl/br_wheel_speed; Nightwatch/Angelique still use the legacy flw/frw/blw/brw_speed.
+          // Both supported cars use the generated wheel-speed field names.
           flwSpeed: d.fl_wheel_speed ?? d.flw_speed ?? d.flwSpeed ?? null,
           frwSpeed: d.fr_wheel_speed ?? d.frw_speed ?? d.frwSpeed ?? null,
           blwSpeed: d.bl_wheel_speed ?? d.blw_speed ?? d.blwSpeed ?? null,

@@ -21,6 +21,10 @@ if [[ -n "${TEST_SRCDIR:-}" && -n "${1:-}" && -z "${ORION_DB_INIT_SQL:-}" ]]; th
     export ORION_DB_INIT_SQL="$TEST_SRCDIR/$1"
 fi
 
+if [[ -n "${TEST_SRCDIR:-}" && -n "${2:-}" && -z "${ARTEMIS_DB_INIT_SQL:-}" ]]; then
+    export ARTEMIS_DB_INIT_SQL="$TEST_SRCDIR/$2"
+fi
+
 # Docker compose file paths (relative to telemetry directory)
 INGEST_COMPOSE="$TELEMETRY_DIR/stack/ingest/docker-compose.yml"
 KAFKA_COMPOSE="$TELEMETRY_DIR/stack/kafka/docker-compose.yml"

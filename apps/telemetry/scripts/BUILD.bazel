@@ -1,0 +1,25 @@
+load("@rules_python//python:defs.bzl", "py_library", "py_binary")
+load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
+load("//apps/telemetry:compatibility.bzl", "NOT_WINDOWS")
+
+py_library(
+    name = "schema_helpers",
+    srcs = ["generate_schema.py"],
+    visibility = ["//visibility:public"],
+)
+
+
+py_binary(
+    name = "schema_apply",
+    srcs = ["apply_storage.py"],
+    main = "apply_storage.py",
+    imports = [".."],
+    args = [
+        "$(rlocationpath //lib/codegen/telemetry:storage_contract)",
+        "$(rlocationpath //lib/codegen/telemetry:storage_sql)",
+    ],
+    data = ["//lib/codegen/telemetry:storage_contract", "//lib/codegen/telemetry:storage_sql", "//apps/telemetry:config_files"],
+    deps = ["//apps/telemetry/analysis:analysis_lib", requirement("SQLAlchemy"), requirement("psycopg2-binary"), requirement("python-dotenv"), "@lhre_pypi//bazel_runfiles"],
+    target_compatible_with = NOT_WINDOWS,
+    visibility = ["//visibility:public"],
+)

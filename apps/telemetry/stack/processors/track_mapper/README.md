@@ -7,3 +7,6 @@ Targets follow the standard `track_mapper_binary`, `_image`, `_load`, `_push`,
 and `_smoke_test` contract. The image receives the selected ingest schema and
 network configuration through Bazel runfiles; Compose no longer supplies the
 protobuf directory as the source of the executable image.
+
+Raw telemetry decoding supports only explicit Orion and Artemis car headers.
+Unknown headers are rejected rather than decoded as the default car.

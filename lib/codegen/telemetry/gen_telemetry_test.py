@@ -1,3 +1,4 @@
+import copy
 import json
 import re
 import sys
@@ -5,8 +6,9 @@ import unittest
 
 from runfiles import Runfiles
 
-from lib.codegen.telemetry import gen_telemetry
+from lib.codegen.telemetry import catalog, gen_telemetry
 from lib.spec.ir import wire
+from lib.spec.ir import loader
 
 
 class TelemetryGeneratorTest(unittest.TestCase):
@@ -24,8 +26,20 @@ class TelemetryGeneratorTest(unittest.TestCase):
         self.assertIn("repeated float gps = 1;", proto)
         self.assertIn("BoardStatus board_status = 9;", proto)
 
+    def test_catalog_hash_ignores_paths_and_file_order(self):
+        from lib.spec.ir import loader
+        original = json.loads(gen_telemetry.render_signals_json(self.spec))
+        relocated = loader.Spec({f"elsewhere/{i}.textproto": value
+                                 for i, value in enumerate(reversed(list(self.spec.files.values())))})
+        self.assertEqual(json.loads(gen_telemetry.render_signals_json(relocated)), original)
+
+    def test_catalog_generation_requires_car_identity(self):
+        from lib.spec.ir import loader
+        with self.assertRaisesRegex(ValueError, "exactly one"):
+            gen_telemetry.render_signals_json(loader.Spec({}))
+
     def test_json_tracks_every_can_message(self):
-        packets = json.loads(gen_telemetry.render_json(self.spec))
+        packets = json.loads(gen_telemetry.render_can_json(self.spec))
         messages = [message for _, message in sorted(self.spec.messages(), key=lambda item: item[1].can_id)]
         self.assertEqual(len(packets), len(messages))
         for packet, message in zip(packets, messages, strict=True):
@@ -36,17 +50,120 @@ class TelemetryGeneratorTest(unittest.TestCase):
             self.assertEqual(packet["quantity"], gen_telemetry.validator.effective_quantity(message))
             self.assertEqual(packet["bus"], message.bus)
 
+    def test_signals_cover_every_snapshot_field_once(self):
+        catalog = json.loads(gen_telemetry.render_signals_json(self.spec))
+        rows = {row["signal"]: row for row in catalog["signals"]}
+        expected = {f"{gen_telemetry.snake_case(group)}.{field}"
+                    for group, field in wire.field_types(self.spec)}
+        self.assertEqual(set(rows), expected)
+        self.assertEqual(len(rows), len(catalog["signals"]))
+        for row in rows.values():
+            self.assertIn("rate_hz", row)
+            self.assertNotIn("native_rate_hz", row)
+            self.assertNotIn("uplink_rate_hz", row)
+        self.assertEqual(catalog["car"], "artemis")
+        self.assertRegex(catalog["schema_version"], r"^[a-f0-9]{64}$")
+        self.assertTrue(all("schema_version" not in row for row in rows.values()))
+        self.assertEqual(rows["dynamics.gps"]["unit"], "deg")
+        self.assertEqual(rows["dynamics.gps_speed"]["unit"], "knots")
+        self.assertIsNone(rows["dynamics.gps_precise"]["unit"])
+        self.assertTrue(rows["dynamics.gps"]["repeated"])
+        for field in ("gps", "gps_imu", "gps_speed", "gps_precise"):
+            row = rows[f"dynamics.{field}"]
+            self.assertEqual(row["rate_hz"], 50)
+        health = rows["board_status.hvc_last_seen_s"]
+        self.assertEqual((health["module"], health["unit"], health["channel_type"]),
+                         ("gateway", "s", "health"))
+
+    def test_catalog_preserves_event_and_uplink_metadata(self):
+        from lib.spec.ir import loader
+        parsed = loader.parse_file('''
+car: "test"
+groups { group { name: "Events" snapshot_id: 3 next_free_id: 2
+  external_field { name: "fault" id: 1 type: PROTO_BOOL
+    uplink_rate_hz: 5 channel_type: EVENT }
+} }
+''')
+        spec = loader.Spec({"test.textproto": parsed})
+        row = json.loads(gen_telemetry.render_signals_json(spec))["signals"][0]
+        self.assertEqual(row["channel_type"], "event")
+        self.assertEqual(row["rate_hz"], 5)
+
+    def test_can_uplink_rate_override_and_native_fallback(self):
+        from lib.spec.ir import loader
+        for frequency, override, expected in ((100, "", 100), (100, "uplink_rate_hz: 10", 10), (0, "", 0)):
+            with self.subTest(frequency=frequency, override=override):
+                parsed = loader.parse_file(f'''
+car: "test"
+bus {{ name: "Critical" bitrate_bps: 1000000 }}
+groups {{ group {{ name: "Vehicle" snapshot_id: 3 next_free_id: 2 }} }}
+message {{ name: "STATUS" can_id: 256 from_board: "VCU" bus: "Critical" dlc: 1
+  frequency_hz: {frequency}
+  signal {{ name: "speed" encoding {{ bit_length: 8 }} logical {{ physical {{ unit: "m/s" }} }}
+    telemetry {{ group: "Vehicle" field: "speed" id: 1 {override} }} }}
+}}
+''')
+                spec = loader.Spec({"test.textproto": parsed})
+                self.assertEqual(gen_telemetry.validator.validate(spec)[0], [])
+                row = json.loads(gen_telemetry.render_signals_json(spec))["signals"][0]
+                self.assertEqual(row["rate_hz"], expected)
+
+    def test_current_catalog_matches_artemis_pool_fields(self):
+        value = json.loads(gen_telemetry.render_signals_json(self.spec))
+        self.assertEqual(value["car"], "artemis")
+        fields = {f"{pool['group']}.{field['name']}" for pool in gen_telemetry.storage.contract(self.spec)["pools"] for field in pool["fields"]}
+        self.assertEqual({row["signal"] for row in value["signals"]}, fields)
+
+    def test_uplink_metadata_does_not_reconcile_database_or_wire_layout(self):
+        changed = loader.Spec(copy.deepcopy(self.spec.files))
+        for _, _, _, _, binding in gen_telemetry.validator.telemetry_bindings(changed):
+            binding.uplink_rate_hz = 17
+            binding.channel_type = gen_telemetry.can_spec_pb2.EVENT
+        for _, group in changed.groups():
+            for field in group.external_field:
+                field.uplink_rate_hz = 17
+                field.channel_type = gen_telemetry.can_spec_pb2.HEALTH
+        self.assertEqual(gen_telemetry.validator.validate(changed)[0], [])
+        self.assertEqual(gen_telemetry.storage.contract(changed), gen_telemetry.storage.contract(self.spec))
+        self.assertEqual(gen_telemetry.render_proto(changed, "same"), gen_telemetry.render_proto(self.spec, "same"))
+        self.assertEqual(gen_telemetry.schema_manifest(changed), gen_telemetry.schema_manifest(self.spec))
+        self.assertNotEqual(json.loads(gen_telemetry.render_signals_json(changed))["schema_version"],
+                            json.loads(gen_telemetry.render_signals_json(self.spec))["schema_version"])
+
     def test_sql_tracks_every_snapshot_field(self):
+        sql = gen_telemetry.render_artemis_sql(self.spec, "test", "-- common")
+        orm = gen_telemetry.render_artemis_orm(self.spec)
+        prisma = gen_telemetry.render_artemis_prisma(self.spec, "-- common")
+        pools = gen_telemetry.storage.contract(self.spec)["pools"]
+        emitted = []
+        for pool in pools:
+            self.assertIn(f"CREATE TABLE IF NOT EXISTS public.{pool['table']}", sql)
+            for field in pool["fields"]:
+                emitted.append(tuple(field["path"]))
+                self.assertIn(f"{field['name']} {field['sql_type']}", sql)
+                self.assertIn(f"{field['name']} = Column(", orm)
+                self.assertRegex(prisma, rf"(?m)^\s+{field['name']}\s+")
+        self.assertEqual(len(emitted), len(set(emitted)))
+        self.assertIn("gps double precision[]", sql)
+        self.assertNotIn("CREATE TABLE public.packet", sql)
+        self.assertNotIn("REFERENCES packet", sql)
+        self.assertNotIn("AS packet_id", sql)
+        fast = next(pool for pool in pools if pool["table"] == "controls_333hz")
+        self.assertTrue({"motor_speed", "torque_feedback"} <= {f["name"] for f in fast["fields"]})
+
+
+    def test_orion_retains_packet_storage_and_artemis_has_its_own_identity(self):
         sql = gen_telemetry.render_sql(self.spec, "test", "-- common")
-        for group, fields in gen_telemetry.snapshot_fields(self.spec).items():
-            self.assertIn(f"CREATE TABLE public.{gen_telemetry.snake_case(group)}", sql)
-            for _, field, _ in fields:
-                self.assertRegex(sql, rf"(?m)^\s+{field}\s+")
-        self.assertRegex(sql, r"(?m)^\s+gps\s+real\[\],")
+        self.assertIn("CREATE TABLE public.packet", sql)
+        self.assertIn("REFERENCES packet(packet_id)", sql)
+        self.assertNotIn("create_hypertable", sql)
+        self.assertIn("OrionPacket", gen_telemetry.render_orm(self.spec))
+        self.assertIn("package artemis;", gen_telemetry.render_proto(self.spec, "test", "Artemis"))
+        self.assertIn("ArtemisSensorData", gen_telemetry.schema_manifest(self.spec, "Artemis")["root"])
 
     def test_legacy_inverter_sources_keep_the_same_snapshot_fields(self):
         messages = {message.name: message for _, message in self.spec.messages()}
-        packets = {packet["packet_id"]: packet for packet in json.loads(gen_telemetry.render_json(self.spec))}
+        packets = {packet["packet_id"]: packet for packet in json.loads(gen_telemetry.render_can_json(self.spec))}
         proto = gen_telemetry.render_proto(self.spec, "test")
         for message_name, field in (
             ("INVERTER_STATUS", "motor_speed"),
@@ -66,6 +183,21 @@ class TelemetryGeneratorTest(unittest.TestCase):
                 self.assertEqual(mapping["proto_id"], signal.telemetry.id)
                 self.assertEqual(mapping["type"], "float")
                 self.assertEqual(proto.count(f"float {field} = {signal.telemetry.id};"), 1)
+
+    def test_contract_identity_ignores_source_locations_and_descriptions(self):
+        copied = loader.Spec({"relocated/" + str(index): type(file).FromString(file.SerializeToString()) for index, file in enumerate(reversed(list(self.spec.files.values())))})
+        for _, message in copied.messages():
+            message.description = "documentation-only change"
+        self.assertEqual(gen_telemetry.schema_manifest(self.spec)["schema_id"], gen_telemetry.schema_manifest(copied)["schema_id"])
+
+    def test_reserved_numbers_and_names_are_emitted(self):
+        spec = loader.Spec({name: type(file).FromString(file.SerializeToString()) for name, file in self.spec.files.items()})
+        group = next(spec.groups())[1]
+        group.reserved_ids.append(999)
+        group.reserved_names.append("retired_field")
+        proto = gen_telemetry.render_proto(spec, "test")
+        self.assertIn("999;", proto)
+        self.assertIn('reserved "retired_field";', proto)
 
 
 if __name__ == "__main__":

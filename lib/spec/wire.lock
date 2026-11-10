@@ -9,6 +9,17 @@
 # encodings unless a deployed field has a compatibility override
 # (lib/spec/ir/wire.py). Encoding edits can still change a non-overridden type.
 
+[Root]
+Root.time 1 int64
+Root.packet_id 2 int64
+Root.Dynamics 3 message Dynamics
+Root.Controls 4 message Controls
+Root.Pack 5 message Pack
+Root.DiagnosticsHigh 6 message DiagnosticsHigh
+Root.DiagnosticsLow 7 message DiagnosticsLow
+Root.Thermal 8 message Thermal
+Root.BoardStatus 9 message BoardStatus
+
 [BoardStatus] snapshot_id=9 next_free_id=9
 BoardStatus.csm_last_seen_s 1 float
 BoardStatus.dui_last_seen_s 2 float
@@ -126,8 +137,8 @@ DiagnosticsLow.charger_enabled 16 bool
 DiagnosticsLow.imd_led 17 bool
 
 [Dynamics] snapshot_id=3 next_free_id=37
-Dynamics.gps 1 repeated float
-Dynamics.gps_imu 2 repeated float
+Dynamics.gps 1 repeated float[2]
+Dynamics.gps_imu 2 repeated float[3]
 Dynamics.gps_speed 3 float
 Dynamics.bl_unsprung_accel 4 repeated float[3]
 Dynamics.br_unsprung_accel 5 repeated float[3]
@@ -161,7 +172,7 @@ Dynamics.fr_strain_gauge_v 32 float
 Dynamics.fr_sus_pot_v 33 float
 Dynamics.ride_height 34 float
 Dynamics.wheel_speed 35 float
-Dynamics.gps_precise 36 repeated double
+Dynamics.gps_precise 36 repeated double[6]
 
 [Pack] snapshot_id=5 next_free_id=23
 Pack.bus_voltage 1 float
@@ -226,3 +237,77 @@ Thermal.max_charge_current 35 float
 Thermal.max_charge_voltage 36 float
 Thermal.bms_led 37 bool
 Thermal.charger_enable 38 bool
+
+[Enum:BenchCommand]
+Enum:BenchCommand.NONE 0 enum
+Enum:BenchCommand.SET_OUTPUTS 1 enum
+Enum:BenchCommand.PLAY_TONE 2 enum
+Enum:BenchCommand.STOP_TONE 3 enum
+Enum:BenchCommand.WATCHDOG_TEST 4 enum
+Enum:BenchCommand.RELEASE_OUTPUTS 5 enum
+
+[Enum:EventMode]
+Enum:EventMode.UNASSIGNED 0 enum
+Enum:EventMode.ACCELERATION 1 enum
+Enum:EventMode.SKIDPAD 2 enum
+Enum:EventMode.AUTOCROSS 3 enum
+Enum:EventMode.ENDURANCE 4 enum
+
+[Enum:HvcState]
+Enum:HvcState.NOT_ENERGIZED 0 enum
+Enum:HvcState.PRECHARGING 1 enum
+Enum:HvcState.ENERGIZED 2 enum
+Enum:HvcState.CHARGING_PRECHARGING 3 enum
+Enum:HvcState.CHARGING 4 enum
+
+[Enum:ResetCause]
+Enum:ResetCause.UNKNOWN 0 enum
+Enum:ResetCause.POWER_ON 1 enum
+Enum:ResetCause.PIN 2 enum
+Enum:ResetCause.SOFTWARE 3 enum
+Enum:ResetCause.INDEPENDENT_WATCHDOG 4 enum
+Enum:ResetCause.WINDOW_WATCHDOG 5 enum
+Enum:ResetCause.LOW_POWER 6 enum
+Enum:ResetCause.OPTION_BYTE_LOAD 7 enum
+
+[Enum:ShutdownLoopState]
+Enum:ShutdownLoopState.UNKNOWN 0 enum
+Enum:ShutdownLoopState.CLOSED 1 enum
+Enum:ShutdownLoopState.BSPD_RELAY_OPEN 2 enum
+Enum:ShutdownLoopState.UPSTREAM_OPEN 3 enum
+Enum:ShutdownLoopState.IMPLAUSIBLE 4 enum
+
+[Enum:VcuFaultCode]
+Enum:VcuFaultCode.NONE 0 enum
+Enum:VcuFaultCode.APPS_IMPLAUSIBLE 1 enum
+Enum:VcuFaultCode.APPS1_RANGE 2 enum
+Enum:VcuFaultCode.APPS2_RANGE 3 enum
+Enum:VcuFaultCode.BSE1_RANGE 4 enum
+Enum:VcuFaultCode.BSE2_RANGE 5 enum
+Enum:VcuFaultCode.STEERING_RANGE 6 enum
+Enum:VcuFaultCode.BRAKE_FLAG_LATCHED 7 enum
+Enum:VcuFaultCode.BRAKE_OVER_THROTTLE 8 enum
+Enum:VcuFaultCode.SHUTDOWN_OPEN 9 enum
+Enum:VcuFaultCode.HVC_TIMEOUT 10 enum
+Enum:VcuFaultCode.INVERTER_TIMEOUT 11 enum
+Enum:VcuFaultCode.PDU_TIMEOUT 12 enum
+Enum:VcuFaultCode.INVERTER_FAULT 13 enum
+Enum:VcuFaultCode.BSPD_TRIPPED 14 enum
+Enum:VcuFaultCode.HARD_BRAKE_MISMATCH 15 enum
+Enum:VcuFaultCode.DUI_TIMEOUT 16 enum
+Enum:VcuFaultCode.BSE3_UNAVAILABLE 17 enum
+Enum:VcuFaultCode.CONTACTORS_OPEN 18 enum
+Enum:VcuFaultCode.MOTOR_DISCONNECT 19 enum
+Enum:VcuFaultCode.SHUTDOWN_SENSE_IMPLAUSIBLE 20 enum
+Enum:VcuFaultCode.ADC_STALE 21 enum
+Enum:VcuFaultCode.COOLANT_OVERTEMP 22 enum
+
+[Enum:VcuStateMachine]
+Enum:VcuStateMachine.INIT 0 enum
+Enum:VcuStateMachine.IDLE 1 enum
+Enum:VcuStateMachine.DRIVE 2 enum
+Enum:VcuStateMachine.FAULT 3 enum
+Enum:VcuStateMachine.PRECHARGE 4 enum
+Enum:VcuStateMachine.TS_ACTIVE 5 enum
+Enum:VcuStateMachine.RTD_WAIT 6 enum
+Enum:VcuStateMachine.BSPD_TRIPPED 7 enum

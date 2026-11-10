@@ -5,6 +5,7 @@ def _telemetry_artifact_impl(ctx):
     args = ctx.actions.args()
     args.add("--kind", ctx.attr.kind)
     args.add("--out", ctx.outputs.out)
+    args.add("--car", ctx.attr.car)
     if ctx.file.common_sql:
         args.add("--common-sql", ctx.file.common_sql)
     args.add_all(ctx.files.spec)
@@ -25,8 +26,9 @@ def _telemetry_artifact_impl(ctx):
 telemetry_artifact = rule(
     implementation = _telemetry_artifact_impl,
     attrs = {
+        "car": attr.string(default = "Orion", values = ["Orion", "Artemis"]),
         "common_sql": attr.label(allow_single_file = [".sql"]),
-        "kind": attr.string(mandatory = True, values = ["json", "proto", "sql"]),
+        "kind": attr.string(mandatory = True, values = ["json", "can_json", "signals_json", "proto", "sql", "contract", "orm", "prisma", "storage", "storage_sql", "native_policy"]),
         "out": attr.output(mandatory = True),
         "spec": attr.label(
             mandatory = True,

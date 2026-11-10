@@ -15,14 +15,12 @@ NOT_WINDOWS = select({
 rust_binary(
     name = "cand",
     srcs = ["main.rs"],
-    data = ["//apps/BEVO:can_json"],
     edition = "2021",
     target_compatible_with = NOT_WINDOWS,
     deps = [
         "//apps/BEVO:sensor_proto",
         "@crates//:anyhow",
         "@crates//:prost",
-        "@crates//:serde_json",
     ] + select({
         "@platforms//os:linux": ["@crates//:socketcan"],
         "//conditions:default": [],
@@ -33,16 +31,19 @@ rust_binary(
 # macOS development.
 rust_binary(
     name = "mock_main",
-    srcs = ["mock_main.rs"],
-    data = ["//apps/BEVO:can_json"],
+    srcs = ["mock_main.rs", "main.rs"],
+    crate_root = "mock_main.rs",
+    visibility = ["//apps/BEVO:__subpackages__", "//apps/telemetry/stack/tests:__pkg__"],
     edition = "2021",
     target_compatible_with = NOT_WINDOWS,
     deps = [
         "//apps/BEVO:sensor_proto",
         "@crates//:anyhow",
         "@crates//:prost",
-        "@crates//:serde_json",
-    ],
+    ] + select({
+        "@platforms//os:linux": ["@crates//:socketcan"],
+        "//conditions:default": [],
+    }),
 )
 
 # Pure-stdlib mock CAN traffic generator; feeds cand's CAND_USE_MOCK=1 UDP
@@ -50,6 +51,8 @@ rust_binary(
 py_binary(
     name = "mock_can",
     srcs = ["mock_can.py"],
+    args = ["--can-json", "$(location //lib/codegen/telemetry:can_json)"],
+    data = ["//lib/codegen/telemetry:can_json"],
 )
 
 sh_binary(
@@ -57,7 +60,6 @@ sh_binary(
     srcs = ["run_can_stack.sh"],
     data = [
         ":cand",
-        "//apps/BEVO:can_json",
         "//apps/BEVO/dashd",
         "//apps/BEVO/loggerd",
         "//apps/BEVO/publishd",
@@ -72,7 +74,6 @@ sh_binary(
     data = [
         ":cand",
         ":mock_can",
-        "//apps/BEVO:can_json",
         "//apps/BEVO/dashd",
         "//apps/BEVO/loggerd",
     ],

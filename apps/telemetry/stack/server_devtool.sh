@@ -26,6 +26,7 @@
 #   disk               docker disk usage + free space on the docker data dir
 #   up                 start the core stack detached (reuses images, no rebuild)
 #   build [comp...]    rebuild + start (core, or named components)
+#   schema-serve       serve the running ingest/bridge schema (foreground; --config /absolute/releases.json)
 #   logs [comp...]     follow logs (Ctrl-C detaches; containers keep running)
 #   attach             alias for `logs` on the core stack
 #   restart [comp...]  restart component(s) (default: core)
@@ -39,7 +40,7 @@
 #   help               this text
 #
 # Core      : kafka ingest field_enricher
-# Optional  : gps_classifier lap_timer track_mapper kafka_test gg_plot
+# Optional  : gps_classifier lap_timer track_mapper kafka_test gg_plot car_status board_health events_faults
 # Apps      : viewer (pm2)  logsync (docker)
 
 set -uo pipefail
@@ -83,6 +84,8 @@ track_mapper|processors/track_mapper|docker||//apps/telemetry/stack/processors/t
 kafka_test|processors/kafka_test|docker||//apps/telemetry/stack/processors/kafka_test:kafka_test_load
 gg_plot|processors/gg_plot|docker||//apps/telemetry/stack/processors/gg_plot:gg_plot_load
 car_status|processors/car_status|docker||//apps/telemetry/stack/processors/car_status:car_status_load
+board_health|processors/board_health|docker||//apps/telemetry/stack/processors/board_health:board_health_load
+events_faults|processors/events_faults|docker||//apps/telemetry/stack/processors/events_faults:events_faults_load
 logsync|logsync|docker
 viewer|../analysis/database/viewer_tool|pm2|viewer_tool
 "
@@ -91,7 +94,7 @@ viewer|../analysis/database/viewer_tool|pm2|viewer_tool
 CORE_ORDER="kafka ingest field_enricher"
 # user-facing apps (pulled logs worker + the Next.js viewer)
 APP_ORDER="logsync viewer"
-ALL_ORDER="kafka ingest field_enricher gps_classifier lap_timer track_mapper kafka_test gg_plot car_status logsync viewer"
+ALL_ORDER="kafka ingest field_enricher gps_classifier lap_timer track_mapper kafka_test gg_plot car_status board_health events_faults logsync viewer"
 
 # With no storage override, Docker owns the database/Kafka volumes and logsync
 # uses its local data directory.
@@ -146,7 +149,7 @@ compose_in() {  # compose_in <dir> <args...>
     fi
     if [[ "$(basename "$dir")" == "ingest" ]]; then
         prepare_orion_schema "$REPO_ROOT" "${1:-}" || return 1
-        ( cd "$dir" && $SUDO env "ORION_DB_INIT_SQL=$ORION_DB_INIT_SQL" docker compose "$@" )
+        ( cd "$dir" && $SUDO env "ORION_DB_INIT_SQL=$ORION_DB_INIT_SQL" "ARTEMIS_DB_INIT_SQL=$ARTEMIS_DB_INIT_SQL" docker compose "$@" )
         return
     fi
     ( cd "$dir" && $SUDO docker compose "$@" )
@@ -168,6 +171,16 @@ comp_pm2name() { comp_field "$1" 4; }
 comp_bazel_targets() { comp_field "$1" 5; }
 
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+
+ensure_viewer_schema() {
+    command -v bazel >/dev/null 2>&1 || { err "bazel is required to generate the viewer schema"; return 1; }
+    ( cd "$REPO_ROOT" && bazel build --config=local //lib/codegen/telemetry:server_schema ) || return 1
+    ORION_PROTO_PATH="${ORION_PROTO_PATH:-$REPO_ROOT/bazel-bin/lib/codegen/telemetry/can_packets.proto}"
+    [[ -f "$ORION_PROTO_PATH" ]] || { err "Selected viewer protobuf does not exist: $ORION_PROTO_PATH"; return 1; }
+    ARTEMIS_PROTO_PATH="${ARTEMIS_PROTO_PATH:-$REPO_ROOT/bazel-bin/lib/codegen/telemetry/artemis.proto}"
+    [[ -f "$ARTEMIS_PROTO_PATH" ]] || { err "Selected Artemis protobuf does not exist: $ARTEMIS_PROTO_PATH"; return 1; }
+    export ORION_PROTO_PATH ARTEMIS_PROTO_PATH
+}
 
 bazel_load_component() {
     local name="$1" targets target
@@ -341,6 +354,7 @@ free_db_port() {
 up_pm2_component() {  # up_pm2_component <name> <dir> <build>
     local name="$1" dir="$2" build="$3" app
     app="$(comp_pm2name "$name")"; app="${app:-$name}"
+    if [[ "$name" == "viewer" ]]; then ensure_viewer_schema || return 1; fi
     ensure_node || return 1
     if [[ "$build" == "1" ]]; then
         if [[ ! -d "$dir/node_modules" ]]; then
@@ -416,6 +430,7 @@ restart_set() {
         info "Restarting $n ..."
         if [[ "$(comp_type "$n")" == "pm2" ]]; then
             local app; app="$(comp_pm2name "$n")"; app="${app:-$n}"
+            if [[ "$n" == "viewer" ]]; then ensure_viewer_schema || return 1; fi
             ensure_node && pm2 reload "$app" --update-env || up_component "$n" 0
         else
             compose_in "$dir" restart 2>/dev/null || up_component "$n" 0
@@ -570,6 +585,10 @@ run_command() {
             require_docker
             if [[ $# -gt 0 ]]; then up_set 1 "$@"; else up_set 1 $CORE_ORDER; fi
             echo; ok "Built + started (detached). Logs: $0 logs" ;;
+        schema-serve)
+            require_docker
+            if [[ -n "$SUDO" ]]; then set -- --docker-sudo "$@"; fi
+            ( cd "$REPO_ROOT" && bazel run --config=local //apps/telemetry/schema_registry:deployed_registry_binary -- "$@" ) ;;
         logs|attach) require_docker; logs_for "$@" ;;
         restart)     require_docker; if [[ $# -gt 0 ]]; then restart_set "$@"; else restart_set $CORE_ORDER; fi ;;
         stop|down)   require_docker; stop_all ;;

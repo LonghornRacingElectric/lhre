@@ -8,3 +8,7 @@ Targets follow the standard `lap_timer_binary`, `_image`, `_load`, `_push`, and
 `_smoke_test` contract. The legacy `lap_timer_tarball` label aliases `_load`.
 Compose maps `host.docker.internal` on Linux as well as Docker Desktop so local
 callback configuration behaves consistently.
+
+This optional processor currently selects Orion for its database work. It does
+not implement Artemis frequency-pool queries; enabling it does not add a second
+telemetry writer.

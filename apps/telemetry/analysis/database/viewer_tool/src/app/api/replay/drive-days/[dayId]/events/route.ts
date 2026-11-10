@@ -38,8 +38,10 @@ export async function GET(
         creation_time: day.creation_time?.toString() ?? null,
         start_time: day.start_time != null ? day.start_time.toString() : null,
         end_time: day.end_time != null ? day.end_time.toString() : null,
-        packet_start: day.packet_start != null ? day.packet_start.toString() : null,
-        packet_end: day.packet_end != null ? day.packet_end.toString() : null,
+        ...(day.car?.car_name === "Orion" ? {
+          packet_start: day.packet_start?.toString() ?? null,
+          packet_end: day.packet_end?.toString() ?? null,
+        } : {}),
         day_date: day.date.toISOString(),
         driver_name: day.driver?.driver_name ?? null,
         area: day.location?.area ?? null,

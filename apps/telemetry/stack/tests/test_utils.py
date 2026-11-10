@@ -118,12 +118,12 @@ class TelemetryConfig:
         kafka_port = int(kafka_parts[1]) if len(kafka_parts) > 1 else 29092
         
         return cls(
-            mqtt_host="localhost",
-            mqtt_port=1883,
+            mqtt_host=os.getenv("MQTT_HOST", "localhost"),
+            mqtt_port=int(os.getenv("MQTT_PORT", "1883")),
             kafka_host=kafka_host,
             kafka_port=kafka_port,
-            db_host="localhost",
-            db_port=5432,
+            db_host=os.getenv("POSTGRES_HOST", "localhost"),
+            db_port=int(os.getenv("POSTGRES_PORT", "5432")),
             db_user=os.getenv("POSTGRES_USER", "postgres"),
             db_password=os.getenv("POSTGRES_PASSWORD", "postgres"),
             db_name=os.getenv("POSTGRES_DB", "telemetry"),
@@ -258,49 +258,19 @@ class TestDataGenerator:
             },
         }
     
-    def generate_protobuf_message(self, packet_id: int = 1, car: str = "Nightwatch"):
+    def generate_protobuf_message(self, packet_id: int = 1, car: str = "Orion"):
         """Generate a protobuf-encoded sensor data message."""
         import time
         import json
         
         try:
-            if car == "Angelique":
-                from telemetry.stack.ingest.protobuf.angelique_pb2 import AngeliqueSensorData
-                data = AngeliqueSensorData()
-            elif car == "Orion":
-                from telemetry.stack.ingest.protobuf.can_packets_pb2 import OrionSensorData
-                data = OrionSensorData()
-            else:
-                from telemetry.stack.ingest.protobuf.template_pb2 import SensorData
-                data = SensorData()
-            
+            from stack.ingest.sensor_decode import CAR_MESSAGES
+            data = CAR_MESSAGES[car]()
             data.packet_id = packet_id
             data.time = int(time.time() * 1000)
-            
-            # Set dynamics fields if they exist
-            if hasattr(data, 'dynamics'):
-                if car == "Orion":
-                    data.dynamics.steer_col_angle = float(self.rng.random() * 2.5)
-                    data.dynamics.fl_wheel_speed = float(self.rng.random() * 100)
-                elif car != "Angelique":
-                    data.dynamics.f_gps_velocity = float(self.rng.random() * 100)
-                    data.dynamics.f_gps_heading = float(self.rng.random() * 360)
-                    data.dynamics.steer_col_angle = float(self.rng.random() * 2.5)
-                else:
-                    data.dynamics.gps_velocity = float(self.rng.random() * 100)
-                    data.dynamics.gps_heading = float(self.rng.random() * 360)
-                    data.dynamics.torque_request = float(self.rng.random() * 2.5)
-            
-            # Set controls fields if they exist
-            if hasattr(data, 'controls'):
-                if car == "Orion":
-                    data.controls.apps1_v = float(self.rng.random())
-                elif car != "Angelique":
-                    data.controls.accel_pedal_t = float(self.rng.random())
-                else:
-                    data.controls.apps1_v = float(self.rng.random())
-
-            
+            data.dynamics.steer_col_angle = float(self.rng.random() * 2.5)
+            data.dynamics.fl_wheel_speed = float(self.rng.random() * 100)
+            data.controls.apps1_v = float(self.rng.random())
             return data.SerializeToString()
         except ImportError as e:
             logger.warning(f"Could not import protobuf: {e}")

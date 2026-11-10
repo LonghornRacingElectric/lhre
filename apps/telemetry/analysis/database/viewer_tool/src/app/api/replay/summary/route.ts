@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import prismaTelemetry from "@/lib/prisma/telemetry";
 import {
-  findPacketTimeById,
   normalizeCar,
+  replayBounds,
   resolveCarFromCarId,
 } from "@/lib/prisma/carPrisma";
 
@@ -63,35 +63,15 @@ export async function GET(req: NextRequest) {
 
     if (!ev)
       return NextResponse.json({ error: "Drive day not found" }, { status: 404 });
-    if (ev.packet_start == null || ev.packet_end == null) {
-      return NextResponse.json(
-        { error: "Drive day has no packet range" },
-        { status: 409 },
-      );
-    }
-
-    const packetStart = BigInt(ev.packet_start as any);
-    const packetEnd = BigInt(ev.packet_end as any);
     const requestedCar = normalizeCar(url.searchParams.get("car"));
     const car =
       requestedCar ??
       normalizeCar(ev.car?.car_name) ??
       (await resolveCarFromCarId(ev.car_id)) ??
       "orion";
-    const [p0, p1] = await Promise.all([
-      findPacketTimeById(car, packetStart),
-      findPacketTimeById(car, packetEnd),
-    ]);
-
-    const startMs = p0 != null ? BigInt(p0 as any) : null;
-    const endMs = p1 != null ? BigInt(p1 as any) : null;
-
-    if (startMs == null || endMs == null) {
-      return NextResponse.json(
-        { error: "Drive day has no time range" },
-        { status: 409 },
-      );
-    }
+    const bounds = await replayBounds(car, ev);
+    if (!bounds) return NextResponse.json({ error: "Drive day has no time range" }, { status: 409 });
+    const [startMs, endMs] = bounds;
 
     const classifiers = await prismaTelemetry.classifier.findMany({
       where: {
@@ -198,8 +178,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       {
         event_id: ev.day_id,
-        packet_start: packetStart.toString(),
-        packet_end: packetEnd.toString(),
+        ...(car === "orion" ? { packet_start: ev.packet_start?.toString(), packet_end: ev.packet_end?.toString() } : {}),
         day_id: ev.day_id,
         day_date: ev.date.toISOString(),
         driver_name: ev.driver?.driver_name ?? null,

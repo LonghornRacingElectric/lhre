@@ -1,19 +1,24 @@
 # loggerd
 
-CSV logger. Subscribes to cand's IPC snapshot stream and appends one row
-per snapshot to a timestamped CSV in `logs/` (repo-relative under
-`bazel run`; override with `LOGGERD_CAN_JSON_PATH` / see `main.rs`).
+Log Artemis fresh observations independently of uplink filtering. Connect to
+cand's logger socket and write one CSV per generated frequency pool:
+`artemis_<recordingStartMs>_<pool>.csv`. All files opened by one logger process
+share a recording start; only pools receiving observations get files.
+`LOGGERD_LOG_DIR` overrides the output directory.
 
-Column order is derived from the protobuf schema plus `can.json` (repeated
-fields like `pack.cells_v[N]` are sized from the schema, sorted numerically)
-— `:loggerd_test` locks that contract in, and runs on the host with no
-hardware.
+Headers come from the compiled storage policy: `time`, `sample_time_ns`,
+`updated_fields`, then qualified field columns in natural numeric order.
+Arrays use indexed columns. Unobserved fields are blank; zeros and false are
+values. `updated_fields` is a JSON list of qualified field names, so a freshly
+recorded empty array is distinguishable from a missing array. Rows retain the
+original receipt timestamp and contain only fresh fields in that pool.
 
-Bazel supplies the shared textproto-generated protobuf and CAN JSON for the
-executable and its tests. `//apps/BEVO:pi_core_binaries` cross-compiles the Pi
-logger alongside `cand` and `publishd`.
+Each file uses a buffered writer, flushed every 100 rows or one second.
+SIGINT/SIGTERM flush before exit. Forced kills or power loss can lose buffered
+rows; this is not a durable journal. Cand's bounded logger queue reports
+backpressure independently of publishing. There is no automatic CSV-to-database
+backfill in this change; logsync continues to transfer the files as CSV.
 
-The generated CAN JSON is required at startup. Missing or invalid JSON stops
-`loggerd` with an error before it creates a log; there are no built-in schema
-sizes to substitute for a missing artifact. Set `LOGGERD_CAN_JSON_PATH` to the
-generated file's deployed location.
+Build with `bazel build //apps/BEVO:pi_core_binaries`; run
+`bazel test //apps/BEVO/loggerd:loggerd_test`. There is no runtime schema JSON
+input and no Orion logging mode.

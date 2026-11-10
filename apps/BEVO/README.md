@@ -13,10 +13,10 @@ all fed by `cand`:
 
 | Target | Role |
 | ------ | ---- |
-| [cand](cand/README.md) | Reads both CAN buses (SocketCAN), decodes frames per `can.json`, fans out protobuf snapshots over IPC. Linux-only for real CAN; elsewhere it compiles to a stub — use `mock_main`. |
+| [cand](cand/README.md) | Reads both CAN buses (SocketCAN), decodes frames per `can.json`, fans out fresh Artemis updates and dashboard snapshots over IPC. SocketCAN on Linux; UDP mock input on other Unix platforms. |
 | [dashd](dashd/README.md) | Driver display backend: MQTT + WebSocket server for the React kiosk frontend in `dashd/frontend/`. |
 | [loggerd](loggerd/README.md) | Writes CSV logs (schema-derived columns) to `loggerd/logs/`. |
-| [publishd](publishd/README.md) | Uplinks snapshots to the pit MQTT broker. |
+| [publishd](publishd/README.md) | Uplinks fresh Artemis batches to the pit MQTT broker. |
 | [debugd](debugd/README.md) | Dumps decoded snapshots to stdout; smoke-test tool. |
 
 ## Build and run
@@ -53,9 +53,15 @@ The executable work in this PR covers those three core daemons. Dashboard,
 debug, kiosk, and logsync build and deployment workflows are outside its scope.
 
 BEVO's prost bindings and CAN decode JSON come from the same
-`//lib/codegen/telemetry:can_packets_proto` and `:can_json` targets selected by
+`//lib/codegen/telemetry:artemis_proto_source` and `:can_json` targets selected by
 the telemetry server. Both sides therefore rebuild from `lib/spec` together;
 there is no separately generated BEVO wire schema in the Bazel path.
+
+`sensor_proto_library` in `sensor_proto.bzl` declares the protobuf, CAN JSON
+and schema contract inputs for that Rust generation action. Artemis also
+requires the generated `policy` input for native pool/rate/presence metadata. The isolated
+[schema propagation regression](schema_tests/README.md) uses the same macro
+with append-only test fixtures, so it needs no registry or running stack.
 
 ## Deploying to the Pi
 
@@ -67,11 +73,18 @@ bazel run //apps/BEVO:deploy -- lhre@bevo.local /opt/bevo
 
 That cross-compiles every daemon as a **static aarch64-musl ELF**
 (`//platforms:pi` — no glibc version coupling with the Pi's OS image),
-bundles them with `can.json` and the runbook scripts into
+bundles them with the runbook scripts into
 `pi_bundle.tar.gz` (~8 MB), untars it over SSH, and restarts
 `bevo_telemetry.service` if it's installed. The bundled
 `nonhermetic/run_real_stack.sh` finds the binaries in `bin/` automatically
 (`BEVO_BIN_DIR` overrides).
+
+For the current publisher, provision a core release using the
+[GHCR updater](updater/README.md) and set `BEVO_CORE_ROOT=/opt/bevo/core`
+before starting the service. The bundle supplies support scripts and the
+separate dashboard; the core launcher requires an installed release with a
+reconciliation plan. A bundle alone no longer starts the uplink. For explicit
+offline deployment, use the updater's admin override with a complete release.
 
 One-time service install on the Pi:
 
@@ -79,19 +92,75 @@ One-time service install on the Pi:
 sudo sh -c "sed 's|__BEVO_REPO__/apps/BEVO|/opt/bevo|g; s|__BEVO_REPO__|/opt/bevo|g' /opt/bevo/nonhermetic/bevo_telemetry.service > /etc/systemd/system/bevo_telemetry.service && systemctl daemon-reload && systemctl enable bevo_telemetry"
 ```
 
+Set the managed core path with `sudo systemctl edit bevo_telemetry`:
+
+```ini
+[Service]
+Environment=BEVO_CORE_ROOT=/opt/bevo/core
+```
+
+Run the updater's `update` or explicit `override` before starting the service.
+Subsequent bundle deploys restart that service against the selected core release.
+
 The kiosk frontend is a separate flow (`dashd/deploy/`, needs npm). Build the
 core executables on the development machine with `:pi_core_binaries` and copy
-the paths reported by `bazel cquery` to the Pi. `cand` and `loggerd` also need
-the generated `can.json`; configure its deployed path with
-`CAND_CAN_JSON_PATH` and `LOGGERD_CAN_JSON_PATH`.
+the paths reported by `bazel cquery` to the Pi. CAN decode tables and logger
+columns are compiled into the executables from Bazel-generated artifacts;
+there is no runtime CAN JSON file to copy or override.
 
 ## The CAN schema
 
 [`lib/spec`](../../lib/spec/README.md) is the Bazel source of truth. It
-generates `can.json`, the deployed snapshot proto, prost bindings, dispatch
+generates `can.json`, the Artemis update proto, prost bindings, dispatch
 code, and server database DDL; **no generated Bazel artifact is checked in**.
 BEVO carries no CSV or checked-in protobuf fallback; see
 [schema source](schema/README.md).
+
+## Schema release metadata
+
+The [schema metadata](../../lib/telemetry/README.md) identifies the textproto
+definitions used to build a release. Server artifacts and BEVO executables
+depend on the same generated protobuf. A separate updater compares the
+installed or selected release with the deployed server; generated publisher
+code sends their compatible numeric field intersection. Artemis uses explicit fresh-update batches on `artemis/data`; see
+[the native-observation decision](../../docs/architecture/025-artemis-native-observations.md).
+
+```bash
+bazel build //apps/BEVO:pi_core_binaries //apps/BEVO:pi_core_manifest
+bazel test //apps/BEVO:pi_core_binary_test //apps/BEVO:release_metadata_test
+```
+
+`bazel-bin/apps/BEVO/pi_core_manifest.json` pins the three executable digests,
+the shared CAN JSON, descriptor and contract, source schema ID and
+`linux/arm64` platform. Its `format_version` versions only the metadata file;
+`projection_version: 2` advertises publisher support for updater plans.
+The build generates typed CAN tables, logger columns and field projection
+from the textproto-derived descriptor/contract. CAN reading/decoding stays shared. Fresh updates carry nanosecond receipt times
+and explicit presence; the dashboard keeps its separate cached stream.
+
+Transfer matched executables together. The CAN JSON in registry metadata is
+an audit artifact, not a runtime input. The Pi needs no
+Bazel, Cargo, source tree, compiler, or build cache. The separate
+[updater](updater/README.md) checks the deployed server's authoritative schema,
+keeps compatible releases or installs a compatible registry release, and
+supports persistent local admin overrides. The updater writes a release-bound
+plan; `publishd` applies it only to pit-bound protobuf fields. Other available
+registry images never narrow the intersection. The server uses the same Artemis batch contract; explicit presence distinguishes
+omitted fields from recorded scalar defaults and empty arrays.
+Server/admin schema overrides are documented in
+the [schema authority](../telemetry/schema_registry/README.md).
+
+`//apps/BEVO:pi_core_image` packages the already-built executables and schema
+metadata in two OCI layers for GHCR. `//apps/BEVO:pi_core_push` publishes only
+when explicitly run. `//apps/BEVO/updater:standalone` creates the Python-stdlib
+updater archive to copy to the Pi. Automatic publishing and service restarts
+are deliberately not part of PR CI or the updater.
+
+The [CI workflow](../../docs/ci.md) has an opt-in BEVO publish
+button/CLI command. It compares generated schema/CAN definitions with an
+explicit baseline and publishes only changed definitions after verification.
+Publishing makes an image available; the server's approved digest list still
+controls updater selection.
 
 ## Not built by Bazel (on purpose)
 

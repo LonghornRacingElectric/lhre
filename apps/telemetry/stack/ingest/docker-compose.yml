@@ -18,7 +18,6 @@ services:
     restart: unless-stopped
     depends_on:
       - mosquitto
-      - db
     env_file:
       - path: ../../../../.env
         required: true
@@ -26,13 +25,9 @@ services:
       PYTHONUNBUFFERED: 1   # Allows output in Docker Compose console
       IN_DOCKER: 1          # Custom env variable used for IP resolution
       SERVER_TARGET: 'LOCAL'
-      DB_CONN_TYPE: 6
       LOGLEVEL: 'DEBUG'
-      LOG_BASE_DIR: /app/logs
     volumes:
-      - ../../../../.env:/.env
       - ../../net_configs.json:/app/net_configs.json
-      - ../../logs:/app/logs
     networks:
       - telemetry_network
 
@@ -55,7 +50,7 @@ services:
       - telemetry_network
 
   db:
-    image: ${TELEMETRY_POSTGRES_IMAGE:-lhre/telemetry-postgres:17.11}
+    image: ${TELEMETRY_POSTGRES_IMAGE:-lhre/telemetry-postgres:2.31.0-pg17}
     container_name: db
     restart: unless-stopped
     shm_size: 2gb
@@ -64,11 +59,10 @@ services:
         required: true
     volumes:
       - telemetry_db:/var/lib/postgresql/data
-      - ./nightwatch_db_init.sql:/app/nightwatch_db_init.sql
-      - ./angelique_db_init.sql:/app/angelique_db_init.sql
+      - ./common_schema.sql:/app/common_schema.sql:ro
       - type: bind
-        source: ${ORION_DB_INIT_SQL:?Build //apps/telemetry:current_schema_sql and set its absolute output path}
-        target: /app/orion_db_init.sql
+        source: ${ARTEMIS_DB_INIT_SQL:?Build //apps/telemetry:new_car_schema_sql and set its absolute output path}
+        target: /app/artemis_db_init.sql
         read_only: true
         bind:
           create_host_path: false

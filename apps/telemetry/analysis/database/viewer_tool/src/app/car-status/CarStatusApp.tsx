@@ -90,7 +90,7 @@ const STATE_COLOR: Record<string, string> = {
 };
 
 export default function CarStatusApp() {
-  const [car, setCar] = useState<"orion" | "angelique">("orion");
+  const [car, setCar] = useState<"orion" | "artemis">("orion");
   const [connected, setConnected] = useState(false);
   const [statusMsg, setStatusMsg] = useState("Connecting…");
   const [latest, setLatest] = useState<CarStatusEvent | null>(null);
@@ -204,9 +204,9 @@ export default function CarStatusApp() {
           <p>Central live state · HV state-of-charge · LV battery voltage</p>
         </div>
         <div className="csTopActions">
-          <select value={car} onChange={(e) => setCar(e.target.value as "orion" | "angelique")}>
+          <select value={car} onChange={(e) => setCar(e.target.value as "orion" | "artemis")}>
             <option value="orion">Orion</option>
-            <option value="angelique">Angelique</option>
+            <option value="artemis">Artemis</option>
           </select>
           <span className={connected ? "csConn csOn" : "csConn"}>
             <Radio size={13} /> {connected ? "Live" : "Offline"}

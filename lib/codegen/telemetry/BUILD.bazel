@@ -1,12 +1,26 @@
 """Server-side artifacts generated from //lib/spec."""
 
 load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("@protobuf//bazel:proto_library.bzl", "proto_library")
+load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
 load(":telemetry_artifact.bzl", "telemetry_artifact")
 
 py_library(
+    name = "catalog_lib",
+    srcs = ["catalog.py"],
+    visibility = ["//visibility:public"],
+)
+
+py_library(
     name = "gen_telemetry_lib",
-    srcs = ["gen_telemetry.py"],
-    deps = ["//lib/spec:ir"],
+    visibility = ["//apps/telemetry/stack/ingest:__pkg__"],
+    srcs = ["gen_telemetry.py", "storage.py"],
+    deps = [
+        ":catalog_lib",
+        "//lib/spec:ir",
+        "//lib/telemetry:contract",
+        "//apps/telemetry/scripts:schema_helpers",
+    ],
 )
 
 py_binary(
@@ -26,8 +40,16 @@ telemetry_artifact(
 
 telemetry_artifact(
     name = "can_json",
-    kind = "json",
+    kind = "can_json",
     out = "can.json",
+    spec = "//lib/spec:files",
+    visibility = ["//visibility:public"],
+)
+
+telemetry_artifact(
+    name = "signals_json",
+    kind = "signals_json",
+    out = "signals.json",
     spec = "//lib/spec:files",
     visibility = ["//visibility:public"],
 )
@@ -47,7 +69,61 @@ filegroup(
         ":can_json",
         ":can_packets_proto",
         ":orion_db_init",
+        ":schema_contract",
+        ":schema_descriptor",
+        ":orm_source",
+        ":orion_prisma",
+        ":artemis_schema",
+        ":storage_contract",
+        ":storage_sql",
+        ":signals_json",
     ],
+    visibility = ["//visibility:public"],
+)
+
+telemetry_artifact(
+    name = "schema_contract",
+    kind = "contract",
+    out = "schema_contract.json",
+    spec = "//lib/spec:files",
+    visibility = ["//visibility:public"],
+)
+
+genrule(
+    name = "schema_descriptor",
+    srcs = [":can_packets_proto"],
+    outs = ["schema_descriptor.pb"],
+    cmd = "$(location //tools/protoc) --descriptor_set_out=$@ --proto_path=$$(dirname $(location :can_packets_proto)) $(location :can_packets_proto)",
+    tools = ["//tools/protoc"],
+    visibility = ["//visibility:public"],
+)
+
+proto_library(
+    name = "orion_proto",
+    srcs = [":can_packets_proto"],
+    visibility = ["//visibility:public"],
+)
+
+telemetry_artifact(
+    name = "orm_source",
+    kind = "orm",
+    out = "orion_models.py",
+    spec = "//lib/spec:files",
+)
+
+py_library(
+    name = "orion_models",
+    srcs = [":orm_source"],
+    deps = [requirement("SQLAlchemy")],
+    visibility = ["//visibility:public"],
+)
+
+telemetry_artifact(
+    name = "orion_prisma",
+    kind = "prisma",
+    out = "orion.prisma",
+    common_sql = "//apps/telemetry/stack/ingest:common_schema.sql",
+    spec = "//lib/spec:files",
     visibility = ["//visibility:public"],
 )
 
@@ -58,7 +134,124 @@ py_test(
     args = ["$(rlocationpaths //lib/spec:files)"],
     data = ["//lib/spec:files"],
     deps = [
+        ":catalog_lib",
         ":gen_telemetry_lib",
         "@lhre_pypi//bazel_runfiles",
     ],
+)
+
+py_test(
+    name = "generated_contract_test",
+    size = "small",
+    srcs = ["generated_contract_test.py"],
+    args = ["$(rootpath :schema_contract)", "$(rootpath //lib/spec:wire.lock)"],
+    data = [":schema_contract", ":server_schema", "//lib/spec:wire.lock"],
+    deps = [
+        "//lib/spec:ir",
+        "//lib/telemetry:contract",
+        ":artemis_models",
+        "//apps/telemetry/scripts:schema_helpers",
+    ],
+)
+
+telemetry_artifact(
+    name = "storage_contract",
+    car = "Artemis",
+    kind = "storage",
+    out = "storage_contract.json",
+    spec = "//lib/spec:files",
+    visibility = ["//visibility:public"],
+)
+
+telemetry_artifact(
+    name = "storage_sql",
+    car = "Artemis",
+    kind = "storage_sql",
+    out = "storage_update.sql",
+    spec = "//lib/spec:files",
+    visibility = ["//visibility:public"],
+)
+
+telemetry_artifact(
+    name = "artemis_proto_source",
+    kind = "proto",
+    car = "Artemis",
+    out = "artemis.proto",
+    spec = "//lib/spec:files",
+    visibility = ["//visibility:public"],
+)
+
+telemetry_artifact(
+    name = "artemis_db_init",
+    kind = "sql",
+    car = "Artemis",
+    out = "artemis_db_init.sql",
+    common_sql = "//apps/telemetry/stack/ingest:common_schema.sql",
+    spec = "//lib/spec:files",
+    visibility = ["//visibility:public"],
+)
+
+telemetry_artifact(
+    name = "artemis_orm_source",
+    kind = "orm",
+    car = "Artemis",
+    out = "artemis_models.py",
+    spec = "//lib/spec:files",
+    visibility = ["//visibility:public"],
+)
+
+telemetry_artifact(
+    name = "artemis_prisma",
+    kind = "prisma",
+    car = "Artemis",
+    out = "artemis.prisma",
+    common_sql = "//apps/telemetry/stack/ingest:common_schema.sql",
+    spec = "//lib/spec:files",
+    visibility = ["//visibility:public"],
+)
+
+telemetry_artifact(
+    name = "artemis_schema_contract",
+    kind = "contract",
+    car = "Artemis",
+    out = "artemis_schema_contract.json",
+    spec = "//lib/spec:files",
+    visibility = ["//visibility:public"],
+)
+
+py_library(
+    name = "artemis_models",
+    srcs = [":artemis_orm_source"],
+    deps = [requirement("SQLAlchemy")],
+    visibility = ["//visibility:public"],
+)
+
+proto_library(
+    name = "artemis_proto",
+    srcs = [":artemis_proto_source"],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "artemis_schema",
+    srcs = [":native_policy", ":artemis_schema_descriptor", ":artemis_proto_source", ":artemis_db_init", ":artemis_orm_source", ":artemis_prisma", ":artemis_schema_contract", ":storage_contract", ":storage_sql"],
+    visibility = ["//visibility:public"],
+)
+
+telemetry_artifact(
+    name = "native_policy",
+    kind = "native_policy",
+    car = "Artemis",
+    out = "native_policy.json",
+    spec = "//lib/spec:files",
+    visibility = ["//visibility:public"],
+)
+
+genrule(
+    name = "artemis_schema_descriptor",
+    srcs = [":artemis_proto_source"],
+    outs = ["artemis_schema_descriptor.pb"],
+    cmd = "$(location //tools/protoc) --descriptor_set_out=$@ --proto_path=$$(dirname $(location :artemis_proto_source)) $(location :artemis_proto_source)",
+    tools = ["//tools/protoc"],
+    visibility = ["//visibility:public"],
 )

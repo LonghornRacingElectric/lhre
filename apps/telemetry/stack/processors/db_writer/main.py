@@ -1,4 +1,4 @@
-"""Batch raw Kafka telemetry into packet and sensor tables."""
+"""Persist raw Kafka telemetry into Artemis time pools or Orion packet tables."""
 from collections import defaultdict
 import logging
 import os
@@ -12,15 +12,25 @@ from sqlalchemy.dialects.postgresql import insert
 from analysis.sql_utils.db_session import get_db
 from analysis.sql_utils.query_builder import QueryBuilder
 from stack.ingest.partition_manager import PartitionManager
-from stack.ingest.sensor_decode import CAR_MESSAGES, car_from_headers, decode_sensor, sensor_rows
+from stack.ingest.pool_storage import write_updates
+from stack.ingest.sensor_decode import CAR_MESSAGES, car_from_headers, decode_sensor, decode_updates, payload_format, sensor_rows
 
 
 def write_batch(records, models, specs):
     packets = defaultdict(dict)
+    artemis = []
     for record in records:
         car = car_from_headers(record.headers)
-        rows = sensor_rows(decode_sensor(record.value, car), models[car])
+        payload_format(record.headers, car)
+        if car == "Artemis":
+            artemis.extend(decode_updates(record.value))
+            continue
+        message = decode_sensor(record.value, car)
+        rows = sensor_rows(message, models[car])
         packets[car].setdefault(rows["packet"]["packet_id"], rows)
+    if artemis:
+        with get_db("Artemis") as session, session.begin():
+            write_updates(session, artemis)
     for car, rows_by_id in packets.items():
         with get_db(car) as session, session.begin():
             packet = models[car]["packet"].__table__
@@ -32,7 +42,7 @@ def write_batch(records, models, specs):
             jobs = [(table, row) for packet_id in admitted
                     for table, row in rows_by_id[packet_id].items() if table != "packet"]
             QueryBuilder.execute_insert(session, jobs, specs[car], car, commit=False)
-            if car in {"Orion", "Angelique"} and admitted:
+            if car == "Orion" and admitted:
                 PartitionManager().record_batch(session, [int(rows_by_id[key]["packet"]["time"]) for key in admitted])
 
 

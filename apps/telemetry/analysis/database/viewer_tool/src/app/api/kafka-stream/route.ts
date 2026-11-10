@@ -10,15 +10,15 @@ import {
 } from "@/lib/kafka/kafkaConsumer";
 import { getBufferedMessages } from "@/lib/kafka/messageBuffer";
 
-function normalizeCar(value: string | null): "orion" | "angelique" | null {
+function normalizeCar(value: string | null): "orion" | "artemis" | null {
   if (!value) return null;
   const v = value.trim().toLowerCase();
   if (v === "orion") return "orion";
-  if (v === "angelique") return "angelique";
+  if (v === "artemis") return "artemis";
   return null;
 }
 
-function getMessageCarType(msg: any): "orion" | "angelique" | null {
+function getMessageCarType(msg: any): "orion" | "artemis" | null {
   const rawFromHeader = msg?.headers?.car_type;
   const headerCar = normalizeCar(typeof rawFromHeader === "string" ? rawFromHeader : null);
   if (headerCar) return headerCar;
