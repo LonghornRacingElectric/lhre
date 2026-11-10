@@ -93,8 +93,8 @@ jobs:
         run: bazel run //tools/format:check
 
   # Linters for code outside Bazel's view, pinned in pyproject's lint group.
-  # Cheap, so it always runs. Each linter grandfathers today's violations in
-  # a baseline that may only shrink; see tools/lint/README.md.
+  # Cheap, so it always runs. Old violations are suppressed inline; see
+  # tools/lint/README.md.
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -103,34 +103,8 @@ jobs:
 
       - uses: astral-sh/setup-uv@v9.0.0
 
-      - name: Test the lint tooling
-        run: uv run --group lint pytest -q tools/lint
-
       - name: Python (ruff)
         run: uv run --group lint ruff check --output-format=github
-
-      - name: Fetch the base branch for the baseline growth check
-        if: github.event_name == 'pull_request'
-        run: git fetch --no-tags --depth=1 origin "+refs/heads/$GITHUB_BASE_REF:refs/remotes/origin/$GITHUB_BASE_REF"
-
-      # A grown baseline is how a new violation sneaks past the check above,
-      # so PRs can't grow it without the lint-baseline-ok label. The labels
-      # are read now, not from the event, so adding the label and re-running
-      # the job takes effect. If the lookup fails, the growth check stays on.
-      - name: Decide whether baselines may grow
-        if: github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
-        run: |
-          if gh api "repos/$GITHUB_REPOSITORY/issues/$PR/labels" --jq '.[].name' | grep -qx lint-baseline-ok; then
-            echo "::notice::lint-baseline-ok: baselines may grow in this PR"
-          else
-            echo "GROWTH_FROM=origin/$GITHUB_BASE_REF" >> "$GITHUB_ENV"
-          fi
-
-      - name: Python baseline only shrinks
-        run: uv run --group lint tools/lint/ruff_baseline.py ${GROWTH_FROM:+--no-growth-from "$GROWTH_FROM"}
 
   bazel:
     name: Bazel (Linux)

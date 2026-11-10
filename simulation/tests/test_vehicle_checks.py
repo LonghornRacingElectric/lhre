@@ -63,7 +63,7 @@ def _set(path, value):
 def _midpoint(axle, first, second):
     def value(vehicle):
         points = _points(vehicle, axle)
-        return [(a + b) / 2 for a, b in zip(points[first], points[second])]
+        return [(a + b) / 2 for a, b in zip(points[first], points[second])]  # noqa: B905 pre-existing when the lint gate went on
 
     return value
 

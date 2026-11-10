@@ -26,7 +26,7 @@ NOT_CAR_INPUTS = ["simulation/docs/bobsim.md", "simulation/studies/front-ackerma
 
 
 def _dry_run(target, *args):
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: PLW1510 pre-existing when the lint gate went on
         ["make", "-n", target, "COMPOSE=compose", *args], cwd=SIM, capture_output=True, text=True
     )
     assert result.returncode == 0, f"make -n {target} failed:\n{result.stderr}"

@@ -23,8 +23,7 @@ docs = [
 ]
 # Linters CI runs on every PR (`uv run --group lint ...`, see
 # tools/lint/README.md). Exact pins: a linter upgrade can add findings, so it
-# lands on purpose, with its baseline update, never by drift.
+# lands on purpose, with its fixes, never by drift.
 lint = [
-    "pytest==9.0.3",
     "ruff==0.17.4",
 ]

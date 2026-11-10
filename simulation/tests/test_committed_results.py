@@ -205,7 +205,7 @@ def test_gate_does_not_skip_a_change_when_git_is_unavailable(tree, tmp_path, mon
 
 
 def _dry_run(*args):
-    result = subprocess.run(["make", "-n", "stale", "COMPOSE=compose", *args], cwd=SIM, capture_output=True, text=True)
+    result = subprocess.run(["make", "-n", "stale", "COMPOSE=compose", *args], cwd=SIM, capture_output=True, text=True)  # noqa: PLW1510 pre-existing when the lint gate went on
     assert result.returncode == 0, result.stderr
     return result.stdout
 
