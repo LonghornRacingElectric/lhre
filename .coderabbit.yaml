@@ -10,6 +10,10 @@ reviews:
   auto_review:
     ignore_title_keywords:
       - "Autonomous:"
+    # Review stacked PRs too (PRs whose base is another PR's branch), not
+    # only PRs into main, so each layer of a stack gets its own review.
+    base_branches:
+      - ".*"
   # The testing contract (docs/testing.md, ADR-017): CI is the gate, so the
   # review checks that the tests actually pin the change.
   path_instructions:
