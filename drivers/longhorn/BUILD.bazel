@@ -219,3 +219,59 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "rate_gate_test",
+    size = "small",
+    srcs = ["test/rate_gate_test.cpp"],
+    deps = [
+        ":rate_gate",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "can_inbox_test",
+    size = "small",
+    srcs = ["test/can_inbox_test.cpp"],
+    deps = [
+        ":can_inbox",
+        "//drivers/lhal:host",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "rainbow_task_test",
+    size = "small",
+    srcs = ["test/rainbow_task_test.cpp"],
+    deps = [
+        ":rainbow_task",
+        "//drivers/freertos:host",
+        "//drivers/lhal:host",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "dfu_console_test",
+    size = "small",
+    srcs = ["test/dfu_console_test.cpp"],
+    deps = [
+        ":dfu_console",
+        "//drivers/freertos:host",
+        "//drivers/lhal:host",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "rtos_lock_test",
+    size = "small",
+    srcs = ["test/rtos_lock_test.cpp"],
+    deps = [
+        ":rtos_lock",
+        "//drivers/freertos:host",
+        "@googletest//:gtest_main",
+    ],
+)
