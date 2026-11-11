@@ -31,13 +31,17 @@ vcu::PedalOutputs Settle(vcu::PedalProcessor& pp, const vcu::PedalInputs& in,
   return out;
 }
 
-TEST(Pedals, TravelThroughFilterAndDeadzone) {
+TEST(Pedals, DemandIsZeroBeforeThrottleStartAndOneAfterThrottleFull) {
+  const auto& a = P().apps;
   vcu::PedalProcessor pp;
   uint32_t t = 0;
   EXPECT_EQ(Settle(pp, Pedal(0.05f), &t, 300).pedal_travel, 0.0f);
+  EXPECT_EQ(Settle(pp, Pedal(a.throttle_start), &t, 300).pedal_travel, 0.0f);
   EXPECT_EQ(Settle(pp, Pedal(0.9f), &t, 300).pedal_travel, 1.0f);
   const float mid = Settle(pp, Pedal(0.415f), &t, 300).pedal_travel;
-  EXPECT_NEAR(mid, (0.415f - 0.09f) / (0.74f - 0.09f), 0.01f);
+  EXPECT_NEAR(
+      mid, (0.415f - a.throttle_start) / (a.throttle_full - a.throttle_start),
+      0.01f);
 }
 
 TEST(Pedals, DeviationOver10PercentFor100msIsImplausible) {
@@ -100,7 +104,7 @@ TEST(Pedals, BrakeOverThrottleUsesUnfilteredMechanicalTravelAtBothThresholds) {
   in.apps1_v = in.apps2_v = 0.251f;
   auto out = pp.Update(in, 6, apps, P().bse);
   EXPECT_EQ(out.pedal_travel, 0)
-      << "torque demand is still below its filtered deadzone";
+      << "torque demand is still below throttle_start after the filter";
   EXPECT_TRUE(out.brake_over_throttle)
       << "trip must not wait for the pedal EMA";
   in.bse1_v = in.bse2_v = P().bse.v_at_0_psi;

@@ -323,7 +323,7 @@ message {
       physical {
       }
     }
-    description: "Event mode: acceleration, skidpad, autocross, or endurance."
+    description: "Event mode: acceleration, skidpad, autocross, endurance, or motor spin."
   }
 }
 message {

@@ -61,6 +61,11 @@ enum_type {
     number: 4
     description: "Endurance"
   }
+  value {
+    name: "MOTOR_SPIN"
+    number: 5
+    description: "Bench motor spin: low torque cap and a motor speed fade"
+  }
 }
 enum_type {
   name: "HvcState"

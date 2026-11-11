@@ -139,7 +139,7 @@ msg::EnergyEstimate EnergyFrame(const ControlSnapshot& s) {
 
 msg::TorquePath TorquePathFrame(const ControlSnapshot& s) {
   msg::TorquePath tp;
-  tp.set_torque_lookup(Clamp(s.torque.lookup, 0.0f, kU16Nm));
+  tp.set_torque_lookup(Clamp(s.torque.pedal, 0.0f, kU16Nm));
   tp.set_torque_derated(Clamp(s.torque.derated, 0.0f, kU16Nm));
   tp.set_torque_power_limited(Clamp(s.torque.power_limited, 0.0f, kU16Nm));
   tp.set_torque_traction_controlled(Clamp(s.torque.traction, 0.0f, kU16Nm));

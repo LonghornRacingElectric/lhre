@@ -368,6 +368,35 @@ TEST_F(VcuAppTest, ModeCommandAppliesOnlyOutsideDriveAndEchoes) {
   EXPECT_EQ(ds.event_mode, static_cast<uint8_t>(EventMode::kSkidpad));
 }
 
+TEST_F(VcuAppTest, MotorSpinModeCapsTorqueAndStopsPushingAtTheSpeedCeiling) {
+  ReachRtdWait();
+  lhre::can::pi::VcuModeCommand m;
+  m.event_mode = static_cast<uint8_t>(EventMode::kMotorSpin);
+  b_.car.Send(m.ToFrame());
+  b_.Run(*app_, 30);
+  ASSERT_EQ(app_->snapshot().event_mode, EventMode::kMotorSpin);
+  msg::InverterTorqueCommand cmd;
+  ASSERT_TRUE(b_.LastFrame(b_.car, &cmd));
+  EXPECT_NEAR(cmd.torque_limit(), 20.0f, 0.1f) << "inverter gets the cap too";
+
+  b_.PressRtd(true);
+  b_.Run(*app_, 50);
+  ASSERT_EQ(app_->state(), VcuState::kDrive);
+  b_.SetBrakePsi(0.0f);
+  b_.Run(*app_, 50);
+  b_.SetPedalTravel(1.0f);
+  b_.Run(*app_, 300);
+  EXPECT_NEAR(app_->torque_command(), 20.0f, 0.01f);
+
+  b_.motor_rpm = 1350;
+  b_.Run(*app_, 50);
+  EXPECT_NEAR(app_->torque_command(), 10.0f, 0.1f);
+  b_.motor_rpm = 1600;
+  b_.Run(*app_, 50);
+  EXPECT_EQ(app_->torque_command(), 0.0f);
+  EXPECT_EQ(app_->state(), VcuState::kDrive) << "coasts, no fault";
+}
+
 TEST_F(VcuAppTest, LineLockRequestStaysZeroAndActualIsReported) {
   ReachDrive();
   EXPECT_FALSE(b_.linelock_ctrl.Read());
