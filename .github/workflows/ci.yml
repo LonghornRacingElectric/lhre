@@ -339,8 +339,28 @@ jobs:
           git fetch --no-tags --depth=1 origin "+refs/heads/$GITHUB_BASE_REF:refs/remotes/origin/$GITHUB_BASE_REF"
           make check-vehicle BASE="origin/$GITHUB_BASE_REF"
 
+      # The container has no network, so the host fetches coverage.py,
+      # pinned by hash. The report never fails the job.
+      - name: Fetch coverage.py for the report
+        continue-on-error: true
+        run: >-
+          pip download --no-deps --only-binary=:all: --platform any
+          --python-version 3.11 --implementation py --require-hashes
+          -r coverage-requirements.txt -d out/wheels
+
       - name: Run the unit and contract tests
+        env:
+          COVERAGE: "1"
         run: make unit
+
+      - name: Report tools coverage
+        if: ${{ !cancelled() }}
+        run: |
+          if [ -f out/coverage.md ]; then
+            { echo "### Simulation tools coverage"; echo; cat out/coverage.md; } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::no coverage report for simulation/tools"
+          fi
 
   four-post:
     name: FourPost
