@@ -25,9 +25,11 @@ no network. Concretely:
 
 - **No network.** Unit tests never reach the internet or a service. Fake
   the boundary (LHAL host fakes for firmware, synthetic files for
-  simulation tools). Tests that truly need a service (the telemetry
-  integration suite) are tagged `manual` + `local` and run in their own CI
-  job.
+  simulation tools). Bazel enforces it: tests run in a sandbox with only
+  loopback, and [`//tools/hermetic:network_off_test`](../tools/hermetic/README.md)
+  fails if that ever stops being true. Tests that truly need a service
+  (the telemetry integration suite) are tagged `manual` + `local` and run
+  in their own CI job.
 - **No wall clock.** Inject time. Firmware code takes ticks from LHAL;
   Python takes a clock argument or a fixed timestamp.
 - **No unseeded randomness.** Seed it, and put the seed in the test.
@@ -45,6 +47,7 @@ no network. Concretely:
 | Gate | What it catches | Run it locally |
 | ---- | --------------- | -------------- |
 | Bazel build + test (Linux, Windows) | Broken builds, failing unit tests, firmware over its flash/RAM budget | `bazel test //...` |
+| Network off in tests | A unit test that reaches the internet or a service | `bazel test //tools/hermetic:network_off_test` |
 | UBSan | Undefined behavior in host C++ (overflow, bad shifts, misaligned access) | `bazel test --config=ubsan //boards/... //drivers/... //lib/codegen/cpp/...` |
 | `-Wall -Wextra -Werror` on app code | Warnings in firmware application code | part of `bazel build //...` |
 | Format | Unformatted C/C++ | `bazel run //tools/format:check` |

@@ -74,6 +74,13 @@ build:windows --workspace_status_command=tools/workspace_status.bat
 # actions a sane PATH regardless of the client OS.
 build --incompatible_strict_action_env
 
+# Tests get no network (docs/testing.md), so a unit test can't quietly depend
+# on the internet or a running service. In the local sandbox that's an empty
+# network namespace with loopback only. Tests that need a real service carry
+# the `requires-network` tag, or `local` like the telemetry Docker suites,
+# and keep it. //tools/hermetic:network_off_test is the canary.
+test --sandbox_default_allow_network=false
+
 # Never strip at link time. Bazel's default (--strip=sometimes) adds -Wl,-S
 # in fastbuild, which silently discards the DWARF that //toolchains bakes in
 # with -g3 — the firmware .elf must keep it for VS Code debugging (see
