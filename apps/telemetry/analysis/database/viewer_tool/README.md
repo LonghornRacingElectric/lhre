@@ -119,6 +119,21 @@ How it sorts lap presses into courses, where the export comes from and how to
 test it are in [src/lib/driveday/README.md](src/lib/driveday/README.md);
 `npm run test:driveday` runs its tests.
 
+## Tests
+
+CI's `Telemetry viewer` job runs both suites on every change under
+`apps/telemetry/`. Locally:
+
+```bash
+npm ci --ignore-scripts      # postinstall wants the auth database; tests don't
+npm rebuild ffmpeg-static    # fetches the ffmpeg the video helper test uses
+npm run test:driveday        # vitest: tests/driveday and tests/trackside
+npm run test:video-helper    # node --test: tools/video-helper.test.mjs
+```
+
+The COTA, UTA and real-session suites skip unless their recordings are on
+disk, since those aren't in the repo.
+
 ## LAPDOG refresh
 
 Trackside Retro includes the current LAPDOG video/track/analysis workspace,
