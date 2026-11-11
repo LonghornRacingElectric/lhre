@@ -8,6 +8,17 @@ git ls-files -z '*.sh' '*.bash' apps/BEVO/dashd/deploy/labwc-autostart ':!autono
   | xargs -0 uv run --group lint shellcheck --severity=warning   # shell (CI runs this)
 ```
 
+CI also fails on a switched-off test, with one `git grep` in the `Lint`
+job: `flaky = True` or `enable_tests = False` in a BUILD file, `DISABLED_` /
+`GTEST_SKIP` in C++, or `mark.skip` / `mark.xfail` / `unittest.skip` /
+`expectedFailure` in Python, also as a bare `@skip` (`skipif`, `skipIf`
+and `skipUnless` for a platform guard are fine). Runtime skips
+(`pytest.skip()`, `self.skipTest()`) and `tags = ["manual"]` aren't
+caught, since both have real uses (a missing optional dependency, Docker
+integration suites); a reviewer reads those.
+A test that can't pass gets fixed or deleted in its own commit, with the
+reason in the PR ([docs/testing.md](../../docs/testing.md)).
+
 Linters for code Bazel doesn't compile, run straight from their own CLIs.
 C/C++ formatting lives in [tools/format](../format/README.md), and
 `autonomy/` is linted by `ament_lint` in its colcon tests
