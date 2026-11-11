@@ -1,0 +1,17 @@
+# coverage.py settings for `make unit COVERAGE=1` (CI's report, see
+# README.md). Measures lhre's own tools, not BobSim.
+[run]
+source = tools
+parallel = true
+# The tests run most tools as subprocesses.
+patch = subprocess
+data_file = out/coverage/.coverage
+# test_car_wrapper runs car_identity.py from a copy in a scratch repo,
+# which coverage can't tie back to this file. It is tested, not unmeasured.
+omit = */tools/car_identity.py
+# The pure-Python wheel has no C tracer; that's only slower.
+disable_warnings = no-ctracer
+
+[report]
+skip_empty = true
+sort = cover

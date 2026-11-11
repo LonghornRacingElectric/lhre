@@ -35,7 +35,7 @@ make test    # check that BobSim loads //vehicle, then run the fast tests
 | `make shell` | Open a shell in the container |
 | `make test` | Run `make smoke`, then `make unit` |
 | `make smoke` | Check that BobSim loads `vehicle/vehicle.yml` and its tires. It checks loading only. |
-| `make unit` | Run the fast unit and contract tests in `tests/`. Then check that `bobsim/` has no local changes. See [docs/tests.md](docs/tests.md). |
+| `make unit` | Run the fast unit and contract tests in `tests/`. Then check that `bobsim/` has no local changes. `COVERAGE=1` also writes a coverage report of `tools/` ([how](docs/tests.md#coverage)). See [docs/tests.md](docs/tests.md). |
 | `make records` | Write `vehicle/vehicle.yml` into BobLib's Modelica records. `VEHICLE=<path>` writes a candidate copy instead. |
 | `make records-undo` | Put back only the files `make records` wrote |
 | `make fmu` | Build the identified Orion FMU with the merged upstream exporter; see [FMU](docs/fmu.md) |

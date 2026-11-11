@@ -65,6 +65,7 @@ except coverage, which is reported, not enforced.
 | No switched-off tests | `flaky = True` or `enable_tests = False` in BUILD files, `DISABLED_` or `GTEST_SKIP` in C++, unconditional skips in Python | see [tools/lint](../tools/lint/README.md) |
 | Lint: workflows (actionlint) | Broken expressions and job references in CI, shellcheck on `run:` blocks | `uv run --group lint actionlint` |
 | Simulation fast checks | lhre's simulation tools, vehicle bundle and study contracts (BobSim itself is tested in BobDyn) | `make -C simulation test`; on a PR also `make -C simulation check-vehicle BASE=origin/<base>` |
+| Simulation coverage (report only) | How much of `simulation/tools/` the unit tests run, on the run's summary page | `make -C simulation unit COVERAGE=1` ([how](../simulation/docs/tests.md#coverage)) |
 | Docs | Broken links, missing nav entries | `uv run --group docs mkdocs build --strict` |
 
 ## No baselines
