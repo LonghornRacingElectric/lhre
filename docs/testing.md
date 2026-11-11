@@ -67,6 +67,7 @@ except coverage, which is reported, not enforced.
 | Simulation fast checks | lhre's simulation tools, vehicle bundle and study contracts (BobSim itself is tested in BobDyn) | `make -C simulation test`; on a PR also `make -C simulation check-vehicle BASE=origin/<base>` |
 | Simulation coverage (report only) | How much of `simulation/tools/` the unit tests run, on the run's summary page | `make -C simulation unit COVERAGE=1` ([how](../simulation/docs/tests.md#coverage)) |
 | BEVO dash frontend | The kiosk UI's jest tests (driver messages from the trackside site, first render) | `cd apps/BEVO/dashd/frontend && npm ci --ignore-scripts && CI=true npm test` |
+| Telemetry viewer | The drive-day viewer's vitest suite (session conversion, timeline, laps, sectors) and the video helper | see the [viewer README](../apps/telemetry/analysis/database/viewer_tool/README.md#tests) |
 | Docs | Broken links, missing nav entries | `uv run --group docs mkdocs build --strict` |
 
 ## No baselines

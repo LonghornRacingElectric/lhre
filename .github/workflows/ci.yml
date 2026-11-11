@@ -508,6 +508,38 @@ jobs:
           CI: "true"
         run: npm test -- --watchAll=false
 
+  # The viewer is an npm project outside Bazel, so it gets its own job.
+  telemetry-viewer:
+    name: Telemetry viewer
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.telemetry != 'false' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/telemetry/analysis/database/viewer_tool
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/telemetry/analysis/database/viewer_tool/package-lock.json
+
+      # --ignore-scripts skips postinstall, which wants the auth database.
+      # ffmpeg-static's own install script fetches the ffmpeg binary the
+      # video helper test converts with.
+      - name: Install
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm rebuild ffmpeg-static
+
+      - name: Run the vitest suite
+        run: npm run test:driveday
+
+      - name: Run the video helper test
+        run: npm run test:video-helper
+
   # On main, docs.yml builds and publishes the site instead.
   docs:
     name: Docs
@@ -617,7 +649,7 @@ jobs:
   # Jobs skip only on an untouched area, and run if Changes fails.
   all-checks:
     name: All checks passed
-    needs: [changes, format, lint, bazel, bazel-windows, sim-fast, four-post, autonomy, bevo, bevo-frontend, docs, telemetry]
+    needs: [changes, format, lint, bazel, bazel-windows, sim-fast, four-post, autonomy, bevo, bevo-frontend, docs, telemetry, telemetry-viewer]
     if: always()
     runs-on: ubuntu-latest
     steps:
