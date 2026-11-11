@@ -24,6 +24,10 @@ The DUI is a plain CAN peripheral this year.
 | `:vcu_rtos_test`          | Real FreeRTOS tasks under the simulator port.           |
 | `:vcu_sim`                | Scripted drive under the simulator (`bazel run --config=local`). |
 | `:release`                | Vehicle elf/bin/hex for CI artifacts.              |
+| `:vcu_sil_rig`, `:libvcu_sil.so` | Software-in-the-loop: the app driven by a car model ([Sil/](Sil/README.md)). Host only; the `.so` is Linux only. |
+| `:vcu_sil_rig_test`, `:vcu_sil_test` | The SIL rig against the real app (host only), and its C ABI (`:vcu_sil_test`, Linux only). |
+| `:vcu_sil_can_table`      | The CAN spec as a JSON decode table for the SIL's run log. Linux only. |
+| `:vcu_sil_gen_can_table_test` | The decode-table generator, including specs it cannot fully decode. Linux only. |
 
 ## Layout
 
@@ -57,6 +61,9 @@ The DUI is a plain CAN peripheral this year.
     (`test_app`, `test_shell`). It is not flashed.
   - `test/`: one `<module>_test.cpp` per module, plus `bench.hpp` (host
     fakes and a scripted car, for tests and the sim).
+- `Sil/`: the software-in-the-loop rig, its C ABI and the Python host that
+  steps it against a car model ([Sil/README.md](Sil/README.md)). Outside
+  `App/`, so none of it is in the firmware.
 - Shared code the VCU uses: `//drivers/longhorn` (shell, logger, RGB LED and
   rainbow task, DFU console hook, debounce, math, CAN inbox, period, rate
   gate, RTOS lock) and `//drivers/lhal` (peripheral interfaces, STM32 adapters, host

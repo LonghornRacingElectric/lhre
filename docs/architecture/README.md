@@ -26,6 +26,8 @@ three years after everyone who made the decision graduated.
 | [015](015-study-layout.md) | A study is a README, a study.yml and a run.py | Accepted |
 | [016](016-fmu-artifact-boundary.md) | Identified full-vehicle FMU artifact for autonomy | Accepted |
 | [017](017-tests-gate-merges.md) | Tests and linters gate merges; reviews check intent | Accepted |
+| 018–019 | Reserved by open PR 150 (BEVO schema registry) | Pending merge |
+| [020](020-vcu-sil-fmu-host.md) | VCU SIL steps the firmware as a library beside a car-model FMU | Accepted |
 
 ## ADRs vs. READMEs
 
