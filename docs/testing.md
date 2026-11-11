@@ -66,6 +66,7 @@ except coverage, which is reported, not enforced.
 | Lint: workflows (actionlint) | Broken expressions and job references in CI, shellcheck on `run:` blocks | `uv run --group lint actionlint` |
 | Simulation fast checks | lhre's simulation tools, vehicle bundle and study contracts (BobSim itself is tested in BobDyn) | `make -C simulation test`; on a PR also `make -C simulation check-vehicle BASE=origin/<base>` |
 | Simulation coverage (report only) | How much of `simulation/tools/` the unit tests run, on the run's summary page | `make -C simulation unit COVERAGE=1` ([how](../simulation/docs/tests.md#coverage)) |
+| BEVO dash frontend | The kiosk UI's jest tests (driver messages from the trackside site, first render) | `cd apps/BEVO/dashd/frontend && npm ci --ignore-scripts && CI=true npm test` |
 | Docs | Broken links, missing nav entries | `uv run --group docs mkdocs build --strict` |
 
 ## No baselines
