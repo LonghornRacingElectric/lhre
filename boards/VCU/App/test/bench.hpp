@@ -149,6 +149,7 @@ struct Bench {
   bool hvc_alive = true;
   lhre::can::HvcState hvc_state = lhre::can::HvcState::kNotEnergized;
   bool contactors = false;
+  bool negative_contactor_open = false;  // one side failed open
   bool inverter_alive = true;
   bool speed_alive = true;
   bool current_alive = true;
@@ -212,7 +213,7 @@ struct Bench {
       hvc::ContactorStatus s;
       s.hvc_state_machine = static_cast<uint8_t>(hvc_state);
       s.positive_hv_contactor = contactors;
-      s.negative_hv_contactor = contactors;
+      s.negative_hv_contactor = contactors && !negative_contactor_open;
       car.Send(s.ToFrame());
       hvc::BatteryCellLimits c;
       c.set_min_cell_voltage(3.9f);
