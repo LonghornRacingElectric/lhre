@@ -2,12 +2,12 @@
 # Run the 10/28 Software MVP gate (#109) in Gazebo and score it.
 #
 # Run from autonomy/ros2 after ./scripts/build.sh, on Ubuntu or inside the
-# Docker container. Every gate run uses the no-shortcuts stack from
-# docs/plans/mvp-pass-criteria.md: perception:=lidar estimator:=ekf with
-# safety on, the Mid-360 caster and stereo camera fusion (#206). Lap time
-# is scored against a reference lap computed from the course (#232).
+# Docker container. Every gate run launches with the gate stack in
+# stack.args, which run_faults.sh shares (#237): perception:=lidar
+# estimator:=ekf with safety on, the Mid-360 caster and stereo camera fusion.
+# Lap time is scored against a reference lap computed from the course (#232).
 # BASELINE=1 adds one truth-stack run per seed (perception:=sim
-# estimator:=truth) for comparison only. A run
+# estimator:=truth) for comparison only, and names its own arguments. A run
 # ends SETTLE_S sim seconds after the mission reaches FINISHED or EMERGENCY,
 # or at RUN_S sim seconds, so a slow machine runs the same campaign, only
 # longer. Wall time only catches a hung sim: /clock stopped for HANG_S
@@ -35,6 +35,8 @@ case "$TRACK_STYLE" in
     *) echo "unsupported gate TRACK_STYLE=$TRACK_STYLE" >&2; exit 2 ;;
 esac
 ROS2=$(cd "$HERE/../../../ros2" && pwd)
+source "$HERE/stack.sh"
+STACK=$(gate_stack) || exit 2
 
 TOPICS="/clock /lhr/mission/status /lhr/mission/complete /lhr/metrics/lap_complete
 /lhr/vehicle/odom /lhr/vehicle/odom_truth /lhr/safety/status"
@@ -102,7 +104,7 @@ one_run() {  # id [launch args...]
     fi
     mkdir -p "$dir"
     local launch_cmd=(ros2 launch lhr_gazebo gazebo_demo.launch.py
-        gui:=false rviz:=false safety:=true output_csv:="$dir/metrics.csv"
+        gui:=false rviz:=false output_csv:="$dir/metrics.csv"
         ${world:+"world:=$world"} $EXTRA "$@")
     ros2 bag record -s mcap -o "$dir/bag" --topics $TOPICS \
         > "$dir/record.log" 2>&1 &
@@ -124,21 +126,22 @@ one_run() {  # id [launch args...]
 }
 
 plan() {  # one line per run: the id, then its launch arguments
-    local sensors='lidar_source:=mid360 enable_stereo_camera:=true enable_camera_lidar_fusion:=true'
+    # The truth baseline is the one run that opts out of the gate stack.
+    local truth='perception:=sim estimator:=truth safety:=true lidar_source:=gazebo enable_stereo_camera:=false enable_camera_lidar_fusion:=false'
     for s in $SEEDS; do
         if [ "$BASELINE" != 0 ]; then
-            echo "baseline_${TRACK_STYLE}_s$s track_style:=$TRACK_STYLE seed:=$s perception:=sim estimator:=truth lidar_source:=gazebo enable_stereo_camera:=false enable_camera_lidar_fusion:=false"
+            echo "baseline_${TRACK_STYLE}_s$s track_style:=$TRACK_STYLE seed:=$s $truth"
         fi
         for r in $(seq 1 "$REPEATS"); do
-            echo "${TRACK_STYLE}_s${s}_r$r track_style:=$TRACK_STYLE seed:=$s perception:=lidar estimator:=ekf $sensors"
+            echo "${TRACK_STYLE}_s${s}_r$r track_style:=$TRACK_STYLE seed:=$s $STACK"
         done
     done
     for r in $(seq 1 "${ACCEL_REPEATS:-0}"); do
-        echo "acceleration_r$r track_style:=acceleration perception:=lidar estimator:=ekf $sensors"
+        echo "acceleration_r$r track_style:=acceleration $STACK"
     done
     if [ -e "$SKIDPAD_WORLD" ]; then
         for r in $(seq 1 "${SKIDPAD_REPEATS:-0}"); do
-            echo "skidpad_r$r track_style:=skidpad mission:=skidpad perception:=lidar estimator:=ekf $sensors"
+            echo "skidpad_r$r track_style:=skidpad mission:=skidpad $STACK"
         done
     fi
 }
