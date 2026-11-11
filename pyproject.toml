@@ -29,3 +29,7 @@ lint = [
     "actionlint-py==1.7.8.24",
     "shellcheck-py==0.11.0.1",
 ]
+# Coverage of changed lines in CI (tools/coverage/README.md).
+coverage = [
+    "diff-cover==11.0.1",
+]

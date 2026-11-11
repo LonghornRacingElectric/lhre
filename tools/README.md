@@ -12,6 +12,7 @@ Build and dev tooling. Each package documents itself:
 | [monitor/](monitor/README.md) | Serial console for the longhorn debug shell: `bazel run //tools/monitor` connects, checks the flashed sha against the checkout, and goes interactive. |
 | [ide/](ide/README.md) | `compile_commands.json` regeneration for clangd/IDEs: `bazel run //:refresh_ide` (or the fast `//:refresh_compile_commands`). |
 | [hermetic/](hermetic/README.md) | Tests run without network; `:network_off_test` is the canary that proves it. |
+| [coverage/](coverage/README.md) | Firmware line coverage from the host tests on the lines a PR changes, reported on every PR (no enforced percent). |
 | [ubsan/](ubsan/README.md) | `--config=ubsan`: host tests with undefined behavior trapping, plus the canary that proves it's on. |
 
 `new_board.py` (`bazel run //tools:new_board -- boards/<Name>/<Name>.ioc`)

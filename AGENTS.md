@@ -46,6 +46,10 @@ Follow [docs/testing.md](docs/testing.md); the rules that matter most:
 
 - A behavior change ships with a test that fails without it. Cover the
   edges (limits, saturation, faults, units), not only the happy path.
+- Aim for high coverage of the lines you add or change. CI reports it on
+  every PR without a fixed percent; a low number needs a reason.
+- For a big overhaul, land a tests-first PR that pins current behavior,
+  then the refactor.
 - Never delete, skip or loosen a test, widen a size budget, mark a test
   flaky (`flaky = True`, `DISABLED_`, `GTEST_SKIP` fail CI), or add a
   lint suppression to get CI green. If a test is
@@ -66,6 +70,7 @@ bazel run //tools/format                # clang-format everything (CI enforces :
 uv run --group lint ruff check          # Python lint (CI enforces)
 uv run --group lint actionlint          # lint the CI workflows
 uv run --group docs mkdocs build --strict   # docs must build cleanly
+bazel coverage //boards/... //drivers/...  # then diff-cover (tools/coverage/README.md)
 ```
 
 ## CI

@@ -146,6 +146,11 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v7
+        with:
+          # The PR's merge commit and its base, for diff-cover.
+          fetch-depth: 2
+
+      - uses: astral-sh/setup-uv@v9.0.0
 
       # With a BuildBuddy key, builds use the remote cache + executors and
       # stream results. Fork PRs don't get secrets, so they fall back to a
@@ -193,6 +198,47 @@ jobs:
         run: >-
           bazel test --config=ubsan
           //boards/... //drivers/... //lib/codegen/cpp/... //tools/ubsan:trap_test
+
+      # Firmware line coverage from the host tests on the lines this PR
+      # changes, reported on the summary page and never failing the build
+      # (tools/coverage/README.md). The checkout is the PR merged into its
+      # base, so HEAD^1 is the base and the diff is exactly this PR.
+      - name: Measure firmware line coverage
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        continue-on-error: true
+        run: bazel coverage //boards/... //drivers/...
+
+      - name: Report changed-line coverage
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        run: |
+          report="$(bazel info output_path)/_coverage/_coverage_report.dat"
+          uv run --only-group coverage diff-cover "$report" \
+            --compare-branch=HEAD^1 \
+            --format "markdown:$RUNNER_TEMP/diff-cover.md" ||
+            echo "::warning::diff-cover failed, so this PR has no coverage report"
+          cat "$RUNNER_TEMP/diff-cover.md" >> "$GITHUB_STEP_SUMMARY" || true
+          # diff-cover skips files the report doesn't list, so a changed
+          # source no host test links would read as fine. Board/, Core/ and
+          # the STM32 LHAL backend only run on target and are never measured.
+          changed=$(git diff --name-only --no-renames --diff-filter=AM HEAD^1 HEAD -- \
+            'boards/*.cpp' 'boards/*.cc' 'drivers/longhorn/*.cpp' 'drivers/longhorn/*.cc' \
+            'drivers/lhal/*.cpp' 'drivers/lhal/*.cc' \
+            ':!boards/*/Board/*' ':!boards/*/Core/*' ':!drivers/lhal/stm32/*' \
+            ':!*_test.*' ':!*_sim.*')
+          # With no report every file would read as unlinked; say so once.
+          if [ ! -s "$report" ]; then
+            echo "::warning::no coverage report, so changed sources weren't checked for a host test"
+            exit 0
+          fi
+          # Read the SF: lines once. Piping a big report into grep -q would
+          # fail under pipefail when grep exits early (SIGPIPE), and warn
+          # about files that are listed.
+          sources=$(grep '^SF:' "$report" || true)
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            grep -qF -- "$f" <<< "$sources" ||
+              echo "::warning file=$f::no host test links this file, so its coverage isn't measured"
+          done <<< "$changed"
 
   # Windows builds run fully locally (see .bazelrc: Bazel can't drive the
   # Linux remote executors from a Windows client) but still share the

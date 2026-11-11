@@ -161,4 +161,20 @@ build:ubsan --copt=-fsanitize-trap=undefined
 test:ubsan --build_tests_only
 test:ubsan --test_tag_filters=-firmware_size
 
+# Line coverage of host C++ tests, with LLVM's source-based coverage (the
+# hermetic toolchain ships llvm-cov and llvm-profdata). Only firmware code is
+# instrumented; tests and generated code are left out. The combined lcov
+# report lands in $(bazel info output_path)/_coverage/_coverage_report.dat,
+# and CI reports the lines a PR changes with diff-cover, with no enforced
+# percent (tools/coverage/README.md). Linux and macOS only.
+# --noexperimental_fetch_all_coverage_outputs works around a dangling gcov
+# symlink in rules_cc 0.2.22's coverage output (fixed in rules_cc 0.2.23).
+coverage --experimental_use_llvm_covmap
+coverage --experimental_generate_llvm_lcov
+coverage --combined_report=lcov
+coverage --noexperimental_fetch_all_coverage_outputs
+coverage --instrumentation_filter=^//boards[/:],^//drivers/(longhorn|lhal)[/:]
+coverage --build_tests_only
+coverage --test_tag_filters=-firmware_size
+
 try-import %workspace%/.bazelrc.user
