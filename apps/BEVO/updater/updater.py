@@ -10,6 +10,24 @@ import re
 import shutil
 import tarfile
 import tempfile
+import time
+import sys
+import math
+import signal
+from contextlib import contextmanager
+
+
+@contextmanager
+def startup_deadline(seconds):
+    def expired(*_):
+        raise TimeoutError("startup synchronization deadline exceeded")
+    previous = signal.signal(signal.SIGALRM, expired)
+    signal.setitimer(signal.ITIMER_REAL, max(.001, seconds))
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
 import urllib.parse
 
 from apps.BEVO.updater.oci import Registry, fetch, verify
@@ -101,10 +119,14 @@ class Updater:
             raise ValueError("unsupported server profile")
         server = Manifest(profile["schema"])
         installed = self.installed()
-        if installed and not upgrade:
+        prefer_deployed = profile.get("selection_policy") == "prefer_deployed"
+        existing = None
+        installed_metadata = None
+        if installed:
             current = self.root / "current"
             files = {name: (current / name).read_bytes() for name in METADATA_FILES}
             metadata, _ = release_schema(files)
+            installed_metadata = metadata
             try:
                 plan = release_plan(metadata, installed, server)
             except ValueError:
@@ -114,16 +136,26 @@ class Updater:
                 if not (current / PLAN_FILE).exists() or json.loads((current / PLAN_FILE).read_bytes()) != plan:
                     selection["action"] = "reconcile"
                     selection["files"].update({"bin/" + name: (current / "bin" / name).read_bytes() for name in EXECUTABLES})
-                return selection
+                existing = selection
+        if existing and not upgrade and not prefer_deployed:
+            return existing
+        if existing and prefer_deployed and profile.get("preferred_release_id") == content_id(installed_metadata) and installed.schema_id == server.schema_id and installed_metadata["can_json_sha256"] == profile["can_json_sha256"]:
+            return existing
         for reference in profile["releases"]:
             manifest = self.registry.manifest(reference)
             files = unpack(self.registry.blob(manifest["layers"][0], 2 * 1024 * 1024), METADATA_FILES, 2 * 1024 * 1024)
             metadata, schema = release_schema(files)
+            if prefer_deployed and (schema.schema_id != server.schema_id or metadata["can_json_sha256"] != profile["can_json_sha256"]):
+                continue
             try:
                 plan = release_plan(metadata, schema, server)
             except ValueError:
                 continue
+            if existing and metadata == installed_metadata:
+                return existing
             return dict(self.selection("install", files, metadata, plan), reference=reference, image=manifest)
+        if prefer_deployed and existing:
+            return dict(existing, warning="no matching approved build; using installed intersection")
         raise ValueError("no approved GHCR release supports a usable intersection with the deployed server schema")
 
     def selection(self, action, files, metadata, plan):
@@ -182,15 +214,48 @@ class Updater:
         return destination
 
 
+def synchronize(updater, args):
+    server_token = os.getenv("BEVO_SERVER_TOKEN")
+    server_headers = {"Authorization": "Bearer " + server_token} if server_token else {}
+    if not args.server_url:
+        raise ValueError("server URL is not configured")
+    deadline = time.monotonic() + args.network_wait
+    while True:
+        try:
+            profile = json.loads(fetch(args.server_url, 2 * 1024 * 1024, server_headers,
+                                       timeout=min(5, max(0.1, deadline - time.monotonic()))) if args.command == "startup"
+                                 else fetch(args.server_url, 2 * 1024 * 1024, server_headers))
+            break
+        except OSError:
+            if args.command != "startup" or time.monotonic() >= deadline:
+                raise
+            time.sleep(min(1, max(0, deadline - time.monotonic())))
+    descriptor_url = urllib.parse.urljoin(args.server_url, "schema_descriptor.pb")
+    verify(fetch(descriptor_url, 2 * 1024 * 1024, server_headers), "sha256:" + profile["schema_descriptor_sha256"])
+    selection = updater.choose(profile, args.upgrade)
+    def confirm_server():
+        if json.loads(fetch(args.server_url, 2 * 1024 * 1024, server_headers)) != profile:
+            raise ValueError("server schema/deployment or approved releases changed during update; retry")
+    if args.command in ("update", "startup") and selection["action"] in ("install", "reconcile"):
+        selection["release"] = str(updater.install(selection, confirm=confirm_server))
+        selection["restart_required"] = True
+    else:
+        confirm_server()
+    return {key: value for key, value in selection.items() if key not in ("files", "metadata", "image")}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("check", "update", "override", "clear-override"))
+    parser.add_argument("command", choices=("check", "update", "startup", "override", "clear-override"))
     parser.add_argument("--root", type=Path, default=Path("/opt/bevo/core"))
     parser.add_argument("--server-url")
     parser.add_argument("--repository", default="ghcr.io/longhornracingelectric/bevo-core")
     parser.add_argument("--release", type=Path, help="admin override directory containing a complete release")
     parser.add_argument("--upgrade", action="store_true", help="select the first compatible release even if the installed release suffices")
+    parser.add_argument("--network-wait", type=float, default=60, help="startup connectivity wait in seconds")
     args = parser.parse_args()
+    if not math.isfinite(args.network_wait) or args.network_wait < 0:
+        parser.error("network wait must be finite and nonnegative")
     args.root.mkdir(parents=True, exist_ok=True)
     with (args.root / ".lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -222,23 +287,24 @@ def main():
                 raise ValueError("admin override is pending or damaged; reapply it or explicitly clear it")
             print(json.dumps({"action": "admin-override-active", **pinned}))
             return
-        if not args.server_url:
-            parser.error("check/update requires --server-url")
-        server_token = os.getenv("BEVO_SERVER_TOKEN")
-        server_headers = {"Authorization": "Bearer " + server_token} if server_token else {}
-        profile = json.loads(fetch(args.server_url, 2 * 1024 * 1024, server_headers))
-        descriptor_url = urllib.parse.urljoin(args.server_url, "schema_descriptor.pb")
-        verify(fetch(descriptor_url, 2 * 1024 * 1024, server_headers), "sha256:" + profile["schema_descriptor_sha256"])
-        selection = updater.choose(profile, args.upgrade)
-        def confirm_server():
-            if json.loads(fetch(args.server_url, 2 * 1024 * 1024, server_headers)) != profile:
-                raise ValueError("server schema/deployment or approved releases changed during update; retry")
-        if args.command == "update" and selection["action"] in ("install", "reconcile"):
-            selection["release"] = str(updater.install(selection, confirm=confirm_server))
-            selection["restart_required"] = True
-        else:
-            confirm_server()
-        print(json.dumps({key: value for key, value in selection.items() if key not in ("files", "metadata", "image")}))
+        try:
+            if args.command == "startup":
+                with startup_deadline(args.network_wait):
+                    result = synchronize(updater, args)
+            else:
+                result = synchronize(updater, args)
+            print(json.dumps(result))
+        except Exception as error:
+            if args.command != "startup":
+                raise
+            current = args.root / "current"
+            if updater.installed() is None:
+                raise ValueError("synchronization failed and no verified release is installed") from error
+            files = {name: (current / name).read_bytes() for name in METADATA_FILES | {PLAN_FILE}}
+            metadata, producer = release_schema(files)
+            checked_plan(files, metadata, producer)
+            print("Synchronization failed; continuing last verified activation: " + str(error), file=sys.stderr)
+            print(json.dumps({"action": "offline-keep", "release": str(current.resolve()), "warning": str(error)}))
 
 
 if __name__ == "__main__":

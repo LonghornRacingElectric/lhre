@@ -153,3 +153,7 @@ The `:classifier` library and `:classifier_test` target isolate the decisions. `
 path. `BUILD.bazel` the Bazel path: targets follow the standard
 `board_health_binary`, `_image`, `_load`, `_push`, and `_smoke_test` contract. It
 is optional and never part of `core_images`.
+
+The Bazel image packages its generated Artemis schema, CAN and storage metadata
+and is labeled as a schema consumer for deployment agreement checks. See the
+[stack deployment guide](../../README.md).

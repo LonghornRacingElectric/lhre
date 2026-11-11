@@ -105,3 +105,7 @@ Set these in `docker-compose.yml`:
   `_smoke_test` targets, plus the test targets. The processor is optional.
 - `docker-compose.yml`: runs the Bazel-loaded image using the shared telemetry
   requirements and generated schema bindings.
+
+The Bazel image packages its generated Artemis schema, CAN and storage metadata
+and is labeled as a schema consumer for deployment agreement checks. See the
+[stack deployment guide](../../README.md).

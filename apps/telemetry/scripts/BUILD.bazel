@@ -8,6 +8,16 @@ py_library(
     visibility = ["//visibility:public"],
 )
 
+py_library(
+    name = "storage_apply_lib",
+    srcs = ["apply_storage.py"],
+    data = ["//apps/telemetry:config_files"],
+    imports = [".."],
+    deps = ["//apps/telemetry/analysis:analysis_lib", requirement("SQLAlchemy"), requirement("psycopg2-binary"), requirement("python-dotenv"), "@lhre_pypi//bazel_runfiles"],
+    visibility = ["//apps/telemetry/schema_registry:__pkg__"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
 
 py_binary(
     name = "schema_apply",

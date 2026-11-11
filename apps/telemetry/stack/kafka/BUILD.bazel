@@ -52,6 +52,7 @@ go_binary(
 )
 
 telemetry_service_image(
+    schema_consumer = True,
     name = "kafka_bridge",
     base = "@python312_linux_amd64",
     binary = ":kafka_bridge_binary",

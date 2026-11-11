@@ -16,6 +16,7 @@ def telemetry_service_image(
         env = {},
         tars = [],
         workdir = "",
+        schema_consumer = False,
         visibility = None):
     """Packages one executable and its complete runfiles into an OCI image.
 
@@ -55,7 +56,8 @@ def telemetry_service_image(
         # required by the rules_python launcher.
         entrypoint = ["/" + name],
         env = env,
-        tars = [":" + app_tar] + tars,
+        tars = [":" + app_tar] + tars + (["//apps/telemetry:current_schema_tar"] if schema_consumer and "//apps/telemetry:current_schema_tar" not in tars else []),
+        labels = {"lhre.schema-consumer": "artemis"} if schema_consumer else {},
         target_compatible_with = NOT_WINDOWS,
         workdir = workdir,
         visibility = visibility,

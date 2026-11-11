@@ -27,6 +27,8 @@
 #   up                 start the core stack detached (reuses images, no rebuild)
 #   build [comp...]    rebuild + start (core, or named components)
 #   schema-serve       serve the running ingest/bridge schema (foreground; --config /absolute/releases.json)
+#   schema-sync        discover verified release metadata (--config /absolute/releases.json)
+#   schema-prepare     apply additive storage for a pinned release before deployment
 #   logs [comp...]     follow logs (Ctrl-C detaches; containers keep running)
 #   attach             alias for `logs` on the core stack
 #   restart [comp...]  restart component(s) (default: core)
@@ -408,6 +410,12 @@ down_component() {
 }
 up_set() {  # up_set <build:1|0> <name...>
     local build="$1"; shift; local n
+    if [[ "$build" == "1" && -n "${TELEMETRY_RELEASE_CONFIG:-}" ]]; then
+        [[ -n "${TELEMETRY_RELEASE_REFERENCE:-}" ]] || { err "Set TELEMETRY_RELEASE_REFERENCE to the pinned deployment bundle"; return 1; }
+        local rollback=()
+        [[ "${TELEMETRY_RELEASE_ROLLBACK:-0}" == "1" ]] && rollback=(--rollback)
+        run_command schema-prepare --config "$TELEMETRY_RELEASE_CONFIG" --reference "$TELEMETRY_RELEASE_REFERENCE" "${rollback[@]}" || return 1
+    fi
     for n in "$@"; do up_component "$n" "$build" || return 1; done
 }
 stop_all() {
@@ -589,6 +597,14 @@ run_command() {
             require_docker
             if [[ -n "$SUDO" ]]; then set -- --docker-sudo "$@"; fi
             ( cd "$REPO_ROOT" && bazel run --config=local //apps/telemetry/schema_registry:deployed_registry_binary -- "$@" ) ;;
+        schema-sync)
+            ( cd "$REPO_ROOT" && bazel run --config=local //apps/telemetry/schema_registry:catalog_binary -- sync "$@" ) ;;
+        schema-prepare)
+            require_docker
+            ( cd "$REPO_ROOT" && bazel build --config=local //lib/codegen/telemetry:artemis_schema //lib/codegen/telemetry:can_json ) || return 1
+            if [[ -n "$SUDO" ]]; then set -- --docker-sudo "$@"; fi
+            ( cd "$REPO_ROOT" && bazel run --config=local //apps/telemetry/schema_registry:catalog_binary -- prepare \
+                --built-schema-directory "$REPO_ROOT/bazel-bin/lib/codegen/telemetry" "$@" ) ;;
         logs|attach) require_docker; logs_for "$@" ;;
         restart)     require_docker; if [[ $# -gt 0 ]]; then restart_set "$@"; else restart_set $CORE_ORDER; fi ;;
         stop|down)   require_docker; stop_all ;;

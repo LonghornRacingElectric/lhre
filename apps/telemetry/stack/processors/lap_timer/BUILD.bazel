@@ -34,6 +34,7 @@ py_binary(
 )
 
 telemetry_service_image(
+    schema_consumer = True,
     name = "lap_timer",
     base = "@python312_linux_amd64",
     binary = ":lap_timer_binary",

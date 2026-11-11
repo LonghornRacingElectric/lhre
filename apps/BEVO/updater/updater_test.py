@@ -61,6 +61,32 @@ class FakeRegistry:
 
 
 class UpdaterTest(unittest.TestCase):
+    def test_prefers_matching_deployed_build_then_keeps_identical_executables(self):
+        with tempfile.TemporaryDirectory() as directory:
+            schema = fixture_schema()
+            old = release(schema, b"old")
+            new = release(schema, b"new")
+            registry = FakeRegistry({"new": new})
+            updater = Updater(directory, registry)
+            updater.activate(old)
+            profile = {"format_version": 1, "schema": schema.manifest, "releases": ["new"],
+                       "selection_policy": "prefer_deployed", "can_json_sha256": digest(new["can.json"])}
+            selected = updater.choose(profile)
+            self.assertEqual(selected["action"], "install")
+            updater.install(selected)
+            self.assertEqual(updater.choose(profile)["action"], "keep")
+
+    def test_same_protobuf_with_wrong_can_definitions_is_not_installed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            schema = fixture_schema()
+            current = release(schema)
+            updater = Updater(directory, FakeRegistry({"wrong": release(schema, b"wrong")}))
+            activation = updater.activate(current)
+            selected = updater.choose({"format_version": 1, "schema": schema.manifest, "releases": ["wrong"],
+                                       "selection_policy": "prefer_deployed", "can_json_sha256": "0" * 64})
+            self.assertEqual(selected["action"], "keep")
+            self.assertEqual((Path(directory) / "current").resolve(), activation)
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)

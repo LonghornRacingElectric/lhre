@@ -172,6 +172,15 @@ _BUNDLE_SCRIPTS = [
     "nonhermetic/start_telemetry.sh",
 ]
 
+py_test(
+    name = "startup_test",
+    srcs = ["nonhermetic/startup_test.py"],
+    main = "nonhermetic/startup_test.py",
+    args = ["$(rootpath nonhermetic/start_telemetry.sh)"],
+    data = _BUNDLE_SCRIPTS,
+    target_compatible_with = NOT_WINDOWS,
+)
+
 _BUNDLE_FILES = [
     "cell.py",
     "locus_power.sh",
@@ -182,7 +191,7 @@ _BUNDLE_FILES = [
 # genrule needs bash; deploys happen from macOS/Linux machines.
 genrule(
     name = "pi_bundle",
-    srcs = [":pi_binaries"] + _BUNDLE_SCRIPTS + _BUNDLE_FILES,
+    srcs = [":pi_binaries", "//apps/BEVO/updater:standalone"] + _BUNDLE_SCRIPTS + _BUNDLE_FILES,
     outs = ["pi_bundle.tar.gz"],
     cmd = """
         STAGE=$$(mktemp -d)
@@ -192,6 +201,7 @@ genrule(
         chmod +x $$STAGE/nonhermetic/*.sh
         cp $(location cell.py) $(location locus_power.sh) $(location requirements.txt) $$STAGE/
         chmod +x $$STAGE/locus_power.sh
+        cp $(location //apps/BEVO/updater:standalone) $$STAGE/bevo_updater.pyz
         cp $(location nonhermetic/bevo_telemetry.service) $$STAGE/nonhermetic/
         tar czf $@ -C $$STAGE .
         rm -rf $$STAGE

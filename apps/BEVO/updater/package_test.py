@@ -6,14 +6,47 @@ import sys
 import tempfile
 import threading
 import unittest
+import time
 
 from apps.BEVO.updater.oci import Registry
 from apps.BEVO.updater.updater import EXECUTABLES, MAX_RELEASE_BYTES, METADATA_FILES, Updater, release_schema, unpack, validate_binaries
+from apps.BEVO.updater.updater import identity_release
 from lib.telemetry.contract import seal_manifest
 from apps.telemetry.schema_registry.server import create_server, profile
 
 
 class PackageTest(unittest.TestCase):
+    def test_startup_preserves_activation_on_malformed_profile_and_slow_descriptor(self):
+        files = unpack(Path(sys.argv[2]).read_bytes(), METADATA_FILES, 2 * 1024 * 1024)
+        files.update(unpack(Path(sys.argv[3]).read_bytes(), {"bin/" + name for name in EXECUTABLES}, MAX_RELEASE_BYTES))
+        files = identity_release(files)
+        metadata, schema = release_schema(files)
+        for mode in ("malformed", "slow_descriptor"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                active = Updater(directory, None).activate(files)
+                requests = []
+                def provider():
+                    requests.append(True)
+                    if mode == "slow_descriptor" and len(requests) == 2:
+                        time.sleep(10)
+                    return {"format_version": 1, "schema": None if mode == "malformed" else schema.manifest,
+                            "schema_descriptor_sha256": metadata["schema_descriptor_sha256"], "releases": []}, files["schema_descriptor.pb"]
+                authority = create_server(provider, ("127.0.0.1", 0))
+                thread = threading.Thread(target=authority.serve_forever, daemon=True)
+                thread.start()
+                try:
+                    result = subprocess.run([sys.executable, "-I", "-S", str(Path(sys.argv[1]).resolve()), "startup",
+                                             "--root", directory, "--network-wait", ".25", "--server-url",
+                                             f"http://127.0.0.1:{authority.server_address[1]}/profile.json"],
+                                            capture_output=True, text=True, timeout=3)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(json.loads(result.stdout)["action"], "offline-keep")
+                    self.assertEqual((Path(directory) / "current").resolve(), active)
+                finally:
+                    authority.shutdown()
+                    authority.server_close()
+                    thread.join(timeout=3)
+
     def test_real_bazel_release_layers_match_metadata_and_executables(self):
         _, metadata_path, binary_path, _ = map(Path, sys.argv[1:])
         files = unpack(metadata_path.read_bytes(), METADATA_FILES, 2 * 1024 * 1024)
@@ -84,6 +117,12 @@ class PackageTest(unittest.TestCase):
                 remaining_reads = 2
                 failed = subprocess.run(command, capture_output=True, text=True)
                 self.assertNotEqual(failed.returncode, 0)
+                self.assertEqual((Path(directory) / "current").resolve(), active)
+                offline = subprocess.run([sys.executable, "-I", "-S", str(Path(sys.argv[1]).resolve()),
+                                          "startup", "--root", directory, "--server-url", url, "--network-wait", "0"],
+                                         capture_output=True, text=True)
+                self.assertEqual(offline.returncode, 0, offline.stderr)
+                self.assertEqual(json.loads(offline.stdout)["action"], "offline-keep")
                 self.assertEqual((Path(directory) / "current").resolve(), active)
             finally:
                 authority.shutdown()

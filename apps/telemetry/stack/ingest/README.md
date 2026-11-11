@@ -33,3 +33,7 @@ bridge uses matching generated Artemis bindings. Network defaults come from
 The [Kafka bridge](../kafka/README.md) acknowledges successful raw publication.
 The [database writer](../processors/db_writer/README.md) owns subsequent storage.
 Database/Grafana provisioning is described in the [stack guide](../README.md).
+
+The Bazel image packages its generated Artemis schema, CAN and storage metadata
+and is labeled as a schema consumer for deployment agreement checks. See the
+[stack deployment guide](../README.md).

@@ -79,6 +79,7 @@ py_test(
 )
 
 telemetry_service_image(
+    schema_consumer = True,
     name = "events_faults",
     base = "@python312_linux_amd64",
     binary = ":events_faults_binary",

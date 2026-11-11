@@ -163,3 +163,9 @@ Gazelle use those files for the Bazel graph. The telemetry CI job builds
 `all_images`, runs `core_smoke_tests`, then starts the core with Compose
 `--no-build` before integration tests. Docker-backed tests are tagged `manual`
 and `local`, so normal remote `bazel test //...` stays hermetic.
+
+`telemetry_service_image(schema_consumer = True)` packages the generated
+Artemis descriptor, semantic contract, CAN JSON and storage contract under
+`/schema/`. It adds the `lhre.schema-consumer=artemis` image label so the
+deployed authority checks enabled consumers against the same release. The
+[release catalog](schema_registry/README.md) documents discovery and preparation.

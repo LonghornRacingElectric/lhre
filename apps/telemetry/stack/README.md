@@ -112,3 +112,13 @@ Run `npm run prisma-cars-register` from the viewer directory against the shared
 metadata database (`TELEMETRY_DATABASE_URL`). This adds Orion ID 5 and Artemis
 ID 6 through Prisma, refusing conflicting IDs and preserving historical rows.
 Subsequent Artemis field additions use the explicit schema apply command.
+
+## Release-coordinated deployment
+
+The [schema catalog](../schema_registry/README.md) discovers immutable release
+bundles. With `TELEMETRY_RELEASE_CONFIG` and `TELEMETRY_RELEASE_REFERENCE` set,
+`build` prepares additive Artemis storage before replacing containers. A failed
+preflight stops the build. `schema-sync` discovers a candidate and
+`schema-prepare` runs preparation explicitly; neither command deploys server
+images. All schema consumers package their generated CAN/storage metadata and
+are checked before the automatic authority advertises a new schema.

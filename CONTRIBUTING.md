@@ -30,7 +30,7 @@ everywhere.
   out of every review. Its repo settings live in
   [`.coderabbit.yaml`](https://github.com/LonghornRacingElectric/lhre/blob/main/.coderabbit.yaml);
   everything else follows the org's CodeRabbit settings.
-- Every PR, every push to `main` and a weekly run use
+- Every PR, pushes to `main` and `vms/telemetry-pdr`, and a weekly run use
   [`ci.yml`](https://github.com/LonghornRacingElectric/lhre/blob/main/.github/workflows/ci.yml).
   Its `Changes` job finds which areas the change touches. Each area's job
   runs only when its paths changed: Bazel build and test on Linux and

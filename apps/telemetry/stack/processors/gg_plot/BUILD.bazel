@@ -22,6 +22,7 @@ py_binary(
 )
 
 telemetry_service_image(
+    schema_consumer = True,
     name = "gg_plot",
     base = "@python312_linux_amd64",
     binary = ":gg_plot_binary",

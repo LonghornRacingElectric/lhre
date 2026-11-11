@@ -17,35 +17,24 @@ bazel build //apps/BEVO:pi_core_image //apps/BEVO/updater:standalone
 bazel run //apps/BEVO:pi_core_push -- --tag release-name
 ```
 
-Authenticate the build machine to GHCR first. Publishing is explicit, never
-performed by PR CI. Use the pushed **image digest**, not a tag, in the server's
+Authenticate the build machine to GHCR first. CI publication is manual; PR and
+push checks only validate. Use the pushed **image digest**, not a tag, in the server's
 release list. The default repository is
 `ghcr.io/longhornracingelectric/bevo-core`. Private packages need a Pi token
 with `read:packages`; see [GHCR authentication](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
 
-For a release with changed schema/CAN definitions, use **Actions → CI →
-Run workflow**, select the branch, enable `publish`, and set `schema_base` to
-the last released commit. The CLI equivalent is:
-
-```bash
-gh workflow run ci.yml --ref YOUR_BRANCH -f publish=true -f schema_base=LAST_RELEASE_COMMIT
-```
-
-The workflow builds both revisions' generated contract and CAN JSON, skips
-publication if they match, and requires its verification jobs to pass before
-pushing a `sha-COMMIT` tag. Ordinary PR runs never publish. The workflow must
-be on the default branch before its new dispatch inputs become available.
-For bootstrap or executable-only releases with identical definitions, use the
-explicit Bazel push command above. See the
-[workflow runbook](../../../docs/ci.md) for permissions and
-the difference between publishing and server approval.
+An explicit manual CI `publish` run publishes the core image and a matching
+server contract bundle after verification. Only a manual run on the configured
+deployment branch promotes the discovery channel; other reviewed revisions can
+be published without admitting them to that channel. See the
+[CI runbook](../../../docs/ci.md).
 
 The image is an artifact carrier, not a container run on the Pi. Layer one
 contains `pi_core_manifest.json`, `schema_contract.json`,
 `schema_descriptor.pb` and `can.json`. Layer two contains exactly
 `bin/cand`, `bin/loggerd` and `bin/publishd`. OCI layers and individual files
 are digest-verified. Dashboard and logsync are not included.
-The CAN JSON is retained for release auditing only; decode tables and CSV
+The CAN JSON is hashed for release auditing and preferred-build selection; decode tables and CSV
 columns are compiled into the executables, not loaded from this file.
 
 Copy `bazel-bin/apps/BEVO/updater/bevo_updater.pyz` to the Pi. It needs only
@@ -81,8 +70,10 @@ the operation with the existing activation intact. This catches changes
 during a download; it does not lock the server against later deployments.
 
 The server profile is authoritative and orders approved releases
-preferred-first. A compatible installed release is kept without downloading
-images. `--upgrade` selects the first compatible approved release even when
+preferred-first. Automatic catalog profiles request a build matching the deployed
+protobuf and CAN definitions. Identical executable metadata is kept; a changed
+plan alone is reconciled without a binary download. Manual profiles retain the
+compatible-installed-release policy. `--upgrade` selects the first compatible approved release even when
 the installed one suffices. Shared numeric paths must preserve names, types,
 cardinality, units, enum meanings and array layouts. Additive protobuf fields
 may be absent on either side; equal schema hashes are not required.
@@ -115,7 +106,7 @@ match. Activation identity includes the executable metadata and plan digest;
 the previous complete release/plan remains available for rollback. Plans are
 validated against both manifests and bound to the exact executable digests.
 
-The updater does not restart services; output reports `restart_required`.
+The updater does not restart running services; output reports `restart_required`.
 Set `BEVO_CORE_ROOT=/opt/bevo/core` in the telemetry service environment and
 restart at an operator-approved time. The [launcher](../nonhermetic/README.md)
 resolves `current` once, so all core processes use the same release. The
@@ -128,13 +119,34 @@ IPC consumers and local logging retain the complete producer snapshot.
 Only pit-bound publishing projects fields. Missing/invalid plans fail
 startup; malformed snapshots are dropped without publishing original bytes.
 
-This is wire-field exclusion, not database availability tracking. With
-implicit proto3 scalar presence, omitted values decode as defaults; existing
-server JSON conversion may therefore show an excluded scalar as zero/false.
-It cannot distinguish that from a valid zero without a separate presence
-design. See [protobuf field presence](https://protobuf.dev/programming-guides/field_presence/).
-The updater does not change the server schema, add a per-frame identity or
-make uncoordinated server/BEVO deployment safe.
+Artemis projection filters values and explicit presence masks together. Omitted
+fields do not become fresh zero observations in native batches. CAN layout
+identity is separate from protobuf compatibility; passive decoding cannot prove
+that flashed board firmware matches those definitions.
+
+## Startup synchronization
+
+The bootstrap service powers GPS and the cellular modem through the existing
+GPIO scripts and configures CAN first. It then runs `startup`, allowing up to
+60 seconds for the complete synchronization attempt before resolving the core release and
+starting daemons. Configure `/etc/default/bevo-telemetry`:
+
+```bash
+BEVO_CORE_ROOT=/opt/bevo/core
+BEVO_UPDATER=/absolute/bevo_updater.pyz
+BEVO_SERVER_URL=https://telemetry.example/schema/profile.json
+BEVO_NETWORK_WAIT_S=60
+```
+
+The Pi bundle includes the standalone updater. Keep it and GPIO bootstrap
+scripts outside managed executable releases. On network, registry or validation
+failure, `startup` verifies the installed executables and their existing plan
+before returning `offline-keep`. Missing/damaged activations fail updater verification. If the updater itself
+cannot execute, bootstrap pins the pre-existing activation and continues the
+normal launcher checks; the publisher still validates its release-bound plan. A
+running stack checks every five minutes but never activates or restarts itself;
+apply a new release at the next coordinated startup. Explicit admin-pinned
+`BEVO_CORE_RELEASE` bypasses automatic startup synchronization.
 
 ## Admin override
 
@@ -170,8 +182,8 @@ bazel test --config=local //apps/BEVO/updater:docker_updater_test --test_output=
 ```
 
 This opt-in test loads the Bazel-built images and starts actual ingest and
-bridge processes with isolated Kafka, MQTT and PostgreSQL. Database schemas
-are initialized from the normal SQL artifacts. It checks that the authority
+bridge processes with isolated Kafka, MQTT and PostgreSQL. The database starts with an older additive storage fixture built by the normal
+generator, then preparation applies the selected release artifacts. It checks that the authority
 reads the running images, the standalone updater activates a matching plan
 with unchanged core executables, and a repeated update keeps that release.
 Stopping the bridge must produce HTTP 503 and preserve the activation;
@@ -209,3 +221,7 @@ producer schema stays unchanged.
 All installation roots are temporary. These tests run in normal presubmit
 and postsubmit without credentials, Docker or a Pi. Real GHCR authentication
 and running the ARM executables remain a manual deployment check.
+
+The Docker updater test also prepares additive Timescale storage, preserves an
+existing row, sends zero/false through MQTT → Kafka → the actual writer, and
+runs the pool-storage correctness cases against its disposable database.

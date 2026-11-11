@@ -14,7 +14,7 @@ from analysis.sql_utils.db_session import get_db
 from analysis.sql_utils.models import ArtemisStorageMigration
 
 
-def changes(connection, expected):
+def changes(connection, expected, allow_historical=False):
     inspector = inspect(connection)
     tables = set(inspector.get_table_names(schema="public"))
     if "packet" in tables:
@@ -25,6 +25,11 @@ def changes(connection, expected):
             ArtemisStorageMigration.applied_at.desc()).limit(1)).scalar()
     old_paths = {tuple(field["path"]): (pool["table"], field["name"], field["sql_type"])
                  for pool in (previous or {}).get("pools", []) for field in pool["fields"]}
+    expected_paths = {tuple(field["path"]) for pool in expected["pools"] for field in pool["fields"]}
+    if allow_historical and {pool["table"] for pool in (previous or {}).get("pools", [])} - {pool["table"] for pool in expected["pools"]}:
+        raise ValueError("Rollback across added pools requires an explicit migration; older writers cannot maintain their session bounds")
+    if old_paths.keys() - expected_paths and not allow_historical:
+        raise ValueError("Retiring fields requires an explicit migration preserving historical read interfaces")
     planned = []
     for name in ("recording_session", "storage_migration", "gps_precise"):
         if name not in tables:
@@ -51,6 +56,17 @@ def changes(connection, expected):
                     planned.append(f"Add nullable {name}.{field['name']}")
             elif str(column["type"].compile(dialect=connection.dialect)).lower() != field["sql_type"]:
                 raise ValueError(f"{name}.{field['name']}: database type differs from the generated schema")
+    return planned
+
+
+def apply(session, expected, sql):
+    session.execute(select(func.set_config("lock_timeout", "5s", True)))
+    session.execute(select(func.pg_advisory_xact_lock(176021, 1)))
+    planned = changes(session.connection(), expected)
+    applied = session.scalar(select(ArtemisStorageMigration.storage_id).where(
+        ArtemisStorageMigration.storage_id == expected["storage_id"])) if inspect(session.connection()).has_table("storage_migration", schema="public") else None
+    if not applied or planned:
+        session.connection().exec_driver_sql(sql)
     return planned
 
 

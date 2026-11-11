@@ -29,8 +29,12 @@ precedence over `BEVO_CORE_ROOT`. Missing explicitly selected releases fail
 startup rather than falling back. A core release is required to start the real stack. Only publishing requires
 `reconciliation.json`; acquisition and logging remain independent of its validity. The launcher exports its resolved
 physical directory as `BEVO_CORE_RELEASE_ROOT` for `publishd`.
-No updater/network request runs inside this launcher;
-install first, then restart the stack when appropriate.
+The outer `start_telemetry.sh` powers GPIO/modem hardware and configures CAN
+before invoking updater startup synchronization. Network failures preserve a
+verified installed activation after a bounded wait. The inner launcher resolves
+that activation once. Configure the URL/root/updater path in
+`/etc/default/bevo-telemetry`. Running stacks only check for updates every five
+minutes; activation waits for the next coordinated startup.
 
 For mock publishing, set `BEVO_CORE_RELEASE_ROOT` to a plan for the same
 Artemis schema compiled into its installed mock executables.
@@ -47,3 +51,11 @@ To change a schema, install the matching rebuilt executable release.
 
 - Bazel on the build machine; deployed executables need no build toolchain.
 - Optional for `cell.py`: install `../requirements.txt` (Pi-only deps)
+
+`bazel test --config=local //apps/BEVO:startup_test` verifies modem-before-sync
+and release selection before launching the core, with stubbed hardware commands.
+
+Updater process failures (including a missing standalone archive or busy lock)
+log a warning and pin the pre-existing physical activation for the normal
+launcher checks. They do not prevent local acquisition/logging. No replacement
+release is selected on this path; publishing retains its plan validation.

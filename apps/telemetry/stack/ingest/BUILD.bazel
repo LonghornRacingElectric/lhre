@@ -172,6 +172,7 @@ pkg_tar(
 )
 
 telemetry_service_image(
+    schema_consumer = True,
     name = "ingest",
     binary = ":ingest_binary",
     base = "@python312_linux_amd64",
@@ -230,6 +231,7 @@ py_library(
 
 py_test(
     name = "pool_storage_test",
+    visibility = ["//apps/telemetry:__subpackages__", "//apps/BEVO/updater:__pkg__"],
     srcs = ["pool_storage_test.py"],
     imports = ["../.."],
     data = ["//apps/telemetry:config_files"],

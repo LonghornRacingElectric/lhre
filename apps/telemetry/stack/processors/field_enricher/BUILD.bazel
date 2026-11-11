@@ -29,6 +29,7 @@ pkg_tar(
 )
 
 telemetry_service_image(
+    schema_consumer = True,
     name = "field_enricher",
     base = "@python312_linux_amd64",
     binary = ":field_enricher_binary",

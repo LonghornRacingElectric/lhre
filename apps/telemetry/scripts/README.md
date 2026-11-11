@@ -47,3 +47,10 @@ has not been applied. Reapplying a matching schema preserves all measurements.
 The native-update layout requires the three-column raw primary key
 `(session_start_ms, time, sample_time_ns)`. This command refuses older keys;
 initialize a fresh Artemis database instead of rewriting existing history.
+
+The [release preparation command](../schema_registry/README.md) reuses this
+additive planner under the existing advisory lock. Automatic preparation blocks
+field retirement as well as renames, semantic/type changes and pool moves so
+existing read interfaces and measurements remain available. Preparation uses a
+five-second lock timeout; a busy database aborts deployment instead of waiting
+indefinitely. No second Kafka writer is introduced.

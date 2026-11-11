@@ -18,3 +18,7 @@ writing each to its corresponding `_derived` topic. Both currently use the
 shared current-field expressions in `config/orion.yaml`. `ENRICHER_CONFIG`
 overrides that file. An explicit `KAFKA_SOURCE_TOPIC` selects a single input;
 `KAFKA_OUTPUT_TOPIC` then overrides its destination.
+
+The Bazel image packages its generated Artemis schema, CAN and storage metadata
+and is labeled as a schema consumer for deployment agreement checks. See the
+[stack deployment guide](../../README.md).
