@@ -47,6 +47,9 @@ TEST(RateGate, KeepsTimeAcrossTheMillisecondCounterWrap) {
   RateGate gate;
   const uint32_t start = UINT32_MAX - 4;
   ASSERT_TRUE(gate.Due(start, 10));
+  // The deadline is past the wrap and the clock is not: a raw compare of
+  // the two counters fires here.
+  EXPECT_FALSE(gate.Due(start + 1, 10));
   EXPECT_FALSE(gate.Due(start + 9, 10));  // wrapped to 4
   EXPECT_TRUE(gate.Due(start + 10, 10));
 }
