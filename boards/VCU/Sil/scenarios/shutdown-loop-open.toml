@@ -1,0 +1,62 @@
+# The shutdown loop opens at speed with the pedal down, as when the driver
+# hits a shutdown button. The VCU must cut torque from its own loop sense,
+# leave DRIVE for FAULT and stay there while the loop is open. The AIR coils
+# are in the loop, so the AIRs open too; the HVC reports it 20 ms later. The
+# driver lifts 300 ms after the loop opens; the RTD toggle stays on.
+schema = "lhre.vcu-sil-scenario.v1"
+description = "At 60 % pedal the shutdown loop opens; the AIRs open 20 ms later and the driver lifts 300 ms later."
+duration_ms = 6000
+
+# Power up on the brake, as in launch.toml.
+[[at]]
+t_ms = 0
+accelerator = 0.0
+brake_psi = 350.0
+steering_deg = 0.0
+rtd_pressed = false
+hvc_state = "NOT_ENERGIZED"
+contactors_closed = false
+shutdown_loop_v = 24.0
+
+[[at]]
+t_ms = 200
+mark = "precharge"
+hvc_state = "PRECHARGING"
+
+[[at]]
+t_ms = 600
+mark = "energized"
+hvc_state = "ENERGIZED"
+contactors_closed = true
+
+[[at]]
+t_ms = 1000
+mark = "rtd"
+rtd_pressed = true
+
+[[at]]
+t_ms = 1500
+mark = "brake-off"
+brake_psi = { to = 0.0, ramp_ms = 150 }
+
+[[at]]
+t_ms = 2000
+mark = "roll-on"
+accelerator = { to = 0.6, ramp_ms = 300 }
+
+# 0 V is far under the loop's 16.6 V low threshold.
+[[at]]
+t_ms = 4000
+mark = "loop-open"
+shutdown_loop_v = 0.0
+
+[[at]]
+t_ms = 4020
+mark = "airs-open"
+hvc_state = "NOT_ENERGIZED"
+contactors_closed = false
+
+[[at]]
+t_ms = 4300
+mark = "lift"
+accelerator = { to = 0.0, ramp_ms = 200 }

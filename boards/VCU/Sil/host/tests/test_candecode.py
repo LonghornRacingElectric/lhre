@@ -2,12 +2,11 @@ import dataclasses
 import json
 
 import pytest
-from fakes import ToyCar
+from fakes import Launch, ToyCar
 
 from vcusil import cosim
 from vcusil.candecode import CanTable
 from vcusil.firmware import Firmware
-from vcusil.scenario import Launch
 
 # A two-message table in the generator's format, covering every signal kind.
 TABLE = {

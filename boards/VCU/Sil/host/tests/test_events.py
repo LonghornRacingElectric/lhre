@@ -1,9 +1,8 @@
-from fakes import ToyCar
+from fakes import Launch, ToyCar
 from test_cosim import BrakeOnThrottle
 
-from vcusil import cosim, events
+from vcusil import cosim, events, scenario_file
 from vcusil.firmware import Firmware
-from vcusil.scenario import Launch
 
 
 def run(lib, scenario, car=None):
@@ -88,3 +87,43 @@ def test_the_bspd_timer_restarts_when_the_condition_breaks():
         row['dcBusCurrent'] = 9.0
     assert not [e for e in events.derive(result, lambda s: 'DRIVE', lambda c: '', lambda i: '')
                 if e.name == 'bspd']
+
+
+def test_scenario_marks_are_events_at_the_sample_that_sees_them(lib):
+    sf = scenario_file.load('launch')
+    with Firmware(lib) as fw:
+        result = cosim.run(sf.timeline, fw, ToyCar())
+        marks = events.derive(result, fw.state_name, fw.fault_name, fw.transition_reason,
+                              marks=sf.marks)
+    assert [(e.t_ms, e.level, e.message) for e in marks if e.name == 'scenario'] == [
+        (201, events.INFO, 'mark precharge (t_ms 200)'),
+        (600, events.INFO, 'mark energized (t_ms 600)'),
+        (1002, events.INFO, 'mark rtd (t_ms 1000)'),
+        (1500, events.INFO, 'mark brake-off (t_ms 1500)'),
+        (2001, events.INFO, 'mark pedal-on (t_ms 2000)'),
+        (6000, events.INFO, 'mark pedal-off (t_ms 6000)')]
+    assert marks[0].message == 'scenario launch starts'
+    assert marks[-1].message == 'scenario launch completed'
+    assert [e.t_ms for e in marks] == sorted(e.t_ms for e in marks)
+    # At an equal ms the firmware's own event comes first.
+    at_600 = [e.name for e in marks if e.t_ms == 600]
+    assert at_600 == ['vcu.state', 'scenario']
+
+
+def test_marks_after_the_last_row_are_dropped():
+    rows = []
+    for k in range(10):
+        row = {c: 0 for c in cosim.COLUMNS}
+        row.update(t_ms=3 * k, fw_state=2, fw_control_ms=3 * k, dcBusVoltage=574.0)
+        rows.append(row)
+    result = cosim.Result(scenario='synthetic', rows=rows, status='plant_failed',
+                          failure='step 9: boom')
+    marks = events.derive(result, lambda s: 'DRIVE', lambda c: '', lambda i: '',
+                          marks=[('a', 0, 0), ('b', 10, 12), ('end', 27, 27), ('late', 28, 30)])
+    assert [(e.t_ms, e.name, e.message) for e in marks] == [
+        (0, 'run', 'scenario synthetic starts'), (0, 'vcu.state', 'start -> DRIVE'),
+        (0, 'scenario', 'mark a (t_ms 0)'), (12, 'scenario', 'mark b (t_ms 10)'),
+        (27, 'scenario', 'mark end (t_ms 27)'),
+        (27, 'model.failure', 'car model failed: step 9: boom')]
+    assert not [e for e in events.derive(cosim.Result(scenario='x'), str, str, str,
+                                         marks=[('a', 0, 0)]) if e.name == 'scenario']
