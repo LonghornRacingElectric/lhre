@@ -514,6 +514,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.telemetry != 'false' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: apps/telemetry/analysis/database/viewer_tool
