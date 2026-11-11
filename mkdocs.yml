@@ -56,6 +56,7 @@ nav:
       - Serial Monitor: tools/monitor/README.md
       - UBSan: tools/ubsan/README.md
       - Hermetic Tests: tools/hermetic/README.md
+      - Coverage: tools/coverage/README.md
       - Prebuilt protoc: tools/protoc/README.md
   - Autonomy:
       - Overview: autonomy/README.md
