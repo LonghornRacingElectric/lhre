@@ -482,6 +482,32 @@ jobs:
       - name: Verify static AArch64 executables
         run: bazel test //apps/BEVO:pi_core_binary_test --test_output=errors
 
+  # The kiosk UI is an npm project outside Bazel, so it gets its own job.
+  bevo-frontend:
+    name: BEVO dash frontend
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.bevo != 'false' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/BEVO/dashd/frontend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/BEVO/dashd/frontend/package-lock.json
+
+      - name: Install
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Run the jest tests
+        env:
+          CI: "true"
+        run: npm test -- --watchAll=false
+
   # On main, docs.yml builds and publishes the site instead.
   docs:
     name: Docs
@@ -591,7 +617,7 @@ jobs:
   # Jobs skip only on an untouched area, and run if Changes fails.
   all-checks:
     name: All checks passed
-    needs: [changes, format, lint, bazel, bazel-windows, sim-fast, four-post, autonomy, bevo, docs, telemetry]
+    needs: [changes, format, lint, bazel, bazel-windows, sim-fast, four-post, autonomy, bevo, bevo-frontend, docs, telemetry]
     if: always()
     runs-on: ubuntu-latest
     steps:
