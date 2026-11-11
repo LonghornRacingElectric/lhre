@@ -14,6 +14,7 @@ Build and dev tooling. Each package documents itself:
 | [hermetic/](hermetic/README.md) | Tests run without network; `:network_off_test` is the canary that proves it. |
 | [coverage/](coverage/README.md) | Firmware line coverage from the host tests on the lines a PR changes, reported on every PR (no enforced percent). |
 | [ubsan/](ubsan/README.md) | `--config=ubsan`: host tests with undefined behavior trapping, plus the canary that proves it's on. |
+| [asan/](asan/README.md) | `--config=asan`: host tests under AddressSanitizer, with its canary. |
 
 `new_board.py` (`bazel run //tools:new_board -- boards/<Name>/<Name>.ioc`)
 scaffolds a whole working board from its CubeMX `.ioc`, so new boards

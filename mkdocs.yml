@@ -55,6 +55,7 @@ nav:
       - IDE Setup: tools/ide/README.md
       - Serial Monitor: tools/monitor/README.md
       - UBSan: tools/ubsan/README.md
+      - ASan: tools/asan/README.md
       - Hermetic Tests: tools/hermetic/README.md
       - Coverage: tools/coverage/README.md
       - Prebuilt protoc: tools/protoc/README.md

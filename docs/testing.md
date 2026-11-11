@@ -58,6 +58,7 @@ except coverage, which is reported, not enforced.
 | Network off in tests | A unit test that reaches the internet or a service | `bazel test //tools/hermetic:network_off_test` |
 | Changed-line coverage (report only) | How many firmware lines a PR adds or changes run under a host test, on the run's summary page | `bazel coverage //boards/... //drivers/...`, then diff-cover ([how](../tools/coverage/README.md)) |
 | UBSan | Undefined behavior in host C++ (overflow, bad shifts, misaligned access) | `bazel test --config=ubsan //boards/... //drivers/... //lib/codegen/cpp/...` |
+| ASan | Memory errors in host C++ (out of bounds, use after free, leaks) | `bazel test --config=asan //boards/... //drivers/... //lib/codegen/cpp/... //tools/asan:overflow_test` |
 | Firmware warnings as errors | Shadowed variables, `float` silently widened to `double` (slow on the M4F), unchecked format strings, fallthrough, `#if` on undefined macros, in app and longhorn code ([list](../tools/firmware/README.md#warnings)) | part of `bazel build //...` |
 | Format | Unformatted C/C++ | `bazel run //tools/format:check` |
 | Lint: Python (ruff) | Undefined names, unused imports, swallowed exceptions, unchecked subprocesses, unsafe calls. Stale `noqa` fails. | `uv run --group lint ruff check` |
