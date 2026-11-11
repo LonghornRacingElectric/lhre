@@ -4,7 +4,6 @@ or FMU runs, so these need neither Docker nor a build."""
 
 import json
 import os
-import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -18,14 +17,16 @@ SIL = Path(__file__).resolve().parents[2]
 RUN_SH = SIL / 'run.sh'
 REPO = SIL.parents[2]  # physical, as run.sh's pwd -P makes it
 LAUNCH_IN_CONTAINER = '/work/lhre/boards/VCU/Sil/scenarios/launch.toml'
-OLD = 946684800  # 2000-01-01: a previous run's meta.json
+OLD = 946684800  # 2000-01-01 UTC: a previous run's meta.json
+STAMP = 1577836800  # 2020-01-01 UTC: run.sh's stamp, from the mktemp stub
+NOW = '20260102-030405'  # what the date stub says
 UID = os.getuid()
 
 # Logs every call. A docker run with a /out mount stands in for vcusil:
-# STUB_META=new writes a meta.json 2 s ahead of run.sh's stamp however coarse
-# the file clock, =old one dated long before it; STUB_EXIT is its status.
+# STUB_META=new writes a meta.json dated a second after run.sh's stamp, =old
+# one dated before it; STUB_EXIT is its status. No time here is the clock's.
 STUB_DOCKER = f'''#!/usr/bin/env python3
-import json, os, sys, time
+import json, os, sys
 from pathlib import Path
 
 args = sys.argv[1:]
@@ -38,7 +39,7 @@ meta = os.environ.get('STUB_META')
 if outs and meta:
     path = Path(outs[0]) / 'meta.json'
     path.write_text('{{"run": "this one"}}', encoding='utf-8')
-    when = time.time() + 2 if meta == 'new' else {OLD}
+    when = {STAMP} + 1 if meta == 'new' else {OLD}
     os.utime(path, (when, when))
 sys.exit(int(os.environ.get('STUB_EXIT', '0')))
 '''
@@ -46,6 +47,22 @@ sys.exit(int(os.environ.get('STUB_EXIT', '0')))
 STUB_DF = '''#!/bin/sh
 printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\\n'
 printf 'stub 1 1 %s 1%% /\\n' "${STUB_FREE_KB:-999999999}"
+'''
+
+# run.sh's stamp, at a known path and time. 'x': a stamp left by an earlier
+# run (its trap failed) stops the next one.
+STUB_MKTEMP = f'''#!/usr/bin/env python3
+import os
+path = os.environ['STUB_STAMP']
+open(path, 'x').close()
+os.utime(path, ({STAMP}, {STAMP}))
+print(path)
+'''
+
+# Only the format run.sh names a run directory with.
+STUB_DATE = f'''#!/bin/sh
+[ "$*" = '+%Y%m%d-%H%M%S' ] || {{ echo "date stub: unexpected arguments: $*" >&2; exit 1; }}
+echo {NOW}
 '''
 
 
@@ -80,10 +97,12 @@ class RunSh:
         self.tmp = tmp
         self.bin = tmp / 'bin'
         self.bin.mkdir()
-        for name, text in (('docker', STUB_DOCKER), ('df', STUB_DF)):
+        for name, text in (('docker', STUB_DOCKER), ('df', STUB_DF), ('mktemp', STUB_MKTEMP),
+                           ('date', STUB_DATE)):
             (self.bin / name).write_text(text)
             (self.bin / name).chmod(0o755)
         self.log = tmp / 'docker.log'
+        self.stamp = tmp / 'stamp'
         self.fmu = tmp / 'fmus' / 'car.fmu'
         self.fmu.parent.mkdir()
         self.fmu.write_bytes(b'')
@@ -92,10 +111,9 @@ class RunSh:
                  **env: str) -> Result:
         self.log.write_text('')
         # Only what run.sh needs: no VCU_SIL_FMU from the session running this.
-        # TMPDIR keeps its stamp here on Linux (macOS's mktemp ignores it).
         environ = {'PATH': f'{self.bin}{os.pathsep}{os.environ["PATH"]}',
                    'HOME': str(self.tmp), 'TMPDIR': str(self.tmp),
-                   'STUB_LOG': str(self.log), **env}
+                   'STUB_LOG': str(self.log), 'STUB_STAMP': str(self.stamp), **env}
         p = subprocess.run(['bash', str(script), *map(str, args)], cwd=cwd or self.tmp,
                            env=environ, capture_output=True, text=True, check=False,
                            timeout=60)
@@ -276,6 +294,7 @@ def test_what_a_run_leaves_in_its_directory(sh, case):
     line = f'  wrote {out} (open it with: {RUN_SH} --view {out})\n'
     assert r.out == (line if wrote else '')
     assert out.is_dir() == kept
+    assert not sh.stamp.exists()  # run.sh's trap removes it
     if before == 'previous' and not wrote:
         assert (out / 'meta.json').read_text() == '{"run": "the previous one"}'
         assert (out / 'meta.json').stat().st_mtime == OLD
@@ -295,7 +314,7 @@ def test_a_run_without_out_is_named_for_its_scenario(sh, scenario, stem):
            STUB_META='new')
     assert r.code == 0, r.err
     [out] = (sil / 'out').iterdir()
-    assert re.fullmatch(rf'{stem}-\d{{8}}-\d{{6}}', out.name)
+    assert out.name == f'{stem}-{NOW}'
     assert f'{out}:/out' in volumes(r.run())
     assert volumes(r.run())[0] == f'{fake}:/work/lhre:ro'
     expected = '/work/lhre/boards/VCU/Sil/scenarios/my-drive.toml' if '/' in scenario else stem

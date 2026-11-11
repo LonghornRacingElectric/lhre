@@ -477,13 +477,13 @@ reverse `direction` is refused: the model cannot take it.
 - `events.py`, `mcaplog.py`: the event markers and `run.mcap`.
 - `tests/`: pytest. `VCU_SIL_LIB`, `VCU_SIL_CAN_TABLE` and `VCU_SIL_FMU`
   select the library, the decode table and the FMU; `run.sh --test` sets
-  them. Only the tests that need the FMU skip
-  without it. `test_check_firmware.py` holds each of `check.py`'s models to
-  the library. `test_run_sh.py` runs `run.sh` with a stub `docker` and `df`
-  first on `PATH`, so it checks what each container is handed and what a
-  run leaves in its directory without Docker. The script that runs inside
-  the container is exercised only by real runs. CI does not run this suite
-  yet.
+  them. Only the tests that need the FMU skip without it.
+  `test_check_firmware.py` holds each of `check.py`'s models to the
+  library. `test_run_sh.py` runs `run.sh` with stub `docker`, `df`,
+  `mktemp` and `date` first on `PATH`, so it checks what each container is
+  handed and what a run leaves in its directory without Docker or the
+  clock. The script that runs inside the container is exercised only by
+  real runs. CI does not run this suite yet.
 
 ## Gotchas
 
