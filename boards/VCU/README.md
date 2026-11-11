@@ -85,6 +85,12 @@ The DUI is a plain CAN peripheral this year.
 | LED status | 33 ms | idle+2 | Applies the state/fault color selected by control. |
 | shell ×2, logger | — | idle+1 | Debug consoles on the STDC14 VCP (USART3) and USB CDC. |
 
+Every periodic frame goes out at the rate the CAN spec gives it (slower
+frames on rate gates inside the control and telemetry ticks), since the
+Pi and the MoTeC export read those rates from the spec.
+`critical_tx_test` and `telemetry_test` count each frame over three
+seconds and fail on a mismatch, and on any frame on the wrong bus.
+
 ## Pin map (Rev A netlist)
 
 | Signal | Pin | Notes |
