@@ -129,7 +129,9 @@ void ApplyAnalogAndPins(bench::Bench& b, const RigInputs& in,
 
   // The BSPD's hard-brake comparators, trimmed to the firmware's threshold
   // and fed the pin volts the firmware computes from the same ADC counts,
-  // so its cross-check agrees with them even at the threshold.
+  // so its cross-check agrees with them even at the threshold. The host ADC
+  // reads back what the setters above just wrote (CompleteScan only counts
+  // scans), so these are the counts every pass of this advance reads.
   const AnalogReadings a =
       ReadAnalog(&b.adc1, &b.adc2, bench::kVrefintCal, p.analog);
   b.hard_braking.Write(a.bse1.pin_v > p.bse.hard_brake_pin_v &&

@@ -390,6 +390,45 @@ TEST(SilRig, HardBrakeComparatorAgreesWithTheFirmware) {
   }
 }
 
+// The mismatch fault waits hard_brake_mismatch_ms (50 ms), so the holds
+// above would miss a comparator that lagged the firmware by an advance.
+// This checks the raw pin against the firmware's own view on every control
+// tick, including the one each brake change lands on.
+TEST(SilRig, HardBrakePinMatchesTheFirmwareOnTheTickABrakeChangeLands) {
+  Rig rig;
+  RigInputs in = ParkedCar();
+  Hold(rig, in, 30);
+  std::vector<float> sweep;
+  for (float psi = 520.0f; psi <= 545.0f; psi += 0.25f) sweep.push_back(psi);
+  for (float psi = 545.0f; psi >= 520.0f; psi -= 0.25f) sweep.push_back(psi);
+  for (const float psi : {0.0f, 3000.0f, 0.0f, 600.0f, 100.0f}) {
+    sweep.push_back(psi);
+  }
+  int flips = 0;
+  bool previous = false;
+  for (const uint32_t ms : {1u, 3u}) {
+    // The control tick is every 3 ms, so one-ms advances hold each value for
+    // four of them: every value reaches a tick, and the changes land on each
+    // phase of it in turn.
+    const int advances = ms == 1 ? 4 : 1;
+    for (const float psi : sweep) {
+      in.brake_front_psi = psi;
+      in.brake_rear_psi = psi;
+      for (int k = 0; k < advances; ++k) {
+        const RigOutputs out = rig.Advance(in, ms);
+        const bool firmware = out.snapshot.pedals.firmware_hard_brake;
+        ASSERT_EQ(out.snapshot.inputs.hard_braking, firmware)
+            << psi << " psi, advance " << k << " of " << ms << " ms";
+        flips += firmware != previous;
+        previous = firmware;
+      }
+    }
+  }
+  // Every value reaches the firmware, so each pass of the sweep crosses the
+  // threshold at least six times.
+  EXPECT_GE(flips, 12);
+}
+
 TEST(SilRig, ClampedCarModelValuesAreFlagged) {
   Rig rig;
   RigInputs in = ParkedCar();
