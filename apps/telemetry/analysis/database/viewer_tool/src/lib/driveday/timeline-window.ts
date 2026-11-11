@@ -28,3 +28,33 @@ export function speedEnvelope(times: number[], speeds: number[], start: number, 
   flush();
   return out;
 }
+
+/** A reversible display axis. Source timestamps and samples remain untouched. */
+export function lapTimelineAxis(duration: number, intervals: { start: number; end: number }[], showBetween: boolean) {
+  const merged: { start: number; end: number; offset: number }[] = [];
+  for (const item of [...intervals].sort((a, b) => a.start - b.start)) {
+    const start = Math.max(0, item.start), end = Math.min(duration, item.end);
+    if (end <= start) continue;
+    const previous = merged[merged.length - 1];
+    if (previous && start < previous.end) previous.end = Math.max(previous.end, end);
+    else merged.push({ start, end, offset: 0 });
+  }
+  let total = 0;
+  for (const segment of merged) { segment.offset = total; total += segment.end - segment.start; }
+  const full = showBetween || !merged.length;
+  return {
+    duration: full ? duration : total,
+    segments: merged,
+    includes: (time: number) => full || merged.some(s => time >= s.start && time <= s.end),
+    toDisplay: (time: number) => {
+      if (full) return time;
+      for (const s of merged) if (time < s.end) return s.offset + Math.max(0, time - s.start);
+      return total;
+    },
+    toSession: (time: number) => {
+      if (full) return Math.max(0, Math.min(duration, time));
+      for (const s of merged) if (time < s.offset + s.end - s.start) return s.start + Math.max(0, time - s.offset);
+      return merged[merged.length - 1].end;
+    },
+  };
+}

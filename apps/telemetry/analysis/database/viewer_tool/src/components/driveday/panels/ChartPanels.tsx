@@ -152,7 +152,6 @@ export function ChartPanel({ id }: { id: string }) {
   };
   return (
     <>
-      <p className="pdesc">{def.desc}</p>
       <div className="lg">
         {def.legend.map(([c, l]) => <span key={l}><i style={{ background: `var(${c})` }} />{l}</span>)}
       </div>

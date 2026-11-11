@@ -109,7 +109,7 @@ export function rebuildRun(D0: RunData): RunData {
     let dist = 0;
     for (let k = 1; k < m; k++) dist += Math.hypot(sm[k].x - sm[k - 1].x, sm[k].y - sm[k - 1].y);
     return {
-      ch, name: src.name, kind: src.kind, t0, t1, dur: src.dur,
+      ch, name: src.name.replace(/^manual(\s+\d+)\b/i, "Lap$1"), kind: src.kind, t0, t1, dur: src.dur,
       sec: sectorTimes({ ch: { u, t: tt }, dur: src.dur, kind: src.kind }, [RL / 3, 2 * RL / 3]),
       pts, dist,
       vmax: sm.reduce((v, s) => Math.max(v, s.spd), 0),

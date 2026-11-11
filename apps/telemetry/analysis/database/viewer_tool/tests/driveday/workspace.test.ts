@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultWorkspace, movePane, resizePair, restoreWorkspace } from "../../src/lib/driveday/workspace";
+import { defaultWorkspace, movePane, resizePair, restoreWorkspace, workspacePreset, workspacePanels } from "../../src/lib/driveday/workspace";
 import { lineChevron } from "../../src/lib/driveday/video-overlay";
 
 describe("workspace layout", () => {
@@ -40,5 +40,32 @@ describe("racing line arrows", () => {
     expect(numbers[1]).toBeGreaterThan(numbers[3]);
     expect(numbers[5]).toBeGreaterThan(numbers[3]);
     expect(lineChevron(a, a)).toBeNull();
+  });
+});
+
+describe("team layouts", () => {
+  it("gives electronics the full width and four simultaneous panels", () => {
+    const preset = workspacePreset("Electronics");
+    expect(preset.showBetweenLaps).toBe(true);
+    expect(preset.layout.panes.video.visible).toBe(false);
+    expect(preset.layout.panes.track.visible).toBe(false);
+    expect(preset.layout.panes.analysis.visible).toBe(true);
+    expect(workspacePanels(preset)).toEqual(["car", "cells", "kw", "temp"]);
+  });
+  it("prioritizes driver video and trackside timing without sharing mutable state", () => {
+    const driver = workspacePreset("Driver"), trackside = workspacePreset("Trackside");
+    expect(driver.layout.panes.video.weight).toBeGreaterThan(driver.layout.panes.track.weight);
+    expect(workspacePanels(trackside)).toEqual(["laps"]);
+    expect(driver.showBetweenLaps).toBe(false); expect(trackside.showBetweenLaps).toBe(false);
+    expect(trackside.layout.panes.video.visible).toBe(true);
+    expect(trackside.layout.panes.analysis.visible).toBe(true);
+    trackside.layout.panes.track.visible = false;
+    expect(driver.layout.panes.track.visible).toBe(true);
+    expect(workspacePreset("Trackside").layout.panes.track.visible).toBe(true);
+  });
+  it("migrates saved single-panel layouts and retains empty or multiple selections", () => {
+    expect(workspacePanels({panel:"cells"})).toEqual(["cells"]);
+    expect(workspacePanels({panel:"cells", panels:[]})).toEqual([]);
+    expect(workspacePanels({panel:null, panels:["car","kw","car"]})).toEqual(["car","kw"]);
   });
 });
