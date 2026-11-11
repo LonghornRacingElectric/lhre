@@ -82,7 +82,10 @@ from the `App/` directory instead of boards restating it:
   aren't warning-clean.
 - `App/**/*_test.cpp` → one small `cc_test` per file, named by its stem,
   against `{name}_app` + the LHAL host fakes + gtest. Stems must be unique
-  across `App/`.
+  across `App/`. A test function's stack frame over 256 KiB is a build
+  error: Windows gives tests 1 MB of stack, so a whole app object as a local
+  passes on Linux and crashes there. Hold it in a `std::unique_ptr` or a
+  fixture member instead.
 - `App/**/*_sim.cpp` → one host `cc_binary` per file, named by its stem.
 
 `app_deps` adds host-buildable dependencies to the app library (e.g.

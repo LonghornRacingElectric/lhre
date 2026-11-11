@@ -572,6 +572,20 @@ def firmware_project(
                 name = test_src.split("/")[-1][:-len(".cpp")],
                 size = "small",
                 srcs = [test_src],
+                # Windows gives a test 1 MB of stack and Linux 8 MB, so a
+                # big local (a whole App is over 1 MB) passes here and
+                # overflows there. Fail the build on every OS instead. Host
+                # tests build with hermetic clang, but GCC and clang spell
+                # the error differently and each rejects the other's form.
+                copts = select({
+                    "@rules_cc//cc/compiler:gcc": [
+                        "-Werror=frame-larger-than=262144",
+                    ],
+                    "//conditions:default": [
+                        "-Wframe-larger-than=262144",
+                        "-Werror=frame-larger-than",
+                    ],
+                }),
                 deps = [
                     ":" + app_name,
                     "//drivers/lhal:host",
