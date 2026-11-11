@@ -92,6 +92,20 @@ jobs:
       - name: Check formatting
         run: bazel run //tools/format:check
 
+  # Linters for code outside Bazel's view, pinned in pyproject's lint group.
+  # Cheap, so it always runs. Old violations are suppressed inline; see
+  # tools/lint/README.md.
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v9.0.0
+
+      - name: Python (ruff)
+        run: uv run --group lint ruff check --output-format=github
+
   bazel:
     name: Bazel (Linux)
     needs: changes
@@ -480,7 +494,7 @@ jobs:
   # Jobs skip only on an untouched area, and run if Changes fails.
   all-checks:
     name: All checks passed
-    needs: [changes, format, bazel, bazel-windows, sim-fast, four-post, autonomy, bevo, docs, telemetry]
+    needs: [changes, format, lint, bazel, bazel-windows, sim-fast, four-post, autonomy, bevo, docs, telemetry]
     if: always()
     runs-on: ubuntu-latest
     steps:

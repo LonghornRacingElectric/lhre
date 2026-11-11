@@ -62,6 +62,7 @@ Follow [docs/testing.md](docs/testing.md); the rules that matter most:
 bazel test //...                        # build + test everything (remote by default)
 bazel test --config=local //...         # same, entirely on this machine
 bazel run //tools/format                # clang-format everything (CI enforces :check)
+uv run --group lint ruff check          # Python lint (CI enforces)
 uv run --group docs mkdocs build --strict   # docs must build cleanly
 ```
 
@@ -75,6 +76,9 @@ It runs on every PR, on every push to `main`, weekly, and by hand.
   included. Each area's job runs only when its paths changed: Bazel on
   Linux and Windows, simulation fast checks, FourPost, autonomy (colcon),
   BEVO, docs and telemetry. `Format` always runs.
+- `Lint` always runs: ruff for Python outside `autonomy/` (see
+  [tools/lint/README.md](tools/lint/README.md)). Fix a new violation; a
+  `# noqa: <code>` needs a reason after it, and a stale one fails.
 - `All checks passed` is the only required check. It fails if any job failed or
   was cancelled, or if `Changes` failed. A job skips only when `Changes`
   says its paths are untouched. If `Changes` fails, every job runs.

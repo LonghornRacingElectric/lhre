@@ -9,7 +9,6 @@ import glob
 import os
 import pathlib
 import re
-import sys
 
 # Safeguard: optimize mkdocs-simple-plugin ignore scanning to prevent
 # recursing into Bazel output symlinks (bazel-*) and virtualenvs on Windows dev setups.

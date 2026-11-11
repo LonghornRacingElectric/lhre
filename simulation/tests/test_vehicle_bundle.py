@@ -308,7 +308,7 @@ def test_a_released_bundle_only_changes_to_superseded(root):
 
 def _git(root, *args):
     command = ["git", "-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false"]
-    result = subprocess.run([*command, "-C", str(root), *args], capture_output=True, text=True)
+    result = subprocess.run([*command, "-C", str(root), *args], capture_output=True, text=True)  # noqa: PLW1510 pre-existing when the lint gate went on
     assert result.returncode == 0, result.stderr
     return result.stdout
 
@@ -460,7 +460,7 @@ def test_vehicle_checks_do_not_run_on_a_changed_vehicle(root, monkeypatch, capsy
 
 def test_make_check_vehicle_passes_its_options():
     def dry_run(*args):
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: PLW1510 pre-existing when the lint gate went on
             ["make", "-n", "check-vehicle", "COMPOSE=compose", *args], cwd=SIM, capture_output=True, text=True
         )
         assert result.returncode == 0, result.stderr

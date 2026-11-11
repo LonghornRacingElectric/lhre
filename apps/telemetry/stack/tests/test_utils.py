@@ -23,7 +23,7 @@ For Local Development:
 import os
 import time
 import logging
-from typing import Optional, Callable, Any
+from typing import Optional, Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -155,7 +155,7 @@ def wait_for_service(
             if check_fn():
                 logger.info(f"Service {service_name} is available")
                 return True
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
             logger.debug(f"Waiting for {service_name}: {e}")
         
         time.sleep(interval)
@@ -173,7 +173,7 @@ def check_mqtt_connection(host: str = "localhost", port: int = 1883) -> bool:
         client.connect(host, port, keepalive=5)
         client.disconnect()
         return True
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
         logger.debug(f"MQTT connection check failed: {e}")
         return False
 
@@ -182,7 +182,6 @@ def check_kafka_connection(host: str = "localhost", port: int = 9092) -> bool:
     """Check if Kafka broker is available."""
     try:
         from kafka import KafkaConsumer
-        from kafka.errors import NoBrokersAvailable
         
         consumer = KafkaConsumer(
             bootstrap_servers=f"{host}:{port}",
@@ -191,7 +190,7 @@ def check_kafka_connection(host: str = "localhost", port: int = 9092) -> bool:
         consumer.topics()
         consumer.close()
         return True
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
         logger.debug(f"Kafka connection check failed: {e}")
         return False
 
@@ -218,7 +217,7 @@ def check_db_connection(
         )
         conn.close()
         return True
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
         logger.debug(f"PostgreSQL connection check failed: {e}")
         return False
 
@@ -230,7 +229,6 @@ class TestDataGenerator:
     """
     
     def __init__(self, seed: Optional[int] = None):
-        import numpy as np
         from numpy.random import default_rng
         
         self.rng = default_rng(seed)
@@ -238,7 +236,6 @@ class TestDataGenerator:
     def generate_sensor_data(self, packet_id: int = 1) -> dict:
         """Generate mock sensor data payload."""
         import time
-        import numpy as np
         
         return {
             "packet_id": packet_id,
@@ -261,7 +258,6 @@ class TestDataGenerator:
     def generate_protobuf_message(self, packet_id: int = 1, car: str = "Nightwatch"):
         """Generate a protobuf-encoded sensor data message."""
         import time
-        import json
         
         try:
             if car == "Angelique":
@@ -371,7 +367,7 @@ class MQTTTestClient:
             time.sleep(0.1)
             
             return self._connected
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
             logger.error(f"Failed to connect to MQTT: {e}")
             return False
     
@@ -383,7 +379,7 @@ class MQTTTestClient:
             self._loop_started = False
         try:
             self.client.disconnect()
-        except Exception:
+        except Exception:  # noqa: BLE001 pre-existing when the lint gate went on
             pass
     
     def is_connected(self) -> bool:

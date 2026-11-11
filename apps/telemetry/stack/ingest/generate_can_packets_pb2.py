@@ -37,7 +37,7 @@ def main() -> int:
         f"--python_out={out_dir}",
         dest_proto,
     ]
-    res = subprocess.run(cmd)
+    res = subprocess.run(cmd)  # noqa: PLW1510 pre-existing when the lint gate went on
     return res.returncode
 
 

@@ -281,7 +281,7 @@ def workspace_root():
     root = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
     if root:
         return root
-    out = subprocess.run(
+    out = subprocess.run(  # noqa: PLW1510 pre-existing when the lint gate went on
         ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True
     )
     return out.stdout.strip() if out.returncode == 0 else None
@@ -329,7 +329,7 @@ def flash(label, root):
     if root is None:
         sys.exit("error: --flash needs a workspace (run via bazel run, or from the repo)")
     print(f"flashing: bazel run {label}")
-    result = subprocess.run(["bazel", "run", label], cwd=root)
+    result = subprocess.run(["bazel", "run", label], cwd=root)  # noqa: PLW1510 pre-existing when the lint gate went on
     if result.returncode != 0:
         sys.exit(f"error: flash failed (exit {result.returncode})")
 
@@ -437,11 +437,11 @@ def check_version(port, root):
         )
         return False
 
-    head = subprocess.run(
+    head = subprocess.run(  # noqa: PLW1510 pre-existing when the lint gate went on
         ["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True
     ).stdout.strip()
     ws_dirty = bool(
-        subprocess.run(
+        subprocess.run(  # noqa: PLW1510 pre-existing when the lint gate went on
             ["git", "status", "--porcelain", "--untracked-files=no"],
             cwd=root,
             capture_output=True,
