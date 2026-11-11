@@ -18,7 +18,7 @@ from lib.spec.ir import loader
 from lib.spec.proto import can_spec_pb2
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import gen_can_table  # noqa: E402
+import gen_can_table
 
 SPEC = {}
 PROBE = "SIL_TABLE_PROBE"

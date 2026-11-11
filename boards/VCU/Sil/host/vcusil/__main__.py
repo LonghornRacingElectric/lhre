@@ -72,7 +72,7 @@ def main(argv: list[str] | None = None) -> int:
     meta: dict[str, object] = {}
     try:
         return _run(args, meta)
-    except Exception as exc:  # anything unplanned is the harness's fault
+    except Exception as exc:  # noqa: BLE001 anything unplanned is a harness error, reported below
         traceback.print_exc()
         print(f'vcusil: harness error: {exc}', file=sys.stderr)
         meta.update(status='harness_error', failure=f'{type(exc).__name__}: {exc}')

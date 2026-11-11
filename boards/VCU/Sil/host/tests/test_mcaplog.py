@@ -55,16 +55,16 @@ def test_every_step_reaches_its_topic_exactly(run):
                   '/vcu/pedals', '/vcu/analog', '/vcu/torque', '/model/outputs',
                   '/model/truth', '/model/inputs'):
         assert len(messages[topic]) == steps, topic
-    for (t_ns, msg), row in zip(messages['/model/outputs'], result.rows):
+    for (t_ns, msg), row in zip(messages['/model/outputs'], result.rows, strict=True):
         assert t_ns == row['t_ms'] * 1_000_000
         assert msg['rearU'] == row['rearU'] and msg['dcBusCurrent'] == row['dcBusCurrent']
-    for (t_ns, msg), snap in zip(messages['/vcu/status'], result.snapshots):
+    for (t_ns, msg), snap in zip(messages['/vcu/status'], result.snapshots, strict=True):
         assert t_ns == snap['now_ms'] * 1_000_000  # stamped at the control tick
         assert msg['torque_command_nm'] == snap['torque_command_nm']
         assert msg['fault_flags']['SHUTDOWN_OPEN'] == bool(snap['faults'] >> 8 & 1)
-    for (_, msg), snap in zip(messages['/vcu/pedals'], result.snapshots):
+    for (_, msg), snap in zip(messages['/vcu/pedals'], result.snapshots, strict=True):
         assert msg['pedal_travel'] == snap['pedals_pedal_travel']
-    for (_, msg), snap in zip(messages['/vcu/torque'], result.snapshots):
+    for (_, msg), snap in zip(messages['/vcu/torque'], result.snapshots, strict=True):
         assert set(msg) == {'lookup', 'derated', 'power_limited', 'traction', 'power_w',
                             'power_trim_w'}
         assert msg['power_w'] == snap['torque_power_w']

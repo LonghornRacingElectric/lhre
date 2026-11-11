@@ -37,7 +37,7 @@ while (($#)); do
     --fmu) (($# >= 2)) || die "--fmu needs a path"; fmu="$2"; shift 2 ;;
     --out) (($# >= 2)) || die "--out needs a path"; out="$2"; shift 2 ;;
     --scenario) (($# >= 2)) || die "--scenario needs a name"; scenario="$2"; pass+=("$1" "$2"); shift 2 ;;
-    --test) mode=test; shift ;;
+    --test) mode='test'; shift ;;
     --view) (($# >= 2)) || die "--view needs a run directory"; mode=view; view_dir="$2"; shift 2 ;;
     --port) (($# >= 2)) || die "--port needs a number"; port="$2"; shift 2 ;;
     -h | --help) usage; exit 0 ;;

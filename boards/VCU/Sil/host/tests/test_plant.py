@@ -140,7 +140,7 @@ def test_step_sets_each_input_by_name():
     refs = check_interface(description())
     p = Plant.__new__(Plant)
     sent = {}
-    p._slave = SimpleNamespace(setReal=lambda r, v: sent.update(zip(r, v)),
+    p._slave = SimpleNamespace(setReal=lambda r, v: sent.update(zip(r, v, strict=True)),
                                doStep=lambda **_: None)
     p._in_refs = [refs[n] for n in INPUTS]
     p.step_s = 0.003

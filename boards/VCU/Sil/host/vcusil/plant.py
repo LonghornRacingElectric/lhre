@@ -294,12 +294,12 @@ class Plant:
         """Outputs at the current communication point. Read before setting
         inputs: several outputs feed through directly from them."""
         values = self._slave.getReal(self._read_refs)
-        out = dict(zip(OUTPUTS, values))
+        out = dict(zip(OUTPUTS, values[:len(OUTPUTS)], strict=True))
         bad = [name for name, v in out.items() if not math.isfinite(v)]
         if bad:
             raise PlantError(f'non-finite plant output: {", ".join(bad)}')
         truth = {k: (v if math.isfinite(v) else None)
-                 for k, v in zip(self._truth_keys, values[len(OUTPUTS):])}
+                 for k, v in zip(self._truth_keys, values[len(OUTPUTS):], strict=True)}
         if self.slip_from_states:
             for c in _CORNERS:
                 u, v = truth.get(f'slipU_{c}'), truth.get(f'slipV_{c}')

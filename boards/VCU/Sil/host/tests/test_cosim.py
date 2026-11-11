@@ -31,7 +31,7 @@ def test_torque_reaches_the_car_only_while_the_inverter_is_enabled(lib):
         result = cosim.run(Launch(), fw, car)
     rows = result.rows
     assert any(r['fw_state'] == STATE_DRIVE for r in rows)
-    for r, u in zip(rows, car.inputs):
+    for r, u in zip(rows, car.inputs, strict=True):
         if r['fw_inverter_enable']:
             assert u.motor_torque_nm == r['fw_torque_request_nm']
             assert u.regen_limit_nm == r['fw_torque_limit_nm']
@@ -45,7 +45,7 @@ def test_brake_steering_and_cells_map_as_documented(lib):
     car = ToyCar()
     with Firmware(lib) as fw:
         result = cosim.run(Short(), fw, car)
-    for r, u in zip(result.rows, car.inputs):
+    for r, u in zip(result.rows, car.inputs, strict=True):
         assert u.brake == pytest.approx(min(r['brake_psi'] / 1500.0, 1.0))
         assert u.steering_rad == pytest.approx(math.radians(r['steering_deg']))
         assert r['cell_v'] == pytest.approx(r['dcBusVoltage'] / 140)

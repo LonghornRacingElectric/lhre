@@ -136,7 +136,7 @@ def test_the_run_log_holds_firmware_frames_and_model_truth(launch_run):
     # FL plus twice RL is the whole brake torque, and the bias favours the front.
     outputs = messages['/model/outputs']
     assert [t for t, _ in outputs] == [t for t, _ in truth]
-    held = [(m, y) for (t_ns, m), (_, y) in zip(truth, outputs)
+    held = [(m, y) for (t_ns, m), (_, y) in zip(truth, outputs, strict=True)
             if 300 <= t_ns // 1_000_000 < 1500]
     assert held and all(y['mechanicalBrakeTorque'] > 0 for _, y in held)
     for m, y in held:
