@@ -199,6 +199,14 @@ jobs:
           bazel test --config=ubsan
           //boards/... //drivers/... //lib/codegen/cpp/... //tools/ubsan:trap_test
 
+      # And under ASan for memory errors; overflow_test is its canary
+      # (tools/asan/README.md).
+      - name: Test host C++ under ASan
+        if: ${{ !cancelled() }}
+        run: >-
+          bazel test --config=asan
+          //boards/... //drivers/... //lib/codegen/cpp/... //tools/asan:overflow_test
+
       # Firmware line coverage from the host tests on the lines this PR
       # changes, reported on the summary page and never failing the build
       # (tools/coverage/README.md). The checkout is the PR merged into its

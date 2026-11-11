@@ -161,6 +161,16 @@ build:ubsan --copt=-fsanitize-trap=undefined
 test:ubsan --build_tests_only
 test:ubsan --test_tag_filters=-firmware_size
 
+# Host tests under AddressSanitizer: out-of-bounds access, use after free and
+# leaks fail the test with a report. Host tests only, like ubsan. See
+# tools/asan/README.md. The toolchain's own flag, not a raw -fsanitize: it
+# also puts the ASan runtime among the link inputs, which plain --linkopt
+# can't, so remote links fail to find libclang_rt.asan*.a.
+build:asan --@llvm//config:asan=true
+build:asan --copt=-fno-omit-frame-pointer
+test:asan --build_tests_only
+test:asan --test_tag_filters=-firmware_size
+
 # Line coverage of host C++ tests, with LLVM's source-based coverage (the
 # hermetic toolchain ships llvm-cov and llvm-profdata). Only firmware code is
 # instrumented; tests and generated code are left out. The combined lcov
