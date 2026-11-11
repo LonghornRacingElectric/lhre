@@ -50,6 +50,7 @@ no network. Concretely:
 | Format | Unformatted C/C++ | `bazel run //tools/format:check` |
 | Lint: Python (ruff) | Undefined names, unused imports, swallowed exceptions, unchecked subprocesses, unsafe calls. Stale `noqa` fails. | `uv run --group lint ruff check` |
 | Lint: shell (shellcheck) | Word splitting, unused variables, masked failures in scripts | see [tools/lint](../tools/lint/README.md) |
+| No switched-off tests | `flaky = True` or `enable_tests = False` in BUILD files, `DISABLED_` or `GTEST_SKIP` in C++, unconditional skips in Python | see [tools/lint](../tools/lint/README.md) |
 | Lint: workflows (actionlint) | Broken expressions and job references in CI, shellcheck on `run:` blocks | `uv run --group lint actionlint` |
 | Simulation fast checks | lhre's simulation tools, vehicle bundle and study contracts (BobSim itself is tested in BobDyn) | `make -C simulation test`; on a PR also `make -C simulation check-vehicle BASE=origin/<base>` |
 | Docs | Broken links, missing nav entries | `uv run --group docs mkdocs build --strict` |

@@ -113,6 +113,23 @@ jobs:
         run: |
           git ls-files -z '*.sh' '*.bash' apps/BEVO/dashd/deploy/labwc-autostart ':!autonomy' ':!simulation/bobsim' | xargs -0 uv run --group lint shellcheck --severity=warning
 
+      # A test that can't pass gets fixed or deleted, not switched off.
+      - name: No switched-off tests
+        if: ${{ !cancelled() }}
+        run: |
+          # skipif stays allowed: a platform guard isn't a switched-off test.
+          # git grep exits 1 on no match; anything higher is a broken pathspec
+          # that must fail the step, not read as clean.
+          found=0
+          scan() { rc=0; git grep -nE "$@" || rc=$?; [ "$rc" -le 1 ] || exit "$rc"; [ "$rc" -eq 1 ] || found=1; }
+          scan 'flaky *= *True|enable_tests *= *False' -- '*BUILD' '*BUILD.bazel' '*.bzl' ':!tools/firmware/firmware_project.bzl'
+          scan '(^|[^[:alnum:]_])(DISABLED_|GTEST_SKIP)' -- '*.cc' '*.cpp' '*.cxx' '*.h' '*.hh' '*.hpp'
+          scan '(^|[^[:alnum:]_])(mark\.(skip|xfail)|unittest\.(skip|expectedFailure))([^[:alnum:]_]|$)|^[[:space:]]*@(skip|expectedFailure)([^[:alnum:]_]|$)' -- '*.py'
+          if [ "$found" -eq 1 ]; then
+            echo "::error::A test is switched off (flaky, enable_tests = False, DISABLED_, GTEST_SKIP, or a pytest/unittest skip); fix or delete it."
+            exit 1
+          fi
+
       # Workflow files are code too: expression typos, bad job references,
       # and shellcheck on every run: block.
       - name: GitHub workflows (actionlint)
