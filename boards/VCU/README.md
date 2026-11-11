@@ -22,6 +22,7 @@ The DUI is a plain CAN peripheral this year.
 | `:vcu_app_test`           | Vehicle app end to end through `Step()` with LHAL fakes. |
 | `:test_app_test`          | Host bench harness end to end.                          |
 | `:vcu_rtos_test`          | Real FreeRTOS tasks under the simulator port.           |
+| `:control_stall_rtos_test` / `:telemetry_stall_rtos_test` | The same tasks with one stuck: the supervisor stops feeding the watchdog. |
 | `:vcu_sim`                | Scripted drive under the simulator (`bazel run --config=local`). |
 | `:release`                | Vehicle elf/bin/hex for CI artifacts.              |
 

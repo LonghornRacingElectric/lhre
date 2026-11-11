@@ -286,6 +286,50 @@ TEST_F(ControlLoopTest, RefusedLaunchRequestDoesNotArmLater) {
   EXPECT_FALSE(app_->snapshot().launch_armed);
 }
 
+// Launch arms only from a standstill. Motor rpm stays at zero here, so the
+// front wheel speed is the only thing that can refuse.
+TEST_F(ControlLoopTest, LaunchArmsOnlyBelowHalfAMetrePerSecond) {
+  b_.params.event_mode = EventMode::kAcceleration;
+  b_.params.launch.enabled = true;
+  Rebuild();
+  for (bool& alive : b_.wheel_alive) alive = true;
+  ReachDrive();
+  b_.SetBrakePsi(100.0f);
+
+  for (float& w : b_.wheel_rad_s) w = 3.0f;  // 0.61 m/s
+  b_.Run(*app_, 100);
+  Shell("/launch arm");
+  b_.Run(*app_, 6);
+  EXPECT_FALSE(app_->snapshot().launch_armed);
+
+  for (float& w : b_.wheel_rad_s) w = 2.0f;  // 0.41 m/s
+  b_.Run(*app_, 100);
+  Shell("/launch arm");
+  b_.Run(*app_, 6);
+  EXPECT_TRUE(app_->snapshot().launch_armed);
+}
+
+// A torque cut clears the acceleration limiter's trim, so torque does not
+// come back already trimmed by a spin-up from before the cut.
+TEST_F(ControlLoopTest, TorqueCutClearsTheAccelerationLimiterTrim) {
+  b_.params.traction.enabled = true;
+  Rebuild();
+  ReachDrive();
+  SpinUp(b_, *app_, 0.6f);
+  auto s = app_->snapshot();
+  ASSERT_LT(s.torque.traction, s.torque.power_limited);
+
+  // Brake over throttle cuts torque without leaving DRIVE. The motor keeps
+  // accelerating, so a limiter that still ran would hold its trim.
+  b_.SetBrakePsi(500.0f);
+  SpinUp(b_, *app_, 0.6f);
+  ASSERT_EQ(app_->state(), VcuState::kDrive);
+  ASSERT_EQ(app_->torque_command(), 0.0f);
+  s = app_->snapshot();
+  ASSERT_GT(s.torque.power_limited, 0.0f);
+  EXPECT_FLOAT_EQ(s.torque.traction, s.torque.power_limited);
+}
+
 class RegenArbitrationTest : public ControlLoopTest {
  protected:
   void SetUp() override {
