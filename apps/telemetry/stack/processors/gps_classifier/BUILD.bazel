@@ -39,6 +39,7 @@ py_binary(
 )
 
 telemetry_service_image(
+    schema_consumer = True,
     name = "gps_classifier",
     base = "@python312_linux_amd64",
     binary = ":gps_classifier_binary",

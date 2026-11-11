@@ -13,7 +13,7 @@ py_library(
 
 py_library(
     name = "gen_telemetry_lib",
-    visibility = ["//apps/telemetry/stack/ingest:__pkg__"],
+    visibility = ["//apps/telemetry/stack/ingest:__pkg__", "//apps/BEVO/updater:__pkg__"],
     srcs = ["gen_telemetry.py", "storage.py"],
     deps = [
         ":catalog_lib",

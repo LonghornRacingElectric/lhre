@@ -169,3 +169,8 @@ controls updater selection.
   (Pi-only deps like `lgpio`).
 - `nonhermetic/`, `dashd/deploy/` — Pi deployment: systemd units, kiosk
   setup, and runtime runbooks for already-built executables.
+
+The Pi bundle includes the standalone release updater. Bootstrap powers GPIO
+and the modem before synchronization, then starts one verified core activation.
+See the [startup runbook](nonhermetic/README.md) for configuration and offline
+behavior.

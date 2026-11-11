@@ -116,6 +116,8 @@ pkg_tar(
     files = {
         "//lib/codegen/telemetry:artemis_schema_contract": "schema_contract.json",
         "//lib/codegen/telemetry:artemis_schema_descriptor": "schema_descriptor.pb",
+        "//lib/codegen/telemetry:can_json": "can.json",
+        "//lib/codegen/telemetry:storage_contract": "storage_contract.json",
     },
     package_dir = "/schema",
     target_compatible_with = NOT_WINDOWS,

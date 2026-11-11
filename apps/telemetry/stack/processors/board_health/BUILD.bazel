@@ -36,6 +36,7 @@ py_binary(
 )
 
 telemetry_service_image(
+    schema_consumer = True,
     name = "board_health",
     base = "@python312_linux_amd64",
     binary = ":board_health_binary",

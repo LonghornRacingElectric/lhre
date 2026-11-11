@@ -28,6 +28,8 @@ py_binary(
 )
 
 telemetry_service_image(
+    schema_consumer = True,
+    visibility = ["//apps/telemetry:__subpackages__", "//apps/BEVO/updater:__pkg__"],
     name = "db_writer",
     binary = ":db_writer_binary",
     base = "@python312_linux_amd64",

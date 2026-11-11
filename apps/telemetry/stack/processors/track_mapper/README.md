@@ -10,3 +10,7 @@ protobuf directory as the source of the executable image.
 
 Raw telemetry decoding supports only explicit Orion and Artemis car headers.
 Unknown headers are rejected rather than decoded as the default car.
+
+The Bazel image packages its generated Artemis schema, CAN and storage metadata
+and is labeled as a schema consumer for deployment agreement checks. See the
+[stack deployment guide](../../README.md).

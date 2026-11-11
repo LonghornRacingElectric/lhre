@@ -56,3 +56,7 @@ and reconstructs latest state only for best-effort Grafana output. Per-field
 receipt clocks prevent late updates from overwriting fresher live values.
 Arrays are replaced as whole observations, including a recorded empty array.
 The raw Kafka record always remains the original fresh batch.
+
+The Bazel image packages its generated Artemis schema, CAN and storage metadata
+and is labeled as a schema consumer for deployment agreement checks. See the
+[stack deployment guide](../README.md).

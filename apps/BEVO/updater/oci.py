@@ -24,12 +24,12 @@ class SafeRedirect(urllib.request.HTTPRedirectHandler):
         return redirected
 
 
-def fetch(url, limit, headers=None):
+def fetch(url, limit, headers=None, timeout=30):
     parsed = urllib.parse.urlsplit(url)
     if parsed.username or parsed.password or (parsed.scheme != "https" and not (parsed.scheme == "http" and parsed.hostname in ("127.0.0.1", "localhost", "::1"))):
         raise ValueError("remote downloads require HTTPS")
     request = urllib.request.Request(url, headers=headers or {})
-    with urllib.request.build_opener(SafeRedirect()).open(request, timeout=30) as response:
+    with urllib.request.build_opener(SafeRedirect()).open(request, timeout=timeout) as response:
         final = urllib.parse.urlsplit(response.url)
         if parsed.scheme == "https" and final.scheme != "https":
             raise ValueError("HTTPS downgrade rejected")
@@ -75,14 +75,32 @@ class Registry:
             headers["Authorization"] = "Bearer " + self.bearer
             return self.reader(url, limit, headers)
 
-    def manifest(self, reference):
-        match = REFERENCE.fullmatch(reference)
-        if not match or reference.split("@", 1)[0] != self.repository:
-            raise ValueError("release must pin a SHA-256 digest in the configured repository")
-        host, name, digest = match.groups()
+    def document(self, reference):
+        host, name = self.repository.split("/", 1)
+        if reference.startswith(self.repository + "@sha256:"):
+            version = reference[len(self.repository) + 1:]
+            if not re.fullmatch(r"sha256:[a-f0-9]{64}", version):
+                raise ValueError("invalid registry digest")
+        elif reference.startswith(self.repository + ":"):
+            version = reference[len(self.repository) + 1:]
+            if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", version):
+                raise ValueError("invalid discovery tag")
+        else:
+            raise ValueError("artifact is outside the configured repository")
         self.base = f"https://{host}/v2/{name}"
-        data = verify(self._read(f"{self.base}/manifests/sha256:{digest}", 1024 * 1024), "sha256:" + digest)
+        data = self._read(f"{self.base}/manifests/{version}", 1024 * 1024)
+        digest = "sha256:" + hashlib.sha256(data).hexdigest()
+        if version.startswith("sha256:"):
+            verify(data, version)
         manifest = json.loads(data)
+        if manifest.get("schemaVersion") != 2:
+            raise ValueError("unsupported OCI manifest")
+        return self.repository + "@" + digest, manifest
+
+    def manifest(self, reference):
+        if not REFERENCE.fullmatch(reference):
+            raise ValueError("BEVO releases require a digest")
+        _, manifest = self.document(reference)
         if manifest.get("schemaVersion") != 2 or len(manifest.get("layers", [])) != 2:
             raise ValueError("expected the two-layer BEVO release format")
         config = manifest["config"]

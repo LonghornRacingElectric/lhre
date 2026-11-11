@@ -1,4 +1,5 @@
 load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
 
 package(default_visibility = ["//apps/BEVO:__subpackages__"])
 
@@ -8,6 +9,13 @@ py_library(
     name = "updater_lib",
     srcs = ["updater.py", "oci.py"],
     deps = ["//lib/telemetry:contract"],
+    visibility = ["//apps/telemetry/schema_registry:__pkg__"],
+)
+
+py_library(
+    name = "package_lib",
+    srcs = ["package.py"],
+    visibility = ["//apps/telemetry/schema_registry:__pkg__"],
 )
 
 py_binary(
@@ -79,11 +87,13 @@ _DOCKER_TEST_INPUTS = [
     "//apps/telemetry:mqtt_load",
     "//apps/BEVO:pi_core_metadata_layer",
     "//apps/BEVO:pi_core_executables_layer",
-    "//apps/telemetry:current_schema_sql",
     "//apps/telemetry/stack/ingest:common_schema.sql",
-    "//apps/telemetry:new_car_schema_sql",
     "//apps/telemetry/stack/ingest:mosquitto.conf",
     ":standalone",
+    "//apps/telemetry/stack/processors/db_writer:db_writer_load",
+    "//apps/telemetry/schema_registry:release_bundle",
+    "//lib/codegen/telemetry:storage_contract",
+    "//apps/telemetry/stack/ingest:pool_storage_test",
 ]
 
 py_test(
@@ -92,8 +102,8 @@ py_test(
     timeout = "long",
     srcs = ["docker_updater_test.py"],
     args = ["$(rootpath %s)" % label for label in _DOCKER_TEST_INPUTS],
-    data = _DOCKER_TEST_INPUTS,
-    deps = [":updater_lib", "//apps/telemetry/schema_registry:registry_lib"],
+    data = _DOCKER_TEST_INPUTS + ["//lib/codegen/telemetry:artemis_schema_contract", "//lib/codegen/telemetry:artemis_schema_descriptor", "//lib/codegen/telemetry:can_json"],
+    deps = [":updater_lib", "//apps/telemetry/schema_registry:registry_lib", "//apps/telemetry/schema_registry:catalog_lib", "//apps/telemetry/schema_registry:bundle_lib", "//apps/telemetry/schema_registry:prepare_lib", "//lib/codegen/telemetry:gen_telemetry_lib", "//apps/telemetry/stack/ingest:sensor_decode", requirement("paho-mqtt"), requirement("SQLAlchemy"), requirement("psycopg2-binary")],
     tags = ["manual", "local", "external", "docker", "integration"],
     target_compatible_with = select({
         "@platforms//os:windows": ["@platforms//:incompatible"],

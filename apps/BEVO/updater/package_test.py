@@ -85,6 +85,12 @@ class PackageTest(unittest.TestCase):
                 failed = subprocess.run(command, capture_output=True, text=True)
                 self.assertNotEqual(failed.returncode, 0)
                 self.assertEqual((Path(directory) / "current").resolve(), active)
+                offline = subprocess.run([sys.executable, "-I", "-S", str(Path(sys.argv[1]).resolve()),
+                                          "startup", "--root", directory, "--server-url", url, "--network-wait", "0"],
+                                         capture_output=True, text=True)
+                self.assertEqual(offline.returncode, 0, offline.stderr)
+                self.assertEqual(json.loads(offline.stdout)["action"], "offline-keep")
+                self.assertEqual((Path(directory) / "current").resolve(), active)
             finally:
                 authority.shutdown()
                 authority.server_close()

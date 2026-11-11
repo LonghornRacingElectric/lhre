@@ -17,7 +17,7 @@ class ServerProfileTest(unittest.TestCase):
     def test_packaged_server_schema_is_at_the_deployment_reader_path(self):
         with tarfile.open(sys.argv[1]) as archive:
             files = {member.name.lstrip("./"): archive.extractfile(member).read() for member in archive if member.isfile()}
-        self.assertEqual(set(files), {"schema/schema_contract.json", "schema/schema_descriptor.pb"})
+            self.assertEqual(set(files), {"schema/schema_contract.json", "schema/schema_descriptor.pb", "schema/can.json", "schema/storage_contract.json"})
         Schema(files["schema/schema_contract.json"], files["schema/schema_descriptor.pb"])
 
     def test_profile_uses_the_explicitly_selected_server_schema(self):

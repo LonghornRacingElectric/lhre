@@ -8,6 +8,7 @@ three years after everyone who made the decision graduated.
 
 | ADR | Decision | Status |
 | --- | -------- | ------ |
+| [026](026-coordinated-schema-releases.md) | Catalog verified releases, prepare additive storage, and synchronize BEVO after modem startup | Accepted; extends ADR-018 and ADR-019 |
 | [001](001-monorepo.md) | One monorepo; `main` is always the current car | Accepted |
 | [002](002-bazel.md) | Bazel with hermetic toolchains, not CMake | Accepted |
 | [003](003-lhal.md) | App code depends on LHAL interfaces, never ST HAL | Accepted |

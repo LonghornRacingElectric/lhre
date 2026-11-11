@@ -4,20 +4,15 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, vms/telemetry-pdr]
   schedule:
     - cron: "23 7 * * 1"
   workflow_dispatch:
     inputs:
       publish:
-        description: Publish BEVO to GHCR after verification, only if the generated schema or CAN mapping changed
+        description: Explicitly publish verified BEVO and server contract releases to GHCR
         type: boolean
         default: false
-      schema_base:
-        description: Last released commit or ref to compare against (HEAD^ compares with the selected commit's parent)
-        type: string
-        default: HEAD^
-        required: true
 
 permissions:
   contents: read
@@ -362,8 +357,6 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.bevo != 'false' }}
     runs-on: ubuntu-latest
-    outputs:
-      schema_changed: ${{ steps.schema.outputs.changed }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -387,52 +380,13 @@ jobs:
         run: bazel build //apps/BEVO:pi_core_binaries //apps/BEVO:pi_core_manifest //apps/BEVO:pi_core_image //apps/BEVO/updater:standalone
 
       - name: Verify static AArch64 executables
-        run: bazel test //apps/BEVO:pi_core_binary_test //apps/BEVO:release_metadata_test //apps/BEVO/schema_tests:schema_propagation_test //apps/BEVO/updater:updater_test //apps/BEVO/updater:package_test //apps/telemetry/schema_registry:registry_test //lib/telemetry:contract_test --test_output=errors
-
-      - name: Compare generated schema and CAN mapping with the release baseline
-        id: schema
-        if: github.event_name == 'workflow_dispatch' && inputs.publish
-        env:
-          SCHEMA_BASE: ${{ inputs.schema_base }}
-        run: |
-          BASE_SHA=$(git rev-parse --verify --end-of-options "$SCHEMA_BASE^{commit}")
-          BASE_DIR="$RUNNER_TEMP/bevo-schema-baseline"
-          BASE_OUTPUT="$RUNNER_TEMP/bevo-schema-baseline-bazel"
-          git worktree add --detach "$BASE_DIR" "$BASE_SHA"
-          trap 'git worktree remove --force "$BASE_DIR"' EXIT
-          cp .bazelrc.user "$BASE_DIR/.bazelrc.user"
-          (
-            cd "$BASE_DIR"
-            bazel --output_base="$BASE_OUTPUT" build //lib/codegen/telemetry:schema_contract //lib/codegen/telemetry:can_json
-          )
-          BASE_BIN=$(cd "$BASE_DIR" && bazel --output_base="$BASE_OUTPUT" info bazel-bin)
-          CURRENT_BIN=$(bazel info bazel-bin)
-          export BASE_BIN CURRENT_BIN
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          base = Path(os.environ["BASE_BIN"]) / "lib/codegen/telemetry"
-          current = Path(os.environ["CURRENT_BIN"]) / "lib/codegen/telemetry"
-          def definitions(directory):
-              return {name: json.loads((directory / name).read_bytes())
-                      for name in ("schema_contract.json", "can.json")}
-
-          changed = definitions(base) != definitions(current)
-          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-              output.write(f"changed={str(changed).lower()}\n")
-          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as output:
-              output.write(f"Generated schema/CAN mapping changed: **{changed}**.\n")
-              if not changed:
-                  output.write("GHCR publication skipped: generated definitions match the selected baseline.\n")
-          PY
+        run: bazel test //apps/BEVO:pi_core_binary_test //apps/BEVO:release_metadata_test //apps/BEVO/schema_tests:schema_propagation_test //apps/BEVO/updater:updater_test //apps/BEVO/updater:package_test //apps/telemetry/schema_registry:registry_test //apps/telemetry/schema_registry:catalog_test //apps/BEVO:startup_test //lib/telemetry:contract_test --test_output=errors
 
   # On main, docs.yml builds and publishes the site instead.
   docs:
     name: Docs
     needs: changes
-    if: ${{ !cancelled() && github.event_name != 'push' && needs.changes.outputs.docs != 'false' }}
+    if: ${{ !cancelled() && (github.event_name != 'push' || github.ref != 'refs/heads/main' || github.ref_name == (vars.TELEMETRY_DEPLOY_BRANCH || 'vms/telemetry-pdr')) && needs.changes.outputs.docs != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -477,10 +431,13 @@ jobs:
         run: bazel build //apps/telemetry:all_images //apps/telemetry:new_car_schema_bundle
 
       - name: Check deployed wire compatibility
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
         run: |
+          if [ "$BASE_SHA" = 0000000000000000000000000000000000000000 ]; then
+            BASE_SHA=$(git merge-base HEAD origin/main)
+          fi
           git show "$BASE_SHA:lib/spec/wire.lock" > "$RUNNER_TEMP/baseline-wire.lock"
           bazel run //tools/spec:check_wire_compat -- \
             --baseline "$RUNNER_TEMP/baseline-wire.lock" --current "$GITHUB_WORKSPACE/lib/spec/wire.lock"
@@ -545,15 +502,21 @@ jobs:
           rm -f .env
 
   publish:
-    name: Publish BEVO to GHCR
+    name: Publish telemetry releases to GHCR
     needs: [changes, format, bazel, bazel-windows, sim-fast, four-post, autonomy, bevo, docs, telemetry]
-    if: github.event_name == 'workflow_dispatch' && inputs.publish && needs.bevo.outputs.schema_changed == 'true'
+    if: >-
+      !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') &&
+      github.event_name == 'workflow_dispatch' && inputs.publish
+    concurrency:
+      group: telemetry-release-publication
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     env:
       DOCKER_CONFIG: ${{ github.workspace }}/.bevo-ghcr-auth
+      DEPLOY_BRANCH: ${{ vars.TELEMETRY_DEPLOY_BRANCH || 'vms/telemetry-pdr' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -576,7 +539,8 @@ jobs:
 
       - name: Publish the Bazel-built core release
         run: |
-          bazel run //apps/BEVO:pi_core_push -- --tag "sha-$GITHUB_SHA"
+          bazel run --define "TELEMETRY_REVISION=$GITHUB_SHA" --define "TELEMETRY_BRANCH=$GITHUB_REF_NAME" \
+            //apps/BEVO:pi_core_push -- --tag "sha-$GITHUB_SHA"
           python3 - <<'PY'
           import json
           import os
@@ -586,8 +550,26 @@ jobs:
           digest = json.loads((image / "index.json").read_bytes())["manifests"][0]["digest"]
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as output:
               output.write(f"Published `ghcr.io/longhornracingelectric/bevo-core@{digest}`\n\n")
-              output.write("Add this digest to the deployed server's approved release list to make it selectable by BEVO.\n")
+              output.write("The server catalog selects this release only against the actual deployed Artemis contracts.\n")
           PY
+
+      - name: Publish matching generated server contracts
+        run: |
+          bazel run --define "TELEMETRY_REVISION=$GITHUB_SHA" --define "TELEMETRY_BRANCH=$GITHUB_REF_NAME" \
+            //apps/telemetry/schema_registry:release_push -- --tag "sha-$GITHUB_SHA"
+
+      - name: Promote the deployment channel
+        if: github.ref_name == env.DEPLOY_BRANCH
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CURRENT_SHA=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$DEPLOY_BRANCH" --jq '.object.sha')
+          if [ "$CURRENT_SHA" != "$GITHUB_SHA" ]; then
+            echo "A newer commit exists; leaving the deployment channel unchanged."
+            exit 0
+          fi
+          bazel run --define "TELEMETRY_REVISION=$GITHUB_SHA" --define "TELEMETRY_BRANCH=$GITHUB_REF_NAME" \
+            //apps/telemetry/schema_registry:release_push -- --tag deployment
 
       - name: Remove registry credentials
         if: always()

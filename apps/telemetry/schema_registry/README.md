@@ -1,10 +1,86 @@
 # Server schema authority
 
-Read-only deployment interface for the separate
-[BEVO updater](../../BEVO/updater/README.md). It exposes the deployed server's
-serialized protobuf descriptor, canonical field manifest, and approved
-digest-pinned BEVO releases. It never handles telemetry or changes
-MQTT, ingest decoding, bridge RPCs, database models or migrations.
+The deployed Artemis schema is authoritative. The catalog caches verified GHCR
+metadata; the separate preparation command applies additive storage changes.
+Neither downloading a candidate nor checking out a commit changes the active
+schema. Server executables remain operator-deployed.
+
+## Automatic catalog and deployment
+
+An explicit manual CI publication run publishes digest-pinned BEVO and server
+metadata releases after verification. PR and push checks do not publish. Only
+manual publication on the configured deployment branch promotes the discovery
+channel. The server bundle contains the
+protobuf manifest/descriptor, CAN definitions, storage contract, generated
+additive SQL, wire lock and the matching BEVO image reference. The mutable
+`deployment` tag is discovery only; installed/prepared selections use digests.
+
+Create an operator-owned configuration:
+
+```json
+{
+  "catalog": {
+    "cache": "/var/lib/lhre/schema-catalog",
+    "branch": "vms/telemetry-pdr",
+    "repository": "ghcr.io/longhornracingelectric/telemetry-release"
+  }
+}
+```
+
+Set `ARTEMIS_DATABASE_URL` to the existing Artemis database using an owner
+connection for preparation and a read-capable connection for serving. Private
+GHCR packages use `BEVO_REGISTRY_USER` and `BEVO_REGISTRY_TOKEN`; credentials
+are not stored in the cache.
+
+```bash
+./apps/telemetry/stack/server_devtool.sh schema-sync --config /absolute/releases.json
+```
+
+The command prints an immutable bundle reference. Check out the intended
+server source, then set `TELEMETRY_RELEASE_CONFIG` to that configuration and
+`TELEMETRY_RELEASE_REFERENCE` to the printed digest reference. `build` runs
+schema preparation before replacing any containers. Preparation verifies the
+local Bazel-generated contracts against the chosen bundle and the deployed
+schema, applies additions transactionally, and leaves existing measurements
+intact. It does not cross-compile BEVO on the server. It refuses renames,
+retirements, semantic changes, type changes and pool moves. An explicit migration
+is required for those changes. Rollback keeps additive columns and old migration
+records; no volume reset or historical backfill is automatic.
+
+Preparation can also run explicitly:
+
+```bash
+./apps/telemetry/stack/server_devtool.sh schema-prepare --config /absolute/releases.json --reference ghcr.io/longhornracingelectric/telemetry-release@sha256:REPLACE_WITH_DIGEST
+./apps/telemetry/stack/server_devtool.sh build
+./apps/telemetry/stack/server_devtool.sh schema-serve --config /absolute/releases.json
+```
+
+The database must already be reachable. Normal initialization provisions a new
+volume. `schema-prepare --bootstrap` is restricted to an uninitialized database;
+it does not bypass validation of existing storage.
+
+With a catalog configured, the authority requires matching metadata from
+`ingest`, `kafka-bridge`, `db-writer`, `field_enricher_processor`, and running
+schema consumers on `telemetry_network`. Images carry the
+`lhre.schema-consumer=artemis` label. Known older optional processors are also
+detected and must be rebuilt if their metadata is missing. Missing/mixed
+consumers or an unapplied storage ID return HTTP 503, never a candidate schema.
+Use `--network` for a differently named deployment network. A first upgrade must
+rebuild all enabled consumers to package their CAN/storage metadata.
+
+Discovery refreshes every 60 seconds. The cache retains active, previous and
+prepared selections within a five-release budget. Registry failures preserve
+verified metadata and do not stop telemetry. The profile adds
+`can_json_sha256`, `storage_id`, `selection_policy: prefer_deployed` and a
+`preferred_release_id` derived from the core metadata. This lets BEVO keep
+identical binaries without downloading them. Schema and CAN definitions must
+both match for preferred selection. Each fallback intersection remains specific
+to one producer release and the deployed server.
+
+## Manual release list
+
+The configuration below retains explicit release selection without automatic
+catalog refresh or the extended storage readiness gate.
 
 ## Configure and run
 
@@ -160,3 +236,11 @@ identity and descriptor definitions agree; there is no latest-schema fallback.
 The server's declared schema remains the source of truth. Admin overrides
 change deployment selection, not compatibility. Database migrations and
 server deployment stay operator-managed; existing ingest behavior is preserved.
+
+For an executable rollback, select a cached active/previous digest and its
+matching checkout, then pass `--rollback` to `schema-prepare`, or set
+`TELEMETRY_RELEASE_ROLLBACK=1` for `build`. Rollback verifies that the older
+storage contract was applied and remains intact. It does not execute older DDL,
+remove added columns, or remove newer read interfaces.
+Rollback across newly added frequency pools requires an explicit migration:
+older writer models cannot maintain session merges for pools they do not know.

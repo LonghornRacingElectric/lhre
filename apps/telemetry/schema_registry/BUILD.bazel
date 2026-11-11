@@ -1,12 +1,95 @@
 load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
 load("//apps/telemetry:compatibility.bzl", "NOT_WINDOWS")
 load("//apps/telemetry:container.bzl", "telemetry_service_image")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_push")
+load(":bundle.bzl", "release_bundle")
+load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
+
+py_library(
+    name = "catalog_lib",
+    srcs = ["catalog.py"],
+    deps = [":bundle_lib", "//apps/BEVO/updater:updater_lib", "//lib/telemetry:contract"],
+    visibility = ["//apps/BEVO/updater:__pkg__"],
+)
+
+py_test(
+    name = "catalog_test",
+    srcs = ["catalog_test.py"],
+    args = ["$(rootpath :release_bundle)"],
+    data = [":release_bundle"],
+    deps = [":catalog_lib", ":bundle_lib", "//apps/BEVO/updater:updater_lib", "//apps/BEVO/updater:package_lib"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_library(
+    name = "prepare_lib",
+    srcs = ["prepare.py"],
+    imports = [".."],
+    deps = [":registry_lib", ":catalog_lib", ":bundle_lib", "//apps/telemetry/scripts:storage_apply_lib", "//apps/BEVO/updater:updater_lib", "//lib/telemetry:contract"],
+    visibility = ["//apps/BEVO/updater:__pkg__"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_binary(
+    name = "catalog_binary",
+    srcs = ["prepare.py"],
+    main = "prepare.py",
+    deps = [":prepare_lib"],
+    visibility = ["//visibility:public"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_library(
+    name = "bundle_lib",
+    srcs = ["bundle.py"],
+    deps = ["//apps/BEVO/updater:updater_lib", "//apps/BEVO/updater:package_lib", "//lib/telemetry:contract"],
+    visibility = ["//apps/BEVO/updater:__pkg__"],
+)
+
+py_binary(
+    name = "bundle_tool",
+    srcs = ["bundle.py"],
+    main = "bundle.py",
+    deps = [":bundle_lib"],
+)
+
+release_bundle(
+    name = "release_bundle",
+    visibility = ["//apps/BEVO/updater:__pkg__"],
+    out = "server_release.tar.gz",
+    image = "//apps/BEVO:pi_core_image",
+    assets = {
+        "//apps/BEVO:pi_core_manifest": "pi_core_manifest.json",
+        "//lib/codegen/telemetry:artemis_schema_contract": "schema_contract.json",
+        "//lib/codegen/telemetry:artemis_schema_descriptor": "schema_descriptor.pb",
+        "//lib/codegen/telemetry:can_json": "can.json",
+        "//lib/codegen/telemetry:storage_contract": "storage_contract.json",
+        "//lib/codegen/telemetry:storage_sql": "storage.sql",
+        "//lib/spec:wire.lock": "wire.lock",
+    },
+    target_compatible_with = NOT_WINDOWS,
+)
+
+oci_image(
+    name = "release_image",
+    os = "linux",
+    architecture = "amd64",
+    tars = [":release_bundle"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+oci_push(
+    name = "release_push",
+    image = ":release_image",
+    repository = "ghcr.io/longhornracingelectric/telemetry-release",
+    target_compatible_with = NOT_WINDOWS,
+)
 
 py_library(
     name = "registry_lib",
     srcs = ["server.py", "deployment.py"],
     visibility = ["//apps/BEVO/updater:__pkg__"],
-    deps = ["//lib/telemetry:contract", "@lhre_pypi//bazel_runfiles"],
+    deps = [":catalog_lib", "//lib/telemetry:contract", "@lhre_pypi//bazel_runfiles", requirement("SQLAlchemy"), requirement("psycopg2-binary")],
     target_compatible_with = NOT_WINDOWS,
 )
 
@@ -14,7 +97,7 @@ py_binary(
     name = "registry_binary",
     srcs = ["server.py"],
     main = "server.py",
-    data = ["//apps/telemetry:current_schema_contract", "//apps/telemetry:current_schema_descriptor"],
+    data = ["//lib/codegen/telemetry:artemis_schema_contract", "//lib/codegen/telemetry:artemis_schema_descriptor", "//lib/codegen/telemetry:can_json", "//lib/codegen/telemetry:storage_contract"],
     deps = [":registry_lib"],
     target_compatible_with = NOT_WINDOWS,
 )

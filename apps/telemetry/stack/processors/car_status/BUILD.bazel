@@ -46,6 +46,7 @@ py_test(
 )
 
 telemetry_service_image(
+    schema_consumer = True,
     name = "car_status",
     base = "@python312_linux_amd64",
     binary = ":car_status_binary",

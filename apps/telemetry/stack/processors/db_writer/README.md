@@ -49,3 +49,7 @@ Orion retains its separate packet-based legacy integration.
 Run the [explicit schema apply](../../../scripts/README.md) before restarting
 this service for additions. No automatic schema service, compression policy,
 retention deletion or continuous aggregate is introduced for the demo.
+
+The Bazel image packages its generated Artemis schema, CAN and storage metadata
+and is labeled as a schema consumer for deployment agreement checks. See the
+[stack deployment guide](../../README.md).

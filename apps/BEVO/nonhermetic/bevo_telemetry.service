@@ -5,6 +5,7 @@ Wants=network.target
 
 [Service]
 Type=simple
+EnvironmentFile=-/etc/default/bevo-telemetry
 WorkingDirectory=__BEVO_REPO__/apps/BEVO
 ExecStart=__BEVO_REPO__/apps/BEVO/nonhermetic/start_telemetry.sh
 Restart=always

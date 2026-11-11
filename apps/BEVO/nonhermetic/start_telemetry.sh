@@ -49,7 +49,6 @@ echo "Turning on cellular module..."
 if ! "$PYTHON_BIN" "$CELL_SCRIPT" on; then
   echo "WARNING: cell.py failed; continuing without cellular (dash + CAN still work)." >&2
 fi
-sleep 5
 
 for CAN_IFACE in "$CAN_IFACE_0" "$CAN_IFACE_1"; do
   echo "Configuring CAN interface $CAN_IFACE @ $CAN_BITRATE bps..."
@@ -63,15 +62,32 @@ done
 # openvpn --config "$OPENVPN_CONFIG" --auth-user-pass "$OPENVPN_CREDS" --daemon
 # sleep 5
 
+UPDATER="${BEVO_UPDATER:-$BEVO_ROOT/bevo_updater.pyz}"
+if [[ -z "${BEVO_CORE_RELEASE:-}" ]]; then
+  export BEVO_CORE_ROOT="${BEVO_CORE_ROOT:-/opt/bevo/core}"
+  "$PYTHON_BIN" "$UPDATER" startup --root "$BEVO_CORE_ROOT" \
+    --server-url "${BEVO_SERVER_URL:-}" --network-wait "${BEVO_NETWORK_WAIT_S:-60}"
+fi
+
 echo "Starting BEVO real CAN stack..."
 LOGGERD_ENABLED=1 "$SCRIPT_ROOT/run_real_stack.sh" &
 STACK_PID=$!
 START_TIME=$(date +%s)
+LAST_SCHEMA_CHECK=$START_TIME
+SCHEMA_CHECK_PID=""
+trap 'kill "$STACK_PID" ${SCHEMA_CHECK_PID:+"$SCHEMA_CHECK_PID"} 2>/dev/null || true' EXIT INT TERM
 
 # Monitor disk space and stop if low
 while kill -0 $STACK_PID 2>/dev/null; do
   CURRENT_TIME=$(date +%s)
   ELAPSED=$((CURRENT_TIME - START_TIME))
+  if [[ -z "${BEVO_CORE_RELEASE:-}" && -n "${BEVO_SERVER_URL:-}" ]] && (( CURRENT_TIME - LAST_SCHEMA_CHECK >= 300 )); then
+    if [[ -z "$SCHEMA_CHECK_PID" ]] || ! kill -0 "$SCHEMA_CHECK_PID" 2>/dev/null; then
+      "$PYTHON_BIN" "$UPDATER" check --root "$BEVO_CORE_ROOT" --server-url "$BEVO_SERVER_URL" &
+      SCHEMA_CHECK_PID=$!
+      LAST_SCHEMA_CHECK=$CURRENT_TIME
+    fi
+  fi
   if (( ELAPSED > 3600 )); then
     echo "Runtime exceeded 1 hour. Stopping telemetry."
     kill $STACK_PID

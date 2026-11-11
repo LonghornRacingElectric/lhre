@@ -178,3 +178,7 @@ The Artemis root reserves tag 2/name `packet_id`; `FieldPath`, `TelemetryUpdate`
 and `TelemetryBatch` carry explicit presence and receipt nanoseconds. The
 `:artemis_schema_descriptor` target includes these messages for server authority
 and release packaging. Generated outputs remain build artifacts.
+
+The updater Docker check uses `gen_telemetry_lib` to create an older additive
+storage fixture. Deployment still consumes the normal generated artifacts;
+it does not regenerate or patch protobuf source at runtime.

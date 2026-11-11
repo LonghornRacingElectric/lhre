@@ -7,13 +7,13 @@ from unittest.mock import patch
 import os
 import unittest
 
-from sqlalchemy import create_engine, select, func, inspect
+from sqlalchemy import create_engine, select, func, inspect, update
 from sqlalchemy.orm import Session
 from apps.telemetry.scripts.apply_storage import changes
 from lib.codegen.telemetry import storage
 from lib.codegen.telemetry.artemis_models import POOLS
 
-from analysis.sql_utils.models import ARTEMIS_MODELS, ArtemisRecordingSession
+from analysis.sql_utils.models import ARTEMIS_MODELS, ArtemisRecordingSession, ArtemisStorageMigration
 from stack.ingest.pool_storage import write_updates, write_gps, POOL_MODELS
 
 
@@ -104,12 +104,30 @@ class PoolStorageTest(unittest.TestCase):
         self.assertIn("Add nullable controls_333hz.fixture_sensor", changes(self.connection, value))
         self.connection.exec_driver_sql(storage.update_sql(value))
         self.assertEqual(changes(self.connection, value), [])
+        historical = {"pools": copy.deepcopy(POOLS)}
+        with self.assertRaises(ValueError):
+            changes(self.connection, historical)
+        self.assertEqual(changes(self.connection, historical, allow_historical=True), [])
         table = POOL_MODELS["controls_333hz"].__table__
         self.assertEqual(self.session.scalar(select(func.count()).select_from(table)), 1)
         changed = copy.deepcopy(value)
         next(pool for pool in changed["pools"] if pool["table"] == "controls_333hz")["fields"][0]["sql_type"] = "integer"
         with self.assertRaises(ValueError):
             changes(self.connection, changed)
+        renamed = copy.deepcopy(value)
+        renamed["pools"][0]["fields"][0]["name"] += "_renamed"
+        with self.assertRaises(ValueError):
+            changes(self.connection, renamed)
+        moved = copy.deepcopy(value)
+        moved["pools"][0]["table"] += "_different_rate"
+        with self.assertRaises(ValueError):
+            changes(self.connection, moved)
+        added_pool = copy.deepcopy(value)
+        added_pool["pools"].append({"table": "fixture_new_pool", "fields": []})
+        self.connection.execute(update(ArtemisStorageMigration).where(
+            ArtemisStorageMigration.storage_id == value["storage_id"]).values(contract=added_pool))
+        with self.assertRaises(ValueError):
+            changes(self.connection, historical, allow_historical=True)
 
 
 if __name__ == "__main__":
