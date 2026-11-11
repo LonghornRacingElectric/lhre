@@ -95,7 +95,9 @@ class Logger {
     va_end(args);
   }
 
-  void VLog(Level level, const char* format, va_list args) {
+  __attribute__((format(printf, 3, 0))) void VLog(Level level,
+                                                  const char* format,
+                                                  va_list args) {
     if (stream_ == nullptr || !stream_->connected() || queue_ == nullptr) {
       return;
     }

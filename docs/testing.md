@@ -49,7 +49,7 @@ no network. Concretely:
 | Bazel build + test (Linux, Windows) | Broken builds, failing unit tests, firmware over its flash/RAM budget | `bazel test //...` |
 | Network off in tests | A unit test that reaches the internet or a service | `bazel test //tools/hermetic:network_off_test` |
 | UBSan | Undefined behavior in host C++ (overflow, bad shifts, misaligned access) | `bazel test --config=ubsan //boards/... //drivers/... //lib/codegen/cpp/...` |
-| `-Wall -Wextra -Werror` on app code | Warnings in firmware application code | part of `bazel build //...` |
+| Firmware warnings as errors | Shadowed variables, `float` silently widened to `double` (slow on the M4F), unchecked format strings, fallthrough, `#if` on undefined macros, in app and longhorn code ([list](../tools/firmware/README.md#warnings)) | part of `bazel build //...` |
 | Format | Unformatted C/C++ | `bazel run //tools/format:check` |
 | Lint: Python (ruff) | Undefined names, unused imports, swallowed exceptions, unchecked subprocesses, unsafe calls. Stale `noqa` fails. | `uv run --group lint ruff check` |
 | Lint: shell (shellcheck) | Word splitting, unused variables, masked failures in scripts | see [tools/lint](../tools/lint/README.md) |

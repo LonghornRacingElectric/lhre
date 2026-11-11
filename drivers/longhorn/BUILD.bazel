@@ -7,10 +7,12 @@ builds for the MCU (firmware extra_deps) and the host (tests, sims).
 
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("//tools/firmware:warnings.bzl", "FIRMWARE_WARNINGS")
 
 cc_library(
     name = "led",
     srcs = ["led.cpp"],
+    copts = FIRMWARE_WARNINGS,
     hdrs = ["include/longhorn/led.hpp"],
     includes = ["include"],
     visibility = ["//visibility:public"],
@@ -20,6 +22,7 @@ cc_library(
 cc_library(
     name = "console",
     srcs = ["console.cpp"],
+    copts = FIRMWARE_WARNINGS,
     hdrs = ["include/longhorn/console.hpp"],
     includes = ["include"],
     visibility = ["//visibility:public"],
