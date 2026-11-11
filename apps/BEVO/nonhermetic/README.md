@@ -54,3 +54,8 @@ To change a schema, install the matching rebuilt executable release.
 
 `bazel test --config=local //apps/BEVO:startup_test` verifies modem-before-sync
 and release selection before launching the core, with stubbed hardware commands.
+
+Updater process failures (including a missing standalone archive or busy lock)
+log a warning and pin the pre-existing physical activation for the normal
+launcher checks. They do not prevent local acquisition/logging. No replacement
+release is selected on this path; publishing retains its plan validation.

@@ -244,3 +244,7 @@ storage contract was applied and remains intact. It does not execute older DDL,
 remove added columns, or remove newer read interfaces.
 Rollback across newly added frequency pools requires an explicit migration:
 older writer models cannot maintain session merges for pools they do not know.
+
+Missing or corrupt cached candidates are logged and excluded from selection;
+they do not hide a healthy deployed schema. A later verified refresh repairs
+a corrupt entry. Deployed-consumer or storage disagreement still returns 503.

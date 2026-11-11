@@ -10,6 +10,15 @@ import unittest
 
 class StartupTest(unittest.TestCase):
     def test_modem_then_sync_then_all_core_processes_use_the_new_release(self):
+        self.startup("success")
+
+    def test_missing_updater_starts_the_existing_release(self):
+        self.startup("missing")
+
+    def test_failed_updater_starts_the_existing_release(self):
+        self.startup("failure")
+
+    def startup(self, mode):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             log = root / "order.log"
@@ -37,22 +46,28 @@ class StartupTest(unittest.TestCase):
                        BEVO_UPDATER=str(root / "updater.py"), BEVO_SERVER_URL="https://authority.invalid/profile.json",
                        PATH=str(root / "bin") + os.pathsep + os.environ["PATH"])
             env.pop("BEVO_CORE_RELEASE", None)
+            if mode == "missing":
+                (root / "updater.py").unlink()
+            elif mode == "failure":
+                (root / "updater.py").write_text('raise RuntimeError("updater unavailable")\n')
+            selected = "/new/bin/" if mode == "success" else "/old/bin/"
             process = subprocess.Popen(["bash", str(Path(sys.argv[1]).resolve())], env=env,
                                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
             try:
                 deadline = time.monotonic() + 10
                 while time.monotonic() < deadline:
                     lines = log.read_text().splitlines() if log.exists() else []
-                    if sum("/new/bin/" in line for line in lines) == 3:
+                    if sum(selected in line for line in lines) == 3:
                         break
                     if process.poll() is not None:
                         self.fail(process.stdout.read().decode())
                     time.sleep(.05)
                 else:
                     self.fail("core processes did not start: " + str(lines))
-                self.assertLess(lines.index("MODEM"), lines.index("SYNC"))
-                self.assertTrue(all(lines.index(line) > lines.index("SYNC") for line in lines if "/new/bin/" in line))
-                self.assertFalse(any("/old/bin/" in line for line in lines))
+                if mode == "success":
+                    self.assertLess(lines.index("MODEM"), lines.index("SYNC"))
+                    self.assertTrue(all(lines.index(line) > lines.index("SYNC") for line in lines if selected in line))
+                self.assertFalse(any(("/old/bin/" if mode == "success" else "/new/bin/") in line for line in lines))
             finally:
                 os.killpg(process.pid, signal.SIGTERM)
                 try:

@@ -7,6 +7,7 @@ import re
 import shutil
 import tempfile
 import fcntl
+import logging
 from contextlib import contextmanager
 
 from apps.BEVO.updater.oci import Registry
@@ -74,6 +75,14 @@ class Catalog:
                 stage.mkdir()
                 for name, value in files.items():
                     (stage / name).write_bytes(value)
+                if destination.exists():
+                    try:
+                        self.read(reference)
+                    except (ValueError, OSError, KeyError, TypeError):
+                        if destination.is_dir() and not destination.is_symlink():
+                            shutil.rmtree(destination)
+                        else:
+                            destination.unlink()
                 if not destination.exists():
                     stage.rename(destination)
             self.read(reference)
@@ -103,7 +112,11 @@ class Catalog:
         exact, compatible = [], []
         server = Manifest(profile["schema"])
         for reference in self.index()["releases"]:
-            files, release, schema, _ = self.read(reference)
+            try:
+                files, release, schema, _ = self.read(reference)
+            except (ValueError, OSError, KeyError, TypeError) as error:
+                logging.warning("Ignoring invalid cached candidate %s: %s", reference, error)
+                continue
             if release["can_json_sha256"] != profile["can_json_sha256"]:
                 continue
             metadata, _ = release_schema(files)

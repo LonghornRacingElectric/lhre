@@ -128,7 +128,7 @@ that flashed board firmware matches those definitions.
 
 The bootstrap service powers GPS and the cellular modem through the existing
 GPIO scripts and configures CAN first. It then runs `startup`, allowing up to
-60 seconds for authority connectivity before resolving the core release and
+60 seconds for the complete synchronization attempt before resolving the core release and
 starting daemons. Configure `/etc/default/bevo-telemetry`:
 
 ```bash
@@ -141,7 +141,9 @@ BEVO_NETWORK_WAIT_S=60
 The Pi bundle includes the standalone updater. Keep it and GPIO bootstrap
 scripts outside managed executable releases. On network, registry or validation
 failure, `startup` verifies the installed executables and their existing plan
-before returning `offline-keep`. Missing/damaged activations fail startup. A
+before returning `offline-keep`. Missing/damaged activations fail updater verification. If the updater itself
+cannot execute, bootstrap pins the pre-existing activation and continues the
+normal launcher checks; the publisher still validates its release-bound plan. A
 running stack checks every five minutes but never activates or restarts itself;
 apply a new release at the next coordinated startup. Explicit admin-pinned
 `BEVO_CORE_RELEASE` bypasses automatic startup synchronization.

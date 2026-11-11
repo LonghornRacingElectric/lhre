@@ -51,6 +51,13 @@ class CatalogTest(unittest.TestCase):
             (catalog.directory(reference) / "schema_descriptor.pb").write_bytes(b"broken")
             with self.assertRaises(ValueError):
                 catalog.read(reference)
+            with self.assertLogs(level="WARNING"):
+                remaining = catalog.augment(deployed)
+            self.assertEqual(remaining["releases"], [])
+            self.assertEqual(remaining["schema"], deployed["schema"])
+            available = True
+            catalog.sync()
+            self.assertEqual(catalog.augment(deployed)["releases"], [release["bevo_release"]])
 
 
 if __name__ == "__main__":

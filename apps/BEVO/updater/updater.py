@@ -13,6 +13,21 @@ import tempfile
 import time
 import sys
 import math
+import signal
+from contextlib import contextmanager
+
+
+@contextmanager
+def startup_deadline(seconds):
+    def expired(*_):
+        raise TimeoutError("startup synchronization deadline exceeded")
+    previous = signal.signal(signal.SIGALRM, expired)
+    signal.setitimer(signal.ITIMER_REAL, max(.001, seconds))
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
 import urllib.parse
 
 from apps.BEVO.updater.oci import Registry, fetch, verify
@@ -273,8 +288,13 @@ def main():
             print(json.dumps({"action": "admin-override-active", **pinned}))
             return
         try:
-            print(json.dumps(synchronize(updater, args)))
-        except (OSError, ValueError, KeyError) as error:
+            if args.command == "startup":
+                with startup_deadline(args.network_wait):
+                    result = synchronize(updater, args)
+            else:
+                result = synchronize(updater, args)
+            print(json.dumps(result))
+        except Exception as error:
             if args.command != "startup":
                 raise
             current = args.root / "current"
