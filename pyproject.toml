@@ -26,4 +26,6 @@ docs = [
 # lands on purpose, with its fixes, never by drift.
 lint = [
     "ruff==0.17.4",
+    "actionlint-py==1.7.8.24",
+    "shellcheck-py==0.11.0.1",
 ]

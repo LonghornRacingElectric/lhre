@@ -98,6 +98,7 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    # Every step runs even after one fails, so one run shows every finding.
     steps:
       - uses: actions/checkout@v7
 
@@ -105,6 +106,18 @@ jobs:
 
       - name: Python (ruff)
         run: uv run --group lint ruff check --output-format=github
+
+      # Scripts by extension, plus the one shebang-only script.
+      - name: Shell scripts (shellcheck)
+        if: ${{ !cancelled() }}
+        run: |
+          git ls-files -z '*.sh' '*.bash' apps/BEVO/dashd/deploy/labwc-autostart ':!autonomy' ':!simulation/bobsim' | xargs -0 uv run --group lint shellcheck --severity=warning
+
+      # Workflow files are code too: expression typos, bad job references,
+      # and shellcheck on every run: block.
+      - name: GitHub workflows (actionlint)
+        if: ${{ !cancelled() }}
+        run: uv run --group lint actionlint
 
   bazel:
     name: Bazel (Linux)
@@ -147,6 +160,7 @@ jobs:
       - name: Summarize firmware memory use
         if: ${{ !cancelled() }}
         run: |
+          # shellcheck disable=SC2016 # the backticks are Markdown, not a command
           for label in $(bazel query 'attr(tags, firmware_size, tests(//...))'); do
             log="bazel-testlogs/${label#//}"
             log="${log/://}/test.log"
