@@ -24,8 +24,10 @@ nav:
       - ADR-014 Deployed Telemetry Schema: docs/architecture/014-deployed-telemetry-schema.md
       - ADR-015 Study Layout: docs/architecture/015-study-layout.md
       - ADR-016 FMU Artifact Boundary: docs/architecture/016-fmu-artifact-boundary.md
+      - ADR-017 Tests Gate Merges: docs/architecture/017-tests-gate-merges.md
       - ADR-020 VCU SIL FMU Host: docs/architecture/020-vcu-sil-fmu-host.md
       - Build System: docs/build-system.md
+      - Testing: docs/testing.md
       - Cookbook: docs/cookbook.md
   - Boards:
       - Overview: boards/README.md
@@ -48,12 +50,14 @@ nav:
       - VS Code & Hardware Debug: tools/debug/README.md
       - Firmware Project Macro: tools/firmware/README.md
       - Code Formatting: tools/format/README.md
+      - Lint: tools/lint/README.md
       - OpenOCD: tools/openocd/README.md
       - DFU Util: tools/dfu/README.md
       - CAN Spec Tools: tools/spec/README.md
       - IDE Setup: tools/ide/README.md
       - Serial Monitor: tools/monitor/README.md
       - UBSan: tools/ubsan/README.md
+      - Hermetic Tests: tools/hermetic/README.md
       - Prebuilt protoc: tools/protoc/README.md
   - Autonomy:
       - Overview: autonomy/README.md

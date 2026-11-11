@@ -92,6 +92,50 @@ jobs:
       - name: Check formatting
         run: bazel run //tools/format:check
 
+  # Linters for code outside Bazel's view, pinned in pyproject's lint group.
+  # Cheap, so it always runs. Old violations are suppressed inline; see
+  # tools/lint/README.md.
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    # Every step runs even after one fails, so one run shows every finding.
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v9.0.0
+
+      - name: Python (ruff)
+        run: uv run --group lint ruff check --output-format=github
+
+      # Scripts by extension, plus the one shebang-only script.
+      - name: Shell scripts (shellcheck)
+        if: ${{ !cancelled() }}
+        run: |
+          git ls-files -z '*.sh' '*.bash' apps/BEVO/dashd/deploy/labwc-autostart ':!autonomy' ':!simulation/bobsim' | xargs -0 uv run --group lint shellcheck --severity=warning
+
+      # A test that can't pass gets fixed or deleted, not switched off.
+      - name: No switched-off tests
+        if: ${{ !cancelled() }}
+        run: |
+          # skipif stays allowed: a platform guard isn't a switched-off test.
+          # git grep exits 1 on no match; anything higher is a broken pathspec
+          # that must fail the step, not read as clean.
+          found=0
+          scan() { rc=0; git grep -nE "$@" || rc=$?; [ "$rc" -le 1 ] || exit "$rc"; [ "$rc" -eq 1 ] || found=1; }
+          scan 'flaky *= *True|enable_tests *= *False' -- '*BUILD' '*BUILD.bazel' '*.bzl' ':!tools/firmware/firmware_project.bzl'
+          scan '(^|[^[:alnum:]_])(DISABLED_|GTEST_SKIP)' -- '*.cc' '*.cpp' '*.cxx' '*.h' '*.hh' '*.hpp'
+          scan '(^|[^[:alnum:]_])(mark\.(skip|xfail)|unittest\.(skip|expectedFailure))([^[:alnum:]_]|$)|^[[:space:]]*@(skip|expectedFailure)([^[:alnum:]_]|$)' -- '*.py'
+          if [ "$found" -eq 1 ]; then
+            echo "::error::A test is switched off (flaky, enable_tests = False, DISABLED_, GTEST_SKIP, or a pytest/unittest skip); fix or delete it."
+            exit 1
+          fi
+
+      # Workflow files are code too: expression typos, bad job references,
+      # and shellcheck on every run: block.
+      - name: GitHub workflows (actionlint)
+        if: ${{ !cancelled() }}
+        run: uv run --group lint actionlint
+
   bazel:
     name: Bazel (Linux)
     needs: changes
@@ -133,6 +177,7 @@ jobs:
       - name: Summarize firmware memory use
         if: ${{ !cancelled() }}
         run: |
+          # shellcheck disable=SC2016 # the backticks are Markdown, not a command
           for label in $(bazel query 'attr(tags, firmware_size, tests(//...))'); do
             log="bazel-testlogs/${label#//}"
             log="${log/://}/test.log"
@@ -480,7 +525,7 @@ jobs:
   # Jobs skip only on an untouched area, and run if Changes fails.
   all-checks:
     name: All checks passed
-    needs: [changes, format, bazel, bazel-windows, sim-fast, four-post, autonomy, bevo, docs, telemetry]
+    needs: [changes, format, lint, bazel, bazel-windows, sim-fast, four-post, autonomy, bevo, docs, telemetry]
     if: always()
     runs-on: ubuntu-latest
     steps:

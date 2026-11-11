@@ -438,7 +438,7 @@ _logs_one() {  # _logs_one <name> <tail> <prefix>   (prefix empty = no fan-out)
 }
 logs_for() {  # logs_for <name...>  (default core); Ctrl-C detaches
     local names=("$@")
-    [[ ${#names[@]} -eq 0 ]] && names=($CORE_ORDER)
+    [[ ${#names[@]} -eq 0 ]] && read -ra names <<< "$CORE_ORDER"
     warn "Following logs — press Ctrl-C to DETACH (containers keep running)."; echo
     if [[ ${#names[@]} -eq 1 ]]; then
         _logs_one "${names[0]}" 100 ""

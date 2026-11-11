@@ -9,8 +9,6 @@ Docker containers and non-Docker scripts (like paho_testing.py).
 """
 
 import unittest
-import os
-import sys
 import time
 import json
 import uuid
@@ -219,7 +217,7 @@ class TestDataFlow(unittest.TestCase):
 
                     while time.time() - start_time < 10:
                         batch = consumer.poll(timeout_ms=1000)
-                        for partition, records in batch.items():
+                        for partition, records in batch.items():  # noqa: B007 pre-existing when the lint gate went on
                             for record in records:
                                 if record.value == test_data:
                                     message_found = True

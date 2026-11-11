@@ -41,6 +41,10 @@ everywhere.
 - `All checks passed` is the one required check. It fails if any job failed or
   was cancelled, or if `Changes` failed. Its run page shows a table of
   every job's result.
+- Every change follows the testing contract in
+  [docs/testing.md](docs/testing.md): behavior changes ship with a test,
+  tests stay hermetic, and tests are never weakened to get green. That
+  page lists every gate and how to run it locally.
 - Run `bazel test //...` and `bazel run //tools/format:check` locally
   before pushing.
 

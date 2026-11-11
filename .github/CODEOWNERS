@@ -3,3 +3,16 @@
 /autonomy/  @LonghornRacingElectric/autonomous
 /simulation/ @LonghornRacingElectric/vehicle-modeling
 /vehicle/    @LonghornRacingElectric/vehicle-modeling
+
+# The CI gates and the testing contract. A change here changes what a green
+# PR means, so it gets a named reviewer even when everything passes.
+/.github/CODEOWNERS      @raorjun
+/.github/workflows/      @raorjun
+/.bazelrc                @raorjun
+/.coderabbit.yaml        @raorjun
+/ruff.toml               @raorjun
+/tools/lint/             @raorjun
+/tools/coverage/         @raorjun
+/AGENTS.md               @raorjun
+/docs/testing.md         @raorjun
+/docs/architecture/017-tests-gate-merges.md @raorjun

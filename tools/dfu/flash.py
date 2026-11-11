@@ -48,7 +48,7 @@ def run_command(command, ignore_error=False):
     """Runs a shell command and prints its output."""
     print(f"{bcolors.BOLD}Running: {command}{bcolors.ENDC}")
     # Use sys.stdout.write and flush for potentially better real-time output
-    process = os.popen(command)
+    process = os.popen(command)  # noqa: S605 pre-existing when the lint gate went on
     while True:
         # Read in chunks to avoid blocking on large output
         output_chunk = process.read(4096)
@@ -89,7 +89,7 @@ def main():
     print(f"Resolved Firmware Path: {firmware_elf_actual_path}")
     print("-----------------------------------------------------------------")
 
-    firmware_elf_arg = firmware_elf_actual_path.replace("\\", "/")
+    firmware_elf_arg = firmware_elf_actual_path.replace("\\", "/")  # noqa: F841 pre-existing when the lint gate went on
 
     try:
         print(bcolors.OKCYAN + "--- Finding Device Serial Port ---" + bcolors.ENDC)
@@ -147,14 +147,14 @@ def main():
                     file=sys.stderr,
                 )
                 print("Proceeding to DFU update anyway.")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
                 print(
                     f"{bcolors.FAIL}An unexpected error occurred: {e}{bcolors.ENDC}",
                     file=sys.stderr,
                 )
                 print("Proceeding to DFU update anyway.")
 
-        process = os.popen(f"{dfu_util_exe_actual_path} --list")
+        process = os.popen(f"{dfu_util_exe_actual_path} --list")  # noqa: S605 pre-existing when the lint gate went on
         dfu_path = find_first_path_for_device_regex(process.read())
         if dfu_path is None:
             sys.stderr.write(
@@ -179,7 +179,7 @@ def main():
 
         print(f"{bcolors.OKGREEN}DFU Update process finished.{bcolors.ENDC}")
         print("--- Flash Complete ---")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
         print(f"An unexpected error occurred: {e}", file=sys.stderr)
         sys.exit(1)
 
