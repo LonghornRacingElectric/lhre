@@ -5,6 +5,7 @@ load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
 load("@rules_python//python:defs.bzl", "py_test")
+load(":warnings.bzl", "FIRMWARE_WARNINGS")
 
 # ---------------------------------------------------------------------------
 # Target platform per family. Each platform's CPU-core constraint selects the
@@ -562,7 +563,7 @@ def firmware_project(
             srcs = app_srcs,
             hdrs = native.glob(["App/**/*.hpp"], allow_empty = True),
             includes = ["App"],
-            copts = ["-Wall", "-Wextra", "-Werror"],
+            copts = FIRMWARE_WARNINGS,
             deps = final_app_deps,
         )
 
