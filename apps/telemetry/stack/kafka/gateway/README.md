@@ -201,13 +201,11 @@ declared native rates; record latency, `/v1/stats` source reads, hit ratios,
 RSS, disk use and ingest lag before increasing budgets. Benchmark uncompressed
 IPC against LZ4 before changing the file format; compression requires decoded
 buffers and changes memory accounting.
-The [trackside benchmark](../../tests/TRACKSIDE_BENCHMARK.md) exercises native-rate
-ingest with concurrent engineering reads. At its synthetic rate, the 64 MiB ring
-held roughly 41 seconds; the configured time window remains an upper bound.
-The [controlled comparison](../../tests/QUERY_COMPARISON.md) measures the
-projected parallel reader against direct Postgres and the previous full-pool
-reader. Historical backend cache hits are substantially faster; Grafana still
-adds transport and frame conversion, so use its comparison when assessing plots.
+The ring's configured time window is an upper bound; its byte cap can shorten
+retention. Measure on the deployment hardware with representative traffic.
+Compare identical queries against direct Postgres and each cache configuration
+before claiming a speedup. Include Grafana's transport and frame conversion
+when measuring dashboard queries.
 
 ## Verification
 

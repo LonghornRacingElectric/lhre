@@ -1,0 +1,9 @@
+services:
+  query_gateway:
+    environment:
+      QUERY_L1_BYTES: "${QUERY_BENCH_L1_BYTES:-268435456}"
+      QUERY_L2_BYTES: "${QUERY_BENCH_L2_BYTES:-1073741824}"
+    volumes:
+      - benchmark_cache:/cache
+volumes:
+  benchmark_cache:

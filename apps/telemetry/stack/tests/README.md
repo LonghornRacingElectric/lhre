@@ -94,8 +94,7 @@ CI runs this independently of the secret-dependent broader integration suite.
 
 ## Trackside workflow benchmark
 
-The [measured run](TRACKSIDE_BENCHMARK.md) records latency, correctness and sizing
-limits for the synthetic trackside workload.
+Manual runs produce machine-specific reports outside the checkout.
 
 ```bash
 QUERY_TEST_LOCAL=1 bash apps/telemetry/stack/tests/run_query_gateway_test.sh \
@@ -132,8 +131,8 @@ claiming production capacity. It is deliberately excluded from presubmit.
 
 ## Query design comparison
 
-The [measured comparison](QUERY_COMPARISON.md) evaluates speedup and regressions
-against direct Postgres, including both paths through Grafana.
+Compare identical workloads on the same machine; keep the resulting measurements
+local rather than treating them as deployment-wide performance guarantees.
 
 ```bash
 QUERY_TEST_LOCAL=1 bash apps/telemetry/stack/tests/run_query_gateway_test.sh \
