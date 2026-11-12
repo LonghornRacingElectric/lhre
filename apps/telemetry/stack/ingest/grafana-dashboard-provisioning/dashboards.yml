@@ -1,12 +1,51 @@
 apiVersion: 1
 
+# One Grafana folder per car + mode: "<Car> · Real-Time" (live Kafka) and
+# "<Car> · Retrospect" (Postgres history), each fed by dashboards/<car>/<mode>/.
+#
+# Don't go back to foldersFromFilesStructure: Grafana 11.3 names the folder
+# after the leaf directory only, so every car's real-time/ collapsed into one
+# shared "real-time" folder. Folders stay flat because file provisioning can't
+# create nested folders (two providers both titled "Real-Time" fail with
+# "a folder with the same name already exists"). folderUid keeps folder
+# links stable; dashboard UIDs come from the JSON and never change here.
+#
+# New car: copy an Orion pair and point it at dashboards/<car>/.
 providers:
-  - name: telemetry-file-dashboards
+  - &dashboards
+    name: orion-real-time
+    folder: Orion · Real-Time
+    folderUid: orion-real-time
     orgId: 1
     type: file
     disableDeletion: false
     updateIntervalSeconds: 10
     allowUiUpdates: true
     options:
-      path: /var/lib/grafana/dashboards
-      foldersFromFilesStructure: true
+      path: /var/lib/grafana/dashboards/orion/real-time
+  - <<: *dashboards
+    name: orion-retrospect
+    folder: Orion · Retrospect
+    folderUid: orion-retrospect
+    options:
+      path: /var/lib/grafana/dashboards/orion/retrospect
+
+  # Legacy cars, to be removed with the Angelique/Nightwatch databases.
+  - <<: *dashboards
+    name: angelique-real-time
+    folder: Angelique · Real-Time
+    folderUid: angelique-real-time
+    options:
+      path: /var/lib/grafana/dashboards/angelique/real-time
+  - <<: *dashboards
+    name: angelique-retrospect
+    folder: Angelique · Retrospect
+    folderUid: angelique-retrospect
+    options:
+      path: /var/lib/grafana/dashboards/angelique/retrospect
+  - <<: *dashboards
+    name: nightwatch-real-time
+    folder: Nightwatch · Real-Time
+    folderUid: nightwatch-real-time
+    options:
+      path: /var/lib/grafana/dashboards/nightwatch/real-time
