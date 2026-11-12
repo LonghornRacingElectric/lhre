@@ -9,3 +9,7 @@ It also accepts an external Gazebo clock without publishing another clock.
 It applies command expiry and publishes the build manifest. It does not
 implement another vehicle model. See the [package guide](../README.md) for
 builds, parameters and limitations.
+
+`timing_report.py` collects accepted-step compute times and Gazebo pose-age
+observations. It requires measured gate-speed motion and all selected sensor
+streams before it can report timing acceptance.

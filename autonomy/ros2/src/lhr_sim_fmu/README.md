@@ -56,6 +56,101 @@ The fixed-step catch-up loop preserves elapsed simulation time; it is not a
 real-time speed guarantee. There is no second `/clock` publisher in FMU Gazebo
 mode. Initial pose comes from the world's saved vehicle spawn.
 
+## Gazebo timing report
+
+Gazebo FMU mode now defaults to `fmu_lockstep:=true`. The coordinator pauses
+simulation time while the plant solves and its pose is sent to Gazebo. It
+allows the next interval only after that handshake. `fmu_step_sec:=0.02`
+sets both the plant integration interval and the coordinated physics batch.
+It must be a positive integer multiple of the world's physics step and less
+than 0.1 s. Missing states, failed control/pose requests and backward time
+jumps fail the run. `fmu_lockstep:=false` selects the earlier asynchronous
+comparison mode. MVS behavior and the default Gazebo dynamics plant are unchanged.
+
+`/lhr/sim/fmu_step_timing` publishes one JSON record per accepted step. Its
+wall duration includes the driver adapter, native FMI call and output mapping;
+it excludes waiting for Gazebo and rendering. Slow steps are reported, not
+hidden. The report shows their mean, nearest-rank p95, maximum, deadline
+misses and simulated seconds per plant-compute second. Its observed real-time
+factor also includes the coordinator and Gazebo overhead.
+
+Start the observer before the launch, in separate terminals with the same
+`ROS_DOMAIN_ID` and the workspace sourced:
+
+```bash
+ros2 run lhr_sim_fmu timing_report --seconds 135 \
+  --output data/fmu-timing/cameras-off.json
+# Other terminal, with a display available to the renderer:
+timeout -s INT -k 15 130 ros2 launch lhr_gazebo gazebo_demo.launch.py \
+  plant:=fmu perception:=lidar estimator:=ekf safety:=true \
+  safety_lidar_timeout_s:=1.5 gui:=false rviz:=false enable_metrics:=false
+```
+
+The 1.5 s LiDAR watchdog is the existing CPU-rendering diagnostic setting;
+the launch default remains 0.3 s. It does not change the 0.1 s pose-age
+acceptance limit.
+
+Repeat with observer `--stereo` and launch `enable_stereo_camera:=true`.
+Reports include artifact provenance and raw timing/pose-age samples. Keep
+these files in ignored run-data storage. `timing_passed` requires measured
+4–5 m/s motion, an explicit FMU clock origin, each selected sensor stream,
+no unmatched frames after its first observed accepted integration step, and a maximum observed age below 0.1 s. A missing stream or an empty
+speed band fails; a slow solver can pass when simulation time waits for it.
+Frames before the first observed accepted integration step are retained and
+counted as `pre_start`. This excludes the initial two-tick clock handshake
+and sensor frames rendered before any FMU step is available. The boundary
+is the recorded clock origin plus the first observed accepted FMU time. A missing timebase
+fails acceptance.
+
+This checks the sampled pose-age diagnostic from the Gazebo guide, not
+per-ray/per-pixel sensor truth or a full driving gate.
+
+### Mac container result (2026-11-06)
+
+Two autocross seed-1 measurements used 135 s observer windows and 130 s
+launch deadlines, including shutdown. Both used LiDAR/EKF, the gate's default
+5 m/s speed limit, `fmu_lockstep:=true` and `fmu_step_sec:=0.02`. Each launch
+used a different automatically generated Gazebo transport partition. Both
+passed the sampled timing check. Safety stayed enabled with the existing
+1.5 s CPU LiDAR watchdog override. The 0.3 s default still tripped
+`LIDAR_STALE` in an earlier READY run; that stationary report failed its
+unmeasured-speed check. This work does not establish sensor throughput or
+fix that separate freshness failure.
+
+| At 4–5 m/s | Cameras off | Stereo on |
+| --- | --- | --- |
+| Accepted steps in speed band | 849 | 968 |
+| Plant call mean | 26.24 ms | 27.51 ms |
+| Plant call p95 | 47.27 ms | 50.54 ms |
+| Plant call maximum | 95.35 ms | 241.11 ms |
+| Calls over the 20 ms interval | 511 | 615 |
+| Plant-compute speedup | 0.762x | 0.727x |
+
+Overall observed simulation/wall-time ratios were 0.230x with cameras off and
+0.247x with stereo on. These include startup, waiting and driving.
+
+| Sensor pose-age observations | Count | Mean | Maximum |
+| --- | --- | --- | --- |
+| Cameras-off LiDAR | 137 | 19.00 ms | 19.00 ms |
+| Stereo-on LiDAR | 139 | 19.00 ms | 19.00 ms |
+| Stereo left | 362 | 28.64 ms | 38.00 ms |
+| Stereo right | 350 | 28.10 ms | 38.00 ms |
+
+No post-bootstrap observations were unmatched. The stereo report retained
+1 LiDAR, 4 left-image and 3 right-image bootstrap frames as `pre_start`.
+Pose age is sampled from Gazebo's model-pose observations; camera observation
+age can add up to 19 ms. These are bounded timing measurements, not a lap,
+a full gate pass, a guaranteed real-time rate or per-pixel sensor validation.
+The native pull-away solver failure and native IMU/wheel work (#205) remain
+independent.
+
+The runs used the current artifact `fe1aadc873f7852993faf0691467093d78e83f9730f4efc52f79f83ceed2328b`,
+BobSim `f58f932`, BobLib `75b6e03` and canonical vehicle hash
+`c4dc19eb29749755054802385e6930261e6ec3720bc7e4730fb217cdc4acaaa0`.
+The JSON reports retain complete artifact provenance, timing samples and pose
+samples in ignored `data/issue203/` storage. Both runs kept the same settings;
+no solver tolerance or model input was changed to meet the pose-age limit.
+
 ## Vehicle and command contract
 
 [The build](../../../../simulation/docs/fmu.md) uses the single canonical

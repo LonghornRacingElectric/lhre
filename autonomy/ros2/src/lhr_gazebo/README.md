@@ -35,22 +35,39 @@ Gazebo odometry. Gazebo therefore renders a rigid, planar sensor rig; suspension
 travel, roll/pitch and wheel articulation are not rendered yet. Cone contacts
 remain geometric metrics, not modeled impact forces.
 
-`fmu_pose` sends the latest accepted FMU pose through Gazebo's `set_pose`
-service, with at most one request in flight. It coalesces states if rendering
-falls behind rather than queuing stale poses. Gazebo keeps running while the
-FMU solves; this is asynchronous coupling, not lockstep. #203 owns pacing and
-performance acceptance. A lost/rejected pose request or exited FMU component
-shuts down the launch.
+`fmu_lockstep:=true` starts Gazebo paused. The coordinator advances a small
+batch of physics steps, waits for the corresponding accepted FMU state, sends
+its pose through `set_pose`, and waits for the response before allowing the
+next batch. It keeps at most one pose request and one world-control request
+in flight. A slow solver increases wall time while simulation time waits.
+The first two physics ticks bootstrap the clock after FMU provenance is
+available. A missing state, lost/rejected request or exited FMU component
+shuts down the launch. Manually playing or resetting the world is unsupported
+in this mode; use the launch to restart a run.
+
+`fmu_lockstep:=false` retains the asynchronous comparison mode: Gazebo runs
+freely and the follower sends the newest available pose. It can render stale
+states under load. The [FMU timing report](../lhr_sim_fmu/README.md#gazebo-timing-report)
+records the selected mode and measures both cases.
+
+FMU launches choose a unique Gazebo transport partition unless `GZ_PARTITION`
+is already set. The launch logs that value and FMU provenance records it. This
+keeps a different Gazebo session from serving this run’s clock or pose calls.
+Set the same environment value when using native `gz` inspection tools; ROS
+tools still use their ROS domain.
 
 | Argument | Default | Meaning |
 | --- | --- | --- |
+| `fmu_lockstep` | true | Pause Gazebo between coordinated plant intervals |
+| `fmu_step_sec` | 0.02 | FMU interval; an integer number of world physics steps, below 0.1 s |
 | `fmu_path` | empty | Artifact and adjacent manifest; see the FMU package |
 | `fmu_pedal_gain` | 0.1 | Proportional speed-to-pedal gain, recorded only for FMU runs |
 | `fmu_command_timeout_sec` | 0.5 | Simulation seconds before braking on expired commands |
 | `fmu_pose_timeout_sec` | 5.0 | Wall seconds allowed for pose service startup/response |
 
-The internal `world_name` and `truth_topic` pose-node parameters are derived
-from the selected world and estimator/fault routing. `external_clock` and
+The internal `world_name`, `physics_step_sec` and `truth_topic` pose-node
+parameters come from the selected world and estimator/fault routing. The
+plant update rate is the inverse of `fmu_step_sec`. `external_clock` and
 `publish_clock` are fixed by plant mode, so they are not user launch flags.
 Use `EXTRA="plant:=fmu"` with either the gate or fault runner; their defaults
 still select Gazebo. `steer_freeze` routes to the FMU command input in FMU mode.
@@ -66,9 +83,13 @@ LiDAR/stereo topic at its sensor stamp. `observation_age_s` is the gap to the
 most recent pose observation at or before the sensor stamp. Thus this is a
 sampled age diagnostic, not an exact per-ray/per-pixel pose trace; repeated
 stationary poses match the newest identical FMU state. Missing pose matches
-produce no sample, never a zero-lag claim. Keep the launch log with study data.
+produce an explicit unmatched record, never a zero-lag claim.
+`/lhr/sim/fmu_pose_lag` publishes the same per-frame observations as JSON for
+the timing report. Bootstrap frames are retained separately from acceptance using the explicit
+FMU clock origin and first observed accepted integration step.
+Keep the launch log and report with study data.
 
-### Coupling checks (2026-11-06)
+### Earlier asynchronous coupling checks (2026-11-06)
 
 Local autocross seed 1 smoke runs reached DRIVING with the real compiled FMU:
 LiDAR/EKF without cameras (70 s wall limit), and simulated cones/truth with
@@ -106,10 +127,10 @@ is unconfirmed. This is not assumed to be the motor-latch defect in BobLib
 #32. The failure remains in the native test; no retry, altered tolerance or
 substitute plant hides it.
 
-The default seed-1 gate subset completed its truth baseline in 35.2144 s,
+Before synchronized stepping, the default seed-1 gate subset completed its truth baseline in 35.2144 s,
 with 0 cone contacts and 0.2268 m maximum CTE. Its LiDAR/EKF run failed in
 READY on `LIDAR_STALE`, so the subset failed. Baseline sampled pose age
-reached 198 ms during stopping; #203's pacing target is not established.
+reached 198 ms during stopping in that asynchronous mode.
 A completed baseline is not a full gate pass or a native solver acceptance.
 Native IMU/wheel outputs still depend on #205.
 
@@ -138,7 +159,9 @@ and CPU timeout override. It reached DRIVING without a safety trip. Last
 logged cumulative pose-age measurements were 37.14 ms mean / 218 ms maximum
 for LiDAR, 52.63 ms / 237 ms for left images, and 53.13 ms / 237 ms for right
 images. It was bounded before a full lap and did not collect lap metrics.
-These spikes also leave #203's 100 ms pacing target unmet on this Mac.
+These asynchronous spikes motivated the synchronized mode. See the
+[Mac timing result](../lhr_sim_fmu/README.md#mac-container-result-2026-11-06)
+for the coordinated stepping measurements.
 
 The [gate runner](../../../testing/tools/gate/README.md) explicitly selects
 `perception:=lidar estimator:=ekf safety:=true lidar_source:=mid360
