@@ -8,3 +8,12 @@ filegroup(
     ],
     visibility = ["//visibility:public"],
 )
+
+
+filegroup(
+    name = "boards",
+    srcs = [
+        ":all_firmware",
+    ],
+    visibility = ["//visibility:public"],
+)

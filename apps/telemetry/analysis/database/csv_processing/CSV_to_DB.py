@@ -1,44 +1,42 @@
 import warnings
 warnings.filterwarnings("ignore")
-import pandas as pd
-import pickle
-import time
-import logging
-import datetime
-import os
-import sys
-import json
-import argparse
-import matplotlib.pyplot as plt
-import numpy as np
-from concurrent.futures import ThreadPoolExecutor, as_completed, wait
-from multiprocessing import cpu_count
-from pathlib import Path
-from tqdm import tqdm
-from queue import Queue
-import requests
+import pandas as pd  # noqa: E402 pre-existing when the lint gate went on
+import pickle  # noqa: E402 pre-existing when the lint gate went on
+import time  # noqa: E402 pre-existing when the lint gate went on
+import logging  # noqa: E402 pre-existing when the lint gate went on
+import datetime  # noqa: E402 pre-existing when the lint gate went on
+import os  # noqa: E402 pre-existing when the lint gate went on
+import sys  # noqa: E402 pre-existing when the lint gate went on
+import json  # noqa: E402 pre-existing when the lint gate went on
+import argparse  # noqa: E402 pre-existing when the lint gate went on
+import numpy as np  # noqa: E402 pre-existing when the lint gate went on
+from concurrent.futures import ThreadPoolExecutor, as_completed, wait  # noqa: E402 pre-existing when the lint gate went on
+from multiprocessing import cpu_count  # noqa: E402 pre-existing when the lint gate went on
+from pathlib import Path  # noqa: E402 pre-existing when the lint gate went on
+from tqdm import tqdm  # noqa: E402 pre-existing when the lint gate went on
+from queue import Queue  # noqa: E402 pre-existing when the lint gate went on
+import requests  # noqa: E402 pre-existing when the lint gate went on
 
 REALTIME = True
 
 sys.path.append(str(Path(__file__).parents[3]))
 
-from analysis.sql_utils.db_session import get_db, DBTarget
-from analysis.sql_utils.models import (
-    Packet,
+from analysis.sql_utils.db_session import get_db  # noqa: E402 pre-existing when the lint gate went on
+from analysis.sql_utils.models import (  # noqa: E402 pre-existing when the lint gate went on
     Event,
     DriveDay,
     Partitions,
 )
-from analysis.sql_utils.query_builder import QueryBuilder
-from stack.ingest.mqtt_handler import MQTTHandler, MQTTTarget
-from analysis.database.csv_processing.proto_builders import (
+from analysis.sql_utils.query_builder import QueryBuilder  # noqa: E402 pre-existing when the lint gate went on
+from stack.ingest.mqtt_handler import MQTTHandler, MQTTTarget  # noqa: E402 pre-existing when the lint gate went on
+from analysis.database.csv_processing.proto_builders import (  # noqa: E402 pre-existing when the lint gate went on
     build_angelique_sensor_data_proto,
     build_orion_sensor_data_proto,
 )
 
 class CSVToDB():
 
-    def __init__(self, data_csv_folder = None, mqtt = None, db_session = None, car = "Nightwatch", MQTT_target = MQTTTarget.get()):
+    def __init__(self, data_csv_folder = None, mqtt = None, db_session = None, car = "Nightwatch", MQTT_target = MQTTTarget.get()):  # noqa: B008 pre-existing when the lint gate went on
         self.db_session = db_session
         self.MQTT_target = MQTT_target
         self.mqtt = mqtt
@@ -47,11 +45,11 @@ class CSVToDB():
         self.car = car
         self._models = QueryBuilder(car)._models
         self._table_models = {model.__tablename__: model for model in self._models.values()}
-        if (data_csv_folder != None):
+        if (data_csv_folder != None):  # noqa: E711 pre-existing when the lint gate went on
             try:
                 self.data_csv_folder = sorted(list(Path(__file__).parent.joinpath("csv_data", data_csv_folder).glob("*.csv")))
             except FileNotFoundError:
-                raise FileNotFoundError("NO CSV FILES WERE FOUND UNDER csv_data/\nCREATE csv_data/ and add csv files within the folder.\n")
+                raise FileNotFoundError("NO CSV FILES WERE FOUND UNDER csv_data/\nCREATE csv_data/ and add csv files within the folder.\n")  # noqa: B904 pre-existing when the lint gate went on
         else:
             logging.warning("NO CSV FOLDER WAS PASSED\n")
 
@@ -115,7 +113,7 @@ class CSVToDB():
 
         #TODO event separation using wheel speeds
         continous_event = []
-        for i, (df, delay_indices) in enumerate(zip(csv_split, delays)):
+        for i, (df, delay_indices) in enumerate(zip(csv_split, delays)):  # noqa: B007, B905 pre-existing when the lint gate went on
             start_idx = 0
             for delay_idx in delay_indices:
                 continous_event.append(df.iloc[start_idx:delay_idx])  
@@ -212,7 +210,7 @@ class CSVToDB():
                     if lat_col and lon_col:
                         lat_vals = df[lat_col].astype(float).to_numpy()
                         lon_vals = df[lon_col].astype(float).to_numpy()
-                        convert[table][column] = [[lat, lon] for lat, lon in zip(lat_vals, lon_vals)]
+                        convert[table][column] = [[lat, lon] for lat, lon in zip(lat_vals, lon_vals)]  # noqa: B905 pre-existing when the lint gate went on
                         continue
 
                 # Construct CSV column name (for Orion: table.column, others: from mapping)
@@ -298,7 +296,7 @@ class CSVToDB():
     def _insert_chunk_callback(self, future):
         try:
             future.result()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
             logging.error(f"An error occurred during insertion: {e}")
 
     def insert_multi_row_from_csv(self, df, table_desc, amt = 500, rebuild_partitions = True, partition_gap_seconds = 300):
@@ -322,7 +320,7 @@ class CSVToDB():
 
                 # Insert into other tables
                 for table_name, values in data.items():
-                    if not table_name in {"packet", "event", "classifier", "drive_day",
+                    if table_name not in {"packet", "event", "classifier", "drive_day",
                                     "lut_driver", "lut_location", "lut_car", "lut_event_type", "partitions"}:
                         model = self._table_models.get(table_name)
                         if model:
@@ -399,7 +397,7 @@ class CSVToDB():
                         try:
                             self.start_timer(row_dict_list.get("packet")[0]['time'])
                             started = True
-                        except Exception as e:
+                        except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
                             logging.error(e)
 
                     for i in range(chunk_length):
@@ -478,9 +476,9 @@ class CSVToDB():
                 raise ValueError("No running event found.")
             event_id = result[0]
             logging.info("EVENT ID: %s", event_id)
-            if event_id == -1: raise Exception("No event is currently running")
+            if event_id == -1: raise Exception("No event is currently running")  # noqa: E701 pre-existing when the lint gate went on
         # Creating a new event
-        except (ValueError, TypeError, Exception) as e:
+        except (ValueError, TypeError, Exception):  # noqa: BLE001 pre-existing when the lint gate went on
             logging.info("No running event found, creating a new one.")
             
             sample_drive_day = {
@@ -496,7 +494,7 @@ class CSVToDB():
             #! CHANGE FOR PROD
             # response = requests.post("http://" + MQTTTarget.get() + ":5000/webtool/create_event/", data=sample_event)
             # response = requests.post("http://" + DBTarget.resolve_ip(DBTarget.get(client=True)) + "/webtool/create_event/", data=sample_event)
-            response = requests.post("https://lhrelectric.org/webtool/create_event/", data=sample_event)
+            response = requests.post("https://lhrelectric.org/webtool/create_event/", data=sample_event)  # noqa: F841, S113 pre-existing when the lint gate went on
             
             with MQTTHandler('flask_app') as mqtt:
                 mqtt.publish('config/page_sync', "running_event_page")
@@ -504,7 +502,7 @@ class CSVToDB():
         #! NEED TO CHANGE BASED ON TRACK
         config = {"event_id": 1, "gate": ((30.3870, -97.7253), (30.3869, -97.7252)), "status": 0, "start_packet": 0}
         logging.info(config)
-        self.mqtt.publish(f'config/test', json.dumps(config))
+        self.mqtt.publish('config/test', json.dumps(config))
                 
     def start_timer(self, start_time: int):
         config = {
@@ -602,13 +600,13 @@ def is_csv_valid_for_insert(csv_path, df, table_desc, car):
     for table_name, columns in table_desc.items():
         if table_name in {"controls", "dynamics", "pack", "packet", "diagnostics_high", "diagnostics_low", "thermal"}:
             if isinstance(columns, dict):
-                for col, (dtype, ndim) in columns.items():
+                for col, (dtype, ndim) in columns.items():  # noqa: B007 pre-existing when the lint gate went on
                     # Exclude special-cased columns and array columns (stored as indexed cols or handled gracefully)
                     if col not in {"time", "packet_id", "f_gps", "b_gps"} and ndim == 0:
                         expected_cols.add(f"{table_name}.{col}")
 
     df_cols = set(df.columns)
-    csv_fields = set(df.columns)
+    csv_fields = set(df.columns)  # noqa: F841 pre-existing when the lint gate went on
 
     missing_expected = expected_cols - df_cols
 
@@ -718,7 +716,7 @@ if __name__ == '__main__':
                             df = pd.read_csv(csv_file, skiprows=range(1, start_row_offset + 1), low_memory=False)
                         else:
                             df = pd.read_csv(csv_file, low_memory=False)
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
                         logging.warning("Skipping %s: could not read CSV (%s)", csv_file, e)
                         continue
 

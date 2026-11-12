@@ -5,6 +5,9 @@ Adapter: AckermannDriveStamped -> individual joint commands for Gazebo.
 Publishes:
   - 2x Float64 for steering joint positions (Ackermann-corrected angles)
   - 4x Float64 for wheel joint velocities (differential-corrected speeds)
+  - /lhr/vehicle/steering_measured: the steering joints' actual angles from
+    Gazebo, as the one bicycle-equivalent angle the car's steering encoder
+    will report. safety_node checks it against the command (#208).
 
 Gazebo's joint controllers hold their last target, so without a timeout a
 dead controller would leave the car driving on its last command. The real
@@ -19,7 +22,24 @@ from ackermann_msgs.msg import AckermannDriveStamped
 from lhr_vehicle import load_vehicle
 import rclpy
 from rclpy.node import Node
+from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64
+
+STEERING_JOINTS = ('front_left_steering_joint', 'front_right_steering_joint')
+
+
+def bicycle_angle(left: float, right: float) -> float:
+    """
+    Return the center steering angle that puts the wheels at left and right.
+
+    The inverse of _ackermann_angles: the turn radius is the mean of the
+    two wheels' L / tan(angle), so tan(center) is the harmonic mean of
+    their tangents, whatever the track.
+    """
+    tl, tr = math.tan(left), math.tan(right)
+    if abs(tl + tr) < 1e-12:
+        return 0.0
+    return math.atan(2.0 * tl * tr / (tl + tr))
 
 
 class JointCmdAdapter(Node):
@@ -41,6 +61,10 @@ class JointCmdAdapter(Node):
 
         self._sub = self.create_subscription(
             AckermannDriveStamped, '/lhr/vehicle/cmd', self._cmd_cb, 10)
+        self.create_subscription(
+            JointState, '/lhr/vehicle/steering_joint_states', self._joints_cb, 10)
+        self._pub_measured = self.create_publisher(
+            JointState, '/lhr/vehicle/steering_measured', 10)
 
         # Steering position publishers
         self._pub_steer_fl = self.create_publisher(
@@ -90,6 +114,16 @@ class JointCmdAdapter(Node):
             for pub in (self._pub_vel_fl, self._pub_vel_fr,
                         self._pub_vel_rl, self._pub_vel_rr):
                 pub.publish(Float64(data=0.0))
+
+    def _joints_cb(self, msg: JointState):
+        angles = dict(zip(msg.name, msg.position))
+        if not all(name in angles for name in STEERING_JOINTS):
+            return
+        out = JointState()
+        out.header = msg.header
+        out.name = ['steering']
+        out.position = [bicycle_angle(*(angles[name] for name in STEERING_JOINTS))]
+        self._pub_measured.publish(out)
 
     def _cmd_cb(self, msg: AckermannDriveStamped):
         self._apply(msg.drive.speed, msg.drive.steering_angle, self._now())

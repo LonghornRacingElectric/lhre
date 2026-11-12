@@ -16,7 +16,7 @@ from rclpy.parameter import Parameter
 
 @pytest.mark.parametrize('perception, classify_sides, pairing_strategy', [
     ('sim', False, 'boundary'), ('lidar', False, 'boundary'),
-    ('lidar', True, 'classified'),
+    ('lidar', True, 'boundary'),
 ])
 @pytest.mark.parametrize('algorithm', [
     None, 'greedy', 'constrained_greedy', 'fixed_width_beam_search',

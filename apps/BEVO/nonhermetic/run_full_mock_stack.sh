@@ -6,9 +6,6 @@ BEVO_ROOT="$(cd "$SCRIPT_ROOT/.." && pwd)"
 BIN_DIR="${BEVO_BIN_DIR:-$BEVO_ROOT/bin}"
 CAN_JSON_PATH="$BEVO_ROOT/nonhermetic/assets/can.json"
 
-# environment variables mirrored from run_real_stack.sh but for mock use
-CAN_IFACE="${CAND_CAN_INTERFACE:-can0}"
-
 cleanup() {
   kill "${MOCK_PID:-}" "${MOCK_MAIN_PID:-}" "${DEBUGD_PID:-}" "${DASHD_PID:-}" "${LOGGERD_PID:-}" "${PUBLISHD_PID:-}" >/dev/null 2>&1 || true
   rm -f /tmp/BEVO_publishd_ready /tmp/BEVO_cand.sock /tmp/BEVO_cand_publishd.sock

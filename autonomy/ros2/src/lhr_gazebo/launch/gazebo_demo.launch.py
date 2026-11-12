@@ -38,6 +38,38 @@ def _float(name):
     return ParameterValue(LaunchConfiguration(name), value_type=float)
 
 
+MID360_MOUNT = ('x_m', 'y_m', 'z_m', 'roll_rad', 'pitch_rad', 'yaw_rad')
+# The base_link cut the old sensor-frame band (-0.40 m) gave at the old nose mount.
+# At 0.05 m, range noise on ground hits near the car became 123 false cones
+# on one lap (testing/2026-11-08-lidar-mount-study).
+MID360_MIN_GROUND_CUT_M = 0.15
+
+
+def _mid360_mount_default():
+    """Return the mount the detector assumes without tf: vehicle.yaml's."""
+    vehicle = load_vehicle()
+    return dict(zip(MID360_MOUNT, (*vehicle.lidar_position_m, *vehicle.lidar_rpy_rad)))
+
+
+def _check_mid360_mount(configs):
+    """
+    Refuse a moved Mid-360 unless the detector reads the move.
+
+    By default the detector places the cloud at the vehicle.yaml mount, so a
+    caster moved, pitched or flipped away from it would hand the detector a
+    cloud it misplaces, silently.
+    """
+    moved = any(float(configs.get(f'mid360_mount_{name}', value)) != value
+                for name, value in _mid360_mount_default().items())
+    if moved and (configs.get('lidar_sensor_transform_source') != 'tf'
+                  or configs.get('lidar_height_filter_frame') != 'base_link'
+                  or float(configs.get('lidar_ground_z_min', '0')) < MID360_MIN_GROUND_CUT_M):
+        raise ValueError(
+            'A moved Mid-360 mount needs lidar_sensor_transform_source:=tf, '
+            'lidar_height_filter_frame:=base_link and '
+            f'lidar_ground_z_min of at least {MID360_MIN_GROUND_CUT_M} m')
+
+
 def _find_world(context: LaunchContext):
     """
     Resolve the world SDF path from track_style and seed.
@@ -159,6 +191,7 @@ def _launch_setup(context: LaunchContext):
             load_world_cones(world_path)
         except (OSError, ET.ParseError, ValueError) as error:
             raise ValueError(f'Unsupported Mid-360 world {world_path!r}: {error}') from error
+        _check_mid360_mount(context.launch_configurations)
     classify_sides = context.launch_configurations.get(
         'lidar_classify_sides', 'false').lower() == 'true'
     use_ekf = context.launch_configurations.get(
@@ -365,6 +398,7 @@ def _launch_setup(context: LaunchContext):
                     **{name: _float(f'mid360_{name}') for name in (
                         'frame_rate_hz', 'point_rate_hz', 'max_range_m',
                         'range_noise_std_m', 'dropout_rate')},
+                    **{f'mount_{name}': _float(f'mid360_mount_{name}') for name in MID360_MOUNT},
                     **{name: ParameterValue(LaunchConfiguration(f'mid360_{name}'),
                                             value_type=str)
                        for name in ('elevation_profile', 'return_profile')},
@@ -418,9 +452,10 @@ def _launch_setup(context: LaunchContext):
                 'use_sim_time': True,
                 'cone_topic': ('/lhr/perception/cones_classified' if enable_fusion
                                else '/lhr/sensor/cones_detected'),
-                'pairing_strategy': ('boundary' if enable_fusion else
-                                     'classified' if classify_sides else 'boundary'),
-                'boundary_use_color': True,
+                # Side inference waits for motion; geometry bootstraps unknown cones.
+                'pairing_strategy': 'boundary',
+                # Geometry-only inferred sides must not stop their own recovery motion.
+                'boundary_use_color': enable_fusion,
                 'chaining_alg': ParameterValue(
                     LaunchConfiguration('chaining_alg'), value_type=str),
                 'min_step_m': ParameterValue(
@@ -542,6 +577,10 @@ def _launch_setup(context: LaunchContext):
                 'wheel_scale_error': ParameterValue(
                     LaunchConfiguration('wheel_scale_error'), value_type=float),
                 'lidar_classify_sides': classify_sides,
+                # What pure_pursuit drives under, recorded so a row says what
+                # it ran with and the gate can compute its reference lap (#232).
+                **{name: _float(name) for name in (
+                    'lookahead_dist', 'a_lat_max', 'v_min', 'v_max', 'max_accel', 'max_decel')},
                 'use_sim_time': True,
             }],
             output='screen',
@@ -599,6 +638,9 @@ def _launch_setup(context: LaunchContext):
                 'max_position_std_m': _float('safety_max_position_std_m'),
                 'max_speed_factor': _float('safety_max_speed_factor'),
                 'geofence_radius_m': _float('safety_geofence_radius_m'),
+                'steer_angle_tol_rad': _float('safety_steer_angle_tol_rad'),
+                'steer_angle_window_s': _float('safety_steer_angle_window_s'),
+                'steer_angle_timeout_s': _float('safety_steer_angle_timeout_s'),
                 'steer_min_speed_mps': _float('safety_steer_min_speed_mps'),
                 'steer_yaw_rate_tol': _float('safety_steer_yaw_rate_tol'),
                 'steer_rel_tol': _float('safety_steer_rel_tol'),
@@ -707,6 +749,9 @@ def generate_launch_description():
                               choices=['livox', 'rosette', 'uniform']),
         DeclareLaunchArgument('mid360_return_profile', default_value='baseline',
                               choices=['baseline', 'acceptance_overcast']),
+        # The mount study's six numbers, in base_link; roll pi is upside down.
+        *[DeclareLaunchArgument(f'mid360_mount_{name}', default_value=str(value))
+          for name, value in _mid360_mount_default().items()],
         DeclareLaunchArgument(
             'lidar_classify_sides', default_value='false',
             description='Infer LiDAR sides; always enabled when camera fusion is enabled'),
@@ -766,9 +811,11 @@ def generate_launch_description():
         # Sensor sim
         DeclareLaunchArgument('fov_deg', default_value='200.0'),
         DeclareLaunchArgument('max_range_m', default_value='20.0'),
-        # Gazebo keeps its sensor-frame detector defaults.
-        DeclareLaunchArgument('lidar_ground_z_min', default_value='-0.40'),
-        DeclareLaunchArgument('lidar_ground_z_max', default_value='0.5'),
+        # Height is cut in base_link, at ground level, because the sensor
+        # is mounted upside down and pitched (vehicle.yaml): its own z is
+        # not height. 0.15 m keeps range noise on near ground hits out.
+        DeclareLaunchArgument('lidar_ground_z_min', default_value=str(MID360_MIN_GROUND_CUT_M)),
+        DeclareLaunchArgument('lidar_ground_z_max', default_value='1.05'),
         DeclareLaunchArgument('lidar_min_cluster_points', default_value='1'),
         DeclareLaunchArgument('lidar_dedup_radius', default_value='1.5'),
         DeclareLaunchArgument('lidar_max_cluster_points', default_value='50'),
@@ -776,7 +823,7 @@ def generate_launch_description():
         DeclareLaunchArgument('lidar_stack_max_frames', default_value='10'),
         DeclareLaunchArgument('lidar_transform_wait_sec', default_value='0.5'),
         DeclareLaunchArgument('lidar_sensor_transform_source', default_value='vehicle_config'),
-        DeclareLaunchArgument('lidar_height_filter_frame', default_value='sensor'),
+        DeclareLaunchArgument('lidar_height_filter_frame', default_value='base_link'),
         # Track builder chaining (both perception modes)
         DeclareLaunchArgument('chaining_alg', default_value='constrained_greedy'),
         DeclareLaunchArgument('min_step_m', default_value='0.3'),
@@ -838,7 +885,10 @@ def generate_launch_description():
         DeclareLaunchArgument('safety_cmd_timeout_s', default_value='0.25'),
         DeclareLaunchArgument('safety_max_position_std_m', default_value='0.0'),
         DeclareLaunchArgument('safety_max_speed_factor', default_value='1.5'),
-        DeclareLaunchArgument('safety_geofence_radius_m', default_value='150.0'),
+        DeclareLaunchArgument('safety_geofence_radius_m', default_value='300.0'),
+        DeclareLaunchArgument('safety_steer_angle_tol_rad', default_value='0.035'),
+        DeclareLaunchArgument('safety_steer_angle_window_s', default_value='0.2'),
+        DeclareLaunchArgument('safety_steer_angle_timeout_s', default_value='0.25'),
         DeclareLaunchArgument('safety_steer_min_speed_mps', default_value='2.0'),
         DeclareLaunchArgument('safety_steer_yaw_rate_tol', default_value='0.15'),
         DeclareLaunchArgument('safety_steer_rel_tol', default_value='0.5'),
