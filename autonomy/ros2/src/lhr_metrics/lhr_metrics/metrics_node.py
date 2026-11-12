@@ -12,7 +12,7 @@ from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 from lhr_metrics.alignment import TruthAligner
 from lhr_metrics.course import CourseEnvelope, FOOTPRINT_MODEL, SWEEP_STEP_M
 from lhr_metrics.reference import (
-    CircuitProgress, paired_centerline, ReferenceTrack, world_geometry)
+    CircuitProgress, paired_centerline, ReferenceTrack, world_centerline, world_geometry)
 from lhr_metrics.track_error import TrackErrorAccumulator
 from lhr_metrics.watchdog import RunWatchdog
 from lhr_vehicle import load_vehicle, vehicle_sha256
@@ -220,9 +220,12 @@ class MetricsNode(Node):
         self._truth_topic = self.get_parameter('truth_odom_topic').value
         reference_world = self.get_parameter('reference_world').value
         if reference_world:
-            self._set_reference(*world_geometry(
-                reference_world, acceleration=self._run_params['mission'] == 'acceleration'
-                or self._run_params['track_style'] == 'acceleration'), source=reference_world)
+            acceleration = (self._run_params['mission'] == 'acceleration'
+                            or self._run_params['track_style'] == 'acceleration')
+            self._set_reference(
+                *world_geometry(reference_world, acceleration=acceleration),
+                source=reference_world,
+                centerline=world_centerline(reference_world, acceleration=acceleration))
         else:
             qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                              durability=DurabilityPolicy.TRANSIENT_LOCAL)
@@ -258,9 +261,10 @@ class MetricsNode(Node):
         elif msg.data == 'EMERGENCY':
             self.finish('emergency')
 
-    def _set_reference(self, left, right, cones, source):
+    def _set_reference(self, left, right, cones, source, centerline=None):
         closed = self.get_parameter('reference_closed').value
-        track = ReferenceTrack(paired_centerline(left, right), closed)
+        points = centerline if centerline is not None else paired_centerline(left, right)
+        track = ReferenceTrack(points, closed)
         course = CourseEnvelope(left, right, cones, load_vehicle(), closed)
         lap = CircuitProgress(
             track, min_fraction=self.get_parameter('min_progress_fraction').value,

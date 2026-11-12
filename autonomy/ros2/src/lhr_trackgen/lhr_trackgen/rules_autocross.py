@@ -21,7 +21,7 @@ def _point_segment(p, a, b):
     return math.hypot(p[0]-a[0]-t*dx, p[1]-a[1]-t*dy)
 
 
-def _segment_distance(a, b, c, d):
+def segment_distance(a, b, c, d):
     def cross(p, q, r):
         return (q[0]-p[0])*(r[1]-p[1]) - (q[1]-p[1])*(r[0]-p[0])
     if (cross(a, b, c)*cross(a, b, d) <= 0
@@ -33,20 +33,10 @@ def _segment_distance(a, b, c, d):
                _point_segment(c, a, b), _point_segment(d, a, b))
 
 
-def check_envelope(left, right):
-    """
-    Measure a closed paired layout; raise ValueError outside the rules envelope.
-
-    Width is the minimum between boundary segments, less the circumscribed cone-base diameter.
-    Radius is the centerline circumradius. Remote same-side segments also need
-    a 0.5 m gap between cone bases; this separation is a simulator guard, not
-    an additional event rule. All measurements include the closing edges.
-    """
-    if len(left) != len(right) or len(left) < 6:
-        raise ValueError('course needs complete paired boundaries')
-    if any(len(p) != 2 or not all(map(math.isfinite, p)) for p in left + right):
-        raise ValueError('course coordinates must be finite XY pairs')
-    center = [((a[0]+b[0])/2, (a[1]+b[1])/2) for a, b in zip(left, right)]
+def measure_route(center):
+    """Measure the closed reference curve using the shared envelope convention."""
+    if len(center) < 6 or any(len(p) != 2 or not all(map(math.isfinite, p)) for p in center):
+        raise ValueError('reference needs at least six finite XY vertices')
     edges = _edges(center)
     lengths = [math.dist(a, b) for a, b in edges]
     if min(lengths) < 1e-6:
@@ -69,6 +59,27 @@ def check_envelope(left, right):
         longest = max(longest, straight)
         if bends[i]:
             straight = 0.
+    return {'lap_length_m': lap, 'longest_straight_m': longest, 'minimum_radius_m': radius}
+
+
+def check_envelope(left, right):
+    """
+    Measure a closed paired layout; raise ValueError outside the rules envelope.
+
+    Width is the minimum between boundary segments, less the circumscribed cone-base diameter.
+    Radius is the centerline circumradius. Remote same-side segments also need
+    a 0.5 m gap between cone bases; this separation is a simulator guard, not
+    an additional event rule. All measurements include the closing edges.
+    """
+    if len(left) != len(right) or len(left) < 6:
+        raise ValueError('course needs complete paired boundaries')
+    if any(len(p) != 2 or not all(map(math.isfinite, p)) for p in left + right):
+        raise ValueError('course coordinates must be finite XY pairs')
+    center = [((a[0]+b[0])/2, (a[1]+b[1])/2) for a, b in zip(left, right)]
+    measured = measure_route(center)
+    lap, longest, radius = (measured[k] for k in (
+        'lap_length_m', 'longest_straight_m', 'minimum_radius_m'))
+    lengths = [math.dist(a, b) for a, b in _edges(center)]
     if not 200 <= lap <= 500:
         raise ValueError(f'lap length {lap:.3f} m outside 200..500')
     if longest > 80 + 1e-6:
@@ -101,13 +112,13 @@ def check_envelope(left, right):
                 if min(delta, lap-delta) <= 2*max(3., width+BASE):
                     # Adjacent edges share endpoints; every other crossing is invalid.
                     if (i-j) % len(left) not in (0, 1, len(left)-1):
-                        if _segment_distance(a, b, c, d) < 1e-8:
+                        if segment_distance(a, b, c, d) < 1e-8:
                             raise ValueError('boundary crosses itself')
                     continue
-                if _segment_distance(a, b, c, d) < .5 + BASE:
+                if segment_distance(a, b, c, d) < .5 + BASE:
                     raise ValueError('remote boundaries crowd each other')
             else:
-                width = min(width, _segment_distance(a, b, c, d)-BASE)
+                width = min(width, segment_distance(a, b, c, d)-BASE)
     if width < 3 - 1e-6:
         raise ValueError(f'clear width {width:.3f} m below 3 (or boundaries cross)')
     return {'lap_length_m': lap, 'longest_straight_m': longest,
