@@ -47,7 +47,120 @@
               "tooltip": false,
               "viz": false
             },
-            "insertNulls": 300000,
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT p.start_time AS effective_start, p.end_time AS effective_end\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n    OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n),\ngranularity AS (\n  SELECT GREATEST($__interval_ms::double precision, 1) AS step_ms\n)\nSELECT\n  to_timestamp(floor(packet.time / granularity.step_ms) * granularity.step_ms / 1000.0) AS time,\n  AVG(thermal.fan_rpm)              AS \"fan_rpm [RPM]\",\n  AVG(thermal.battery_fan_rpm)      AS \"battery_fan_rpm [RPM]\",\n  AVG(thermal.coolant_flow_lpm)     AS \"coolant_flow [LPM]\"\nFROM thermal\nJOIN packet ON packet.packet_id = thermal.packet_id\nJOIN bounds ON true\nJOIN granularity ON true\nWHERE packet.time BETWEEN bounds.effective_start AND bounds.effective_end\nGROUP BY 1\nORDER BY time;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Fan Speeds + Cooling Loop",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -86,6 +199,119 @@
         "w": 24,
         "x": 0,
         "y": 0
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT p.start_time AS effective_start, p.end_time AS effective_end\n  FROM partitions p\n  WHERE (\n    COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n    OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[])\n  )\n),\ngranularity AS (\n  SELECT GREATEST($__interval_ms::double precision, 1) AS step_ms\n)\nSELECT\n  to_timestamp(floor(packet.time / granularity.step_ms) * granularity.step_ms / 1000.0) AS time,\n  AVG(thermal.motor_loop_motor_temp)    AS \"coolant_loop_motor_temp [C]\",\n  AVG(thermal.motor_loop_inverter_temp) AS \"coolant_loop_inverter_temp [C]\",\n  AVG(thermal.motor_loop_rad_temp)      AS \"coolant_loop_rad_temp [C]\",\nFROM thermal\nJOIN packet ON packet.packet_id = thermal.packet_id\nJOIN bounds ON true\nJOIN granularity ON true\nWHERE packet.time BETWEEN bounds.effective_start AND bounds.effective_end\nGROUP BY 1\nORDER BY time;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Cooling Loops + Ambient",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": 300000,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 8
       },
       "id": 1,
       "interval": "200ms",
@@ -178,7 +404,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 8
+        "y": 16
       },
       "id": 2,
       "interval": "200ms",
@@ -271,7 +497,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 16
+        "y": 24
       },
       "id": 3,
       "interval": "200ms",
@@ -364,7 +590,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 24
+        "y": 32
       },
       "id": 4,
       "options": {

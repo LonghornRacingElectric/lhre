@@ -1,0 +1,973 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "description": "GPS track, speed and G-G from dynamics.gps / gps_speed / gps_imu in the orion Postgres DB. The time picker and Zoom both narrow the range. Position uses dynamics.gps_precise where present.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "description": "Route over the time picker range narrowed by Zoom, coloured by GPS speed (mph), up to 5000 points spread over the selected span. No-fix (empty gps) and (0,0) rows are dropped. cand keeps the last fix through a GPS dropout, so a dropout shows as a stall at one spot. Position is the full-precision one (gps_precise) where the row has it, otherwise the float32 gps; sigma_m is its 1-sigma horizontal accuracy, src 1 = standard, 2 = RTK.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "continuous-YlRd"
+          },
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          },
+          "decimals": 1,
+          "unit": "velocitymph"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lat"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 6
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lon"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 6
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 18,
+        "w": 14,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "maxDataPoints": 5000,
+      "options": {
+        "basemap": {
+          "config": {
+            "server": "world-imagery"
+          },
+          "name": "Satellite",
+          "type": "esri-xyz"
+        },
+        "controls": {
+          "mouseWheelZoom": true,
+          "showAttribution": true,
+          "showDebug": false,
+          "showMeasure": false,
+          "showScale": true,
+          "showZoom": true
+        },
+        "layers": [
+          {
+            "config": {
+              "arrow": 1,
+              "style": {
+                "color": {
+                  "field": "speed_mph",
+                  "fixed": "yellow"
+                },
+                "lineWidth": 3,
+                "opacity": 0.9
+              }
+            },
+            "location": {
+              "latitude": "lat",
+              "longitude": "lon",
+              "mode": "coords"
+            },
+            "name": "Track",
+            "tooltip": false,
+            "type": "route"
+          },
+          {
+            "config": {
+              "showLegend": true,
+              "style": {
+                "color": {
+                  "field": "speed_mph",
+                  "fixed": "yellow"
+                },
+                "opacity": 0.8,
+                "size": {
+                  "fixed": 3
+                },
+                "symbol": {
+                  "fixed": "img/icons/marker/circle.svg",
+                  "mode": "fixed"
+                }
+              }
+            },
+            "location": {
+              "latitude": "lat",
+              "longitude": "lon",
+              "mode": "coords"
+            },
+            "name": "Samples",
+            "tooltip": true,
+            "type": "markers"
+          }
+        ],
+        "tooltip": {
+          "mode": "details"
+        },
+        "view": {
+          "allLayers": true,
+          "id": "fit",
+          "lastOnly": false,
+          "lat": 0,
+          "lon": 0,
+          "padding": 10,
+          "zoom": 17
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n),\nw AS (SELECT GREATEST((MAX(t1) - MIN(t0)) / 5000, 50) AS ms FROM bounds)\nSELECT DISTINCT ON (packet.time / w.ms) to_timestamp(packet.time / 1000.0) AS time,\n  CASE WHEN cardinality(dynamics.gps_precise) = 6 AND dynamics.gps_precise[1] <> 0 AND dynamics.gps_precise[2] <> 0 THEN dynamics.gps_precise[1] ELSE dynamics.gps[1] END AS \"lat\",\n  CASE WHEN cardinality(dynamics.gps_precise) = 6 AND dynamics.gps_precise[1] <> 0 AND dynamics.gps_precise[2] <> 0 THEN dynamics.gps_precise[2] ELSE dynamics.gps[2] END AS \"lon\",\n  dynamics.gps_speed * 1.15078 AS \"speed_mph\",\n  CASE WHEN cardinality(dynamics.gps_precise) = 6 AND dynamics.gps_precise[1] <> 0 AND dynamics.gps_precise[2] <> 0 THEN dynamics.gps_precise[4] END AS \"sigma_m\",\n  CASE WHEN cardinality(dynamics.gps_precise) = 6 AND dynamics.gps_precise[1] <> 0 AND dynamics.gps_precise[2] <> 0 THEN dynamics.gps_precise[5] END AS \"src\"\nFROM packet JOIN dynamics USING (packet_id), w\nWHERE packet.time BETWEEN $__from AND $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE packet.time BETWEEN b.t0 AND b.t1)\n  AND cardinality(dynamics.gps) = 2 AND dynamics.gps[1] <> 0 AND dynamics.gps[2] <> 0\n  AND dynamics.gps[1] BETWEEN -90 AND 90 AND dynamics.gps[2] BETWEEN -180 AND 180\nORDER BY packet.time / w.ms, packet.time",
+          "refId": "A"
+        }
+      ],
+      "title": "Track",
+      "transformations": [],
+      "type": "geomap"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "description": "Lateral vs longitudinal g from the chudpi IMU (dynamics.gps_imu) over the time picker range narrowed by Zoom, coloured by GPS speed (mph). Up to 5000 points: one raw sample per span / 5000 (at least 100 ms). The raw axes are rotated onto the car's with the mount fitted on 2026-10-10, valid since ~2026-06-07: if 'IMU mount check' is far from 1.00 g the board sat differently and this plot is wrong. Samples with any axis >= 50 m/s², NaN, empty or all-zero are dropped. Dashed ring = 1 g.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "yellow",
+            "mode": "fixed"
+          },
+          "custom": {
+            "axisCenteredZero": true,
+            "axisPlacement": "auto",
+            "axisSoftMax": 1.5,
+            "axisSoftMin": -1.5,
+            "fillOpacity": 80,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "pointShape": "circle",
+            "pointSize": {
+              "fixed": 4
+            },
+            "pointStrokeWidth": 0,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "show": "points"
+          },
+          "decimals": 2,
+          "unit": "suffix: g"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lat_g"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Lateral (+ right)"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "Lateral g (+ right)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "long_g"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Longitudinal (+ accel)"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "Longitudinal g (+ accel)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "speed_mph"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "velocitymph"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "continuous-YlRd"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ring_long"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#8e8e8e",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "displayName",
+                "value": "1 g"
+              },
+              {
+                "id": "custom.show",
+                "value": "lines"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    6,
+                    6
+                  ],
+                  "fill": "dash"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 18,
+        "w": 10,
+        "x": 14,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "mapping": "manual",
+        "series": [
+          {
+            "color": {
+              "matcher": {
+                "id": "byName",
+                "options": "speed_mph"
+              }
+            },
+            "frame": {
+              "matcher": {
+                "id": "byIndex",
+                "options": 0
+              }
+            },
+            "name": {
+              "fixed": "Samples"
+            },
+            "x": {
+              "matcher": {
+                "id": "byName",
+                "options": "lat_g"
+              }
+            },
+            "y": {
+              "matcher": {
+                "id": "byName",
+                "options": "long_g"
+              }
+            }
+          },
+          {
+            "frame": {
+              "matcher": {
+                "id": "byIndex",
+                "options": 1
+              }
+            },
+            "name": {
+              "fixed": "1 g"
+            },
+            "x": {
+              "matcher": {
+                "id": "byName",
+                "options": "ring_lat"
+              }
+            },
+            "y": {
+              "matcher": {
+                "id": "byName",
+                "options": "ring_long"
+              }
+            }
+          }
+        ],
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "maxDataPoints": 5000,
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n),\nw AS (SELECT GREATEST((MAX(t1) - MIN(t0)) / 5000, 100) AS ms FROM bounds)\nSELECT DISTINCT ON (packet.time / w.ms) to_timestamp(packet.time / 1000.0) AS time,\n  (-0.2835 * dynamics.gps_imu[1] + 0.0741 * dynamics.gps_imu[2] - 0.9561 * dynamics.gps_imu[3]) / 9.81 AS \"lat_g\",\n  (-0.3555 * dynamics.gps_imu[1] + 0.9178 * dynamics.gps_imu[2] + 0.1766 * dynamics.gps_imu[3]) / 9.81 AS \"long_g\",\n  dynamics.gps_speed * 1.15078 AS \"speed_mph\"\nFROM packet JOIN dynamics USING (packet_id), w\nWHERE packet.time BETWEEN $__from AND $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE packet.time BETWEEN b.t0 AND b.t1)\n  AND cardinality(dynamics.gps_imu) = 3 AND abs(dynamics.gps_imu[1]) < 50 AND abs(dynamics.gps_imu[2]) < 50 AND abs(dynamics.gps_imu[3]) < 50\n  AND (dynamics.gps_imu[1] <> 0 OR dynamics.gps_imu[2] <> 0 OR dynamics.gps_imu[3] <> 0)\nORDER BY packet.time / w.ms, packet.time",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT sin(radians(a)) AS \"ring_lat\", cos(radians(a)) AS \"ring_long\"\nFROM generate_series(0, 360, 5) AS a",
+          "refId": "B"
+        }
+      ],
+      "title": "G-G",
+      "transformations": [],
+      "type": "xychart"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "description": "Highest GPS speed with a valid fix in the range. Single-sample GPS spikes show up here as-is.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": "velocitymph"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 18
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n)\nSELECT MAX(dynamics.gps_speed * 1.15078) FILTER (WHERE cardinality(dynamics.gps) = 2 AND dynamics.gps[1] <> 0 AND dynamics.gps[2] <> 0\n  AND dynamics.gps[1] BETWEEN -90 AND 90 AND dynamics.gps[2] BETWEEN -180 AND 180) AS \"top_mph\",\n  100.0 * COUNT(*) FILTER (WHERE cardinality(dynamics.gps) = 2 AND dynamics.gps[1] <> 0 AND dynamics.gps[2] <> 0\n  AND dynamics.gps[1] BETWEEN -90 AND 90 AND dynamics.gps[2] BETWEEN -180 AND 180) / NULLIF(COUNT(*), 0) AS \"fix_pct\",\n  AVG(0.8907 * dynamics.gps_imu[1] + 0.3899 * dynamics.gps_imu[2] - 0.2338 * dynamics.gps_imu[3]) FILTER (WHERE cardinality(dynamics.gps_imu) = 3 AND abs(dynamics.gps_imu[1]) < 50 AND abs(dynamics.gps_imu[2]) < 50 AND abs(dynamics.gps_imu[3]) < 50\n  AND (dynamics.gps_imu[1] <> 0 OR dynamics.gps_imu[2] <> 0 OR dynamics.gps_imu[3] <> 0)) / 9.81 AS \"vert_g\",\n  percentile_cont(0.5) WITHIN GROUP (ORDER BY dynamics.gps_precise[4]) FILTER (WHERE cardinality(dynamics.gps_precise) = 6 AND dynamics.gps_precise[1] <> 0 AND dynamics.gps_precise[2] <> 0) AS \"sigma_median_m\",\n  100.0 * COUNT(*) FILTER (WHERE cardinality(dynamics.gps_precise) = 6 AND dynamics.gps_precise[1] <> 0 AND dynamics.gps_precise[2] <> 0 AND dynamics.gps_precise[5] = 2) / NULLIF(COUNT(*) FILTER (WHERE cardinality(dynamics.gps_precise) = 6 AND dynamics.gps_precise[1] <> 0 AND dynamics.gps_precise[2] <> 0), 0) AS \"rtk_pct\"\nFROM packet JOIN dynamics USING (packet_id)\nWHERE packet.time BETWEEN $__from AND $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE packet.time BETWEEN b.t0 AND b.t1)",
+          "refId": "A"
+        }
+      ],
+      "title": "Top GPS speed",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "top_mph"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "top_mph": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Dashboard --"
+      },
+      "description": "Share of packets in the range whose gps holds a valid, non-(0,0) fix.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "green",
+                "value": 90
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 18
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "datasource",
+            "uid": "-- Dashboard --"
+          },
+          "panelId": 3,
+          "refId": "A"
+        }
+      ],
+      "title": "Packets with a GPS fix",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "fix_pct"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "fix_pct": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Dashboard --"
+      },
+      "description": "Mean IMU reading along the calibrated 'up' axis: gravity plus vertical load, about 1.00 g when the chudpi is mounted as calibrated. Far from 1 means the board sat differently in this range, so the G-G plot is wrong there until the mount vectors are re-fit.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.9
+              },
+              {
+                "color": "green",
+                "value": 0.95
+              },
+              {
+                "color": "yellow",
+                "value": 1.05
+              },
+              {
+                "color": "red",
+                "value": 1.1
+              }
+            ]
+          },
+          "unit": "suffix: g"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 18
+      },
+      "id": 5,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "datasource",
+            "uid": "-- Dashboard --"
+          },
+          "panelId": 3,
+          "refId": "A"
+        }
+      ],
+      "title": "IMU mount check",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "vert_g"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "vert_g": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Dashboard --"
+      },
+      "description": "Median 1-sigma horizontal accuracy of the full-precision position (gps_precise) in the range, and the share of those positions that came from RTK. About 0.3-1 m standard, centimetres only with RTK fixed.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "sigma_median_m"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Median accuracy"
+              },
+              {
+                "id": "unit",
+                "value": "lengthm"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 0.5
+                    },
+                    {
+                      "color": "red",
+                      "value": 2
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "rtk_pct"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "From RTK"
+              },
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 18
+      },
+      "id": 7,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "datasource",
+            "uid": "-- Dashboard --"
+          },
+          "panelId": 3,
+          "refId": "A"
+        }
+      ],
+      "title": "GPS accuracy",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "sigma_median_m",
+                "rtk_pct"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "rtk_pct": 1,
+              "sigma_median_m": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "velocitymph"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "speed_mph"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "GPS speed"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "id": 6,
+      "interval": "100ms",
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n)\nSELECT to_timestamp(floor(packet.time / GREATEST($__interval_ms, 1)::double precision) * GREATEST($__interval_ms, 1) / 1000.0) AS time,\n  MAX(dynamics.gps_speed * 1.15078) AS \"speed_mph\"\nFROM packet JOIN dynamics USING (packet_id)\nWHERE packet.time BETWEEN $__from AND $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE packet.time BETWEEN b.t0 AND b.t1)\n  AND cardinality(dynamics.gps) = 2 AND dynamics.gps[1] <> 0 AND dynamics.gps[2] <> 0\n  AND dynamics.gps[1] BETWEEN -90 AND 90 AND dynamics.gps[2] BETWEEN -180 AND 180\nGROUP BY 1\nORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "GPS speed",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "time",
+                "speed_mph"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "speed_mph": 1,
+              "time": 0
+            }
+          }
+        }
+      ],
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 40,
+  "tags": [
+    "orion",
+    "retrospective",
+    "gps"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "orion"
+        },
+        "definition": "SELECT partition_name FROM partitions ORDER BY start_time;",
+        "description": "Select partition generated from packet gaps",
+        "includeAll": true,
+        "label": "Zoom to partition",
+        "multi": true,
+        "name": "Zoom",
+        "options": [],
+        "query": "SELECT partition_name FROM partitions ORDER BY start_time;",
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Orion GPS Track (Retrospective)",
+  "uid": "orion_gps_track_ret_v1",
+  "version": 1
+}
