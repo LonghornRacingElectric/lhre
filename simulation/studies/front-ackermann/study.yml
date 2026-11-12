@@ -1,0 +1,177 @@
+question: >-
+  Is pro-Ackermann or anti-Ackermann steering better for the 2027 car, and which laws stay good when
+  the inputs we do not trust change?
+decision: >-
+  The direction and the range of the 2027 front Ackermann. A law outside the robust region is
+  rejected. A failed lock gate changes the rack travel or the steering arm before the Ackermann value.
+bundle: orion-baseline-1
+
+front_geometry:
+  name: Front V34
+  status: superseded
+  source: >-
+    Transcribed from 2027_FrontV34.shk (SHA-256
+    95063c3b8a0ccaadfd9971088b65b395eb299acdcfb4ea31b8fe5b68ee254562), block FRONT SUSPENSION,
+    rounded to 0.001 mm. Rows 1 to 6 are the wishbone points, row 9 is the outer track rod ball
+    joint, row 10 is the inner track rod ball joint and row 14 is the wheel center. The study uses
+    them as vehicle.yml points with no frame transform. 2027_FrontV43.shk (SVN r11810) supersedes
+    FrontV34. The study was not run on FrontV43.
+  hardpoints_mm:
+    lower_fore_i_m: [110.431, 198.700, 76.000]
+    lower_aft_i_m: [-100.273, 198.700, 76.000]
+    lower_o_m: [2.000, 599.739, 104.495]
+    upper_fore_i_m: [165.945, 239.958, 217.000]
+    upper_aft_i_m: [-104.470, 241.260, 196.410]
+    upper_o_m: [-6.000, 570.866, 295.000]
+    tie_o_m: [80.000, 605.350, 199.930]
+    wheel_center_m: [0.000, 635.000, 199.930]
+  rack_pickup_mm: [25.277, 240.652, 140.010]
+  rack_travel_mm:
+    value: 31.75
+    status: unverified
+    source: >-
+      Rack travel each way. The README of the 2026-10-11 run gives 2027_FrontV34.shk as the source.
+      A text search of that file on 2026-10-24 did not find 31.75. No rack part number confirms it.
+
+car:
+  car_mass_lb:
+    value: 430.0
+    status: estimate
+    source: >-
+      Team 2027 estimate from Will, as recorded in the LHRe note "2026-10-03 Front Ackermann study
+      for 2027 steering". With the driver mass, it replaces the vehicle.yml mass in the trim model.
+  driver_mass_lb:
+    value: 150.0
+    status: estimate
+    source: Team 2027 estimate from Will, same note.
+  cg_height_in:
+    value: 11.0
+    status: estimate
+    source: Team 2027 estimate from Will, same note.
+  front_static_frac:
+    value: 0.45
+    status: estimate
+    source: Team 2027 estimate from Will, same note.
+  camber_case_deg:
+    value: -1.0
+    status: assumed
+    source: >-
+      Static camber on all four wheels for one sensitivity case. run.py at the 2026-10-11 run named
+      it TEAM_CAMBER_DEG and gave no source. The nominal camber comes from the vehicle file.
+
+tire:
+  grip_scale:
+    value: 0.623
+    status: unvalidated
+    source: >-
+      LMUY = LMUX. 0.6225 correlated by Abishek Rathnakumar (unreviewed), rounded. Not validated.
+  grip_scale_sensitivity:
+    value: 0.75
+    status: assumed
+    source: The second grip scale for the operating map and the lap.
+
+brakes:
+  front_bias_nominal:
+    value: 0.65
+    status: assumed
+    source: >-
+      No source. The vehicle.yml front_bias (0.84, no source) runs as the second brake case.
+
+lsd:
+  preload_nm:
+    value: 5.0
+    status: assumed
+    source: Planned LSD preload per side. No part data. vehicle.yml has diff_T_preload 20.
+  lock:
+    value: 0.6
+    status: assumed
+    source: Planned LSD lock fraction. No part data. vehicle.yml has diff_lockFractionAccel 0.35.
+
+rules:
+  hairpin_outside_diameter_m:
+    value: 9.0
+    status: declared
+    source: FSAE rules, course specification. The rule number was not checked on 2026-10-24.
+  skidpad_radius_m:
+    value: 9.125
+    status: declared
+    source: >-
+      Radius of the skidpad driven line. It is half of 18.25 m: the 15.25 m inner circle plus the
+      3 m lane. FSAE skidpad layout. The rule number was not checked on 2026-10-24.
+
+lap_config: simulations/lap/lap_time_eval_config.yml
+
+sweep:
+  radii_m: [3.5, 4.5, 6.0, 8.0, 15.0]
+  ackermann_pct: [-50, -25, 0, 25, 50, 75, 100]
+  slip_sides: {pos: 1.0, neg: -1.0}
+  lltd_offsets: [-0.1, 0.0, 0.1]
+  brake_g: [0.3, 0.5]
+  brake_radii_m: [3.5, 4.5]
+  brake_models: [ellipse, slip_norm]
+  brake_curves: [$design, "-50%", "-25%", "+25%", "+50%", "+75%", "+100%"]
+  toe_out_deg: [-1.0, -0.5, 0.0, 0.5, 1.0]
+  toe_radii_m: [3.5, 4.5]
+  toe_ackermann_pct: [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+  mass_curves: [$design, "-50%", "+50%", "+75%"]
+  mass_cases:
+    - ["mass +10 kg", mass, 10.0]
+    - ["mass -10 kg", mass, -10.0]
+    - ["CG +20 mm", cg_height, 0.02]
+    - ["CG -20 mm", cg_height, -0.02]
+    - ["front +3 pts", front_static_frac, 0.03]
+    - ["front -3 pts", front_static_frac, -0.03]
+    - ["camber -1 deg", camber, null]
+  steer_fix_targets_pct: [-40.0, 0.0, 70.0]
+  map_radii_m: [3.5, 4.5, 6.0, 8.0, 11.0, 15.0]
+  map_ax_g: [-1.2, -0.9, -0.6, -0.3, 0.0, 0.15, 0.3, 0.6, 0.9]
+  map_pcts: [-50, -25, 25, 50, 75, 100]
+  deriv_radii_m: [3.5, 4.5, 8.0]
+  limit_curves: ["-50%", "+0%", "+50%", $design]
+  variant_radii_m: [3.5, 4.5, 6.0, 8.0]
+  variant_ax_g: [-0.6, -0.3, 0.0, 0.3, 0.6]
+  variant_lltd_offsets: [-0.1, 0.1]
+  convergence_curves: ["-50%", "+50%", "+75%", "+100%", $design]
+
+method:
+  grip_probe: 1.01
+  deriv_fraction: 0.9
+  bump_mm: 25.0
+  balance_radius_m: 15.0
+  rack_grid_mm: {start: 0.0, stop: 60.5, step: 0.5}
+  report_rack_mm: [10.0, 20.0]
+  fx_max_fz_grid_n: {start: 0.0, stop: 2525.0, step: 25.0}
+  qss_speeds_mps:
+    start: 3.0
+    stop: 16.5
+    step: 0.5
+    then: [17.0, 18.0, 19.0, 20.0, 22.0, 25.0, 30.0, 35.0]
+  qss_ay_step_g: 0.001
+  variant_tol_g: 5.0e-4
+  circle_check_radius_m: 8.0
+  coverage_step: 5
+
+policy:
+  best_min_gain_pct: 0.1
+  robust_tol_pct: [0.5, 1.0]
+  lock_margin_min_deg: 0.5
+  steer_reserve: 0.9
+  coverage_demand: 0.98
+  circle_check_tol: 0.005
+  corner_radius_max_m: 15.0
+  lap_radius_bands_m: [6.0, 15.0]
+
+quick:
+  lltd_offsets: [0.0]
+  slip_sides: {pos: 1.0}
+  brake_g: [0.5]
+  brake_radii_m: [3.5]
+  toe_out_deg: [0.0]
+  toe_ackermann_pct: [0, 50, 100]
+  mass_cases:
+    - ["mass +10 kg", mass, 10.0]
+  map_radii_m: [3.5, 4.5, 8.0, 15.0]
+  map_ax_g: [-0.6, 0.0, 0.3]
+  deriv_radii_m: [3.5]
+  variant_radii_m: [3.5, 8.0]
+  variant_ax_g: [-0.6, 0.0, 0.3]

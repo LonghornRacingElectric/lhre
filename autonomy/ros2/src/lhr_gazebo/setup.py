@@ -50,6 +50,8 @@ setup(
     entry_points={
         'console_scripts': [
             'joint_cmd_adapter = lhr_gazebo.joint_cmd_adapter:main',
+            'fault_injector = lhr_gazebo.fault_injector:main',
+            'world_viz = lhr_gazebo.world_viz:main',
         ],
     },
 )

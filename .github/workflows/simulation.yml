@@ -1,25 +1,22 @@
 name: simulation
 
+# The full standard-evaluation run on our car, weekly and by hand. PR and
+# main checks for simulation/ run from ci.yml.
 on:
-  push:
-    branches: [main]
-    paths:
-      - "simulation/**"
-      - "vehicle/**"
-      - ".gitmodules"
-      - ".github/workflows/simulation.yml"
-  pull_request:
-    paths:
-      - "simulation/**"
-      - "vehicle/**"
-      - ".gitmodules"
-      - ".github/workflows/simulation.yml"
+  schedule:
+    - cron: "23 7 * * 1"
   workflow_dispatch:
+    inputs:
+      full_regeneration:
+        description: Run every standard evaluation on our car
+        type: boolean
+        default: false
 
 jobs:
-  simulation:
+  full-regeneration:
+    if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_regeneration) }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 300
     defaults:
       run:
         working-directory: simulation
@@ -31,5 +28,25 @@ jobs:
       - name: Build the image
         run: make build
 
-      - name: Check that BobSim loads the vehicle
-        run: make test
+      - name: Run every standard evaluation on our car
+        run: make car T=standard-eval-all
+
+      - name: Check the FourPost acceptance
+        run: make four-post-acceptance T=standard-eval-all
+
+      - name: Upload the run record
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: full-regeneration-${{ github.run_id }}
+          if-no-files-found: warn
+          path: |
+            simulation/out/car/*/identity.json
+            simulation/out/car/*/four_post_acceptance.json
+            simulation/out/car/*/vehicle.yml
+            simulation/out/car/*/*.log
+            simulation/out/car/*/generated_results/*metrics*
+            simulation/out/car/*/runs/*/*/manifest.json
+            simulation/out/car/*/runs/*/*/overrides.txt
+            simulation/out/car/*/runs/*/*/run.log
+            !simulation/out/car/**/*.tir

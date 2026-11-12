@@ -36,6 +36,14 @@ export interface Presence {
   /** Session starter reclaim: instantly seize leadership on rejoin. Gated
    *  client-side by sessionInfo.starterId === clientId. */
   claimAsStarter: () => void;
+  /** Leader locked to one client: no auto-hop while its phone sleeps. */
+  locked: boolean;
+  leaderName: string;
+  /** Locked leader is silent — mirrors may takeLeader(). */
+  leaderAway: boolean;
+  lockLeader: () => void;
+  unlockLeader: () => void;
+  takeLeader: () => void;
 }
 
 const CLIENT_ID_KEY = 'trackside-client-id';
@@ -52,8 +60,9 @@ function getClientId(): string {
 }
 
 export function usePresence(enabled: boolean): Presence {
-  const [s, setS] = useState<Omit<Presence, 'requestLeader' | 'grantLeader' | 'denyLeader' | 'setName' | 'forceLeader' | 'claimAsStarter'>>({
+  const [s, setS] = useState<Omit<Presence, 'requestLeader' | 'grantLeader' | 'denyLeader' | 'setName' | 'forceLeader' | 'claimAsStarter' | 'lockLeader' | 'unlockLeader' | 'takeLeader'>>({
     role: 'connecting', isMirror: false, clients: 1, max: 3, leader: null, clientId: '', name: '', requests: [], requested: false,
+    locked: false, leaderName: '', leaderAway: false,
   });
   const stopRef = useRef(false);
   const idRef = useRef('');
@@ -71,6 +80,9 @@ export function usePresence(enabled: boolean): Presence {
       name: nameRef.current,
       requests: Array.isArray(j.requests) ? (j.requests as PresenceRequest[]) : [],
       requested: !!j.requested,
+      locked: !!j.locked,
+      leaderName: typeof j.leaderName === 'string' ? j.leaderName : '',
+      leaderAway: !!j.leaderAway,
     });
   }, []);
 
@@ -107,8 +119,11 @@ export function usePresence(enabled: boolean): Presence {
       const payload = JSON.stringify({ clientId: idRef.current, leave: true });
       navigator.sendBeacon?.('/api/motec/live/presence', new Blob([payload], { type: 'application/json' }));
     };
+    // A phone waking up re-announces at once instead of waiting for the next tick.
+    const wake = () => { if (document.visibilityState === 'visible') void post({}); };
     window.addEventListener('beforeunload', leave);
-    return () => { stopRef.current = true; window.clearInterval(iv); window.removeEventListener('beforeunload', leave); leave(); };
+    document.addEventListener('visibilitychange', wake);
+    return () => { stopRef.current = true; window.clearInterval(iv); window.removeEventListener('beforeunload', leave); document.removeEventListener('visibilitychange', wake); leave(); };
   }, [enabled, post]);
 
   const requestLeader = useCallback(() => { void post({ action: 'request' }); }, [post]);
@@ -116,6 +131,9 @@ export function usePresence(enabled: boolean): Presence {
   const denyLeader = useCallback((target: string) => { void post({ action: 'deny', target }); }, [post]);
   const forceLeader = useCallback(() => { void post({ action: 'force' }); }, [post]);
   const claimAsStarter = useCallback(() => { void post({ action: 'claim_starter' }); }, [post]);
+  const lockLeader = useCallback(() => { void post({ action: 'lock' }); }, [post]);
+  const unlockLeader = useCallback(() => { void post({ action: 'unlock' }); }, [post]);
+  const takeLeader = useCallback(() => { void post({ action: 'take' }); }, [post]);
 
-  return { ...s, setName, requestLeader, grantLeader, denyLeader, forceLeader, claimAsStarter };
+  return { ...s, setName, requestLeader, grantLeader, denyLeader, forceLeader, claimAsStarter, lockLeader, unlockLeader, takeLeader };
 }

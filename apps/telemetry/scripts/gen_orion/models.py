@@ -50,6 +50,7 @@ class OrionDynamics(BaseOrion):
     fr_sus_pot_v = Column(Float)
     ride_height = Column(Float)
     wheel_speed = Column(Float)
+    gps_precise = Column(ARRAY(Float))
     packet = relationship("OrionPacket", back_populates="dynamics")
 
 class OrionControls(BaseOrion):

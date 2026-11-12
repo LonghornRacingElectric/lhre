@@ -1,0 +1,66 @@
+# proto-file: lib/spec/proto/can_spec.proto
+# proto-message: lhre.canspec.SpecFile
+
+message {
+  name: "CHARGER_STATUS"
+  can_id: 81
+  from_board: "Charger"
+  to_boards: "HVC"
+  bus: "Critical"
+  dlc: 5
+  frequency_hz: 10.0
+  description: "Charger Status"
+  signal {
+    name: "actual_voltage"
+    encoding {
+      bit_length: 16
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    telemetry {
+      group: "DiagnosticsLow"
+      field: "charger_voltage"
+      id: 15
+    }
+    description: "Actual Voltage"
+  }
+  signal {
+    name: "actual_current"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "A"
+      }
+    }
+    telemetry {
+      group: "DiagnosticsLow"
+      field: "charger_current"
+      id: 14
+    }
+    description: "Actual Current"
+  }
+  signal {
+    name: "charger_enabled"
+    encoding {
+      start_bit: 32
+      bit_length: 1
+    }
+    logical {
+      boolean: true
+    }
+    telemetry {
+      group: "DiagnosticsLow"
+      field: "charger_enabled"
+      id: 16
+    }
+    description: "Charger Enabled"
+  }
+}

@@ -25,7 +25,7 @@ boards/**/Drivers/
 # CubeMX-vendored middleware (FreeRTOS kernel + CMSIS-RTOS2 wrapper): never
 # compiled. The kernel comes from @freertos_kernel (one version shared with
 # host tests) and the cmsis_os.h include in the generated main.c is satisfied
-# by //drivers/freertos:cmsis_os_stub — see drivers/freertos/README.md.
+# by //drivers/freertos:cmsis_os_stub (see drivers/freertos/README.md).
 /boards/**/Middlewares/
 boards/**/CMakeLists.txt
 boards/**/*.cmake
@@ -34,3 +34,6 @@ boards/**/CMakePresets.json
 apps/BEVO/nonhermetic/assets/
 apps/BEVO/target/
 apps/BEVO/loggerd/logs/*.csv
+
+# macOS Finder metadata, created on any browsed directory.
+.DS_Store

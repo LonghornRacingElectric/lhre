@@ -80,7 +80,7 @@ def parse_sql_schema(sql_content):
         columns_block = match.group(2)
         
         columns = []
-        lines = [l.strip() for l in columns_block.split('\n') if l.strip() and not l.strip().startswith('--')]
+        lines = [l.strip() for l in columns_block.split('\n') if l.strip() and not l.strip().startswith('--')]  # noqa: E741 pre-existing when the lint gate went on
         
         for line in lines:
             if line.upper().startswith('CONSTRAINT'):
@@ -131,7 +131,7 @@ def parse_proto(proto_content):
         fields = []
         for line in body.split('\n'):
             line = line.strip()
-            if not line or line.startswith('//'): continue
+            if not line or line.startswith('//'): continue  # noqa: E701 pre-existing when the lint gate went on
             
             # Match: [repeated] type name = tag;
             field_match = re.match(r'(repeated\s+)?(\w+)\s+(\w+)\s*=\s*(\d+)\s*;', line)
@@ -161,11 +161,11 @@ def generate_prisma_from_sql(tables):
         model_attrs = []
         for col in table['columns']:
             prisma_type = PG_TO_PRISMA_TYPES.get(col['type'], 'String')
-            if col['is_array']: prisma_type += "[]"
+            if col['is_array']: prisma_type += "[]"  # noqa: E701 pre-existing when the lint gate went on
             
             line = f"  {col['name']} {prisma_type}"
-            if col['is_pk']: line += " @id"
-            if col['is_autoincrement']: line += " @default(autoincrement())"
+            if col['is_pk']: line += " @id"  # noqa: E701 pre-existing when the lint gate went on
+            if col['is_autoincrement']: line += " @default(autoincrement())"  # noqa: E701 pre-existing when the lint gate went on
 
             # Keep compatibility with existing Prisma expectations for common schema.
             if table['name'] == 'partitions' and col['name'] == 'partition_name':
@@ -281,10 +281,10 @@ def generate_sqlalchemy_from_proto(messages, root_msg_name, prefix=""):
     sa_lines = []
     
     sa_lines.append(f"class {prefix}Packet(Base{prefix}):")
-    sa_lines.append(f"    __tablename__ = 'packet'")
+    sa_lines.append("    __tablename__ = 'packet'")
     sa_lines.append("    __table_args__ = {'schema': 'public', 'extend_existing': True}")
-    sa_lines.append(f"    packet_id = Column(BigInteger, primary_key=True)")
-    sa_lines.append(f"    time = Column(BigInteger, nullable=False)")
+    sa_lines.append("    packet_id = Column(BigInteger, primary_key=True)")
+    sa_lines.append("    time = Column(BigInteger, nullable=False)")
     
     for field in root_fields:
         if field['type'] in messages:
@@ -302,7 +302,7 @@ def generate_sqlalchemy_from_proto(messages, root_msg_name, prefix=""):
             sa_lines.append(f"class {class_name}(Base{prefix}):")
             sa_lines.append(f"    __tablename__ = '{table_name}'")
             sa_lines.append("    __table_args__ = {'schema': 'public', 'extend_existing': True}")
-            sa_lines.append(f"    packet_id = Column(BigInteger, ForeignKey('public.packet.packet_id'), primary_key=True)")
+            sa_lines.append("    packet_id = Column(BigInteger, ForeignKey('public.packet.packet_id'), primary_key=True)")
             
             for f in messages[msg_name]:
                 sa_type = PROTO_TO_SA_TYPES.get(f['type'], 'Text')
@@ -400,8 +400,8 @@ def generate_prisma_from_proto(messages, root_msg_name):
     return "\n".join(prisma_lines)
 
 def concat_prisma(common_prisma_path, sensor_prisma_path, output_path, car_name):
-    with open(common_prisma_path, 'r') as f: common = f.read()
-    with open(sensor_prisma_path, 'r') as f: sensor = f.read()
+    with open(common_prisma_path, 'r') as f: common = f.read()  # noqa: E701 pre-existing when the lint gate went on
+    with open(sensor_prisma_path, 'r') as f: sensor = f.read()  # noqa: E701 pre-existing when the lint gate went on
     
     header = f"""generator client {{
   provider = "prisma-client-js"
@@ -421,7 +421,7 @@ datasource db {{
         f.write(sensor)
 
 def patch_models(models_path, patch_content, car_name):
-    with open(models_path, 'r') as f: content = f.read()
+    with open(models_path, 'r') as f: content = f.read()  # noqa: E701 pre-existing when the lint gate went on
     
     start_marker = f"# BEGIN GENERATED {car_name}"
     end_marker = f"# END GENERATED {car_name}"
@@ -445,8 +445,8 @@ if __name__ == "__main__":
     
     cmd = sys.argv[1]
     if cmd == "sql-to-prisma":
-        with open(sys.argv[2], 'r') as f: content = f.read()
-        with open(sys.argv[3], 'w') as f: f.write(generate_prisma_from_sql(parse_sql_schema(content)))
+        with open(sys.argv[2], 'r') as f: content = f.read()  # noqa: E701 pre-existing when the lint gate went on
+        with open(sys.argv[3], 'w') as f: f.write(generate_prisma_from_sql(parse_sql_schema(content)))  # noqa: E701 pre-existing when the lint gate went on
     elif cmd == "proto-to-all":
         # proto-to-all <proto_file> <root_msg> <output_dir> [prefix]
         proto_file = sys.argv[2]
@@ -454,7 +454,7 @@ if __name__ == "__main__":
         out_dir = sys.argv[4]
         prefix = sys.argv[5] if len(sys.argv) > 5 else ""
         
-        with open(proto_file, 'r') as f: proto_content = f.read()
+        with open(proto_file, 'r') as f: proto_content = f.read()  # noqa: E701 pre-existing when the lint gate went on
         messages = parse_proto(proto_content)
         if root_msg.lower() == "auto":
             resolved_root = find_default_root_message(messages)
@@ -469,15 +469,15 @@ if __name__ == "__main__":
         dc = generate_dataclasses_from_proto(messages, root_msg, prefix)
         
         os.makedirs(out_dir, exist_ok=True)
-        with open(os.path.join(out_dir, "sensors.sql"), "w") as f: f.write(sql)
-        with open(os.path.join(out_dir, "models.py"), "w") as f: f.write(sa)
-        with open(os.path.join(out_dir, "sensors.prisma"), "w") as f: f.write(prisma)
-        with open(os.path.join(out_dir, "dataclasses.py"), "w") as f: f.write(dc)
+        with open(os.path.join(out_dir, "sensors.sql"), "w") as f: f.write(sql)  # noqa: E701 pre-existing when the lint gate went on
+        with open(os.path.join(out_dir, "models.py"), "w") as f: f.write(sa)  # noqa: E701 pre-existing when the lint gate went on
+        with open(os.path.join(out_dir, "sensors.prisma"), "w") as f: f.write(prisma)  # noqa: E701 pre-existing when the lint gate went on
+        with open(os.path.join(out_dir, "dataclasses.py"), "w") as f: f.write(dc)  # noqa: E701 pre-existing when the lint gate went on
         print(f"Generated artifacts in {out_dir}")
     elif cmd == "concat-prisma":
         concat_prisma(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5])
     elif cmd == "patch-models":
         # patch-models <models_file> <patch_file> <car_name>
-        with open(sys.argv[3], 'r') as f: patch_content = f.read()
+        with open(sys.argv[3], 'r') as f: patch_content = f.read()  # noqa: E701 pre-existing when the lint gate went on
         patch_models(sys.argv[2], patch_content, sys.argv[4])
         print(f"Patched {sys.argv[2]} for {sys.argv[4]}")

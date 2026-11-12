@@ -232,6 +232,10 @@ function allocId(groupName) {
 // Newest unsaved id shrinks the high-water mark back. Anything else is
 // tombstoned, since ids are append-only.
 function releaseBinding(tel) {
+  const stillBound = allOf("message").some(({item}) => (item.signal || []).some(sig =>
+    sig.telemetry && sig.telemetry !== tel && sig.telemetry.group === tel.group &&
+    sig.telemetry.field === tel.field && sig.telemetry.id === tel.id));
+  if (stillBound) return;
   const g = findGroup(tel.group);
   if (!g || !tel.id) return;
   g.reserved_ids = g.reserved_ids || [];

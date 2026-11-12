@@ -124,7 +124,7 @@ try:
                     car_type = _get_car_type_from_headers(record.headers) or DEFAULT_CAR
                     decoded_message = _decode_sensor_payload(payload=record.value, car_type=car_type)
                     logging.debug(f"  Decoded Message: {decoded_message}")
-                except Exception as decode_error:
+                except Exception as decode_error:  # noqa: BLE001 pre-existing when the lint gate went on
                     logging.error(f"  Error decoding message: {decode_error}")
                 # Place your message processing logic here
 
@@ -134,7 +134,7 @@ try:
 
     logging.info("kafka_base processor shutdown requested; leaving consume loop.")
 
-except Exception as e:
+except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
     logging.error(f"An error occurred: {e}")
 
 finally:

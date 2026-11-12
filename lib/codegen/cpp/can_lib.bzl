@@ -46,7 +46,7 @@ def can_lib_sources(name, spec, boards):
     instructions if it drifts."""
     outs = ["lhre_can.hpp", "lhre_can_types.hpp", "lhre_can_types.cpp"]
     for board in boards:
-        outs += ["lhre_can_{}.hpp".format(board), "lhre_can_{}.cpp".format(board)]
+        outs += ["lhre_can_{}.hpp".format(board), "lhre_can_{}.cpp".format(board), "lhre_can_rx_{}.hpp".format(board)]
     _can_lib_sources(
         name = name,
         spec = spec,

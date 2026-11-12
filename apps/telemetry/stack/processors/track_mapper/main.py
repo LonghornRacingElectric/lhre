@@ -244,13 +244,13 @@ try:
                         if gate and is_intersection((last_point, current_point), gate):
                             logging.info("Lap completed for %s", car_type)
                             car_state["lap_completed"] = True
-                except Exception as decode_error:
+                except Exception as decode_error:  # noqa: BLE001 pre-existing when the lint gate went on
                     logging.error("Error decoding/process message: %s", decode_error)
 
         consumer.commit()
         logging.debug("Offsets committed for batch.")
 
-except Exception as e:
+except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
     logging.error("An error occurred: %s", e)
 
 finally:

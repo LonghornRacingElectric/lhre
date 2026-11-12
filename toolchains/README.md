@@ -49,7 +49,7 @@ whose docstring is its documentation:
 - [`sh/`](https://github.com/LonghornRacingElectric/lhre/blob/main/toolchains/sh/BUILD.bazel)
   is a shell toolchain for Windows with a fixed bash path that deliberately
   does not exist. Windows builds are shell-free
-  ([ADR-013](../docs/architecture/013-windows-shell-free.md)), but every
+  ([ADR-018](../docs/architecture/018-windows-shell-free.md)), but every
   test rule still resolves a shell toolchain through an implicit `sh_binary`
   dep, and the autodetected one is empty on a machine without bash, which
   fails `bazel test` at analysis. Keep its path in sync with

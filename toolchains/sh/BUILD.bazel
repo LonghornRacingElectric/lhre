@@ -1,6 +1,6 @@
 """Shell toolchain for Windows that doesn't depend on what's installed.
 
-Windows builds are shell-free (ADR-013), but Bazel still resolves a shell
+Windows builds are shell-free (ADR-018), but Bazel still resolves a shell
 toolchain there: every test rule implicitly depends on
 @bazel_tools//tools/test:collect_coverage, an sh_binary, and on Windows an
 sh_binary fails *analysis* ("No suitable shell toolchain found ... set the

@@ -1,6 +1,6 @@
 # LHRe
 
-[![postsubmit](https://github.com/LonghornRacingElectric/lhre/actions/workflows/postsubmit.yml/badge.svg)](https://github.com/LonghornRacingElectric/lhre/actions/workflows/postsubmit.yml)
+[![CI](https://github.com/LonghornRacingElectric/lhre/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/LonghornRacingElectric/lhre/actions/workflows/ci.yml)
 
 Documentation: https://docs.lhre.org
 
@@ -77,7 +77,7 @@ behind its forks, pins, and patches — in
 That's it — compilers (ARM GCC for firmware, LLVM for host code) are hermetic
 and downloaded by Bazel. No Xcode, MSVC, or system GCC needed for C++, and
 no MSYS2 or Git Bash on Windows: builds there are shell-free
-([ADR-013](docs/architecture/013-windows-shell-free.md)).
+([ADR-018](docs/architecture/018-windows-shell-free.md)).
 STM32CubeMX is only needed when changing a board's peripheral configuration.
 
 On Windows, builds run locally instead of on remote executors; for full remote
@@ -98,6 +98,7 @@ because [`firmware_project`](tools/firmware/README.md) generates them.
 | -------------------------- | --- |
 | Build one board's firmware | `bazel build //boards/VCU:vcu` |
 | Build + test everything    | `bazel test //...` |
+| Test host C++ under UBSan  | `bazel test --config=ubsan //boards/... //drivers/...` ([more](tools/ubsan/README.md)) |
 | Run a board's simulator    | `bazel run --config=local //boards/VCU:vcu_sim` |
 | Flash over ST-Link         | `bazel run //boards/VCU:openocd` |
 | Flash over USB (DFU)       | `bazel run //boards/VCU:dfu` |

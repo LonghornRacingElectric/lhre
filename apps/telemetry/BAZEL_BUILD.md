@@ -16,7 +16,8 @@ display telemetry:
 | PostgreSQL | durable telemetry storage | pinned upstream |
 | Kafka | live event transport | pinned upstream |
 | Grafana | dashboards | pinned upstream |
-| ingest | MQTT decode, database write, Kafka forward | this repo |
+| ingest | MQTT forward, legacy inputs, CSV | this repo |
+| db_writer | Kafka protobuf decode and batched PostgreSQL persistence | this repo |
 | kafka_bridge | gRPC-to-Kafka bridge | this repo |
 | field_enricher | configured derived fields | this repo |
 
@@ -106,10 +107,11 @@ for a branch image or a registry digest without editing YAML.
 
 ## Schema boundary and branch testing
 
-Services consume `//apps/telemetry:current_schema_bundle`, not the physical
-BEVO generator path. Today that target selects the checked-in BEVO protobuf
-schema and Bazel-generated CAN JSON. It is only a dependency seam: this change does
-not implement a registry, schema negotiation, or multi-version decoding.
+Services consume `//apps/telemetry:current_schema_bundle`, not a physical
+generator path. That target selects the protobuf, CAN JSON, and Orion database
+DDL generated from `//lib/spec`; a spec edit therefore invalidates every
+server-side artifact in the same Bazel graph. It remains a dependency seam,
+not a schema registry or multi-version decoder.
 
 A future registry can replace the selection behind this target and generate
 board-specific libraries without changing every service BUILD file. Deployed
@@ -128,7 +130,7 @@ bazel run //apps/telemetry/stack:requirements.update
 ```
 
 The Kafka bridge keeps `go.mod` and `go.sum` for Go tooling; rules_go and
-Gazelle use those files for the Bazel graph. The telemetry workflow builds
+Gazelle use those files for the Bazel graph. The telemetry CI job builds
 `all_images`, runs `core_smoke_tests`, then starts the core with Compose
 `--no-build` before integration tests. Docker-backed tests are tagged `manual`
 and `local`, so normal remote `bazel test //...` stays hermetic.

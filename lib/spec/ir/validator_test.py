@@ -15,7 +15,7 @@ enum_type {
   value { name: "ON" number: 1 }
 }
 groups {
-  group { name: "Vehicle" next_free_id: 2 }
+  group { name: "Vehicle" next_free_id: 2 snapshot_id: 3 }
 }
 """
 
@@ -53,6 +53,27 @@ class ValidatorTest(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertEqual(warnings, [])
 
+    def test_shared_scalar_sources_require_matching_contracts_and_opt_in(self):
+        first = MESSAGE.replace('id: 1 }', 'id: 1 shared_source: true }')
+        second = first.replace("STATUS", "STATUS2").replace("0x100", "0x101")
+        errors, _ = _validate(REGISTRY, first, second)
+        self.assertEqual(errors, [])
+        for before, after, error in (
+            ('unit: "kph"', 'unit: "rpm"', "different encoding, meaning, unit, or wire type"),
+            ('scale: 0.01', 'scale: 0.1', "different encoding, meaning, unit, or wire type"),
+            ('shared_source: true', 'shared_source: true wire_type: PROTO_FLOAT', "different encoding, meaning, unit, or wire type"),
+            ('id: 1', 'id: 2', "bound with id 2"),
+            ('shared_source: true', '', "already bound"),
+        ):
+            with self.subTest(change=after):
+                errors, _ = _validate(REGISTRY, first, second.replace(before, after))
+                self.assert_error(errors, error)
+
+    def test_shared_source_does_not_alias_repeated_fields(self):
+        message = MESSAGE.replace('id: 1 }', 'id: 1 shared_source: true repeated: true }')
+        errors, _ = _validate(REGISTRY, message)
+        self.assert_error(errors, "shared_source requires a scalar CAN signal")
+
     # Rule 1: ledger partition.
     def test_missing_tombstone(self):
         registry = REGISTRY.replace("next_free_id: 2", "next_free_id: 3")
@@ -82,8 +103,9 @@ class ValidatorTest(unittest.TestCase):
     # Rule 2: global field-name uniqueness.
     def test_same_name_in_two_groups(self):
         registry = REGISTRY.replace(
-            'group { name: "Vehicle" next_free_id: 2 }',
-            'group { name: "Vehicle" next_free_id: 2 } group { name: "Other" next_free_id: 2 }')
+            'group { name: "Vehicle" next_free_id: 2 snapshot_id: 3 }',
+            'group { name: "Vehicle" next_free_id: 2 snapshot_id: 3 } '
+            'group { name: "Other" next_free_id: 2 snapshot_id: 4 }')
         other = MESSAGE.replace("STATUS", "STATUS2").replace("0x100", "0x101").replace(
             '"Vehicle"', '"Other"')
         errors, _ = _validate(registry, MESSAGE, other)
@@ -165,6 +187,22 @@ message {
         message = MESSAGE.replace('logical { physical { unit: "kph" } }', 'logical { enum_type: "Nope" }')
         errors, _ = _validate(REGISTRY, message)
         self.assert_error(errors, "unknown enum_type")
+
+    def test_external_snapshot_field_satisfies_ledger(self):
+        registry = REGISTRY.replace(
+            'next_free_id: 2 snapshot_id: 3',
+            'next_free_id: 3 snapshot_id: 3 '
+            'external_field { name: "gps" id: 2 type: PROTO_FLOAT repeated: true }')
+        errors, _ = _validate(registry, MESSAGE)
+        self.assertEqual(errors, [])
+
+    def test_duplicate_snapshot_id(self):
+        registry = REGISTRY.replace(
+            'group { name: "Vehicle" next_free_id: 2 snapshot_id: 3 }',
+            'group { name: "Vehicle" next_free_id: 2 snapshot_id: 3 } '
+            'group { name: "Other" snapshot_id: 3 }')
+        errors, _ = _validate(registry, MESSAGE)
+        self.assert_error(errors, "snapshot_id 3 already used")
 
     # Rule 6: encoding sanity.
     def test_signed_needs_two_bits(self):

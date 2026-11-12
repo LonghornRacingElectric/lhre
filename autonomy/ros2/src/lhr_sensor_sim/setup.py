@@ -21,6 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'sensor_sim = lhr_sensor_sim.sensor_sim_node:main',
+            'inertial_sim = lhr_sensor_sim.inertial_sim_node:main',
         ],
     },
 )

@@ -7,10 +7,12 @@ builds for the MCU (firmware extra_deps) and the host (tests, sims).
 
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("//tools/firmware:warnings.bzl", "FIRMWARE_WARNINGS")
 
 cc_library(
     name = "led",
     srcs = ["led.cpp"],
+    copts = FIRMWARE_WARNINGS,
     hdrs = ["include/longhorn/led.hpp"],
     includes = ["include"],
     visibility = ["//visibility:public"],
@@ -20,6 +22,7 @@ cc_library(
 cc_library(
     name = "console",
     srcs = ["console.cpp"],
+    copts = FIRMWARE_WARNINGS,
     hdrs = ["include/longhorn/console.hpp"],
     includes = ["include"],
     visibility = ["//visibility:public"],
@@ -51,6 +54,84 @@ cc_library(
     includes = ["include"],
     visibility = ["//visibility:public"],
     deps = ["//drivers/lhal"],
+)
+
+cc_library(
+    name = "debounce",
+    hdrs = ["include/longhorn/debounce.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+    deps = ["//drivers/lhal"],
+)
+
+cc_library(
+    name = "math",
+    hdrs = ["include/longhorn/math.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "dfu",
+    hdrs = ["include/longhorn/dfu.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "can_inbox",
+    hdrs = ["include/longhorn/can_inbox.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+    deps = ["//drivers/lhal"],
+)
+
+cc_library(
+    name = "period",
+    hdrs = ["include/longhorn/period.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "rate_gate",
+    hdrs = ["include/longhorn/rate_gate.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+)
+
+# Header-only: FreeRTOS.h resolves against the consumer's kernel.
+cc_library(
+    name = "dfu_console",
+    hdrs = ["include/longhorn/dfu_console.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":console",
+        ":dfu",
+        ":shell",
+        "//drivers/lhal",
+    ],
+)
+
+# Header-only: FreeRTOS.h resolves against the consumer's kernel.
+cc_library(
+    name = "rtos_lock",
+    hdrs = ["include/longhorn/rtos_lock.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+)
+
+# Header-only: FreeRTOS.h resolves against the consumer's kernel.
+cc_library(
+    name = "rainbow_task",
+    hdrs = ["include/longhorn/rainbow_task.hpp"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":led",
+        "//drivers/lhal",
+    ],
 )
 
 cc_test(
@@ -95,6 +176,102 @@ cc_test(
     deps = [
         ":led",
         "//drivers/lhal:host",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "debounce_test",
+    size = "small",
+    srcs = ["test/debounce_test.cpp"],
+    deps = [
+        ":debounce",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "math_test",
+    size = "small",
+    srcs = ["test/math_test.cpp"],
+    deps = [
+        ":math",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "dfu_test",
+    size = "small",
+    srcs = ["test/dfu_test.cpp"],
+    deps = [
+        ":dfu",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "period_test",
+    size = "small",
+    srcs = ["test/period_test.cpp"],
+    deps = [
+        ":period",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "rate_gate_test",
+    size = "small",
+    srcs = ["test/rate_gate_test.cpp"],
+    deps = [
+        ":rate_gate",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "can_inbox_test",
+    size = "small",
+    srcs = ["test/can_inbox_test.cpp"],
+    deps = [
+        ":can_inbox",
+        "//drivers/lhal:host",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "rainbow_task_test",
+    size = "small",
+    srcs = ["test/rainbow_task_test.cpp"],
+    deps = [
+        ":rainbow_task",
+        "//drivers/freertos:host",
+        "//drivers/lhal:host",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "dfu_console_test",
+    size = "small",
+    srcs = ["test/dfu_console_test.cpp"],
+    deps = [
+        ":dfu_console",
+        "//drivers/freertos:host",
+        "//drivers/lhal:host",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "rtos_lock_test",
+    size = "small",
+    srcs = ["test/rtos_lock_test.cpp"],
+    deps = [
+        ":rtos_lock",
+        "//drivers/freertos:host",
         "@googletest//:gtest_main",
     ],
 )

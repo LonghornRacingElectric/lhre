@@ -58,7 +58,7 @@ understandable.
 | `//toolchains` targets tagged `manual`, macro mirrored locally | [toolchains/README](../toolchains/README.md) — untagged, `bazel build //...` downloads every host's ~150 MB GCC archive |
 | Remote execution on Linux/macOS clients but not Windows; rc-file flag ordering | comments in [`.bazelrc`](https://github.com/LonghornRacingElectric/lhre/blob/main/.bazelrc) — Bazel can't reliably drive Linux executors from a Windows client, and `--enable_platform_specific_config` expands *before* plain `build` lines |
 | Windows machines uncomment a short `--output_user_root` in `.bazelrc.user` | comments in [`.bazelrc`](https://github.com/LonghornRacingElectric/lhre/blob/main/.bazelrc) — importing the pip protobuf runtime from runfiles exceeds the 260-char `MAX_PATH`, rules_python 2.x ignores `--build_python_zip` (the old escape hatch) on Windows, and startup options can't be set per-OS in an rc file |
-| Windows builds need no bash; `--shell_executable` pinned to a path that doesn't exist | [ADR-013](architecture/013-windows-shell-free.md) and "Windows builds are shell-free" below — MSYS2 was becoming a prerequisite, and autodetected bash locations split the remote cache |
+| Windows builds need no bash; `--shell_executable` pinned to a path that doesn't exist | [ADR-018](architecture/018-windows-shell-free.md) and "Windows builds are shell-free" below — MSYS2 was becoming a prerequisite, and autodetected bash locations split the remote cache |
 | Hermetic LLVM for host C++, registered before the BuildBuddy toolchain | comments in [`MODULE.bazel`](https://github.com/LonghornRacingElectric/lhre/blob/main/MODULE.bazel) — no dependency on Xcode/system GCC/MSVC, same clang everywhere |
 | Single FreeRTOS kernel version for firmware and host sims | [drivers/freertos/README](../drivers/freertos/README.md) |
 | Optimization level (`-Og`/`-Os`) keyed on `--compilation_mode` in the toolchain, not in target copts | [toolchains/README](../toolchains/README.md) — a hardcoded target-level `-O` silently overrides `-c opt` |
@@ -186,7 +186,7 @@ The pip wheel is also why Windows machines shorten `--output_user_root`
 
 Nothing `bazel test //...` does on Windows needs bash, so MSYS2 and Git
 Bash are not prerequisites.
-[ADR-013](architecture/013-windows-shell-free.md) has the decision and the
+[ADR-018](architecture/018-windows-shell-free.md) has the decision and the
 alternatives. Bazel wants a shell in more places than genrules, so it takes
 four pieces:
 
@@ -270,7 +270,7 @@ helpers that cannot be analyzed by the native Windows Bazel client. The containe
 server ingestion targets declare `target_compatible_with = NOT_WINDOWS` to ensure native
 Windows builds automatically skip them during recursive builds and tests (`//...`), while
 cross-platform targets like schema definitions and protobuf codegen (`can_packets_pb2`)
-remain buildable on Windows. The Linux CI jobs and dedicated telemetry workflow retain full
+remain buildable on Windows. The Linux CI jobs and the telemetry CI job retain full
 build and test coverage for the entire telemetry subtree.
 
 `--bes_upload_mode=fully_async` and `--remote_cache_async` keep builds

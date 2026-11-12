@@ -15,13 +15,15 @@ everywhere.
 - Branch from `main`: `<your-name>/<short-description>` (e.g.
   `dhairya/vcu-can-heartbeat`).
 - Open a PR; the `main` ruleset requires one approving review from someone
-  other than the author and a green presubmit before merge. No direct
+  other than the author and a green `All checks passed` check before merge. No direct
   pushes to `main`.
 - Reviews are routed by `.github/CODEOWNERS`: a PR touching `autonomy/`
   automatically requests the `@LonghornRacingElectric/autonomous` team,
   and the approving review must come from one of its members (code-owner
-  review is required). Paths without an owner can be approved by anyone
-  with write access.
+  review is required). The CI gates and the testing contract (workflows,
+  lint and coverage tooling, `.bazelrc`, `AGENTS.md`, `docs/testing.md`)
+  are owned by `@LonghornRacingElectric/ci-owners`. Paths without an owner
+  can be approved by anyone with write access.
 - Repository admins can bypass these rules (the ruleset lists the admin
   role as a bypass actor); every bypass is logged and shown on the PR, so
   use it for stalled reviews, not as the normal path.
@@ -30,17 +32,27 @@ everywhere.
   out of every review. Its repo settings live in
   [`.coderabbit.yaml`](https://github.com/LonghornRacingElectric/lhre/blob/main/.coderabbit.yaml);
   everything else follows the org's CodeRabbit settings.
-- Presubmit runs `bazel test //...` (builds all firmware, runs host tests)
-  and `bazel run //tools/format:check`. Run both locally before pushing.
-- `autonomy/` is outside Bazel
-  ([ADR-009](docs/architecture/009-autonomy-outside-bazel.md)); its own
-  path-filtered workflow builds and lints it with colcon, and PRs that
-  touch only `autonomy/` skip the Bazel jobs (they report as skipped,
-  which satisfies the required check).
+- Every PR, every push to `main` and a weekly run use
+  [`ci.yml`](https://github.com/LonghornRacingElectric/lhre/blob/main/.github/workflows/ci.yml).
+  Its `Changes` job finds which areas the change touches. Each area's job
+  runs only when its paths changed: Bazel build and test on Linux and
+  Windows, simulation, FourPost, autonomy (colcon, outside Bazel per
+  [ADR-009](docs/architecture/009-autonomy-outside-bazel.md)), BEVO, docs
+  and telemetry (images and Docker Compose integration tests). The format
+  check always runs.
+- `All checks passed` is the one required check. It fails if any job failed or
+  was cancelled, or if `Changes` failed. Its run page shows a table of
+  every job's result.
+- Every change follows the testing contract in
+  [docs/testing.md](docs/testing.md): behavior changes ship with a test,
+  tests stay hermetic, and tests are never weakened to get green. That
+  page lists every gate and how to run it locally.
+- Run `bazel test //...` and `bazel run //tools/format:check` locally
+  before pushing.
 
 ## Formatting
 
-clang-formatted code is a **requirement** for every push and PR — presubmit
+clang-formatted code is a **requirement** for every push and PR — CI
 runs `bazel run //tools/format:check` and fails on any unformatted file.
 Before pushing, run:
 
@@ -121,7 +133,7 @@ uv run --group docs mkdocs serve
 ```
 
 PRs that touch docs run `mkdocs build --strict`, so broken links between
-pages fail presubmit. Links to *code* files (BUILD files, configs) don't
+pages fail CI. Links to *code* files (BUILD files, configs) don't
 exist on the site — use a full GitHub URL for those.
 
 Decisions that bind the whole repo — layout, build system, a new
@@ -152,8 +164,8 @@ the `.ioc` and creates everything `firmware_project` can't derive:
 - **`BUILD.bazel`** — the minimal `firmware_project` call. The macro
   derives the rest (device define, linker script, startup file, HAL
   wiring) and synthesizes targets from file names: `App/**/*.cpp` form the
-  `<name>_app` library, each `App/*_test.cpp` becomes a host test, each
-  `App/*_sim.cpp` a host simulator (see
+  `<name>_app` library, each `App/**/*_test.cpp` becomes a host test, each
+  `App/**/*_sim.cpp` a host simulator (see
   [tools/firmware](tools/firmware/README.md)).
 - **Starter `App/` and `Board/` files** that compile, pass their test, and
   blink an LED as-is: `App/<name>_app.{hpp,cpp}` (application logic,
@@ -184,21 +196,21 @@ and with the board on an ST-Link, `bazel run //boards/<Name>:openocd`
 flashes the blinker. From there, follow the scaffolder's printed next
 steps: grow the app in `App/` (new `*_test.cpp` / `*_sim.cpp` files become
 targets automatically), wire real peripherals in `Board/main.cpp`, add
-`:release` to `//boards:all_firmware`, add a `post_cubemx.sh` like VCU's,
-and write the board README.
+`:release` to `//boards:all_firmware`, and write the board README.
 
 ## Regenerating CubeMX code safely
 
 `Core/` is 100% CubeMX-owned; `Board/` is 100% ours. That split is what makes
 "Generate Code" safe:
 
-1. Edit the `.ioc` in CubeMX and generate.
-2. Run the board's `post_cubemx.sh` (deletes the generated `main.c`; our
-   entry point is `Board/main.cpp`).
-3. If you changed the clock tree in CubeMX, mirror it by hand in
-   `Board/main.cpp` (`ConfigureSystemClock()`) — clock config is the one
-   thing owned in both places.
-4. Build and diff: only `Core/` files should have changed.
+1. Edit the `.ioc` in CubeMX and generate. Keep
+   `ProjectManager.NoMain=true` (Project Manager → Code Generator → "Do
+   not generate the main()"): the generated `main.c` then only supplies
+   `SystemClock_Config()` and `Error_Handler()`, which the firmware
+   compiles and `lhal::stm32::InitCore()` calls, so clock-tree changes
+   apply with no hand transcription. Our entry point is `Board/main.cpp`.
+2. Build and diff: only `Core/` (and `USB_Device/`) files should have
+   changed, and `USER CODE` sections must survive.
 
 ## Season policy
 

@@ -79,4 +79,19 @@ TEST_F(LedTest, DisableFreezesRainbowButNotSet) {
   EXPECT_FLOAT_EQ(blue_.duty(), 0.0f);
 }
 
+TEST(Rainbow, PreservesLegacyPwmBrightnessAndFiveSecondColorCycle) {
+  lhal::host::Pwm red, green, blue;
+  const float peak = 127.0f / 1001.0f;
+  longhorn::RgbLed led(&red, &green, &blue, peak, 125.0f / 1001.0f);
+  EXPECT_FLOAT_EQ(red.duty(), 125.0f / 1001.0f);
+  led.Rainbow(0);
+  EXPECT_FLOAT_EQ(red.duty(), peak);
+  led.Rainbow(5.0f / 3.0f);
+  EXPECT_NEAR(green.duty(), peak, 1e-6f);
+  led.Rainbow(5.0f / 3.0f);
+  EXPECT_NEAR(blue.duty(), peak, 1e-6f);
+  led.Rainbow(5.0f / 3.0f);
+  EXPECT_NEAR(red.duty(), peak, 1e-6f);
+}
+
 }  // namespace

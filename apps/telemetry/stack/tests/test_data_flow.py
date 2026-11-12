@@ -9,8 +9,6 @@ Docker containers and non-Docker scripts (like paho_testing.py).
 """
 
 import unittest
-import os
-import sys
 import time
 import json
 import uuid
@@ -136,6 +134,8 @@ class TestDataFlow(unittest.TestCase):
                         message.ParseFromString(record.value)
                         if message.packet_id == packet_id:
                             self.assertEqual(dict(record.headers).get("car_type"), b"Orion")
+                            expected_time = message.time
+                            expected_steer_angle = message.dynamics.steer_col_angle
                             raw_found = True
                             break
             self.assertTrue(raw_found, f"packet {packet_id} missing from sensor_data")
@@ -179,8 +179,8 @@ class TestDataFlow(unittest.TestCase):
 
             self.assertIsNotNone(row, f"packet {packet_id} missing from the Orion database")
             self.assertEqual(row[0], packet_id)
-            self.assertGreater(row[1], 0)
-            self.assertIsNotNone(row[2])
+            self.assertEqual(row[1], expected_time)
+            self.assertAlmostEqual(row[2], expected_steer_angle, places=5)
         finally:
             raw_client.close()
             grafana_client.close()
@@ -217,7 +217,7 @@ class TestDataFlow(unittest.TestCase):
 
                     while time.time() - start_time < 10:
                         batch = consumer.poll(timeout_ms=1000)
-                        for partition, records in batch.items():
+                        for partition, records in batch.items():  # noqa: B007 pre-existing when the lint gate went on
                             for record in records:
                                 if record.value == test_data:
                                     message_found = True
@@ -413,7 +413,7 @@ class TestKafkaProcessorFlow(unittest.TestCase):
             producer = kafka_client.create_producer()
             test_data = self.data_generator.generate_protobuf_message(packet_id=int(time.time() * 1000))
             self.assertIsNotNone(test_data, "Could not generate protobuf test data")
-            producer.send("sensor_data", value=test_data).get(timeout=10)
+            producer.send("sensor_data", value=test_data, headers=[("car_type", b"Nightwatch")]).get(timeout=10)
             producer.flush()
 
             message_found = False
@@ -450,7 +450,7 @@ class TestKafkaProcessorFlow(unittest.TestCase):
             packet_id = int(time.time() * 1000)
             test_data = self.data_generator.generate_protobuf_message(packet_id=packet_id)
             self.assertIsNotNone(test_data, "Could not generate protobuf test data")
-            producer.send("sensor_data", value=test_data).get(timeout=10)
+            producer.send("sensor_data", value=test_data, headers=[("car_type", b"Nightwatch")]).get(timeout=10)
             producer.flush()
 
             deadline = time.time() + 10

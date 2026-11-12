@@ -90,7 +90,7 @@ def run_data_flow_tests():
             mqtt.publish(test_topic, b"test_message")
             time.sleep(2)
             results['mqtt_pubsub'] = len(mqtt.received_messages) > 0
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
         logger.error(f"MQTT test failed: {e}")
         results['mqtt_pubsub'] = False
     
@@ -103,7 +103,7 @@ def run_data_flow_tests():
         producer.flush()
         results['kafka_produce'] = True
         kafka.close()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
         logger.error(f"Kafka test failed: {e}")
         results['kafka_produce'] = False
     
@@ -112,7 +112,7 @@ def run_data_flow_tests():
     try:
         data = generator.generate_protobuf_message(packet_id=1)
         results['protobuf_gen'] = data is not None and len(data) > 0
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
         logger.error(f"Protobuf test failed: {e}")
         results['protobuf_gen'] = False
     
@@ -161,7 +161,7 @@ def run_telemetry_flow_test():
             
             return True
             
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
         logger.error(f"Telemetry flow test failed: {e}")
         return False
 

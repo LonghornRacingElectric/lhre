@@ -1,4 +1,5 @@
 import json
+import math
 import re
 import shutil
 import sys
@@ -8,16 +9,36 @@ BLOCK = re.compile(r"<!-- out:(?P<ref>[^ ]+) -->(?P<body>.*?)<!-- /out -->", re.
 IMAGE = re.compile(r"!\[[^\]]*\]\((?P<name>[^)/]+\.(?:png|svg))\)")
 
 
+class MissingValue(ValueError):
+    pass
+
+
+def _empty(data):
+    if data is None:
+        return "null"
+    if isinstance(data, float) and math.isnan(data):
+        return "NaN"
+    items = data.values() if isinstance(data, dict) else data if isinstance(data, list) else ()
+    return next(filter(None, map(_empty, items)), None)
+
+
 def value(out_dir, ref):
     name, _, rest = ref.partition("#")
     path = out_dir / name
+    if not path.is_file():
+        raise MissingValue(f"out:{ref}: {path} does not exist.")
     if not rest:
         text = path.read_text(encoding="utf-8").rstrip("\n")
         return text if path.suffix == ".md" else f"```{path.suffix.lstrip('.')}\n{text}\n```"
     keys, _, spec = rest.partition("|")
     data = json.loads(path.read_text(encoding="utf-8"))
     for key in keys.split("/"):
-        data = data[int(key) if isinstance(data, list) else key]
+        try:
+            data = data[int(key) if isinstance(data, list) else key]
+        except (KeyError, IndexError, ValueError, TypeError):
+            raise MissingValue(f"out:{ref}: {path.name} has no value at {keys}.") from None
+    if empty := _empty(data):
+        raise MissingValue(f"out:{ref}: {path.name} has {empty} at {keys}. Fix run.py or remove the marker.")
     return format(data, spec).replace("-", "−") if isinstance(data, (int, float)) and spec else str(data)
 
 
@@ -38,4 +59,8 @@ def fill(readme, out_dir):
 
 
 if __name__ == "__main__":
-    fill(Path(sys.argv[1]), Path(sys.argv[2]))
+    try:
+        fill(Path(sys.argv[1]), Path(sys.argv[2]))
+    except MissingValue as error:
+        print(f"readme.py: {sys.argv[1]}: {error}", file=sys.stderr)
+        sys.exit(1)
