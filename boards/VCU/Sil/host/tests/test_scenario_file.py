@@ -833,6 +833,14 @@ STRICT = [
     ('non-specific-tag', [('accelerator: 1.0', 'accelerator: ! 1.0')], 'yaml_syntax', '',
      'accelerator: !', '! is a tag; this loader reads no tags: write the value plain, and text '
                        'in quotes if it must be'),
+    # A tag's %1B decodes to ESC: the message escapes it, or printing it
+    # would clear the terminal.
+    ('tag-that-does-not-print', [('description: Power', 'description: !<%1B%5B2J> Power')],
+     'yaml_syntax', '', 'description:', '"\\x1b[2J" is a tag; this loader reads no tags: write the '
+                                        'value plain, and text in quotes if it must be'),
+    ('local-tag-with-a-line-break', [('hvc_state: ENERGIZED', 'hvc_state: !x%0Ay ENERGIZED')],
+     'yaml_syntax', '', 'hvc_state: !x', '"!x\\ny" is a tag; this loader reads no tags: write the '
+                                         'value plain, and text in quotes if it must be'),
     # One document (a leading --- is fine: LOADS); its top level is keys.
     ('second-document', [append('---\nschema: lhre.vcu-sil-scenario.v1\n')], 'yaml_syntax', '',
      '---', 'a second document starts here; a scenario file is one document'),
@@ -841,6 +849,10 @@ STRICT = [
      '%YAML is a directive, which this loader does not read; delete the line'),
     ('tag-directive', [lambda text: '%TAG !e! tag:example.com,2026:\n---\n' + text], 'yaml_syntax',
      '', '%TAG', '%TAG is a directive, which this loader does not read; delete the line'),
+    # PyYAML reads %YAML's numbers with int(), which refuses past 4300 digits.
+    ('yaml-directive-past-the-digit-limit',
+     [lambda text: '%YAML 1.' + '1' * 4301 + '\n---\n' + text], 'yaml_syntax', '', '%YAML',
+     '%YAML is a directive, which this loader does not read; delete the line'),
     ('top-level-list', [lambda text: text[:text.index('schema:')] + '- schema: x\n'],
      'yaml_syntax', '', '- schema', 'the top level is a list, not keys; a scenario file is keys, '
                                     'each at the start of a line, such as schema: '
@@ -909,6 +921,8 @@ WRITTEN = [
     # What does not print is escaped: a message never clears the terminal.
     ('\x1b[2J', '"\\x1b[2J"'), ('\x00', '"\\x00"'), ('4\xa0s', '"4\\xa0s"'),
     ('ENERGIZED\u200b', '"ENERGIZED\\u200b"'), ('\U000e0001', '"\\U000e0001"'),
+    # Read as YAML, this is an escape past U+10FFFF: quoted, not a crash.
+    ('"\\U00110000"', '"\\"\\\\U00110000\\""'),
     ({'to': 1.5, 'ramp_ms': 300}, '{to: 1.5, ramp_ms: 300}'), ([[0.5]], '[[0.5]]'),
 ]
 
@@ -916,6 +930,35 @@ WRITTEN = [
 @pytest.mark.parametrize('value, written', WRITTEN, ids=[repr(w[0]) for w in WRITTEN])
 def test_values_in_messages_are_written_as_yaml_writes_them(value, written):
     assert scenario_file._yaml(value) == written
+
+
+# check prints the report, so what an escape or a tag decodes to reaches the
+# terminal escaped, wherever it was written: \e[2J would clear the screen.
+DECODES_UNPRINTABLE = ['\\e[2J', '\\x00', '\\r', '\\L', '\\N', '\\u200b', '\\ud83d',
+                       '\\U000e0001']
+WHERE_TEXT_GOES = {
+    'description': lambda e: ('description: Power', f'description: "x{e}" # Power'),
+    'mark': lambda e: ('mark: energized', f'mark: "x{e}"'),
+    'signal': lambda e: ('hvc_state: ENERGIZED', f'hvc_state: "E{e}"'),
+    'ramp': lambda e: ('accelerator: 1.0', f'accelerator: {{to: "{e}", ramp_ms: 10}}'),
+    'key': lambda e: top(f'"k{e}": 1'),
+    'allow-code': lambda e: allow(f'"c{e}": why'),
+    'allow-reason': lambda e: allow(f'brake_high: "r{e}"'),
+    'tag': lambda e: ('description: Power', f'description: !<x{e}> Power'),
+}
+
+
+@pytest.mark.parametrize('where, escape',
+                         [(w, e) for w in WHERE_TEXT_GOES if w != 'tag'
+                          for e in DECODES_UNPRINTABLE]
+                         + [('tag', e) for e in ('%1B%5B2J', '%0A', '%00', '%E2%80%A8')])
+def test_no_report_carries_a_character_that_does_not_print(where, escape):
+    text = edited(WHERE_TEXT_GOES[where](escape))
+    with pytest.raises(ScenarioError) as caught:
+        scenario_file.loads(text.encode(), 'launch')
+    assert all(p.message.isprintable() for p in caught.value.problems), caught.value.problems
+    report = caught.value.report()
+    assert all(line.isprintable() for line in report.split('\n')), report
 
 
 # (id, edits, line anchor, the whole message): yaml_syntax, PyYAML's message
@@ -1091,6 +1134,17 @@ SYNTAX = [
      'description:', "YAML: found unknown escape character 'p' at column 18; in double quotes a "
                      '\\ starts an escape: write \\\\ for a backslash, or put the text in single '
                      'quotes'),
+    # PyYAML hands a \U escape to chr(), which raises ValueError past U+10FFFF
+    # and OverflowError past 0x7FFFFFFF; both are a YAML error at the \.
+    ('escape-past-unicode', [(LAUNCH.splitlines(True)[6], 'description: "\\U00110000"\n')],
+     'description:', 'YAML: found escape \\U00110000 at column 15; no character has that code, '
+                     'since Unicode ends at U+10FFFF: check the digits'),
+    ('escape-past-a-c-int', [(LAUNCH.splitlines(True)[6], 'description: "\\UFFFFFFFF"\n')],
+     'description:', 'YAML: found escape \\UFFFFFFFF at column 15; no character has that code, '
+                     'since Unicode ends at U+10FFFF: check the digits'),
+    ('escape-past-unicode-in-a-key', [top('"\\U00110000": 1')], '"\\U00110000"',
+     'YAML: found escape \\U00110000 at column 2; no character has that code, since Unicode ends '
+     'at U+10FFFF: check the digits'),
     ('after-the-document-end', [append('...\nexpect: 1\n')], 'expect: 1',
      "YAML: expected '<document start>', but found '<block mapping start>' at column 1"),
     ('control-character', [('description: Power', 'description: Pow\x07er')], 'description:',

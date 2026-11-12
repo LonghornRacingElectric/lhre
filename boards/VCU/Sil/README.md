@@ -377,8 +377,9 @@ The rules:
   surrogate escapes, which YAML does not join into one character: write the
   emoji itself. A raw control character is an error anywhere, comments
   included.
-- Nesting deeper than 100 levels and an integer longer than Python reads
-  are errors, not crashes.
+- Nesting deeper than 100 levels, an integer longer than Python reads and a
+  `"\U00110000"` escape past the last character are errors, not crashes.
+  A message writes a value or tag that does not print in quotes, escaped.
 
 **Not expressible yet:** APPS1 different from APPS2, front brake different
 from rear, sensor volts, a single AIR, separate loop taps, pins, and CAN

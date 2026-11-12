@@ -205,9 +205,29 @@ class _Loader(yaml.SafeLoader):
         event = self.peek_event()
         if event.version or event.tags:
             # %YAML 1.1 asks for the types this loader reads as text.
-            raise _Refused(event.start_mark, f'%{"YAML" if event.version else "TAG"} is a '
-                           'directive, which this loader does not read; delete the line')
+            raise _Refused(event.start_mark, _directive('YAML' if event.version else 'TAG'))
         return super().compose_document()
+
+    def scan_yaml_directive_number(self, start_mark):
+        try:
+            return super().scan_yaml_directive_number(start_mark)
+        except ValueError:  # int()'s digit limit, which PyYAML does not catch
+            raise _Refused(start_mark, _directive('YAML')) from None
+
+    def scan_flow_scalar_non_spaces(self, double, start_mark):
+        """PyYAML hands an 8-digit \\U escape to chr() unchecked, so one past
+        U+10FFFF raises ValueError or OverflowError, not a YAML error. Only
+        that chr() can raise either: every other code is two or four digits."""
+        try:
+            return super().scan_flow_scalar_non_spaces(double, start_mark)
+        except (ValueError, OverflowError):
+            # The reader stopped on the digits, two past the backslash.
+            at = self.get_mark()
+            escape = yaml.Mark(at.name, at.index - 2, at.line, at.column - 2, at.buffer,
+                               at.pointer - 2 if at.pointer is not None else None)
+            raise yaml.scanner.ScannerError('while scanning a double-quoted scalar', start_mark,
+                                            f'found escape \\U{self.prefix(8)}',
+                                            escape) from None
 
     def parse_block_sequence_entry(self):
         if self.check_token(yaml.BlockEntryToken):
@@ -229,7 +249,9 @@ class _Loader(yaml.SafeLoader):
             raise _Refused(event.start_mark, f'&{event.anchor} is an anchor; this loader reads no '
                            'anchors or aliases, so write each block out')
         if event.tag is not None:
+            # A tag's %1B decodes to ESC, so one that does not print is escaped.
             tag = event.tag.replace('tag:yaml.org,2002:', '!!')
+            tag = tag if tag.isprintable() else _quoted(tag)
             raise _Refused(event.start_mark, f'{tag} is a tag; this loader reads no tags: write '
                            'the value plain, and text in quotes if it must be')
         if self._depth == _MAX_DEPTH:
@@ -252,6 +274,10 @@ class _Loader(yaml.SafeLoader):
 
 for _tag, _pattern in (('bool', _BOOL), ('null', _NULL), ('int', _INT), ('float', _FLOAT)):
     _Loader.add_implicit_resolver(f'tag:yaml.org,2002:{_tag}', _pattern, None)
+
+
+def _directive(name: str) -> str:
+    return f'%{name} is a directive, which this loader does not read; delete the line'
 
 
 def _where(path: tuple) -> str:
@@ -769,6 +795,8 @@ def _syntax_problem(exc: yaml.MarkedYAMLError, text: str) -> Problem:
     elif exc.problem.startswith('found unknown escape character'):
         hint = ('in double quotes a \\ starts an escape: write \\\\ for a backslash, or put the '
                 'text in single quotes')
+    elif exc.problem.startswith('found escape \\U'):
+        hint = 'no character has that code, since Unicode ends at U+10FFFF: check the digits'
     elif exc.problem.startswith('found character'):
         hint = f'text that starts with {row[mark.column]} goes in quotes'
     elif exc.problem.startswith('expected <block end>'):
