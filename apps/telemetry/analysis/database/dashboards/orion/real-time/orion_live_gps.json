@@ -1251,6 +1251,134 @@
         "w": 24,
         "h": 7
       }
+    },
+    {
+      "type": "timeseries",
+      "title": "Motor speed, last 5 min",
+      "datasource": {
+        "type": "lhre-kafka-datasource",
+        "uid": "real-time-data"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "lhre-kafka-datasource",
+            "uid": "real-time-data"
+          },
+          "refId": "A",
+          "topicName": "grafana_data_orion_derived",
+          "partition": "all",
+          "autoOffsetReset": "latest",
+          "timestampMode": "message",
+          "messageFormat": "json",
+          "avroSchemaSource": "schemaRegistry",
+          "selectedFields": [
+            "motor_speed"
+          ],
+          "sampleIntervalMs": 0,
+          "bufferDurationSec": 300
+        }
+      ],
+      "transformations": [
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "binary",
+            "alias": "motor_speed_mph",
+            "replaceFields": false,
+            "binary": {
+              "left": "motor_speed",
+              "operator": "*",
+              "right": "0.014236"
+            }
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "time",
+                "motor_speed_mph"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "time": 0,
+              "motor_speed_mph": 1
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "velocitymph",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": true,
+            "axisBorderShow": false,
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 1
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "motor_speed_mph"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Motor speed"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "id": 7,
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 24,
+        "h": 7
+      },
+      "description": "Rear-wheel speed from inverter RPM: motor_speed x 2pi/60 x 13/43 x 0.201 m x 2.237 = rpm x 0.014236 mph (same as the car dash). Much smoother than GPS and exactly 0 when stopped, but reads high on wheelspin and low on lock-up."
     }
   ]
 }
