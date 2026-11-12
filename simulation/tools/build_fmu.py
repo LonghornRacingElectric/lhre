@@ -12,7 +12,7 @@ from common.vehicle_io import load_yaml
 from tools.invalidation import git, sha256_file
 
 
-BOBLIB_SHA = '4741a5ec6201635051031ed356a1bb55932df89c'
+BOBLIB_SHA = '75b6e031d8f9cb49acdb62b536c41c22e566a020'
 
 
 def git_sha(path):
@@ -28,11 +28,11 @@ def require_matching_models(source, bobsim_root):
         raise ValueError('BobSim has local changes; restore it before building the FMU')
 
 
-def model_text(record):
+def model_text(record, front_brake_bias):
     return f'''model OrionFMI
   extends BobLib.Experiments.Standards.VehicleFMI(
     redeclare record VehicleRecord = BobLib.Records.VehicleDefn.{record},
-    chassis(redeclare record VehicleRecord = BobLib.Records.VehicleDefn.{record}),
+    pVehicle(brakes(frontBrakeBias = {front_brake_bias:.17g})),
     headless = true);
   output Real rearX(unit="m");
   output Real rearY(unit="m");
@@ -47,9 +47,9 @@ protected
   Real rearPosition[3];
   Real forwardAxis[3];
 equation
-  rearReferenceX = pVehicle.pRrDW.wheelCenter[1];
+  rearReferenceX = pVehicle.chassis.rearAxle.geometry.wheelCenter[1];
   rearReferenceY = 0;
-  rearReferenceZ = pVehicle.pRrDW.wheelCenter[3];
+  rearReferenceZ = pVehicle.chassis.rearAxle.geometry.wheelCenter[3];
   rearPosition = chassis.chassisFrame.r_0 + Modelica.Mechanics.MultiBody.Frames.resolve1(
     chassis.chassisFrame.R,
     {{rearReferenceX, rearReferenceY, rearReferenceZ}} - chassis.chassisReferencePosition);
@@ -62,6 +62,18 @@ equation
   rearYawRate = yawVel;
 end OrionFMI;
 '''
+
+
+def stage_records(plan, stage, original):
+    for path, content in plan.contents:
+        target = stage/path.relative_to(original)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content)
+    for path, name in plan.result.package_orders:
+        target = stage/path.relative_to(original)
+        entries = target.read_text().splitlines() if target.exists() else []
+        if name not in entries:
+            target.write_text('\n'.join([*entries, name])+'\n')
 
 
 def build(source, output, vehicle_path, bobsim_root):
@@ -82,21 +94,11 @@ def build(source, output, vehicle_path, bobsim_root):
     exporter = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = exporter
     spec.loader.exec_module(exporter)
-    text = model_text(plan.result.record_name)
+    text = model_text(plan.result.record_name, plan.front_brake_bias)
     with tempfile.TemporaryDirectory(prefix='orion-', dir=output) as raw:
         stage = Path(raw)/'BobLib'
         shutil.copytree(source/'BobLib', stage)
-        for path, content in plan.contents:
-            target = stage/path.relative_to(original)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(content)
-        for path, name in zip(plan.result.package_orders, (  # noqa: B905 pre-existing when the lint gate went on
-                plan.result.record_name, plan.result.vehicle_template_name,
-                plan.result.four_post_template_name)):
-            target = stage/path.relative_to(original)
-            entries = target.read_text().splitlines()
-            if name not in entries:
-                target.write_text('\n'.join([*entries, name])+'\n')
+        stage_records(plan, stage, original)
         artifact = exporter.export_fmu(stage, output, timeout_s=3600, name='OrionFMI', model=text)
     manifest = {
         'schema': 'lhre.fmu.v1', 'fmu_sha256': sha256_file(artifact),

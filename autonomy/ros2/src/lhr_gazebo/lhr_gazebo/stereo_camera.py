@@ -7,16 +7,18 @@ from tempfile import TemporaryDirectory
 from lhr_vehicle import StereoCamera
 
 
-def stereo_model_resources(models_dir) -> TemporaryDirectory:
+def stereo_model_resources(models_dir, *, external_plant=False, stereo=True) -> TemporaryDirectory:
     """Overlay the stereo variant under the world's existing vehicle URI."""
     source = Path(models_dir).resolve() / 'fsae_vehicle'
-    if not (source / 'model_stereo.sdf').is_file():
+    variant = ('model_fmu_stereo.sdf' if stereo else 'model_fmu.sdf') if external_plant else (
+        'model_stereo.sdf' if stereo else 'model.sdf')
+    if not (source / variant).is_file():
         raise FileNotFoundError('Missing model_stereo.sdf; regenerate the models and rebuild')
     resources = TemporaryDirectory(prefix='lhr-stereo-')
     model = Path(resources.name) / 'fsae_vehicle'
     model.mkdir()
     for name, target in (('model.config', 'model.config'),
-                         ('model.sdf', 'model_stereo.sdf'), ('meshes', 'meshes')):
+                         ('model.sdf', variant), ('meshes', 'meshes')):
         (model / name).symlink_to(source / target, target_is_directory=name == 'meshes')
     return resources
 

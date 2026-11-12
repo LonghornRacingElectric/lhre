@@ -14,6 +14,11 @@ The BobSim test takes about 6 s of `make unit`.
 
 ## What the tests check
 
+- `test_fmu_source.py`: matched Modelica trees, clean and readable dependency
+  checkouts, and staging the current public generation plan without duplicate
+  package-order entries. Native FMU checks run separately in the autonomy
+  container; see the [FMU guide](fmu.md).
+
 - `test_bobsim_layout.py`: lhre code and docs use the BobSim names at the
   pin. Every import resolves. `make records` writes only into the BobLib of
   BobSim.

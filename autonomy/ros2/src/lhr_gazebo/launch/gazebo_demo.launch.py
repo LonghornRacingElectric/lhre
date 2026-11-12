@@ -155,6 +155,10 @@ def _launch_setup(context: LaunchContext):
     track_style + seed at launch time.
     """
     track_style = context.launch_configurations.get('track_style', 'autocross')
+    plant = context.launch_configurations.get('plant', 'gazebo')
+    if plant not in ('gazebo', 'fmu'):
+        raise ValueError('plant must be gazebo or fmu')
+    external_plant = plant == 'fmu'
     world_path = _find_world(context)
     if not world_path:
         seed = context.launch_configurations.get('seed', '1')
@@ -198,6 +202,9 @@ def _launch_setup(context: LaunchContext):
         'estimator', 'truth').lower() == 'ekf'
     fault = context.launch_configurations.get('fault', '')
     fault_remaps = _fault_remaps(fault, use_ekf, context.launch_configurations)
+    if external_plant:
+        if fault == 'steer_freeze':
+            fault_remaps = {'sim_fmu': fault_remaps['joint_cmd_adapter']}
     # The sensor sim observes the plant, never the injected driving estimate.
     caster_odom = '/lhr/vehicle/odom_truth' if use_ekf else (
         '/lhr/vehicle/odom_raw' if fault in ('odom_nan', 'odom_spike')
@@ -258,11 +265,12 @@ def _launch_setup(context: LaunchContext):
 
     resource_path = models_dir
     resource_cleanup = []
-    if enable_stereo:
+    if enable_stereo or external_plant:
         from lhr_gazebo.stereo_camera import stereo_model_resources
         # Keep world URIs and mesh paths identical in both modes. The overlay
         # lives for this launch only; concurrent runs never edit shared models.
-        resources = stereo_model_resources(models_dir)
+        resources = stereo_model_resources(
+            models_dir, external_plant=external_plant, stereo=enable_stereo)
         resource_path = os.pathsep.join((resources.name, models_dir))
         resource_cleanup.append(RegisterEventHandler(OnShutdown(
             on_shutdown=lambda event, context: resources.cleanup())))
@@ -304,7 +312,8 @@ def _launch_setup(context: LaunchContext):
         executable='parameter_bridge',
         name='ros_gz_bridge',
         parameters=[{
-            'config_file': os.path.join(config_dir, 'ros_gz_bridge.yaml'),
+            'config_file': os.path.join(
+                config_dir, 'ros_gz_fmu_bridge.yaml' if external_plant else 'ros_gz_bridge.yaml'),
         }],
         remappings=bridge_remaps + fault_remaps.get('ros_gz_bridge', []),
         output='screen',
@@ -313,14 +322,14 @@ def _launch_setup(context: LaunchContext):
     # ----- State estimation -----
     estimation_nodes = []
     if use_ekf:
-        # Gazebo already bridges a physics IMU, so only the wheel speeds
-        # are synthesized here.
+        # FMU mode temporarily synthesizes both sensors from FMU truth (#205);
+        # the default Gazebo plant supplies its own physics IMU.
         estimation_nodes.append(Node(
             package='lhr_sensor_sim',
             executable='inertial_sim',
             name='inertial_sim',
             parameters=[{
-                'publish_imu': False,
+                'publish_imu': external_plant,
                 'gyro_bias': _float('gyro_bias'),
                 'wheel_scale_error': _float('wheel_scale_error'),
                 'use_sim_time': True,
@@ -354,6 +363,11 @@ def _launch_setup(context: LaunchContext):
         remappings=fault_remaps.get('joint_cmd_adapter', []),
         output='screen',
     )
+
+    plant_nodes = []
+    if external_plant:
+        from lhr_gazebo.fmu_launch import fmu_actions
+        plant_nodes = fmu_actions(context, world_path, caster_odom, use_ekf, fault_remaps)
 
     # ----- Perception nodes -----
     perception_nodes = []
@@ -565,7 +579,8 @@ def _launch_setup(context: LaunchContext):
                     LaunchConfiguration('max_odom_gap_sec'), value_type=float),
                 'truth_odom_topic': '/lhr/vehicle/odom_truth' if use_ekf else '',
                 'scenario': 'gazebo_demo',
-                'plant': 'gazebo',
+                'plant': plant,
+                **({'fmu_pedal_gain': _float('fmu_pedal_gain')} if external_plant else {}),
                 'seed': ParameterValue(LaunchConfiguration('seed'), value_type=int),
                 'num_waypoints': ParameterValue(
                     LaunchConfiguration('num_waypoints'), value_type=int),
@@ -707,7 +722,7 @@ def _launch_setup(context: LaunchContext):
         *resource_cleanup,
         gz_sim,
         bridge,
-        cmd_adapter,
+        *([cmd_adapter] if not external_plant else plant_nodes),
         *camera_nodes,
         *estimation_nodes,
         *perception_nodes,
@@ -725,6 +740,11 @@ def _launch_setup(context: LaunchContext):
 def generate_launch_description():
     return LaunchDescription([
         # ----- Launch arguments -----
+        DeclareLaunchArgument('plant', default_value='gazebo', choices=['gazebo', 'fmu']),
+        DeclareLaunchArgument('fmu_path', default_value=''),
+        DeclareLaunchArgument('fmu_pedal_gain', default_value='0.1'),
+        DeclareLaunchArgument('fmu_command_timeout_sec', default_value='0.5'),
+        DeclareLaunchArgument('fmu_pose_timeout_sec', default_value='5.0'),
         DeclareLaunchArgument(
             'world', default_value='',
             description='Override: absolute path to world SDF file'),

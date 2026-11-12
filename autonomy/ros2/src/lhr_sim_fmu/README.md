@@ -3,8 +3,9 @@
 Run Orion's full BobLib Modelica vehicle through FMI 2.0 co-simulation.
 The upstream CVODE solver advances the model. The existing ROS simulator
 interface publishes `/clock`, rear-axle odometry and TF after accepted steps.
-The default plant remains kinematic. Gazebo keeps its own dynamics; this
-package is selected only by the MVS launcher.
+The MVS default plant remains kinematic. The Gazebo launcher also supports
+`plant:=fmu`, with Gazebo rendering sensors at the FMU pose; its default
+remains `plant:=gazebo`.
 
 ## Build and run
 
@@ -29,6 +30,7 @@ The standard Docker mount resolves the artifact at
 
 | Node parameter | Default | Meaning |
 | --- | --- | --- |
+| `external_clock` | false | Subscribe to Gazebo time instead of using the MVS timer |
 | `fmu_path` | empty | Artifact path; adjacent `provenance.json` is required |
 | `pedal_gain` | 0.1 | Pedal demand per m/s of speed error |
 | `command_timeout_sec` | 0.5 | Brake toward zero speed after commands expire |
@@ -37,6 +39,22 @@ The MVS launcher exposes `fmu_path` and `fmu_pedal_gain` with typed startup
 checks in both perception and estimator modes. It records `fmu_pedal_gain`
 in metrics. Shared initial pose, clock, odometry and EKF remappings match the
 other plants. Changing parameters is a startup operation, not live tuning.
+
+## Gazebo clock mode
+
+See the [Gazebo guide](../lhr_gazebo/README.md#fmu-motion) for launch flags,
+sensor limitations and observed pose-lag logging. Both perception branches
+forward artifact, pedal gain and command timeout with explicit ROS types.
+`external_clock=true` cancels the inherited timer and cannot be combined with
+`publish_clock=true`. The first positive Gazebo clock stamp anchors native
+FMU time zero. Each complete 20 ms interval advances the plant once; duplicate
+clock samples do nothing. Odometry and TF carry the accepted integration time,
+which never exceeds the received clock. Rewinding the world fails the node;
+restart the launch to create a fresh FMI instance.
+
+The fixed-step catch-up loop preserves elapsed simulation time; it is not a
+real-time speed guarantee. There is no second `/clock` publisher in FMU Gazebo
+mode. Initial pose comes from the world's saved vehicle spawn.
 
 ## Vehicle and command contract
 
@@ -63,7 +81,7 @@ height), projected into XY. It exports heading and twist from the chassis
 frame. The loader checks that reference against the canonical vehicle.
 Roll, pitch and suspension remain internal; the ROS interface is planar. One fixed map transform places the native start at the requested
 ROS pose. The adapter does not integrate yaw rate or velocity to invent pose.
-The simulation clock starts at ROS time 1 s, while the FMU starts at 0 s;
+In MVS mode the simulation clock starts at ROS time 1 s, while the FMU starts at 0 s;
 accepted step increments are identical.
 
 The loader rejects altered artifact/vehicle/tire bytes and a different BobSim
@@ -89,8 +107,8 @@ LHR_TEST_FMU=/opt/lhr/simulation/out/fmu/OrionFMI.fmu \
 CI runs interface/error/provenance tests without building a large native FMU.
 The native test skips unless `LHR_TEST_FMU` is set; if set, a missing or stale
 artifact fails. It covers waiting, launch, both steering directions, stopping and
-relaunch. It also checks that compiled aero references match our car rather
-than the different BobLib defaults. Launch tests evaluate flags and start the node with an injected
+relaunch. It also checks that compiled aero references and front brake bias match our
+car rather than the BobLib defaults. Launch tests evaluate flags and start the node with an injected
 plant to check types and EKF routing without pretending to test physics.
 
 Any rejected FMI step or nonfinite state fails the process. Native resources

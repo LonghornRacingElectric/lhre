@@ -172,6 +172,9 @@ The gate passes only when every run passes. Per the pass criteria, a failed
 run gets an issue in the milestone and is repeated after the fix, never
 dropped.
 
+Select the opt-in Gazebo/FMU coupling with `EXTRA="plant:=fmu"`. See [FMU motion](../../../ros2/src/lhr_gazebo/README.md#fmu-motion)
+for artifact setup, sensor limitations and pose lag. Existing defaults are unchanged.
+
 ### The reference lap
 
 `lap_time` compares the lap with the fastest standing-start lap of the

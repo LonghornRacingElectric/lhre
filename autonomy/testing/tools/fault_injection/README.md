@@ -115,6 +115,9 @@ SharePoint ([testing/README.md](../../README.md)).
 Any run that is not `caught` (or `clean`), or has `within_pdr` false, gets
 an issue.
 
+Select the opt-in Gazebo/FMU coupling with `EXTRA="plant:=fmu"`. See [FMU motion](../../../ros2/src/lhr_gazebo/README.md#fmu-motion)
+for artifact setup, sensor limitations and pose lag. Existing defaults are unchanged.
+
 ## Rules-compliant courses
 
 `TRACK=rules_autocross` runs fault cases on the new generated course style.
