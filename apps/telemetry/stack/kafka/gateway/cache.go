@@ -66,6 +66,17 @@ func NewCache(s *Schema, r *Ring, files *Files, hotBytes, baselineBytes, pinByte
 	return c, nil
 }
 func (c *Cache) Close() { c.hot.Close(); c.baseline.Close() }
+
+// Do waits for the shared operation before the owning snapshot can close.
+// Client cancellation must not cancel the operation for other callers.
+func (c *Cache) sharedRead(ctx context.Context, key string, read func(context.Context) (any, error)) (any, error) {
+	value, err, _ := c.flight.Do(key, func() (any, error) {
+		work, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+		return read(work)
+	})
+	return value, err
+}
 func externalSignature(sessions []Session) string {
 	parts := []string{}
 	for _, s := range sessions {
@@ -166,7 +177,7 @@ func (c *Cache) Rows(ctx context.Context, snap Snapshot, p Pool, start, end int6
 	// Coalesce the expensive fetch while each caller retains its own metadata
 	// snapshot. A revision/offset signature prevents cross-snapshot reuse.
 	flightKey := fmt.Sprintf("%s/%v/%v", key, snap.Sessions(), snap.Offsets())
-	value, err, _ := c.flight.Do(flightKey, func() (any, error) { return snap.Read(ctx, p, start, end, nil) })
+	value, err := c.sharedRead(ctx, flightKey, func(work context.Context) (any, error) { return snap.Read(work, p, start, end, nil) })
 	if err != nil {
 		return nil, "", err
 	}

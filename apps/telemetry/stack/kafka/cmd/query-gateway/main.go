@@ -14,7 +14,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/IBM/sarama"
 	"github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/gateway"
 )
 
@@ -102,28 +101,7 @@ func main() {
 	engine := &gateway.Engine{Schema: schema, Store: store, Cache: cache, Secret: secret, Feeds: feeds}
 	brokers := strings.Split(env("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092"), ",")
 	go gateway.Consume(ctx, brokers, env("QUERY_KAFKA_GROUP", "artemis-query-gateway-v1"), topic, liveTopics, store, ring, decoder, feeds)
-	go files.Run(ctx, store, func(ctx context.Context) (gateway.Offsets, error) {
-		cfg := sarama.NewConfig()
-		cfg.Net.DialTimeout = 5 * time.Second
-		client, err := sarama.NewClient(brokers, cfg)
-		if err != nil {
-			return nil, err
-		}
-		defer client.Close()
-		parts, err := client.Partitions(topic)
-		if err != nil {
-			return nil, err
-		}
-		offsets := gateway.Offsets{}
-		for _, part := range parts {
-			off, err := client.GetOffset(topic, part, sarama.OffsetNewest)
-			if err != nil {
-				return nil, err
-			}
-			offsets[part] = off
-		}
-		return offsets, nil
-	})
+	go files.Run(ctx, store)
 	server := &http.Server{Addr: env("QUERY_ADDR", ":8090"), Handler: engine.Handler(token), ReadTimeout: 30 * time.Second, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
 	shutdownDone := make(chan struct{})
 	go func() {

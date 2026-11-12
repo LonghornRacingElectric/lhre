@@ -106,7 +106,7 @@ go_binary(
     srcs = ["cmd/query-gateway/main.go"],
     importpath = "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/cmd/query-gateway",
     pure = "on",
-    deps = [":query_gateway_lib", "@com_github_ibm_sarama//:sarama"],
+    deps = [":query_gateway_lib"],
     target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )

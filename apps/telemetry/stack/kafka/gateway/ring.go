@@ -42,6 +42,14 @@ func (r *Ring) Start(partition int32, offset int64) {
 func (r *Ring) Ready(ready bool) { r.mu.Lock(); r.ready = ready; r.mu.Unlock() }
 
 func (r *Ring) Add(partition int32, offset int64, rows []LiveRow) {
+	r.add(partition, offset, rows, false)
+}
+
+func (r *Ring) Reject(partition int32, offset int64) {
+	r.add(partition, offset, nil, true)
+}
+
+func (r *Ring) add(partition int32, offset int64, rows []LiveRow, rejected bool) {
 	encoded, _ := json.Marshal(rows)
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -51,6 +59,10 @@ func (r *Ring) Add(partition int32, offset int64, rows []LiveRow) {
 	if offset != r.next[partition] {
 		r.gaps++
 		r.floor[partition] = offset
+	}
+	if rejected {
+		r.gaps++
+		r.floor[partition] = offset + 1
 	}
 	// Copy-on-read keeps callers from sharing mutable values with the consumer.
 	now := time.Now().UnixMilli()

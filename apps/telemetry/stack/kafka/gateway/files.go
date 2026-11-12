@@ -372,28 +372,18 @@ func (f *Files) evict() error {
 }
 
 // The single worker also discovers old sessions after all derived files vanish.
-func (f *Files) Run(ctx context.Context, store Store, heads func(context.Context) (Offsets, error)) {
+func (f *Files) Run(ctx context.Context, store Store) {
 	tick := time.NewTicker(30 * time.Second)
 	defer tick.Stop()
 	for {
 		if f.Dir != "" && f.Cap > 0 {
 			func() {
-				boundary, err := heads(ctx)
-				if err != nil {
-					return
-				}
 				snap, err := store.Snapshot(ctx, 0, time.Now().UnixMilli()+1)
 				if err != nil {
 					return
 				}
 				sessions := snap.Sessions()
-				progress := snap.Offsets()
 				snap.Close(ctx)
-				for part, end := range boundary {
-					if progress[part] < end {
-						return
-					}
-				}
 				for _, s := range sessions {
 					if time.Now().UnixMilli()-s.Written < 300000 {
 						continue
@@ -421,6 +411,10 @@ func (f *Files) Run(ctx context.Context, store Store, heads func(context.Context
 					}
 					if err := f.Seal(ctx, store, s); err != nil {
 						log.Printf("query seal session %d: %v", s.ID, err)
+						if ctx.Err() != nil {
+							return
+						}
+						continue
 					}
 					f.mu.Lock()
 					delete(f.queue, s.ID)

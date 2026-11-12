@@ -141,9 +141,12 @@ request cannot establish complete coverage, it returns `tail_unavailable` until
 the shared consumer catches up. The ring is bounded by time and accounted bytes;
 it can discard pending samples under sustained pressure and reports coverage
 gaps. It does not promise infinite buffering during a writer outage.
-Undecodable native records are logged with their topic, partition and offset
-and skipped by the live reader; later valid records continue flowing. This does
-not advance the database writer's independent persistence checkpoint.
+Undecodable or unsupported native Artemis records are logged with their topic,
+partition and offset and create an explicit coverage gap. Consumption continues,
+but recent queries return `tail_unavailable` until the writer's checkpoint passes
+the rejected offset. Quarantine/recovery belongs to ingestion operations; the
+gateway never advances the persistence checkpoint or claims missing rows are
+represented.
 
 `GET /v1/stream?query=<URL-encoded query JSON>` uses SSE. `t1: "live"` and
 `window_ms` select a moving window. Events replace that bounded window, including
@@ -173,8 +176,15 @@ UTC dates; `QUERY_PIN_BYTES` reserves
 at most half of `QUERY_L1_BYTES` for hot entries from those days. Pinning is bounded
 and does not preload an entire day.
 
+Shared source reads use an independent 30-second context, so one disconnected
+client cannot cancel work needed by another. Callers wait for in-flight shared
+work to finish; the owning database snapshot stays open until it completes.
+
 The single background seal worker exports idle sessions after five minutes
-without writes and after the writer reaches a captured Kafka backlog boundary.
+without database writes. It seals a consistent database revision, independently
+of the Kafka log-end offset; unrelated, rejected or backlogged records cannot
+block historical copies. Later persistence changes the revision and invalidates
+the old files. Failed seals retry on a later worker pass.
 It writes versioned Arrow files and manifests with checksums, source counts,
 timestamp bounds, persistence offsets and a batch index. Raw batches cover one
 minute; companion one-second overviews retain count/sum/min/max/last state.

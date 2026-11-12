@@ -260,14 +260,21 @@ func (h *consumerHandler) ConsumeClaim(s sarama.ConsumerGroupSession, c sarama.C
 					format = string(header.Value)
 				}
 			}
-			if car != "Artemis" || format != "artemis_updates_v1" {
+			if car != "Artemis" {
 				h.ring.Add(m.Partition, m.Offset, nil)
+				s.MarkMessage(m, "")
+				continue
+			}
+			if format != "artemis_updates_v1" {
+				log.Printf("query Kafka: rejecting unsupported Artemis format %q at %s/%d/%d", format, m.Topic, m.Partition, m.Offset)
+				h.ring.Reject(m.Partition, m.Offset)
+				s.MarkMessage(m, "")
 				continue
 			}
 			rows, err := h.decoder.Decode(m.Value)
 			if err != nil {
-				log.Printf("query Kafka: skipping undecodable record %s/%d/%d: %v", m.Topic, m.Partition, m.Offset, err)
-				h.ring.Add(m.Partition, m.Offset, nil)
+				log.Printf("query Kafka: rejecting undecodable record %s/%d/%d: %v", m.Topic, m.Partition, m.Offset, err)
+				h.ring.Reject(m.Partition, m.Offset)
 				s.MarkMessage(m, "")
 				continue
 			}

@@ -71,7 +71,7 @@ func (e *Engine) historicalPool(ctx context.Context, snap Snapshot, p Pool, sign
 		e.Cache.Reads[1].Add(1)
 		return poolResult{entry.Prepared, []string{"L1"}}, nil
 	}
-	value, err, _ := e.Cache.flight.Do(key, func() (any, error) {
+	value, err := e.Cache.sharedRead(ctx, key, func(ctx context.Context) (any, error) {
 		result := poolResult{}
 		sealed := len(snap.Sessions()) > 0
 		for _, session := range snap.Sessions() {

@@ -136,7 +136,7 @@ func (c *Cache) aggregate(ctx context.Context, snap Snapshot, p Pool, from, to, 
 	if rows == nil {
 		source = "postgres"
 		flightKey := fmt.Sprintf("%s/%v", key, snap.Offsets())
-		value, err, _ := c.flight.Do(flightKey, func() (any, error) { return reader.Aggregate(ctx, p, from, to, width) })
+		value, err := c.sharedRead(ctx, flightKey, func(work context.Context) (any, error) { return reader.Aggregate(work, p, from, to, width) })
 		if err != nil {
 			return nil, nil, "", err
 		}

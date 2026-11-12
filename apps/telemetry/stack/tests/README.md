@@ -85,8 +85,10 @@ database writer, checks that the API serves pending samples from its ring,
 resumes persistence without duplicate observations, follows raw pagination,
 and executes a maximum query through Grafana's actual backend datasource.
 It also restarts the gateway over retained JSON feed messages and verifies that
-new live events are served without replay, then checks that an undecodable
-native record cannot stop subsequent valid live updates.
+new live events are served without replay. An undecodable native record reports
+a coverage gap; later records remain consumed, and the real writer recovers
+after explicit fixture quarantine. Historical sealing proceeds despite that
+unprocessed Kafka tail.
 Historical paging checks same-sample fields and continuation into later samples.
 Eight distinct cold requests verify progress when all four database connections
 are occupied.

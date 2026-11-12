@@ -99,6 +99,57 @@ func TestRecentWindowUsesBaselineAndKafkaAcrossPersistence(t *testing.T) {
 		t.Fatalf("Persistence duplicated/refetched data: %+v reads=%d", persisted, store.reads.Load())
 	}
 }
+
+func TestSharedReadSurvivesLeaderCancellation(t *testing.T) {
+	e, _, _ := setup(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	started, release := make(chan struct{}), make(chan struct{})
+	leader := make(chan error, 1)
+	go func() {
+		_, err := e.Cache.sharedRead(ctx, "cancelled-leader", func(work context.Context) (any, error) {
+			close(started)
+			<-release
+			return "complete", work.Err()
+		})
+		leader <- err
+	}()
+	<-started
+	// DoChan registers the follower before cancellation, without a timing race.
+	follower := e.Cache.flight.DoChan("cancelled-leader", func() (any, error) { return "unexpected second read", nil })
+	cancel()
+	close(release)
+	result := <-follower
+	if result.Err != nil || result.Val != "complete" || !result.Shared {
+		t.Fatalf("follower: %+v", result)
+	}
+	if err := <-leader; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRejectedRecordRequiresPersistenceProofBeforeServingRecentData(t *testing.T) {
+	e, store, start := setup(t)
+	r := request(start, "controls.apps")
+	if _, err := e.Query(context.Background(), r); err != nil {
+		t.Fatal(err)
+	}
+	e.Cache.Ring.Reject(0, 10)
+	row := Row{Time: start + 20, NS: (start + 20) * 1000000, Values: map[string]any{"apps": 50.0}}
+	e.Cache.Ring.Add(0, 11, []LiveRow{{Pool: "controls_100hz", Row: row}})
+	_, err := e.Query(context.Background(), r)
+	if p, ok := err.(*queryProblem); !ok || p.Code != "tail_unavailable" {
+		t.Fatalf("incomplete coverage: %v", err)
+	}
+	row.Session = start
+	store.rows["controls_100hz"] = append(store.rows["controls_100hz"], row)
+	store.offsets[0] = 12
+	store.sessions[0].Revision++
+	page, err := e.Query(context.Background(), r)
+	if err != nil || len(page.Data) != 2 || page.Data[1].Value != 50.0 {
+		t.Fatalf("recovery: %+v %v", page, err)
+	}
+}
 func TestImportInvalidatesRecentBaseline(t *testing.T) {
 	e, store, start := setup(t)
 	r := request(start, "controls.apps")

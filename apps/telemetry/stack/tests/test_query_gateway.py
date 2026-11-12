@@ -11,11 +11,12 @@ import urllib.request
 import urllib.parse
 from datetime import datetime, timezone
 
-from kafka import KafkaProducer
-from sqlalchemy import create_engine, select, MetaData, Table
+from kafka import KafkaProducer, KafkaConsumer, TopicPartition
+from kafka.structs import OffsetAndMetadata
+from sqlalchemy import create_engine, select, update, MetaData, Table
 from sqlalchemy.orm import Session
 
-from analysis.sql_utils.models import ArtemisIngestProgress
+from analysis.sql_utils.models import ArtemisIngestProgress, ArtemisRecordingSession
 from stack.ingest.protobuf import artemis_pb2
 
 
@@ -167,11 +168,34 @@ class QueryGatewayTest(unittest.TestCase):
             with urllib.request.urlopen(request, timeout=15) as response:
                 event = json.loads(response.readline().decode().removeprefix("data: "))
                 self.assertEqual(len(event["page"]["data"]), 3)
-            # Keep the writer stopped: its independent poison-record policy is
-            # intentional. The live reader must still serve later valid samples.
+            # Rejected native data creates an explicit gap while consumption
+            # continues. It cannot count as fully represented live coverage.
             control("stop")
-            producer.send("sensor_data", b"\xff", headers=[("car_type", b"Artemis"), ("payload_format", b"artemis_updates_v1")]).get(timeout=15)
-            send(stamp + 30, "controls", "apps1_travel", 60)
+            before_rejection = call("/v1/stats")["ring"]["records"]
+            rejected = producer.send("sensor_data", b"\xff", headers=[("car_type", b"Artemis"), ("payload_format", b"artemis_updates_v1")]).get(timeout=15)
+            valid = send(stamp + 30, "controls", "apps1_travel", 60)
+            self.wait_for(lambda: call("/v1/stats"), lambda p: p["ring"]["records"] >= before_rejection + 2 and p["ring"]["gaps"] > 0 and p["ring"]["ready"])
+            with self.assertRaises(urllib.error.HTTPError) as unavailable:
+                call("/v1/query", query)
+            self.assertEqual(unavailable.exception.code, 503)
+            self.assertEqual(json.load(unavailable.exception)["error"]["code"], "tail_unavailable")
+
+            # Historical sealing depends on its database revision, not the
+            # unread native tail. Age the test recording to avoid a five-minute wait.
+            with engine.begin() as db:
+                db.execute(update(ArtemisRecordingSession).where(ArtemisRecordingSession.session_start_ms == historical).values(last_write_ms=time.time_ns() // 1_000_000 - 360_000))
+            probe = f"import glob,json; print(any(json.load(open(p)).get('session_start_ms') == {historical} and json.load(open(p)).get('pool') == 'controls_333hz' for p in glob.glob('/cache/*.json')))"
+            self.wait_for(lambda: subprocess.check_output([*compose, "exec", "-T", "query_gateway", "python", "-c", probe], text=True).strip(), lambda result: result == "True")
+
+            # Explicitly quarantine this known malformed fixture record. The
+            # actual writer must persist the following valid record to recover.
+            resetter = KafkaConsumer(bootstrap_servers="localhost:39092", group_id="telemetry-db-writer-v1", enable_auto_commit=False)
+            try:
+                resetter.commit({TopicPartition("sensor_data", rejected.partition): OffsetAndMetadata(rejected.offset + 1, "fixture quarantine", -1)})
+            finally:
+                resetter.close(autocommit=False)
+            control("start")
+            self.wait_for(lambda: persisted(valid))
             recovered = self.wait_for(lambda: call("/v1/query", query), lambda p: len(p["data"]) == 4)
             self.assertEqual(next(r["value"] for r in recovered["data"] if r["ts"] == iso(stamp + 30).replace("+00:00", "Z")), 60)
         finally:
