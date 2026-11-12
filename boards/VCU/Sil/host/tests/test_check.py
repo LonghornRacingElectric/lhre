@@ -573,7 +573,8 @@ def test_thresholds_match_params_hpp():
                 'BseParams::bot_pedal_off', 'BseParams::full_scale_psi',
                 'BseParams::hard_brake_pin_v', 'ShutdownParams::high_pin_v',
                 'ShutdownParams::low_pin_v', 'ShutdownParams::debounce_ms',
-                'DigitalParams::rtd_debounce_ms', 'DriveParams::rtd_max_pedal'):
+                'DigitalParams::rtd_debounce_ms', 'DriveParams::rtd_max_pedal',
+                'InverterParams::torque_limit_nm'):
         assert key in check.THRESHOLDS, key
     for key, value in check.THRESHOLDS.items():
         assert key in header, f'{key} is not in params.hpp'

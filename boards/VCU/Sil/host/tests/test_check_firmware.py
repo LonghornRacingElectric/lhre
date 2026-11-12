@@ -15,7 +15,7 @@ from fakes import ToyCar
 from test_check import (BASE, UNPLUGGED_RTD, at, brake_off_at, drive, hard_stop_pedal_at,
                         insert_before, press_at, released)
 
-from vcusil import check, cosim, scenario_file
+from vcusil import check, cosim, fwmodel, scenario_file
 from vcusil.firmware import Firmware
 
 LOOP_UNKNOWN, LOOP_CLOSED, LOOP_UPSTREAM_OPEN = 0, 1, 3  # lhre ShutdownLoopState
@@ -271,7 +271,7 @@ def test_the_loop_model_is_the_firmwares(lib, text):
     sf, models, snaps, _ = _run(lib, text)
     states = {None: LOOP_UNKNOWN, True: LOOP_CLOSED, False: LOOP_UPSTREAM_OPEN}
     assert [states[r] for r in models.loop.reported] == [s['loop_state'] for s in snaps]
-    pins = [check._loop_pin_v(v) for v in models.values['shutdown_loop_v']]
+    pins = [fwmodel.loop_pin_v(v) for v in models.values['shutdown_loop_v']]
     for k, s in enumerate(snaps):
         assert pins[k] == pytest.approx(s['analog_shutdown_in_pin_v'], abs=1e-6)
         assert pins[k] == pytest.approx(s['analog_shutdown_out_pin_v'], abs=1e-6)

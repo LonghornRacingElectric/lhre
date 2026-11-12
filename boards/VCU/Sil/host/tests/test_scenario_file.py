@@ -12,7 +12,7 @@ import pytest
 import yaml
 from fakes import Launch, ToyCar
 
-from vcusil import check, cosim, report, scenario_file
+from vcusil import check, cosim, fwmodel, report, scenario_file
 from vcusil.candecode import CanTable
 from vcusil.firmware import (EVENT_MODES, HVC_ENERGIZED, HVC_NOT_ENERGIZED, HVC_PRECHARGING,
                              HVC_STATES, STATE_DRIVE, Firmware)
@@ -1733,7 +1733,7 @@ def test_shutdown_demo_faults_within_20_ms(lib):
     the 3 ms ticks reach at 4014."""
     rows = _run_demo(lib, 'shutdown-loop-open')
     fault = [r['t_ms'] for r in rows if r['fw_state'] == STATE_FAULT]
-    assert fault[0] == first_step_ms(4000) + check._debounced(
+    assert fault[0] == first_step_ms(4000) + fwmodel.debounced(
         check.THRESHOLDS['ShutdownParams::debounce_ms']) == 4014
     assert fault == list(range(fault[0], rows[-1]['t_ms'] + 3, 3))  # and stays there
     after = [r for r in rows if r['t_ms'] >= fault[0]]
