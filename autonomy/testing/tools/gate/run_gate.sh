@@ -35,6 +35,18 @@ case "$TRACK_STYLE" in
     *) echo "unsupported gate TRACK_STYLE=$TRACK_STYLE" >&2; exit 2 ;;
 esac
 ROS2=$(cd "$HERE/../../../ros2" && pwd)
+# Opt-in extension; the historical MVP matrix stays unchanged.
+EXTREMES=${EXTREMES-}
+if [ -n "$EXTREMES" ]; then
+    NAMED_STYLES=$(python3 -c 'from lhr_trackgen.extreme_autocross import SCENARIOS; print(" ".join(SCENARIOS))') || exit 2
+    [ "$EXTREMES" = all ] && EXTREMES=$NAMED_STYLES
+    for style in $EXTREMES; do
+        case " $NAMED_STYLES " in
+            *" $style "*) ;;
+            *) echo "unsupported extreme course $style" >&2; exit 2 ;;
+        esac
+    done
+fi
 
 TOPICS="/clock /lhr/mission/status /lhr/mission/complete /lhr/metrics/lap_complete
 /lhr/vehicle/odom /lhr/vehicle/odom_truth /lhr/safety/status"
@@ -131,6 +143,14 @@ plan() {  # one line per run: the id, then its launch arguments
         fi
         for r in $(seq 1 "$REPEATS"); do
             echo "${TRACK_STYLE}_s${s}_r$r track_style:=$TRACK_STYLE seed:=$s perception:=lidar estimator:=ekf $sensors"
+        done
+    done
+    for style in $EXTREMES; do
+        if [ "$BASELINE" != 0 ]; then
+            echo "baseline_${style}_s1 track_style:=$style seed:=1 perception:=sim estimator:=truth lidar_source:=gazebo enable_stereo_camera:=false enable_camera_lidar_fusion:=false"
+        fi
+        for r in $(seq 1 "$REPEATS"); do
+            echo "${style}_s1_r$r track_style:=$style seed:=1 perception:=lidar estimator:=ekf $sensors"
         done
     done
     for r in $(seq 1 "${ACCEL_REPEATS:-0}"); do

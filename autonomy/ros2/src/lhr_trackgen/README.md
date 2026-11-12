@@ -135,3 +135,15 @@ Metrics reads the selected world's ordered pairs, including return sections;
 no reference route is supplied to perception or control. See the
 [gate runner](../../../testing/tools/gate/README.md) and
 [fault runner](../../../testing/tools/fault_injection/README.md) for campaigns.
+
+## Fixed extreme autocross courses
+
+The seven `extreme_*` styles are deterministic edge cases for #212, built
+from analytic-tangent straights, turns, chicanes and slaloms. See
+[the world catalog](../lhr_gazebo/worlds/README.md#extreme-autocross-set) for
+names, measured limits, regeneration and the gate command. Their only seed
+is 1; generic dimension and spacing parameters do not alter named fixtures.
+The three-metre courses use a smaller chord reserve than random courses,
+and the 500 m target is the scored closed polyline. Every returned layout
+passes the same envelope checker. Each call returns independent lists so a
+consumer cannot mutate a cached fixture. Legacy generators are unchanged.

@@ -30,6 +30,7 @@ import sys
 
 from lhr_metrics.reference import paired_centerline, world_geometry
 from lhr_metrics.reference_lap import reference_lap
+from lhr_trackgen.extreme_autocross import SCENARIOS
 from rclpy.serialization import deserialize_message
 from rosbag2_py import ConverterOptions, SequentialReader, StorageOptions
 from rosidl_runtime_py.utilities import get_message
@@ -53,8 +54,10 @@ FIELDS = (['id', 'kind', 'event', 'track_style', 'seed', 'outcome', 'lap_time_s'
            'off_track_count', 'cones_hit', 'max_pos_error',
            'stop_dist_m', 'stop_time_s', 'max_v_after_stop', 'finished', 'emergency',
            'early_exits', 'end', 'sim_s', 'wall_s', 'invalid_reason'] + CHECKS + ['passed'])
+COURSE_STYLES = ('autocross', 'rules_autocross', 'acceleration', 'skidpad', *SCENARIOS)
 RUN_ID = re.compile(
-    r'^(baseline_)?(autocross|rules_autocross|acceleration|skidpad)(?:_s(\d+))?(?:_r(\d+))?$')
+    r'^(baseline_)?(' + '|'.join(map(re.escape, COURSE_STYLES))
+    + r')(?:_s(\d+))?(?:_r(\d+))?$')
 
 
 def read(bag):
@@ -176,7 +179,7 @@ def score(run_dir, run_id):
     if not match:
         return None
     baseline, style, seed, _ = match.groups()
-    event = 'autocross' if style == 'rules_autocross' else style
+    event = style if style in ('acceleration', 'skidpad') else 'autocross'
     row = {'id': run_id, 'kind': 'baseline' if baseline else 'gate', 'event': event,
            'seed': seed or '', 'track_style': style}
     if not os.path.isdir(run_dir):
