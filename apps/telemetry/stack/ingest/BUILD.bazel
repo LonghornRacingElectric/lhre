@@ -98,6 +98,8 @@ py_library(
         "__init__.py",
         "mqtt_handler.py",
         "partition_manager.py",
+        "packet_ids.py",
+        "sensor_decode.py",
     ],
     data = [
         ":car_configs",
@@ -185,6 +187,25 @@ telemetry_service_image(
 alias(
     name = "ingest_tarball",
     actual = ":ingest_load",
+    target_compatible_with = NOT_WINDOWS,
+    visibility = ["//visibility:public"],
+)
+
+py_library(
+    name = "sensor_decode",
+    srcs = ["sensor_decode.py"],
+    imports = ["../.."],
+    data = [":protobuf_files"],
+    deps = [requirement("protobuf")],
+    target_compatible_with = NOT_WINDOWS,
+    visibility = ["//visibility:public"],
+)
+
+py_library(
+    name = "partition_manager",
+    srcs = ["partition_manager.py"],
+    imports = ["../.."],
+    deps = ["//apps/telemetry/analysis:analysis_lib"],
     target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )

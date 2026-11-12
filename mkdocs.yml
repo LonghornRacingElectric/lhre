@@ -24,7 +24,9 @@ nav:
       - ADR-014 Deployed Telemetry Schema: docs/architecture/014-deployed-telemetry-schema.md
       - ADR-015 Study Layout: docs/architecture/015-study-layout.md
       - ADR-016 FMU Artifact Boundary: docs/architecture/016-fmu-artifact-boundary.md
+      - ADR-017 Tests Gate Merges: docs/architecture/017-tests-gate-merges.md
       - Build System: docs/build-system.md
+      - Testing: docs/testing.md
       - Cookbook: docs/cookbook.md
   - Boards:
       - Overview: boards/README.md
@@ -46,12 +48,16 @@ nav:
       - VS Code & Hardware Debug: tools/debug/README.md
       - Firmware Project Macro: tools/firmware/README.md
       - Code Formatting: tools/format/README.md
+      - Lint: tools/lint/README.md
       - OpenOCD: tools/openocd/README.md
       - DFU Util: tools/dfu/README.md
       - CAN Spec Tools: tools/spec/README.md
       - IDE Setup: tools/ide/README.md
       - Serial Monitor: tools/monitor/README.md
       - UBSan: tools/ubsan/README.md
+      - ASan: tools/asan/README.md
+      - Hermetic Tests: tools/hermetic/README.md
+      - Coverage: tools/coverage/README.md
       - Prebuilt protoc: tools/protoc/README.md
   - Autonomy:
       - Overview: autonomy/README.md
@@ -90,12 +96,18 @@ nav:
           - ZED 2i Implementation: autonomy/docs/plans/zed2i-stereo-implementation.md
           - On-Car Architecture: autonomy/docs/plans/on-car-architecture.md
           - MVP Pass Criteria: autonomy/docs/plans/mvp-pass-criteria.md
+          - Sim v2 Pass Criteria: autonomy/docs/plans/sim-v2-pass-criteria.md
+          - Mid-360 Fusion Gate Plan: autonomy/docs/plans/2026-11-07-mid360-fusion-gate-plan.md
       - Testing:
           - Overview: autonomy/testing/README.md
           - Mid-360 Acceptance 2026-10-04: autonomy/testing/2026-10-04-mid360-acceptance/README.md
           - PR 133 Integration 2026-10-24: autonomy/testing/2026-10-24-pr133-integration/README.md
           - FMU Seeds 2026-10-26: autonomy/testing/2026-10-26-fmu-seeds/README.md
           - MVP Gate 2026-10-28: autonomy/testing/2026-10-28-mvp-gate/README.md
+          - FMU on red-mesa 2026-11-07: autonomy/testing/2026-11-07-fmu-gazebo-red-mesa/README.md
+          - Mid-360 Fusion Checks 2026-11-08: autonomy/testing/2026-11-08-mid360-fusion-gate/README.md
+          - Side Classifier Fixes 2026-11-08: autonomy/testing/2026-11-08-side-classifier-fixes/README.md
+          - LiDAR Mount Study 2026-11-08: autonomy/testing/2026-11-08-lidar-mount-study/README.md
           - Livox Test Tools: autonomy/testing/tools/livox/README.md
           - Fault Injection Tools: autonomy/testing/tools/fault_injection/README.md
           - MVP Gate Tools: autonomy/testing/tools/gate/README.md

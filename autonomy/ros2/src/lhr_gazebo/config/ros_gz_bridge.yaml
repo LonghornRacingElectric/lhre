@@ -16,6 +16,14 @@
   ros_type_name: "tf2_msgs/msg/TFMessage"
   direction: GZ_TO_ROS
 
+# Steering joint angles: Gazebo → ROS2 (joint_cmd_adapter turns them into
+# /lhr/vehicle/steering_measured)
+- gz_topic_name: "/model/fsae_vehicle/steering_joint_state"
+  ros_topic_name: "/lhr/vehicle/steering_joint_states"
+  gz_type_name: "gz.msgs.Model"
+  ros_type_name: "sensor_msgs/msg/JointState"
+  direction: GZ_TO_ROS
+
 # Steering position commands: ROS2 → Gazebo
 - ros_topic_name: "/model/fsae_vehicle/joint/front_left_steering_joint/cmd_pos"
   gz_topic_name: "/model/fsae_vehicle/joint/front_left_steering_joint/cmd_pos"

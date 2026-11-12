@@ -140,21 +140,34 @@ for LiDAR, 52.63 ms / 237 ms for left images, and 53.13 ms / 237 ms for right
 images. It was bounded before a full lap and did not collect lap metrics.
 These spikes also leave #203's 100 ms pacing target unmet on this Mac.
 
+The [gate runner](../../../testing/tools/gate/README.md) explicitly selects
+`perception:=lidar estimator:=ekf safety:=true lidar_source:=mid360
+enable_stereo_camera:=true enable_camera_lidar_fusion:=true`. This is the
+gate's sensor configuration; standalone launch defaults remain the GPU
+source with stereo and fusion off. Truth-stack baselines explicitly keep
+those sensors off because Mid-360 and fusion require LiDAR perception.
+Combined-source launch tests check both truth/EKF modes, the caster's clean
+plant pose, single cloud ownership, classified planner input and side fallback.
+
 ## LiDAR coordinates
 
-Gazebo preserves main's level LiDAR mount at z=0.55 m and its generated
-cloud frame. The detector reads that mount from vehicle YAML rather than
-requiring a new static TF. Its height band stays in the sensor frame.
-The kinematic demo uses scan-time TF and base-frame heights by default;
-Gazebo keeps the values below for either cloud source.
+The LiDAR sits where vehicle YAML puts it: the 11/8 study's design mount,
+just inside the main hoop at `base_link` (0.609, 0, 1.06), upside down and 7°
+nose down ([mount study](../../../testing/2026-11-08-lidar-mount-study/README.md)).
+The GPU sensor in the generated model and the Mid-360 caster both use that pose.
+The detector reads it, position and rotation, from vehicle YAML rather than
+requiring a static TF, and cuts height in `base_link` at ground level: the
+sensor's own z is not height when it is flipped and pitched. The kinematic
+demo uses scan-time TF and base-frame heights too. The values below apply to
+either cloud source.
 
-These LiDAR-only arguments preserve Gazebo's existing values and are typed
-before node startup. They have no effect in `perception:=sim`.
+These LiDAR-only arguments are typed before node startup. They have no effect
+in `perception:=sim`.
 
 | Argument | Default |
 | --- | --- |
-| `lidar_ground_z_min` | `-0.40` |
-| `lidar_ground_z_max` | `0.5` |
+| `lidar_ground_z_min` | `0.15` (launch refuses less for a moved Mid-360) |
+| `lidar_ground_z_max` | `1.05` |
 | `lidar_min_cluster_points` | `1` |
 | `lidar_dedup_radius` | `1.5` |
 | `lidar_max_cluster_points` | `50` |
@@ -162,13 +175,12 @@ before node startup. They have no effect in `perception:=sim`.
 | `lidar_stack_max_frames` | `10` |
 | `lidar_transform_wait_sec` | `0.5` |
 | `lidar_sensor_transform_source` | `vehicle_config` |
-| `lidar_height_filter_frame` | `sensor` |
+| `lidar_height_filter_frame` | `base_link` |
 
 For example, `perception:=lidar lidar_min_cluster_points:=2` overrides the
-cluster threshold. A pitched mount requires `lidar_sensor_transform_source:=tf`
-and a published scan-time mount transform; select `lidar_height_filter_frame:=base_link`
-when using ground-relative thresholds. These opt-in configurations need
-Gazebo acceptance testing before changing defaults.
+cluster threshold. A mount other than vehicle YAML's requires
+`lidar_sensor_transform_source:=tf` and a published scan-time mount transform,
+which the Mid-360 caster provides.
 
 The default `lidar_source:=gazebo` retains main's repeating VLP-16-style grid:
 1800 × 16 rays at 10 Hz, 360° horizontal and −15° to +15° vertical coverage,
@@ -278,7 +290,7 @@ cones by default. The track builder uses `boundary` pairing. Use
 `estimator:=truth` to check perception without EKF drift, then repeat with
 `estimator:=ekf`.
 
-To opt into left/right inference and one-to-one `classified` pairing, run:
+To opt into left/right inference while keeping geometry-only `boundary` pairing, run:
 
 ```bash
 ./scripts/run_gazebo_demo.sh track_style:=autocross perception:=lidar lidar_classify_sides:=true estimator:=truth
@@ -288,11 +300,15 @@ By default, mapped cones appear orange in RViz. The unclassified `boundary`
 strategy can produce incorrect centerlines on sharp autocross turns; the
 classifier remains opt-in while its sparse-map failures are investigated.
 
-The geometry-based side classifier is experimental. In a live autocross run,
-the cone map had no duplicate cones, but sparse early detections caused a
-right-side boundary fragment to be labelled left and the car departed the
-course. The generated-track regression does not reproduce the LiDAR's
-occlusion and sparse returns.
+The geometry-based side classifier remains experimental. It now rejects
+strong opposing boundary links and waits for independent travelled evidence
+before accepting a side; sustained contrary evidence can correct it.
+Planning stays in `boundary` mode with `boundary_use_color=false` so unknown
+startup cones and temporarily wrong inferred labels cannot block that motion.
+Camera fusion still sets `boundary_use_color=true` to use its measured colors.
+The old live sparse-map failure is retained as historical evidence;
+partial-map and marker-recovery regressions cover its mechanisms, while
+physical sensing and occlusions still require driving validation.
 
 The launch starts graphical Gazebo and RViz by default. Use `gui:=false` or
 `rviz:=false` for a headless run. See the workspace
@@ -346,8 +362,9 @@ Only the selected cloud owns `/lhr/lidar/points`; the GPU comparison moves to
 `lidar_drop` intercepts the selected producer, including Mid-360.
 
 The internal read-only `world_sdf` is bound to launch's `world`, and `seed`
-reaches the caster as an integer. Mount, motion and clutter study settings are
-fixed in world mode; see [sensor limits](../lhr_lidar_sim/README.md#gazebo-world-input).
+reaches the caster as an integer. Motion and clutter study settings are fixed
+in world mode, and the mount is fixed once the run starts; see
+[sensor limits](../lhr_lidar_sim/README.md#gazebo-world-input).
 
 The following typed startup arguments affect only `lidar_source:=mid360`:
 
@@ -360,6 +377,8 @@ The following typed startup arguments affect only `lidar_source:=mid360`:
 | `mid360_dropout_rate` | `0.0` |
 | `mid360_elevation_profile` | `livox` (`rosette` / `uniform` are approximations) |
 | `mid360_return_profile` | `baseline` (`acceptance_overcast` is an empirical profile) |
+| `mid360_mount_x_m`, `_y_m`, `_z_m` | vehicle YAML, currently `(0.609, 0, 1.06)` m in `base_link` |
+| `mid360_mount_roll_rad`, `_pitch_rad`, `_yaw_rad` | vehicle YAML, currently `(π, 0.1222, 0)`: upside down, 7° nose down |
 
 For example, `mid360_range_noise_std_m:=0 mid360_max_range_m:=30` starts the
 caster with ideal ranges limited to 30 m. The noise default shares the GPU
@@ -368,10 +387,29 @@ still requires model regeneration. Record the source and effective settings
 with comparison results; the generic `max_range_m` controls `sensor_sim`, not
 the caster. These modes do not share a physical accuracy guarantee.
 
-World mode intentionally exposes no mount, motion-distortion or clutter launch
-controls: they are fixed to the shared mount, snapshot scans and no synthetic
-clutter. The internal world path follows `world`; the 0.1 m sensor minimum is
-fixed. Study those alternatives in marker mode instead.
+A Mid-360 mount other than the vehicle YAML one only starts if the detector
+reads it from tf: `lidar_sensor_transform_source:=tf`, with
+`lidar_height_filter_frame:=base_link` and a `lidar_ground_z_min` of at least
+0.15 m (both defaults). With `vehicle_config` the detector places the cloud at
+the vehicle YAML mount, so a moved caster's cloud would land in the wrong place
+with no error. A cut at 0.05 m lets range noise on the many ground returns near
+the car through, and with one point per cluster each becomes a cone, which is
+why launch refuses a lower cut. The old sim mount, upright and level in the nose:
+
+```bash
+ros2 launch lhr_gazebo gazebo_demo.launch.py perception:=lidar lidar_source:=mid360 \
+  mid360_mount_x_m:=1.8 mid360_mount_z_m:=0.55 \
+  mid360_mount_roll_rad:=0 mid360_mount_pitch_rad:=0 \
+  lidar_sensor_transform_source:=tf
+```
+
+These arguments are for mount studies. The as-built mount goes in
+`vehicle.yaml` once the bracket exists. The caster does not model the car's own
+body, so a mount behind the nose sees the near field the real car hides.
+
+World mode exposes no motion-distortion or clutter launch controls: scans are
+snapshots with no synthetic clutter. The internal world path follows `world`; the
+0.1 m sensor minimum is fixed. Study those alternatives in marker mode instead.
 
 On Wayland with X11 available, Gazebo/RViz select `xcb` unless another backend
 is explicitly chosen. Gazebo uses the packaged Fontconfig configuration;
@@ -435,6 +473,17 @@ brakes the car in the exit lane once the nose crosses the finish:
 ./scripts/run_gazebo_demo.sh track_style:=acceleration perception:=lidar estimator:=ekf
 ```
 
+## Measured steering
+
+The vehicle model's joint state publisher reports both steering joints'
+actual angles at 50 Hz, bridged to `/lhr/vehicle/steering_joint_states`.
+`joint_cmd_adapter` turns them into the one bicycle-model angle the car's
+steering encoder will report, `/lhr/vehicle/steering_measured`
+(`sensor_msgs/JointState`, joint `steering`), which `safety_node`'s
+`STEER_TRACKING` compares with the command
+([#208](https://github.com/LonghornRacingElectric/lhre/issues/208)). The
+plugin lives in `templates/model.sdf.in`, so both generated models carry it.
+
 ## Command timeout
 
 `joint_cmd_adapter` stops the wheels when `/lhr/vehicle/cmd` has been silent
@@ -473,7 +522,7 @@ The matrix runner and scoring are in
 
 `safety:=true` adds `lhr_safety`'s `safety_node`, which trips the mission
 on stale odometry, commands or LiDAR, a diverged EKF, leaving the geofence,
-or steering that does not track. It is off by default while the thresholds
+or a measured steering angle that does not follow the command. It is off by default while the thresholds
 are tuned; each one is a `safety_*` launch argument. See
 [lhr_safety](../lhr_safety/README.md).
 
@@ -750,7 +799,10 @@ with truth or EKF estimation. EKF mode scores `/lhr/vehicle/odom_truth`; truth
 mode scores the plant-owned `/lhr/vehicle/odom`. Estimates only feed error
 measurements. Rows also record the mission the launch actually runs (always
 acceleration on the acceleration track), Gazebo's scenario, plant, seed, track style,
-waypoints, perception, estimator, and selected estimator perturbations. `reference_closed:=false` scores an open course
+waypoints, perception, estimator, selected estimator perturbations, and the
+speed limits `pure_pursuit` drives under (`lookahead_dist`, `a_lat_max`,
+`v_min`, `v_max`, `max_accel`, `max_decel`), which the gate's reference lap
+reads. `reference_closed:=false` scores an open course
 without inventing a return segment or a circuit lap. Missing or invalid world
 geometry fails rather than silently using a different course. See the
 [metrics contract](../lhr_metrics/README.md#reference-and-lap-contract).
@@ -809,3 +861,20 @@ observer saw up to 18 confirmed orange cones on the inspection map, no
 Final estimated speed was 0.0024 m/s. This was one moving completion check
 with safety/metrics disabled, not a repeated/scored MVP gate campaign; the
 reviewer's full acceleration gate rerun is still needed.
+
+## Rules-compliant courses
+
+`track_style:=rules_autocross` uses the seeded piece-based
+[track generator](../lhr_trackgen/README.md#rules-compliant-autocross).
+Generate the matching world with `generate_world.py --style rules_autocross`
+and pass its absolute path as `world:=...`. `width_m` (default 3.5) and
+`cone_spacing_m` (default 2.0) reach the simplified cone publisher as typed
+floats. Match them to the world's `--width` and `--cone-spacing` values.
+For this style width is clear space between cone bases; both perception
+branches give the planner the corresponding cone-center pairing width.
+Legacy styles keep their width conventions and defaults. The generated
+ground plane grows when necessary to contain long courses. Existing worlds
+within the original 200 m plane serialize unchanged.
+Metrics scores the actual world's paired centerline without a style-specific
+route shortcut. These courses can expose failures in perception and planning;
+passing the geometry checks does not imply the autonomy gate passes.

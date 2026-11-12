@@ -32,3 +32,8 @@ firmware_project(
     enable_usb = True,
     mcu = "stm32g474xx",
 )
+
+alias(
+    name = "VCU",
+    actual = ":vcu",
+)

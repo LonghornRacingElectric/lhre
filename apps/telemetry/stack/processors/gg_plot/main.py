@@ -212,7 +212,7 @@ try:
                     )
                     logging.debug("Sent filtered data to '%s': %s", OUTPUT_TOPIC, filtered_message)
 
-                except Exception as decode_error:
+                except Exception as decode_error:  # noqa: BLE001 pre-existing when the lint gate went on
                     logging.error(f"  Error decoding message: {decode_error}")
 
         consumer.commit()
@@ -220,13 +220,13 @@ try:
 
     logging.info("gg-plot processor shutdown requested; leaving consume loop.")
 
-except Exception as e:
+except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
     logging.error(f"An error occurred: {e}")
 
 finally:
     try:
         producer.flush(timeout=5)
-    except Exception:
+    except Exception:  # noqa: BLE001 pre-existing when the lint gate went on
         pass
     consumer.close()
     producer.close()

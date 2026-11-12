@@ -11,7 +11,7 @@ count false trips.
 
 | File | What it does |
 |---|---|
-| `run_faults.sh` | Runs the matrix: every case at every speed, `REPEATS` times, plus clean autocross laps. One headless launch per run, recorded to a bag |
+| `run_faults.sh` | Runs the matrix: every case at every speed, `REPEATS` times, plus clean autocross laps. One headless launch per run, recorded to a bag and ended in sim time by the gate's `watch_run.py` |
 | `analyze_run.py` | Scores one bag and writes its row to `results.csv`, replacing an earlier run with the same id |
 | `summarize.py` | Turns `results.csv` into the markdown table for the campaign README |
 
@@ -28,7 +28,7 @@ The faults themselves come from `lhr_gazebo`'s `fault_injector`
 | `odom_spike` | One estimated-odometry sample at 410 m/s | `EKF_DIVERGED` |
 | `lidar_drop` | Stop forwarding the point cloud | `LIDAR_STALE` |
 | `cmd_nan` | NaN steering in every command | `CMD_INVALID` |
-| `steer_freeze` | The actuators keep the steering angle from the fault on; `safety_node` still sees the real command | `STEER_TRACKING` |
+| `steer_freeze` | The actuators keep the steering angle from the fault on; `safety_node` still sees the real command, and the measured angle stops following it | `STEER_TRACKING` |
 | `geofence` | No injection: the fence shrinks to `FENCE` m (20) | `GEOFENCE` |
 | `clean` | None, on autocross seeds (a seed with no committed world gets one generated into `$OUT/worlds`) | Nothing |
 
@@ -44,11 +44,15 @@ container:
 Environment variables pick the matrix: `CASES` (empty for none), `SPEEDS` (`v_max` values,
 default `3 5 8`), `REPEATS` (2), `TRACK` (for the fault cases, `oval`),
 `CLEAN_SEEDS` (`1 2 3 4 5`, empty for none), `AFTER` (fault seconds after
-`DRIVING`, 25), `RUN_S` (60), `CLEAN_S` (150), `OUT` and `EXTRA` (more launch
-arguments). `AFTER` is sim time but `RUN_S` and `CLEAN_S` are wall time, so
-raise them on a machine that runs well below real time; runs that end before
-the fault show up as `no_fault`. The full matrix is 59 runs, 71 minutes in
-the Mac container on 11/1. A quick check:
+`DRIVING`, 25), `RUN_S` (60), `CLEAN_S` (150), `HANG_S` (60), `OUT` and
+`EXTRA` (more launch arguments). `AFTER`, `RUN_S` and `CLEAN_S` are sim
+seconds, so a machine that runs below real time gets the same runs, only
+later ([#227](https://github.com/LonghornRacingElectric/lhre/issues/227)).
+`HANG_S` is the one wall-time setting: a run whose `/clock` stands still that
+long ends as `hung` (the gate's
+[`watch_run.py`](../gate/README.md#sim-time-not-wall-time) does this for
+both tools, and writes `bags/<id>.end.txt`). The full matrix is 59 runs, 71
+minutes in the Mac container on 11/1. A quick check:
 
 ```bash
 CASES="ekf_kill steer_freeze" SPEEDS=5 REPEATS=1 CLEAN_SEEDS= \
@@ -86,10 +90,19 @@ SharePoint ([testing/README.md](../../README.md)).
     its latency is negative.
   - `clean` and `false_trip`: a clean lap without or with a trip.
   - `no_drive` (never reached `DRIVING`, or covered under 10 m before the
-    fault), `no_fault` (the run ended before the fault) and `error` (the bag
-    did not read): the run itself went wrong. These are listed under the
+    fault), `no_fault` (the run ended before the fault), `hung` (the sim
+    clock stopped) and `error` (the bag did not read): the run itself went
+    wrong. These are listed under the
     summary table, not counted in it. Rerun them.
 - `trip_latency_s`: fault to latched trip, in sim time.
+- `visible_after_s` and `latency_from_visible_s` (`steer_freeze` only): a
+  frozen actuator is invisible until the command moves
+  `steer_angle_tol_rad` off the frozen angle, so these split the latency at
+  that moment. A trip before the freeze shows scores 0, and a freeze that
+  never shows reads `never` with 0. The `STEER_TRACKING` budget in the Sim
+  v2 pass criteria applies to `latency_from_visible_s`
+  ([#208](https://github.com/LonghornRacingElectric/lhre/issues/208)); the
+  summary prints both.
 - `stop_dist_m`: path length from the fault to standstill, from ground
   truth. Stops are optimistic until the regen and spring-brake model lands
   ([#199](https://github.com/LonghornRacingElectric/lhre/issues/199)):
@@ -104,3 +117,22 @@ an issue.
 
 Select the opt-in Gazebo/FMU coupling with `EXTRA="plant:=fmu"`. See [FMU motion](../../../ros2/src/lhr_gazebo/README.md#fmu-motion)
 for artifact setup, sensor limitations and pose lag. Existing defaults are unchanged.
+
+## Rules-compliant courses
+
+`TRACK=rules_autocross` runs fault cases on the new generated course style.
+`CLEAN_TRACK=rules_autocross` selects it for clean laps too (default remains
+`autocross`). Missing worlds are generated with the shared generator into
+`$OUT/worlds`; the analyzer records the selected style. For example:
+
+```bash
+TRACK=rules_autocross CLEAN_TRACK=rules_autocross CASES=lidar_drop SPEEDS=5 \
+  REPEATS=1 CLEAN_SEEDS=1 CLEAN_S=600 OUT="$HOME/lhr-test-data/rules-faults" \
+  ../testing/tools/fault_injection/run_faults.sh
+```
+
+Use a separate output directory when changing styles, since fault/clean run
+IDs retain their existing format. The courses are longer than MVP autocross,
+so give clean runs enough sim time (`CLEAN_S`). Their geometry checks do not guarantee
+the controller can complete them. See
+[the course contract](../../../ros2/src/lhr_trackgen/README.md#rules-compliant-autocross).

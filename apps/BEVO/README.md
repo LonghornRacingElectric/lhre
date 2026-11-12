@@ -23,7 +23,7 @@ all fed by `cand`:
 
 ```bash
 bazel build --config=local //apps/BEVO:pi_core_binaries
-bazel test --config=local //apps/BEVO:pi_core_binary_test //apps/BEVO/loggerd:loggerd_test
+bazel test --config=local //apps/BEVO:pi_core_binary_test //apps/BEVO/loggerd:loggerd_test //apps/BEVO/cand:cand_test
 bazel cquery --config=local //apps/BEVO:pi_core_binaries --output=files
 ```
 

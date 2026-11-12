@@ -67,7 +67,7 @@ def test_null_nan_or_missing_value_stops_the_fill(study, marker, words):
 def test_command_exits_nonzero_with_a_message(study):
     path, out = study
     _readme(path, "readme.json#missing")
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: PLW1510 pre-existing when the lint gate went on
         [sys.executable, str(SIM / "tools/readme.py"), str(path), str(out)], capture_output=True, text=True
     )
     assert result.returncode == 1

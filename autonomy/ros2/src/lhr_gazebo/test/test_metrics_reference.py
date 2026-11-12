@@ -15,24 +15,45 @@ import rclpy
 from rclpy.parameter import Parameter
 
 
-@pytest.mark.parametrize('perception', ['sim', 'lidar'])
-@pytest.mark.parametrize('estimator', ['truth', 'ekf'])
-@pytest.mark.parametrize('override', [False, True])
-def test_reference_source_and_scoring_overrides(perception, estimator, override, monkeypatch):
-    package = Path(__file__).parents[1]
-    world = package / 'worlds/autocross_seed1.sdf'
-    alternate = package / 'worlds/oval_seed1.sdf'
+PACKAGE = Path(__file__).parents[1]
+WORLD = PACKAGE / 'worlds/autocross_seed1.sdf'
+
+
+def _metrics_params(monkeypatch, configs):
+    """Evaluate the launch with configs and return metrics_node's parameters."""
     spec = importlib.util.spec_from_file_location(
-        'gazebo_reference_launch', package / 'launch/gazebo_demo.launch.py')
+        'gazebo_reference_launch', PACKAGE / 'launch/gazebo_demo.launch.py')
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    monkeypatch.setattr(module, '_find_world', lambda _: str(world))
+    monkeypatch.setattr(module, '_find_world', lambda _: str(WORLD))
     monkeypatch.setattr(module, 'get_package_share_directory', lambda _: '/tmp/lhr_gazebo')
     context = LaunchContext()
     for action in module.generate_launch_description().entities:
         if isinstance(action, DeclareLaunchArgument):
             action.execute(context)
-    context.launch_configurations.update(perception=perception, estimator=estimator)
+    assert set(configs) <= set(context.launch_configurations)
+    context.launch_configurations.update(configs)
+    node = next(action for action in module._launch_setup(context)
+                if isinstance(action, Node) and action.node_executable == 'metrics_node')
+    return evaluate_parameters(context, node._Node__parameters)[0]
+
+
+def _start_metrics(params):
+    """Start MetricsNode on params as ROS would."""
+    args = ['--ros-args']
+    for name, value in params.items():
+        args += ['-p', f'{name}:={json.dumps(value)}']
+    rclpy.init(args=args)
+    return MetricsNode()
+
+
+@pytest.mark.parametrize('perception', ['sim', 'lidar'])
+@pytest.mark.parametrize('estimator', ['truth', 'ekf'])
+@pytest.mark.parametrize('override', [False, True])
+def test_reference_source_and_scoring_overrides(perception, estimator, override, monkeypatch):
+    world = WORLD
+    alternate = PACKAGE / 'worlds/oval_seed1.sdf'
+    configs = {'perception': perception, 'estimator': estimator}
     expected = {'reference_closed': True, 'min_progress_fraction': .98, 'lap_start_speed': .1,
                 'max_odom_gap_sec': 1., 'off_track_threshold': 2., 'start_radius': 2.,
                 'min_lap_time': 5.}
@@ -41,24 +62,18 @@ def test_reference_source_and_scoring_overrides(perception, estimator, override,
                   'min_progress_fraction': '1', 'lap_start_speed': '1',
                   'max_odom_gap_sec': '2', 'off_track_threshold': '3',
                   'start_radius': '4', 'min_lap_time': '6'}
-        context.launch_configurations.update(values)
+        configs.update(values)
         expected = {name: (value == 'true' if name == 'reference_closed' else float(value))
                     for name, value in values.items() if name != 'reference_world'}
-    node = next(action for action in module._launch_setup(context)
-                if isinstance(action, Node) and action.node_executable == 'metrics_node')
-    params = evaluate_parameters(context, node._Node__parameters)[0]
+    params = _metrics_params(monkeypatch, configs)
     selected = alternate if override else world
     assert params['reference_world'] == str(selected)
     for name, value in expected.items():
         assert params[name] == value
         assert type(params[name]) is type(value)
-    args = ['--ros-args']
-    for name, value in params.items():
-        args += ['-p', f'{name}:={json.dumps(value)}']
-    rclpy.init(args=args)
     metrics = None
     try:
-        metrics = MetricsNode()
+        metrics = _start_metrics(params)
         reference = ReferenceTrack(world_centerline(selected), closed=not override)
         assert metrics._reference.sha256 == reference.sha256
         assert metrics._reference_source == str(selected)
@@ -123,6 +138,36 @@ def test_acceleration_world_is_open_and_includes_stopping_lane(
         assert not metrics._reference.closed
         assert metrics._reference.length == 157.
         assert metrics._reference.project(110., 0.)[0] == 0.
+    finally:
+        if metrics is not None:
+            metrics.destroy_node()
+        rclpy.shutdown()
+
+
+# Launch defaults of the speed limits pure_pursuit drives under.
+SPEED_LIMITS = {'lookahead_dist': 5.0, 'a_lat_max': 3.0, 'v_min': 1.0, 'v_max': 5.0,
+                'max_accel': 1.0, 'max_decel': 2.0}
+
+
+@pytest.mark.parametrize('perception', ['sim', 'lidar'])
+@pytest.mark.parametrize('override', [False, True])
+def test_speed_limits_reach_metrics_as_doubles(perception, override, monkeypatch):
+    # The gate's reference lap reads these from the metrics row (#232). Whole
+    # numbers on the command line must still arrive as doubles (#130).
+    values = {name: str(int(value) + 2) for name, value in SPEED_LIMITS.items()}
+    expected = ({name: float(text) for name, text in values.items()} if override
+                else SPEED_LIMITS)
+    configs = {'perception': perception, 'estimator': 'ekf', **(values if override else {})}
+    params = _metrics_params(monkeypatch, configs)
+    for name, value in expected.items():
+        assert params[name] == value, name
+        assert type(params[name]) is float, name
+    metrics = None
+    try:
+        metrics = _start_metrics(params)
+        for name, value in expected.items():
+            assert metrics.get_parameter(name).type_ == Parameter.Type.DOUBLE, name
+            assert metrics._run_params[name] == str(value), name
     finally:
         if metrics is not None:
             metrics.destroy_node()
