@@ -238,6 +238,17 @@ class ArtemisRecordingSession(BaseArtemis):
     session_start_ms = Column(BigInteger, primary_key=True)
     start_time = Column(BigInteger, nullable=False)
     end_time = Column(BigInteger, nullable=False)
+    data_revision = Column(BigInteger, nullable=False, default=0)
+    external_revision = Column(BigInteger, nullable=False, default=0)
+    last_write_ms = Column(BigInteger, nullable=False, default=0)
+
+
+class ArtemisIngestProgress(BaseArtemis):
+    __tablename__ = 'ingest_progress'
+    __table_args__ = {'schema': 'public'}
+    topic = Column(Text, primary_key=True)
+    partition = Column(Integer, primary_key=True)
+    next_offset = Column(BigInteger, nullable=False)
 
 
 

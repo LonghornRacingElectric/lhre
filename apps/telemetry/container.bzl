@@ -92,19 +92,29 @@ def telemetry_upstream_image(
         image,
         repo_tags,
         executable,
+        tars = [],
         visibility = None):
     """Exposes a pinned upstream OCI image through the local target contract."""
 
-    native.alias(
-        name = name + "_image",
-        actual = image,
-        target_compatible_with = NOT_WINDOWS,
-        visibility = visibility,
-    )
+    if tars:
+        oci_image(
+            name = name + "_image",
+            base = image,
+            tars = tars,
+            target_compatible_with = NOT_WINDOWS,
+            visibility = visibility,
+        )
+    else:
+        native.alias(
+            name = name + "_image",
+            actual = image,
+            target_compatible_with = NOT_WINDOWS,
+            visibility = visibility,
+        )
 
     oci_load(
         name = name + "_load",
-        image = image,
+        image = ":" + name + "_image",
         repo_tags = repo_tags,
         target_compatible_with = NOT_WINDOWS,
         visibility = visibility,

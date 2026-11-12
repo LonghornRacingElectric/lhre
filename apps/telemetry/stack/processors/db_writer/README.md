@@ -5,6 +5,12 @@ grouped by car and inserted in one transaction per car. Artemis uses generated
 frequency pools and session bounds; Orion retains packet/sensor tables. Kafka offsets are committed after the database transactions succeed.
 Failed inserts roll back and retry from Kafka after five seconds.
 
+Artemis transactions also advance `ingest_progress.next_offset` per Kafka
+partition and recording-session revisions. The query gateway uses that proof to
+combine persisted history with its live ring. Imports without Kafka offsets
+advance `external_revision`, forcing a fresh live baseline. Progress is never
+advanced by a failed batch, and replay cannot move it backward.
+
 For Orion, packet IDs use `ON CONFLICT DO NOTHING`; sensor rows are written only for newly
 inserted packets. This handles replay when the database commit succeeds before
 the Kafka commit. Existing packets are first-writer-wins, including their sensor

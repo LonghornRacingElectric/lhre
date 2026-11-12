@@ -36,6 +36,8 @@ three years after everyone who made the decision graduated.
 | [024](024-artemis-query-gateway.md) | Current Artemis catalog and session/time query gateway; preserve Orion legacy paths | Accepted |
 
 | [025](025-artemis-native-observations.md) | Fresh Artemis observations, explicit presence and nanosecond receipt identity | Accepted |
+| [026](026-coordinated-schema-releases.md) | Coordinate server schema releases and BEVO startup updates | Accepted |
+| [027](027-shared-query-gateway.md) | Shared Artemis queries, Kafka live coverage and disposable Arrow caches | Accepted |
 
 ## ADRs vs. READMEs
 

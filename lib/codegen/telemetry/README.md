@@ -182,3 +182,11 @@ and release packaging. Generated outputs remain build artifacts.
 The updater Docker check uses `gen_telemetry_lib` to create an older additive
 storage fixture. Deployment still consumes the normal generated artifacts;
 it does not regenerate or patch protobuf source at runtime.
+## Query persistence metadata
+
+Storage contract format 3 includes database support for query-cache validity:
+recording-session data/external revisions, last-write time, and
+`ingest_progress(topic, partition, next_offset)`. Generated additive DDL installs
+these without replacing telemetry pools. The existing writer maintains them in
+its write transaction; ordinary queries never run DDL. Pool placement, column
+types and field-number paths still derive from the spec.

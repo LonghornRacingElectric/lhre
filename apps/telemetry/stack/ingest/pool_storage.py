@@ -1,13 +1,14 @@
 """Atomic Artemis pool writes. Kafka offsets remain owned by db_writer."""
 
 from collections import defaultdict
+import time
 
 from sqlalchemy import and_, select, update, func
 from sqlalchemy.dialects.postgresql import insert
 
 from lib.codegen.telemetry.artemis_models import POOLS, STORAGE_ID
 from analysis.sql_utils.models import (ARTEMIS_MODELS, ArtemisGpsPrecise, ArtemisRecordingSession,
-                                       ArtemisStorageMigration)
+                                       ArtemisStorageMigration, ArtemisIngestProgress)
 
 
 POOL_MODELS = {model.__tablename__: model for model in ARTEMIS_MODELS.values()
@@ -77,7 +78,22 @@ def insert_rows(session, table, rows):
         raise ValueError(f"Conflicting stored {table.name} sample; batch rolled back")
 
 
-def write_updates(session, messages):
+def record_changes(session, session_ids, progress=None):
+    values = {"data_revision": ArtemisRecordingSession.data_revision + 1,
+              "last_write_ms": time.time_ns() // 1_000_000}
+    # Imports have no Kafka offset proof; a live cache must fetch a new baseline.
+    if progress is None:
+        values["external_revision"] = ArtemisRecordingSession.external_revision + 1
+    session.execute(update(ArtemisRecordingSession).where(
+        ArtemisRecordingSession.session_start_ms.in_(set(session_ids))).values(**values))
+    for (topic, partition), offset in (progress or {}).items():
+        statement = insert(ArtemisIngestProgress).values(topic=topic, partition=partition, next_offset=offset)
+        session.execute(statement.on_conflict_do_update(
+            index_elements=["topic", "partition"],
+            set_={"next_offset": func.greatest(ArtemisIngestProgress.next_offset, statement.excluded.next_offset)}))
+
+
+def write_updates(session, messages, progress=None):
     require_schema(session)
     sessions = assign_sessions(session, [int(message["time"]) for message in messages])
     jobs = defaultdict(list)
@@ -94,6 +110,7 @@ def write_updates(session, messages):
             jobs[pool["table"]].append(row)
     for name, rows in jobs.items():
         insert_rows(session, POOL_MODELS[name].__table__, rows)
+    record_changes(session, sessions.values(), progress)
 
 
 def write_gps(session, rows):
@@ -103,3 +120,4 @@ def write_gps(session, rows):
     values = [{**{name: row.get(name) for name in columns.keys() if name != "session_start_ms"},
                "session_start_ms": sessions[int(row["time"])], "time": int(row["time"]), "sample_time_ns": int(row.get("sample_time_ns", int(row["time"]) * 1_000_000))} for row in rows]
     insert_rows(session, ArtemisGpsPrecise.__table__, values)
+    record_changes(session, sessions.values())

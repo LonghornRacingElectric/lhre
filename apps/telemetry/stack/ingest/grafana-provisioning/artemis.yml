@@ -1,15 +1,12 @@
 apiVersion: 1
 
 datasources:
-  - name: Artemis (Postgres)
+  - name: Artemis
     uid: artemis
-    type: postgres
+    type: lhre-artemis-datasource
     access: proxy
-    isDefault: false
-    url: db:5432
-    user: electric
+    isDefault: true
     secureJsonData:
-      password: ${POSTGRES_PASSWORD}
+      apiToken: ${QUERY_API_TOKEN}
     jsonData:
-      database: 'artemis'
-      sslmode: disable
+      url: http://query_gateway:8090

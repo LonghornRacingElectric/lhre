@@ -6,6 +6,7 @@ import { DEFAULT_CHANNEL_KEY, ORION_CHANNELS, getChannel } from "./channels";
 import type { Settings } from "./config";
 import { ReadOnlyDatabase } from "./db";
 import { readBuckets, storageContract, bucketWidth, type BucketAggregate } from "./artemisStorage";
+import { gatewaySessions, gatewayJSON } from "../query/client";
 import { detectSplitRanges } from "./split";
 import type {
   ChannelDef, DayDetail, DriveDay, GpsResponse, SegmentSummary, SeriesPoint, SeriesResponse, SessionSummary,
@@ -94,7 +95,7 @@ export class TelemetryService {
 
   async calendar(channelKey: string | null, threshold = 0, minDurationS = 0, validOnly = false): Promise<DriveDay[]> {
     if (!this.settings.usePostgres) return []; // no sample mode — honest empty when DB not connected
-    const rows = await this.db.query<{ start_ms: string; end_ms: string }>(
+    const rows = this.settings.car === "artemis" ? await gatewaySessions() : await this.db.query<{ start_ms: string; end_ms: string }>(
       `select start_time::bigint as start_ms, end_time::bigint as end_ms
        from partitions where end_time > start_time order by end_time desc limit 2000`,
     );
@@ -156,7 +157,7 @@ export class TelemetryService {
   async sessionsForDay(date: string): Promise<SessionSummary[]> {
     if (!this.settings.usePostgres) return [];
     const [dayStart, dayEnd] = localDayBoundsMs(date, this.settings.displayTimezone);
-    const rows = await this.db.query<{ start_ms: string; end_ms: string }>(
+    const rows = this.settings.car === "artemis" ? (await gatewaySessions()).filter(r => Number(r.start_ms) < dayEnd && Number(r.end_ms) > dayStart) : await this.db.query<{ start_ms: string; end_ms: string }>(
       `select start_time::bigint as start_ms, end_time::bigint as end_ms
        from partitions where start_time < $1 and end_time > $2 and end_time > start_time order by start_time asc`,
       [dayEnd, dayStart],
@@ -227,7 +228,7 @@ export class TelemetryService {
   ): Promise<Array<{ state: string; startMs: number; endMs: number | null; activeFaults: string[] }>> {
     if (!this.settings.usePostgres) return [];
     try {
-      const rows = await this.db.query<{
+      const rows = this.settings.car === "artemis" ? (await gatewayJSON<{data: Array<{state: string; start_time: string; end_time: string | null; active_faults: string | null}>}>(`/v1/car-status?from=${Math.floor(startMs)}&to=${Math.floor(endMs)}&limit=10000`)).data : await this.db.query<{
         state: string; start_time: string; end_time: string | null; active_faults: string | null;
       }>(
         `select state, start_time, end_time, active_faults

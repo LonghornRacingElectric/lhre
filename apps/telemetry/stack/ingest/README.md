@@ -37,3 +37,18 @@ Database/Grafana provisioning is described in the [stack guide](../README.md).
 The Bazel image packages its generated Artemis schema, CAN and storage metadata
 and is labeled as a schema consumer for deployment agreement checks. See the
 [stack deployment guide](../README.md).
+## Query access
+
+Compose runs the [Artemis gateway](../kafka/gateway/README.md) alongside the
+existing writer. Set `QUERY_API_TOKEN` in the root environment and the viewer's
+server environment. Artemis Grafana uses UID `artemis` with the gateway
+datasource and generated signal builder; convert any old SQL panel targets.
+The query port is published only on loopback. Existing Postgres access remains
+available for metadata and legacy clients; restrict it after those clients have
+completed their cutover. The `analysis` role
+receives read grants on fresh database initialization. Existing installations
+must apply the generated schema and provision equivalent grants before rollout.
+
+The query ring and its baseline start with conservative 64 MiB bootstrap
+budgets. Sealed L1/L2 caches default off; configure measured budgets through
+`QUERY_L1_BYTES` and `QUERY_L2_BYTES`. The cache volume is disposable.

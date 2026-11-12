@@ -474,7 +474,7 @@ function App() {
   };
   const [health, setHealth] = useState<{ source: string; postgres_enabled: boolean } | null>(null);
   const [sources, setSources] = useState<SourceDef[]>(DEFAULT_SOURCES);
-  const [source, setSource] = useState<"orion" | "artemis">("orion");
+  const [source, setSource] = useState<"orion" | "artemis">("artemis");
   const [channels, setChannels] = useState<ChannelDef[]>([]);
   const [channel, setChannel] = useState("");
   const [threshold, setThreshold] = useState(0);

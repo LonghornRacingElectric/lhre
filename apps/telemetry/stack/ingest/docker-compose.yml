@@ -1,4 +1,31 @@
 services:
+  query_gateway:
+    image: ${TELEMETRY_QUERY_GATEWAY_IMAGE:-lhre/telemetry-query-gateway:dev}
+    restart: unless-stopped
+    depends_on:
+      - db
+    env_file:
+      - path: ../../../../.env
+        required: true
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      QUERY_CACHE_DIR: /cache
+      QUERY_RING_BYTES: ${QUERY_RING_BYTES:-67108864}
+      QUERY_BASELINE_BYTES: ${QUERY_BASELINE_BYTES:-67108864}
+      QUERY_L1_BYTES: ${QUERY_L1_BYTES:-0}
+      QUERY_L2_BYTES: ${QUERY_L2_BYTES:-0}
+      QUERY_PIN_BYTES: ${QUERY_PIN_BYTES:-0}
+      ARTEMIS_DB_USER: analysis
+      ARTEMIS_DB_PASSWORD: ${ANALYSIS_PWD}
+      TELEMETRY_DB_USER: analysis
+      TELEMETRY_DB_PASSWORD: ${ANALYSIS_PWD}
+    volumes:
+      - query_cache:/cache
+    networks:
+      - telemetry_network
+    ports:
+      - "127.0.0.1:8090:8090"
+
   mosquitto:
     image: ${TELEMETRY_MQTT_IMAGE:-lhre/telemetry-mqtt:2.0.18}
     container_name: mosquitto
@@ -87,19 +114,21 @@ services:
       GF_SERVER_ROOT_URL: 'https://telemetry.lhre.org/grafana/'  # Adjust if using a different host or port
       GF_SERVER_SERVE_FROM_SUB_PATH: 'true'
       GF_SERVER_PROTOCOL: 'http'
-      GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: 'lhre-kafka-datasource'
+      GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: 'lhre-kafka-datasource,lhre-artemis-datasource'
+      GF_PATHS_PLUGINS: /usr/share/grafana/lhre-plugins
     volumes:
       - grafana_storage:/var/lib/grafana
       - ./grafana-provisioning:/etc/grafana/provisioning/datasources:ro
       - ./grafana-dashboard-provisioning:/etc/grafana/provisioning/dashboards:ro
       - ../../analysis/database/dashboards:/var/lib/grafana/dashboards:ro
-      - ./grafana-kafka-datasource/dist:/var/lib/grafana/plugins/lhre-kafka-datasource:ro
+      - ./grafana-kafka-datasource/dist:/usr/share/grafana/lhre-plugins/lhre-kafka-datasource:ro
     networks:
       - telemetry_network
     ports:
       - "3000:3000"
 
 volumes:
+  query_cache:
   grafana_storage:
     external: true
   telemetry_db:

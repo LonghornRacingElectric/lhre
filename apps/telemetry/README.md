@@ -65,8 +65,10 @@ and deployment paths are covered in the
 
 The viewer remains an npm/PM2 application rather than a Bazel image:
 
-Artemis history is available through `POST /api/query`, using frequency pools
-and session/time pagination. Orion remains a legacy integration reference. Configure it using the
+Artemis reads use a shared Go gateway with Kafka-backed recent windows,
+bounded raw/aggregate queries and disposable Arrow caches. Grafana's Artemis
+datasource supplies signal and aggregate selection; the viewer's `POST /api/query`
+and analysis/live adapters use that same gateway. Configure it using the
 [query guide](analysis/database/viewer_tool/src/lib/query/README.md).
 
 ```bash

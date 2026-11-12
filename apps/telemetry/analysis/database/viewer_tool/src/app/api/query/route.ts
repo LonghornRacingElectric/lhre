@@ -1,10 +1,7 @@
-import { readSignalCatalog } from "../../../lib/signals/catalog";
-import { CursorCodec } from "../../../lib/query/cursor";
-import { createQueryHandler } from "../../../lib/query/http";
-import { ArtemisSource } from "../../../lib/query/artemis";
-import { createQueryService } from "../../../lib/query/service";
+import { NextRequest } from "next/server";
+import { gatewayRequest } from "@/lib/query/gateway";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export const POST = createQueryHandler(createQueryService(new ArtemisSource(), readSignalCatalog, new CursorCodec()));
+export const POST = (req: NextRequest) => gatewayRequest(req, "/v1/query");

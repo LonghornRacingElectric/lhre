@@ -1,0 +1,19 @@
+{
+  "type": "datasource",
+  "name": "Artemis",
+  "id": "lhre-artemis-datasource",
+  "backend": true,
+  "executable": "gpx_artemis",
+  "metrics": true,
+  "streaming": true,
+  "alerting": true,
+  "info": {
+    "description": "Artemis history and live telemetry through the query gateway",
+    "author": { "name": "Longhorn Racing Electric" },
+    "keywords": ["artemis", "telemetry"],
+    "logos": { "small": "logo.svg", "large": "logo.svg" },
+    "version": "0.1.0",
+    "updated": "2026-11-11"
+  },
+  "dependencies": { "grafanaDependency": ">=11.3.0", "plugins": [] }
+}

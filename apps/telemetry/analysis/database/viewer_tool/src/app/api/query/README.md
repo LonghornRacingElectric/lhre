@@ -1,10 +1,10 @@
 # Artemis QUERY
 
-`POST /api/query` exposes the Artemis history service in the Node runtime.
-The route connects the generated frequency-pool reader, published Artemis
-catalog and signed session/time cursors. Other car names return `unsupported_car`.
-It uses the existing `/api/*` middleware exclusion; API-key authentication is
-outside this v0 endpoint. Database connection URLs remain server-only.
+`POST /api/query` proxies the shared Artemis gateway in the Node runtime.
+A viewer session or query API token is required. The server attaches its
+`QUERY_API_TOKEN` to `QUERY_GATEWAY_URL`; browser code sees no database or
+service credentials. Signal/session discovery and SSE windows are sibling
+routes under this directory. Other car names return `unsupported_car`.
 
 See [query semantics and configuration](../../../lib/query/README.md) for the
-request shape, JSON/CSV formats, raw-only scope and pagination guarantees.
+request shape, export formats, aggregate functions and pagination guarantees.

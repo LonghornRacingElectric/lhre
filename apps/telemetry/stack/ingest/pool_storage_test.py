@@ -89,7 +89,8 @@ class PoolStorageTest(unittest.TestCase):
         message.controls.enable = False
         batch = TelemetryBatch(format_version=1, updates=[TelemetryUpdate(sample_time_ns=message.time * 1_000_000, values=message,
             updated_fields=[FieldPath(group=4,field=message.controls.DESCRIPTOR.fields_by_name[name].number) for name in ("apps1_travel","enable")])])
-        record = SimpleNamespace(headers=[("car_type", b"Artemis"), ("payload_format",b"artemis_updates_v1")], value=batch.SerializeToString())
+        record = SimpleNamespace(topic="sensor_data", partition=0, offset=0,
+            headers=[("car_type", b"Artemis"), ("payload_format",b"artemis_updates_v1")], value=batch.SerializeToString())
         with patch("stack.processors.db_writer.main.get_db", return_value=nullcontext(self.session)):
             write_batch([record], {}, {})
         raw = POOL_MODELS["controls_333hz"]

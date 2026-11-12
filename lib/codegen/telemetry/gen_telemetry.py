@@ -242,7 +242,7 @@ def render_artemis_prisma(spec, common_sql):
             suffix = "[]" if field["sql_type"].endswith("[]") else "?"
             lines.append(f"  {field['name']} {kind}{suffix}")
         lines += ["  @@id([session_start_ms, time, sample_time_ns])" if raw else "  @@id([session_start_ms, time])", "}", ""]
-    lines += ["model recording_session {", "  session_start_ms BigInt @id", "  start_time BigInt", "  end_time BigInt", "}", ""]
+    lines += ["model recording_session {", "  session_start_ms BigInt @id", "  start_time BigInt", "  end_time BigInt", "  data_revision BigInt @default(0)", "  external_revision BigInt @default(0)", "  last_write_ms BigInt @default(0)", "}", ""]
     return "\n".join(lines)
 
 

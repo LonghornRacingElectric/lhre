@@ -9,6 +9,7 @@ import {
   startKafkaConsumer,
 } from "@/lib/kafka/kafkaConsumer";
 import { getBufferedMessages } from "@/lib/kafka/messageBuffer";
+import { gatewayLive } from "@/lib/query/live";
 
 function normalizeCar(value: string | null): "orion" | "artemis" | null {
   if (!value) return null;
@@ -52,6 +53,7 @@ function parseHistoryMode(value: string | null): HistoryMode {
 }
 
 export async function GET(req: NextRequest) {
+  if ((req.nextUrl.searchParams.get("car") || "artemis").toLowerCase() === "artemis") return gatewayLive(req, "kafka");
   await startKafkaConsumer();
 
   const url = new URL(req.url);

@@ -1,7 +1,8 @@
 import prismaOrion from "@/lib/prisma/orion";
-import prismaArtemis from "@/lib/prisma/artemis";
 import prismaTelemetry from "@/lib/prisma/telemetry";
 import { Prisma } from "../../../.prisma/orion-client";
+import { readBuckets, storageContract } from "../motec/artemisStorage";
+import { gatewaySessions, gatewayJSON, type GatewayRow } from "../query/client";
 
 export type SupportedCar = "orion" | "artemis";
 export type PacketScalar = bigint | number;
@@ -18,15 +19,12 @@ export function normalizeCar(value: string | null | undefined): SupportedCar | n
   return normalized === "orion" || normalized === "artemis" ? normalized : null;
 }
 
-export function getCarPrisma(car: SupportedCar | null | undefined) {
-  return car === "orion" ? prismaOrion : prismaArtemis;
-}
-
 export async function findLatestSampleTime(car: SupportedCar | null | undefined): Promise<PacketScalar | null> {
   if (car === "orion") {
     return (await prismaOrion.packet.findFirst({ orderBy: { time: "desc" }, select: { time: true } }))?.time ?? null;
   }
-  return (await prismaArtemis.recording_session.aggregate({ _max: { end_time: true } }))._max.end_time;
+  const sessions = await gatewaySessions();
+  return sessions.length ? BigInt(Math.max(...sessions.map(s => Number(s.end_ms)))) : null;
 }
 
 // Only the existing Orion protocol uses packet ranges.
@@ -49,20 +47,27 @@ export async function findReplaySampleAtOrAfter(
     return { time: row.time, packet_id: row.packet_id, dynamics: data[0]?.dynamics ?? null, controls: data[0]?.controls ?? null };
   }
 
-  const row = await prismaArtemis.sample_time.findFirst({ where: { time: { gte: lower, lte: endMs } }, orderBy: { time: "asc" } });
-  if (!row) return null;
-  const where = { session_start_ms_time: { session_start_ms: row.session_start_ms, time: row.time } };
-  const [dynamics, controls] = await Promise.all([
-    prismaArtemis.dynamics.findUnique({ where }), prismaArtemis.controls.findUnique({ where }),
-  ]);
-  return { ...row, dynamics, controls };
+  const first = await nextArtemisObservation(lower, BigInt(endMs));
+  if (!first) return null;
+  const stamp = Date.parse(first.ts);
+  const rows = await readBuckets(["dynamics", "controls"], stamp, Math.min(Number(endMs) + 1, stamp + 100), 100);
+  const row = rows[0];
+  return row ? { time: BigInt(stamp), session_start_ms: row.session_start_ms, dynamics: row.dynamics as Record<string, unknown> ?? null, controls: row.controls as Record<string, unknown> ?? null } : null;
 }
 
 export async function findNextSampleTime(car: SupportedCar | null | undefined, time: PacketScalar, endMs: PacketScalar) {
   if (car === "orion") {
     return (await prismaOrion.packet.findFirst({ where: { time: { gt: time, lte: endMs } }, orderBy: { time: "asc" }, select: { time: true } }))?.time ?? null;
   }
-  return (await prismaArtemis.sample_time.findFirst({ where: { time: { gt: time, lte: endMs } }, orderBy: { time: "asc" }, select: { time: true } }))?.time ?? null;
+  const row = await nextArtemisObservation(BigInt(time) + BigInt(1), BigInt(endMs));
+  return row ? BigInt(Date.parse(row.ts)) : null;
+}
+
+async function nextArtemisObservation(from: bigint, to: bigint) {
+  if (from > to) return null;
+  const pools = storageContract().pools.filter(p => ["dynamics", "controls"].includes(p.group)).map(p => p.table);
+  const page = await gatewayJSON<{ data: GatewayRow[] }>("/v1/query", { car: "artemis", signals: ["*"], pools, agg: "raw", t0: new Date(Number(from)).toISOString(), t1: new Date(Number(to) + 1).toISOString(), page_size: 1 });
+  return page.data[0] ?? null;
 }
 
 export async function replayBounds(car: SupportedCar, day: { start_time: PacketScalar | null; end_time: PacketScalar | null; packet_start: PacketScalar | null; packet_end: PacketScalar | null }): Promise<[bigint, bigint] | null> {

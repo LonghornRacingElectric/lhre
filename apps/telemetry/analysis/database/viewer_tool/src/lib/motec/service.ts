@@ -6,8 +6,8 @@ import { ChannelChartStore, TrackStore } from "./stores";
 import type { SourceDef } from "./types";
 
 export const SOURCES: SourceDef[] = [
-  { key: "orion", label: "Orion" },
   { key: "artemis", label: "Artemis" },
+  { key: "orion", label: "Orion" },
 ];
 
 export function services(source?: string | null) {

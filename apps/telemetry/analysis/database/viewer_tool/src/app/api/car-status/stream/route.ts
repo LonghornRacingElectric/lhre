@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";  // never cache an SSE stream
 import { NextRequest } from "next/server";
 import { bus } from "@/lib/kafka/bus";
 import { ensureSubscribe, startKafkaConsumer } from "@/lib/kafka/kafkaConsumer";
+import { gatewayLive } from "@/lib/query/live";
 
 // The car_status processor publishes high-level state events here.
 const CAR_STATUS_TOPIC = process.env.KAFKA_CAR_STATUS_TOPIC || "car_status";
@@ -15,6 +16,7 @@ const CAR_STATUS_TOPIC = process.env.KAFKA_CAR_STATUS_TOPIC || "car_status";
  * processor emitted: { car, kind, state, reasons, hv_soc, lv_v, thresholds, ... }.
  */
 export async function GET(req: NextRequest) {
+  if ((req.nextUrl.searchParams.get("car") || "artemis").toLowerCase() === "artemis") return gatewayLive(req, "status");
   const url = new URL(req.url);
   const carFilter = (url.searchParams.get("car") || "").trim().toLowerCase();
 

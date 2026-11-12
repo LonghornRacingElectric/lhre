@@ -7,6 +7,7 @@ import { ensureSubscribe, startKafkaConsumer } from "@/lib/kafka/kafkaConsumer";
 import { getSettings } from "@/lib/motec/config";
 import { enrichOrionLiveSample, kafkaTransportFor, normalizeLivePayload } from "@/lib/motec/live";
 import type { LiveStreamEvent } from "@/lib/motec/types";
+import { gatewayLive } from "@/lib/query/live";
 
 // The raw nested protobuf feed (sparse subsystem tables) — kept as a fallback.
 const RAW_TELEMETRY_TOPIC = process.env.KAFKA_SENSOR_TOPIC || "sensor_data";
@@ -38,6 +39,7 @@ function sampleIntervalMs(sampleHz: number | null): number | null {
  * raw payload through the already-ported normalizeLivePayload().
  */
 export async function GET(req: NextRequest) {
+  if ((req.nextUrl.searchParams.get("source") || "artemis").toLowerCase() === "artemis") return gatewayLive(req, "motec");
   const url = new URL(req.url);
   const source = (url.searchParams.get("source") || "orion").trim().toLowerCase();
   const requestedTopic = url.searchParams.get("topic");

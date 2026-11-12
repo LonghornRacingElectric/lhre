@@ -70,3 +70,19 @@ Artemis schema. It never opens a physical CAN interface.
 `data_flow_test` checks explicit Artemis batches through MQTT and Kafka,
 including rejection of the former-car topic. These integration
 targets require a running disposable stack; unit tests alone do not prove it.
+## Query gateway integration
+
+Run `bash apps/telemetry/stack/tests/run_query_gateway_test.sh` from the repo
+root. Set `QUERY_TEST_LOCAL=1` to build locally on macOS. The runner builds and
+loads the pinned images, starts an isolated `query-gateway-test` Compose project,
+runs `:query_gateway_integration_test`, and removes only that project's
+containers and volumes. Docker test results are never reused by this runner.
+No secrets or hardware are needed. Ports 35432, 39092,
+38090 and 33000 must be free. The failure log is
+`/tmp/lhre-query-gateway-test.log`.
+
+The test publishes native Artemis updates into real Kafka, pauses the real
+database writer, checks that the API serves pending samples from its ring,
+resumes persistence without duplicate observations, follows raw pagination,
+and executes a maximum query through Grafana's actual backend datasource.
+CI runs this independently of the secret-dependent broader integration suite.

@@ -31,9 +31,15 @@ def changes(connection, expected, allow_historical=False):
     if old_paths.keys() - expected_paths and not allow_historical:
         raise ValueError("Retiring fields requires an explicit migration preserving historical read interfaces")
     planned = []
-    for name in ("recording_session", "storage_migration", "gps_precise"):
+    metadata_tables = ("ingest_progress",) if expected.get("format_version", 1) >= 3 else ()
+    for name in ("recording_session", "storage_migration", "gps_precise") + metadata_tables:
         if name not in tables:
             planned.append(f"Create {name}")
+    if "recording_session" in tables and expected.get("format_version", 1) >= 3:
+        session_columns = {c["name"] for c in inspector.get_columns("recording_session", schema="public")}
+        for name in ("data_revision", "external_revision", "last_write_ms"):
+            if name not in session_columns:
+                planned.append(f"Add recording_session.{name}")
     views = set(inspector.get_view_names(schema="public"))
     if not {pool["group"] for pool in expected["pools"]}.issubset(views):
         planned.append("Refresh generated bucket read interfaces")

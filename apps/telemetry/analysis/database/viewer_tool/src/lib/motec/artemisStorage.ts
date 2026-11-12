@@ -1,5 +1,4 @@
-import { Prisma } from "../../../.prisma/artemis-client";
-import prisma from "@/lib/prisma/artemis";
+import { gatewayRows } from "../query/client";
 import { storageContract } from "./artemisContract";
 export { storageContract } from "./artemisContract";
 
@@ -14,30 +13,30 @@ export function bucketWidth(groups: string[], requestedMs = 100, fields?: string
 }
 
 export async function readBuckets(groups: string[], startMs: number, endMs: number, requestedMs = 100, aggregate: BucketAggregate = "avg", fields?: string[]) {
-  if (!Number.isSafeInteger(startMs) || !Number.isSafeInteger(endMs) || endMs <= startMs) {
-    throw new Error("Invalid telemetry time range");
-  }
-  if (!Number.isFinite(requestedMs) || requestedMs <= 0) throw new Error("Invalid bucket width");
-  if (!["avg", "min", "max", "last"].includes(aggregate)) throw new Error("Invalid bucket aggregate");
-  const allowed = new Set(storageContract().pools.map(p => p.group));
+  if (!Number.isSafeInteger(startMs) || !Number.isSafeInteger(endMs) || endMs <= startMs || !Number.isFinite(requestedMs) || requestedMs <= 0) throw new Error("Invalid telemetry bounds");
+  const pools = storageContract().pools.filter(p => groups.includes(p.group));
+  if (groups.some(g => !pools.some(p => p.group === g))) throw new Error("Unknown Artemis group");
   const width = bucketWidth(groups, requestedMs, fields);
-  const rows = await Promise.all(groups.map(async group => {
-    if (!allowed.has(group)) throw new Error(`Unknown telemetry group: ${group}`);
-    // Prisma cannot express a table-valued Timescale function. The identifier
-    // comes only from the generated contract; all values remain parameters.
-    const identifier = Prisma.raw(`public.${group}_buckets`);
-    return prisma.$queryRaw<BucketRow[]>(Prisma.sql`
-      SELECT * FROM ${identifier}(${BigInt(width)}, ${BigInt(startMs)}, ${BigInt(endMs)}, ${aggregate})
-    `);
-  }));
+  const selections = pools.flatMap(p => p.fields.filter(f => !fields || fields.includes(f.name)).map(f => ({ signal: `${p.group}.${f.name}`, numeric: ["double precision", "integer", "bigint", "smallint", "numeric"].includes(f.sql_type) && (aggregate !== "avg" || f.aggregate === "avg") })));
   const merged = new Map<string, BucketRow>();
-  rows.forEach((values, index) => {
-    for (const value of values) {
-      const key = `${value.session_start_ms}:${value.time}`;
-      const row = merged.get(key) || { session_start_ms: value.session_start_ms, time: value.time };
-      row[groups[index]] = value;
-      merged.set(key, row);
+  for (const numeric of [true, false]) {
+    const signals = selections.filter(s => s.numeric === numeric).map(s => s.signal);
+    for (let i = 0; i < signals.length; i += 50) {
+      for (let from = startMs; from < endMs;) {
+        const to = Math.min(endMs, Math.floor((from + width * 10000) / width) * width);
+        const rows = await gatewayRows({ signals: signals.slice(i, i + 50), t0: new Date(from).toISOString(), t1: new Date(to).toISOString(), bucket_ms: width, max_points: 10000, agg: !numeric ? "last" : aggregate === "avg" ? "mean" : aggregate });
+        for (const value of rows) {
+          const time = BigInt(Date.parse(value.ts));
+          const key = `${value.session_start_ms}:${time}`;
+          const row = merged.get(key) || { session_start_ms: BigInt(value.session_start_ms), time };
+          const [group, field] = value.signal.split(".");
+          const target = (row[group] ||= {}) as Record<string, unknown>;
+          target[field] = value.value;
+          merged.set(key, row);
+        }
+        from = to;
+      }
     }
-  });
+  }
   return [...merged.values()].sort((a, b) => Number(a.time - b.time));
 }

@@ -285,7 +285,7 @@ function maxDefined(values: Array<number | undefined>): number | undefined {
   return Math.max(...valid);
 }
 
-function buildNormalizedSensorRoutes(parsed: ParsedRecord, carType: string): Record<string, unknown> {
+export function buildNormalizedSensorRoutes(parsed: ParsedRecord, carType: string): Record<string, unknown> {
   const dynamics = (parsed.dynamics as ParsedRecord | undefined) || {};
   const controls = (parsed.controls as ParsedRecord | undefined) || {};
   const pack = (parsed.pack as ParsedRecord | undefined) || {};
