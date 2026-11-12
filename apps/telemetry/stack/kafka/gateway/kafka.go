@@ -159,21 +159,26 @@ func Consume(ctx context.Context, brokers []string, group, topic string, topics 
 		cfg.Consumer.Offsets.Initial = sarama.OffsetOldest
 		cfg.Consumer.Offsets.AutoCommit.Enable = false
 		cfg.Consumer.Return.Errors = true
-		consumer, err := sarama.NewConsumerGroup(brokers, group, cfg)
+		client, err := sarama.NewClient(brokers, cfg)
 		if err == nil {
-			handler := &consumerHandler{store: store, ring: ring, decoder: decoder, topic: topic, feeds: feeds}
-			go func() {
-				for err := range consumer.Errors() {
-					log.Printf("query Kafka: %v", err)
+			var consumer sarama.ConsumerGroup
+			consumer, err = sarama.NewConsumerGroupFromClient(group, client)
+			if err == nil {
+				handler := &consumerHandler{client: client, store: store, ring: ring, decoder: decoder, topic: topic, feeds: feeds}
+				go func() {
+					for err := range consumer.Errors() {
+						log.Printf("query Kafka: %v", err)
+					}
+				}()
+				for ctx.Err() == nil {
+					if err = consumer.Consume(ctx, append([]string{topic}, topics...), handler); err != nil {
+						break
+					}
 				}
-			}()
-			for ctx.Err() == nil {
-				if err = consumer.Consume(ctx, append([]string{topic}, topics...), handler); err != nil {
-					break
-				}
+				ring.Ready(false)
+				_ = consumer.Close()
 			}
-			ring.Ready(false)
-			_ = consumer.Close()
+			_ = client.Close()
 		}
 		if err != nil {
 			log.Printf("query Kafka unavailable: %v", err)
@@ -187,6 +192,7 @@ func Consume(ctx context.Context, brokers []string, group, topic string, topics 
 }
 
 type consumerHandler struct {
+	client     sarama.Client
 	topic      string
 	feeds      *Feeds
 	store      Store
@@ -208,8 +214,12 @@ func (h *consumerHandler) Setup(s sarama.ConsumerGroupSession) error {
 	for topic, parts := range s.Claims() {
 		for _, part := range parts {
 			if topic != h.topic {
-				s.MarkOffset(topic, part, sarama.OffsetNewest, "")
-				s.ResetOffset(topic, part, sarama.OffsetNewest, "")
+				newest, err := h.client.GetOffset(topic, part, sarama.OffsetNewest)
+				if err != nil {
+					return err
+				}
+				s.MarkOffset(topic, part, newest, "")
+				s.ResetOffset(topic, part, newest, "")
 				continue
 			}
 			if off, ok := h.checkpoint[part]; ok {
@@ -256,8 +266,10 @@ func (h *consumerHandler) ConsumeClaim(s sarama.ConsumerGroupSession, c sarama.C
 			}
 			rows, err := h.decoder.Decode(m.Value)
 			if err != nil {
-				h.ring.Ready(false)
-				return err
+				log.Printf("query Kafka: skipping undecodable record %s/%d/%d: %v", m.Topic, m.Partition, m.Offset, err)
+				h.ring.Add(m.Partition, m.Offset, nil)
+				s.MarkMessage(m, "")
+				continue
 			}
 			h.ring.Add(m.Partition, m.Offset, rows)
 			s.MarkMessage(m, "")

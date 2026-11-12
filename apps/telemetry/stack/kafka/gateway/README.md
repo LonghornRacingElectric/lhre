@@ -82,6 +82,21 @@ Requests are limited to 256 KiB, 10,000 rows per page, 2 MiB per JSON page,
 64 KiB per observation and a 30-second query deadline. Large raw scans fail
 explicitly; use a smaller range or sealed bucketed history.
 
+## Client SDK boundary
+
+An SDK is a client of this API: `discover()` reads `/v1/signals`, `get()` posts
+to `/v1/query`, and `stream()` subscribes to `/v1/stream`. Recording discovery
+uses `/v1/sessions`. Keep authentication, pagination, cancellation and response
+decoding in the client; source selection, aggregation and caching belong here.
+Grafana and the viewer consume the same contract through their adapters.
+
+Discovery describes the gateway's deployed catalog and its `schema_version`;
+it does not currently select archived schemas. Preserve exact integer strings
+and sample identities. A stream replaces its bounded window and reports gaps;
+it is not an append-only log. The [schema authority](../../../schema_registry/README.md)
+serves BEVO compatibility and executable reconciliation, a separate responsibility
+from discovering queryable signals.
+
 ## Live coverage and source order
 
 The first recent-window miss establishes a database baseline. The shared raw
@@ -104,6 +119,9 @@ request cannot establish complete coverage, it returns `tail_unavailable` until
 the shared consumer catches up. The ring is bounded by time and accounted bytes;
 it can discard pending samples under sustained pressure and reports coverage
 gaps. It does not promise infinite buffering during a writer outage.
+Undecodable native records are logged with their topic, partition and offset
+and skipped by the live reader; later valid records continue flowing. This does
+not advance the database writer's independent persistence checkpoint.
 
 `GET /v1/stream?query=<URL-encoded query JSON>` uses SSE. `t1: "live"` and
 `window_ms` select a moving window. Events replace that bounded window, including
@@ -116,6 +134,8 @@ Existing JSON state feeds use `GET /v1/topics/<topic>`. The allowlist defaults t
 `QUERY_LIVE_TOPICS` explicitly for other Artemis producers. These are best-effort
 latest-state feeds. They have no implied historical representation. They share
 the gateway Kafka consumer with native telemetry; clients open no consumers.
+On assignment these feeds start at each partition's resolved log-end offset,
+so restarts and rebalances do not replay retained payloads as live events.
 
 ## Cache ownership and sizing
 

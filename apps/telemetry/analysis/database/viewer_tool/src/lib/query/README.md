@@ -6,6 +6,8 @@ exports. `live.ts` adapts gateway streams to existing viewer event shapes;
 Artemis routes open no Kafka consumers. Logical dashboard topics use the
 existing latest-state JSON feed, while native raw queries preserve fresh field
 presence. These paths must not substitute one representation for the other.
+Disconnecting a viewer stream immediately stops its heartbeat and upstream
+readers.
 
 Set `QUERY_GATEWAY_URL` (default `http://127.0.0.1:8090`) and `QUERY_API_TOKEN` in
 the viewer server environment. The public query routes require a signed-in

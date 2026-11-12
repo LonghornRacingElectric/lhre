@@ -21,10 +21,13 @@ export async function readBuckets(groups: string[], startMs: number, endMs: numb
   const merged = new Map<string, BucketRow>();
   for (const numeric of [true, false]) {
     const signals = selections.filter(s => s.numeric === numeric).map(s => s.signal);
-    for (let i = 0; i < signals.length; i += 50) {
+    for (let i = 0; i < signals.length; i += 10) {
+      const batch = signals.slice(i, i + 10);
+      // Bound observations as well as buckets to avoid reaggregating large pages.
+      const points = Math.floor(10000 / batch.length);
       for (let from = startMs; from < endMs;) {
-        const to = Math.min(endMs, Math.floor((from + width * 10000) / width) * width);
-        const rows = await gatewayRows({ signals: signals.slice(i, i + 50), t0: new Date(from).toISOString(), t1: new Date(to).toISOString(), bucket_ms: width, max_points: 10000, agg: !numeric ? "last" : aggregate === "avg" ? "mean" : aggregate });
+        const to = Math.min(endMs, Math.floor((from + width * points) / width) * width);
+        const rows = await gatewayRows({ signals: batch, t0: new Date(from).toISOString(), t1: new Date(to).toISOString(), bucket_ms: width, max_points: points, agg: !numeric ? "last" : aggregate === "avg" ? "mean" : aggregate });
         for (const value of rows) {
           const time = BigInt(Date.parse(value.ts));
           const key = `${value.session_start_ms}:${time}`;

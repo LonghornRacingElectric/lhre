@@ -49,6 +49,11 @@ class QueryGatewayTest(unittest.TestCase):
         producer = KafkaProducer(bootstrap_servers="localhost:39092", acks="all")
         engine = create_engine("postgresql+psycopg2://electric:gateway-test-password@localhost:35432/artemis")
         stamp = time.time_ns() // 1_000_000 // 1000 * 1000 - 2000
+        compose = ["docker", "compose", "-p", "query-gateway-test", "-f", os.environ["QUERY_TEST_COMPOSE"]]
+
+        def control(action, service="db_writer"):
+            result = subprocess.run([*compose, action, service], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
         def send(at, group, field, value):
             batch = artemis_pb2.TelemetryBatch(format_version=1)
@@ -73,10 +78,20 @@ class QueryGatewayTest(unittest.TestCase):
             first = send(stamp, "controls", "enable", False)
             self.wait_for(lambda: persisted(first))
             self.wait_for(lambda: call("/v1/query", query), lambda p: len(p["data"]) == 1)
-            compose = ["docker", "compose", "-p", "query-gateway-test", "-f", os.environ["QUERY_TEST_COMPOSE"]]
-            def control(action):
-                result = subprocess.run([*compose, action, "db_writer"], capture_output=True, text=True)
-                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            control("stop", "query_gateway")
+            producer.send("grafana_data_artemis", json.dumps({"car_type": "artemis", "marker": "retained"}).encode()).get(timeout=15)
+            control("start", "query_gateway")
+            self.wait_for(lambda: call("/v1/stats"), lambda p: p["ring"]["ready"])
+            feed = urllib.request.Request("http://127.0.0.1:38090/v1/topics/grafana_data_artemis", headers={"Authorization": "Bearer gateway-test-token"})
+            with urllib.request.urlopen(feed, timeout=15) as response:
+                self.assertEqual(response.readline().strip(), b": connected")
+                producer.send("grafana_data_artemis", json.dumps({"car_type": "artemis", "marker": "fresh"}).encode()).get(timeout=15)
+                for line in response:
+                    if line.startswith(b"data: "):
+                        event = json.loads(line[6:])
+                        self.assertEqual(json.loads(event["payload"])["marker"], "fresh")
+                        break
+            self.wait_for(lambda: call("/v1/query", query), lambda p: len(p["data"]) == 1)
             control("stop")
             try:
                 before = call("/v1/stats")["reads"]["postgres"]
@@ -127,6 +142,13 @@ class QueryGatewayTest(unittest.TestCase):
             with urllib.request.urlopen(request, timeout=15) as response:
                 event = json.loads(response.readline().decode().removeprefix("data: "))
                 self.assertEqual(len(event["page"]["data"]), 3)
+            # Keep the writer stopped: its independent poison-record policy is
+            # intentional. The live reader must still serve later valid samples.
+            control("stop")
+            producer.send("sensor_data", b"\xff", headers=[("car_type", b"Artemis"), ("payload_format", b"artemis_updates_v1")]).get(timeout=15)
+            send(stamp + 30, "controls", "apps1_travel", 60)
+            recovered = self.wait_for(lambda: call("/v1/query", query), lambda p: len(p["data"]) == 4)
+            self.assertEqual(next(r["value"] for r in recovered["data"] if r["ts"] == iso(stamp + 30).replace("+00:00", "Z")), 60)
         finally:
             producer.close()
             engine.dispose()

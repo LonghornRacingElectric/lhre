@@ -15,7 +15,9 @@ export async function gatewayLive(req: NextRequest, mode: "kafka" | "motec" | "s
   const latest: Record<string, unknown> = { car_type: "artemis" };
   const seen = new Map<string, bigint>();
   const abort = new AbortController();
-  req.signal.addEventListener("abort", () => abort.abort(), { once: true });
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
+  const stop = () => { clearInterval(heartbeat); abort.abort(); };
+  req.signal.addEventListener("abort", stop, { once: true });
   const activeReaders: ReadableStreamDefaultReader<Uint8Array>[] = [];
   const upstreams = await Promise.all(sources.map(async topic => {
     const query = { car: "artemis", signals: ["*"], agg: "raw", t0: new Date(Date.now() - 2000).toISOString(), t1: "live", window_ms: 2000, page_size: 10000 };
@@ -23,11 +25,13 @@ export async function gatewayLive(req: NextRequest, mode: "kafka" | "motec" | "s
     return { topic, response: await gatewayRequest(new NextRequest(req.url, { headers: req.headers, signal: abort.signal }), path) };
   }));
   const failure = upstreams.find(s => !s.response.ok);
-  if (failure) { abort.abort(); return failure.response; }
+  if (failure) { stop(); return failure.response; }
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       const send = (event: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-      const heartbeat = setInterval(() => controller.enqueue(encoder.encode(": heartbeat\n\n")), 15000);
+      heartbeat = setInterval(() => {
+        try { controller.enqueue(encoder.encode(": heartbeat\n\n")); } catch { stop(); }
+      }, 15000);
       const tasks = upstreams.map(async ({ topic, response }) => {
         const reader = response.body!.getReader(); activeReaders.push(reader);
         const decoder = new TextDecoder(); let buffer = "";
@@ -74,9 +78,9 @@ export async function gatewayLive(req: NextRequest, mode: "kafka" | "motec" | "s
           }
         } finally { reader.releaseLock(); }
       });
-      Promise.all(tasks).catch(() => { if (!abort.signal.aborted) { try { send({ kind: "status", ok: false, message: "Gateway live feed disconnected" }); } catch {} } }).finally(() => { clearInterval(heartbeat); abort.abort(); try { controller.close(); } catch {} });
+      Promise.all(tasks).catch(() => { if (!abort.signal.aborted) { try { send({ kind: "status", ok: false, message: "Gateway live feed disconnected" }); } catch {} } }).finally(() => { stop(); req.signal.removeEventListener("abort", stop); try { controller.close(); } catch {} });
     },
-    cancel() { abort.abort(); for (const reader of activeReaders) void reader.cancel().catch(() => {}); },
+    cancel() { stop(); for (const reader of activeReaders) void reader.cancel().catch(() => {}); },
   });
   return new NextResponse(stream, { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-store", "X-Accel-Buffering": "no" } });
 }

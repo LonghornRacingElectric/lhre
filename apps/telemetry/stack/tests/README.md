@@ -44,9 +44,8 @@ The opt-in `//apps/telemetry/stack/ingest:pool_storage_test` uses
 database. It rolls back its test transactions and covers raw timestamps,
 zero/false values through the existing Kafka writer, replay, conflicts, late
 session merging, bucket joins, peaks and additive schema application.
-The viewer's `tests/storage/artemisStorage.test.ts` similarly opts in with
-`ARTEMIS_STORAGE_TEST=1` and `ARTEMIS_DATABASE_URL`. It inserts/deletes temporary
-fixture rows; do not point it at a live recording database.
+Viewer reads now use the gateway; the isolated query integration below verifies
+its database and live paths.
 
 The ordinary `data_flow_test` verifies Artemis MQTT forwarding to raw and live
 Kafka topics, including rejection of the former-car topic.
@@ -85,4 +84,7 @@ The test publishes native Artemis updates into real Kafka, pauses the real
 database writer, checks that the API serves pending samples from its ring,
 resumes persistence without duplicate observations, follows raw pagination,
 and executes a maximum query through Grafana's actual backend datasource.
+It also restarts the gateway over retained JSON feed messages and verifies that
+new live events are served without replay, then checks that an undecodable
+native record cannot stop subsequent valid live updates.
 CI runs this independently of the secret-dependent broader integration suite.
