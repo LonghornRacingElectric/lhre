@@ -168,7 +168,7 @@ def test_main_fails_when_git_is_required_and_unavailable(tree, tmp_path, monkeyp
 
 
 def _dry_run(*args):
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: PLW1510 pre-existing when the lint gate went on
         ["make", "-n", "study", "COMPOSE=compose", *args], cwd=SIM, capture_output=True, text=True
     )
     assert result.returncode == 0, result.stderr

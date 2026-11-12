@@ -6,7 +6,10 @@ the [Bazel build guide](../BAZEL_BUILD.md).
 
 `server_devtool.sh` is the deploy-box interface. Its core is `kafka`, `ingest`,
 and `field_enricher`; those Compose projects also start the pinned brokers,
-database, and Grafana images. Commands are detached by default:
+database, and Grafana images. The ingest project also runs the core
+[database writer](processors/db_writer/README.md): protobuf persistence consumes
+Kafka rather than MQTT's in-memory queues. Rebuilding ingest loads both service
+images. Commands are detached by default:
 
 ```bash
 ./server_devtool.sh build          # Bazel build/load core, then Compose up

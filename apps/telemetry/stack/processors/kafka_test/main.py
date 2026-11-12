@@ -50,7 +50,7 @@ try:
             try:
                 producer.send('status', value=payload)
                 logging.debug(f"Sent dummy status: {payload}")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
                 logging.error(f"(failed to send dummy status: {e})")
             last_status_sent = now
         continue
@@ -64,7 +64,7 @@ try:
             continue
 
         # Iterate over the messages in the batch (logging only)
-        for partition, records in batch.items():
+        for partition, records in batch.items():  # noqa: B007 pre-existing when the lint gate went on
             for record in records:
                 logging.debug(f"Processing message from topic '{record.topic}', partition {record.partition}: offset {record.offset}")
                 logging.debug(f"  Key: {record.key}, Value: {record.value}")
@@ -74,7 +74,7 @@ try:
         consumer.commit()
         logging.debug("Offsets committed for the batch.")
 
-except Exception as e:
+except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
     logging.error(f"An error occurred: {e}")
 
 finally:
@@ -83,7 +83,7 @@ finally:
     try:
         producer.flush(timeout=5)
         producer.close()
-    except Exception:
+    except Exception:  # noqa: BLE001 pre-existing when the lint gate went on
         pass
     logging.info("Consumer closed.")
     

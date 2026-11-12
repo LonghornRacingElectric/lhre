@@ -52,10 +52,27 @@ The BobSim test takes about 6 s of `make unit`.
 - `test_anti_paths.py`: `tools/anti_paths.py` against the oracle. A changed
   brake reaction alone does not change inboard-drive anti-squat. A negated
   sign fails.
-
+- `test_parallel.py`: `STUDY_WORKERS` and the CPU count set the worker
+  count, and `map_cases` keeps the case order, serial or in a pool.
 
 The anti tests check a model against an oracle. They do not validate the
 car. See [anti-paths.md](anti-paths.md).
+
+## Coverage
+
+CI runs `make unit COVERAGE=1` and puts the line coverage of `tools/` on
+the run's summary page. It's a report, not a gate: aim high on the code you
+change, and say why in the PR if a new tool goes untested. To get the same
+report locally, download the wheel the container can't fetch itself:
+
+```bash
+pip download --no-deps --only-binary=:all: --platform any --python-version 3.11 \
+  --implementation py --require-hashes -r coverage-requirements.txt -d out/wheels
+make unit COVERAGE=1   # writes out/coverage.md
+```
+
+`car_identity.py` is left out: `test_car_wrapper.py` runs it from a copy,
+which coverage can't tie back to the file.
 
 ## Add a test
 

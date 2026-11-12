@@ -13,9 +13,9 @@ fourth, `boundary_graph`, has [its own section](#local-unclassified-corridor).
   (`right_cones`) cone. This strategy requires classified cones.
 - `classified` computes a minimum-cost one-to-one left/right assignment within
   `track_width +/- track_width_tolerance`, leaving unmatched cones unused.
-  Both demo launches select it with
-  `perception:=lidar lidar_classify_sides:=true` when camera fusion is off. It depends on correct side
-  labels; sparse detections can cause the experimental classifier to mislabel
+  Neither demo launch selects it; it remains available by setting
+  `pairing_strategy:=classified` when running `track_builder` directly.
+  It depends on correct side labels; sparse detections can cause the experimental classifier to mislabel
   a boundary and leave gaps or an incorrect path.
 - `boundary` (default) Delaunay-triangulates all cone positions without considering
   color, extracts the unique triangle edges, then rejects blue-blue and
@@ -68,8 +68,9 @@ camera-age limit returns to the current LiDAR side; if that side is unknown,
 boundary pairing still uses geometry. The fallback classifier is experimental:
 its errors can still affect the path during camera loss.
 
-Without fusion, Gazebo keeps `/lhr/sensor/cones_detected` and its existing
-boundary/default or opt-in classified pairing. The `sim` perception branch is
+Without fusion, Gazebo keeps `/lhr/sensor/cones_detected` and uses
+`boundary` pairing with `boundary_use_color:=false` to bootstrap motion
+before inferred side labels are available. The `sim` perception branch is
 unchanged. Fusion launch tests check actual node subscription topics in both
 estimators and a real image/TF/DDS integration exercises camera priority,
 conflicts, dropout, recovery, pairing results and orange geometry fallback. Live
@@ -183,7 +184,7 @@ for topics and all parameters.
 ## Local unclassified corridor
 
 `pairing_strategy:=boundary_graph` selects a geometry-only local corridor.
-`mvs_demo.launch.py` uses it under `perception:=lidar` unless
+`mvs_demo.launch.py` uses it under `perception:=lidar`, including when
 `lidar_classify_sides:=true`; the Gazebo launch never does. It connects
 Delaunay edge midpoints through shared triangles, limits gaps to
 `max_path_gap_m` (4 m), turns to `max_path_turn_deg` (60 degrees), and

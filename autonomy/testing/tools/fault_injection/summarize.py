@@ -14,8 +14,16 @@ FAULT_RESULTS = ('caught', 'wrong_check', 'missed', 'early_trip')
 CLEAN_RESULTS = ('clean', 'false_trip')
 
 
+def number(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def fmt(values, how):
-    nums = [float(v) for v in values if v not in ('', 'nan')]
+    # Markers such as 'never' are not numbers; leave them out of the statistic.
+    nums = [n for n in (number(v) for v in values) if n is not None and n == n]
     return f'{how(nums):.2f}' if nums else '-'
 
 
@@ -42,6 +50,16 @@ def main():
               f"{fmt([r['stop_dist_m'] for r in rs], max)} | "
               f"{fmt([r['pdr_dist_m'] for r in rs], max)} | "
               f'{within}/{len(rs)} |')
+
+    freezes = [r for r in faulted
+               if r['case'] == 'steer_freeze' and r.get('latency_from_visible_s')]
+    if freezes:
+        # A frozen actuator only shows once the command moves off the
+        # frozen angle; the STEER_TRACKING budget runs from there (#208).
+        print()
+        print(f'`steer_freeze`: visible {fmt([r["visible_after_s"] for r in freezes], median)} s '
+              f'after the freeze (median), then tripped within '
+              f'{fmt([r["latency_from_visible_s"] for r in freezes], max)} s.')
 
     if clean:
         trips = [r for r in clean if r['result'] == 'false_trip']

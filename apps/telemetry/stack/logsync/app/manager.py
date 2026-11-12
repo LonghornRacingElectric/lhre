@@ -248,7 +248,7 @@ class JobManager:
                 continue
             try:
                 await self._run_job(job, ctrl)
-            except Exception as e:  # never let one job kill the worker
+            except Exception as e:  # never let one job kill the worker  # noqa: BLE001 pre-existing when the lint gate went on
                 job.error = f"worker error: {e}"
                 self._set_state(job, JobState.FAILED)
 
@@ -397,7 +397,7 @@ class JobManager:
         (single-threaded, one job at a time) stays responsive during long
         'waiting to reconnect' backoffs."""
         end = time.monotonic() + seconds
-        while time.monotonic() < end and not ctrl.cancel.is_set() and not ctrl.paused:
+        while time.monotonic() < end and not ctrl.cancel.is_set() and not ctrl.paused:  # noqa: ASYNC110 pre-existing when the lint gate went on
             await asyncio.sleep(min(0.5, max(0.0, end - time.monotonic())))
 
     async def _supervise(self, job: Job, ctrl: _Control, run: RsyncRun) -> int | None:

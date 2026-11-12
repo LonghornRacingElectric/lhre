@@ -2,6 +2,7 @@
 
 import math
 import random
+from types import SimpleNamespace
 
 from lhr_perception.cone_side_classifier import (
     classify_cone_sides,
@@ -10,10 +11,13 @@ from lhr_perception.cone_side_classifier import (
     StableSideLabels,
     vehicle_relative_side_vote,
 )
+from lhr_perception.lidar_cone_detector import LidarConeDetector
 from lhr_perception.pose_history import Pose2D
 from lhr_track_builder.centerline import pair_classified_cones
+from lhr_track_builder.track_builder_node import TrackBuilder
 from lhr_trackgen.publish_cones import generate_autocross_track
 import pytest
+import rclpy
 
 
 def _spawn_index(centerline):
@@ -94,7 +98,7 @@ def test_progressive_map_has_stable_sides_and_unique_midpoints(seed):
 
         proposed = classify_cone_sides(
             [cones[index] for index in mapped_indices], votes)
-        labels = stable.update(proposed, seed=step == 0)
+        labels = stable.update(proposed)
         assert all(
             label == 0 or label == truth[mapped_indices[index]]
             for index, label in enumerate(labels)
@@ -116,3 +120,71 @@ def test_progressive_map_has_stable_sides_and_unique_midpoints(seed):
     for midpoint in midpoints:
         error = min(math.dist(midpoint, expected) for expected in centerline)
         assert error < 0.25
+
+
+@pytest.mark.parametrize('seed', [1, 2, 3, 4, 5])
+def test_sparse_viewpoints_recover_boundaries_and_centerline(seed):
+    """Replay partial maps through the real detector rather than seeding full visibility."""
+    left, right = generate_autocross_track(seed=seed, width_m=3.)
+    cones = left + right
+    truth = [LEFT] * len(left) + [RIGHT] * len(right)
+    centerline = [((a[0]+b[0])/2, (a[1]+b[1])/2) for a, b in zip(left, right)]
+    trajectory = _one_metre_trajectory(centerline, _spawn_index(centerline))
+    rclpy.init()
+    detector = LidarConeDetector()
+    rng = random.Random(seed)
+    mapped = []
+    seen = set()
+    try:
+        # Revisit the course so sparse late detections have independent viewpoints.
+        for step, (x, y, yaw) in enumerate(trajectory + trajectory):
+            for index, cone in enumerate(cones):
+                if index not in seen and math.dist((x, y), cone) < 15. and rng.random() < .25:
+                    mapped.append(index)
+                    seen.add(index)
+                    detector._cone_map.append([*cone, 1.])
+            detector._update_side_classification(Pose2D(step+1, x, y, yaw))
+        assert len(seen) == len(cones)
+        assert detector._cone_sides == [truth[index] for index in mapped]
+        inferred_left = [cones[i] for i, side in zip(mapped, detector._cone_sides)
+                         if side == LEFT]
+        inferred_right = [cones[i] for i, side in zip(mapped, detector._cone_sides)
+                          if side == RIGHT]
+        midpoints = pair_classified_cones(inferred_left, inferred_right, 3., 1.)
+        assert len(midpoints) == len(centerline)
+        assert max(min(math.dist(p, expected) for expected in centerline) for p in midpoints) < .25
+    finally:
+        detector.destroy_node()
+        rclpy.shutdown()
+
+
+def test_unknown_startup_and_corrected_labels_reach_geometry_planner():
+    """Unknown sides can start a path, and corrected snapshots replace old planner IDs."""
+    rclpy.init(args=['--ros-args', '-p', 'pairing_strategy:=boundary',
+                     '-p', 'boundary_use_color:=false'])
+    detector, planner = LidarConeDetector(), TrackBuilder()
+    detector._cone_map = [[x, y, 1.] for y in (1.5, -1.5) for x in (4., 6., 8.)]
+    detector._det_pub = SimpleNamespace(publish=planner._cones_cb)
+    try:
+        detector._update_side_classification(Pose2D(1, 0., 3., 0.))
+        detector._publish_accumulated()
+        assert len(planner._unknown_cones) == 6
+        assert planner._compute_midpoints()
+        for stamp, x in enumerate((1., 2.), start=2):
+            detector._update_side_classification(Pose2D(stamp, x, 3., 0.))
+        detector._publish_accumulated()
+        assert 0 in planner._right_cones
+        assert planner._compute_midpoints(), (
+            'Wrong inferred sides must not prevent recovery motion')
+        for stamp, x in enumerate((3., 4., 5., 6.), start=4):
+            detector._update_side_classification(Pose2D(stamp, x, 0., 0.))
+        detector._publish_accumulated()
+        assert set(planner._left_cones) == {0, 1, 2}
+        assert set(planner._right_cones) == {3, 4, 5}
+        path = planner._compute_midpoints()
+        assert path
+        assert max(abs(y) for _, y in path) < 1e-6
+    finally:
+        planner.destroy_node()
+        detector.destroy_node()
+        rclpy.shutdown()

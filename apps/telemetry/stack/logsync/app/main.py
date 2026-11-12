@@ -123,8 +123,8 @@ async def preview_logs(from_ms: int, to_ms: int):
     """Dry-run: which files (and how many bytes) a job for this window would pull."""
     try:
         files = select_in_range(await list_remote_logs(), from_ms, to_ms)
-    except Exception as e:
-        raise HTTPException(502, f"could not list Pi logs: {e}")
+    except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
+        raise HTTPException(502, f"could not list Pi logs: {e}")  # noqa: B904 pre-existing when the lint gate went on
     return {
         "from_ms": from_ms,
         "to_ms": to_ms,
@@ -138,8 +138,8 @@ async def preview_logs(from_ms: int, to_ms: int):
 async def create_job(body: CreateJobBody):
     try:
         files = select_in_range(await list_remote_logs(), body.from_ms, body.to_ms)
-    except Exception as e:
-        raise HTTPException(502, f"could not list Pi logs: {e}")
+    except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
+        raise HTTPException(502, f"could not list Pi logs: {e}")  # noqa: B904 pre-existing when the lint gate went on
     if not files:
         raise HTTPException(400, "no log files overlap the requested time range")
     job = await _mgr().create_job(body.from_ms, body.to_ms, files, body.bwlimit_kbps)
@@ -282,7 +282,7 @@ async def file_head(job_id: str, name: str, rows: int = 10):
     rows = max(1, min(rows, 100))
     columns: list[str] = []
     data: list[list[str]] = []
-    with open(path, newline="", encoding="utf-8") as fh:
+    with open(path, newline="", encoding="utf-8") as fh:  # noqa: ASYNC230 pre-existing when the lint gate went on
         reader = csv.reader(fh)
         columns = next(reader, [])
         for i, row in enumerate(reader):
@@ -309,7 +309,7 @@ async def download_file(job_id: str, name: str, cols: str | None = None):
         return FileResponse(path, filename=name, media_type="text/csv")
 
     requested = [c.strip() for c in cols.split(",") if c.strip()]
-    with open(path, newline="", encoding="utf-8") as fh:
+    with open(path, newline="", encoding="utf-8") as fh:  # noqa: ASYNC230 pre-existing when the lint gate went on
         header = next(csv.reader(fh), [])
     index_of = {c: i for i, c in enumerate(header)}
     indices = [index_of[c] for c in requested if c in index_of]
@@ -353,8 +353,8 @@ async def download_archive(job_id: str):
 
     try:
         from zipstream import ZipStream  # zipstream-ng
-    except Exception:
-        raise HTTPException(501, "archive download requires zipstream-ng")
+    except Exception:  # noqa: BLE001 pre-existing when the lint gate went on
+        raise HTTPException(501, "archive download requires zipstream-ng")  # noqa: B904 pre-existing when the lint gate went on
 
     zs = ZipStream(sized=False)
     for f in done:
