@@ -1,8 +1,6 @@
 from sqlalchemy import (
-    create_engine,
     Column,
     Integer,
-    String,
     Float,
     Boolean,
     BigInteger,

@@ -1,3 +1,4 @@
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -26,7 +27,7 @@ NOT_CAR_INPUTS = ["simulation/docs/bobsim.md", "simulation/studies/front-ackerma
 
 
 def _dry_run(target, *args):
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: PLW1510 pre-existing when the lint gate went on
         ["make", "-n", target, "COMPOSE=compose", *args], cwd=SIM, capture_output=True, text=True
     )
     assert result.returncode == 0, f"make -n {target} failed:\n{result.stderr}"
@@ -95,6 +96,103 @@ def test_make_unit_checks_bobsim_after_the_tests():
     assert "git -C bobsim status" in commands
     assert commands.index("pytest") < commands.index("git -C bobsim status")
 
+
+
+def _unit_run(coverage):
+    """The shell that make unit runs in the container, for COVERAGE=coverage."""
+    result = subprocess.run(  # noqa: PLW1510 the returncode is asserted below
+        [
+            "make", "-s", "--no-print-directory", "COMPOSE=compose", f"COVERAGE={coverage}",
+            "--eval", "print-unit-run: ; @printf '%s\\n' '$(UNIT_RUN)'", "print-unit-run",
+        ],
+        cwd=SIM, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    return result.stdout
+
+
+# Stand-ins for pip and python, so the recipe runs here without coverage.py.
+# PYTEST_STATUS is what the tests return; REPORT_FAILS makes the report die
+# after writing half a table.
+_FAKE_PIP = """#!/bin/sh
+exit "${PIP_STATUS:-0}"
+"""
+_FAKE_PYTHON = """#!/bin/sh
+case "$*" in
+  *"coverage report"*)
+    echo "| partial"
+    [ -z "$REPORT_FAILS" ] || exit 1
+    echo "| tools | 92% |" ;;
+  *"coverage combine"*) ;;
+  *) exit "${PYTEST_STATUS:-0}" ;;
+esac
+"""
+
+
+def _run_unit_recipe(tmp_path, *, pip_status=0, pytest_status=0, report_fails=False, stale_report=True):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    for name, body in (("pip", _FAKE_PIP), ("python", _FAKE_PYTHON)):
+        path = bin_dir / name
+        path.write_text(body)
+        path.chmod(0o755)
+    out = tmp_path / "out"
+    out.mkdir()
+    if stale_report:
+        (out / "coverage.md").write_text("| stale | 10% |\n")
+    env = {
+        **os.environ,
+        "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+        "PIP_STATUS": str(pip_status),
+        "PYTEST_STATUS": str(pytest_status),
+        "REPORT_FAILS": "1" if report_fails else "",
+    }
+    result = subprocess.run(  # noqa: PLW1510 callers assert on the returncode
+        ["sh", "-c", _unit_run(1)], cwd=tmp_path, env=env, capture_output=True, text=True
+    )
+    report = out / "coverage.md"
+    return result, report.read_text() if report.exists() else None, sorted(p.name for p in out.iterdir())
+
+
+def test_make_unit_without_coverage_runs_plain_pytest():
+    script = _unit_run("")
+    assert "pytest" in script
+    assert "coverage" not in script
+
+
+def test_make_unit_with_coverage_writes_a_whole_report_and_keeps_the_tests_status(tmp_path):
+    result, report, files = _run_unit_recipe(tmp_path, pytest_status=3)
+    assert result.returncode == 3, "the tests' status is lost behind the report"
+    assert report == "| partial\n| tools | 92% |\n"
+    assert "coverage.md.tmp" not in files
+
+
+def test_make_unit_leaves_no_report_when_the_report_fails(tmp_path):
+    result, report, files = _run_unit_recipe(tmp_path, report_fails=True)
+    assert result.returncode == 0, "a failed report must not fail the tests"
+    assert report is None, f"CI would publish this as current coverage: {report!r}"
+    assert "coverage.md.tmp" not in files
+
+
+def test_make_unit_without_the_wheel_drops_the_old_report(tmp_path):
+    result, report, _ = _run_unit_recipe(tmp_path, pip_status=1, pytest_status=2)
+    assert result.returncode == 2
+    assert report is None, "a report from an earlier run would read as this run's"
+
+
+def test_fast_job_runs_make_unit_with_coverage_and_publishes_the_report(fast_job):
+    steps = [step for step in fast_job["steps"] if step.get("run", "").strip() == "make unit"]
+    assert len(steps) == 1
+    assert str(steps[0].get("env", {}).get("COVERAGE")) == "1", "CI runs make unit without coverage."
+    unit = fast_job["steps"].index(steps[0])
+    published = [
+        index for index, step in enumerate(fast_job["steps"])
+        if "out/coverage.md" in step.get("run", "") and "GITHUB_STEP_SUMMARY" in step.get("run", "")
+    ]
+    assert published and published[0] > unit, "No step after make unit puts out/coverage.md on the summary."
+    assert "cancelled()" in str(fast_job["steps"][published[0]].get("if", "")), (
+        "The report must publish when the tests fail too."
+    )
 
 
 def test_make_test_runs_smoke_then_unit():

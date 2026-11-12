@@ -11,11 +11,12 @@ and every consumer reads it from there:
   differential-speed math.
 - `lhr_perception/lidar_cone_detector` uses the body dimensions for the
   self-exclusion box. It takes its mount from TF by default and uses the
-  LiDAR position for the sensor→`base_link` transform only with
+  LiDAR position and rotation for the sensor→`base_link` transform only with
   `sensor_transform_source:=vehicle_config`, which the Gazebo launch
   passes. `evaluate_recordings` uses the mount x/y and stamps the file's
   hash on its results.
-- `lhr_lidar_sim` takes its default mount position from it.
+- `lhr_lidar_sim` takes its default mount pose from it, and the generated
+  Gazebo models place their GPU LiDAR with the same pose.
 - `lhr_metrics` builds the whole-vehicle footprint envelope from the body
   and wheel dimensions, and stamps the file's hash on every row.
 - `lhr_safety` takes its wheelbase and speed-limit defaults from it.
@@ -41,9 +42,11 @@ in four places with four different steering values (0.45, 0.55, 0.69 and
 `base_link` is the rear-axle center at ground level, x forward, y left,
 z up. Sensor positions are given in that frame.
 
-The LiDAR mount remains main's assumed z=0.55 m pending Gazebo validation.
-The CAD nose clearance check suggests a higher mount; that geometry alone
-does not validate a new detector configuration.
+The LiDAR mount (`sensors.lidar.position_m` and `rpy_rad`) is the 11/8
+study's design: just inside the main hoop, upside down (roll π), 7° nose down
+([mount study](../../../testing/2026-11-08-lidar-mount-study/README.md)). It is
+`ASSUMED` until the bracket is built and measured. The old mount at
+(1.8, 0, 0.55) sat inside the nose.
 
 ## Fingerprinting the file
 

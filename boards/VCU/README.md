@@ -22,6 +22,7 @@ The DUI is a plain CAN peripheral this year.
 | `:vcu_app_test`           | Vehicle app end to end through `Step()` with LHAL fakes. |
 | `:test_app_test`          | Host bench harness end to end.                          |
 | `:vcu_rtos_test`          | Real FreeRTOS tasks under the simulator port.           |
+| `:control_stall_rtos_test` / `:telemetry_stall_rtos_test` | The same tasks with one stuck: the supervisor stops feeding the watchdog. |
 | `:vcu_sim`                | Scripted drive under the simulator (`bazel run --config=local`). |
 | `:release`                | Vehicle elf/bin/hex for CI artifacts.              |
 
@@ -84,6 +85,12 @@ The DUI is a plain CAN peripheral this year.
 | telemetry  | 10 ms  | idle+3   | Data-bus diagnostics, flash writes for the fault latch. |
 | LED status | 33 ms | idle+2 | Applies the state/fault color selected by control. |
 | shell ×2, logger | — | idle+1 | Debug consoles on the STDC14 VCP (USART3) and USB CDC. |
+
+Every periodic frame goes out at the rate the CAN spec gives it (slower
+frames on rate gates inside the control and telemetry ticks), since the
+Pi and the MoTeC export read those rates from the spec.
+`critical_tx_test` and `telemetry_test` count each frame over three
+seconds and fail on a mismatch, and on any frame on the wrong bus.
 
 ## Pin map (Rev A netlist)
 

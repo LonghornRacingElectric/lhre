@@ -155,7 +155,7 @@ def is_doc(relative: PurePosixPath) -> bool:
 
 def git(repo: Path, *args: str) -> str:
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: PLW1510 pre-existing when the lint gate went on
             ["git", "--no-optional-locks", "-C", str(repo), *args],
             capture_output=True,
             env={**os.environ, **SAFE_DIRECTORY},

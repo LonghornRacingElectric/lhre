@@ -133,8 +133,10 @@ flowchart LR
 
 The upper stack (track_builder, control, mission_manager, metrics) is identical in both modes. The `perception` launch argument selects between the sim pipeline and LiDAR-based detection.
 MVS LiDAR mapping publishes unclassified orange cones and uses `boundary_graph` pairing
-by default. Set `lidar_classify_sides:=true` to infer left/right sides and use
-one-to-one `classified` pairing. That mode remains experimental on autocross.
+by default. Set `lidar_classify_sides:=true` to infer left/right sides while
+retaining geometry-based `boundary_graph` planning. It can start on unknown
+cones while labels wait for independent travelled observations. Side inference
+remains experimental on autocross.
 
 To bypass the sensor sim and use all cones directly (god-mode), override the cone topic:
 ```bash
@@ -281,7 +283,7 @@ launch lists what it takes:
 ./scripts/run_gazebo_demo.sh gui:=false          # headless Gazebo (no Gazebo GUI)
 ./scripts/run_gazebo_demo.sh rviz:=false         # disable RViz
 ./scripts/run_gazebo_demo.sh perception:=lidar   # LiDAR-based cone detection
-./scripts/run_gazebo_demo.sh perception:=lidar lidar_classify_sides:=true  # opt into side inference and classified pairing
+./scripts/run_gazebo_demo.sh perception:=lidar lidar_classify_sides:=true  # side inference with boundary pairing
 ./scripts/run_gazebo_demo.sh track_style:=oval   # oval track (also: autocross, simple)
 ./scripts/run_gazebo_demo.sh track_style:=oval perception:=lidar  # LiDAR on oval (best LiDAR experience)
 ./scripts/run_gazebo_demo.sh track_style:=acceleration  # 75 m straight, runs the acceleration mission, stops in the exit lane
@@ -438,7 +440,7 @@ flowchart TB
 | Cone source | `publish_cones` | `publish_cones` (reused) | Gazebo GPU LiDAR or world-backed Mid-360 caster |
 | Perception | `sensor_sim` (FOV filter) | `sensor_sim` (reused) | `lidar_cone_detector` (pointcloud clustering) |
 | Physics / vehicle | `sim_kinematic` | Gazebo | Gazebo |
-| `track_builder` pairing | boundary (Delaunay) | boundary (Delaunay) | boundary by default and in camera fusion; classified with side inference alone |
+| `track_builder` pairing | boundary (Delaunay) | boundary (Delaunay) | boundary, including side inference and camera fusion |
 | Actuation | `/lhr/vehicle/cmd` directly | `joint_cmd_adapter` → 6 joints | `joint_cmd_adapter` → 6 joints |
 
 All paths produce the same ROS 2 topic interfaces. Boundary pairing uses color when available and falls back to geometry for unclassified LiDAR cones.
@@ -692,7 +694,7 @@ and the measured drift figures are in
 
 Cone pairing strategies:
 - **nearest**: Pairs each left cone with its nearest unpaired right cone.
-- **classified**: Computes a minimum-cost one-to-one left/right assignment within the track-width band, leaving unmatched cones unused. Opt-in for LiDAR perception.
+- **classified**: Computes a minimum-cost one-to-one left/right assignment within the track-width band, leaving unmatched cones unused. Available on the standalone track builder; the demo launchers retain geometry planning for uncertain LiDAR sides.
 - **boundary** (default): Delaunay-triangulates all cone positions independently of color. It rejects blue-blue and yellow-yellow edges, then retains blue-yellow edges and edges involving unknown colors when they are approximately `track_width` (3.5 m +/- `track_width_tolerance`) apart.
 
 Set `boundary_use_color:=false` with `pairing_strategy:=boundary` to use the
@@ -857,6 +859,8 @@ outer = atan(wheelbase / (R + track_width/2))
 
 **Wheel velocity differential:** Each wheel's angular velocity accounts for its distance from the instantaneous center of rotation. Outer wheels travel farther and spin faster than inner wheels in a turn.
 
+**Measured steering:** the model's joint state publisher sends both steering joints' actual angles at 50 Hz (`/lhr/vehicle/steering_joint_states`). The adapter inverts the Ackermann split (tan of the center angle is the harmonic mean of the wheels' tangents) and publishes the one angle the car's steering encoder will report, `/lhr/vehicle/steering_measured`, which `safety_node` checks against the command.
+
 **Command timeout:** Gazebo's joint controllers hold their last target, so a dead controller would otherwise leave the car driving. With no command for `cmd_timeout_s` the adapter sets all four wheel speeds to 0 (steering holds), the way the real car's actuators stop when commands stop. It acts once per dropout and resumes on the next command; a sim clock that jumps backwards counts as a dropout.
 
 | Param | Default | Description |
@@ -901,7 +905,7 @@ Side inference remains opt-in through `lidar_classify_sides:=true`. It uses geom
 | `side_vote_max_lateral` | `5.0` | Lateral classification corridor (m) |
 | `side_vote_deadband` | `0.5` | Lateral no-vote band around the vehicle axis (m) |
 | `side_update_distance` | `1.0` | Travel between independent side updates (m) |
-| `side_confirmations` | `2` | Consistent traveled viewpoints before a later label locks |
+| `side_confirmations` | `2` | Consistent traveled viewpoints to acquire a label; twice this count to reverse |
 | `boundary_link_distance` | `3.0` | Direct same-boundary link distance (m) |
 | `boundary_gap_distance` | `3.3` | Maximum aligned boundary gap (m) |
 | `boundary_gap_angle_deg` | `40.0` | Maximum direction error across a boundary gap (degrees) |
@@ -910,9 +914,11 @@ The default LiDAR mode publishes unclassified `cones` (orange). With
 `lidar_classify_sides:=true`, it infers track sides from geometry and publishes
 `left_cones` (blue) and `right_cones` (yellow), with `cones` (orange) for
 unknown sides. LiDAR does not measure cone colour. The side classifier is
-experimental: in a live Gazebo autocross run, sparse initial detections caused
-an entire right-boundary fragment to be locked as left, and the car left the
-course. The timestamp-aligned cone map remained accurate in that run. See
+experimental. Short links now reject strong opposing component votes; labels
+wait for independent travelled viewpoints and can recover with sustained
+correction. The earlier live failure locked a sparse initial right-boundary
+fragment as left. Regressions cover that mechanism and partial-map replay,
+while both launchers retain geometry planning for unknown startup cones. See
 [the perception package](src/lhr_perception/README.md) for the pipeline and
 its limits.
 
@@ -930,7 +936,7 @@ its limits.
 | `min_lap_time` | `5.0` | Minimum seconds before a lap return is accepted |
 | `output_csv` | `"data/metrics.csv"` | Path for CSV output (relative to cwd). Also a launch argument on both demos, so a runner can redirect it |
 | `run_id` | `""` | Run identifier; auto-generates timestamp if empty |
-| `timeout_sec` | `0.0` | Optional wall-clock watchdog (0 = off); `run_headless.sh` sets 120 s |
+| `timeout_sec` | `0.0` | Optional watchdog in sim seconds, ending `hung` if the clock stops that many wall seconds (0 = off); `run_headless.sh` sets 120 s |
 | `truth_odom_topic` | `""` | Ground-truth odometry to score `/lhr/vehicle/odom` against; empty leaves the error columns blank |
 
 ### Metrics output
@@ -1044,15 +1050,21 @@ for the contact model and off-track-distance uncertainty.
 | `cmd_timeout_s` | `0.25` | Control command age (s) that counts as stale; the controller publishes at 20 Hz once it has a mission status |
 | `max_position_std_m` | `0.0` | Largest pose standard deviation (m) before the EKF counts as diverged; 0 is off, the default until GNSS bounds the EKF's covariance |
 | `max_speed_factor` | `1.5` | Speed above this multiple of `vehicle.yaml`'s top speed counts as diverged |
-| `geofence_radius_m` | `150.0` | Distance (m) from where the car armed (entered Ready) that trips the geofence |
-| `steer_min_speed_mps` | `2.0` | Speed (m/s) below which the steering check is skipped |
-| `steer_yaw_rate_tol` | `0.15` | Smallest yaw-rate mismatch (rad/s) that counts |
-| `steer_rel_tol` | `0.5` | Mismatch allowed as a fraction of the expected yaw rate |
-| `steer_window_s` | `1.0` | How long (s) a mismatch must last before it trips |
+| `geofence_radius_m` | `300.0` | Distance (m) from where the car armed (entered Ready) that trips the geofence. Holds every legal sim course (see [lhr_safety](src/lhr_safety/README.md)) |
+| `steering_measured_topic` | `"/lhr/vehicle/steering_measured"` | Measured steering angle (`sensor_msgs/JointState`, one joint) |
+| `steer_angle_tol_rad` | `0.035` | Measured-vs-commanded steering error (rad) that counts, after the actuator's rate limit |
+| `steer_angle_window_s` | `0.2` | How long (s) that error must last before it trips |
+| `steer_angle_timeout_s` | `0.25` | Measured-angle age (s) that trips, counted from startup until the first one |
+| `require_steer_measurement` | `true` | Trip when the measured angle never arrives instead of falling back to the yaw-rate rule; not a Gazebo launch argument |
+| `steer_min_speed_mps` | `2.0` | Yaw-rate fallback (`require_steer_measurement` off): speed (m/s) below which it is skipped |
+| `steer_yaw_rate_tol` | `0.15` | Yaw-rate fallback: smallest mismatch (rad/s) that counts |
+| `steer_rel_tol` | `0.5` | Yaw-rate fallback: mismatch allowed as a fraction of the expected yaw rate |
+| `steer_window_s` | `1.0` | Yaw-rate fallback: how long (s) a mismatch must last before it trips |
 
 The Gazebo launch exposes every threshold as `safety_<param>` and starts
 the node only with `safety:=true`. `monitor_lidar` follows `perception`, and
-`rate_hz` and `lidar_topic` are not launch arguments; the package README says
+`rate_hz`, `lidar_topic`, `steering_measured_topic` and
+`require_steer_measurement` are not launch arguments; the package README says
 why. See [lhr_safety](src/lhr_safety/README.md)
 for what a trip does.
 

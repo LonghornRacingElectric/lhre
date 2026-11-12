@@ -256,7 +256,7 @@ try:
                         try:
                             payload = record.value.decode("utf-8") if isinstance(record.value, bytes) else record.value
                             _apply_config(json.loads(payload) if isinstance(payload, str) else payload)
-                        except Exception as cfg_err:
+                        except Exception as cfg_err:  # noqa: BLE001 pre-existing when the lint gate went on
                             logging.warning("bad car_status_config message: %s", cfg_err)
                         continue
 
@@ -264,7 +264,7 @@ try:
                     try:
                         car_type = _car_from_headers(record.headers) or DEFAULT_CAR
                         frame = _decode(record.value, car_type)
-                    except Exception as decode_err:
+                    except Exception as decode_err:  # noqa: BLE001 pre-existing when the lint gate went on
                         logging.error("decode error: %s", decode_err)
                         continue
 
@@ -300,19 +300,19 @@ try:
 
     logging.info("car_status processor shutdown requested; leaving loop.")
 
-except Exception as e:
+except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
     logging.error("car_status error: %s", e)
 
 finally:
     # Persist whatever segments are still open so the last window isn't lost.
     try:
         _flush_open_segments()
-    except Exception as flush_err:
+    except Exception as flush_err:  # noqa: BLE001 pre-existing when the lint gate went on
         logging.warning("car_status segment flush failed: %s", flush_err)
     try:
         producer.flush()
         producer.close()
-    except Exception:
+    except Exception:  # noqa: BLE001 pre-existing when the lint gate went on
         pass
     consumer.close()
     logging.info("car_status consumer closed.")

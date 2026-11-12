@@ -2,9 +2,7 @@ import pandas as pd
 import numpy as np
 import datetime
 import logging
-import time
 from sqlalchemy import text, insert
-from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import Query, aliased
 from .db_session import get_db
 from .models import (
@@ -41,10 +39,7 @@ from .models import (
     OrionGpsPrecise,
 )
 from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy.dialects.postgresql import JSONB # Added for JSONB type handling
 
-import json
-import os
 
 class QueryBuilder:
 
@@ -97,7 +92,7 @@ class QueryBuilder:
 
     def get_table_column_specs(self, force=False, verbose=False, target=None):
         table_specs = {}
-        for model_name, model_class in self._models.items():
+        for model_name, model_class in self._models.items():  # noqa: B007 pre-existing when the lint gate went on
             table_name = model_class.__tablename__
             
             if table_name not in table_specs:
@@ -281,7 +276,7 @@ class QueryBuilder:
             return val.encode('utf-8')
         try:
             return expected_type(val)
-        except Exception:
+        except Exception:  # noqa: BLE001 pre-existing when the lint gate went on
             return val
 
     @staticmethod
@@ -304,13 +299,13 @@ class QueryBuilder:
 
         # --- Handle NaN/None values ---
         missing_flags = [not is_missing_value(val) for _, val in data.items()]
-        nans = {k: v for (k, v), ok in zip(data.items(), missing_flags) if not ok}
+        nans = {k: v for (k, v), ok in zip(data.items(), missing_flags) if not ok}  # noqa: B905 pre-existing when the lint gate went on
         if nans:
             logging.warning(f"NaN-like data in {table}: {nans}")
 
         # --- Normalize values ---
         processed = {}
-        for (key, val), ok in zip(data.items(), missing_flags):
+        for (key, val), ok in zip(data.items(), missing_flags):  # noqa: B905 pre-existing when the lint gate went on
             if not ok:
                 continue
             if key not in table_desc:

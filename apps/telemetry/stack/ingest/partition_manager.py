@@ -37,3 +37,17 @@ class PartitionManager:
         latest = session.query(Partitions).order_by(Partitions.end_time.desc()).first()
         if latest is not None and packet_time_ms > int(latest.end_time):
             latest.end_time = packet_time_ms
+
+    def record_batch(self, session, packet_times) -> None:
+        """Advance session windows once per batch, flushing newly created windows."""
+        latest = session.query(Partitions).order_by(Partitions.end_time.desc()).first()
+        for packet_time in sorted(set(packet_times)):
+            if latest is None or packet_time - int(latest.end_time) > self.partition_gap_ms:
+                latest = Partitions(
+                    partition_name=datetime.datetime.fromtimestamp(packet_time / 1000).strftime('%Y-%m-%d %H:%M:%S'),
+                    start_time=packet_time, end_time=packet_time,
+                )
+                session.add(latest)
+            elif packet_time > int(latest.end_time):
+                latest.end_time = packet_time
+        session.flush()

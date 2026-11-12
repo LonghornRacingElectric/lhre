@@ -6,6 +6,8 @@ run itself is
 [#109](https://github.com/LonghornRacingElectric/lhre/issues/109), and the
 work feeding it is the
 [Software MVP milestone](https://github.com/LonghornRacingElectric/lhre/milestone/1).
+The next gate is [Sim v2](sim-v2-pass-criteria.md), which keeps this
+page's structure on a sim with the shortcuts removed.
 
 The MVP is "a full simulated lap with no shortcuts" (Autonomy Plan, Notion).
 This page turns that into a run matrix and thresholds, so 10/28 is a pass or

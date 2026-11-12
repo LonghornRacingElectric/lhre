@@ -42,7 +42,7 @@ def main() -> int:
     ]
     for step in steps:
         print(f">>> {' '.join(step)}", flush=True)
-        result = subprocess.run(step, cwd=workspace)
+        result = subprocess.run(step, cwd=workspace)  # noqa: PLW1510 pre-existing when the lint gate went on
         if result.returncode != 0:
             return result.returncode
 

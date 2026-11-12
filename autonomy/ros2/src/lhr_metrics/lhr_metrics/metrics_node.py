@@ -14,6 +14,7 @@ from lhr_metrics.course import CourseEnvelope, FOOTPRINT_MODEL, SWEEP_STEP_M
 from lhr_metrics.reference import (
     CircuitProgress, paired_centerline, ReferenceTrack, world_centerline, world_geometry)
 from lhr_metrics.track_error import TrackErrorAccumulator
+from lhr_metrics.watchdog import RunWatchdog
 from lhr_vehicle import load_vehicle, vehicle_sha256
 from nav_msgs.msg import Odometry
 from rcl_interfaces.msg import ParameterDescriptor
@@ -189,8 +190,8 @@ class MetricsNode(Node):
         self._speed_sum = 0.0
         self._speed_max = 0.0
 
-        # Wall time on purpose: this is the watchdog that stops a
-        # headless run hanging when the sim dies and sim time freezes.
+        # Sim seconds under use_sim_time, with a wall-time hang guard; see
+        # lhr_metrics/watchdog.py.
         self.timeout_sec = self.get_parameter(
             'timeout_sec').get_parameter_value().double_value
 
@@ -580,13 +581,14 @@ def main():
     """Entry point."""
     rclpy.init()
     node = MetricsNode()
-    deadline = (time.monotonic() + node.timeout_sec
-                if node.timeout_sec > 0.0 else None)
+    watchdog = RunWatchdog(node.timeout_sec, time.monotonic())
     try:
         while rclpy.ok() and not node.finished:
             rclpy.spin_once(node, timeout_sec=0.1)
-            if deadline is not None and time.monotonic() > deadline:
-                node.finish('timeout')
+            ending = watchdog.check(
+                node.get_clock().now().nanoseconds * 1e-9, time.monotonic())
+            if ending:
+                node.finish(ending)
     except KeyboardInterrupt:
         node.finish('interrupted')
     code = node.finalize()

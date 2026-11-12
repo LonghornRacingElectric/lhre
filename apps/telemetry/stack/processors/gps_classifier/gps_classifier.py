@@ -3,9 +3,6 @@ import os
 import logging
 from time import sleep
 import pandas as pd
-import io
-import base64
-import requests
 import numpy as np
 from paho.mqtt import client as mqtt_client
 import threading
@@ -14,18 +11,15 @@ from numpy.typing import NDArray
 import warnings
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
-import pandas as pd
 from sqlalchemy import func
-import sys
-from pathlib import Path
 
 warnings.simplefilter('ignore', np.linalg.LinAlgError)
 warnings.filterwarnings("ignore")
 
-from analysis.sql_utils.db_session import get_db, DBTarget
-from analysis.sql_utils.query_builder import QueryBuilder
-from stack.ingest.mqtt_handler import MQTTHandler, MQTTTarget
-from analysis.sql_utils.models import Classifier, Dynamics, Packet, Controls
+from analysis.sql_utils.db_session import get_db  # noqa: E402 pre-existing when the lint gate went on
+from analysis.sql_utils.query_builder import QueryBuilder  # noqa: E402 pre-existing when the lint gate went on
+from stack.ingest.mqtt_handler import MQTTHandler, MQTTTarget  # noqa: E402 pre-existing when the lint gate went on
+from analysis.sql_utils.models import Classifier, Dynamics, Packet, Controls  # noqa: E402 pre-existing when the lint gate went on
 
 if os.getenv('IN_DOCKER'):
     visualizer_image_path = "/app/analysis/database/viewer_tool/static/images"
@@ -45,12 +39,12 @@ class Visualizer:
         self.starting_time = None
     
     def start_event(self, time: int, event: ProcessType):
-        if self.starting_time == None: self.starting_time = time
+        if self.starting_time == None: self.starting_time = time  # noqa: E701, E711 pre-existing when the lint gate went on
         self.events.loc[len(self.events)] = {'Time': time - self.starting_time, 'Event': 0}
         self.events.loc[len(self.events)] = {'Time': time - self.starting_time, 'Event': 1 if event == ProcessType.LINEAR_ACCELERATION else -1}
         
     def stop_event(self, time: int, event: ProcessType):
-        if self.starting_time == None: self.starting_time = time
+        if self.starting_time == None: self.starting_time = time  # noqa: E701, E711 pre-existing when the lint gate went on
         self.events.loc[len(self.events)] = {'Time': time - self.starting_time, 'Event': 1 if event == ProcessType.LINEAR_ACCELERATION else -1}
         self.events.loc[len(self.events)] = {'Time': time - self.starting_time, 'Event': 0}
         
@@ -70,7 +64,7 @@ class Visualizer:
         ax.set_zticklabels([])
         
         
-        fig2 = plt.figure()
+        fig2 = plt.figure()  # noqa: F841 pre-existing when the lint gate went on
 
         color_mapping = {1: 'green', -1: 'red', 0: 'black'}
         colors = [color_mapping[event] for event in self.events['Event']]
@@ -133,7 +127,7 @@ class Event:
         """
         
         if self.type == ProcessType.LINEAR_ACCELERATION:
-            if self.max_speed_time: time = min(time, self.max_speed_time)        
+            if self.max_speed_time: time = min(time, self.max_speed_time)  # noqa: E701 pre-existing when the lint gate went on
             
         if abs(time - self.starting_time) < 1000: #1 second
             return
@@ -270,7 +264,7 @@ class GPSClassifierProcessor:
                                   .order_by(Packet.time.asc())
                                   .limit(500)
                                   .all(), dtype=object)
-                if points.any(): break
+                if points.any(): break  # noqa: E701 pre-existing when the lint gate went on
                 sleep(1 / frequency)
                         
                             
@@ -298,7 +292,7 @@ class GPSClassifierProcessor:
                 else:
                     pass
                 
-            if not self.started_event: continue
+            if not self.started_event: continue  # noqa: E701 pre-existing when the lint gate went on
             
             # Check if linear acceleration event is still ongoing
             if self.started_event.type == ProcessType.LINEAR_ACCELERATION:
@@ -349,7 +343,7 @@ class GPSClassifierProcessor:
                 gps_df[['Latitude', 'Longitude']] = gps_df['gps'].apply(lambda gps_tuple: pd.Series(gps_tuple))
 
                 # Append and remove duplicates in one step
-                if visualizer.starting_time == None: visualizer.starting_time = gps_df['Time'].iloc[0]
+                if visualizer.starting_time == None: visualizer.starting_time = gps_df['Time'].iloc[0]  # noqa: E701, E711 pre-existing when the lint gate went on
                 visualizer.gps = (
                     pd.concat([visualizer.gps, gps_df[['Time', 'Latitude', 'Longitude']]], ignore_index=True)
                     .drop_duplicates()

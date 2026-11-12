@@ -27,7 +27,7 @@ def tree(tmp_path):
 
 
 def _new_study(sim, name):
-    return subprocess.run(["make", "new-study", f"S={name}"], cwd=sim, capture_output=True, text=True)
+    return subprocess.run(["make", "new-study", f"S={name}"], cwd=sim, capture_output=True, text=True)  # noqa: PLW1510 pre-existing when the lint gate went on
 
 
 def test_new_study_copies_a_template_that_runs_and_fills_its_readme(tree, tmp_path):
@@ -44,7 +44,7 @@ def test_new_study_copies_a_template_that_runs_and_fills_its_readme(tree, tmp_pa
     out.mkdir()
     (out / "provenance.json").write_text(json.dumps({"study": "demo-study"}), encoding="utf-8")
     env = {**os.environ, "OUT_DIR": str(out), "BOBSIM_VEHICLE": str(tmp_path / "vehicle/vehicle.yml")}
-    run = subprocess.run([sys.executable, str(study / "run.py")], env=env, capture_output=True, text=True)
+    run = subprocess.run([sys.executable, str(study / "run.py")], env=env, capture_output=True, text=True)  # noqa: PLW1510 pre-existing when the lint gate went on
     assert run.returncode == 0, run.stderr
     assert {"summary.json", "readme.json", "provenance.json"} <= {p.name for p in out.iterdir()}
     readme.fill(study / "README.md", out)
@@ -64,7 +64,7 @@ def test_template_run_refuses_a_vehicle_without_a_bundle(tree, tmp_path):
     assert _new_study(tree, "demo-study").returncode == 0
     (tmp_path / "vehicle" / "bundle.yml").unlink()
     env = {**os.environ, "OUT_DIR": str(tmp_path), "BOBSIM_VEHICLE": str(tmp_path / "vehicle/vehicle.yml")}
-    run = subprocess.run([sys.executable, str(tree / "studies/demo-study/run.py")], env=env, capture_output=True, text=True)
+    run = subprocess.run([sys.executable, str(tree / "studies/demo-study/run.py")], env=env, capture_output=True, text=True)  # noqa: PLW1510 pre-existing when the lint gate went on
     assert run.returncode != 0
     assert "the vehicle has None" in run.stderr
 
