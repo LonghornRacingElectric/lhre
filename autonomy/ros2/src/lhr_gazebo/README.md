@@ -30,7 +30,7 @@ world-relative spawn at z=0.
 
 The launch selects generated `model_fmu.sdf` or `model_fmu_stereo.sdf` through
 a temporary resource overlay. These share the normal model's template and
-YAML geometry, have fixed joints and no collisions, IMU, drive controllers or
+YAML geometry and current LiDAR mount, have fixed joints and no collisions, IMU, drive controllers or
 Gazebo odometry. Gazebo therefore renders a rigid, planar sensor rig; suspension
 travel, roll/pitch and wheel articulation are not rendered yet. Cone contacts
 remain geometric metrics, not modeled impact forces.
