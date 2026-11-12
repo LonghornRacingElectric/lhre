@@ -92,6 +92,13 @@ def test_gate_plans_all_cases_and_keeps_matching_baselines(tmp_path):
     lines = result.stdout.splitlines()
     assert len(lines) == 3*len(SCENARIOS)
     assert len({line.split()[0] for line in lines}) == len(lines)
+    for line in lines:
+        if 'perception:=lidar' in line:
+            assert 'lidar_source:=mid360' in line
+            assert 'enable_stereo_camera:=true' in line
+            assert 'enable_camera_lidar_fusion:=true' in line
+        else:
+            assert 'enable_stereo_camera:=false' in line
     scorer = load('extreme_gate', TOOLS/'score_gate.py')
     for name in SCENARIOS:
         expected = [f'baseline_{name}_s1', f'{name}_s1_r1', f'{name}_s1_r2']

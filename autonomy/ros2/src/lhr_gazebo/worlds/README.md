@@ -59,7 +59,7 @@ the corresponding cone-center pairing width. Metrics remains on the
 `autocross` mission and scores the selected world's ordered reference;
 perception and control receive no route from that reference.
 
-To run just this set with one matching truth baseline per course:
+To run just this set with course-derived reference laps:
 
 ```bash
 SEEDS= EXTREMES=all REPEATS=1 ACCEL_REPEATS=0 SKIDPAD_REPEATS=0 \
@@ -70,9 +70,10 @@ SEEDS= EXTREMES=all REPEATS=1 ACCEL_REPEATS=0 SKIDPAD_REPEATS=0 \
 `EXTREMES` also accepts a space-separated subset of style names. See the
 [gate tools](../../../../testing/tools/gate/README.md). The extension uses
 existing scorer thresholds and does not alter the approved MVP defaults.
-Official inclusion, repeats, stack and thresholds in the Sim v2 gate are
-owned by [#201](https://github.com/LonghornRacingElectric/lhre/issues/201);
-this set and command are ready for that integration. Geometry acceptance is
+The [Sim v2 criteria](../../../../docs/plans/sim-v2-pass-criteria.md) include
+these scenarios. Each row selects the current Mid-360 and camera-fusion stack.
+`BASELINE=1` adds optional truth-stack comparisons; lap scoring uses the course
+reference. `RUN_S` counts simulation seconds. Geometry acceptance is
 not a claim that any course has passed the driving gate.
 
 ## Validation

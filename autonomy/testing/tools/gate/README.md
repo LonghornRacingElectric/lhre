@@ -232,7 +232,8 @@ Use a quoted space-separated subset, for example
 name fails before recording or process cleanup. Each case uses its committed
 seed-1 world, `REPEATS` LiDAR/EKF rows, and one simplified-perception/truth
 baseline when `BASELINE=1`. Run IDs and CSV styles distinguish every fixture;
-only the baseline for that same style and seed can satisfy its lap-time check.
+course-derived reference laps supply the lap-time check. Truth comparisons
+remain optional; legacy baseline matching still requires the same style and seed.
 
 From `autonomy/ros2`, to run the set alone:
 
@@ -242,10 +243,11 @@ SEEDS= EXTREMES=all REPEATS=1 ACCEL_REPEATS=0 SKIDPAD_REPEATS=0 \
   ../testing/tools/gate/run_gate.sh
 ```
 
-Build `lhr_gazebo` first to install all seven worlds. Longer courses and CPU
-rendering need a larger wall cap. The usual `EXTRA` settings still pass to
+Build `lhr_gazebo` first to install all seven worlds. `RUN_S` is a simulation-time
+cap; slow CPU rendering does not require a larger cap. The usual `EXTRA` settings still pass to
 every launch. Every planned missing result fails; none is silently omitted
 because it has a new style name. Use a fresh output directory when selecting
 a different matrix, since the scorer also reads completed folders there.
-The extension uses existing MVP thresholds. Official Sim v2 adoption and
-criteria remain [#201](https://github.com/LonghornRacingElectric/lhre/issues/201).
+The runner uses the current Mid-360 and camera-fusion stack for these rows.
+The [Sim v2 criteria](../../../docs/plans/sim-v2-pass-criteria.md) include
+all seven scenarios; a full-set driving pass remains unverified.
