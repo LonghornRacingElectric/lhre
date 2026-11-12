@@ -12,8 +12,21 @@ export ARTEMIS_DB_INIT_SQL="$repo/bazel-bin/lib/codegen/telemetry/artemis_db_ini
 export QUERY_TEST_COMPOSE="$repo/apps/telemetry/stack/tests/query-gateway.compose.yml"
 export DOCKER_CONFIG="${DOCKER_CONFIG:-$HOME/.docker}"
 compose=(docker compose -p query-gateway-test -f "$QUERY_TEST_COMPOSE")
+benchmark=0
+if [[ "${1:-}" == --benchmark || "${1:-}" == --compare ]]; then
+    benchmark=1
+    if [[ "$1" == --compare ]]; then benchmark=2; fi
+    shift
+    compose+=(-f "$repo/apps/telemetry/stack/tests/query-gateway.benchmark.yml")
+fi
 cleanup() { "${compose[@]}" logs --tail=60 > /tmp/lhre-query-gateway-test.log; "${compose[@]}" down -v --remove-orphans; }
 trap cleanup EXIT
 "${compose[@]}" up -d --wait --wait-timeout 150
-bazel test "${bazel_flags[@]}" //apps/telemetry/stack/tests:query_gateway_integration_test \
-    --nocache_test_results --test_env=QUERY_TEST_COMPOSE --test_env=ARTEMIS_DB_INIT_SQL --test_env=DOCKER_CONFIG --test_output=errors
+if [[ "$benchmark" == 2 ]]; then
+    bazel run "${bazel_flags[@]}" //apps/telemetry/stack/tests:query_gateway_comparison -- "$@"
+elif [[ "$benchmark" == 1 ]]; then
+    bazel run "${bazel_flags[@]}" //apps/telemetry/stack/tests:query_gateway_benchmark -- "$@"
+else
+    bazel test "${bazel_flags[@]}" //apps/telemetry/stack/tests:query_gateway_integration_test \
+        --nocache_test_results --test_env=QUERY_TEST_COMPOSE --test_env=ARTEMIS_DB_INIT_SQL --test_env=DOCKER_CONFIG --test_output=errors
+fi

@@ -8,8 +8,9 @@ import (
 	"math/big"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 type Request struct {
@@ -40,6 +41,7 @@ type Observation struct {
 	Signal   string `json:"signal"`
 	Value    any    `json:"value"`
 	position Position
+	size     int
 }
 type Page struct {
 	Schema      string        `json:"schema_version"`
@@ -78,12 +80,14 @@ func (e *Engine) bounds(ctx context.Context, r Request) (int64, int64, error) {
 		return max(1, to-r.WindowMS), to, nil
 	}
 	var from, to int64
+	var dayStart, dayEnd int64
 	var err error
 	if r.DriveDay != nil {
-		from, to, err = e.Store.Day(ctx, *r.DriveDay)
+		dayStart, dayEnd, err = e.Store.Day(ctx, *r.DriveDay)
 		if err != nil {
 			return 0, 0, err
 		}
+		from, to = dayStart, dayEnd
 	}
 	if r.T0 != "" {
 		from, err = parseTimestamp(r.T0)
@@ -104,10 +108,6 @@ func (e *Engine) bounds(ctx context.Context, r Request) (int64, int64, error) {
 		return 0, 0, problem(400, "invalid_request", "t1 or drive_day is required")
 	}
 	if r.DriveDay != nil {
-		dayStart, dayEnd, err := e.Store.Day(ctx, *r.DriveDay)
-		if err != nil {
-			return 0, 0, err
-		}
 		from = max(from, dayStart)
 		to = min(to, dayEnd)
 	}
@@ -129,7 +129,7 @@ func before(a, b Position) bool {
 	return a.Signal < b.Signal
 }
 func observation(t, ns, session int64, signal string, value any) Observation {
-	return Observation{time.UnixMilli(t).UTC().Format("2006-01-02T15:04:05.000Z"), strconv.FormatInt(ns, 10), strconv.FormatInt(session, 10), signal, publicValue(value), Position{t, session, ns, signal}}
+	return Observation{TS: time.UnixMilli(t).UTC().Format("2006-01-02T15:04:05.000Z"), NS: strconv.FormatInt(ns, 10), Session: strconv.FormatInt(session, 10), Signal: signal, Value: publicValue(value), position: Position{t, session, ns, signal}}
 }
 
 func (e *Engine) Query(ctx context.Context, r Request) (*Page, error) {
@@ -214,103 +214,35 @@ func (e *Engine) Query(ctx context.Context, r Request) (*Page, error) {
 	}
 	data := []Observation{}
 	sources := map[string]bool{}
-	aggregates := map[string]*accumulator{}
-	if _, ok := snap.(aggregateSnapshot); ok && r.Aggregate != "raw" && to-from > 2*slabMS {
-		for name, signals := range pools {
-			p := e.Schema.byPool[name]
-			if width%1000 == 0 && e.Cache.hasSealed(snap, p, from, to) {
-				continue
-			}
-			rows, tail, source, err := e.Cache.aggregate(ctx, snap, p, from, to, width)
-			if err != nil {
-				return nil, err
-			}
-			sources[source] = true
-			if err = addAggregateRows(aggregates, rows, signals, r.Aggregate, width, true); err != nil {
-				return nil, err
-			}
-			if err = addAggregateRows(aggregates, tail, signals, r.Aggregate, width, false); err != nil {
-				return nil, err
-			}
-			delete(pools, name)
-		}
+	names := make([]string, 0, len(pools))
+	for name := range pools {
+		names = append(names, name)
 	}
-	scanned := 0
-	for start := max(from/slabMS*slabMS, func() int64 {
-		if after != nil {
-			return after.Time / slabMS * slabMS
-		}
-		return 0
-	}()); start < to && len(pools) > 0; start += slabMS {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		for name, signals := range pools {
-			var rows []Row
-			source := "L2-overview"
-			overview := false
-			if r.Aggregate != "raw" && width%1000 == 0 && (start >= from || from%1000 == 0) && (start+slabMS <= to || to%1000 == 0) {
-				rows, overview, err = e.Cache.Overview(ctx, snap, e.Schema.byPool[name], start, start+slabMS)
-			}
-			if err == nil && !overview {
-				rows, source, err = e.Cache.Rows(ctx, snap, e.Schema.byPool[name], start, start+slabMS)
-			}
-			if err != nil {
-				return nil, err
-			}
-			sources[source] = true
-			scanned += len(rows)
-			if scanned > 2000000 {
-				return nil, problem(413, "query_scan_limit", "Too many raw samples; narrow the range")
-			}
-			for _, row := range rows {
-				if row.Time < from || row.Time >= to {
-					continue
-				}
-				for _, signal := range signals {
-					field := strings.SplitN(signal.Name, ".", 2)[1]
-					value, ok := row.Values[field]
-					if overview {
-						value, ok = row.Values[field+"_last"]
-					}
-					if !ok || value == nil {
-						continue
-					}
-					if r.Aggregate == "raw" {
-						ob := observation(row.Time, row.NS, row.Session, signal.Name, value)
-						if after == nil || before(*after, ob.position) {
-							data = append(data, ob)
-						}
-					} else {
-						bucket := row.Time / width * width
-						key := fmt.Sprintf("%d/%d/%s", bucket, row.Session, signal.Name)
-						acc, ok := aggregates[key]
-						if !ok {
-							acc = &accumulator{stamp: bucket, session: row.Session, signal: signal.Name, agg: r.Aggregate}
-							aggregates[key] = acc
-						}
-						if overview {
-							err = acc.addSummary(field, row)
-						} else {
-							err = acc.add(row.NS, value)
-						}
-						if err != nil {
-							return nil, err
-						}
-					}
-				}
-			}
-		}
-		if r.Aggregate == "raw" && len(data) > r.PageSize {
-			break
-		}
+	sort.Strings(names)
+	results := make([]poolResult, len(names))
+	workers, workCtx := errgroup.WithContext(ctx)
+	workers.SetLimit(4)
+	for i, name := range names {
+		workers.Go(func() error {
+			var err error
+			results[i], err = e.readPool(workCtx, snap, e.Schema.byPool[name], pools[name], r, from, to, width, after)
+			return err
+		})
 	}
-	if r.Aggregate != "raw" {
-		for _, a := range aggregates {
-			ob := observation(a.stamp, a.stamp*1000000, a.session, a.signal, a.value())
+	if err := workers.Wait(); err != nil {
+		return nil, err
+	}
+	for _, result := range results {
+		for _, source := range result.sources {
+			sources[source] = true
+		}
+		for _, ob := range result.data {
 			if after == nil || before(*after, ob.position) {
 				data = append(data, ob)
 			}
+		}
+		if len(data) > 200000 {
+			return nil, problem(413, "query_scan_limit", "Too many observations; reduce signals or max_points")
 		}
 	}
 	sort.Slice(data, func(i, j int) bool { return before(data[i].position, data[j].position) })
@@ -319,41 +251,34 @@ func (e *Engine) Query(ctx context.Context, r Request) (*Page, error) {
 		page.Sources = append(page.Sources, source)
 	}
 	sort.Strings(page.Sources)
+	// Reserve the envelope and cursor once; trimming one row at a time would
+	// repeatedly serialize the entire page near the byte limit.
+	bytes := 4096
 	for _, row := range data {
-		encoded, err := json.Marshal(row)
-		if err != nil {
-			return nil, err
-		}
-		if len(encoded) > 65536 {
-			return nil, problem(413, "sample_too_large", "A value exceeds 64 KiB")
-		}
-		page.Data = append(page.Data, row)
-		if len(page.Data) >= r.PageSize {
-			break
-		}
-	}
-	for {
-		if len(data) > len(page.Data) && len(page.Data) > 0 {
-			token, err := e.encodeCursor(r, from, to, page.Data[len(page.Data)-1].position)
+		if row.size == 0 {
+			encoded, err := json.Marshal(row)
 			if err != nil {
 				return nil, err
 			}
-			page.Next = &token
-		} else {
-			page.Next = nil
+			row.size = len(encoded)
 		}
-		encoded, err := json.Marshal(page)
+		if row.size > 65536 {
+			return nil, problem(413, "sample_too_large", "A value exceeds 64 KiB")
+		}
+		if len(page.Data) >= r.PageSize || bytes+row.size+1 > 2*1024*1024 {
+			break
+		}
+		page.Data = append(page.Data, row)
+		bytes += row.size + 1
+	}
+	if len(data) > len(page.Data) && len(page.Data) > 0 {
+		token, err := e.encodeCursor(r, from, to, page.Data[len(page.Data)-1].position)
 		if err != nil {
 			return nil, err
 		}
-		if len(encoded) <= 2*1024*1024 {
-			return page, nil
-		}
-		if len(page.Data) <= 1 {
-			return nil, problem(413, "page_too_large", "Narrow the query")
-		}
-		page.Data = page.Data[:len(page.Data)-1]
+		page.Next = &token
 	}
+	return page, nil
 }
 
 type accumulator struct {
@@ -400,6 +325,23 @@ func (a *accumulator) value() any {
 	}
 }
 func compareNumbers(a, b any) int {
+	if x, ok := a.(float64); ok {
+		if y, ok := b.(float64); ok {
+			if math.IsNaN(x) {
+				if math.IsNaN(y) {
+					return 0
+				}
+				return 1
+			}
+			if math.IsNaN(y) || x < y {
+				return -1
+			}
+			if x > y {
+				return 1
+			}
+			return 0
+		}
+	}
 	xr, xok := new(big.Rat).SetString(fmt.Sprint(a))
 	yr, yok := new(big.Rat).SetString(fmt.Sprint(b))
 	if xok && yok {

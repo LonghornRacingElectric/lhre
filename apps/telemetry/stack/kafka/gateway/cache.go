@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -16,7 +17,9 @@ import (
 const slabMS int64 = 60000
 
 type cachedSlab struct {
-	Data      []byte
+	Rows      []Row
+	Prepared  []Observation
+	Cost      int64
 	Offsets   Offsets
 	Signature string
 }
@@ -25,9 +28,9 @@ type Cache struct {
 	baseline         *ristretto.Cache[string, *cachedSlab]
 	pinned           map[string]*cachedSlab
 	pinBytes, pinCap int64
+	hotCap           int64
 	pinDays          map[string]bool
 	mu               sync.Mutex
-	hits             map[string]uint8
 	flight           singleflight.Group
 	Files            *Files
 	Ring             *Ring
@@ -51,7 +54,7 @@ func NewCache(s *Schema, r *Ring, files *Files, hotBytes, baselineBytes, pinByte
 		hot.Close()
 		return nil, err
 	}
-	c := &Cache{hot: hot, baseline: base, Files: files, Ring: r, Schema: s, pinned: map[string]*cachedSlab{}, pinCap: pinBytes, pinDays: map[string]bool{}, hits: map[string]uint8{}}
+	c := &Cache{hot: hot, baseline: base, Files: files, Ring: r, Schema: s, pinned: map[string]*cachedSlab{}, pinCap: pinBytes, hotCap: hotBytes - pinBytes, pinDays: map[string]bool{}}
 	for _, day := range pinDays {
 		if day != "" {
 			if _, err := time.Parse("2006-01-02", day); err != nil {
@@ -74,7 +77,17 @@ func externalSignature(sessions []Session) string {
 func (c *Cache) admit(key string, value *cachedSlab, start int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	cost := int64(len(value.Data) + len(key) + 128)
+	if c.hotCap == 0 && c.pinCap == 0 {
+		return
+	}
+	if value.Cost == 0 {
+		encoded, err := json.Marshal(value.Rows)
+		if err != nil {
+			return
+		}
+		value.Cost = int64(len(encoded)*2 + len(value.Rows)*128)
+	}
+	cost := value.Cost + int64(len(key)+128)
 	if c.pinDays[time.UnixMilli(start).UTC().Format("2006-01-02")] && cost+c.pinBytes <= c.pinCap {
 		if _, ok := c.pinned[key]; !ok {
 			c.pinned[key] = value
@@ -82,29 +95,35 @@ func (c *Cache) admit(key string, value *cachedSlab, start int64) {
 		}
 		return
 	}
-	if len(c.hits) > 100000 {
-		clear(c.hits)
-	}
-	c.hits[key]++
-	if c.hits[key] >= 2 {
+	// Ristretto handles frequency admission. A second gate would repeat the
+	// expensive miss, including between pages of the same query.
+	if cost <= c.hotCap/4 {
 		c.hot.Set(key, value, cost)
+		c.hot.Wait()
 	}
 }
 
-func (c *Cache) Rows(ctx context.Context, snap Snapshot, p Pool, start, end int64) ([]Row, string, error) {
-	key := fmt.Sprintf("%s/%s/%d", c.Schema.StorageID, p.Table, start)
+func rowsInRange(rows []Row, from, to int64) []Row {
+	first := sort.Search(len(rows), func(i int) bool { return rows[i].Time >= from })
+	last := sort.Search(len(rows), func(i int) bool { return rows[i].Time >= to })
+	return rows[first:last]
+}
+
+func (c *Cache) Rows(ctx context.Context, snap Snapshot, p Pool, start, end int64, bounds ...int64) ([]Row, string, error) {
+	from, to := start, end
+	if len(bounds) == 2 {
+		from, to = max(start, bounds[0]), min(end, bounds[1])
+	}
+	key := fmt.Sprintf("%s/%s/%v/%d", c.Schema.StorageID, p.Table, p.Fields, start)
 	signature := externalSignature(snap.Sessions())
-	_, currentCovered := c.Ring.Read(snap.Offsets(), p.Table, start, end)
+	currentCovered := c.Ring.Covers(snap.Offsets())
 	if entry, ok := c.baseline.Get(key); ok && entry.Signature == signature && currentCovered {
-		if tail, covered := c.Ring.Read(entry.Offsets, p.Table, start, end); covered {
-			base, err := decodeSlab(p, entry.Data)
-			if err == nil {
-				c.Reads[0].Add(1)
-				return mergeRows(base, tail, snap.Sessions()), "ring", nil
-			}
+		if tail, covered := c.Ring.Read(entry.Offsets, p.Table, from, to); covered {
+			c.Reads[0].Add(1)
+			return mergeRows(rowsInRange(entry.Rows, from, to), tail, snap.Sessions(), p.Fields), "ring", nil
 		}
 	}
-	tail, tailCovered := c.Ring.Read(snap.Offsets(), p.Table, start, end)
+	tail, tailCovered := c.Ring.Read(snap.Offsets(), p.Table, from, to)
 	// Sealed caches use data revisions; live baselines instead prove that every
 	// intervening database write is represented by the contiguous Kafka tail.
 	result := []Row{}
@@ -114,7 +133,7 @@ func (c *Cache) Rows(ctx context.Context, snap Snapshot, p Pool, start, end int6
 		if session.Start >= end || session.End < start {
 			continue
 		}
-		sealedKey := fmt.Sprintf("%s/%s/%d/%d/%d", c.Schema.StorageID, p.Table, session.ID, session.Revision, start)
+		sealedKey := fmt.Sprintf("%s/%s/%v/%d/%d/%d", c.Schema.StorageID, p.Table, p.Fields, session.ID, session.Revision, start)
 		c.mu.Lock()
 		entry, ok := c.pinned[sealedKey]
 		c.mu.Unlock()
@@ -122,20 +141,13 @@ func (c *Cache) Rows(ctx context.Context, snap Snapshot, p Pool, start, end int6
 			entry, ok = c.hot.Get(sealedKey)
 		}
 		if ok {
-			rows, err := decodeSlab(p, entry.Data)
-			if err == nil {
-				result = append(result, rows...)
-				continue
-			}
+			result = append(result, entry.Rows...)
+			continue
 		}
 		rows, found, err := c.Files.Read(p, session, start, end)
 		if err == nil && found {
 			source = "L2"
-			data, err := encodeSlab(p, rows)
-			if err != nil {
-				return nil, "", err
-			}
-			c.admit(sealedKey, &cachedSlab{Data: data}, start)
+			c.admit(sealedKey, &cachedSlab{Rows: rows}, start)
 			result = append(result, rows...)
 			continue
 		}
@@ -143,12 +155,13 @@ func (c *Cache) Rows(ctx context.Context, snap Snapshot, p Pool, start, end int6
 		c.Files.Queue(session.ID)
 	}
 	if allSealed && (tailCovered || end <= time.Now().Add(-c.Ring.window).UnixMilli()) {
+		sort.Slice(result, func(i, j int) bool { return result[i].Time < result[j].Time })
 		if source == "L1" {
 			c.Reads[1].Add(1)
 		} else {
 			c.Reads[2].Add(1)
 		}
-		return mergeRows(result, tail, snap.Sessions()), source, nil
+		return mergeRows(rowsInRange(result, from, to), tail, snap.Sessions(), p.Fields), source, nil
 	}
 	// Coalesce the expensive fetch while each caller retains its own metadata
 	// snapshot. A revision/offset signature prevents cross-snapshot reuse.
@@ -163,11 +176,11 @@ func (c *Cache) Rows(ctx context.Context, snap Snapshot, p Pool, start, end int6
 		return nil, "", problem(503, "tail_unavailable", "Kafka coverage is incomplete; retry after the shared consumer catches up")
 	}
 	if end > time.Now().Add(-c.Ring.window).UnixMilli() {
-		data, err := encodeSlab(p, rows)
+		data, err := json.Marshal(rows)
 		if err != nil {
 			return nil, "", err
 		}
-		c.baseline.Set(key, &cachedSlab{Data: data, Offsets: snap.Offsets(), Signature: signature}, int64(len(data)+len(key)+512))
+		c.baseline.Set(key, &cachedSlab{Rows: rows, Offsets: snap.Offsets(), Signature: signature}, int64(len(data)*2+len(rows)*128+len(key)+512))
 		c.baseline.Wait()
 	}
 	for _, session := range snap.Sessions() {
@@ -180,12 +193,8 @@ func (c *Cache) Rows(ctx context.Context, snap Snapshot, p Pool, start, end int6
 				selected = append(selected, row)
 			}
 		}
-		data, err := encodeSlab(p, selected)
-		if err != nil {
-			return nil, "", err
-		}
-		sealedKey := fmt.Sprintf("%s/%s/%d/%d/%d", c.Schema.StorageID, p.Table, session.ID, session.Revision, start)
-		c.admit(sealedKey, &cachedSlab{Data: data}, start)
+		sealedKey := fmt.Sprintf("%s/%s/%v/%d/%d/%d", c.Schema.StorageID, p.Table, p.Fields, session.ID, session.Revision, start)
+		c.admit(sealedKey, &cachedSlab{Rows: selected}, start)
 	}
-	return mergeRows(rows, tail, snap.Sessions()), "postgres", nil
+	return mergeRows(rowsInRange(rows, from, to), tail, snap.Sessions(), p.Fields), "postgres", nil
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"strconv"
+	"sync"
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
@@ -58,9 +59,14 @@ func OpenDB(ctx context.Context, url string) (*pgxpool.Pool, error) {
 }
 
 type postgresSnapshot struct {
-	tx       pgx.Tx
-	sessions []Session
-	offsets  Offsets
+	tx         pgx.Tx
+	db         *pgxpool.Pool
+	mu         sync.Mutex
+	exported   string
+	exportOnce sync.Once
+	exportErr  error
+	sessions   []Session
+	offsets    Offsets
 }
 
 func (s *postgresSnapshot) Sessions() []Session       { return s.sessions }
@@ -72,7 +78,7 @@ func (p *Postgres) Snapshot(ctx context.Context, from, to int64) (Snapshot, erro
 	if err != nil {
 		return nil, err
 	}
-	s := &postgresSnapshot{tx: tx, offsets: Offsets{}}
+	s := &postgresSnapshot{tx: tx, db: p.DB, offsets: Offsets{}}
 	fail := func(err error) (Snapshot, error) { s.Close(ctx); return nil, err }
 	query, args, _ := selectSQL.Select("storage_id").From("public.storage_migration").Where(sq.Eq{"storage_id": p.StorageID}).ToSql()
 	var id string
@@ -119,6 +125,51 @@ func (p *Postgres) Snapshot(ctx context.Context, from, to int64) (Snapshot, erro
 	return s, nil
 }
 
+// Spare connections import the same MVCC snapshot. If the pool is busy, use
+// the parent instead of reserving a connection while waiting for another one.
+func (s *postgresSnapshot) reader(ctx context.Context) (pgx.Tx, func(), error) {
+	probe, cancel := context.WithTimeout(ctx, 5*time.Millisecond)
+	conn, err := s.db.Acquire(probe)
+	cancel()
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, nil, ctx.Err()
+		}
+		s.mu.Lock()
+		return s.tx, s.mu.Unlock, nil
+	}
+	s.exportOnce.Do(func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		q, args, _ := selectSQL.Select("pg_export_snapshot()").ToSql()
+		s.exportErr = s.tx.QueryRow(ctx, q, args...).Scan(&s.exported)
+	})
+	id := s.exported
+	if s.exportErr != nil {
+		conn.Release()
+		return nil, nil, s.exportErr
+	}
+	tx, err := conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		conn.Release()
+		return nil, nil, err
+	}
+	close := func() { _ = tx.Rollback(context.Background()); conn.Release() }
+	// This transaction command cannot bind parameters. The literal is an ID
+	// returned by Postgres, restricted to its hex-and-hyphen representation.
+	for _, ch := range id {
+		if !(ch >= '0' && ch <= '9' || ch >= 'A' && ch <= 'F' || ch >= 'a' && ch <= 'f' || ch == '-') {
+			close()
+			return nil, nil, fmt.Errorf("invalid exported snapshot ID")
+		}
+	}
+	if _, err = tx.Exec(ctx, "SET TRANSACTION SNAPSHOT '"+id+"'"); err != nil {
+		close()
+		return nil, nil, err
+	}
+	return tx, close, nil
+}
+
 func (s *postgresSnapshot) Read(ctx context.Context, p Pool, from, to int64, session *int64) ([]Row, error) {
 	columns := []string{`"time"`, "sample_time_ns", "session_start_ms"}
 	for _, f := range p.Fields {
@@ -132,7 +183,12 @@ func (s *postgresSnapshot) Read(ctx context.Context, p Pool, from, to int64, ses
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.tx.Query(ctx, query, args...)
+	tx, close, err := s.reader(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer close()
+	rows, err := tx.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -153,6 +209,69 @@ func (s *postgresSnapshot) Read(ctx context.Context, p Pool, from, to int64, ses
 		if len(result) > 100000 {
 			return nil, problem(413, "query_scan_limit", "Pool slab exceeds 100000 rows; narrow the range")
 		}
+	}
+	return result, rows.Err()
+}
+
+func (s *postgresSnapshot) Window(ctx context.Context, p Pool, from, to, width int64, aggregate string, after *Position, limit int) ([]Row, error) {
+	q := selectSQL.Select("session_start_ms").From("public." + p.Table).
+		Where(sq.GtOrEq{`"time"`: from}).Where(sq.Lt{`"time"`: to})
+	if aggregate == "raw" {
+		q = q.Column(`"time"`).Column("sample_time_ns")
+		if after != nil {
+			q = q.Where(sq.Expr(`("time", session_start_ms, sample_time_ns) >= (?, ?, ?)`, after.Time, after.Session, after.NS))
+		}
+	} else {
+		q = q.Column(sq.Expr(`time_bucket(?::bigint, "time") AS "time"`, width)).Column("max(sample_time_ns) AS sample_time_ns").GroupBy("session_start_ms", "2")
+	}
+	present := sq.Or{}
+	for _, f := range p.Fields {
+		col := `"` + f.Name + `"`
+		present = append(present, sq.NotEq{col: nil})
+		var expression string
+		switch aggregate {
+		case "raw":
+			expression = col
+		case "last":
+			expression = "last(" + col + ", sample_time_ns) FILTER (WHERE " + col + " IS NOT NULL)"
+		case "mean":
+			expression = "avg(" + col + ")"
+		case "min", "max":
+			expression = aggregate + "(" + col + ")"
+		}
+		q = q.Column(expression + " AS " + col)
+	}
+	q = q.Where(present).OrderBy(`"time"`, "session_start_ms", "sample_time_ns").Limit(uint64(limit))
+	query, args, err := q.ToSql()
+	if err != nil {
+		return nil, err
+	}
+	tx, close, err := s.reader(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer close()
+	rows, err := tx.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := []Row{}
+	for rows.Next() {
+		v, err := rows.Values()
+		if err != nil {
+			return nil, err
+		}
+		r := Row{Session: v[0].(int64), Time: v[1].(int64), NS: v[2].(int64), Values: map[string]any{}}
+		if aggregate != "raw" {
+			r.NS = r.Time * 1000000
+		}
+		for i, f := range p.Fields {
+			if v[i+3] != nil {
+				r.Values[f.Name] = normalize(v[i+3])
+			}
+		}
+		result = append(result, r)
 	}
 	return result, rows.Err()
 }

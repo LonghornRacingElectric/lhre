@@ -75,22 +75,35 @@ func (r *Ring) Add(partition int32, offset int64, rows []LiveRow) {
 	}
 }
 
-func (r *Ring) Read(from Offsets, pool string, start, end int64) ([]Row, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+func (r *Ring) covered(from Offsets) bool {
 	if !r.ready {
-		return nil, false
+		return false
 	}
 	for part, floor := range r.floor {
 		off := from[part]
 		if off < floor || off > r.next[part] {
-			return nil, false
+			return false
 		}
 	}
 	for part, off := range from {
 		if _, ok := r.next[part]; !ok || off > r.next[part] {
-			return nil, false
+			return false
 		}
+	}
+	return true
+}
+
+func (r *Ring) Covers(from Offsets) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.covered(from)
+}
+
+func (r *Ring) Read(from Offsets, pool string, start, end int64) ([]Row, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if !r.covered(from) {
+		return nil, false
 	}
 	result := []Row{}
 	for _, record := range r.records {
@@ -119,7 +132,7 @@ func (r *Ring) Stats() map[string]any {
 	return map[string]any{"bytes": r.bytes, "records": len(r.records), "gaps": r.gaps, "ready": r.ready}
 }
 
-func mergeRows(base, tail []Row, sessions []Session) []Row {
+func mergeRows(base, tail []Row, sessions []Session, fields ...[]Field) []Row {
 	merged := map[string]Row{}
 	for _, rows := range [][]Row{tail, base} {
 		for _, row := range rows {
@@ -128,8 +141,16 @@ func mergeRows(base, tail []Row, sessions []Session) []Row {
 			if !ok {
 				existing = Row{Time: row.Time, NS: row.NS, Values: map[string]any{}}
 			}
-			for k, v := range row.Values {
-				existing.Values[k] = v
+			if len(fields) == 0 {
+				for k, v := range row.Values {
+					existing.Values[k] = v
+				}
+			} else {
+				for _, f := range fields[0] {
+					if v, ok := row.Values[f.Name]; ok {
+						existing.Values[f.Name] = v
+					}
+				}
 			}
 			if row.Session != 0 {
 				existing.Session = row.Session

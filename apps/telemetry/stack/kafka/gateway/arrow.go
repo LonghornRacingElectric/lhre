@@ -1,11 +1,11 @@
 package gateway
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -94,12 +94,33 @@ func recordBatch(p Pool, rows []Row) (arrow.RecordBatch, error) {
 	}
 	return b.NewRecordBatch(), nil
 }
-func batchRows(p Pool, rec arrow.RecordBatch) ([]Row, error) {
-	result := make([]Row, rec.NumRows())
-	for i := range result {
-		r := Row{Time: rec.Column(0).(*array.Int64).Value(i), NS: rec.Column(1).(*array.Int64).Value(i), Session: rec.Column(2).(*array.Int64).Value(i), Values: map[string]any{}}
+func batchRowsRange(p Pool, rec arrow.RecordBatch, start, end int64) ([]Row, error) {
+	clock := rec.Column(0).(*array.Int64)
+	first := sort.Search(int(rec.NumRows()), func(i int) bool { return clock.Value(i) >= start })
+	last := sort.Search(int(rec.NumRows()), func(i int) bool { return clock.Value(i) >= end })
+	columns := make([]int, len(p.Fields))
+	for i, field := range p.Fields {
+		indices := rec.Schema().FieldIndices(field.Name)
+		if len(indices) != 1 {
+			return nil, fmt.Errorf("Arrow field %s is absent or ambiguous", field.Name)
+		}
+		columns[i] = indices[0]
+	}
+	result := make([]Row, 0, last-first)
+	for i := first; i < last; i++ {
+		present := false
+		for _, column := range columns {
+			if !rec.Column(column).IsNull(i) {
+				present = true
+				break
+			}
+		}
+		if !present {
+			continue
+		}
+		r := Row{Time: clock.Value(i), NS: rec.Column(1).(*array.Int64).Value(i), Session: rec.Column(2).(*array.Int64).Value(i), Values: make(map[string]any, len(p.Fields))}
 		for j, f := range p.Fields {
-			col := rec.Column(j + 3)
+			col := rec.Column(columns[j])
 			if col.IsNull(i) {
 				continue
 			}
@@ -125,45 +146,9 @@ func batchRows(p Pool, rec arrow.RecordBatch) ([]Row, error) {
 			}
 			r.Values[f.Name] = v
 		}
-		result[i] = r
+		result = append(result, r)
 	}
 	return result, nil
-}
-func encodeSlab(p Pool, rows []Row) ([]byte, error) {
-	var buffer bytes.Buffer
-	writer, err := ipc.NewFileWriter(&buffer, ipc.WithSchema(arrowSchema(p)))
-	if err != nil {
-		return nil, err
-	}
-	rec, err := recordBatch(p, rows)
-	if err != nil {
-		_ = writer.Close()
-		return nil, err
-	}
-	defer rec.Release()
-	if err = writer.Write(rec); err != nil {
-		return nil, err
-	}
-	if err = writer.Close(); err != nil {
-		return nil, err
-	}
-	return bytes.Clone(buffer.Bytes()), nil
-}
-func decodeSlab(p Pool, data []byte) ([]Row, error) {
-	r, err := ipc.NewMappedFileReader(data)
-	if err != nil {
-		return nil, err
-	}
-	defer r.Close()
-	if r.NumRecords() != 1 {
-		return nil, fmt.Errorf("invalid slab")
-	}
-	batch, err := r.RecordBatchAt(0)
-	if err != nil {
-		return nil, err
-	}
-	defer batch.Release()
-	return batchRows(p, batch)
 }
 func publicValue(v any) any {
 	switch x := v.(type) {

@@ -9,6 +9,12 @@ worker forwards them in order and retries failed or uncertain sends until Kafka
 acknowledges the record. The queue holds 30,000 batches; a full queue logs and
 drops new input. MQTT subscriptions are restored after reconnecting.
 
+The shared pool writer assigns ordinary contiguous batches to a recording in
+one lookup and flush. Discontinuous batches and late data spanning multiple
+recordings retain the historical merge path.
+Pool upserts use SQLAlchemy's bulk execution within the existing transaction;
+replays remain idempotent and conflicting values roll back the batch.
+
 Ingest does not allocate packet IDs, write CSVs, open database sessions or apply
 DDL. GPS travels in the native Artemis updates. There is no separate GPS JSON
 input or packet-ID welcome exchange.

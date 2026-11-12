@@ -59,6 +59,23 @@ func (f *Files) Queue(id int64) {
 func (f *Files) name(p Pool, s Session) string {
 	return filepath.Join(f.Dir, fmt.Sprintf("%s_%d_%d_%s", f.Schema.StorageID, s.ID, s.Revision, p.Table))
 }
+
+func (f *Files) Available(p Pool, s Session) bool {
+	if f.Dir == "" || f.Cap == 0 {
+		return false
+	}
+	name := f.name(p, s)
+	data, err := os.ReadFile(name + ".json")
+	if err != nil {
+		return false
+	}
+	var m Manifest
+	if json.Unmarshal(data, &m) != nil || m.Storage != f.Schema.StorageID || m.Session != s.ID || m.Revision != s.Revision || m.Pool != p.Table {
+		return false
+	}
+	stat, err := os.Stat(name + ".arrow")
+	return err == nil && stat.Size() > 0
+}
 func (f *Files) Read(p Pool, s Session, start, end int64) ([]Row, bool, error) {
 	if f.Dir == "" || f.Cap <= 0 {
 		return nil, false, nil
@@ -126,7 +143,7 @@ func (f *Files) Read(p Pool, s Session, start, end int64) ([]Row, bool, error) {
 		if err != nil {
 			return nil, false, err
 		}
-		rows, err := batchRows(p, batch)
+		rows, err := batchRowsRange(p, batch, start, end)
 		batch.Release()
 		if err != nil {
 			return nil, false, err
@@ -292,6 +309,13 @@ func (f *Files) Seal(ctx context.Context, store Store, s Session) error {
 			}
 			if err = atomicJSON(name+".json", manifest); err != nil {
 				return err
+			}
+			// Sealing already hashed these immutable bytes. Reuse that proof
+			// instead of scanning the whole file on its first query.
+			if stat, err := os.Stat(name + ".arrow"); err == nil {
+				f.mu.Lock()
+				f.verified[name] = fmt.Sprintf("%s/%d/%d", manifest.Checksum, stat.Size(), stat.ModTime().UnixNano())
+				f.mu.Unlock()
 			}
 		}
 	}

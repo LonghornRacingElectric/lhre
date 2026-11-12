@@ -42,6 +42,10 @@ preserve independent samples within one millisecond. Disjoint observations with
 one key merge, identical replay is idempotent, and conflicting values roll back
 the batch without committing Kafka offsets.
 
+Contiguous batches resolve their recording once, avoiding a database round trip
+per sample timestamp. Late imports spanning recordings use the merge path.
+Pool upserts pass row batches to SQLAlchemy's bulk executor, retaining one
+transaction and conflict checks without compiling a statement per value.
 Recording windows split on gaps greater than five minutes. Their keys are
 fixed time-derived values; start/end bounds can expand when older data arrives.
 Late data matches historical windows and can merge windows when it closes a

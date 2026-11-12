@@ -79,8 +79,30 @@ Gateway cursor version 4 replaces the old viewer cursor; restart a paged read
 after upgrading. Pagination does not freeze subsequent late database writes.
 
 Requests are limited to 256 KiB, 10,000 rows per page, 2 MiB per JSON page,
-64 KiB per observation and a 30-second query deadline. Large raw scans fail
+64 KiB per observation, 200,000 merged observations per request and a 30-second
+query deadline. Large raw scans fail
 explicitly; use a smaller range or sealed bucketed history.
+
+## Read planning
+
+One repeatable-read metadata snapshot validates schema, recording revisions and
+persistence offsets before cache lookup. Up to four pool workers run in parallel.
+SQL workers import the same exported Postgres snapshot on spare connections;
+when the four-connection pool is busy, they use the parent transaction under a
+lock. This preserves a coherent query without waiting indefinitely for extra
+connections.
+
+Historical L1 hits return immutable prepared observations. Misses check Arrow
+manifest identities before reading file bodies. Arrow reads binary-search the
+requested timestamps and decode only selected columns; whole-second summaries
+combine with raw boundary samples for partial buckets. Historical Postgres misses select
+only requested fields and exact bounds, with aggregation performed in Timescale
+at every range size. Raw SQL reads seek from the continuation position.
+
+Pools merge in deterministic timestamp/session/sample/signal order. Paging uses
+cached observation sizes and one byte budget, without repeatedly encoding an
+oversized result. Recent baselines retain decoded projected rows and slice to
+the requested range before merging Kafka updates.
 
 ## Client SDK boundary
 
@@ -112,7 +134,7 @@ The gateway checks lightweight database metadata before trusting cached telemetr
 A database metadata outage therefore returns an unavailable result instead of
 asserting that an unverified cache is current.
 
-Lookup order is the recent baseline plus Kafka ring, L1 pool slabs, L2 Arrow
+Lookup order is the recent baseline plus Kafka ring, prepared L1 results, L2 Arrow
 files, then Postgres for missing telemetry. Cold starts recover from persistence
 offsets; the ring's own Kafka commits do not make its RAM durable. If a recent
 request cannot establish complete coverage, it returns `tail_unavailable` until
@@ -139,10 +161,15 @@ so restarts and rebalances do not replay retained payloads as live events.
 
 ## Cache ownership and sizing
 
-L1 stores uncompressed Arrow slabs per pool and minute, keyed by storage identity,
-session and revision. Second-access admission and Ristretto's frequency/cost
-policy keep one-off scans from displacing hot slabs. Simultaneous identical
-misses share the fetch. `QUERY_PIN_DAYS` names UTC dates; `QUERY_PIN_BYTES` reserves
+L1 stores prepared per-pool results keyed by storage identity, selected fields,
+time bounds, aggregate/bucket width and recording revisions. Hits reuse decoded,
+sorted observations and precomputed sizes instead of decoding Arrow again.
+Recent baselines use a separate byte budget for projected decoded minute ranges.
+Ristretto handles frequency/cost admission directly; there is no extra two-hit
+gate. Entries are admitted on the first completed miss, including before the
+next page, and a single entry may consume at most a quarter of the unpinned L1
+budget. Simultaneous identical misses share computation. `QUERY_PIN_DAYS` names
+UTC dates; `QUERY_PIN_BYTES` reserves
 at most half of `QUERY_L1_BYTES` for hot entries from those days. Pinning is bounded
 and does not preload an entire day.
 
@@ -153,7 +180,9 @@ timestamp bounds, persistence offsets and a batch index. Raw batches cover one
 minute; companion one-second overviews retain count/sum/min/max/last state.
 Larger means weight sample counts; partial boundary seconds use raw data.
 
-Files are closed and synced before atomic publication. Revisions are checked
+Files are closed and synced before atomic publication. The sealer reuses its
+checksum proof for the first read; file size/mtime changes require verification
+again. Revisions are checked
 again before publication and on reads. Late writes invalidate the old revision;
 readers can finish on an old mapping. Missing/corrupt files fall back to Postgres
 and queue a reseal. Deleting the entire cache loses no authoritative data.
@@ -172,6 +201,13 @@ declared native rates; record latency, `/v1/stats` source reads, hit ratios,
 RSS, disk use and ingest lag before increasing budgets. Benchmark uncompressed
 IPC against LZ4 before changing the file format; compression requires decoded
 buffers and changes memory accounting.
+The [trackside benchmark](../../tests/TRACKSIDE_BENCHMARK.md) exercises native-rate
+ingest with concurrent engineering reads. At its synthetic rate, the 64 MiB ring
+held roughly 41 seconds; the configured time window remains an upper bound.
+The [controlled comparison](../../tests/QUERY_COMPARISON.md) measures the
+projected parallel reader against direct Postgres and the previous full-pool
+reader. Historical backend cache hits are substantially faster; Grafana still
+adds transport and frame conversion, so use its comparison when assessing plots.
 
 ## Verification
 

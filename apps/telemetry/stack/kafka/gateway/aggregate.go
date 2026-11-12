@@ -32,7 +32,12 @@ func (s *postgresSnapshot) Aggregate(ctx context.Context, p Pool, from, to, widt
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.tx.Query(ctx, query, args...)
+	tx, close, err := s.reader(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer close()
+	rows, err := tx.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +62,7 @@ func (s *postgresSnapshot) Aggregate(ctx context.Context, p Pool, from, to, widt
 	return out, rows.Err()
 }
 func (s *postgresSnapshot) Unstored(ctx context.Context, p Pool, tail []Row) ([]Row, error) {
-	tail = mergeRows(nil, tail, nil)
+	tail = mergeRows(nil, tail, nil, p.Fields)
 	if len(tail) == 0 {
 		return tail, nil
 	}
@@ -75,7 +80,12 @@ func (s *postgresSnapshot) Unstored(ctx context.Context, p Pool, tail []Row) ([]
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.tx.Query(ctx, query, args...)
+	tx, close, err := s.reader(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer close()
+	rows, err := tx.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -112,35 +122,16 @@ func (s *postgresSnapshot) Unstored(ctx context.Context, p Pool, tail []Row) ([]
 	return out, nil
 }
 
-func (c *Cache) hasSealed(snap Snapshot, p Pool, from, to int64) bool {
-	if len(snap.Sessions()) == 0 {
-		return false
-	}
-	for _, session := range snap.Sessions() {
-		_, found, err := c.Files.Read(overviewPool(p), session, max(from, session.Start), min(to, session.Start+1))
-		if err != nil || !found {
-			c.Files.Queue(session.ID)
-			return false
-		}
-	}
-	return true
-}
-
 func (c *Cache) aggregate(ctx context.Context, snap Snapshot, p Pool, from, to, width int64) ([]Row, []Row, string, error) {
 	reader, ok := snap.(aggregateSnapshot)
 	if !ok {
 		return nil, nil, "", fmt.Errorf("aggregate source unavailable")
 	}
-	key := fmt.Sprintf("aggregate/%s/%s/%d/%d/%d/%v", c.Schema.StorageID, p.Table, from, to, width, snap.Sessions())
-	overview := overviewPool(p)
+	key := fmt.Sprintf("aggregate/%s/%s/%v/%d/%d/%d/%v", c.Schema.StorageID, p.Table, p.Fields, from, to, width, snap.Sessions())
 	var rows []Row
 	source := "L1"
 	if entry, ok := c.hot.Get(key); ok {
-		var err error
-		rows, err = decodeSlab(overview, entry.Data)
-		if err != nil {
-			rows = nil
-		}
+		rows = entry.Rows
 	}
 	if rows == nil {
 		source = "postgres"
@@ -151,11 +142,7 @@ func (c *Cache) aggregate(ctx context.Context, snap Snapshot, p Pool, from, to, 
 		}
 		rows = value.([]Row)
 		c.Reads[3].Add(1)
-		encoded, err := encodeSlab(overview, rows)
-		if err != nil {
-			return nil, nil, "", err
-		}
-		c.admit(key, &cachedSlab{Data: encoded}, from)
+		c.admit(key, &cachedSlab{Rows: rows}, from)
 	} else {
 		c.Reads[1].Add(1)
 	}
@@ -167,7 +154,7 @@ func (c *Cache) aggregate(ctx context.Context, snap Snapshot, p Pool, from, to, 
 	if err != nil {
 		return nil, nil, "", err
 	}
-	return rows, mergeRows(nil, tail, snap.Sessions()), source, nil
+	return rows, mergeRows(nil, tail, snap.Sessions(), p.Fields), source, nil
 }
 
 func addAggregateRows(aggregates map[string]*accumulator, rows []Row, signals []Signal, agg string, width int64, summary bool) error {

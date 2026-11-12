@@ -24,9 +24,31 @@ def require_schema(session):
 def assign_sessions(session, times):
     """Match historical windows too; late data can bridge two recordings."""
     session.execute(select(func.pg_advisory_xact_lock(176021, 1)))
+    times = sorted(set(times))
+    if not times:
+        return {}
+    # Native batches normally extend one contiguous recording. Resolve that
+    # window once instead of querying and flushing for every sample timestamp.
+    nearby = session.scalars(select(ArtemisRecordingSession).where(
+        ArtemisRecordingSession.start_time <= times[-1] + GAP_MS,
+        ArtemisRecordingSession.end_time >= times[0] - GAP_MS,
+    ).order_by(ArtemisRecordingSession.session_start_ms).with_for_update()).all()
+    contiguous = all(b - a <= GAP_MS for a, b in zip(times, times[1:]))
+    if contiguous and not nearby:
+        row = ArtemisRecordingSession(session_start_ms=times[0], start_time=times[0], end_time=times[-1])
+        session.add(row)
+        session.flush()
+        return dict.fromkeys(times, row.session_start_ms)
+    if contiguous and len(nearby) == 1:
+        row = nearby[0]
+        if row.start_time - GAP_MS <= times[0] <= row.end_time + GAP_MS:
+            row.start_time = min(times[0], row.start_time)
+            row.end_time = max(times[-1], row.end_time)
+            session.flush()
+            return dict.fromkeys(times, row.session_start_ms)
     mapping = {}
     tables = [model.__table__ for model in POOL_MODELS.values()] + [ArtemisGpsPrecise.__table__]
-    for stamp in sorted(set(times)):
+    for stamp in times:
         nearby = session.scalars(select(ArtemisRecordingSession).where(
             ArtemisRecordingSession.start_time <= stamp + GAP_MS,
             ArtemisRecordingSession.end_time >= stamp - GAP_MS,
@@ -66,14 +88,14 @@ def insert_rows(session, table, rows):
         return
     names = sorted({name for row in unique.values() for name in row})
     values = [{name: row.get(name) for name in names} for row in unique.values()]
-    statement = insert(table).values(values)
+    statement = insert(table)
     fields = [name for name in names if name not in keys]
     equal = and_(*(table.c[name].is_(None) | statement.excluded[name].is_(None) |
                    table.c[name].is_not_distinct_from(statement.excluded[name]) for name in fields))
     admitted = session.execute(statement.on_conflict_do_update(
         index_elements=[table.c[name] for name in keys],
         set_={name: func.coalesce(statement.excluded[name], table.c[name]) for name in fields}, where=equal,
-    ).returning(table.c.time)).all()
+    ).returning(table.c.time), values).all()
     if len(admitted) != len(values):
         raise ValueError(f"Conflicting stored {table.name} sample; batch rolled back")
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -13,7 +14,7 @@ type fixtureStore struct {
 	sessions []Session
 	offsets  Offsets
 	rows     map[string][]Row
-	reads    int
+	reads    atomic.Int64
 }
 type fixtureSnapshot struct {
 	store    *fixtureStore
@@ -35,7 +36,7 @@ func (s *fixtureSnapshot) Sessions() []Session   { return s.sessions }
 func (s *fixtureSnapshot) Offsets() Offsets      { return s.offsets }
 func (s *fixtureSnapshot) Close(context.Context) {}
 func (s *fixtureSnapshot) Read(ctx context.Context, p Pool, from, to int64, id *int64) ([]Row, error) {
-	s.store.reads++
+	s.store.reads.Add(1)
 	rows := []Row{}
 	for _, r := range s.store.rows[p.Table] {
 		if r.Time >= from && r.Time < to && (id == nil || r.Session == *id) {
@@ -78,14 +79,14 @@ func TestRecentWindowUsesBaselineAndKafkaAcrossPersistence(t *testing.T) {
 	if len(first.Data) != 1 || first.Data[0].Value != 0.0 {
 		t.Fatalf("first: %+v", first)
 	}
-	reads := store.reads
+	reads := store.reads.Load()
 	e.Cache.Ring.Add(0, 10, []LiveRow{{Pool: "controls_100hz", Row: Row{Time: start + 20, NS: (start + 20) * 1000000, Values: map[string]any{"apps": 50.0}}}})
 	live, err := e.Query(ctx, r)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(live.Data) != 2 || store.reads != reads {
-		t.Fatalf("live=%+v DB reads=%d", live, store.reads)
+	if len(live.Data) != 2 || store.reads.Load() != reads {
+		t.Fatalf("live=%+v DB reads=%d", live, store.reads.Load())
 	}
 	store.rows["controls_100hz"] = append(store.rows["controls_100hz"], Row{Time: start + 20, NS: (start + 20) * 1000000, Session: start, Values: map[string]any{"apps": 50.0}})
 	store.offsets[0] = 11
@@ -94,8 +95,8 @@ func TestRecentWindowUsesBaselineAndKafkaAcrossPersistence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(persisted.Data) != 2 || store.reads != reads {
-		t.Fatalf("Persistence duplicated/refetched data: %+v reads=%d", persisted, store.reads)
+	if len(persisted.Data) != 2 || store.reads.Load() != reads {
+		t.Fatalf("Persistence duplicated/refetched data: %+v reads=%d", persisted, store.reads.Load())
 	}
 }
 func TestImportInvalidatesRecentBaseline(t *testing.T) {
@@ -111,8 +112,35 @@ func TestImportInvalidatesRecentBaseline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if page.Data[0].Value != 99.0 || store.reads != 2 {
-		t.Fatalf("stale import: %+v reads=%d", page, store.reads)
+	if page.Data[0].Value != 99.0 || store.reads.Load() != 2 {
+		t.Fatalf("stale import: %+v reads=%d", page, store.reads.Load())
+	}
+}
+
+func TestPreparedHistorySeparatesSelectionsAndRefreshesAfterImport(t *testing.T) {
+	e, store, start := setup(t)
+	shift := int64(time.Hour / time.Millisecond)
+	start -= shift
+	store.sessions[0].ID, store.sessions[0].Start, store.sessions[0].End = start, start, start+2000
+	row := &store.rows["controls_100hz"][0]
+	row.Time, row.NS, row.Session = row.Time-shift, row.NS-shift*1000000, start
+	r := request(start, "controls.apps")
+	for i := 0; i < 2; i++ {
+		page, err := e.Query(context.Background(), r)
+		if err != nil || len(page.Data) != 1 || page.Data[0].Value != 0.0 {
+			t.Fatalf("cached history: %+v %v", page, err)
+		}
+	}
+	other, err := e.Query(context.Background(), request(start, "controls.enabled"))
+	if err != nil || len(other.Data) != 1 || other.Data[0].Value != false {
+		t.Fatalf("selection: %+v %v", other, err)
+	}
+	row.Values["apps"] = 99.0
+	store.sessions[0].Revision++
+	store.sessions[0].External++
+	page, err := e.Query(context.Background(), r)
+	if err != nil || len(page.Data) != 1 || page.Data[0].Value != 99.0 {
+		t.Fatalf("import: %+v %v", page, err)
 	}
 }
 func TestBucketsAndPaginationAcrossPools(t *testing.T) {

@@ -1,5 +1,6 @@
 """Exercise the shared API with actual Kafka, writer, Timescale and Grafana."""
 import base64
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 import subprocess
@@ -78,6 +79,30 @@ class QueryGatewayTest(unittest.TestCase):
             first = send(stamp, "controls", "enable", False)
             self.wait_for(lambda: persisted(first))
             self.wait_for(lambda: call("/v1/query", query), lambda p: len(p["data"]) == 1)
+            historical = stamp - 86_400_000
+            send(historical, "controls", "apps1_travel", 0)
+            send(historical, "controls", "enable", False)
+            send(historical + 1, "controls", "apps1_travel", 77)
+            send(historical + 2, "controls", "apps1_travel", 88)
+            old_record = send(historical + 3, "controls", "apps1_travel", 99)
+            self.wait_for(lambda: persisted(old_record))
+            history = {**query, "signals": ["controls.apps1_travel", "controls.enable"], "t0": iso(historical), "t1": iso(historical + 4), "page_size": 1}
+            old_rows = []
+            while True:
+                page = call("/v1/query", history)
+                old_rows.extend(page["data"])
+                if page["next_page_token"] is None:
+                    break
+                history["page_token"] = page["next_page_token"]
+            self.assertEqual([row["value"] for row in old_rows], [0, False, 77, 88, 99])
+            self.assertEqual(len({(row["sample_time_ns"], row["signal"]) for row in old_rows}), 5)
+            # Distinct cold requests exceed the four-connection pool. Readers
+            # must finish without waiting for a spare snapshot connection.
+            def cold_history(index):
+                return call("/v1/query", {**history, "page_token": "", "page_size": 100, "t0": iso(historical - index - 1)})
+            with ThreadPoolExecutor(max_workers=8) as clients:
+                for page in clients.map(cold_history, range(8)):
+                    self.assertEqual([row["value"] for row in page["data"]], [0, False, 77, 88, 99])
             control("stop", "query_gateway")
             producer.send("grafana_data_artemis", json.dumps({"car_type": "artemis", "marker": "retained"}).encode()).get(timeout=15)
             control("start", "query_gateway")

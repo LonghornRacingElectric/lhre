@@ -72,6 +72,15 @@ class PoolStorageTest(unittest.TestCase):
         raw = POOL_MODELS["controls_333hz"]
         self.assertEqual(set(self.session.scalars(select(raw.session_start_ms))), {3_000_000})
 
+    def test_contiguous_batch_extends_bounds_without_changing_recording_identity(self):
+        write_updates(self.session, [self.message(7_000_000)])
+        write_updates(self.session, [self.message(7_300_000), self.message(6_800_000), self.message(7_000_100)])
+        window = self.session.scalars(select(ArtemisRecordingSession)).one()
+        self.assertEqual((window.session_start_ms, window.start_time, window.end_time),
+                         (7_000_000, 6_800_000, 7_300_000))
+        raw = POOL_MODELS["controls_333hz"]
+        self.assertEqual(set(self.session.scalars(select(raw.session_start_ms))), {7_000_000})
+
     def test_schema_and_gps_have_no_packet_relationship(self):
         inspector = inspect(self.connection)
         self.assertNotIn("packet", inspector.get_table_names(schema="public"))

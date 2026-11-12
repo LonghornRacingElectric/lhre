@@ -87,4 +87,85 @@ and executes a maximum query through Grafana's actual backend datasource.
 It also restarts the gateway over retained JSON feed messages and verifies that
 new live events are served without replay, then checks that an undecodable
 native record cannot stop subsequent valid live updates.
+Historical paging checks same-sample fields and continuation into later samples.
+Eight distinct cold requests verify progress when all four database connections
+are occupied.
 CI runs this independently of the secret-dependent broader integration suite.
+
+## Trackside workflow benchmark
+
+The [measured run](TRACKSIDE_BENCHMARK.md) records latency, correctness and sizing
+limits for the synthetic trackside workload.
+
+```bash
+QUERY_TEST_LOCAL=1 bash apps/telemetry/stack/tests/run_query_gateway_test.sh \
+  --benchmark --minutes 10 --live-seconds 60 --clients 3 \
+  --report /tmp/query-gateway-trackside.json
+```
+
+The manual `:query_gateway_benchmark` uses the same isolated services and cleanup.
+It bulk-loads two synthetic recordings at every generated pool's native rate,
+separated by a six-minute pit stop. External GPS uses 10 Hz and board health
+1 Hz as explicit fixture assumptions. All generated fields are populated;
+arrays have three elements. The signal pattern has known zeroes, peaks and
+averages; it models query volume, not vehicle dynamics or worst-case cell arrays.
+
+The workload discovers signals and recordings, selects a drive day, requests
+multi-pool overviews, zooms, all-pool snapshots and paged raw exports, and queries
+Grafana's actual datasource. It checks session separation, empty pit intervals,
+exact raw identities and independent peak/mean results. Three historical readers
+run alongside native-rate Kafka traffic and an SSE dashboard. Pausing the real
+writer verifies live delivery and duplicate-free catch-up after it resumes.
+
+History is a direct SQLAlchemy fixture load; live data uses the real Kafka
+consumer and database writer. The benchmark ages only the fixture's idle-write
+metadata to exercise the normal seal worker without waiting five minutes.
+It measures unsealed and sealed reads with 256 MiB L1 and 1 GiB L2, separately
+from shipped cache defaults. First-read timings mean empty derived caches;
+Postgres and OS page caches remain warm after fixture loading.
+
+The JSON report records dataset size, schema, Docker capacity, per-operation
+latencies/sample counts/pages/sources, seal size/time, concurrent-read latency,
+live freshness, sampled persistence lag, writer catch-up and sampled container memory. This is a local
+synthetic acceptance run; repeat on the server with recorded traffic before
+claiming production capacity. It is deliberately excluded from presubmit.
+
+## Query design comparison
+
+The [measured comparison](QUERY_COMPARISON.md) evaluates speedup and regressions
+against direct Postgres, including both paths through Grafana.
+
+```bash
+QUERY_TEST_LOCAL=1 bash apps/telemetry/stack/tests/run_query_gateway_test.sh \
+  --compare --minutes 10 --repeats 20 --clients 3 \
+  --report /tmp/query-gateway-comparison.json
+```
+
+The manual `:query_gateway_comparison` compares identical results on one fixture:
+direct Timescale through SQLAlchemy, gateway with both caches disabled, L1 only,
+Arrow only, and L1 plus Arrow. The direct client selects only requested columns
+and computes the same session-separated buckets. It includes native PostgreSQL
+transport and conversion to the same observation shape; gateway measurements
+include HTTP and JSON decoding. This measures client-visible implementation
+cost, not just SQL execution time or a comparison with a different car schema.
+
+Each case records its first read, primes three requests, then measures the same
+20 warmed requests and checks every result against the direct-query digest.
+The workload includes overviews, short zooms, raw reads, all-pool snapshots and
+a three-client mixed-query burst. Direct queries run before and after the cache
+variants to expose host drift. Postgres/OS pages remain warm for every variant;
+the comparison does not claim disk-cold performance. No live traffic runs during
+this comparison, so historical speedup is isolated from ingest load.
+
+Only the gateway is recreated between variants. Its memory resets while a
+disposable named volume preserves sealed Arrow files. Environment overrides
+change benchmark cache sizes; production defaults remain unchanged. Database
+read counts cover telemetry pool fetches, not the gateway's metadata checks.
+Reports contain individual timings, p50/p95, exact-result checks and speedup
+ratios against both direct Timescale and the uncached gateway.
+
+Add `--grafana-only` to compare Grafana's built-in Postgres datasource against
+the combined-cache gateway datasource. Requests alternate between them after
+priming; plotted timestamps, names and values must match. The datasource and
+generated SQL exist only in the isolated benchmark stack. This variant uses
+one sequential client; `--clients` applies to the backend burst comparison.

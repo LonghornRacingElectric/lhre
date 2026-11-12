@@ -1,11 +1,9 @@
 package gateway
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"strconv"
-	"time"
 )
 
 func overviewPool(p Pool) Pool {
@@ -101,42 +99,4 @@ func (a *accumulator) addSummary(name string, row Row) error {
 	}
 	a.count += count
 	return nil
-}
-func (c *Cache) Overview(ctx context.Context, snap Snapshot, p Pool, start, end int64) ([]Row, bool, error) {
-	if len(snap.Sessions()) == 0 {
-		return nil, false, nil
-	}
-	overview := overviewPool(p)
-	result := []Row{}
-	for _, session := range snap.Sessions() {
-		if session.Start >= end || session.End < start {
-			continue
-		}
-		key := fmt.Sprintf("%s/%s/%d/%d/%d", c.Schema.StorageID, overview.Table, session.ID, session.Revision, start)
-		if entry, ok := c.hot.Get(key); ok {
-			rows, err := decodeSlab(overview, entry.Data)
-			if err == nil {
-				result = append(result, rows...)
-				continue
-			}
-		}
-		rows, found, err := c.Files.Read(overview, session, start, end)
-		if err != nil || !found {
-			return nil, false, nil
-		}
-		encoded, err := encodeSlab(overview, rows)
-		if err != nil {
-			return nil, false, err
-		}
-		c.admit(key, &cachedSlab{Data: encoded}, start)
-		result = append(result, rows...)
-	}
-	// A sealed session can still have a pending late update. Do not summarize
-	// across that boundary until it is persisted and the revision is resealed.
-	tail, covered := c.Ring.Read(snap.Offsets(), p.Table, start, end)
-	if !covered && end > time.Now().Add(-c.Ring.window).UnixMilli() || len(tail) > 0 {
-		return nil, false, nil
-	}
-	c.Reads[2].Add(1)
-	return result, true, nil
 }
