@@ -11,13 +11,16 @@ from launch import LaunchContext
 from launch.actions import DeclareLaunchArgument
 from launch_ros.actions import Node
 from launch_ros.utilities import evaluate_parameters
-from lhr_gazebo.imported_tracks import build_reference, checked_spawn, COURSES, digest, read_cones
+from lhr_gazebo.imported_tracks import (
+    audit, build_reference, checked_spawn, COURSES, digest, read_cones, reference_curve)
 from lhr_gazebo.world_cones import observation_cones, WorldCones
 from lhr_lidar_sim.world import load_world_cones
 from lhr_metrics.course import CourseEnvelope
 from lhr_metrics.metrics_node import MetricsNode
 from lhr_metrics.reference import (
     CircuitProgress, imported_reference, ReferenceTrack, world_geometry)
+from lhr_metrics.reference_lap import reference_lap
+from lhr_trackgen.rules_autocross import measure_route
 from lhr_vehicle import load_vehicle
 import pytest
 import rclpy
@@ -61,6 +64,11 @@ def test_original_physical_cones_and_scoring_route(name, counts):
     for a, b in zip(rebuilt['centerline'], data['centerline']):
         assert a == pytest.approx(b, abs=1e-9)
     assert rebuilt['rules']['status'] == data['rules']['status'] == 'outside_envelope'
+    raw_midpoints = [((left[i][0]+right[i][0])/2, (left[i][1]+right[i][1])/2)
+                     for i in range(len(left))]
+    assert rebuilt['rules']['geometry'] == 'unsmoothed_gate_midpoints'
+    for key, value in measure_route(raw_midpoints).items():
+        assert rebuilt['rules']['measurements'][key] == pytest.approx(value, abs=1e-8)
     assert len(left) == len(right) >= max(counts[:2])
     course = CourseEnvelope(left, right, cones, load_vehicle(), True)
     assert course.pose_check(*data['spawn'], padding=.05) == (False, set())
@@ -187,7 +195,22 @@ def test_importer_round_trip_and_explicit_flag(tmp_path):
 def gate_env(tmp_path):
     return {**os.environ, 'OUT': str(tmp_path/'campaign'), 'PLAN_ONLY': '1', 'SEEDS': '',
             'ACCEL_REPEATS': '0', 'SKIDPAD_REPEATS': '0', 'REPEATS': '2',
-            'REAL_TRACKS': 'amz_fsg amz_fsi', 'ALLOW_NONCOMPLIANT': '1'}
+            'REAL_TRACKS': 'amz_fsg amz_fsi', 'ALLOW_NONCOMPLIANT': '1', 'BASELINE': '1'}
+
+
+def test_audit_preserves_long_straights_and_tight_turns_before_smoothing():
+    midpoints = [(0., 0.), (45., 0.), (90., 0.), (90., 20.), (45., 20.), (0., 20.)]
+    left = [(x, y+2.) for x, y in midpoints]
+    right = [(x, y-2.) for x, y in midpoints]
+    smoothed = reference_curve(left, right, [(i, i) for i in range(len(midpoints))])
+    assert measure_route(smoothed)['longest_straight_m'] < 80
+    report = audit(left, right, midpoints)
+    assert report['measurements']['longest_straight_m'] == pytest.approx(90.)
+    assert 'straight exceeds 80 m' in report['violations']
+    tight = [(0., 0.), (2., 0.), (2., 2.), (0., 2.), (-2., 2.), (-2., 0.)]
+    report = audit(left, right, tight)
+    assert report['measurements']['minimum_radius_m'] == pytest.approx(2**.5)
+    assert 'reference turn radius below 4.5 m' in report['violations']
 
 
 def test_gate_plan_has_matched_baselines_and_no_side_effects(tmp_path):
@@ -200,6 +223,11 @@ def test_gate_plan_has_matched_baselines_and_no_side_effects(tmp_path):
         assert any(s.startswith(f'baseline_{name}_s1 ') for s in lines)
         assert sum(s.startswith(name+'_s1_r') for s in lines) == 2
     assert all('allow_noncompliant_track:=true' in s for s in lines)
+    for line in lines:
+        if 'perception:=lidar' in line:
+            assert 'lidar_source:=mid360' in line
+            assert 'enable_stereo_camera:=true' in line
+            assert 'enable_camera_lidar_fusion:=true' in line
     assert not Path(env['OUT']).exists()
     for name, allow in [('unknown', '1'), ('amz_fsg', '0')]:
         result = subprocess.run(['bash', str(GATE/'run_gate.sh')],
@@ -223,6 +251,20 @@ def test_scorer_recognizes_imports_and_fails_missing_runs(tmp_path):
     assert not row['passed']  # another layout cannot supply the baseline
     scorer.judge(row, {('amz_fsg', '1'): 50.})
     assert row['passed']
+
+
+def test_course_lap_reference_uses_the_same_imported_route_as_metrics(tmp_path):
+    scorer = module(GATE/'score_gate.py', 'imported_course_lap')
+    data = imported_reference(WORLDS/'amz_fsg.sdf')
+    route = ReferenceTrack(data['centerline'])
+    limits = {'v_max': 5., 'v_min': 1., 'a_lat_max': 3., 'max_accel': 1., 'max_decel': 2.}
+    _, _, point, tangent = route.project(*route.points[0])
+    metrics = {**{key: str(value) for key, value in limits.items()},
+               'reference_world': str(WORLDS/'amz_fsg.sdf'),
+               'lap_gate_x_m': str(point[0]), 'lap_gate_y_m': str(point[1]),
+               'lap_gate_tangent_x': str(tangent[0]), 'lap_gate_tangent_y': str(tangent[1])}
+    expected = reference_lap(data['centerline'], start=point, tangent=tangent, **limits)
+    assert scorer.course_reference(metrics, str(tmp_path)) == pytest.approx(expected)
 
 
 def test_unsafe_source_spawn_requires_explicit_correction():

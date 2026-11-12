@@ -73,17 +73,20 @@ hashes bind the reference, audit and exact world bytes; missing or edited files 
 ## Envelope flags and running
 
 The shared [rules checker](../../../lhr_trackgen/README.md#rules-compliant-autocross)
-measures reference length, segment straightness, circumradius and conservative
-cone-base clearance against original boundary segments, including closure.
+measures length, segment straightness and circumradius on the unsmoothed
+paired gate midpoints, including closure. Smoothing applies only to the scoring
+route; it cannot erase a long straight or soften an audited corner. Cone-base
+clearance uses the original boundary segments.
 Self-intersections and nearby remote boundaries are also flagged. This is a
 geometric simulator audit, not full sporting-rule or physical validation.
-Radius and straightness describe the inferred reference, not an official racing
-line. Maximum original cone spacing is recorded as a diagnostic.
+Radius and straightness describe the inferred gate polygon, not an official
+racing line. Only collinear segments count as one straight; near-straight
+sections with small bends are not combined. Maximum original cone spacing is recorded as a diagnostic.
 
-| Layout | Reference length | Minimum reference radius | Minimum clear width | Flags |
+| Layout | Gate-polygon length | Minimum gate-polygon radius | Minimum clear width | Flags |
 | --- | --- | --- | --- | --- |
-| `amz_fsg` | 305.24 m | 4.01 m | 2.95 m | radius <4.5 m, width <3 m, remote boundary crowding |
-| `amz_fsi` | 214.07 m | 4.12 m | 2.82 m | radius <4.5 m, width <3 m |
+| `amz_fsg` | 308.84 m | 3.46 m | 2.95 m | radius <4.5 m, width <3 m, remote boundary crowding |
+| `amz_fsi` | 217.58 m | 2.50 m | 2.82 m | radius <4.5 m, width <3 m |
 
 Generation requires `--allow-out-of-envelope` for these retained inputs.
 Launch independently requires acknowledgement and always logs the violations:
@@ -101,9 +104,12 @@ the scoring centerline. Pairing uses the imported median gate width instead
 of the procedural generator's width. Other generator knobs do not edit imports.
 
 The [gate runner](../../../../../testing/tools/gate/README.md#imported-competition-layouts)
-can append these as diagnostic scenarios. Official v2 adoption remains
-[#201](https://github.com/LonghornRacingElectric/lhre/issues/201); the default
-MVP matrix and pass criteria are unchanged.
+can append these as diagnostic scenarios. The [Sim v2 criteria](../../../../../docs/plans/sim-v2-pass-criteria.md)
+include these layouts. Clean laps at default planner settings remain tracked
+in [#225](https://github.com/LonghornRacingElectric/lhre/issues/225).
+The runner keeps imports opt-in and uses the current Mid-360/fusion stack.
+Course-derived lap times use the same smoothed reference as metrics;
+truth-stack baselines remain optional comparisons.
 
 FSG's sparse source gates exceed the default planner `max_step_m:=4`;
 `max_step_m:=8` above is an explicit diagnostic override, not a new planner

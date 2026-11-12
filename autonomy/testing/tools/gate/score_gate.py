@@ -29,7 +29,7 @@ import os
 import re
 import sys
 
-from lhr_metrics.reference import paired_centerline, world_geometry
+from lhr_metrics.reference import imported_reference, paired_centerline, world_geometry
 from lhr_metrics.reference_lap import reference_lap
 from rclpy.serialization import deserialize_message
 from rosbag2_py import ConverterOptions, SequentialReader, StorageOptions
@@ -132,7 +132,9 @@ def course_reference(metrics, out):
                       os.path.join(WORLDS, os.path.basename(world))):
         if world and os.path.isfile(candidate):
             left, right, _ = world_geometry(candidate)
-            return reference_lap(paired_centerline(left, right), start=gate[:2],
+            imported = imported_reference(candidate)
+            points = imported['centerline'] if imported else paired_centerline(left, right)
+            return reference_lap(points, start=gate[:2],
                                  tangent=gate[2:], **limits)
     return None
 
@@ -324,7 +326,7 @@ def main(out):
             audits = json.load(f)
         if audits:
             lines += ['', '## Imported course audits', '',
-                      'Diagnostic additions only; official v2 adoption is decided in #201.', '']
+                      'Imported geometry flags; default-setting planner acceptance is tracked in #225.', '']
             for name, audit in sorted(audits.items()):
                 flags = '; '.join(audit['violations']) or 'no envelope violations'
                 lines.append(f'- {name}: **{audit["status"]}** — {flags}')

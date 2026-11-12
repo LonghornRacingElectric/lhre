@@ -2893,10 +2893,11 @@
     ]
   ],
   "rules": {
+    "geometry": "unsmoothed_gate_midpoints",
     "measurements": {
-      "lap_length_m": 305.23533264755156,
-      "longest_straight_m": 0.9994868838162998,
-      "minimum_radius_m": 4.014671371870479,
+      "lap_length_m": 308.84242432901806,
+      "longest_straight_m": 5.604790551160851,
+      "minimum_radius_m": 3.4637087363044046,
       "minimum_clear_width_m": 2.9493626893855436,
       "maximum_cone_spacing_m": 7.221162287204705
     },
@@ -2928,5 +2929,5 @@
       "Derive a scoring-only closed reference by monotone ordered-boundary alignment, 0.5 m arc sampling and periodic Gaussian smoothing at a 2 m spatial scale. Do not feed it to perception or control."
     ]
   },
-  "world_sha256": "1957c048c2752b7aab82e0eb18871550ed0102d5465152ff5b2be02e488d1054"
+  "world_sha256": "9412cefe6a447f48a299a7281508d5f32521a634b4493650ede419d218769903"
 }

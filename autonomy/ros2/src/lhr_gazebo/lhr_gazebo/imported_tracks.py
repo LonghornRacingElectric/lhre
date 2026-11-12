@@ -100,9 +100,9 @@ def reference_curve(left, right, pairs):
     return [[round(float(v), 12) for v in row] for row in smoothed]
 
 
-def audit(left, right, route):
+def audit(left, right, gate_midpoints):
     """Flag the same length/straight/radius/width envelope as rules_autocross."""
-    measured = measure_route(route)
+    measured = measure_route(gate_midpoints)
     sides = [edges(left), edges(right)]
     measured['minimum_clear_width_m'] = min(
         segment_distance(a, b, c, d) for a, b in sides[0] for c, d in sides[1])-BASE
@@ -131,7 +131,8 @@ def audit(left, right, route):
                    3., measured['minimum_clear_width_m']+BASE)):
             violations.append('remote boundaries crowd each other')
             break
-    return {'measurements': measured, 'violations': violations,
+    return {'geometry': 'unsmoothed_gate_midpoints',
+            'measurements': measured, 'violations': violations,
             'status': 'outside_envelope' if violations else 'within_envelope'}
 
 
@@ -147,7 +148,9 @@ def build_reference(cones, spawn):
             fraction = i/max(1, math.ceil(math.dist(a, b)/.05))
             if not course.contains(a[0]+fraction*(b[0]-a[0]), a[1]+fraction*(b[1]-a[1])):
                 raise ValueError('derived reference leaves the source road; correct the input')
-    report = audit(left, right, route)
+    midpoints = [((left[i][0]+right[j][0])/2, (left[i][1]+right[j][1])/2)
+                 for i, j in pairs]
+    report = audit(left, right, midpoints)
     widths = sorted(math.dist(left[i], right[j]) for i, j in pairs)
     return {'pairs': pairs, 'centerline': route, 'rules': report,
             'nominal_width_m': widths[len(pairs)//2]}

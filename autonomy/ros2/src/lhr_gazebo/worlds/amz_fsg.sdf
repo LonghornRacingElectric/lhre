@@ -24,7 +24,7 @@
 
     <gravity>0 0 -9.81</gravity>
 
-    <physics name="lhr_imported_reference_v1_0cd6b8ea9e0888d96a607ca55b19776b66bbbc7a3388bbf9875cb5165675872a" type="ode">
+    <physics name="lhr_imported_reference_v1_05c4a03dd37b5b7749bedf9807f84c858e0a0698bb7a136248921af24ee99399" type="ode">
       <max_step_size>0.001</max_step_size>
       <real_time_factor>1.0</real_time_factor>
     </physics>

@@ -225,7 +225,8 @@ thresholds in the official Sim v2 gate belong to
 ## Imported competition layouts
 
 `REAL_TRACKS="amz_fsg amz_fsi"` appends fixed imported circuits, each with its
-own seed-1 truth baseline and `REPEATS` LiDAR/EKF runs. The default is empty.
+own `REPEATS` LiDAR/EKF runs and an optional seed-1 truth comparison
+(`BASELINE=1`). The default is empty.
 Imports are verified before output creation or process cleanup. Flagged
 layouts require `ALLOW_NONCOMPLIANT=1`, which forwards the launch's explicit
 acknowledgement. See [sources and measured flags](../../../ros2/src/lhr_gazebo/worlds/competition/README.md).
@@ -242,7 +243,9 @@ gates with the current planner. Record this override beside results; importing
 a layout does not change controller or planner defaults.
 `PLAN_ONLY` prints the audited matrix without launching or stopping processes.
 The runner saves `course_audits.json`; the scorer includes flags in the
-summary and matches lap baselines by layout **and** seed. Missing planned
-import runs fail. These are diagnostic additions; official v2 adoption is
-owned by [#201](https://github.com/LonghornRacingElectric/lhre/issues/201).
+summary. Course-derived lap times use the same imported scoring reference
+as metrics; legacy baseline matching uses layout **and** seed. Missing planned
+import runs fail. The [Sim v2 criteria](../../../docs/plans/sim-v2-pass-criteria.md) include
+these layouts; default-setting planner acceptance remains in
+[#225](https://github.com/LonghornRacingElectric/lhre/issues/225).
 Neither existing pass thresholds nor the default MVP matrix changes.
