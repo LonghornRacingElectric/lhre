@@ -64,7 +64,7 @@ class Launch:
     under the brake-over-throttle threshold. The RTD switch is a toggle and
     stays on: releasing it leaves DRIVE.
 
-    The stage 2 scenario, kept as the reference scenarios/launch.toml must
+    The stage 2 scenario, kept as the reference scenarios/launch.yml must
     reproduce at every millisecond, and as the base of the Python variants.
     """
     name: str = 'launch'

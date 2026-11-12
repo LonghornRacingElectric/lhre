@@ -99,7 +99,7 @@ def test_every_scenario_completes_on_the_car_model(name, fmu_path, can_table_pat
     meta = json.loads((tmp_path / 'meta.json').read_text())
     assert status == cli.EXIT_COMPLETED and meta['status'] == 'completed'
     assert meta['summary']['min_speed_m_s'] > -0.1
-    # A file sets off only the warnings its [allow] names, and each of those.
+    # A file sets off only the warnings its allow names, and each of those.
     assert meta['scenario_warnings'] == []
     assert ({w['code'] for w in meta['scenario_allowed']}
             == set(scenario_file.load(name).allow))
@@ -178,7 +178,7 @@ def test_the_run_log_holds_firmware_frames_and_model_truth(launch_run):
         assert msg['motor_speed'] == round(row['motorSpeed'] * 30 / 3.141592653589793)
     states = {m['state_name'] for _, m in messages['/can/vcu/VCU_FAULTS']}
     assert 'DRIVE' in states
-    assert set(attachments) == {'meta.json', 'summary.txt', 'scenario.toml'}
+    assert set(attachments) == {'meta.json', 'summary.txt', 'scenario.yml'}
     levels = [m['level'] for _, m in messages['/events']]
     assert max(levels) == 3  # warnings (boot fault, launch ring), no errors
 

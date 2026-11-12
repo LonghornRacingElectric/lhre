@@ -45,7 +45,7 @@ SNAPSHOT_GROUPS = {
 STATUS_FIELDS = {'torque_command_nm'}
 FAULT_BITS = 22  # lib/spec/types.textproto VcuFaultBits
 # Attachment media types by suffix; anything else is text/plain.
-MEDIA_TYPES = {'.json': 'application/json', '.toml': 'application/toml'}
+MEDIA_TYPES = {'.json': 'application/json', '.yml': 'application/yaml'}
 
 # The foxglove.Log JSON schema (foxglove/schemas jsonschema/Log.json), trimmed
 # to what the Log panel reads.

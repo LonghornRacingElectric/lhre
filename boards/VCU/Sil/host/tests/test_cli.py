@@ -10,7 +10,7 @@ from fakes import ToyCar
 from vcusil import __main__ as cli
 from vcusil import check, firmware, plant, report, scenario_file
 
-LAUNCH = scenario_file.SCENARIO_DIR / 'launch.toml'
+LAUNCH = scenario_file.SCENARIO_DIR / 'launch.yml'
 
 
 class FakePlant(ToyCar):
@@ -69,7 +69,7 @@ def test_a_completed_run_exits_0_and_writes_everything(run_cli):
     assert modes == [0] and [p.soc_start for p in made] == [0.9]
     # The scenario is recorded by path, hash and content, and copied.
     assert meta['scenario'] == 'launch'
-    assert meta['scenario_file'] == {'path': 'boards/VCU/Sil/scenarios/launch.toml',
+    assert meta['scenario_file'] == {'path': 'boards/VCU/Sil/scenarios/launch.yml',
                                      'sha256': hashlib.sha256(LAUNCH.read_bytes()).hexdigest(),
                                      'schema': 'lhre.vcu-sil-scenario.v1'}
     assert meta['scenario_parameters']['duration_ms'] == 7000
@@ -77,12 +77,12 @@ def test_a_completed_run_exits_0_and_writes_everything(run_cli):
                                                     'hvc_state': 'PRECHARGING'}
     assert meta['scenario_warnings'] == [] and meta['scenario_allowed'] == []
     assert meta['setup_from'] == {'event_mode': 'scenario', 'soc_start': 'scenario'}
-    assert (out / 'scenario.toml').read_bytes() == LAUNCH.read_bytes()
+    assert (out / 'scenario.yml').read_bytes() == LAUNCH.read_bytes()
     marks = [e for e in meta['events'] if e['name'] == 'scenario']
     assert marks[0] == {'t_ms': 201, 'level': 2, 'name': 'scenario',
                         'message': 'mark precharge (t_ms 200)'}
     summary = (out / 'summary.txt').read_text()
-    assert ('  scenario file boards/VCU/Sil/scenarios/launch.toml (sha256 '
+    assert ('  scenario file boards/VCU/Sil/scenarios/launch.yml (sha256 '
             f'{meta["scenario_file"]["sha256"][:12]})\n'
             '  scenario description: Power up, ready to drive on the brake, full pedal from rest '
             'for 4 s, coast.\n'
@@ -104,9 +104,9 @@ def test_the_same_run_writes_the_same_run_log(run_cli, tmp_path):
     assert 'wall_s' not in logged and logged['summary'] == meta['summary']
     assert ' simulated\n' in attached['summary.txt'].decode()
     assert tags['vcusil']['firmware_dirty'] in ('True', 'False')
-    assert attached['scenario.toml'] == LAUNCH.read_bytes()
+    assert attached['scenario.yml'] == LAUNCH.read_bytes()
     assert tags['vcusil']['scenario_sha256'] == meta['scenario_file']['sha256']
-    assert tags['vcusil']['scenario_path'] == 'boards/VCU/Sil/scenarios/launch.toml'
+    assert tags['vcusil']['scenario_path'] == 'boards/VCU/Sil/scenarios/launch.yml'
 
 
 def test_a_failed_car_model_exits_1(run_cli):
@@ -139,17 +139,17 @@ def _write(path, text):
 
 def test_a_scenario_file_outside_the_repo(run_cli, tmp_path, capsys):
     text = LAUNCH.read_text()
-    text = text[:text.index('# Off the brake')]  # stop before 1500 ms
-    text = text.replace('duration_ms = 7000', 'duration_ms = 1500')
-    text = text.replace('brake_psi = 350.0', 'brake_psi = 0.0')  # RTD refused
-    path = tmp_path / 'no-brake.toml'
+    text = text[:text.index('  # Off the brake')]  # stop before 1500 ms
+    text = text.replace('duration_ms: 7000', 'duration_ms: 1500')
+    text = text.replace('brake_psi: 350.0', 'brake_psi: 0.0')  # RTD refused
+    path = tmp_path / 'no-brake.yml'
     status, out, meta, _, _ = run_cli('--scenario', _write(path, text))
     assert status == cli.EXIT_COMPLETED
     assert meta['scenario'] == 'no-brake'
     assert meta['scenario_file']['path'] == str(path.resolve())
     # The warning is recorded whole, at the line that presses RTD, and
     # printed in the same words when the run starts.
-    line = next(n for n, row in enumerate(text.splitlines(), 1) if row == 'rtd_pressed = true')
+    line = next(n for n, row in enumerate(text.splitlines(), 1) if row == '    rtd_pressed: true')
     message = ('the filtered brake at the debounced edge (1023 ms) is about 0 psi; RTD needs 30 '
                'psi (brake_light_psi), so the firmware refuses it')
     assert meta['scenario_warnings'] == [{'code': 'rtd_without_brake', 't_ms': 1002, 'line': line,
@@ -162,8 +162,8 @@ def test_a_scenario_file_outside_the_repo(run_cli, tmp_path, capsys):
 
 
 def test_setup_reaches_the_run(run_cli, tmp_path):
-    text = LAUNCH.read_text().replace('event_mode = "UNASSIGNED"', 'event_mode = "SKIDPAD"')
-    path = _write(tmp_path / 'skidpad.toml', text.replace('soc_start = 0.9', 'soc_start = 0.5'))
+    text = LAUNCH.read_text().replace('event_mode: UNASSIGNED', 'event_mode: SKIDPAD')
+    path = _write(tmp_path / 'skidpad.yml', text.replace('soc_start: 0.9', 'soc_start: 0.5'))
     _, _, meta, made, modes = run_cli('--scenario', path)
     assert modes == [2] and [p.soc_start for p in made] == [0.5]
     assert meta['setup_from'] == {'event_mode': 'scenario', 'soc_start': 'scenario'}
@@ -171,7 +171,7 @@ def test_setup_reaches_the_run(run_cli, tmp_path):
     _, _, meta, made, modes = run_cli('--scenario', path, '--event-mode', '3')
     assert modes == [3] and [p.soc_start for p in made] == [0.5] and meta['event_mode'] == 3
     assert meta['setup_from'] == {'event_mode': 'cli', 'soc_start': 'scenario'}
-    # A file without [setup] gets the defaults.
+    # A file without setup gets the defaults.
     _, _, meta, made, modes = run_cli('--scenario', 'part-throttle')
     assert modes == [0] and [p.soc_start for p in made] == [0.9]
     assert meta['setup_from'] == {'event_mode': 'default', 'soc_start': 'default'}
@@ -185,8 +185,8 @@ def test_bad_scenarios_exit_2_before_running(tmp_path, capsys):
     err = capsys.readouterr().err
     assert "no scenario named 'no-such'" in err
     assert f'scenarios/ has: {", ".join(scenario_file.names())}. A path' in err
-    bad = tmp_path / 'bad.toml'
-    bad.write_text(LAUNCH.read_text().replace('t_ms = 200\n', 't_ms = 200\nbrake_psi = 4000.0\n'))
+    bad = tmp_path / 'bad.yml'
+    bad.write_text(LAUNCH.read_text().replace('t_ms: 200\n', 't_ms: 200\n    brake_psi: 4000.0\n'))
     assert main(str(bad)) == cli.EXIT_HARNESS
     err = capsys.readouterr().err
     line = next(n for n, text in enumerate(bad.read_text().splitlines(), 1) if '4000' in text)
@@ -199,7 +199,7 @@ def test_a_comment_only_change_keeps_the_trace(run_cli, tmp_path):
     """One path, first without the comment and then with it, so the comment
     is the only difference between the two runs."""
     from test_mcaplog import read_all
-    copy = tmp_path / 'copy' / 'launch.toml'
+    copy = tmp_path / 'copy' / 'launch.yml'
     copy.parent.mkdir()
     plain = LAUNCH.read_bytes()
     commented = plain + b'# A comment changes the hash, not the drive.\n'
@@ -217,7 +217,7 @@ def test_a_comment_only_change_keeps_the_trace(run_cli, tmp_path):
     messages, _, attached, tags = read_all(first / 'run.mcap')
     messages_c, _, attached_c, tags_c = read_all(second / 'run.mcap')
     assert messages == messages_c
-    assert (attached['scenario.toml'], attached_c['scenario.toml']) == (plain, commented)
+    assert (attached['scenario.yml'], attached_c['scenario.yml']) == (plain, commented)
     assert tags_c['vcusil'] == {**tags['vcusil'], 'scenario_sha256': sha_commented}
     logged, logged_c = json.loads(attached['meta.json']), json.loads(attached_c['meta.json'])
     logged['scenario_file']['sha256'] = sha_commented
@@ -248,8 +248,8 @@ def test_a_scenario_that_cannot_run_leaves_a_reused_out_as_it_was(run_cli, tmp_p
     whole (and run.sh, seeing no new meta.json, does not claim it)."""
     _, out, _, _, _ = run_cli()
     before = {p.name: p.read_bytes() for p in out.iterdir()}
-    bad = tmp_path / 'bad.toml'
-    bad.write_text(LAUNCH.read_text().replace('duration_ms = 7000', 'duration_ms = 0'))
+    bad = tmp_path / 'bad.yml'
+    bad.write_text(LAUNCH.read_text().replace('duration_ms: 7000', 'duration_ms: 0'))
     status, _, _, made, _ = run_cli('--scenario', str(bad))
     assert status == cli.EXIT_HARNESS and made == []
     assert {p.name: p.read_bytes() for p in out.iterdir()} == before

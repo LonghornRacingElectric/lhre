@@ -5,6 +5,8 @@ the rules run are held to the library in test_check_firmware.py."""
 import ast
 import math
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -21,30 +23,26 @@ LOOP_CLOSED, LOOP_UPSTREAM_OPEN = 1, 3  # lhre ShutdownLoopState
 
 # A clean power-up: every rule stays quiet on it. RTD is first sampled at
 # 1002 and debounced at 1023, on 350 psi of brake.
-BASE = '''schema = "lhre.vcu-sil-scenario.v1"
-description = "A clean power-up for the lint tests."
-duration_ms = 3000
+BASE = '''schema: lhre.vcu-sil-scenario.v1
+description: A clean power-up for the lint tests.
+duration_ms: 3000
 
-[[at]]
-t_ms = 0
-brake_psi = 350.0
+at:
+  - t_ms: 0
+    brake_psi: 350.0
 
-[[at]]
-t_ms = 200
-hvc_state = "PRECHARGING"
+  - t_ms: 200
+    hvc_state: PRECHARGING
 
-[[at]]
-t_ms = 600
-hvc_state = "ENERGIZED"
-contactors_closed = true
+  - t_ms: 600
+    hvc_state: ENERGIZED
+    contactors_closed: true
 
-[[at]]
-t_ms = 1000
-rtd_pressed = true
+  - t_ms: 1000
+    rtd_pressed: true
 
-[[at]]
-t_ms = 1500
-brake_psi = 0.0
+  - t_ms: 1500
+    brake_psi: 0.0
 '''
 
 
@@ -57,24 +55,24 @@ def drive(*edits, then: str = '') -> str:
 
 
 def at(t_ms: int, *lines: str) -> str:
-    return f'\n[[at]]\nt_ms = {t_ms}\n' + ''.join(f'{line}\n' for line in lines)
+    return f'\n  - t_ms: {t_ms}\n' + ''.join(f'    {line}\n' for line in lines)
 
 
 def insert_before(t_ms: int, *blocks: str) -> tuple[str, str]:
     """A drive() edit that puts blocks just before BASE's block at t_ms."""
-    header = f'[[at]]\nt_ms = {t_ms}\n'
+    header = f'  - t_ms: {t_ms}\n'
     return header, ''.join(blocks).lstrip('\n') + '\n' + header
 
 
 def hold_at_2000(key: str, value: object, back: object = 0.0) -> str:
-    return at(2000, f'{key} = {value}') + at(2500, f'{key} = {back}')
+    return at(2000, f'{key}: {value}') + at(2500, f'{key}: {back}')
 
 
 def brake_off_at(t_ms: int) -> str:
     """BASE with the brake off at t_ms, before the press at 1000."""
-    return drive(('t_ms = 1500\nbrake_psi = 0.0', f't_ms = {t_ms}\nbrake_psi = 0.0'),
-                 ('[[at]]\nt_ms = 1000\nrtd_pressed = true\n\n', ''),
-                 then=at(1000, 'rtd_pressed = true'))
+    return drive(('t_ms: 1500\n    brake_psi: 0.0', f't_ms: {t_ms}\n    brake_psi: 0.0'),
+                 ('  - t_ms: 1000\n    rtd_pressed: true\n\n', ''),
+                 then=at(1000, 'rtd_pressed: true'))
 
 
 def lint(text: str, **kw) -> check.Findings:
@@ -88,167 +86,180 @@ def line_of(text: str, anchor: str) -> int:
 
 
 # Ready to drive from 0 ms, so only the switch decides an early press.
-READY_AT_0 = (('brake_psi = 350.0', 'brake_psi = 350.0\nhvc_state = "ENERGIZED"\n'
-               'contactors_closed = true'),
-              ('[[at]]\nt_ms = 200\nhvc_state = "PRECHARGING"\n\n', ''),
-              ('[[at]]\nt_ms = 600\nhvc_state = "ENERGIZED"\ncontactors_closed = true\n\n', ''))
+READY_AT_0 = (('brake_psi: 350.0', 'brake_psi: 350.0\n    hvc_state: ENERGIZED\n'
+               '    contactors_closed: true'),
+              ('  - t_ms: 200\n    hvc_state: PRECHARGING\n\n', ''),
+              ('  - t_ms: 600\n    hvc_state: ENERGIZED\n    contactors_closed: true\n\n', ''))
 
 
 def press_at(t_ms: int) -> str:
-    return drive(*READY_AT_0, ('t_ms = 1000\nrtd', f't_ms = {t_ms}\nrtd'))
+    return drive(*READY_AT_0, ('t_ms: 1000\n    rtd', f't_ms: {t_ms}\n    rtd'))
 
 
-UNPLUGGED_RTD = ('[[at]]\nt_ms = 1000\nrtd_pressed = true\n', '')
-ALLOW_BRAKE_HIGH = ('[[at]]\nt_ms = 0\n', '[allow]\nbrake_high = "a hard stop"\n\n'
-                                          '[[at]]\nt_ms = 0\n')
+UNPLUGGED_RTD = ('  - t_ms: 1000\n    rtd_pressed: true\n', '')
+NO_CONTACTORS = ('    contactors_closed: true\n', '')
+
+
+def allowing(code: str, reason: str) -> tuple[str, str]:
+    """A drive() edit that puts an allow: before BASE's at:."""
+    return '\nat:\n', f'\nallow:\n  {code}: {reason}\n\nat:\n'
+
+
+ALLOW_BRAKE_HIGH = allowing('brake_high', 'a hard stop')
 
 def hard_stop_pedal_at(t_ms: int) -> str:
     """The review's probe: 3000 psi from 0, held at 200 from 2001. The filter
     is under 250 psi (brake-pressed off) from 2115, and under 225 (the lint's
     margin) from 2133."""
-    return drive(ALLOW_BRAKE_HIGH, ('brake_psi = 350.0', 'brake_psi = 3000.0'),
-                 ('t_ms = 1500\nbrake_psi = 0.0', 't_ms = 2001\nbrake_psi = 200.0'),
-                 then=at(t_ms, 'accelerator = 0.5'))
+    return drive(ALLOW_BRAKE_HIGH, ('brake_psi: 350.0', 'brake_psi: 3000.0'),
+                 ('t_ms: 1500\n    brake_psi: 0.0', 't_ms: 2001\n    brake_psi: 200.0'),
+                 then=at(t_ms, 'accelerator: 0.5'))
 
 
 def pedal_before_the_press(pedal: float, off_at: int | None = None) -> str:
     """accelerator at pedal from 900 ms, and back to 0 at off_at (else 2000)."""
-    off = at(off_at, 'accelerator = 0.0') if off_at else ''
-    return drive(insert_before(1000, at(900, f'accelerator = {pedal}')),
-                 insert_before(1500, off), then='' if off_at else at(2000, 'accelerator = 0.0'))
+    off = at(off_at, 'accelerator: 0.0') if off_at else ''
+    return drive(insert_before(1000, at(900, f'accelerator: {pedal}')),
+                 insert_before(1500, off), then='' if off_at else at(2000, 'accelerator: 0.0'))
 
 
 def released(t_ms: int, again: int | None) -> str:
     """BASE, with RTD released at t_ms and pressed again at again."""
-    return drive(then=at(t_ms, 'rtd_pressed = false')
-                 + (at(again, 'rtd_pressed = true') if again else ''))
+    return drive(then=at(t_ms, 'rtd_pressed: false')
+                 + (at(again, 'rtd_pressed: true') if again else ''))
 
 
 def loop_open_from_0_until(t_ms: int) -> str:
-    open_at_0 = ('brake_psi = 350.0', 'brake_psi = 350.0\nshutdown_loop_v = 0.0')
-    close = at(t_ms, 'shutdown_loop_v = 24.0')
+    open_at_0 = ('brake_psi: 350.0', 'brake_psi: 350.0\n    shutdown_loop_v: 0.0')
+    close = at(t_ms, 'shutdown_loop_v: 24.0')
     if t_ms < 1500:
         return drive(open_at_0, insert_before(1000 if t_ms < 1000 else 1500, close))
     return drive(open_at_0, then=close)
 
 
 def loop_held_from_0(volts: float) -> str:
-    return drive(('brake_psi = 350.0', f'brake_psi = 350.0\nshutdown_loop_v = {volts}'))
+    return drive(('brake_psi: 350.0', f'brake_psi: 350.0\n    shutdown_loop_v: {volts}'))
 
 
-SHORT_RUN = '''schema = "lhre.vcu-sil-scenario.v1"
-description = "Shorter than the RTD debounce."
-duration_ms = 15
+SHORT_RUN = '''schema: lhre.vcu-sil-scenario.v1
+description: Shorter than the RTD debounce.
+duration_ms: 15
 
-[[at]]
-t_ms = 0
-rtd_pressed = false
+at:
+  - t_ms: 0
+    rtd_pressed: false
 '''
 
 
 def ramp_end_then(after: str) -> str:
     """A brake ramp to 300 that ends at 2100, where after changes it."""
-    return drive(then=at(2001, 'brake_psi = { to = 300.0, ramp_ms = 99 }')
-                 + at(2100, f'brake_psi = {after}'))
+    return drive(then=at(2001, 'brake_psi: {to: 300.0, ramp_ms: 99}')
+                 + at(2100, f'brake_psi: {after}'))
 
 
 def disagree_until(t_ms: int) -> str:
-    return drive(('contactors_closed = true\n', ''), then=at(t_ms, 'contactors_closed = true'))
+    return drive(NO_CONTACTORS, then=at(t_ms, 'contactors_closed: true'))
 
 
 # (id, text, code, the warning's t_ms, line anchor)
 FIRES = [
     ('brake-300', drive(then=hold_at_2000('brake_psi', 300.0)), 'brake_near_threshold', 2001,
-     'brake_psi = 300.0'),
+     'brake_psi: 300.0'),
     ('brake-30', drive(then=hold_at_2000('brake_psi', 30.0)), 'brake_near_threshold', 2001,
-     'brake_psi = 30.0'),
+     'brake_psi: 30.0'),
     ('brake-10', drive(then=hold_at_2000('brake_psi', 10.0)), 'brake_near_threshold', 2001,
-     'brake_psi = 10.0'),
+     'brake_psi: 10.0'),
     ('brake-531', drive(then=hold_at_2000('brake_psi', 531.0)), 'brake_near_threshold', 2001,
-     'brake_psi = 531.0'),
+     'brake_psi: 531.0'),
     # The ramp's end is still the value at the next ramp's start sample.
-    ('brake-ramp-end-held-into-a-ramp', ramp_end_then('{ to = 0.0, ramp_ms = 100 }'),
-     'brake_near_threshold', 2100, 'brake_psi = { to = 300.0, ramp_ms = 99 }'),
+    ('brake-ramp-end-held-into-a-ramp', ramp_end_then('{to: 0.0, ramp_ms: 100}'),
+     'brake_near_threshold', 2100, 'brake_psi: {to: 300.0, ramp_ms: 99}'),
     ('brake-1001', drive(then=hold_at_2000('brake_psi', 1001.0)), 'brake_high', 2001,
-     'brake_psi = 1001.0'),
+     'brake_psi: 1001.0'),
     ('brake-1000.01', drive(then=hold_at_2000('brake_psi', 1000.01)), 'brake_high', 2001,
-     'brake_psi = 1000.01'),
+     'brake_psi: 1000.01'),
+    # A block-style ramp's warning is at its value, under the signal.
+    ('brake-1001-ramped-in-block-style', drive(then=at(2000, 'brake_psi:', '  to: 1001.0',
+                                                       '  ramp_ms: 10') + at(2500, 'brake_psi: 0.0')),
+     'brake_high', 2010, 'to: 1001.0'),
     ('pedal-0.05', drive(then=hold_at_2000('accelerator', 0.05)), 'pedal_in_deadzone', 2001,
-     'accelerator = 0.05'),
+     'accelerator: 0.05'),
     ('pedal-0.09', drive(then=hold_at_2000('accelerator', 0.09)), 'pedal_in_deadzone', 2001,
-     'accelerator = 0.09'),
+     'accelerator: 0.09'),
     ('pedal-0.74', drive(then=hold_at_2000('accelerator', 0.74)), 'pedal_in_deadzone', 2001,
-     'accelerator = 0.74'),
+     'accelerator: 0.74'),
     ('pedal-0.8', drive(then=hold_at_2000('accelerator', 0.8)), 'pedal_in_deadzone', 2001,
-     'accelerator = 0.8'),
+     'accelerator: 0.8'),
     ('loop-18', drive(then=hold_at_2000('shutdown_loop_v', 18.0, 24.0)), 'loop_near_threshold',
-     2001, 'shutdown_loop_v = 18.0'),
+     2001, 'shutdown_loop_v: 18.0'),
     ('loop-19.67', drive(then=hold_at_2000('shutdown_loop_v', 19.67, 24.0)),
-     'loop_near_threshold', 2001, 'shutdown_loop_v = 19.67'),
+     'loop_near_threshold', 2001, 'shutdown_loop_v: 19.67'),
     ('loop-16.1', drive(then=hold_at_2000('shutdown_loop_v', 16.1, 24.0)), 'loop_near_threshold',
-     2001, 'shutdown_loop_v = 16.1'),
+     2001, 'shutdown_loop_v: 16.1'),
     # The filter reaches 275 psi on the 12th tick of 400 psi, at 2034.
-    ('bot-as-the-filter-rises', drive(then=at(1900, 'accelerator = 0.3')
-                                      + at(2000, 'brake_psi = 400.0')),
-     'brake_over_throttle', 2034, 'brake_psi = 400.0'),
+    ('bot-as-the-filter-rises', drive(then=at(1900, 'accelerator: 0.3')
+                                      + at(2000, 'brake_psi: 400.0')),
+     'brake_over_throttle', 2034, 'brake_psi: 400.0'),
     ('bot-105-ms-after-a-hard-stop', hard_stop_pedal_at(2106), 'brake_over_throttle', 2106,
-     'accelerator = 0.5'),
+     'accelerator: 0.5'),
     ('bot-129-ms-after-a-hard-stop', hard_stop_pedal_at(2130), 'brake_over_throttle', 2130,
-     'accelerator = 0.5'),
-    ('bot-pedal-0.25', drive(then=at(2000, 'brake_psi = 400.0') + at(2100, 'accelerator = 0.25')),
-     'brake_over_throttle', 2100, 'accelerator = 0.25'),
-    ('rtd-at-boot', drive(UNPLUGGED_RTD, ('brake_psi = 350.0', 'brake_psi = 350.0\n'
-                                                               'rtd_pressed = true')),
-     'rtd_at_boot', 0, 'rtd_pressed = true'),
-    ('rtd-pressed-at-15', press_at(15), 'rtd_at_boot', 15, 'rtd_pressed = true'),
-    ('rtd-pressed-at-21', press_at(21), 'rtd_at_boot', 21, 'rtd_pressed = true'),
-    ('rtd-pressed-1000-to-1012', drive(insert_before(1500, at(1012, 'rtd_pressed = false'))),
-     'rtd_too_short', 1002, 'rtd_pressed = true'),
+     'accelerator: 0.5'),
+    ('bot-pedal-0.25', drive(then=at(2000, 'brake_psi: 400.0') + at(2100, 'accelerator: 0.25')),
+     'brake_over_throttle', 2100, 'accelerator: 0.25'),
+    ('rtd-at-boot', drive(UNPLUGGED_RTD, ('brake_psi: 350.0', 'brake_psi: 350.0\n'
+                                                               '    rtd_pressed: true')),
+     'rtd_at_boot', 0, 'rtd_pressed: true'),
+    ('rtd-pressed-at-15', press_at(15), 'rtd_at_boot', 15, 'rtd_pressed: true'),
+    ('rtd-pressed-at-21', press_at(21), 'rtd_at_boot', 21, 'rtd_pressed: true'),
+    ('rtd-pressed-1000-to-1012', drive(insert_before(1500, at(1012, 'rtd_pressed: false'))),
+     'rtd_too_short', 1002, 'rtd_pressed: true'),
     ('rtd-released-for-21-ms', released(2000, 2022), 'rtd_too_short', 2001,
-     'rtd_pressed = false'),
-    ('rtd-released-at-2977', released(2977, None), 'rtd_too_short', 2979, 'rtd_pressed = false'),
-    ('rtd-no-brake', drive(('brake_psi = 350.0', 'brake_psi = 0.0')), 'rtd_without_brake', 1002,
-     'rtd_pressed = true'),
-    ('rtd-brake-54', drive(insert_before(600, at(500, 'brake_psi = 54.0'))), 'rtd_without_brake',
-     1002, 'rtd_pressed = true'),
-    ('rtd-brake-off-at-972', brake_off_at(972), 'rtd_without_brake', 1002, 'rtd_pressed = true'),
-    ('rtd-brake-off-at-954', brake_off_at(954), 'rtd_without_brake', 1002, 'rtd_pressed = true'),
-    ('rtd-brake-29.2', drive(insert_before(600, at(500, 'brake_psi = 29.2'))), 'rtd_without_brake',
-     1002, 'rtd_pressed = true'),
-    ('rtd-with-pedal', drive(insert_before(1000, at(980, 'accelerator = 0.1'))), 'rtd_with_pedal',
-     1002, 'rtd_pressed = true'),
+     'rtd_pressed: false'),
+    ('rtd-released-at-2977', released(2977, None), 'rtd_too_short', 2979, 'rtd_pressed: false'),
+    ('rtd-no-brake', drive(('brake_psi: 350.0', 'brake_psi: 0.0')), 'rtd_without_brake', 1002,
+     'rtd_pressed: true'),
+    ('rtd-brake-54', drive(insert_before(600, at(500, 'brake_psi: 54.0'))), 'rtd_without_brake',
+     1002, 'rtd_pressed: true'),
+    ('rtd-brake-off-at-972', brake_off_at(972), 'rtd_without_brake', 1002, 'rtd_pressed: true'),
+    ('rtd-brake-off-at-954', brake_off_at(954), 'rtd_without_brake', 1002, 'rtd_pressed: true'),
+    ('rtd-brake-29.2', drive(insert_before(600, at(500, 'brake_psi: 29.2'))), 'rtd_without_brake',
+     1002, 'rtd_pressed: true'),
+    ('rtd-with-pedal', drive(insert_before(1000, at(980, 'accelerator: 0.1'))), 'rtd_with_pedal',
+     1002, 'rtd_pressed: true'),
     ('rtd-pedal-0.051', pedal_before_the_press(0.051), 'rtd_with_pedal', 1002,
-     'rtd_pressed = true'),
+     'rtd_pressed: true'),
     ('rtd-pedal-0.0908', pedal_before_the_press(0.0908), 'rtd_with_pedal', 1002,
-     'rtd_pressed = true'),
+     'rtd_pressed: true'),
     # 0.2 * 0.65 ** 3 = 0.055 at 1023.
     ('rtd-pedal-off-at-1017', pedal_before_the_press(0.2, 1017), 'rtd_with_pedal', 1002,
-     'rtd_pressed = true'),
-    ('rtd-10-ms-after-energized', drive(('t_ms = 1000\nrtd', 't_ms = 610\nrtd')),
-     'rtd_before_ready', 612, 'rtd_pressed = true'),
+     'rtd_pressed: true'),
+    ('rtd-10-ms-after-energized', drive(('t_ms: 1000\n    rtd', 't_ms: 610\n    rtd')),
+     'rtd_before_ready', 612, 'rtd_pressed: true'),
     # The window opens 50 ms before the press: 597 is still PRECHARGING.
-    ('rtd-45-ms-after-energized', drive(('t_ms = 1000\nrtd', 't_ms = 645\nrtd')),
-     'rtd_before_ready', 645, 'rtd_pressed = true'),
-    ('rtd-without-contactors', drive(('contactors_closed = true\n', '')), 'rtd_before_ready', 1002,
-     'rtd_pressed = true'),
+    ('rtd-45-ms-after-energized', drive(('t_ms: 1000\n    rtd', 't_ms: 645\n    rtd')),
+     'rtd_before_ready', 645, 'rtd_pressed: true'),
+    ('rtd-without-contactors', drive(NO_CONTACTORS), 'rtd_before_ready', 1002,
+     'rtd_pressed: true'),
     ('rtd-loop-open', loop_open_from_0_until(2000), 'rtd_before_ready', 1002,
-     'rtd_pressed = true'),
+     'rtd_pressed: true'),
     # Ready wants the loop above the loop_near_threshold band, which ends at 19.67.
-    ('rtd-loop-19.67', loop_held_from_0(19.67), 'rtd_before_ready', 1002, 'rtd_pressed = true'),
+    ('rtd-loop-19.67', loop_held_from_0(19.67), 'rtd_before_ready', 1002, 'rtd_pressed: true'),
     # ... and closes at the debounced edge, 1023.
-    ('rtd-loop-opens-at-the-edge', drive(insert_before(1500, at(1023, 'shutdown_loop_v = 0.0'))),
-     'rtd_before_ready', 1002, 'rtd_pressed = true'),
-    ('disagree-101-ms', drive(('contactors_closed = true\n', ''),
-                              insert_before(1000, at(701, 'contactors_closed = true'))),
-     'hvc_contactors_disagree', 600, 'hvc_state = "ENERGIZED"'),
-    ('disagree-to-the-end', drive(('contactors_closed = true\n', '')), 'hvc_contactors_disagree',
-     600, 'hvc_state = "ENERGIZED"'),
+    ('rtd-loop-opens-at-the-edge', drive(insert_before(1500, at(1023, 'shutdown_loop_v: 0.0'))),
+     'rtd_before_ready', 1002, 'rtd_pressed: true'),
+    ('disagree-101-ms', drive(NO_CONTACTORS,
+                              insert_before(1000, at(701, 'contactors_closed: true'))),
+     'hvc_contactors_disagree', 600, 'hvc_state: ENERGIZED'),
+    ('disagree-to-the-end', drive(NO_CONTACTORS), 'hvc_contactors_disagree',
+     600, 'hvc_state: ENERGIZED'),
     # The block that starts it sets both keys: the warning is on the one that changed.
-    ('disagree-set-in-one-block', drive(('contactors_closed = true', 'contactors_closed = false')),
-     'hvc_contactors_disagree', 600, 'hvc_state = "ENERGIZED"'),
-    ('unused-allow', drive(('[[at]]\nt_ms = 0\n', '[allow]\nbrake_high = "for the test"\n\n'
-                                                  '[[at]]\nt_ms = 0\n')),
-     'unused_allow', None, 'brake_high = "for the test"'),
+    ('disagree-set-in-one-block', drive(('contactors_closed: true', 'contactors_closed: false')),
+     'hvc_contactors_disagree', 600, 'hvc_state: ENERGIZED'),
+    ('unused-allow', drive(allowing('brake_high', 'for the test')),
+     'unused_allow', None, 'brake_high: for the test'),
+    ('unused-allow-with-its-reason-below', drive(('\nat:\n', '\nallow:\n  brake_high:\n'
+                                                              '    for the test\n\nat:\n')),
+     'unused_allow', None, 'brake_high:'),
 ]
 
 # (id, text, code, lint options)
@@ -264,7 +275,7 @@ QUIET = [
       for v in (0.0900001, 0.1, 0.73, 0.7399999, 1.0, 0.0)],
     *[(f'loop-{v}', drive(then=hold_at_2000('shutdown_loop_v', v, 24.0)), 'loop_near_threshold',
        {}) for v in (19.68, 19.671, 19.8, 16.09, 16.099, 16.0)],
-    ('bot-pedal-0.23', drive(then=at(2000, 'brake_psi = 400.0') + at(2100, 'accelerator = 0.23')),
+    ('bot-pedal-0.23', drive(then=at(2000, 'brake_psi: 400.0') + at(2100, 'accelerator: 0.23')),
      'brake_over_throttle', {}),
     ('bot-132-ms-after-a-hard-stop', hard_stop_pedal_at(2133), 'brake_over_throttle', {}),
     ('rtd-on-the-brake', BASE, 'rtd_at_boot', {}),
@@ -278,29 +289,28 @@ QUIET = [
     # short for the debounce to take it.
     ('rtd-run-shorter-than-the-debounce', SHORT_RUN, 'rtd_too_short', {}),
     # Off the brake after the press: the edge at 1023 still sees 350 psi.
-    ('rtd-brake-off-at-1040', drive(('t_ms = 1500', 't_ms = 1040')), 'rtd_without_brake', {}),
-    ('rtd-brake-56', drive(insert_before(600, at(500, 'brake_psi = 56.0'))), 'rtd_without_brake',
+    ('rtd-brake-off-at-1040', drive(('t_ms: 1500', 't_ms: 1040')), 'rtd_without_brake', {}),
+    ('rtd-brake-56', drive(insert_before(600, at(500, 'brake_psi: 56.0'))), 'rtd_without_brake',
      {}),
     ('rtd-brake-off-at-975', brake_off_at(975), 'rtd_without_brake', {}),
     ('rtd-pedal-up', BASE, 'rtd_with_pedal', {}),
     ('rtd-pedal-0.049', pedal_before_the_press(0.049), 'rtd_with_pedal', {}),
     ('rtd-pedal-off-at-1014', pedal_before_the_press(0.2, 1014), 'rtd_with_pedal', {}),
     ('rtd-400-ms-after-energized', BASE, 'rtd_before_ready', {}),
-    ('rtd-48-ms-after-energized', drive(('t_ms = 1000\nrtd', 't_ms = 648\nrtd')),
+    ('rtd-48-ms-after-energized', drive(('t_ms: 1000\n    rtd', 't_ms: 648\n    rtd')),
      'rtd_before_ready', {}),
     ('rtd-loop-closed-at-900', loop_open_from_0_until(900), 'rtd_before_ready', {}),
     ('rtd-loop-19.68', loop_held_from_0(19.68), 'rtd_before_ready', {}),
     ('rtd-loop-opens-after-the-edge', drive(insert_before(1500, at(1024,
-                                                                   'shutdown_loop_v = 0.0'))),
+                                                                   'shutdown_loop_v: 0.0'))),
      'rtd_before_ready', {}),
-    ('disagree-30-ms', drive(('contactors_closed = true\n', ''),
-                             insert_before(1000, at(630, 'contactors_closed = true'))),
+    ('disagree-30-ms', drive(NO_CONTACTORS,
+                             insert_before(1000, at(630, 'contactors_closed: true'))),
      'hvc_contactors_disagree', {}),
-    ('disagree-100-ms', drive(('contactors_closed = true\n', ''),
-                              insert_before(1000, at(700, 'contactors_closed = true'))),
+    ('disagree-100-ms', drive(NO_CONTACTORS,
+                              insert_before(1000, at(700, 'contactors_closed: true'))),
      'hvc_contactors_disagree', {}),
-    ('allow-used', drive(('[[at]]\nt_ms = 0\n', '[allow]\nbrake_high = "for the test"\n\n'
-                                                '[[at]]\nt_ms = 0\n'),
+    ('allow-used', drive(allowing('brake_high', 'for the test'),
                          then=hold_at_2000('brake_psi', 1001.0)), 'unused_allow', {}),
 ]
 
@@ -365,7 +375,7 @@ def test_rules_text():
                             'which uses it up',
         'hvc_contactors_disagree': 'hvc_state ENERGIZED without contactors_closed, or the '
                                    "reverse, for over 100 ms of the file's time",
-        'unused_allow': 'an [allow] code that never fires: the drive no longer tests what it '
+        'unused_allow': 'an allow entry that never fires: the drive no longer tests what it '
                         'claims',
     }
 
@@ -452,7 +462,7 @@ MESSAGES = {
                            'VCU counts the HVC as energized only with both (a forgotten '
                            'contactors_closed?)',
     'unused-allow': 'brake_high is allowed but never fires; the drive no longer tests what it '
-                    'claims (or remove it from [allow])',
+                    'claims (or delete its line under allow:)',
 }
 
 
@@ -465,28 +475,27 @@ def test_warning_messages(case):
 
 
 def test_brake_over_throttle_fires_once_per_stretch():
-    one = drive(then=at(2000, 'brake_psi = 400.0') + at(2100, 'accelerator = 0.3')
-                + at(2500, 'brake_psi = 0.0'))
+    one = drive(then=at(2000, 'brake_psi: 400.0') + at(2100, 'accelerator: 0.3')
+                + at(2500, 'brake_psi: 0.0'))
     assert [p.t_ms for p in lint(one).active if p.code == 'brake_over_throttle'] == [2100]
-    two = one + at(2700, 'accelerator = 0.0') + at(2800, 'brake_psi = 400.0') + at(
-        2900, 'accelerator = 0.3')
+    two = one + at(2700, 'accelerator: 0.0') + at(2800, 'brake_psi: 400.0') + at(
+        2900, 'accelerator: 0.3')
     assert [p.t_ms for p in lint(two).active if p.code == 'brake_over_throttle'] == [2100, 2901]
 
 
 def test_ramps_through_a_band_do_not_warn():
     """Only a value held for a sample decides a state."""
-    text = drive(('t_ms = 1500\nbrake_psi = 0.0', 't_ms = 1500\nbrake_psi = { to = 0.0, '
-                                                  'ramp_ms = 150 }'),
-                 then=at(2000, 'shutdown_loop_v = { to = 0.0, ramp_ms = 50 }'))
+    text = drive(('t_ms: 1500\n    brake_psi: 0.0', 't_ms: 1500\n    brake_psi: {to: 0.0, '
+                                                  'ramp_ms: 150}'),
+                 then=at(2000, 'shutdown_loop_v: {to: 0.0, ramp_ms: 50}'))
     assert lint(text) == check.Findings((), ())
     # The ramp's end value is held, so it is checked.
-    held = drive(then=at(2000, 'brake_psi = { to = 300.0, ramp_ms = 100 }'))
+    held = drive(then=at(2000, 'brake_psi: {to: 300.0, ramp_ms: 100}'))
     assert [(p.code, p.t_ms) for p in lint(held).active] == [('brake_near_threshold', 2100)]
 
 
 def test_allow_moves_a_warning_to_allowed():
-    text = drive(('[[at]]\nt_ms = 0\n', '[allow]\nbrake_high = "the car model must reverse"\n\n'
-                                        '[[at]]\nt_ms = 0\n'),
+    text = drive(allowing('brake_high', 'the car model must reverse'),
                  then=hold_at_2000('brake_psi', 1200.0))
     findings = lint(text)
     assert findings.active == ()
@@ -495,9 +504,8 @@ def test_allow_moves_a_warning_to_allowed():
 
 
 def test_rtd_too_short_can_be_allowed():
-    text = drive(('[[at]]\nt_ms = 0\n', '[allow]\nrtd_too_short = "a bouncing switch"\n\n'
-                                        '[[at]]\nt_ms = 0\n'),
-                 insert_before(1500, at(1012, 'rtd_pressed = false')))
+    text = drive(allowing('rtd_too_short', 'a bouncing switch'),
+                 insert_before(1500, at(1012, 'rtd_pressed: false')))
     findings = lint(text)
     assert findings.active == ()
     assert [(p.code, p.t_ms, why) for p, why in findings.allowed] == [
@@ -676,17 +684,17 @@ def test_check_command(capsys, tmp_path):
                                            '0 warnings. Power up')
     assert _line(out, 'brake-over-throttle').endswith(
         '0 warnings, 1 allowed. ' + scenario_file.load('brake-over-throttle').description)
-    launch = (scenario_file.SCENARIO_DIR / 'launch.toml').read_text()
-    bad = tmp_path / 'bad.toml'
-    bad.write_text(launch.replace('accelerator = 1.0', 'accelerator = 1.5'))
+    launch = (scenario_file.SCENARIO_DIR / 'launch.yml').read_text()
+    bad = tmp_path / 'bad.yml'
+    bad.write_text(launch.replace('accelerator: 1.0', 'accelerator: 1.5'))
     assert check.main([str(bad)]) == 2
     captured = capsys.readouterr()
-    line = line_of(bad.read_text(), 'accelerator = 1.5')
+    line = line_of(bad.read_text(), 'accelerator: 1.5')
     assert captured.err.startswith(f'{bad}:{line}: error: at[5].accelerator: 1.5 is outside')
     assert '[out_of_range]' in captured.err
     assert captured.out == f'FAIL {bad}: 1 error, 0 warnings\n'
-    warned = tmp_path / 'warned.toml'
-    warned.write_text(launch.replace('brake_psi = 350.0', 'brake_psi = 300.0'))
+    warned = tmp_path / 'warned.yml'
+    warned.write_text(launch.replace('brake_psi: 350.0', 'brake_psi: 300.0'))
     assert check.main([str(warned)]) == 0
     assert '[brake_near_threshold]' in capsys.readouterr().err
     assert check.main(['--strict', str(warned)]) == 2
@@ -707,9 +715,9 @@ def test_check_command(capsys, tmp_path):
 def test_errors_only(capsys, tmp_path):
     """run.sh's check before a run: errors and the per-file line, and no
     warnings, which the run itself reports."""
-    launch = (scenario_file.SCENARIO_DIR / 'launch.toml').read_text()
-    warned = tmp_path / 'warned.toml'
-    warned.write_text(launch.replace('brake_psi = 350.0', 'brake_psi = 300.0'))
+    launch = (scenario_file.SCENARIO_DIR / 'launch.yml').read_text()
+    warned = tmp_path / 'warned.yml'
+    warned.write_text(launch.replace('brake_psi: 350.0', 'brake_psi: 300.0'))
     assert check.main(['--errors-only', str(warned), 'launch']) == 0
     captured = capsys.readouterr()
     assert captured.err == ''
@@ -717,8 +725,8 @@ def test_errors_only(capsys, tmp_path):
     assert captured.out == (f'ok warned: 7000 ms, 2334 steps, 7 blocks, warnings not checked. '
                             f'{description}\nok launch: 7000 ms, 2334 steps, 7 blocks, warnings '
                             f'not checked. {description}\n')
-    bad = tmp_path / 'bad.toml'
-    bad.write_text(launch.replace('accelerator = 1.0', 'accelerator = 1.5'))
+    bad = tmp_path / 'bad.yml'
+    bad.write_text(launch.replace('accelerator: 1.0', 'accelerator: 1.5'))
     assert check.main(['--errors-only', str(bad), 'launch']) == 2
     captured = capsys.readouterr()
     assert captured.err.count('\n') == 1 and '[out_of_range]' in captured.err
@@ -741,22 +749,60 @@ def test_a_bad_number_names_no_private_function(capsys):
         assert '_positive' not in err
 
 
+@pytest.mark.parametrize('module', ['vcusil.check', 'vcusil'])
+def test_a_python_without_pyyaml_is_told_how_to_check(module):
+    """python3 -m vcusil.check, or a run, on a bare python3: the fix, not a
+    traceback, and one that works where pip refuses a system Python."""
+    hide = ("import runpy, sys; sys.modules['yaml'] = None; "
+            f"runpy.run_module('{module}', run_name='__main__')")
+    p = subprocess.run([sys.executable, '-c', hide, 'launch'], cwd=SIL / 'host',
+                       capture_output=True, text=True, check=False, timeout=60)
+    assert (p.returncode, p.stdout) == (2, '')
+    assert p.stderr == ('vcusil needs Python 3.11 or newer with PyYAML; start the command with '
+                        'uv run --no-project --python 3.12 --with PyYAML, which fetches both for '
+                        'it, or use boards/VCU/Sil/run.sh, which runs vcusil in the SIL '
+                        'container\n')
+
+
+def test_help_names_the_yaml_format(capsys):
+    with pytest.raises(SystemExit):
+        check.main(['--help'])
+    text = ' '.join(capsys.readouterr().out.split())  # argparse wraps to the terminal
+    assert 'has no warning its allow: does not cover); 2: otherwise.' in text
+    assert "--strict fail on any warning the file's allow: does not cover (for CI)" in text
+    assert 'a name from scenarios/ or a .yml file (default: every scenarios/*.yml)' in text
+
+
 def test_no_names_checks_the_files_as_paths(capsys, tmp_path, monkeypatch):
     """A badly named file gets the rename hint, and dot-files are skipped."""
-    launch = (scenario_file.SCENARIO_DIR / 'launch.toml').read_text()
-    (tmp_path / 'launch.toml').write_text(launch)
-    (tmp_path / 'My_Test.toml').write_text(launch)
-    (tmp_path / '._launch.toml').write_bytes(b'\x00\x05\x16\x07')  # macOS AppleDouble
-    (tmp_path / '.hidden.toml').write_text('not toml')
+    launch = (scenario_file.SCENARIO_DIR / 'launch.yml').read_text()
+    (tmp_path / 'launch.yml').write_text(launch)
+    (tmp_path / 'My_Test.yml').write_text(launch)
+    (tmp_path / '._launch.yml').write_bytes(b'\x00\x05\x16\x07')  # macOS AppleDouble
+    (tmp_path / '.hidden.yml').write_text('not yaml')
     monkeypatch.setattr(scenario_file, 'SCENARIO_DIR', tmp_path)
     assert check.main([]) == 2
     captured = capsys.readouterr()
-    path = tmp_path / 'My_Test.toml'
+    path = tmp_path / 'My_Test.yml'
     assert captured.out.splitlines()[0] == f'FAIL {path}: 1 error, 0 warnings'
     assert captured.out.splitlines()[1].startswith('ok launch: 7000 ms')
     assert len(captured.out.splitlines()) == 2
-    assert 'rename it to my-test.toml' in captured.err
+    assert 'rename it to my-test.yml' in captured.err
     assert '[bad_name]' in captured.err and 'hidden' not in captured.err
+
+
+def test_no_names_also_fails_a_yaml_or_toml_file_in_scenarios(capsys, tmp_path, monkeypatch):
+    """So CI's --check --strict cannot pass over a drive that never loads."""
+    launch = (scenario_file.SCENARIO_DIR / 'launch.yml').read_text()
+    for name in ('launch.yml', 'my-test.yaml', 'old.toml', '._x.yaml'):
+        (tmp_path / name).write_text(launch)
+    monkeypatch.setattr(scenario_file, 'SCENARIO_DIR', tmp_path)
+    assert check.main([]) == 2
+    captured = capsys.readouterr()
+    assert [line.split(':')[0] for line in captured.out.splitlines()] == [
+        'ok launch', f'FAIL {tmp_path / "my-test.yaml"}', f'FAIL {tmp_path / "old.toml"}']
+    assert 'rename it to my-test.yml [bad_name]' in captured.err
+    assert 'rename it to old.yml [bad_name]' in captured.err and '._x' not in captured.out
 
 
 EXPLAIN_LAUNCH = '''launch: 7000 ms, 2334 steps of 3 ms (t = 0 .. 6999 ms)
@@ -795,16 +841,16 @@ def _sets(text: str) -> dict[int, str]:
             for row in rows}
 
 
-STEP_INTO_A_RAMP = drive(then=at(2000, 'shutdown_loop_v = 0.0')
-                         + at(2001, 'shutdown_loop_v = { to = 24.0, ramp_ms = 30 }'))
+STEP_INTO_A_RAMP = drive(then=at(2000, 'shutdown_loop_v: 0.0')
+                         + at(2001, 'shutdown_loop_v: {to: 24.0, ramp_ms: 30}'))
 
 
 def test_explain_notes_come_from_the_models():
     # A loop ramp is seen once the tap crosses 16.60 V (2016) and the 10 ms
     # debounce passes; 24 to 22 V crosses nothing; a dip is swallowed.
-    loop = drive(then=at(2000, 'shutdown_loop_v = { to = 0.0, ramp_ms = 50 }')
-                 + at(2200, 'shutdown_loop_v = 24.0') + at(2400, 'shutdown_loop_v = 22.0')
-                 + at(2600, 'shutdown_loop_v = 0.0') + at(2606, 'shutdown_loop_v = 24.0'))
+    loop = drive(then=at(2000, 'shutdown_loop_v: {to: 0.0, ramp_ms: 50}')
+                 + at(2200, 'shutdown_loop_v: 24.0') + at(2400, 'shutdown_loop_v: 22.0')
+                 + at(2600, 'shutdown_loop_v: 0.0') + at(2606, 'shutdown_loop_v: 24.0'))
     sets = _sets(loop)
     assert sets[2000] == 'shutdown_loop_v to 0.0 over 50 ms (the firmware sees it at 2028 ms)'
     assert sets[2200] == 'shutdown_loop_v 24.0 (the firmware sees it at 2214 ms)'
@@ -820,12 +866,12 @@ def test_explain_notes_come_from_the_models():
     # The loop boots UNKNOWN, so a value at 0 gets no note. Both taps boot
     # reading low, so a value inside the band from 0 reads open.
     assert _sets(loop_open_from_0_until(2000))[0] == 'brake_psi 350.0, shutdown_loop_v 0.0'
-    in_band = drive(('brake_psi = 350.0', 'brake_psi = 350.0\nshutdown_loop_v = 18.0'),
-                    insert_before(1500, at(1200, 'shutdown_loop_v = 24.0')))
+    in_band = drive(('brake_psi: 350.0', 'brake_psi: 350.0\n    shutdown_loop_v: 18.0'),
+                    insert_before(1500, at(1200, 'shutdown_loop_v: 24.0')))
     assert _sets(in_band)[1200] == 'shutdown_loop_v 24.0 (the firmware sees it at 1212 ms)'
     # RTD: a release is debounced like a press; presses the switch never
     # sees say why.
-    rtd = released(2000, 2030) + at(2100, 'rtd_pressed = false') + at(2112, 'rtd_pressed = true')
+    rtd = released(2000, 2030) + at(2100, 'rtd_pressed: false') + at(2112, 'rtd_pressed: true')
     sets = _sets(rtd)
     assert sets[2000] == 'rtd_pressed false (the firmware sees it at 2022 ms)'
     assert sets[2030] == 'rtd_pressed true (the firmware sees it at 2052 ms)'
@@ -846,3 +892,11 @@ def test_readme_lists_every_key_and_warning():
         assert f'`{key}`' in text, key
     rows = re.findall(r'^\| `(\w+)` \|', text, re.M)
     assert [code for code in rows if code in check.RULES] == list(check.RULES)
+
+
+def test_the_readme_examples_load_and_lint_clean():
+    texts = re.findall(r'^```yaml\n(.*?)^```', (SIL / 'README.md').read_text(), re.M | re.S)
+    assert texts
+    for text in texts:
+        findings = lint(text)
+        assert findings.active == (), findings.active

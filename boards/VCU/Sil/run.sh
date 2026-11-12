@@ -10,19 +10,20 @@
 # The first form checks the scenario (default launch) for errors, builds
 # //boards/VCU:libvcu_sil.so and the CAN decode table from this checkout and
 # runs it; other options go to python -m vcusil (README.md lists them). A
-# scenario FILE must be inside this checkout: the container sees only the
-# checkout and the FMU's folder. --check runs python3 -m vcusil.check on
-# scenario files (with no names, every file in scenarios/; --scenario X adds
-# X). It needs Docker and builds or reuses the SIL image, but never builds
-# the firmware; python3 -m vcusil.check in host/ needs neither. --test runs
-# the SIL's C++ tests and the host's pytest suite instead; with an FMU the
-# end-to-end tests run too. --view serves a run's run.mcap with the SIL
-# layout in Lichtblick, an open-source Foxglove viewer, on localhost. The FMU
-# (GPL, never committed) may also come from VCU_SIL_FMU. A value may follow
-# its option after a space or an = (--out=DIR). Exit status: 0 completed, 1
-# the car model failed, 2 anything else, including a firmware that does not
-# build or a scenario that cannot run. A run that stops before it starts
-# leaves no run directory, and a reused --out as it was.
+# scenario FILE, a .yml file, must be inside this checkout: the container
+# sees only the checkout and the FMU's folder. --check runs
+# python3 -m vcusil.check on scenario files (with no names, every file in
+# scenarios/; --scenario X adds X). It needs Docker and builds or reuses the
+# SIL image, but never builds the firmware; python3 -m vcusil.check in host/
+# needs neither, just Python 3.11+ with PyYAML. --test runs the SIL's C++
+# tests and the host's pytest suite instead; with an FMU the end-to-end tests
+# run too. --view serves a run's run.mcap with the SIL layout in Lichtblick,
+# an open-source Foxglove viewer, on localhost. The FMU (GPL, never
+# committed) may also come from VCU_SIL_FMU. A value may follow its option
+# after a space or an = (--out=DIR). Exit status: 0 completed, 1 the car
+# model failed, 2 anything else, including a firmware that does not build or
+# a scenario that cannot run. A run that stops before it starts leaves no run
+# directory, and a reused --out as it was.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -53,7 +54,7 @@ while (($#)); do
     --fmu) (($# >= 2)) && [[ -n "$2" ]] || die "--fmu needs a path"; fmu="$2"; shift 2 ;;
     --out) (($# >= 2)) && [[ -n "$2" ]] || die "--out needs a path"; out="$2"; shift 2 ;;
     --scenario)
-      (($# >= 2)) && [[ -n "$2" ]] || die "--scenario needs a name or a .toml file"
+      (($# >= 2)) && [[ -n "$2" ]] || die "--scenario needs a name or a .yml file"
       scenario="$2"; named+=("$2"); shift 2 ;;
     --check) mode=check; shift ;;
     --test) mode='test'; shift ;;
@@ -89,7 +90,7 @@ fi
 # paths are physical, so a symlinked spelling of the checkout (or /tmp
 # against /private/tmp) is still inside it.
 container_scenario() {
-  if [[ "$1" != */* && "$1" != *.toml ]]; then printf '%s\n' "$1"; return; fi
+  if [[ "$1" != */* && "$1" != *.yml ]]; then printf '%s\n' "$1"; return; fi
   [[ -f "$1" ]] || { echo "run.sh: no scenario file at $1" >&2; return 2; }
   local abs
   abs="$(cd "$(dirname "$1")" && pwd -P)/$(basename "$1")"
@@ -154,7 +155,7 @@ if [[ "$mode" == test ]]; then
 fi
 
 scenario_c="$(container_scenario "$scenario")" || exit 2
-out="${out:-$here/out/$(basename "$scenario" .toml)-$(date +%Y%m%d-%H%M%S)}"
+out="${out:-$here/out/$(basename "$scenario" .yml)-$(date +%Y%m%d-%H%M%S)}"
 made_out=0
 [[ -e "$out" ]] || made_out=1
 mkdir -p "$out" || die "cannot make the run directory $out"

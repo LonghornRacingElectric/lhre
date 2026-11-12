@@ -61,10 +61,10 @@ def test_trace_round_trips_floats_exactly(tmp_path):
 def test_summary_names_the_scenario_file_and_its_warnings():
     result = cosim.Result(scenario='launch')
     assert 'scenario file' not in report.summary_text(summary(), result, {})
-    meta = {'scenario_file': {'path': 'boards/VCU/Sil/scenarios/launch.toml',
+    meta = {'scenario_file': {'path': 'boards/VCU/Sil/scenarios/launch.yml',
                               'sha256': '1a2b3c4d5e6f' + '0' * 52},
             'scenario_warnings': [], 'scenario_allowed': []}
-    file_line = '  scenario file boards/VCU/Sil/scenarios/launch.toml (sha256 1a2b3c4d5e6f)'
+    file_line = '  scenario file boards/VCU/Sil/scenarios/launch.yml (sha256 1a2b3c4d5e6f)'
     lines = report.summary_text(summary(), result, meta).splitlines()
     assert lines[-2:] == [file_line, '  scenario warnings: none']
     # The description comes from the parsed file, between the two.

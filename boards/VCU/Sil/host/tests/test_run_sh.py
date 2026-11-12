@@ -16,7 +16,7 @@ from vcusil import scenario_file
 SIL = Path(__file__).resolve().parents[2]
 RUN_SH = SIL / 'run.sh'
 REPO = SIL.parents[2]  # physical, as run.sh's pwd -P makes it
-LAUNCH_IN_CONTAINER = '/work/lhre/boards/VCU/Sil/scenarios/launch.toml'
+LAUNCH_IN_CONTAINER = '/work/lhre/boards/VCU/Sil/scenarios/launch.yml'
 OLD = 946684800  # 2000-01-01 UTC: a previous run's meta.json
 STAMP = 1577836800  # 2020-01-01 UTC: run.sh's stamp, from the mktemp stub
 NOW = '20260102-030405'  # what the date stub says
@@ -132,7 +132,10 @@ def test_help_is_the_header_comment(sh):
     assert r.code == 0 and r.calls == []
     assert lines[0] == 'Runs the VCU firmware against the car model in the SIL dev container.'
     assert '  boards/VCU/Sil/run.sh --check [--strict] [--explain] [--errors-only]' in lines
-    assert lines[-1] == 'leaves no run directory, and a reused --out as it was.'
+    assert "needs neither, just Python 3.11+ with PyYAML. --test runs the SIL's C++" in lines
+    assert lines[-2:] == [
+        'a scenario that cannot run. A run that stops before it starts leaves no run',
+        'directory, and a reused --out as it was.']
 
 
 def test_a_value_may_follow_its_option_after_an_equals(sh):
@@ -149,10 +152,10 @@ def test_a_value_may_follow_its_option_after_an_equals(sh):
 @pytest.mark.parametrize('args, message', [
     (['--fmu='], '--fmu needs a path'),
     (['--out='], '--out needs a path'),
-    (['--scenario='], '--scenario needs a name or a .toml file'),
+    (['--scenario='], '--scenario needs a name or a .yml file'),
     (['--view='], '--view needs a run directory'),
     (['--port='], '--port needs a number'),
-    (['--check', '--scenario'], '--scenario needs a name or a .toml file'),
+    (['--check', '--scenario'], '--scenario needs a name or a .yml file'),
     (['--out', ''], '--out needs a path'),
 ])
 def test_an_option_without_its_value_stops_before_docker(sh, args, message):
@@ -163,11 +166,11 @@ def test_an_option_without_its_value_stops_before_docker(sh, args, message):
 def _inside(sh):
     return {
         'name': ('launch', None, 'launch'),
-        'absolute': (SIL / 'scenarios' / 'launch.toml', None, LAUNCH_IN_CONTAINER),
-        'relative': ('scenarios/launch.toml', SIL, LAUNCH_IN_CONTAINER),
-        'symlinked-checkout': (sh.tmp / 'checkout' / 'boards/VCU/Sil/scenarios/launch.toml',
+        'absolute': (SIL / 'scenarios' / 'launch.yml', None, LAUNCH_IN_CONTAINER),
+        'relative': ('scenarios/launch.yml', SIL, LAUNCH_IN_CONTAINER),
+        'symlinked-checkout': (sh.tmp / 'checkout' / 'boards/VCU/Sil/scenarios/launch.yml',
                                None, LAUNCH_IN_CONTAINER),
-        'symlinked-folder': (sh.tmp / 'alias' / 'launch.toml', None, LAUNCH_IN_CONTAINER),
+        'symlinked-folder': (sh.tmp / 'alias' / 'launch.yml', None, LAUNCH_IN_CONTAINER),
     }
 
 
@@ -185,7 +188,7 @@ def test_check_hands_a_name_as_is_and_a_file_as_its_path_under_work_lhre(sh, spe
 def test_through_a_symlinked_checkout_the_real_one_is_mounted(sh):
     (sh.tmp / 'checkout').symlink_to(REPO, target_is_directory=True)
     sil = sh.tmp / 'checkout' / 'boards/VCU/Sil'
-    r = sh('--check', 'scenarios/launch.toml', script=sil / 'run.sh', cwd=sil)
+    r = sh('--check', 'scenarios/launch.yml', script=sil / 'run.sh', cwd=sil)
     assert r.code == 0, r.err
     assert volumes(r.run()) == [f'{REPO}:/work/lhre:ro']
     assert handed(r.run()) == [LAUNCH_IN_CONTAINER]
@@ -195,22 +198,22 @@ def test_through_a_symlinked_checkout_the_real_one_is_mounted(sh):
 
 
 def _unseen(sh):
-    (sh.tmp / 'mine.toml').write_text((SIL / 'scenarios' / 'launch.toml').read_text())
-    (sh.tmp / 'link.toml').symlink_to(SIL / 'scenarios' / 'launch.toml')
+    (sh.tmp / 'mine.yml').write_text((SIL / 'scenarios' / 'launch.yml').read_text())
+    (sh.tmp / 'link.yml').symlink_to(SIL / 'scenarios' / 'launch.yml')
     outside = ('is outside this checkout, the only folder the SIL container sees; move it '
                'under boards/VCU/Sil/scenarios/')
     return {
-        'outside': (sh.tmp / 'mine.toml', outside),
+        'outside': (sh.tmp / 'mine.yml', outside),
         # The link is outside even though its target is not: the container
         # would see neither the link nor that path.
-        'link-from-outside': (sh.tmp / 'link.toml', outside),
-        'missing': (sh.tmp / 'gone.toml', None),
-        'toml-name-not-here': ('launch.toml', None),
+        'link-from-outside': (sh.tmp / 'link.yml', outside),
+        'missing': (sh.tmp / 'gone.yml', None),
+        'yml-name-not-here': ('launch.yml', None),
     }
 
 
 @pytest.mark.parametrize('case', ['outside', 'link-from-outside', 'missing',
-                                  'toml-name-not-here'])
+                                  'yml-name-not-here'])
 def test_a_file_the_container_cannot_see_stops_before_any_container(sh, case):
     arg, outside = _unseen(sh)[case]
     message = f'run.sh: {arg} {outside}\n' if outside else f'run.sh: no scenario file at {arg}\n'
@@ -247,7 +250,7 @@ def test_check_needs_no_fmu_and_no_room_for_a_build(sh):
 @pytest.mark.parametrize('args, expected', [
     ([], 'launch'),
     (['--scenario', 'launch', '--scenario', 'part-throttle'], 'part-throttle'),
-    (['--scenario', SIL / 'scenarios' / 'launch.toml'], LAUNCH_IN_CONTAINER),
+    (['--scenario', SIL / 'scenarios' / 'launch.yml'], LAUNCH_IN_CONTAINER),
 ])
 def test_a_run_drives_the_last_scenario_option(sh, args, expected):
     r = sh('--fmu', sh.fmu, '--out', sh.tmp / 'run', *args)
@@ -301,14 +304,14 @@ def test_what_a_run_leaves_in_its_directory(sh, case):
 
 
 @pytest.mark.parametrize('scenario, stem', [('launch', 'launch'),
-                                             ('scenarios/my-drive.toml', 'my-drive')])
+                                             ('scenarios/my-drive.yml', 'my-drive')])
 def test_a_run_without_out_is_named_for_its_scenario(sh, scenario, stem):
     # A copy in a checkout of its own, so the default run directory under
     # boards/VCU/Sil/out/ is made here rather than in the real one.
     fake = sh.tmp / 'fake'
     sil = fake / 'boards/VCU/Sil'
     (sil / 'scenarios').mkdir(parents=True)
-    (sil / 'scenarios' / 'my-drive.toml').write_text('')
+    (sil / 'scenarios' / 'my-drive.yml').write_text('')
     shutil.copy(RUN_SH, sil / 'run.sh')
     r = sh('--fmu', sh.fmu, '--scenario', scenario, script=sil / 'run.sh', cwd=sil,
            STUB_META='new')
@@ -317,7 +320,7 @@ def test_a_run_without_out_is_named_for_its_scenario(sh, scenario, stem):
     assert out.name == f'{stem}-{NOW}'
     assert f'{out}:/out' in volumes(r.run())
     assert volumes(r.run())[0] == f'{fake}:/work/lhre:ro'
-    expected = '/work/lhre/boards/VCU/Sil/scenarios/my-drive.toml' if '/' in scenario else stem
+    expected = '/work/lhre/boards/VCU/Sil/scenarios/my-drive.yml' if '/' in scenario else stem
     assert handed(r.run()) == ['/fmu/car.fmu', expected]
 
 

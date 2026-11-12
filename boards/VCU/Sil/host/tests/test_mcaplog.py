@@ -128,11 +128,11 @@ def test_non_finite_values_become_null():
 def test_attachments_get_their_media_type(tmp_path):
     path = tmp_path / 'run.mcap'
     mcaplog.write(path, cosim.Result(scenario='x'), [], str, str, str, None, metadata={},
-                  attachments={'meta.json': b'{}', 'scenario.toml': b'schema = 1\n',
+                  attachments={'meta.json': b'{}', 'scenario.yml': b'schema: 1\n',
                                'summary.txt': b'ok\n'})
     with open(path, 'rb') as f:
         types = {a.name: (a.media_type, a.data, a.log_time, a.create_time)
                  for a in make_reader(f).iter_attachments()}
     assert types == {'meta.json': ('application/json', b'{}', 0, 0),
-                     'scenario.toml': ('application/toml', b'schema = 1\n', 0, 0),
+                     'scenario.yml': ('application/yaml', b'schema: 1\n', 0, 0),
                      'summary.txt': ('text/plain', b'ok\n', 0, 0)}

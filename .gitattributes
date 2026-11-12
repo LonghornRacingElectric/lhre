@@ -1,2 +1,2 @@
 MODULE.bazel.lock linguist-generated=true
-boards/VCU/Sil/scenarios/*.toml text eol=lf
+boards/VCU/Sil/scenarios/*.yml text eol=lf

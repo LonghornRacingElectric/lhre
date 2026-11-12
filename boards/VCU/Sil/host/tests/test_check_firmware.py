@@ -31,7 +31,7 @@ RTD_PROBES = [
     ('press-at-15', press_at(15), [], [], []),
     ('press-at-21', press_at(21), [], [], []),
     ('press-at-24', press_at(24), [45], [45], []),
-    ('press-1000-to-1012', drive(insert_before(1500, at(1012, 'rtd_pressed = false'))), [], [],
+    ('press-1000-to-1012', drive(insert_before(1500, at(1012, 'rtd_pressed: false'))), [], [],
      []),
     ('release-for-12-ms', released(2000, 2012), [1023], [1023], []),
     ('release-for-30-ms', released(2000, 2030), [1023, 2052], [1023], [2022]),
@@ -39,26 +39,26 @@ RTD_PROBES = [
     ('release-for-22-ms', released(2000, 2023), [1023, 2046], [1023], [2022]),
     ('release-at-the-end', released(2990, None), [1023], [1023], []),
     ('press-and-release-from-boot', drive(
-        ('[[at]]\nt_ms = 1000\nrtd_pressed = true\n', ''),
-        ('brake_psi = 350.0', 'brake_psi = 350.0\nrtd_pressed = true'),
-        insert_before(1500, at(1100, 'rtd_pressed = false'), at(1200, 'rtd_pressed = true'))),
+        ('  - t_ms: 1000\n    rtd_pressed: true\n', ''),
+        ('brake_psi: 350.0', 'brake_psi: 350.0\n    rtd_pressed: true'),
+        insert_before(1500, at(1100, 'rtd_pressed: false'), at(1200, 'rtd_pressed: true'))),
      [1221], [1221], []),
     # Off the brake before the press: the filter at the 1023 edge is about
     # 27.9, 31.0 and 52.5 psi.
     *[(f'brake-off-at-{t}', brake_off_at(t), [1023], [] if t == 954 else [1023], [])
       for t in (954, 957, 972)],
-    ('brake-off-just-in-time', drive(('t_ms = 1500\nbrake_psi = 0.0',
-                                      't_ms = 1020\nbrake_psi = 0.0')), [1023], [1023], []),
-    ('pedal-at-the-edge', drive(insert_before(1500, at(1017, 'accelerator = 0.2')),
-                                then=at(2000, 'accelerator = 0.0')), [1023], [], []),
-    ('pedal-in-the-deadzone', drive(insert_before(1500, at(1017, 'accelerator = 0.08')),
-                                    then=at(2000, 'accelerator = 0.0')), [1023], [1023], []),
+    ('brake-off-just-in-time', drive(('t_ms: 1500\n    brake_psi: 0.0',
+                                      't_ms: 1020\n    brake_psi: 0.0')), [1023], [1023], []),
+    ('pedal-at-the-edge', drive(insert_before(1500, at(1017, 'accelerator: 0.2')),
+                                then=at(2000, 'accelerator: 0.0')), [1023], [], []),
+    ('pedal-in-the-deadzone', drive(insert_before(1500, at(1017, 'accelerator: 0.08')),
+                                    then=at(2000, 'accelerator: 0.0')), [1023], [1023], []),
     # rtd_before_ready is a margin: RTD_WAIT is at 603, so this edge counts...
-    ('press-10-ms-after-energized', drive(('t_ms = 1000\nrtd', 't_ms = 610\nrtd')), [633], [633],
-     []),
+    ('press-10-ms-after-energized', drive(('t_ms: 1000\n    rtd', 't_ms: 610\n    rtd')), [633],
+     [633], []),
     # ... and this one, in PRECHARGE, is used up.
     ('press-while-precharging', drive(UNPLUGGED_RTD, insert_before(600, at(300,
-                                                                        'rtd_pressed = true'))),
+                                                                        'rtd_pressed: true'))),
      [321], [], []),
 ]
 
@@ -160,17 +160,17 @@ def test_rtd_explain_notes_give_the_firmwares_tick(lib, text):
 # Files for the filters, brake-pressed and brake-over-throttle: the four in
 # scenarios/ and hand-made edges.
 FILTER_PROBES = [
-    *[(name, (scenario_file.SCENARIO_DIR / f'{name}.toml').read_text())
+    *[(name, (scenario_file.SCENARIO_DIR / f'{name}.yml').read_text())
       for name in ('launch', 'part-throttle', 'shutdown-loop-open', 'brake-over-throttle')],
     ('hard-stop-pedal-at-2106', hard_stop_pedal_at(2106)),
     ('hard-stop-pedal-at-2130', hard_stop_pedal_at(2130)),
-    ('brake-hysteresis', drive(then=at(1800, 'brake_psi = 290.0') + at(1900, 'accelerator = 0.3')
-                               + at(2000, 'brake_psi = 310.0') + at(2200, 'brake_psi = 260.0')
-                               + at(2400, 'brake_psi = 240.0') + at(2600, 'accelerator = 0.0')
-                               + at(2700, 'brake_psi = { to = 600.0, ramp_ms = 200 }'))),
-    ('pedal-sweep', drive(then=at(1800, 'accelerator = { to = 1.0, ramp_ms = 400 }')
-                          + at(2300, 'accelerator = { to = 0.0, ramp_ms = 300 }')
-                          + at(2700, 'accelerator = 0.05') + at(2800, 'accelerator = 0.95'))),
+    ('brake-hysteresis', drive(then=at(1800, 'brake_psi: 290.0') + at(1900, 'accelerator: 0.3')
+                               + at(2000, 'brake_psi: 310.0') + at(2200, 'brake_psi: 260.0')
+                               + at(2400, 'brake_psi: 240.0') + at(2600, 'accelerator: 0.0')
+                               + at(2700, 'brake_psi: {to: 600.0, ramp_ms: 200}'))),
+    ('pedal-sweep', drive(then=at(1800, 'accelerator: {to: 1.0, ramp_ms: 400}')
+                          + at(2300, 'accelerator: {to: 0.0, ramp_ms: 300}')
+                          + at(2700, 'accelerator: 0.05') + at(2800, 'accelerator: 0.95'))),
 ]
 
 
@@ -246,25 +246,23 @@ def test_the_filtered_brake_at_the_edge_is_the_firmwares(lib):
 
 
 LOOP_PROBES = [
-    ('shutdown-loop-open', (scenario_file.SCENARIO_DIR / 'shutdown-loop-open.toml').read_text()),
-    ('ramps', drive(then=at(2000, 'shutdown_loop_v = { to = 0.0, ramp_ms = 50 }')
-                    + at(2200, 'shutdown_loop_v = { to = 24.0, ramp_ms = 50 }'))),
+    ('shutdown-loop-open', (scenario_file.SCENARIO_DIR / 'shutdown-loop-open.yml').read_text()),
+    ('ramps', drive(then=at(2000, 'shutdown_loop_v: {to: 0.0, ramp_ms: 50}')
+                    + at(2200, 'shutdown_loop_v: {to: 24.0, ramp_ms: 50}'))),
     # Slow enough that each ADC count near a threshold gets a sample.
-    ('across-each-threshold', drive(then=at(1600, 'shutdown_loop_v = 17.0')
-                                    + at(1700, 'shutdown_loop_v = { to = 16.0, ramp_ms = 600 }')
-                                    + at(2400, 'shutdown_loop_v = 19.0')
-                                    + at(2450, 'shutdown_loop_v = { to = 19.4, ramp_ms = 500 }'))),
-    ('a-dip-under-the-debounce', drive(then=at(2000, 'shutdown_loop_v = 0.0')
-                                       + at(2006, 'shutdown_loop_v = 24.0'))),
-    ('open-from-boot', drive(('brake_psi = 350.0', 'brake_psi = 350.0\nshutdown_loop_v = 0.0'),
-                             insert_before(1500, at(1200, 'shutdown_loop_v = 24.0')))),
-    ('in-the-band-from-boot', drive(('brake_psi = 350.0',
-                                     'brake_psi = 350.0\nshutdown_loop_v = 18.0'),
-                                    insert_before(1500, at(1200, 'shutdown_loop_v = 24.0')))),
-    ('opens-before-it-reports', drive(('[[at]]\nt_ms = 200\n',
-                                       '[[at]]\nt_ms = 5\nshutdown_loop_v = 0.0\n\n[[at]]\n'
-                                       't_ms = 100\nshutdown_loop_v = 24.0\n\n[[at]]\n'
-                                       't_ms = 200\n'))),
+    ('across-each-threshold', drive(then=at(1600, 'shutdown_loop_v: 17.0')
+                                    + at(1700, 'shutdown_loop_v: {to: 16.0, ramp_ms: 600}')
+                                    + at(2400, 'shutdown_loop_v: 19.0')
+                                    + at(2450, 'shutdown_loop_v: {to: 19.4, ramp_ms: 500}'))),
+    ('a-dip-under-the-debounce', drive(then=at(2000, 'shutdown_loop_v: 0.0')
+                                       + at(2006, 'shutdown_loop_v: 24.0'))),
+    ('open-from-boot', drive(('brake_psi: 350.0', 'brake_psi: 350.0\n    shutdown_loop_v: 0.0'),
+                             insert_before(1500, at(1200, 'shutdown_loop_v: 24.0')))),
+    ('in-the-band-from-boot', drive(('brake_psi: 350.0',
+                                     'brake_psi: 350.0\n    shutdown_loop_v: 18.0'),
+                                    insert_before(1500, at(1200, 'shutdown_loop_v: 24.0')))),
+    ('opens-before-it-reports', drive(insert_before(200, at(5, 'shutdown_loop_v: 0.0'),
+                                                    at(100, 'shutdown_loop_v: 24.0')))),
 ]
 
 

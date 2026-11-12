@@ -1,7 +1,7 @@
 """Scripted drives: what the driver and the rest of the car do over time.
 
 Times are integer milliseconds. A drive is a Timeline, compiled from a
-scenarios/<name>.toml file by scenario_file.py; the format and its exact
+scenarios/<name>.yml file by scenario_file.py; the format and its exact
 semantics are in boards/VCU/Sil/README.md, section Scenarios.
 """
 

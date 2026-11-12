@@ -25,8 +25,8 @@ REPO = Path(__file__).resolve().parents[5]
 
 # What a run writes; a reused --out loses the previous run's copies first.
 OUTPUT_FILES = ('meta.json', 'trace.csv', 'run.mcap', 'plot.png', 'summary.txt', 'console.log',
-                'fmu.log', 'scenario.toml')
-# What a run gets when neither the command line nor the file's [setup] says.
+                'fmu.log', 'scenario.yml')
+# What a run gets when neither the command line nor the file's setup says.
 DEFAULT_EVENT_MODE, DEFAULT_SOC = 0, 0.9
 
 
@@ -63,13 +63,13 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
                    help='vcu_sil_can.json from //boards/VCU:vcu_sil_can_table; without it '
                         'run.mcap keeps CAN frames undecoded')
     p.add_argument('--scenario', default='launch', metavar='NAME|FILE',
-                   help='a name from boards/VCU/Sil/scenarios/ or a .toml file (default launch)')
+                   help='a name from boards/VCU/Sil/scenarios/ or a .yml file (default launch)')
     p.add_argument('--soc', type=_fraction, default=None,
-                   help="initial state of charge, 0..1; overrides the scenario's [setup] "
+                   help="initial state of charge, 0..1; overrides the scenario's setup "
                         '(default 0.9; at 1.0 the model accepts no regen)')
     p.add_argument('--event-mode', type=int, default=None, choices=range(5),
                    help='lhre EventMode: 0 boots like the car (ENDURANCE), 1-4 pick an event; '
-                        "overrides the scenario's [setup] (default 0)")
+                        "overrides the scenario's setup (default 0)")
     p.add_argument('--brake-psi-full', type=_positive,
                    default=cosim.BRAKE_PSI_AT_FULL_PLANT_BRAKE,
                    help='line pressure that is full brake in the car model (default 1500)')
@@ -106,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _setup(args: argparse.Namespace, sf: scenario_file.ScenarioFile):
-    """event_mode and soc_start: the command line, else the file's [setup],
+    """event_mode and soc_start: the command line, else the file's setup,
     else the default, and which of the three each came from."""
     chosen, source = {}, {}
     for key, flag, default in (('event_mode', args.event_mode, DEFAULT_EVENT_MODE),
@@ -126,7 +126,7 @@ def _run(args: argparse.Namespace, sf: scenario_file.ScenarioFile, findings: che
     args.out.mkdir(parents=True, exist_ok=True)
     for name in OUTPUT_FILES:
         (args.out / name).unlink(missing_ok=True)
-    (args.out / 'scenario.toml').write_bytes(sf.data)
+    (args.out / 'scenario.yml').write_bytes(sf.data)
     event_mode, soc, setup_from = _setup(args, sf)
     recorded_path = sf.repo_path or str(sf.path)
     meta.update({
@@ -202,7 +202,7 @@ def _run(args: argparse.Namespace, sf: scenario_file.ScenarioFile, findings: che
             'summary.txt': (report.summary_text(summary, result, meta, wall_time=False)
                             + '\n').encode(),
             'meta.json': json.dumps(logged_meta, indent=2, sort_keys=True).encode(),
-            'scenario.toml': sf.data})
+            'scenario.yml': sf.data})
     report.write_meta(meta, args.out / 'meta.json')
     if not args.no_plot and result.rows:
         report.plot(result, args.out / 'plot.png',

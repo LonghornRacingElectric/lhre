@@ -60,7 +60,7 @@ runs the scenario (`launch` unless `--scenario` names another; see
 | `console.log` | The firmware's own debug-UART log (state changes, build stamp).   |
 | `fmu.log`     | The OpenModelica runtime's output; the cause of a model failure.  |
 | `meta.json`   | Status and provenance: the scenario file's path, hash, content and warnings, FMU and library hashes, firmware build stamp, git state, whether the FMU's `vehicle.yml`, tire files and BobSim pin match the checkout. |
-| `scenario.toml` | The scenario file, byte for byte.                               |
+| `scenario.yml` | The scenario file, byte for byte.                                |
 
 Exit status: 0 the run completed, 1 the car model failed, 2 anything else
 (a scenario file that cannot run, a firmware that does not build, a wrong
@@ -75,9 +75,9 @@ Other options pass through to `python -m vcusil`:
 
 | Option | Default | What |
 | ------ | ------- | ---- |
-| `--scenario` | `launch` | A name from `scenarios/` or a `.toml` file inside the checkout; see [Scenarios](#scenarios). |
-| `--soc` | the scenario's `[setup]`, else 0.9 | Initial state of charge, 0..1. At 1.0 the model's pack sits at `V_dc_max` and accepts no regen. |
-| `--event-mode` | the scenario's `[setup]`, else 0 | lhre `EventMode`: 0 boots like the car (ENDURANCE); 1-4 pick that event's parameter set. |
+| `--scenario` | `launch` | A name from `scenarios/` or a `.yml` file inside the checkout; see [Scenarios](#scenarios). |
+| `--soc` | the scenario's `setup`, else 0.9 | Initial state of charge, 0..1. At 1.0 the model's pack sits at `V_dc_max` and accepts no regen. |
+| `--event-mode` | the scenario's `setup`, else 0 | lhre `EventMode`: 0 boots like the car (ENDURANCE); 1-4 pick that event's parameter set. |
 | `--brake-psi-full` | 1500 | Line pressure that is full brake in the car model (see below). |
 | `--allow-unverified-fmu` | off | Run an FMU without a matching `provenance.json`. |
 | `--no-plot` | off | Skip `plot.png`. |
@@ -109,45 +109,86 @@ tests that need the car model skip.
 ## Scenarios
 
 A scenario is a scripted test drive: what the driver and the rest of the car
-(HVC, AIRs, shutdown loop) do over time. Each is a TOML file in `scenarios/`,
-named for its file: `scenarios/part-throttle.toml` runs with
+(HVC, AIRs, shutdown loop) do over time. Each is a YAML file in `scenarios/`,
+named for its file: `scenarios/part-throttle.yml` runs with
 `--scenario part-throttle`. You write no Python.
 
 | Scenario | What |
 | -------- | ---- |
-| [`launch`](https://github.com/LonghornRacingElectric/lhre/blob/main/boards/VCU/Sil/scenarios/launch.toml) | Power up, ready to drive on the brake, full pedal from rest for 4 s, coast. The reference to copy. |
-| [`part-throttle`](https://github.com/LonghornRacingElectric/lhre/blob/main/boards/VCU/Sil/scenarios/part-throttle.toml) | 40 % then 60 % pedal with ramps: the pedal map. |
-| [`shutdown-loop-open`](https://github.com/LonghornRacingElectric/lhre/blob/main/boards/VCU/Sil/scenarios/shutdown-loop-open.toml) | The loop opens at 60 % pedal: the VCU must cut torque and go to FAULT. |
-| [`brake-over-throttle`](https://github.com/LonghornRacingElectric/lhre/blob/main/boards/VCU/Sil/scenarios/brake-over-throttle.toml) | Braking at 60 % pedal: torque stays cut until the pedal is under 5 %. |
+| [`launch`](https://github.com/LonghornRacingElectric/lhre/blob/main/boards/VCU/Sil/scenarios/launch.yml) | Power up, ready to drive on the brake, full pedal from rest for 4 s, coast. The reference to copy. |
+| [`part-throttle`](https://github.com/LonghornRacingElectric/lhre/blob/main/boards/VCU/Sil/scenarios/part-throttle.yml) | 40 % then 60 % pedal with ramps: the pedal map. |
+| [`shutdown-loop-open`](https://github.com/LonghornRacingElectric/lhre/blob/main/boards/VCU/Sil/scenarios/shutdown-loop-open.yml) | The loop opens at 60 % pedal: the VCU must cut torque and go to FAULT. |
+| [`brake-over-throttle`](https://github.com/LonghornRacingElectric/lhre/blob/main/boards/VCU/Sil/scenarios/brake-over-throttle.yml) | Braking at 60 % pedal: torque stays cut until the pedal is under 5 %. |
 
 **Write one in five minutes.**
 
 Every command here runs from the repo root.
 
-1. `cp boards/VCU/Sil/scenarios/launch.toml boards/VCU/Sil/scenarios/my-test.toml`.
+1. `cp boards/VCU/Sil/scenarios/launch.yml boards/VCU/Sil/scenarios/my-test.yml`.
    Names are lowercase words with dashes.
-2. Change `description` and the `[[at]]` blocks.
+2. Change `description` and the blocks under `at:`.
 3. Check it: `PYTHONPATH=boards/VCU/Sil/host python3 -m vcusil.check my-test`
-   needs Python 3.11 or newer, and no Docker and no build.
+   needs Python 3.11 or newer with PyYAML, and no Docker and no build.
+   Without them (a system Python may refuse `pip install PyYAML`),
+   `PYTHONPATH=boards/VCU/Sil/host uv run --no-project --python 3.12 --with PyYAML python -m vcusil.check my-test`
+   fetches both for the one command.
    `boards/VCU/Sil/run.sh --check my-test` is the same check in the SIL
-   container. Each problem names the file, line and fix. `--explain` shows
+   container. Each problem names the file and, where it has them, the line
+   and the fix. `--explain` shows
    when each change reaches the firmware.
 4. Run it with `boards/VCU/Sil/run.sh --fmu PATH --scenario my-test`, then
    `boards/VCU/Sil/run.sh --view boards/VCU/Sil/out/my-test-<time>`. Each
    `mark` shows in the Log panel.
 
-**The file** (schema `lhre.vcu-sil-scenario.v1`):
+**The file** (schema `lhre.vcu-sil-scenario.v1`), here a short launch:
+
+```yaml
+# Comments say why the drive does what it does.
+schema: lhre.vcu-sil-scenario.v1
+description: Power up, ready to drive on the brake, half pedal for 2 s, coast.
+duration_ms: 5000
+
+setup:
+  soc_start: 0.9  # at 1.0 the car model's pack accepts no regen
+
+at:
+  # HV off, shutdown loop closed, foot on the brake.
+  - t_ms: 0
+    brake_psi: 350.0
+
+  - t_ms: 200
+    hvc_state: PRECHARGING
+
+  - t_ms: 600
+    hvc_state: ENERGIZED
+    contactors_closed: true
+
+  - t_ms: 1000
+    mark: rtd
+    rtd_pressed: true
+
+  - t_ms: 1500
+    brake_psi: 0.0
+
+  - t_ms: 2000
+    mark: pedal-on
+    accelerator: {to: 0.5, ramp_ms: 200}
+
+  - t_ms: 4000
+    mark: pedal-off
+    accelerator: 0.0
+```
 
 | Key | Type | Required | Rule |
 | --- | ---- | -------- | ---- |
-| `schema` | string | yes | Exactly `"lhre.vcu-sil-scenario.v1"`. Another `lhre.vcu-sil-scenario.vN` gets "written for a different harness version". |
+| `schema` | string | yes | Exactly `lhre.vcu-sil-scenario.v1`. Another `lhre.vcu-sil-scenario.vN` gets "written for a different harness version". |
 | `description` | string | yes | One line, 1..120 characters. Shown by `check`, in `summary.txt` and in `meta.json`. |
 | `duration_ms` | integer | yes | 1..600000. The run has `ceil(duration_ms / 3)` steps, and the last sample is at `3 * (ceil(duration_ms / 3) - 1)`. 7000 gives 2334 steps, the last at 6999. |
-| `[setup]` | table | no | Run conditions (below). |
-| `[allow]` | table | no | `warning_code = "reason"` (below). |
-| `[[at]]` | array of tables | yes, at least 1 | The timeline (below). |
+| `setup` | mapping | no | Run conditions (below). |
+| `allow` | mapping | no | `warning_code: reason`, one line per warning (below). |
+| `at` | list of blocks | yes, at least 1 | The timeline (below). |
 
-`[setup]`: the command line wins, then the file, then the default.
+`setup`: the command line wins, then the file, then the default.
 `meta.json` records where each value came from in `setup_from` (`cli`,
 `scenario` or `default`). `--brake-psi-full` stays a command-line option: it
 calibrates the car model; it is not part of the drive.
@@ -157,13 +198,13 @@ calibrates the car model; it is not part of the drive.
 | `event_mode` | string | lhre `EventMode` name: `UNASSIGNED` (boots like the car: ENDURANCE parameters), `ACCELERATION`, `SKIDPAD`, `AUTOCROSS`, `ENDURANCE` | `UNASSIGNED` (0) | `--event-mode 0..4` |
 | `soc_start` | number | 0..1 | 0.9 | `--soc` |
 
-`[allow]`: each key is a warning code from the table under Checks (except
+`allow`: each key is a warning code from the table under Checks (except
 `unused_allow`), and its value a one-line reason. An allowed warning is still
 recorded in `meta.json` (`scenario_allowed`, with the reason) and named in
 `summary.txt`, but it does not print and does not fail `--strict`. An
 allowed code that never fires is the `unused_allow` warning.
 
-`[[at]]` blocks:
+Blocks, each a list item under `at:`:
 
 | Key | Type | Rule |
 | --- | ---- | ---- |
@@ -181,21 +222,30 @@ allowed code that never fires is the `unused_allow` warning.
 | `contactors_closed` | rest_of_car | bool | both AIRs | `true` / `false` | false | no |
 | `shutdown_loop_v` | rest_of_car | number | V at both sense taps | 0..27 (ABI) | 24.0 | yes |
 
-- One `[[at]]` block per moment something changes, in time order. A value
-  holds until a later block changes it; a signal no block sets keeps its
+- One block per moment something changes, in time order: `- t_ms: N`, with
+  the block's other keys lined up under `t_ms`. A value holds until a later
+  block changes it; a signal no block sets keeps its
   default (`Driver()` and `RestOfCar()` in `scenario.py`). The keys are
   those dataclasses' fields, so a file, `/driver`, `/rest_of_car` and
   `trace.csv` share one vocabulary. `contactors_closed` is never derived
   from `hvc_state`, so a fault drive can contradict it.
-- `{ to = X, ramp_ms = N }` ramps from the held value to X over N ms, in a
-  straight line. Only numbers ramp. The ramp must end before the next change
-  to that signal, and it must stay on one line (TOML 1.0, no comma before
-  `}`).
-- Write `schema`, `description` and `duration_ms` before the first
-  `[table]`: TOML files a key written later under the table above it.
+- `{to: X, ramp_ms: N}` ramps from the held value to X over N ms, in a
+  straight line. Only numbers ramp. The ramp must end by the next change to
+  that signal: at its time or before. The same two keys may instead go on their own lines,
+  indented under the signal.
+- Top-level keys start at the left margin, in any order. One indented as far
+  as a block's keys is part of that block, and an unknown key there; one at
+  the column of the dashes is a syntax error.
+- Text needs no quotes, unless it has `: ` or ` #` in it, starts with a
+  symbol such as `[`, `{`, `*` or `&`, or would read as a number, `true`,
+  `false` or `null`. A ` #` starts a comment even in the middle of unquoted
+  text, so `description: pedal #2` is an error, not a description of `pedal`.
+  A comment after text has a space after its `#`: `  # why`. A description
+  or reason written as a `>` or `|` block uses `>-` or `|-`, since `>` and
+  `|` keep a line break at the end.
 - Use `#` comments for explanations.
 - Save the file as UTF-8 without a byte-order mark, which some Windows
-  editors add.
+  editors add. The loader is strict; Why YAML, below, lists its rules.
 
 **When the firmware sees it.** The host samples every 3 ms, so a change at
 `t_ms` takes effect at 3·⌈t_ms/3⌉, between 0 and 2 ms late, and a ramp is a
@@ -228,8 +278,11 @@ never sees it. Those ticks come from the lint's models of the firmware
 
 - A file that breaks the format or a range the C ABI enforces does not run
   (exit 2), before anything builds: every problem is listed at once, as
-  `file:line: error: where: message [code]`. The codes are `not_found`,
-  `bad_name`, `toml_syntax`, `wrong_schema`, `missing_key`, `unknown_key`,
+  `file:line: error: where: message [code]`. Only the YAML reader's own
+  problems come first and alone: the first syntax error PyYAML meets, or
+  every refusal of the strict loader (Why YAML, below), since the checks
+  need the file read. The codes are `not_found`,
+  `bad_name`, `yaml_syntax`, `wrong_schema`, `missing_key`, `unknown_key`,
   `wrong_type`, `out_of_range`, `bad_value`, `time_order`, `sets_nothing`,
   `bad_ramp`, and, once the rest is clean, the timing errors
   `ramp_overlap`, `ramp_past_end` and `unsampled`. `unsampled` is a value no
@@ -259,11 +312,11 @@ never sees it. Those ticks come from the lint's models of the firmware
 | `rtd_without_brake` | At the debounced press edge e (s + 21): the modelled filtered brake < 55 psi | RTD needs filtered brake ≥ 30 psi (`brake_light_psi`) at the edge. The message says the firmware refuses it only under 29 psi. |
 | `rtd_with_pedal` | At the debounced edge: the modelled filtered accelerator (EMA α 0.35) > 0.05 | `rtd_max_pedal` = 0 after the 9 % deadzone (`min_travel_deadzone`). The message says the firmware refuses it only over 0.091. |
 | `rtd_before_ready` | For a press first sampled at s, with its edge at e: some sample in [s-50, e] is not (ENERGIZED, contactors closed, loop over 19.67 V, above the `loop_near_threshold` band) | A margin, not the firmware's own test: RTD_WAIT trails these by the 100 Hz CONTACTOR_STATUS frames and the loop's 10 ms debounce, so the edge may come outside RTD_WAIT, which uses it up |
-| `hvc_contactors_disagree` | `(hvc_state == ENERGIZED) != contactors_closed` for more than 100 ms of the file's time, from the block that starts it to the block that ends it (or `duration_ms`) | `Energized` needs both; this catches a forgotten `contactors_closed = true` |
-| `unused_allow` | An `[allow]` code that never fired | The drive no longer tests what it claims |
+| `hvc_contactors_disagree` | `(hvc_state == ENERGIZED) != contactors_closed` for more than 100 ms of the file's time, from the block that starts it to the block that ends it (or `duration_ms`) | `Energized` needs both; this catches a forgotten `contactors_closed: true` |
+| `unused_allow` | An `allow` entry that never fired | The drive no longer tests what it claims |
 
-- If a warning is the point of the drive, add `code = "reason"` under
-  `[allow]`, as `brake-over-throttle.toml` does.
+- If a warning is the point of the drive, add a `code: reason` line under
+  `allow:`, as `brake-over-throttle.yml` does.
 - `--strict` fails on any warning that is not allowed (for CI).
 - `check --brake-psi-full PSI` takes the run's value (default 1500), which
   `brake_high` depends on.
@@ -275,21 +328,57 @@ never sees it. Those ticks come from the lint's models of the firmware
 **Provenance.** `meta.json` records the file's path (from the repo root, or
 absolute outside it), sha256 and parsed content (`scenario_file`,
 `scenario_parameters`), and its warnings. `run.mcap` attaches the file
-unchanged as `scenario.toml`, and the run directory keeps a copy.
+unchanged as `scenario.yml`, and the run directory keeps a copy.
 `trace.csv` depends only on the parsed content: a comment-only edit changes
 the hash and `run.mcap`, not the trace.
 
-**Why TOML, not YAML.** The rest of lhre writes inputs in YAML, so this needs
-a reason:
+**Why YAML.** The rest of lhre writes its inputs in YAML (`vehicle/vehicle.yml`,
+`simulation/studies/*/study.yml`), so a scenario reads like them. Plain
+YAML is loose, though: `yaml.safe_load` keeps the last of two equal keys,
+reads `no` and `off` as false, `010` as 8 and `1_000` as 1000, and expands
+anchors into blocks the file never spells out. So `scenario_file.py` reads a
+strict YAML with PyYAML (6.0.3, pinned in `host/requirements.txt`): `true`,
+`false`, `null` and decimal numbers read as YAML 1.2 reads them and
+everything else is text, a leading zero (`010`: 8 to YAML 1.1, 10 to YAML
+1.2) does not load, and the usual slips are errors at their line.
+`yaml.safe_load` follows YAML 1.1, so it still reads some values otherwise
+(`mark: on` as true, `1e3` as text), and the tests hold the shipped files to
+reading the same to it.
+The rules:
 
-- `tomllib` is in the standard library, and PyYAML is in neither the SIL
-  image nor the Bazel pip hub;
-- a duplicate key is an error, where `yaml.safe_load` silently keeps the
-  last;
-- integers and floats are different types;
-- there are no YAML 1.1 surprises (`no` meaning false, `1e3` meaning a
-  string);
-- unlike JSON, it allows comments.
+- `true` and `false` (also `True`, `TRUE`, `False`, `FALSE`) are booleans;
+  `null`, `~` or nothing is null; `0`, `7000` or `-5` is an integer; a
+  number with a `.` or an exponent, or `.inf` or `.nan`, is a float.
+  Everything else is text, `yes`, `off`, `1_000`, `0x1F`, `2026-01-01` and
+  `12:30` included, so where a number or `true`/`false` belongs it is a
+  `wrong_type` error with the fix (`yes`: write true; `1_000`: write 1000).
+  A quoted value is always text.
+- A number with a leading zero (`010`, `-007`, `00.5`) is refused: YAML 1.1
+  reads `010` as 8, YAML 1.2 as 10.
+- A key is a bare name. A quoted, numeric, `true`/`false`/`null` or `? `
+  key is an error, and so is a key written twice in one mapping, naming
+  both lines.
+- No anchors (`&`), aliases (`*`), merge keys (`<<`) or tags (`!`,
+  `!!str`): each block is written out.
+- One document: a leading `---` is fine; a second document, and a `%YAML`
+  or `%TAG` directive, are errors. An empty or comment-only file is the
+  empty document, so its missing keys are reported. The top level must be
+  keys, not `null`.
+- UTF-8 without a byte-order mark, and no U+2028, U+2029, U+0085 or carriage
+  return without a line feed, which end a line for some readers and not
+  others. A tab outside quotes (PyYAML reads none, even before a comment;
+  `\t` in double quotes is fine), a no-break space where a space goes, an
+  unclosed `{`, `[` or quote, a missing space after `:` or a block's `-`, a
+  key without its `:`, a block without its dash, a `: ` inside unquoted
+  text, and a ` #` that would cut it short (`pedal #2`) or leave it empty
+  (`description: #2`), are errors with the fix.
+- Text has no control or invisible character other than a tab, such as
+  `"\e"` or U+200B, which `check` would print, and no `"\ud83d\ude80"`
+  surrogate escapes, which YAML does not join into one character: write the
+  emoji itself. A raw control character is an error anywhere, comments
+  included.
+- Nesting deeper than 100 levels and an integer longer than Python reads
+  are errors, not crashes.
 
 **Not expressible yet:** APPS1 different from APPS2, front brake different
 from rear, sensor volts, a single AIR, separate loop taps, pins, and CAN
@@ -319,7 +408,7 @@ the firmware: the `firmware_project` macro only globs `App/`, `Board/`,
 
 `run.mcap` holds the run as JSON messages, one topic per subsystem, stamped
 in simulated time from 0. Copies of the run's `meta.json` and `summary.txt`
-are attached, with the scenario file as `scenario.toml`, and its metadata
+are attached, with the scenario file as `scenario.yml`, and its metadata
 names the scenario (with `scenario_path` and `scenario_sha256`), status,
 firmware build (and whether the tree was dirty) and FMU hash. No wall-clock time goes in:
 the attached copies leave out `wall_s`, the wall time in the summary, and
@@ -469,10 +558,11 @@ reverse `direction` is refused: the model cannot take it.
   `SOC_start`, reads `Ns` (an Integer), captures the runtime's output.
 - `scenario.py` (the timeline a scenario file compiles to), `cosim.py` (the
   loop), `report.py`, `provenance.py`.
-- `scenario_file.py`: loads and checks scenario files.
+- `scenario_file.py`: loads scenario files with a strict YAML loader (see
+  Why YAML under [Scenarios](#scenarios)) and checks them.
 - `check.py`: the warnings, the models of the firmware they stand on,
-  `--explain`, and `python -m vcusil.check`. Standard library only, so it
-  runs on any Python 3.11 or newer.
+  `--explain`, and `python -m vcusil.check`. It needs only PyYAML beyond
+  the standard library, so it runs on any Python 3.11 or newer that has it.
 - `candecode.py`: decodes captured frames with the generated table.
 - `events.py`, `mcaplog.py`: the event markers and `run.mcap`.
 - `tests/`: pytest. `VCU_SIL_LIB`, `VCU_SIL_CAN_TABLE` and `VCU_SIL_FMU`

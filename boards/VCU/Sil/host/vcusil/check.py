@@ -6,18 +6,24 @@ brake together. Where the firmware's past decides, the rules run a model of
 it, one control tick per 3 ms sample: the RTD switch's debounce, the brake
 and pedal filters, the brake-pressed hysteresis and the shutdown loop's
 taps. test_check_firmware.py holds each model to the library. Fault drives
-cross the traps on purpose, so a run still goes ahead. [allow] waives one
-with a reason; --strict (CI) fails on any other. Standard library only: it
-needs no Docker, no build and no FMU.
+cross the traps on purpose, so a run still goes ahead. A file's allow:
+waives one with a reason; --strict (CI) fails on any other. It needs only
+PyYAML beyond the standard library: no Docker, no build and no FMU.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import sys
 
-if sys.version_info < (3, 11):  # before scenario_file imports tomllib
-    print('vcusil.check needs Python 3.11 or newer (tomllib); run boards/VCU/Sil/run.sh '
-          '--check instead', file=sys.stderr)
+# Before scenario_file imports yaml, so a bare python3 gets the fix, not a
+# traceback. 3.11 for sys.get_int_max_str_digits. python -m vcusil imports
+# this too, so the message is for both; a system python3 may refuse pip
+# install (PEP 668), and uv fetches both for the one command.
+if sys.version_info < (3, 11) or importlib.util.find_spec('yaml') is None:
+    print('vcusil needs Python 3.11 or newer with PyYAML; start the command with uv run '
+          '--no-project --python 3.12 --with PyYAML, which fetches both for it, or use '
+          'boards/VCU/Sil/run.sh, which runs vcusil in the SIL container', file=sys.stderr)
     raise SystemExit(2)
 
 import argparse
@@ -27,8 +33,9 @@ from dataclasses import dataclass
 from .cosim import BRAKE_PSI_AT_FULL_PLANT_BRAKE, STEP_MS
 from .firmware import HVC_ENERGIZED, HVC_STATES
 from .scenario import DEFAULTS
-from .scenario_file import (Block, Problem, Ramp, ScenarioError, ScenarioFile, _count, _toml,
-                            first_step_ms, last_step_ms, load, scenario_paths)
+from .scenario_file import (Block, Problem, Ramp, ScenarioError, ScenarioFile, _count, _yaml,
+                            first_step_ms, last_step_ms, load, misnamed_paths,
+                            scenario_paths)
 
 # Firmware constants the warnings stand on, as boards/VCU/App/config/params.hpp
 # sets them. Every event mode shares them: params.cpp changes only the pedal
@@ -178,7 +185,7 @@ RULES = {
                         'outside RTD_WAIT, which uses it up',
     'hvc_contactors_disagree': f'hvc_state ENERGIZED without contactors_closed, or the reverse, '
                                f'for over {DISAGREE_MS} ms of the file\'s time',
-    'unused_allow': 'an [allow] code that never fires: the drive no longer tests what it claims',
+    'unused_allow': 'an allow entry that never fires: the drive no longer tests what it claims',
 }
 
 _HVC_NAMES = {number: name for name, number in HVC_STATES.items()}
@@ -375,26 +382,26 @@ class _Lint:
         for block, psi, t in self.held('brake_psi'):
             for lo, hi, what in BRAKE_BANDS:
                 if lo <= psi <= hi:
-                    self.warn('brake_near_threshold', t, f'brake_psi holds {_toml(psi)}, within '
+                    self.warn('brake_near_threshold', t, f'brake_psi holds {_yaml(psi)}, within '
                               f'{BRAKE_MARGIN_PSI:g} psi of {what}: too close to rely on; hold it '
                               f'under {lo:.0f} or over {hi:.0f}', block, 'brake_psi')
                     break
             if psi > high:
-                self.warn('brake_high', t, f'brake_psi holds {_toml(psi)}, over 2/3 of '
+                self.warn('brake_high', t, f'brake_psi holds {_yaml(psi)}, over 2/3 of '
                           f'--brake-psi-full ({high:.0f} psi at {brake_psi_full:g}): the car '
                           'model reverses near full brake', block, 'brake_psi')
         for block, pedal, t in self.held('accelerator'):
             if 0.0 < pedal <= PEDAL_NONE:
-                self.warn('pedal_in_deadzone', t, f'accelerator holds {_toml(pedal)}, inside the '
+                self.warn('pedal_in_deadzone', t, f'accelerator holds {_yaml(pedal)}, inside the '
                           f'{_pct(PEDAL_NONE)} deadzone (min_travel_deadzone): it asks for no '
                           'torque', block, 'accelerator')
             elif PEDAL_FULL <= pedal < 1.0:
-                self.warn('pedal_in_deadzone', t, f'accelerator holds {_toml(pedal)}, past the '
+                self.warn('pedal_in_deadzone', t, f'accelerator holds {_yaml(pedal)}, past the '
                           f'{_pct(PEDAL_FULL)} deadzone (max_travel_deadzone): it asks for '
                           'full-pedal torque', block, 'accelerator')
         for block, volts, t in self.held('shutdown_loop_v'):
             if LOOP_BAND[0] <= volts <= LOOP_BAND[1]:
-                self.warn('loop_near_threshold', t, f'shutdown_loop_v holds {_toml(volts)}, '
+                self.warn('loop_near_threshold', t, f'shutdown_loop_v holds {_yaml(volts)}, '
                           f'{_LOOP_WHY}; use about 24.0 for closed or 0.0 for open', block,
                           'shutdown_loop_v')
 
@@ -407,7 +414,7 @@ class _Lint:
             now = self.may_press[k] and pedal > BOT_PEDAL
             if now and not stretch:
                 block, key = self.source(('accelerator', 'brake_psi'), t)
-                self.warn('brake_over_throttle', t, f'accelerator {_toml(pedal)} is over '
+                self.warn('brake_over_throttle', t, f'accelerator {_yaml(pedal)} is over '
                           f'{_pct(BOT_PEDAL)} while the filtered brake (about '
                           f'{self.brake[k]:.0f} psi) may hold brake-pressed, on at '
                           f'{_T["BseParams::pressed_on_psi"]:g} and off under '
@@ -481,7 +488,7 @@ class _Lint:
         if not self.values['contactors_closed'][j]:
             why.append('contactors_closed is false')
         if self.values['shutdown_loop_v'][j] <= RTD_LOOP_V:
-            why.append(f'shutdown_loop_v is {_toml(self.values["shutdown_loop_v"][j])}')
+            why.append(f'shutdown_loop_v is {_yaml(self.values["shutdown_loop_v"][j])}')
         return ' and '.join(why)
 
     def disagree(self) -> None:
@@ -506,7 +513,7 @@ class _Lint:
                     key = 'hvc_state' if 'hvc_state' in began.values else 'contactors_closed'
                     self.warn('hvc_contactors_disagree', first_step_ms(began.t_ms),
                               f'hvc_state {_HVC_NAMES[was_hvc]} with contactors_closed '
-                              f'{_toml(was_closed)} for {lasted} ms; the VCU counts the HVC as '
+                              f'{_yaml(was_closed)} for {lasted} ms; the VCU counts the HVC as '
                               'energized only with both (a forgotten contactors_closed?)',
                               began, key)
                 start = None
@@ -517,7 +524,7 @@ class _Lint:
         if signal == 'rtd_pressed':
             k = first_step_ms(block.t_ms) // STEP_MS
             change = next((c for c in self.rtd.changes if c.k == k and c.to == value), None)
-            return _note(change, self.times, _RTD_MS, _toml(value))
+            return _note(change, self.times, _RTD_MS, _yaml(value))
         if signal == 'shutdown_loop_v' and block.t_ms > 0:
             # At 0 it would only say the loop boots: UNKNOWN until 12 ms.
             lo, hi = self.span(block, signal)
@@ -559,7 +566,7 @@ def lint(sf: ScenarioFile, brake_psi_full: float = BRAKE_PSI_AT_FULL_PLANT_BRAKE
         if code not in fired:
             found.append(Problem('warning', 'unused_allow', f'allow.{code}', f'{code} is allowed '
                                  'but never fires; the drive no longer tests what it claims '
-                                 '(or remove it from [allow])', sf.lines.table('allow', code)))
+                                 '(or delete its line under allow:)', sf.lines.key('allow', code)))
     found.sort(key=lambda p: (p.line or 0, p.t_ms or 0))
     return Findings(
         active=tuple(p for p in found if p.code not in sf.allow),
@@ -568,8 +575,8 @@ def lint(sf: ScenarioFile, brake_psi_full: float = BRAKE_PSI_AT_FULL_PLANT_BRAKE
 
 def _describe(signal: str, value: object) -> str:
     if isinstance(value, Ramp):
-        return f'{signal} to {_toml(value.to)} over {value.ramp_ms} ms'
-    return f'{signal} {_HVC_NAMES[value] if signal == "hvc_state" else _toml(value)}'
+        return f'{signal} to {_yaml(value.to)} over {value.ramp_ms} ms'
+    return f'{signal} {_HVC_NAMES[value] if signal == "hvc_state" else _yaml(value)}'
 
 
 def explain(sf: ScenarioFile) -> str:
@@ -614,11 +621,11 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog='python3 -m vcusil.check', formatter_class=argparse.RawDescriptionHelpFormatter,
         description='Check scenario files without building or running anything. Exit status '
-                    '0: every file can run (and, with --strict, has no warning [allow] does '
+                    '0: every file can run (and, with --strict, has no warning its allow: does '
                     'not cover); 2: otherwise.',
         epilog='warnings:\n' + '\n'.join(f'  {code}: {why}' for code, why in RULES.items()))
     p.add_argument('--strict', action='store_true',
-                   help='fail on any warning [allow] does not cover (for CI)')
+                   help="fail on any warning the file's allow: does not cover (for CI)")
     p.add_argument('--explain', action='store_true',
                    help='show when each block reaches the firmware')
     p.add_argument('--errors-only', action='store_true',
@@ -628,13 +635,14 @@ def main(argv: list[str] | None = None) -> int:
                    metavar='PSI', help='as for python -m vcusil (default 1500); brake_high '
                                        'warns over 2/3 of it')
     p.add_argument('scenarios', nargs='*', metavar='NAME|FILE',
-                   help='a name from scenarios/ or a .toml file (default: every scenarios/*.toml)')
+                   help='a name from scenarios/ or a .yml file (default: every scenarios/*.yml)')
     args = p.parse_args(argv)
     if args.errors_only and (args.strict or args.explain):
         p.error('--errors-only reports no warnings, so it cannot go with --strict or --explain')
     status = 0
-    # As paths, so a badly named file in scenarios/ gets the rename hint.
-    for arg in args.scenarios or [str(path) for path in scenario_paths()]:
+    # As paths, so a badly named file in scenarios/ gets the rename hint,
+    # and a .yaml or .toml there fails rather than being skipped unseen.
+    for arg in args.scenarios or [str(path) for path in scenario_paths() + misnamed_paths()]:
         try:
             sf = load(arg)
         except ScenarioError as exc:
