@@ -8,6 +8,11 @@ existing latest-state JSON feed, while native raw queries preserve fresh field
 presence. These paths must not substitute one representation for the other.
 Disconnecting a viewer stream immediately stops its heartbeat and upstream
 readers.
+Native SSE forwards gateway freshness in status and sample messages, including
+status changes when no new sample arrives. Catch-up status keeps the connection
+usable; coverage gaps remain errors. The latest-value adapter suppresses repeated
+samples from replacement windows. Paged reads discard their accumulated result
+when the gateway returns `409 query_changed`; callers restart the read explicitly.
 
 Set `QUERY_GATEWAY_URL` (default `http://127.0.0.1:8090`) and `QUERY_API_TOKEN` in
 the viewer server environment. The public query routes require a signed-in

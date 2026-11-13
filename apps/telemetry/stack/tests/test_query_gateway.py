@@ -104,6 +104,14 @@ class QueryGatewayTest(unittest.TestCase):
             with ThreadPoolExecutor(max_workers=8) as clients:
                 for page in clients.map(cold_history, range(8)):
                     self.assertEqual([row["value"] for row in page["data"]], [0, False, 77, 88, 99])
+            changing = {**history, "page_token": "", "t1": iso(historical + 10)}
+            guarded = call("/v1/query", changing)
+            addition = send(historical + 4, "controls", "apps1_travel", 66)
+            self.wait_for(lambda: persisted(addition))
+            with self.assertRaises(urllib.error.HTTPError) as changed:
+                call("/v1/query", {**changing, "page_token": guarded["next_page_token"]})
+            self.assertEqual(changed.exception.code, 409)
+            self.assertEqual(json.load(changed.exception)["error"]["code"], "query_changed")
             control("stop", "query_gateway")
             producer.send("grafana_data_artemis", json.dumps({"car_type": "artemis", "marker": "retained"}).encode()).get(timeout=15)
             control("start", "query_gateway")
@@ -163,11 +171,14 @@ class QueryGatewayTest(unittest.TestCase):
             result = frames["results"]["A"]
             self.assertNotIn("error", result, result)
             self.assertIn(80, result["frames"][0]["data"]["values"][1])
-            stream_query = urllib.parse.quote(json.dumps(query))
+            stream_query = urllib.parse.quote(json.dumps({**query, "page_size": 1}))
             request = urllib.request.Request("http://127.0.0.1:38090/v1/stream?query=" + stream_query, headers={"Authorization": "Bearer gateway-test-token"})
             with urllib.request.urlopen(request, timeout=15) as response:
                 event = json.loads(response.readline().decode().removeprefix("data: "))
                 self.assertEqual(len(event["page"]["data"]), 3)
+                self.assertIsNone(event["page"]["next_page_token"])
+                self.assertTrue(event["page"]["live"]["ready"])
+                self.assertIsInstance(event["page"]["live"]["kafka_lag_messages"], int)
             # Rejected native data creates an explicit gap while consumption
             # continues. It cannot count as fully represented live coverage.
             control("stop")

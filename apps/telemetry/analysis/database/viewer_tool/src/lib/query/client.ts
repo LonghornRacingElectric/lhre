@@ -13,6 +13,7 @@ export async function gatewayJSON<T>(path: string, body?: unknown): Promise<T> {
 }
 
 export type GatewayRow = { ts: string; sample_time_ns: string; session_start_ms: string; signal: string; value: unknown };
+export type GatewayLiveStatus = { ready: boolean; kafka_lag_messages: number | null; latest_sample_ms: number | null; observed_at_ms: number | null };
 export async function gatewayRows(body: Record<string, unknown>): Promise<GatewayRow[]> {
   const rows: GatewayRow[] = [];
   let token: string | null = null;

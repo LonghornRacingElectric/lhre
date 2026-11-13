@@ -19,5 +19,12 @@ Provision its URL as `http://query_gateway:8090` and store the gateway token in
 The Artemis datasource keeps UID `artemis`. Existing SQL panel targets must be
 converted to builder queries; changing a datasource type does not translate SQL.
 Use scalar numeric channels for graphs. Arrays remain available through the raw
-API. Live uses a stable wide frame and replaces duplicate bucket timestamps as
-the final bucket changes. The supported deployment is Grafana 11.3.0.
+API. Live uses a stable wide frame and Grafana's explicit `StreamingFrameAction.Replace`
+buffer policy. Each event replaces the whole window, including corrected final
+buckets, removed timestamps and empty windows. Frame metadata preserves gateway
+freshness under `custom.live`; a delayed consumer keeps serving available data.
+Historical pagination errors require restarting the query; partial results are
+discarded. The supported deployment is Grafana 11.3.0.
+
+`bazel test //apps/telemetry/stack/kafka:grafana_query_test` exercises actual SSE
+window conversion, corrections, shrinking/empty windows and freshness metadata.

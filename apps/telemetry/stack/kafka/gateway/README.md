@@ -75,8 +75,13 @@ typed timestamps/identities, signal names and lossless `value_json` cells.
 
 Follow `next_page_token` with the same request. CSV/IPC expose it through
 `X-Next-Page-Token`. Tokens bind the request and catalog and expire after 24 hours.
-Gateway cursor version 4 replaces the old viewer cursor; restart a paged read
-after upgrading. Pagination does not freeze subsequent late database writes.
+Gateway cursor version 5 binds storage identity and recording IDs/revisions.
+If an import, persistence write or session merge changes a recording between
+pages, HTTP `409 query_changed` requires discarding previous pages and restarting.
+Recent reads also bind the ring generation and consumed-offset frontier;
+new arrivals or a rebalance require a restart. Checks are conservative: a write
+elsewhere in the same recording can invalidate the cursor. Pagination retains
+no database transaction between requests. Restart paged reads after upgrading.
 
 Requests are limited to 256 KiB, 10,000 rows per page, 2 MiB per JSON page,
 64 KiB per observation, 200,000 merged observations per request and a 30-second
@@ -91,6 +96,10 @@ SQL workers import the same exported Postgres snapshot on spare connections;
 when the four-connection pool is busy, they use the parent transaction under a
 lock. This preserves a coherent query without waiting indefinitely for extra
 connections.
+Each query also captures one ring generation and per-partition upper offset.
+Every pool uses that boundary, so arrivals during execution appear on the next
+query. Eviction or reassignment that prevents coverage returns an error for the
+whole query. The boundary copies offset metadata rather than the ring contents.
 
 Historical L1 hits return immutable prepared observations. Misses check Arrow
 manifest identities before reading file bodies. Arrow reads binary-search the
@@ -148,11 +157,28 @@ the rejected offset. Quarantine/recovery belongs to ingestion operations; the
 gateway never advances the persistence checkpoint or claims missing rows are
 represented.
 
+Recent responses include `live`: `ready`, nullable `kafka_lag_messages`,
+`latest_sample_ms`, and `observed_at_ms`. The same fields appear under `ring`
+in `/v1/stats`. Readiness requires every assigned native partition to initialize;
+it does not mean the consumer has caught up. Lag compares consumed offsets with
+the existing consumer's cached Kafka high-water marks, sampled once per second.
+It is an observed backlog, not a promise that no newer message exists. Unknown
+or disconnected lag is null. `observed_at_ms` is the oldest partition observation;
+`latest_sample_ms` is the newest native sample consumed by this gateway, across
+all pools, and can be null after startup. Sample age and backlog answer different
+questions: an idle car can have old samples with zero lag. Catch-up status does
+not suppress available data. Pending Kafka rows make responses provisional even
+when their sample timestamps are historical.
+
 `GET /v1/stream?query=<URL-encoded query JSON>` uses SSE. `t1: "live"` and
 `window_ms` select a moving window. Events replace that bounded window, including
 its changing final bucket; clients must not append repeated snapshots as fresh
 observations. Updates are coalesced at 250 ms. A truncated window is reported as
 a gap, not silently presented as complete.
+Each replacement window uses one query execution and its shared boundaries,
+independently of public `page_size`. It contains at most 200,000 observations
+and fits within a 32 MiB SSE event; oversized windows report a gap. Live windows
+do not follow public continuation tokens while ingestion changes the recording.
 
 Existing JSON state feeds use `GET /v1/topics/<topic>`. The allowlist defaults to
 `grafana_data_artemis`, `grafana_data_artemis_derived` and `car_status`; configure

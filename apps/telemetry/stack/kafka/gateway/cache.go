@@ -120,21 +120,21 @@ func rowsInRange(rows []Row, from, to int64) []Row {
 	return rows[first:last]
 }
 
-func (c *Cache) Rows(ctx context.Context, snap Snapshot, p Pool, start, end int64, bounds ...int64) ([]Row, string, error) {
+func (c *Cache) Rows(ctx context.Context, snap Snapshot, view *ringView, p Pool, start, end int64, bounds ...int64) ([]Row, string, error) {
 	from, to := start, end
 	if len(bounds) == 2 {
 		from, to = max(start, bounds[0]), min(end, bounds[1])
 	}
 	key := fmt.Sprintf("%s/%s/%v/%d", c.Schema.StorageID, p.Table, p.Fields, start)
 	signature := externalSignature(snap.Sessions())
-	currentCovered := c.Ring.Covers(snap.Offsets())
+	currentCovered := view.Covers(snap.Offsets())
 	if entry, ok := c.baseline.Get(key); ok && entry.Signature == signature && currentCovered {
-		if tail, covered := c.Ring.Read(entry.Offsets, p.Table, from, to); covered {
+		if tail, covered := view.Read(entry.Offsets, p.Table, from, to); covered {
 			c.Reads[0].Add(1)
 			return mergeRows(rowsInRange(entry.Rows, from, to), tail, snap.Sessions(), p.Fields), "ring", nil
 		}
 	}
-	tail, tailCovered := c.Ring.Read(snap.Offsets(), p.Table, from, to)
+	tail, tailCovered := view.Read(snap.Offsets(), p.Table, from, to)
 	// Sealed caches use data revisions; live baselines instead prove that every
 	// intervening database write is represented by the contiguous Kafka tail.
 	result := []Row{}

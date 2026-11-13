@@ -218,6 +218,130 @@ func TestBucketsAndPaginationAcrossPools(t *testing.T) {
 		t.Fatalf("page2: %+v", second)
 	}
 }
+
+func TestPaginationRejectsChangedRecordingsAndLiveFrontiers(t *testing.T) {
+	for _, historical := range []bool{true, false} {
+		t.Run(fmt.Sprint(historical), func(t *testing.T) {
+			engine, store, start := setup(t)
+			if historical {
+				start -= int64(time.Hour / time.Millisecond)
+				store.sessions[0] = Session{ID: start, Start: start, End: start + 2000, Revision: 1}
+			}
+			store.rows["controls_100hz"] = []Row{{Time: start + 10, NS: (start + 10) * 1000000, Session: start, Values: map[string]any{"apps": 1.0}}, {Time: start + 20, NS: (start + 20) * 1000000, Session: start, Values: map[string]any{"apps": 2.0}}}
+			query := request(start, "controls.apps")
+			query.PageSize = 1
+			first, err := engine.Query(context.Background(), query)
+			if err != nil || first.Next == nil {
+				t.Fatalf("first page: %+v %v", first, err)
+			}
+			query.PageToken = *first.Next
+			second, err := engine.Query(context.Background(), query)
+			if err != nil || len(second.Data) != 1 || second.Data[0].Value != 2.0 {
+				t.Fatalf("unchanged page: %+v %v", second, err)
+			}
+			if historical {
+				store.sessions[0].Revision++
+			} else {
+				engine.Cache.Ring.Add(0, 10, []LiveRow{{Pool: "controls_100hz", Row: Row{Time: start + 15, NS: (start + 15) * 1000000, Values: map[string]any{"apps": 1.5}}}})
+			}
+			_, err = engine.Query(context.Background(), query)
+			if failure, ok := err.(*queryProblem); !ok || failure.Status != 409 || failure.Code != "query_changed" {
+				t.Fatalf("changed query: %v", err)
+			}
+		})
+	}
+}
+
+func TestKafkaBoundaryExcludesArrivalsAcrossPoolReads(t *testing.T) {
+	engine, store, start := setup(t)
+	ring := engine.Cache.Ring
+	ring.Add(0, 10, []LiveRow{{Pool: "controls_100hz", Row: Row{Time: start + 10, NS: (start + 10) * 1000000, Values: map[string]any{"apps": 50.0}}}, {Pool: "pack_1hz", Row: Row{Time: start + 10, NS: (start + 10) * 1000000, Values: map[string]any{"temp": 60.0}}}})
+	view := ring.View()
+	controls, covered := view.Read(store.offsets, "controls_100hz", start, start+5000)
+	if !covered || len(controls) != 1 {
+		t.Fatalf("first pool: %+v covered=%v", controls, covered)
+	}
+	ring.Add(0, 11, []LiveRow{{Pool: "controls_100hz", Row: Row{Time: start + 20, NS: (start + 20) * 1000000, Values: map[string]any{"apps": 70.0}}}, {Pool: "pack_1hz", Row: Row{Time: start + 20, NS: (start + 20) * 1000000, Values: map[string]any{"temp": 80.0}}}})
+	pack, covered := view.Read(store.offsets, "pack_1hz", start, start+5000)
+	if !covered || len(pack) != 1 || pack[0].Values["temp"] != 60.0 {
+		t.Fatalf("second pool: %+v covered=%v", pack, covered)
+	}
+	for _, pool := range []string{"controls_100hz", "pack_1hz"} {
+		rows, covered := ring.View().Read(store.offsets, pool, start, start+5000)
+		if !covered || len(rows) != 2 {
+			t.Fatalf("next boundary %s: %+v covered=%v", pool, rows, covered)
+		}
+	}
+	ring.Assign([]int32{0})
+	if _, covered := view.Read(store.offsets, "controls_100hz", start, start+5000); covered {
+		t.Fatal("reassigned ring accepted an old boundary")
+	}
+}
+
+func TestFreshnessDistinguishesBacklogFromQuietSamples(t *testing.T) {
+	engine, store, start := setup(t)
+	ring := engine.Cache.Ring
+	ring.Assign([]int32{0, 1})
+	ring.Start(0, 10)
+	ring.Observe(0, 12)
+	ring.Ready(true)
+	if ring.View().status.Ready {
+		t.Fatal("uninitialized partition reported ready")
+	}
+	ring.Start(1, 20)
+	ring.Observe(1, 20)
+	ring.Ready(true)
+	store.offsets[1] = 20
+	query := request(start, "controls.apps")
+	page, err := engine.Query(context.Background(), query)
+	if err != nil || page.Live == nil || !page.Live.Ready || page.Live.KafkaLagMessages == nil || *page.Live.KafkaLagMessages != 2 {
+		t.Fatalf("backlogged query: %+v %v", page, err)
+	}
+	ring.Add(0, 10, []LiveRow{{Pool: "controls_100hz", Row: Row{Time: start + 20, NS: (start + 20) * 1000000, Values: map[string]any{"apps": 50.0}}}})
+	ring.Add(0, 11, nil)
+	page, err = engine.Query(context.Background(), query)
+	if err != nil || len(page.Data) != 2 || *page.Live.KafkaLagMessages != 0 || page.Live.LatestSampleMS == nil || *page.Live.LatestSampleMS != start+20 || page.Live.ObservedAtMS == nil {
+		t.Fatalf("quiet caught-up query: %+v %v", page, err)
+	}
+}
+
+func TestRingEvictionReportsGapUntilPersistenceRecovers(t *testing.T) {
+	engine, store, start := setup(t)
+	query := request(start, "controls.apps")
+	if _, err := engine.Query(context.Background(), query); err != nil {
+		t.Fatal(err)
+	}
+	engine.Cache.Ring.maxBytes = 1
+	row := Row{Time: start + 20, NS: (start + 20) * 1000000, Session: start, Values: map[string]any{"apps": 50.0}}
+	engine.Cache.Ring.Add(0, 10, []LiveRow{{Pool: "controls_100hz", Row: row}})
+	_, err := engine.Query(context.Background(), query)
+	if failure, ok := err.(*queryProblem); !ok || failure.Code != "tail_unavailable" {
+		t.Fatalf("evicted pending sample: %v", err)
+	}
+	store.rows["controls_100hz"] = append(store.rows["controls_100hz"], row)
+	store.offsets[0] = 11
+	store.sessions[0].Revision++
+	page, err := engine.Query(context.Background(), query)
+	if err != nil || len(page.Data) != 2 {
+		t.Fatalf("recovered persistence: %+v %v", page, err)
+	}
+}
+
+func TestStreamBuildsCompleteWindowWithoutPublicPagination(t *testing.T) {
+	engine, store, start := setup(t)
+	store.rows["controls_100hz"] = nil
+	for index := int64(0); index < 10001; index++ {
+		stamp := start + index/10
+		store.rows["controls_100hz"] = append(store.rows["controls_100hz"], Row{Time: stamp, NS: stamp*1000000 + index%10, Session: start, Values: map[string]any{"apps": float64(index)}})
+	}
+	page, err := engine.query(context.Background(), request(start, "controls.apps"), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Next != nil || len(page.Data) != 10001 {
+		t.Fatalf("complete stream: count=%d next=%v", len(page.Data), page.Next)
+	}
+}
 func TestSealedArrowFallsBackAfterDeletionAndCorruption(t *testing.T) {
 	e, store, start := setup(t)
 	e.Schema.Pools[0].Fields = append(e.Schema.Pools[0].Fields, Field{Name: "counter", SQLType: "numeric"})

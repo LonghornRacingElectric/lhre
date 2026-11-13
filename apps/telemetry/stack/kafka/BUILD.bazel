@@ -157,6 +157,14 @@ go_binary(
     target_compatible_with = NOT_WINDOWS,
 )
 
+go_test(
+    name = "grafana_query_test",
+    srcs = ["grafana/live_test.go"],
+    embed = [":grafana_query_lib"],
+    deps = ["@com_github_grafana_grafana_plugin_sdk_go//backend"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
 platform_transition_binary(
     name = "grafana_plugin_linux_amd64",
     basename = "gpx_artemis_linux_amd64",

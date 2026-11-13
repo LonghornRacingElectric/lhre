@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { buildNormalizedSensorRoutes } from "../kafka/kafkaConsumer";
 import { normalizeLivePayload } from "../motec/live";
 import { gatewayRequest } from "./gateway";
-import type { GatewayRow } from "./client";
+import type { GatewayLiveStatus, GatewayRow } from "./client";
 
 const logicalTopics = new Set(["sensor_data", "car_visualization", "driver_input_visualizer", "map", "live_banner", "dashboard_screen", "timing_deltas", "shutdown_screen", "thermal_headroom", "energy_budget"]);
 const sourceFor = (topic: string) => topic === "sensor_data" ? topic : logicalTopics.has(topic) ? "grafana_data_artemis" : topic;
@@ -35,6 +35,7 @@ export async function gatewayLive(req: NextRequest, mode: "kafka" | "motec" | "s
       const tasks = upstreams.map(async ({ topic, response }) => {
         const reader = response.body!.getReader(); activeReaders.push(reader);
         const decoder = new TextDecoder(); let buffer = "";
+        let previousFreshness = "";
         try {
           while (!abort.signal.aborted) {
             const { value, done } = await reader.read(); if (done) break;
@@ -49,6 +50,12 @@ export async function gatewayLive(req: NextRequest, mode: "kafka" | "motec" | "s
                 let payload: Record<string, unknown>;
                 let timestamp: string;
                 if (topic === "sensor_data") {
+                  const live = event.page?.live as GatewayLiveStatus | undefined;
+                  if (live && JSON.stringify(live) !== previousFreshness) {
+                    previousFreshness = JSON.stringify(live);
+                    const message = !live.ready ? "Live consumer reconnecting" : live.kafka_lag_messages === null ? "Live consumer lag unknown" : live.kafka_lag_messages > 0 ? `Live consumer catching up (${live.kafka_lag_messages} messages)` : "Live consumer caught up";
+                    send({ ...(mode === "motec" ? { type: "status" } : { kind: "status" }), ok: true, message, live });
+                  }
                   let changed = false;
                   for (const row of (event.page?.data || []) as GatewayRow[]) {
                     const ns = BigInt(row.sample_time_ns);
@@ -66,12 +73,12 @@ export async function gatewayLive(req: NextRequest, mode: "kafka" | "motec" | "s
                 if (mode === "status") { send(payload); continue; }
                 if (mode === "motec") {
                   const sample = normalizeLivePayload(payload, "artemis");
-                  if (sample) send({ type: "sample", topic, transport: topic === "sensor_data" ? "protobuf" : "json", sample });
+                  if (sample) send({ type: "sample", topic, transport: topic === "sensor_data" ? "protobuf" : "json", sample, live: event.page?.live });
                   continue;
                 }
                 const normalized = topic === "sensor_data" || topic === "grafana_data_artemis" ? buildNormalizedSensorRoutes(payload, "artemis") : {};
                 for (const target of requested.filter(t => sourceFor(t) === topic)) {
-                  send({ topic: target, partition: event.partition ?? 0, offset: event.offset ?? timestamp, timestamp, headers: { car_type: "artemis" }, payload: JSON.stringify(normalized[target] ?? payload) });
+                  send({ topic: target, partition: event.partition ?? 0, offset: event.offset ?? timestamp, timestamp, headers: { car_type: "artemis" }, payload: JSON.stringify(normalized[target] ?? payload), live: event.page?.live });
                 }
               }
             }

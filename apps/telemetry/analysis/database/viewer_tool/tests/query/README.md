@@ -8,3 +8,5 @@ SQL reader or cursor implementation. See the
 
 `npx vitest run --config vitest.config.mjs tests/query` checks the viewer's
 bucket adapter across request boundaries, including partial buckets and peaks.
+It also verifies native SSE freshness updates and gap propagation without
+duplicating unchanged samples from replacement windows.

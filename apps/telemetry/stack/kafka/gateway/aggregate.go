@@ -122,7 +122,7 @@ func (s *postgresSnapshot) Unstored(ctx context.Context, p Pool, tail []Row) ([]
 	return out, nil
 }
 
-func (c *Cache) aggregate(ctx context.Context, snap Snapshot, p Pool, from, to, width int64) ([]Row, []Row, string, error) {
+func (c *Cache) aggregate(ctx context.Context, snap Snapshot, view *ringView, p Pool, from, to, width int64) ([]Row, []Row, string, error) {
 	reader, ok := snap.(aggregateSnapshot)
 	if !ok {
 		return nil, nil, "", fmt.Errorf("aggregate source unavailable")
@@ -146,7 +146,7 @@ func (c *Cache) aggregate(ctx context.Context, snap Snapshot, p Pool, from, to, 
 	} else {
 		c.Reads[1].Add(1)
 	}
-	tail, covered := c.Ring.Read(snap.Offsets(), p.Table, from, to)
+	tail, covered := view.Read(snap.Offsets(), p.Table, from, to)
 	if !covered && to > time.Now().Add(-c.Ring.window).UnixMilli() {
 		return nil, nil, "", problem(503, "tail_unavailable", "Kafka coverage is incomplete")
 	}

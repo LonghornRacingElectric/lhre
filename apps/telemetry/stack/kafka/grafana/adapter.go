@@ -38,9 +38,10 @@ type observation struct {
 	Value  any    `json:"value"`
 }
 type page struct {
-	Data        []observation `json:"data"`
-	Next        *string       `json:"next_page_token"`
-	Provisional bool          `json:"provisional"`
+	Data        []observation   `json:"data"`
+	Next        *string         `json:"next_page_token"`
+	Provisional bool            `json:"provisional"`
+	Live        json.RawMessage `json:"live"`
 }
 
 func New(ctx context.Context, s backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
@@ -275,6 +276,7 @@ func (a *Adapter) RunStream(ctx context.Context, req *backend.RunStreamRequest, 
 			return fmt.Errorf("live gap: %s", event.Message)
 		}
 		for _, frame := range wideFrames(event.Page.Data, alias, body) {
+			frame.Meta = &data.FrameMeta{Custom: map[string]any{"live": event.Page.Live}}
 			if err := sender.SendFrame(frame, data.IncludeAll); err != nil {
 				return err
 			}

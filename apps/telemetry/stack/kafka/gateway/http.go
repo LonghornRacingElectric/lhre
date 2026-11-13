@@ -154,24 +154,7 @@ func (e *Engine) streamHTTP(w http.ResponseWriter, r *http.Request) {
 	for {
 		if dirty {
 			ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-			page, err := e.Query(ctx, query)
-			if err == nil {
-				continuation := query
-				for page.Next != nil {
-					if len(page.Data) >= 200000 {
-						err = problem(413, "stream_too_large", "Reduce the live range, selected signals or max_points")
-						break
-					}
-					continuation.PageToken = *page.Next
-					var next *Page
-					next, err = e.Query(ctx, continuation)
-					if err != nil {
-						break
-					}
-					page.Data = append(page.Data, next.Data...)
-					page.Next = next.Next
-				}
-			}
+			page, err := e.query(ctx, query, true)
 			cancel()
 			var event any
 			if err != nil {

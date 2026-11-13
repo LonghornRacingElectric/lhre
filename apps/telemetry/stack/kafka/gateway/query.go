@@ -50,6 +50,7 @@ type Page struct {
 	Bucket      int64         `json:"bucket_ms,omitempty"`
 	Sources     []string      `json:"sources"`
 	Provisional bool          `json:"provisional"`
+	Live        *LiveStatus   `json:"live,omitempty"`
 }
 type Engine struct {
 	Feeds  *Feeds
@@ -133,6 +134,10 @@ func observation(t, ns, session int64, signal string, value any) Observation {
 }
 
 func (e *Engine) Query(ctx context.Context, r Request) (*Page, error) {
+	return e.query(ctx, r, false)
+}
+
+func (e *Engine) query(ctx context.Context, r Request, stream bool) (*Page, error) {
 	if r.Car != "artemis" {
 		return nil, problem(400, "unsupported_car", "Only Artemis is supported")
 	}
@@ -151,6 +156,11 @@ func (e *Engine) Query(ctx context.Context, r Request) (*Page, error) {
 		r.PageSize = 1000
 	}
 	r.PageSize = min(r.PageSize, 10000)
+	byteLimit := 2 * 1024 * 1024
+	if stream {
+		r.PageSize = 200000
+		byteLimit = (32 << 20) - 4096
+	}
 	if r.MaxPoints <= 0 {
 		r.MaxPoints = 1000
 	}
@@ -174,9 +184,13 @@ func (e *Engine) Query(ctx context.Context, r Request) (*Page, error) {
 	if err != nil {
 		return nil, err
 	}
-	after, err := e.cursor(r, &from, &to)
+	continuation, err := e.cursor(r, &from, &to)
 	if err != nil {
 		return nil, err
+	}
+	var after *Position
+	if continuation != nil {
+		after = &continuation.After
 	}
 	width := r.BucketMS
 	if r.Rate != nil {
@@ -208,6 +222,11 @@ func (e *Engine) Query(ctx context.Context, r Request) (*Page, error) {
 		return nil, err
 	}
 	defer snap.Close(ctx)
+	view := e.Cache.Ring.View()
+	dataset := datasetSignature(snap.Sessions())
+	if continuation != nil && (continuation.Dataset != dataset || continuation.Live != "" && continuation.Live != view.signature()) {
+		return nil, problem(409, "query_changed", "Recording or live data changed; discard previous pages and restart the query")
+	}
 	pools := map[string][]Signal{}
 	for _, signal := range selected {
 		pools[signal.Pool] = append(pools[signal.Pool], signal)
@@ -225,12 +244,15 @@ func (e *Engine) Query(ctx context.Context, r Request) (*Page, error) {
 	for i, name := range names {
 		workers.Go(func() error {
 			var err error
-			results[i], err = e.readPool(workCtx, snap, e.Schema.byPool[name], pools[name], r, from, to, width, after)
+			results[i], err = e.readPool(workCtx, snap, view, e.Schema.byPool[name], pools[name], r, from, to, width, after)
 			return err
 		})
 	}
 	if err := workers.Wait(); err != nil {
 		return nil, err
+	}
+	if continuation != nil && continuation.Live == "" && view.used.Load() {
+		return nil, problem(409, "query_changed", "Pending live data changed; discard previous pages and restart the query")
 	}
 	for _, result := range results {
 		for _, source := range result.sources {
@@ -246,7 +268,12 @@ func (e *Engine) Query(ctx context.Context, r Request) (*Page, error) {
 		}
 	}
 	sort.Slice(data, func(i, j int) bool { return before(data[i].position, data[j].position) })
-	page := &Page{Schema: e.Schema.Version, Data: []Observation{}, Bucket: width, Provisional: sources["ring"] || to > time.Now().Add(-time.Second).UnixMilli()}
+	page := &Page{Schema: e.Schema.Version, Data: []Observation{}, Bucket: width, Provisional: view.used.Load() || sources["ring"] || to > time.Now().Add(-time.Second).UnixMilli()}
+	live := ""
+	if r.T1 == "live" || view.used.Load() || to > time.Now().Add(-e.Cache.Ring.window).UnixMilli() {
+		page.Live = &view.status
+		live = view.signature()
+	}
 	for source := range sources {
 		page.Sources = append(page.Sources, source)
 	}
@@ -265,14 +292,17 @@ func (e *Engine) Query(ctx context.Context, r Request) (*Page, error) {
 		if row.size > 65536 {
 			return nil, problem(413, "sample_too_large", "A value exceeds 64 KiB")
 		}
-		if len(page.Data) >= r.PageSize || bytes+row.size+1 > 2*1024*1024 {
+		if len(page.Data) >= r.PageSize || bytes+row.size+1 > byteLimit {
 			break
 		}
 		page.Data = append(page.Data, row)
 		bytes += row.size + 1
 	}
 	if len(data) > len(page.Data) && len(page.Data) > 0 {
-		token, err := e.encodeCursor(r, from, to, page.Data[len(page.Data)-1].position)
+		if stream {
+			return nil, problem(413, "stream_too_large", "Reduce the live range, selected signals or max_points")
+		}
+		token, err := e.encodeCursor(r, from, to, page.Data[len(page.Data)-1].position, dataset, live)
 		if err != nil {
 			return nil, err
 		}

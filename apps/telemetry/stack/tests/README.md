@@ -90,6 +90,9 @@ a coverage gap; later records remain consumed, and the real writer recovers
 after explicit fixture quarantine. Historical sealing proceeds despite that
 unprocessed Kafka tail.
 Historical paging checks same-sample fields and continuation into later samples.
+It also verifies that a recording change rejects an older continuation with
+`409 query_changed`. SSE returns a complete replacement window even with a
+one-row public page size and includes consumer freshness metadata.
 Eight distinct cold requests verify progress when all four database connections
 are occupied.
 CI runs this independently of the secret-dependent broader integration suite.

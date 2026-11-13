@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"sort"
 	"strings"
 	"time"
 )
@@ -14,6 +15,9 @@ type cursor struct {
 	Version int      `json:"v"`
 	Request string   `json:"request"`
 	Schema  string   `json:"schema"`
+	Storage string   `json:"storage"`
+	Dataset string   `json:"dataset"`
+	Live    string   `json:"live,omitempty"`
 	Expires int64    `json:"expires"`
 	From    int64    `json:"from"`
 	To      int64    `json:"to"`
@@ -26,8 +30,19 @@ func fingerprint(r Request) string {
 	hash := sha256.Sum256(data)
 	return hex.EncodeToString(hash[:])
 }
-func (e *Engine) encodeCursor(r Request, from, to int64, after Position) (string, error) {
-	data, err := json.Marshal(cursor{4, fingerprint(r), e.Schema.Version, time.Now().Add(24 * time.Hour).UnixMilli(), from, to, after})
+func datasetSignature(sessions []Session) string {
+	identities := make([][2]int64, 0, len(sessions))
+	for _, session := range sessions {
+		identities = append(identities, [2]int64{session.ID, session.Revision})
+	}
+	sort.Slice(identities, func(left, right int) bool { return identities[left][0] < identities[right][0] })
+	encoded, _ := json.Marshal(identities)
+	hash := sha256.Sum256(encoded)
+	return hex.EncodeToString(hash[:])
+}
+
+func (e *Engine) encodeCursor(r Request, from, to int64, after Position, dataset, live string) (string, error) {
+	data, err := json.Marshal(cursor{Version: 5, Request: fingerprint(r), Schema: e.Schema.Version, Storage: e.Schema.StorageID, Dataset: dataset, Live: live, Expires: time.Now().Add(24 * time.Hour).UnixMilli(), From: from, To: to, After: after})
 	if err != nil {
 		return "", err
 	}
@@ -36,7 +51,7 @@ func (e *Engine) encodeCursor(r Request, from, to int64, after Position) (string
 	_, _ = hash.Write([]byte(payload))
 	return payload + "." + base64.RawURLEncoding.EncodeToString(hash.Sum(nil)), nil
 }
-func (e *Engine) cursor(r Request, from, to *int64) (*Position, error) {
+func (e *Engine) cursor(r Request, from, to *int64) (*cursor, error) {
 	if r.PageToken == "" {
 		return nil, nil
 	}
@@ -59,9 +74,9 @@ func (e *Engine) cursor(r Request, from, to *int64) (*Position, error) {
 		return nil, invalid
 	}
 	var c cursor
-	if json.Unmarshal(data, &c) != nil || c.Version != 4 || c.Request != fingerprint(r) || c.Schema != e.Schema.Version || c.Expires <= time.Now().UnixMilli() || c.From <= 0 || c.To <= c.From {
+	if json.Unmarshal(data, &c) != nil || c.Version != 5 || c.Request != fingerprint(r) || c.Schema != e.Schema.Version || c.Storage != e.Schema.StorageID || c.Dataset == "" || c.Expires <= time.Now().UnixMilli() || c.From <= 0 || c.To <= c.From {
 		return nil, invalid
 	}
 	*from, *to = c.From, c.To
-	return &c.After, nil
+	return &c, nil
 }

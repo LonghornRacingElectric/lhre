@@ -24,16 +24,7 @@ System.register(['@grafana/data', '@grafana/runtime', '@grafana/ui', 'react', 'r
             // A stable path isolates queries with different signals or buckets.
             var encoded = JSON.stringify(body), hash = 2166136261;
             for (var i = 0; i < encoded.length; i++) { hash = Math.imul(hash ^ encoded.charCodeAt(i), 16777619); }
-            streams.push(runtime.getGrafanaLiveSrv().getDataStream({ addr: { scope: data.LiveChannelScope.DataSource, namespace: this.uid, path: 'query/' + (hash >>> 0).toString(16), data: body }, buffer: { maxLength: maxPoints } }).pipe(operators.map(response => ({ data: (response.data || []).map(frame => {
-              // Live messages replace a bounded window, including its changing
-              // final bucket; retain the latest row for each timestamp.
-              var timeField = frame.fields.find(f => f.type === data.FieldType.time);
-              if (!timeField) { return frame; }
-              var indices = new Map();
-              for (var j = 0; j < timeField.values.length; j++) { indices.set(timeField.values[j], j); }
-              var keep = Array.from(indices.values()).sort((a, b) => timeField.values[a] - timeField.values[b]);
-              return data.toDataFrame({ name: frame.name, refId: q.refId, fields: frame.fields.map(f => Object.assign({}, f, { values: keep.map(k => f.values[k]) })) });
-            }) }))));
+            streams.push(runtime.getGrafanaLiveSrv().getDataStream({ addr: { scope: data.LiveChannelScope.DataSource, namespace: this.uid, path: 'query/' + (hash >>> 0).toString(16), data: body }, buffer: { maxLength: maxPoints, action: runtime.StreamingFrameAction.Replace } }).pipe(operators.map(response => Object.assign({}, response, { data: (response.data || []).map(frame => data.toDataFrame({ name: frame.name, refId: q.refId, meta: frame.meta, fields: frame.fields.map(field => Object.assign({}, field, { values: Array.from(field.values) })) })) }))));
           });
           return streams.length ? rx.merge.apply(null, streams) : rx.of({ data: [] });
         }

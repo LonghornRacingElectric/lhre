@@ -211,6 +211,7 @@ func (h *consumerHandler) Setup(s sarama.ConsumerGroupSession) error {
 	h.mu.Lock()
 	h.checkpoint = snap.Offsets()
 	h.mu.Unlock()
+	h.ring.Assign(s.Claims()[h.topic])
 	for topic, parts := range s.Claims() {
 		for _, part := range parts {
 			if topic != h.topic {
@@ -232,14 +233,21 @@ func (h *consumerHandler) Setup(s sarama.ConsumerGroupSession) error {
 }
 func (h *consumerHandler) Cleanup(sarama.ConsumerGroupSession) error { h.ring.Ready(false); return nil }
 func (h *consumerHandler) ConsumeClaim(s sarama.ConsumerGroupSession, c sarama.ConsumerGroupClaim) error {
+	var observations <-chan time.Time
 	if c.Topic() == h.topic {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		observations = ticker.C
 		h.ring.Start(c.Partition(), max(0, c.InitialOffset()))
+		h.ring.Observe(c.Partition(), c.HighWaterMarkOffset())
 		h.ring.Ready(true)
 	}
 	for {
 		select {
 		case <-s.Context().Done():
 			return nil
+		case <-observations:
+			h.ring.Observe(c.Partition(), c.HighWaterMarkOffset())
 		case m, ok := <-c.Messages():
 			if !ok {
 				return nil

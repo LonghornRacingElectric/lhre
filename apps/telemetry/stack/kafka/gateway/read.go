@@ -55,7 +55,7 @@ func prepareObservations(data []Observation, limit int) (*cachedSlab, error) {
 	return &cachedSlab{Prepared: data, Cost: cost}, nil
 }
 
-func (e *Engine) historicalPool(ctx context.Context, snap Snapshot, p Pool, signals []Signal, r Request, from, to, width int64, after *Position) (poolResult, error) {
+func (e *Engine) historicalPool(ctx context.Context, snap Snapshot, view *ringView, p Pool, signals []Signal, r Request, from, to, width int64, after *Position) (poolResult, error) {
 	pageKey := ""
 	if r.Aggregate == "raw" {
 		pageKey = fmt.Sprintf("/%d/%v", r.PageSize, after)
@@ -122,7 +122,7 @@ func (e *Engine) historicalPool(ctx context.Context, snap Snapshot, p Pool, sign
 				e.Cache.Reads[3].Add(1)
 			} else {
 				var err error
-				result, err = e.slabPool(ctx, snap, p, signals, r, from, to, width, after)
+				result, err = e.slabPool(ctx, snap, view, p, signals, r, from, to, width, after)
 				if err != nil {
 					return nil, err
 				}
@@ -234,11 +234,11 @@ func (e *Engine) filePool(ctx context.Context, snap Snapshot, p Pool, signals []
 }
 
 // Recent reads retain a persisted baseline plus contiguous Kafka coverage.
-func (e *Engine) slabPool(ctx context.Context, snap Snapshot, p Pool, signals []Signal, r Request, from, to, width int64, after *Position) (poolResult, error) {
+func (e *Engine) slabPool(ctx context.Context, snap Snapshot, view *ringView, p Pool, signals []Signal, r Request, from, to, width int64, after *Position) (poolResult, error) {
 	result := poolResult{data: []Observation{}, sources: []string{}}
 	aggregates := map[string]*accumulator{}
 	if _, ok := snap.(aggregateSnapshot); ok && r.Aggregate != "raw" && to-from > 2*slabMS {
-		rows, tail, source, err := e.Cache.aggregate(ctx, snap, p, from, to, width)
+		rows, tail, source, err := e.Cache.aggregate(ctx, snap, view, p, from, to, width)
 		if err != nil {
 			return result, err
 		}
@@ -259,7 +259,7 @@ func (e *Engine) slabPool(ctx context.Context, snap Snapshot, p Pool, signals []
 		if ctx.Err() != nil {
 			return result, ctx.Err()
 		}
-		rows, source, err := e.Cache.Rows(ctx, snap, p, start, start+slabMS, from, to)
+		rows, source, err := e.Cache.Rows(ctx, snap, view, p, start, start+slabMS, from, to)
 		if err != nil {
 			return result, err
 		}
@@ -294,13 +294,13 @@ func (e *Engine) slabPool(ctx context.Context, snap Snapshot, p Pool, signals []
 	return result, nil
 }
 
-func (e *Engine) readPool(ctx context.Context, snap Snapshot, p Pool, signals []Signal, r Request, from, to, width int64, after *Position) (poolResult, error) {
+func (e *Engine) readPool(ctx context.Context, snap Snapshot, view *ringView, p Pool, signals []Signal, r Request, from, to, width int64, after *Position) (poolResult, error) {
 	p = projectPool(p, signals)
 	if to <= time.Now().Add(-e.Cache.Ring.window).UnixMilli() {
-		tail, _ := e.Cache.Ring.Read(snap.Offsets(), p.Table, from, to)
+		tail, _ := view.Read(snap.Offsets(), p.Table, from, to)
 		if len(tail) == 0 {
-			return e.historicalPool(ctx, snap, p, signals, r, from, to, width, after)
+			return e.historicalPool(ctx, snap, view, p, signals, r, from, to, width, after)
 		}
 	}
-	return e.slabPool(ctx, snap, p, signals, r, from, to, width, after)
+	return e.slabPool(ctx, snap, view, p, signals, r, from, to, width, after)
 }
