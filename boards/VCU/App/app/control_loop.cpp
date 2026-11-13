@@ -154,7 +154,7 @@ uint32_t App::ComputeFaults(uint32_t now, bool inverter_fresh,
   if (sm_.state() == VcuState::kDrive && !StateConditions::Energized(hvc)) {
     f |= kFaultContactorsOpen;
   }
-  return f;
+  return f & ~params_->drive.ignored_faults;
 }
 
 void App::UpdateState(uint32_t now, bool rtd_edge, bool inverter_fresh,
@@ -169,7 +169,7 @@ void App::UpdateState(uint32_t now, bool rtd_edge, bool inverter_fresh,
       rx_.contactor_status.msg.hvc_state_machine);
   si.contactors_closed = rx_.contactor_status.msg.positive_hv_contactor &&
                          rx_.contactor_status.msg.negative_hv_contactor;
-  si.loop_closed = shutdown_loop_.closed();
+  si.loop_closed = shutdown_loop_.closed() || !P.drive.require_loop;
   si.torque_cut_fault = (faults_ & kTorqueCutFaults) != 0;
   si.inverter_ready = inverter_fresh && !inverter_faulted;
   si.pdu_fresh = live_.bse3_available || !P.drive.require_pdu;

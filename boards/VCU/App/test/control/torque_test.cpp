@@ -81,10 +81,10 @@ TEST(Torque, FullDemandIsPeakUntilThePowerCapTakesOver) {
 TEST(Torque, MotorSpinCapsTorqueAndFadesItToZeroBeforeTheSpeedCeiling) {
   const vcu::Params& spin = vcu::ParamsFor(lhre::can::EventMode::kMotorSpin);
   EXPECT_EQ(spin.inverter.torque_limit_nm, spin.torque.peak_torque_nm);
-  EXPECT_FLOAT_EQ(Sweep(spin, 0.0f).back(), 20.0f);
-  EXPECT_FLOAT_EQ(Sweep(spin, 1200.0f).back(), 20.0f);
-  EXPECT_NEAR(Sweep(spin, 1350.0f).back(), 10.0f, 0.01f);
-  EXPECT_NEAR(Sweep(spin, -1350.0f).back(), 10.0f, 0.01f);
+  EXPECT_FLOAT_EQ(Sweep(spin, 0.0f).back(), 5.0f);
+  EXPECT_FLOAT_EQ(Sweep(spin, 1200.0f).back(), 5.0f);
+  EXPECT_NEAR(Sweep(spin, 1350.0f).back(), 2.5f, 0.01f);
+  EXPECT_NEAR(Sweep(spin, -1350.0f).back(), 2.5f, 0.01f);
   for (float rpm : {1500.0f, 2000.0f, 6000.0f}) {
     for (float t : Sweep(spin, rpm)) EXPECT_EQ(t, 0.0f) << rpm;
   }

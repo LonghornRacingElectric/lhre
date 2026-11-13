@@ -1,5 +1,7 @@
 #include "config/params.hpp"
 
+#include "safety/faults.hpp"
+
 namespace vcu {
 namespace {
 
@@ -58,13 +60,23 @@ Params MakeEndurance() {
 Params MakeMotorSpin() {
   Params p = MakeDefaults();
   p.event_mode = EventMode::kMotorSpin;
-  p.torque.peak_torque_nm = 20.0f;
+  // TEMP: minimal power for the first spin.
+  p.torque.peak_torque_nm = 5.0f;
+  p.power_limit.limit_w = 1000.0f;
   p.torque.fade_start_rpm = 1200.0f;
   p.torque.zero_torque_rpm = 1500.0f;
   // The inverter enforces the same cap on its side of the command.
   p.inverter.torque_limit_nm = p.torque.peak_torque_nm;
-  // TEMP: the bench spin has no PDU on the bus, so don't wait for its BSE_3.
+  // TEMP: the bench spin has only the HVC, inverter, pedals and motor, so
+  // don't wait for the PDU or the shutdown loop, and ignore the faults of
+  // sensors that aren't wired: steering, the motor-cable sense, the loop
+  // taps, and the hard-brake cross-check. APPS, BSE, inverter, HVC and BSPD
+  // faults all stay live.
   p.drive.require_pdu = false;
+  p.drive.require_loop = false;
+  p.drive.ignored_faults = kFaultShutdownOpen | kFaultShutdownSenseImplausible |
+                           kFaultSteeringRange | kFaultMotorDisconnect |
+                           kFaultHardBrakeMismatch;
   return p;
 }
 

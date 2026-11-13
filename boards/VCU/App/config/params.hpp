@@ -110,8 +110,13 @@ struct DriveParams {
   // button.
   bool rtd_release_exits_drive = true;
   // The PDU's BSE_3 gates RTD_WAIT and DRIVE, and its timeout cuts torque.
-  // Only the unloaded motor spin turns this off.
+  // Only the bench motor spin turns this off.
   bool require_pdu = true;
+  // The shutdown loop taps gate RTD_WAIT and keep DRIVE. Only the bench
+  // motor spin, with no loop wired, turns this off.
+  bool require_loop = true;
+  // Faults (safety/faults.hpp bits) not raised or acted on. Empty on the car.
+  uint32_t ignored_faults = 0;
 };
 
 struct BuzzerParams {

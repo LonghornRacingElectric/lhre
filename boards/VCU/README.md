@@ -228,27 +228,32 @@ volts with `/analog` before trusting the knob values.
 ### Motor spin
 
 `/mode 5` (or `VCU_MODE_COMMAND` 5) selects bench parameters for spinning
-the motor unloaded: 20 Nm peak, also sent to the inverter as its torque
+the motor unloaded: 5 Nm peak and a 1 kW power cap (temporary, minimal power), also sent to the inverter as its torque
 limit, fading to zero between 1200 and 1500 rpm, after which the motor
 coasts. With no load, the car's 210 Nm would reach the motor's top speed in
 well under a second. Select it before RTD, and check `/state` shows
 `mode=MOTOR_SPIN`: the mode is not kept across a reset.
 
-Every DRIVE prerequisite still applies, so the bench needs:
+The bench needs:
 
 - the HVC on the Critical bus reporting energized with both AIRs closed;
-- the shutdown loop closed at both VCU taps, and the BSPD latch clear;
+- the BSPD latch clear;
 - the inverter's status, fault, current and voltage frames, and either
   speed frame;
 - both APPS and both BSE sensors connected and in range, with the brake
   pressed for the RTD press;
-- `motor_disconnect` (PE6) low.
+- the RTD switch (PE11, low = pressed).
 
-The PDU (`PDU_BSE3`), the dash and the wheel speeds aren't needed. Motor spin
-is the one mode that doesn't wait for the PDU (`DriveParams::require_pdu`):
-every other mode still does, and a silent PDU cuts torque there. A latched
-brake comparator flag (`/faults`) clears on a power cycle with all four flags
-low. The 20 Nm and 1500 rpm are first-spin values, not the motor's limits.
+Motor spin is the one mode that doesn't need the rest of the car
+(`DriveParams`): no PDU (`require_pdu`), no shutdown loop (`require_loop`,
+so RTD_WAIT and DRIVE don't wait for the loop taps), and it ignores the
+faults of sensors that aren't wired (`ignored_faults`: shutdown open and
+implausible, steering range, motor-cable sense, hard-brake mismatch). The
+dash and wheel speeds aren't needed either. Every other mode still needs
+all of it, and the APPS, BSE, inverter, HVC and BSPD faults still apply in
+motor spin. A latched brake comparator flag (`/faults`) clears on a power
+cycle with all four flags low. The 5 Nm, 1 kW and 1500 rpm are first-spin
+values, not the motor's limits.
 
 Four independent wheel speeds are subscribed on the **Data** CAN bus,
 not GPIO: `0x402` FL, `0x403` FR, `0x404` RL and `0x405` RR. This matches

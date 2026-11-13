@@ -341,7 +341,7 @@ TEST_F(VcuAppTest, MotorSpinModeCapsTorqueAndStopsPushingAtTheSpeedCeiling) {
   ASSERT_EQ(app_->snapshot().event_mode, EventMode::kMotorSpin);
   msg::InverterTorqueCommand cmd;
   ASSERT_TRUE(b_.LastFrame(b_.car, &cmd));
-  EXPECT_NEAR(cmd.torque_limit(), 20.0f, 0.1f) << "inverter gets the cap too";
+  EXPECT_NEAR(cmd.torque_limit(), 5.0f, 0.1f) << "inverter gets the cap too";
 
   b_.PressRtd(true);
   b_.Run(*app_, 50);
@@ -350,24 +350,26 @@ TEST_F(VcuAppTest, MotorSpinModeCapsTorqueAndStopsPushingAtTheSpeedCeiling) {
   b_.Run(*app_, 50);
   b_.SetPedalTravel(1.0f);
   b_.Run(*app_, 300);
-  EXPECT_NEAR(app_->torque_command(), 20.0f, 0.01f);
+  EXPECT_NEAR(app_->torque_command(), 5.0f, 0.01f);
 
   b_.motor_rpm = 1350;
   b_.Run(*app_, 50);
-  EXPECT_NEAR(app_->torque_command(), 10.0f, 0.1f);
+  EXPECT_NEAR(app_->torque_command(), 2.5f, 0.1f);
   b_.motor_rpm = 1600;
   b_.Run(*app_, 50);
   EXPECT_EQ(app_->torque_command(), 0.0f);
   EXPECT_EQ(app_->state(), VcuState::kDrive) << "coasts, no fault";
 }
 
-TEST_F(VcuAppTest, MotorSpinModeNeedsNoPduButOtherModesDo) {
+TEST_F(VcuAppTest, MotorSpinDrivesWithNoLoopPduSteeringOrMotorSense) {
   b_.pdu_alive = false;
+  b_.SetLoop(0.0f, 0.0f);           // no shutdown loop wired
+  b_.motor_disconnect.Write(true);  // motor-cable sense floating
   b_.Energize();
   b_.SetBrakePsi(500.0f);
   b_.Run(*app_, 200);
-  EXPECT_EQ(app_->state(), VcuState::kTsActive)
-      << "endurance waits for the PDU";
+  EXPECT_EQ(app_->state(), VcuState::kTsActive) << "endurance needs the loop";
+  EXPECT_NE(app_->faults() & vcu::kFaultShutdownOpen, 0u);
   EXPECT_NE(app_->faults() & vcu::kFaultPduTimeout, 0u);
 
   lhre::can::pi::VcuModeCommand m;
@@ -375,12 +377,17 @@ TEST_F(VcuAppTest, MotorSpinModeNeedsNoPduButOtherModesDo) {
   b_.car.Send(m.ToFrame());
   b_.Run(*app_, 200);
   ASSERT_EQ(app_->snapshot().event_mode, EventMode::kMotorSpin);
-  EXPECT_EQ(app_->faults() & vcu::kFaultPduTimeout, 0u);
-  EXPECT_EQ(app_->faults() & vcu::kFaultBse3Unavailable, 0u);
+  EXPECT_EQ(app_->faults(), 0u);
   ASSERT_EQ(app_->state(), VcuState::kRtdWait);
   b_.PressRtd(true);
   b_.Run(*app_, 50);
   EXPECT_EQ(app_->state(), VcuState::kDrive);
+  b_.SetBrakePsi(0.0f);
+  b_.Run(*app_, 50);
+  b_.SetPedalTravel(1.0f);
+  b_.Run(*app_, 300);
+  EXPECT_GT(app_->torque_command(), 0.0f);
+  EXPECT_EQ(app_->state(), VcuState::kDrive) << "stays in DRIVE, no loop";
 }
 
 TEST_F(VcuAppTest, LineLockRequestStaysZeroAndActualIsReported) {

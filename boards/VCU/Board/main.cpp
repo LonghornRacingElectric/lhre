@@ -172,7 +172,8 @@ int main() {
   p.reset_cause = reset_cause;
   p.vrefint_cal = *kVrefintCal;
 
-  static vcu::App app(p);
+  // TEMP: boot into the bench motor spin set (5 Nm, 1 kW cap, no PDU or loop).
+  static vcu::App app(p, &vcu::ParamsFor(lhre::can::EventMode::kMotorSpin));
   app.StartTasks();
   vTaskStartScheduler();
 
