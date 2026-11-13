@@ -96,7 +96,7 @@ func main() {
 		log.Fatal(err)
 	}
 	defer cache.Close()
-	liveTopics := strings.Split(env("QUERY_LIVE_TOPICS", "grafana_data_artemis,grafana_data_artemis_derived,car_status"), ",")
+	liveTopics := strings.Split(env("QUERY_LIVE_TOPICS", "grafana_data_artemis,grafana_data_artemis_derived,car_status,board_health_state,board_health,fault_events"), ",")
 	feeds := gateway.NewFeeds(liveTopics)
 	engine := &gateway.Engine{Schema: schema, Store: store, Cache: cache, Secret: secret, Feeds: feeds}
 	brokers := strings.Split(env("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092"), ",")

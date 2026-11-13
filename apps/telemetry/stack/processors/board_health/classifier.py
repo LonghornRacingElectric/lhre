@@ -114,3 +114,35 @@ def change_events(changes, board_status, cause, t_ms, t_source="server", car="ar
         }
         for board, (previous, current) in sorted(changes.items())
     ]
+
+
+def snapshot_event(states, t_ms, t_source="server", car="artemis"):
+    """Every board's current state in one JSON-ready message.
+
+    Live feeds keep only a topic's latest message, so each snapshot carries the
+    whole picture: a client that connects late, or misses a message, still sees
+    every board.
+    """
+    return {
+        "car": car,
+        "boards": dict(sorted(states.items())),
+        "t_ms": t_ms,
+        "t_source": t_source,
+    }
+
+
+class SnapshotTimer:
+    """Decides when to publish a snapshot: on any change, or every interval."""
+
+    def __init__(self, interval_s):
+        if not math.isfinite(interval_s) or interval_s <= 0:
+            raise ValueError("Snapshot interval must be finite, positive seconds")
+        self.interval_s = interval_s
+        self.last_sent_at = None
+
+    def due(self, now, changed):
+        return (changed or self.last_sent_at is None
+                or now - self.last_sent_at >= self.interval_s)
+
+    def sent(self, now):
+        self.last_sent_at = now
