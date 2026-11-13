@@ -72,6 +72,15 @@ class PoolStorageTest(unittest.TestCase):
         raw = POOL_MODELS["controls_333hz"]
         self.assertEqual(set(self.session.scalars(select(raw.session_start_ms))), {3_000_000})
 
+    def test_contiguous_batch_extends_bounds_without_changing_recording_identity(self):
+        write_updates(self.session, [self.message(7_000_000)])
+        write_updates(self.session, [self.message(7_300_000), self.message(6_800_000), self.message(7_000_100)])
+        window = self.session.scalars(select(ArtemisRecordingSession)).one()
+        self.assertEqual((window.session_start_ms, window.start_time, window.end_time),
+                         (7_000_000, 6_800_000, 7_300_000))
+        raw = POOL_MODELS["controls_333hz"]
+        self.assertEqual(set(self.session.scalars(select(raw.session_start_ms))), {7_000_000})
+
     def test_schema_and_gps_have_no_packet_relationship(self):
         inspector = inspect(self.connection)
         self.assertNotIn("packet", inspector.get_table_names(schema="public"))
@@ -89,7 +98,8 @@ class PoolStorageTest(unittest.TestCase):
         message.controls.enable = False
         batch = TelemetryBatch(format_version=1, updates=[TelemetryUpdate(sample_time_ns=message.time * 1_000_000, values=message,
             updated_fields=[FieldPath(group=4,field=message.controls.DESCRIPTOR.fields_by_name[name].number) for name in ("apps1_travel","enable")])])
-        record = SimpleNamespace(headers=[("car_type", b"Artemis"), ("payload_format",b"artemis_updates_v1")], value=batch.SerializeToString())
+        record = SimpleNamespace(topic="sensor_data", partition=0, offset=0,
+            headers=[("car_type", b"Artemis"), ("payload_format",b"artemis_updates_v1")], value=batch.SerializeToString())
         with patch("stack.processors.db_writer.main.get_db", return_value=nullcontext(self.session)):
             write_batch([record], {}, {})
         raw = POOL_MODELS["controls_333hz"]

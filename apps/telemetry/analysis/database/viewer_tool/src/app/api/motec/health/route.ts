@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const settings = getSettings("orion");
+  const settings = getSettings("artemis");
   return NextResponse.json({
     ok: true,
     source: settings.telemetrySource,

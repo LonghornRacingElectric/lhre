@@ -1,8 +1,10 @@
 load("@protobuf//bazel:proto_library.bzl", "proto_library")
-load("@rules_go//go:def.bzl", "go_binary")
+load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 load("@rules_go//proto:def.bzl", "go_grpc_library", "go_proto_library")
 load("//apps/telemetry:compatibility.bzl", "NOT_WINDOWS")
 load("//apps/telemetry:container.bzl", "telemetry_service_image")
+load("@aspect_bazel_lib//lib:transitions.bzl", "platform_transition_binary")
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 
 package(default_visibility = ["//apps/telemetry:__subpackages__"])
 
@@ -68,6 +70,119 @@ telemetry_service_image(
 filegroup(
     name = "kafka_configs",
     srcs = ["docker-compose.yml"],
+    target_compatible_with = NOT_WINDOWS,
+    visibility = ["//visibility:public"],
+)
+
+go_library(
+    name = "query_gateway_lib",
+    srcs = glob(["gateway/*.go"], exclude = ["gateway/*_test.go"]),
+    importpath = "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/gateway",
+    deps = [
+        "@com_github_ibm_sarama//:sarama",
+        "@com_github_masterminds_squirrel//:squirrel",
+        "@com_github_apache_arrow_go_v18//arrow",
+        "@com_github_apache_arrow_go_v18//arrow/array",
+        "@com_github_apache_arrow_go_v18//arrow/ipc",
+        "@com_github_apache_arrow_go_v18//arrow/memory",
+        "@com_github_dgraph_io_ristretto_v2//:ristretto",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_jackc_pgx_v5//pgtype",
+        "@org_golang_x_sync//singleflight",
+        "@org_golang_x_sync//errgroup",
+        "@org_golang_x_sys//unix",
+        "@org_golang_google_protobuf//proto",
+        "@org_golang_google_protobuf//reflect/protodesc",
+        "@org_golang_google_protobuf//reflect/protoreflect",
+        "@org_golang_google_protobuf//types/descriptorpb",
+        "@org_golang_google_protobuf//types/dynamicpb",
+    ],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+go_binary(
+    name = "query_gateway_binary",
+    srcs = ["cmd/query-gateway/main.go"],
+    importpath = "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/cmd/query-gateway",
+    pure = "on",
+    deps = [":query_gateway_lib"],
+    target_compatible_with = NOT_WINDOWS,
+    visibility = ["//visibility:public"],
+)
+
+telemetry_service_image(
+    name = "query_gateway",
+    binary = ":query_gateway_binary",
+    base = "@python312_linux_amd64",
+    schema_consumer = True,
+    tars = [":query_catalog_tar"],
+    repo_tags = ["lhre/telemetry-query-gateway:dev"],
+    repository = "ghcr.io/longhornracingelectric/telemetry-query-gateway",
+    visibility = ["//visibility:public"],
+)
+
+pkg_tar(
+    name = "query_catalog_tar",
+    files = {"//lib/codegen/telemetry:signals_json": "signals.json"},
+    package_dir = "/catalog",
+    target_compatible_with = NOT_WINDOWS,
+)
+
+go_test(
+    name = "query_gateway_test",
+    srcs = ["gateway/query_test.go"],
+    embed = [":query_gateway_lib"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+go_library(
+    name = "grafana_query_lib",
+    srcs = ["grafana/adapter.go", "grafana/live.go"],
+    importpath = "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/grafana",
+    deps = [
+        "@com_github_grafana_grafana_plugin_sdk_go//backend",
+        "@com_github_grafana_grafana_plugin_sdk_go//backend/instancemgmt",
+        "@com_github_grafana_grafana_plugin_sdk_go//data",
+    ],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+go_binary(
+    name = "grafana_query_binary",
+    srcs = ["cmd/grafana-query/main.go"],
+    importpath = "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/cmd/grafana-query",
+    pure = "on",
+    deps = [":grafana_query_lib", "@com_github_grafana_grafana_plugin_sdk_go//backend/datasource"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+go_test(
+    name = "grafana_query_test",
+    srcs = ["grafana/live_test.go"],
+    embed = [":grafana_query_lib"],
+    deps = ["@com_github_grafana_grafana_plugin_sdk_go//backend"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+platform_transition_binary(
+    name = "grafana_plugin_linux_amd64",
+    basename = "gpx_artemis_linux_amd64",
+    binary = ":grafana_query_binary",
+    target_platform = "//platforms:linux_amd64",
+    target_compatible_with = NOT_WINDOWS,
+)
+
+pkg_tar(
+    name = "artemis_grafana_plugin_tar",
+    srcs = [":grafana_plugin_linux_amd64"],
+    files = {
+        "grafana/module.js": "module.js",
+        "grafana/plugin.json": "plugin.json",
+        "grafana/logo.svg": "logo.svg",
+    },
+    package_dir = "/usr/share/grafana/lhre-plugins/lhre-artemis-datasource",
+    mode = "0755",
     target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )

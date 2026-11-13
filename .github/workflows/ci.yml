@@ -445,6 +445,9 @@ jobs:
       - name: Load and smoke-test core images
         run: bazel test //apps/telemetry:core_smoke_tests --test_output=errors
 
+      - name: Exercise Artemis query gateway and Grafana
+        run: bash apps/telemetry/stack/tests/run_query_gateway_test.sh
+
       - name: Warn that the integration tests cannot run
         if: env.HAVE_SECRETS != 'true'
         run: echo "::warning::Not every telemetry secret is set in this run, so the integration tests are skipped. Only the images and smoke tests ran."
@@ -471,6 +474,7 @@ jobs:
             echo "GRAFANA_PWD=$GRAFANA_PWD"
             echo "ANALYSIS_PWD=$ANALYSIS_PWD"
             echo "ARTEMIS_DB_INIT_SQL=$ARTEMIS_DB_INIT_SQL"
+            echo "QUERY_API_TOKEN=$(openssl rand -hex 32)"
           } > .env
           (cd apps/telemetry/stack/kafka && docker compose up -d --no-build --wait)
           (cd apps/telemetry/stack/ingest && docker compose up -d --no-build --wait)

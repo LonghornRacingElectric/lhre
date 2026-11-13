@@ -150,6 +150,7 @@ telemetry_upstream_image(
 
 telemetry_upstream_image(
     name = "grafana",
+    tars = ["//apps/telemetry/stack/kafka:artemis_grafana_plugin_tar"],
     executable = "/usr/share/grafana/bin/grafana",
     image = "@telemetry_grafana_linux_amd64",
     repo_tags = ["lhre/telemetry-grafana:11.3.0"],
@@ -164,6 +165,7 @@ telemetry_upstream_image(
 filegroup(
     name = "core_images",
     srcs = [
+        "//apps/telemetry/stack/kafka:query_gateway_image",
         ":grafana_image",
         ":kafka_image",
         ":mqtt_image",
@@ -209,6 +211,7 @@ sh_binary(
     name = "load_core_images",
     srcs = ["load_images.sh"],
     args = [
+        "$(rootpath //apps/telemetry/stack/kafka:query_gateway_load)",
         "$(rootpath :grafana_load)",
         "$(rootpath :kafka_load)",
         "$(rootpath :mqtt_load)",
@@ -219,6 +222,7 @@ sh_binary(
         "$(rootpath //apps/telemetry/stack/processors/field_enricher:field_enricher_load)",
     ],
     data = [
+        "//apps/telemetry/stack/kafka:query_gateway_load",
         ":grafana_load",
         ":kafka_load",
         ":mqtt_load",
@@ -263,6 +267,7 @@ sh_binary(
     name = "load_all_images",
     srcs = ["load_images.sh"],
     args = [
+        "$(rootpath //apps/telemetry/stack/kafka:query_gateway_load)",
         "$(rootpath :grafana_load)",
         "$(rootpath :kafka_load)",
         "$(rootpath :mqtt_load)",
@@ -281,6 +286,7 @@ sh_binary(
         "$(rootpath //apps/telemetry/stack/processors/track_mapper:track_mapper_load)",
     ],
     data = [
+        "//apps/telemetry/stack/kafka:query_gateway_load",
         ":grafana_load",
         ":kafka_load",
         ":mqtt_load",
@@ -333,6 +339,7 @@ test_suite(
     name = "core_smoke_tests",
     tags = ["docker", "manual"],
     tests = [
+        "//apps/telemetry/stack/kafka:query_gateway_smoke_test",
         ":grafana_smoke_test",
         ":kafka_smoke_test",
         ":mqtt_smoke_test",

@@ -1,0 +1,76 @@
+services:
+  db:
+    image: lhre/telemetry-postgres:2.31.0-pg17
+    environment:
+      POSTGRES_USER: electric
+      POSTGRES_PASSWORD: gateway-test-password
+      POSTGRES_DB: artemis
+      ANALYSIS_PWD: gateway-test-analysis
+    ports: ["127.0.0.1:35432:5432"]
+    volumes:
+      - ../ingest/common_schema.sql:/app/common_schema.sql:ro
+      - ${ARTEMIS_DB_INIT_SQL:?Build the generated Artemis schema}:/app/artemis_db_init.sql:ro
+      - ../ingest/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U electric -d artemis"]
+      interval: 2s
+      retries: 40
+  kafka:
+    image: lhre/telemetry-kafka:4.1.0
+    platform: linux/amd64
+    ports: ["127.0.0.1:39092:29092"]
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,EXTERNAL://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:39092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null"]
+      interval: 3s
+      retries: 40
+  db_writer:
+    image: lhre/telemetry-db-writer:dev
+    environment:
+      IN_DOCKER: "1"
+      ELECTRIC_PWD: gateway-test-password
+      ARTEMIS_DATABASE_URL: postgresql+psycopg2://electric:gateway-test-password@db:5432/artemis
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      db: {condition: service_healthy}
+      kafka: {condition: service_healthy}
+  query_gateway:
+    image: lhre/telemetry-query-gateway:dev
+    environment:
+      ARTEMIS_DATABASE_URL: postgres://analysis:gateway-test-analysis@db:5432/artemis?sslmode=disable
+      TELEMETRY_DATABASE_URL: postgres://analysis:gateway-test-analysis@db:5432/telemetry?sslmode=disable
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      QUERY_API_TOKEN: gateway-test-token
+      QUERY_CURSOR_SECRET: gateway-test-cursors
+      QUERY_RING_BYTES: "67108864"
+      QUERY_BASELINE_BYTES: "67108864"
+      QUERY_L1_BYTES: "67108864"
+      QUERY_L2_BYTES: "134217728"
+      QUERY_CACHE_DIR: /cache
+    ports: ["127.0.0.1:38090:8090"]
+    depends_on:
+      db: {condition: service_healthy}
+      kafka: {condition: service_healthy}
+  grafana:
+    image: lhre/telemetry-grafana:11.3.0
+    ports: ["127.0.0.1:33000:3000"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: gateway-test-password
+      GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: lhre-artemis-datasource
+      GF_PATHS_PLUGINS: /usr/share/grafana/lhre-plugins
+      QUERY_API_TOKEN: gateway-test-token
+    volumes:
+      - grafana_state:/var/lib/grafana
+      - ../ingest/grafana-provisioning/artemis.yml:/etc/grafana/provisioning/datasources/artemis.yml:ro
+    depends_on: [query_gateway]
+volumes:
+  grafana_state:

@@ -76,13 +76,13 @@ identifier; `sample_time_ns` is a decimal string in JSON/CSV. Other car
 names are rejected; Orion's existing telemetry readers remain separate legacy
 integration paths. The gateway does not migrate or reconcile databases.
 
-Use `ARTEMIS_DATABASE_URL` or the `ARTEMIS_DB_*` settings and set
-`QUERY_CURSOR_SECRET` to a stable secret shared by viewer processes. See the
+Set `QUERY_GATEWAY_URL` and `QUERY_API_TOKEN` on the viewer server. Configure
+database connections and `QUERY_CURSOR_SECRET` on the gateway. See the
 [query guide](src/lib/query/README.md) for limits and pagination behavior.
 Existing bucketed Artemis analysis remains available through the MoTeC interfaces.
 
-`npm run test:query` runs the unit and HTTP checks; the optional real PostgreSQL
-checks are described in the [test guide](tests/query/README.md).
+`npm run test:query` runs the gateway's Bazel functionality checks. Real
+Kafka/Timescale/Grafana checks are described in the [test guide](tests/query/README.md).
 
 ## Environment variables
 
@@ -216,6 +216,9 @@ settings. `ARTEMIS_STORAGE_CONTRACT_PATH` explicitly overrides the generated
 contract path when deploying artifacts outside the checkout.
 
 Artemis replay uses drive-day start/end times and session/time sample keys.
+Replay returns fields from the selected raw nanosecond sample and recording;
+it preserves peaks and leaves missing subsystem fields absent rather than
+averaging the following 100 ms. See the [replay reader](src/lib/prisma/README.md).
 Trackside Retro database exports and MoTeC series use the generated Timescale
 bucket functions, aligning each pool before combining subsystems. The bucket
 widens to the slowest participating periodic pool; cell arrays require at least
@@ -227,16 +230,15 @@ channels (default `avg`). Arrays and states retain the last sample. The handshak
 returns `latest_sample_ms` and preserves `last_packet` for Orion; Artemis replay returns `session_start_ms`, not a
 packet identifier. No Artemis packet-table compatibility layer is installed.
 
-Prisma is used for normal database reads; the small parameterized call to the
-generated table-valued bucket function is the Timescale-specific SQL boundary.
-Prisma clients are generated only: never run `db push` against telemetry data.
+Artemis telemetry reads use the shared gateway; Prisma remains for application
+metadata and legacy readers. Clients are generated only: never run `db push`
+against telemetry data.
 
 
-Database-read integration tests can run with `ARTEMIS_STORAGE_TEST=1` and
-`ARTEMIS_DATABASE_URL` set to an initialized disposable Timescale database:
-`npm run test:driveday`. They exercise actual Prisma calls and the generated
-bucket functions, including mixed-rate alignment and peak aggregation.
-Without that opt-in, database tests skip while the browser-analysis tests run.
+The isolated [gateway integration runner](../../../stack/tests/README.md)
+exercises real Kafka, Timescale, mixed-rate queries and Grafana. `npm run
+test:driveday` runs the viewer's browser-analysis tests independently of that
+Docker stack.
 
 For existing shared metadata databases, `npm run prisma-cars-register` registers
 Orion ID 5 and Artemis ID 6 through Prisma without deleting old drive days or

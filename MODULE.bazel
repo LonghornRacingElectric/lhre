@@ -133,6 +133,13 @@ go_deps.from_file(go_mod = "//apps/telemetry/stack/kafka:go.mod")
 use_repo(
     go_deps,
     "com_github_ibm_sarama",
+    "com_github_masterminds_squirrel",
+    "com_github_apache_arrow_go_v18",
+    "com_github_dgraph_io_ristretto_v2",
+    "com_github_jackc_pgx_v5",
+    "com_github_grafana_grafana_plugin_sdk_go",
+    "org_golang_x_sync",
+    "org_golang_x_sys",
     "org_golang_google_grpc",
     "org_golang_google_protobuf",
 )

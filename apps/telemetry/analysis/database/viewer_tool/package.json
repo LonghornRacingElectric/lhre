@@ -7,7 +7,7 @@
     "build": "next build --turbopack",
     "start": "node tools/run-viewer.mjs start",
     "lint": "next lint",
-    "test:query": "vitest run --config vitest.config.mjs tests/query",
+    "test:query": "bazel test --config=local //apps/telemetry/stack/kafka:query_gateway_test --test_output=errors",
     "test:signals": "vitest run --config vitest.config.mjs tests/signals",
     "test:driveday": "vitest run --config vitest.config.mjs",
     "postinstall": "npm run prisma-auth-generate && npm run prisma-telemetry-generate && npm run prisma-orion-generate && npm run prisma-artemis-generate && npm run prisma-auth-setup",

@@ -90,7 +90,7 @@ const STATE_COLOR: Record<string, string> = {
 };
 
 export default function CarStatusApp() {
-  const [car, setCar] = useState<"orion" | "artemis">("orion");
+  const [car, setCar] = useState<"orion" | "artemis">("artemis");
   const [connected, setConnected] = useState(false);
   const [statusMsg, setStatusMsg] = useState("Connecting…");
   const [latest, setLatest] = useState<CarStatusEvent | null>(null);

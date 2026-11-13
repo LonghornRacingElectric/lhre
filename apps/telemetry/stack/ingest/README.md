@@ -9,6 +9,12 @@ worker forwards them in order and retries failed or uncertain sends until Kafka
 acknowledges the record. The queue holds 30,000 batches; a full queue logs and
 drops new input. MQTT subscriptions are restored after reconnecting.
 
+The shared pool writer assigns ordinary contiguous batches to a recording in
+one lookup and flush. Discontinuous batches and late data spanning multiple
+recordings retain the historical merge path.
+Pool upserts use SQLAlchemy's bulk execution within the existing transaction;
+replays remain idempotent and conflicting values roll back the batch.
+
 Ingest does not allocate packet IDs, write CSVs, open database sessions or apply
 DDL. GPS travels in the native Artemis updates. There is no separate GPS JSON
 input or packet-ID welcome exchange.
@@ -37,3 +43,18 @@ Database/Grafana provisioning is described in the [stack guide](../README.md).
 The Bazel image packages its generated Artemis schema, CAN and storage metadata
 and is labeled as a schema consumer for deployment agreement checks. See the
 [stack deployment guide](../README.md).
+## Query access
+
+Compose runs the [Artemis gateway](../kafka/gateway/README.md) alongside the
+existing writer. Set `QUERY_API_TOKEN` in the root environment and the viewer's
+server environment. Artemis Grafana uses UID `artemis` with the gateway
+datasource and generated signal builder; convert any old SQL panel targets.
+The query port is published only on loopback. Existing Postgres access remains
+available for metadata and legacy clients; restrict it after those clients have
+completed their cutover. The `analysis` role
+receives read grants on fresh database initialization. Existing installations
+must apply the generated schema and provision equivalent grants before rollout.
+
+The query ring and its baseline start with conservative 64 MiB bootstrap
+budgets. Sealed L1/L2 caches default off; configure measured budgets through
+`QUERY_L1_BYTES` and `QUERY_L2_BYTES`. The cache volume is disposable.

@@ -215,6 +215,54 @@ test_suite(
 )
 
 py_test(
+    name = "query_gateway_integration_test",
+    srcs = ["test_query_gateway.py"],
+    main = "test_query_gateway.py",
+    imports = ["../..", "../../.."],
+    deps = [
+        "//apps/telemetry/analysis:analysis_lib",
+        "//apps/telemetry/stack/ingest:sensor_decode",
+        requirement("kafka-python"),
+        requirement("psycopg2-binary"),
+        requirement("SQLAlchemy"),
+    ],
+    tags = ["manual", "integration", "docker", "local"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_binary(
+    name = "query_gateway_benchmark",
+    srcs = ["benchmark_query_gateway.py"],
+    main = "benchmark_query_gateway.py",
+    imports = ["../..", "../../.."],
+    deps = [
+        "//apps/telemetry/analysis:analysis_lib",
+        "//apps/telemetry/stack/ingest:sensor_decode",
+        requirement("kafka-python"),
+        requirement("psycopg2-binary"),
+        requirement("SQLAlchemy"),
+    ],
+    tags = ["manual"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_binary(
+    name = "query_gateway_comparison",
+    srcs = ["compare_query_gateway.py", "benchmark_query_gateway.py"],
+    main = "compare_query_gateway.py",
+    imports = ["../..", "../../.."],
+    deps = [
+        "//apps/telemetry/analysis:analysis_lib",
+        "//apps/telemetry/stack/ingest:sensor_decode",
+        requirement("kafka-python"),
+        requirement("psycopg2-binary"),
+        requirement("SQLAlchemy"),
+    ],
+    tags = ["manual"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_test(
     name = "native_bevo_flow_test",
     srcs = ["test_native_bevo_flow.py"],
     main = "test_native_bevo_flow.py",

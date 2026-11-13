@@ -169,3 +169,16 @@ Artemis descriptor, semantic contract, CAN JSON and storage contract under
 `/schema/`. It adds the `lhre.schema-consumer=artemis` image label so the
 deployed authority checks enabled consumers against the same release. The
 [release catalog](schema_registry/README.md) documents discovery and preparation.
+## Query gateway packaging
+
+`//apps/telemetry/stack/kafka:query_gateway_image` belongs to `:core_images` and
+its loader/smoke test belong to the core aggregates. The Go module contains the
+bridge, gateway and Grafana adapter; Bazel generates protobuf bindings and
+resolves the pinned Go module graph. `telemetry_upstream_image(tars = [...])`
+can add a plugin layer to a pinned upstream image. Grafana uses that option for
+the Artemis datasource. Its files live outside the persistent Grafana data
+volume, so an existing volume cannot hide a plugin update.
+
+The gateway's separate catalog layer packages `/catalog/signals.json` from the
+same Bazel build as its descriptor and pool contract. The shared schema tar
+retains its existing four-file authority contract.

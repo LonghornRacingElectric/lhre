@@ -60,3 +60,10 @@ The raw Kafka record always remains the original fresh batch.
 The Bazel image packages its generated Artemis schema, CAN and storage metadata
 and is labeled as a schema consumer for deployment agreement checks. See the
 [stack deployment guide](../README.md).
+## Artemis query service
+
+The module also builds the [query gateway](gateway/README.md) and
+[Grafana adapter](grafana/README.md). `:query_gateway_binary` and
+`:query_gateway_load` are the local executable and Docker loader;
+`:query_gateway_test` exercises source routing and cache recovery. The
+Grafana adapter is embedded by `//apps/telemetry:grafana_load`.

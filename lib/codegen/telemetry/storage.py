@@ -39,7 +39,7 @@ def contract(spec):
             "sql_type": SQL_TYPES.get(scalar, "integer") + ("[]" if repeated else ""),
             "aggregate": "avg" if scalar in ("float", "double") and not repeated else "last",
         })
-    value = {"format_version": 2, "sample_precision": "ns", "car": "Artemis", "read_bucket_ms": 100, "bucket_aggregates": ["avg", "min", "max", "last"], "pools": list(pools.values())}
+    value = {"format_version": 3, "sample_precision": "ns", "car": "Artemis", "read_bucket_ms": 100, "bucket_aggregates": ["avg", "min", "max", "last"], "pools": list(pools.values())}
     value["storage_id"] = hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     return value
 
@@ -59,7 +59,19 @@ CREATE TABLE IF NOT EXISTS public.recording_session (
     session_start_ms bigint PRIMARY KEY,
     start_time bigint NOT NULL,
     end_time bigint NOT NULL,
+    data_revision bigint NOT NULL DEFAULT 0,
+    external_revision bigint NOT NULL DEFAULT 0,
+    last_write_ms bigint NOT NULL DEFAULT 0,
     CHECK (start_time > 0 AND end_time >= start_time)
+);
+ALTER TABLE public.recording_session ADD COLUMN IF NOT EXISTS data_revision bigint NOT NULL DEFAULT 0;
+ALTER TABLE public.recording_session ADD COLUMN IF NOT EXISTS external_revision bigint NOT NULL DEFAULT 0;
+ALTER TABLE public.recording_session ADD COLUMN IF NOT EXISTS last_write_ms bigint NOT NULL DEFAULT 0;
+CREATE TABLE IF NOT EXISTS public.ingest_progress (
+    topic text NOT NULL,
+    partition integer NOT NULL,
+    next_offset bigint NOT NULL,
+    PRIMARY KEY (topic, partition)
 );
 CREATE OR REPLACE VIEW public.partitions AS
 SELECT to_char(to_timestamp(start_time / 1000.0) AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS.MS') AS partition_name,

@@ -18,3 +18,6 @@ retain their native types.
 
 Artemis raw rows are partial fresh observations. Bucket read models remain keyed
 by session/millisecond bucket; do not use those views to infer raw sampling.
+Recording-session revisions and `ArtemisIngestProgress` mirror the generated
+query metadata. The existing writer advances them inside its telemetry
+transaction; imports without Kafka offsets also invalidate live baselines.

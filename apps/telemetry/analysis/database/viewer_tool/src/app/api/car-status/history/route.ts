@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getSettings } from "@/lib/motec/config";
 import { ReadOnlyDatabase } from "@/lib/motec/db";
+import { gatewayJSON } from "@/lib/query/client";
 
 // Returns car-status segments for a car over a time range, plus derived
 // "moving windows" and totals. Self-contained: queried by car + time only
@@ -25,7 +26,7 @@ const toNum = (v: string | number | bigint | null): number | null =>
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
-  const carParam = (url.searchParams.get("car") || "orion").trim().toLowerCase();
+  const carParam = (url.searchParams.get("car") || "artemis").trim().toLowerCase();
   const car = carParam === "artemis" ? "artemis" : "orion";
 
   const now = Date.now();
@@ -36,7 +37,7 @@ export async function GET(req: NextRequest) {
   let rows: SegmentRow[];
   try {
     const db = new ReadOnlyDatabase(getSettings(car));
-    rows = await db.query<SegmentRow>(
+    rows = car === "artemis" ? (await gatewayJSON<{data: SegmentRow[]}>(`/v1/car-status?from=${Math.floor(fromMs)}&to=${Math.floor(toMs)}&limit=${limit}`)).data : await db.query<SegmentRow>(
       `select segment_id, car, state, start_time, end_time, hv_soc_avg, lv_v_avg, active_faults
        from car_status_segment
        where car = $1

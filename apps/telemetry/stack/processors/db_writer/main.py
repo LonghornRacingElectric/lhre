@@ -19,18 +19,21 @@ from stack.ingest.sensor_decode import CAR_MESSAGES, car_from_headers, decode_se
 def write_batch(records, models, specs):
     packets = defaultdict(dict)
     artemis = []
+    progress = {}
     for record in records:
         car = car_from_headers(record.headers)
         payload_format(record.headers, car)
         if car == "Artemis":
             artemis.extend(decode_updates(record.value))
+            key = (record.topic, record.partition)
+            progress[key] = max(progress.get(key, 0), record.offset + 1)
             continue
         message = decode_sensor(record.value, car)
         rows = sensor_rows(message, models[car])
         packets[car].setdefault(rows["packet"]["packet_id"], rows)
     if artemis:
         with get_db("Artemis") as session, session.begin():
-            write_updates(session, artemis)
+            write_updates(session, artemis, progress)
     for car, rows_by_id in packets.items():
         with get_db(car) as session, session.begin():
             packet = models[car]["packet"].__table__
