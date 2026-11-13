@@ -10,3 +10,5 @@ SQL reader or cursor implementation. See the
 bucket adapter across request boundaries, including partial buckets and peaks.
 It also verifies native SSE freshness updates and gap propagation without
 duplicating unchanged samples from replacement windows.
+Replay verification preserves a raw peak and sparse fields while excluding
+other nanosecond samples and recording sessions within the same millisecond.

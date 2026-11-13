@@ -209,6 +209,14 @@ class QueryGatewayTest(unittest.TestCase):
             self.wait_for(lambda: persisted(valid))
             recovered = self.wait_for(lambda: call("/v1/query", query), lambda p: len(p["data"]) == 4)
             self.assertEqual(next(r["value"] for r in recovered["data"] if r["ts"] == iso(stamp + 30).replace("+00:00", "Z")), 60)
+            send(stamp + 40, "controls", "apps1_travel", float("nan"))
+            special = send(stamp + 50, "pack", "cells_v", [float("inf"), float("-inf"), float("nan")])
+            self.wait_for(lambda: persisted(special))
+            nonfinite = {**query, "signals": ["controls.apps1_travel", "controls.enable", "pack.cells_v"], "t0": iso(stamp + 40), "t1": iso(stamp + 51)}
+            for _ in range(2):
+                values = call("/v1/query", nonfinite)["data"]
+                self.assertEqual(next(row["value"] for row in values if row["signal"] == "controls.apps1_travel"), "NaN")
+                self.assertEqual(next(row["value"] for row in values if row["signal"] == "pack.cells_v"), ["Infinity", "-Infinity", "NaN"])
         finally:
             producer.close()
             engine.dispose()

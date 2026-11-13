@@ -2,7 +2,6 @@ package gateway
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -15,6 +14,39 @@ import (
 )
 
 const slabMS int64 = 60000
+
+func valueCost(value any) int64 {
+	switch value := value.(type) {
+	case string:
+		return 16 + int64(len(value))
+	case []byte:
+		return 24 + int64(cap(value))
+	case []any:
+		cost := int64(24 + cap(value)*16)
+		for _, item := range value {
+			cost += valueCost(item)
+		}
+		return cost
+	default:
+		return 16
+	}
+}
+
+func rowCost(row Row) int64 {
+	cost := int64(128 + len(row.Values)*64)
+	for name, value := range row.Values {
+		cost += int64(len(name)) + valueCost(value)
+	}
+	return cost
+}
+
+func rowsCost(rows []Row) int64 {
+	cost := int64(64 + cap(rows)*32)
+	for _, row := range rows {
+		cost += rowCost(row)
+	}
+	return cost
+}
 
 type cachedSlab struct {
 	Rows      []Row
@@ -92,11 +124,7 @@ func (c *Cache) admit(key string, value *cachedSlab, start int64) {
 		return
 	}
 	if value.Cost == 0 {
-		encoded, err := json.Marshal(value.Rows)
-		if err != nil {
-			return
-		}
-		value.Cost = int64(len(encoded)*2 + len(value.Rows)*128)
+		value.Cost = rowsCost(value.Rows)
 	}
 	cost := value.Cost + int64(len(key)+128)
 	if c.pinDays[time.UnixMilli(start).UTC().Format("2006-01-02")] && cost+c.pinBytes <= c.pinCap {
@@ -187,11 +215,7 @@ func (c *Cache) Rows(ctx context.Context, snap Snapshot, view *ringView, p Pool,
 		return nil, "", problem(503, "tail_unavailable", "Kafka coverage is incomplete; retry after the shared consumer catches up")
 	}
 	if end > time.Now().Add(-c.Ring.window).UnixMilli() {
-		data, err := json.Marshal(rows)
-		if err != nil {
-			return nil, "", err
-		}
-		c.baseline.Set(key, &cachedSlab{Rows: rows, Offsets: snap.Offsets(), Signature: signature}, int64(len(data)*2+len(rows)*128+len(key)+512))
+		c.baseline.Set(key, &cachedSlab{Rows: rows, Offsets: snap.Offsets(), Signature: signature}, rowsCost(rows)+int64(len(key))+512)
 		c.baseline.Wait()
 	}
 	for _, session := range snap.Sessions() {

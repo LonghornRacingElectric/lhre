@@ -89,6 +89,8 @@ new live events are served without replay. An undecodable native record reports
 a coverage gap; later records remain consumed, and the real writer recovers
 after explicit fixture quarantine. Historical sealing proceeds despite that
 unprocessed Kafka tail.
+Native NaN/infinity scalar and array samples are persisted through the writer
+and remain queryable on both cold and cached reads.
 Historical paging checks same-sample fields and continuation into later samples.
 It also verifies that a recording change rejects an older continuation with
 `409 query_changed`. SSE returns a complete replacement window even with a

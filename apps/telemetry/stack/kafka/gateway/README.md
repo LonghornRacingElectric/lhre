@@ -175,6 +175,8 @@ when their sample timestamps are historical.
 its changing final bucket; clients must not append repeated snapshots as fresh
 observations. Updates are coalesced at 250 ms. A truncated window is reported as
 a gap, not silently presented as complete.
+Gap events use the same public error codes and messages as query failures;
+unexpected source errors are logged server-side and return `source_unavailable`.
 Each replacement window uses one query execution and its shared boundaries,
 independently of public `page_size`. It contains at most 200,000 observations
 and fits within a 32 MiB SSE event; oversized windows report a gap. Live windows
@@ -222,13 +224,20 @@ again. Revisions are checked
 again before publication and on reads. Late writes invalidate the old revision;
 readers can finish on an old mapping. Missing/corrupt files fall back to Postgres
 and queue a reseal. Deleting the entire cache loses no authoritative data.
-Disk eviction uses decayed access frequency per byte. Evicted files are rebuilt
-when requested, not in a continuous eager rebuild loop.
+Disk eviction uses decayed access frequency per byte. Requests queue missing
+files for resealing. If eviction rejects part of a newly sealed session, that
+revision is retried only when its measured export fits the available space or
+its data revision changes. Repeated misses otherwise fall back to Postgres/L1
+without rereading the entire session on every worker tick. New files remain
+subject to the disk cap.
 
 Set `QUERY_CACHE_DIR` on local SSD and cap it with `QUERY_L2_BYTES`. IPC is
 uncompressed and memory-mapped. The OS page cache still consumes RAM; decoded
 query results, Go overhead and Postgres need headroom too. Ring byte accounting
 includes an allowance for decoded Go values and must be checked against RSS.
+Sizing counts fields, strings and array elements without serializing telemetry.
+NaN and infinities remain valid samples, represented as `NaN`, `Infinity` and
+`-Infinity` strings in public JSON, including within arrays.
 There is no Redis dependency.
 
 Compose's 64 MiB ring and baseline budgets are bootstrap settings, not measured

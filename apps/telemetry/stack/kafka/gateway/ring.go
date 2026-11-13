@@ -145,7 +145,10 @@ func (r *Ring) Reject(partition int32, offset int64) {
 }
 
 func (r *Ring) add(partition int32, offset int64, rows []LiveRow, rejected bool) {
-	encoded, _ := json.Marshal(rows)
+	size := int64(128)
+	for _, live := range rows {
+		size += int64(len(live.Pool)) + rowCost(live.Row)
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if offset < r.next[partition] {
@@ -161,7 +164,6 @@ func (r *Ring) add(partition int32, offset int64, rows []LiveRow, rejected bool)
 	}
 	// Copy-on-read keeps callers from sharing mutable values with the consumer.
 	now := time.Now().UnixMilli()
-	size := int64(len(encoded)*2 + 128)
 	r.records = append(r.records, liveRecord{partition, offset, now, rows, size})
 	r.bytes += size
 	r.next[partition] = offset + 1

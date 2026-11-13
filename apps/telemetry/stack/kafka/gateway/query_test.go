@@ -1,10 +1,17 @@
 package gateway
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
+	"math"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -408,5 +415,108 @@ func TestOverviewPreservesWeightedMeanPeaksAndPartialBounds(t *testing.T) {
 	page, err = e.Query(context.Background(), r)
 	if err != nil || page.Data[0].Value != 60.0 {
 		t.Fatalf("partial bucket: %+v %v", page, err)
+	}
+}
+
+func TestNonfiniteSamplesRemainQueryableAndRespectMemoryBudget(t *testing.T) {
+	engine, store, start := setup(t)
+	store.rows["controls_100hz"][0].Values["apps"] = math.NaN()
+	store.rows["controls_100hz"][0].Values["cells"] = []any{math.Inf(1), math.Inf(-1)}
+	query := request(start, "controls.apps", "controls.cells")
+	for attempt := 0; attempt < 2; attempt++ {
+		page, err := engine.Query(context.Background(), query)
+		if err != nil || len(page.Data) != 2 {
+			t.Fatalf("nonfinite query: %+v %v", page, err)
+		}
+		if page.Data[0].Value != "NaN" || page.Data[1].Value.([]any)[0] != "Infinity" || page.Data[1].Value.([]any)[1] != "-Infinity" {
+			t.Fatalf("nonfinite values: %+v", page.Data)
+		}
+		if _, err := json.Marshal(page); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if store.reads.Load() != 1 {
+		t.Fatalf("baseline was not reused: reads=%d", store.reads.Load())
+	}
+	ring := NewRing(15*time.Minute, 4096)
+	ring.Start(0, 0)
+	ring.Ready(true)
+	values := make([]any, 5000)
+	values[0] = math.NaN()
+	ring.Add(0, 0, []LiveRow{{Pool: "controls_100hz", Row: Row{Time: start, NS: start * 1000000, Values: map[string]any{"cells": values}}}})
+	if ring.View().Covers(Offsets{0: 0}) {
+		t.Fatal("oversized nonfinite array escaped the ring budget")
+	}
+}
+
+func TestRejectedSealWaitsForCapacityOrNewRevision(t *testing.T) {
+	engine, store, _ := setup(t)
+	files := engine.Cache.Files
+	files.Cap = 1
+	files.sealIdle(context.Background(), store)
+	reads := store.reads.Load()
+	if reads == 0 {
+		t.Fatal("initial seal did not read the source")
+	}
+	for attempt := 0; attempt < 2; attempt++ {
+		files.Queue(store.sessions[0].ID)
+		files.sealIdle(context.Background(), store)
+		if store.reads.Load() != reads {
+			t.Fatal("unchanged rejected session was rebuilt")
+		}
+	}
+	paths, err := filepath.Glob(filepath.Join(files.Dir, "*.arrow"))
+	if err != nil || len(paths) != 0 {
+		t.Fatalf("disk cap exceeded: files=%v error=%v", paths, err)
+	}
+	store.sessions[0].Revision++
+	files.Queue(store.sessions[0].ID)
+	files.sealIdle(context.Background(), store)
+	if store.reads.Load() == reads {
+		t.Fatal("new revision was not reconsidered")
+	}
+	files.Cap = 64 << 20
+	files.Queue(store.sessions[0].ID)
+	files.sealIdle(context.Background(), store)
+	if !files.Available(engine.Schema.Pools[0], store.sessions[0]) {
+		t.Fatal("session was not sealed after capacity became available")
+	}
+}
+
+type unavailableStore struct{ Store }
+
+func (unavailableStore) Snapshot(context.Context, int64, int64) (Snapshot, error) {
+	return nil, fmt.Errorf("connection to private-db.internal failed: secret SQL details")
+}
+
+func TestStreamMasksSourceErrors(t *testing.T) {
+	engine, store, start := setup(t)
+	engine.Store = unavailableStore{store}
+	server := httptest.NewServer(engine.Handler("test-token"))
+	defer server.Close()
+	query, _ := json.Marshal(request(start, "controls.apps"))
+	request, err := http.NewRequest("GET", server.URL+"/v1/stream?query="+url.QueryEscape(string(query)), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Authorization", "Bearer test-token")
+	client := &http.Client{Timeout: 5 * time.Second}
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	line, err := bufio.NewReader(response.Body).ReadString('\n')
+	if err != nil {
+		t.Fatal(err)
+	}
+	var event struct {
+		Type, Code, Message string
+	}
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &event); err != nil {
+		t.Fatal(err)
+	}
+	if event.Type != "gap" || event.Code != "source_unavailable" || event.Message != "Telemetry source is unavailable" {
+		t.Fatalf("source error escaped masking: %s", line)
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -44,10 +45,16 @@ type Files struct {
 	frequency map[string]float64
 	verified  map[string]string
 	seen      map[int64]int64
+	rejected  map[int64]sealRejection
+}
+
+type sealRejection struct {
+	revision int64
+	bytes    int64
 }
 
 func NewFiles(dir string, capacity int64, schema *Schema) *Files {
-	return &Files{Dir: dir, Cap: capacity, Schema: schema, queue: map[int64]bool{}, frequency: map[string]float64{}, verified: map[string]string{}, seen: map[int64]int64{}}
+	return &Files{Dir: dir, Cap: capacity, Schema: schema, queue: map[int64]bool{}, frequency: map[string]float64{}, verified: map[string]string{}, seen: map[int64]int64{}, rejected: map[int64]sealRejection{}}
 }
 func (f *Files) Queue(id int64) {
 	f.mu.Lock()
@@ -319,10 +326,10 @@ func (f *Files) Seal(ctx context.Context, store Store, s Session) error {
 			}
 		}
 	}
-	return f.evict()
+	return f.evict(s)
 }
 
-func (f *Files) evict() error {
+func (f *Files) evict(session Session) error {
 	entries, err := filepath.Glob(filepath.Join(f.Dir, "*.arrow"))
 	if err != nil {
 		return err
@@ -331,9 +338,12 @@ func (f *Files) evict() error {
 		name  string
 		bytes int64
 		score float64
+		owned bool
 	}
 	items := []candidate{}
-	var total int64
+	var total, sessionBytes int64
+	prefix := f.name(Pool{}, session)
+	rejected := false
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, path := range entries {
@@ -344,8 +354,12 @@ func (f *Files) evict() error {
 		name := path[:len(path)-6]
 		size := stat.Size()
 		total += size
+		owned := strings.HasPrefix(path, prefix)
+		if owned {
+			sessionBytes += size
+		}
 		score := f.frequency[name] / float64(max(size, 1))
-		items = append(items, candidate{name, size, score})
+		items = append(items, candidate{name, size, score, owned})
 		f.frequency[name] *= .5
 	}
 	sort.Slice(items, func(i, j int) bool {
@@ -367,8 +381,76 @@ func (f *Files) evict() error {
 		delete(f.verified, item.name)
 		delete(f.frequency, item.name)
 		total -= item.bytes
+		rejected = rejected || item.owned
+	}
+	if rejected {
+		f.rejected[session.ID] = sealRejection{session.Revision, sessionBytes}
+	} else {
+		delete(f.rejected, session.ID)
 	}
 	return nil
+}
+
+func (f *Files) sealIdle(ctx context.Context, store Store) {
+	if f.Dir == "" || f.Cap <= 0 {
+		return
+	}
+	snap, err := store.Snapshot(ctx, 0, time.Now().UnixMilli()+1)
+	if err != nil {
+		return
+	}
+	sessions := snap.Sessions()
+	snap.Close(ctx)
+	for _, session := range sessions {
+		if time.Now().UnixMilli()-session.Written < 300000 {
+			continue
+		}
+		f.mu.Lock()
+		queued := f.queue[session.ID]
+		revision, seen := f.seen[session.ID]
+		rejection, rejected := f.rejected[session.ID]
+		f.mu.Unlock()
+		if !queued && seen && revision == session.Revision {
+			continue
+		}
+		var used, resident int64
+		prefix := f.name(Pool{}, session)
+		paths, _ := filepath.Glob(filepath.Join(f.Dir, "*.arrow"))
+		for _, path := range paths {
+			if stat, err := os.Stat(path); err == nil {
+				used += stat.Size()
+				if strings.HasPrefix(path, prefix) {
+					resident += stat.Size()
+				}
+			}
+		}
+		if rejected && rejection.revision == session.Revision && rejection.bytes > f.Cap-used+resident {
+			f.mu.Lock()
+			delete(f.queue, session.ID)
+			f.mu.Unlock()
+			continue
+		}
+		if !queued && used >= f.Cap {
+			f.mu.Lock()
+			f.seen[session.ID] = session.Revision
+			f.mu.Unlock()
+			continue
+		}
+		if err := f.Seal(ctx, store, session); err != nil {
+			log.Printf("query seal session %d: %v", session.ID, err)
+			if ctx.Err() != nil {
+				return
+			}
+			continue
+		}
+		f.mu.Lock()
+		delete(f.queue, session.ID)
+		f.seen[session.ID] = session.Revision
+		f.mu.Unlock()
+		if ctx.Err() != nil {
+			return
+		}
+	}
 }
 
 // The single worker also discovers old sessions after all derived files vanish.
@@ -376,56 +458,7 @@ func (f *Files) Run(ctx context.Context, store Store) {
 	tick := time.NewTicker(30 * time.Second)
 	defer tick.Stop()
 	for {
-		if f.Dir != "" && f.Cap > 0 {
-			func() {
-				snap, err := store.Snapshot(ctx, 0, time.Now().UnixMilli()+1)
-				if err != nil {
-					return
-				}
-				sessions := snap.Sessions()
-				snap.Close(ctx)
-				for _, s := range sessions {
-					if time.Now().UnixMilli()-s.Written < 300000 {
-						continue
-					}
-					f.mu.Lock()
-					queued := f.queue[s.ID]
-					revision, seen := f.seen[s.ID]
-					f.mu.Unlock()
-					if !queued && seen && revision == s.Revision {
-						continue
-					}
-					// Eviction must not immediately cause an eager rebuild loop.
-					var used int64
-					paths, _ := filepath.Glob(filepath.Join(f.Dir, "*.arrow"))
-					for _, path := range paths {
-						if stat, err := os.Stat(path); err == nil {
-							used += stat.Size()
-						}
-					}
-					if !queued && used >= f.Cap {
-						f.mu.Lock()
-						f.seen[s.ID] = s.Revision
-						f.mu.Unlock()
-						continue
-					}
-					if err := f.Seal(ctx, store, s); err != nil {
-						log.Printf("query seal session %d: %v", s.ID, err)
-						if ctx.Err() != nil {
-							return
-						}
-						continue
-					}
-					f.mu.Lock()
-					delete(f.queue, s.ID)
-					f.seen[s.ID] = s.Revision
-					f.mu.Unlock()
-					if ctx.Err() != nil {
-						return
-					}
-				}
-			}()
-		}
+		f.sealIdle(ctx, store)
 		select {
 		case <-ctx.Done():
 			return

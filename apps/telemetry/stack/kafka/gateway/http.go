@@ -61,12 +61,16 @@ func writeJSON(w http.ResponseWriter, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(value)
 }
-func writeError(w http.ResponseWriter, err error) {
+func publicError(err error) *queryProblem {
 	var p *queryProblem
 	if !errors.As(err, &p) {
 		log.Printf("query: %v", err)
 		p = &queryProblem{503, "source_unavailable", "Telemetry source is unavailable"}
 	}
+	return p
+}
+func writeError(w http.ResponseWriter, err error) {
+	p := publicError(err)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(p.Status)
 	_ = json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"code": p.Code, "message": p.Message}})
@@ -158,7 +162,8 @@ func (e *Engine) streamHTTP(w http.ResponseWriter, r *http.Request) {
 			cancel()
 			var event any
 			if err != nil {
-				event = map[string]any{"type": "gap", "message": err.Error()}
+				failure := publicError(err)
+				event = map[string]any{"type": "gap", "code": failure.Code, "message": failure.Message}
 			} else {
 				event = map[string]any{"type": "data", "page": page}
 			}

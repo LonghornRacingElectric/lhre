@@ -216,6 +216,9 @@ settings. `ARTEMIS_STORAGE_CONTRACT_PATH` explicitly overrides the generated
 contract path when deploying artifacts outside the checkout.
 
 Artemis replay uses drive-day start/end times and session/time sample keys.
+Replay returns fields from the selected raw nanosecond sample and recording;
+it preserves peaks and leaves missing subsystem fields absent rather than
+averaging the following 100 ms. See the [replay reader](src/lib/prisma/README.md).
 Trackside Retro database exports and MoTeC series use the generated Timescale
 bucket functions, aligning each pool before combining subsystems. The bucket
 widens to the slowest participating periodic pool; cell arrays require at least

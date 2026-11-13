@@ -1,8 +1,8 @@
 import prismaOrion from "@/lib/prisma/orion";
 import prismaTelemetry from "@/lib/prisma/telemetry";
 import { Prisma } from "../../../.prisma/orion-client";
-import { readBuckets, storageContract } from "../motec/artemisStorage";
-import { gatewaySessions, gatewayJSON, type GatewayRow } from "../query/client";
+import { storageContract } from "../motec/artemisStorage";
+import { gatewaySessions, gatewayJSON, gatewayRows, type GatewayRow } from "../query/client";
 
 export type SupportedCar = "orion" | "artemis";
 export type PacketScalar = bigint | number;
@@ -50,9 +50,16 @@ export async function findReplaySampleAtOrAfter(
   const first = await nextArtemisObservation(lower, BigInt(endMs));
   if (!first) return null;
   const stamp = Date.parse(first.ts);
-  const rows = await readBuckets(["dynamics", "controls"], stamp, Math.min(Number(endMs) + 1, stamp + 100), 100);
-  const row = rows[0];
-  return row ? { time: BigInt(stamp), session_start_ms: row.session_start_ms, dynamics: row.dynamics as Record<string, unknown> ?? null, controls: row.controls as Record<string, unknown> ?? null } : null;
+  const pools = storageContract().pools.filter(pool => ["dynamics", "controls"].includes(pool.group)).map(pool => pool.table);
+  const observations = await gatewayRows({ signals: ["*"], pools, agg: "raw", t0: new Date(stamp).toISOString(), t1: new Date(stamp + 1).toISOString() });
+  const sample = observations.filter(row => row.sample_time_ns === first.sample_time_ns && row.session_start_ms === first.session_start_ms);
+  if (!sample.length) return null;
+  const groups: Record<string, Record<string, unknown>> = {};
+  for (const row of sample) {
+    const [group, field] = row.signal.split(".");
+    (groups[group] ||= {})[field] = row.value;
+  }
+  return { time: BigInt(stamp), session_start_ms: BigInt(first.session_start_ms), dynamics: groups.dynamics ?? null, controls: groups.controls ?? null };
 }
 
 export async function findNextSampleTime(car: SupportedCar | null | undefined, time: PacketScalar, endMs: PacketScalar) {
