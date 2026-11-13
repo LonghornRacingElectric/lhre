@@ -8,8 +8,13 @@ Build and dev tooling. Each package documents itself:
 | [openocd/](openocd/README.md) | Hermetic OpenOCD + the `bazel run …:openocd` flash flow (ST-Link). |
 | [dfu/](dfu/README.md) | Hermetic dfu-util + the `bazel run …:dfu` flash flow (USB only, no probe). |
 | [format/](format/README.md) | clang-format for the whole repo: `bazel run //tools/format` (or `:check`). |
+| [lint/](lint/README.md) | Linters outside Bazel (ruff, shellcheck, actionlint): `uv run --group lint ruff check`. |
 | [monitor/](monitor/README.md) | Serial console for the longhorn debug shell: `bazel run //tools/monitor` connects, checks the flashed sha against the checkout, and goes interactive. |
 | [ide/](ide/README.md) | `compile_commands.json` regeneration for clangd/IDEs: `bazel run //:refresh_ide` (or the fast `//:refresh_compile_commands`). |
+| [hermetic/](hermetic/README.md) | Tests run without network; `:network_off_test` is the canary that proves it. |
+| [coverage/](coverage/README.md) | Firmware line coverage from the host tests on the lines a PR changes, reported on every PR (no enforced percent). |
+| [ubsan/](ubsan/README.md) | `--config=ubsan`: host tests with undefined behavior trapping, plus the canary that proves it's on. |
+| [asan/](asan/README.md) | `--config=asan`: host tests under AddressSanitizer, with its canary. |
 
 `new_board.py` (`bazel run //tools:new_board -- boards/<Name>/<Name>.ioc`)
 scaffolds a whole working board from its CubeMX `.ioc`, so new boards

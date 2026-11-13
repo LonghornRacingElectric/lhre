@@ -1,0 +1,268 @@
+# proto-file: lib/spec/proto/can_spec.proto
+# proto-message: lhre.canspec.SpecFile
+
+message {
+  name: "SWITCH_OUTPUTS"
+  can_id: 324
+  from_board: "PDU"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 2
+  frequency_hz: 10.0
+  description: "Switch Outputs"
+  signal {
+    name: "switch_output"
+    encoding {
+      bit_length: 8
+    }
+    logical {
+      bitfield {
+        bitfield_type: "SwitchOutput"
+      }
+    }
+    description: "Switch Output"
+  }
+}
+message {
+  name: "BATTERY_COOLING"
+  can_id: 385
+  from_board: "PDU"
+  to_boards: "Pi"
+  bus: "Critical"
+  dlc: 6
+  frequency_hz: 10.0
+  description: "Battery Cooling"
+  signal {
+    name: "temp_after_battery"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    telemetry {
+      group: "Thermal"
+      field: "batt_loop_batt_temp"
+      id: 5
+    }
+    description: "Temp After Battery"
+  }
+  signal {
+    name: "temp_after_radiator"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    telemetry {
+      group: "Thermal"
+      field: "batt_loop_rad_temp"
+      id: 7
+    }
+    description: "Temp After Radiator"
+  }
+  signal {
+    name: "radiator_fan_speed"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      scale: 0.2
+    }
+    logical {
+      physical {
+        unit: "rpm"
+      }
+    }
+    telemetry {
+      group: "Thermal"
+      field: "batt_loop_rad_fan_speed"
+      id: 6
+    }
+    description: "Radiator Fan Speed"
+  }
+}
+message {
+  name: "TEMPS"
+  can_id: 386
+  from_board: "PDU"
+  to_boards: "Pi"
+  bus: "Critical"
+  dlc: 8
+  frequency_hz: 10.0
+  description: "Temps"
+  signal {
+    name: "inverter"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    telemetry {
+      group: "Thermal"
+      field: "inverter_temp"
+      id: 20
+    }
+    description: "Inverter"
+  }
+  signal {
+    name: "motor"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    description: "Motor"
+  }
+  signal {
+    name: "ambient"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    description: "Ambient"
+  }
+  signal {
+    name: "discharge_resistor_temp"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    telemetry {
+      group: "Thermal"
+      field: "discharge_r_temp"
+      id: 16
+    }
+    description: "Discharge Resistor Temp"
+  }
+}
+message {
+  name: "LV_BATTERY"
+  can_id: 387
+  from_board: "PDU"
+  to_boards: "Pi"
+  bus: "Critical"
+  dlc: 6
+  frequency_hz: 10.0
+  description: "LV Battery"
+  signal {
+    name: "lv_battery_voltage"
+    encoding {
+      bit_length: 16
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    telemetry {
+      group: "Pack"
+      field: "lv_batt_v"
+      id: 19
+    }
+    description: "LV Battery Voltage"
+  }
+  signal {
+    name: "lv_battery_current"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "A"
+      }
+    }
+    telemetry {
+      group: "Pack"
+      field: "lv_batt_c"
+      id: 17
+    }
+    description: "LV Battery Current"
+  }
+  signal {
+    name: "lv_battery_temp"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.01
+    }
+    logical {
+      physical {
+        unit: "degC"
+      }
+    }
+    telemetry {
+      group: "Pack"
+      field: "lv_batt_t"
+      id: 18
+    }
+    description: "LV Battery Temp"
+  }
+}
+message {
+  name: "BSE_3"
+  can_id: 456
+  from_board: "PDU"
+  to_boards: "VCU"
+  bus: "Critical"
+  dlc: 2
+  frequency_hz: 100.0
+  description: "BSE 3"
+  signal {
+    name: "brake_pressure_3"
+    encoding {
+      bit_length: 16
+      scale: 0.05
+    }
+    logical {
+      physical {
+        unit: "psi"
+      }
+    }
+    telemetry {
+      group: "Controls"
+      field: "bse3"
+      id: 30
+    }
+    description: "Brake Pressure 3"
+  }
+}

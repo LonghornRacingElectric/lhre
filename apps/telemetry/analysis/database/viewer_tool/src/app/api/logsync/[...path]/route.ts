@@ -1,12 +1,14 @@
 // Thin reverse-proxy from the viewer to the logsync worker service.
 //
-// Keeps the browser same-origin (no CORS) and gives us one place to add auth
-// later. Streams responses through untouched so SSE (`/events`) and large file
-// downloads (`/jobs/{id}/files/{name}`, `/archive`) work without buffering.
+// Keeps the browser same-origin (no CORS) and requires the same sign-in as the
+// pages (the middleware skips /api). Streams responses through untouched so SSE
+// (`/events`) and large file downloads (`/jobs/{id}/files/{name}`, `/archive`)
+// work without buffering.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest } from "next/server";
+import { getToken } from "next-auth/jwt";
 
 const LOGSYNC_URL = (process.env.LOGSYNC_URL ?? "http://localhost:8090").replace(/\/$/, "");
 
@@ -20,6 +22,14 @@ const PASS_THROUGH = [
 ];
 
 async function proxy(req: NextRequest, path: string[]) {
+  // Same session check as src/middleware.ts (NextAuth JWT cookie).
+  if (!(await getToken({ req }))) {
+    return new Response(JSON.stringify({ error: "sign in required" }), {
+      status: 401,
+      headers: { "content-type": "application/json" },
+    });
+  }
+
   const search = req.nextUrl.search; // includes leading '?'
   const target = `${LOGSYNC_URL}/${path.join("/")}${search}`;
 

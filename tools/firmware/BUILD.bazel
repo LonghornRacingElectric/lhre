@@ -25,6 +25,18 @@ cc_library(
     visibility = ["//visibility:public"],
 )
 
+# Run by each firmware image's {image}_size_test (firmware_project).
+exports_files(["size_check.py"])
+
+py_test(
+    name = "size_check_test",
+    size = "small",
+    srcs = [
+        "size_check.py",
+        "size_check_test.py",
+    ],
+)
+
 # ---- Flash launcher test ---------------------------------------------------
 # The flash rules can't run for real without a board, so the test
 # instantiates them with a probe standing in for the flash script and for the

@@ -1,0 +1,64 @@
+"""Server-side artifacts generated from //lib/spec."""
+
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load(":telemetry_artifact.bzl", "telemetry_artifact")
+
+py_library(
+    name = "gen_telemetry_lib",
+    srcs = ["gen_telemetry.py"],
+    deps = ["//lib/spec:ir"],
+)
+
+py_binary(
+    name = "gen_telemetry",
+    srcs = ["gen_telemetry.py"],
+    visibility = ["//visibility:private"],
+    deps = [":gen_telemetry_lib"],
+)
+
+telemetry_artifact(
+    name = "can_packets_proto",
+    kind = "proto",
+    out = "can_packets.proto",
+    spec = "//lib/spec:files",
+    visibility = ["//visibility:public"],
+)
+
+telemetry_artifact(
+    name = "can_json",
+    kind = "json",
+    out = "can.json",
+    spec = "//lib/spec:files",
+    visibility = ["//visibility:public"],
+)
+
+telemetry_artifact(
+    name = "orion_db_init",
+    common_sql = "//apps/telemetry/stack/ingest:common_schema.sql",
+    kind = "sql",
+    out = "orion_db_init.sql",
+    spec = "//lib/spec:files",
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "server_schema",
+    srcs = [
+        ":can_json",
+        ":can_packets_proto",
+        ":orion_db_init",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+py_test(
+    name = "gen_telemetry_test",
+    size = "small",
+    srcs = ["gen_telemetry_test.py"],
+    args = ["$(rlocationpaths //lib/spec:files)"],
+    data = ["//lib/spec:files"],
+    deps = [
+        ":gen_telemetry_lib",
+        "@lhre_pypi//bazel_runfiles",
+    ],
+)

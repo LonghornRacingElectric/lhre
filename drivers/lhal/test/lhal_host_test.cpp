@@ -4,12 +4,16 @@
 
 #include <gtest/gtest.h>
 
+#include "lhal/host/adc.hpp"
 #include "lhal/host/can.hpp"
+#include "lhal/host/dac.hpp"
 #include "lhal/host/gpio.hpp"
 #include "lhal/host/i2c.hpp"
 #include "lhal/host/pwm.hpp"
 #include "lhal/host/system.hpp"
 #include "lhal/host/uart.hpp"
+#include "lhal/host/watchdog.hpp"
+#include "lhal/reset.hpp"
 
 namespace {
 
@@ -159,6 +163,56 @@ TEST(Clock, ElapsedMsIsWrapSafe) {
   EXPECT_TRUE(lhal::ElapsedMs(150, 100, 50));
   EXPECT_FALSE(lhal::ElapsedMs(149, 100, 50));
   EXPECT_TRUE(lhal::ElapsedMs(5, 0xFFFFFFF0u, 20));
+}
+
+TEST(AdcScan, SetReadAndClamp) {
+  lhal::host::AdcScan adc(3);
+  EXPECT_EQ(adc.channel_count(), 3u);
+  EXPECT_EQ(adc.full_scale(), 4095);
+  adc.Set(1, 1234);
+  EXPECT_EQ(adc.Read(1), 1234);
+  adc.Set(2, 9999);  // clamps to full scale
+  EXPECT_EQ(adc.Read(2), 4095);
+  EXPECT_EQ(adc.Read(7), 0);  // out of range reads 0
+  adc.SetVolts(0, 1.65f, 3.3f);
+  EXPECT_NEAR(adc.Read(0), 2048, 1);
+}
+
+TEST(WaveformDac, RecordsPlaybackAndStop) {
+  lhal::host::WaveformDac dac;
+  const uint16_t samples[] = {2048, 4095, 2048, 0};
+  EXPECT_EQ(dac.Play(samples, 0, 1000), lhal::Status::kError);
+  ASSERT_TRUE(lhal::IsOk(dac.Play(samples, 4, 32000)));
+  EXPECT_TRUE(dac.playing());
+  EXPECT_EQ(dac.samples().size(), 4u);
+  EXPECT_EQ(dac.sample_rate_hz(), 32000u);
+  dac.Stop(2048);
+  EXPECT_FALSE(dac.playing());
+  EXPECT_EQ(dac.idle_code(), 2048);
+}
+
+TEST(Watchdog, CountsStartAndRefresh) {
+  lhal::host::Watchdog wdg;
+  EXPECT_EQ(wdg.Start(0), lhal::Status::kError);
+  ASSERT_TRUE(lhal::IsOk(wdg.Start(100)));
+  EXPECT_TRUE(wdg.started());
+  wdg.Refresh();
+  wdg.Refresh();
+  EXPECT_EQ(wdg.refresh_count(), 2u);
+}
+
+TEST(Can, StatsDefaultZeroAndSettable) {
+  lhal::host::Can node;
+  EXPECT_EQ(node.stats().bus_off_count, 0u);
+  lhal::CanStats stats;
+  stats.bus_off_count = 3;
+  node.set_stats(stats);
+  EXPECT_EQ(node.stats().bus_off_count, 3u);
+}
+
+TEST(ResetCause, Names) {
+  EXPECT_STREQ(lhal::ToString(lhal::ResetCause::kIndependentWatchdog), "iwdg");
+  EXPECT_STREQ(lhal::ToString(lhal::ResetCause::kUnknown), "unknown");
 }
 
 }  // namespace

@@ -2,7 +2,7 @@
 <sdf version="1.9">
   <model name="fsae_vehicle">
     <!--
-      GENERATED FILE — do not edit model.sdf by hand.
+      GENERATED FILE — do not edit by hand.
       Source: lhr_vehicle/config/vehicle.yaml rendered through
       lhr_gazebo/templates/model.sdf.in by lhr_gazebo/scripts/generate_vehicle_model.py.
 
@@ -55,14 +55,11 @@
         <topic>/imu/data</topic>
       </sensor>
 
-      <!-- LiDAR sensor (VLP-16 Puck, front-mounted)
-           Matches real Velodyne VLP-16 datasheet specs:
-           - 16 channels, +/-15 deg vertical FOV, 2.0 deg spacing
-           - 1800 horizontal samples at 10 Hz = 0.2 deg resolution
-           - 0.9 m min range, 100 m max range
-           - ~300,000 pts/sec single return -->
+      <!-- Retain main's VLP-16-style grid. The 500 x 40 Mid-360 approximation
+           regressed cone-contact gates; vendor-pattern GPU sampling belongs
+           in a separate experiment. -->
       <sensor name="lidar" type="gpu_lidar">
-        <pose>${lidar_dx} ${lidar_dy} ${lidar_dz} 0 0 0</pose>
+        <pose>${lidar_dx} ${lidar_dy} ${lidar_dz} ${lidar_roll} ${lidar_pitch} ${lidar_yaw}</pose>
         <always_on>true</always_on>
         <update_rate>10</update_rate>
         <visualize>true</visualize>
@@ -87,9 +84,16 @@
             <max>100.0</max>
             <resolution>0.003</resolution>
           </range>
+          <noise>
+            <type>gaussian</type>
+            <mean>0</mean>
+            <stddev>${lidar_range_noise_std_m}</stddev>
+          </noise>
         </lidar>
       </sensor>
     </link>
+
+${stereo_camera}
 
     <!-- ===== FRONT LEFT STEERING KNUCKLE ===== -->
     <link name="front_left_steering">
@@ -346,6 +350,19 @@
       <cmd_min>-10.0</cmd_min>
     </plugin>
 
+    <!-- ===== STEERING FEEDBACK: the joints' actual angles, standing in for
+         the car's steering encoder. joint_cmd_adapter turns them into
+         /lhr/vehicle/steering_measured for safety_node (#208). 50 Hz, not
+         every physics step. ===== -->
+    <plugin
+      filename="gz-sim-joint-state-publisher-system"
+      name="gz::sim::systems::JointStatePublisher">
+      <joint_name>front_left_steering_joint</joint_name>
+      <joint_name>front_right_steering_joint</joint_name>
+      <topic>/model/fsae_vehicle/steering_joint_state</topic>
+      <update_rate>50</update_rate>
+    </plugin>
+
     <!-- ===== DRIVE: direct velocity control ===== -->
     <plugin
       filename="gz-sim-joint-controller-system"
@@ -380,6 +397,8 @@
       filename="gz-sim-odometry-publisher-system"
       name="gz::sim::systems::OdometryPublisher">
       <odom_topic>/model/fsae_vehicle/odometry</odom_topic>
+      <!-- Harmonic defaults to /pose; the bridge explicitly consumes /tf. -->
+      <tf_topic>/model/fsae_vehicle/tf</tf_topic>
       <odom_frame>map</odom_frame>
       <robot_base_frame>base_link</robot_base_frame>
       <odom_publish_frequency>50</odom_publish_frequency>

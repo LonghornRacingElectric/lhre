@@ -18,7 +18,10 @@ Each module is its own target so boards pull in only what they use:
 - `//drivers/longhorn:shell` — `longhorn::Shell`, a line-oriented debug
   shell on top of `Console`: type `/help`, `/version` (build provenance,
   the same banner boards print at boot), `/uptime`, plus whatever the
-  board registers with `AddCommand`. Poll it from one loop or task.
+  board registers with `AddCommand`. Poll it from one loop or task. Lines
+  without the leading `/` go to an optional `SetPlainLineHandler` hook —
+  that's how a board answers [tools/dfu](../../tools/dfu/README.md)'s
+  `update.` bootloader request.
   [tools/monitor](../../tools/monitor/README.md) is the laptop-side
   counterpart, and parses `/version` to catch stale firmware.
 - `//drivers/longhorn:logger` — `longhorn::Logger`, thread-safe non-blocking
@@ -28,6 +31,27 @@ Each module is its own target so boards pull in only what they use:
   logging immediately when disconnected to avoid queue/formatting overhead.
   Header only, so the kernel comes from the consumer's build; on the MCU
   construct it statically and `StartTask()` before `vTaskStartScheduler()`.
+- `//drivers/longhorn:rainbow_task` — `longhorn::RainbowTask`, the single
+  writer for an `RgbLed`: a 33 ms rainbow task with a cross-task color
+  override.
+- `//drivers/longhorn:dfu` — `longhorn::DfuCommand`, a byte-stream matcher
+  for the tools/dfu `update.` token. No newline is needed, and partial
+  tokens survive packet boundaries.
+- `//drivers/longhorn:dfu_console` — `longhorn::DfuConsole`, which watches
+  one console for that token through the stream's RX observer or the
+  shell's byte hook, and raises a bootloader request flag.
+- `//drivers/longhorn:can_inbox` — `longhorn::CanInbox`, an ISR-to-task
+  queue for classic CAN frames. `longhorn::RxSlot<Message>` holds the
+  latest decoded message with its age.
+- `//drivers/longhorn:period` — `longhorn::PeriodMs<Message>()`, a spec
+  message's transmit period in ms.
+- `//drivers/longhorn:debounce` — `Debouncer`, `EdgeButton` (no press edge
+  until first released) and `PersistenceTimer`.
+- `//drivers/longhorn:math` — `Clamp`, `Lookup1D`, `Normalize` and `Ema`.
+- `//drivers/longhorn:rate_gate` — `longhorn::RateGate`, a drift-free
+  fixed-rate trigger inside a faster loop.
+- `//drivers/longhorn:rtos_lock` — `longhorn::SchedulerLock`, a scoped
+  mutex lock that is a no-op before the scheduler starts.
 
 ## Using a module on a board
 
@@ -49,3 +73,16 @@ In tests, construct the same driver with `lhal::host::*` fakes instead.
 Task/RTOS wiring stays in the board app (see `boards/VCU/App`): drive
 `RgbLed::Rainbow(dt)` from a periodic task or a `Step()` loop. Pure,
 LHAL-free logic (CRC, pack/unpack, ring buffers) belongs in `lib/`, not here.
+
+`Shell::SetByteHandler` observes each byte before line parsing. Returning
+true consumes the byte and clears the partial line, supporting newline-free
+recovery tokens across polls. The hook runs in the polling task.
+
+RX slots live here because arrival timestamps, freshness policy and LHAL
+frame validation are board services rather than wire packing. A slot times
+out after twice the message period; aperiodic messages can be seen but are
+never fresh by age.
+
+`period` provides `PeriodMs<Message>()`: fractional Hz are converted before
+truncation, periods are at least 1 ms, and aperiodic or unrepresentable
+periods fail at compile time instead of dividing by zero.

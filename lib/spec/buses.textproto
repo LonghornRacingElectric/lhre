@@ -6,3 +6,8 @@ bus {
   bitrate_bps: 1000000
   description: "Primary vehicle bus: VCU, inverter, HVC, dash."
 }
+bus {
+  name: "Data Acq"
+  bitrate_bps: 1000000
+  description: "Sensor acquisition bus: corner, upright, and thermal modules."
+}

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Sensor simulation: FOV-limited cone detection with accumulation."""
 
+from copy import deepcopy
 import math
 import random
 
@@ -33,6 +34,7 @@ class SensorSim(Node):
         self.declare_parameter('detection_hz', 10.0)
         self.declare_parameter('noise_std_m', 0.0)
         self.declare_parameter('false_negative_rate', 0.0)
+        self.declare_parameter('seed', 1)
 
         self._fov_rad = math.radians(
             self.get_parameter('fov_deg').get_parameter_value().double_value)
@@ -46,6 +48,14 @@ class SensorSim(Node):
             'noise_std_m').get_parameter_value().double_value
         self._fn_rate = self.get_parameter(
             'false_negative_rate').get_parameter_value().double_value
+        seed = int(self.get_parameter('seed').value)
+
+        # A node-local stream, not the process-global `random`: anything
+        # else drawing from the global one interleaves with these draws
+        # and no run repeats. Identical output also needs identical
+        # message timing, which the kinematic stack can promise and
+        # Gazebo cannot.
+        self._rng = random.Random(seed)
 
         # --- State ---
         self._all_cones: list = []          # latest ground-truth MarkerArray
@@ -81,7 +91,8 @@ class SensorSim(Node):
         self.get_logger().info(
             f'SensorSim ready  (fov={math.degrees(self._fov_rad):.0f}deg, '
             f'range=[{self._min_range}, {self._max_range}]m, '
-            f'hz={detection_hz})')
+            f'hz={detection_hz}, seed={seed}, '
+            f'noise={self._noise_std}m, fn={self._fn_rate})')
 
     # ------------------------------------------------------------------
     def _cones_cb(self, msg: MarkerArray):
@@ -122,24 +133,17 @@ class SensorSim(Node):
                 continue
 
             # false negative
-            if self._fn_rate > 0.0 and random.random() < self._fn_rate:
+            if self._fn_rate > 0.0 and self._rng.random() < self._fn_rate:
                 continue
 
             # store (with optional noise)
-            m = Marker()
-            m.header = marker.header
-            m.ns = marker.ns
-            m.id = marker.id
-            m.type = marker.type
-            m.action = marker.action
-            m.scale = marker.scale
-            m.color = marker.color
-            m.pose = marker.pose
+            # Preserve mesh vertices/colors and keep noise off the scene message.
+            m = deepcopy(marker)
             m.pose.orientation.w = 1.0
 
             if self._noise_std > 0.0:
-                m.pose.position.x += random.gauss(0, self._noise_std)
-                m.pose.position.y += random.gauss(0, self._noise_std)
+                m.pose.position.x += self._rng.gauss(0, self._noise_std)
+                m.pose.position.y += self._rng.gauss(0, self._noise_std)
 
             self._accumulated[key] = m
 
@@ -150,7 +154,7 @@ class SensorSim(Node):
     # ------------------------------------------------------------------
     def _publish_accumulated(self):
         msg = MarkerArray()
-        # sort by namespace then id for stable index-based pairing
+        # Sort by namespace then ID for deterministic output.
         sorted_markers = sorted(
             self._accumulated.values(), key=lambda m: (m.ns, m.id))
         msg.markers = sorted_markers
@@ -164,7 +168,7 @@ class SensorSim(Node):
             key = (marker.ns, marker.id)
             detected = key in self._accumulated
 
-            m = Marker()
+            m = deepcopy(marker)
             m.header.frame_id = 'map'
             m.header.stamp = now
             m.ns = marker.ns + '_viz'
@@ -180,6 +184,8 @@ class SensorSim(Node):
             else:
                 # dim: same hue but low alpha and desaturated
                 c = marker.color
+                m.colors = [ColorRGBA(r=c.r * .4 + .2, g=c.g * .4 + .2,
+                                      b=c.b * .4 + .2, a=c.a) for c in marker.colors]
                 m.color = ColorRGBA(
                     r=c.r * 0.4 + 0.2,
                     g=c.g * 0.4 + 0.2,
@@ -233,4 +239,4 @@ def main():
     except KeyboardInterrupt:
         pass
     node.destroy_node()
-    rclpy.shutdown()
+    rclpy.try_shutdown()

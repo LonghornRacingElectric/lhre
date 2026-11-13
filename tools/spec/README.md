@@ -31,7 +31,9 @@ the page loaded.
 
 Telemetry ids are handed out and released automatically. Removing a
 binding shrinks `next_free_id` if the id was the newest, otherwise it is
-tombstoned.
+tombstoned. A shared scalar binding retains its ledger entry while another
+producer still uses it. Configure shared producers in textproto; the editor
+preserves their `shared_source` flag and validates matching contracts on save.
 
 The signal table shows the derived snapshot proto type per signal, so
 you can see when a scale change turns a `uint32` into a `float`. The

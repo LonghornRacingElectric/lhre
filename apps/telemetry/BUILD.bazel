@@ -61,10 +61,22 @@ pkg_tar(
 
 # Stable consumer-facing seam for the currently deployed telemetry schema.
 # A future registry can change this selection without making every service
-# depend directly on BEVO's generator layout.
+# depend directly on the code generator's physical package layout.
 alias(
     name = "current_schema_proto",
-    actual = "//apps/BEVO/schema:can_packets.proto",
+    actual = "//lib/codegen/telemetry:can_packets_proto",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "current_schema_json",
+    actual = "//lib/codegen/telemetry:can_json",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "current_schema_sql",
+    actual = "//lib/codegen/telemetry:orion_db_init",
     visibility = ["//visibility:public"],
 )
 
@@ -72,7 +84,8 @@ filegroup(
     name = "current_schema_bundle",
     srcs = [
         ":current_schema_proto",
-        "//apps/BEVO/schema:can_json",
+        ":current_schema_json",
+        ":current_schema_sql",
     ],
     visibility = ["//visibility:public"],
 )
@@ -122,6 +135,7 @@ filegroup(
         ":mqtt_image",
         ":postgres_image",
         "//apps/telemetry/stack/ingest:ingest_image",
+        "//apps/telemetry/stack/processors/db_writer:db_writer_image",
         "//apps/telemetry/stack/kafka:kafka_bridge_image",
         "//apps/telemetry/stack/processors/field_enricher:field_enricher_image",
     ],
@@ -164,6 +178,7 @@ sh_binary(
         "$(rootpath :mqtt_load)",
         "$(rootpath :postgres_load)",
         "$(rootpath //apps/telemetry/stack/ingest:ingest_load)",
+        "$(rootpath //apps/telemetry/stack/processors/db_writer:db_writer_load)",
         "$(rootpath //apps/telemetry/stack/kafka:kafka_bridge_load)",
         "$(rootpath //apps/telemetry/stack/processors/field_enricher:field_enricher_load)",
     ],
@@ -173,6 +188,7 @@ sh_binary(
         ":mqtt_load",
         ":postgres_load",
         "//apps/telemetry/stack/ingest:ingest_load",
+        "//apps/telemetry/stack/processors/db_writer:db_writer_load",
         "//apps/telemetry/stack/kafka:kafka_bridge_load",
         "//apps/telemetry/stack/processors/field_enricher:field_enricher_load",
     ],
@@ -212,6 +228,7 @@ sh_binary(
         "$(rootpath :mqtt_load)",
         "$(rootpath :postgres_load)",
         "$(rootpath //apps/telemetry/stack/ingest:ingest_load)",
+        "$(rootpath //apps/telemetry/stack/processors/db_writer:db_writer_load)",
         "$(rootpath //apps/telemetry/stack/kafka:kafka_bridge_load)",
         "$(rootpath //apps/telemetry/stack/processors/field_enricher:field_enricher_load)",
         "$(rootpath //apps/telemetry/stack/processors/car_status:car_status_load)",
@@ -227,6 +244,7 @@ sh_binary(
         ":mqtt_load",
         ":postgres_load",
         "//apps/telemetry/stack/ingest:ingest_load",
+        "//apps/telemetry/stack/processors/db_writer:db_writer_load",
         "//apps/telemetry/stack/kafka:kafka_bridge_load",
         "//apps/telemetry/stack/processors/car_status:car_status_load",
         "//apps/telemetry/stack/processors/field_enricher:field_enricher_load",
@@ -249,6 +267,7 @@ sh_binary(
         "$(rootpath :mqtt_load)",
         "$(rootpath :postgres_load)",
         "$(rootpath //apps/telemetry/stack/ingest:ingest_load)",
+        "$(rootpath //apps/telemetry/stack/processors/db_writer:db_writer_load)",
         "$(rootpath //apps/telemetry/stack/kafka:kafka_bridge_load)",
         "$(rootpath //apps/telemetry/stack/processors/field_enricher:field_enricher_load)",
     ],
@@ -258,6 +277,7 @@ sh_binary(
         ":mqtt_load",
         ":postgres_load",
         "//apps/telemetry/stack/ingest:ingest_load",
+        "//apps/telemetry/stack/processors/db_writer:db_writer_load",
         "//apps/telemetry/stack/kafka:kafka_bridge_load",
         "//apps/telemetry/stack/processors/field_enricher:field_enricher_load",
     ],
@@ -274,6 +294,7 @@ test_suite(
         ":mqtt_smoke_test",
         ":postgres_smoke_test",
         "//apps/telemetry/stack/ingest:ingest_smoke_test",
+        "//apps/telemetry/stack/processors/db_writer:db_writer_smoke_test",
         "//apps/telemetry/stack/kafka:kafka_bridge_smoke_test",
         "//apps/telemetry/stack/processors/field_enricher:field_enricher_smoke_test",
     ],

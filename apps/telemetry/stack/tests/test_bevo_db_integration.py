@@ -9,7 +9,6 @@ Docker-dependent integration tests for:
 import json
 import time
 import unittest
-from pathlib import Path
 
 from paho.mqtt import client as mqtt_client
 from sqlalchemy import text
@@ -26,50 +25,13 @@ class TestBevoAndDatabaseIntegration(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.config = TelemetryConfig.from_env()
-        cls._ensure_orion_schema()
-
-    @classmethod
-    def _ensure_orion_schema(cls):
-        try:
-            import psycopg2
-        except Exception:
-            return
-
-        schema_sql_path = Path(__file__).resolve().parents[1] / "ingest" / "orion_db_init.sql"
-        if not schema_sql_path.exists():
-            return
-
-        try:
-            conn = psycopg2.connect(
-                host=cls.config.db_host,
-                port=cls.config.db_port,
-                user=cls.config.db_user,
-                password=cls.config.db_password,
-                database="orion",
-            )
-            conn.autocommit = True
-            with conn.cursor() as cur:
-                cur.execute("SELECT to_regclass('public.packet')")
-                regclass = cur.fetchone()
-                if regclass and regclass[0] is not None:
-                    return
-            with conn.cursor() as cur:
-                with open(schema_sql_path, "r", encoding="utf-8") as f:
-                    cur.execute(f.read())
-        except Exception:
-            return
-        finally:
-            try:
-                conn.close()
-            except Exception:
-                pass
 
     def _orion_schema_ready(self) -> bool:
         try:
             with get_db("Orion") as session:
                 result = session.execute(text("SELECT to_regclass('public.packet')")).scalar()
                 return result is not None
-        except Exception:
+        except Exception:  # noqa: BLE001 pre-existing when the lint gate went on
             return False
 
     def _await_welcome_packet(self, client_id: str, announce_payload: str, timeout: float = 12.0):
@@ -220,7 +182,7 @@ class TestBevoAndDatabaseIntegration(unittest.TestCase):
             with get_db("Angelique") as session:
                 count = session.query(AngeliquePacket).count()
                 self.assertIsInstance(count, int, "Count should be an integer")
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 pre-existing when the lint gate went on
             self.fail(f"Querying AngeliquePacket raised an exception: {exc}")
 
     def test_nightwatch_model_query(self):
@@ -229,7 +191,7 @@ class TestBevoAndDatabaseIntegration(unittest.TestCase):
             with get_db("Nightwatch") as session:
                 count = session.query(Packet).count()
                 self.assertIsInstance(count, int, "Count should be an integer")
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 pre-existing when the lint gate went on
             self.fail(f"Querying Nightwatch model raised an exception: {exc}")
 
     def test_orion_model_query(self):
@@ -240,7 +202,7 @@ class TestBevoAndDatabaseIntegration(unittest.TestCase):
             with get_db("Orion") as session:
                 count = session.query(OrionPacket).count()
                 self.assertIsInstance(count, int, "Count should be an integer")
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 pre-existing when the lint gate went on
             self.fail(f"Querying OrionPacket raised an exception: {exc}")
 
 

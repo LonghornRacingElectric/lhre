@@ -2,10 +2,10 @@
 import './trackside.css';
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type Dispatch, type MouseEvent, type ReactNode, type SetStateAction } from "react";
-import { Activity, AlertTriangle, ArrowDown, ArrowUp, CalendarDays, ChevronLeft, ChevronRight, Crosshair, Disc3, Download, FileText, Flag, Gauge, GraduationCap, HelpCircle, MapPinned, Minus, MonitorCog, Moon, NotebookText, Plus, Power, Radio, RefreshCcw, Save, Scissors, SlidersHorizontal, Sun, Target, Thermometer, Timer, Trash2, Upload, Users, WifiOff, X, Zap } from "lucide-react";
+import { Activity, AlertTriangle, ArrowDown, ArrowUp, CalendarDays, ChevronLeft, ChevronRight, Crosshair, Disc3, Download, FileText, Flag, Gauge, GraduationCap, HelpCircle, History, MapPinned, Minus, MonitorCog, Moon, NotebookText, Plus, Power, Radio, RefreshCcw, Save, Scissors, SlidersHorizontal, Square, Sun, Target, Thermometer, Timer, Trash2, Upload, Users, WifiOff, X, Zap } from "lucide-react";
 import { api } from "@/lib/trackside/api";
 import { useCarStatus, CAR_STATE_META, humanizeReason, type CarState, type CarStatusFeed } from "@/lib/trackside/useCarStatus";
-import { EVENT_TYPES, upsertSession, patchSession, syncRegistryWithServer, type TracksideSessionInfo } from "@/lib/trackside/sessionRegistry";
+import { EVENT_TYPES, upsertSession, patchSession, suggestSessionName, syncRegistryWithServer, type TracksideSessionInfo } from "@/lib/trackside/sessionRegistry";
 import { usePresence } from "@/lib/trackside/usePresence";
 import { useSession } from "next-auth/react";
 import { DashLayoutEditor } from "@/components/dashlayout/DashLayoutEditor";
@@ -16,6 +16,8 @@ import { useMessageLibrary } from "@/lib/dash/useMessageLibrary";
 import { activeMessages, MESSAGE_ICON_GLYPH, type DashMessage } from "@/lib/dash/dashMessages";
 import { useRacePlan } from "@/lib/dash/useRacePlan";
 import { DriveDaySetupForm, driveDaySetupToPayload, type DriveDaySetup } from "@/components/trackside/DriveDaySetupForm";
+import { ManualLapEntry } from "@/components/trackside/ManualLapEntry";
+import { parseLapTimeInput } from "@/lib/trackside/lapTime";
 import type {
   ChannelDef,
   ChannelChartDefinition,
@@ -136,6 +138,8 @@ type LiveLap = {
    *  from the lap's samples. Drives the battery thermal-projection trend. */
   maxCellTempC?: number;
   notes?: string; // per-lap note (synced to the classifier DB)
+  /** Entered by hand as a duration only: its times are when it was typed in, so it stays out of the DB sync. */
+  byHand?: boolean;
 };
 type LiveSessionState = {
   running: boolean;
@@ -149,6 +153,8 @@ type LiveSessionState = {
   lapSamples: LiveSample[];
   laps: LiveLap[];
   lapStartMs: number | null;
+  /** Set by Stop Lap: the start/finish gate does not start a lap until Start Lap is pressed. */
+  gateDisarmed?: boolean;
   sectorStartMs: number | null;
   nextSplitIndex: number;
   currentSectors: number[];
@@ -161,6 +167,8 @@ type LiveSessionState = {
   lapDistanceM: number;
   deltaRate: number | null;
   deltaMs: number;
+  // Event flags fired this session (saved = the /api/event-flag POST succeeded).
+  flags: { t: number; label: string; saved: boolean }[];
 };
 type SavedCurrentLap = {
   lapStartMs: number | null;
@@ -192,6 +200,7 @@ type SavedSession = {
   currentLap?: SavedCurrentLap | null;
   hasSectors: boolean;
   sessionInfo?: TracksideSessionInfo | null;
+  flags?: LiveSessionState["flags"];
 };
 const SESSION_STORAGE_KEY = "motec-live-session";
 const TOUR_STORAGE_KEY = "trackside-tour-done";
@@ -262,6 +271,7 @@ const EMPTY_LIVE_STATE: LiveSessionState = {
   lapDistanceM: 0,
   deltaRate: null,
   deltaMs: 0,
+  flags: [],
 };
 
 function readLocalSavedSession() {
@@ -619,6 +629,9 @@ function App() {
   const liveShouldRunRef = useRef(false);
   const reconnectTimerRef = useRef<number | null>(null);
   const liveStateRef = useRef<LiveSessionState>(EMPTY_LIVE_STATE);
+  // Wall-clock arrival of the newest live sample, so a lap press is stamped at
+  // press time rather than at that (up to 1/sampleHz old) sample.
+  const lastSampleWallRef = useRef(0);
   const liveTrackRef = useRef(track);
   const liveMetadataRef = useRef(metadataDraft);
   const liveChannelChartRef = useRef(channelChart);
@@ -669,6 +682,15 @@ function App() {
   const bestLap = useMemo(() => liveState.laps.reduce<LiveLap | null>((best, lap) => (!best || lap.durationMs < best.durationMs ? lap : best), null), [liveState.laps]);
   // Most recently completed lap — drives the hero "Last lap" (net + time) tile.
   const lastLap = liveState.laps.length ? liveState.laps[liveState.laps.length - 1] : null;
+  // Flag tally for the hero + phone drive view (mirrors adopt the leader's flags).
+  const coneFlags = liveState.flags.filter((f) => f.label === "Hit Cone").length;
+  const offFlags = liveState.flags.filter((f) => f.label === "Off-track").length;
+  const lastFlag = liveState.flags.length ? liveState.flags[liveState.flags.length - 1] : null;
+  const unsavedFlags = liveState.flags.filter((f) => !f.saved).length;
+  // Phones get the simplified drive view (CSS, max-width 760px) unless they opt
+  // into the full page.
+  const [phoneFull, setPhoneFull] = useState(() => localStorage.getItem("trackside-phone-full") === "1");
+  const lastDrivePressRef = useRef(0);
   const bestSectors = useMemo(() => bestSectorTimes(liveState.laps), [liveState.laps]);
   const torqueParamSet = useMemo(
     () => VCU_TORQUE_PARAM_SETS.find((item) => item.id === torqueParamSetId) ?? VCU_TORQUE_PARAM_SETS[0],
@@ -1096,7 +1118,7 @@ function App() {
     if (isMirror || sessionInfo?.dayId == null) return;
     if (lapSyncTimerRef.current) window.clearTimeout(lapSyncTimerRef.current);
     const dayId = sessionInfo.dayId;
-    const laps = liveState.laps.map((l) => ({ start_time: l.startMs, end_time: l.endMs, notes: l.notes ?? "" }));
+    const laps = liveState.laps.filter((l) => !l.byHand).map((l) => ({ start_time: l.startMs, end_time: l.endMs, notes: l.notes ?? "" }));
     lapSyncTimerRef.current = window.setTimeout(() => {
       void fetch("/api/laps/sync", {
         method: "POST", headers: { "content-type": "application/json" },
@@ -1332,6 +1354,54 @@ function App() {
   useEffect(() => {
     isMirrorRef.current = isMirror;
   }, [isMirror]);
+
+  useEffect(() => {
+    try { localStorage.setItem("trackside-phone-full", phoneFull ? "1" : "0"); } catch { /* quota */ }
+  }, [phoneFull]);
+
+  // Keep a phone's screen on in drive view: a sleeping phone can't log a lap
+  // and drops its presence heartbeat. Needs HTTPS; silently skipped otherwise.
+  useEffect(() => {
+    if (phoneFull || !("wakeLock" in navigator)) return;
+    let lock: WakeLockSentinel | null = null;
+    const acquire = () => {
+      if (document.visibilityState !== "visible" || !window.matchMedia("(max-width: 760px)").matches) return;
+      navigator.wakeLock.request("screen").then((l) => { lock = l; }).catch(() => { /* denied / unsupported */ });
+    };
+    acquire();
+    document.addEventListener("visibilitychange", acquire);
+    return () => { document.removeEventListener("visibilitychange", acquire); void lock?.release(); };
+  }, [phoneFull]);
+
+  // Leader pulls this session's flags from the DB (its own drive day, since the
+  // session started) so flags logged by another device or lost from local state
+  // still show. Mirrors get them from the leader's shared doc.
+  // ponytail: dedupe is exact t+label; a POST whose client clock was >5 min off
+  // is stored at server time and would show twice.
+  const sessionStartedAt = sessionInfo?.startedAt ?? null;
+  const sessionDayId = sessionInfo?.dayId ?? null;
+  useEffect(() => {
+    if (isMirror || sessionStartedAt == null || sessionDayId == null || resumeAvailable) return;
+    let cancelled = false;
+    const pull = () => fetch("/api/event-flag")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { dayId?: number; flags?: { t: number; label: string }[] } | null) => {
+        // Another drive day is active (old session restored): not this session's flags.
+        if (cancelled || j?.dayId !== sessionDayId || !Array.isArray(j.flags)) return;
+        const cur = liveStateRef.current;
+        const have = new Set(cur.flags.map((f) => `${f.t}|${f.label}`));
+        const add = j.flags.filter((f) => f.t >= sessionStartedAt && !have.has(`${f.t}|${f.label}`));
+        if (!add.length) return;
+        const next = { ...cur, flags: [...cur.flags, ...add.map((f) => ({ ...f, saved: true }))].sort((a, b) => a.t - b.t) };
+        liveStateRef.current = next;
+        setLiveState(next);
+      })
+      .catch(() => { /* offline — local flags still show */ });
+    pull();
+    // ponytail: 10 s poll; flags from other devices are rare and not time-critical.
+    const iv = window.setInterval(pull, 10_000);
+    return () => { cancelled = true; window.clearInterval(iv); };
+  }, [isMirror, sessionStartedAt, sessionDayId, resumeAvailable]);
 
   // Mirror clients adopt the leader's shared session (laps, totals, lap-in-
   // progress, targets, identity) by polling the session-cache, while keeping
@@ -2047,7 +2117,7 @@ function App() {
   // session on screen. Does NOT pull the raw car CSVs — Log Sync handles those.
   function stopEventAndDownload() {
     if (isMirrorRef.current) return;
-    const hasData = liveStateRef.current.laps.length > 0 || liveStateRef.current.samples.length > 0;
+    const hasData = liveStateRef.current.laps.length > 0 || liveStateRef.current.samples.length > 0 || liveStateRef.current.flags.length > 0;
     // Nothing to stop ONLY if there's no data AND no active session. A named
     // session with no laps yet must still be ended + cleared here — otherwise its
     // persisted sessionInfo restores on the next reload (looks like "stop didn't
@@ -2069,7 +2139,7 @@ function App() {
     if (sessionInfo?.dayId != null) {
       if (lapSyncTimerRef.current) { window.clearTimeout(lapSyncTimerRef.current); lapSyncTimerRef.current = null; }
       const dayId = sessionInfo.dayId;
-      const laps = liveStateRef.current.laps.map((l) => ({ start_time: l.startMs, end_time: l.endMs, notes: l.notes ?? "" }));
+      const laps = liveStateRef.current.laps.filter((l) => !l.byHand).map((l) => ({ start_time: l.startMs, end_time: l.endMs, notes: l.notes ?? "" }));
       void fetch("/api/laps/sync", {
         method: "POST", headers: { "content-type": "application/json" }, keepalive: true,
         body: JSON.stringify({ day_id: dayId, laps }),
@@ -2151,10 +2221,26 @@ function App() {
     if (!sessionInfo) { setLiveState((prev) => ({ ...prev, status: "Start a session before flagging events." })); return; }
     // Optionally flash the same flag on the driver's dash.
     if (flagSendsMessage) fireFlagDriverMessage(label);
+    // Kept in session state too (persisted + in the end-of-session JSON), so a
+    // failed POST still leaves a record (saved: false). Recorded before the POST
+    // so the count moves on tap and a slow network or closed page can't lose it.
+    const t = Date.now();
+    const recorded = { ...liveStateRef.current, flags: [...liveStateRef.current.flags, { t, label, saved: false }] };
+    liveStateRef.current = recorded;
+    setLiveState(recorded);
+    persistLiveSession(recorded, { saveLocal: true, saveBackend: false, includeFullLapSamples: false });
+    let saved = false;
+    let status = "Flag failed — offline?";
     try {
-      const res = await fetch("/api/event-flag", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ eventFlag: label }) });
-      setLiveState((prev) => ({ ...prev, status: res.ok ? `Flagged: ${label}` : "Flag failed — no active drive day on the server." }));
-    } catch { setLiveState((prev) => ({ ...prev, status: "Flag failed — offline?" })); }
+      const res = await fetch("/api/event-flag", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ eventFlag: label, t }) });
+      saved = res.ok;
+      status = res.ok ? `Flagged: ${label}` : "Flag failed — no active drive day on the server.";
+    } catch { /* offline — kept locally with saved: false */ }
+    const cur = liveStateRef.current;
+    const next = { ...cur, status, flags: cur.flags.map((f) => (f.t === t && f.label === label ? { ...f, saved } : f)) };
+    liveStateRef.current = next;
+    setLiveState(next);
+    persistLiveSession(next, { saveLocal: true, saveBackend: true, includeFullLapSamples: false });
   }
   // Flash an event flag on the driver's dash (used when "Show on driver dash" is
   // on). The per-flag picker decides which screen: a chosen message-library
@@ -2246,7 +2332,8 @@ function App() {
       return;
     }
     if (event.type !== "sample") return;
-    setLastDataAtMs(Date.now());
+    lastSampleWallRef.current = Date.now();
+    setLastDataAtMs(lastSampleWallRef.current);
     const completedLap = processLiveSample(event.sample);
     if (completedLap && liveAutoDownloadRef.current) {
       void downloadLiveLap(completedLap);
@@ -2314,7 +2401,7 @@ function App() {
     if (gpsTrustworthy) {
       const startGate = trackForLive.gates.find((gate) => gate.role === "start_finish");
       const splits = trackForLive.gates.filter((gate) => gate.role === "split");
-      if (startGate && sampleCrossesGate(previous, sample, startGate)) {
+      if (startGate && !current.gateDisarmed && sampleCrossesGate(previous, sample, startGate)) {
         if (lapStartMs && sample.t - lapStartMs > 5000) {
           const durationMs = sample.t - lapStartMs;
           const finalSectorMs = sectorStartMs ? sample.t - sectorStartMs : durationMs;
@@ -2408,11 +2495,16 @@ function App() {
       setLiveState((prev) => ({ ...prev, status: "Waiting for a live sample before starting a manual lap." }));
       return;
     }
+    // Car time of the press: newest sample + time since it arrived. Without this
+    // the boundary lands on the sample, up to 1/sampleHz (0.5 s at 2 Hz) early.
+    // ponytail: ignores phone-side network jitter (~tens of ms).
+    const sinceArrivalMs = Date.now() - lastSampleWallRef.current;
+    const pressT = sample.t + (sinceArrivalMs >= 0 && sinceArrivalMs < 2000 ? sinceArrivalMs : 0);
     if (!current.lapStartMs) {
       const nextState = {
         ...current,
-        lapStartMs: sample.t,
-        sectorStartMs: sample.t,
+        lapStartMs: pressT,
+        sectorStartMs: pressT,
         nextSplitIndex: 0,
         currentSectors: [],
         lapEnergyWh: 0,
@@ -2421,6 +2513,7 @@ function App() {
         lapDistanceM: 0,
         lapSamples: [sample],
         deltaMs: 0,
+        gateDisarmed: false,
         status: "Manual lap started.",
       };
       liveStateRef.current = nextState;
@@ -2431,7 +2524,7 @@ function App() {
       return;
     }
 
-    const durationMs = sample.t - current.lapStartMs;
+    const durationMs = pressT - current.lapStartMs;
     if (durationMs <= 0) {
       setLiveState((prev) => ({ ...prev, status: "Manual lap needs a positive time range." }));
       return;
@@ -2439,11 +2532,11 @@ function App() {
 
     const laps = [...current.laps];
     const completedLap: LiveLap = {
-      id: `manual-lap-${laps.length + 1}-${sample.t}`,
+      id: `manual-lap-${laps.length + 1}-${pressT}`,
       label: `Manual ${laps.length + 1}`,
       kind: "manual",
       startMs: current.lapStartMs,
-      endMs: sample.t,
+      endMs: pressT,
       durationMs,
       sectors: current.currentSectors,
       energyWh: current.lapEnergyWh,
@@ -2458,8 +2551,8 @@ function App() {
     const nextState = {
       ...current,
       laps,
-      lapStartMs: sample.t,
-      sectorStartMs: sample.t,
+      lapStartMs: pressT,
+      sectorStartMs: pressT,
       nextSplitIndex: 0,
       currentSectors: [],
       lapEnergyWh: 0,
@@ -2508,6 +2601,66 @@ function App() {
       setMsgSendStatus(`Lap timer started — next click closes lap 1.`);
     }
     window.setTimeout(() => setMsgSendStatus(""), 4000);
+  }
+
+  // Close the running lap WITHOUT arming the next one. Log Lap always re-arms,
+  // which is right on a loop but on an autocross / accel / skidpad run turns
+  // the drive back to the start into a bogus lap that has to be deleted or
+  // filtered out downstream (the retro viewer drops slow legs for this reason).
+  function stopLap() {
+    if (isMirrorRef.current || !liveStateRef.current.lapStartMs) return;
+    const before = liveStateRef.current.laps.length;
+    markLap();
+    if (liveStateRef.current.laps.length === before) return; // nothing closed (no sample / zero length)
+    const next: LiveSessionState = {
+      ...liveStateRef.current,
+      lapStartMs: null,
+      sectorStartMs: null,
+      nextSplitIndex: 0,
+      currentSectors: [],
+      lapEnergyWh: 0,
+      lapEnergyOutWh: 0,
+      lapEnergyInWh: 0,
+      lapDistanceM: 0,
+      lapSamples: [],
+      deltaMs: 0,
+      gateDisarmed: true,
+      status: "Lap stopped. Start Lap arms the next run.",
+    };
+    liveStateRef.current = next;
+    persistLiveSession(next, { saveLocal: true, saveBackend: true, includeFullLapSamples: false });
+    setLiveState(next);
+  }
+
+  // A lap timed elsewhere (official timing, a stopwatch): just its duration.
+  // No samples, sectors or energy, so it shows in the table and counts toward
+  // laps and the average, nothing else.
+  function addManualLap(durationMs: number) {
+    if (isMirrorRef.current || !(durationMs > 0)) return;
+    const current = liveStateRef.current;
+    const endMs = Date.now();
+    const n = current.laps.length + 1;
+    const lap: LiveLap = {
+      id: `manual-lap-${n}-${endMs}`,
+      label: `Manual ${n}`,
+      kind: "manual",
+      startMs: endMs - durationMs,
+      endMs,
+      durationMs,
+      sectors: [],
+      energyWh: 0,
+      distanceM: 0,
+      avgSpeedMps: null,
+      samples: [],
+      notes: "entered by hand",
+      byHand: true,
+    };
+    const next: LiveSessionState = { ...current, laps: [...current.laps, lap], status: `${lap.label} entered by hand.` };
+    liveStateRef.current = next;
+    selectCompletedLapByDefault(lap.id);
+    persistLiveSession(next, { saveLocal: true, saveBackend: true, includeFullLapSamples: false });
+    lastSavedLapCountRef.current = next.laps.length;
+    setLiveState(next);
   }
 
   function toggleLapSelected(lapId: string) {
@@ -2582,6 +2735,7 @@ function App() {
       sampleTail: current.samples.slice(includeFullLapSamples ? 0 : -SESSION_AUTOSAVE_SAMPLE_CAP),
       currentLap,
       hasSectors: sessionFromFile || current.laps.some((lap) => lap.sectors.length > 0),
+      flags: current.flags,
       // Inject the LIVE metadata / plan / setup into sessionInfo so the saved
       // session always reflects the latest edits. patchSession only writes to
       // localStorage + server, not React state — without this merge,
@@ -2624,6 +2778,7 @@ function App() {
       lapEnergyInWh: cur?.lapEnergyInWh ?? 0,
       lapDistanceM: cur?.lapDistanceM ?? 0,
       deltaMs: cur?.deltaMs ?? 0,
+      flags: saved.flags ?? current.flags,
     };
     knownLapIdsRef.current = new Set(laps.map((lap) => lap.id));
     liveStateRef.current = merged;
@@ -2694,6 +2849,7 @@ function App() {
       lapEnergyInWh: currentLap?.lapEnergyInWh ?? 0,
       lapDistanceM: currentLap?.lapDistanceM ?? 0,
       deltaMs: currentLap?.deltaMs ?? 0,
+      flags: saved.flags ?? [],
     };
     knownLapIdsRef.current = new Set(laps.map((lap) => lap.id));
     liveStateRef.current = restored;
@@ -2879,7 +3035,74 @@ function App() {
   }
 
   return (
-    <main className="shell">
+    <main className={phoneFull ? "shell" : "shell driveMode"}>
+      {/* Phone drive view — CSS shows it only at <=760px in driveMode. Layout from
+          the drivers' whiteboard: status, flying-lap timer, lap n/target, last
+          lap, two big flag buttons, one big Start Lap / Log Lap. The rest is in Full view. */}
+      <section className="driveView" aria-label="Drive view">
+        <div className="driveChips">
+          <button className="tool driveFull" onClick={() => setPhoneFull(true)}>Full view</button>
+          <span className="freshTag"><span className={`dot ${uplinkMeta.dot}`} /> {uplinkMeta.label}</span>
+          <span className="freshTag"><span className={`dot ${gpsTag.dot}`} /> {gpsTag.label}</span>
+          {isMirror ? (
+            <>
+              <span className="freshTag">Mirror{presence.leaderName ? ` of ${presence.leaderName}` : ""}{presence.leaderAway ? " (away)" : ""}</span>
+              {presence.leaderAway ? (
+                <button className="primary" onClick={() => presence.takeLeader()}>Take control</button>
+              ) : presence.role === "full" ? null : presence.requested ? (
+                <span className="freshTag">Requested…</span>
+              ) : (
+                <button className="tool" onClick={() => presence.requestLeader()}>Request control</button>
+              )}
+            </>
+          ) : (
+            <button className="tool" title="Locked: control stays on this phone even if it sleeps"
+              onClick={() => (presence.locked ? presence.unlockLeader() : presence.lockLeader())}>
+              {presence.locked ? "Leader · locked" : "Lock as leader"}
+            </button>
+          )}
+        </div>
+        <div className="driveTimer">
+          <b>{liveState.lapStartMs ? formatLapTime(liveLapElapsedMs) : "0:00.00"}</b>
+          <small>{eventEnded ? "Event ended" : liveState.lapStartMs ? "Flying lap" : "Out lap / waiting for start"}</small>
+        </div>
+        <div className="driveLap">
+          <b>Lap {liveState.laps.length + (liveState.lapStartMs ? 1 : 0)} / {targetLaps > 0 ? targetLaps : "—"}</b>
+          <span>Last <b>{lastLap ? formatLapTime(lastLap.durationMs) : "--:--"}</b></span>
+        </div>
+        <div className="driveFlags">
+          <button className="driveBtn driveCone" disabled={isMirror || !sessionInfo} onClick={() => void eventFlag("Hit Cone")}>
+            <span>Cone</span><span className="driveGlyph" aria-hidden>▲</span><span className="driveCount">{coneFlags}</span>
+          </button>
+          <button className="driveBtn driveOff" disabled={isMirror || !sessionInfo} onClick={() => void eventFlag("Off-track")}>
+            <span>Off-track</span><span className="driveGlyph" aria-hidden>!</span><span className="driveCount">{offFlags}</span>
+          </button>
+        </div>
+        <div className="driveFlagLine">
+          {!sessionInfo ? (
+            isMirror ? <span>Flags need an active session.</span> : (
+              <button className="tool" onClick={() => setNewSessionOpen(true)}><Plus size={14} /> Start a session to log flags</button>
+            )
+          ) : lastFlag ? (
+            <span>Last flag: {lastFlag.label} {new Date(lastFlag.t).toLocaleTimeString()}{lastFlag.saved ? "" : " · not saved to DB"}</span>
+          ) : <span>No flags yet</span>}
+        </div>
+        <button
+          className="driveBtn driveStart"
+          disabled={isMirror || !telemetryFresh}
+          onClick={() => {
+            // ponytail: 1.5 s lockout — drivers' logs showed double taps (1–3 s junk laps).
+            const now = Date.now();
+            if (now - lastDrivePressRef.current < 1500) return;
+            lastDrivePressRef.current = now;
+            markLap();
+          }}
+        >
+          {liveState.lapStartMs ? "Log Lap" : "Start Lap"}
+          {isMirror ? <small>Leader controls the timer</small> : !telemetryFresh ? <small>No live telemetry</small> : null}
+        </button>
+        {msgSendStatus || liveState.status ? <small className="driveStatus" role="status">{msgSendStatus || liveState.status}</small> : null}
+      </section>
       {activeTab === "live" ? <CarStorageBar dash={dashSignals.dashState} /> : null}
       {showTour ? (
         <TracksideTour
@@ -3005,6 +3228,11 @@ function App() {
             <span className="statusSep">·</span>
             <span className="statusSrc">{sourceLabel}</span>
           </div>
+          {/* plain <a>: a full load keeps trackside.css out of the viewer */}
+          <a className="tool" href="/trackside-retro" title="Review a drive day from the database: laps, sectors, corners, cones">
+            <History size={14} /> Retro
+          </a>
+          <button className="tool driveToggle" onClick={() => setPhoneFull(false)}>Drive view</button>
           <button className="tool iconOnly" onClick={() => setShowTour(true)} aria-label="Show guided tour" title="Guided tour">
             <HelpCircle size={16} />
           </button>
@@ -3029,12 +3257,16 @@ function App() {
           <span>
             {presence.role === "full"
               ? `Viewer limit reached (${presence.max}) — read-only mirror.`
-              : "Mirroring the session leader — read-only."}{" "}
+              : `Mirroring ${presence.leaderName || "the session leader"}${presence.locked ? " (locked)" : ""}${presence.leaderAway ? ", who is away" : ""} — read-only.`}{" "}
             Live gauges are your own feed; laps &amp; strategy follow the leader.
           </span>
           <input className="nameField" value={presence.name} placeholder="your name"
             onChange={(e) => presence.setName(e.target.value)} aria-label="Your name" />
-          {isAdmin ? (
+          {presence.leaderAway ? (
+            <button className="primary" style={{ whiteSpace: "nowrap" }} title="The locked leader is offline — take over (stays locked to you)" onClick={() => presence.takeLeader()}>
+              <Power size={14} /> Take control
+            </button>
+          ) : isAdmin ? (
             <button className="primary" style={{ whiteSpace: "nowrap" }} title="Admin: seize control immediately" onClick={() => presence.forceLeader()}>
               <Power size={14} /> Take control
             </button>
@@ -3045,12 +3277,17 @@ function App() {
           ) : null}
           <span className="syncCount">{presence.clients}/{presence.max} clients</span>
         </div>
-      ) : presence.clients > 1 ? (
+      ) : presence.clients > 1 || presence.locked ? (
         <div className="syncBanner leader" role="status">
           <Radio size={15} />
-          <span>You&apos;re the session leader — your laps &amp; strategy sync to {presence.clients - 1} mirror{presence.clients - 1 === 1 ? "" : "s"}.</span>
+          <span>You&apos;re the session leader{presence.locked ? " (locked — control won't move while your screen sleeps)" : ""} — your laps &amp; strategy sync to {presence.clients - 1} mirror{presence.clients - 1 === 1 ? "" : "s"}.</span>
           <input className="nameField" value={presence.name} placeholder="your name"
             onChange={(e) => presence.setName(e.target.value)} aria-label="Your name" />
+          <button className="tool" style={{ whiteSpace: "nowrap" }}
+            title={presence.locked ? "Let control move to another viewer if you leave" : "Keep control on this device even if it sleeps or reloads"}
+            onClick={() => (presence.locked ? presence.unlockLeader() : presence.lockLeader())}>
+            {presence.locked ? "Unlock leader" : "Lock as leader"}
+          </button>
           <span className="syncCount">{presence.clients}/{presence.max} clients</span>
         </div>
       ) : null}
@@ -3513,6 +3750,13 @@ function App() {
                   </button>
                 </div>
               )}
+              {liveState.flags.length ? (
+                <small className="heroFlagStatus">
+                  Flags: {coneFlags} cone · {offFlags} off-track · {liveState.flags.length - coneFlags - offFlags} other
+                  {lastFlag ? ` — last ${lastFlag.label} ${new Date(lastFlag.t).toLocaleTimeString()}` : ""}
+                  {unsavedFlags ? ` · ⚠ ${unsavedFlags} not saved to DB` : ""}
+                </small>
+              ) : null}
               {msgSendStatus ? (
                 <small className="heroFlagStatus" role="status">{msgSendStatus}</small>
               ) : null}
@@ -3545,6 +3789,16 @@ function App() {
               >
                 <Flag size={20} /> {liveState.lapStartMs ? "Log Lap" : "Start Lap"}
               </button>
+              {liveState.lapStartMs ? (
+                <button
+                  className="tool liveAction"
+                  disabled={isMirror}
+                  onClick={stopLap}
+                  title="Close this lap without starting the next one (autocross / accel / skidpad runs). Start Lap arms the next run."
+                >
+                  <Square size={20} /> Stop Lap
+                </button>
+              ) : null}
               <div className="liveActionPair">
                 <button
                   className={recordingStartMs != null ? "tool liveAction dangerPrimary" : "tool liveAction"}
@@ -3561,7 +3815,7 @@ function App() {
                 </button>
                 <button
                   className="tool liveAction"
-                  disabled={isMirror || eventEnded || (!liveState.laps.length && !liveState.samples.length)}
+                  disabled={isMirror || eventEnded || (!liveState.laps.length && !liveState.samples.length && !liveState.flags.length)}
                   onClick={() => setConfirmStopOpen(true)}
                   title={eventEnded ? "Event already stopped — start a new session to run again" : "End the session and download everything to review it locally (laps CSV + full session JSON). Raw car CSVs come from Log Sync."}
                 >
@@ -3611,6 +3865,7 @@ function App() {
                   targetEnergyPerLapWh={targetEnergyPerLapWh}
                   averages={lapAverages}
                 />
+                <ManualLapEntry disabled={isMirror} onAdd={addManualLap} />
               </Panel>
               <PackStatusPanel state={liveState} displayState={filteredLiveState} soeCutoffCellV={soeCutoffCellV} />
               <CellThermalsPanel sample={filteredLiveState.lastSample} />
@@ -4505,7 +4760,7 @@ function NewSessionModal({
   const [eventType, setEventType] = useState<string>(EVENT_TYPES[0]);
   const [venue, setVenue] = useState(defaultVenue);
   const [name, setName] = useState("");
-  const suggestedName = `${venue || "Session"} · ${eventType}`;
+  const suggestedName = suggestSessionName(venue, eventType);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -6611,22 +6866,6 @@ function formatLapTime(ms: number) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toFixed(2).padStart(5, "0")}`;
-}
-
-// Parse an edited lap time. Accepts "M:SS.ss" / "MM:SS.ss" or plain seconds
-// ("83.45"). Returns milliseconds, or null if it can't be parsed.
-function parseLapTimeInput(text: string): number | null {
-  const s = text.trim();
-  if (!s) return null;
-  const colon = s.match(/^(\d+):(\d{1,2}(?:\.\d+)?)$/);
-  if (colon) {
-    const min = Number(colon[1]);
-    const sec = Number(colon[2]);
-    if (!Number.isFinite(min) || !Number.isFinite(sec) || sec >= 60) return null;
-    return Math.round((min * 60 + sec) * 1000);
-  }
-  const n = Number(s);
-  return Number.isFinite(n) && n >= 0 ? Math.round(n * 1000) : null;
 }
 
 // Lap-time cell: click to edit (M:SS.ss or seconds), Enter/blur commits, Esc

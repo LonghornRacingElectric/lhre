@@ -15,7 +15,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -140,7 +139,7 @@ def run_publisher(script_path: Path, car: str, rows: int, delay: float, schema_s
     ]
     env = os.environ.copy()
     env["TQDM_DISABLE"] = "1"
-    return subprocess.run(cmd, capture_output=True, text=True, env=env)
+    return subprocess.run(cmd, capture_output=True, text=True, env=env)  # noqa: PLW1510 pre-existing when the lint gate went on
 
 
 def schema_sync_report(car: str) -> tuple[list[str], dict[str, list[str]]]:
@@ -315,7 +314,7 @@ def main() -> int:
                 orm_sync_failures.append(sync_msg)
             else:
                 print(f"[OK] {car} ORM schema matches protobuf tables/fields.")
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 pre-existing when the lint gate went on
             sync_msg = f"{car} ORM schema check unavailable: {type(exc).__name__}: {exc}"
             print(f"[WARN] {sync_msg}")
             orm_sync_failures.append(sync_msg)

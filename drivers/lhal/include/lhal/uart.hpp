@@ -11,6 +11,12 @@ class Uart {
  public:
   virtual ~Uart() = default;
 
+  using RxObserver = void (*)(void*, const uint8_t*, size_t);
+  // Optional receive-path observer, before buffering (including overflow).
+  // May run in ISR context; must not block. Context must outlive registration.
+  // Returns false when unsupported; callers can observe polled bytes instead.
+  virtual bool SetRxObserver(RxObserver, void*) { return false; }
+
   // Blocking transfers. Return kTimeout if the transfer did not finish in
   // time; a partial transfer may have occurred.
   virtual Status Write(const uint8_t* data, size_t len,

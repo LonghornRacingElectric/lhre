@@ -1,16 +1,60 @@
 # Studies
 
 A study answers one engineering question about the current car. It is a
-folder under `studies/` with two files:
+folder under `studies/`. Make one from the template in
+`tools/study_template/`:
+
+```bash
+make new-study S=<name>
+```
 
 ```text
 studies/<name>/
-  README.md   # the question, the method and the result
-  run.py      # the script that makes the result
+  README.md   # the question, the method, the result and a status line
+  study.yml   # the inputs: the question, the bundle, the parameters and the sweep grid
+  run.py      # reads study.yml and writes every output to OUT_DIR
 ```
 
 Use a short kebab-case name that says the question, for example
-`rear-stabar-rate` or `aero-balance-ggv`.
+`rear-stabar-rate` or `aero-balance-ggv`. `make new-study` refuses another
+name form and a name that exists.
+
+The three files are the minimum, not a fixed layout. A study can add
+helper modules next to `run.py`, more config files, and at most two
+committed figures. These rules are fixed:
+
+- Every output goes to `OUT_DIR`.
+- Car numbers come from the vehicle file (`BOBSIM_VEHICLE`) and its bundle.
+  `run.py` does not hard-code them.
+- Study choices, such as the parameters and the sweep grid, are in
+  `study.yml`.
+- Every run writes `summary.json` and `readme.json`. `make study` writes
+  `provenance.json`.
+- A study has no tests of its own. Shared code in `tools/` has its tests in
+  `tests/`.
+
+## study.yml
+
+`study.yml` holds the inputs. It holds no results. The template has these
+keys:
+
+| Key | Value |
+| --- | ----- |
+| `question` | The question in one sentence. The README shows it from `readme.json`. |
+| `decision` | The choice that the result informs, and the result that would change it. |
+| `bundle` | The `bundle_id` in `vehicle/bundle.yml`. `run.py` stops if the vehicle has another bundle. |
+| `parameters` | The fixed inputs of each case. |
+| `sweep` | A list of values for each swept parameter. `run.py` runs every combination. |
+
+- Add keys when the study needs them.
+- `make study` does not read `study.yml`. `run.py` reads it. If the file is
+  missing, the template `run.py` stops with an error.
+- Every file in the study folder is an input of the result. A change to
+  `study.yml` makes the committed result stale. See
+  [Invalidation keys](#invalidation-keys).
+- To mark an input that is not validated, write it as
+  `{value, status, source}`. The stale check ignores `status` and `source`.
+  `run.py` reads `value`.
 
 ## run.py
 
@@ -22,17 +66,24 @@ The script gets these environment variables:
 | `BOBSIM_VEHICLE` | `/lhre/vehicle/vehicle.yml` |
 | `OUT_DIR` | `out/.staging/<name>`. It exists before `run.py` starts. |
 | `STUDY` | `<name>` |
+| `STUDY_VARIANT` | The variant name `V`. Empty for the main run. |
 | `BOBSIM_SHA` | The pinned BobSim commit |
 | `STUDY_WORKERS` | CPU limit for parallel cases. Empty means all CPUs. |
 
+`make study` also passes `LHRE_SHA`, `LHRE_IMAGE_ID` and
+`LHRE_REQUIRE_GIT` to `tools/provenance.py`. `run.py` does not need them.
+
 Rules:
 
+- Read the inputs from `study.yml` next to `run.py`.
 - Read the vehicle from `BOBSIM_VEHICLE`. Do not hardcode a path.
 - Write every output to `OUT_DIR`. Write nothing else.
+- Write `summary.json` with every result and the inputs that the run used.
+  Write `readme.json` with the values that the README markers read.
 - To test a parameter change, load the vehicle, change the value in memory
   or in a copy under `OUT_DIR`, and pass that to BobSim.
 - Import BobSim modules. For example:
-  `from _2_EnvelopeSim.vehicle_loader import load_active_envelope_inputs`.
+  `from simulations.envelope.vehicle_loader import load_active_envelope_inputs`.
 - Keep the script short. If you write a helper that other studies need, put
   it in `tools/` and import it as `tools.<module>`. Treat BobSim as a black
   box: do not change it for a study.
@@ -40,10 +91,11 @@ Rules:
 ## Variants
 
 A variant runs the same study with changed inputs, for example a higher
-tire grip scale. `run.py` reads the inputs from its command line.
+tire grip scale. Put the changed inputs in a second config file next to
+`study.yml`. The template `run.py` reads it with `--config`:
 
 ```bash
-make study S=front-ackermann ARGS="--mu 0.75" V=mu075
+make study S=<name> ARGS="--config studies/<name>/mu075.yml" V=mu075
 ```
 
 - `ARGS` goes to `run.py`. `V` names the variant and is required with
@@ -101,11 +153,35 @@ simple:
 - Do not repeat a number in prose that a table already shows.
 
 1. **Question.** One or two sentences.
-2. **Method.** Tier, evaluation, the parameters you changed and their range.
+2. **Method.** Tier, evaluation, and the parameters and sweep in `study.yml`.
 3. **Result.** Numbers with units, and one or two figures. Say how sure you
    are and why.
 4. **Provenance.** The BobSim SHA, the vehicle hash and the date, from
    `out/<name>/provenance.json`.
+
+### Status
+
+The README starts with a status line. The word is `current`,
+`historical` or `stale`. The template starts with `**Status: current.**`.
+
+A committed result can become stale when an input changes. Then run the
+study again, or mark the README as historical. Put the mark near the top,
+in one of these two forms:
+
+```markdown
+**Status: historical.** BobSim `4da577a` made these results. ...
+```
+
+```markdown
+| Status | historical |
+```
+
+`make unit` runs `tests/test_committed_results.py`. For each README that
+is not marked `historical` or `stale`, the test fails when the result is `STALE` or `UNKNOWN`, or when the README has
+no readable provenance block. In a git worktree, git in the container cannot
+read BobSim and BobLib. A result that is `UNKNOWN` only for that reason then
+skips. `LHRE_REQUIRE_GIT=1`, as in CI, makes it fail. See
+[Check a result](#check-a-result).
 
 ### Numbers from the run
 
@@ -124,8 +200,9 @@ published page shows only the value.
 - `run.py` writes the tables as `.md` files to `OUT_DIR`.
 - `make study` also copies each figure that the README links, such as
   `![Result](result.png)`, from `out/<name>/` to the study folder.
-- A marker that names a missing file or key stops `make study`. Fix the
-  marker or `run.py`.
+- A marker that names a missing file or key stops `make study`. A value
+  that is `null` or NaN also stops it. The README never shows `None`. Fix
+  the marker or `run.py`.
 - Words stay yours. Read the new numbers after each run, and change the
   text if the result changed.
 
@@ -136,14 +213,102 @@ If `run.py` succeeds, `make study` moves `OUT_DIR` to `out/<name>/`. If it
 fails, `out/<name>/` keeps the last good result, and the failed run stays in
 `out/.staging/<name>/`.
 
-```json
-{
-  "study": "<name>",
-  "bobsim_sha": "7ff5191…",
-  "vehicle_sha256": "8a06ba5…",
-  "utc": "2026-09-23T07:30:31+00:00"
-}
+The schema is `lhre.provenance.v2`. The file records:
+
+- The study, the variant and the arguments of `run.py` (`argv`).
+- The lhre, BobSim and BobLib commits and their dirty state. BobLib also
+  has `gitlink`, the commit that the BobSim pin names.
+- The image ID and the Python version.
+- The vehicle path and SHA-256, the bundle ID and the SHA-256 of each tire
+  file. It never copies tire data.
+- The SHA-256 of each study file and each lhre tool that `run.py` imports
+  (`study_code`).
+- The invalidation keys (`invalidation`).
+
+A value that the run cannot read is `null`, with the reason. The tool never
+guesses it. In a git worktree, git in the container cannot read the
+repositories. Then the commits come from the host, the dirty state is
+`null`, and the BobSim and BobLib keys are `null`. With
+`LHRE_REQUIRE_GIT=1`, as in CI, a `null` from git stops the run.
+
+### Invalidation keys
+
+Each key is a digest of the content of one input. A commit SHA is never a
+key, so a commit that changes only docs does not change a key.
+
+| Key | Input |
+| --- | ----- |
+| `vehicle` | The parsed values of the vehicle file |
+| `tire:<name>` | The bytes of each `.tir` file that the vehicle names |
+| `bundle_id` | `bundle_id` in `bundle.yml` next to the vehicle, or `absent` |
+| `bundle:<name>` | Each key of `dependency_keys()` in `tools/bundle.py`: the values of `frame`, `axle:front`, `axle:rear`, `setup` and `torque_topology`, and the hash of each tire and source member. The vehicle member is left out, because the `vehicle` key covers that file. There is no such key when there is no bundle. |
+| `lhre:<path>` | Each file in the study folder, and each lhre module that the study imports |
+| `bobsim:<folder>` | The files of each BobSim physics folder: `common`, `engines`, `simulations`, `optimization`, `Dockerfile` and `requirements.txt` |
+| `bobsim:<file>` | Each BobSim module outside those folders that the study imports, for example `app/tire_eval.py` |
+| `boblib:BobLib` | The files of the BobLib package, also the records that `make records` writes |
+
+Python files are keyed by their tokens. YAML files are keyed by their
+parsed values. A file that does not parse is keyed by its bytes.
+
+These changes do not change a key:
+
+- Markdown, reStructuredText, PDF and image files, in any folder.
+- Comments, blank lines and indent width in Python files.
+- Comments, layout, key order and number format (`280.0` or `280.00`) in
+  YAML files.
+- The `status` and `source` of a `{value, status, source}` value in a YAML
+  file, for example in a study `inputs.yml`.
+- BobSim `docs/`, `tests/`, `visualization/`, and `app/` modules that the
+  study does not import.
+- `__pycache__/` folders, and files that git ignores in BobSim and
+  BobLib, such as build output.
+- The `status` and `source` of a bundle value, and the bundle `status` and
+  `release` fields.
+
+The bundle next to the vehicle can also make a result stale. The stale
+check reads it when it compares the keys:
+
+- A bundle with `status: superseded` gives `STALE` (`bundle_status`).
+- A bundle whose `members.vehicle.sha256` is not the SHA-256 of the vehicle
+  file bytes gives `STALE` (`bundle_vehicle`). A bundle with no such hash
+  gives `UNKNOWN`.
+- A `bundle.yml` that does not parse gives `UNKNOWN`.
+
+So a comment edit in the vehicle file keeps the `vehicle` key. It changes
+the bytes, so update the bundle too. `make study` prints a warning when it
+records a superseded bundle or a bundle that does not describe the vehicle.
+
+### Check a result
+
+```bash
+make stale S=<name>
+make stale
 ```
 
-If the vehicle or the BobSim pin changes, run the study again before you
-use its result.
+`make stale S=<name>` checks the result in `studies/<name>/README.md`. It
+reads the JSON in the `<!-- out:provenance.json -->` block. `make stale`
+checks every study. The tool also takes a path to a study `README.md` or
+to a `provenance.json`:
+
+```bash
+docker compose run --rm -T sim python tools/invalidation.py stale out/<name>/provenance.json
+```
+
+The check compares the recorded keys with the current files. It uses the
+vehicle in `BOBSIM_VEHICLE`, or the file that `--vehicle PATH` names. It
+prints one of these for each result:
+
+| Output | Exit code | Meaning |
+| ------ | --------- | ------- |
+| `CURRENT <name>` | 0 | Every key is the same. |
+| `STALE <name>` and the changed keys | 1 | An input changed. Run the study again before you use its result. |
+| `UNKNOWN <name>` and the keys it cannot compare | 3 | A key was `null` at the run or cannot be read now. Do not treat the result as current. |
+| `Cannot read <path>` | 2 | The file has no provenance, or its JSON is not valid. |
+
+For a README, the check also prints the README status. With more than one
+study, the exit code is the worst result. The order from best to worst is
+0, 3, 1, 2.
+
+A `provenance.json` without keys (schema version 1) is never `CURRENT`.
+`CURRENT` means that the software inputs did not change. It is not a
+hardware approval.

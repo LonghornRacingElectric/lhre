@@ -1,6 +1,6 @@
 // Host tests for the generated CAN library. Byte patterns are computed
-// by hand from the seed spec, so they pin the wire format independently
-// of the generator's own bit logic.
+// independently from the lhre-2026 CSV layout so they pin the migrated wire
+// format rather than the generator's implementation.
 
 #include <cstring>
 
@@ -11,163 +11,137 @@
 namespace lhre::can {
 namespace {
 
-// Messages are generated into one namespace per source board.
-using hvc::HvcCellTemps;
-using hvc::HvcPackStatus;
-using vcu::VcuBootloaderData;
-using vcu::VcuDebug;
-using vcu::VcuStatus;
+using hvc::BatteryPackStatus;
+using hvc::CellTemperatures;
+using hvc::CellVoltages;
+using hvc::ContactorStatus;
+using vcu::VcuFuses;
+using vcu::VcuState;
 
-TEST(CanLib, VcuStatusPackMatchesHandComputedBytes) {
-  VcuStatus msg;
-  msg.state = VcuState::kDrive;    // byte 0 = 0x02
-  msg.faults_overtemp = true;      // bit 8
-  msg.faults_sensor_loss = true;   // bit 10 -> byte 1 = 0x05
-  msg.torque_request_raw = -1234;  // 0xFB2E little-endian
-  msg.speed_raw = 0x1234;
-  msg.steering_angle_raw = -100;  // 0xFF9C big-endian at bit 55
+TEST(CanLib, VcuStatePackMatchesLhre2026Layout) {
+  VcuState msg;
+  msg.prndl_state = 2;
+  msg.stomp_fault = true;
+  msg.ready_to_drive_buzzer = false;
+  msg.state_of_charge_estimate_raw = 955;
+  msg.line_lock_enabled = true;
+  msg.event_mode = 4;
 
-  uint8_t data[VcuStatus::kDlc];
+  uint8_t data[VcuState::kDlc];
   msg.Pack(data);
 
-  const uint8_t expected[8] = {0x02, 0x05, 0x2E, 0xFB, 0x34, 0x12, 0xFF, 0x9C};
+  const uint8_t expected[7] = {0x02, 0x01, 0x00, 0xBB, 0x03, 0x01, 0x04};
   EXPECT_EQ(0, std::memcmp(data, expected, sizeof(expected)));
 }
 
-TEST(CanLib, VcuStatusRoundTripsThroughLhalFrame) {
-  VcuStatus msg;
-  msg.state = VcuState::kFault;
-  msg.faults_overcurrent = true;
-  msg.torque_request_raw = -3000;
-  msg.speed_raw = 65535;
-  msg.steering_angle_raw = -1800;
+TEST(CanLib, VcuStateRoundTripsThroughLhalFrame) {
+  VcuState msg;
+  msg.prndl_state = 3;
+  msg.stomp_fault = true;
+  msg.ready_to_drive_buzzer = true;
+  msg.state_of_charge_estimate_raw = 500;
+  msg.line_lock_enabled = true;
+  msg.event_mode = 7;
 
   lhal::CanFrame frame = msg.ToFrame();
-  EXPECT_EQ(frame.id, VcuStatus::kFrameId);
-  EXPECT_EQ(frame.len, VcuStatus::kDlc);
-  ASSERT_TRUE(VcuStatus::Matches(frame.id));
+  EXPECT_EQ(frame.id, VcuState::kFrameId);
+  EXPECT_EQ(frame.len, VcuState::kDlc);
+  ASSERT_TRUE(VcuState::Matches(frame.id));
 
-  VcuStatus out = VcuStatus::FromFrame(frame);
-  EXPECT_EQ(out.state, VcuState::kFault);
-  EXPECT_FALSE(out.faults_overtemp);
-  EXPECT_TRUE(out.faults_overcurrent);
-  EXPECT_FALSE(out.faults_sensor_loss);
-  EXPECT_EQ(out.torque_request_raw, -3000);
-  EXPECT_EQ(out.speed_raw, 65535);
-  EXPECT_EQ(out.steering_angle_raw, -1800);
+  VcuState out = VcuState::FromFrame(frame);
+  EXPECT_EQ(out.prndl_state, 3);
+  EXPECT_TRUE(out.stomp_fault);
+  EXPECT_TRUE(out.ready_to_drive_buzzer);
+  EXPECT_EQ(out.state_of_charge_estimate_raw, 500);
+  EXPECT_TRUE(out.line_lock_enabled);
+  EXPECT_EQ(out.event_mode, 7);
 }
 
-TEST(CanLib, HvcPackStatusRoundTrip) {
-  HvcPackStatus msg;
-  msg.pack_voltage_raw = 5432;  // 543.2 V
-  msg.pack_current_raw = -875;  // -87.5 A
-  msg.soc_raw = 191;
-  msg.coolant_temp = -40;  // scale 1 -> raw field keeps the bare name
+TEST(CanLib, BatteryPackStatusRoundTrip) {
+  BatteryPackStatus msg;
+  msg.pack_voltage_raw = 54320;
+  msg.tractive_current_raw = 8750;
+  msg.state_of_charge_raw = 9550;
+  msg.cell_top_temp = 41;
+  msg.cell_bottom_temp = 37;
 
-  uint8_t data[HvcPackStatus::kDlc];
+  uint8_t data[BatteryPackStatus::kDlc];
   msg.Pack(data);
-  HvcPackStatus out;
+  BatteryPackStatus out;
   out.Unpack(data);
 
-  EXPECT_EQ(out.pack_voltage_raw, 5432);
-  EXPECT_EQ(out.pack_current_raw, -875);
-  EXPECT_EQ(out.soc_raw, 191);
-  EXPECT_EQ(out.coolant_temp, -40);
+  EXPECT_NEAR(out.pack_voltage(), 543.2f, 1e-3f);
+  EXPECT_NEAR(out.tractive_current(), 87.5f, 1e-3f);
+  EXPECT_NEAR(out.state_of_charge(), 95.5f, 1e-3f);
+  EXPECT_EQ(out.cell_top_temp, 41);
+  EXPECT_EQ(out.cell_bottom_temp, 37);
 }
 
-TEST(CanLib, MuxPacksOnlyTheSelectedChannel) {
-  VcuDebug msg;
-  msg.channel = 1;
-  msg.loop_time = 0xDEADBEEF;  // channel 0 signal; must NOT be packed
-  msg.cpu_load_raw = 5000;     // 50.00 %
+TEST(CanLib, ImportedBitfieldsPackByCsvBitIndex) {
+  VcuFuses msg;
+  msg.vcu_fuses_1_batt_pump_fuse = true;
+  msg.vcu_fuses_1_batt_fans_fuse = true;
+  msg.vcu_fuses_1_boards_fuse = true;
+  msg.vcu_fuses_2_brake_light_fuse = true;
+  msg.vcu_fuses_2_spare_fuse = true;
 
-  uint8_t data[VcuDebug::kDlc];
+  uint8_t data[VcuFuses::kDlc];
   msg.Pack(data);
 
-  const uint8_t expected[8] = {0x01, 0x88, 0x13, 0x00, 0x00, 0x00, 0x00, 0x00};
+  const uint8_t expected[2] = {0x89, 0x05};
   EXPECT_EQ(0, std::memcmp(data, expected, sizeof(expected)));
-
-  VcuDebug out;
-  out.loop_time = 111;  // must survive unpacking a channel-1 frame
-  out.Unpack(data);
-  EXPECT_EQ(out.channel, 1);
-  EXPECT_EQ(out.cpu_load_raw, 5000);
-  EXPECT_EQ(out.loop_time, 111u);
-}
-
-TEST(CanLib, MuxChannelZero) {
-  VcuDebug msg;
-  msg.channel = 0;
-  msg.loop_time = 0xDEADBEEF;
-  msg.cpu_load_raw = 1234;  // channel 1 signal; must not be packed
-
-  uint8_t data[VcuDebug::kDlc];
-  msg.Pack(data);
-  VcuDebug out;
-  out.Unpack(data);
-  EXPECT_EQ(out.loop_time, 0xDEADBEEFu);
-  EXPECT_EQ(out.cpu_load_raw, 0);
 }
 
 TEST(CanLib, FloatAccessorsScaleAndRound) {
-  VcuStatus msg;
-  msg.torque_request_raw = -1234;
-  EXPECT_NEAR(msg.torque_request(), -123.4f, 1e-3f);
-  msg.set_torque_request(-123.4f);
-  EXPECT_EQ(msg.torque_request_raw, -1234);
-  // Round-to-nearest, both signs.
-  msg.set_torque_request(0.06f);
-  EXPECT_EQ(msg.torque_request_raw, 1);
-  msg.set_torque_request(-0.06f);
-  EXPECT_EQ(msg.torque_request_raw, -1);
+  VcuState state;
+  state.set_state_of_charge_estimate(95.5f);
+  EXPECT_EQ(state.state_of_charge_estimate_raw, 955);
+  EXPECT_NEAR(state.state_of_charge_estimate(), 95.5f, 1e-3f);
 
-  HvcPackStatus hvc;
-  hvc.soc_raw = 191;
-  EXPECT_NEAR(hvc.soc(), 95.5f, 1e-3f);
+  CellVoltages cells;
+  cells.set_voltage_i(4.1234f);
+  EXPECT_EQ(cells.voltage_i_raw, 41234);
+  EXPECT_NEAR(cells.voltage_i(), 4.1234f, 1e-4f);
 }
 
-TEST(CanLib, EnumToString) {
-  EXPECT_STREQ(ToString(VcuState::kDrive), "DRIVE");
-  EXPECT_STREQ(ToString(static_cast<VcuState>(200)), "?");
+TEST(CanLib, KnownMessageMetadataAndCorrectedContactorDlc) {
+  EXPECT_EQ(ContactorStatus::kFrameId, 0x131u);
+  EXPECT_EQ(ContactorStatus::kDlc, 4u);
+  EXPECT_EQ(VcuState::kFrameId, 0x1C7u);
+  EXPECT_EQ(VcuState::kFrequencyHz, 333.0f);
 }
 
-TEST(CanLib, QuantityBlockAndMetadata) {
-  ASSERT_EQ(kMessageCount, 5u);
-  // Sorted by frame ID; bootloader block occupies 0x010-0x013.
-  EXPECT_EQ(kMessageMeta[0].frame_id, VcuBootloaderData::kFrameId);
-  EXPECT_EQ(kMessageMeta[0].quantity, 4);
-  EXPECT_EQ(kMessageMeta[0].frequency_hz, 0.0f);
-  EXPECT_EQ(kMessageMeta[1].frame_id, 0x300u);
-  EXPECT_EQ(kMessageMeta[1].dlc, 8);
-  EXPECT_EQ(kMessageMeta[3].frame_id, 0x400u);
-  EXPECT_EQ(kMessageMeta[3].frequency_hz, 50.0f);
+TEST(CanLib, Lhre2026CellVoltageRange) {
+  EXPECT_EQ(CellVoltages::kFrameId, 0x0D0u);
+  EXPECT_EQ(CellVoltages::kQuantity, 33u);
+  EXPECT_TRUE(CellVoltages::Matches(0x0F0));
+  EXPECT_FALSE(CellVoltages::Matches(0x0F1));
 
-  EXPECT_TRUE(VcuBootloaderData::Matches(0x013));
-  EXPECT_FALSE(VcuBootloaderData::Matches(0x014));
-  VcuBootloaderData boot;
-  lhal::CanFrame frame = boot.ToFrame(3);
-  EXPECT_EQ(frame.id, 0x013u);
+  CellVoltages cells;
+  lhal::CanFrame frame = cells.ToFrame(32);
+  EXPECT_EQ(frame.id, 0x0F0u);
 }
 
-// Indexed array block: 4 temp slots per frame over 4 consecutive IDs;
-// cell = (frame_id - kFrameId) * 4 + slot.
-TEST(CanLib, CellTempArrayBlock) {
-  HvcCellTemps msg;
-  msg.set_cell_temp_slot0(21.5f);
-  msg.cell_temp_slot1_raw = -113;  // -11.3 degC
-  msg.set_cell_temp_slot2(0.0f);
-  msg.set_cell_temp_slot3(45.9f);
+TEST(CanLib, Lhre2026CellTemperatureRangeAndSlots) {
+  EXPECT_EQ(CellTemperatures::kFrameId, 0x100u);
+  EXPECT_EQ(CellTemperatures::kQuantity, 23u);
 
-  lhal::CanFrame frame = msg.ToFrame(2);  // frame for cells 8-11
-  EXPECT_EQ(frame.id, HvcCellTemps::kFrameId + 2);
-  ASSERT_TRUE(HvcCellTemps::Matches(frame.id));
-  EXPECT_FALSE(HvcCellTemps::Matches(HvcCellTemps::kFrameId + 4));
+  CellTemperatures msg;
+  msg.set_temp_i(21.5f);
+  msg.temp_i_1_raw = 113;
+  msg.set_temp_i_2(0.0f);
+  msg.set_temp_i_3(45.9f);
 
-  HvcCellTemps out = HvcCellTemps::FromFrame(frame);
-  EXPECT_NEAR(out.cell_temp_slot0(), 21.5f, 1e-3f);
-  EXPECT_EQ(out.cell_temp_slot1_raw, -113);
-  EXPECT_EQ(out.cell_temp_slot2_raw, 0);
-  EXPECT_NEAR(out.cell_temp_slot3(), 45.9f, 1e-3f);
+  lhal::CanFrame frame = msg.ToFrame(22);
+  EXPECT_EQ(frame.id, 0x116u);
+  ASSERT_TRUE(CellTemperatures::Matches(frame.id));
+  EXPECT_FALSE(CellTemperatures::Matches(0x117));
+
+  CellTemperatures out = CellTemperatures::FromFrame(frame);
+  EXPECT_NEAR(out.temp_i(), 21.5f, 1e-3f);
+  EXPECT_EQ(out.temp_i_1_raw, 113);
+  EXPECT_EQ(out.temp_i_2_raw, 0);
+  EXPECT_NEAR(out.temp_i_3(), 45.9f, 1e-3f);
 }
 
 }  // namespace

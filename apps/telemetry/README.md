@@ -33,8 +33,9 @@ Local and CI runs use Docker-managed volumes by default. On the production
 server, export `TELEMETRY_STORAGE_ROOT=/mnt/server_ssd` before running the
 devtool to bind Postgres, Kafka, and logsync storage onto the SSD.
 
-The core is Kafka/bridge, ingest with Mosquitto/PostgreSQL/Grafana, and the
-field enricher. Optional processors are GPS classifier, lap timer, track
+The core is Kafka/bridge, ingest with Mosquitto/PostgreSQL/Grafana and the
+[Kafka database writer](stack/processors/db_writer/README.md), and the field
+enricher. Optional processors are GPS classifier, lap timer, track
 mapper, Kafka test, GG plot, and car status.
 
 ## Logsync
@@ -98,5 +99,6 @@ action input or container-image layer. The container images, server ingestion,
 and integration targets run on Linux and macOS and are intentionally
 incompatible with native Windows.
 
-Docker-backed targets are manual/local and are exercised by the telemetry CI
-workflow. Normal repo presubmit remains service-free.
+Docker-backed targets are manual/local and are exercised by the
+`Telemetry` job in `ci.yml`. The Bazel jobs stay
+service-free.

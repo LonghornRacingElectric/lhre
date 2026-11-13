@@ -30,7 +30,7 @@ py_binary(
 
 # One command for both shells. It is a bare program invocation with no shell
 # syntax, so the same string works as `cmd` (bash, Linux/macOS) and `cmd_bat`
-# (cmd.exe). Windows builds have no bash (ADR-013), so a genrule that builds
+# (cmd.exe). Windows builds have no bash (ADR-018), so a genrule that builds
 # there needs cmd_bat; sharing the string keeps the two from drifting.
 _GEN_CAN_PACKETS_PB2_CMD = "$(execpath :gen_can_packets_pb2) $(location //tools/protoc) $(location //apps/telemetry:current_schema_proto) $(RULEDIR) $@"
 
@@ -59,9 +59,12 @@ exports_files([
     "init-databases.sh",
     "nightwatch_db_init.sql",
     "angelique_db_init.sql",
-    "orion_db_init.sql",
-    "common_schema.sql",
 ])
+
+exports_files(
+    ["common_schema.sql"],
+    visibility = ["//visibility:public"],
+)
 
 # Filegroup for SQL initialization scripts
 filegroup(
@@ -70,7 +73,7 @@ filegroup(
         "angelique_db_init.sql",
         "init-databases.sh",
         "nightwatch_db_init.sql",
-        "orion_db_init.sql",
+        "//apps/telemetry:current_schema_sql",
     ],
     target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
@@ -102,6 +105,8 @@ py_library(
         "__init__.py",
         "mqtt_handler.py",
         "partition_manager.py",
+        "packet_ids.py",
+        "sensor_decode.py",
     ],
     data = [
         ":car_configs",
@@ -189,6 +194,25 @@ telemetry_service_image(
 alias(
     name = "ingest_tarball",
     actual = ":ingest_load",
+    target_compatible_with = NOT_WINDOWS,
+    visibility = ["//visibility:public"],
+)
+
+py_library(
+    name = "sensor_decode",
+    srcs = ["sensor_decode.py"],
+    imports = ["../.."],
+    data = [":protobuf_files"],
+    deps = [requirement("protobuf")],
+    target_compatible_with = NOT_WINDOWS,
+    visibility = ["//visibility:public"],
+)
+
+py_library(
+    name = "partition_manager",
+    srcs = ["partition_manager.py"],
+    imports = ["../.."],
+    deps = ["//apps/telemetry/analysis:analysis_lib"],
     target_compatible_with = NOT_WINDOWS,
     visibility = ["//visibility:public"],
 )

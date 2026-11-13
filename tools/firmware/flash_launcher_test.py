@@ -27,6 +27,8 @@ def run_launcher(env_var, *forwarded):
     launcher = Runfiles.Create().Rlocation(os.environ[env_var])
     return subprocess.run(
         [launcher, "--", *forwarded],
+        # The tests assert on the exit code, so a failure must not raise.
+        check=False,
         stdout=subprocess.PIPE,
         text=True,
     )

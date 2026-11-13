@@ -65,11 +65,14 @@ class Can final : public lhal::CanBus {
     rx_context_ = context;
   }
 
+  CanStats stats() const override { return stats_; }
+
   // Test helpers -----------------------------------------------------------
   const std::vector<CanFrame>& sent() const { return sent_; }
   void ClearSent() { sent_.clear(); }
   // Deliver a frame to this node as if it arrived on the bus.
   void Inject(const CanFrame& frame) { Deliver(frame); }
+  void set_stats(const CanStats& stats) { stats_ = stats; }
 
  private:
   friend class CanNetwork;
@@ -86,6 +89,7 @@ class Can final : public lhal::CanBus {
   std::vector<CanFrame> sent_;
   RxCallback rx_callback_ = nullptr;
   void* rx_context_ = nullptr;
+  CanStats stats_;
 };
 
 inline void CanNetwork::Broadcast(const Can* sender, const CanFrame& frame) {

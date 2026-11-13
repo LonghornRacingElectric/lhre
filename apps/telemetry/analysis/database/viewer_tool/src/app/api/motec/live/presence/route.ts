@@ -8,6 +8,11 @@
 // it (manual transfer), which pins a designated leader until it leaves. Capped
 // at MAX_CLIENTS.
 //
+// LOCK: the leader can lock leadership to itself so it never hops while their
+// phone sleeps — a locked leader keeps its seat while silent, and everyone else
+// stays a mirror. If the locked leader is away (silent > TTL), any client can
+// explicitly TAKE control; unlock returns to the hop-on-leave behaviour.
+//
 // State is in-process (single `next start` instance) — fine for a trackside box.
 // Clients heartbeat ~every 4s; a client is dropped after TTL_MS of silence.
 export const runtime = "nodejs";
@@ -17,21 +22,23 @@ import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 
 type Client = { id: string; firstSeen: number; lastSeen: number; name: string };
-type PresenceState = { clients: Map<string, Client>; requests: Map<string, number>; designated: string | null };
+type PresenceState = { clients: Map<string, Client>; requests: Map<string, number>; designated: string | null; locked: boolean };
 
 const TTL_MS = 12_000;
 const MAX_CLIENTS = 3;
 
 const g = globalThis as unknown as { __livePresenceV2?: PresenceState };
 const state: PresenceState = g.__livePresenceV2 ?? (g.__livePresenceV2 = {
-  clients: new Map(), requests: new Map(), designated: null,
+  clients: new Map(), requests: new Map(), designated: null, locked: false,
 });
 const { clients, requests } = state;
 
+const away = (c: Client | undefined, now: number) => !c || now - c.lastSeen > TTL_MS;
+
 function prune(now: number) {
-  for (const [id, c] of clients) if (now - c.lastSeen > TTL_MS) clients.delete(id);
+  for (const [id, c] of clients) if (away(c, now) && !(state.locked && id === state.designated)) clients.delete(id);
   for (const id of requests.keys()) if (!clients.has(id)) requests.delete(id);
-  if (state.designated && !clients.has(state.designated)) state.designated = null; // demote if it left
+  if (state.designated && !clients.has(state.designated)) { state.designated = null; state.locked = false; } // demote if it left
 }
 
 function leaderId(): string | null {
@@ -44,7 +51,7 @@ function leaderId(): string | null {
   return leader?.id ?? null;
 }
 
-function snapshot(clientId: string) {
+function snapshot(clientId: string, now: number) {
   const leader = leaderId();
   const isLeader = leader === clientId;
   return {
@@ -56,6 +63,10 @@ function snapshot(clientId: string) {
     requests: [...requests.keys()].map((id) => ({ id, name: clients.get(id)?.name || '' })),
     // Whether THIS client has an outstanding request.
     requested: requests.has(clientId),
+    locked: state.locked,
+    leaderName: (leader && clients.get(leader)?.name) || '',
+    // Locked leader silent > TTL — mirrors may take control.
+    leaderAway: state.locked && away(leader ? clients.get(leader) : undefined, now),
   };
 }
 
@@ -63,7 +74,7 @@ export async function POST(req: NextRequest) {
   const now = Date.now();
   const body = (await req.json().catch(() => ({}))) as {
     clientId?: string; name?: string; leave?: boolean;
-    action?: "request" | "grant" | "deny" | "force" | "claim_starter";
+    action?: "request" | "grant" | "deny" | "force" | "claim_starter" | "lock" | "unlock" | "take";
     target?: string;
   };
   const clientId = typeof body.clientId === "string" ? body.clientId : "";
@@ -73,9 +84,14 @@ export async function POST(req: NextRequest) {
   prune(now);
 
   if (body.leave) {
-    clients.delete(clientId);
     requests.delete(clientId);
-    if (state.designated === clientId) state.designated = null;
+    if (state.locked && state.designated === clientId) {
+      const c = clients.get(clientId);
+      if (c) c.lastSeen = 0; // keep the locked seat, but show it as away now
+    } else {
+      clients.delete(clientId);
+      if (state.designated === clientId) state.designated = null;
+    }
     return NextResponse.json({ role: "left", clients: clients.size, max: MAX_CLIENTS, leader: leaderId() });
   }
 
@@ -90,6 +106,7 @@ export async function POST(req: NextRequest) {
   }
 
   const leader = leaderId();
+  const leaderAway = state.locked && away(leader ? clients.get(leader) : undefined, now);
   if (body.action === "force") {
     // Admin override: seize leadership instantly, even over an active leader.
     // Verified server-side via the next-auth session token — a non-admin POST
@@ -110,7 +127,14 @@ export async function POST(req: NextRequest) {
     }
   } else if (body.action === "deny" && typeof body.target === "string") {
     if (clientId === leader) requests.delete(body.target);
-  } else if (body.action === "claim_starter") {
+  } else if (body.action === "lock") {
+    if (clientId === leader) { state.designated = clientId; state.locked = true; }
+  } else if (body.action === "unlock") {
+    if (clientId === leader) state.locked = false;
+  } else if (body.action === "take") {
+    // Escape hatch for a locked leader whose phone died; the lock carries over.
+    if (leaderAway) { state.designated = clientId; requests.delete(clientId); }
+  } else if (body.action === "claim_starter" && (!state.locked || leaderAway)) {
     // The user who originally started the active session reclaims control on
     // rejoin. The frontend gates this with sessionInfo.starterId ===
     // clientId, so only that user's browser will fire it. We trust the action
@@ -119,5 +143,5 @@ export async function POST(req: NextRequest) {
     requests.delete(clientId);
   }
 
-  return NextResponse.json(snapshot(clientId));
+  return NextResponse.json(snapshot(clientId, now));
 }

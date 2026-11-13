@@ -5,9 +5,15 @@ Working documents: integration plans, change logs, the year roadmap. Written as 
 | Doc | What it is |
 |-----|-----------|
 | [gazebo-integration.md](gazebo-integration.md) | Gazebo + LiDAR integration plan, current status, known issues |
-| [camera-fusion.md](camera-fusion.md) | Phase 3 camera fusion plan (not started) |
+| [camera-fusion.md](camera-fusion.md) | Phase 3 roadmap: Camera fusion, LiDAR fallback and planner wiring ([#100](https://github.com/LonghornRacingElectric/lhre/issues/100)) implemented; ROS checks pass and manual autocross/EKF visuals confirmed |
+| [camera-lidar-fusion-design.md](camera-lidar-fusion-design.md) | Fusion contracts, side fallback, planner wiring and validation limits |
+| [zed2i-stereo.md](zed2i-stereo.md) | Implemented first camera milestone: one ZED 2i, 2.1 mm lens, stereo images and calibration |
+| [zed2i-stereo-implementation.md](zed2i-stereo-implementation.md) | Implementation plan for stereo geometry, ROS/RViz integration, and runtime validation |
 | [on-car-architecture.md](on-car-architecture.md) | Target stack on the retrofit car: sensors, nodes, CAN, safety loop, and what swaps versus sim |
 | [gazebo-change-notes.md](gazebo-change-notes.md) | Chronological change log (historical) |
 | [retrofit-roadmap-2026-27.md](retrofit-roadmap-2026-27.md) | Year roadmap snapshot. The live version is the VMS Timeline in Notion |
+| [mvp-pass-criteria.md](mvp-pass-criteria.md) | What the 10/28 software MVP gate run must show |
+| [sim-v2-pass-criteria.md](sim-v2-pass-criteria.md) | The 11/14 Sim v2 stack, run matrix and acceptance thresholds |
+| [2026-11-07-mid360-fusion-gate-plan.md](2026-11-07-mid360-fusion-gate-plan.md) | Implementation and validation plan for #206: gate sensor selection, fallback and rates |
 
 For onboarding, start at [ros2/GETTING-STARTED.md](../../ros2/GETTING-STARTED.md).
