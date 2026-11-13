@@ -58,3 +58,34 @@ must apply the generated schema and provision equivalent grants before rollout.
 The query ring and its baseline start with conservative 64 MiB bootstrap
 budgets. Sealed L1/L2 caches default off; configure measured budgets through
 `QUERY_L1_BYTES` and `QUERY_L2_BYTES`. The cache volume is disposable.
+
+## Decode router
+
+Every `sensor_data` record carries a `schema_fingerprint` header: the
+`schema_id` of the wire contract its payload was encoded with
+(`//lib/codegen/telemetry:artemis_schema_contract`). The bridge stamps its own
+deployed `schema_id` (from `/schema/schema_contract.json` in its image) unless
+the publisher named one by sending to `artemis/data/<schema_id>`. Batches in
+any other schema stay out of the live `grafana_data_artemis` feed, which the
+bridge decodes with its own schema.
+
+`decode_router.route()` decodes a record only when its fingerprint is the
+deployed schema or an approved entry in
+[`schema_registry/decoders.json`](../../schema_registry/decoders.json).
+Anything else raises `Quarantined` with `unknown_schema`, `unapproved_bundle`
+or `invalid_payload`. Records with no fingerprint (from an older bridge) decode
+as the deployed schema. Consumers still decode by car name; moving them onto
+`route()`, keeping quarantined bytes for replay, and having BEVO send the
+fingerprint itself are the next steps.
+
+```bash
+# watch the router on the running stack's sensor_data (read-only)
+bazel run //apps/telemetry/stack/ingest:decode_router_demo -- --from-kafka localhost:29092
+# publish one batch per case through MQTT -> ingest -> bridge
+bazel run //apps/telemetry/stack/ingest:decode_router_demo -- --send localhost:1883
+# no stack: route the same cases plus malformed records in-process
+bazel run //apps/telemetry/stack/ingest:decode_router_demo -- --samples
+
+bazel test //apps/telemetry/stack/ingest:decode_router_test
+bazel test --config=local //apps/telemetry/stack/ingest:decode_router_integration_test
+```
