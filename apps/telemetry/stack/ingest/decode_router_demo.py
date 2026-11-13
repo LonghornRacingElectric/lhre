@@ -1,13 +1,13 @@
 """Watch the decode router pick a decoder (or quarantine) for each record.
 
     # tail the running stack's sensor_data and route every record
-    bazel run //apps/telemetry/stack/ingest:decode_router_demo -- --from-kafka localhost:29092
+    bazel run --config=local //apps/telemetry/stack/ingest:decode_router_demo -- --from-kafka localhost:29092
 
     # in another terminal: publish one batch per case through MQTT -> ingest -> bridge
-    bazel run //apps/telemetry/stack/ingest:decode_router_demo -- --send localhost:1883
+    bazel run --config=local //apps/telemetry/stack/ingest:decode_router_demo -- --send localhost:1883
 
     # no stack needed: route the same cases plus malformed records in-process
-    bazel run //apps/telemetry/stack/ingest:decode_router_demo -- --samples
+    bazel run --config=local //apps/telemetry/stack/ingest:decode_router_demo -- --samples
 
 Read-only on Kafka: the tail uses no consumer group and commits nothing, so it
 cannot affect db_writer or the processors.

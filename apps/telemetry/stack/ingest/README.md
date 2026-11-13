@@ -80,12 +80,12 @@ fingerprint itself are the next steps.
 
 ```bash
 # watch the router on the running stack's sensor_data (read-only)
-bazel run //apps/telemetry/stack/ingest:decode_router_demo -- --from-kafka localhost:29092
+bazel run --config=local //apps/telemetry/stack/ingest:decode_router_demo -- --from-kafka localhost:29092
 # publish one batch per case through MQTT -> ingest -> bridge
-bazel run //apps/telemetry/stack/ingest:decode_router_demo -- --send localhost:1883
+bazel run --config=local //apps/telemetry/stack/ingest:decode_router_demo -- --send localhost:1883
 # no stack: route the same cases plus malformed records in-process
-bazel run //apps/telemetry/stack/ingest:decode_router_demo -- --samples
+bazel run --config=local //apps/telemetry/stack/ingest:decode_router_demo -- --samples
 
-bazel test //apps/telemetry/stack/ingest:decode_router_test
+bazel test --config=local //apps/telemetry/stack/ingest:decode_router_test
 bazel test --config=local //apps/telemetry/stack/ingest:decode_router_integration_test
 ```
