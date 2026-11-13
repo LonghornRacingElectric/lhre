@@ -1,38 +1,25 @@
+"""Artemis telemetry fixtures, logger CSV replay and MQTT publishing."""
 import argparse
-import os
-import random
-import math
-import numpy as np
-import secrets
-from numpy.random import default_rng
-import time
 import datetime
-import pickle
 import json
-import requests
 import logging
-from itertools import count
-from tqdm import tqdm
-import sys
-import secrets
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from multiprocessing import cpu_count
+import math
+import os
 from pathlib import Path
-from typing import Union, Tuple
-from google.protobuf.descriptor import FieldDescriptor
-from google.protobuf.message import Message
+import secrets
+import time
+from typing import Tuple, Union
+
+import numpy as np
 import pandas as pd
-from sqlalchemy import func, select
+import requests
+from numpy.random import default_rng
+from google.protobuf.descriptor import FieldDescriptor
+from paho.mqtt import client as mqtt_client
+from tqdm import tqdm
 
-sys.path.append(str(Path(__file__).parents[2]))
-from stack.ingest.mqtt_handler import MQTTHandler, MQTTTarget
-from analysis.sql_utils.db_session import get_db, DBTarget
-from analysis.sql_utils.query_builder import QueryBuilder
-from analysis.sql_utils.models import OrionPacket, ArtemisTransportState
-from stack.ingest.protobuf.can_packets_pb2 import OrionSensorData
-from stack.ingest.protobuf.artemis_pb2 import ArtemisSensorData
-from stack.ingest.sensor_decode import CAR_MESSAGES
-
+from analysis.database.native_demo import contract, field_definitions, publish
+from stack.ingest.protobuf import artemis_pb2
 
 
 class DataTester:
@@ -55,6 +42,21 @@ class DataTester:
         self.mapping = None
         self.csv_index = 0
         self.value_profile = value_profile.lower().strip()
+        if self.value_profile not in ("generic", "viewer"):
+            raise ValueError("value_profile must be generic or viewer")
+        self.storage = contract()
+        self.definitions = field_definitions()
+        self.pools = {pool["table"]: pool for pool in self.storage["pools"]}
+        self.pool_by_field = {(pool["group"], field["name"]): pool["table"]
+                              for pool in self.storage["pools"] for field in pool["fields"]}
+        groups = self.get_proto_desc()
+        self.pool_descriptions = {
+            pool["table"]: {field["name"]: groups[pool["group"]][field["name"]]
+                            for field in pool["fields"]}
+            for pool in self.storage["pools"]
+        }
+        self.array_lengths = {field["names"][-1]: len(field["layout"])
+                              for field in self.definitions.values() if field["repeated"]}
         self._viewer_story_packet = None
         self._viewer_story_data = None
         
@@ -344,6 +346,8 @@ class DataTester:
             return self._cast_numeric(story["blw_speed"], dtype)
         if lower_col in {"brw_speed", "br_wheel_speed"}:
             return self._cast_numeric(story["brw_speed"], dtype)
+        if lower_col == "gps_speed":
+            return self._cast_numeric(story["speed_mps"] / 0.5144444444444445, dtype)
         if lower_col in {"wheel_speed", "dash_speed", "gps_velocity", "f_gps_velocity", "b_gps_velocity"}:
             return self._cast_numeric(story["speed_mps"], dtype)
         if lower_col in {"motor_speed"}:
@@ -461,6 +465,8 @@ class DataTester:
                 return [float(v) for v in values]
             return values
 
+        if lower_col == "gps_precise" and ndims == 1:
+            return cast_vector([story["lat"], story["lon"], 250., .1, 1., story["t"]])
         if lower_col in {"gps", "f_gps", "b_gps"} and ndims == 1:
             lat = float(story["lat"])
             lon = float(story["lon"])
@@ -521,123 +527,138 @@ class DataTester:
         return None
 
     def load_csv(self, csv_path):
-        """
-        Load CSV file into memory.
-        
-        :param csv_path: path to CSV file
-        """
-        self.csv_data = pd.read_csv(csv_path)
+        """Load one Artemis logger CSV or merge a directory's pool files by receipt time."""
+        path = Path(csv_path)
+        files = sorted(path.glob("artemis_*.csv")) if path.is_dir() else [path]
+        if not files:
+            raise ValueError(f"No Artemis logger CSVs found in {path}")
+        # String columns keep nanosecond integers exact and distinguish blanks from zero.
+        self.csv_data = pd.concat(
+            [pd.read_csv(file, dtype=str, keep_default_na=False) for file in files],
+            ignore_index=True,
+        ).fillna("")
+        if self.mapping is None and "sample_time_ns" in self.csv_data:
+            order = sorted(range(len(self.csv_data)), key=lambda i: int(self.csv_data.iloc[i]["sample_time_ns"]))
+            self.csv_data = self.csv_data.iloc[order].reset_index(drop=True)
+        if self.csv_data.empty:
+            raise ValueError("CSV contains no observations")
         self.csv_index = 0
-        logging.info(f"Loaded CSV with {len(self.csv_data)} rows and columns: {list(self.csv_data.columns)}")
-    
+
     def load_mapping(self, mapping_path):
-        """
-        Load JSON mapping file.
-        
-        :param mapping_path: path to JSON mapping file
-        """
-        with open(mapping_path, 'r') as f:
-            self.mapping = json.load(f)
-        logging.info(f"Loaded mapping with {len(self.mapping)} fields")
+        """Map qualified Artemis field/metadata names to CSV columns or column lists."""
+        with open(mapping_path) as source:
+            self.mapping = json.load(source)
+        if not isinstance(self.mapping, dict):
+            raise ValueError("CSV mapping must be an object")
+        for name in self.mapping:
+            if name not in ("time", "sample_time_ns", "updated_fields") and name.split("[")[0] not in self.definitions:
+                raise ValueError(f"Unknown Artemis mapping field: {name}")
 
     @staticmethod
-    def get_next_packet_id(target: str) -> int:
-        """
-        Query the selected car DB for max packet_id and return max + 1.
+    def _coerce(value, field):
+        if field.type == FieldDescriptor.TYPE_BOOL:
+            if isinstance(value, str):
+                if value.lower() not in ("true", "false", "1", "0"):
+                    raise ValueError(f"Invalid Boolean value: {value!r}")
+                return value.lower() in ("true", "1")
+            return bool(value)
+        if field.type in (FieldDescriptor.TYPE_FLOAT, FieldDescriptor.TYPE_DOUBLE):
+            return float(value)
+        if field.type == FieldDescriptor.TYPE_STRING:
+            return str(value)
+        if field.type == FieldDescriptor.TYPE_BYTES:
+            return value.encode() if isinstance(value, str) else bytes(value)
+        return int(value)
 
-        :param target: car name (Orion or Artemis)
-        :return: next packet_id to use
-        """
-        with get_db(target) as session:
-            if target == "Artemis":
-                latest_packet_id = session.scalar(select(ArtemisTransportState.last_packet_id).where(ArtemisTransportState.singleton))
+    def create_row_from_csv(self, packet=0, table_desc=None):
+        """Read one fresh logger observation; packet is only a fixture index."""
+        if self.csv_data is None:
+            raise ValueError("CSV data is not loaded")
+        source = self.csv_data.iloc[self.csv_index].to_dict()
+        self.csv_index = (self.csv_index + 1) % len(self.csv_data)
+        values = dict(source)
+        for name, columns in (self.mapping or {}).items():
+            values[name] = [source[column] for column in columns] if isinstance(columns, list) else source[columns]
+        try:
+            stamp = int(values["sample_time_ns"])
+            time_ms = int(values["time"])
+            updated = json.loads(values["updated_fields"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError("Artemis CSV requires time, sample_time_ns and updated_fields") from error
+        if stamp <= 0 or time_ms != stamp // 1_000_000:
+            raise ValueError("CSV time does not match sample_time_ns")
+        if not isinstance(updated, list) or not updated or any(not isinstance(name, str) for name in updated) or len(set(updated)) != len(updated):
+            raise ValueError("CSV updated_fields must be a nonempty list of unique qualified names")
+        row = {"time": time_ms, "sample_time_ns": stamp, "updated_fields": updated}
+        for name in updated:
+            if name not in self.definitions or "." not in name:
+                raise ValueError(f"Unknown Artemis CSV field: {name}")
+            group, column = name.split(".")
+            field = artemis_pb2.ArtemisSensorData.DESCRIPTOR.fields_by_name[group].message_type.fields_by_name[column]
+            if field.is_repeated:
+                if name in values and isinstance(values[name], list):
+                    items = values[name]
+                else:
+                    slots = {int(key[len(name) + 1:-1]): value for key, value in values.items()
+                             if key.startswith(name + "[") and key.endswith("]")}
+                    nonempty = [index for index, value in slots.items() if value != ""]
+                    count = max(nonempty, default=-1) + 1
+                    if any(slots.get(index, "") == "" for index in range(count)):
+                        raise ValueError(f"Missing array slot in {name}")
+                    items = [slots[index] for index in range(count)]
+                row[name] = [self._coerce(item, field) for item in items]
             else:
-                latest_packet_id = session.scalar(select(func.max(OrionPacket.packet_id)))
-
-        next_packet_id = (int(latest_packet_id) if latest_packet_id is not None else 0) + 1
-        logging.info(f"Starting packet IDs for {target} at {next_packet_id} (latest={latest_packet_id})")
-        return next_packet_id
-    
-    def create_row_from_csv(self, packet: int, table_desc: dict = None):
-        """
-        Create a row of data from CSV using the mapping.
-        
-        :param packet: packet ID
-        :param table_desc: optional table description with type information
-        :return: dict with database column names as keys
-        """
-        if self.csv_data is None or self.mapping is None:
-            raise ValueError("CSV data or mapping is not loaded.")
-
-        if self.csv_index >= len(self.csv_data):
-            self.csv_index = 0  # Reset index if we reach the end of the CSV
-
-        csv_row = self.csv_data.iloc[self.csv_index]
-        self.csv_index += 1
-
-        row = {}
-        row['packet_id'] = packet
-
-        for db_col, csv_col in self.mapping.items():
-            # Special-case time: CSV "Time" is in seconds; DB/protobuf expects milliseconds.
-            if db_col == 'time':
-                if isinstance(csv_col, list):
-                    raise ValueError('Mapping for "time" must be a single CSV column name, not a list.')
-                time_s = csv_row[csv_col]
-                try:
-                    row[db_col] = int(round(float(time_s) * 1000.0))
-                except (TypeError, ValueError) as e:
-                    raise ValueError(f'Non-numeric CSV time value {time_s!r} in column {csv_col!r}') from e
-                continue
-
-            if isinstance(csv_col, list):
-                row[db_col] = [csv_row[col] for col in csv_col]
-            else:
-                row[db_col] = csv_row[csv_col]
-
+                if name not in values or values[name] == "":
+                    raise ValueError(f"Fresh scalar {name} is blank")
+                row[name] = self._coerce(values[name], field)
         return row
 
     @staticmethod
-    def get_desc(db=False, tables=None, rm_cols=None, **get_specs):
-        """
-        Most advanced infra to pull a table description from the DB. Can return either a full table description or
-        number of tables. Refer to get_table_column_specs for return format
+    def _select_description(desc, tables=None, rm_cols=None):
+        pools = {pool["table"]: pool for pool in contract()["pools"]}
+        requested = [tables] if isinstance(tables, str) else tables
+        selected = {}
+        for table in requested or desc:
+            if table in desc:
+                selected[table] = dict(desc[table])
+            elif table in pools:
+                pool = pools[table]
+                selected[table] = {field["name"]: desc[pool["group"]][field["name"]] for field in pool["fields"]}
+            else:
+                matching = [pool for pool in pools.values() if pool["group"] == table]
+                if not matching:
+                    raise ValueError(f"Unknown Artemis group or pool: {table}")
+                selected[table] = {name: spec for pool in matching for name, spec in desc[pool["table"]].items()}
+            removed = [rm_cols] if isinstance(rm_cols, str) else rm_cols
+            if isinstance(removed, dict):
+                removed = removed.get(table, [])
+            for column in removed or []:
+                selected[table].pop(column, None)
+        return selected
 
-        :param db:      bool indicating whether entire DB description is desired
-        :param tables:  str | list indicating which table(s) is desired
-        :param rm_cols: str | list | dict indicating which columns to remove or if dict, which columns to
-                                          remove from which table (format: {'electronics': ['imd_on'], 'dynamics': ...})
-        :param get_specs: kwargs to pass to get_table_columns_specs
-
-        :return: db_description (see get_table_column_specs for return format details)
-        """
-        if tables and db:
-            raise ValueError('Can not produce full DB and table(s) descriptions simultaneously.')
-        elif not (tables or db):
-            raise ValueError('Either db arg must be true or table names must be given.')
-        elif db and not isinstance(db, bool):
-            raise ValueError('Input to db must be True or False.')
-
-        if isinstance(rm_cols, str):
-            rm_cols = [rm_cols]
-        if isinstance(tables, str):
-            tables = [tables]
-
-        with QueryBuilder(car=get_specs.get('target')) as qb:
-            desc = qb.get_table_column_specs(get_specs.get('force'), get_specs.get('verbose'), target=get_specs.get('target'))
-
-        if rm_cols:
-            for table in (desc if db else tables):
-                for col in rm_cols if isinstance(rm_cols, list) else rm_cols[table]:
-                    desc[table].pop(col)
-
-        if db:
-            return desc
-        return {table: desc[table] for table in tables}
+    @classmethod
+    def get_desc(cls, db=False, tables=None, rm_cols=None, **get_specs):
+        """Return generated Artemis pool column types without connecting to a DB."""
+        cls._root_proto_message(get_specs.get("target", "Artemis"))
+        if bool(db) == bool(tables):
+            raise ValueError("Select either the full schema (db=True) or tables")
+        types = {"double precision": float, "numeric": float, "boolean": bool,
+                 "integer": int, "bigint": int, "smallint": int, "text": str, "bytea": bytes}
+        desc = {}
+        for pool in contract()["pools"]:
+            columns = {"time": (int, 0), "sample_time_ns": (int, 0)}
+            for field in pool["fields"]:
+                repeated = field["sql_type"].endswith("[]")
+                sql_type = field["sql_type"].removesuffix("[]")
+                columns[field["name"]] = (types[sql_type], int(repeated))
+            desc[pool["table"]] = columns
+        return cls._select_description(desc, tables, rm_cols)
 
     @staticmethod
-    def _root_proto_message(target: str):
-        return CAR_MESSAGES[target]
+    def _root_proto_message(target="Artemis"):
+        if target != "Artemis":
+            raise ValueError("Telemetry publishing supports Artemis only")
+        return artemis_pb2.ArtemisSensorData
 
     @staticmethod
     def _proto_scalar_dtype(field_type: int):
@@ -668,38 +689,13 @@ class DataTester:
         return float
 
     @classmethod
-    def get_proto_desc(cls, target: str, tables=None, rm_cols=None):
-        if isinstance(tables, str):
-            tables = [tables]
-        requested = set(tables) if tables else None
-
-        proto_message = cls._root_proto_message(target)
+    def get_proto_desc(cls, target="Artemis", tables=None, rm_cols=None):
         desc = {}
-        for table_field in proto_message.DESCRIPTOR.fields:
-            if table_field.type != FieldDescriptor.TYPE_MESSAGE:
-                continue
-            table_name = table_field.name
-            if requested and table_name not in requested:
-                continue
-            table_desc = {}
-            for column in table_field.message_type.fields:
-                dtype = cls._proto_scalar_dtype(column.type)
-                if hasattr(column, "is_repeated"):
-                    is_repeated = bool(column.is_repeated)
-                else:
-                    is_repeated = column.label == FieldDescriptor.LABEL_REPEATED
-                ndims = 1 if is_repeated else 0
-                table_desc[column.name] = (dtype, ndims)
-            desc[table_name] = table_desc
-
-        if isinstance(rm_cols, str):
-            rm_cols = [rm_cols]
-        if rm_cols:
-            for table in list(desc.keys()):
-                cols_to_remove = rm_cols if isinstance(rm_cols, list) else rm_cols.get(table, [])
-                for col in cols_to_remove:
-                    desc[table].pop(col, None)
-        return desc
+        for group in cls._root_proto_message(target).DESCRIPTOR.fields:
+            if group.type == FieldDescriptor.TYPE_MESSAGE:
+                desc[group.name] = {field.name: (cls._proto_scalar_dtype(field.type), int(field.is_repeated))
+                                    for field in group.message_type.fields}
+        return cls._select_description(desc, tables, rm_cols)
 
     def get_random_data(self, dtype: type, size: Union[int, Tuple[int, int]], as_scalar=False, **kwargs):
         """
@@ -744,211 +740,166 @@ class DataTester:
 
         return res[0] if as_scalar else list(res)
 
-    def create_row(self, table_desc: dict, packet: int):
-        """
-        This function is used to create a row of test data.
-
-        :param table_desc: table_desc to base row of data off of
-
-        :return: a row of data in dict {col_name: random_data, col2_name: ...} format
-        """
+    def create_row(self, table_desc, packet):
+        """Generate a typed row using the existing generic or coherent viewer profile."""
         row = {}
-        for col, (dtype, ndims) in table_desc.items():
-            if col == 'time':
-                row[col] = time.time() * 1000
-            elif col == 'packet_id':
-                row[col] = packet
-            elif col == 'cells_temp' and self.value_profile != "viewer":
-                # row[col] = np.random.randint(1, 101, size=(4, 5)).tolist()
-                row[col] = np.random.randint(1, 101, size=140).tolist()
+        stamp = time.time_ns()
+        for column, (dtype, ndims) in table_desc.items():
+            if column == "time":
+                value = stamp // 1_000_000
+            elif column == "sample_time_ns":
+                value = stamp
             elif dtype is datetime.datetime:
-                row[col] = datetime.date.today()
+                value = datetime.datetime.now()
             elif dtype is dict:
-                # row[col] = Jsonb({'fake_jsonb_data': self.get_random_data(int, 3)})
-                row[col] = {'fake_jsonb_data': self.get_random_data(int, 3)} 
-            elif dtype == 'point' or dtype == "POINT" or (isinstance(dtype, str) and dtype.lower() == 'point') or (isinstance(dtype, str) and dtype.lower() == 'POINT'):
+                value = {"fake_jsonb_data": self.get_random_data(int, 3)}
+            elif dtype is bytes or dtype is bytearray:
+                value = secrets.token_bytes(16)
+            elif isinstance(dtype, str) and dtype.lower() == "point":
                 if self.value_profile == "viewer":
                     story = self._viewer_story(packet)
-                    row[col] = (story["lat"], story["lon"])
+                    value = (story["lat"], story["lon"])
                 else:
-                    point = random.choice([(30.289464, -97.735303), (30.389670, -97.728152)])
-                    row[col] = point
-            elif dtype is bytearray or dtype is bytes:
-                row[col] = secrets.token_bytes(16)
+                    value = [(30.289464, -97.735303), (30.389670, -97.728152)][self.rng.integers(2)]
             else:
+                value = None
                 if self.value_profile == "viewer":
                     if ndims == 0:
-                        demo_scalar = self._viewer_scalar_value(col, dtype, packet)
-                        if demo_scalar is not None:
-                            row[col] = demo_scalar
-                            continue
-                    elif ndims in (1, 2):
-                        demo_vector = self._viewer_vector_value(col, dtype, ndims, packet)
-                        if demo_vector is not None:
-                            row[col] = demo_vector
-                            continue
-
-                if ndims == 0:
-                    row[col] = self.get_random_data(dtype, size=1, as_scalar=True)
-                elif ndims == 1:
-                    row[col] = self.get_random_data(dtype, size=3)
-                elif ndims == 2:
-                    row[col] = self.get_random_data(dtype, size=(3, 3))
-                else:
-                    raise ValueError(f'Invalid number of dimensions: {ndims}')
+                        value = self._viewer_scalar_value(column, dtype, packet)
+                    else:
+                        value = self._viewer_vector_value(column, dtype, ndims, packet)
+                if ndims == 1:
+                    length = self.array_lengths.get(column, 3)
+                    if value is None:
+                        value = self.get_random_data(dtype, length)
+                    elif value:
+                        value = (value * math.ceil(length / len(value)))[:length]
+                elif value is None:
+                    if ndims == 0:
+                        value = self.get_random_data(dtype, 1, as_scalar=True)
+                    elif ndims == 2:
+                        value = self.get_random_data(dtype, (3, 3))
+                    else:
+                        raise ValueError(f"Invalid number of dimensions: {ndims}")
+            row[column] = value
         return row
 
-
-    
-    def send_proto_rows(self, tables:list,  num_rows:int, delay:float, rm_cols = None, use_csv=False,
-                        schema_source: str = "proto", **kwargs):
-        target = kwargs.get('target', 'Orion')
-        schema_source = schema_source.lower().strip()
+    def send_proto_rows(self, tables, num_rows, delay, rm_cols=None, use_csv=False,
+                        schema_source="proto", **kwargs):
+        """Publish the requested number of synthetic or CSV rows as native Artemis batches."""
+        target = kwargs.get("target", "Artemis")
+        self._root_proto_message(target)
+        if num_rows < 0 or delay < 0:
+            raise ValueError("Row count and delay must be nonnegative")
         if schema_source == "proto":
-            db_desc = self.get_proto_desc(target=target, tables=tables, rm_cols=rm_cols)
+            desc = self.get_proto_desc(target, tables, rm_cols)
         elif schema_source == "orm":
-            db_desc = self.get_desc(tables=tables, rm_cols=rm_cols, **kwargs)
+            desc = self.get_desc(db=not tables, tables=tables, rm_cols=rm_cols, target=target)
         else:
-            raise ValueError(f"Invalid schema_source: {schema_source}. Expected 'proto' or 'orm'.")
-        if not db_desc:
-            raise ValueError(f"No tables selected for {target} using schema_source={schema_source}.")
-
-        start_packet_id = kwargs.get('start_packet_id', self.get_next_packet_id(target))
-        if target not in CAR_MESSAGES:
-            raise ValueError(f"Unsupported car: {target}")
-        topic = target.lower() + "/data"
-        for i in tqdm(range(num_rows)):
-            packet_id = start_packet_id + i
-            data = self.create_proto_message(packet_id, db_desc, use_csv=use_csv, target=target)
-            self.mqtt.publish(topic, data.SerializeToString(), qos=0)
+            raise ValueError("schema_source must be proto or orm")
+        start = kwargs.get("start_packet_id", 1)
+        sent = 0
+        for index in tqdm(range(num_rows)):
+            batch = self.create_proto_message(start + index, desc, use_csv, target)
+            if batch.updates:
+                result = self.mqtt.publish("artemis/data", batch.SerializeToString(), qos=1)
+                if result is not None:
+                    result.wait_for_publish(timeout=5)
+                    if not result.is_published():
+                        raise TimeoutError("MQTT publish did not complete")
+                sent += 1
             time.sleep(delay)
+        return sent
 
-    def create_proto_message(self, packet: int, db_desc, use_csv=False, target="Orion"):
-        """
-        Create a protobuf message using either random data or CSV data.
-        
-        :param packet: packet ID
-        :param db_desc: database description
-        :param use_csv: whether to use CSV data
-        :param target: target database
-        :return: protobuf message
-        """
-        if use_csv:
-            row = self.create_row_from_csv(packet, db_desc)
+    def create_proto_message(self, packet, db_desc, use_csv=False, target="Artemis", sample_time_ns=None):
+        """Build fresh per-pool observations; packet controls fixture values, never wire identity."""
+        self._root_proto_message(target)
+        csv_row = self.create_row_from_csv(packet) if use_csv else None
+        stamp = csv_row["sample_time_ns"] if csv_row is not None else sample_time_ns or time.time_ns()
+        batch = artemis_pb2.TelemetryBatch(format_version=1)
+        updates = {}
+        seen = set()
+        for table, desc in db_desc.items():
+            group = self.pools[table]["group"] if table in self.pools else table
+            group_descriptor = artemis_pb2.ArtemisSensorData.DESCRIPTOR.fields_by_name[group]
+            values = csv_row if csv_row is not None else self.create_row(desc, packet)
+            for name in desc:
+                field = group_descriptor.message_type.fields_by_name.get(name)
+                if field is None or (group, name) in seen:
+                    continue
+                qualified = f"{group}.{name}"
+                if csv_row is not None and qualified not in csv_row["updated_fields"]:
+                    continue
+                value = values[qualified] if csv_row is not None else values[name]
+                pool = self.pool_by_field[group, name]
+                if pool not in updates:
+                    update = batch.updates.add(sample_time_ns=stamp)
+                    update.values.time = stamp // 1_000_000
+                    updates[pool] = update
+                update = updates[pool]
+                destination = getattr(update.values, group)
+                destination.SetInParent()
+                if field.is_repeated:
+                    getattr(destination, name).extend(self._coerce(item, field) for item in value)
+                else:
+                    setattr(destination, name, self._coerce(value, field))
+                update.updated_fields.add(group=group_descriptor.number, field=field.number)
+                seen.add((group, name))
+        return batch
 
-        data = CAR_MESSAGES[target]()
-        data.packet_id = int(packet)
-        data.time = int(time.time() * 1000)
-        
-        # Get data from CSV once if needed
-        csv_row = None
-        if use_csv and self.csv_data is not None and self.mapping is not None:
-            # We need to pass table_desc but we'll use a merged version for all tables
-            # or just handle type conversion more carefully
-            csv_row = self.create_row_from_csv(packet, table_desc=None)
-        
-        for table in db_desc:
-            if use_csv and csv_row is not None:
-                row = csv_row  # Use the CSV data for all tables
-            else:
-                row = self.create_row(db_desc[table], packet)  # Create random data
-            
-            if hasattr(data, table):  
-                table_instance = getattr(data, table)
-                if isinstance(table_instance, Message): # Iterate through a specific table (not packet table)
-                    for key, value in row.items():
-                        if hasattr(table_instance, key): # Set values in protobuf message
-                            if (isinstance(value, list) or isinstance(value, tuple)):
-                                getattr(table_instance, key).extend(value)
-                            elif isinstance(value, dict):
-                                setattr(table_instance, key, json.dumps(value))
-                            else:
-                                setattr(table_instance, key, value)
-            else:
-                for key, value in row.items(): # Edit packet and time
-                    if hasattr(data, key):  
-                        setattr(data, key, int(value))
-        return data
-    
+    def native_update(self, pool, stamp, elapsed, seed):
+        desc = {pool["table"]: self.pool_descriptions[pool["table"]]}
+        return self.create_proto_message(int(elapsed / .02) + 1, desc, sample_time_ns=stamp).updates[0]
 
 
-if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO)
-    parser = argparse.ArgumentParser(description="Publish telemetry test data through MQTT.")
-    parser.add_argument(
-        "--car",
-        choices=["Orion", "Artemis"],
-        default="Orion",
-        help="Target car stream to publish.",
-    )
-    parser.add_argument(
-        "--profile",
-        choices=["viewer", "generic"],
-        default="viewer",
-        help="viewer: realistic ranges for live widget demos; generic: legacy [0,1)-heavy random ranges.",
-    )
-    parser.add_argument(
-        "--schema-source",
-        choices=["proto", "orm"],
-        default="proto",
-        help="Schema source for protobuf field generation. proto follows compiled protobuf definitions (SDD source of truth).",
-    )
-    parser.add_argument("--rows", type=int, default=500000, help="Number of protobuf rows to publish.")
-    parser.add_argument("--delay", type=float, default=None, help="Delay between publishes in seconds.")
-    args = parser.parse_args()
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--car", choices=["Artemis"], default="Artemis")
+    parser.add_argument("--profile", choices=["viewer", "generic"], default="viewer")
+    parser.add_argument("--schema-source", choices=["proto", "orm"], default="proto")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--rows", type=int, help="Number of fixture rows to publish (default: 500000).")
+    mode.add_argument("--duration", type=float, help="Publish independent frequency pools for this many seconds.")
+    parser.add_argument("--delay", type=float, help="Delay between fixture rows; defaults to 0.02 s (viewer) or 0.001 s (generic).")
+    parser.add_argument("--csv", type=Path, help="Artemis logger CSV or directory of pool CSVs.")
+    parser.add_argument("--mapping", type=Path, help="Optional qualified-field-to-CSV-column JSON mapping.")
+    parser.add_argument("--tables", nargs="+", help="Subsystem groups or generated pool table names.")
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--rate-scale", type=float, default=1)
+    parser.add_argument("--mqtt-host", default=os.getenv("MQTT_HOST", "localhost"))
+    parser.add_argument("--mqtt-port", type=int, default=int(os.getenv("MQTT_PORT", "1883")))
+    parser.add_argument("--contract", help="Override the generated storage contract path.")
+    args = parser.parse_args(argv)
+    if args.contract:
+        os.environ["ARTEMIS_STORAGE_CONTRACT"] = args.contract
+    if args.mapping and not args.csv:
+        parser.error("--mapping requires --csv")
+    if args.duration is None and args.rate_scale != 1:
+        parser.error("--rate-scale requires --duration")
+    if args.duration is not None and (args.csv or args.tables or args.delay is not None or args.schema_source != "proto"):
+        parser.error("--duration uses generated pool rates; CSV, tables, delay and ORM selection use --rows")
+    tester = DataTester(None, args.seed, args.csv, args.mapping, args.profile)
+    if args.duration is not None:
+        result = publish(args.duration, args.rate_scale, args.seed, args.mqtt_host,
+                         args.mqtt_port, update_factory=tester.native_update)
+    else:
+        delay = args.delay if args.delay is not None else .02 if args.profile == "viewer" else .001
+        rows = args.rows if args.rows is not None else 500000
+        if rows < 0 or delay < 0:
+            parser.error("--rows and --delay must be nonnegative")
+        client = mqtt_client.Client(client_id="paho-test-" + str(os.getpid()))
+        client.connect(args.mqtt_host, args.mqtt_port)
+        client.loop_start()
+        try:
+            tester.mqtt = client
+            sent = tester.send_proto_rows(args.tables, rows, delay, use_csv=args.csv is not None,
+                                          schema_source=args.schema_source, target=args.car)
+            result = {"rows": sent, "profile": args.profile, "schema_source": args.schema_source}
+        finally:
+            client.disconnect()
+            client.loop_stop()
+    print(json.dumps(result))
 
-    car_name = args.car
 
-    delay = args.delay
-    if delay is None:
-        # The viewer profile is for stable UI updates without overwhelming the front-end.
-        delay = 0.02 if args.profile == "viewer" else 0.001
-    
-    with get_db("Orion") as orion_session, get_db("Artemis") as artemis_session:
-        db_sessions = {"Orion": orion_session, "Artemis": artemis_session}
-        with MQTTHandler('paho_test', db_sessions=db_sessions, target=MQTTTarget.get()) as mqtt:
-            # Protobuf message testing with CSV data
-            dt = DataTester(
-                mqtt=mqtt,
-                seed=42,
-                csv_path=None,
-                mapping_path=None,
-                value_profile=args.profile,
-            )
-            start_packet_id = dt.get_next_packet_id(car_name)
-            proto_tables = list(dt.get_proto_desc(target=car_name).keys())
-            selected_tables = proto_tables
-            if args.schema_source == "orm":
-                available_tables = set(dt.get_desc(db=True, target=car_name).keys())
-                selected_tables = [table for table in proto_tables if table in available_tables]
-                missing_tables = [table for table in proto_tables if table not in available_tables]
-                if missing_tables:
-                    logging.warning(
-                        "ORM schema missing %s tables: %s",
-                        car_name,
-                        ", ".join(missing_tables),
-                    )
-
-            logging.info(
-                "Publishing %s rows for %s using %s schema over tables: %s",
-                args.rows,
-                car_name,
-                args.schema_source,
-                ", ".join(selected_tables),
-            )
-            dt.send_proto_rows(
-                tables=selected_tables,
-                num_rows=args.rows,
-                delay=delay,
-                use_csv=False,
-                schema_source=args.schema_source,
-                target=car_name,
-                start_packet_id=start_packet_id,
-            )
-
-            # data_ingest with fully processed data
-            # dt = DataTester(mqtt=mqtt, seed=42)
-            # time.sleep(1)
-            #                               2000, 0.01, target=car_name)  # batch
-            #                               2000, 0.01, target=car_name)  # batch
-            #print (dt.get_desc(db=True, target=car_name))
+if __name__ == "__main__":
+    main()

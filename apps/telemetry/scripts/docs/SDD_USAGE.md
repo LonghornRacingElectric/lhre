@@ -197,34 +197,30 @@ python3 scripts/generate_schema.py patch-models \
 
 ---
 
-## 6. Live-Viewer Validation (Schema-First)
+## 6. Artemis telemetry validation
 
-When validating live-viewer widgets, publish test packets from protobuf schema (not ORM reflection):
-
-```bash
-source telemetry/.venv/bin/activate
-python telemetry/analysis/database/paho_testing.py --car Orion --profile viewer --schema-source proto
-```
-
-`paho_testing.py` now supports `--schema-source`:
-- `proto` (default): uses compiled protobuf descriptors as the source of truth (SDD-aligned).
-- `orm`: uses SQLAlchemy/query-builder table specs (legacy behavior).
-
-For end-to-end validation (MQTT -> Kafka -> viewer topics), use:
+Publish native Artemis update batches using generated protobufs and frequency
+pools:
 
 ```bash
-source telemetry/.venv/bin/activate
-python telemetry/analysis/database/validate_live_viewer.py --car Both --rows 20 --delay 0.03
+bazel run //apps/telemetry/analysis:publish_demo -- --duration 60 --seed 42
 ```
 
-This checks:
-- `sensor_data` includes expected protobuf table payloads.
-- Live widget topics (`live_banner`, `dashboard_screen`, `driver_input_visualizer`, `car_visualization`,
-  `thermal_headroom`, `energy_budget`, `map`) receive fresh, changing values.
-- Optional ORM drift reporting against protobuf schema (`--strict-orm-sync` to fail on drift).
+The publisher uses MQTT `artemis/data` and requires no database credentials.
+Paho retains its `DataTester` helpers, viewer/generic profiles, `--rows`,
+`--delay`, `--schema-source proto|orm`, and CSV mapping. The ORM mode describes
+generated Artemis pool columns. CSV replay reads Artemis logger pool files with
+exact nanosecond timestamps and explicit fresh-field masks. `--duration` is the
+optional native-rate demo mode; row-based publishing remains the default.
 
-Processor-backed topics are separate from the core ingest path:
-- `gg-plot` requires `telemetry/stack/processors/gg_plot`.
-- `track-mapper`/lap timing require `telemetry/stack/processors/track_mapper` and `telemetry/stack/processors/lap_timer`.
+For live and historical gateway validation with the stack running:
 
-`server_devtool.sh` option `3` only starts Kafka + ingest, so `gg-plot` and `track-mapper` will stay empty unless those processors are started.
+```bash
+bazel run //apps/telemetry/analysis:validate_live_viewer -- --duration 5
+```
+
+Set `QUERY_GATEWAY_URL` and `QUERY_API_TOKEN` for the validator. It checks live
+channels and every historical observation for its selected signals. The
+isolated Docker test separately checks persistence in all generated pools.
+See the [application guide](../../analysis/database/README.md) for the full
+MQTT-to-Grafana demo.

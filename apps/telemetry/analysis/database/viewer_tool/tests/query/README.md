@@ -12,3 +12,6 @@ It also verifies native SSE freshness updates and gap propagation without
 duplicating unchanged samples from replacement windows.
 Replay verification preserves a raw peak and sparse fields while excluding
 other nanosecond samples and recording sessions within the same millisecond.
+Application checks exercise snake_case widget inputs, GPS speed units and missing
+power values, authenticated deployed discovery, and Grafana editor selection of
+scalar/Boolean channels. The editor test executes the shipped SystemJS module.

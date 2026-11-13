@@ -1,0 +1,345 @@
+{
+  "uid": "artemis-demo",
+  "title": "Artemis demo",
+  "tags": [
+    "artemis",
+    "demo"
+  ],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "time": {
+    "from": "now-5m",
+    "to": "now"
+  },
+  "refresh": "5s",
+  "timezone": "browser",
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Live — moving five minute window",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Pedals and torque",
+      "description": "Gateway SSE replaces this window. Query inspector frame metadata includes sample age inputs and Kafka lag.",
+      "datasource": {
+        "type": "lhre-artemis-datasource",
+        "uid": "artemis"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 8,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "signals": [
+            "controls.apps1_travel",
+            "controls.apps2_travel",
+            "controls.commanded_torque"
+          ],
+          "agg": "last",
+          "bucket_ms": 0,
+          "live": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "spanNulls": false,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Pack voltage and current",
+      "description": "Gateway SSE replaces this window. Query inspector frame metadata includes sample age inputs and Kafka lag.",
+      "datasource": {
+        "type": "lhre-artemis-datasource",
+        "uid": "artemis"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 1,
+        "w": 8,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "signals": [
+            "pack.hv_pack_v",
+            "pack.hv_c"
+          ],
+          "agg": "last",
+          "bucket_ms": 0,
+          "live": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "spanNulls": false,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Temperatures",
+      "description": "Gateway SSE replaces this window. Query inspector frame metadata includes sample age inputs and Kafka lag.",
+      "datasource": {
+        "type": "lhre-artemis-datasource",
+        "uid": "artemis"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 1,
+        "w": 8,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "signals": [
+            "thermal.ambient_temp",
+            "thermal.inverter_temp"
+          ],
+          "agg": "last",
+          "bucket_ms": 0,
+          "live": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "spanNulls": false,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "row",
+      "title": "History — selected dashboard time range",
+      "gridPos": {
+        "x": 0,
+        "y": 10,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Pedals and torque",
+      "description": "Gateway history query. Adjust the dashboard time picker to revisit a recording.",
+      "datasource": {
+        "type": "lhre-artemis-datasource",
+        "uid": "artemis"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 11,
+        "w": 8,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "signals": [
+            "controls.apps1_travel",
+            "controls.apps2_travel",
+            "controls.commanded_torque"
+          ],
+          "agg": "last",
+          "bucket_ms": 0,
+          "live": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "spanNulls": false,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Pack voltage and current",
+      "description": "Gateway history query. Adjust the dashboard time picker to revisit a recording.",
+      "datasource": {
+        "type": "lhre-artemis-datasource",
+        "uid": "artemis"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 11,
+        "w": 8,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "signals": [
+            "pack.hv_pack_v",
+            "pack.hv_c"
+          ],
+          "agg": "last",
+          "bucket_ms": 0,
+          "live": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "spanNulls": false,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Temperatures",
+      "description": "Gateway history query. Adjust the dashboard time picker to revisit a recording.",
+      "datasource": {
+        "type": "lhre-artemis-datasource",
+        "uid": "artemis"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 11,
+        "w": 8,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "signals": [
+            "thermal.ambient_temp",
+            "thermal.inverter_temp"
+          ],
+          "agg": "last",
+          "bucket_ms": 0,
+          "live": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "spanNulls": false,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    }
+  ]
+}

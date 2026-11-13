@@ -220,6 +220,8 @@ py_test(
     main = "test_query_gateway.py",
     imports = ["../..", "../../.."],
     deps = [
+        "//apps/telemetry/analysis:paho_testing",
+        "//apps/telemetry/analysis:validate_live_viewer",
         "//apps/telemetry/analysis:analysis_lib",
         "//apps/telemetry/stack/ingest:sensor_decode",
         requirement("kafka-python"),

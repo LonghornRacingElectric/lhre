@@ -286,6 +286,7 @@ function maxDefined(values: Array<number | undefined>): number | undefined {
 }
 
 export function buildNormalizedSensorRoutes(parsed: ParsedRecord, carType: string): Record<string, unknown> {
+  parsed = camelizeKeysDeep(parsed);
   const dynamics = (parsed.dynamics as ParsedRecord | undefined) || {};
   const controls = (parsed.controls as ParsedRecord | undefined) || {};
   const pack = (parsed.pack as ParsedRecord | undefined) || {};

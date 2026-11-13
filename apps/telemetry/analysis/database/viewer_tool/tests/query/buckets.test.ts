@@ -1,8 +1,8 @@
 import { expect, it, vi } from "vitest";
 import { readBuckets } from "../../src/lib/motec/artemisStorage";
-import { gatewayRows } from "../../src/lib/query/client";
+import { gatewayRows, gatewayJSON } from "../../src/lib/query/client";
 
-vi.mock("../../src/lib/query/client", () => ({ gatewayRows: vi.fn() }));
+vi.mock("../../src/lib/query/client", () => ({ gatewayRows: vi.fn(), gatewayJSON:vi.fn() }));
 vi.mock("../../src/lib/motec/artemisContract", () => ({
   storageContract: () => ({ pools: [{
     table: "controls_100hz", group: "controls", frequency_hz: 100,
@@ -11,6 +11,7 @@ vi.mock("../../src/lib/motec/artemisContract", () => ({
 }));
 
 it("preserves partial edge buckets and peaks across bounded request windows", async () => {
+  vi.mocked(gatewayJSON).mockResolvedValue({ signals:Array.from({ length:10 }, (_, i) => ({ signal:`controls.value_${i}`, group:"controls", rate_hz:100, aggregates:["mean", "min", "max", "last"] })) });
   const start = 1_700_000_000_123;
   const end = start + 200_000;
   const calls: Array<Record<string, unknown>> = [];

@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
@@ -21,6 +22,8 @@ import (
 type Adapter struct {
 	url, token string
 	client     *http.Client
+	mu         sync.Mutex
+	catalog    catalog
 }
 type Query struct {
 	RefID     string   `json:"refId"`
@@ -38,6 +41,8 @@ type observation struct {
 	Value  any    `json:"value"`
 }
 type page struct {
+	Schema      string          `json:"schema_version"`
+	Bucket      int64           `json:"bucket_ms"`
 	Data        []observation   `json:"data"`
 	Next        *string         `json:"next_page_token"`
 	Provisional bool            `json:"provisional"`
@@ -55,7 +60,7 @@ func New(ctx context.Context, s backend.DataSourceInstanceSettings) (instancemgm
 	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
 		return nil, fmt.Errorf("set an HTTP(S) gateway URL")
 	}
-	return &Adapter{strings.TrimRight(cfg.URL, "/"), s.DecryptedSecureJSONData["apiToken"], &http.Client{Timeout: 35 * time.Second}}, nil
+	return &Adapter{url: strings.TrimRight(cfg.URL, "/"), token: s.DecryptedSecureJSONData["apiToken"], client: &http.Client{Timeout: 35 * time.Second}}, nil
 }
 func (a *Adapter) request(ctx context.Context, method, path string, body []byte) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, a.url+path, bytes.NewReader(body))
@@ -90,6 +95,15 @@ func (a *Adapter) CallResource(ctx context.Context, req *backend.CallResourceReq
 	if err != nil {
 		return err
 	}
+	if response.StatusCode == 200 {
+		var current catalog
+		if err := json.Unmarshal(body, &current); err != nil {
+			return err
+		}
+		a.mu.Lock()
+		a.catalog = current
+		a.mu.Unlock()
+	}
 	return sender.Send(&backend.CallResourceResponse{Status: response.StatusCode, Headers: map[string][]string{"Content-Type": {"application/json"}}, Body: body})
 }
 
@@ -112,6 +126,14 @@ func (a *Adapter) QueryData(ctx context.Context, req *backend.QueryDataRequest) 
 		if q.Aggregate == "" {
 			q.Aggregate = "mean"
 		}
+		catalog, err := a.loadCatalog(ctx, "")
+		if err == nil {
+			_, err = catalog.chartSignals(q)
+		}
+		if err != nil {
+			response.Responses[query.RefID] = backend.DataResponse{Error: err}
+			continue
+		}
 		if q.Live {
 			body := queryBody(q, query)
 			body["t1"] = "live"
@@ -126,7 +148,7 @@ func (a *Adapter) QueryData(ctx context.Context, req *backend.QueryDataRequest) 
 		}
 		body := queryBody(q, query)
 		all := []observation{}
-		var err error
+		var metadata page
 		for {
 			encoded, _ := json.Marshal(body)
 			result, requestErr := a.request(ctx, "POST", "/v1/query", encoded)
@@ -146,6 +168,11 @@ func (a *Adapter) QueryData(ctx context.Context, req *backend.QueryDataRequest) 
 			if err != nil {
 				break
 			}
+			catalog, err = a.loadCatalog(ctx, p.Schema)
+			if err != nil {
+				break
+			}
+			metadata = p
 			all = append(all, p.Data...)
 			if len(all) > 200000 {
 				err = fmt.Errorf("too many observations; reduce max points or signals")
@@ -159,7 +186,9 @@ func (a *Adapter) QueryData(ctx context.Context, req *backend.QueryDataRequest) 
 		if err != nil {
 			response.Responses[query.RefID] = backend.DataResponse{Error: err}
 		} else {
-			response.Responses[query.RefID] = backend.DataResponse{Frames: frames(all, q.Alias, query.RefID)}
+			result := frames(all, q.Alias, query.RefID)
+			catalog.annotate(result, metadata)
+			response.Responses[query.RefID] = backend.DataResponse{Frames: result}
 		}
 	}
 	return response, nil
@@ -220,6 +249,7 @@ func frames(rows []observation, alias, ref string) data.Frames {
 			field = data.NewField(label, nil, texts)
 		}
 		frame := data.NewFrame(label, data.NewField("time", nil, times), field)
+		field.Config = &data.FieldConfig{Path: name}
 		frame.RefID = ref
 		out = append(out, frame)
 	}
@@ -236,6 +266,23 @@ func (a *Adapter) RunStream(ctx context.Context, req *backend.RunStreamRequest, 
 	if err := json.Unmarshal(req.Data, &body); err != nil {
 		return err
 	}
+	var q Query
+	if err := json.Unmarshal(req.Data, &q); err != nil {
+		return err
+	}
+	if q.Aggregate == "" {
+		q.Aggregate = "mean"
+	}
+	catalog, err := a.loadCatalog(ctx, "")
+	if err != nil {
+		return err
+	}
+	names, err := catalog.chartSignals(q)
+	if err != nil {
+		return err
+	}
+	body["signals"] = names
+	delete(body, "pools")
 	alias, _ := body["alias"].(string)
 	delete(body, "alias")
 	window, _ := body["window_ms"].(float64)
@@ -275,8 +322,13 @@ func (a *Adapter) RunStream(ctx context.Context, req *backend.RunStreamRequest, 
 		if event.Type == "gap" {
 			return fmt.Errorf("live gap: %s", event.Message)
 		}
-		for _, frame := range wideFrames(event.Page.Data, alias, body) {
-			frame.Meta = &data.FrameMeta{Custom: map[string]any{"live": event.Page.Live}}
+		catalog, err = a.loadCatalog(ctx, event.Page.Schema)
+		if err != nil {
+			return err
+		}
+		frames := wideFrames(event.Page.Data, alias, body)
+		catalog.annotate(frames, event.Page)
+		for _, frame := range frames {
 			if err := sender.SendFrame(frame, data.IncludeAll); err != nil {
 				return err
 			}

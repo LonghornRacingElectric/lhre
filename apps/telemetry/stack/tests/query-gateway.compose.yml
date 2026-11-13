@@ -1,4 +1,21 @@
 services:
+  mosquitto:
+    image: lhre/telemetry-mqtt:2.0.18
+    ports: ["127.0.0.1:31883:1883"]
+    volumes:
+      - ../ingest/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+  kafka-bridge:
+    image: lhre/telemetry-kafka-bridge:dev
+    environment:
+      KAFKA_BROKER: kafka:9092
+      BRIDGE_ADDR: :50051
+    depends_on:
+      kafka: {condition: service_healthy}
+  ingest:
+    image: lhre/telemetry-ingest:dev
+    environment:
+      IN_DOCKER: "1"
+    depends_on: [mosquitto, kafka-bridge]
   db:
     image: lhre/telemetry-postgres:2.31.0-pg17
     environment:
@@ -71,6 +88,8 @@ services:
     volumes:
       - grafana_state:/var/lib/grafana
       - ../ingest/grafana-provisioning/artemis.yml:/etc/grafana/provisioning/datasources/artemis.yml:ro
+      - ../ingest/grafana-dashboard-provisioning:/etc/grafana/provisioning/dashboards:ro
+      - ../../analysis/database/dashboards/artemis:/var/lib/grafana/dashboards/artemis:ro
     depends_on: [query_gateway]
 volumes:
   grafana_state:

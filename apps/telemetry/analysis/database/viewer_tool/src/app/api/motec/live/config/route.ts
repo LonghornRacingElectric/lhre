@@ -16,8 +16,11 @@ function mqttTopicFor(source: string, requested?: string | null): string {
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
-  const source = (url.searchParams.get("source") || "orion").trim().toLowerCase();
+  const source = (url.searchParams.get("source") || "artemis").trim().toLowerCase();
   const requestedTopic = url.searchParams.get("topic");
+  if (source === "artemis") {
+    return NextResponse.json({ source, topic: requestedTopic || "sensor_data", transport: "kafka", gateway: true });
+  }
 
   let settings;
   try {

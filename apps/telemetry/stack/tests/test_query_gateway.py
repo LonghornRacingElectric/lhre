@@ -4,6 +4,9 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 import subprocess
+import csv
+from pathlib import Path
+import tempfile
 import time
 import unittest
 import urllib.error
@@ -13,11 +16,13 @@ from datetime import datetime, timezone
 
 from kafka import KafkaProducer, KafkaConsumer, TopicPartition
 from kafka.structs import OffsetAndMetadata
-from sqlalchemy import create_engine, select, update, MetaData, Table
+from sqlalchemy import create_engine, select, update, MetaData, Table, func
 from sqlalchemy.orm import Session
 
-from analysis.sql_utils.models import ArtemisIngestProgress, ArtemisRecordingSession
+from analysis.sql_utils.models import ArtemisIngestProgress, ArtemisRecordingSession, ARTEMIS_MODELS
 from stack.ingest.protobuf import artemis_pb2
+from analysis.database.validate_live_viewer import validate
+from analysis.database.paho_testing import main as publish_paho
 
 
 def iso(stamp):
@@ -33,6 +38,56 @@ def call(path, body=None, grafana=False):
 
 
 class QueryGatewayTest(unittest.TestCase):
+    def test_paho_logger_csv_through_mqtt_and_persistence(self):
+        self.wait_for(lambda: call("/v1/signals"))
+        publish_paho(["--duration", "0.05", "--mqtt-port", "31883", "--profile", "viewer"])
+        stamp = time.time_ns() // 1_000_000 - 172_800_000
+        ns = stamp * 1_000_000 + 123
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "artemis_1_controls_333hz.csv"
+            with path.open("w", newline="") as source:
+                writer = csv.writer(source)
+                writer.writerow(["time", "sample_time_ns", "updated_fields", "controls.apps1_travel", "controls.enable"])
+                writer.writerow([stamp, ns, json.dumps(["controls.apps1_travel", "controls.enable"]), 0, "false"])
+                writer.writerow([stamp + 1, ns + 1_000_000, json.dumps(["controls.enable"]), "", "true"])
+            publish_paho(["--csv", str(path), "--rows", "2", "--delay", "0", "--schema-source", "orm", "--tables", "controls_333hz", "--mqtt-port", "31883"])
+        engine = create_engine("postgresql+psycopg2://electric:gateway-test-password@localhost:35432/artemis")
+        table = next(m.__table__ for m in ARTEMIS_MODELS.values() if m.__tablename__ == "controls_333hz")
+        try:
+            def persisted():
+                with engine.connect() as db:
+                    return list(db.execute(select(table.c.sample_time_ns, table.c.apps1_travel, table.c.enable).where(table.c.sample_time_ns.in_([ns, ns + 1_000_000])).order_by(table.c.sample_time_ns)))
+            rows = self.wait_for(persisted, lambda rows: len(rows) == 2)
+            self.assertEqual([tuple(row) for row in rows], [(ns, 0, False), (ns + 1_000_000, None, True)])
+            result = call("/v1/query", {"car":"artemis", "signals":["controls.apps1_travel", "controls.enable"], "t0":iso(stamp), "t1":iso(stamp + 2), "agg":"raw"})
+            self.assertEqual([(row["sample_time_ns"], row["signal"], row["value"]) for row in result["data"]], [(str(ns), "controls.apps1_travel", 0), (str(ns), "controls.enable", False), (str(ns + 1_000_000), "controls.enable", True)])
+        finally:
+            engine.dispose()
+
+    def test_mqtt_demo_and_provisioned_dashboard(self):
+        self.wait_for(lambda: call("/v1/signals"))
+        result = validate(duration=2, port=31883, url="http://127.0.0.1:38090", token="gateway-test-token")
+        self.assertEqual(len(result["live_signals"]), 3)
+        self.assertGreater(result["historical_observations"], 600)
+        engine = create_engine("postgresql+psycopg2://electric:gateway-test-password@localhost:35432/artemis")
+        try:
+            tables = {model.__tablename__:model.__table__ for model in ARTEMIS_MODELS.values()}
+            def persisted_counts():
+                with engine.connect() as db:
+                    return {name:db.scalar(select(func.count()).select_from(tables[name]).where(tables[name].c.time >= result["published"]["start_ms"], tables[name].c.time < result["published"]["end_ms"])) for name in result["published"]["pool_samples"]}
+            self.wait_for(persisted_counts, lambda counts:counts == result["published"]["pool_samples"])
+        finally:
+            engine.dispose()
+        dashboard = self.wait_for(lambda: call("/api/dashboards/uid/artemis-demo", grafana=True))
+        for panel in dashboard["dashboard"]["panels"]:
+            if panel["type"] == "row":
+                continue
+            queries = [{**q, "datasource": panel["datasource"], "maxDataPoints": 1000, "intervalMs": 100, "live": False} for q in panel["targets"]]
+            response = call("/api/ds/query", {"from":str(result["published"]["start_ms"]), "to":str(result["published"]["end_ms"]), "queries":queries}, grafana=True)
+            self.assertTrue(response["results"]["A"].get("frames"), response)
+            fields = response["results"]["A"]["frames"][0]["schema"]["fields"]
+            self.assertTrue(fields[1]["config"].get("unit"), fields)
+
     def wait_for(self, operation, predicate=lambda value: bool(value), timeout=45):
         deadline = time.monotonic() + timeout
         error = None

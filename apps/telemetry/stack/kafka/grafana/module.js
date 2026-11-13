@@ -5,6 +5,8 @@ System.register(['@grafana/data', '@grafana/runtime', '@grafana/ui', 'react', 'r
     setters: [function (m) { data = m; }, function (m) { runtime = m; }, function (m) { ui = m; }, function (m) { React = m; }, function (m) { rx = m; }, function (m) { operators = m; }],
     execute: function () {
       var h = React.createElement;
+      var chartable = s => !s.repeated && !['string', 'bytes'].includes(s.value_type);
+      var functionsFor = selected => ['mean', 'min', 'max', 'last', 'raw'].filter(agg => selected.every(s => (s.aggregates || []).includes(agg)));
       class DataSource extends runtime.DataSourceWithBackend {
         getDefaultQuery() { return { signals: [], agg: 'mean', bucket_ms: 0, alias: '', live: false }; }
         filterQuery(q) { return !q.hide && ((q.signals || []).length > 0 || (q.pools || []).length > 0); }
@@ -30,22 +32,28 @@ System.register(['@grafana/data', '@grafana/runtime', '@grafana/ui', 'react', 'r
         }
         async metricFindQuery() {
           var catalog = await this.getResource('signals');
-          return catalog.signals.map(s => ({ text: s.signal, value: s.signal }));
+          return catalog.signals.filter(chartable).map(s => ({ text: s.signal, value: s.signal }));
         }
       }
       function QueryEditor(props) {
         var state = React.useState([]), signals = state[0], setSignals = state[1];
         var failure = React.useState(''), error = failure[0], setError = failure[1];
+        var filter = React.useState(''), group = filter[0], setGroup = filter[1];
         React.useEffect(() => { var active = true; props.datasource.getResource('signals').then(c => { if (active) { setSignals(c.signals || []); } }).catch(e => { if (active) { setError(String(e)); } }); return () => { active = false; }; }, [props.datasource]);
         var q = props.query;
         function change(values) { props.onChange(Object.assign({}, q, values)); props.onRunQuery(); }
         var chosen = signals.filter(s => (q.signals || []).includes(s.signal));
-        var funcs = ['mean', 'min', 'max', 'last', 'raw'].filter(agg => chosen.every(s => (s.aggregates || []).includes(agg)));
+        var funcs = functionsFor(chosen);
+        var invalid = (q.signals || []).filter(name => !name.includes('$') && signals.length && !signals.some(s => s.signal === name && chartable(s)));
+        var period = Math.max(0, ...chosen.filter(s => s.rate_hz > 0).map(s => Math.ceil(1000 / s.rate_hz)));
         return h('div', { style: { display: 'grid', gap: '8px', maxWidth: '960px' } },
           error ? h('div', { role: 'alert' }, error) : null,
-          h(ui.InlineField, { label: 'Signals', grow: true }, h(ui.MultiSelect, { options: signals.map(s => ({ label: s.signal, value: s.signal, description: [s.unit, s.pool].filter(Boolean).join(' · ') })), value: q.signals || [], placeholder: 'Search Artemis signals', onChange: values => change({ signals: values.map(v => v.value) }) })),
+          invalid.length ? h('div', { role: 'alert' }, 'Unknown or non-scalar chart signals: ' + invalid.join(', ')) : null,
+          h(ui.InlineField, { label: 'Subsystem' }, h(ui.Select, { options: [{ label: 'All', value: '' }].concat([...new Set(signals.map(s => s.group))].sort().map(value => ({ label: value, value }))), value: group, onChange: v => setGroup(v.value) })),
+          h(ui.InlineField, { label: 'Signals', grow: true }, h(ui.MultiSelect, { options: signals.filter(s => chartable(s) && (!group || s.group === group)).map(s => ({ label: s.signal, value: s.signal, description: [s.unit, s.rate_hz ? s.rate_hz + ' Hz' : 'external', s.pool].filter(Boolean).join(' · ') })), value: q.signals || [], placeholder: 'Search Artemis scalar signals', onChange: values => { var names = values.map(v => v.value), allowed = functionsFor(signals.filter(s => names.includes(s.signal))); change({ signals: names, agg: allowed.includes(q.agg || 'mean') ? q.agg || 'mean' : allowed.includes('last') ? 'last' : allowed[0] }); } })),
           h(ui.InlineField, { label: 'Function' }, h(ui.Select, { options: funcs.map(v => ({ label: v, value: v })), value: q.agg || 'mean', onChange: v => change({ agg: v.value }) })),
           h(ui.InlineField, { label: 'Bucket (ms)', tooltip: '0 selects a bucket from panel width and native signal frequency.' }, h(ui.Input, { type: 'number', min: 0, value: q.bucket_ms || 0, onChange: e => props.onChange(Object.assign({}, q, { bucket_ms: Number(e.target.value) })), onBlur: props.onRunQuery })),
+          h('small', null, 'Auto bucket follows panel width; minimum ' + period + ' ms for these signals. Actual bucket and freshness are in Query inspector → Data → frame metadata. Arrays are available through the raw API.'),
           h(ui.InlineField, { label: 'Alias', tooltip: 'Use {{signal}} for the qualified channel name.' }, h(ui.Input, { value: q.alias || '', onChange: e => props.onChange(Object.assign({}, q, { alias: e.target.value })), onBlur: props.onRunQuery })),
           h(ui.InlineField, { label: 'Live' }, h(ui.Switch, { value: !!q.live, onChange: e => change({ live: e.target.checked }) }))
         );

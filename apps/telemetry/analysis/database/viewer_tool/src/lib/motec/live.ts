@@ -15,6 +15,7 @@ import type { KafkaTransport, LiveLapExportRequest, LiveSample } from "./types";
 export function kafkaTopicFor(source: string, settings: Settings, requested?: string | null): string {
   const t = (requested || "").trim();
   if (t) return t;
+  if (source.trim().toLowerCase() === "artemis") return "sensor_data";
   const prefix = (settings as unknown as { kafkaTopicPrefix?: string }).kafkaTopicPrefix?.trim()
     || process.env.KAFKA_TOPIC_PREFIX?.trim()
     || "grafana_data";
@@ -29,6 +30,7 @@ export function kafkaTransportFor(requested?: string | null): KafkaTransport {
 }
 
 function num(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
   const n = typeof value === "number" ? value : Number(value);
   return Number.isFinite(n) ? n : null;
 }
@@ -112,14 +114,15 @@ export function normalizeLivePayload(raw: string | Record<string, unknown>, sour
   for (const k of ["gps_speed", "dynamics.gps_speed", "dynamics_gps_speed", "gps_velocity", "dash_speed", "wheel_speed_avg", "wheel_speed", "speed"]) {
     const v = num(first(payload, [k]));
     if (v === null) continue;
-    if (v > 0) { speed = v; break; }
+    if (v > 0) { speed = source === "artemis" && ["gps_speed", "dynamics.gps_speed", "dynamics_gps_speed"].includes(k) ? v * 0.5144444444444445 : v; break; }
     sawZeroSpeed = true;
   }
-  if (speed === null) {
+  if (speed === null && source !== "artemis") {
     const wheels = ["flw_speed", "frw_speed", "blw_speed", "brw_speed"].map((k) => num(first(payload, [k, `dynamics.${k}`]))).filter((v): v is number => v !== null && v > 0);
     if (wheels.length) speed = wheels.reduce((a, b) => a + b, 0) / wheels.length;
     else if (sawZeroSpeed) speed = 0;
   }
+  if (speed === null && sawZeroSpeed) speed = 0;
   const dcV = num(first(payload, ["dc_bus_v", "bus_voltage", "pack.dc_bus_v", "pack.bus_voltage"]));
   const dcC = num(first(payload, ["dc_bus_current", "pack.dc_bus_current"]));
   const hvVraw = num(first(payload, ["hv_pack_v", "pack_hv_pack_v", "pack.hv_pack_v"]));

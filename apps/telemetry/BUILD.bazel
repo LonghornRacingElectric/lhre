@@ -413,6 +413,8 @@ filegroup(
 test_suite(
     name = "unit_tests",
     tests = [
+        "//apps/telemetry/analysis:paho_testing_test",
+        "//apps/telemetry/analysis:query_client_test",
         "//apps/telemetry/analysis/tests:analysis_tests",
         "//apps/telemetry/stack/processors/events_faults:faults_test",
         "//apps/telemetry/stack/processors/events_faults:main_test",

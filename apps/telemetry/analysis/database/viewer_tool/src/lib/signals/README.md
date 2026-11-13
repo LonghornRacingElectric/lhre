@@ -1,8 +1,8 @@
 # Signal catalogs
 
-DISCOVER reads immutable published catalogs from the requested car's folder.
-The current spec declares Artemis; other cars use the same format and need
-their own published artifacts. There is no Orion fallback or hardcoded car list.
+Artemis DISCOVER uses the query gateway's deployed catalog and authentication.
+This filesystem reader supports the archived catalogs used by historical tools.
+There is no cross-car fallback.
 
 The archive root is `SIGNAL_CATALOG_DIR`, defaulting to `apps/telemetry/catalogs`
 relative to the viewer working directory. `<car>/current.json` selects the
@@ -24,4 +24,4 @@ Zero means no trimming; null means unknown or conflicting sources. External
 signals use their uplink rate or null.
 
 See the [archive guide](../../../../../../catalogs/README.md) and
-[viewer setup](../../../README.md#signal-discovery-v0).
+[viewer setup](../../../README.md#signal-discovery).

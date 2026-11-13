@@ -15,6 +15,32 @@ type frameRecorder struct {
 	packets []*backend.StreamPacket
 }
 
+func TestChartMetadataAndUnsupportedArrays(t *testing.T) {
+	queries := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/signals" {
+			fmt.Fprint(w, `{"schema_version":"demo","signals":[{"signal":"pack.voltage","value_type":"float","unit":"V","aggregates":["last"]},{"signal":"controls.enable","value_type":"bool","unit":"","aggregates":["last"]},{"signal":"pack.cells","value_type":"float","repeated":true,"aggregates":["last"]}]}`)
+			return
+		}
+		queries++
+		fmt.Fprint(w, `{"schema_version":"demo","bucket_ms":100,"data":[{"ts":"2026-11-12T12:00:00Z","signal":"pack.voltage","value":420},{"ts":"2026-11-12T12:00:00Z","signal":"controls.enable","value":false}]}`)
+	}))
+	defer upstream.Close()
+	a := &Adapter{url: upstream.URL, client: upstream.Client()}
+	req := &backend.QueryDataRequest{Queries: []backend.DataQuery{{RefID: "A", JSON: json.RawMessage(`{"signals":["pack.voltage","controls.enable"],"agg":"last"}`)}, {RefID: "B", JSON: json.RawMessage(`{"signals":["pack.cells"],"agg":"last"}`)}}}
+	response, err := a.QueryData(context.Background(), req)
+	if err != nil || response.Responses["A"].Error != nil || response.Responses["B"].Error == nil || queries != 1 {
+		t.Fatalf("queries=%d response=%+v err=%v", queries, response, err)
+	}
+	frames := response.Responses["A"].Frames
+	if len(frames) != 2 || frames[0].Fields[1].Config.Unit != "volt" || *frames[1].Fields[1].At(0).(*float64) != 0 {
+		t.Fatalf("frames: %+v", frames)
+	}
+	if frames[0].Meta.Custom.(map[string]any)["bucket_ms"] != int64(100) {
+		t.Fatal("effective bucket missing")
+	}
+}
+
 func (recorder *frameRecorder) Send(packet *backend.StreamPacket) error {
 	recorder.packets = append(recorder.packets, packet)
 	return nil
@@ -22,6 +48,10 @@ func (recorder *frameRecorder) Send(packet *backend.StreamPacket) error {
 
 func TestLiveWindowsPreserveCorrectionsRemovalAndEmptyFrames(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/v1/signals" {
+			fmt.Fprint(writer, `{"schema_version":"demo","signals":[{"signal":"controls.apps","value_type":"float","unit":"%","aggregates":["mean"]}]}`)
+			return
+		}
 		writer.Header().Set("Content-Type", "text/event-stream")
 		for _, observations := range []string{
 			`[{"ts":"2026-11-12T12:00:00.000Z","signal":"controls.apps","value":10},{"ts":"2026-11-12T12:00:01.000Z","signal":"controls.apps","value":20}]`,

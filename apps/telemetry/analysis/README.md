@@ -3,6 +3,21 @@
 Python analysis and database access used by ingest and the stack processors.
 `//apps/telemetry/analysis:analysis_lib` is the shared Bazel library.
 
+Application reads use `GatewayClient` from `analysis.query_client`, backed by
+`QUERY_GATEWAY_URL` and `QUERY_API_TOKEN`. It provides discovery, sessions,
+paged queries and SSE streams through the existing API. Nanosecond identity and
+large integer values stay decimal strings. `query()` discards partial pages on
+an error, including `409 query_changed`; callers restart the whole query.
+Stream events expose coverage gaps and replacement windows without silently
+retrying or appending duplicate rows. The client adds no result cache.
+
+`bazel test //apps/telemetry/analysis:query_client_test` checks pagination,
+conflicts and stream handling. See the [application guide](database/README.md)
+for the generated Artemis publisher and full-stack validation.
+The publisher retains the `DataTester` generator/description helpers, profiles,
+row-count/delay controls, and CSV mapping, adapted to native Artemis batches and
+logger CSVs. Its shared library is `//apps/telemetry/analysis:paho_testing`.
+
 Orion ORM classes are generated from the textproto by
 `//lib/codegen/telemetry:orion_models`, not synchronized into this tree.
 Existing imports from `sql_utils.models` still work through its re-exports.
