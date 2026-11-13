@@ -6,6 +6,7 @@ load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
 load("@telemetry_reqs//:requirements.bzl", "requirement")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//apps/telemetry:compatibility.bzl", "NOT_WINDOWS")
+load("//apps/telemetry:container.bzl", "telemetry_service_image")
 
 package(default_visibility = ["//apps/telemetry:__subpackages__"])
 
@@ -282,5 +283,92 @@ py_test(
         "//lib/codegen/telemetry:artemis_schema_contract",
     ],
     tags = ["manual", "integration", "docker", "e2e", "local"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+# PDR measurements are opt-in: the default matrix includes hour-long workloads.
+# Keep the hyphenated artifact directory out of Python import module names.
+[
+    py_binary(
+        name = "pdr_" + mode,
+        srcs = [
+            "PDR-Benchmarks/" + mode + ".py",
+            "PDR-Benchmarks/common.py",
+            "PDR-Benchmarks/metrics.py",
+            "PDR-Benchmarks/reads.py",
+            "PDR-Benchmarks/traffic.py",
+            "benchmark_query_gateway.py",
+        ] if mode != "reads" else [
+            "PDR-Benchmarks/reads.py",
+            "PDR-Benchmarks/common.py",
+            "benchmark_query_gateway.py",
+        ],
+        main = "PDR-Benchmarks/" + mode + ".py",
+        imports = ["../..", "../../..", "PDR-Benchmarks"],
+        deps = [
+            "//apps/telemetry/analysis:analysis_lib",
+            "//apps/telemetry/stack/ingest:sensor_decode",
+            requirement("kafka-python"),
+            requirement("paho-mqtt"),
+            requirement("psycopg2-binary"),
+            requirement("SQLAlchemy"),
+        ],
+        tags = ["manual"],
+        target_compatible_with = NOT_WINDOWS,
+    )
+    for mode in ["reads", "ingest", "recent"]
+]
+
+
+py_binary(
+    name = "pdr_probe_binary",
+    srcs = ["PDR-Benchmarks/probe.py"],
+    main = "PDR-Benchmarks/probe.py",
+    deps = ["//apps/telemetry/stack/ingest:ingest_lib"],
+    tags = ["manual"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+telemetry_service_image(
+    name = "pdr_probe",
+    binary = ":pdr_probe_binary",
+    base = "@python312_linux_amd64",
+    repository = "lhre/pdr-ingest-probe",
+    repo_tags = ["lhre/pdr-ingest-probe:local"],
+    env = {"IN_DOCKER": "1", "PYTHONPATH": "/app", "PYTHONUNBUFFERED": "1"},
+    tars = ["//apps/telemetry:runtime_config_tar", "//apps/telemetry:current_schema_tar"],
+    workdir = "/app",
+)
+
+py_test(
+    name = "pdr_metrics_test",
+    srcs = ["PDR-Benchmarks/metrics.py", "PDR-Benchmarks/test_metrics.py"],
+    main = "PDR-Benchmarks/test_metrics.py",
+    imports = ["PDR-Benchmarks"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+
+py_binary(
+    name = "pdr_report",
+    srcs = ["PDR-Benchmarks/report.py"],
+    main = "PDR-Benchmarks/report.py",
+    deps = [requirement("matplotlib")],
+    tags = ["manual"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_test(
+    name = "pdr_reads_test",
+    srcs = ["PDR-Benchmarks/test_reads.py", "PDR-Benchmarks/reads.py", "PDR-Benchmarks/common.py", "benchmark_query_gateway.py"],
+    main = "PDR-Benchmarks/test_reads.py",
+    imports = ["../..", "../../..", "PDR-Benchmarks"],
+    deps = [
+        "//apps/telemetry/analysis:analysis_lib",
+        "//apps/telemetry/stack/ingest:sensor_decode",
+        requirement("kafka-python"),
+        requirement("psycopg2-binary"),
+        requirement("SQLAlchemy"),
+    ],
     target_compatible_with = NOT_WINDOWS,
 )
