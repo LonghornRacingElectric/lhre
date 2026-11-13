@@ -146,15 +146,23 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     table = load_table(args.contract, args.table)
-    if args.samples:
-        run_samples(table)
-    elif args.send:
-        send(args.send, table)
-    else:
-        try:
+    try:
+        if args.samples:
+            run_samples(table)
+        elif args.send:
+            send(args.send, table)
+        else:
             tail(args.from_kafka, table, args.from_beginning)
-        except KeyboardInterrupt:
-            pass
+    except KeyboardInterrupt:
+        pass
+    except (ConnectionError, OSError) as error:
+        sys.exit(f"Can't reach {args.send or args.from_kafka} ({error}). Is the stack running? "
+                 "Start it with ./apps/telemetry/stack/server_devtool.sh up")
+    except Exception as error:
+        if type(error).__name__ != "NoBrokersAvailable":
+            raise
+        sys.exit(f"No Kafka broker at {args.from_kafka}. Is the stack running? "
+                 "Start it with ./apps/telemetry/stack/server_devtool.sh up")
 
 
 if __name__ == "__main__":
