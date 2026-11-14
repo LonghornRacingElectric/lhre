@@ -1,0 +1,60 @@
+# EV.9.6.2: Ready to Drive needs the brake pressed and held. The driver
+# presses RTD with the brake off, and the VCU must stay in RTD_WAIT; then
+# releases it, brakes and presses again, and the VCU enters DRIVE.
+schema: lhre.vcu-sil-scenario.v1
+description: RTD pressed with the brake off is refused; released, braked and pressed again, it enters DRIVE.
+duration_ms: 3000
+
+# This drive sets off the RTD-without-brake warning on purpose.
+allow:
+  rtd_without_brake: "the point of this drive: the VCU must refuse RTD without the brake"
+
+# What the run must show (README, Checks after the run). Every run is also
+# held to the invariants: DRIVE only on a debounced RTD edge with the brake on.
+expect:
+  - states: [IDLE, PRECHARGE, TS_ACTIVE, RTD_WAIT, DRIVE]
+  # The refused press: the VCU waits in RTD_WAIT until the honest one.
+  - hold: {state: RTD_WAIT}
+    from: rtd-no-brake
+    until: rtd
+  # The brake is on 400 ms before the second press; its debounce passes 21 ms
+  # after the press's sample (the default deadline is 24 ms).
+  - reach: {state: DRIVE}
+    from: rtd
+
+at:
+  # Power up, as in launch.yml.
+  - t_ms: 0
+    accelerator: 0.0
+    brake_psi: 0.0
+    steering_deg: 0.0
+    rtd_pressed: false
+    hvc_state: NOT_ENERGIZED
+    contactors_closed: false
+    shutdown_loop_v: 24.0
+
+  - t_ms: 200
+    mark: precharge
+    hvc_state: PRECHARGING
+
+  - t_ms: 600
+    mark: energized
+    hvc_state: ENERGIZED
+    contactors_closed: true
+
+  # The RTD toggle on, foot off the brake.
+  - t_ms: 1000
+    mark: rtd-no-brake
+    rtd_pressed: true
+
+  - t_ms: 1500
+    mark: rtd-off
+    rtd_pressed: false
+
+  - t_ms: 1600
+    mark: brake-on
+    brake_psi: 350.0
+
+  - t_ms: 2000
+    mark: rtd
+    rtd_pressed: true

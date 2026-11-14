@@ -141,6 +141,11 @@ def summary_text(summary: dict[str, object], result: Result, meta: dict[str, obj
         allowed = list(dict.fromkeys(w['code'] for w in meta.get('scenario_allowed', [])))
         lines.append(f'  scenario warnings: {", ".join(active) or "none"}'
                      + (f'; allowed: {", ".join(allowed)}' if allowed else ''))
+    checks = meta.get('checks')
+    if checks:
+        lines.append(f'  {checks["headline"]}')
+        lines += [f'    {line}' for line in checks['report']]
+        lines += [f'    accepted: {what}' for what in checks['accepted']]
     repo = meta.get('repo', {})
     if repo.get('vehicle_matches_fmu') is False:
         lines.append('  WARNING: the FMU was built from a different vehicle.yml than this checkout')

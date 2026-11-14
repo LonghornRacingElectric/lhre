@@ -7,6 +7,25 @@ schema: lhre.vcu-sil-scenario.v1
 description: At 60 % pedal the shutdown loop opens; the AIRs open 20 ms later and the driver lifts 300 ms later.
 duration_ms: 6000
 
+# What the run must show (README, Checks after the run). Every run is also
+# held to the invariants, such as zero torque on a torque-cut fault's tick.
+expect:
+  - states: [IDLE, PRECHARGE, TS_ACTIVE, RTD_WAIT, DRIVE, FAULT]
+  # The loop's 10 ms debounce passes 12 ms after the sample that sees it open
+  # (4002 to 4014): the VCU leaves DRIVE and cuts torque on that tick. The
+  # default deadline for a loop change is 15 ms.
+  - reach: {state: FAULT}
+    from: loop-open
+  - reach: {signal: torque_nm, at_most: 0.0}
+    from: loop-open
+  # The loop stays open, so the VCU stays in FAULT with SHUTDOWN_OPEN.
+  - hold: {state: FAULT}
+    from: loop-open
+    after_ms: 15
+  - hold: {fault: SHUTDOWN_OPEN}
+    from: loop-open
+    after_ms: 15
+
 at:
   # Power up on the brake, as in launch.yml.
   - t_ms: 0

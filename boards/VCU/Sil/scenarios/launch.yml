@@ -12,6 +12,23 @@ setup:
   event_mode: UNASSIGNED  # boots like the car: the ENDURANCE parameter set
   soc_start: 0.9          # at 1.0 the car model's pack accepts no regen
 
+# What the run must show (README, Checks after the run). Every run is also
+# held to the invariants, such as no torque outside DRIVE.
+expect:
+  # The power-up sequence, each state once: the VCU never leaves DRIVE.
+  - states: [IDLE, PRECHARGE, TS_ACTIVE, RTD_WAIT, DRIVE]
+  # The press is first sampled at 1002 and its 20 ms debounce passes at 1023.
+  - reach: {state: DRIVE}
+    from: rtd
+    not_before_ms: 18
+    within_ms: 24
+  # No fault once the shutdown loop has settled (it reads UNKNOWN to 9 ms).
+  - never: {fault: any}
+  # Full pedal asks for the torque table's 210 N.m. The frame carries 0.1 N.m
+  # steps, so this band holds 210.0 and nothing else. (Speed and DC power are
+  # the car model's numbers: test_end_to_end.py checks them on the FMU.)
+  - peak: {signal: torque_nm, between: [209.95, 210.05]}
+
 at:
   # The start: HV off, shutdown loop closed, foot on the brake. 350 psi is
   # over RTD's 30 psi and clear of the brake-pressed hysteresis (on at 300,

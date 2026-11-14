@@ -1,0 +1,64 @@
+# The driver holds the pedal at 20 % while pressing RTD. The VCU must
+# refuse RTD (it needs the pedal inside its 9 % deadzone) and send no
+# torque outside DRIVE. 20 % stays under the 25 % brake-over-throttle
+# threshold, so only the RTD rule decides. After a lift and a second press
+# the VCU enters DRIVE.
+schema: lhre.vcu-sil-scenario.v1
+description: RTD pressed at 20 % pedal is refused and no torque goes out; lifted and pressed again, it enters DRIVE.
+duration_ms: 3000
+
+# This drive sets off the RTD-with-pedal warning on purpose.
+allow:
+  rtd_with_pedal: "the point of this drive: the VCU must refuse RTD with the pedal down"
+
+# What the run must show (README, Checks after the run). Every run is also
+# held to the invariants: no torque and no inverter enable outside DRIVE.
+expect:
+  - states: [IDLE, PRECHARGE, TS_ACTIVE, RTD_WAIT, DRIVE]
+  - hold: {state: RTD_WAIT}
+    from: rtd-with-pedal
+    until: rtd
+  - never: {signal: torque_nm, at_least: 0.1}
+    until: rtd
+  - reach: {state: DRIVE}
+    from: rtd
+
+at:
+  # Power up, as in launch.yml.
+  - t_ms: 0
+    accelerator: 0.0
+    brake_psi: 350.0
+    steering_deg: 0.0
+    rtd_pressed: false
+    hvc_state: NOT_ENERGIZED
+    contactors_closed: false
+    shutdown_loop_v: 24.0
+
+  - t_ms: 200
+    mark: precharge
+    hvc_state: PRECHARGING
+
+  - t_ms: 600
+    mark: energized
+    hvc_state: ENERGIZED
+    contactors_closed: true
+
+  - t_ms: 800
+    mark: pedal-down
+    accelerator: 0.2
+
+  - t_ms: 1000
+    mark: rtd-with-pedal
+    rtd_pressed: true
+
+  - t_ms: 1400
+    mark: lift
+    accelerator: 0.0
+
+  - t_ms: 1500
+    mark: rtd-off
+    rtd_pressed: false
+
+  - t_ms: 2000
+    mark: rtd
+    rtd_pressed: true

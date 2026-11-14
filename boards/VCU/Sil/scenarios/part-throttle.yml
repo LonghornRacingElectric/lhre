@@ -8,6 +8,22 @@ schema: lhre.vcu-sil-scenario.v1
 description: Power up, then 40 % and 60 % pedal with ramps, lift, coast.
 duration_ms: 8000
 
+# What the run must show (README, Checks after the run). Loose sanity bands:
+# the pedal map's exact numbers are tuning, for the metrics stage.
+expect:
+  - states: [IDLE, PRECHARGE, TS_ACTIVE, RTD_WAIT, DRIVE]
+  # 40 % pedal asks for about a third of the 210 N.m table (69.2 N.m).
+  - hold: {signal: torque_nm, between: [60.0, 80.0]}
+    from: pedal-40
+    after_ms: 700
+    until: pedal-60
+  # 60 % asks for about 70 %, which the table trims as the motor speeds up
+  # (146 falling to 126 N.m).
+  - hold: {signal: torque_nm, between: [115.0, 155.0]}
+    from: pedal-60
+    after_ms: 600
+    until: lift
+
 at:
   # Power up on the brake, as in launch.yml.
   - t_ms: 0

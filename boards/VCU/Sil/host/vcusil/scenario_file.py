@@ -28,7 +28,8 @@ from pathlib import Path
 import yaml
 
 from .cosim import STEP_MS
-from .firmware import EVENT_MODES, HVC_STATES
+from .firmware import EVENT_MODES, HVC_STATES, VCU_FAULTS, VCU_STATES
+from .fwmodel import CONTACTOR_STATUS_PERIOD_MS, LOOP_MS, RTD_MS, debounced
 from .scenario import DEFAULTS, Segment, Timeline
 
 SCHEMA = 'lhre.vcu-sil-scenario.v1'
@@ -68,7 +69,7 @@ SIGNALS = {
     'shutdown_loop_v': Signal('rest_of_car', 'number', 'volts at both shutdown sense taps: 24.0 '
                               'is closed, 0.0 open', 0.0, 27.0),
 }
-TOP_KEYS = ('schema', 'description', 'duration_ms', 'setup', 'allow', 'at')
+TOP_KEYS = ('schema', 'description', 'duration_ms', 'setup', 'allow', 'waive', 'expect', 'at')
 SETUP_KEYS = ('event_mode', 'soc_start')
 BLOCK_KEYS = ('t_ms', 'mark', *SIGNALS)
 # Keys later stages are expected to add (README, Scenarios). v1 rejects
@@ -76,15 +77,53 @@ BLOCK_KEYS = ('t_ms', 'mark', *SIGNALS)
 PLANNED = {
     'brake_front_psi': 'planned: separate front and rear brake; v1 has brake_psi for both',
     'brake_rear_psi': 'planned: separate front and rear brake; v1 has brake_psi for both',
-    'after': 'planned: times relative to a firmware state, stage 4',
-    'delay_ms': 'planned: times relative to a firmware state, stage 4',
-    'expect': 'planned: expectations checked against the run, stage 4',
+    'after': 'planned: block times relative to a firmware state',
+    'delay_ms': 'planned: block times relative to a firmware state',
     'can': 'planned: CAN drops, delays and overrides, stage 6',
 }
 # The warnings check.py can raise, which allow may name (check.RULES).
 WARNINGS = ('brake_near_threshold', 'brake_high', 'pedal_in_deadzone', 'loop_near_threshold',
             'brake_over_throttle', 'rtd_at_boot', 'rtd_too_short', 'rtd_without_brake',
             'rtd_with_pedal', 'rtd_before_ready', 'hvc_contactors_disagree', 'unused_allow')
+# The invariants invariants.py checks on every run, which waive may name
+# (invariants.RULES). None is a warning code, so a name under the wrong key
+# gets the right one as its hint.
+INVARIANTS = ('no_torque_outside_drive', 'enable_only_in_drive', 'torque_within_limit',
+              'bot_cuts_torque', 'bot_detected', 'fault_cuts_torque', 'drive_needs_rtd_and_brake',
+              'power_within_80kw', 'bspd_not_tripped')
+# Expectations: one verb per item, with its condition and a window
+# (README, Checks after the run). Each verb takes only its own window keys.
+VERBS = ('reach', 'hold', 'never', 'peak', 'low', 'states')
+_SPAN = ('from', 'after_ms', 'until', 'for_ms')
+WINDOW_KEYS = {'reach': ('from', 'within_ms', 'not_before_ms'), 'hold': _SPAN, 'never': _SPAN,
+               'peak': _SPAN, 'low': _SPAN, 'states': ()}
+EXPECT_KEYS = (*VERBS, 'from', 'within_ms', 'not_before_ms', 'after_ms', 'until', 'for_ms')
+# The car's signals an expectation may judge: what left the VCU, or what the
+# car model reports; never a controller's internals.
+EXPECT_SIGNALS = {
+    'torque_nm': 'the torque the VCU sent, INVERTER_TORQUE_COMMAND torque_request (N.m)',
+    'speed_m_s': "the car model's longitudinal speed, rearU (m/s)",
+    'dc_power_kw': "the car model's DC power, dcBusVoltage x dcBusCurrent (kW)",
+}
+COMPARATORS = ('at_most', 'at_least', 'between')
+CONDITION_KEYS = ('state', 'fault', 'signal', *COMPARATORS)
+# The rig has no BSPD latch (README, Not modelled), so an expectation of
+# either could only fail, or pass for nothing.
+NOT_MODELLED = ('BSPD_TRIPPED',)
+# How a window that leaves out from: or until: reads: from the start of the
+# run, until its end. Neither is a mark, so no mark name is reserved.
+START, END = 'the start', 'the end'
+# reach's within_ms when a file leaves it out, from what the anchor's block
+# changes: the firmware's delay counted from the mark's sample, which a tick
+# of slack keeps off the edge. The 10 ms CONTACTOR_STATUS frame comes 0 to 9
+# ms after a sample. accelerator and brake_psi reach the firmware through
+# filters, so their delay depends on the size of the change: no default.
+DEFAULT_WITHIN_MS = {
+    'shutdown_loop_v': debounced(LOOP_MS) + STEP_MS,
+    'rtd_pressed': debounced(RTD_MS) + STEP_MS,
+    'hvc_state': debounced(CONTACTOR_STATUS_PERIOD_MS),
+    'contactors_closed': debounced(CONTACTOR_STATUS_PERIOD_MS),
+}
 
 
 @dataclass(frozen=True)
@@ -145,6 +184,88 @@ class Block:
     t_ms: int
     mark: str | None
     values: dict[str, object]  # signal -> value (hvc_state as its number) or Ramp
+    line: int | None
+
+
+@dataclass(frozen=True)
+class Condition:
+    """What an expectation looks for on a tick, or for peak and low in a
+    signal's highest or lowest value."""
+    kind: str  # 'state', 'fault' or 'signal'
+    name: str  # a VcuStateMachine or VcuFaultCode name, 'any', or an EXPECT_SIGNALS key
+    lo: float | None = None  # at_least, or between's low end
+    hi: float | None = None  # at_most, or between's high end
+
+    def written(self) -> dict:
+        """As parameters() records it: names as written, numbers as floats."""
+        if self.kind != 'signal':
+            return {self.kind: self.name}
+        if self.lo is not None and self.hi is not None:
+            return {'signal': self.name, 'between': [self.lo, self.hi]}
+        return ({'signal': self.name, 'at_most': self.hi} if self.hi is not None
+                else {'signal': self.name, 'at_least': self.lo})
+
+    def text(self) -> str:
+        if self.kind != 'signal':
+            return 'any fault' if self.name == 'any' else f'{self.kind} {self.name}'
+        if self.lo is not None and self.hi is not None:
+            return f'{self.name} between {self.lo:g} and {self.hi:g}'
+        if self.hi is not None:
+            return f'{self.name} at most {self.hi:g}'
+        return f'{self.name} at least {self.lo:g}'
+
+
+@dataclass(frozen=True)
+class Expectation:
+    """One item under expect:, with its window resolved to samples.
+
+    reach: the first sample at or after anchor_ms where the condition holds
+    must come within_ms after it at the latest, and not_before_ms at the
+    earliest. hold, never, peak and low: the samples t with
+    start_ms <= t < stop_ms (stop_ms None: to the end of the run)."""
+    index: int
+    verb: str
+    condition: Condition | None  # None for states
+    states: tuple[str, ...]  # states only
+    anchor: str  # a mark, or START
+    anchor_ms: int  # the mark's sample: the first at or after its block's t_ms
+    within_ms: int | None = None
+    within_default: bool = False  # within_ms came from DEFAULT_WITHIN_MS
+    not_before_ms: int = 0
+    start_ms: int = 0
+    stop_ms: int | None = None
+    span: str = ''  # how the file wrote the window's end
+    line: int | None = None
+
+    def text(self) -> str:
+        if self.verb == 'states':
+            return 'states ' + ' -> '.join(self.states)
+        what = f'{self.verb} {self.condition.text()} from {self.anchor}'
+        if self.verb == 'reach':
+            what += f' within {self.within_ms} ms'
+            if self.within_default:
+                what += ' (default)'
+            if self.not_before_ms:
+                what += f', not before {self.not_before_ms} ms'
+            return what
+        if self.start_ms != self.anchor_ms:
+            what += f' + {self.start_ms - self.anchor_ms} ms'
+        return f'{what} {self.span}'
+
+
+@dataclass(frozen=True)
+class _Pending:
+    """An expect: item that passed pass 1; pass 2 resolves its marks."""
+    index: int
+    verb: str
+    condition: Condition | None
+    states: tuple[str, ...]
+    anchor: str | None  # a mark; None counts from the start
+    within_ms: int | None
+    not_before_ms: int
+    after_ms: int
+    until: str | None  # a mark; None with no for_ms runs to the end
+    for_ms: int | None
     line: int | None
 
 
@@ -287,7 +408,7 @@ def _where(path: tuple) -> str:
 
 def _is_text(path: tuple) -> bool:
     """Whether path is where text goes: the description, a mark, a reason."""
-    return (path == ('description',) or (len(path) == 2 and path[0] == 'allow')
+    return (path == ('description',) or (len(path) == 2 and path[0] in ('allow', 'waive'))
             or (len(path) == 3 and path[0] == 'at' and path[2] == 'mark'))
 
 
@@ -415,6 +536,8 @@ class ScenarioFile:
     timeline: Timeline
     document: dict = field(repr=False)  # the normalised file: parameters()
     lines: _Lines = field(repr=False, compare=False, default_factory=_Lines)
+    waive: dict[str, str] = field(default_factory=dict)  # invariant -> the file's reason
+    expectations: tuple[Expectation, ...] = ()
 
     @property
     def duration_ms(self) -> int:
@@ -622,23 +745,25 @@ def loads(data: bytes, name: str, path: str | Path | None = None,
     checked = checker.check(doc or {})
     if checked is None or checker.problems:
         raise ScenarioError(checker.problems, display)
-    description, duration, setup, allow, blocks, document = checked
+    description, duration, setup, allow, waive, pending, blocks, document = checked
     checker.timing(duration, blocks)
+    expectations = checker.windows(duration, blocks, pending)
     if checker.problems:
         raise ScenarioError(checker.problems, display)
     return ScenarioFile(
         name=name, path=absolute, display=display, repo_path=repo_path, data=data,
         sha256=hashlib.sha256(data).hexdigest(), schema=SCHEMA, description=description,
         setup=setup, allow=allow, blocks=blocks, timeline=_compile(name, duration, blocks),
-        document=document, lines=built.lines)
+        document=document, lines=built.lines, waive=waive, expectations=expectations)
 
 
 _DASH = re.compile(r'\s*-\S')  # -t_ms: 0, --t_ms: 0: a block's dash with no space after it
 _GLUED = re.compile(r'\s*(?:- )?[\w-]+:[^\s:]')  # t_ms:200
 _OWN_KEY = re.compile(r' *(?:- +)?([\w-]+):')  # the key a row starts with
 # Keys whose value is free text, where a ': ' or an opener may be meant.
-_TEXT_KEYS = ('description', 'mark', *WARNINGS)
-_NOT_TEXT = (*SIGNALS, *SETUP_KEYS, 'schema', 'duration_ms', 't_ms', 'setup', 'allow', 'at')
+_TEXT_KEYS = ('description', 'mark', *WARNINGS, *INVARIANTS)
+_NOT_TEXT = (*SIGNALS, *SETUP_KEYS, 'schema', 'duration_ms', 't_ms', 'setup', 'allow', 'waive',
+             'expect', *VERBS, 'between', 'at')
 
 
 def _char(c: str) -> str:
@@ -775,7 +900,8 @@ def _syntax_problem(exc: yaml.MarkedYAMLError, text: str) -> Problem:
             if re.search(r', *[\w-]+$', before):
                 hint = 'a comma separates keys only inside { }: put each key on its own line'
             elif (own and own[1] not in _TEXT_KEYS and word
-                  and word[1] in (*TOP_KEYS, *SETUP_KEYS, *BLOCK_KEYS, 'ramp_ms')):
+                  and word[1] in (*TOP_KEYS, *SETUP_KEYS, *BLOCK_KEYS, 'ramp_ms',
+                                  *EXPECT_KEYS)):
                 hint = f'{word[1]} is a key of its own: put each key on its own line'
             else:
                 hint = "a ': ' inside text starts a key: put the text in quotes"
@@ -970,8 +1096,11 @@ class _Checker:
         setup, document['setup'] = self._setup(doc.get('setup'))
         allow = self._allow(doc.get('allow'))
         document['allow'] = dict(allow)
+        waive = self._waive(doc.get('waive'))
+        document['waive'] = dict(waive)
+        pending, document['expect'] = self._expect(doc.get('expect'))
         blocks, document['at'] = self._blocks(doc['at'], duration) if 'at' in doc else ((), [])
-        return description, duration, setup, allow, blocks, document
+        return description, duration, setup, allow, waive, pending, blocks, document
 
     def _unknown_top(self, key: str) -> None:
         if key in PLANNED:
@@ -1116,6 +1245,7 @@ class _Checker:
                 continue
             if code not in WARNINGS:
                 hint = (_INDENTED.format(table='allow') if code in TOP_KEYS
+                        else f'{code} is an invariant: it goes under waive:' if code in INVARIANTS
                         else _did_you_mean(code, WARNINGS))
                 self.add('unknown_key', where, _hinted('is not a warning code', hint), line)
                 continue
@@ -1124,6 +1254,265 @@ class _Checker:
             if text is not None:
                 allowed[code] = text
         return allowed
+
+    def _waive(self, waive: object) -> dict[str, str]:
+        if waive is None:  # left out, or waive: with every name commented out
+            return {}
+        if not isinstance(waive, dict):
+            self.add('wrong_type', 'waive', f'{_yaml(waive)} is not a mapping; write waive: on '
+                     'its own line, then one invariant: reason line per invariant, indented',
+                     self.lines.value('waive'))
+            return {}
+        waived = {}
+        for name in waive:
+            where, line = f'waive.{name}', self.lines.key('waive', name)
+            if name not in INVARIANTS:
+                hint = (_INDENTED.format(table='waive') if name in TOP_KEYS
+                        else 'it is the warning for an allow entry that never fires, which '
+                             'cannot be allowed or waived' if name == 'unused_allow'
+                        else f'{name} is a warning code: it goes under allow:' if name in WARNINGS
+                        else _did_you_mean(name, INVARIANTS))
+                self.add('unknown_key', where, _hinted('is not an invariant', hint), line)
+                continue
+            text = self._text(waive, name, where, self.lines.value('waive', name),
+                              'say why the drive breaks it')
+            if text is not None:
+                waived[name] = text
+        return waived
+
+    def _expect(self, expect: object) -> tuple[list[_Pending], list]:
+        if expect is None:  # left out, or expect: with every item commented out
+            return [], []
+        line = self.lines.value('expect')
+        if isinstance(expect, dict):
+            self.add('wrong_type', 'expect', 'is a single mapping; write each expectation as a '
+                     'list item, such as - reach: {state: DRIVE}', line)
+            return [], []
+        if not isinstance(expect, list):
+            self.add('wrong_type', 'expect', f'{_yaml(expect)} is not a list of expectations; '
+                     'write expect:, then each one as a list item, such as - reach: '
+                     '{state: DRIVE}', line)
+            return [], []
+        pending, written = [], []
+        for i, item in enumerate(expect):
+            found, entry = self._expectation(i, item)
+            if found is not None:
+                pending.append(found)
+            written.append(entry)
+        return pending, written
+
+    def _expectation(self, i: int, item: object) -> tuple[_Pending | None, dict]:
+        where, line = f'expect[{i}]', self.lines.value('expect', i)
+        if not isinstance(item, dict):
+            hint = ('write a space after the :' if isinstance(item, str)
+                    and re.match(r'[\w-]+:\S', item) else 'an expectation is a check and its '
+                    'condition, such as - reach: {state: DRIVE}')
+            self.add('wrong_type', where, f'{_yaml(item)} is not an expectation; {hint}', line)
+            return None, {}
+        before = len(self.problems)
+        verbs = [k for k in item if k in VERBS]
+        if not verbs:
+            self.add('missing_key', where, f'has no check; give it one of {", ".join(VERBS)}',
+                     line)
+        elif len(verbs) > 1:
+            self.add('bad_value', where, f'has both {verbs[0]} and {verbs[1]}; give each check '
+                     'its own item', self.lines.key('expect', i, verbs[1]))
+        verb = verbs[0] if len(verbs) == 1 else None
+        entry: dict = {}
+        condition, states = None, ()
+        window: dict[str, object] = {}
+        for key, value in item.items():
+            key_where, value_line = f'{where}.{key}', self.lines.value('expect', i, key)
+            key_line = self.lines.key('expect', i, key)
+            if key in VERBS:
+                if key != verb:
+                    continue
+                if verb == 'states':
+                    states = self._states(value, key_where, value_line)
+                    if states:
+                        entry[key] = list(states)
+                else:
+                    condition = self._condition(verb, value, key_where, ('expect', i, key))
+                    if condition is not None:
+                        entry[key] = condition.written()
+            elif key in EXPECT_KEYS:
+                if verb is not None and key not in WINDOW_KEYS[verb]:
+                    hint = ('states checks the whole run, so it takes no window' if verb == 'states'
+                            else f'{verb} takes {", ".join(WINDOW_KEYS[verb])}')
+                    self.add('unknown_key', key_where, f'does not go with {verb}; {hint}',
+                             key_line)
+                    continue
+                if key in ('from', 'until'):
+                    if not isinstance(value, str) or not NAME.fullmatch(value):
+                        leave = ('to count from the start of the run' if key == 'from'
+                                 else 'to run to the end')
+                        self.add('wrong_type' if not isinstance(value, str) else 'bad_value',
+                                 key_where, f'{_yaml(value)} is not a mark; write the mark of '
+                                 f'a block under at:, or leave {key} out {leave}', value_line)
+                        continue
+                else:
+                    value = self._ms(value, key_where, value_line)
+                    if value is None:
+                        continue
+                    least = 1 if key == 'for_ms' else 0
+                    if not least <= value <= MAX_DURATION_MS:
+                        self.add('out_of_range', key_where, f'{value} is outside '
+                                 f'{least}..{MAX_DURATION_MS} ms', value_line)
+                        continue
+                window[key] = entry[key] = value
+            else:
+                if key in TOP_KEYS:
+                    hint = _INDENTED.format(table=where)
+                elif key in CONDITION_KEYS:
+                    hint = (f'it goes inside the condition, such as {verb or "reach"}: '
+                            '{state: DRIVE}')
+                elif key in BLOCK_KEYS:
+                    hint = 'a signal or a mark goes in a block under at:'
+                else:
+                    hint = _did_you_mean(key, EXPECT_KEYS)
+                self.add('unknown_key', key_where, _hinted('is not an expectation key', hint),
+                         key_line)
+        if 'until' in window and 'for_ms' in window:
+            self.add('bad_value', f'{where}.for_ms', 'cannot go with until; give the window one '
+                     'end', self.lines.key('expect', i, 'for_ms'))
+        if ('within_ms' in window and 'not_before_ms' in window
+                and window['not_before_ms'] > window['within_ms']):
+            self.add('bad_value', f'{where}.not_before_ms', f'{window["not_before_ms"]} is after '
+                     f'within_ms ({window["within_ms"]}), so nothing could pass',
+                     self.lines.value('expect', i, 'not_before_ms'))
+        if len(self.problems) > before or verb is None:
+            return None, entry
+        return _Pending(i, verb, condition, states, window.get('from'),
+                        window.get('within_ms'), window.get('not_before_ms', 0),
+                        window.get('after_ms', 0), window.get('until'), window.get('for_ms'),
+                        line), entry
+
+    def _states(self, value: object, where: str, line: int | None) -> tuple[str, ...]:
+        if not isinstance(value, list) or not value:
+            self.add('wrong_type', where, f'{_yaml(value)} is not a list of states; write the '
+                     'run\'s states in order, such as states: [IDLE, PRECHARGE, TS_ACTIVE, '
+                     'RTD_WAIT, DRIVE]', line)
+            return ()
+        names = []
+        for n, name in enumerate(value):
+            if not isinstance(name, str):
+                # _name's hint is for state: NAME, which a list item is not.
+                named = {number: text for text, number in VCU_STATES.items()}
+                example = named.get(name) if type(name) is int else None  # not for a bool
+                hint = (f'write the name: {example}' if example
+                        else f'write the name, one of {", ".join(VCU_STATES)}')
+                self.add('wrong_type', f'{where}[{n}]', f'{_yaml(name)} is not an lhre '
+                         f'VcuStateMachine name; {hint}', line)
+                return ()
+            if self._state_or_fault(name, 'state', VCU_STATES, 'VcuStateMachine', f'{where}[{n}]',
+                                    line) is None:
+                return ()
+            if names and names[-1] == name:
+                self.add('bad_value', f'{where}[{n}]', f'{name} twice in a row; states lists each '
+                         'stretch once, as the summary does', line)
+                return ()
+            names.append(name)
+        return tuple(names)
+
+    def _state_or_fault(self, value: object, key: str, table: dict[str, int], kind: str,
+                        where: str, line: int | None) -> str | None:
+        if isinstance(value, str) and value in NOT_MODELLED:
+            self.add('not_modelled', where, f'{value} never happens here: the rig does not model '
+                     'the BSPD latch (README, Not modelled); the bspd_not_tripped invariant '
+                     'stands in for it', line)
+            return None
+        if key == 'fault' and value == 'NONE':
+            self.add('bad_value', where, 'NONE is no fault; for no faults write never: '
+                     '{fault: any}', line)
+            return None
+        if key == 'fault' and value == 'any':
+            return value
+        return value if self._name(value, key, table, kind, where, line) is not None else None
+
+    def _condition(self, verb: str, value: object, where: str, path: tuple) -> Condition | None:
+        line = self.lines.value(*path)
+        example = ('{signal: speed_m_s, at_least: 25.0}' if verb in ('peak', 'low')
+                   else '{state: DRIVE}')
+        if not isinstance(value, dict):
+            hint = (f'write {verb}: {{state: {value}}}' if isinstance(value, str)
+                    and value in VCU_STATES else f'write {verb}: {example}')
+            self.add('wrong_type', where, f'{_yaml(value)} is not a condition; {hint}', line)
+            return None
+        before = len(self.problems)
+        for key in value:
+            if key not in CONDITION_KEYS:
+                self.add('unknown_key', f'{where}.{key}', _hinted(
+                    'is not a condition key', _did_you_mean(key, CONDITION_KEYS)),
+                    self.lines.key(*path, key))
+        kinds = [k for k in ('state', 'fault', 'signal') if k in value]
+        comparators = [k for k in COMPARATORS if k in value]
+        if not kinds:
+            self.add('missing_key', where, f'names nothing to look for; give it state:, fault: '
+                     f'or signal:, such as {example}', line)
+        elif len(kinds) > 1:
+            self.add('bad_value', where, f'has both {kinds[0]} and {kinds[1]}; give each its own '
+                     'item', line)
+        if len(self.problems) > before:
+            return None
+        kind = kinds[0]
+        name = value[kind]
+        name_where, name_line = f'{where}.{kind}', self.lines.value(*path, kind)
+        if verb in ('peak', 'low') and kind != 'signal':
+            extreme = 'highest' if verb == 'peak' else 'lowest'
+            self.add('bad_value', where, f'{verb} judges a signal\'s {extreme} value; write '
+                     f'{verb}: {example}', line)
+            return None
+        if kind == 'signal':
+            if not isinstance(name, str) or name not in EXPECT_SIGNALS:
+                hint = (_did_you_mean(name, EXPECT_SIGNALS) if isinstance(name, str) else None)
+                self.add('bad_value', name_where, _hinted(
+                    f'{_yaml(name)} is not a signal an expectation can judge, which are '
+                    f'{", ".join(EXPECT_SIGNALS)}', hint), name_line)
+                return None
+            if len(comparators) != 1:
+                self.add('missing_key' if not comparators else 'bad_value', where,
+                         f'a signal takes one of {", ".join(COMPARATORS)}, such as '
+                         '{signal: torque_nm, at_most: 0.0}', line)
+                return None
+            return self._bounds(name, comparators[0], value[comparators[0]],
+                                f'{where}.{comparators[0]}',
+                                self.lines.value(*path, comparators[0]))
+        if comparators:
+            self.add('bad_value', f'{where}.{comparators[0]}', f'a {kind} is there or not: '
+                     f'{comparators[0]} goes with a signal', self.lines.key(*path, comparators[0]))
+            return None
+        table, kind_name = ((VCU_STATES, 'VcuStateMachine') if kind == 'state'
+                            else (VCU_FAULTS, 'VcuFaultCode'))
+        if self._state_or_fault(name, kind, table, kind_name, name_where, name_line) is None:
+            return None
+        return Condition(kind, name)
+
+    def _bounds(self, signal: str, comparator: str, value: object, where: str,
+                line: int | None) -> Condition | None:
+        def number(x: object, at: str) -> float | None:
+            if isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(x):
+                self.add('wrong_type', at, _hinted(f'{_yaml(x)} is not a finite number '
+                         f'({EXPECT_SIGNALS[signal]})', _respelt(x, 'number')), line)
+                return None
+            return float(x) + 0.0
+        if comparator != 'between':
+            bound = number(value, where)
+            if bound is None:
+                return None
+            return (Condition('signal', signal, hi=bound) if comparator == 'at_most'
+                    else Condition('signal', signal, lo=bound))
+        if not isinstance(value, list) or len(value) != 2:
+            self.add('wrong_type', where, f'{_yaml(value)} is not two numbers; write '
+                     'between: [low, high]', line)
+            return None
+        lo, hi = number(value[0], f'{where}[0]'), number(value[1], f'{where}[1]')
+        if lo is None or hi is None:
+            return None
+        if lo > hi:
+            self.add('bad_value', where, f'{lo:g} is above {hi:g}; write the low end first',
+                     line)
+            return None
+        return Condition('signal', signal, lo=lo, hi=hi)
 
     def _blocks(self, at: object, duration: int | None) -> tuple[tuple[Block, ...], list]:
         line = self.lines.value('at')
@@ -1365,6 +1754,95 @@ class _Checker:
             fix = f'hold the value through {lo} ms'
         self.add('unsampled', where, f'is never {seen}: the host samples every {STEP_MS} ms, '
                  f'and {first}, {when}; {fix}', line)
+
+    def windows(self, duration: int, blocks: tuple[Block, ...],
+                pending: list[_Pending]) -> tuple[Expectation, ...]:
+        """Pass 2 for expect: the marks each window names, resolved to the
+        samples the run takes."""
+        last = last_step_ms(duration)
+        marks = {b.mark: b for b in blocks if b.mark}
+        found = []
+        for p in pending:
+            where = f'expect[{p.index}]'
+            anchor_block, anchor_ms, anchor = None, 0, p.anchor or START
+            if p.anchor is not None:
+                anchor_block = self._marked(marks, p.anchor, f'{where}.from',
+                                            self.lines.value('expect', p.index, 'from'))
+                if anchor_block is None:
+                    continue
+                anchor_ms = first_step_ms(anchor_block.t_ms)
+            if p.verb == 'states':
+                found.append(Expectation(p.index, p.verb, None, p.states, anchor, anchor_ms,
+                                         line=p.line))
+                continue
+            if p.verb == 'reach':
+                within, default = p.within_ms, False
+                if within is None:
+                    paths = [DEFAULT_WITHIN_MS[s] for s in (anchor_block.values if anchor_block
+                                                            else ()) if s in DEFAULT_WITHIN_MS]
+                    if not paths:
+                        if anchor_block is None:
+                            what = ('it counts from the start of the run; give the deadline in '
+                                    'ms from 0')
+                        else:
+                            what = (f'the block of {p.anchor} sets no shutdown_loop_v, '
+                                    'rtd_pressed, hvc_state or contactors_closed, whose delay is '
+                                    'known; give the deadline in ms after the mark (accelerator '
+                                    'and brake_psi pass through filters, so their delay depends '
+                                    'on the size of the change)')
+                        self.add('missing_key', f'{where}.within_ms', f'is missing, and {what}',
+                                 p.line)
+                        continue
+                    within, default = max(paths), True
+                if p.not_before_ms > within:
+                    self.add('bad_value', f'{where}.not_before_ms', f'{p.not_before_ms} is after '
+                             f'within_ms ({within}), so nothing could pass',
+                             self.lines.value('expect', p.index, 'not_before_ms'))
+                    continue
+                if anchor_ms + p.not_before_ms > last:
+                    self.add('out_of_range', where, f'it can pass only from '
+                             f'{anchor_ms + p.not_before_ms} ms, after the last sample ({last} '
+                             'ms)', p.line)
+                    continue
+                found.append(Expectation(p.index, p.verb, p.condition, (), anchor, anchor_ms,
+                                         within_ms=within, within_default=default,
+                                         not_before_ms=p.not_before_ms, line=p.line))
+                continue
+            start = anchor_ms + p.after_ms
+            if first_step_ms(start) > last:
+                self.add('out_of_range', where, f'its window starts at {start} ms, after the last '
+                         f'sample ({last} ms)', p.line)
+                continue
+            stop, span = None, f'until {END}'
+            if p.until is not None:
+                until = self._marked(marks, p.until, f'{where}.until',
+                                     self.lines.value('expect', p.index, 'until'))
+                if until is None:
+                    continue
+                stop, span = first_step_ms(until.t_ms), f'until {p.until}'
+            elif p.for_ms is not None:
+                stop, span = start + p.for_ms, f'for {p.for_ms} ms'
+                if stop > last + STEP_MS:
+                    self.add('out_of_range', f'{where}.for_ms', f'the window runs until {stop} '
+                             f'ms, past the last sample ({last} ms); shorten it, or leave for_ms '
+                             'out to run to the end', self.lines.value('expect', p.index, 'for_ms'))
+                    continue
+            if stop is not None and first_step_ms(start) >= stop:
+                self.add('bad_value', where, f'its window, from {start} ms to {stop} ms, holds no '
+                         f'sample; the host samples every {STEP_MS} ms', p.line)
+                continue
+            found.append(Expectation(p.index, p.verb, p.condition, (), anchor, anchor_ms,
+                                     start_ms=start, stop_ms=stop, span=span, line=p.line))
+        return tuple(found)
+
+    def _marked(self, marks: dict[str, Block], name: str, where: str,
+                line: int | None) -> Block | None:
+        if name in marks:
+            return marks[name]
+        hint = (_did_you_mean(name, marks) or f'the marks are {", ".join(marks)}' if marks
+                else 'no block has a mark: yet; give the block one, such as mark: loop-open')
+        self.add('bad_value', where, f'{name} is not a mark; {hint}', line)
+        return None
 
 
 _INDENTED = 'top-level keys are not indented, so this one counts as part of {table}'

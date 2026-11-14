@@ -59,12 +59,15 @@ runs the scenario (`launch` unless `--scenario` names another; see
 | `trace.csv`   | One row per 3 ms step: model outputs, driver inputs, firmware internals, what the model was given, then the model truth as `truth_*`. Floats round-trip exactly. |
 | `console.log` | The firmware's own debug-UART log (state changes, build stamp).   |
 | `fmu.log`     | The OpenModelica runtime's output; the cause of a model failure.  |
-| `meta.json`   | Status and provenance: the scenario file's path, hash, content and warnings, FMU and library hashes, firmware build stamp, git state, whether the FMU's `vehicle.yml`, tire files and BobSim pin match the checkout. |
+| `meta.json`   | Status, verdict and provenance: the checks (`checks`: each invariant and expectation, what the run did, the verdict; see [Checks after the run](#checks-after-the-run)), the scenario file's path, hash, content and warnings, FMU and library hashes, firmware build stamp, git state, whether the FMU's `vehicle.yml`, tire files and BobSim pin match the checkout. |
 | `scenario.yml` | The scenario file, byte for byte.                                |
 
-Exit status: 0 the run completed, 1 the car model failed, 2 anything else
-(a scenario file that cannot run, a firmware that does not build, a wrong
-FMU, bad options, a harness bug). Once the run has started, `meta.json` says
+Exit status: 0 the run completed and every check passed, 1 the car model
+failed, 3 a check failed (an invariant or one of the file's expectations: see
+[Checks after the run](#checks-after-the-run)), 2 anything else (a scenario
+file that cannot run, a firmware that does not build, a wrong FMU, bad
+options, a harness bug). 3 wins over 1: what the firmware did before the car
+model failed still counts. Once the run has started, `meta.json` says
 what failed and the trace so far is kept. A run that stops before it starts
 writes nothing: a scenario file that cannot run (checked before anything
 builds), bad options or a firmware that does not build leave no run
@@ -119,6 +122,10 @@ named for its file: `scenarios/part-throttle.yml` runs with
 | [`part-throttle`](https://github.com/LonghornRacingElectric/lhre/blob/main/boards/VCU/Sil/scenarios/part-throttle.yml) | 40 % then 60 % pedal with ramps: the pedal map. |
 | [`shutdown-loop-open`](https://github.com/LonghornRacingElectric/lhre/blob/main/boards/VCU/Sil/scenarios/shutdown-loop-open.yml) | The loop opens at 60 % pedal: the VCU must cut torque and go to FAULT. |
 | [`brake-over-throttle`](https://github.com/LonghornRacingElectric/lhre/blob/main/boards/VCU/Sil/scenarios/brake-over-throttle.yml) | Braking at 60 % pedal: torque stays cut until the pedal is under 5 %. |
+| [`hard-brake-at-throttle`](https://github.com/LonghornRacingElectric/lhre/blob/main/boards/VCU/Sil/scenarios/hard-brake-at-throttle.yml) | A 600 psi stop at 60 % pedal, past the hard-brake comparators, then the pedal pressed again under the brake: brake-over-throttle must cut torque before the BSPD condition can last. |
+| [`hvc-drops-in-drive`](https://github.com/LonghornRacingElectric/lhre/blob/main/boards/VCU/Sil/scenarios/hvc-drops-in-drive.yml) | The HVC reports NOT_ENERGIZED in DRIVE with the loop closed: one tick of FAULT, then IDLE, torque cut from the frame's tick. |
+| [`rtd-without-brake`](https://github.com/LonghornRacingElectric/lhre/blob/main/boards/VCU/Sil/scenarios/rtd-without-brake.yml) | RTD pressed with the brake off is refused; braked and pressed again, it enters DRIVE. |
+| [`pedal-before-rtd`](https://github.com/LonghornRacingElectric/lhre/blob/main/boards/VCU/Sil/scenarios/pedal-before-rtd.yml) | RTD pressed at 20 % pedal is refused and no torque goes out; lifted and pressed again, it enters DRIVE. |
 
 **Write one in five minutes.**
 
@@ -186,6 +193,8 @@ at:
 | `duration_ms` | integer | yes | 1..600000. The run has `ceil(duration_ms / 3)` steps, and the last sample is at `3 * (ceil(duration_ms / 3) - 1)`. 7000 gives 2334 steps, the last at 6999. |
 | `setup` | mapping | no | Run conditions (below). |
 | `allow` | mapping | no | `warning_code: reason`, one line per warning (below). |
+| `waive` | mapping | no | `invariant: reason`, one line per invariant the drive breaks on purpose ([Checks after the run](#checks-after-the-run)). |
+| `expect` | list | no | What the run must show, each a check anchored to the file's marks ([Checks after the run](#checks-after-the-run)). |
 | `at` | list of blocks | yes, at least 1 | The timeline (below). |
 
 `setup`: the command line wins, then the file, then the default.
@@ -272,7 +281,8 @@ and for an `rtd_pressed` change, or a `shutdown_loop_v` change that crosses
 a loop threshold, the tick the firmware's debounce takes it
 (`rtd_pressed true (the firmware sees it at 1023 ms)`) or why the firmware
 never sees it. Those ticks come from the lint's models of the firmware
-(Checks, below).
+(Checks, below). Last, explain lists each expectation with the samples it is
+judged on.
 
 **Checks.**
 
@@ -296,8 +306,8 @@ never sees it. Those ticks come from the lint's models of the firmware
   ramp passing through a band does not warn. Where the firmware's past
   decides, the rules run a model of it, one control tick per 3 ms sample:
   the RTD switch's debounce (`EdgeButton`), the brake and pedal filters,
-  brake-pressed and the shutdown loop's taps. The thresholds are
-  `check.THRESHOLDS`, copied from `params.hpp` and tested against it, and
+  brake-pressed and the shutdown loop's taps (`fwmodel.py`). The thresholds
+  are `fwmodel.THRESHOLDS`, copied from `params.hpp` and tested against it, and
   `tests/test_check_firmware.py` holds each model to the library. The
   check runs models rather than the library so that it needs no firmware
   build: `run.sh --check` never builds one, and the check runs natively on
@@ -390,6 +400,170 @@ delays or loss. The C ABI or the host drives these together today. A
 firmware parameter change, such as a 40 kW power limit, is still an edit to
 `params.hpp`. v1 rejects every unknown key, so a harness given a file
 written for a later one fails loudly instead of misreading it.
+
+## Checks after the run
+
+A run is judged as well as recorded: the firmware did what it must, or the
+run says where it did not and exits 3, so CI can fail a pull request on it.
+There are two layers.
+
+- **Invariants** hold on every run of every drive. They are code
+  ([`invariants.py`](https://github.com/LonghornRacingElectric/lhre/blob/main/boards/VCU/Sil/host/vcusil/invariants.py)) and read only what
+  left the VCU (the decoded `INVERTER_TORQUE_COMMAND`, the state and faults
+  it reports), what the drive gave it, and the car model's DC power: never a
+  controller's internals, so a lookup table and an MPC are judged alike.
+  Where the firmware's past decides (a debounced RTD edge, the filtered
+  brake), the oracle is the model of the firmware the lint uses
+  (`fwmodel.py`), which `test_check_firmware.py` holds to the library: the
+  check does not trust the code it judges.
+- **Expectations** are what one drive must show, under `expect:` in its
+  file, anchored to its marks: DRIVE by a deadline, FAULT within some ms of
+  `loop-open`, a fault held through a window, the torque back after a lift.
+
+The lint's warnings (Checks, under Scenarios) come before a run and judge
+the file; these come after and judge the firmware.
+
+### Invariants
+
+"Rules" means an FSAE rule requires it (numbers from the 2026 rules, checked
+against their text; 2027 numbers from the team's rule review), with any team
+threshold inside it named; "design" means the team's own choice, which the
+controls team signs off.
+
+| Name | Fails when | Stands on | Basis |
+| ---- | ---------- | --------- | ----- |
+| `no_torque_outside_drive` | On a tick not in DRIVE, the inverter is enabled with a nonzero torque request | EV.9.6.1: Ready to Drive is when the motors answer the APPS (2027: EV.10.6.1) | rules |
+| `enable_only_in_drive` | `inverter_enable` set, or a nonzero torque request sent, on a tick not in DRIVE | `control_loop.cpp` `ArbitrateTorque` | design |
+| `torque_within_limit` | The torque request is past `InverterParams::torque_limit_nm` (230 N·m) by more than half the frame's 0.1 N·m step, either way | `params.hpp` | design (the hardware rating) |
+| `bot_cuts_torque` | A nonzero torque request on a tick with BRAKE_OVER_THROTTLE set, or the latch clearing while the drive's pedal is still at 5 % or more | EV.4.7.2: power cut "immediately and completely", until the APPS reads under 5 % | rules |
+| `bot_detected` | BRAKE_OVER_THROTTLE not set on a tick the modelled filtered brake surely holds brake-pressed and the drive's pedal is over 25 % | EV.4.7.1; 300 psi as "brakes engaged" is the team's | rules, team threshold |
+| `fault_cuts_torque` | A nonzero torque request or `inverter_enable` on a tick any `kTorqueCutFaults` fault is set | T.4.2.5 and T.4.3.3 for APPS_IMPLAUSIBLE, BSE1_RANGE and BSE2_RANGE; the other nine are the team's | rules for three, design for nine |
+| `drive_needs_rtd_and_brake` | DRIVE entered on a tick that is not a debounced RTD press edge (the model of `EdgeButton` on the drive's switch), with the modelled filtered brake under 30 psi, or without the last CONTACTOR_STATUS reporting ENERGIZED with both AIRs closed | EV.9.6.2: tractive system active, brake pressed and held, a manual action (2027: EV.10.6.2); 30 psi as "pressed" is the team's | rules, team threshold |
+| `power_within_80kw` | The car model's DC power is over 80 kW continuously for 100 ms, or over it on a 500 ms moving average | EV.3.3.1 and EV.3.4.1, which define the violation this way | rules, on the car model's power |
+| `bspd_not_tripped` | Hard braking with more than 5 kW for 500 ms: the car's BSPD would open the shutdown loop | EV.7.7.2 | rules, on the car model's power |
+
+- **No slack.** The firmware cuts torque on the tick it raises the fault, as
+  `ControlTick` computes the faults, then the state, then the torque, so the
+  invariants allow no tick of lag. The only margins are the models' ADC
+  rounding: 1 psi of brake (`SURE_PSI`) and 0.001 of pedal (`SURE_PEDAL`),
+  the same the lint uses.
+- **Judged at the VCU.** The torque is what the VCU sent in that tick's
+  frame. CAN delay downstream (a later stage) does not change what it sent.
+- **Copies are pinned.** The thresholds come from `fwmodel.THRESHOLDS`,
+  tested against `params.hpp`. `invariants.TORQUE_CUT_FAULTS` is tested
+  against `faults.hpp`, the 0.1 N·m step against the spec, and the state and
+  fault names against `vcu_sil_can.json`. A firmware change to any of them
+  fails a test until the invariant follows: that is where the controls team
+  signs off.
+
+**Known non-failures.** The checks accept what the firmware does by design.
+
+- SHUTDOWN_OPEN on the ticks before 10 ms of every run: `ShutdownLoop`
+  reads UNKNOWN until both taps have had their debounce. The invariants pass
+  it (the VCU is in IDLE, with no torque), fault conditions in expectations
+  do not see it, and `meta.json` lists it under `checks.accepted`.
+- One tick of FAULT when the HVC drops in DRIVE while it still sends frames
+  ([`hvc-drops-in-drive`](https://github.com/LonghornRacingElectric/lhre/blob/main/boards/VCU/Sil/scenarios/hvc-drops-in-drive.yml)): CONTACTORS_OPEN
+  is not a torque-cut fault, so FAULT clears to IDLE on the next tick. Write
+  `reach: {state: FAULT}`, then `reach: {state: IDLE}`, never
+  `hold: {state: FAULT}`.
+- BSPD_TRIPPED never happens: the rig has no BSPD latch. An expectation
+  naming it is a `not_modelled` error before the run; `bspd_not_tripped`
+  stands in for it.
+- `inverter_enable` stays on through brake-over-throttle, with 0 N·m sent.
+
+**Waivers.** A drive that breaks an invariant on purpose names it under
+`waive:` with a one-line reason, as `allow:` does for a warning. A waived
+failure does not fail the run; `meta.json` records it (`result: waived`, the
+reason, its first tick), the summary names it and `/events` marks it. A
+waiver the run never needs fails the run (`unused_waiver`, exit 3): the drive
+no longer tests what it says. Invariant names are not warning codes, so a
+name under the wrong key gets the other key as its fix.
+
+### Expectations
+
+```yaml
+expect:
+  # The power-up sequence, each state once: the VCU never leaves DRIVE.
+  - states: [IDLE, PRECHARGE, TS_ACTIVE, RTD_WAIT, DRIVE]
+  - reach: {state: DRIVE}
+    from: rtd
+    not_before_ms: 18
+    within_ms: 24
+  - never: {fault: any}
+  # Off the pedal, the torque is gone once its filter is under the deadzone.
+  - hold: {signal: torque_nm, at_most: 0.0}
+    from: pedal-off
+    after_ms: 30
+```
+
+This is an `expect:` for `launch.yml`, whose marks it names.
+
+Each item is one check: a verb, its condition, and the window keys that verb
+takes. Every window counts from its mark's **sample**, the first at or after
+the block's `t_ms`, which is where `/events` shows the mark.
+
+| Verb | Passes when | Window keys |
+| ---- | ----------- | ----------- |
+| `reach` | The first sample at or after the mark where the condition holds comes no later than `within_ms` after it (and no sooner than `not_before_ms`) | `from`, `within_ms`, `not_before_ms` |
+| `hold` | The condition holds on every sample of the window | `from`, `after_ms`, `until` or `for_ms` |
+| `never` | It holds on none | `from`, `after_ms`, `until` or `for_ms` |
+| `peak`, `low` | The signal's highest (lowest) value in the window meets the bound | `from`, `after_ms`, `until` or `for_ms` |
+| `states` | The run's states, consecutive repeats merged as the summary shows them, are exactly this list | none: the whole run |
+
+- **Conditions:** `{state: NAME}` (a `VcuStateMachine` name),
+  `{fault: NAME}` (a `VcuFaultCode` name) or `{fault: any}`, and
+  `{signal: NAME, at_most: X}`, `at_least: X` or `between: [lo, hi]`
+  (inclusive). `peak` and `low` take a signal.
+- **Signals** are the car's, never a controller's internals: `torque_nm`
+  (the torque the VCU sent), `speed_m_s` (the car model's `rearU`) and
+  `dc_power_kw` (the car model's V × I). Speed and power judge the car model
+  as much as the firmware; launch's are asserted in `test_end_to_end.py` on
+  the FMU, not in its file, as the toy car in the CLI tests has its own.
+- **Windows:** `from` names a mark; left out, the window starts at 0.
+  `after_ms` starts it later. `until` names a mark whose sample ends the
+  window, exclusive; `for_ms` gives its length; with neither it runs to the
+  end. A window with no sample in it, or one past the run's end, is an
+  error.
+- **Default `within_ms`.** Left out of a `reach`, it comes from what the
+  `from` block changes: how long the firmware takes to act on it, counted
+  from the mark's sample, plus a tick (below). A filter's delay depends on
+  the size of the change, so a block that only moves `accelerator` or
+  `brake_psi` needs its own. `check --explain` prints each resolved window.
+- **Errors before the run.** The loader checks `expect:` and `waive:` like
+  the rest of the file (exit 2, `file:line`, every problem at once): verbs,
+  names, marks, windows. A mark or window error waits for the rest of the
+  file to be clean. The one new code is `not_modelled`.
+- **A run cut short** (the car model failed) judges what it can: what broke
+  stays broken, and a window it never reached is `not_evaluated`, not failed.
+
+| The `from` block changes | The firmware's path | Measured | Default `within_ms` |
+| ------------------------ | ------------------- | -------- | ------------------- |
+| `shutdown_loop_v` | 10 ms debounce, 12 on the 3 ms grid; fault, state and torque on that tick | 12 ms (`loop-open`: 4002 to 4014) | 15 |
+| `rtd_pressed` | 20 ms debounce, 21 on the grid; DRIVE on that tick | 21 ms (`rtd`: 1002 to 1023) | 24 |
+| `hvc_state`, `contactors_closed` | The next 10 ms CONTACTOR_STATUS frame | 0 to 9 ms | 12 |
+
+Each further state hop is another tick (TS_ACTIVE at 600, RTD_WAIT at 603),
+so a chain needs its own `within_ms`.
+
+### What a run reports
+
+- `meta.json` `checks`: `status` (`passed` or `failed`), each invariant
+  (`result` `pass`, `fail`, `waived` or `unused_waiver`; its first tick, how
+  many ticks, the first one's message, its rule) and each expectation
+  (`pass`, `fail` or `not_evaluated`; what the run did, such as "first at
+  4014 ms, 12 ms after loop-open"), counts, `accepted`, the `headline` and the
+  `report` lines.
+- `summary.txt` and stderr: the headline (`checks passed: 9/9 invariants
+  passed, 5/5 expectations passed`) and one line per check that did not pass,
+  led by `file:line:` as the lint's are: `...:24: FAIL: expect[1] reach state
+  DRIVE from rtd within 10 ms: first at 1023 ms, 21 ms after rtd: 11 ms late
+  [expect_failed]`.
+- `run.mcap`: `/events` gets `check.invariant` and `check.expect` markers
+  (a failure at its first tick, a passed expectation at the tick it rests
+  on) and the verdict at the end; the metadata gets `checks`.
+- Exit status 3. Order: a harness error (2) judges nothing; then a failed
+  check (3); then a car model failure (1). `run.sh` passes 3 through.
 
 ## Targets
 
@@ -564,17 +738,21 @@ reverse `direction` is refused: the model cannot take it.
   loop), `report.py`, `provenance.py`.
 - `scenario_file.py`: loads scenario files with a strict YAML loader (see
   Why YAML under [Scenarios](#scenarios)) and checks them.
-- `check.py`: the warnings, the models of the firmware they stand on,
-  `--explain`, and `python -m vcusil.check`. It needs only PyYAML beyond
-  the standard library, so it runs on any Python 3.11 or newer that has it.
-  `host/ruff.toml` lints all of `host/` for 3.11, so syntax only 3.12
-  reads fails CI's Lint job.
+- `check.py`: the warnings, `--explain`, and `python -m vcusil.check`. It
+  needs only PyYAML beyond the standard library, so it runs on any Python
+  3.11 or newer that has it. `host/ruff.toml` lints all of `host/` for
+  3.11, so syntax only 3.12 reads fails CI's Lint job.
+- `fwmodel.py`: the models of the firmware (debounce, `EdgeButton`, the
+  filters, brake-pressed, the loop's taps) and `THRESHOLDS`, shared by the
+  lint and the invariants.
+- `invariants.py`, `expectations.py`, `verdict.py`: the checks after the
+  run, and how a run reports them.
 - `candecode.py`: decodes captured frames with the generated table.
 - `events.py`, `mcaplog.py`: the event markers and `run.mcap`.
 - `tests/`: pytest. `VCU_SIL_LIB`, `VCU_SIL_CAN_TABLE` and `VCU_SIL_FMU`
   select the library, the decode table and the FMU; `run.sh --test` sets
   them. Only the tests that need the FMU skip without it.
-  `test_check_firmware.py` holds each of `check.py`'s models to the
+  `test_check_firmware.py` holds each of `fwmodel.py`'s models to the
   library. `test_run_sh.py` runs `run.sh` with stub `docker`, `df`,
   `mktemp` and `date` first on `PATH`, so it checks what each container is
   handed and what a run leaves in its directory without Docker or the
@@ -607,10 +785,13 @@ reverse `direction` is refused: the model cannot take it.
 - Some CAN spec units look wrong (`%` for values the firmware sends as a
   0..1 fraction, such as `ACCELERATOR_PEDAL.accelerator_pedal_travel` and
   `BRAKES.brake_bias`). The decoder logs the spec's values as they are.
-- `check.THRESHOLDS` copies the `params.hpp` fields its warnings stand on.
-  Change one of those fields and `test_check.py` fails until the copy
-  follows; it also fails if `params.cpp` overrides one for an event mode.
-- `check.py`'s models mirror longhorn's `EdgeButton` and `Ema`, `pedals.cpp`
+- `fwmodel.THRESHOLDS` copies the `params.hpp` fields the warnings and
+  invariants stand on. Change one of those fields and `test_check.py` fails
+  until the copy follows; it also fails if `params.cpp` overrides one for an
+  event mode. `invariants.TORQUE_CUT_FAULTS` copies `kTorqueCutFaults`,
+  and `scenario_file.INVARIANTS` the names in `invariants.RULES`; tests hold
+  both.
+- `fwmodel.py`'s models mirror longhorn's `EdgeButton` and `Ema`, `pedals.cpp`
   (the filters, brake-pressed, brake-over-throttle) and `ShutdownLoop`.
   Change those and `test_check_firmware.py` fails until the model follows.
 - `run.sh` mounts the repo read-only and keeps Bazel's cache in the
