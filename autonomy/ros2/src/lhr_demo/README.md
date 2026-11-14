@@ -1,5 +1,11 @@
 # lhr_demo
 
+`estimator:=ekf` defaults to `use_wheel_speeds:=false`, matching the real-car
+decision to exclude unreliable wheel feedback. The kinematic inertial simulator
+still supplies the IMU, but the EKF creates no wheel subscription. Opt into
+`use_wheel_speeds:=true` only for legacy comparisons. The mode is recorded in
+metrics; historical wheel/IMU results do not validate the new IMU-only default.
+
 Launch files for the kinematic stack. `mvs_demo.launch.py` is the one
 `run_headless.sh` and `check_stability.sh` both run, so it is where a run's
 independent variables are declared and where its provenance is stamped.

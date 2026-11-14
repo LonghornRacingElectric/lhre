@@ -1,0 +1,174 @@
+{
+  "date": "2026-11-14",
+  "base_commit": "da9d5a95a9a49679a05c5a313432dfb8a55626dd",
+  "working_tree_modified": true,
+  "user_constraint": "Test uncertain starting heading",
+  "initial_yaw_offset_stress_deg": [
+    0,
+    -10,
+    10
+  ],
+  "comparisons": 120,
+  "policies": [
+    "default_gyro_gain1",
+    "measured_gyro_gain1",
+    "measured_gyro_gain025",
+    "measured_gyro_gain01",
+    "measured_gyro_gain0"
+  ],
+  "verification": {
+    "build": "16 packages passed ./scripts/build.sh",
+    "affected_tests": {
+      "lhr_state_estimation": 53,
+      "lhr_gazebo": 325,
+      "lhr_metrics": 74,
+      "total": 452
+    },
+    "strict_docs": "uv run --group docs mkdocs build --strict --site-dir /tmp/lhre-imu-stop-docs passed",
+    "runtime_defaults": {
+      "gnss_heading_gain": 1.0,
+      "yaw_rate_variance": 0.0004
+    },
+    "parameter_checks": "Default and nondefault real-node startup in sim/lidar branches, including metadata node; invalid controls rejected",
+    "scope": "Offline recorded and ideal synthetic comparisons, opt-in constant runtime gain; no default policy change, adaptive detector, live calibration or closed-loop validation",
+    "diff_check": "git diff --check passed"
+  },
+  "source_sha256": {
+    "src/lhr_state_estimation/lhr_state_estimation/ekf.py": "8e57331db031d27cb1b8c695079e27ddebb504b41c0697f7f14e3fce583b7bb5",
+    "src/lhr_state_estimation/lhr_state_estimation/ekf_node.py": "882524da98ec68bb969b08999b8e69de3dea984720b9ac188c0f380c0290bc2a",
+    "src/lhr_state_estimation/lhr_state_estimation/gnss.py": "c3b943cd8009d786776ea0b842061833b45fef5e123b186daab864602a55b7db",
+    "src/lhr_state_estimation/test/test_heading_gain.py": "d427c6d8f357decffd536d4e22e31f9cafc0603ba6fda8870c1f649cb8d250fd",
+    "src/lhr_state_estimation/test/test_gnss_node.py": "d39b01b7c7c640b62f0c87685ea8b207d20107d954a28d6bac0f87dd64233246",
+    "src/lhr_gazebo/scripts/compare_heading_policies.py": "e11edb2c395bf2c6fa6023d2cd3dba57fcae5e8a60e2ac9ac738911fe409a669",
+    "src/lhr_gazebo/scripts/audit_gnss_heading.py": "bea9d0d43d2b59dd2d1eb45144e3f064461c84ce016dfbdd33b86d4c8632742d",
+    "src/lhr_gazebo/scripts/analyze_stationary_cones.py": "d1fed0a129c1a78c2bc8935416d6126c8d266764d44300ac71c3ccfe983243a8",
+    "src/lhr_gazebo/launch/gazebo_demo.launch.py": "756e79930d98bc2dd9123887b50eaee95752e73153f1fe7a76db102f00fcd766",
+    "src/lhr_gazebo/test/test_gnss_launch.py": "ef2db5d482f596613debf0ecb579e875ade9b36b78613a789bbc69fb5ddd1834",
+    "src/lhr_gazebo/test/test_heading_policy_controls.py": "8c4db8a6edfad2064792ccb42d5840e0c16a618d1dd29146a2af9f5acbb46585",
+    "src/lhr_metrics/lhr_metrics/metrics_node.py": "83abadb639f30b9caa6ecbaa3747096c626b8e809f93da2de5d478071aa915f7",
+    "src/lhr_vehicle/config/vehicle.yaml": "77bfe782b6748d906a31fee764c336abe1afdeb7c2914fbbb320d731e54418f5"
+  },
+  "input_capture_sha256": {
+    "data/heading-attribution/gps08-live": {
+      "args.json": "71a04cfc63eb0825ca4a78de45aa854d9dc2103f49450f1c635d663a0f9f7e47",
+      "bag/bag_0.mcap": "4ecacdd1b694fa94e552e8ffc75eb0bd6baa47f4384b5165e46a29e749a589e3",
+      "bag/metadata.yaml": "c39be1db4efe20610ed7885e196d1759688cdf45ca0f60d9f73e3d018a939bc7",
+      "cone-contacts.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "contact-audit.json": "21ed59f8de5c884bf8081d2767054d282d81c50b18f6f88e49072bead25ce5c2",
+      "ekf_node-params.yaml": "452491ab97568be35ea7a08929d66763fb4e1f68e06aed4fa1c5fee811150ca2",
+      "gnss_sim-params.yaml": "c2a4d5485465f46594c9c1a39e8bd955ddb14b8ae2a735c03061313c3dc86b41",
+      "lidar_cone_detector-params.yaml": "f89cc353b5209e97a1adc41738048dfe6b2d18f0226dfa175966693c296f0dfc",
+      "mission_manager-params.yaml": "871f9f0284858d8a001cbb84a5e935630c6150ad6ef2f74817aaf5c7b86dfc2b",
+      "native-imu.csv": "6d99ea69fdc9d08b20840855d6cf2d605716203e597407efb34fe10584ae5de9",
+      "probe-imu.csv": "2dad0ed953eeda24881185b7aab5fa2386bc3348e688289a3eee817cf8812ec8",
+      "probe-odom3d.csv": "4b81024b36535891ff16a3efb757f22d0646e7b409e8f109e2efd62361bbb2e7",
+      "pure_pursuit-params.yaml": "897137e085f6c7ad3899e4e1960f7d0c51ec4fcab384e5aa7e2bd210e1a15410",
+      "track_builder-params.yaml": "ede59f745f43b12e5808f8d78c01e75132ea95f8af65cf8e606045ce7b31dd63"
+    },
+    "data/gnss-study/standard-50hz": {
+      "args.json": "964bcb2d099e5c5c7530a02ce53aac942617c4421adace0dc1cf0060bf2d2498",
+      "bag/bag_0.mcap": "3da4054701aee790d0d8941211a13464296374f11f0701a4e7fba69a4618694b",
+      "bag/metadata.yaml": "b4c9d949d901c7d90d0ce419ba971190dca3ee8990f4a957a7daffbabce4193a",
+      "cone-contacts.json": "beff2d7d8bbf8cd3f8b7ae526c38d137bec8dedb1a9ba507f6c5a72869c456b4",
+      "contact-audit.json": "558c246ccbc9fe29b99636c0a480a9f67aee74bea1fa40c4661e9894e0ffb22b",
+      "ekf_node-params.yaml": "452491ab97568be35ea7a08929d66763fb4e1f68e06aed4fa1c5fee811150ca2",
+      "gnss_sim-params.yaml": "c2a4d5485465f46594c9c1a39e8bd955ddb14b8ae2a735c03061313c3dc86b41",
+      "lidar_cone_detector-params.yaml": "f89cc353b5209e97a1adc41738048dfe6b2d18f0226dfa175966693c296f0dfc",
+      "metrics.csv": "7f49b1092a66faff1edec2e4b14f33b861f343734ea8512238037343130f5ad2",
+      "native-imu.csv": "527e25ee8085ae9614652d973508241a7e1bd892c0069726a39758a6b43c88c3",
+      "probe-imu.csv": "84e1251db5e37ea4488360aa3dd533c8d35fe7a83a853466f976f7a596b6f662",
+      "probe-odom3d.csv": "1017dbb53289230c82ffc58e1a4d9b5085be57ef508e49eb3d1f4b093812f05e",
+      "pure_pursuit-params.yaml": "897137e085f6c7ad3899e4e1960f7d0c51ec4fcab384e5aa7e2bd210e1a15410",
+      "track_builder-params.yaml": "ede59f745f43b12e5808f8d78c01e75132ea95f8af65cf8e606045ce7b31dd63"
+    }
+  },
+  "synthetic": {
+    "stationary_recorded": {
+      "physics_samples": 3001,
+      "physics_max_translation_from_window_start_m": 0.0,
+      "physics_max_heading_change_deg": 0.0,
+      "physics_max_linear_speed_m_s": 0.0,
+      "command_samples": 61,
+      "max_abs_commanded_speed_m_s": 0.0,
+      "mission_states_whole_capture": {
+        "OFF": 20,
+        "READY": 304
+      },
+      "stationary_verified": true
+    },
+    "moving_recorded": {
+      "physics_samples": 3001,
+      "physics_max_translation_from_window_start_m": 0.0,
+      "physics_max_heading_change_deg": 0.0,
+      "physics_max_linear_speed_m_s": 0.0,
+      "command_samples": 61,
+      "max_abs_commanded_speed_m_s": 0.0,
+      "mission_states_whole_capture": {
+        "OFF": 20,
+        "READY": 50,
+        "DRIVING": 230
+      },
+      "stationary_verified": false
+    },
+    "synthetic_straight_seed3": {
+      "kind": "straight",
+      "seed": 3,
+      "imu_rate_hz": 100.0,
+      "gyro_bias_rad_s": 0.011873586145027083,
+      "accel_bias_m_s2": -0.3341668330578296,
+      "gyro_white_std_rad_s": 0.0005553603672697958,
+      "accel_white_std_m_s2": 0.006934348715723056,
+      "limits": "Ideal planar synthetic motion, not Gazebo or physical validation; stationary until 7 s, then straight acceleration or a slow turn."
+    },
+    "synthetic_straight_seed7": {
+      "kind": "straight",
+      "seed": 7,
+      "imu_rate_hz": 100.0,
+      "gyro_bias_rad_s": 7.156742130844581e-06,
+      "accel_bias_m_s2": 0.03906257233876582,
+      "gyro_white_std_rad_s": 0.0005553603672697958,
+      "accel_white_std_m_s2": 0.006934348715723056,
+      "limits": "Ideal planar synthetic motion, not Gazebo or physical validation; stationary until 7 s, then straight acceleration or a slow turn."
+    },
+    "synthetic_straight_seed11": {
+      "kind": "straight",
+      "seed": 11,
+      "imu_rate_hz": 100.0,
+      "gyro_bias_rad_s": 0.00019892545631205376,
+      "accel_bias_m_s2": 0.17779424288240914,
+      "gyro_white_std_rad_s": 0.0005553603672697958,
+      "accel_white_std_m_s2": 0.006934348715723056,
+      "limits": "Ideal planar synthetic motion, not Gazebo or physical validation; stationary until 7 s, then straight acceleration or a slow turn."
+    },
+    "synthetic_slow_turn_seed3": {
+      "kind": "slow_turn",
+      "seed": 3,
+      "imu_rate_hz": 100.0,
+      "gyro_bias_rad_s": 0.011873586145027083,
+      "accel_bias_m_s2": -0.3341668330578296,
+      "gyro_white_std_rad_s": 0.0005553603672697958,
+      "accel_white_std_m_s2": 0.006934348715723056,
+      "limits": "Ideal planar synthetic motion, not Gazebo or physical validation; stationary until 7 s, then straight acceleration or a slow turn."
+    },
+    "synthetic_slow_turn_seed7": {
+      "kind": "slow_turn",
+      "seed": 7,
+      "imu_rate_hz": 100.0,
+      "gyro_bias_rad_s": 7.156742130844581e-06,
+      "accel_bias_m_s2": 0.03906257233876582,
+      "gyro_white_std_rad_s": 0.0005553603672697958,
+      "accel_white_std_m_s2": 0.006934348715723056,
+      "limits": "Ideal planar synthetic motion, not Gazebo or physical validation; stationary until 7 s, then straight acceleration or a slow turn."
+    },
+    "synthetic_slow_turn_seed11": {
+      "kind": "slow_turn",
+      "seed": 11,
+      "imu_rate_hz": 100.0,
+      "gyro_bias_rad_s": 0.00019892545631205376,
+      "accel_bias_m_s2": 0.17779424288240914,
+      "gyro_white_std_rad_s": 0.0005553603672697958,
+      "accel_white_std_m_s2": 0.006934348715723056,
+      "limits": "Ideal planar synthetic motion, not Gazebo or physical validation; stationary until 7 s, then straight acceleration or a slow turn."
+    }
+  }
+}

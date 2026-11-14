@@ -3,17 +3,20 @@
 <package format="3">
   <name>lhr_state_estimation</name>
   <version>0.0.0</version>
-  <description>EKF vehicle state estimation from IMU and wheel speeds.</description>
+  <description>IMU dead reckoning with optional legacy wheel-speed corrections.</description>
   <maintainer email="ya7897@eid.utexas.edu">koa</maintainer>
   <license>MIT</license>
 
   <exec_depend>rclpy</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>sensor_msgs_py</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
   <exec_depend>lhr_vehicle</exec_depend>
   <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-scipy</exec_depend>
 
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>

@@ -1,0 +1,119 @@
+[
+  {
+    "capture": "accel-clean-standard",
+    "style": "acceleration",
+    "noise": "false",
+    "native_samples": 3301,
+    "ros_samples": 3301,
+    "matched_samples": 3301,
+    "ros_match_fraction": 1.0,
+    "max_native_ros_difference": 0.0,
+    "imu_median_dt_s": 0.009999999999999787,
+    "imu_max_gap_s": 0.010000000000005116,
+    "stationary_sigma": [
+      5.930242799166843e-13,
+      5.09076989319298e-13,
+      8.726515518967168e-19,
+      3.1713898062330554e-11,
+      3.6668714807286265e-10,
+      5.985860854000805e-10
+    ],
+    "stationary_offsets": [
+      -2.4720778334433198e-14,
+      -1.4326832193397736e-14,
+      1.0324865411825634e-19,
+      -6.964066311948108e-11,
+      -9.104308779159353e-10,
+      9.809999999971195
+    ],
+    "noise_spread_pass": true,
+    "accelerating": {
+      "truth_delta_v_m_s": 2.9897508708354175,
+      "imu_integrated_delta_v_m_s": 2.9428158971494707,
+      "relative_error": 0.015698623635765307
+    },
+    "braking": {
+      "truth_delta_v_m_s": -5.000249785175597,
+      "imu_integrated_delta_v_m_s": -4.977700803105858,
+      "relative_error": 0.004509571129144504
+    },
+    "final_speed_m_s": 0.0,
+    "validation_pass": true
+  },
+  {
+    "capture": "accel-native-standard",
+    "style": "acceleration",
+    "noise": "true",
+    "native_samples": 3301,
+    "ros_samples": 3300,
+    "matched_samples": 3300,
+    "ros_match_fraction": 1.0,
+    "max_native_ros_difference": 0.0,
+    "imu_median_dt_s": 0.009999999999999787,
+    "imu_max_gap_s": 0.010000000000005116,
+    "stationary_sigma": [
+      0.0005491877769877921,
+      0.0005661884760976941,
+      0.0005606679154182692,
+      0.006816365337586397,
+      0.006711904476631516,
+      0.007255625130106385
+    ],
+    "stationary_offsets": [
+      0.00434181409124336,
+      0.0036685299298338087,
+      0.0023828821561009,
+      -0.23789182702173134,
+      -0.047347260318315355,
+      9.478877231959226
+    ],
+    "noise_spread_pass": true,
+    "accelerating": {
+      "truth_delta_v_m_s": 2.9896982787118715,
+      "imu_integrated_delta_v_m_s": 2.9441487082742928,
+      "relative_error": 0.015235507463048773
+    },
+    "braking": {
+      "truth_delta_v_m_s": -5.000247867033766,
+      "imu_integrated_delta_v_m_s": -4.969572172967534,
+      "relative_error": 0.006134834688590941
+    },
+    "final_speed_m_s": 0.0,
+    "validation_pass": true
+  },
+  {
+    "capture": "oval-native-standard",
+    "style": "oval",
+    "noise": "true",
+    "native_samples": 4500,
+    "ros_samples": 4501,
+    "matched_samples": 4500,
+    "ros_match_fraction": 0.9997778271495223,
+    "max_native_ros_difference": 0.0,
+    "imu_median_dt_s": 0.009999999999999787,
+    "imu_max_gap_s": 0.010000000000005116,
+    "stationary_sigma": [
+      0.0005381641284590089,
+      0.0005421575553274954,
+      0.0005776428722569487,
+      0.007216227356597175,
+      0.006733037846963291,
+      0.006852754068460454
+    ],
+    "stationary_offsets": [
+      0.004374813173078534,
+      0.003685543039173635,
+      0.0024094436820927276,
+      -0.2374229661348001,
+      -0.04750229966461708,
+      9.478864934121361
+    ],
+    "noise_spread_pass": true,
+    "turn": {
+      "truth_yaw_change_rad": 6.982356226215246,
+      "imu_integrated_yaw_change_rad": 6.983414686051621,
+      "absolute_error_rad": 0.0010584598363747588
+    },
+    "validation_pass": true
+  }
+]

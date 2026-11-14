@@ -1,0 +1,126 @@
+{
+  "base_commit": "da9d5a95a9a49679a05c5a313432dfb8a55626dd",
+  "branch": "koa/gazebo-imu-noise",
+  "working_tree_modified": true,
+  "wheel_speeds_used_in_replay": false,
+  "imu_orientation_used_in_replay": false,
+  "initial_pose": "one surveyed-pose proxy from reference at calibration end",
+  "initial_velocity": "known zero while held still",
+  "source_sha256": {
+    "src/lhr_state_estimation/lhr_state_estimation/ekf.py": "d772297b98fee6c5e2200c6815e26e2c1243de1d3dcce06f595ba429a62ed9f7",
+    "src/lhr_state_estimation/lhr_state_estimation/ekf_node.py": "3637e51957462394786214343b3d6f31913cc1d4cf4cd77e9f29877cb3dce1a2",
+    "src/lhr_vehicle/config/vehicle.yaml": "123ad891ed3db8737fffe52b529775337c824bb150e2c602345abb0b0ec398dd",
+    "src/lhr_gazebo/launch/gazebo_demo.launch.py": "33bd19670644dfad98406ac09b5c8dd59664c2fa710c54b5ccd7c6ad80d153d2",
+    "src/lhr_demo/launch/mvs_demo.launch.py": "0c5dbf786729d7b9d2a5ffbf9423b7a11b4dd6807e1eb19d52639d2a66ac9f94",
+    "src/lhr_gazebo/scripts/record_imu_reference.py": "c5f9a5b047af4a455b4077e1e26f57b91812a97c1e9a03074d752ea0708c781d",
+    "src/lhr_gazebo/scripts/evaluate_imu_only.py": "e9a27dfd31c1c4a03f8194e5a4dbd68906d57b2847be424cb55c6ecbb37d58d6",
+    "src/lhr_gazebo/models/fsae_vehicle/model.sdf": "16688c6625c47aafd89d264b0abeee8d473f6319e1b0e0854399074a3e2f9e3b",
+    "src/lhr_gazebo/worlds/acceleration_seed1.sdf": "8f0a0bd894fd95bda31862b13c1e851537da52d4ef6194cd42265882a7850e1e",
+    "src/lhr_gazebo/lhr_gazebo/imu_model.py": "f4f48a8fc7cae55f4d386b217dee7b4274886f4d4d856bc5675d7c04a1d6feb2"
+  },
+  "captures": {
+    "acceleration-clean": {
+      "arguments": [
+        "ros2",
+        "launch",
+        "lhr_gazebo",
+        "gazebo_demo.launch.py",
+        "gui:=false",
+        "rviz:=false",
+        "perception:=sim",
+        "estimator:=truth",
+        "enable_metrics:=false",
+        "safety:=false",
+        "ready_hold_sec:=10.0",
+        "use_wheel_speeds:=false",
+        "imu_noise:=false",
+        "track_style:=acceleration",
+        "seed:=1",
+        "world:=/home/black-book/lhre/autonomy/ros2/data/imu-only/acceleration-clean/world.sdf"
+      ],
+      "artifacts_sha256": {
+        "launch.log": "cac27ac3ed968cc518db90b63252100f5d00f5f7a64d83fe03bb10466ba7fc9d",
+        "world.sdf": "85c9aa45929e6a64998d513952f658a60eed979e10994e4ff13f2cc40a85cb92",
+        "args.json": "c17816313824bbfbd74a068d5d44332218cc46e4b084b3b04f3db4de3b1f679f",
+        "vehicle.sdf": "d0ff19806844a969ef8bfb350517c60a7703cc04d426d935b73fdd2320d6a6ec",
+        "bag.log": "647a4cfe54da39d376f3c131eb26fb18dc0669e1839c3e7f47b0bf23baa642bd",
+        "bag/metadata.yaml": "6014c3059a711f3d56872438d3e4fb88975b64d99169600e0bef422082419df6",
+        "bag/bag_0.mcap": "a26b7a7cf388e7646be74d32210242407395d8e30a155a7dce38b6912988784e"
+      }
+    },
+    "acceleration-native": {
+      "arguments": [
+        "ros2",
+        "launch",
+        "lhr_gazebo",
+        "gazebo_demo.launch.py",
+        "gui:=false",
+        "rviz:=false",
+        "perception:=sim",
+        "estimator:=truth",
+        "enable_metrics:=false",
+        "safety:=false",
+        "ready_hold_sec:=10.0",
+        "use_wheel_speeds:=false",
+        "imu_noise:=true",
+        "track_style:=acceleration",
+        "seed:=1",
+        "world:=/home/black-book/lhre/autonomy/ros2/data/imu-only/acceleration-native/world.sdf"
+      ],
+      "artifacts_sha256": {
+        "launch.log": "b33ad8bf2a12db9b0445ab21bdb6cb32df7ca4a68ecaf4782a6f68ef0544d801",
+        "world.sdf": "9f5720b7c3f2350b2599f5a0f08db9b5d0ba845424678bedbf2ef096770a08c0",
+        "args.json": "3cfbc21475f9507b7b45c5731d73c9f70e9b40fc2f987ce7c2e728a4f04ce5e1",
+        "vehicle.sdf": "f922f4deda5234872d3c88db83bb679ac6d5570edf8f9c4f9c31bf7ffe88071c",
+        "bag.log": "18db7ef5a805f11bd02505fdf60097e172bc2d924b7da88ea84695ea78657320",
+        "bag/metadata.yaml": "7da7ece85f0b5c751f9266af812a199c15f10f6fe77dd5b6fdd352c45a13900e",
+        "bag/bag_0.mcap": "689f724e5c2213df5cae1fe0318e324282334927feff324159d2a3da5cee84b5"
+      }
+    },
+    "acceleration-clean-fullworld": {
+      "arguments": [
+        "ros2",
+        "launch",
+        "lhr_gazebo",
+        "gazebo_demo.launch.py",
+        "gui:=false",
+        "rviz:=false",
+        "perception:=sim",
+        "estimator:=truth",
+        "enable_metrics:=false",
+        "safety:=false",
+        "ready_hold_sec:=10.0",
+        "use_wheel_speeds:=false",
+        "imu_noise:=false",
+        "track_style:=acceleration",
+        "seed:=1",
+        "world:=/home/black-book/lhre/autonomy/ros2/install/lhr_gazebo/share/lhr_gazebo/worlds/acceleration_seed1.sdf"
+      ],
+      "artifacts_sha256": {
+        "launch.log": "4b15d4c1ea30d4f9b753254a5c1144e759d883c59ff7f56855501c51cf6618ab",
+        "world.sdf": "62e39f329c30c3e2ff1fcfc574ffd5c8ee261af67c174fb5a487e39236fc2688",
+        "args.json": "57a1c25ccda43e2e7ab17441608baf64319fd7334f5177c8092fb5d22a21649e",
+        "vehicle.sdf": "d0ff19806844a969ef8bfb350517c60a7703cc04d426d935b73fdd2320d6a6ec",
+        "bag.log": "bc8e5e7c775b50a363967d4eff50acbc5cb57810a5fe7d845275434465155762",
+        "bag/metadata.yaml": "71f8d218eb6e425a3207c35a98d21930debdc13665a816e4ea132007aba5aacc",
+        "bag/bag_0.mcap": "bd52b763f497fa2ff041259f6ceac12bc070082b114eefd5a5cb4c6f768177e7"
+      }
+    }
+  },
+  "unsuccessful_capture": {
+    "path": "data/imu-only/autocross-clean",
+    "reason": "reference capture timeout after 150 wall seconds; no completed-run score",
+    "next_capture_not_started": "autocross-native"
+  },
+  "continuous_truth_used_for_correction": false,
+  "source_manifest_note": "Final checkpoint source hashes; the original lightweight capture batch predates the added full-world option and longer teardown timeout. These harness additions do not change its IMU data processing.",
+  "validation": {
+    "build_packages": 16,
+    "focused_package_tests": 432,
+    "failures": 0,
+    "strict_mkdocs": "passed",
+    "position_gate_passed": false,
+    "live_calibration_implemented": false,
+    "bias_state_implemented": false
+  }
+}

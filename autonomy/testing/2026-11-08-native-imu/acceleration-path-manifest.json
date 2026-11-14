@@ -1,0 +1,212 @@
+{
+  "date": "2026-11-08",
+  "gazebo_sim": "8.15.0",
+  "physics_engine": "gz::physics::dartsim::Plugin",
+  "base_commit": "da9d5a95a9a49679a05c5a313432dfb8a55626dd",
+  "branch": "koa/gazebo-imu-noise",
+  "working_tree_modified": true,
+  "runtime": {
+    "ROS_DOMAIN_ID": 88,
+    "GZ_PARTITION": "imu-accel-path"
+  },
+  "production_actuation_changed": false,
+  "noise_enabled": false,
+  "scope": "Native/ROS acceleration input-path diagnosis; no estimator or perception gate",
+  "interval_s": [
+    12,
+    15
+  ],
+  "stationary_offset_interval_s": [
+    2,
+    7
+  ],
+  "source_sha256": {
+    "src/lhr_gazebo/scripts/record_imu_reference.py": "3ffc3f8ff5dacfe42ce35b2955c329f0f3e0ec3d17416e342a89005e7ef0b42e",
+    "src/lhr_gazebo/scripts/check_imu_acceleration.py": "5516f8ff3aa00b939178069b3e62967fc7fb00944b16bb97b4125fa961b93e0b",
+    "src/lhr_gazebo/scripts/evaluate_imu_only.py": "e9a27dfd31c1c4a03f8194e5a4dbd68906d57b2847be424cb55c6ecbb37d58d6",
+    "src/lhr_gazebo/templates/model.sdf.in": "478c3b96c09bc753753d9356b72bb0b3e4182806b3ffd822313ddd3df61c5b35",
+    "src/lhr_gazebo/models/fsae_vehicle/model.sdf": "16688c6625c47aafd89d264b0abeee8d473f6319e1b0e0854399074a3e2f9e3b",
+    "src/lhr_gazebo/launch/gazebo_demo.launch.py": "33bd19670644dfad98406ac09b5c8dd59664c2fa710c54b5ccd7c6ad80d153d2",
+    "src/lhr_gazebo/config/ros_gz_bridge.yaml": "652cf731ca806fd88320ccafd0111018955e4df3e77c9c5f2f1b3a60ca42f09a",
+    "src/lhr_vehicle/config/vehicle.yaml": "123ad891ed3db8737fffe52b529775337c824bb150e2c602345abb0b0ec398dd"
+  },
+  "captures": {
+    "direct-100-run": {
+      "options": {
+        "out": "data/imu-accel-path/direct-100-run",
+        "style": "acceleration",
+        "seed": 1,
+        "noise": "false",
+        "full_rendering": false,
+        "capture_native": true,
+        "imu_rate": null,
+        "force_drive": false,
+        "stop_sim_time": 16.0
+      },
+      "launch_args": [
+        "ros2",
+        "launch",
+        "lhr_gazebo",
+        "gazebo_demo.launch.py",
+        "gui:=false",
+        "rviz:=false",
+        "perception:=sim",
+        "estimator:=truth",
+        "enable_metrics:=false",
+        "safety:=false",
+        "ready_hold_sec:=10.0",
+        "use_wheel_speeds:=false",
+        "imu_noise:=false",
+        "track_style:=acceleration",
+        "seed:=1",
+        "world:=/home/black-book/lhre/autonomy/ros2/data/imu-accel-path/direct-100-run/world.sdf"
+      ],
+      "artifacts_sha256": {
+        "args.json": "631d51de44b7f592085d398e38091ddf429206bde6a52e0d370f8a9bec22f15a",
+        "bag/bag_0.mcap": "a1c8342b1d5dbbfce28ff569322b1582f6530e40e07f75973d2f46a444914ddd",
+        "bag/metadata.yaml": "5a9d11e4a54c65b8fcc6ad7c5343ee43467eebd4e6c4912a5d0e8d079bdad863",
+        "bag.log": "50b1146a2e044e605c6bc1363ae6e6853365df874c4ee9b6aab2c9df10a1975f",
+        "capture-options.json": "1564b7893d00d71388c25baaf890a741dd45035ac8889821fdb2455fc8735d28",
+        "launch.log": "a671700e2ebfcda1efef9f1db3a5a953b0b2e496b4a864b27317904dcd17872f",
+        "native-imu.csv": "ad1d27bb1f2b3237e6173ee6239cabfdc570147e66ea71ae43c47c083edde5d0",
+        "vehicle.sdf": "d0ff19806844a969ef8bfb350517c60a7703cc04d426d935b73fdd2320d6a6ec",
+        "world.sdf": "84ebbe21db49af25b75e21da52ad795f39aa72221023d82716bd986bbd4ec8a3"
+      }
+    },
+    "direct-1000": {
+      "options": {
+        "out": "data/imu-accel-path/direct-1000",
+        "style": "acceleration",
+        "seed": 1,
+        "noise": "false",
+        "full_rendering": false,
+        "capture_native": true,
+        "imu_rate": 1000.0,
+        "force_drive": false,
+        "stop_sim_time": 16.0
+      },
+      "launch_args": [
+        "ros2",
+        "launch",
+        "lhr_gazebo",
+        "gazebo_demo.launch.py",
+        "gui:=false",
+        "rviz:=false",
+        "perception:=sim",
+        "estimator:=truth",
+        "enable_metrics:=false",
+        "safety:=false",
+        "ready_hold_sec:=10.0",
+        "use_wheel_speeds:=false",
+        "imu_noise:=false",
+        "track_style:=acceleration",
+        "seed:=1",
+        "world:=/home/black-book/lhre/autonomy/ros2/data/imu-accel-path/direct-1000/world.sdf"
+      ],
+      "artifacts_sha256": {
+        "args.json": "e995f1b03e3867fedbaa6ba0b9634db6080f1aa538d54efaf0637acc894c9c4a",
+        "bag/bag_0.mcap": "6d98b0123d85fed6f05d3b8342a47d51c006f471c1a7f2eaddd5c25a84e09cee",
+        "bag/metadata.yaml": "f79489739c8cd9aae535c8b4ceca573076508eaccf4f83d2562adc3880ce5061",
+        "bag.log": "edbe7a4d4f9be168acf1d19c5fef516ab416748d218dcdea397505380e07325d",
+        "capture-options.json": "7195ae8554b0417b095083a183a72d6520e38a0b5070f6afe7c86f5710e3948d",
+        "launch.log": "791cd33c3ed536c0dc704ce2263dc025d70e0dd43c84098072885d2f7ec05005",
+        "native-imu.csv": "5e458c61526aed359a818ffd366ad5877de6a494493e72faec5867b673571f2a",
+        "vehicle.sdf": "f3fc0e7f0ea66e310ba8cf59d1fa9b2da7746f96272a2c9b365231c0dd442317",
+        "world.sdf": "2817f5f12cba57da1efaa0d0025d19740855fcb70958bd534282d9abb8a2361b"
+      }
+    },
+    "force-100": {
+      "options": {
+        "out": "data/imu-accel-path/force-100",
+        "style": "acceleration",
+        "seed": 1,
+        "noise": "false",
+        "full_rendering": false,
+        "capture_native": true,
+        "imu_rate": null,
+        "force_drive": true,
+        "stop_sim_time": 16.0
+      },
+      "launch_args": [
+        "ros2",
+        "launch",
+        "lhr_gazebo",
+        "gazebo_demo.launch.py",
+        "gui:=false",
+        "rviz:=false",
+        "perception:=sim",
+        "estimator:=truth",
+        "enable_metrics:=false",
+        "safety:=false",
+        "ready_hold_sec:=10.0",
+        "use_wheel_speeds:=false",
+        "imu_noise:=false",
+        "track_style:=acceleration",
+        "seed:=1",
+        "world:=/home/black-book/lhre/autonomy/ros2/data/imu-accel-path/force-100/world.sdf"
+      ],
+      "artifacts_sha256": {
+        "args.json": "b53f4bb8a0d2d0e212c86f2394ca13aea4dec1967627dd609d5ddb01f3104943",
+        "bag/bag_0.mcap": "9b23777f39dff8c5f5f726a7d63a79a71ca4a8056b16ec743226969f1fa6ab45",
+        "bag/metadata.yaml": "da03063b40e91d648f5642b2709de3912e87655d2360d0938cc359b2bb169894",
+        "bag.log": "8fff265b1df0630ad04a8c01405f310a8289c2b4bbeb2fdb2b650926a32a3315",
+        "capture-options.json": "6bfac8931caee5f639c444f2f869e473f5f2843394d0c2496c4c418afbfc4933",
+        "launch.log": "aa458cfbd017d8e005df2de9b8e9164039686d424ccdb637b4dedbc8691f4371",
+        "native-imu.csv": "d492859ae60e9c68d4512e5de7c24a53f2cb467cde06413eb7f247f6cb08ec83",
+        "vehicle.sdf": "e8e008fbae91bb37f0f2599669e5f6e0f8e17ce3229d3e812fad656d556c64e8",
+        "world.sdf": "c24529a85ddd1c360c696081fdc657327e6f196779102588300a4c537a87d803"
+      }
+    },
+    "force-100-repeat": {
+      "options": {
+        "out": "data/imu-accel-path/force-100-repeat",
+        "style": "acceleration",
+        "seed": 1,
+        "noise": "false",
+        "full_rendering": false,
+        "capture_native": true,
+        "imu_rate": null,
+        "force_drive": true,
+        "stop_sim_time": 16.0
+      },
+      "launch_args": [
+        "ros2",
+        "launch",
+        "lhr_gazebo",
+        "gazebo_demo.launch.py",
+        "gui:=false",
+        "rviz:=false",
+        "perception:=sim",
+        "estimator:=truth",
+        "enable_metrics:=false",
+        "safety:=false",
+        "ready_hold_sec:=10.0",
+        "use_wheel_speeds:=false",
+        "imu_noise:=false",
+        "track_style:=acceleration",
+        "seed:=1",
+        "world:=/home/black-book/lhre/autonomy/ros2/data/imu-accel-path/force-100-repeat/world.sdf"
+      ],
+      "artifacts_sha256": {
+        "args.json": "3d4454894fe4b0255a3dbe7c2cc144b0ceb9843c9c0b722d852b6c02c365ecd9",
+        "bag/bag_0.mcap": "b30fce49fb01154082fdf2e5a6cea6a5c0f428adff5de2cc5c0442481a0cf3eb",
+        "bag/metadata.yaml": "a77c4759b34feed984c45e142e66049d2e37b9f54561c034b2364b1241e46920",
+        "bag.log": "e9fc6e2abd831102188f8c8014f3e49340cefea93b55aeeaa868594b328b25d2",
+        "capture-options.json": "0917f5abf598ab12de476a038a2248c0e1a5122b54ca9671b1dd39d01eb6d769",
+        "launch.log": "e35d59e35442636cfb007a91313137993abab44552ee904cc4faf3370438742c",
+        "native-imu.csv": "ffe9558f795a59ac63677fedb857b9f4138cfa732ed53e59e6faa2fe4b56b166",
+        "vehicle.sdf": "e8e008fbae91bb37f0f2599669e5f6e0f8e17ce3229d3e812fad656d556c64e8",
+        "world.sdf": "75d900944571fed0344577bf5bfd9482557afb703b55082d0715c27b1d698a66"
+      }
+    }
+  },
+  "verification": {
+    "acceleration_controls": "4/4 passed",
+    "lhr_gazebo_tests": "299 tests, 0 errors, 0 failures, 0 skipped",
+    "flake8": "2 scripts passed",
+    "pep257": "2 scripts passed",
+    "initial_sandbox_test_attempt": "ROS log directory was read-only; rerun with local ROS permissions passed",
+    "live_calibration_integrated": false,
+    "bias_state_integrated": false
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "build": {
+    "command": "./scripts/build.sh",
+    "result": "16 packages passed"
+  },
+  "affected_tests": {
+    "command": "colcon test --packages-select lhr_state_estimation lhr_sensor_sim lhr_vehicle lhr_gazebo lhr_metrics",
+    "results": {
+      "lhr_state_estimation": 36,
+      "lhr_sensor_sim": 4,
+      "lhr_vehicle": 85,
+      "lhr_gazebo": 311,
+      "lhr_metrics": 74
+    },
+    "passed_total": 510,
+    "notes": "Gazebo analyzer lint errors corrected and the Gazebo suite rerun successfully. Production-code changes already covered by these runs; final edit clarifies NIS docstring."
+  },
+  "generated_models": "Both SDF freshness tests passed in lhr_gazebo",
+  "strict_docs": {
+    "command": "uv run --group docs mkdocs build --strict --site-dir /tmp/lhre-imu-stop-docs",
+    "result": "passed"
+  },
+  "diff_check": "git diff --check passed"
+}

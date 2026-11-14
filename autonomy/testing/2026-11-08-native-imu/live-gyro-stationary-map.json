@@ -1,0 +1,286 @@
+{
+  "capture": "data/live-gyro-heading/stationary-r3",
+  "analysis_window_s": [
+    8.0,
+    20.0
+  ],
+  "frames": 121,
+  "motion_audit": {
+    "physics_samples": 12001,
+    "physics_max_translation_from_window_start_m": 0.0,
+    "physics_max_heading_change_deg": 0.0,
+    "physics_max_linear_speed_m_s": 0.0,
+    "command_samples": 237,
+    "max_abs_commanded_speed_m_s": 0.0,
+    "mission_states_whole_capture": {
+      "OFF": 72,
+      "READY": 68,
+      "EMERGENCY": 157
+    },
+    "stationary_verified": true
+  },
+  "stationary_native_gyro_z": {
+    "samples": 12001,
+    "mean_rad_s": -0.007945584255742483,
+    "mean_deg_s": -0.4552484436196396,
+    "stddev_rad_s": 0.0017437590149947638,
+    "mean_integrated_over_window_deg": -5.462981323435676
+  },
+  "pose_position_error_m": {
+    "n": 121,
+    "median": 0.15624482259831257,
+    "p95": 0.3699950752483874,
+    "max": 0.5997375974778242
+  },
+  "pose_heading_error_deg": {
+    "n": 121,
+    "median": 0.003977868046016849,
+    "p95": 0.01105725898005492,
+    "max": 0.015508862126467435
+  },
+  "estimated_translation_from_first_scan_m": {
+    "n": 121,
+    "median": 0.15372182093007442,
+    "p95": 0.428280700047419,
+    "max": 0.5854976930698381
+  },
+  "sensor_and_fresh_detection_jitter": {
+    "raw_roi": {
+      "landmarks_with_10_samples": 21,
+      "radial_scatter_m": {
+        "n": 2541,
+        "median": 0.004602900696042029,
+        "p95": 0.018517103179057293,
+        "max": 0.03799610659952651
+      }
+    },
+    "base": {
+      "landmarks_with_10_samples": 26,
+      "radial_scatter_m": {
+        "n": 3146,
+        "median": 0.006992163598038135,
+        "p95": 0.03134025445663487,
+        "max": 0.07655372550270688
+      }
+    },
+    "registered": {
+      "landmarks_with_10_samples": 26,
+      "radial_scatter_m": {
+        "n": 3146,
+        "median": 0.15118586668977285,
+        "p95": 0.3985158775424159,
+        "max": 0.594701935624208
+      }
+    }
+  },
+  "replay_geometry": {
+    "estimated": {
+      "count": {
+        "n": 121,
+        "median": 28.0,
+        "p95": 28.0,
+        "max": 28.0
+      },
+      "p95_m": {
+        "n": 121,
+        "median": 0.19618496900037857,
+        "p95": 0.41333365127403915,
+        "max": 0.6397800193892546
+      },
+      "unmatched": {
+        "n": 121,
+        "median": 1.0,
+        "p95": 21.0,
+        "max": 28.0
+      },
+      "duplicates": {
+        "n": 121,
+        "median": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "birth_identified": {
+        "n": 121,
+        "median": 28.0,
+        "p95": 28.0,
+        "max": 28.0
+      },
+      "birth_duplicate_excess": {
+        "n": 121,
+        "median": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      }
+    },
+    "physics": {
+      "count": {
+        "n": 121,
+        "median": 28.0,
+        "p95": 28.0,
+        "max": 28.0
+      },
+      "p95_m": {
+        "n": 121,
+        "median": 0.09632243180340967,
+        "p95": 0.096904343463731,
+        "max": 0.09695829861390703
+      },
+      "unmatched": {
+        "n": 121,
+        "median": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "duplicates": {
+        "n": 121,
+        "median": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "birth_identified": {
+        "n": 121,
+        "median": 28.0,
+        "p95": 28.0,
+        "max": 28.0
+      },
+      "birth_duplicate_excess": {
+        "n": 121,
+        "median": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      }
+    },
+    "fixed": {
+      "count": {
+        "n": 121,
+        "median": 28.0,
+        "p95": 28.0,
+        "max": 28.0
+      },
+      "p95_m": {
+        "n": 121,
+        "median": 0.09632243180340967,
+        "p95": 0.096904343463731,
+        "max": 0.09695829861390703
+      },
+      "unmatched": {
+        "n": 121,
+        "median": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "duplicates": {
+        "n": 121,
+        "median": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "birth_identified": {
+        "n": 121,
+        "median": 28.0,
+        "p95": 28.0,
+        "max": 28.0
+      },
+      "birth_duplicate_excess": {
+        "n": 121,
+        "median": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      }
+    },
+    "instant": {
+      "count": {
+        "n": 121,
+        "median": 26.0,
+        "p95": 26.0,
+        "max": 27.0
+      },
+      "p95_m": {
+        "n": 121,
+        "median": 0.05268781989880063,
+        "p95": 0.06406358416865901,
+        "max": 0.07249166429305112
+      },
+      "unmatched": {
+        "n": 121,
+        "median": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "duplicates": {
+        "n": 121,
+        "median": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "birth_identified": {
+        "n": 121,
+        "median": 26.0,
+        "p95": 26.0,
+        "max": 27.0
+      },
+      "birth_duplicate_excess": {
+        "n": 121,
+        "median": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      }
+    }
+  },
+  "live_geometry": {
+    "count": {
+      "n": 77,
+      "median": 28.0,
+      "p95": 28.0,
+      "max": 28.0
+    },
+    "p95_m": {
+      "n": 77,
+      "median": 0.20768738434185258,
+      "p95": 0.4516467865636546,
+      "max": 0.6168081170960554
+    },
+    "unmatched": {
+      "n": 77,
+      "median": 1.0,
+      "p95": 27.0,
+      "max": 28.0
+    },
+    "duplicates": {
+      "n": 77,
+      "median": 0.0,
+      "p95": 0.0,
+      "max": 0.0
+    }
+  },
+  "final_replay_frame": {
+    "stamp_s": 20.0,
+    "pose_error_m": 0.12066700885265322,
+    "heading_error_deg": 0.015508862126467435,
+    "estimated_count": 28,
+    "estimated_p95_m": 0.1718059456901805,
+    "estimated_unmatched": 1,
+    "estimated_duplicates": 0,
+    "estimated_birth_identified": 28,
+    "estimated_birth_duplicate_excess": 0,
+    "physics_count": 28,
+    "physics_p95_m": 0.09695829861390703,
+    "physics_unmatched": 0,
+    "physics_duplicates": 0,
+    "physics_birth_identified": 28,
+    "physics_birth_duplicate_excess": 0,
+    "fixed_count": 28,
+    "fixed_p95_m": 0.09695829861390703,
+    "fixed_unmatched": 0,
+    "fixed_duplicates": 0,
+    "fixed_birth_identified": 28,
+    "fixed_birth_duplicate_excess": 0,
+    "instant_count": 26,
+    "instant_p95_m": 0.052367863640889904,
+    "instant_unmatched": 0,
+    "instant_duplicates": 0,
+    "instant_birth_identified": 26,
+    "instant_birth_duplicate_excess": 0
+  },
+  "limits": "Single seed-3 capture; identity/radius scoring is diagnostic. Raw ROI and fresh-detection jitter use >=10 observations per cone. Scans before the analysis window remain in persistent history. Physics/fixed poses are offline controls only. Production perception/estimator are unchanged."
+}

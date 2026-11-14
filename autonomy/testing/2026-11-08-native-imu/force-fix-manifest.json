@@ -1,0 +1,173 @@
+{
+  "base_commit": "da9d5a95a9a49679a05c5a313432dfb8a55626dd",
+  "branch": "koa/gazebo-imu-noise",
+  "working_tree_modified": true,
+  "gazebo": "8.15.0",
+  "physics": "DART",
+  "ros": "Jazzy",
+  "ROS_DOMAIN_ID": 90,
+  "GZ_PARTITION": "imu-force-fix",
+  "source_sha256": {
+    "src/lhr_vehicle/config/vehicle.yaml": "0c27e03f535d168ca08815d8e5e5bee13422990f234d79949693fd85b8ff7a86",
+    "src/lhr_vehicle/lhr_vehicle/__init__.py": "685f29f1713cc8829f803c70b10f4969634e7b716b9bfbae618c34071e6c58a7",
+    "src/lhr_gazebo/templates/model.sdf.in": "418285ffdc018449032d138c281eb900bc759b647ed9ae51a4b96552a181c760",
+    "src/lhr_gazebo/scripts/generate_vehicle_model.py": "694ac57b16df9583ebe9cc41e3e407491e8209c797d5774e70632a255c6b900f",
+    "src/lhr_gazebo/models/fsae_vehicle/model.sdf": "7cfd7b2ed558d372dc96a042b775189f0ce1c7517d3006e6886e36efba777dbe",
+    "src/lhr_gazebo/models/fsae_vehicle/model_stereo.sdf": "89197b121e0971d51a90344ab5fa82162f3c4f28e30608999f1ad5413d6dac51",
+    "src/lhr_gazebo/scripts/record_imu_reference.py": "5f7398090c63e498a618902d154cc93f3bea3ac3ef92711f6986b7d201892356",
+    "src/lhr_gazebo/scripts/check_imu_acceleration.py": "074720bb37dd4eef8e54b9bb28c2b3d4cbc137b6977aacf5086518d09a608318",
+    "src/lhr_gazebo/scripts/evaluate_imu_only.py": "e9a27dfd31c1c4a03f8194e5a4dbd68906d57b2847be424cb55c6ecbb37d58d6",
+    "src/lhr_gazebo/launch/gazebo_demo.launch.py": "33bd19670644dfad98406ac09b5c8dd59664c2fa710c54b5ccd7c6ad80d153d2",
+    "src/lhr_gazebo/lhr_gazebo/imu_model.py": "f4f48a8fc7cae55f4d386b217dee7b4274886f4d4d856bc5675d7c04a1d6feb2",
+    "src/lhr_gazebo/config/ros_gz_bridge.yaml": "652cf731ca806fd88320ccafd0111018955e4df3e77c9c5f2f1b3a60ca42f09a"
+  },
+  "capture_source_note": "Hashes identify final verifier/capture scripts; formatting and checker logic were edited between captures. All runs used the same rebuilt installed standard vehicle/world and launch. Captures retain arguments and unused lightweight model/world copies; --full-rendering loads the installed world and normal launch noise overlay instead.",
+  "captures": {
+    "accel-clean-standard": {
+      "options": {
+        "out": "data/imu-force-fix/accel-clean-standard",
+        "style": "acceleration",
+        "seed": 1,
+        "noise": "false",
+        "full_rendering": true,
+        "capture_native": true,
+        "imu_rate": null,
+        "force_drive": false,
+        "direct_drive": false,
+        "stop_sim_time": null,
+        "post_terminal_sim_sec": 3.0,
+        "drive_mode": "force"
+      },
+      "launch_args": [
+        "ros2",
+        "launch",
+        "lhr_gazebo",
+        "gazebo_demo.launch.py",
+        "gui:=false",
+        "rviz:=false",
+        "perception:=sim",
+        "estimator:=truth",
+        "enable_metrics:=false",
+        "safety:=false",
+        "ready_hold_sec:=10.0",
+        "use_wheel_speeds:=false",
+        "imu_noise:=false",
+        "track_style:=acceleration",
+        "seed:=1",
+        "world:=/home/black-book/lhre/autonomy/ros2/install/lhr_gazebo/share/lhr_gazebo/worlds/acceleration_seed1.sdf"
+      ],
+      "artifacts_sha256": {
+        "args.json": "57a1c25ccda43e2e7ab17441608baf64319fd7334f5177c8092fb5d22a21649e",
+        "bag/bag_0.mcap": "4172b01118216f464ac5528659a2766769576627cad1c6f96361de8f7e2391a5",
+        "bag/metadata.yaml": "d24d6b84e1b503d54f11e8b40e61e36367eb125ab07ad958ba686a2ec591d4a9",
+        "bag.log": "e3d263c62393b393ab39c36e68b95e61695453bedba7448a59e2c633bdb14fb7",
+        "capture-options.json": "6821f9b8c1c8e264fce770781819453acec0070793b9b7804becfc61e3914009",
+        "launch.log": "aa5a40ebbc3cca4d84c2260912b822f3a24effd2c3e5e4e9991d4560d56962b5",
+        "native-imu.csv": "05f1c2c8495c5d7ff9babed8795503ad75827397a914331c4fc85d2b36d66e1a",
+        "vehicle.sdf": "9243bbd76a59282b07ab840a123adf17d1128d091620d0bee5f6ef91a255cbb1",
+        "world.sdf": "75ae2564f553433c0d9c88b5ab1427ff3e4ccfe6186e4d170354fe760108c861"
+      }
+    },
+    "accel-native-standard": {
+      "options": {
+        "out": "data/imu-force-fix/accel-native-standard",
+        "style": "acceleration",
+        "seed": 1,
+        "noise": "true",
+        "full_rendering": true,
+        "capture_native": true,
+        "imu_rate": null,
+        "force_drive": false,
+        "direct_drive": false,
+        "stop_sim_time": null,
+        "post_terminal_sim_sec": 3.0,
+        "drive_mode": "force"
+      },
+      "launch_args": [
+        "ros2",
+        "launch",
+        "lhr_gazebo",
+        "gazebo_demo.launch.py",
+        "gui:=false",
+        "rviz:=false",
+        "perception:=sim",
+        "estimator:=truth",
+        "enable_metrics:=false",
+        "safety:=false",
+        "ready_hold_sec:=10.0",
+        "use_wheel_speeds:=false",
+        "imu_noise:=true",
+        "track_style:=acceleration",
+        "seed:=1",
+        "world:=/home/black-book/lhre/autonomy/ros2/install/lhr_gazebo/share/lhr_gazebo/worlds/acceleration_seed1.sdf"
+      ],
+      "artifacts_sha256": {
+        "args.json": "b5bb357a49f31ac5e858c3a9dd678b72408dca4b22f98d0e689f8da4266cfcdd",
+        "bag/bag_0.mcap": "666a764f80487b773e45f881d7aabdc6c1deb0daae2a601d59870c4f96b9acf3",
+        "bag/metadata.yaml": "6176dd97d09fbb065b8d6ed7e0b6779a94dac58bbc69b3b47082432089dac1fd",
+        "bag.log": "7ecbb7aef1446eceaa413c221edaedc761da9698beb45a3b2fc2912b3dc9c176",
+        "capture-options.json": "b8d5493cd96bc75a3aaac241f575036d3b1e3442c48d5bb9a180b8067c3afa77",
+        "launch.log": "203293683365e20679c22fa9d49481582b1afbbdbc0ac51b5fc1fc0c3610a28d",
+        "native-imu.csv": "528281ba13947b76d6859e0b3b36b2dfd0c887a37f4207a8e3db6222f1c0f826",
+        "vehicle.sdf": "732d449b3721dd1336fc4bae0f502dbed87006745e36dc69c644d9ae2e866473",
+        "world.sdf": "63b954aac9c71fa10827b7ef55779378b0650d671bffee83cd2b2c01470b5878"
+      }
+    },
+    "oval-native-standard": {
+      "options": {
+        "out": "data/imu-force-fix/oval-native-standard",
+        "style": "oval",
+        "seed": 1,
+        "noise": "true",
+        "full_rendering": true,
+        "capture_native": true,
+        "imu_rate": null,
+        "force_drive": false,
+        "direct_drive": false,
+        "stop_sim_time": 45.0,
+        "post_terminal_sim_sec": 0.0,
+        "drive_mode": "force"
+      },
+      "launch_args": [
+        "ros2",
+        "launch",
+        "lhr_gazebo",
+        "gazebo_demo.launch.py",
+        "gui:=false",
+        "rviz:=false",
+        "perception:=sim",
+        "estimator:=truth",
+        "enable_metrics:=false",
+        "safety:=false",
+        "ready_hold_sec:=10.0",
+        "use_wheel_speeds:=false",
+        "imu_noise:=true",
+        "track_style:=oval",
+        "seed:=1",
+        "world:=/home/black-book/lhre/autonomy/ros2/install/lhr_gazebo/share/lhr_gazebo/worlds/oval_seed1.sdf"
+      ],
+      "artifacts_sha256": {
+        "args.json": "fbd3d41b63b37363b336a024f17e5f5b11c2200026c1ad1cc62e5f5df18da2dd",
+        "bag/bag_0.mcap": "3caf079909b4e7ebcc5ee45bfe55252ee19ce8a9b3f196e61689e386d3d86e37",
+        "bag/metadata.yaml": "7ce9cf06551d453d79642ddc9de2555bb75d768e06e4a05d1c27b920e9c1d8d5",
+        "bag.log": "b1b8acf44156189c9a0d4337b861398e8ea9f88ee6ff946b1d3d84a9dc4a4fc6",
+        "capture-options.json": "3be5373bc2e8d01cb97d3e48b0d692439161e191fa9876f2a75f87be9fe31870",
+        "launch.log": "f563b0b011a954ffff241a7ba528a7ab45e299f8adf7dcc34828236e5fd941f0",
+        "native-imu.csv": "d528048bafec001b6d0f7e161f54ccbcd89fd6264cb20d79a65609be86fad5b2",
+        "vehicle.sdf": "732d449b3721dd1336fc4bae0f502dbed87006745e36dc69c644d9ae2e866473",
+        "world.sdf": "76626245e7f5d9250778d6d38592b867a6f30aef9880dcb908936288c4702fc4"
+      }
+    }
+  },
+  "checks": {
+    "build": "16 packages passed",
+    "unit_lint_tests": "vehicle 79 + Gazebo 301 passed",
+    "model_freshness": "both passed",
+    "sdf_schema": "both valid",
+    "motion_checks": "3/3 passed",
+    "live_calibration": false,
+    "bias_states": false,
+    "estimator_0_5m_gate_met": false,
+    "docs": "strict build passed"
+  }
+}

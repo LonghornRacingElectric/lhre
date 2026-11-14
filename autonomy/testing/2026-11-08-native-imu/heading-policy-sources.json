@@ -1,0 +1,89 @@
+{
+  "stationary_recorded": {
+    "physics_samples": 3001,
+    "physics_max_translation_from_window_start_m": 0.0,
+    "physics_max_heading_change_deg": 0.0,
+    "physics_max_linear_speed_m_s": 0.0,
+    "command_samples": 61,
+    "max_abs_commanded_speed_m_s": 0.0,
+    "mission_states_whole_capture": {
+      "OFF": 20,
+      "READY": 304
+    },
+    "stationary_verified": true
+  },
+  "moving_recorded": {
+    "physics_samples": 3001,
+    "physics_max_translation_from_window_start_m": 0.0,
+    "physics_max_heading_change_deg": 0.0,
+    "physics_max_linear_speed_m_s": 0.0,
+    "command_samples": 61,
+    "max_abs_commanded_speed_m_s": 0.0,
+    "mission_states_whole_capture": {
+      "OFF": 20,
+      "READY": 50,
+      "DRIVING": 230
+    },
+    "stationary_verified": false
+  },
+  "synthetic_straight_seed3": {
+    "kind": "straight",
+    "seed": 3,
+    "imu_rate_hz": 100.0,
+    "gyro_bias_rad_s": 0.011873586145027083,
+    "accel_bias_m_s2": -0.3341668330578296,
+    "gyro_white_std_rad_s": 0.0005553603672697958,
+    "accel_white_std_m_s2": 0.006934348715723056,
+    "limits": "Ideal planar synthetic motion, not Gazebo or physical validation; stationary until 7 s, then straight acceleration or a slow turn."
+  },
+  "synthetic_straight_seed7": {
+    "kind": "straight",
+    "seed": 7,
+    "imu_rate_hz": 100.0,
+    "gyro_bias_rad_s": 7.156742130844581e-06,
+    "accel_bias_m_s2": 0.03906257233876582,
+    "gyro_white_std_rad_s": 0.0005553603672697958,
+    "accel_white_std_m_s2": 0.006934348715723056,
+    "limits": "Ideal planar synthetic motion, not Gazebo or physical validation; stationary until 7 s, then straight acceleration or a slow turn."
+  },
+  "synthetic_straight_seed11": {
+    "kind": "straight",
+    "seed": 11,
+    "imu_rate_hz": 100.0,
+    "gyro_bias_rad_s": 0.00019892545631205376,
+    "accel_bias_m_s2": 0.17779424288240914,
+    "gyro_white_std_rad_s": 0.0005553603672697958,
+    "accel_white_std_m_s2": 0.006934348715723056,
+    "limits": "Ideal planar synthetic motion, not Gazebo or physical validation; stationary until 7 s, then straight acceleration or a slow turn."
+  },
+  "synthetic_slow_turn_seed3": {
+    "kind": "slow_turn",
+    "seed": 3,
+    "imu_rate_hz": 100.0,
+    "gyro_bias_rad_s": 0.011873586145027083,
+    "accel_bias_m_s2": -0.3341668330578296,
+    "gyro_white_std_rad_s": 0.0005553603672697958,
+    "accel_white_std_m_s2": 0.006934348715723056,
+    "limits": "Ideal planar synthetic motion, not Gazebo or physical validation; stationary until 7 s, then straight acceleration or a slow turn."
+  },
+  "synthetic_slow_turn_seed7": {
+    "kind": "slow_turn",
+    "seed": 7,
+    "imu_rate_hz": 100.0,
+    "gyro_bias_rad_s": 7.156742130844581e-06,
+    "accel_bias_m_s2": 0.03906257233876582,
+    "gyro_white_std_rad_s": 0.0005553603672697958,
+    "accel_white_std_m_s2": 0.006934348715723056,
+    "limits": "Ideal planar synthetic motion, not Gazebo or physical validation; stationary until 7 s, then straight acceleration or a slow turn."
+  },
+  "synthetic_slow_turn_seed11": {
+    "kind": "slow_turn",
+    "seed": 11,
+    "imu_rate_hz": 100.0,
+    "gyro_bias_rad_s": 0.00019892545631205376,
+    "accel_bias_m_s2": 0.17779424288240914,
+    "gyro_white_std_rad_s": 0.0005553603672697958,
+    "accel_white_std_m_s2": 0.006934348715723056,
+    "limits": "Ideal planar synthetic motion, not Gazebo or physical validation; stationary until 7 s, then straight acceleration or a slow turn."
+  }
+}

@@ -1,7 +1,10 @@
 """Check that Ogre-based windows use XWayland when Qt prefers Wayland."""
 
 import importlib.util
+import os
 from pathlib import Path
+import shutil
+import subprocess
 
 from launch import LaunchContext
 from launch.actions import DeclareLaunchArgument, ExecuteProcess
@@ -10,6 +13,27 @@ from launch_ros.actions import Node
 import pytest
 
 PKG_DIR = Path(__file__).resolve().parents[1]
+
+
+def test_packaged_fontconfig_excludes_user_fonts(tmp_path):
+    """System fonts.conf would silently reintroduce the crashing user font path."""
+    if shutil.which('fc-list') is None:
+        pytest.skip('Fontconfig tools are not installed')
+    config = PKG_DIR / 'config' / 'gazebo-fontconfig.conf'
+    env = {**os.environ, 'FONTCONFIG_FILE': str(config),
+           'XDG_CACHE_HOME': str(tmp_path / 'cache')}
+    fonts = subprocess.check_output(
+        ['fc-list', '--format', '%{file}\n'], env=env, text=True).splitlines()
+    if not fonts:
+        pytest.skip('No system fonts are installed')
+    user_font = tmp_path / 'user-data' / 'fonts' / Path(fonts[0]).name
+    user_font.parent.mkdir(parents=True)
+    shutil.copyfile(fonts[0], user_font)
+    env['XDG_DATA_HOME'] = str(tmp_path / 'user-data')
+    isolated = subprocess.check_output(
+        ['fc-list', '--format', '%{file}\n'], env=env, text=True).splitlines()
+    assert isolated
+    assert all(Path(path).is_relative_to('/usr/share/fonts') for path in isolated)
 
 
 @pytest.mark.parametrize('platform, wayland, display, expected', [

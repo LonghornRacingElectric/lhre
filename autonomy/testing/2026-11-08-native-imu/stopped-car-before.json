@@ -1,0 +1,57 @@
+{
+  "capture": "data/imu-stop/seed3-native",
+  "intervals": [
+    {
+      "interval": "initial_held",
+      "begin_s": 2.0,
+      "end_s": 4.0,
+      "truth_position_span_m": 0.0,
+      "truth_max_speed_m_s": 0.0,
+      "estimate_speed_begin_m_s": -0.04998892601708334,
+      "estimate_speed_end_m_s": -0.10530546075638268,
+      "estimate_position_travel_m": 0.1566310112054372,
+      "imu_ax_mean_m_s2": -0.026413159069528867,
+      "imu_ax_std_m_s2": 0.0074960535852076305,
+      "imu_ax_minus_startup_mean_m_s2": 0.0,
+      "diagnostic_gravity_x_mean_m_s2": -6.698268235918606e-11,
+      "max_abs_command_speed_m_s": 0.0
+    },
+    {
+      "interval": "physical_stop",
+      "begin_s": 18.1,
+      "end_s": 30.08,
+      "truth_position_span_m": 0.0005347408512535383,
+      "truth_max_speed_m_s": 0.003423452453105927,
+      "estimate_speed_begin_m_s": 3.4358953048819596,
+      "estimate_speed_end_m_s": 3.127989320455179,
+      "estimate_position_travel_m": 39.33067250943162,
+      "imu_ax_mean_m_s2": -0.02498278045943799,
+      "imu_ax_std_m_s2": 0.029043292459480157,
+      "imu_ax_minus_startup_mean_m_s2": 0.0014303786100908766,
+      "diagnostic_gravity_x_mean_m_s2": -1.4815706022187012e-06,
+      "max_abs_command_speed_m_s": 0.0
+    }
+  ],
+  "status_changes": [
+    {
+      "stamp_s": 0.10060078142955643,
+      "state": "OFF"
+    },
+    {
+      "stamp_s": 2.100338124572211,
+      "state": "READY"
+    },
+    {
+      "stamp_s": 7.100396932952924,
+      "state": "DRIVING"
+    },
+    {
+      "stamp_s": 18.000860866232273,
+      "state": "EMERGENCY"
+    }
+  ],
+  "imu_samples": 3009,
+  "matched_native_samples": 3009,
+  "max_imu_gap_s": 0.010000000000001563,
+  "max_native_ros_difference": 0.0
+}

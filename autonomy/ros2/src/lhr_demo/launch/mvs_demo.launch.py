@@ -187,7 +187,8 @@ def _launch_sim(context):
             Node(package='lhr_state_estimation', executable='ekf_node',
                  name='ekf_node', parameters=[{
                      'use_sim_time': sim_time,
-                     'init_x': x, 'init_y': y, 'init_yaw': yaw}], output='screen'),
+                     'init_x': x, 'init_y': y, 'init_yaw': yaw,
+                     'use_wheel_speeds': _b('use_wheel_speeds')}], output='screen'),
         ]
     return [simulator, *estimators, RegisterEventHandler(OnProcessExit(
         target_action=simulator,
@@ -350,6 +351,8 @@ def generate_launch_description():
                               choices=['truth', 'ekf']),
         DeclareLaunchArgument('gyro_bias', default_value='0.0'),
         DeclareLaunchArgument('wheel_scale_error', default_value='1.0'),
+        DeclareLaunchArgument('use_wheel_speeds', default_value='false',
+                              choices=['true', 'false']),
         DeclareLaunchArgument('lidar_classify_sides', default_value='false'),
         DeclareLaunchArgument('motion_distortion', default_value='false'),
         DeclareLaunchArgument('clutter_profile', default_value='none',
@@ -523,6 +526,7 @@ def generate_launch_description():
             'estimator': _s('estimator'),
             'gyro_bias': _f('gyro_bias'),
             'wheel_scale_error': _f('wheel_scale_error'),
+            'use_wheel_speeds': _b('use_wheel_speeds'),
             'lidar_classify_sides': _b('lidar_classify_sides'),
             'output_csv': _s('output_csv'),
             'run_id': _s('run_id'),

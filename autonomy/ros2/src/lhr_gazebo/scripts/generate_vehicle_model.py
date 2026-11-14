@@ -101,8 +101,25 @@ def render(veh, *, enable_stereo_camera=False) -> str:
         'max_steer': veh.max_steer_rad,
         'joint_steer_limit': inner_steer_limit(veh),
         'max_steer_rate': veh.max_steer_rate_rad_s,
+        'drive_p_gain': veh.gazebo_drive.velocity_p_gain_nm_s_rad,
+        'drive_max_torque': veh.gazebo_drive.max_wheel_torque_nm,
+        'drive_min_torque': -veh.gazebo_drive.max_wheel_torque_nm,
     }
     substitutions = {k: _fmt(v) for k, v in values.items()}
+    imu = veh.imu
+    substitutions['imu_update_rate_hz'] = format(imu.update_rate_hz, '.12g')
+    channels = []
+    for channel, stddev, bias in (
+        ('angular_velocity', imu.gyro_stddev_rad_s, imu.gyro_bias_stddev_rad_s),
+        ('linear_acceleration', imu.accel_stddev_m_s2, imu.accel_bias_stddev_m_s2),
+    ):
+        axes = '\n'.join(
+            f'            <{axis}><noise type="gaussian">'
+            f'<mean>0</mean><stddev>{stddev:.12g}</stddev>'
+            f'<bias_mean>0</bias_mean><bias_stddev>{bias:.12g}</bias_stddev>'
+            f'</noise></{axis}>' for axis in 'xyz')
+        channels.append(f'          <{channel}>\n{axes}\n          </{channel}>')
+    substitutions['imu_noise'] = '\n'.join(channels)
     substitutions['lidar_range_noise_std_m'] = format(veh.lidar_range_noise_std_m, '.12g')
     camera = veh.stereo_camera
     x, y, z = camera.position_m

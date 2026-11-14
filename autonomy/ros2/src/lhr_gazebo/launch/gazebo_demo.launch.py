@@ -29,6 +29,7 @@ from launch.event_handlers import OnShutdown
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+from lhr_state_estimation.gyro_calibration import CALIBRATION_DEFAULTS
 from lhr_vehicle import load_vehicle
 import yaml
 
@@ -163,6 +164,9 @@ def _launch_setup(context: LaunchContext):
         'lidar_classify_sides', 'false').lower() == 'true'
     use_ekf = context.launch_configurations.get(
         'estimator', 'truth').lower() == 'ekf'
+    if (context.launch_configurations.get('use_gnss', 'false').lower() == 'true'
+            and not use_ekf):
+        raise ValueError('use_gnss requires estimator:=ekf')
     fault = context.launch_configurations.get('fault', '')
     fault_remaps = _fault_remaps(fault, use_ekf, context.launch_configurations)
     # The sensor sim observes the plant, never the injected driving estimate.
@@ -225,11 +229,14 @@ def _launch_setup(context: LaunchContext):
 
     resource_path = models_dir
     resource_cleanup = []
-    if enable_stereo:
-        from lhr_gazebo.stereo_camera import stereo_model_resources
+    imu_noise = context.launch_configurations.get('imu_noise', 'true').lower() == 'true'
+    gyro_bias = float(context.launch_configurations.get('gyro_bias', '0.0'))
+    if enable_stereo or not imu_noise or gyro_bias != 0.0:
+        from lhr_gazebo.imu_model import imu_model_resources
         # Keep world URIs and mesh paths identical in both modes. The overlay
         # lives for this launch only; concurrent runs never edit shared models.
-        resources = stereo_model_resources(models_dir)
+        resources = imu_model_resources(models_dir, stereo=enable_stereo,
+                                        noise_enabled=imu_noise, gyro_bias=gyro_bias)
         resource_path = os.pathsep.join((resources.name, models_dir))
         resource_cleanup.append(RegisterEventHandler(OnShutdown(
             on_shutdown=lambda event, context: resources.cleanup())))
@@ -246,6 +253,7 @@ def _launch_setup(context: LaunchContext):
         gz_cmd = ['gz', 'sim', '-r', world_path]
     else:
         gz_cmd = ['gz', 'sim', '-r', '-s', world_path]
+    gz_cmd.extend(['--seed', context.launch_configurations.get('seed', '1')])
 
     gz_sim = ExecuteProcess(
         cmd=gz_cmd,
@@ -279,21 +287,28 @@ def _launch_setup(context: LaunchContext):
 
     # ----- State estimation -----
     estimation_nodes = []
+    gnss_shared = {
+        name: ParameterValue(LaunchConfiguration(name), value_type=kind)
+        for name, kind in [('gnss_topic', str), ('gnss_frame_id', str),
+                           ('gnss_origin_latitude_deg', float),
+                           ('gnss_origin_longitude_deg', float),
+                           ('gnss_origin_altitude_m', float)]}
     if use_ekf:
         # Gazebo already bridges a physics IMU, so only the wheel speeds
         # are synthesized here.
-        estimation_nodes.append(Node(
+        wheel_node = Node(
             package='lhr_sensor_sim',
             executable='inertial_sim',
             name='inertial_sim',
             parameters=[{
                 'publish_imu': False,
-                'gyro_bias': _float('gyro_bias'),
                 'wheel_scale_error': _float('wheel_scale_error'),
                 'use_sim_time': True,
             }],
             output='screen',
-        ))
+        )
+        if context.launch_configurations.get('use_wheel_speeds', 'false').lower() == 'true':
+            estimation_nodes.append(wheel_node)
         estimation_nodes.append(Node(
             package='lhr_state_estimation',
             executable='ekf_node',
@@ -302,11 +317,34 @@ def _launch_setup(context: LaunchContext):
                 # The world file picks the spawn pose, so seed from the
                 # first truth sample rather than from a launch argument.
                 'init_pose_topic': '/lhr/vehicle/odom_truth',
+                'use_wheel_speeds': ParameterValue(
+                    LaunchConfiguration('use_wheel_speeds'), value_type=bool),
+                'use_gnss': ParameterValue(LaunchConfiguration('use_gnss'), value_type=bool),
+                'gnss_max_delay_s': _float('gnss_max_delay_s'),
+                'gnss_gate_chi2': _float('gnss_gate_chi2'),
+                'gnss_heading_gain': _float('gnss_heading_gain'),
+                'yaw_rate_variance': _float('yaw_rate_variance'),
+                'calibrate_gyro': ParameterValue(
+                    LaunchConfiguration('calibrate_gyro'), value_type=bool),
+                **{name: ParameterValue(LaunchConfiguration(name), value_type=type(value))
+                   for name, value in CALIBRATION_DEFAULTS.items()},
+                **gnss_shared,
                 'use_sim_time': True,
             }],
             remappings=fault_remaps.get('ekf_node', []),
             output='screen',
         ))
+        if (context.launch_configurations.get('use_gnss', 'false').lower() == 'true'
+                and context.launch_configurations.get('simulate_gnss', 'true').lower() == 'true'):
+            estimation_nodes.append(Node(
+                package='lhr_sensor_sim', executable='gnss_sim', name='gnss_sim',
+                parameters=[{'use_sim_time': True, 'truth_topic': '/lhr/vehicle/odom_truth',
+                             'seed': ParameterValue(LaunchConfiguration('seed'), value_type=int),
+                             **gnss_shared, **{
+                                 name: _float(name) for name in [
+                                     'gnss_rate_hz', 'gnss_horizontal_stddev_m',
+                                     'gnss_vertical_stddev_m', 'gnss_latency_s']}}],
+                output='screen'))
 
     # ----- Joint command adapter -----
     cmd_adapter = Node(
@@ -539,6 +577,14 @@ def _launch_setup(context: LaunchContext):
                 'perception': perception,
                 'estimator': 'ekf' if use_ekf else 'truth',
                 'gyro_bias': ParameterValue(LaunchConfiguration('gyro_bias'), value_type=float),
+                'imu_noise': ParameterValue(LaunchConfiguration('imu_noise'), value_type=bool),
+                **{name: ParameterValue(LaunchConfiguration(name), value_type=kind)
+                   for name, kind in [('use_gnss', bool), ('simulate_gnss', bool),
+                                      ('gnss_rate_hz', float), ('gnss_horizontal_stddev_m', float),
+                                      ('gnss_latency_s', float), ('gnss_heading_gain', float),
+                                      ('yaw_rate_variance', float), ('calibrate_gyro', bool)]},
+                'use_wheel_speeds': ParameterValue(
+                    LaunchConfiguration('use_wheel_speeds'), value_type=bool),
                 'wheel_scale_error': ParameterValue(
                     LaunchConfiguration('wheel_scale_error'), value_type=float),
                 'lidar_classify_sides': classify_sides,
@@ -718,11 +764,36 @@ def generate_launch_description():
             description='Odometry source: "truth" (Gazebo) or "ekf"'),
         DeclareLaunchArgument(
             'gyro_bias', default_value='0.0',
-            description='Gyro bias (rad/s); recorded only, Gazebo bridges its own IMU'),
+            description='Additional signed native IMU z-gyro offset (rad/s)'),
+        DeclareLaunchArgument(
+            'imu_noise', default_value='true', choices=['true', 'false'],
+            description='Native gyro/accelerometer noise and startup bias from vehicle.yaml'),
         DeclareLaunchArgument(
             'wheel_scale_error', default_value='1.0',
             description='Simulated rolling-radius error (1.0 = exact)'),
+        DeclareLaunchArgument('use_wheel_speeds', default_value='false',
+                              choices=['true', 'false'],
+                              description='Legacy wheel correction; disabled for IMU-only trials'),
         DeclareLaunchArgument('seed', default_value='1'),
+        DeclareLaunchArgument('use_gnss', default_value='false', choices=['true', 'false']),
+        DeclareLaunchArgument('simulate_gnss', default_value='true', choices=['true', 'false']),
+        DeclareLaunchArgument('gnss_topic', default_value='/lhr/gnss/fix'),
+        DeclareLaunchArgument('gnss_frame_id', default_value='gnss_link'),
+        DeclareLaunchArgument('gnss_origin_latitude_deg', default_value='0.0'),
+        DeclareLaunchArgument('gnss_origin_longitude_deg', default_value='0.0'),
+        DeclareLaunchArgument('gnss_origin_altitude_m', default_value='0.0'),
+        DeclareLaunchArgument('gnss_max_delay_s', default_value='1.0'),
+        DeclareLaunchArgument('gnss_gate_chi2', default_value='25.0'),
+        DeclareLaunchArgument('gnss_heading_gain', default_value='1.0'),
+        DeclareLaunchArgument('yaw_rate_variance', default_value='0.0004'),
+        DeclareLaunchArgument('calibrate_gyro', default_value='false', choices=['true', 'false']),
+        *[DeclareLaunchArgument(name, default_value=str(value))
+          for name, value in CALIBRATION_DEFAULTS.items()],
+        *[DeclareLaunchArgument(name, default_value=str(value)) for name, value in [
+            ('gnss_rate_hz', load_vehicle().gnss.update_rate_hz),
+            ('gnss_horizontal_stddev_m', load_vehicle().gnss.horizontal_stddev_m),
+            ('gnss_vertical_stddev_m', load_vehicle().gnss.vertical_stddev_m),
+            ('gnss_latency_s', load_vehicle().gnss.latency_s)]],
         DeclareLaunchArgument('num_waypoints', default_value='10'),
         DeclareLaunchArgument('width_m', default_value='3.5'),
         DeclareLaunchArgument('cone_spacing_m', default_value='2.0'),

@@ -1,0 +1,211 @@
+{
+  "base_commit": "da9d5a95a9a49679a05c5a313432dfb8a55626dd",
+  "branch": "koa/gazebo-imu-noise",
+  "working_tree_modified": true,
+  "ROS_DOMAIN_ID": 94,
+  "GZ_PARTITION": "imu-stop-investigation",
+  "gazebo": "8.15.0 / DART",
+  "source_sha256": {
+    "src/lhr_state_estimation/lhr_state_estimation/ekf.py": "0f84ccc9aa0bacabbc06f065bd639cd6897db372b6bbbebebadf7091ac585256",
+    "src/lhr_state_estimation/lhr_state_estimation/ekf_node.py": "235622c5026f9679d81e77e1190fa2ac85c42c3510161ba45c5e7f89b4ceff35",
+    "src/lhr_state_estimation/test/test_imu_timing.py": "b3e5d20ddb352f8f38aa0dcf70c97c17274109447f93d5787ba024d6da33df44",
+    "src/lhr_state_estimation/test/test_ekf.py": "ca449d2108f8d6c9be78e5cc7e87f81ff73d7c65114bc9e5ac3321ac9f61cd7e",
+    "src/lhr_gazebo/scripts/record_ekf_stop.py": "0bc40d285a22f1d42d8d48914f3a30959a3e61f4c24f20da5998d8818fb52061",
+    "src/lhr_gazebo/scripts/analyze_ekf_stop.py": "f71bf594c226ffebc668ca57f6a3e47eb7958452fce5e0a9fd88005eba3d96e2",
+    "src/lhr_gazebo/templates/model.sdf.in": "418285ffdc018449032d138c281eb900bc759b647ed9ae51a4b96552a181c760",
+    "src/lhr_gazebo/models/fsae_vehicle/model.sdf": "8088689a9b7f489d34172d78b13bab2ab24aa3f08a9aadfb8ea307148c77d687",
+    "src/lhr_gazebo/models/fsae_vehicle/model_stereo.sdf": "56d51671cbafd630d4a14b83721390cdff6d37076f731831048a2d326cb4f2a5",
+    "src/lhr_vehicle/config/vehicle.yaml": "b8a9811df2948427f193e3e61f77cc08bf026bb8bbc6e35b5b1e4353a8a7f5a7"
+  },
+  "phases": {
+    "before_hz_source_sha256": {
+      "before-hz-fix/ekf_node.py": "3637e51957462394786214343b3d6f31913cc1d4cf4cd77e9f29877cb3dce1a2",
+      "before-hz-fix/vehicle.yaml": "0c27e03f535d168ca08815d8e5e5bee13422990f234d79949693fd85b8ff7a86",
+      "before-hz-fix/record_ekf_stop.py": "26a46dbab2785e3bca7ec61d898faf73831063187e4e515044c7ee2a7366590f"
+    },
+    "covariance_note": "The intermediate clean controlled-stop recording predates the continuous-time process covariance refinement. The final noisy recording uses the complete final implementation."
+  },
+  "captures": {
+    "seed3-native": {
+      "args": {
+        "launch_args": [
+          "ros2",
+          "launch",
+          "lhr_gazebo",
+          "gazebo_demo.launch.py",
+          "gui:=false",
+          "rviz:=false",
+          "foxglove:=false",
+          "track_style:=autocross",
+          "seed:=3",
+          "perception:=lidar",
+          "estimator:=ekf",
+          "imu_noise:=true",
+          "use_wheel_speeds:=false",
+          "safety:=true",
+          "safety_lidar_timeout_s:=1.5",
+          "output_csv:=/home/black-book/lhre/autonomy/ros2/data/imu-stop/seed3-native/metrics.csv"
+        ],
+        "stop_sim_time": 30.0,
+        "vehicle_sha256": "0c27e03f535d168ca08815d8e5e5bee13422990f234d79949693fd85b8ff7a86",
+        "ROS_DOMAIN_ID": "94",
+        "GZ_PARTITION": "imu-stop-investigation"
+      },
+      "artifacts_sha256": {
+        "args.json": "ce100824c14d1f76768b5b173bd63d212116aa9f4439b5167ffd8880ea0966e7",
+        "bag/bag_0.mcap": "be372c1c5a225a74283ab2dfb933c2a99c4a4f4364f042e3921d59d219193f2b",
+        "bag/metadata.yaml": "f75aa0091fcf24565ffc938ae690e3ee3667443dfcd6e91d6a9317c00c5bc903",
+        "bag.log": "2bd66f70ffdb963a67782a6e98366ce9d91356558c08c612467b67ca10e9bdf5",
+        "launch.log": "1d8e7f106d3ac9045bbcfecd46f59f3fc8f6c4fe6ab63f305d3ecdfcd4802fe6",
+        "metrics.csv": "ad41320b1551bbb43a21abd4d5f907cc3bc4d52ed87167e23d5e1db46162d8ed",
+        "native-imu.csv": "6a8411c7625b455cf64743031e2c941a1f9651cbfb939ed43f34cbde4b26fe00"
+      }
+    },
+    "seed3-probe": {
+      "args": {
+        "launch_args": [
+          "ros2",
+          "launch",
+          "lhr_gazebo",
+          "gazebo_demo.launch.py",
+          "gui:=false",
+          "rviz:=false",
+          "foxglove:=false",
+          "track_style:=autocross",
+          "seed:=3",
+          "perception:=lidar",
+          "estimator:=ekf",
+          "imu_noise:=true",
+          "use_wheel_speeds:=false",
+          "safety:=true",
+          "safety_lidar_timeout_s:=1.5",
+          "output_csv:=/home/black-book/lhre/autonomy/ros2/data/imu-stop/seed3-probe/metrics.csv",
+          "world:=/home/black-book/lhre/autonomy/ros2/data/imu-stop/seed3-probe/probe-world.sdf"
+        ],
+        "stop_sim_time": 30.0,
+        "vehicle_sha256": "0c27e03f535d168ca08815d8e5e5bee13422990f234d79949693fd85b8ff7a86",
+        "ROS_DOMAIN_ID": "94",
+        "GZ_PARTITION": "imu-stop-investigation",
+        "high_rate_probe": true
+      },
+      "artifacts_sha256": {
+        "args.json": "1102c222dce9833eada7dd67280fe6a5f112c1f1aa9a01ee7717dccdf12f02e0",
+        "bag/bag_0.mcap": "84cf80ea7394a75881031e3150fe2433b4834f559478708f381d19f19a9dd484",
+        "bag/metadata.yaml": "a67a0b78843206ea63d05cfee004959851376938ab162fedfdeaa61f08972028",
+        "bag.log": "4da46dab529456fc5f21d95b89e72bdeff09a4f8930f2f15622fa8f44a4ceaf8",
+        "launch.log": "6a57e77daf9bdfdc915eda307abfbbcbfccd288d132887353a863c7abecf2afc",
+        "metrics.csv": "8c33b0ff908f491a132339c992c44b0da1b79f68e38732a51bcf2f04ea500a35",
+        "native-imu.csv": "05c682b4c304127a61a75cbbe6e212d4c8d84b95bfe4172c90cd0f4e15930d95",
+        "probe-imu.csv": "d4505c81469857819eb7fcbb9b6dacfcde4d7d6f87f7c93516b0e316925b0128",
+        "probe-odom3d.csv": "171a55c226e0d7d566cc4c319d76181fda50b45da984f5691783cdeed5fa2979",
+        "probe-vehicle.sdf": "f4872351b3fd6931a315073804cf2a991f12c47a53d2f4b327892154037d0af7",
+        "probe-world.sdf": "2457932681bbd7fa251ac8a37baea716c85b2059cad20a3cb7e3d296091ef6ca"
+      }
+    },
+    "hz1000-final-native": {
+      "args": {
+        "launch_args": [
+          "ros2",
+          "launch",
+          "lhr_gazebo",
+          "gazebo_demo.launch.py",
+          "gui:=false",
+          "rviz:=false",
+          "foxglove:=false",
+          "track_style:=autocross",
+          "seed:=3",
+          "perception:=lidar",
+          "estimator:=ekf",
+          "imu_noise:=true",
+          "use_wheel_speeds:=false",
+          "safety:=true",
+          "safety_lidar_timeout_s:=1.5",
+          "output_csv:=/home/black-book/lhre/autonomy/ros2/data/imu-stop/hz1000-final-native/metrics.csv",
+          "world:=/home/black-book/lhre/autonomy/ros2/data/imu-stop/hz1000-final-native/probe-world.sdf"
+        ],
+        "stop_sim_time": 30.0,
+        "vehicle_sha256": "b8a9811df2948427f193e3e61f77cc08bf026bb8bbc6e35b5b1e4353a8a7f5a7",
+        "ROS_DOMAIN_ID": "94",
+        "GZ_PARTITION": "imu-stop-investigation",
+        "high_rate_probe": true,
+        "imu_config": {
+          "update_rate_hz": 1000.0,
+          "noise_bandwidth_hz": 500.0,
+          "gyro_noise_density_rad_s_sqrt_hz": 7.853981633974483e-05,
+          "accel_noise_density_m_s2_sqrt_hz": 0.000980665,
+          "gyro_bias_stddev_rad_s": 0.005817764173314432,
+          "accel_bias_stddev_m_s2": 0.13075533333333333
+        },
+        "emergency_at_s": 20.0
+      },
+      "artifacts_sha256": {
+        "args.json": "006af9bbdd47a3ffadf26a1c0ad2e3eaaf7ba5e12c04a9a34f5bb42aa11e703b",
+        "bag/bag_0.mcap": "c0074e6b4d985e09d5935245bbff7768b9478c5be402ef0c74adffdd39ecbbf1",
+        "bag/metadata.yaml": "c5375b8cc0c1afdcf2cd32e8a8efa2c2b7a104b5ea17fd49dc123534b364e279",
+        "bag.log": "c4185c09d78a3400dd46280827e0cfedcc74a518061c16197256dbfbc29cbfbb",
+        "launch.log": "c9da1171712ca7df2b5a5e91cafdd29ba4979869793e5041a502248137c55072",
+        "metrics.csv": "6fdfa776a2741ae16223957b57adb5b772f71aed55941e642087e17a903715b9",
+        "native-imu.csv": "71edd144265a3b8ae7dd162adc6da458f066188a91c596da4ff1130d1d7a836f",
+        "probe-imu.csv": "2ecf83a7cd6d4875154c44fffab5eb8f3d18dde325393271ccfc0ad3a3f961a7",
+        "probe-odom3d.csv": "49bd17654bf7cee5cbd380dfc97ab73cfa3b1b72f730da6445d2cf213c7f448b",
+        "probe-vehicle.sdf": "ff298f069b1b88cfbe32b1d99b612e36b4dc2807170b12862ba0cddd6869a6d5",
+        "probe-world.sdf": "4156f48a14f03dc2a4d0930eca0dd070d26780f2f4f11a59ef3ae0a5c0e005ba"
+      }
+    },
+    "hz1000-stop20-clean": {
+      "args": {
+        "launch_args": [
+          "ros2",
+          "launch",
+          "lhr_gazebo",
+          "gazebo_demo.launch.py",
+          "gui:=false",
+          "rviz:=false",
+          "foxglove:=false",
+          "track_style:=autocross",
+          "seed:=3",
+          "perception:=lidar",
+          "estimator:=ekf",
+          "imu_noise:=false",
+          "use_wheel_speeds:=false",
+          "safety:=true",
+          "safety_lidar_timeout_s:=1.5",
+          "output_csv:=/home/black-book/lhre/autonomy/ros2/data/imu-stop/hz1000-stop20-clean/metrics.csv"
+        ],
+        "stop_sim_time": 30.0,
+        "vehicle_sha256": "b8a9811df2948427f193e3e61f77cc08bf026bb8bbc6e35b5b1e4353a8a7f5a7",
+        "ROS_DOMAIN_ID": "94",
+        "GZ_PARTITION": "imu-stop-investigation",
+        "high_rate_probe": false,
+        "imu_config": {
+          "update_rate_hz": 1000.0,
+          "noise_bandwidth_hz": 500.0,
+          "gyro_noise_density_rad_s_sqrt_hz": 7.853981633974483e-05,
+          "accel_noise_density_m_s2_sqrt_hz": 0.000980665,
+          "gyro_bias_stddev_rad_s": 0.005817764173314432,
+          "accel_bias_stddev_m_s2": 0.13075533333333333
+        },
+        "emergency_at_s": 20.0
+      },
+      "artifacts_sha256": {
+        "args.json": "3d9d3ffb79065e264364febbd5e4f67b84a75bc194e684f4f6be839edcceea44",
+        "bag/bag_0.mcap": "0bcad554c102643413ecb38ffd84b505bf4f4f594d0befe287fbaa7be4a93bd8",
+        "bag/metadata.yaml": "d859cae5bd13d09a97446440e6663c625b350012aab4116b76d35bb31c274095",
+        "bag.log": "aec8e4db2b724a26dc346ffbe90e88bf7bcf853e54ca996a8605cd0167cdce65",
+        "launch.log": "da56576f154bf1e6e5c7d21331612e27f04eba84894d7353a28d00cdadb0fe40",
+        "metrics.csv": "d64a672b3206ebd5a01a4ebfc678d775ea5a95f7911a47b6400a06f2c648f870",
+        "native-imu.csv": "cc84965f459f59f3c725dc17a780e68eccf48f96fa023d6ddfa2a8ef2d3cad8a"
+      }
+    }
+  },
+  "verification": {
+    "build": "16 packages passed",
+    "tests": "18 state estimation + 80 vehicle + 301 Gazebo = 399 passed",
+    "SDF": "both valid and fresh",
+    "docs": "strict build passed",
+    "position_gate_met": false,
+    "live_calibration_integrated": false,
+    "bias_states_integrated": false
+  },
+  "analysis_notes": "Ideal attitude, gravity removal and 3D sensor-point motion are evaluation only. Fixed diagnostic windows were selected post hoc. Trajectories differ, so no paired percentage performance claim. Runtime source hashes identify final implementation; snapshot hashes identify old timing/rate configuration."
+}

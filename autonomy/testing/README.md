@@ -17,6 +17,7 @@ testing/
 
 | Campaign | Question | Status | Data |
 | -------- | -------- | ------ | ---- |
+| [2026-11-08 Native Gazebo IMU](2026-11-08-native-imu/README.md) / [handoff](2026-11-08-native-imu/HANDOFF.md) | How do native IMU errors, GPS fusion and gyro calibration affect estimation and cone mapping? | Simulator heading improvement verified; position jitter and full-run failures remain open | Local bags and samples; see report and handoff |
 | [2026-10-04 Mid-360 acceptance](2026-10-04-mid360-acceptance/README.md) | Is the donated, dropped Livox Mid-360 good enough for the car, and how far does it see a cone? | Car sensor, provisional: endurance and connector checks not run | [SharePoint](https://utexas.sharepoint.com/sites/ENGR-LonghornRacing/LHR%20Electric/Design/_VMS_/Autonomous/Test%20Data/2026-10-04-mid360-acceptance) |
 | [2026-10-26 FMU seeds](2026-10-26-fmu-seeds/README.md) | Does the FMU plant complete autocross seeds 1 to 5 with LiDAR and EKF? | 5/5 verified laps; seed 2 has a shutdown error | [SharePoint](https://utexas.sharepoint.com/sites/ENGR-LonghornRacing/LHR%20Electric/Design/_VMS_/Autonomous/Test%20Data/2026-10-26-fmu-seeds) |
 | [2026-10-28 MVP gate](2026-10-28-mvp-gate/README.md) | Does the full stack, with no ground-truth shortcuts, pass every gate run in Gazebo? | Pass, 18 of 18 (11/1), and 18 of 18 again with camera fusion; skidpad waived | Upload pending |

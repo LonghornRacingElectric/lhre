@@ -23,6 +23,91 @@ Vec3 = Tuple[float, float, float]
 
 
 @dataclass(frozen=True)
+class Gnss:
+    """Virtual GNSS mount and explicitly assumed simulator characteristics."""
+
+    position_m: Vec3
+    update_rate_hz: float
+    horizontal_stddev_m: float
+    vertical_stddev_m: float
+    latency_s: float
+
+
+def _load_gnss(raw) -> Gnss:
+    if not isinstance(raw, dict):
+        raise ValueError('gnss: require a configuration mapping')
+    position = raw.get('position_m')
+    if (not isinstance(position, list) or len(position) != 3
+            or any(type(v) not in (int, float) or not math.isfinite(v) for v in position)):
+        raise ValueError('gnss.position_m: require three finite numbers')
+    values = {}
+    for field in ('update_rate_hz', 'horizontal_stddev_m', 'vertical_stddev_m', 'latency_s'):
+        value = raw.get(field)
+        if (type(value) not in (int, float) or not math.isfinite(value)
+                or value < 0 or (field != 'latency_s' and value == 0)):
+            raise ValueError(
+                f'gnss.{field}: require a finite positive number (latency may be zero)')
+        values[field] = float(value)
+    return Gnss(position_m=tuple(map(float, position)), **values)
+
+
+@dataclass(frozen=True)
+class GazeboDrive:
+    """Simulator force-based speed controller; not measured motor parameters."""
+
+    velocity_p_gain_nm_s_rad: float
+    max_wheel_torque_nm: float
+
+
+def _load_gazebo_drive(raw) -> GazeboDrive:
+    if not isinstance(raw, dict):
+        raise ValueError('gazebo_drive: require a configuration mapping')
+    values = {}
+    for field in GazeboDrive.__dataclass_fields__:
+        value = raw.get(field)
+        if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
+            raise ValueError(f'gazebo_drive.{field}: require a finite positive number')
+        values[field] = float(value)
+    return GazeboDrive(**values)
+
+
+@dataclass(frozen=True)
+class Imu:
+    """Independent per-axis native Gazebo errors; SI units, one-sided densities."""
+
+    update_rate_hz: float
+    noise_bandwidth_hz: float
+    gyro_noise_density_rad_s_sqrt_hz: float
+    accel_noise_density_m_s2_sqrt_hz: float
+    gyro_bias_stddev_rad_s: float
+    accel_bias_stddev_m_s2: float
+
+    @property
+    def gyro_stddev_rad_s(self) -> float:
+        return self.gyro_noise_density_rad_s_sqrt_hz * math.sqrt(self.noise_bandwidth_hz)
+
+    @property
+    def accel_stddev_m_s2(self) -> float:
+        return self.accel_noise_density_m_s2_sqrt_hz * math.sqrt(self.noise_bandwidth_hz)
+
+
+def _load_imu(raw) -> Imu:
+    if not isinstance(raw, dict):
+        raise ValueError('imu: require a configuration mapping')
+    values = {}
+    for field in Imu.__dataclass_fields__:
+        value = raw.get(field)
+        if (type(value) not in (int, float) or not math.isfinite(value) or value < 0):
+            raise ValueError(f'imu.{field}: require a finite non-negative number')
+        values[field] = float(value)
+    if values['update_rate_hz'] <= 0:
+        raise ValueError('imu.update_rate_hz: require a positive rate')
+    if values['noise_bandwidth_hz'] > values['update_rate_hz'] / 2:
+        raise ValueError('imu.noise_bandwidth_hz: cannot exceed Nyquist frequency')
+    return Imu(**values)
+
+
+@dataclass(frozen=True)
 class StereoCamera:
     """One ideal rectified ZED 2i rig; mount pose is in base_link."""
 
@@ -78,6 +163,9 @@ class Vehicle:
     lidar_position_m: Vec3
     lidar_range_noise_std_m: float
     stereo_camera: StereoCamera
+    imu: Imu
+    gazebo_drive: GazeboDrive
+    gnss: Gnss
 
     @property
     def chassis_center_x_m(self) -> float:
@@ -228,4 +316,7 @@ def load_vehicle(path: Optional[Path] = None) -> Vehicle:
         lidar_position_m=_vec3(sensors['lidar']['position_m']),
         lidar_range_noise_std_m=float(range_noise_std),
         stereo_camera=_load_stereo_camera(sensors.get('stereo_camera')),
+        imu=_load_imu(sensors.get('imu')),
+        gazebo_drive=_load_gazebo_drive(raw.get('simulation', {}).get('gazebo_drive')),
+        gnss=_load_gnss(sensors.get('gnss')),
     )

@@ -1,0 +1,28 @@
+{
+  "build": "16 packages passed ./scripts/build.sh",
+  "affected_tests": {
+    "lhr_state_estimation": 38,
+    "lhr_gazebo": 322,
+    "total": 360
+  },
+  "strict_docs": "uv run --group docs mkdocs build --strict --site-dir /tmp/lhre-imu-stop-docs passed",
+  "diff_check": "git diff --check passed",
+  "live_capture": "Headless, stationary requested; physics and commands independently verified",
+  "native_ros_input_equivalence": {
+    "native_samples": 32412,
+    "recorded_ros_samples": 32019,
+    "shared_samples": 32019,
+    "shared_sample_max_component_difference": 0.0,
+    "note": "Use complete native sensor inputs after verifying identical bridged values; bag recording can miss messages that the live EKF received."
+  },
+  "replay_fidelity": {
+    "heading_difference_deg": {
+      "n": 600,
+      "median": 0.001673376177661778,
+      "p95": 0.002557025327152629,
+      "max": 0.0026328574508001808
+    },
+    "note": "Recorded bag inputs can omit samples received by the live EKF; compare noncoincident output/correction timestamps to avoid callback-order ambiguity."
+  },
+  "scope": "Actual per-fix diagnostic logging plus offline calibration controls; no live calibration, stationary-state update, mapping fix, driving/gate or physical validation"
+}

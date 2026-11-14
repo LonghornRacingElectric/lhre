@@ -92,6 +92,16 @@ def test_covariance_stays_symmetric_and_finite():
     assert np.allclose(ekf.P, ekf.P.T, atol=1e-9)
 
 
+def test_process_uncertainty_is_independent_of_prediction_sample_rate():
+    """One stationary second must carry equal process noise at 50 and 1000 Hz."""
+    coarse, fine = VehicleEkf(), VehicleEkf()
+    for _ in range(50):
+        coarse.predict(1/50)
+    for _ in range(1000):
+        fine.predict(1/1000)
+    np.testing.assert_allclose(coarse.P, fine.P, rtol=1e-10, atol=1e-12)
+
+
 def test_noisy_sensors_track_a_circle():
     """Hold dead-reckoning drift to a few metres on a noisy 60 s circle."""
     rng = np.random.default_rng(7)

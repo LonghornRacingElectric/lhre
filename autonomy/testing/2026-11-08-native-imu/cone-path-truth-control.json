@@ -1,0 +1,212 @@
+{
+  "capture": "data/cone-path-study/truth-native-r2",
+  "frames": 300,
+  "pre_contact_frames": 139,
+  "first_native_cone_contact_s": null,
+  "contact_audit": {
+    "messages": 120284,
+    "contacts": 120284,
+    "examples": [
+      [
+        28,
+        "fsae_vehicle::rear_left_wheel::collision",
+        7,
+        "ground_plane::link::collision"
+      ],
+      [
+        24,
+        "fsae_vehicle::front_right_wheel::collision",
+        7,
+        "ground_plane::link::collision"
+      ],
+      [
+        32,
+        "fsae_vehicle::rear_right_wheel::collision",
+        7,
+        "ground_plane::link::collision"
+      ],
+      [
+        19,
+        "fsae_vehicle::front_left_wheel::collision",
+        7,
+        "ground_plane::link::collision"
+      ],
+      [
+        28,
+        "fsae_vehicle::rear_left_wheel::collision",
+        7,
+        "ground_plane::link::collision"
+      ]
+    ]
+  },
+  "first_conservative_cone_overlap_s": null,
+  "cutoff_s": 21.0,
+  "pose_error_m": {
+    "median": 0.0,
+    "max": 0.0,
+    "min": 0.0
+  },
+  "physical_centerline_cte_m": {
+    "median": 0.056618199159734865,
+    "max": 0.21917782226875598,
+    "min": 3.66205343881779e-15
+  },
+  "live_car_to_displayed_path_m": {
+    "median": 0.07614932449246171,
+    "max": 0.4281101055364261,
+    "min": 0.0002433039089166533
+  },
+  "live_commanded_path_clearance_m": {
+    "median": 0.6160326727667611,
+    "max": 0.687299337436664,
+    "min": -0.16122034611053282
+  },
+  "estimated_map_count": {
+    "median": 66.0,
+    "max": 104.0,
+    "min": 26.0
+  },
+  "estimated_local_map_error_median_m": {
+    "median": 0.02279194998506477,
+    "max": 0.029627078116659065,
+    "min": 0.016828472695403763
+  },
+  "estimated_local_map_error_p95_m": {
+    "median": 0.03745147907784365,
+    "max": 0.04861342362801926,
+    "min": 0.026344717236549117
+  },
+  "estimated_path_clearance_m": {
+    "median": 0.6175572712771795,
+    "max": 0.6884194765018422,
+    "min": 0.45290536335123455
+  },
+  "estimated_car_to_displayed_path_m": {
+    "median": 0.12845251926053686,
+    "max": 0.49660923898922793,
+    "min": 0.0002539730235650578
+  },
+  "truth_map_count": {
+    "median": 66.0,
+    "max": 104.0,
+    "min": 26.0
+  },
+  "truth_local_map_error_median_m": {
+    "median": 0.02279194998506477,
+    "max": 0.029627078116659065,
+    "min": 0.016828472695403763
+  },
+  "truth_local_map_error_p95_m": {
+    "median": 0.03745147907784365,
+    "max": 0.04861342362801926,
+    "min": 0.026344717236549117
+  },
+  "truth_path_clearance_m": {
+    "median": 0.6175572712771795,
+    "max": 0.6884194765018422,
+    "min": 0.45290536335123455
+  },
+  "truth_car_to_displayed_path_m": {
+    "median": 0.12845251926053686,
+    "max": 0.49660923898922793,
+    "min": 0.0002539730235650578
+  },
+  "oracle_observed_path_clearance_m": {
+    "median": 0.6153672457110486,
+    "max": 0.6799310783411993,
+    "min": 0.44370590471558913
+  },
+  "oracle_visible_path_clearance_m": {
+    "median": 0.6153672457110486,
+    "max": 0.6799310783411993,
+    "min": 0.44370590471558913
+  },
+  "oracle_colored_path_clearance_m": {
+    "median": 0.6153672457110486,
+    "max": 0.6799310783411993,
+    "min": 0.44370590471558913
+  },
+  "rigid_map_count": {
+    "median": 66.0,
+    "max": 104.0,
+    "min": 26.0
+  },
+  "rigid_local_map_error_median_m": {
+    "median": 0.02279194998506477,
+    "max": 0.029627078116661223,
+    "min": 0.016828472695401827
+  },
+  "rigid_local_map_error_p95_m": {
+    "median": 0.03745147907783997,
+    "max": 0.048613423628018924,
+    "min": 0.02634471723654906
+  },
+  "rigid_path_clearance_m": {
+    "median": 0.6175572712771823,
+    "max": 0.6884194765018422,
+    "min": 0.45290536335123555
+  },
+  "rigid_car_to_displayed_path_m": {
+    "median": 0.12845251926052279,
+    "max": 0.49660923898922915,
+    "min": 0.0002539730235686933
+  },
+  "instant_map_count": {
+    "median": 25.0,
+    "max": 31.0,
+    "min": 21.0
+  },
+  "instant_local_map_error_median_m": {
+    "median": 0.03102053105240786,
+    "max": 0.039389100762535295,
+    "min": 0.020093645599437722
+  },
+  "instant_local_map_error_p95_m": {
+    "median": 0.05147811700433667,
+    "max": 0.06715280693066267,
+    "min": 0.03812187833861352
+  },
+  "instant_path_clearance_m": {
+    "median": 0.6104650141753601,
+    "max": 0.6841647012819074,
+    "min": 0.42328535212749874
+  },
+  "instant_car_to_displayed_path_m": {
+    "median": 0.12041738694573226,
+    "max": 0.5314791706328006,
+    "min": 0.0007696794821905078
+  },
+  "association_checks": {
+    "estimated": {
+      "checked": 3463,
+      "wrong_birth_identity": 0,
+      "wrong_fraction": 0.0
+    },
+    "truth": {
+      "checked": 3463,
+      "wrong_birth_identity": 0,
+      "wrong_fraction": 0.0
+    },
+    "rigid": {
+      "checked": 3463,
+      "wrong_birth_identity": 0,
+      "wrong_fraction": 0.0
+    },
+    "instant": {
+      "checked": 0,
+      "wrong_birth_identity": 0,
+      "wrong_fraction": 0.0
+    }
+  },
+  "aligned_fresh_fraction": 1.0,
+  "live_map_nearest_geometry_p95_m": {
+    "frames": 100,
+    "median": 0.03857228776980058,
+    "max": 0.050855672388950966
+  },
+  "live_replay_map_agreement_m": {
+    "snapshots": 15,
+    "median": 0.0032034246919936263,
+    "max": 0.021273493347954607
+  }
+}

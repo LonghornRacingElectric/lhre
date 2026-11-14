@@ -1,0 +1,8 @@
+id,kind,event,track_style,seed,outcome,lap_time_s,baseline_lap_s,lap_ratio,max_cte,off_track_count,cones_hit,max_pos_error,stop_dist_m,stop_time_s,max_v_after_stop,finished,emergency,early_exits,invalid_reason,completes,stops,off_course,cones,cte,ekf,lap_time,health,passed
+acceleration_r1,gate,acceleration,acceleration,,mission_finished,,,,0.1697,0,0,3.2772,1.55,0.58,0.00,True,False,,,pass,pass,pass,pass,pass,FAIL,pass,pass,False
+autocross_s1_r1,gate,autocross,autocross,1,lap,33.6442,33.88,0.99,0.2932,0,0,2.2968,1.38,0.56,0.08,True,False,,,pass,pass,pass,pass,pass,FAIL,pass,pass,False
+autocross_s2_r1,gate,autocross,autocross,2,lap,33.8478,33.88,1.00,0.2417,0,0,1.8708,1.71,0.64,0.05,True,False,,,pass,pass,pass,pass,pass,FAIL,pass,pass,False
+autocross_s3_r1,gate,autocross,autocross,3,invalid_lap,,33.86,,0.5834,0,1,8.1924,,,,False,False,,cone_contact,FAIL,FAIL,pass,FAIL,pass,FAIL,FAIL,pass,False
+baseline_autocross_s1,baseline,autocross,autocross,1,lap,33.8786,,,0.2560,0,0,,1.65,0.64,0.01,True,False,,,,,,,,,,,
+baseline_autocross_s2,baseline,autocross,autocross,2,lap,33.8780,,,0.2321,0,0,,1.58,0.60,0.06,True,False,,,,,,,,,,,
+baseline_autocross_s3,baseline,autocross,autocross,3,lap,33.8640,,,0.2333,0,0,,1.64,0.60,0.03,True,False,,,,,,,,,,,

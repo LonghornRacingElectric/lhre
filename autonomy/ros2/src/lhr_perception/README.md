@@ -48,6 +48,17 @@ track builder's `boundary_graph` strategy and Gazebo with `boundary`; both
 switch to `classified` when sides are on.
 `/lhr/perception/debug` shows the accumulated detections.
 
+The persistent map assumes a consistent pose history. It does not localize the
+vehicle against cones or retroactively correct old landmarks when odometry
+drifts. This remains true with `stack_window_sec=0`: disabling cloud stacking
+does not disable persistent cone association/averaging. A changing pose error
+can merge observations of different physical cones and produce an apparently
+well-tracked path with incorrect physical clearance. The
+[seed-3 causal study](../../../testing/2026-11-08-native-imu/README.md#cone-path-causal-study)
+compares identical-cloud pose replays, current-scan-only controls, live maps
+and audited physics contacts. Current-scan-only and truth-registered replays
+are diagnostic controls, not implemented production localization fixes.
+
 ## Parameters
 
 | Parameter | Default | Meaning |
@@ -442,3 +453,20 @@ missing matches, duplicate stamps, and ID replacement. ROS tests cover output
 namespace transitions and timer-driven expiration. ROS checks run in Docker;
 see the [validation record](../lhr_gazebo/README.md#fusion-planner-validation-2026-11-01)
 for manual confirmation and remaining live-interruption evidence.
+
+## Stationary registration limitation
+
+Cone detection continues while the vehicle is stationary, which is needed to
+initialize a path. Each scan is registered with its timestamped estimated
+pose before updating the persistent map. If pose or heading changes while
+the physical vehicle stays still, stable sensor-frame observations can smear
+or split into additional map entries. Old cone observations are not registered
+again after GNSS corrects a pose. A larger association radius or stopping
+sensing at rest does not resolve this inconsistency.
+
+The [stationary Gazebo controls](../lhr_gazebo/README.md#stationary-cone-registration-diagnostic)
+separate raw-return/fresh-detection scatter from pose-induced map movement,
+using independent physics motion checks and identical-cloud offline replay.
+Optional [startup gyro calibration](../lhr_state_estimation/README.md#live-startup-gyro-calibration)
+now gates estimated odometry until sensor initialization passes. Pose-consistent
+map retention remains unimplemented. No simulator truth enters production mapping.

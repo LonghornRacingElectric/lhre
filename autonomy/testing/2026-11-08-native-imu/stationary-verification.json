@@ -1,0 +1,19 @@
+{
+  "build": {
+    "command": "./scripts/build.sh",
+    "result": "16 packages passed"
+  },
+  "gazebo_tests": {
+    "command": "colcon test --packages-select lhr_gazebo",
+    "result": "319 tests passed, zero errors/failures/skips"
+  },
+  "new_tests": 8,
+  "script_lint": "All four changed/new diagnostic Python files passed ament_flake8",
+  "strict_docs": {
+    "command": "uv run --group docs mkdocs build --strict --site-dir /tmp/lhre-imu-stop-docs",
+    "result": "passed"
+  },
+  "diff_check": "git diff --check passed",
+  "physical_motion": "All four captures independently zero translation, yaw change and linear speed in 2-20 s physics window; zero command speed; no DRIVING",
+  "limits": "Single seed with two repetitions of one profile. No production calibration/map behavior change, physical-car validation or gate pass."
+}

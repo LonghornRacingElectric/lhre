@@ -2,9 +2,8 @@
 Extended Kalman filter over the planar vehicle state.
 
 The filter carries ``[x, y, yaw, v, yaw_rate]``: IMU acceleration drives the
-prediction, and the gyro and the wheel-derived speed correct it. There is no
-absolute position measurement yet, so position is dead reckoned and its
-covariance grows without bound until GNSS lands.
+prediction, with gyro, optional GNSS position and legacy wheel-speed corrections.
+Without GNSS, position is dead reckoned and its uncertainty grows unbounded.
 
 Deliberately free of rclpy so the math runs under plain pytest with no ROS
 environment (ADR-009 flags an EKF as the kind of code that earns real unit
@@ -32,7 +31,8 @@ class VehicleEkf:
     """
     Five-state EKF for a planar vehicle.
 
-    Gyro bias is not estimated yet. It can be constrained without GNSS by
+    The core has no gyro-bias state; startup correction lives in the ROS node.
+    A continuous bias state could be constrained without GNSS by
     comparing the gyro with rear-wheel differential yaw rate, and by taking
     zero-rate measurements while stationary. Both need slip and standstill
     checks before adding a bias state.
@@ -84,16 +84,21 @@ class VehicleEkf:
         F[IDX_Y, IDX_V] = math.sin(yaw) * dt
         F[IDX_YAW, IDX_YAW_RATE] = dt
 
-        # White acceleration noise, mapped into every state it touches over dt.
-        G = np.zeros((STATE_DIM, 2))
-        G[IDX_X, 0] = 0.5 * math.cos(yaw) * dt * dt
-        G[IDX_Y, 0] = 0.5 * math.sin(yaw) * dt * dt
-        G[IDX_V, 0] = dt
-        G[IDX_YAW, 1] = 0.5 * dt * dt
-        G[IDX_YAW_RATE, 1] = dt
-        noise = np.diag([self.sigma_accel ** 2, self.sigma_yaw_accel ** 2])
-
-        self.P = F @ self.P @ F.T + G @ noise @ G.T
+        # Continuous white-acceleration intensity: subdivision of the same
+        # interval must not make process uncertainty artificially disappear.
+        noise = np.zeros((STATE_DIM, STATE_DIM))
+        direction = np.array([math.cos(yaw), math.sin(yaw)])
+        intensity = self.sigma_accel**2
+        noise[:2, :2] = intensity*dt**3/3 * np.outer(direction, direction)
+        noise[:2, IDX_V] = intensity*dt**2/2 * direction
+        noise[IDX_V, :2] = noise[:2, IDX_V]
+        noise[IDX_V, IDX_V] = intensity*dt
+        yaw_intensity = self.sigma_yaw_accel**2
+        noise[IDX_YAW, IDX_YAW] = yaw_intensity*dt**3/3
+        noise[IDX_YAW, IDX_YAW_RATE] = yaw_intensity*dt**2/2
+        noise[IDX_YAW_RATE, IDX_YAW] = noise[IDX_YAW, IDX_YAW_RATE]
+        noise[IDX_YAW_RATE, IDX_YAW_RATE] = yaw_intensity*dt
+        self.P = F @ self.P @ F.T + noise
 
     def update_speed(self, speed: float, variance: float) -> None:
         """Correct the longitudinal speed from a wheel-derived measurement."""
@@ -102,6 +107,38 @@ class VehicleEkf:
     def update_yaw_rate(self, yaw_rate: float, variance: float) -> None:
         """Correct the yaw rate from a gyro measurement."""
         self._update_scalar(IDX_YAW_RATE, yaw_rate, variance)
+
+    def update_position(self, position, covariance, lever=(0., 0.), gate=25., heading_gain=1.):
+        """Fuse antenna position, optionally attenuating both angular gain rows."""
+        if not math.isfinite(heading_gain) or not 0 <= heading_gain <= 1:
+            raise ValueError('heading_gain must be finite and within [0, 1]')
+        z, r = np.asarray(position, dtype=float), np.asarray(covariance, dtype=float)
+        if (z.shape != (2,) or r.shape != (2, 2) or not np.isfinite(z).all()
+                or not np.isfinite(r).all() or not np.allclose(r, r.T)
+                or np.linalg.eigvalsh(r).min() <= 0):
+            raise ValueError('Require finite position and positive definite 2D covariance')
+        lx, ly = lever[:2]
+        yaw = self.x[IDX_YAW]
+        c, s = math.cos(yaw), math.sin(yaw)
+        predicted = self.x[:2] + [c*lx-s*ly, s*lx+c*ly]
+        h = np.zeros((2, STATE_DIM))
+        h[0, IDX_X], h[1, IDX_Y] = 1, 1
+        h[:, IDX_YAW] = [-s*lx-c*ly, c*lx-s*ly]
+        residual = z-predicted
+        innovation = h @ self.P @ h.T+r
+        nis = float(residual @ np.linalg.solve(innovation, residual))
+        if nis > gate:
+            return False, nis
+        gain = np.linalg.solve(innovation, h @ self.P).T
+        # Position/speed rows keep their gain. Angular rows and Joseph covariance
+        # use the same modified gain; overwriting yaw afterward would be inconsistent.
+        gain[[IDX_YAW, IDX_YAW_RATE], :] *= heading_gain
+        self.x += gain @ residual
+        self.x[IDX_YAW] = wrap_angle(self.x[IDX_YAW])
+        ikh = np.eye(STATE_DIM)-gain @ h
+        self.P = ikh @ self.P @ ikh.T+gain @ r @ gain.T
+        self.P = .5*(self.P+self.P.T)
+        return True, nis
 
     def _update_scalar(self, index: int, measurement: float,
                        variance: float) -> None:

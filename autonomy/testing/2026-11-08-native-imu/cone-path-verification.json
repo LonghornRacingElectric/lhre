@@ -1,0 +1,14 @@
+{
+  "checks": {
+    "paired_fresh_cloud_correspondence_valid": true,
+    "changing_pose_history_has_large_local_error": true,
+    "reference_and_current_scan_controls_below_10cm": true,
+    "fixed_rigid_control_preserves_local_geometry": true,
+    "wrong_map_associations_exposed": true,
+    "exact_cone_planner_control_clear": true,
+    "actual_physics_contact_captured": true,
+    "truth_live_control_has_no_contact": true,
+    "live_map_lower_bound_confirms_error": true
+  },
+  "rigid_control_max_difference_m": 1.725009024511337e-14
+}

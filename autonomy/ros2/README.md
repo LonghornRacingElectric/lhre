@@ -20,9 +20,9 @@ Colcon workspace for LHR driverless / autonomy nodes. This file is the **referen
 | `lhr_mission_manager` | FSAE driverless state machine (Off → Ready → Driving → Finished → Emergency) |
 | `lhr_metrics` | Cross-track error, off-track count, and lap detection (CSV output) |
 | `lhr_safety` | `safety_node`: odometry, EKF, command, LiDAR, geofence and steering checks, a heartbeat that stops on any fault, and a latched trip onto `/lhr/mission/emergency`. Gazebo only, off unless `safety:=true`. See [its README](src/lhr_safety/README.md) |
-| `lhr_gazebo` | Gazebo Harmonic physics simulation — vehicle with direct joint control, ground-truth odometry, LiDAR sensor, RViz integration |
+| `lhr_gazebo` | Gazebo Harmonic physics simulation — force-based wheel speed control, ground-truth odometry, LiDAR sensor, RViz integration |
 | `lhr_perception` | LiDAR pointcloud clustering, timestamp-aligned persistent mapping, and geometry-based track-side inference |
-| `lhr_state_estimation` | EKF fusing IMU and wheel speeds into `/lhr/vehicle/odom` + `map → base_link`, replacing ground-truth odometry. See [its README](src/lhr_state_estimation/README.md) |
+| `lhr_state_estimation` | IMU dead reckoning into `/lhr/vehicle/odom` + `map → base_link`, with optional legacy wheel corrections. See [its README](src/lhr_state_estimation/README.md) |
 | `lhr_demo` | Launch file that starts the full kinematic stack in one command |
 | `lhr_vehicle` | Orion's physical parameters (`config/vehicle.yaml`) and their loader, the single source for wheelbase, track, steering limits, masses and sensor mounts. See [its README](src/lhr_vehicle/README.md) |
 
@@ -59,6 +59,12 @@ flow drawn above. Under `ekf` the simulator's ground truth is remapped out
 of the way and the EKF takes over the topic and the transform the rest of
 the stack already reads — nothing downstream is reconfigured:
 
+Wheel fusion now defaults off (`use_wheel_speeds:=false`) because real-car
+wheel feedback is unreliable. The wheel arrow below applies only to the
+optional legacy comparison with `use_wheel_speeds:=true`; Gazebo omits the
+wheel sensor publisher entirely when it is off. IMU-only dead reckoning has
+no measured speed or position correction and is being evaluated separately.
+
 ```mermaid
 flowchart LR
     sim["simulator"] -- "/lhr/vehicle/odom_truth" --> inertial["inertial_sim<br>(noise, bias, scale error)"]
@@ -69,7 +75,8 @@ flowchart LR
 ```
 
 In Gazebo the IMU is the bridged physics sensor rather than a synthesized
-one, so `inertial_sim` only supplies wheel speeds there. Details and the
+one. `inertial_sim` is started there only for the legacy wheel-enabled
+comparison. Details and the
 measured drift figures are in
 [`lhr_state_estimation`](src/lhr_state_estimation/README.md). Viz-only topics (`/lhr/sensor/cones_viz`,
 `/lhr/sensor/fov_viz`, `/lhr/track/centerline_markers`, `/lhr/control/lookahead`)
@@ -241,13 +248,27 @@ All scripts live in `scripts/` and should be run from the `autonomy/ros2` direct
 | `check_layout.sh` | Checks the committed Foxglove layout against a recorded bag and fails if it names a topic or frame the bag lacks. A renamed topic otherwise shows up as empty panels, which reads as a broken sim. |
 | `generate_gazebo_world.sh` | Generates a Gazebo world SDF from the track generator. Accepts `--seed`, `--style`, `--num-waypoints`, etc. |
 | `run_gazebo_demo.sh` | Launches the Gazebo-based stack (physics sim + adapters + upper stack). Takes its own launch args, typed the same way as `run_demo.sh`'s; see [Gazebo simulation](#gazebo-simulation). |
+| `run_gyro_heading_demo.sh` | Experimental visual recipe: calibrate gyro at rest, use corrected gyro for heading and GPS for position. See [startup and limits](src/lhr_gazebo/README.md#calibrated-gyro-heading-visual-profile). |
 | `src/lhr_gazebo/scripts/generate_vehicle_model.py` | Regenerates the default `model.sdf` and `model_stereo.sdf` from `lhr_vehicle/config/vehicle.yaml`. Run after editing the YAML; commit both SDFs. |
 
 The individual `run_*.sh` scripts are useful for debugging a single node. For normal use, prefer the two-terminal workflow (`run_demo.sh` + `rviz_demo.sh`).
 
 ## Gazebo simulation
 
+The physics IMU includes native gyro/accelerometer noise and startup bias
+from `vehicle.yaml`. `imu_noise:=false` disables those errors for comparison;
+`gyro_bias:=` adds a signed z-rate offset to the actual Gazebo IMU. `seed`
+also seeds Gazebo. See [controls and verification](src/lhr_gazebo/README.md#native-imu-noise-and-bias).
+
 The `lhr_gazebo` package provides an alternative simulation backend using Gazebo physics. It replaces the kinematic bicycle model (`lhr_sim_kinematic`) with a full physics vehicle while the cone detection pipeline and upper stack remain unchanged.
+
+Periodic GNSS corrections are opt-in with `estimator:=ekf use_gnss:=true`.
+The simulation defaults to 50 Hz uncertain position fixes with 50 ms delivery
+delay; wheel-speed fusion stays disabled. See
+[GNSS controls and hardware assumptions](src/lhr_gazebo/README.md#periodic-gnss).
+Experimental `gnss_heading_gain` and `yaw_rate_variance` controls are described
+in the [heading-policy comparison](src/lhr_gazebo/README.md#gyro-confidence-and-gps-heading-policy-comparison);
+their defaults preserve existing behavior.
 
 ### Setup
 

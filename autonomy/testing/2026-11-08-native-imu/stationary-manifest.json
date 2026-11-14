@@ -1,0 +1,316 @@
+{
+  "date": "2026-11-14",
+  "scope": "Stationary diagnostic only; production estimation and perception behavior unchanged; no driving/gate validation",
+  "base_commit": "da9d5a95a9a49679a05c5a313432dfb8a55626dd",
+  "working_tree_modified": true,
+  "analysis_window_s": [
+    2,
+    20
+  ],
+  "settling_note": "Startup scans remain in persistent map; first 2 s excluded from scoring",
+  "profiles": {
+    "gps08-r1": {
+      "args": {
+        "launch_args": [
+          "ros2",
+          "launch",
+          "lhr_gazebo",
+          "gazebo_demo.launch.py",
+          "gui:=false",
+          "rviz:=false",
+          "foxglove:=false",
+          "track_style:=autocross",
+          "seed:=3",
+          "perception:=lidar",
+          "estimator:=ekf",
+          "imu_noise:=true",
+          "use_wheel_speeds:=false",
+          "safety:=true",
+          "safety_lidar_timeout_s:=1.5",
+          "output_csv:=/home/black-book/lhre/autonomy/ros2/data/stationary-cone-study/gps08-r1/metrics.csv",
+          "world:=/home/black-book/lhre/autonomy/ros2/data/stationary-cone-study/gps08-r1/probe-world.sdf",
+          "use_gnss:=true",
+          "gnss_rate_hz:=50.0",
+          "gnss_horizontal_stddev_m:=0.8",
+          "gnss_latency_s:=0.05",
+          "auto_go:=false"
+        ],
+        "stop_sim_time": 20.0,
+        "vehicle_sha256": "77bfe782b6748d906a31fee764c336abe1afdeb7c2914fbbb320d731e54418f5",
+        "ROS_DOMAIN_ID": "116",
+        "GZ_PARTITION": "stationary-cone-study",
+        "high_rate_probe": true,
+        "imu_config": {
+          "update_rate_hz": 1000.0,
+          "noise_bandwidth_hz": 500.0,
+          "gyro_noise_density_rad_s_sqrt_hz": 7.853981633974483e-05,
+          "accel_noise_density_m_s2_sqrt_hz": 0.000980665,
+          "gyro_bias_stddev_rad_s": 0.005817764173314432,
+          "accel_bias_stddev_m_s2": 0.13075533333333333
+        },
+        "emergency_at_s": null,
+        "perception_study": true,
+        "use_gnss": true,
+        "stationary_requested": true,
+        "gnss_profile": {
+          "rate_hz": 50.0,
+          "sigma_m": 0.8,
+          "latency_s": 0.05
+        }
+      },
+      "raw_sha256": {
+        "args.json": "fe7903ce426e8f2f7f3739bdc758e774d4e307505280a8bae997d2e6d9c394d3",
+        "bag/bag_0.mcap": "6025ab5bb6c3ec547746a9a278571cdfeaec4a9c6671784fcc26bfa694a2ec02",
+        "bag/metadata.yaml": "97a63729bdb0c36ddff700b7b7238d4008da500840cdfed420c5d12b91fe0f05",
+        "cone-contacts.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+        "contact-audit.json": "5a6e0b80199b87a335829e3c505d4858a3b97639f3b89c79f0332fbe81a7d723",
+        "ekf_node-params.yaml": "452491ab97568be35ea7a08929d66763fb4e1f68e06aed4fa1c5fee811150ca2",
+        "gnss_sim-params.yaml": "c2a4d5485465f46594c9c1a39e8bd955ddb14b8ae2a735c03061313c3dc86b41",
+        "lidar_cone_detector-params.yaml": "f89cc353b5209e97a1adc41738048dfe6b2d18f0226dfa175966693c296f0dfc",
+        "mission_manager-params.yaml": "871f9f0284858d8a001cbb84a5e935630c6150ad6ef2f74817aaf5c7b86dfc2b",
+        "native-imu.csv": "473fe132508c619202bf2812f5240d85a03267ba42e01f6e02d28643358cfb0e",
+        "probe-imu.csv": "097415f7f6704430c44170915627585bff2d7a60f4d2e0f198e8b8da2b6a8913",
+        "probe-odom3d.csv": "3f5fad43be29a38dfebc704cbaaf14c1a81b2f360b4a4d6e84cbabff444d3702",
+        "probe-vehicle.sdf": "5ac7896206acd4c58eea4dd60146a503ffb93ae0af9eb31f5940ca0d15f07835",
+        "probe-world.sdf": "4cce757d289fec658d5487e5bedf36021a95af6bec6182b1fc6954f05fc9c94a",
+        "pure_pursuit-params.yaml": "897137e085f6c7ad3899e4e1960f7d0c51ec4fcab384e5aa7e2bd210e1a15410",
+        "track_builder-params.yaml": "ede59f745f43b12e5808f8d78c01e75132ea95f8af65cf8e606045ce7b31dd63"
+      }
+    },
+    "gps08-r2": {
+      "args": {
+        "launch_args": [
+          "ros2",
+          "launch",
+          "lhr_gazebo",
+          "gazebo_demo.launch.py",
+          "gui:=false",
+          "rviz:=false",
+          "foxglove:=false",
+          "track_style:=autocross",
+          "seed:=3",
+          "perception:=lidar",
+          "estimator:=ekf",
+          "imu_noise:=true",
+          "use_wheel_speeds:=false",
+          "safety:=true",
+          "safety_lidar_timeout_s:=1.5",
+          "output_csv:=/home/black-book/lhre/autonomy/ros2/data/stationary-cone-study/gps08-r2/metrics.csv",
+          "world:=/home/black-book/lhre/autonomy/ros2/data/stationary-cone-study/gps08-r2/probe-world.sdf",
+          "use_gnss:=true",
+          "gnss_rate_hz:=50.0",
+          "gnss_horizontal_stddev_m:=0.8",
+          "gnss_latency_s:=0.05",
+          "auto_go:=false"
+        ],
+        "stop_sim_time": 20.0,
+        "vehicle_sha256": "77bfe782b6748d906a31fee764c336abe1afdeb7c2914fbbb320d731e54418f5",
+        "ROS_DOMAIN_ID": "116",
+        "GZ_PARTITION": "stationary-cone-study-repeat",
+        "high_rate_probe": true,
+        "imu_config": {
+          "update_rate_hz": 1000.0,
+          "noise_bandwidth_hz": 500.0,
+          "gyro_noise_density_rad_s_sqrt_hz": 7.853981633974483e-05,
+          "accel_noise_density_m_s2_sqrt_hz": 0.000980665,
+          "gyro_bias_stddev_rad_s": 0.005817764173314432,
+          "accel_bias_stddev_m_s2": 0.13075533333333333
+        },
+        "emergency_at_s": null,
+        "perception_study": true,
+        "use_gnss": true,
+        "stationary_requested": true,
+        "gnss_profile": {
+          "rate_hz": 50.0,
+          "sigma_m": 0.8,
+          "latency_s": 0.05
+        }
+      },
+      "raw_sha256": {
+        "args.json": "af6aa96b958b0d7a0f93c94b3e56e9ee1dfc05551557b56c1d990fa005e90042",
+        "bag/bag_0.mcap": "559641bf5c1a649b9ad24559dd2a4d7f5908b50e0322b39429757af372d67dd0",
+        "bag/metadata.yaml": "47bb7de17ef3c0de074e1f48d568f6771b311767f3c83cae6b1299199373a37e",
+        "cone-contacts.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+        "contact-audit.json": "c6232f526af8f620c7858dd51db2f4b304ef03d88c311c2a0634a8fe7f18f377",
+        "ekf_node-params.yaml": "452491ab97568be35ea7a08929d66763fb4e1f68e06aed4fa1c5fee811150ca2",
+        "gnss_sim-params.yaml": "c2a4d5485465f46594c9c1a39e8bd955ddb14b8ae2a735c03061313c3dc86b41",
+        "lidar_cone_detector-params.yaml": "f89cc353b5209e97a1adc41738048dfe6b2d18f0226dfa175966693c296f0dfc",
+        "mission_manager-params.yaml": "871f9f0284858d8a001cbb84a5e935630c6150ad6ef2f74817aaf5c7b86dfc2b",
+        "native-imu.csv": "43310de54791d08c0ac6d0b58217380861326c9e296da1c883b4e68bd57c446e",
+        "probe-imu.csv": "5c4f9ed3c4d7e4bdc1f55d19f02068971390de8a7a7e38813c028ea96c469fe3",
+        "probe-odom3d.csv": "5f3ac9788637926676ece6b33398de84eb231611391f350f3a0dca146a513300",
+        "probe-vehicle.sdf": "5ac7896206acd4c58eea4dd60146a503ffb93ae0af9eb31f5940ca0d15f07835",
+        "probe-world.sdf": "1c5469285383382fe1217b5d0b77493ac639658e5747626307a16bfc7fb18a18",
+        "pure_pursuit-params.yaml": "897137e085f6c7ad3899e4e1960f7d0c51ec4fcab384e5aa7e2bd210e1a15410",
+        "track_builder-params.yaml": "ede59f745f43b12e5808f8d78c01e75132ea95f8af65cf8e606045ce7b31dd63"
+      }
+    },
+    "gps005-r1": {
+      "args": {
+        "launch_args": [
+          "ros2",
+          "launch",
+          "lhr_gazebo",
+          "gazebo_demo.launch.py",
+          "gui:=false",
+          "rviz:=false",
+          "foxglove:=false",
+          "track_style:=autocross",
+          "seed:=3",
+          "perception:=lidar",
+          "estimator:=ekf",
+          "imu_noise:=true",
+          "use_wheel_speeds:=false",
+          "safety:=true",
+          "safety_lidar_timeout_s:=1.5",
+          "output_csv:=/home/black-book/lhre/autonomy/ros2/data/stationary-cone-study/gps005-r1/metrics.csv",
+          "world:=/home/black-book/lhre/autonomy/ros2/data/stationary-cone-study/gps005-r1/probe-world.sdf",
+          "use_gnss:=true",
+          "gnss_rate_hz:=50.0",
+          "gnss_horizontal_stddev_m:=0.05",
+          "gnss_latency_s:=0.05",
+          "auto_go:=false"
+        ],
+        "stop_sim_time": 20.0,
+        "vehicle_sha256": "77bfe782b6748d906a31fee764c336abe1afdeb7c2914fbbb320d731e54418f5",
+        "ROS_DOMAIN_ID": "117",
+        "GZ_PARTITION": "stationary-cone-study-rtk",
+        "high_rate_probe": true,
+        "imu_config": {
+          "update_rate_hz": 1000.0,
+          "noise_bandwidth_hz": 500.0,
+          "gyro_noise_density_rad_s_sqrt_hz": 7.853981633974483e-05,
+          "accel_noise_density_m_s2_sqrt_hz": 0.000980665,
+          "gyro_bias_stddev_rad_s": 0.005817764173314432,
+          "accel_bias_stddev_m_s2": 0.13075533333333333
+        },
+        "emergency_at_s": null,
+        "perception_study": true,
+        "use_gnss": true,
+        "stationary_requested": true,
+        "gnss_profile": {
+          "rate_hz": 50.0,
+          "sigma_m": 0.05,
+          "latency_s": 0.05
+        }
+      },
+      "raw_sha256": {
+        "args.json": "19dc14485276f67b073aaf56dbe167b010484d490dcd4fb758de3e7f8bdaaa54",
+        "bag/bag_0.mcap": "5a19f88a8b685a6937b47db4ab46b56cfe890d08bd0fe32d4b7a087d67e4b7cc",
+        "bag/metadata.yaml": "146df4e86766fb9884a42b20277bfe1dd5cc0a8acca8c0d49c5685cd5672f5fd",
+        "cone-contacts.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+        "contact-audit.json": "607075a7182f2ccd25b71b94433415232f4dac732ba548e496093b130c1bb744",
+        "ekf_node-params.yaml": "452491ab97568be35ea7a08929d66763fb4e1f68e06aed4fa1c5fee811150ca2",
+        "gnss_sim-params.yaml": "fa801f3ef5aa0220a1e7e2f7b87e3c176a442b27138d1b7be7eb90ee1301d05b",
+        "lidar_cone_detector-params.yaml": "f89cc353b5209e97a1adc41738048dfe6b2d18f0226dfa175966693c296f0dfc",
+        "mission_manager-params.yaml": "871f9f0284858d8a001cbb84a5e935630c6150ad6ef2f74817aaf5c7b86dfc2b",
+        "native-imu.csv": "f2e62173a5841834fc3d3495e89dec12c1d32384353654c8402b50776093cfa2",
+        "probe-imu.csv": "347c1f07061ee61e0700c9c2c14e2f80c07cb880805999d68ce41547d0fb7257",
+        "probe-odom3d.csv": "5e646dfcf5e625a80662350b0695b9ac69040c90e55391442e1e2fcbdd5c118b",
+        "probe-vehicle.sdf": "5ac7896206acd4c58eea4dd60146a503ffb93ae0af9eb31f5940ca0d15f07835",
+        "probe-world.sdf": "eeee24fa75852e179a5ab24b1c24487fce165c876132d623b2b3935091d23376",
+        "pure_pursuit-params.yaml": "897137e085f6c7ad3899e4e1960f7d0c51ec4fcab384e5aa7e2bd210e1a15410",
+        "track_builder-params.yaml": "ede59f745f43b12e5808f8d78c01e75132ea95f8af65cf8e606045ce7b31dd63"
+      }
+    },
+    "imu-r1": {
+      "args": {
+        "launch_args": [
+          "ros2",
+          "launch",
+          "lhr_gazebo",
+          "gazebo_demo.launch.py",
+          "gui:=false",
+          "rviz:=false",
+          "foxglove:=false",
+          "track_style:=autocross",
+          "seed:=3",
+          "perception:=lidar",
+          "estimator:=ekf",
+          "imu_noise:=true",
+          "use_wheel_speeds:=false",
+          "safety:=true",
+          "safety_lidar_timeout_s:=1.5",
+          "output_csv:=/home/black-book/lhre/autonomy/ros2/data/stationary-cone-study/imu-r1/metrics.csv",
+          "world:=/home/black-book/lhre/autonomy/ros2/data/stationary-cone-study/imu-r1/probe-world.sdf",
+          "auto_go:=false"
+        ],
+        "stop_sim_time": 20.0,
+        "vehicle_sha256": "77bfe782b6748d906a31fee764c336abe1afdeb7c2914fbbb320d731e54418f5",
+        "ROS_DOMAIN_ID": "118",
+        "GZ_PARTITION": "stationary-cone-study-imu",
+        "high_rate_probe": true,
+        "imu_config": {
+          "update_rate_hz": 1000.0,
+          "noise_bandwidth_hz": 500.0,
+          "gyro_noise_density_rad_s_sqrt_hz": 7.853981633974483e-05,
+          "accel_noise_density_m_s2_sqrt_hz": 0.000980665,
+          "gyro_bias_stddev_rad_s": 0.005817764173314432,
+          "accel_bias_stddev_m_s2": 0.13075533333333333
+        },
+        "emergency_at_s": null,
+        "perception_study": true,
+        "use_gnss": false,
+        "stationary_requested": true,
+        "gnss_profile": {
+          "rate_hz": 50.0,
+          "sigma_m": 0.8,
+          "latency_s": 0.05
+        }
+      },
+      "raw_sha256": {
+        "args.json": "469e15491f3999a96e29b02fa637bf4864b872bbb47756dbe5f4a2f0919d1f88",
+        "bag/bag_0.mcap": "614556468605da48b5c18a7cc5293329aa9a6053182b44003a9fc68747251ec8",
+        "bag/metadata.yaml": "23f4bdbc6b9545624839dc4485850c50c26cdaeed3cf6c994e061eaa983b245e",
+        "cone-contacts.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+        "contact-audit.json": "bf1134a116f4675b2846ea3572f335746227555d7db8826ca6ee72eea4b4a008",
+        "ekf_node-params.yaml": "ff58c11474439ed2c1491bc6e011c4eeec57bc4f675c5255834fdc307352defc",
+        "lidar_cone_detector-params.yaml": "f89cc353b5209e97a1adc41738048dfe6b2d18f0226dfa175966693c296f0dfc",
+        "mission_manager-params.yaml": "871f9f0284858d8a001cbb84a5e935630c6150ad6ef2f74817aaf5c7b86dfc2b",
+        "native-imu.csv": "9d24bb56dffe7bc34040b7ebca3d43a10bb74ab1045bfd5eb2b457643887097b",
+        "probe-imu.csv": "f606ce78c6977a8d049b45033775488c3165c44ccf39cdaaa6d5ebeeb9af15b1",
+        "probe-odom3d.csv": "df1a977fb8717325fd4e6b3efffb2e46170303c54bccc2072d98e675d58e8504",
+        "probe-vehicle.sdf": "5ac7896206acd4c58eea4dd60146a503ffb93ae0af9eb31f5940ca0d15f07835",
+        "probe-world.sdf": "b027049b7d3f8845752b4b1a30eaa27a3d6c29b5e9357bc41d7a62c8c6661147",
+        "pure_pursuit-params.yaml": "897137e085f6c7ad3899e4e1960f7d0c51ec4fcab384e5aa7e2bd210e1a15410",
+        "track_builder-params.yaml": "ede59f745f43b12e5808f8d78c01e75132ea95f8af65cf8e606045ce7b31dd63"
+      }
+    }
+  },
+  "source_sha256": {
+    "src/lhr_gazebo/scripts/record_ekf_stop.py": "f64bdffb673c02318cb13632031049a61b46a24c259ecd42e3475501b670c38e",
+    "src/lhr_gazebo/scripts/analyze_stationary_cones.py": "d1fed0a129c1a78c2bc8935416d6126c8d266764d44300ac71c3ccfe983243a8",
+    "src/lhr_gazebo/scripts/plot_stationary_cones.py": "876f7a24f1745096cfb72e2b3e2c44927bdb63589af8f40540cc806cd0082caf",
+    "src/lhr_gazebo/scripts/analyze_cone_path.py": "4ac34db2e3eb30f89ee0e64eb7453ed8224e5b7121c18cd58963fa7de4da99c0",
+    "src/lhr_gazebo/test/test_stationary_cone_analysis.py": "5c9990337c50c839848a5ae881497f1a7e56bdf8013a8f7f2e22197453c2a9a2",
+    "src/lhr_gazebo/launch/gazebo_demo.launch.py": "fc6e20f5f400a4033e1b3b5fa605322281f0a5f53ee53e6768ebd2afeece209c",
+    "src/lhr_perception/lhr_perception/lidar_cone_detector.py": "d06453b767d4cddfeff4410fa4137009d3cabf86171bc1b28762d2c409678980",
+    "src/lhr_perception/lhr_perception/cone_map.py": "c9aef024273a382e0593ab8b62ba6e3b8bf0b88d6b82f85af7038e8c62f08940",
+    "src/lhr_state_estimation/lhr_state_estimation/ekf.py": "26215b85434d208cb118576103ae38abe1cb39e4f1348d6fbf53880e745e07c1",
+    "src/lhr_state_estimation/lhr_state_estimation/ekf_node.py": "6e292d6b0a696fea4163f9548fd95cdfb637df06dc85ace50bcf912cf298828d",
+    "src/lhr_state_estimation/lhr_state_estimation/gnss.py": "e23ec4b6fbdf4fe9865799b47cad3e14e79308f11ebc5e9354b7ce74389514da",
+    "src/lhr_sensor_sim/lhr_sensor_sim/gnss_sim_node.py": "49034fa0779506f94066ed938c0b82653ee3c6cef4a06aee640dff62739d424a",
+    "src/lhr_vehicle/config/vehicle.yaml": "77bfe782b6748d906a31fee764c336abe1afdeb7c2914fbbb320d731e54418f5",
+    "src/lhr_gazebo/worlds/autocross_seed3.sdf": "492e8723820a5378fb8f5b3299b842aba7485808916ee6199da6564adfb53863",
+    "src/lhr_gazebo/models/fsae_vehicle/model.sdf": "8088689a9b7f489d34172d78b13bab2ab24aa3f08a9aadfb8ea307148c77d687"
+  },
+  "verification": {
+    "build": {
+      "command": "./scripts/build.sh",
+      "result": "16 packages passed"
+    },
+    "gazebo_tests": {
+      "command": "colcon test --packages-select lhr_gazebo",
+      "result": "319 tests passed, zero errors/failures/skips"
+    },
+    "new_tests": 8,
+    "script_lint": "All four changed/new diagnostic Python files passed ament_flake8",
+    "strict_docs": {
+      "command": "uv run --group docs mkdocs build --strict --site-dir /tmp/lhre-imu-stop-docs",
+      "result": "passed"
+    },
+    "diff_check": "git diff --check passed",
+    "physical_motion": "All four captures independently zero translation, yaw change and linear speed in 2-20 s physics window; zero command speed; no DRIVING",
+    "limits": "Single seed with two repetitions of one profile. No production calibration/map behavior change, physical-car validation or gate pass."
+  }
+}

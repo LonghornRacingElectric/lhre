@@ -9,6 +9,222 @@ a forward prefix, so lookahead and curvature must not connect its ends.
 See [the workspace reference](../../README.md) for launch arguments and
 vehicle physics.
 
+## Native IMU noise and bias
+
+`estimator:=ekf` now defaults to `use_wheel_speeds:=false`. It does not fuse
+wheel speeds or start Gazebo's truth-derived wheel sensor node. Both perception
+branches forward the boolean to the EKF. `use_wheel_speeds:=true` restores the
+legacy diagnostic configuration used by the historical #171 report below;
+`wheel_scale_error` has no effect with wheel fusion off. Metrics records the
+selected wheel-fusion mode. IMU-only calibration experiments are not a claim
+that the existing planar filter meets the 0.5 m gate without wheel updates.
+
+The [2026-11-08 validation report](../../../testing/2026-11-08-native-imu/README.md)
+records stationary sensor measurements, matched noisy/clean gate trials and
+independent bag cross-checks. Native noise exposes EKF accuracy failures;
+the report retains LiDAR-stale and cone-contact failures separately.
+
+Both generated vehicle models apply native Gazebo Gaussian noise and startup
+bias to all gyro and accelerometer axes. Defaults and their datasheet
+conversion assumptions live in [lhr_vehicle](../lhr_vehicle/README.md#native-gazebo-imu).
+They apply in both perception modes, with either estimator. The ROS bridge
+still delivers the physics IMU directly to `/lhr/imu/data`; no ROS noise node
+or truth-derived replacement is inserted.
+Orientation remains Gazebo's ideal quaternion; the EKF consumes acceleration
+and angular rate, not that quaternion.
+
+| Argument | Default | Effect |
+| --- | --- | --- |
+| `imu_noise` | `true` | Enable configured white noise and startup bias; `false` zeros both on all six axes |
+| `gyro_bias` | `0.0` rad/s | Additional signed constant offset on the native sensor's z gyro, independent of `imu_noise` |
+| `seed` | `1` | Course seed and Gazebo `--seed` random-generator seed |
+
+`gyro_bias:=0.03` now changes the sensor the EKF actually receives. It is
+implemented as the z-axis Gaussian **mean**, since Gazebo randomizes the
+sign of its sampled startup bias. It adds to the YAML startup bias when
+`imu_noise:=true`; it remains active when `imu_noise:=false`.
+Overrides are applied at startup using a temporary vehicle resource overlay,
+including the stereo variant when enabled. Installed models are untouched
+and the overlay is removed at launch shutdown. Controls are startup settings,
+not live ROS parameter updates.
+
+Metrics records `imu_noise`, the additional `gyro_bias`, `seed`, and
+`vehicle_sha256`. The latter identifies the configured native noise values.
+The shared metrics node defaults `imu_noise` to false for other plants;
+the Gazebo launch explicitly enables it. Inertial sim still synthesizes
+truth-derived wheel speeds only with `use_wheel_speeds:=true`; wheel slip
+fidelity in those optional measurements is unchanged.
+
+Matched noise-free and native-noise runs:
+
+```bash
+./scripts/run_gazebo_demo.sh gui:=false rviz:=false perception:=lidar \
+  estimator:=ekf safety:=true seed:=1 imu_noise:=false output_csv:=data/imu-clean.csv
+./scripts/run_gazebo_demo.sh gui:=false rviz:=false perception:=lidar \
+  estimator:=ekf safety:=true seed:=1 imu_noise:=true output_csv:=data/imu-native.csv
+```
+
+After building and sourcing `install/setup.bash`, measure the actual bridged
+vehicle IMU at standstill, with five simulation seconds discarded for settling:
+
+```bash
+python3 src/lhr_gazebo/scripts/validate_imu.py data/imu-validation
+```
+
+This runs clean, native-noise, +0.03 and −0.03 rad/s fault trials, writes
+timestamped six-axis samples, launch arguments/logs, `stationary.csv` and
+`checks.json`, and exits nonzero if cadence, noise spread or fault sign fails.
+It requires ROS, Gazebo and the normal server rendering environment; run it
+without another demo publishing on the same ROS domain.
+For driving comparisons, use the existing
+[gate runner and scorer](../../../testing/tools/gate/README.md) in separate
+output directories with `EXTRA="imu_noise:=false"` and
+`EXTRA="imu_noise:=true"`. Keep all other settings and the EKF fixed. Course
+seed also seeds Gazebo, but ROS scheduling can still change trajectories;
+repeat runs and retain failures rather than claiming bitwise determinism.
+
+Combine scored campaigns into `comparison.csv` and `position-error.png`:
+
+```bash
+python3 src/lhr_gazebo/scripts/compare_imu.py data/imu-comparison \
+  --campaign clean=data/imu-clean-gate --campaign native=data/imu-native-gate
+```
+
+The comparison retains every gate row and its failed checks, including
+missing metrics. It reads mean errors from the original metrics CSV because
+the gate scorer's output includes only the maximum position error.
+Plotting requires Matplotlib; it does not require a running ROS graph.
+
+For isolated estimator experiments, `scripts/record_imu_reference.py` records
+the native physics IMU, commands, mission status and a separate truth pose.
+It privately removes GPU LiDAR/rendering from a copied world/model, retaining
+vehicle and IMU physics. Its reference controller uses truth and synthetic
+cone detections to reproduce a trajectory; this is an input-data capture,
+not a closed-loop IMU-only driving success or a perception gate. Offline
+estimators must never read truth except for the initial surveyed-pose proxy
+and evaluation. Raw captures stay under gitignored `data/`.
+`--full-rendering` instead selects the unchanged installed world and its normal
+model/noise overlay, to cross-check that the lightweight harness did not cause
+a sensor discrepancy. Both paths record the exact launch arguments.
+
+For acceleration-path diagnosis, `--capture-native` additionally saves
+`native-imu.csv` directly from Gazebo Transport, before the ROS bridge.
+`--stop-sim-time 16` ends a short input capture. Private-model experiments can
+set `--imu-rate 1000`, `--direct-drive` (old failure control), or `--force-drive`
+(explicit configured force control); none changes the installed model.
+Force control is now the installed default, using the values in
+`vehicle.yaml`. `--direct-drive` and `--force-drive` are mutually exclusive.
+Overrides cannot be combined with `--full-rendering`. Native recording requires the Gazebo
+Transport 13 and Messages 10 Python bindings supplied by the Jazzy vendors.
+
+`scripts/check_imu_acceleration.py OUT.csv CAPTURE...` checks timestamp-matched
+native/ROS equality and compares integrated forward IMU acceleration against
+the independent speed change over simulation seconds 12–15. It requires
+noise-free acceleration captures and a stationary 2–7 s offset interval.
+Its expected controls are missing acceleration for direct velocity at 100 Hz,
+and recovered acceleration for direct velocity at 1000 Hz or force control at
+100 Hz. A diagnostic pass confirms those controls, not a driving gate pass.
+The [acceleration-path results](../../../testing/2026-11-08-native-imu/README.md#acceleration-path-diagnosis)
+show that the 100 Hz sensor misses pulses from direct joint-velocity actuation.
+Increasing the rate reveals the pulses but does not supply an antialiasing
+filter; force control recovers a smoother signal. Production actuation is now
+force-based by default, with P=10 and ±100 N·m per-wheel torque clamps from
+`simulation.gazebo_drive` in `vehicle.yaml`. These are simulator assumptions;
+see [vehicle configuration](../lhr_vehicle/README.md#gazebo-actuation).
+Both generated models now use a 1000 Hz native sensor, matching the default
+1 ms physics step. The EKF integrates each stamped sample and publishes
+odometry at 50 Hz. Noise bandwidth scales from 50 to 500 Hz with this rate:
+per-sample noise increases by sqrt(10), preserving its integrated intensity.
+Datasheet densities and startup bias distributions are unchanged. This is
+simulator sampling, not a claim about the physical Mid-360's output cadence.
+Steering control and wheel command topics are unchanged. Torque-based tracking
+adds a small speed lag; braking commands request zero wheel speed through the
+same bounded controller. This does not calibrate motor or tire dynamics.
+`--post-terminal-sim-sec 3` records three simulation seconds after mission
+termination so braking checks do not depend on rendering wall-clock speed.
+For a complete capture, `scripts/check_imu_acceleration.py OUT.json CAPTURE...
+--motion` verifies six-axis stationary noise spread, native/ROS equality and
+sample gaps. Acceleration captures must finish and stop, with integrated
+acceleration matching speed change over fixed 12–15 s and 28–32 s intervals.
+Oval captures must cover 44 s and match integrated yaw over 12–44 s. Offset
+subtraction is offline diagnostic processing; it does not enable calibration
+in the running estimator. See the
+[force-control fix results](../../../testing/2026-11-08-native-imu/README.md#force-based-actuation-fix)
+for measurements, assumptions and commands.
+
+For the stopped-car case, `scripts/record_ekf_stop.py OUT` reproduces the
+wheel-free autocross seed-3 LiDAR/EKF/safety configuration headlessly for
+30 simulation seconds. It records the primary native IMU, bridged IMU,
+estimated and physics odometry, commands, mission/safety status and clock.
+Use an isolated ROS domain and Gazebo partition. Optional `--high-rate-probe`
+adds a separate noiseless 1 kHz IMU and 3D reference publisher to a private
+copy of the otherwise unchanged vehicle/world; production sensors and
+estimator settings are retained. `--noise false` is a comparison control.
+
+`scripts/analyze_ekf_stop.py CAPTURE OUT` reports estimated travel during
+physics-stationary intervals and native/ROS equality. If probe data exist,
+it compares world-frame velocity impulses against independent 3D sensor-point
+motion over fixed seed-3 windows. It uses ideal attitude, initial world-frame
+alignment and offline offsets only for diagnosis, never for fusion. The
+noiseless probe is also sampled at the production timestamps to separate
+aliasing from noise. The probe analysis requires capture through 29 s. See
+the [stopped-car investigation](../../../testing/2026-11-08-native-imu/README.md#stopped-car-investigation):
+the investigation describes the former 100 Hz / timer-predicted failure and
+its follow-up 1000 Hz / timestamp-integration change. Force control and higher
+sample rate are complementary. This harness changes no runtime filter behavior
+and does not validate a standstill detector. Bias and attitude compensation
+remain separate work.
+
+For cone/path causal experiments, add `--perception-study` to the stop
+recorder. It records compressed raw clouds, live cone maps, centerlines and
+lookahead targets; captures actual detector/planner/controller parameters;
+and adds passive contact probes to the private model. `contact-audit.json`
+must show delivered contacts before an empty cone-contact list is interpreted
+as no observed cone contact. Ground contact traffic verifies that the probes
+are active. The contact topic is configured under `<contact>` for Harmonic.
+`--estimator truth` is a diagnostic localization control, never an on-car
+configuration. Captures stop if free disk space drops below 150 MiB.
+
+`scripts/analyze_cone_path.py CAPTURE OUT` replays identical clouds through
+the production detector with recorded EKF poses, physics poses, a fixed rigid
+frame transform, and an EKF/current-scan-only map. It diagnoses persistent-map
+association using physical cone identities only as offline labels, and tests
+the production planner with exact cone geometry. Clearances use a conservative
+vehicle envelope and cone circumscribed circles over the next 8 m of path;
+negative clearance is a risk indicator, not proof of physics contact. Live-map
+checks supplement the replays, which do not reproduce asynchronous scheduling
+bit for bit. See the
+[cone/path study](../../../testing/2026-11-08-native-imu/README.md#cone-path-causal-study)
+for hypotheses, contact events, controls, results and remaining limitations.
+`scripts/plot_cone_path.py ANALYSIS OUT` renders the replay error traces and a
+pre-contact vehicle-frame view; it requires Matplotlib and the sourced ROS
+environment. The local view overlays physical cones with accumulated cone
+positions relative to the estimated car, making changing map error visible.
+
+`scripts/evaluate_imu_only.py OUT CAPTURE...` replays the recorded IMU through
+the existing wheel-free filter and compares raw, gyro-calibrated and
+known-level forward-offset-calibrated inputs. It never reads the IMU's ideal
+orientation or derives speed from truth. The first pose is a one-time survey
+proxy; truth after that is used for evaluation. A planar mount-lever-arm
+variant is a diagnostic only. Forward-offset subtraction at one known-level
+stationary pose is not a general accelerometer/tilt calibration, and these
+offline experiments do not enable live calibration or bias-state estimation.
+
+Independently cross-check the error columns from stamped estimate/truth poses
+in the MCAP bags (requires the sourced ROS environment):
+
+```bash
+python3 src/lhr_gazebo/scripts/verify_imu_bags.py data/imu-comparison/bag-crosscheck.csv \
+  --campaign clean=data/imu-clean-gate --campaign native=data/imu-native-gate
+```
+
+This uses NumPy interpolation, not the metrics accumulator or `TruthAligner`.
+It selects the CSV's scored time interval, unwraps truth yaw before
+interpolation, and compares mean/max position and mean yaw errors. It exits
+nonzero on differences above 0.02 m or 0.002 rad, allowing endpoint rounding
+and DDS delivery differences. Missing error rows are not cross-checked;
+the gate scorer and comparison CSV still retain those failures.
+
 ## LiDAR coordinates
 
 Gazebo preserves main's level LiDAR mount at z=0.55 m and its generated
@@ -247,6 +463,14 @@ is explicitly chosen. Gazebo uses the packaged Fontconfig configuration;
 an explicit `FONTCONFIG_FILE` takes precedence. These overrides are scoped
 to the launched processes. The packaged font configuration caches under the
 user's XDG cache directory rather than rescanning without a cache on each start.
+It scans only `/usr/share/fonts` and deliberately does not include the system
+`fonts.conf`, which would re-enable user fonts and matching rules. A GUI
+segfault ending in `QFontEngineMulti` / `FcCharSetHasChar` can otherwise cause
+Gazebo's parent process to print `Escalating to SIGKILL on [Gazebo Sim Server]`:
+that final message is server cleanup after the GUI crash, not its cause.
+This scoped configuration leaves other applications and your installed fonts
+unchanged. An explicit caller-provided `FONTCONFIG_FILE` can reintroduce the
+problem; remove that override to use the packaged configuration.
 
 Every argument the launch forwards to a node carries the node's declared
 type, so a whole number like `v_max:=8` still reaches `pure_pursuit` as a
@@ -695,3 +919,289 @@ within the original 200 m plane serialize unchanged.
 Metrics scores the actual world's paired centerline without a style-specific
 route shortcut. These courses can expose failures in perception and planning;
 passing the geometry checks does not imply the autonomy gate passes.
+
+## Periodic GNSS
+
+Opt into timestamped, uncertain position corrections while keeping wheel
+fusion off:
+
+```bash
+./scripts/run_gazebo_demo.sh gui:=false rviz:=false \
+  track_style:=autocross seed:=3 perception:=lidar estimator:=ekf \
+  imu_noise:=true use_wheel_speeds:=false use_gnss:=true \
+  safety:=true safety_lidar_timeout_s:=1.5 output_csv:=data/gnss.csv
+```
+
+Use `gui:=true rviz:=true` for visual inspection in a working desktop session.
+Defaults are unchanged unless GNSS is enabled. Both `sim` and `lidar`
+perception branches forward these typed arguments to the actual nodes:
+
+| Argument | Default | Meaning |
+| --- | --- | --- |
+| `use_gnss` | `false` | Enable GNSS fusion; requires `estimator:=ekf` and wheel speeds off |
+| `simulate_gnss` | `true` | Start the simulation-only fix publisher when fusion is enabled |
+| `gnss_topic` / `gnss_frame_id` | `/lhr/gnss/fix` / `gnss_link` | NavSatFix topic and required antenna frame |
+| `gnss_rate_hz` | YAML: 50.0 | Maximum simulated acquisition rate |
+| `gnss_horizontal_stddev_m` | YAML: 0.8 | Independent east/north sigma, m |
+| `gnss_vertical_stddev_m` | YAML: 1.2 | Up sigma, m; not fused |
+| `gnss_latency_s` | YAML: 0.05 | Delivery delay, s; measurement stamp is retained |
+| `gnss_origin_latitude_deg` / `gnss_origin_longitude_deg` / `gnss_origin_altitude_m` | 0/0/0 | Shared WGS84 datum, degrees and ellipsoid metres |
+| `gnss_max_delay_s` | 1.0 | IMU replay history, s |
+| `gnss_gate_chi2` | 25.0 | Squared Mahalanobis innovation gate |
+
+The simulator's truth input is private plant wiring, not a public launch
+argument. Its random stream uses the existing `seed`. Actual fix rate cannot
+exceed the plant odometry rate (currently 50 Hz); it never repeats an old pose
+to fabricate a higher-rate measurement. Hardware-like rate and error are
+assumptions documented in [vehicle configuration](../lhr_vehicle/README.md#gnss-experiment-configuration).
+`gnss_horizontal_stddev_m:=0.05` selects an assumed RTK-like comparison,
+not a verified specification for the car's receiver.
+
+For an external driver, use `simulate_gnss:=false`, configure a surveyed ENU
+datum/mount and publish valid timestamped NavSatFix with known ENU covariance.
+There is no physical receiver driver or BEVO-to-ROS adapter in this change.
+The EKF does not receive truth fixes or GPS heading; Gazebo retains only its
+existing one-time truth start-pose initialization. Corrections rewind/replay
+IMU history; older TF and persistent cone observations are not rewritten.
+See [filter behavior](../lhr_state_estimation/README.md#periodic-gnss-correction).
+
+### Reproduce the GNSS comparison
+
+After sourcing ROS and the workspace, use fresh capture directories and an
+isolated ROS domain/Gazebo partition. Captures stop at 30 simulated seconds or
+the recorder's wall-time/disk bound, and record fusion decisions and parameters:
+
+```bash
+export PATH=/usr/bin:$PATH
+export ROS_DOMAIN_ID=103 GZ_PARTITION=gnss-reproduce
+python3 src/lhr_gazebo/scripts/record_ekf_stop.py data/gps-baseline \
+  --perception-study --stop-sim-time 30
+python3 src/lhr_gazebo/scripts/record_ekf_stop.py data/gps-standard \
+  --perception-study --stop-sim-time 30 --gnss
+python3 src/lhr_gazebo/scripts/record_ekf_stop.py data/gps-rtk-like \
+  --perception-study --stop-sim-time 30 --gnss --gnss-stddev-m 0.05
+python3 src/lhr_gazebo/scripts/analyze_gnss.py \
+  data/gps-standard data/gps-standard-analysis
+```
+
+The analyzer is specific to this seed-3 study and synthetic 0/0/0 datum. It
+compares positions at matching sensor timestamps against a separate passive
+3D physics probe, audits fix variance/rate/age and decisions, and reports an
+equal 1–6 m physical route section. Use the same analyzer on each capture.
+The [saved experiment](../../../testing/2026-11-08-native-imu/README.md#periodic-gnss-experiment)
+shows lower pre-contact position error but continued collisions; this is not
+a successful gate or physical-car validation. Large post-impact innovations
+can be rejected, so accurate pre-contact results do not imply recovery after
+an impact.
+
+## Stationary cone registration diagnostic
+
+`record_ekf_stop.py --stationary` forwards `auto_go:=false` to the existing
+mission manager. It does not freeze the physics model, substitute truth
+localization or disable sensing. Verify the recorded independent 3D physics
+pose, command stream and mission state before labeling a window stationary.
+This mode needs `--perception-study` for cone analysis. Actual detector,
+planner, controller, mission-manager and EKF parameters are saved; the GNSS
+simulator's parameters are saved when enabled.
+
+From the sourced ROS workspace, use fresh directories and isolated domains:
+
+```bash
+export PATH=/usr/bin:$PATH
+export ROS_DOMAIN_ID=116 GZ_PARTITION=stationary-cone-reproduce
+python3 src/lhr_gazebo/scripts/record_ekf_stop.py data/still-gps \
+  --stationary --perception-study --gnss --stop-sim-time 20
+export ROS_DOMAIN_ID=119
+python3 src/lhr_gazebo/scripts/analyze_stationary_cones.py \
+  data/still-gps data/still-gps-analysis --start-s 2 --end-s 20
+python3 src/lhr_gazebo/scripts/plot_stationary_cones.py \
+  data/still-figures data/still-gps-analysis
+```
+
+Repeat the recorder without `--gnss` for a fresh IMU-only control, and with
+`--gnss --gnss-stddev-m .05` for the assumed RTK-like profile. Hold seed,
+noise, course and duration fixed. The analyzer replays **identical clouds**
+through the real detector with EKF, physics and fixed-at-window-start poses,
+and compares persistent mapping with a current-scan-only control. It measures
+raw-return ROI scatter and fresh-detection scatter separately from pose
+registration. Earlier startup scans remain in persistent history, even when
+the scored window starts at 2 s.
+
+These tools are specific to the seed-3 Gazebo study. Offline truth geometry
+labels diagnostic landmarks, never live detections or estimator updates.
+A 0.35 m nearest-cone radius separates geometry matches from displaced entries;
+a separate birth-identity count detects displaced duplicate landmarks. Raw
+ROI and fresh-centroid scatter use each cone's temporal median and at least
+ten observations; these are precision metrics, not absolute accuracy. Live
+processing may skip scans, so replaying every recorded cloud is a controlled
+counterfactual, not exact live-map reconstruction. Both outputs are reported.
+
+The [stationary experiment](../../../testing/2026-11-08-native-imu/README.md#stationary-cone-registration-experiment)
+confirms a registration/accumulation problem while physical motion is zero.
+Keeping LiDAR detection active at rest is useful; these diagnostics do not
+add a production stationary detector, bias calibration, pose clamp or map fix.
+
+For a desktop stationary inspection, append `auto_go:=false` to the normal
+GPS visual command. The mission remains READY until an explicit go request.
+Compare the cloud in RViz with Fixed Frame `base_link` versus `map`: only the
+latter includes the estimated vehicle-to-map transform. This visualization
+alone is not a motion/stationarity check; the recorded physics audit supplies
+that evidence in simulation. The analyzer also reports mean native gyro-z
+rate over the verified window, exposing a nonzero rate while physics rotation
+is zero. It does not apply a calibration or subtract raw acceleration means.
+
+## GPS heading-jump attribution
+
+GNSS status includes before/after yaw and speed at measurement time and at
+current time after delayed IMU replay. This is read-only instrumentation:
+filter math, noise settings, gating and wheel-fusion behavior are unchanged.
+See the [field definitions](../lhr_state_estimation/README.md#gnss-heading-update-diagnostics).
+
+Capture a stationary GNSS run with the recorder above, then run:
+
+```bash
+python3 src/lhr_gazebo/scripts/audit_gnss_heading.py \
+  data/still-gps data/still-gps-heading-audit --plot
+```
+
+The audit verifies zero physics motion, zero speed commands and no DRIVING
+state in separate 2–5 s calibration and 8–20 s evaluation windows. It estimates
+one gyro-z offset only from the calibration samples, then compares identical
+inputs with GPS on/off and that offset applied/not applied. All offline
+conditions restart at 5 s with the original one-time surveyed-start-pose proxy.
+It does not use ideal IMU orientation or truth to fit an offset. A fifth,
+explicit diagnostic subtracts the stationary forward-acceleration mean;
+that combines bias/gravity projection at a fixed attitude and is not a
+physical accelerometer calibration. Matplotlib is needed only with `--plot`.
+
+The complete native IMU stream is used after checking equality with bridged
+ROS IMU values at shared timestamps; the bag may miss messages received by
+the live estimator. The audit separately checks original-start replay against
+live odometry, excluding simultaneous output/correction timestamps where
+callback order is ambiguous. Actual live per-correction jumps are reported
+independently of all counterfactual replays. Old recordings without the new
+status fields report live jump attribution as unknown.
+
+The [saved attribution experiment](../../../testing/2026-11-08-native-imu/README.md#gps-heading-jitter-attribution)
+confirms that GPS updates produce heading discontinuities at rest. Offline
+gyro correction removes most steady no-GPS drift but does not remove the
+GPS-on wobble; these are not live calibration or successful driving results.
+
+## Gyro-confidence and GPS-heading policy comparison
+
+Experimental startup controls in both perception modes:
+
+| Argument | Default | Effect |
+| --- | --- | --- |
+| `gnss_heading_gain` | `1.0` | Scale [0,1] on GPS yaw/yaw-rate Kalman gain rows |
+| `yaw_rate_variance` | `0.0004` | Gyro rate measurement variance, (rad/s)²; smaller gives measured rate more confidence |
+
+For a stationary desktop diagnostic, append `auto_go:=false` and, for example,
+`gnss_heading_gain:=0.25` to the GPS launch command. This is a constant gain;
+there is no automatic stationary/moving switch. Zero GPS angular gain still
+allows real gyro turns but prevents GPS-aided starting-heading recovery.
+The defaults are unchanged. These flags do not calibrate the live gyro;
+trusting its raw biased reading more does not remove the bias.
+[Implementation and limitations](../lhr_state_estimation/README.md#experimental-heading-controls).
+
+To reproduce the controlled comparison after sourcing ROS/workspace:
+
+```bash
+python3 src/lhr_gazebo/scripts/compare_heading_policies.py \
+  data/heading-attribution/gps08-live data/heading-policy-reproduce \
+  --moving-capture data/gnss-study/standard-50hz --plot
+```
+
+The named input directories refer to retained local recordings, not files
+shipped in git. Capture equivalents with the earlier recorder commands if
+those recordings are unavailable. Calibration uses the predeclared 2–5 s
+stationary interval; all cases use the same 5 s restart, initial covariance,
+input sequence and GPS consumption timestamps. Compare default gyro variance,
+variance measured from calibration, and measured variance with GPS angular
+gain 0.25/0.1/0. Each case tests initial heading offsets 0/−10/+10 degrees.
+The stress offsets are assumptions, not a hardware heading specification.
+
+Six ideal planar synthetic controls cover straight acceleration and a slow
+turn, each at seeds 3/7/11. They use canonical noise/bias scales, 100 Hz IMUs,
+50 Hz GPS and a 50 ms delivery delay. They are model-level tests, separate from
+Gazebo. Recovery means the first two continuous seconds with heading error
+within 2 degrees after motion begins at 7 s. This is a diagnostic criterion,
+not the autonomous gate. Recorded moving scoring ends at 12.5 s, before the
+retained capture's first cone contact. Replays do not simulate how a different
+estimate would alter closed-loop steering.
+
+See [results and source/data fingerprints](../../../testing/2026-11-08-native-imu/README.md#gyro-confidence-and-gps-heading-gain-comparison).
+A smaller constant angular gain improved stationary wobble but slowed recovery
+from uncertain initial heading; no new default or driving-success claim follows.
+
+## Calibrated gyro-heading visual profile
+
+Build once after updating the workspace, then launch the experimental recipe:
+
+```bash
+./scripts/build.sh
+./scripts/run_gyro_heading_demo.sh
+```
+
+It opens Gazebo, RViz and Foxglove on autocross seed 3, with native noisy IMU,
+wheel fusion off, simulated GPS on, `calibrate_gyro:=true` and
+`gnss_heading_gain:=0.0`. The GUI environment includes the existing xcb/font
+workaround. Trailing launch arguments override defaults:
+
+```bash
+# Inspect the calibrated stationary scene without automatic driving.
+./scripts/run_gyro_heading_demo.sh auto_go:=false
+# Use the exact recipe headlessly.
+./scripts/run_gyro_heading_demo.sh gui:=false rviz:=false foxglove:=false
+```
+
+The vehicle waits through settling and a sensor-verified calibration window.
+Estimated odometry/TF and the RViz map appear only after calibration succeeds;
+watch for `Gyro calibration ready` in the terminal. Normal READY hold and
+automatic driving follow. Gazebo still shows the physical vehicle throughout.
+A calibration failure leaves odometry unpublished; inspect the reported
+reason and restart after addressing it. Do not interpret the initial missing
+map/TF as an estimator crash. Default metrics output is
+`data/gyro-heading-visual.csv`.
+
+The gyro-z offset is estimated from quiet IMU samples plus independent raw
+LiDAR scene stability, not truth or GPS. The Gazebo start-pose seed remains
+one-time truth initialization; absolute starting heading is not learned from
+the gyro. Real gyro turns are preserved; GPS cannot update yaw or yaw rate in
+this recipe. GPS-induced translation jitter, acceleration bias and false
+stationary speed may remain. There is no zero-velocity correction, adaptive
+heading gain or retrospective cone-map repair.
+
+All calibration parameters and provisional validation limits are listed in
+[the estimator guide](../lhr_state_estimation/README.md#live-startup-gyro-calibration)
+and exposed as typed launch arguments in both perception modes. Reliable
+buffered raw LiDAR delivery is the Gazebo default; select
+`gyro_calibration_lidar_qos:=sensor_data` only for a best-effort source.
+To inspect late-joining calibration status:
+
+```bash
+ros2 topic echo /lhr/state_estimation/gyro_calibration --once \
+  --qos-durability transient_local
+```
+
+To record and independently verify the profile:
+
+```bash
+export ROS_DOMAIN_ID=125 GZ_PARTITION=gyro-heading-reproduce
+python3 src/lhr_gazebo/scripts/record_ekf_stop.py data/gyro-heading-recording \
+  --perception-study --gnss --calibrate-gyro --gnss-heading-gain 0 \
+  --stop-sim-time 30
+python3 src/lhr_gazebo/scripts/analyze_gyro_heading_demo.py \
+  data/gyro-heading-recording data/gyro-heading-analysis
+```
+
+Add `--stationary` for a no-auto-go control. The analyzer verifies calibration
+against independent physics, checks that no odometry preceded readiness,
+audits actual GPS angular changes, and reports heading/position error and
+native contacts. A stationary run may have no lap metrics CSV because it
+never entered DRIVING; its sensor/pose analysis remains available.
+
+The [saved live tests](../../../testing/2026-11-08-native-imu/README.md#live-calibrated-gyro-heading-and-gps-position-visual-profile)
+include successful calibration, a headless execution of this exact wrapper,
+and a short moving run. The moving run ended on ODOM_STALE; it is not a clean
+full lap or gate pass. GUI rendering itself remains for the user to verify.

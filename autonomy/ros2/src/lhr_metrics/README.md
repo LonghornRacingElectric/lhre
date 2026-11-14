@@ -5,7 +5,32 @@ distance spent off track, speed stats, and lap completion. Writes one CSV
 row per run to `data/metrics.csv` (never committed, see
 `autonomy/AGENTS.md`).
 
+## GNSS provenance
+
+Gazebo rows record `use_gnss`, `simulate_gnss`, `gnss_rate_hz`,
+`gnss_horizontal_stddev_m` and `gnss_latency_s`. These identify the requested
+simulation profile; the receiver's actual message covariance is what the EKF
+fuses. With `use_gnss=false` these settings are inactive, and with
+`simulate_gnss=false` the simulator profile does not describe an external
+receiver. Vehicle YAML hashes retain the vertical sigma and antenna mount.
+Compare equal physical route sections before contact; a low error over an
+early-invalidated scoring interval is not a completed lap. See the
+[GNSS experiment](../../../testing/2026-11-08-native-imu/README.md#periodic-gnss-experiment).
+
 ## Live viewer summary
+
+`use_wheel_speeds` records whether the EKF's optional legacy wheel correction
+is enabled. Both demo launches default it to false; wheel-scale settings have
+no estimator effect in that mode. Historical rows without this field predate
+the wheel-free default and must not be compared as if their sensors matched.
+
+Gazebo rows record `imu_noise` (native white noise and startup bias enabled),
+`gyro_bias` (additional signed native z-gyro offset, rad/s), and `seed`
+(also passed to Gazebo's random generator). `vehicle_sha256` identifies the
+YAML containing noise densities, bandwidth and bias scales. Other plants
+leave `imu_noise` false because they do not use Gazebo's native model; their
+own sensor simulation may still add noise. See
+[IMU configuration](../lhr_gazebo/README.md#native-imu-noise-and-bias).
 
 `/lhr/metrics/live` (`diagnostic_msgs/DiagnosticArray`) mirrors the existing
 score at 2 Hz on the node clock and once at finish. Its named values include
@@ -318,3 +343,22 @@ scored scheduling, since a 0.1 s stall at 5 m/s reads as 0.5 m of error
 ([#165](https://github.com/LonghornRacingElectric/lhre/issues/165)).
 
 Node cleanup tolerates an already-stopped ROS context after launch shutdown.
+
+## Heading-policy provenance
+
+Gazebo rows also record `gnss_heading_gain` (default 1.0) and
+`yaw_rate_variance` (default 0.0004 (rad/s)²). The first is inactive without
+GNSS fusion; the second is inactive without the EKF. They identify the actual
+forwarded startup settings, not a claim that gyro bias has been calibrated.
+The [policy controls](../lhr_gazebo/README.md#gyro-confidence-and-gps-heading-policy-comparison)
+keep GPS position covariance unchanged while optionally attenuating angular
+update rows. Compare heading recovery as well as stationary visual smoothness.
+
+`calibrate_gyro` records whether startup gyro calibration was enabled. The
+learned offset, exact evidence window and validity checks are in the latched
+`/lhr/state_estimation/gyro_calibration` status; configured thresholds are in
+the recorded EKF parameter dump;
+configuration alone is not proof that calibration completed. The
+[gyro-heading recipe](../lhr_gazebo/README.md#calibrated-gyro-heading-visual-profile)
+records that status in diagnostic bags. No lap row is expected if the mission
+never reaches DRIVING.

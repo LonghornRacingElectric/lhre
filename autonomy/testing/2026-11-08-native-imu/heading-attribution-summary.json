@@ -1,0 +1,266 @@
+{
+  "capture": "data/heading-attribution/gps08-live",
+  "calibration_window_s": [
+    2,
+    5
+  ],
+  "evaluation_window_s": [
+    8,
+    20
+  ],
+  "calibration_motion": {
+    "physics_samples": 3001,
+    "physics_max_translation_from_window_start_m": 0.0,
+    "physics_max_heading_change_deg": 0.0,
+    "physics_max_linear_speed_m_s": 0.0,
+    "command_samples": 61,
+    "max_abs_commanded_speed_m_s": 0.0,
+    "mission_states_whole_capture": {
+      "OFF": 20,
+      "READY": 304
+    },
+    "stationary_verified": true
+  },
+  "evaluation_motion": {
+    "physics_samples": 12001,
+    "physics_max_translation_from_window_start_m": 0.0,
+    "physics_max_heading_change_deg": 0.0,
+    "physics_max_linear_speed_m_s": 0.0,
+    "command_samples": 241,
+    "max_abs_commanded_speed_m_s": 0.0,
+    "mission_states_whole_capture": {
+      "OFF": 20,
+      "READY": 304
+    },
+    "stationary_verified": true
+  },
+  "input_stream_audit": {
+    "native_samples": 32412,
+    "recorded_ros_samples": 32019,
+    "shared_samples": 32019,
+    "shared_sample_max_component_difference": 0.0,
+    "note": "Use complete native sensor inputs after verifying identical bridged values; bag recording can miss messages that the live EKF received."
+  },
+  "gyro_offset_rad_s": -0.007954726408472102,
+  "gyro_offset_deg_s": -0.4557722503867108,
+  "initial_yaw_rad": 2.823,
+  "calibration_samples": 3000,
+  "held_out_samples": 12001,
+  "held_out_mean_raw_gyro_deg_s": -0.4537076140908294,
+  "held_out_mean_corrected_gyro_deg_s": 0.0020646362958814143,
+  "stationary_forward_offset_m_s2": -0.025374466565401134,
+  "actual_live_jumps": {
+    "accepted_instrumented_fixes": 600,
+    "absolute_current_yaw_jump_deg": {
+      "n": 600,
+      "median": 0.18551365994294108,
+      "p95": 0.9025103285894716,
+      "max": 1.9678303911834423
+    },
+    "sum_absolute_current_yaw_jumps_deg": 168.60676396718551,
+    "sum_signed_current_yaw_jumps_deg": 0.5030617056255808,
+    "absolute_direct_fix_yaw_jump_deg": {
+      "n": 600,
+      "median": 0.1855136599395824,
+      "p95": 0.902510328576065,
+      "max": 1.9678303911956556
+    },
+    "fixes_changing_current_yaw_over_0_1deg": 400,
+    "absolute_speed_before_fix_m_s": {
+      "n": 600,
+      "median": 0.2171623117636466,
+      "p95": 0.6475640566817409,
+      "max": 1.0163951981966062
+    },
+    "nonzero_yaw_position_cross_covariance": 600
+  },
+  "conditions": {
+    "raw_no_gnss": {
+      "position_error_m": {
+        "n": 601,
+        "median": 1.0520120310080892,
+        "p95": 2.6862233273670686,
+        "max": 2.913042583583469
+      },
+      "absolute_heading_error_deg": {
+        "n": 601,
+        "median": 4.078530983269818,
+        "p95": 6.530265417909446,
+        "max": 6.802947483538999
+      },
+      "absolute_estimated_speed_m_s": {
+        "n": 601,
+        "median": 0.23396667108565133,
+        "p95": 0.3701256833864561,
+        "max": 0.38660418020774545
+      },
+      "gnss_jumps": null
+    },
+    "raw_gnss": {
+      "position_error_m": {
+        "n": 601,
+        "median": 0.13857496808189027,
+        "p95": 0.41156421236218765,
+        "max": 0.649557176129554
+      },
+      "absolute_heading_error_deg": {
+        "n": 601,
+        "median": 3.2850998712583093,
+        "p95": 4.969353475553923,
+        "max": 7.854417717557695
+      },
+      "absolute_estimated_speed_m_s": {
+        "n": 601,
+        "median": 0.20881569067362268,
+        "p95": 0.6371487407796105,
+        "max": 1.022375925463881
+      },
+      "gnss_jumps": {
+        "accepted_instrumented_fixes": 600,
+        "absolute_current_yaw_jump_deg": {
+          "n": 600,
+          "median": 0.16341107891492201,
+          "p95": 0.9436222349607682,
+          "max": 1.9797118410112062
+        },
+        "sum_absolute_current_yaw_jumps_deg": 157.20793891910242,
+        "sum_signed_current_yaw_jumps_deg": 5.7155838552433345,
+        "absolute_direct_fix_yaw_jump_deg": {
+          "n": 600,
+          "median": 0.1634110789182298,
+          "p95": 0.9436222349389394,
+          "max": 1.9797118410168548
+        },
+        "fixes_changing_current_yaw_over_0_1deg": 380,
+        "absolute_speed_before_fix_m_s": {
+          "n": 600,
+          "median": 0.20876141823060734,
+          "p95": 0.637276063566069,
+          "max": 1.0226131636111964
+        },
+        "nonzero_yaw_position_cross_covariance": 600
+      }
+    },
+    "gyro_corrected_no_gnss": {
+      "position_error_m": {
+        "n": 601,
+        "median": 1.0521596353219755,
+        "p95": 2.687190757624017,
+        "max": 2.9141816271675114
+      },
+      "absolute_heading_error_deg": {
+        "n": 601,
+        "median": 0.0228350400722029,
+        "p95": 0.03484526279704106,
+        "max": 0.03617337350941089
+      },
+      "absolute_estimated_speed_m_s": {
+        "n": 601,
+        "median": 0.23396667108565133,
+        "p95": 0.3701256833864561,
+        "max": 0.38660418020774545
+      },
+      "gnss_jumps": null
+    },
+    "gyro_corrected_gnss": {
+      "position_error_m": {
+        "n": 601,
+        "median": 0.14146186500764676,
+        "p95": 0.4121739442611686,
+        "max": 0.6477672483825587
+      },
+      "absolute_heading_error_deg": {
+        "n": 601,
+        "median": 7.123999474974623,
+        "p95": 9.53710388633969,
+        "max": 10.624976162812297
+      },
+      "absolute_estimated_speed_m_s": {
+        "n": 601,
+        "median": 0.20714836719943344,
+        "p95": 0.6219668058290387,
+        "max": 1.022969900749271
+      },
+      "gnss_jumps": {
+        "accepted_instrumented_fixes": 600,
+        "absolute_current_yaw_jump_deg": {
+          "n": 600,
+          "median": 0.16032841147850074,
+          "p95": 0.93412506152132,
+          "max": 1.9925151179649148
+        },
+        "sum_absolute_current_yaw_jumps_deg": 154.51415427249782,
+        "sum_signed_current_yaw_jumps_deg": 6.1191537458984016,
+        "absolute_direct_fix_yaw_jump_deg": {
+          "n": 600,
+          "median": 0.16032841147959487,
+          "p95": 0.9341250614999059,
+          "max": 1.9925151179696474
+        },
+        "fixes_changing_current_yaw_over_0_1deg": 376,
+        "absolute_speed_before_fix_m_s": {
+          "n": 600,
+          "median": 0.20625357814452638,
+          "p95": 0.6213945159775189,
+          "max": 1.0232071388965864
+        },
+        "nonzero_yaw_position_cross_covariance": 600
+      }
+    },
+    "gyro_and_stationary_forward_offset_gnss": {
+      "position_error_m": {
+        "n": 601,
+        "median": 0.14153674528216026,
+        "p95": 0.4150652466671422,
+        "max": 0.6440874558970463
+      },
+      "absolute_heading_error_deg": {
+        "n": 601,
+        "median": 9.215282210015214,
+        "p95": 13.483901328629445,
+        "max": 14.404434386579547
+      },
+      "absolute_estimated_speed_m_s": {
+        "n": 601,
+        "median": 0.21645067094274714,
+        "p95": 0.6327978156142219,
+        "max": 1.0089211677873258
+      },
+      "gnss_jumps": {
+        "accepted_instrumented_fixes": 600,
+        "absolute_current_yaw_jump_deg": {
+          "n": 600,
+          "median": 0.12165326867767678,
+          "p95": 0.9320966400108108,
+          "max": 1.9306184711378376
+        },
+        "sum_absolute_current_yaw_jumps_deg": 137.16198903652034,
+        "sum_signed_current_yaw_jumps_deg": 11.505038973727698,
+        "absolute_direct_fix_yaw_jump_deg": {
+          "n": 600,
+          "median": 0.12165326868475032,
+          "p95": 0.9320966400230649,
+          "max": 1.9306184711437406
+        },
+        "fixes_changing_current_yaw_over_0_1deg": 325,
+        "absolute_speed_before_fix_m_s": {
+          "n": 600,
+          "median": 0.21615122929245487,
+          "p95": 0.6298488730808699,
+          "max": 1.008904661268987
+        },
+        "nonzero_yaw_position_cross_covariance": 600
+      }
+    }
+  },
+  "limits": "Offline counterfactual: same recorded native IMUs/fixes, common restart at 5 s using the original one-time surveyed-start-pose proxy; physics verifies stationarity and scores errors, never computes the offsets. Live GNSS consumption times are retained. This is not live startup calibration. Forward-offset control combines bias and gravity projection under a fixed stationary attitude; it is not a general accelerometer calibration.",
+  "original_start_replay_audit": {
+    "heading_difference_deg": {
+      "n": 600,
+      "median": 0.001673376177661778,
+      "p95": 0.002557025327152629,
+      "max": 0.0026328574508001808
+    },
+    "note": "Recorded bag inputs can omit samples received by the live EKF; compare noncoincident output/correction timestamps to avoid callback-order ambiguity."
+  }
+}

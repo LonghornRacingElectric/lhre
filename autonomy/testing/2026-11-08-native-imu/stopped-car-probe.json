@@ -1,0 +1,199 @@
+{
+  "capture": "data/imu-stop/seed3-probe",
+  "intervals": [
+    {
+      "interval": "initial_held",
+      "begin_s": 2.0,
+      "end_s": 4.0,
+      "truth_position_span_m": 0.0,
+      "truth_max_speed_m_s": 0.0,
+      "estimate_speed_begin_m_s": -0.05266932544310786,
+      "estimate_speed_end_m_s": -0.10458278559626807,
+      "estimate_position_travel_m": 0.15612462501837,
+      "imu_ax_mean_m_s2": -0.02581844476905881,
+      "imu_ax_std_m_s2": 0.006897082060363683,
+      "imu_ax_minus_startup_mean_m_s2": 0.0,
+      "diagnostic_gravity_x_mean_m_s2": -6.698268235918606e-11,
+      "max_abs_command_speed_m_s": 0.0
+    },
+    {
+      "interval": "physical_stop",
+      "begin_s": 16.06,
+      "end_s": 30.04,
+      "truth_position_span_m": 0.000857825685391255,
+      "truth_max_speed_m_s": 0.0037982810130678976,
+      "estimate_speed_begin_m_s": 5.960804153946547,
+      "estimate_speed_end_m_s": 5.602250675134285,
+      "estimate_position_travel_m": 80.87319584136232,
+      "imu_ax_mean_m_s2": -0.025609319275776695,
+      "imu_ax_std_m_s2": 0.0069683500143225266,
+      "imu_ax_minus_startup_mean_m_s2": 0.00020912549328211405,
+      "diagnostic_gravity_x_mean_m_s2": -3.1002730662942484e-07,
+      "max_abs_command_speed_m_s": 0.0
+    }
+  ],
+  "status_changes": [
+    {
+      "stamp_s": 0.3368189475590979,
+      "state": "OFF"
+    },
+    {
+      "stamp_s": 2.6006520399666946,
+      "state": "READY"
+    },
+    {
+      "stamp_s": 7.600978363591146,
+      "state": "DRIVING"
+    },
+    {
+      "stamp_s": 15.901390750256937,
+      "state": "EMERGENCY"
+    }
+  ],
+  "imu_samples": 3005,
+  "matched_native_samples": 3005,
+  "max_imu_gap_s": 0.010000000000001563,
+  "max_native_ros_difference": 0.0,
+  "probe_impulses": {
+    "offline_bias_m_s2": [
+      -0.025818444768373663,
+      0.2191046549276075,
+      0.20834692277965772
+    ],
+    "primary_median_dt_s": 0.009999999999999787,
+    "windows": [
+      {
+        "begin_s": 8,
+        "end_s": 14,
+        "sensor_world_delta_v_from_position": [
+          -4.34434026326926,
+          -2.2512675994403253,
+          -3.3091396289819386e-10
+        ],
+        "probe_1000hz": {
+          "world_delta_v_from_imu": [
+            -4.346112842807418,
+            -2.2494254726573875,
+            3.0060620831119247e-10
+          ],
+          "vector_error_m_s": 0.0025564563957783636
+        },
+        "primary": {
+          "world_delta_v_from_imu": [
+            -4.26757382811061,
+            -2.2102452574708957,
+            0.003288761254745924
+          ],
+          "vector_error_m_s": 0.08710186025792617
+        },
+        "probe_at_primary_timestamps": {
+          "world_delta_v_from_imu": [
+            -4.268130045144933,
+            -2.2143425871585323,
+            -4.084246350899633e-08
+          ],
+          "vector_error_m_s": 0.08468443705055607
+        }
+      },
+      {
+        "begin_s": 14,
+        "end_s": 16.3,
+        "sensor_world_delta_v_from_position": [
+          4.52891970051769,
+          2.1909144490819017,
+          4.814970026245646e-06
+        ],
+        "probe_1000hz": {
+          "world_delta_v_from_imu": [
+            4.529640598777349,
+            2.1894244973428902,
+            4.8632736616704975e-06
+          ],
+          "vector_error_m_s": 0.001655188958305295
+        },
+        "primary": {
+          "world_delta_v_from_imu": [
+            -1.5305843752603059,
+            -0.344016521573429,
+            -6.0075907568701234
+          ],
+          "vector_error_m_s": 8.901385803634797
+        },
+        "probe_at_primary_timestamps": {
+          "world_delta_v_from_imu": [
+            -1.530200900572469,
+            -0.348032198382905,
+            -6.007284597791601
+          ],
+          "vector_error_m_s": 8.902062605144152
+        }
+      },
+      {
+        "begin_s": 8,
+        "end_s": 16.3,
+        "sensor_world_delta_v_from_position": [
+          0.18457943724843062,
+          -0.06035315035842359,
+          4.814639112282748e-06
+        ],
+        "probe_1000hz": {
+          "world_delta_v_from_imu": [
+            0.18352775596992893,
+            -0.06000097531449661,
+            4.863574267750895e-06
+          ],
+          "vector_error_m_s": 0.0011090810500186976
+        },
+        "primary": {
+          "world_delta_v_from_imu": [
+            -5.798158203370916,
+            -2.5542617790443254,
+            -6.004301995615377
+          ],
+          "vector_error_m_s": 8.835407754958794
+        },
+        "probe_at_primary_timestamps": {
+          "world_delta_v_from_imu": [
+            -5.798330945717402,
+            -2.562374785541437,
+            -6.007284638634064
+          ],
+          "vector_error_m_s": 8.839844766110511
+        }
+      },
+      {
+        "begin_s": 17,
+        "end_s": 29,
+        "sensor_world_delta_v_from_position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "probe_1000hz": {
+          "world_delta_v_from_imu": [
+            -5.2890895330610564e-05,
+            -1.6344169660379944e-05,
+            -4.225802523016812e-09
+          ],
+          "vector_error_m_s": 5.5358637163664834e-05
+        },
+        "primary": {
+          "world_delta_v_from_imu": [
+            -0.0014626055013207046,
+            0.008740420255430046,
+            0.005887804407691209
+          ],
+          "vector_error_m_s": 0.01063956774672982
+        },
+        "probe_at_primary_timestamps": {
+          "world_delta_v_from_imu": [
+            -5.289982430763511e-05,
+            -1.634697215106277e-05,
+            -3.948090023797604e-09
+          ],
+          "vector_error_m_s": 5.536799550167677e-05
+        }
+      }
+    ]
+  }
+}

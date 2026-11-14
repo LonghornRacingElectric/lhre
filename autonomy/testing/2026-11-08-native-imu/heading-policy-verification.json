@@ -1,0 +1,17 @@
+{
+  "build": "16 packages passed ./scripts/build.sh",
+  "affected_tests": {
+    "lhr_state_estimation": 53,
+    "lhr_gazebo": 325,
+    "lhr_metrics": 74,
+    "total": 452
+  },
+  "strict_docs": "uv run --group docs mkdocs build --strict --site-dir /tmp/lhre-imu-stop-docs passed",
+  "runtime_defaults": {
+    "gnss_heading_gain": 1.0,
+    "yaw_rate_variance": 0.0004
+  },
+  "parameter_checks": "Default and nondefault real-node startup in sim/lidar branches, including metadata node; invalid controls rejected",
+  "scope": "Offline recorded and ideal synthetic comparisons, opt-in constant runtime gain; no default policy change, adaptive detector, live calibration or closed-loop validation",
+  "diff_check": "git diff --check passed"
+}

@@ -15,7 +15,7 @@ setup(
     zip_safe=True,
     maintainer='koa',
     maintainer_email='ya7897@eid.utexas.edu',
-    description='EKF vehicle state estimation from IMU and wheel speeds.',
+    description='IMU dead reckoning with optional legacy wheel-speed corrections.',
     license='MIT',
     tests_require=['pytest'],
     entry_points={

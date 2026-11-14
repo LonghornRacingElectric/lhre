@@ -1,0 +1,43 @@
+{
+  "capture": "data/gnss-study/standard-50hz",
+  "fixes": 1501,
+  "fusion_decisions": 1494,
+  "accepted": 1494,
+  "reasons": {
+    "fused": 1494
+  },
+  "raw_noise_stddev_enu_m": [
+    0.8097259321197253,
+    0.7992687275644159,
+    1.1965020208263464
+  ],
+  "mean_reported_variance_enu_m2": [
+    0.6399999999999882,
+    0.6399999999999882,
+    1.440000000000041
+  ],
+  "median_fix_period_s": 0.019999999999999574,
+  "median_fusion_age_s": 0.05000000000000071,
+  "pre_contact_decisions": {
+    "fused": 639
+  },
+  "pre_contact_mean_position_error_m": 0.1923821040154079,
+  "pre_contact_max_position_error_m": 1.595437745447291,
+  "common_route_section_m": [
+    1,
+    6
+  ],
+  "common_section_samples": 103,
+  "common_section_mean_position_error_m": 0.2368643154864844,
+  "common_section_max_position_error_m": 0.6485165340385998,
+  "common_section_mean_heading_error_rad": 0.034388561123097114,
+  "full_trace_max_position_error_m": 1.595437745447291,
+  "heading_error_at_6s_rad": 0.06749873486705057,
+  "first_physics_contact": [
+    [
+      12.83,
+      "fsae_vehicle::chassis::body_collision",
+      "cone_yellow_25::link::collision"
+    ]
+  ]
+}

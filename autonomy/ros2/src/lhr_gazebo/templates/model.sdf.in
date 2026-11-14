@@ -50,9 +50,12 @@
       <sensor name="imu_sensor" type="imu">
         <pose>0 0 0 0 0 0</pose>
         <always_on>true</always_on>
-        <update_rate>100</update_rate>
+        <update_rate>${imu_update_rate_hz}</update_rate>
         <visualize>false</visualize>
         <topic>/imu/data</topic>
+        <imu>
+${imu_noise}
+        </imu>
       </sensor>
 
       <!-- Retain main's VLP-16-style grid. The 500 x 40 Mid-360 approximation
@@ -350,12 +353,19 @@ ${stereo_camera}
       <cmd_min>-10.0</cmd_min>
     </plugin>
 
-    <!-- ===== DRIVE: direct velocity control ===== -->
+    <!-- Force-based speed tracking preserves acceleration at the 100 Hz IMU;
+         direct joint velocity commands produce pulses that it can miss. -->
     <plugin
       filename="gz-sim-joint-controller-system"
       name="gz::sim::systems::JointController">
       <joint_name>front_left_wheel_joint</joint_name>
       <topic>/model/fsae_vehicle/joint/front_left_wheel_joint/cmd_vel</topic>
+      <use_force_commands>true</use_force_commands>
+      <p_gain>${drive_p_gain}</p_gain>
+      <i_gain>0</i_gain>
+      <d_gain>0</d_gain>
+      <cmd_max>${drive_max_torque}</cmd_max>
+      <cmd_min>${drive_min_torque}</cmd_min>
     </plugin>
 
     <plugin
@@ -363,6 +373,12 @@ ${stereo_camera}
       name="gz::sim::systems::JointController">
       <joint_name>front_right_wheel_joint</joint_name>
       <topic>/model/fsae_vehicle/joint/front_right_wheel_joint/cmd_vel</topic>
+      <use_force_commands>true</use_force_commands>
+      <p_gain>${drive_p_gain}</p_gain>
+      <i_gain>0</i_gain>
+      <d_gain>0</d_gain>
+      <cmd_max>${drive_max_torque}</cmd_max>
+      <cmd_min>${drive_min_torque}</cmd_min>
     </plugin>
 
     <plugin
@@ -370,6 +386,12 @@ ${stereo_camera}
       name="gz::sim::systems::JointController">
       <joint_name>rear_left_wheel_joint</joint_name>
       <topic>/model/fsae_vehicle/joint/rear_left_wheel_joint/cmd_vel</topic>
+      <use_force_commands>true</use_force_commands>
+      <p_gain>${drive_p_gain}</p_gain>
+      <i_gain>0</i_gain>
+      <d_gain>0</d_gain>
+      <cmd_max>${drive_max_torque}</cmd_max>
+      <cmd_min>${drive_min_torque}</cmd_min>
     </plugin>
 
     <plugin
@@ -377,6 +399,12 @@ ${stereo_camera}
       name="gz::sim::systems::JointController">
       <joint_name>rear_right_wheel_joint</joint_name>
       <topic>/model/fsae_vehicle/joint/rear_right_wheel_joint/cmd_vel</topic>
+      <use_force_commands>true</use_force_commands>
+      <p_gain>${drive_p_gain}</p_gain>
+      <i_gain>0</i_gain>
+      <d_gain>0</d_gain>
+      <cmd_max>${drive_max_torque}</cmd_max>
+      <cmd_min>${drive_min_torque}</cmd_min>
     </plugin>
 
     <!-- ===== GROUND-TRUTH ODOMETRY (world-frame pose, not wheel encoders) ===== -->

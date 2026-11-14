@@ -44,10 +44,66 @@ def test_loads_orion():
     assert 0.15 < veh.wheel_radius_m < 0.25
 
 
+def test_imu_si_conversion_and_bandwidth():
+    imu = load_vehicle().imu
+    assert imu.gyro_stddev_rad_s == pytest.approx(math.radians(0.0045) * math.sqrt(500))
+    assert imu.accel_stddev_m_s2 == pytest.approx(100e-6 * 9.80665 * math.sqrt(500))
+    assert imu.gyro_bias_stddev_rad_s == pytest.approx(math.radians(1) / 3)
+    assert imu.accel_bias_stddev_m_s2 == pytest.approx(0.040 * 9.80665 / 3)
+
+
+@pytest.mark.parametrize('field,value', [
+    ('update_rate_hz', 0), ('horizontal_stddev_m', -1),
+    ('vertical_stddev_m', float('nan')), ('latency_s', -.1),
+    ('position_m', [0, float('inf'), 0])])
+def test_invalid_gnss_configuration_is_rejected(tmp_path, field, value):
+    raw = yaml.safe_load(config_path().read_text())
+    raw['sensors']['gnss'][field] = value
+    path = tmp_path / 'vehicle.yaml'
+    path.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ValueError, match=field):
+        load_vehicle(path)
+
+
+def test_higher_imu_rate_preserves_integrated_white_noise_intensity():
+    """Oversampling must not silently reduce the configured sensor noise."""
+    imu = load_vehicle().imu
+    assert imu.gyro_stddev_rad_s**2/imu.update_rate_hz == pytest.approx(
+        (math.radians(0.0045)*math.sqrt(50))**2/100)
+    assert imu.accel_stddev_m_s2**2/imu.update_rate_hz == pytest.approx(
+        (100e-6*9.80665*math.sqrt(50))**2/100)
+
+
+@pytest.mark.parametrize('field,value', [
+    ('update_rate_hz', 0), ('noise_bandwidth_hz', 501),
+    ('noise_bandwidth_hz', -1), ('gyro_bias_stddev_rad_s', float('nan')),
+    ('accel_bias_stddev_m_s2', float('inf')), ('gyro_noise_density_rad_s_sqrt_hz', True),
+    ('accel_noise_density_m_s2_sqrt_hz', 'bad'),
+])
+def test_imu_rejects_invalid_configuration(tmp_path, field, value):
+    raw = yaml.safe_load(config_path().read_text())
+    raw['sensors']['imu'][field] = value
+    source = tmp_path / 'vehicle.yaml'
+    source.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ValueError, match=field):
+        load_vehicle(source)
+
+
 def test_steering_limit_is_physical():
     veh = load_vehicle()
     assert 0.0 < veh.max_steer_rad < math.pi / 2
     assert veh.max_steer_rate_rad_s > 0.0
+
+
+@pytest.mark.parametrize('field', ['velocity_p_gain_nm_s_rad', 'max_wheel_torque_nm'])
+@pytest.mark.parametrize('value', [0, -1, float('nan'), float('inf'), True, None])
+def test_invalid_gazebo_drive_configuration_is_rejected(tmp_path, field, value):
+    raw = yaml.safe_load(config_path().read_text())
+    raw['simulation']['gazebo_drive'][field] = value
+    source = tmp_path / 'vehicle.yaml'
+    source.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ValueError, match=field):
+        load_vehicle(source)
 
 
 def test_lidar_sits_on_the_car():

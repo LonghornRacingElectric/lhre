@@ -62,7 +62,7 @@ Node cleanup tolerates an already-stopped ROS context after launch shutdown.
 
 ## inertial_sim
 
-The second node, started by `estimator:=ekf`. It degrades
+The inertial node, started by `estimator:=ekf` when synthetic IMU or wheel output is needed. It degrades
 `/lhr/vehicle/odom_truth` into `/lhr/imu/data` and four wheel speeds on
 `/lhr/sensor/wheel_speeds`, the inputs the
 [EKF](../lhr_state_estimation/README.md) fuses. Feeding the filter raw
@@ -88,5 +88,39 @@ pair.
 | `publish_imu` | true | Publish the synthetic IMU |
 
 Gazebo sets `publish_imu` false because it bridges a physics IMU on the
-same topic, so under Gazebo `gyro_bias` and the IMU noise do nothing;
-only the wheel-speed terms apply.
+same topic. Its synthetic IMU parameters therefore do nothing in Gazebo;
+the Gazebo launch applies `gyro_bias` to the native physics sensor separately.
+The wheel publisher is omitted when wheel fusion is disabled.
+
+## gnss_sim
+
+Simulation-only `gnss_sim` publishes noisy `sensor_msgs/NavSatFix` from the
+plant's antenna position. Gazebo starts it only with
+`estimator:=ekf use_gnss:=true simulate_gnss:=true`. This is a separate sensor
+model: the EKF sees uncertain position fixes, never continuous truth odometry.
+The existing truth start-pose initialization remains separate.
+
+A local seeded generator adds independent white Gaussian ENU position error.
+The message contains its actual diagonal variance, fix status, antenna frame
+and measurement timestamp. Delivery is delayed without changing that stamp.
+Only distinct plant samples are used: requesting 100 Hz from 50 Hz truth still
+produces at most 50 Hz. No GPS heading, velocity, multipath, time-correlated
+error, dropout or RTK convergence is simulated. These profiles are experimental
+assumptions, not validation against the physical receiver.
+
+| Parameter | Default | Meaning |
+| --- | --- | --- |
+| `gnss_rate_hz` | vehicle YAML: 50 Hz | Maximum acquisition rate |
+| `gnss_horizontal_stddev_m` | vehicle YAML: 0.8 m | Independent per-axis east/north sigma |
+| `gnss_vertical_stddev_m` | vehicle YAML: 1.2 m | Up sigma; not fused by the planar EKF |
+| `gnss_latency_s` | vehicle YAML: 0.05 s | Simulated delivery delay |
+| `gnss_topic` / `gnss_frame_id` | `/lhr/gnss/fix` / `gnss_link` | Output and antenna identity |
+| `gnss_origin_latitude_deg` / `gnss_origin_longitude_deg` / `gnss_origin_altitude_m` | 0/0/0 | WGS84 datum, degrees and ellipsoid metres |
+| `seed` | 0 standalone; Gazebo's course seed | Node-local random stream |
+| `truth_topic` | `/lhr/vehicle/odom_truth` | Private plant input |
+
+All controls are typed Gazebo launch arguments in both perception modes.
+`truth_topic` is deliberately private plant wiring, supplied by the launch
+rather than exposed as a public argument. Antenna placement comes only from
+`load_vehicle().gnss.position_m`; the simulator rotates its full 3D mount,
+while the EKF currently compensates only the planar lever arm.

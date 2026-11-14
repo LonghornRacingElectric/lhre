@@ -1,0 +1,112 @@
+{
+  "capture": "data/live-gyro-heading/stationary-r3",
+  "actual_calibrate_gyro": true,
+  "actual_gnss_heading_gain": 0.0,
+  "calibration": {
+    "state": "ready",
+    "reason": "stationary_window_verified",
+    "restarts": 0,
+    "last_restart_reason": null,
+    "last_imu_s": 5.516,
+    "last_cloud_s": 5.5,
+    "bias_z_rad_s": -0.007938882483870544,
+    "samples": 3001,
+    "clouds": 31,
+    "window_start_s": 2.5,
+    "window_end_s": 5.5,
+    "gyro_std_rad_s": [
+      0.001737901406284379,
+      0.001717574575979286,
+      0.001732458285293146
+    ],
+    "accel_std_m_s2": [
+      0.021499001772901264,
+      0.021714579580328363,
+      0.022094884002846496
+    ],
+    "max_lidar_translation_m": 0.006767043974686742,
+    "max_lidar_yaw_deg": 0.01921647646495814
+  },
+  "calibration_physics_motion": {
+    "physics_samples": 3001,
+    "physics_max_translation_from_window_start_m": 0.0,
+    "physics_max_heading_change_deg": 0.0,
+    "physics_max_linear_speed_m_s": 0.0,
+    "command_samples": 61,
+    "max_abs_commanded_speed_m_s": 0.0,
+    "mission_states_whole_capture": {
+      "OFF": 72,
+      "READY": 68,
+      "EMERGENCY": 157
+    },
+    "stationary_verified_over_calibration_window": true
+  },
+  "native_mean_gyro_z_over_calibration_rad_s": -0.007938882483870544,
+  "bias_vs_native_mean_difference_rad_s": 0.0,
+  "first_odom_stamp_s": 5.518,
+  "no_odom_before_calibration": true,
+  "first_driving_clock_s": null,
+  "first_emergency_clock_s": 14.547,
+  "observed_safety_faults": [
+    [
+      0.157,
+      "ODOM_STALE"
+    ],
+    [
+      14.501,
+      "CMD_STALE"
+    ]
+  ],
+  "score_window_s": [
+    8,
+    20
+  ],
+  "held_out_corrected_gyro_mean_deg_s": -0.000383983243521621,
+  "heading_error_deg": {
+    "n": 577,
+    "median": 0.003930040286424944,
+    "p95": 0.011219698440928051,
+    "max": 0.015535874867850803
+  },
+  "position_error_m": {
+    "n": 577,
+    "median": 0.1501753712095749,
+    "p95": 0.40729879998554713,
+    "max": 0.6491912091537858
+  },
+  "full_recording_heading_error_deg": {
+    "n": 1207,
+    "median": 0.007763124524526047,
+    "p95": 0.01453606276006012,
+    "max": 0.017951716611170725
+  },
+  "actual_gps_heading_jumps": {
+    "accepted_instrumented_fixes": 577,
+    "absolute_current_yaw_jump_deg": {
+      "n": 577,
+      "median": 0.0,
+      "p95": 0.0,
+      "max": 1.0177774980683254e-13
+    },
+    "sum_absolute_current_yaw_jumps_deg": 1.526666247102488e-13,
+    "sum_signed_current_yaw_jumps_deg": 5.088887490341627e-14,
+    "absolute_direct_fix_yaw_jump_deg": {
+      "n": 577,
+      "median": 0.0,
+      "p95": 0.0,
+      "max": 0.0
+    },
+    "fixes_changing_current_yaw_over_0_1deg": 0,
+    "absolute_speed_before_fix_m_s": {
+      "n": 577,
+      "median": 0.22092208387781956,
+      "p95": 0.6466581634315385,
+      "max": 1.016076116580121
+    },
+    "nonzero_yaw_position_cross_covariance": 577
+  },
+  "first_native_cone_contact": [],
+  "native_capture_end_s": 30.151,
+  "limits": "Live simulator profile, not physical-car calibration or validation of uncertain initial heading. Existing one-time Gazebo start-pose seed remains. No zero-velocity/accelerometer calibration or map retention change.",
+  "metrics": null
+}

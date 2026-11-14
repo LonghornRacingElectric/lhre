@@ -1,0 +1,123 @@
+{
+  "date": "2026-11-14",
+  "base_commit": "da9d5a95a9a49679a05c5a313432dfb8a55626dd",
+  "working_tree_modified": true,
+  "args": {
+    "launch_args": [
+      "ros2",
+      "launch",
+      "lhr_gazebo",
+      "gazebo_demo.launch.py",
+      "gui:=false",
+      "rviz:=false",
+      "foxglove:=false",
+      "track_style:=autocross",
+      "seed:=3",
+      "perception:=lidar",
+      "estimator:=ekf",
+      "imu_noise:=true",
+      "use_wheel_speeds:=false",
+      "safety:=true",
+      "safety_lidar_timeout_s:=1.5",
+      "output_csv:=/home/black-book/lhre/autonomy/ros2/data/heading-attribution/gps08-live/metrics.csv",
+      "world:=/home/black-book/lhre/autonomy/ros2/data/heading-attribution/gps08-live/probe-world.sdf",
+      "use_gnss:=true",
+      "gnss_rate_hz:=50.0",
+      "gnss_horizontal_stddev_m:=0.8",
+      "gnss_latency_s:=0.05",
+      "auto_go:=false"
+    ],
+    "stop_sim_time": 20.0,
+    "vehicle_sha256": "77bfe782b6748d906a31fee764c336abe1afdeb7c2914fbbb320d731e54418f5",
+    "ROS_DOMAIN_ID": "121",
+    "GZ_PARTITION": "gnss-heading-attribution",
+    "high_rate_probe": true,
+    "imu_config": {
+      "update_rate_hz": 1000.0,
+      "noise_bandwidth_hz": 500.0,
+      "gyro_noise_density_rad_s_sqrt_hz": 7.853981633974483e-05,
+      "accel_noise_density_m_s2_sqrt_hz": 0.000980665,
+      "gyro_bias_stddev_rad_s": 0.005817764173314432,
+      "accel_bias_stddev_m_s2": 0.13075533333333333
+    },
+    "emergency_at_s": null,
+    "perception_study": true,
+    "use_gnss": true,
+    "stationary_requested": true,
+    "gnss_profile": {
+      "rate_hz": 50.0,
+      "sigma_m": 0.8,
+      "latency_s": 0.05
+    }
+  },
+  "actual_native_capture_end_s": 32.412,
+  "score_window_s": [
+    8,
+    20
+  ],
+  "calibration_window_s": [
+    2,
+    5
+  ],
+  "counterfactual_restart_s": 5,
+  "verification": {
+    "build": "16 packages passed ./scripts/build.sh",
+    "affected_tests": {
+      "lhr_state_estimation": 38,
+      "lhr_gazebo": 322,
+      "total": 360
+    },
+    "strict_docs": "uv run --group docs mkdocs build --strict --site-dir /tmp/lhre-imu-stop-docs passed",
+    "diff_check": "git diff --check passed",
+    "live_capture": "Headless, stationary requested; physics and commands independently verified",
+    "native_ros_input_equivalence": {
+      "native_samples": 32412,
+      "recorded_ros_samples": 32019,
+      "shared_samples": 32019,
+      "shared_sample_max_component_difference": 0.0,
+      "note": "Use complete native sensor inputs after verifying identical bridged values; bag recording can miss messages that the live EKF received."
+    },
+    "replay_fidelity": {
+      "heading_difference_deg": {
+        "n": 600,
+        "median": 0.001673376177661778,
+        "p95": 0.002557025327152629,
+        "max": 0.0026328574508001808
+      },
+      "note": "Recorded bag inputs can omit samples received by the live EKF; compare noncoincident output/correction timestamps to avoid callback-order ambiguity."
+    },
+    "scope": "Actual per-fix diagnostic logging plus offline calibration controls; no live calibration, stationary-state update, mapping fix, driving/gate or physical validation"
+  },
+  "source_sha256": {
+    "src/lhr_state_estimation/lhr_state_estimation/ekf.py": "26215b85434d208cb118576103ae38abe1cb39e4f1348d6fbf53880e745e07c1",
+    "src/lhr_state_estimation/lhr_state_estimation/ekf_node.py": "93d0f53a1ce106a550c8dd044edc61b8f99f84b5de32681c1e1840b2c0ea26c9",
+    "src/lhr_state_estimation/lhr_state_estimation/gnss.py": "da646a968eaae79810191faf1b93e170d19eb5275bb2588a76829a229973d0de",
+    "src/lhr_state_estimation/test/test_gnss.py": "399edb9e8a0b6e272073f4c26b0bbc35c10734c506d4ec6500bb09811cf805ae",
+    "src/lhr_state_estimation/test/test_gnss_node.py": "983fe3bb39169bed7ac72f99994be76adf24952f409bf1c3b22fbdae76ecbed8",
+    "src/lhr_gazebo/scripts/audit_gnss_heading.py": "dca406429ea21401b1ff1765f27a635a56a60d4b9edf7cf2163ddaf61b2c5907",
+    "src/lhr_gazebo/scripts/analyze_stationary_cones.py": "d1fed0a129c1a78c2bc8935416d6126c8d266764d44300ac71c3ccfe983243a8",
+    "src/lhr_gazebo/scripts/record_ekf_stop.py": "f64bdffb673c02318cb13632031049a61b46a24c259ecd42e3475501b670c38e",
+    "src/lhr_gazebo/test/test_heading_attribution.py": "68dd9e77e7352af3cdca933fde3e7d71e5a30007e1703b182b347ce32532497c",
+    "src/lhr_gazebo/launch/gazebo_demo.launch.py": "fc6e20f5f400a4033e1b3b5fa605322281f0a5f53ee53e6768ebd2afeece209c",
+    "src/lhr_vehicle/config/vehicle.yaml": "77bfe782b6748d906a31fee764c336abe1afdeb7c2914fbbb320d731e54418f5",
+    "src/lhr_sensor_sim/lhr_sensor_sim/gnss_sim_node.py": "49034fa0779506f94066ed938c0b82653ee3c6cef4a06aee640dff62739d424a"
+  },
+  "raw_sha256": {
+    "args.json": "71a04cfc63eb0825ca4a78de45aa854d9dc2103f49450f1c635d663a0f9f7e47",
+    "bag/bag_0.mcap": "4ecacdd1b694fa94e552e8ffc75eb0bd6baa47f4384b5165e46a29e749a589e3",
+    "bag/metadata.yaml": "c39be1db4efe20610ed7885e196d1759688cdf45ca0f60d9f73e3d018a939bc7",
+    "cone-contacts.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "contact-audit.json": "21ed59f8de5c884bf8081d2767054d282d81c50b18f6f88e49072bead25ce5c2",
+    "ekf_node-params.yaml": "452491ab97568be35ea7a08929d66763fb4e1f68e06aed4fa1c5fee811150ca2",
+    "gnss_sim-params.yaml": "c2a4d5485465f46594c9c1a39e8bd955ddb14b8ae2a735c03061313c3dc86b41",
+    "lidar_cone_detector-params.yaml": "f89cc353b5209e97a1adc41738048dfe6b2d18f0226dfa175966693c296f0dfc",
+    "mission_manager-params.yaml": "871f9f0284858d8a001cbb84a5e935630c6150ad6ef2f74817aaf5c7b86dfc2b",
+    "native-imu.csv": "6d99ea69fdc9d08b20840855d6cf2d605716203e597407efb34fe10584ae5de9",
+    "probe-imu.csv": "2dad0ed953eeda24881185b7aab5fa2386bc3348e688289a3eee817cf8812ec8",
+    "probe-odom3d.csv": "4b81024b36535891ff16a3efb757f22d0646e7b409e8f109e2efd62361bbb2e7",
+    "probe-vehicle.sdf": "5ac7896206acd4c58eea4dd60146a503ffb93ae0af9eb31f5940ca0d15f07835",
+    "probe-world.sdf": "f982cfc7269b194145af422c3d29e0205ca10692ab32dddde6c414c1f553e3a7",
+    "pure_pursuit-params.yaml": "897137e085f6c7ad3899e4e1960f7d0c51ec4fcab384e5aa7e2bd210e1a15410",
+    "track_builder-params.yaml": "ede59f745f43b12e5808f8d78c01e75132ea95f8af65cf8e606045ce7b31dd63"
+  }
+}

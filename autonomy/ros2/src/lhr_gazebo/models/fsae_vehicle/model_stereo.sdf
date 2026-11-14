@@ -50,9 +50,21 @@
       <sensor name="imu_sensor" type="imu">
         <pose>0 0 0 0 0 0</pose>
         <always_on>true</always_on>
-        <update_rate>100</update_rate>
+        <update_rate>1000</update_rate>
         <visualize>false</visualize>
         <topic>/imu/data</topic>
+        <imu>
+          <angular_velocity>
+            <x><noise type="gaussian"><mean>0</mean><stddev>0.00175620368276</stddev><bias_mean>0</bias_mean><bias_stddev>0.00581776417331</bias_stddev></noise></x>
+            <y><noise type="gaussian"><mean>0</mean><stddev>0.00175620368276</stddev><bias_mean>0</bias_mean><bias_stddev>0.00581776417331</bias_stddev></noise></y>
+            <z><noise type="gaussian"><mean>0</mean><stddev>0.00175620368276</stddev><bias_mean>0</bias_mean><bias_stddev>0.00581776417331</bias_stddev></noise></z>
+          </angular_velocity>
+          <linear_acceleration>
+            <x><noise type="gaussian"><mean>0</mean><stddev>0.0219283360315</stddev><bias_mean>0</bias_mean><bias_stddev>0.130755333333</bias_stddev></noise></x>
+            <y><noise type="gaussian"><mean>0</mean><stddev>0.0219283360315</stddev><bias_mean>0</bias_mean><bias_stddev>0.130755333333</bias_stddev></noise></y>
+            <z><noise type="gaussian"><mean>0</mean><stddev>0.0219283360315</stddev><bias_mean>0</bias_mean><bias_stddev>0.130755333333</bias_stddev></noise></z>
+          </linear_acceleration>
+        </imu>
       </sensor>
 
       <!-- Retain main's VLP-16-style grid. The 500 x 40 Mid-360 approximation
@@ -405,12 +417,19 @@
       <cmd_min>-10.0</cmd_min>
     </plugin>
 
-    <!-- ===== DRIVE: direct velocity control ===== -->
+    <!-- Force-based speed tracking preserves acceleration at the 100 Hz IMU;
+         direct joint velocity commands produce pulses that it can miss. -->
     <plugin
       filename="gz-sim-joint-controller-system"
       name="gz::sim::systems::JointController">
       <joint_name>front_left_wheel_joint</joint_name>
       <topic>/model/fsae_vehicle/joint/front_left_wheel_joint/cmd_vel</topic>
+      <use_force_commands>true</use_force_commands>
+      <p_gain>10</p_gain>
+      <i_gain>0</i_gain>
+      <d_gain>0</d_gain>
+      <cmd_max>100</cmd_max>
+      <cmd_min>-100</cmd_min>
     </plugin>
 
     <plugin
@@ -418,6 +437,12 @@
       name="gz::sim::systems::JointController">
       <joint_name>front_right_wheel_joint</joint_name>
       <topic>/model/fsae_vehicle/joint/front_right_wheel_joint/cmd_vel</topic>
+      <use_force_commands>true</use_force_commands>
+      <p_gain>10</p_gain>
+      <i_gain>0</i_gain>
+      <d_gain>0</d_gain>
+      <cmd_max>100</cmd_max>
+      <cmd_min>-100</cmd_min>
     </plugin>
 
     <plugin
@@ -425,6 +450,12 @@
       name="gz::sim::systems::JointController">
       <joint_name>rear_left_wheel_joint</joint_name>
       <topic>/model/fsae_vehicle/joint/rear_left_wheel_joint/cmd_vel</topic>
+      <use_force_commands>true</use_force_commands>
+      <p_gain>10</p_gain>
+      <i_gain>0</i_gain>
+      <d_gain>0</d_gain>
+      <cmd_max>100</cmd_max>
+      <cmd_min>-100</cmd_min>
     </plugin>
 
     <plugin
@@ -432,6 +463,12 @@
       name="gz::sim::systems::JointController">
       <joint_name>rear_right_wheel_joint</joint_name>
       <topic>/model/fsae_vehicle/joint/rear_right_wheel_joint/cmd_vel</topic>
+      <use_force_commands>true</use_force_commands>
+      <p_gain>10</p_gain>
+      <i_gain>0</i_gain>
+      <d_gain>0</d_gain>
+      <cmd_max>100</cmd_max>
+      <cmd_min>-100</cmd_min>
     </plugin>
 
     <!-- ===== GROUND-TRUTH ODOMETRY (world-frame pose, not wheel encoders) ===== -->

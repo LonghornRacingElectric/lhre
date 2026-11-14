@@ -1,0 +1,31 @@
+{
+  "capture": "data/cone-path-study/ekf-native-r4",
+  "fixes": 0,
+  "fusion_decisions": 0,
+  "accepted": 0,
+  "reasons": {},
+  "raw_noise_stddev_enu_m": null,
+  "mean_reported_variance_enu_m2": null,
+  "median_fix_period_s": null,
+  "median_fusion_age_s": null,
+  "pre_contact_decisions": {},
+  "pre_contact_mean_position_error_m": 2.993614755348774,
+  "pre_contact_max_position_error_m": 9.210807154186934,
+  "common_route_section_m": [
+    1,
+    6
+  ],
+  "common_section_samples": 103,
+  "common_section_mean_position_error_m": 1.2532669325994463,
+  "common_section_max_position_error_m": 1.5598174531234488,
+  "common_section_mean_heading_error_rad": 0.07773082058330054,
+  "full_trace_max_position_error_m": 12.895551762621457,
+  "heading_error_at_6s_rad": 0.04747619437205936,
+  "first_physics_contact": [
+    [
+      23.329,
+      "fsae_vehicle::front_right_wheel::collision",
+      "cone_yellow_54::link::collision"
+    ]
+  ]
+}

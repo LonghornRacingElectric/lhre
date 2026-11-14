@@ -1,0 +1,4 @@
+profile,section_start_m,section_end_m,samples,mean_position_error_m,max_position_error_m,mean_heading_error_rad,first_native_contact_s,first_contact_cone,fixes,accepted,innovation_gate_rejections
+baseline,1,6,103,1.2532669325994463,1.5598174531234488,0.07773082058330054,23.329,cone_yellow_54::link::collision,0,0,0
+standard,1,6,103,0.2368643154864844,0.6485165340385998,0.034388561123097114,12.83,cone_yellow_25::link::collision,1501,1494,0
+rtk-like,1,6,95,0.030100152899536606,0.07372645608153724,0.00925702882324587,14.328,cone_blue_28::link::collision,1498,765,727

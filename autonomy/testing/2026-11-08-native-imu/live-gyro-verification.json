@@ -1,0 +1,14 @@
+{
+  "build": "16 packages passed",
+  "tests": {
+    "lhr_state_estimation": 63,
+    "lhr_gazebo": 325,
+    "lhr_metrics": 74,
+    "total": 462
+  },
+  "strict_docs": "uv run --group docs mkdocs build --strict --site-dir /tmp/lhre-imu-stop-docs passed",
+  "script_smoke": "Exact wrapper ran headlessly, reached calibration ready and READY; bounded SIGINT stop. GUI rendering not tested by agent.",
+  "scope": "Live simulator prototype; no physical-car calibration certification, unknown-initial-heading recovery, full lap or gate pass.",
+  "diff_check": "git diff --check and bash -n scripts/run_gyro_heading_demo.sh passed",
+  "headless_wrapper_log_sha256": "9db304465957d8d97332916199d6813a139bf924a0723218e43af41c054e8a92"
+}

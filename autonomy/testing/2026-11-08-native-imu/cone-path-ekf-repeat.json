@@ -1,0 +1,202 @@
+{
+  "capture": "data/cone-path-study/ekf-native-r3",
+  "frames": 219,
+  "pre_contact_frames": 137,
+  "first_native_cone_contact_s": null,
+  "contact_audit": {
+    "messages": 88008,
+    "contacts": 88008,
+    "examples": [
+      [
+        28,
+        "fsae_vehicle::rear_left_wheel::collision",
+        7,
+        "ground_plane::link::collision"
+      ],
+      [
+        24,
+        "fsae_vehicle::front_right_wheel::collision",
+        7,
+        "ground_plane::link::collision"
+      ],
+      [
+        32,
+        "fsae_vehicle::rear_right_wheel::collision",
+        7,
+        "ground_plane::link::collision"
+      ],
+      [
+        19,
+        "fsae_vehicle::front_left_wheel::collision",
+        7,
+        "ground_plane::link::collision"
+      ],
+      [
+        28,
+        "fsae_vehicle::rear_left_wheel::collision",
+        7,
+        "ground_plane::link::collision"
+      ]
+    ]
+  },
+  "first_conservative_cone_overlap_s": 21.022,
+  "cutoff_s": 20.721999999999998,
+  "pose_error_m": {
+    "median": 2.9895232667931038,
+    "max": 7.587009299652104,
+    "min": 0.6537887965096513
+  },
+  "physical_centerline_cte_m": {
+    "median": 0.23954941934107699,
+    "max": 0.6821134854174561,
+    "min": 3.66205343881779e-15
+  },
+  "live_car_to_displayed_path_m": {
+    "median": 0.10942750994246894,
+    "max": 0.47600030164101836,
+    "min": 0.0007098656568624359
+  },
+  "live_commanded_path_clearance_m": {
+    "median": 0.2738700247643592,
+    "max": 0.5689269140535634,
+    "min": -0.16122034611053282
+  },
+  "estimated_map_count": {
+    "median": 69.0,
+    "max": 107.0,
+    "min": 27.0
+  },
+  "estimated_local_map_error_median_m": {
+    "median": 0.970837115427901,
+    "max": 2.822546154138739,
+    "min": 0.46423197365543933
+  },
+  "estimated_local_map_error_p95_m": {
+    "median": 2.4317754118340127,
+    "max": 5.2424751786613495,
+    "min": 0.6248962375847622
+  },
+  "estimated_path_clearance_m": {
+    "median": 0.3192579253112514,
+    "max": 0.5477574364999981,
+    "min": -0.16122034611053282
+  },
+  "estimated_car_to_displayed_path_m": {
+    "median": 0.16424435487700062,
+    "max": 0.5361960903810344,
+    "min": 0.0032824166495510816
+  },
+  "truth_map_count": {
+    "median": 64.0,
+    "max": 101.0,
+    "min": 27.0
+  },
+  "truth_local_map_error_median_m": {
+    "median": 0.022045648646182636,
+    "max": 0.029780059144302214,
+    "min": 0.01724093578461301
+  },
+  "truth_local_map_error_p95_m": {
+    "median": 0.0368022878751779,
+    "max": 0.05320324075535316,
+    "min": 0.03155593717800491
+  },
+  "truth_path_clearance_m": {
+    "median": 0.6126085835995989,
+    "max": 0.6898396052389226,
+    "min": -0.16122034611053282
+  },
+  "truth_car_to_displayed_path_m": {
+    "median": 0.3076737949623989,
+    "max": 0.7986049575115713,
+    "min": 0.00035867592666549995
+  },
+  "oracle_observed_path_clearance_m": {
+    "median": 0.6157731820880906,
+    "max": 0.6799310783411984,
+    "min": 0.4437059047155898
+  },
+  "oracle_visible_path_clearance_m": {
+    "median": 0.6157731820880906,
+    "max": 0.6799310783411984,
+    "min": 0.4437059047155898
+  },
+  "oracle_colored_path_clearance_m": {
+    "median": 0.6157731820880906,
+    "max": 0.6799310783411984,
+    "min": 0.4437059047155898
+  },
+  "rigid_map_count": {
+    "median": 64.0,
+    "max": 101.0,
+    "min": 27.0
+  },
+  "rigid_local_map_error_median_m": {
+    "median": 0.02204564864618088,
+    "max": 0.029780059144304365,
+    "min": 0.017240935784603763
+  },
+  "rigid_local_map_error_p95_m": {
+    "median": 0.03680228787518066,
+    "max": 0.053203240755356165,
+    "min": 0.031555937178004125
+  },
+  "rigid_path_clearance_m": {
+    "median": 0.6126085835995841,
+    "max": 0.6898396052389154,
+    "min": -0.16122034611053282
+  },
+  "rigid_car_to_displayed_path_m": {
+    "median": 0.30767379496239866,
+    "max": 0.7986049575115705,
+    "min": 0.00035867592666549995
+  },
+  "instant_map_count": {
+    "median": 25.0,
+    "max": 30.0,
+    "min": 19.0
+  },
+  "instant_local_map_error_median_m": {
+    "median": 0.030940606705623045,
+    "max": 0.03973155676977309,
+    "min": 0.02107992153687757
+  },
+  "instant_local_map_error_p95_m": {
+    "median": 0.05123934892005323,
+    "max": 0.07591326277123557,
+    "min": 0.0400842596298811
+  },
+  "instant_path_clearance_m": {
+    "median": 0.6130808216894555,
+    "max": 0.6833078747335509,
+    "min": 0.4233211859556498
+  },
+  "instant_car_to_displayed_path_m": {
+    "median": 0.3059869200047735,
+    "max": 0.8000078254900328,
+    "min": 0.00327844264667167
+  },
+  "association_checks": {
+    "estimated": {
+      "checked": 3317,
+      "wrong_birth_identity": 1606,
+      "wrong_fraction": 0.48417244498040396
+    },
+    "truth": {
+      "checked": 3323,
+      "wrong_birth_identity": 3,
+      "wrong_fraction": 0.0009027986758952753
+    },
+    "rigid": {
+      "checked": 3323,
+      "wrong_birth_identity": 3,
+      "wrong_fraction": 0.0009027986758952753
+    },
+    "instant": {
+      "checked": 0,
+      "wrong_birth_identity": 0,
+      "wrong_fraction": 0.0
+    }
+  },
+  "aligned_fresh_fraction": 1.0
+}

@@ -69,6 +69,26 @@ def test_steering_joint_limit_admits_the_inner_ackermann_angle():
     assert gen.inner_steer_limit(veh) > veh.max_steer_rad
 
 
+@pytest.mark.parametrize('stereo', [False, True])
+def test_drive_preserves_force_mode_and_configured_actuator_limits(stereo):
+    """Every wheel must retain force actuation, including the stereo variant."""
+    gen = _generator()
+    veh = gen.load_source_vehicle()
+    drive = replace(veh.gazebo_drive, velocity_p_gain_nm_s_rad=7.5, max_wheel_torque_nm=42)
+    root = ET.fromstring(gen.render(replace(veh, gazebo_drive=drive), enable_stereo_camera=stereo))
+    controllers = root.findall(".//plugin[@name='gz::sim::systems::JointController']")
+    assert len(controllers) == 4
+    assert {p.findtext('joint_name') for p in controllers} == {
+        f'{end}_{side}_wheel_joint' for end in ('front', 'rear') for side in ('left', 'right')}
+    for plugin in controllers:
+        assert plugin.findtext('use_force_commands') == 'true'
+        assert float(plugin.findtext('p_gain')) == 7.5
+        assert float(plugin.findtext('i_gain')) == 0
+        assert float(plugin.findtext('d_gain')) == 0
+        assert float(plugin.findtext('cmd_max')) == 42
+        assert float(plugin.findtext('cmd_min')) == -42
+
+
 @pytest.mark.parametrize('stddev', [0.0, 0.0075, 0.02, 0.000001])
 def test_lidar_gaussian_range_noise_uses_vehicle_configuration(stddev):
     gen = _generator()
