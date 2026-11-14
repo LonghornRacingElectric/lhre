@@ -170,7 +170,10 @@ pixel intrinsics to the model generator and camera transforms. Invalid or
 missing camera configuration fails explicitly; rebuild installed packages
 after updating the YAML.
 
-The initial mount is assumed. Images use an ideal rectified pinhole with
+The mount is the 11/8 study's design pose, not a measured one: on the LiDAR
+bracket at `base_link` (0.609, 0, 0.92), 5° nose down
+([camera mount study](../../../testing/2026-11-08-camera-mount-study/README.md)).
+A seated driver's helmet may block it; the study's CAD has no driver. Images use an ideal rectified pinhole with
 zero distortion and square pixels, rather than a physical camera calibration.
 At 1280x720, the 110-degree horizontal FOV implies about 77.6 degrees vertical;
 manufacturer FOV values do not supply exact rectified intrinsics. Measure the

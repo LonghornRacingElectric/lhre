@@ -454,8 +454,10 @@ Commit both generated SDFs. The generator and freshness tests check both
 variants against `vehicle.yaml` and the templates.
 
 The camera-only link has no collision and uses 0.001 kg mass / 0.000001 kg m2
-diagonal inertia for simulation bookkeeping. The initial mount and optics
-are approximations awaiting measurement and physical device calibration.
+diagonal inertia for simulation bookkeeping. The mount is the
+[camera mount study](../../../testing/2026-11-08-camera-mount-study/README.md)'s
+design pose, below the Mid-360 at the main hoop and 5° nose down; mount and
+optics still await measurement and physical device calibration.
 
 ## Stereo images in ROS/RViz
 
@@ -637,8 +639,10 @@ ros2 launch lhr_gazebo gazebo_demo.launch.py \
 
 The fixture disables gravity to hold the dynamic vehicle stationary while
 its odometry plugin publishes TF. Its green target front face is at world
-x=6.8 m, 5 m in front of the current assumed rig center, so changed mount
-geometry requires recomputing the measured target distance.
+x=5.609 m, 5 m in front of the rig center and centred at its height, so
+changed mount geometry requires recomputing the measured target distance.
+The 10/11 disparity check above used the earlier level mount at x=1.8 m; with
+the 5° pitch the face is no longer square to the optical axis.
 
 Camera extrinsics are fixed relative to `base_link`. The existing vehicle
 state/TF is planar, so the map-frame camera pose does not fully represent

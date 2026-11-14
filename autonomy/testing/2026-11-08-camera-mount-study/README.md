@@ -25,8 +25,11 @@ approximately `base_link` (0.609, 0, 0.92) m, `rpy_rad: [0, 0.087, 0]`.
   driver visibility remain unresolved, not demonstrated by the viewer.
 
 This records the design study, not a measured mount or acceptance test.
-No camera-mount sim A/B or field test has been run. The proposed mount has
-not been applied to `vehicle.yaml` or the generated Gazebo models here.
+No camera-mount sim A/B or field test has been run. The proposed mount is
+now the design mount in `vehicle.yaml` and both generated Gazebo models
+([#242](https://github.com/LonghornRacingElectric/lhre/issues/242)), tagged
+`ASSUMED (design)` like the LiDAR's. The fusion gate has not been rerun at
+this mount, and the driver question below still decides whether it stays.
 
 ## Viewer
 

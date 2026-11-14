@@ -39,8 +39,8 @@ milestone.
 | Image size per view | 1280 x 720 | Proposed simulation default; supported hardware mode |
 | Update rate | 30 Hz in simulation time | Proposed simulation default; supported hardware mode |
 | Horizontal FOV | 110 degrees | Initial idealized wide-lens approximation |
-| Mount center in `base_link` | `[1.8, 0.0, 0.65]` m | ASSUMED front mount for simulation |
-| Mount roll/pitch/yaw | `[0.0, 0.0, 0.0]` rad | ASSUMED forward-facing mount |
+| Mount center in `base_link` | `[0.609, 0.0, 0.92]` m | Design mount from the [camera mount study](../../testing/2026-11-08-camera-mount-study/README.md) (was `[1.8, 0.0, 0.65]`) |
+| Mount roll/pitch/yaw | `[0.0, 0.0872664626, 0.0]` rad | 5° nose down, same study (was level) |
 
 Mount position and orientation require measurement on the real car. The
 proposed location places the lens above the simulated body; runtime visual

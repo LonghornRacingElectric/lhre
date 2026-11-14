@@ -61,8 +61,11 @@ sensors:
     model: zed2i
     lens_focal_length_mm: 2.1
     baseline_m: 0.12             # Stereolabs
-    position_m: [1.8, 0.0, 0.65] # ASSUMED (rig center)
-    rpy_rad: [0.0, 0.0, 0.0]     # ASSUMED (forward-facing)
+    # Design mount from the 11/8 study (autonomy/testing/2026-11-08-camera-mount-study):
+    # on the LiDAR bracket, ~12 cm below the LiDAR's optical centre, 5 deg nose
+    # down. Unchecked against a seated driver's helmet; replace with as-built.
+    position_m: [0.609, 0.0, 0.92]       # ASSUMED (design, rig center)
+    rpy_rad: [0.0, 0.0872664626, 0.0]    # ASSUMED (design)
     image_width: 1280
     image_height: 720
     update_rate_hz: 30.0
