@@ -6,7 +6,29 @@ Where should Orion's ZED 2i sit relative to the Mid-360 on the main hoop?
 Companion to the [LiDAR mount study](../2026-11-08-lidar-mount-study/README.md)
 and follow-up to [#242](https://github.com/LonghornRacingElectric/lhre/issues/242).
 
-## Answer
+## Current direction — 2026-11-14
+
+Study the ZED 2i **above the LiDAR on a shared stiff bracket**, on the
+centreline, initially comparing 0–10° nose-down pitch. This supersedes the
+below-LiDAR recommendation as the direction to investigate, not as a final
+mount pose. Helmet interference is deferred for this iteration.
+
+The working viewer starts at `base_link` (0.609, 0, 1.105) m and 5° down.
+The 1.105 m height is the original study's approximate zero-clearance
+above-LiDAR case, **not an accepted installation height**. It does not include
+bracket thickness or clearance for the pitched housings. The camera extends
+above the 1.115 m hoop top even before those allowances. Determine the
+required LiDAR lowering and camera clearance together in CAD; keep the
+front faces clear of each other's field of view. The existing LiDAR mount
+must be revisited if it moves.
+
+Placement is pending. Keep the current below-LiDAR simulation pose until the
+camera position, orientation and any revised LiDAR pose are decided. Then
+update `vehicle.yaml`, regenerate both Gazebo models, update the stereo
+fixture and pose tests, and rerun the stationary disparity and fusion checks.
+Do not apply the viewer's provisional YAML directly to the simulation.
+
+## Original recommendation — superseded
 
 **Below the LiDAR, on the same stiff bracket, on the centreline, about 5°
 nose down.** Leave about 12 cm from the LiDAR's optical centre to the
@@ -29,7 +51,7 @@ No camera-mount sim A/B or field test has been run. The proposed mount is
 now the design mount in `vehicle.yaml` and both generated Gazebo models
 ([#242](https://github.com/LonghornRacingElectric/lhre/issues/242)), tagged
 `ASSUMED (design)` like the LiDAR's. The fusion gate has not been rerun at
-this mount, and the driver question below still decides whether it stays.
+this mount, and it remains the simulation baseline while the above-LiDAR study is open.
 
 ## Viewer
 
@@ -41,7 +63,7 @@ It uses the stack's assumed 1280 × 720, 110° horizontal pinhole model.
 
 The tables below are the viewer results recorded in the source study on
 11/8. They have not been independently reproduced in this import. The
-original viewer source is archived in [viewer/](viewer/README.md); rebuild
+working viewer is in [viewer/](viewer/README.md); rebuild
 it with Python 3 and NumPy:
 
 ```bash
@@ -52,8 +74,8 @@ python3 build.py ../../../ros2/src/lhr_vehicle/meshes/orion.stl \
 
 Open the generated page in a browser with internet access for its pinned
 Three.js/BVH dependencies and fonts. The shared car mesh is embedded. The
-generated HTML is ignored by git. This rebuild matches the Notion attachment
-byte for byte; see [viewer provenance](viewer/README.md) for its SHA-256.
+generated HTML is ignored by git. The working viewer now opens at the provisional above-LiDAR pose; it no
+longer matches the original attachment. See [viewer provenance](viewer/README.md).
 
 ## Above or below the LiDAR
 
@@ -173,7 +195,7 @@ ahead of the driver near the front hoop or nose, inside the allowed envelope.
 Moving above the current LiDAR would improve helmet clearance but breaches
 the envelope in this layout. The viewer alone cannot settle this packaging.
 
-## Zeroing in
+## Original below-LiDAR follow-up — historical
 
 1. Check the approximately 12 cm drop against the Livox FOV model, ZED STEP,
    bracket and driver/head-restraint geometry in SOLIDWORKS.
