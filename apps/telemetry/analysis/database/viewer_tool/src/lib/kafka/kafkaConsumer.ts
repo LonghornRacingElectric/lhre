@@ -327,7 +327,9 @@ export function buildNormalizedSensorRoutes(parsed: ParsedRecord, carType: strin
       return bse1V !== undefined ? Math.max(0, Math.min(100, (bse1V / 5) * 100)) : undefined;
     })();
 
-  const gpsPair = toNumberPair(firstDefined(dynamics, ["gps"]));
+  const gpsPair = (carType.toLowerCase() === "artemis"
+    ? toNumberPair(firstDefined(dynamics, ["gpsPrecise"])) : undefined)
+    ?? toNumberPair(firstDefined(dynamics, ["gps"]));
   const packetId = toNumber(firstDefined(parsed, ["packetId", "packet_id"]));
 
   const ambientTempC = toNumber(firstDefined(thermal, ["ambientTemp"]));

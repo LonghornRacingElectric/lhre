@@ -15,3 +15,6 @@ other nanosecond samples and recording sessions within the same millisecond.
 Application checks exercise snake_case widget inputs, GPS speed units and missing
 power values, authenticated deployed discovery, and Grafana editor selection of
 scalar/Boolean channels. The editor test executes the shipped SystemJS module.
+GPS checks cover full-precision live coordinates, fallback fixes and projected
+history reads. Replay route checks cover native throttle fields and stopping
+polls when playback reaches the end.

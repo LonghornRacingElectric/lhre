@@ -73,7 +73,14 @@ function numArray(value: unknown): number[] | undefined {
   return value.map((v) => { const n = num(v); return n === null ? 0 : n; });
 }
 
-function gpsOf(payload: Record<string, unknown>): [number | null, number | null] {
+function gpsOf(payload: Record<string, unknown>, source: string): [number | null, number | null] {
+  if (source === "artemis") {
+    const precise = first(payload, ["dynamics.gps_precise", "dynamics.gpsPrecise", "gps_precise", "gpsPrecise"]);
+    if (Array.isArray(precise) && precise.length >= 2) {
+      const lat = num(precise[0]), lon = num(precise[1]);
+      if (lat !== null && lon !== null) return [lat, lon];
+    }
+  }
   const lat = num(first(payload, ["latitude", "lat", "gps_latitude", "dynamics_gps_latitude", "dynamics.latitude"]));
   const lon = num(first(payload, ["longitude", "lon", "lng", "gps_longitude", "dynamics_gps_longitude", "dynamics.longitude"]));
   if (lat !== null && lon !== null) return [lat, lon];
@@ -103,7 +110,7 @@ export function normalizeLivePayload(raw: string | Record<string, unknown>, sour
 
   const values = flattenNumeric(payload);
   const t = timestampMs(first(payload, ["time", "timestamp", "packet_time", "packet.time"]));
-  const [lat, lon] = gpsOf(payload);
+  const [lat, lon] = gpsOf(payload, source);
   // Prefer a speed source that's actually carrying signal: a flatlined 0 on the
   // top-level `speed` channel used to shadow a real gps/wheel speed (and leaves
   // the live delta bar with nothing to work from). Walk GPS → derived avg →

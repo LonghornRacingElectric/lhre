@@ -23,3 +23,8 @@ from knots to m/s for Trackside, while discovered historical channels keep their
 declared units. Missing values remain missing; voltage and current can derive
 power when no explicit channel is present. Angular wheel speed requires a wheel
 radius before it can represent vehicle speed.
+Artemis live maps prefer the double-precision `gps_precise` latitude/longitude
+and fall back to `gps` when no precise fix is present. GPS history requests
+only those two arrays, using their last fresh observations per bucket.
+An Artemis export with no explicit channel selection includes the deployed
+scalar catalog, so newly added channels do not require a legacy-list edit.

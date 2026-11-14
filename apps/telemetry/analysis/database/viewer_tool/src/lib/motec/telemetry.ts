@@ -193,7 +193,8 @@ export class TelemetryService {
   async gps(startMs: number, endMs: number, maxPoints = 2000): Promise<GpsResponse> {
     if (!this.settings.usePostgres) return { points: [] };
     if (this.settings.car === "artemis") {
-      const rows = await readBuckets(["dynamics"], startMs, endMs, Math.max(100, Math.ceil((endMs - startMs) / maxPoints)));
+      const rows = await readBuckets(["dynamics"], startMs, endMs,
+        Math.max(100, Math.ceil((endMs - startMs) / maxPoints)), "last", ["gps_precise", "gps"]);
       return { points: rows.flatMap(row => {
         const d = row.dynamics as Record<string, number[] | null> | undefined;
         const gps = d?.gps_precise?.length ? d.gps_precise : d?.gps;
@@ -306,9 +307,10 @@ export class TelemetryService {
   }
 
   async datalog(channelKeys: string[], startMs: number, endMs: number): Promise<DataLog> {
-    const selected = channelKeys.length ? channelKeys : ORION_CHANNELS.map((c) => c.key);
     if (!this.settings.usePostgres) throw new Error("Telemetry database is not connected (set TELEMETRY_SOURCE=postgres).");
-    const channelByKey = new Map((await this.channels()).map((c) => [c.key, c]));
+    const channels = await this.channels();
+    const selected = channelKeys.length ? channelKeys : (this.settings.car === "artemis" ? channels : ORION_CHANNELS).map(c => c.key);
+    const channelByKey = new Map(channels.map(c => [c.key, c]));
     const definitions = selected.map((k) => channelByKey.get(k)).filter((d): d is ChannelDef => Boolean(d));
     if (this.settings.car === "artemis") {
       const rows = await readBuckets([...new Set(definitions.map(d => d.table))], startMs, endMs, 100, "avg", definitions.map(d => d.column.split("[")[0]));
