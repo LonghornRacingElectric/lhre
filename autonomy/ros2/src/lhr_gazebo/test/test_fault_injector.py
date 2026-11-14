@@ -35,6 +35,24 @@ def test_fault_waits_for_driving_then_the_delay():
     assert clock.active
 
 
+def test_fault_waits_for_the_speed_too():
+    # On the oval the 8 m/s tier is at 5.3 m/s in the tight end when 25 s
+    # comes round; the fault waits for the flat side instead (#207).
+    clock = FaultClock(after_s=25.0, duration_s=0.0, min_speed_mps=7.6)
+    clock.update(0.0, driving=True, speed=0.0)
+    assert clock.update(10.0, driving=True, speed=8.0) == ''   # too early
+    assert clock.update(25.0, driving=True, speed=5.3) == ''   # too slow
+    assert clock.update(31.0, driving=True, speed=7.59) == ''
+    assert clock.update(31.5, driving=True, speed=7.6) == 'start'
+    assert clock.started_at == 31.5
+
+
+def test_no_speed_gate_starts_at_any_speed():
+    clock = FaultClock(after_s=5.0, duration_s=0.0)
+    clock.update(0.0, driving=True, speed=0.0)
+    assert clock.update(5.0, driving=True, speed=0.0) == 'start'
+
+
 def test_timed_fault_ends_once():
     clock = FaultClock(after_s=0.0, duration_s=3.0)
     clock.update(10.0, driving=True)
@@ -119,6 +137,36 @@ def test_unknown_fault_is_rejected():
         rclpy.shutdown()
 
 
+def test_speed_gate_reads_the_plant_odometry():
+    rclpy.init(args=['--ros-args', '-p', 'fault:=ekf_kill',
+                     '-p', 'fault_min_speed_mps:=7.6'])
+    try:
+        node = FaultInjector()
+        try:
+            assert node._fault_clock.min_speed_mps == 7.6
+            assert node._speed == 0.0, 'no odometry yet must read as standing still'
+            assert '/lhr/sim/plant_odom' in [s.topic_name for s in node.subscriptions]
+            odom = Odometry()
+            odom.twist.twist.linear.x, odom.twist.twist.linear.y = 6.0, 8.0
+            node._plant_cb(odom)
+            assert node._speed == pytest.approx(10.0)
+        finally:
+            node.destroy_node()
+    finally:
+        rclpy.shutdown()
+
+
+@pytest.mark.parametrize('speed', ['-1.0', 'nan'])
+def test_bad_speed_gate_is_rejected(speed):
+    rclpy.init(args=['--ros-args', '-p', 'fault:=ekf_kill',
+                     '-p', f'fault_min_speed_mps:={speed}'])
+    try:
+        with pytest.raises(ValueError, match='fault_min_speed_mps'):
+            FaultInjector()
+    finally:
+        rclpy.shutdown()
+
+
 # ----- launch wiring ---------------------------------------------------------
 
 def _text(context, value):
@@ -179,6 +227,27 @@ def test_topic_faults_splice_the_injector_in(monkeypatch, fault, estimator,
     assert params['fault_after_s'] == 5.0
     assert type(params['fault_after_s']) is float
     assert params['fault_duration_s'] == 2.0
+    assert params['fault_min_speed_mps'] == 0.0
+    assert type(params['fault_min_speed_mps']) is float
+
+
+@pytest.mark.parametrize('fault, estimator, plant', [
+    ('ekf_kill', 'ekf', '/lhr/vehicle/odom_truth'),
+    # Under truth the bridge's odometry is the plant, unless a fault
+    # corrupts it: then the clean copy is the one it publishes as _raw.
+    ('cmd_nan', 'truth', '/lhr/vehicle/odom'),
+    ('odom_nan', 'truth', '/lhr/vehicle/odom_raw'),
+])
+def test_speed_gate_reaches_the_injector_on_the_plant_odometry(
+        monkeypatch, fault, estimator, plant):
+    context, nodes, remaps = _launch(
+        monkeypatch, fault=fault, estimator=estimator, perception='lidar',
+        fault_min_speed_mps='8')
+    assert ('/lhr/sim/plant_odom', plant) in remaps['fault_injector']
+    (inj,) = [n for n in nodes if n.node_executable == 'fault_injector']
+    params = evaluate_parameters(context, inj._Node__parameters)[0]
+    assert params['fault_min_speed_mps'] == 8.0
+    assert type(params['fault_min_speed_mps']) is float
 
 
 def test_process_faults_need_no_rewiring(monkeypatch):

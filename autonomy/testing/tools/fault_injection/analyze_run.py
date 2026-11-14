@@ -31,6 +31,9 @@ DECEL = 6.0
 STOPPED = 0.1  # m/s
 MOVED = 0.5  # m/s: rolling again after the stop fails the run
 MIN_DRIVE_M = 10.0  # less than this before the fault and the run proves nothing
+# A fault below this share of v_max did not test its tier: the 11/1 oval
+# runs labelled 8 m/s faulted at 5.3 (#207).
+AT_SPEED = 0.9
 # A frozen actuator is invisible while the command still asks for the
 # frozen angle; STEER_TRACKING's budget runs from when the two differ by
 # its tolerance (#208).
@@ -38,7 +41,7 @@ STEER_TOL_RAD = SafetyConfig.steer_angle_tol_rad
 
 FIELDS = [
     'id', 'case', 'track', 'seed', 'v_max', 'result', 'expected', 'tripped',
-    'match', 'v_at_fault', 'trip_latency_s', 'emergency_latency_s',
+    'match', 'v_at_fault', 'at_speed', 'trip_latency_s', 'emergency_latency_s',
     'stop_time_s', 'stop_dist_m', 'pdr_dist_m', 'within_pdr',
     'max_v_after_stop', 'false_trip', 'drove_m', 'visible_after_s', 'latency_from_visible_s',
 ]
@@ -180,6 +183,17 @@ def score(data, case, fence):
     return row
 
 
+def at_speed(v_at_fault, v_max):
+    """Return 'True' if the fault hit at its tier's speed, '' if either is unknown."""
+    try:
+        v, top = float(v_at_fault), float(v_max)
+    except (TypeError, ValueError):
+        return ''
+    if not (math.isfinite(v) and math.isfinite(top) and top > 0.0):
+        return ''
+    return str(v >= AT_SPEED * top)
+
+
 def save(path, row):
     """Write row into the CSV, replacing an earlier row with the same id."""
     rows = []
@@ -221,7 +235,8 @@ def main():
         # Whatever the bag shows stopped with the sim, not with the car.
         row = {'case': args.case, 'result': 'hung'}
     row.update({'id': args.id, 'track': args.track, 'seed': args.seed,
-                'v_max': args.v_max})
+                'v_max': args.v_max,
+                'at_speed': at_speed(row.get('v_at_fault'), args.v_max)})
     save(args.csv, row)
     print('  '.join(f'{k}={row[k]}' for k in FIELDS if row.get(k)))
     return status

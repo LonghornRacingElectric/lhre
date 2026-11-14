@@ -110,11 +110,15 @@ def test_fault_plan_runs_every_case_and_clean_lap_on_the_gate_stack(tmp_path):
         assert stack.items() <= args.items(), f'{run_id} leaves out part of the gate stack'
         if kind == 'clean':
             assert (track, v_max) == ('autocross', '5') and 'fault' not in args
+            assert 'fault_min_speed_mps' not in args
         elif kind == 'geofence':
             assert args['safety_geofence_radius_m'] == '20' and 'fault' not in args
+            assert 'fault_min_speed_mps' not in args
         else:
             assert (track, seed) == ('oval', '1')
             assert args['fault'] == kind and args['fault_after_s'] == '25'
+            # Every injected fault waits for its tier's speed (#207).
+            assert float(args['fault_min_speed_mps']) == pytest.approx(0.95 * float(v_max))
     assert rows['controller_pause_v3_r1'][5]['fault_duration_s'] == '3'
 
 

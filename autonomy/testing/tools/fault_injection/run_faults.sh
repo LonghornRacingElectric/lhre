@@ -27,6 +27,7 @@ CLEAN_SEEDS=${CLEAN_SEEDS-"1 2 3 4 5"}   # clean autocross laps: false trips
 TRACK=${TRACK:-oval}
 CLEAN_TRACK=${CLEAN_TRACK:-autocross}
 AFTER=${AFTER:-25}          # fault starts this many sim seconds after DRIVING
+AT_SPEED=${AT_SPEED:-0.95}  # ...and once the car is at this share of v_max
 RUN_S=${RUN_S:-60}          # sim seconds per faulted run
 CLEAN_S=${CLEAN_S:-150}     # sim seconds per clean lap
 HANG_S=${HANG_S:-60}        # wall seconds of a stopped /clock: hung (#227)
@@ -119,15 +120,19 @@ one_run() {  # id kind track seed v_max seconds [launch args...]
 }
 
 plan() {  # one line per run: id kind track seed v_max seconds, then launch arguments
-    local kind v r s args
+    local kind v r s args gate
     for kind in $CASES; do
         for v in $SPEEDS; do
+            # The fault also waits for the car to be at its tier's speed:
+            # on the oval a time alone landed the 8 m/s tier in a corner (#207).
+            gate="fault_min_speed_mps:=$(awk -v v="$v" -v f="$AT_SPEED" 'BEGIN { print v * f }')"
             for r in $(seq 1 "$REPEATS"); do
                 case $kind in
+                    # Not an injection: the car trips where it crosses the fence.
                     geofence) args="safety_geofence_radius_m:=$FENCE" ;;
                     controller_pause)
-                        args="fault:=$kind fault_after_s:=$AFTER fault_duration_s:=3" ;;
-                    *) args="fault:=$kind fault_after_s:=$AFTER" ;;
+                        args="fault:=$kind fault_after_s:=$AFTER $gate fault_duration_s:=3" ;;
+                    *) args="fault:=$kind fault_after_s:=$AFTER $gate" ;;
                 esac
                 echo "${kind}_v${v}_r${r} $kind $TRACK 1 $v $RUN_S $STACK $args"
             done
