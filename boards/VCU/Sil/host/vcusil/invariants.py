@@ -19,8 +19,8 @@ from dataclasses import dataclass
 
 from .cosim import BSPD_POWER_W, BSPD_TRIP_MS, STEP_MS
 from .firmware import HVC_ENERGIZED, STATE_DRIVE, VCU_FAULTS, VCU_STATES
-from .fwmodel import (CONTACTOR_STATUS_PERIOD_MS, SURE_PEDAL, SURE_PSI, THRESHOLDS, ema,
-                      hysteresis, rtd_switch)
+from .fwmodel import (CONTACTOR_STATUS_PERIOD_MS, HARD_BRAKE_PSI, SURE_PEDAL, SURE_PSI,
+                      THRESHOLDS, ema, hysteresis, rtd_switch)
 
 _T = THRESHOLDS
 # INVERTER_TORQUE_COMMAND's torque_request step (lib/spec/messages/vcu.textproto
@@ -79,8 +79,9 @@ RULES = {rule.name: rule for rule in (
          f'DC power over {POWER_LIMIT_W / 1e3:g} kW for {POWER_CONTINUOUS_MS} ms, or over it '
          f'on a {POWER_AVERAGE_MS} ms moving average'),
     Rule('bspd_not_tripped', 'rules', 'EV.7.7.2, on the car model\'s DC power',
-         f'hard braking with more than {BSPD_POWER_W / 1e3:g} kW for {BSPD_TRIP_MS} ms: the '
-         'car\'s BSPD would open the shutdown loop'),
+         f'the drive\'s brake past the hard-brake comparators (about {HARD_BRAKE_PSI:.0f} psi) '
+         f'with more than {BSPD_POWER_W / 1e3:g} kW for {BSPD_TRIP_MS} ms: the car\'s BSPD would '
+         'open the shutdown loop'),
 )}
 
 
@@ -159,8 +160,11 @@ def _violations(rows: list[dict[str, float | int]]) -> dict[str, list[tuple[int,
     bot_on = round(_T['BseParams::bot_pedal_on'] + SURE_PEDAL, 9)
     bot_off = round(_T['BseParams::bot_pedal_off'] + SURE_PEDAL, 9)
     rtd_brake = _T['BseParams::brake_light_psi'] - SURE_PSI
+    hard_psi = HARD_BRAKE_PSI + SURE_PSI
     power = [float(r['dcBusVoltage']) * float(r['dcBusCurrent']) for r in rows]
-    average_rows = -(-POWER_AVERAGE_MS // STEP_MS)
+    # 500 ms is 166 whole rows (498 ms) and 2 ms of the row before them.
+    full_rows = POWER_AVERAGE_MS // STEP_MS
+    part = (POWER_AVERAGE_MS - full_rows * STEP_MS) / STEP_MS
     over_ms = bspd_ms = 0
     for k, r in enumerate(rows):
         t, state, faults = times[k], int(r['fw_state']), int(r['fw_faults'])
@@ -216,12 +220,15 @@ def _violations(rows: list[dict[str, float | int]]) -> dict[str, list[tuple[int,
             found['power_within_80kw'].append(
                 (t, f'over {POWER_LIMIT_W / 1e3:g} kW for {over_ms} ms at {t} ms '
                     f'({power[k] / 1e3:.1f} kW)'))
-        elif k + 1 >= average_rows:
-            mean = sum(power[k + 1 - average_rows:k + 1]) / average_rows
+        elif k >= full_rows:
+            energy = sum(power[k + 1 - full_rows:k + 1]) + part * power[k - full_rows]
+            mean = energy * STEP_MS / POWER_AVERAGE_MS
             if mean > POWER_LIMIT_W:
                 found['power_within_80kw'].append(
                     (t, f'{mean / 1e3:.1f} kW on the {POWER_AVERAGE_MS} ms average at {t} ms'))
-        hard = bool(r['fw_hard_braking']) and power[k] > BSPD_POWER_W
+        # The BSPD's comparators read the brake sensors themselves, so the
+        # drive's pressure says when the car brakes hard, not the VCU's view.
+        hard = float(r['brake_psi']) > hard_psi and power[k] > BSPD_POWER_W
         bspd_ms = bspd_ms + STEP_MS if hard else 0
         if bspd_ms >= BSPD_TRIP_MS:
             found['bspd_not_tripped'].append(

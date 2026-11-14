@@ -1490,7 +1490,7 @@ class _Checker:
     def _bounds(self, signal: str, comparator: str, value: object, where: str,
                 line: int | None) -> Condition | None:
         def number(x: object, at: str) -> float | None:
-            if isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(x):
+            if isinstance(x, bool) or not isinstance(x, (int, float)) or not _finite(x):
                 self.add('wrong_type', at, _hinted(f'{_yaml(x)} is not a finite number '
                          f'({EXPECT_SIGNALS[signal]})', _respelt(x, 'number')), line)
                 return None
@@ -1778,10 +1778,17 @@ class _Checker:
             if p.verb == 'reach':
                 within, default = p.within_ms, False
                 if within is None:
-                    paths = [DEFAULT_WITHIN_MS[s] for s in (anchor_block.values if anchor_block
-                                                            else ()) if s in DEFAULT_WITHIN_MS]
+                    # A ramp's delay is when it crosses the threshold, not a step's.
+                    values = anchor_block.values if anchor_block else {}
+                    known = [s for s in values if s in DEFAULT_WITHIN_MS]
+                    paths = [DEFAULT_WITHIN_MS[s] for s in known
+                             if not isinstance(values[s], Ramp)]
                     if not paths:
-                        if anchor_block is None:
+                        if anchor_block is not None and known:
+                            what = (f'the block of {p.anchor} ramps {known[0]}, so the delay is '
+                                    'when the ramp crosses the threshold; give the deadline in ms '
+                                    'after the mark')
+                        elif anchor_block is None:
                             what = ('it counts from the start of the run; give the deadline in '
                                     'ms from 0')
                         else:
@@ -1799,10 +1806,17 @@ class _Checker:
                              f'within_ms ({within}), so nothing could pass',
                              self.lines.value('expect', p.index, 'not_before_ms'))
                     continue
-                if anchor_ms + p.not_before_ms > last:
+                earliest = first_step_ms(anchor_ms + p.not_before_ms)
+                if earliest > last:
                     self.add('out_of_range', where, f'it can pass only from '
                              f'{anchor_ms + p.not_before_ms} ms, after the last sample ({last} '
                              'ms)', p.line)
+                    continue
+                if earliest > anchor_ms + within:
+                    self.add('bad_value', where, f'no sample falls from '
+                             f'{anchor_ms + p.not_before_ms} to {anchor_ms + within} ms (the host '
+                             f'samples every {STEP_MS} ms), so nothing could pass; widen '
+                             'within_ms or lower not_before_ms', p.line)
                     continue
                 found.append(Expectation(p.index, p.verb, p.condition, (), anchor, anchor_ms,
                                          within_ms=within, within_default=default,
@@ -1846,6 +1860,13 @@ class _Checker:
 
 
 _INDENTED = 'top-level keys are not indented, so this one counts as part of {table}'
+
+
+def _finite(x: int | float) -> bool:
+    try:
+        return math.isfinite(x)
+    except OverflowError:  # an integer past a float's range
+        return False
 
 
 def _hinted(message: str, hint: str | None) -> str:

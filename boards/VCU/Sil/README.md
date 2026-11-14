@@ -439,8 +439,8 @@ controls team signs off.
 | `bot_detected` | BRAKE_OVER_THROTTLE not set on a tick the modelled filtered brake surely holds brake-pressed and the drive's pedal is over 25 % | EV.4.7.1; 300 psi as "brakes engaged" is the team's | rules, team threshold |
 | `fault_cuts_torque` | A nonzero torque request or `inverter_enable` on a tick any `kTorqueCutFaults` fault is set | T.4.2.5 and T.4.3.3 for APPS_IMPLAUSIBLE, BSE1_RANGE and BSE2_RANGE; the other nine are the team's | rules for three, design for nine |
 | `drive_needs_rtd_and_brake` | DRIVE entered on a tick that is not a debounced RTD press edge (the model of `EdgeButton` on the drive's switch), with the modelled filtered brake under 30 psi, or without the last CONTACTOR_STATUS reporting ENERGIZED with both AIRs closed | EV.9.6.2: tractive system active, brake pressed and held, a manual action (2027: EV.10.6.2); 30 psi as "pressed" is the team's | rules, team threshold |
-| `power_within_80kw` | The car model's DC power is over 80 kW continuously for 100 ms, or over it on a 500 ms moving average | EV.3.3.1 and EV.3.4.1, which define the violation this way | rules, on the car model's power |
-| `bspd_not_tripped` | Hard braking with more than 5 kW for 500 ms: the car's BSPD would open the shutdown loop | EV.7.7.2 | rules, on the car model's power |
+| `power_within_80kw` | The car model's DC power is over 80 kW continuously for 100 ms, or over it on a 500 ms moving average (166 samples and 2 ms of the one before) | EV.3.3.1 and EV.3.4.1, which define the violation this way | rules, on the car model's power |
+| `bspd_not_tripped` | The drive's brake past the hard-brake comparators (about 531 psi), read from the drive rather than the VCU, with more than 5 kW for 500 ms: the car's BSPD would open the shutdown loop | EV.7.7.2 | rules, on the car model's power |
 
 - **No slack.** The firmware cuts torque on the tick it raises the fault, as
   `ControlTick` computes the faults, then the state, then the torque, so the

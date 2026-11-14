@@ -339,11 +339,11 @@ def powered(volts: float, amps: float, rows_on: int, n: int = 300, **values) -> 
                **values)
 
 
-def alternating(n: int) -> list[dict]:
-    """160 kW on every even row and 0 on every odd one: never two rows over
-    80 kW in a row, and over 80 kW on average only over an odd window that
-    starts on an even row (84 of 167 rows)."""
-    return [{**r, 'dcBusCurrent': 320.0 if k % 2 == 0 else 0.0}
+def alternating(n: int, on_odd: bool = False, amps: float = 320.0) -> list[dict]:
+    """amps at 500 V (160 kW) on every even row (odd, with on_odd) and 0 on
+    the others: never two rows over 80 kW in a row, so only the 500 ms
+    average can see it."""
+    return [{**r, 'dcBusCurrent': amps if k % 2 == int(on_odd) else 0.0}
             for k, r in enumerate(run(n, dcBusVoltage=500.0))]
 
 
@@ -363,18 +363,24 @@ POWER = [
     # Over on both counts from 498 ms: each tick still counts once.
     ('100-kw-for-600-ms', run(200, dcBusVoltage=500.0, dcBusCurrent=200.0),
      {'power_within_80kw': (167, 99, 'over 80 kW for 102 ms at 99 ms (100.0 kW)')}),
-    # 167 rows (501 ms) make the 500 ms average: 84 x 160 / 167 = 80.5 kW.
+    # 500 ms is 166 rows and 2 ms of the one before: (83 x 3 + 2) x 160 / 500 = 80.3 kW.
     ('alternating-for-200-rows', alternating(200),
-     {'power_within_80kw': (17, 498, '80.5 kW on the 500 ms average at 498 ms')}),
+     {'power_within_80kw': (17, 498, '80.3 kW on the 500 ms average at 498 ms')}),
     ('alternating-for-167-rows', alternating(167),
-     {'power_within_80kw': (1, 498, '80.5 kW on the 500 ms average at 498 ms')}),
+     {'power_within_80kw': (1, 498, '80.3 kW on the 500 ms average at 498 ms')}),
+    # Over 500 ms exactly, 83 x 3 x 160.7 / 500 = 80.03 kW; a 501 ms window
+    # (167 whole rows) would average 79.87 and pass it.
+    ('alternating-over-on-500-ms-only', alternating(167, on_odd=True, amps=321.4),
+     {'power_within_80kw': (1, 498, '80.0 kW on the 500 ms average at 498 ms')}),
     ('alternating-cut-short-at-166-rows', alternating(166), {}),
 ]
 
 
 def hard(rows_on: int, n: int = 600, amps: float = 12.0) -> list[dict]:
-    """Hard braking at 500 V and amps on rows_on rows from 300 ms."""
-    return powered(500.0, amps, rows_on, n=n, fw_hard_braking=1)
+    """The drive's brake at 600 psi, past the hard-brake comparators, at 500 V
+    and amps, on rows_on rows from 300 ms. The firmware's own hard-braking
+    flag stays 0: the BSPD's oracle is the drive's pressure."""
+    return powered(500.0, amps, rows_on, n=n, brake_psi=600.0)
 
 
 # 166 rows is 498 ms, 167 is 501 ms: past the BSPD's 500.
@@ -386,10 +392,15 @@ BSPD = [
      {'bspd_not_tripped': (4, 798, 'hard braking with 6.0 kW for 501 ms at 798 ms')}),
     ('5-kw-for-a-second', hard(334, amps=10.0, n=700), {}),
     ('6-kw-without-hard-braking',
-     put(hard(200), 0, fw_hard_braking=0), {}),
+     put(hard(200), 0, brake_psi=350.0), {}),
+    # The firmware's flag does not decide: set, it trips nothing on its own.
+    ('6-kw-with-only-the-firmwares-flag',
+     put(hard(200), 0, brake_psi=350.0, fw_hard_braking=1), {}),
+    # Within a psi of the comparators (about 531 psi) the drive is not sure.
+    ('6-kw-at-the-comparators', put(hard(200), 0, brake_psi=532.0), {}),
     # One row without hard braking restarts the timer.
-    ('6-kw-for-498-ms-twice', put(hard(333), 798, 801, fw_hard_braking=0), {}),
-    ('6-kw-for-498-ms-then-501', put(hard(334), 798, 801, fw_hard_braking=0),
+    ('6-kw-for-498-ms-twice', put(hard(333), 798, 801, brake_psi=350.0), {}),
+    ('6-kw-for-498-ms-then-501', put(hard(334), 798, 801, brake_psi=350.0),
      {'bspd_not_tripped': (1, 1299, 'hard braking with 6.0 kW for 501 ms at 1299 ms')}),
     # 170 rows would fail, but the run ends 166 rows in.
     ('6-kw-cut-short-at-498-ms', hard(170, n=266), {}),

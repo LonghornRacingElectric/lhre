@@ -584,8 +584,6 @@ DEFAULTS = [
     ('hvc-state-and-contactors', '', 'energized', 12),
     ('contactors', block(6500, 'mark: airs-open', 'contactors_closed: false'), 'airs-open', 12),
     ('loop', block(6500, 'mark: loop-open', 'shutdown_loop_v: 0.0'), 'loop-open', 15),
-    ('a-loop-ramp', block(6500, 'mark: sag', 'shutdown_loop_v: {to: 12.0, ramp_ms: 30}'), 'sag',
-     15),
     ('loop-and-rtd', block(6500, 'mark: both', 'shutdown_loop_v: 0.0', 'rtd_pressed: false'),
      'both', 24),
     ('loop-and-hvc', block(6500, 'mark: both', 'shutdown_loop_v: 0.0',
@@ -603,6 +601,35 @@ def test_a_reach_with_no_within_ms_takes_the_largest_default(blocks, mark, withi
     assert (e.within_ms, e.within_default) == (within, True)
     assert e.text() == f'reach state FAULT from {mark} within {within} ms (default)'
     assert sf.parameters()['expect'] == [{'reach': {'state': 'FAULT'}, 'from': mark}]
+
+
+def test_a_ramp_gets_no_step_default():
+    # A ramp from 24 to 0 V over 300 ms crosses the loop's low threshold some
+    # 90 ms in: the 15 ms step default would fail correct firmware.
+    ramp = block(6500, 'mark: sag', 'shutdown_loop_v: {to: 0.0, ramp_ms: 300}')
+    [p] = problems_of(expecting(item('reach: {fault: SHUTDOWN_OPEN}', 'from: sag'), blocks=ramp))
+    assert (p.code, p.where) == ('missing_key', 'expect[0].within_ms')
+    assert 'ramps shutdown_loop_v, so the delay is when the ramp crosses' in p.message
+    # A step beside the ramp still gives its own default.
+    both = block(6500, 'mark: sag', 'shutdown_loop_v: {to: 0.0, ramp_ms: 300}',
+                 'rtd_pressed: false')
+    assert only(item('reach: {state: FAULT}', 'from: sag'), blocks=both).within_ms == 24
+
+
+def test_a_reach_window_with_no_sample_in_it_is_refused():
+    # From rtd's sample at 1002, 20..20 ms is 1022, between the 1020 and 1023
+    # samples; 20..21 holds 1023.
+    [p] = problems_of(expecting(item(REACH, 'from: rtd', 'not_before_ms: 20', 'within_ms: 20')))
+    assert (p.code, p.where) == ('bad_value', 'expect[0]')
+    assert p.message.startswith('no sample falls from 1022 to 1022 ms')
+    assert only(item(REACH, 'from: rtd', 'not_before_ms: 20', 'within_ms: 21')).within_ms == 21
+
+
+@pytest.mark.parametrize('bound', ['at_most: 1' + '0' * 400, 'at_least: -1' + '0' * 400,
+                                   'between: [0, 1' + '0' * 400 + ']'])
+def test_a_bound_too_large_for_a_float_is_a_problem_not_a_crash(bound):
+    [p] = problems_of(expecting(item(f'peak: {{signal: torque_nm, {bound}}}')))
+    assert p.code == 'wrong_type' and 'is not a finite number' in p.message
 
 
 def test_a_within_ms_written_out_is_not_a_default_even_when_it_is_the_same():
