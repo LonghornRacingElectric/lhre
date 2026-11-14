@@ -61,8 +61,10 @@ sensors:
     model: zed2i
     lens_focal_length_mm: 2.1
     baseline_m: 0.12             # Stereolabs
-    position_m: [1.8, 0.0, 0.65] # ASSUMED (rig center)
-    rpy_rad: [0.0, 0.0, 0.0]     # ASSUMED (forward-facing)
+    # Proposed shared bracket below the LiDAR: camera top about 12 cm below
+    # its optical centre, pitched 5 deg down. Replace with as-built extrinsics.
+    position_m: [0.609, 0.0, 0.92]       # ASSUMED (design, rig center)
+    rpy_rad: [0.0, 0.0872664626, 0.0]    # ASSUMED (design)
     image_width: 1280
     image_height: 720
     update_rate_hz: 30.0

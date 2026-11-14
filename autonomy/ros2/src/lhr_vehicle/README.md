@@ -170,7 +170,11 @@ pixel intrinsics to the model generator and camera transforms. Invalid or
 missing camera configuration fails explicitly; rebuild installed packages
 after updating the YAML.
 
-The initial mount is assumed. Images use an ideal rectified pinhole with
+The proposed simulation mount sits on the shared LiDAR bracket at
+`base_link` (0.609, 0, 0.92) m, pitched 5° down. The rig centre is 14 cm
+below the LiDAR optical centre, leaving about 12 cm to the camera top.
+Driver/helmet interference is outside this simulation change.
+The pose remains assumed until measured on the car. Images use an ideal rectified pinhole with
 zero distortion and square pixels, rather than a physical camera calibration.
 At 1280x720, the 110-degree horizontal FOV implies about 77.6 degrees vertical;
 manufacturer FOV values do not supply exact rectified intrinsics. Measure the
