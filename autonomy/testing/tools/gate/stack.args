@@ -1,0 +1,11 @@
+# The gate stack (#201, #237): every gated run of run_gate.sh and
+# run_faults.sh launches with these arguments, one per line. A run that needs
+# a different stack, such as a truth-stack baseline, names its own arguments
+# in the runner instead, where a test can see it. plant:=fmu joins this list
+# once #221 and #222 land.
+perception:=lidar
+estimator:=ekf
+safety:=true
+lidar_source:=mid360
+enable_stereo_camera:=true
+enable_camera_lidar_fusion:=true
