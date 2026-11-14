@@ -40,6 +40,8 @@ void App::SendCritical(uint32_t now) {
   }
   if (energy_gate_.Due(now, PeriodMs<msg::EnergyEstimate>())) {
     Send(bus, EnergyFrame(s).ToFrame());
+  }
+  if (torque_path_gate_.Due(now, PeriodMs<msg::TorquePath>())) {
     Send(bus, TorquePathFrame(s).ToFrame());
   }
 }

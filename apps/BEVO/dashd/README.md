@@ -7,6 +7,8 @@ Persists dash layout choices under `/var/lib/bevo-dash/`.
 
 - `frontend/` — the React kiosk UI. Built with `npm run build`, served as
   static files by `deploy/bevo_dash_serve.service`; **not** built by Bazel.
+  Its jest tests run in CI (the `BEVO dash frontend` job); locally:
+  `npm ci --ignore-scripts && CI=true npm test`.
 - `deploy/` — Pi kiosk deployment: systemd units, labwc autostart, Plymouth
   splash, `install.sh`/`deploy.sh` runbooks. Nonhermetic by nature.
 

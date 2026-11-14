@@ -120,8 +120,15 @@ cc_binary(
     copts = SIL_COPTS,
     linkopts = [
         "-Wl,--version-script=$(location Sil/vcu_sil.lds)",
-        "-Wl,-z,defs",
-    ],
+    ] + select({
+        # -z defs proves the .so resolves every symbol itself, so a host
+        # like fmpy can load it. ASan code calls __asan_* in a runtime that
+        # only the executable links (clang leaves it out of -shared links),
+        # so under --config=asan the check would fail every build; there
+        # :vcu_sil_test, an ASan executable, supplies those symbols.
+        "@llvm//config:asan_enabled": [],
+        "//conditions:default": ["-Wl,-z,defs"],
+    }),
     linkshared = True,
     target_compatible_with = ["@platforms//os:linux"],
     deps = [
