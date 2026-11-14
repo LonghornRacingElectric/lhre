@@ -239,3 +239,78 @@ py_test(
     tags = ["manual", "integration", "local"],
     target_compatible_with = NOT_WINDOWS,
 )
+
+# Runtime decode router: picks a decoder per sensor_data record by its
+# schema_fingerprint header, or quarantines it. See decode_router.py.
+py_library(
+    name = "decode_router",
+    srcs = ["decode_router.py"],
+    imports = ["../.."],
+    deps = [":sensor_decode", requirement("protobuf")],
+    target_compatible_with = NOT_WINDOWS,
+    visibility = ["//visibility:public"],
+)
+
+DECODE_ROUTER_DATA = [
+    "//lib/codegen/telemetry:artemis_schema_contract",
+    "//apps/telemetry/schema_registry:decoders.json",
+]
+
+py_library(
+    name = "decode_router_demo_lib",
+    srcs = ["decode_router_demo.py"],
+    imports = ["../.."],
+    data = DECODE_ROUTER_DATA,
+    deps = [
+        ":decode_router",
+        "@lhre_pypi//bazel_runfiles",
+        requirement("kafka-python"),
+        requirement("paho-mqtt"),
+    ],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_binary(
+    name = "decode_router_demo",
+    srcs = ["decode_router_demo.py"],
+    main = "decode_router_demo.py",
+    imports = ["../.."],
+    deps = [":decode_router_demo_lib"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+# Routes records exactly as the bridge writes them, plus malformed ones, with
+# the real deployed schema_id and the checked-in decoder table. No Docker.
+py_test(
+    name = "decode_router_test",
+    srcs = ["decode_router_test.py"],
+    main = "decode_router_test.py",
+    imports = ["../.."],
+    deps = [":decode_router_demo_lib"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+# MQTT -> ingest -> bridge -> sensor_data -> router with the real images.
+py_test(
+    name = "decode_router_integration_test",
+    srcs = ["decode_router_integration_test.py"],
+    main = "decode_router_integration_test.py",
+    imports = ["../.."],
+    args = [
+        "$(rlocationpath //apps/telemetry:kafka_load)",
+        "$(rlocationpath //apps/telemetry:mqtt_load)",
+        "$(rlocationpath :ingest_load)",
+        "$(rlocationpath //apps/telemetry/stack/kafka:kafka_bridge_load)",
+    ],
+    data = [
+        "mosquitto.conf",
+        "//apps/telemetry:kafka_load",
+        "//apps/telemetry:mqtt_load",
+        ":ingest_load",
+        "//apps/telemetry/stack/kafka:kafka_bridge_load",
+    ],
+    deps = [":decode_router_demo_lib"],
+    size = "large",
+    tags = ["manual", "integration", "docker", "local"],
+    target_compatible_with = NOT_WINDOWS,
+)

@@ -33,6 +33,32 @@ var (
 type bridgeServer struct {
 	pb.UnimplementedBridgeServiceServer
 	producer sarama.SyncProducer
+	// schema_id of the contract this bridge was built with ("" if unknown).
+	deployedSchema string
+}
+
+// Consumers pick a decoder from this header (stack/ingest/decode_router.py).
+const fingerprintHeader = "schema_fingerprint"
+
+// deployedSchemaID reads the schema_id packaged into the image at /schema.
+func deployedSchemaID() string {
+	path := os.Getenv("SCHEMA_CONTRACT")
+	if path == "" {
+		path = "/schema/schema_contract.json"
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		log.Printf("No schema contract at %s; records carry no default fingerprint", path)
+		return ""
+	}
+	var contract struct {
+		SchemaID string `json:"schema_id"`
+	}
+	if err := json.Unmarshal(data, &contract); err != nil || len(contract.SchemaID) != 64 {
+		log.Printf("Unreadable schema contract at %s; records carry no default fingerprint", path)
+		return ""
+	}
+	return contract.SchemaID
 }
 
 func (s *bridgeServer) SendSensorData(ctx context.Context, req *pb.SensorDataRequest) (*pb.SensorDataResponse, error) {
@@ -48,18 +74,33 @@ func (s *bridgeServer) SendSensorData(ctx context.Context, req *pb.SensorDataReq
 		CarType: req.CarType,
 		Format:  req.PayloadFormat,
 	}
+	fingerprint := req.SchemaFingerprint
+	if fingerprint == "" {
+		fingerprint = s.deployedSchema
+	}
+	headers := []sarama.RecordHeader{{Key: []byte("car_type"), Value: []byte(msg.CarType)}, {Key: []byte("payload_format"), Value: []byte(msg.Format)}}
+	if fingerprint != "" {
+		headers = append(headers, sarama.RecordHeader{Key: []byte(fingerprintHeader), Value: []byte(fingerprint)})
+	}
 
 	// A successful RPC means Kafka acknowledged the raw packet. The client may
 	// retry an uncertain RPC; db_writer admits each packet only once.
 	_, _, err := s.producer.SendMessage(&sarama.ProducerMessage{
 		Topic:   "sensor_data",
 		Value:   sarama.ByteEncoder(msg.Payload),
-		Headers: []sarama.RecordHeader{{Key: []byte("car_type"), Value: []byte(msg.CarType)}, {Key: []byte("payload_format"), Value: []byte(msg.Format)}},
+		Headers: headers,
 	})
 	if err != nil {
 		return &pb.SensorDataResponse{Success: false, Message: err.Error()}, nil
 	}
 
+	// The live JSON feed is decoded with this bridge's own schema, so only
+	// payloads written in that schema go into it. Others stay raw in
+	// sensor_data for the decode router.
+	if fingerprint != "" && s.deployedSchema != "" && fingerprint != s.deployedSchema {
+		log.Printf("Schema %s is not this bridge's deployed schema; kept out of the live feed", fingerprint)
+		return &pb.SensorDataResponse{Success: true, Message: "persisted to Kafka"}, nil
+	}
 	select {
 	case grafanaDataChan <- msg:
 	default:
@@ -464,7 +505,7 @@ func main() {
 		MinTime:             10 * time.Second,
 		PermitWithoutStream: true,
 	}))
-	pb.RegisterBridgeServiceServer(grpcServer, &bridgeServer{producer: producer})
+	pb.RegisterBridgeServiceServer(grpcServer, &bridgeServer{producer: producer, deployedSchema: deployedSchemaID()})
 
 	// Graceful shutdown
 	sigChan := make(chan os.Signal, 1)

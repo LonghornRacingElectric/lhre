@@ -129,3 +129,9 @@ py_test(
     deps = [":registry_lib", "//lib/telemetry:testing"],
     target_compatible_with = NOT_WINDOWS,
 )
+
+# Decoder table for the runtime decode router (stack/ingest/decode_router.py).
+exports_files(
+    ["decoders.json"],
+    visibility = ["//apps/telemetry:__subpackages__"],
+)
