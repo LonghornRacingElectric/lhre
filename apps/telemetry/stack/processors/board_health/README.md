@@ -26,9 +26,11 @@ and untagged frames are skipped and do not count as a live feed. The board list 
 
 `last_seen_s` is elapsed seconds since communication, or `-1` for never seen.
 `stale_after_s` is the allowed silence, configured by `BOARD_STALE_AFTER_S`.
-The default, 0.5 s, is about 4.5 times the slowest healthy gap in the UTA
-autocross recording (DUI, 0.111 s; the other boards stay under 0.021 s). It is
-one value for every board until per-board thresholds are generated from the spec.
+The 0.5 s default is five times the slowest expected inter-frame gap for an
+active monitored board in the current CAN spec (100 ms). BEVO publishes board
+ages once per second, so this threshold does not imply 0.5 s detection latency.
+It is one value for every board until per-board thresholds are generated from
+the spec.
 Negative values other than `-1`, booleans, nonnumeric values, NaN, and infinity
 are invalid. Only fields in an update's presence mask are observations, including zero.
 Absent fields and malformed batches do not refresh a board's arrival timeout.
@@ -97,11 +99,17 @@ covers consumers that start later.
 A snapshot is published after any poll in which a board changed, and every
 `BOARD_SNAPSHOT_INTERVAL_S` otherwise, including before the first frame (all
 `UNKNOWN`). At most one goes out per poll. `t_ms` and `t_source` come from the
-newest update in that poll, or from the server clock when none arrived. The
-gateway's `/v1/topics` feeds keep only a topic's latest message, so each snapshot
+newest board-status observation in that poll. A heartbeat with no board
+observations, or a snapshot containing a timeout transition, uses server time.
+The gateway's `/v1/topics` feeds keep only a topic's latest message, so each snapshot
 is complete on its own: a client that connects late or misses one still sees
-every board. Use `board_health` for the history of transitions and
-`board_health_state` for the current picture.
+every board. The Kafka topic `board_health` contains transition events;
+`board_health_state` provides the current picture. The gateway's latest-message
+feeds do not provide a complete transition history.
+Clients check the gateway envelope's Kafka `timestamp` for heartbeat freshness.
+`t_ms` retains the newest observed car time even when unchanged states arrive
+from delayed input. A fresh heartbeat alone does not prove the source is caught
+up, and the gateway can keep the last snapshot after this processor stops.
 
 Timeout events come from the poll loop's silence check, not from a frame, so
 they are the only signal that the whole feed died. A per-board `UNKNOWN` with
@@ -159,11 +167,17 @@ Docker and loaded images:
 
 ```bash
 bazel test --config=local //apps/telemetry/stack/processors/events_faults:kafka_integration_test
-``` Run without Docker:
+```
+
+Run without Docker:
 
 ```bash
 bazel test --config=local //apps/telemetry/stack/processors/board_health:classifier_test
+bazel test --config=local //apps/telemetry/stack/processors/board_health:main_test
 ```
+
+`main_test` checks snapshot timestamps for out-of-order observations and a poll
+where one board updates while another expires.
 
 ## Configuration
 

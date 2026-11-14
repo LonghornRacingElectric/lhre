@@ -37,8 +37,8 @@ BOARD_FIELDS = {
 }
 CAR = SENSOR_TYPE.DESCRIPTOR.file.package
 
-# 0.5 s is about 4.5x the slowest healthy gap in the UTA autocross recording
-# (DUI, 0.111 s). One global value until per-board thresholds come from the spec.
+# Every monitored board has an expected CAN gap of at most 100 ms when active.
+# Keep five periods of margin; BEVO still reports these ages at 1 Hz.
 STALE_AFTER_S = float(os.getenv("BOARD_STALE_AFTER_S", "0.5"))
 TELEMETRY_TIMEOUT_S = float(os.getenv("BOARD_TELEMETRY_TIMEOUT_S", "10"))
 SNAPSHOT_INTERVAL_S = float(os.getenv("BOARD_SNAPSHOT_INTERVAL_S", "2"))
@@ -107,7 +107,7 @@ def main():
         while not stop:
             batch = consumer.poll(timeout_ms=1000)
             changed = False
-            # Time of the newest update in this poll; server time when none arrived.
+            # Newest board observation; expiration uses the server's evaluation time.
             snapshot_time = None
             for records in batch.values():
                 for record in records:
@@ -133,7 +133,8 @@ def main():
                         t_ms, t_source = event_time_ms(update["time"], _server_now_ms())
                         _publish(producer, changes, board_status, "frame", t_ms, t_source)
                         changed = changed or bool(changes)
-                        snapshot_time = (t_ms, t_source)
+                        if snapshot_time is None or t_ms > snapshot_time[0]:
+                            snapshot_time = (t_ms, t_source)
 
             # A dead feed produces no records, so this is the only place a car
             # going silent is noticed. It runs after every poll, empty or not.
@@ -141,6 +142,8 @@ def main():
             expired = tracker.expire(time.monotonic())
             _publish(producer, expired, None, "telemetry_timeout", _server_now_ms(), "server")
             changed = changed or bool(expired)
+            if expired:
+                snapshot_time = None
 
             # One snapshot per poll at most: after any change, and on the heartbeat
             # so a live client always has every board's current state.

@@ -20,6 +20,20 @@ py_test(
     deps = [":classifier"],
 )
 
+py_test(
+    name = "main_test",
+    srcs = ["main.py", "test_main.py"],
+    main = "test_main.py",
+    imports = [".", "../../..", "../../../.."],
+    deps = [
+        ":classifier",
+        "//apps/telemetry/stack/ingest:sensor_decode",
+        requirement("kafka-python"),
+        requirement("protobuf"),
+    ],
+    target_compatible_with = NOT_WINDOWS,
+)
+
 py_binary(
     name = "board_health_binary",
     srcs = ["main.py"],
