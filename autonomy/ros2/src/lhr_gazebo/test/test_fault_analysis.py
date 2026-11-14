@@ -4,6 +4,7 @@ import csv
 import importlib.util
 from pathlib import Path
 import sys
+from types import SimpleNamespace as NS
 
 import pytest
 
@@ -52,6 +53,41 @@ def test_analysis_records_at_speed_against_the_runs_tier(tmp_path, monkeypatch):
         rows = {r['id']: r for r in csv.DictReader(f)}
     assert rows['ekf_kill_v5_r1']['at_speed'] == 'True'
     assert rows['ekf_kill_v8_r1']['at_speed'] == 'False'
+
+
+def test_geofence_is_not_scored_against_its_tier(tmp_path, monkeypatch):
+    """It trips where the car crosses the fence, so the summary must not call it slow."""
+    out = tmp_path / 'results.csv'
+    monkeypatch.setattr(analyze, 'read', lambda bag: {})
+    monkeypatch.setattr(analyze, 'score', lambda data, case, fence: {
+        'case': case, 'result': 'caught', 'expected': 'GEOFENCE',
+        'tripped': 'GEOFENCE', 'v_at_fault': '6.18'})
+    monkeypatch.setattr(sys, 'argv', [
+        'analyze_run.py', str(tmp_path / 'bag'), '--id', 'geofence_v8_r1',
+        '--case', 'geofence', '--v-max', '8', '--csv', str(out)])
+    assert analyze.main() == 0
+    with out.open(newline='') as f:
+        (row,) = csv.DictReader(f)
+    assert row['v_at_fault'] == '6.18'
+    assert row['at_speed'] == ''
+
+
+def _odom(x, v):
+    return NS(pose=NS(pose=NS(position=NS(x=x, y=0.0))),
+              twist=NS(twist=NS(linear=NS(x=v, y=0.0))))
+
+
+def test_missed_fault_still_records_the_speed_it_hit():
+    """A fault nothing caught still says which tier it tested."""
+    times = [1.0 + 0.1 * i for i in range(100)]
+    data = {
+        '/lhr/mission/status': [(0.0, NS(data='READY')), (1.0, NS(data='DRIVING'))],
+        '/lhr/vehicle/odom_truth': [(t, _odom(7.7 * (t - 1.0), 7.7)) for t in times],
+        '/lhr/sim/fault': [(5.0, NS(data='start ekf_kill ODOM_STALE'))],
+    }
+    row = analyze.score(data, 'ekf_kill', 20.0)
+    assert row['result'] == 'missed'
+    assert row['v_at_fault'] == '7.70'
 
 
 def test_summary_shows_speed_at_fault_and_names_slow_runs(tmp_path, monkeypatch, capsys):

@@ -55,7 +55,8 @@ FIELDS = [
 #   clean        a clean lap that drove and never tripped
 #   false_trip   a clean lap that tripped
 #   no_drive     never reached DRIVING, or barely moved before the fault
-#   no_fault     drove, but the fault never started (RUN_S too short?)
+#   no_fault     drove, but the fault never started: RUN_S ran out, or the
+#                car never reached the speed gate (the launch log says so)
 #   hung         the sim clock stopped (watch_run.py), so the run proves nothing
 #   error        the bag could not be read
 
@@ -145,6 +146,10 @@ def score(data, case, fence):
            'tripped': trip[1] if trip else '', 'drove_m': f'{drove:.1f}',
            'match': str(result == 'caught'),
            'false_trip': str(result in ('early_trip', 'false_trip'))}
+    if fault_t is not None and result in ('caught', 'wrong_check', 'missed'):
+        # A missed fault still says which tier it tested.
+        v = next((s for t, _, _, s in reversed(truth) if t <= fault_t), math.nan)
+        row['v_at_fault'] = f'{v:.2f}'
     if result not in ('caught', 'wrong_check') or fault_t is None:
         return row
 
@@ -159,12 +164,10 @@ def score(data, case, fence):
         row['visible_after_s'] = 'never' if visible is None else f'{visible - fault_t:.3f}'
         after = 0.0 if visible is None else max(0.0, trip[0] - visible)
         row['latency_from_visible_s'] = f'{after:.3f}'
-    v = next((s for t, _, _, s in reversed(truth) if t <= fault_t), math.nan)
     stop = next((t for t, _, _, s in truth if t > trip[0] and s < STOPPED), None)
     latency = trip[0] - fault_t
     pdr = v * (latency + APPLY_S) + v * v / (2 * DECEL)
     row.update({
-        'v_at_fault': f'{v:.2f}',
         'trip_latency_s': f'{latency:.3f}',
         'emergency_latency_s': (f'{emergency - trip[0]:.3f}'
                                 if emergency is not None else ''),
@@ -234,9 +237,11 @@ def main():
     if 'reason=hung' in end.split():
         # Whatever the bag shows stopped with the sim, not with the car.
         row = {'case': args.case, 'result': 'hung'}
+    # The geofence case trips where the car crosses the fence, not at a
+    # tier's speed, so at_speed says nothing about it.
+    tier = '' if args.case == 'geofence' else at_speed(row.get('v_at_fault'), args.v_max)
     row.update({'id': args.id, 'track': args.track, 'seed': args.seed,
-                'v_max': args.v_max,
-                'at_speed': at_speed(row.get('v_at_fault'), args.v_max)})
+                'v_max': args.v_max, 'at_speed': tier})
     save(args.csv, row)
     print('  '.join(f'{k}={row[k]}' for k in FIELDS if row.get(k)))
     return status

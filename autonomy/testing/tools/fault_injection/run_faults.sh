@@ -34,6 +34,12 @@ HANG_S=${HANG_S:-60}        # wall seconds of a stopped /clock: hung (#227)
 FENCE=${FENCE:-20}          # geofence case: radius well inside the track
 OUT=${OUT:-$HOME/lhr-test-data/$(date +%F)-fault-injection}
 EXTRA=${EXTRA:-}
+# awk reads a typo such as 0,95 as 0, which would silently turn the gate off.
+if ! [[ $AT_SPEED =~ ^[0-9]*\.?[0-9]+$ ]] \
+        || ! awk -v f="$AT_SPEED" 'BEGIN { exit !(f <= 1) }'; then
+    echo "run_faults: AT_SPEED must be a number from 0 to 1 (0 fires on time alone), got '$AT_SPEED'" >&2
+    exit 2
+fi
 
 TOPICS="/clock /lhr/safety/status /lhr/safety/heartbeat /lhr/mission/status
 /lhr/vehicle/odom /lhr/vehicle/odom_truth /lhr/vehicle/cmd /lhr/sim/fault

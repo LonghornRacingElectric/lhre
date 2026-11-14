@@ -122,6 +122,28 @@ def test_fault_plan_runs_every_case_and_clean_lap_on_the_gate_stack(tmp_path):
     assert rows['controller_pause_v3_r1'][5]['fault_duration_s'] == '3'
 
 
+@pytest.mark.parametrize('share, gate', [('0.5', 4.0), ('1', 8.0), ('0', 0.0)])
+def test_fault_plan_scales_the_speed_gate_with_at_speed(tmp_path, share, gate):
+    env = dict(os.environ, CASES='ekf_kill', SPEEDS='8', REPEATS='1', CLEAN_SEEDS='',
+               AT_SPEED=share, OUT=str(tmp_path))
+    result = subprocess.run(['bash', '-c', fault_prefix() + '\nplan'],
+                            env=env, text=True, capture_output=True, check=True)
+    (line,) = result.stdout.splitlines()
+    args = dict(a.split(':=', 1) for a in line.split()[6:])
+    assert float(args['fault_min_speed_mps']) == pytest.approx(gate)
+
+
+@pytest.mark.parametrize('share', ['0,95', 'abc', '1.5', '-0.1', '.'])
+def test_fault_runner_refuses_a_bad_at_speed(tmp_path, share):
+    """A typo must stop the runner, not silently turn the speed gate off."""
+    env = dict(os.environ, AT_SPEED=share, OUT=str(tmp_path))
+    result = subprocess.run(['bash', '-c', fault_prefix() + '\necho planned'],
+                            env=env, text=True, capture_output=True)
+    assert result.returncode == 2
+    assert 'planned' not in result.stdout
+    assert 'AT_SPEED' in result.stderr
+
+
 @pytest.mark.parametrize('style', ['autocross', 'rules_autocross'])
 @pytest.mark.parametrize('extra', ['', 'fusion_camera_max_age_sec:=0.9'])
 def test_completed_run_records_executed_arguments_and_resumes(tmp_path, style, extra):

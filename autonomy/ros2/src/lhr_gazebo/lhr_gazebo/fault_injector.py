@@ -94,6 +94,8 @@ class FaultClock:
         self._driving_since: Optional[float] = None
         self.started_at: Optional[float] = None
         self.ended = False
+        # The delay is over but the car is still under the speed gate.
+        self.waiting_for_speed = False
 
     def update(self, now: float, driving: bool, speed: float = math.inf) -> str:
         """Return 'start', 'end' or '' for this instant."""
@@ -102,10 +104,14 @@ class FaultClock:
                 self._driving_since = now
             return ''
         if self.started_at is None:
-            if (now - self._driving_since >= self._after
-                    and speed >= self.min_speed_mps):
+            if now - self._driving_since < self._after:
+                return ''
+            # No gate starts at any speed, NaN included.
+            if self.min_speed_mps <= 0.0 or speed >= self.min_speed_mps:
                 self.started_at = now
+                self.waiting_for_speed = False
                 return 'start'
+            self.waiting_for_speed = True
             return ''
         if (not self.ended and self._duration > 0.0
                 and now - self.started_at >= self._duration):
@@ -137,11 +143,16 @@ class FaultInjector(Node):
             float(self.get_parameter('fault_after_s').value),
             float(self.get_parameter('fault_duration_s').value),
             float(self.get_parameter('fault_min_speed_mps').value))
-        if not self._fault_clock.min_speed_mps >= 0.0:
-            raise ValueError('fault_min_speed_mps must be a number >= 0')
+        gate = self._fault_clock.min_speed_mps
+        if not (math.isfinite(gate) and gate >= 0.0):
+            # NaN never opens the gate and inf never closes it: either way
+            # the fault would silently never fire.
+            raise ValueError(f'fault_min_speed_mps must be a finite number >= 0, got {gate}')
         self._driving = False
         # No odometry yet reads as standing still, so a speed gate waits.
         self._speed = 0.0
+        self._plant_seen = False
+        self._told_waiting = False
         self._spiked = False
         self._frozen_steer: Optional[float] = None
 
@@ -165,7 +176,7 @@ class FaultInjector(Node):
         self.get_logger().warning(
             f'Fault injector armed: {self._kind} (expect {f.expect}), '
             f'{self._fault_clock.after_s:.1f} s after DRIVING, at '
-            f'{self._fault_clock.min_speed_mps:.1f} m/s or more')
+            f'{self._fault_clock.min_speed_mps:g} m/s or more')
 
     def _now(self) -> float:
         return self.get_clock().now().nanoseconds * 1e-9
@@ -176,9 +187,20 @@ class FaultInjector(Node):
     def _plant_cb(self, msg: Odometry):
         v = msg.twist.twist.linear
         self._speed = math.hypot(v.x, v.y)
+        self._plant_seen = True
 
     def _tick(self):
-        edge = self._fault_clock.update(self._now(), self._driving, self._speed)
+        clock = self._fault_clock
+        edge = clock.update(self._now(), self._driving, self._speed)
+        if clock.waiting_for_speed and not self._told_waiting:
+            # Once, so a gate that never opens is in the launch log, not
+            # only a no_fault row.
+            self._told_waiting = True
+            source = ('' if self._plant_seen else
+                      f', and nothing has arrived on {PLANT_ODOM}')
+            self.get_logger().warning(
+                f'{self._kind} is due but waits for {clock.min_speed_mps:g} m/s: '
+                f'the plant is at {self._speed:.2f} m/s{source}')
         if not edge:
             return
         f = self._fault
