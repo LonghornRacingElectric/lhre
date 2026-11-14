@@ -78,8 +78,8 @@ far it got:
   is wrong** (2). Nothing is written: the scenario is checked before
   anything builds, and the host deletes the previous run's files only once
   it starts. So a run directory `run.sh` made is removed again, a reused
-  `--out` is left as it was, and `run.sh` prints `wrote DIR` only for a run
-  that wrote it.
+  `--out` is left as it was, still holding the earlier run's files, and
+  `run.sh` prints `wrote DIR` only for a run that wrote it.
 
 Other options pass through to `python -m vcusil`:
 
