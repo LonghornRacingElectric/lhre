@@ -81,7 +81,8 @@ wait_for_service() {
     
     log_info "Waiting for $service_name at $host:$port..."
     
-    local start_time=$(date +%s)
+    local start_time
+    start_time=$(date +%s)
     while true; do
         if nc -z "$host" "$port" 2>/dev/null; then
             log_info "$service_name is ready"

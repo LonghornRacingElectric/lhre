@@ -54,8 +54,34 @@ test: smoke unit
 smoke:
 	$(RUN) sim python tools/check_vehicle.py
 
+PYTEST_ARGS = pytest -q -ra -p no:cacheprovider tests
+PYTEST = python -m $(PYTEST_ARGS)
+# COVERAGE=1 (CI sets it) also writes out/coverage.md when coverage.py's
+# wheel is in out/wheels. It only reports: the tests' result is the exit
+# status either way. A report from an earlier run is deleted first, and a
+# new one appears only whole, so CI never shows a stale or partial one.
+COVERAGE ?=
+ifeq ($(COVERAGE),1)
+UNIT_RUN = \
+  rm -f out/coverage.md out/coverage.md.tmp; \
+  if pip install -q --no-index --find-links out/wheels coverage; then \
+    rm -rf out/coverage; \
+    python -m coverage run --rcfile=.coveragerc -m $(PYTEST_ARGS); status=$$?; \
+    { python -m coverage combine --rcfile=.coveragerc -q \
+      && python -m coverage report --rcfile=.coveragerc --format=markdown > out/coverage.md.tmp \
+      && mv out/coverage.md.tmp out/coverage.md; } \
+      || { rm -f out/coverage.md.tmp; echo "coverage.py could not write a report"; }; \
+    exit $$status; \
+  else \
+    echo "coverage.py is not in out/wheels, so there is no coverage report"; \
+    $(PYTEST); \
+  fi
+else
+UNIT_RUN = $(PYTEST)
+endif
+
 unit:
-	$(RUN) -e LHRE_REQUIRE_GIT=$(LHRE_REQUIRE_GIT) sim sh -c 'python -m pytest -q -ra -p no:cacheprovider tests'
+	$(RUN) -e LHRE_REQUIRE_GIT=$(LHRE_REQUIRE_GIT) sim sh -c '$(UNIT_RUN)'
 	@test -z "$$(git -C bobsim status --porcelain --ignore-submodules=none)" || { echo "bobsim/ has local changes after the tests. Tests must not write into BobSim. If make records wrote them, run make records-undo."; git -C bobsim status --short --ignore-submodules=none; exit 1; }
 
 BOBLIB := bobsim/engines/boblib

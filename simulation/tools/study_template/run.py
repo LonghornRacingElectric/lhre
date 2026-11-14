@@ -21,7 +21,7 @@ def bundle_id(vehicle_path):
 def cases(study):
     names = list(study["sweep"])
     for values in itertools.product(*study["sweep"].values()):
-        yield {**study["parameters"], **dict(zip(names, values))}
+        yield {**study["parameters"], **dict(zip(names, values))}  # noqa: B905 pre-existing when the lint gate went on
 
 
 def solve(vehicle, case):

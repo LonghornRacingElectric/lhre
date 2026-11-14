@@ -1,11 +1,9 @@
 import json
-import os
 import logging
 from time import sleep
 import time
 import threading
 from kafka import KafkaConsumer
-import json
 
 from analysis.sql_utils.db_session import get_db
 from analysis.sql_utils.query_builder import QueryBuilder
@@ -50,7 +48,7 @@ class LapTimerProcessor:
         return 0 <= t <= 1 and 0 <= u <= 1
     
     def _is_valid(self, time:int, delta: int):
-        if self.event_id == None:
+        if self.event_id == None:  # noqa: E711 pre-existing when the lint gate went on
             return False
 
         last_lap = self.session.query(Classifier.start_time).filter(Classifier.event_id == self.event_id).order_by(Classifier.start_time.desc()).first()
@@ -60,7 +58,7 @@ class LapTimerProcessor:
         
     
     def _record_time(self, time: int):
-        if self.event_id == None:
+        if self.event_id == None:  # noqa: E711 pre-existing when the lint gate went on
             return
         
         db_obj = {
@@ -83,7 +81,7 @@ class LapTimerProcessor:
     
     def _upload_gates_to_db(self, gates: tuple[tuple[float, float], tuple[float, float]]):
         retries = 5
-        for i in range(retries):
+        for i in range(retries):  # noqa: B007 pre-existing when the lint gate went on
             event = self.session.query(Event).filter(Event.event_id == self.event_id).first()
             if event:
                 break
@@ -102,7 +100,7 @@ class LapTimerProcessor:
         table_desc = self.table_specs[Classifier.__tablename__]
         QueryBuilder.insert(self.session, 'classifier', Classifier, db_obj, table_desc, commit=True)
         
-        logging.info("Published gates to classifier", db_obj)
+        logging.info("Published gates to classifier: %s", db_obj)
    
     def run_thread(self):
         """Kafka Consumer Loop"""
@@ -128,10 +126,10 @@ class LapTimerProcessor:
                     logging.info(f"Lap detected! Time: {lap_time}")
                     
                     if self._is_valid(lap_time, 5000):
-                        logging.info(f"Lap Time is Valid")
+                        logging.info("Lap Time is Valid")
                         self._record_time(lap_time)
                     else:
-                        logging.warning(f"Lap Time is Not Valid")
+                        logging.warning("Lap Time is Not Valid")
             
             self.last_point = (current_point, current_time)
         

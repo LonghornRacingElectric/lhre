@@ -38,13 +38,39 @@ afterthought:
   own page. Prefer the adjacent README for anything structural; use
   embedded blocks for docs that would go stale if separated from the code.
 
+## Tests are the gate
+
+Agent-written code is reviewed less closely than it's written, so CI has to
+catch what a reviewer would have ([ADR-017](docs/architecture/017-tests-gate-merges.md)).
+Follow [docs/testing.md](docs/testing.md); the rules that matter most:
+
+- A behavior change ships with a test that fails without it. Cover the
+  edges (limits, saturation, faults, units), not only the happy path.
+- Aim for high coverage of the lines you add or change. CI reports it on
+  every PR without a fixed percent; a low number needs a reason.
+- For a big overhaul, land a tests-first PR that pins current behavior,
+  then the refactor.
+- Never delete, skip or loosen a test, widen a size budget, mark a test
+  flaky (`flaky = True`, `DISABLED_`, `GTEST_SKIP` fail CI), or add a
+  lint suppression to get CI green. If a test is
+  genuinely wrong, fix it in its own commit and say why in the PR.
+- Tests are hermetic: no network, no wall clock, seeded randomness, no
+  absolute or home paths, writes only under the test's temp dir.
+- In `simulation/`, test lhre's own tools, vehicle files and study
+  plumbing. BobSim and BobLib are tested in BobDyn; don't re-test them here.
+- Fill in the PR template's "How it's tested" with the test that pins the
+  change.
+
 ## Build, test, verify
 
 ```bash
 bazel test //...                        # build + test everything (remote by default)
 bazel test --config=local //...         # same, entirely on this machine
 bazel run //tools/format                # clang-format everything (CI enforces :check)
+uv run --group lint ruff check          # Python lint (CI enforces)
+uv run --group lint actionlint          # lint the CI workflows
 uv run --group docs mkdocs build --strict   # docs must build cleanly
+bazel coverage //boards/... //drivers/...  # then diff-cover (tools/coverage/README.md)
 ```
 
 ## CI
@@ -57,6 +83,11 @@ It runs on every PR, on every push to `main`, weekly, and by hand.
   included. Each area's job runs only when its paths changed: Bazel on
   Linux and Windows, simulation fast checks, FourPost, autonomy (colcon),
   BEVO, docs and telemetry. `Format` always runs.
+- `Lint` always runs: ruff for Python and shellcheck for scripts outside
+  `autonomy/`, and actionlint for the workflows (see
+  [tools/lint/README.md](tools/lint/README.md)). Fix a new violation; a
+  suppression (`# noqa: <code>`, `# shellcheck disable=<code>`) needs a
+  reason after it.
 - `All checks passed` is the only required check. It fails if any job failed or
   was cancelled, or if `Changes` failed. A job skips only when `Changes`
   says its paths are untouched. If `Changes` fails, every job runs.

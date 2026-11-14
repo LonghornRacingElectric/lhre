@@ -1,0 +1,4 @@
+# coverage.py for CI's report on tools/ (make unit COVERAGE=1). CI downloads
+# it on the host, since the container has no network. Pure-Python wheel, so
+# one hash serves every platform.
+coverage==7.10.7 --hash=sha256:f7941f6f2fe6dd6807a1208737b8a0cbcf1cc6d7b07d24998ad2d63590868260

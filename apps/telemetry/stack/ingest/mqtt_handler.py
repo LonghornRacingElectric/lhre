@@ -10,10 +10,8 @@ import time
 import queue
 import threading
 import numpy as np
-import copy
 import grpc
 from paho.mqtt import client as mqtt_client
-from google.protobuf.json_format import MessageToDict
 from pathlib import Path
 from sqlalchemy import text
 
@@ -25,7 +23,7 @@ from analysis.sql_utils.models import AngeliquePacket, OrionPacket, BaseTelemetr
 from stack.ingest.partition_manager import PartitionManager
 from stack.ingest.sensor_decode import decode_sensor
 from stack.ingest.packet_ids import retained_packet_high_water
-from stack.ingest.protobuf import template_pb2, angelique_pb2, can_packets_pb2, bridge_pb2, bridge_pb2_grpc
+from stack.ingest.protobuf import bridge_pb2, bridge_pb2_grpc
 
 # Determine path to net_configs.json based on execution context
 if os.getenv("IN_DOCKER"):
@@ -233,7 +231,7 @@ class MQTTHandler:
                         self.partition_manager.set_latest_end_time(session_obj, packet_times[-1])
 
                 session_obj.commit()
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
                 session_obj.rollback()
                 logging.error(f"DB worker batch insert failed for {car}: {e}")
             finally:
@@ -288,7 +286,7 @@ class MQTTHandler:
             try:
                 payload, car, file_path, columns = item
                 self._write_proto_csv(payload, car, file_path, columns)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
                 logging.error(f"CSV worker write failed: {e}")
             finally:
                 self.csv_queue.task_done()
@@ -366,7 +364,7 @@ class MQTTHandler:
         connected_client_id = msg.payload.decode().strip()
         if connected_client_id in {'BEVO-Angelique', 'BEVO_ANGELIQUE'}:
             # Query the database for the latest packet_id from Angelique
-            logging.warning(f'\t\tBEVO-Angelique has connected. Querying database for latest packet_id to send welcome message...')
+            logging.warning('\t\tBEVO-Angelique has connected. Querying database for latest packet_id to send welcome message...')
             try:
                 with QueryBuilder("Angelique") as qb:
                     result = qb.session.query(AngeliquePacket.packet_id).order_by(AngeliquePacket.packet_id.desc()).first()
@@ -374,7 +372,7 @@ class MQTTHandler:
                         next_packet_id = int(result[0]) + 1
                     else:
                         next_packet_id = 1  # If no packets, start from 1
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
                 logging.error(f'\t\tUnable to fetch latest Angelique packet_id: {e}')
                 return
             self.bridge_queue.join()
@@ -416,7 +414,7 @@ class MQTTHandler:
                 self.orion_log_path = log_file
                 self.orion_cols = cols
                 self.orion_csv_config = (log_file, tuple(cols))
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
                 logging.error(f'\t\tUnable to fetch latest Orion packet_id: {e}')
                 return
 
@@ -548,9 +546,9 @@ class MQTTHandler:
         :param table:       str         destination table name
         '''
         if not os.getenv('EVENT_ID'):
-            logging.error(f'\tAttempt made to send data without an event_id cached.')
+            logging.error('\tAttempt made to send data without an event_id cached.')
         try:
-            data_dict = pickle.loads(payload)
+            data_dict = pickle.loads(payload)  # noqa: S301 pre-existing when the lint gate went on
             #logging.debug('\tPickle Payload received, likely coming from debug source...')
         except pickle.UnpicklingError:
             data_dict = json.loads(payload.decode().replace("'", '"'))
@@ -586,7 +584,7 @@ class MQTTHandler:
                         if packet_time is not None:
                             self.partition_manager.record_packet_time(session, int(packet_time))
                         session.commit()
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
                 session.rollback()
                 logging.error(f"Data ingest failed for {car}.{table}: {e}")
     
@@ -638,9 +636,9 @@ class MQTTHandler:
         :param high_freq:   bool        switch controlling which frequency message to expect
         '''
         if not os.getenv('EVENT_ID'):
-            logging.error(f'\tAttempt made to send data without an event_id cached.')
+            logging.error('\tAttempt made to send data without an event_id cached.')
 
-        logging.info(f'\tData received. Inserting to Database now...')
+        logging.info('\tData received. Inserting to Database now...')
         data_dict = self._base64_decode(payload, high_freq)
         data_dict = self.preprocess_payload(data_dict, high_freq)
 
@@ -706,7 +704,7 @@ class MQTTHandler:
             payload['time'] = int(float(os.environ['RTC_START']) + payload['since_rtc'])
             del payload['since_rtc']
         except KeyError:
-            raise KeyError('RTC Start was not set.')
+            raise KeyError('RTC Start was not set.')  # noqa: B904 pre-existing when the lint gate went on
         if 'packet_id' not in payload:
             payload['packet_id'] = next(self.counter)
         if high_freq:
@@ -759,7 +757,7 @@ def reconcile_orm_schema():
     ):
         try:
             base.metadata.create_all(engine, checkfirst=True)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 pre-existing when the lint gate went on
             logging.warning("Schema reconcile for %s skipped: %s", name, exc)
 
 

@@ -244,7 +244,7 @@ def lhre(tmp_path):
 
 def _make_car(lhre, target, *args):
     compose = f"{sys.executable} {lhre.parent / 'compose.py'}"
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: PLW1510 pre-existing when the lint gate went on
         ["make", "car", f"T={target}", f"COMPOSE={compose}", *args],
         cwd=lhre / "simulation",
         capture_output=True,
@@ -484,7 +484,7 @@ def test_make_car_rejects_a_target_that_is_not_a_name(lhre, target):
 
 
 def test_make_car_is_not_run_by_a_dry_run():
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: PLW1510 pre-existing when the lint gate went on
         ["make", "-n", "car", "T=dry-run-probe", "COMPOSE=compose"],
         cwd=SIM,
         capture_output=True,
@@ -499,5 +499,5 @@ def test_car_script_is_posix_sh():
     dash = shutil.which("dash")
     if dash is None:
         pytest.skip("dash is not installed")
-    result = subprocess.run([dash, "-n", str(SIM / "tools" / "car.sh")], capture_output=True, text=True)
+    result = subprocess.run([dash, "-n", str(SIM / "tools" / "car.sh")], capture_output=True, text=True)  # noqa: PLW1510 pre-existing when the lint gate went on
     assert result.returncode == 0, result.stderr

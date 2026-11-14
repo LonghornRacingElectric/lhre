@@ -185,6 +185,7 @@ class App {
   ControlSnapshot live_;
   longhorn::RateGate faults_gate_;
   longhorn::RateGate energy_gate_;
+  longhorn::RateGate torque_path_gate_;
 
   // Shared between tasks
   StaticSemaphore_t snapshot_mutex_control_;

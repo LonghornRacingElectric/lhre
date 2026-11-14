@@ -56,7 +56,7 @@ def main():
     failed = False
     # Chunk to stay under Windows' command-line length limit.
     for i in range(0, len(files), 100):
-        result = subprocess.run([clang_format, *mode, *files[i : i + 100]])
+        result = subprocess.run([clang_format, *mode, *files[i : i + 100]])  # noqa: PLW1510 pre-existing when the lint gate went on
         failed = failed or result.returncode != 0
 
     if failed:

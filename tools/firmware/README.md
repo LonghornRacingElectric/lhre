@@ -76,15 +76,16 @@ from the `App/` directory instead of boards restating it:
   automatically — Cortex-M port + the board's CubeMX `FreeRTOSConfig.h`
   (exposed as `{name}_freertos_config`) when cross-compiling, simulator
   port + host config otherwise — so task code runs unmodified on the host.
-  It compiles with `-Wall -Wextra -Werror`: app code is ours and starts
-  warning-clean, so new warnings get fixed when they appear instead of
-  piling up. That covers
-  headers it includes from `app_deps` too. `Core/` and `Board/` stay
+  It compiles with the [firmware warnings](#warnings) as errors. That
+  covers headers it includes from `app_deps` too. `Core/` and `Board/` stay
   outside it, since they compile alongside CubeMX and ST HAL sources that
   aren't warning-clean.
 - `App/**/*_test.cpp` → one small `cc_test` per file, named by its stem,
   against `{name}_app` + the LHAL host fakes + gtest. Stems must be unique
-  across `App/`.
+  across `App/`. A test function's stack frame over 256 KiB is a build
+  error: Windows gives tests 1 MB of stack, so a whole app object as a local
+  passes on Linux and crashes there. Hold it in a `std::unique_ptr` or a
+  fixture member instead.
 - `App/**/*_sim.cpp` → one host `cc_binary` per file, named by its stem.
 
 `app_deps` adds host-buildable dependencies to the app library (e.g.
@@ -99,6 +100,23 @@ simply stop being compiled). The scaffolder's `--no-test` / `--no-sim`
 flags are the front-door version: they skip writing those starter files in
 the first place (a `*_test.cpp` / `*_sim.cpp` added later still becomes a
 target automatically).
+
+## Warnings
+
+[`warnings.bzl`](https://github.com/LonghornRacingElectric/lhre/blob/main/tools/firmware/warnings.bzl)
+holds `FIRMWARE_WARNINGS`: `-Wall -Wextra -Werror` plus the warnings that
+catch real firmware bugs, each one commented with what it catches.
+`-Wdouble-promotion` matters most on the car: the M4F's FPU is single
+precision, so a stray `double` turns into slow software math in the control
+loop. Write `1.0f`, not `1.0`, and cast on purpose where a `double` is
+wanted, as with an accumulator.
+
+The app library and the hand-written `drivers/longhorn` libraries compile
+with them, on both the ARM GCC and host clang builds. Everything was clean
+when they went on, so there's no baseline: a new warning fails the build.
+`Core/`, `Board/`, ST HAL and generated CAN code stay outside, since they
+aren't ours to fix. To silence one on purpose, use
+`#pragma GCC diagnostic` around the line, with a comment saying why.
 
 ## App code can't reach the ST HAL — by construction
 

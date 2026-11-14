@@ -57,7 +57,7 @@ async def list_remote_logs() -> list[RemoteFile]:
         except ProcessLookupError:
             pass
         await proc.communicate()
-        raise RuntimeError("timed out listing remote logs over SSH")
+        raise RuntimeError("timed out listing remote logs over SSH")  # noqa: B904 pre-existing when the lint gate went on
     if proc.returncode != 0:
         raise RuntimeError(
             f"Failed to list remote logs (exit {proc.returncode}): "

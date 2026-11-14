@@ -96,7 +96,7 @@ def update_sensor_proto(sensor_proto_path, can_packets_proto_path):
     updated_content = sensor_content
     
     # Pattern to find each Orion message definition
-    for target_msg_name, (source_def, updated_def) in orion_messages.items():
+    for target_msg_name, (source_def, updated_def) in orion_messages.items():  # noqa: B007 pre-existing when the lint gate went on
         # Find the existing message definition in sensor.proto by target name
         pattern = rf'^message\s+{re.escape(target_msg_name)}\s*\{{.*?\n\}}'
         

@@ -16,8 +16,7 @@ That is the command presubmit runs. Gotchas:
 - **Trap mode, so no report.** The hermetic LLVM ships no sanitizer
   runtime, so there is nothing to print which check fired. A trapped test
   dies with `SIGILL`. Rerun it under a debugger to find the faulting
-  line. ASan is not possible for the
-  same reason.
+  line. Memory errors are [ASan's](../asan/README.md) job.
 - **Host tests only.** Firmware images can't take the flags, so the config
   sets `--build_tests_only` and skips each image's `{image}_size_test`
   (tag `firmware_size`, see [tools/firmware](../firmware/README.md)). Don't

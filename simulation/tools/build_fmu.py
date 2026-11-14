@@ -90,7 +90,7 @@ def build(source, output, vehicle_path, bobsim_root):
             target = stage/path.relative_to(original)
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(content)
-        for path, name in zip(plan.result.package_orders, (
+        for path, name in zip(plan.result.package_orders, (  # noqa: B905 pre-existing when the lint gate went on
                 plan.result.record_name, plan.result.vehicle_template_name,
                 plan.result.four_post_template_name)):
             target = stage/path.relative_to(original)
