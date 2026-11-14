@@ -2,6 +2,7 @@ import base64
 import io
 import json
 from pathlib import Path
+import subprocess
 import tarfile
 import tempfile
 import unittest
@@ -174,6 +175,50 @@ class RunnerTest(unittest.TestCase):
         self.assertEqual(outside.read_text(), 'unchanged')
         self.assertFalse((directory / 'stdout.log').is_symlink())
         self.assertEqual((directory / 'stdout.log').read_text(), 'output')
+
+    def test_late_reconciliation_preserves_completed_container_outcome(self):
+        for exit_code, status in [(0, 'succeeded'), (7, 'failed')]:
+            with self.subTest(exit_code=exit_code):
+                self.queue.submit(SETTINGS)
+                self.queue.update(ID, status='running', started=NOW)
+                state = {'State': {'Running': False, 'ExitCode': exit_code}}
+                with patch.object(runner, 'inspect', return_value=state), patch.object(runner, 'capture'), patch.object(runner, 'docker') as docker, patch.object(runner.time, 'time', return_value=1794688000):
+                    runner.tick(self.queue)
+                    docker.assert_not_called()
+                job = self.queue.get(ID)
+                self.assertEqual(job['status'], status)
+                self.assertEqual(job['exit_code'], exit_code)
+                self.assertIsNone(job['error'])
+
+    def test_failed_capture_blocks_archive_and_retries_before_completion(self):
+        self.queue.submit(SETTINGS)
+        self.queue.update(ID, status='running', started=NOW)
+        state = {'State': {'Running': False, 'ExitCode': 0}}
+        success = subprocess.CompletedProcess(['docker', 'logs'], 0, 'complete output', 'complete stderr')
+        with patch.object(runner, 'inspect', return_value=state), patch.object(runner, 'docker', side_effect=[subprocess.TimeoutExpired('docker logs', 25), success]), patch.object(runner.time, 'time', side_effect=[1794686405, 1794688000]):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                runner.tick(self.queue)
+            self.assertEqual(self.queue.get(ID)['status'], 'running')
+            with self.assertRaises(ValueError):
+                runner.archive(self.queue, ID)
+            runner.tick(self.queue)
+        self.assertEqual(self.queue.get(ID)['status'], 'succeeded')
+        archive = runner.archive(self.queue, ID)
+        with tarfile.open(fileobj=io.BytesIO(base64.b64decode(archive['base64']))) as tar:
+            self.assertEqual(tar.extractfile('stdout.log').read(), b'complete output')
+            self.assertEqual(tar.extractfile('stderr.log').read(), b'complete stderr')
+            self.assertEqual(json.load(tar.extractfile('job.json'))['status'], 'succeeded')
+
+    def test_docker_logs_exit_failure_is_not_saved_as_successful_capture(self):
+        self.queue.submit(SETTINGS)
+        def failed_logs(args, **kwargs):
+            if kwargs['check']:
+                raise subprocess.CalledProcessError(1, args, stderr='daemon unavailable')
+            return subprocess.CompletedProcess(args, 1, '', 'daemon unavailable')
+        with patch.object(runner.subprocess, 'run', side_effect=failed_logs):
+            with self.assertRaises(subprocess.CalledProcessError):
+                runner.capture(self.queue, ID)
+        self.assertFalse((self.queue.directory(ID) / 'stderr.log').exists())
 
 
 if __name__ == '__main__':

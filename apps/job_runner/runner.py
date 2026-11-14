@@ -184,10 +184,9 @@ def inspect(job_id):
 def capture(queue, job_id):
     directory = queue.directory(job_id)
     directory.mkdir(exist_ok=True)
-    result = docker(['logs', '--tail', '2000', container_name(job_id)], check=False)
+    result = docker(['logs', '--tail', '2000', container_name(job_id)])
     for name, content in [('stdout.log', result.stdout[-262144:]),
-                          ('stderr.log', result.stderr[-262144:]),
-                          ('job.json', json.dumps(queue.get(job_id), indent=2))]:
+                          ('stderr.log', result.stderr[-262144:])]:
         target = directory / name
         target.unlink(missing_ok=True)
         with target.open('x') as stream:
@@ -210,17 +209,20 @@ def tick(queue):
             continue
         state = info['State']
         age = time.time() - datetime.datetime.fromisoformat(job['started']).timestamp()
-        if state['Running'] and (job['cancel_requested'] or age > 900):
-            queue.update(job['id'], status='cancelling', error='Runtime limit (15 min)' if age > 900 else None)
+        timed_out = state['Running'] and age > 900
+        if state['Running'] and (job['cancel_requested'] or timed_out):
+            queue.update(job['id'], status='cancelling', error='Runtime limit (15 min)' if timed_out else None)
             docker(['stop', '-t', '5', container_name(job['id'])], check=False)
             info = inspect(job['id'])
             state = info['State']
         if not state['Running']:
-            cancelled = job['cancel_requested'] or job['status'] == 'cancelling' or age > 900
+            # A failed capture must leave the job live so the next tick retries;
+            # terminal jobs are immediately eligible for cached result downloads.
+            capture(queue, job['id'])
+            cancelled = job['cancel_requested'] or job['status'] == 'cancelling' or timed_out
             queue.update(job['id'], status='cancelled' if cancelled else ('succeeded' if state['ExitCode'] == 0 else 'failed'),
                          finished=queue.now(), exit_code=state['ExitCode'],
-                         error='Container exceeded its memory limit' if state.get('OOMKilled') else ('Runtime limit (15 min)' if age > 900 else job['error']))
-            capture(queue, job['id'])
+                         error='Container exceeded its memory limit' if state.get('OOMKilled') else ('Runtime limit (15 min)' if timed_out else job['error']))
         elif job['status'] == 'starting':
             queue.update(job['id'], status='running')
     if queue.paused():

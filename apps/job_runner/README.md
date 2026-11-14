@@ -68,6 +68,11 @@ idempotent. Worker restarts reconcile deterministic container names instead
 of starting duplicates. Dashboard restarts or SSH disconnects do not stop
 containers. Cancellation is reported complete only after Docker confirms the
 container stopped. Pausing prevents new starts while existing jobs continue.
+The runtime limit applies only to containers observed still running; a delayed
+worker check preserves an already-exited container's actual result. Jobs become
+terminal and downloadable only after log capture succeeds. Failed captures
+are retried on later worker ticks, and archive metadata uses the final queue
+state, so telemetry cannot cache a premature archive without those logs.
 If HIL cannot be reached, the dashboard labels cached history as disconnected
 and disables new submissions.
 
