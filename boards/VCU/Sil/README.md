@@ -61,7 +61,21 @@ runs the `launch` scenario and writes `boards/VCU/Sil/out/<scenario>-<time>/`:
 
 Exit status: 0 the run completed, 1 the car model failed, 2 anything else
 (a firmware that does not build, a wrong FMU, bad options, a harness bug).
-After 1 or 2, `meta.json` says what failed and the trace so far is kept.
+What a failed run leaves depends on how far it got:
+
+- **It fails mid-run** (the car model: 1; the firmware or the harness: 2).
+  The run's files are written as usual, with `trace.csv` and `run.mcap`
+  ending at the failing step, and `meta.json` says what failed.
+- **It fails before the first step** (a car model that won't start: 1; a
+  wrong FMU or library: 2). Only `meta.json`, saying what failed, and
+  `fmu.log` if the car model got as far as loading. An unexpected exception
+  also writes `meta.json` when it can, beside whatever was written before.
+- **The firmware doesn't build, or an option is wrong** (2). Nothing is
+  written. Nothing is cleared either: the host deletes the previous run's
+  files only once it starts, so in a reused `--out` every file there,
+  `meta.json` included, is the earlier run's, and run.sh still prints its
+  `wrote` line for them. The default `--out` is new for every run; reuse a
+  directory only if you check the exit status.
 
 Other options pass through to `python -m vcusil`:
 

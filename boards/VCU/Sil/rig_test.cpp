@@ -7,6 +7,7 @@
 #include <cstring>
 #include <map>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "Sil/sensors.hpp"
@@ -344,6 +345,44 @@ TEST(SilRig, ConsoleCarriesTheStateLog) {
   EXPECT_NE(text.find("-> DRIVE"), std::string::npos) << text;
   EXPECT_TRUE(rig.TakeConsole().empty());
   EXPECT_EQ(rig.console_dropped(), 0u);
+}
+
+// Past kConsoleLimit the console keeps the newest text and counts what it
+// drops. Two rigs see the same run: `whole` hands its console over every
+// millisecond, so it never drops and its text is the whole stream; `kept`
+// never does, so it must hold exactly that stream's tail.
+TEST(SilRig, ConsoleKeepsTheNewestTextAndCountsWhatItDrops) {
+  Rig whole;
+  Rig kept;
+  const RigInputs in = ParkedCar();
+  std::string stream;
+  // 20 chunks of 64 KiB, 1.25 MiB in all, written beside the boot log to the
+  // debug UART the firmware logs to. Each chunk names itself, so a tail taken
+  // from the wrong place can't match.
+  constexpr size_t kChunk = 64 * 1024;
+  for (int i = 0; i < 20; ++i) {
+    std::string chunk;
+    while (chunk.size() < kChunk) {
+      chunk += "chunk " + std::to_string(i) + "\n";
+    }
+    chunk.resize(kChunk);
+    const auto* bytes = reinterpret_cast<const uint8_t*>(chunk.data());
+    ASSERT_EQ(whole.bench().vcp.Write(bytes, chunk.size(), 0),
+              lhal::Status::kOk);
+    ASSERT_EQ(kept.bench().vcp.Write(bytes, chunk.size(), 0),
+              lhal::Status::kOk);
+    whole.Advance(in, 1);
+    kept.Advance(in, 1);
+    stream += whole.TakeConsole();
+  }
+  ASSERT_GT(stream.size(), Rig::kConsoleLimit);
+  EXPECT_EQ(whole.console_dropped(), 0u);
+  EXPECT_EQ(kept.console_dropped(), stream.size() - Rig::kConsoleLimit);
+  const std::string text = kept.TakeConsole();
+  EXPECT_EQ(text.size(), Rig::kConsoleLimit);
+  EXPECT_EQ(text.substr(text.size() - 64), stream.substr(stream.size() - 64));
+  // Compared as a bool: gtest would print both megabytes on a mismatch.
+  EXPECT_TRUE(text == stream.substr(stream.size() - Rig::kConsoleLimit));
 }
 
 // EV.4.7 seen through the rig: throttle while the filtered brake is still
@@ -698,6 +737,48 @@ TEST(SilRig, CapturedFramesCarryBothDirections) {
   EXPECT_EQ(commands, 1);
   EXPECT_EQ(speeds, 1);
   EXPECT_EQ(rig.frames_dropped(), 0u);
+}
+
+// Past kFrameLimit untaken frames keep the newest and count what they drop.
+// Two rigs see the same run: `whole` hands its frames over every step, so
+// it never drops and its frames are the whole run; `kept` never does, so it
+// must hold exactly the run's newest kFrameLimit, in order.
+TEST(SilRig, UntakenFramesKeepTheNewestAndCountWhatTheyDrop) {
+  Rig whole;
+  Rig kept;
+  const RigInputs in = ParkedCar();
+  std::vector<CapturedFrame> all;
+  // Parked, the buses carry a few frames a millisecond; a minute is a bound
+  // the loop should never reach.
+  for (uint32_t t = 0; t < 60000 && all.size() <= Rig::kFrameLimit + 1000;
+       t += 3) {
+    whole.Advance(in, 3);
+    kept.Advance(in, 3);
+    const std::vector<CapturedFrame> step = whole.TakeFrames();
+    all.insert(all.end(), step.begin(), step.end());
+  }
+  ASSERT_GT(all.size(), Rig::kFrameLimit + 1000);
+  EXPECT_EQ(whole.frames_dropped(), 0u);
+  EXPECT_EQ(kept.frames_dropped(), all.size() - Rig::kFrameLimit);
+  const std::vector<CapturedFrame> frames = kept.TakeFrames();
+  ASSERT_EQ(frames.size(), Rig::kFrameLimit);
+  EXPECT_TRUE(kept.TakeFrames().empty());
+  const size_t first = all.size() - Rig::kFrameLimit;
+  EXPECT_GT(frames.front().t_ms, all.front().t_ms);
+  EXPECT_EQ(frames.back().t_ms, all.back().t_ms);
+  for (size_t i = 0; i < frames.size(); ++i) {
+    const CapturedFrame& got = frames[i];
+    const CapturedFrame& want = all[first + i];
+    ASSERT_EQ(got.t_ms, want.t_ms) << i;
+    ASSERT_EQ(got.id, want.id) << i;
+    ASSERT_EQ(got.bus, want.bus) << i;
+    ASSERT_EQ(got.from_vcu, want.from_vcu) << i;
+    ASSERT_EQ(got.len, want.len) << i;
+    ASSERT_EQ(std::memcmp(got.data, want.data, sizeof got.data), 0) << i;
+    if (i > 0) {
+      ASSERT_LE(frames[i - 1].t_ms, got.t_ms) << i;
+    }
+  }
 }
 
 }  // namespace
