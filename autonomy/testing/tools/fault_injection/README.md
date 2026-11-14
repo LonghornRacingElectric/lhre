@@ -50,7 +50,8 @@ container:
 Environment variables pick the matrix: `CASES` (empty for none), `SPEEDS` (`v_max` values,
 default `3 5 8`), `REPEATS` (2), `TRACK` (for the fault cases, `oval`),
 `CLEAN_SEEDS` (`1 2 3 4 5`, empty for none), `AFTER` (fault seconds after
-`DRIVING`, 25), `RUN_S` (60), `CLEAN_S` (150), `HANG_S` (60), `OUT` and
+`DRIVING`, 25), `AT_SPEED` (0.95: the fault also waits for this share of
+`v_max`; 0 to 1, 0 fires on time alone, anything else stops the runner), `RUN_S` (60), `CLEAN_S` (150), `HANG_S` (60), `OUT` and
 `EXTRA` (more launch arguments; the gate stack and each case's own arguments
 follow it and take precedence). `AFTER`, `RUN_S` and `CLEAN_S` are sim
 seconds, so a machine that runs below real time gets the same runs, only
@@ -70,6 +71,30 @@ On a CPU-rendered machine (the Mac container) Gazebo still drops LiDAR
 frames, with gaps up to about 0.7 s even with the cameras off (#160), so
 add `EXTRA="safety_lidar_timeout_s:=1.5"` or every run trips `LIDAR_STALE`
 first.
+
+## What each tier tests
+
+A fault fires `AFTER` sim seconds into `DRIVING` and once the car is doing
+`AT_SPEED` times its tier's `v_max`, read from the plant's own odometry
+(`fault_min_speed_mps` on the Gazebo launch). A time alone does not test a
+speed: the oval is an ellipse whose tight ends (9 m radius) cap the car near
+5.2 m/s at the default `a_lat_max` of 3.0, and on 11/1 every 8 m/s run hit
+25 s in a tight end, at 5.3 m/s
+([#207](https://github.com/LonghornRacingElectric/lhre/issues/207)). The flat
+sides (42 m radius) let it reach 8 m/s for about 71 m of each 128 m lap, so
+the 8 m/s tier now faults there, at most one lap after `AFTER`.
+
+| Tier | What it tests |
+|---|---|
+| 3 and 5 m/s | The whole oval is at `v_max`, so the fault fires at `AFTER` |
+| 8 m/s | The fault waits for the flat side, up to one lap (about 24 s) after `AFTER`, still inside `RUN_S` |
+| `geofence` (every tier) | Not an injection: the car trips where it crosses the `FENCE` radius, at whatever speed it has there (6.3 m/s on the 8 m/s tier on 11/1) |
+
+`results.csv` marks each injected run `at_speed` (`v_at_fault` at least 90% of
+`v_max`, missed faults included), the summary table gives the median speed at
+the fault, and the summary names every injected run below that, so a tier that
+did not run at its speed cannot pass for one that did. `geofence` is left
+blank: where it trips is set by the fence, not the tier.
 
 Every run launches with `enable_metrics:=false`. Since #132 a finished lap
 ends the mission, and `safety_node` only arms in `READY` and `DRIVING`, so
@@ -97,10 +122,16 @@ SharePoint ([testing/README.md](../../README.md)).
     its latency is negative.
   - `clean` and `false_trip`: a clean lap without or with a trip.
   - `no_drive` (never reached `DRIVING`, or covered under 10 m before the
-    fault), `no_fault` (the run ended before the fault), `hung` (the sim
+    fault), `no_fault` (the fault never started), `hung` (the sim
     clock stopped) and `error` (the bag did not read): the run itself went
     wrong. These are listed under the
-    summary table, not counted in it. Rerun them.
+    summary table, not counted in it. Rerun them, but first check a
+    `no_fault` run's launch log: if `fault_injector` logged that the fault
+    waits for a speed, the car never reached the gate on that track, and
+    only a track or `AT_SPEED` the tier can reach fixes it, not a longer
+    `RUN_S`.
+- `at_speed`: `v_at_fault` was at least 90% of `v_max`, so the run tested
+  its tier (blank when either is unknown, and for `geofence`).
 - `trip_latency_s`: fault to latched trip, in sim time.
 - `visible_after_s` and `latency_from_visible_s` (`steer_freeze` only): a
   frozen actuator is invisible until the command moves

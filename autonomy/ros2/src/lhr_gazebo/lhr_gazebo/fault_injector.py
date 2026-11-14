@@ -10,8 +10,12 @@ the node publishes one event on /lhr/sim/fault at the moment the fault
 starts (and another when a timed fault ends), which the analysis measures
 from.
 
-The fault starts fault_after_s after the mission first reports DRIVING, so
-the car is at speed, and lasts fault_duration_s (0 = until shutdown).
+The fault starts fault_after_s after the mission first reports DRIVING, and
+once the car is at least fault_min_speed_mps fast (0 = any speed), and lasts
+fault_duration_s (0 = until shutdown). Speed comes from the clean plant
+odometry the launch wires to PLANT_ODOM, never the estimate a fault corrupts.
+A time alone is not enough: on the oval the 8 m/s tier was at a tight end,
+doing 5.3 m/s, every time 25 s came round (#207).
 """
 
 from dataclasses import dataclass
@@ -51,6 +55,8 @@ EKF = 'lib/lhr_state_estimation/ekf_node'
 CONTROLLER = 'lib/lhr_control/pursuit_node'
 ODOM = '/lhr/vehicle/odom'
 CMD = '/lhr/vehicle/cmd'
+# Remapped by the launch to the plant's own odometry.
+PLANT_ODOM = '/lhr/sim/plant_odom'
 
 FAULTS = {
     'ekf_kill': FaultKind(
@@ -80,24 +86,32 @@ FAULTS = {
 class FaultClock:
     """Decide when the fault starts and ends. ROS-free so it is testable."""
 
-    def __init__(self, after_s: float, duration_s: float):
+    def __init__(self, after_s: float, duration_s: float, min_speed_mps: float = 0.0):
         self.after_s = after_s
         self._after = after_s
         self._duration = duration_s
+        self.min_speed_mps = min_speed_mps
         self._driving_since: Optional[float] = None
         self.started_at: Optional[float] = None
         self.ended = False
+        # The delay is over but the car is still under the speed gate.
+        self.waiting_for_speed = False
 
-    def update(self, now: float, driving: bool) -> str:
+    def update(self, now: float, driving: bool, speed: float = math.inf) -> str:
         """Return 'start', 'end' or '' for this instant."""
         if self._driving_since is None:
             if driving:
                 self._driving_since = now
             return ''
         if self.started_at is None:
-            if now - self._driving_since >= self._after:
+            if now - self._driving_since < self._after:
+                return ''
+            # No gate starts at any speed, NaN included.
+            if self.min_speed_mps <= 0.0 or speed >= self.min_speed_mps:
                 self.started_at = now
+                self.waiting_for_speed = False
                 return 'start'
+            self.waiting_for_speed = True
             return ''
         if (not self.ended and self._duration > 0.0
                 and now - self.started_at >= self._duration):
@@ -118,6 +132,7 @@ class FaultInjector(Node):
         self.declare_parameter('fault', '')
         self.declare_parameter('fault_after_s', 30.0)
         self.declare_parameter('fault_duration_s', 0.0)
+        self.declare_parameter('fault_min_speed_mps', 0.0)
         self._kind = self.get_parameter('fault').value
         if self._kind not in FAULTS:
             raise ValueError(
@@ -126,8 +141,18 @@ class FaultInjector(Node):
         # rclpy's Node keeps its own clock in an attribute named _clock.
         self._fault_clock = FaultClock(
             float(self.get_parameter('fault_after_s').value),
-            float(self.get_parameter('fault_duration_s').value))
+            float(self.get_parameter('fault_duration_s').value),
+            float(self.get_parameter('fault_min_speed_mps').value))
+        gate = self._fault_clock.min_speed_mps
+        if not (math.isfinite(gate) and gate >= 0.0):
+            # NaN never opens the gate and inf never closes it: either way
+            # the fault would silently never fire.
+            raise ValueError(f'fault_min_speed_mps must be a finite number >= 0, got {gate}')
         self._driving = False
+        # No odometry yet reads as standing still, so a speed gate waits.
+        self._speed = 0.0
+        self._plant_seen = False
+        self._told_waiting = False
         self._spiked = False
         self._frozen_steer: Optional[float] = None
 
@@ -136,6 +161,7 @@ class FaultInjector(Node):
         self._event_pub = self.create_publisher(String, '/lhr/sim/fault', latched)
         self.create_subscription(String, '/lhr/mission/status',
                                  self._status_cb, 10)
+        self.create_subscription(Odometry, PLANT_ODOM, self._plant_cb, 10)
 
         f = self._fault
         if f.src is not None:
@@ -149,7 +175,8 @@ class FaultInjector(Node):
         self.create_timer(0.02, self._tick)
         self.get_logger().warning(
             f'Fault injector armed: {self._kind} (expect {f.expect}), '
-            f'{self._fault_clock.after_s:.1f} s after DRIVING')
+            f'{self._fault_clock.after_s:.1f} s after DRIVING, at '
+            f'{self._fault_clock.min_speed_mps:g} m/s or more')
 
     def _now(self) -> float:
         return self.get_clock().now().nanoseconds * 1e-9
@@ -157,8 +184,23 @@ class FaultInjector(Node):
     def _status_cb(self, msg: String):
         self._driving = msg.data == 'DRIVING'
 
+    def _plant_cb(self, msg: Odometry):
+        v = msg.twist.twist.linear
+        self._speed = math.hypot(v.x, v.y)
+        self._plant_seen = True
+
     def _tick(self):
-        edge = self._fault_clock.update(self._now(), self._driving)
+        clock = self._fault_clock
+        edge = clock.update(self._now(), self._driving, self._speed)
+        if clock.waiting_for_speed and not self._told_waiting:
+            # Once, so a gate that never opens is in the launch log, not
+            # only a no_fault row.
+            self._told_waiting = True
+            source = ('' if self._plant_seen else
+                      f', and nothing has arrived on {PLANT_ODOM}')
+            self.get_logger().warning(
+                f'{self._kind} is due but waits for {clock.min_speed_mps:g} m/s: '
+                f'the plant is at {self._speed:.2f} m/s{source}')
         if not edge:
             return
         f = self._fault

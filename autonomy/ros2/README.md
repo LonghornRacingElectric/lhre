@@ -876,6 +876,7 @@ Sim-only, started by `fault:=<kind>` on the Gazebo launch to test `lhr_safety` (
 | `fault` | `""` | Fault kind; launch argument `fault`, empty starts no injector |
 | `fault_after_s` | `30.0` | Seconds after the mission first reports `DRIVING` |
 | `fault_duration_s` | `0.0` | How long the fault lasts; `0` is until shutdown |
+| `fault_min_speed_mps` | `0.0` | Also wait until the plant odometry (`/lhr/sim/plant_odom`, wired by the launch) reads at least this speed; `0` is any speed. NaN, infinite or negative values fail at startup |
 
 ### lhr_perception (lidar_cone_detector)
 

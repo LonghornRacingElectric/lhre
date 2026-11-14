@@ -110,12 +110,38 @@ def test_fault_plan_runs_every_case_and_clean_lap_on_the_gate_stack(tmp_path):
         assert stack.items() <= args.items(), f'{run_id} leaves out part of the gate stack'
         if kind == 'clean':
             assert (track, v_max) == ('autocross', '5') and 'fault' not in args
+            assert 'fault_min_speed_mps' not in args
         elif kind == 'geofence':
             assert args['safety_geofence_radius_m'] == '20' and 'fault' not in args
+            assert 'fault_min_speed_mps' not in args
         else:
             assert (track, seed) == ('oval', '1')
             assert args['fault'] == kind and args['fault_after_s'] == '25'
+            # Every injected fault waits for its tier's speed (#207).
+            assert float(args['fault_min_speed_mps']) == pytest.approx(0.95 * float(v_max))
     assert rows['controller_pause_v3_r1'][5]['fault_duration_s'] == '3'
+
+
+@pytest.mark.parametrize('share, gate', [('0.5', 4.0), ('1', 8.0), ('0', 0.0)])
+def test_fault_plan_scales_the_speed_gate_with_at_speed(tmp_path, share, gate):
+    env = dict(os.environ, CASES='ekf_kill', SPEEDS='8', REPEATS='1', CLEAN_SEEDS='',
+               AT_SPEED=share, OUT=str(tmp_path))
+    result = subprocess.run(['bash', '-c', fault_prefix() + '\nplan'],
+                            env=env, text=True, capture_output=True, check=True)
+    (line,) = result.stdout.splitlines()
+    args = dict(a.split(':=', 1) for a in line.split()[6:])
+    assert float(args['fault_min_speed_mps']) == pytest.approx(gate)
+
+
+@pytest.mark.parametrize('share', ['0,95', 'abc', '1.5', '-0.1', '.'])
+def test_fault_runner_refuses_a_bad_at_speed(tmp_path, share):
+    """A typo must stop the runner, not silently turn the speed gate off."""
+    env = dict(os.environ, AT_SPEED=share, OUT=str(tmp_path))
+    result = subprocess.run(['bash', '-c', fault_prefix() + '\necho planned'],
+                            env=env, text=True, capture_output=True)
+    assert result.returncode == 2
+    assert 'planned' not in result.stdout
+    assert 'AT_SPEED' in result.stderr
 
 
 @pytest.mark.parametrize('style', ['autocross', 'rules_autocross'])

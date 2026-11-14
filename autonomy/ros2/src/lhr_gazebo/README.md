@@ -363,9 +363,17 @@ driving.
 ## Fault injection
 
 `fault:=<kind>` starts `fault_injector`, which breaks one thing
-`fault_after_s` (30) after the mission reaches `DRIVING`, for
-`fault_duration_s` (0 = until shutdown), and announces it on
-`/lhr/sim/fault`. It exists to test `lhr_safety`
+`fault_after_s` (30) after the mission reaches `DRIVING`, once the car is at
+least `fault_min_speed_mps` (0 = any speed) fast, for `fault_duration_s`
+(0 = until shutdown), and announces it on `/lhr/sim/fault`. The speed comes
+from the plant's own odometry, the same clean pose the Mid-360 caster reads,
+so an odometry fault cannot decide when it starts. A time alone is not
+enough to test a speed: on the oval the 8 m/s tier was always at a tight
+end, doing 5.3 m/s, when 25 s came round
+([#207](https://github.com/LonghornRacingElectric/lhre/issues/207)). When the
+delay is over but the car is still under the speed, the injector logs it once,
+with the plant's speed and whether any plant odometry arrived, so a gate that
+never opens shows in the launch log. It exists to test `lhr_safety`
 ([#117](https://github.com/LonghornRacingElectric/lhre/issues/117)); without
 `fault:=` nothing is rewired.
 
