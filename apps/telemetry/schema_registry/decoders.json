@@ -1,0 +1,12 @@
+{
+  "format_version": 1,
+  "decoders": [
+    {
+      "schema_id": "fde060de516521c3d8144d25bbd69c31b274f47e85aec2dd73d97af031707037",
+      "car": "Artemis",
+      "payload_format": "artemis_updates_v1",
+      "approved": false,
+      "note": "Not a real schema: decode_router_demo publishes with this id to show an unapproved bundle being quarantined"
+    }
+  ]
+}

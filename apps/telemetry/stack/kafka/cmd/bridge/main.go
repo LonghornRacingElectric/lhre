@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -33,14 +34,38 @@ var (
 type bridgeServer struct {
 	pb.UnimplementedBridgeServiceServer
 	producer sarama.SyncProducer
+	// schema_id of the contract this bridge was built with.
+	deployedSchema string
+}
+
+const fingerprintHeader = "schema_fingerprint"
+const quarantineTopic = "sensor_data_quarantine"
+
+// deployedSchemaID reads the schema_id packaged into the image at /schema.
+func deployedSchemaID() (string, error) {
+	path := os.Getenv("SCHEMA_CONTRACT")
+	if path == "" {
+		path = "/schema/schema_contract.json"
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read deployed schema: %w", err)
+	}
+	var contract struct {
+		SchemaID string `json:"schema_id"`
+	}
+	if err := json.Unmarshal(data, &contract); err != nil {
+		return "", fmt.Errorf("read deployed schema: %w", err)
+	}
+	if _, err := hex.DecodeString(contract.SchemaID); err != nil || len(contract.SchemaID) != 64 {
+		return "", fmt.Errorf("invalid schema_id in %s", path)
+	}
+	return contract.SchemaID, nil
 }
 
 func (s *bridgeServer) SendSensorData(ctx context.Context, req *pb.SensorDataRequest) (*pb.SensorDataResponse, error) {
 	if req.CarType != "Artemis" || req.PayloadFormat != "artemis_updates_v1" {
 		return &pb.SensorDataResponse{Success: false, Message: "requires Artemis artemis_updates_v1"}, nil
-	}
-	if _, err := nativeSnapshot(req.Payload, &artemis.ArtemisSensorData{}, map[string]int64{}); err != nil {
-		return &pb.SensorDataResponse{Success: false, Message: err.Error()}, nil
 	}
 	log.Printf("Received SensorDataRequest: CarType=%s, PayloadSize=%d", req.CarType, len(req.Payload))
 	msg := SensorMessage{
@@ -48,18 +73,41 @@ func (s *bridgeServer) SendSensorData(ctx context.Context, req *pb.SensorDataReq
 		CarType: req.CarType,
 		Format:  req.PayloadFormat,
 	}
+	fingerprint := req.SchemaFingerprint
+	if fingerprint == "" {
+		fingerprint = s.deployedSchema
+	}
+	headers := []sarama.RecordHeader{{Key: []byte("car_type"), Value: []byte(msg.CarType)}, {Key: []byte("payload_format"), Value: []byte(msg.Format)}}
+	if fingerprint != "" {
+		headers = append(headers, sarama.RecordHeader{Key: []byte(fingerprintHeader), Value: []byte(fingerprint)})
+	}
+	topic, reason := "sensor_data", ""
+	if fingerprint != s.deployedSchema {
+		// Unknown bytes must not reach a deployed-schema decoder or consumer.
+		topic, reason = quarantineTopic, "schema_mismatch"
+	} else if _, err := nativeSnapshot(req.Payload, &artemis.ArtemisSensorData{}, map[string]int64{}); err != nil {
+		// A malformed batch must not block every later MQTT batch on retries.
+		topic, reason = quarantineTopic, "invalid_payload"
+		log.Printf("Invalid Artemis batch: %v", err)
+	}
+	if reason != "" {
+		headers = append(headers, sarama.RecordHeader{Key: []byte("quarantine_reason"), Value: []byte(reason)})
+	}
 
-	// A successful RPC means Kafka acknowledged the raw packet. The client may
-	// retry an uncertain RPC; db_writer admits each packet only once.
+	// Acknowledge only after Kafka retains the original bytes, including rejects.
 	_, _, err := s.producer.SendMessage(&sarama.ProducerMessage{
-		Topic:   "sensor_data",
+		Topic:   topic,
 		Value:   sarama.ByteEncoder(msg.Payload),
-		Headers: []sarama.RecordHeader{{Key: []byte("car_type"), Value: []byte(msg.CarType)}, {Key: []byte("payload_format"), Value: []byte(msg.Format)}},
+		Headers: headers,
 	})
 	if err != nil {
 		return &pb.SensorDataResponse{Success: false, Message: err.Error()}, nil
 	}
 
+	if topic == quarantineTopic {
+		log.Printf("Quarantined schema %s: %s", fingerprint, reason)
+		return &pb.SensorDataResponse{Success: true, Message: "quarantined in Kafka"}, nil
+	}
 	select {
 	case grafanaDataChan <- msg:
 	default:
@@ -137,7 +185,7 @@ func ensureTopicExists(admin sarama.ClusterAdmin, topic string) error {
 	}
 
 	if _, ok := topics[topic]; ok {
-		if topic == "sensor_data" {
+		if topic == "sensor_data" || topic == quarantineTopic {
 			entries := map[string]sarama.IncrementalAlterConfigsEntry{}
 			for key, value := range rawRetention() {
 				entries[key] = sarama.IncrementalAlterConfigsEntry{Operation: sarama.IncrementalAlterConfigsOperationSet, Value: value}
@@ -158,7 +206,7 @@ func ensureTopicExists(admin sarama.ClusterAdmin, topic string) error {
 		},
 	}
 
-	if topic == "sensor_data" {
+	if topic == "sensor_data" || topic == quarantineTopic {
 		for key, value := range rawRetention() {
 			detail.ConfigEntries[key] = value
 		}
@@ -399,6 +447,10 @@ func artemisToMap(msg *artemis.ArtemisSensorData) map[string]interface{} {
 
 func main() {
 	log.Println("Starting Kafka Bridge Service...")
+	schemaID, err := deployedSchemaID()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	cars := []string{"artemis"}
 
@@ -416,8 +468,10 @@ func main() {
 		}
 	}
 
-	if err := ensureTopicExists(admin, "sensor_data"); err != nil {
-		log.Fatalf("Failed to ensure sensor_data topic exists: %v", err)
+	for _, topic := range []string{"sensor_data", quarantineTopic} {
+		if err := ensureTopicExists(admin, topic); err != nil {
+			log.Fatalf("Failed to ensure %s topic exists: %v", topic, err)
+		}
 	}
 
 	// List all topics for verification
@@ -464,7 +518,7 @@ func main() {
 		MinTime:             10 * time.Second,
 		PermitWithoutStream: true,
 	}))
-	pb.RegisterBridgeServiceServer(grpcServer, &bridgeServer{producer: producer})
+	pb.RegisterBridgeServiceServer(grpcServer, &bridgeServer{producer: producer, deployedSchema: schemaID})
 
 	// Graceful shutdown
 	sigChan := make(chan os.Signal, 1)
