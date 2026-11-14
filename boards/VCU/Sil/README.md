@@ -567,6 +567,8 @@ reverse `direction` is refused: the model cannot take it.
 - `check.py`: the warnings, the models of the firmware they stand on,
   `--explain`, and `python -m vcusil.check`. It needs only PyYAML beyond
   the standard library, so it runs on any Python 3.11 or newer that has it.
+  `host/ruff.toml` lints all of `host/` for 3.11, so syntax only 3.12
+  reads fails CI's Lint job.
 - `candecode.py`: decodes captured frames with the generated table.
 - `events.py`, `mcaplog.py`: the event markers and `run.mcap`.
 - `tests/`: pytest. `VCU_SIL_LIB`, `VCU_SIL_CAN_TABLE` and `VCU_SIL_FMU`
