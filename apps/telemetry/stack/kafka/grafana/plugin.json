@@ -12,8 +12,8 @@
     "author": { "name": "Longhorn Racing Electric" },
     "keywords": ["artemis", "telemetry"],
     "logos": { "small": "logo.svg", "large": "logo.svg" },
-    "version": "0.1.0",
-    "updated": "2026-11-11"
+    "version": "0.1.1",
+    "updated": "2026-11-14"
   },
   "dependencies": { "grafanaDependency": ">=11.3.0", "plugins": [] }
 }

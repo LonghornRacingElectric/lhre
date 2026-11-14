@@ -71,6 +71,8 @@ services:
     volumes:
       - grafana_state:/var/lib/grafana
       - ../ingest/grafana-provisioning/artemis.yml:/etc/grafana/provisioning/datasources/artemis.yml:ro
+      - ../ingest/grafana-dashboard-provisioning:/etc/grafana/provisioning/dashboards:ro
+      - ../../analysis/database/dashboards/artemis:/var/lib/grafana/dashboards/artemis:ro
     depends_on: [query_gateway]
 volumes:
   grafana_state:

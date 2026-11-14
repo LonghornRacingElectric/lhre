@@ -102,7 +102,7 @@
           "signals": [
             "board_status.dui_last_seen_s"
           ],
-          "agg": "max",
+          "agg": "last",
           "bucket_ms": 0,
           "alias": "DUI",
           "live": true
@@ -171,7 +171,7 @@
           "signals": [
             "board_status.hvc_last_seen_s"
           ],
-          "agg": "max",
+          "agg": "last",
           "bucket_ms": 0,
           "alias": "HVC",
           "live": true
@@ -240,7 +240,7 @@
           "signals": [
             "board_status.inverter_last_seen_s"
           ],
-          "agg": "max",
+          "agg": "last",
           "bucket_ms": 0,
           "alias": "Inverter",
           "live": true
@@ -309,7 +309,7 @@
           "signals": [
             "board_status.pdu_last_seen_s"
           ],
-          "agg": "max",
+          "agg": "last",
           "bucket_ms": 0,
           "alias": "PDU",
           "live": true
@@ -378,7 +378,7 @@
           "signals": [
             "board_status.vcu_last_seen_s"
           ],
-          "agg": "max",
+          "agg": "last",
           "bucket_ms": 0,
           "alias": "VCU",
           "live": true

@@ -37,6 +37,11 @@ For Bazel-managed components, `build` invokes each component's `_load` target
 and then `docker compose up --no-build`. Logsync and the PM2 viewer retain their
 existing non-Bazel workflows. The Linux devtool is authoritative for the new
 image path; the Windows script has not yet been ported to the Bazel loader.
+The devtool explicitly passes the repository-root `.env` to Compose for
+variable interpolation, including database passwords and Grafana URL settings;
+the services also load it into their environments. See the
+[Grafana and API setup guide](kafka/grafana/README.md) for tokens, URLs, example
+dashboards and connection checks.
 Before creating ingest containers (`up`, `create`, `run`, or `watch`), the devtool resolves
 `//apps/telemetry:current_schema_sql` and `//apps/telemetry:new_car_schema_sql`,
 and mounts generated Artemis DDL into
@@ -104,13 +109,15 @@ data. Build `//apps/telemetry:new_car_schema_sql`, create an empty `artemis`
 database with the database owner, and apply that generated initialization file:
 
 ```bash
-docker exec db sh -c 'createdb -U "$POSTGRES_USER" artemis'
+docker exec db sh -c 'createdb -U "$POSTGRES_USER" --template=template0 --locale=C --encoding=UTF8 artemis'
 docker exec -i db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d artemis' < bazel-bin/lib/codegen/telemetry/artemis_db_init.sql
 ```
 
 Run `npm run prisma-cars-register` from the viewer directory against the shared
 metadata database (`TELEMETRY_DATABASE_URL`). This adds Orion ID 5 and Artemis
 ID 6 through Prisma, refusing conflicting IDs and preserving historical rows.
+The pristine C-locale template avoids inheriting obsolete locale-version
+metadata when an older volume moves to the Timescale image.
 Subsequent Artemis field additions use the explicit schema apply command.
 
 ## Release-coordinated deployment

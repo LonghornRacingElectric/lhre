@@ -6,6 +6,7 @@ System.register(['@grafana/data', '@grafana/runtime', '@grafana/ui', 'react', 'r
     execute: function () {
       var h = React.createElement;
       class DataSource extends runtime.DataSourceWithBackend {
+        constructor(instanceSettings) { super(instanceSettings); }
         getDefaultQuery() { return { signals: [], agg: 'mean', bucket_ms: 0, alias: '', live: false }; }
         filterQuery(q) { return !q.hide && ((q.signals || []).length > 0 || (q.pools || []).length > 0); }
         applyTemplateVariables(q, vars) {

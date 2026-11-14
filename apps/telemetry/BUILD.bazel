@@ -312,6 +312,7 @@ sh_binary(
     name = "core_up",
     srcs = ["core_up.sh"],
     args = [
+        "$(rootpath //apps/telemetry/stack/kafka:query_gateway_load)",
         "$(rootpath :grafana_load)",
         "$(rootpath :kafka_load)",
         "$(rootpath :mqtt_load)",
@@ -322,6 +323,7 @@ sh_binary(
         "$(rootpath //apps/telemetry/stack/processors/field_enricher:field_enricher_load)",
     ],
     data = [
+        "//apps/telemetry/stack/kafka:query_gateway_load",
         ":grafana_load",
         ":kafka_load",
         ":mqtt_load",

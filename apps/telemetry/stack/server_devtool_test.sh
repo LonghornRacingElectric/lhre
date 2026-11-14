@@ -43,9 +43,21 @@ bazel() {
 cat > "$fixture/bin/docker" <<'DOCKER'
 #!/usr/bin/env bash
 set -euo pipefail
+[[ "$1" == compose ]]
+shift
+[[ "$1" == --env-file ]]
+if [[ -n "${EXPECTED_ENV_FILE:-}" ]]; then
+    [[ "$2" == "${EXPECTED_ENV_FILE:?}" && -f "$2" ]]
+    # Model the same values Compose interpolates from this file.
+    source "$2"
+    [[ "$ANALYSIS_PWD" == 'fixture database password' ]]
+else
+    [[ "$2" == /dev/null ]]
+fi
+shift 2
 case "$*" in
-    "compose up"|"compose create"|"compose run") [[ -f "$ORION_DB_INIT_SQL" && -f "$ARTEMIS_DB_INIT_SQL" ]] ;;
-    "compose down"|"compose logs"|"compose ps"|"compose config"|"compose restart"|"compose start") ;;
+    up|create|run) [[ -f "$ORION_DB_INIT_SQL" && -f "$ARTEMIS_DB_INIT_SQL" ]] ;;
+    down|logs|ps|config|restart|start) ;;
     *) exit 1 ;;
 esac
 [[ "$ORION_DB_INIT_SQL" == /* && "$ARTEMIS_DB_INIT_SQL" == /* ]]
@@ -55,7 +67,7 @@ chmod +x "$fixture/bin/docker"
 export PATH="$fixture/bin:$PATH"
 
 sudo() {
-    command env -i "PATH=$PATH" "$@"
+    command env -i "PATH=$PATH" "EXPECTED_ENV_FILE=${EXPECTED_ENV_FILE:-}" "$@"
 }
 
 unset ORION_DB_INIT_SQL ARTEMIS_DB_INIT_SQL
@@ -69,6 +81,15 @@ prepare_orion_schema "$REPO_ROOT" up
 for SUDO in "" sudo; do
     [[ "$(compose_in "$ingest_dir" up)" == "$generated" ]]
 done
+
+printf "ANALYSIS_PWD='fixture database password'\n" > "$REPO_ROOT/.env"
+for SUDO in "" sudo; do
+    export EXPECTED_ENV_FILE="$REPO_ROOT/.env"
+    # sudo drops shell variables, but the explicit file must still reach Compose.
+    [[ "$(compose_in "$ingest_dir" up)" == "$generated" ]]
+done
+unset EXPECTED_ENV_FILE
+rm "$REPO_ROOT/.env"
 
 fail_build=1
 if compose_in "$ingest_dir" up; then

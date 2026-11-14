@@ -84,6 +84,9 @@ The test publishes native Artemis updates into real Kafka, pauses the real
 database writer, checks that the API serves pending samples from its ring,
 resumes persistence without duplicate observations, follows raw pagination,
 and executes a maximum query through Grafana's actual backend datasource.
+It provisions the shipped Artemis board-health dashboard and executes its
+targets through Grafana, checking that current-age tiles recover while the
+plot retains the maximum dropout age within a bucket.
 It also restarts the gateway over retained JSON feed messages and verifies that
 new live events are served without replay. An undecodable native record reports
 a coverage gap; later records remain consumed, and the real writer recovers

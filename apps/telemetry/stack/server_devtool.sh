@@ -146,15 +146,19 @@ dk() { $SUDO docker "$@"; }
 
 compose_in() {  # compose_in <dir> <args...>
     local dir="$1"; shift
+    local env_file="$REPO_ROOT/.env"
+    # Service env_file does not supply Compose's ${...} interpolation values.
+    # Keep teardown available when the local dotenv has been removed.
+    [[ -f "$env_file" ]] || env_file=/dev/null
     if [[ ! -f "$dir/docker-compose.yml" && ! -f "$dir/docker-compose.yaml" ]]; then
         warn "no docker-compose.(yml|yaml) in $dir — skipping"; return 1
     fi
     if [[ "$(basename "$dir")" == "ingest" ]]; then
         prepare_orion_schema "$REPO_ROOT" "${1:-}" || return 1
-        ( cd "$dir" && $SUDO env "ORION_DB_INIT_SQL=$ORION_DB_INIT_SQL" "ARTEMIS_DB_INIT_SQL=$ARTEMIS_DB_INIT_SQL" docker compose "$@" )
+        ( cd "$dir" && $SUDO env "ORION_DB_INIT_SQL=$ORION_DB_INIT_SQL" "ARTEMIS_DB_INIT_SQL=$ARTEMIS_DB_INIT_SQL" docker compose --env-file "$env_file" "$@" )
         return
     fi
-    ( cd "$dir" && $SUDO docker compose "$@" )
+    ( cd "$dir" && $SUDO docker compose --env-file "$env_file" "$@" )
 }
 
 # registry lookups -----------------------------------------------------------
