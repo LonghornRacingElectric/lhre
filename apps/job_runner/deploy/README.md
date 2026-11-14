@@ -1,9 +1,19 @@
 # Deployment templates
 
-`lhr-runner.service` supervises the queue on HIL. Install runner.py and bridge
-as root-owned files under `/opt/lhr-runner`, the unit under
-`/etc/systemd/system`, and use `/var/lib/lhr-runner` for state. The bridge runs
-Python in isolated mode; it never interprets `SSH_ORIGINAL_COMMAND`.
+`lhr-runner.service` supervises the queue on HIL. From the repository root on
+HIL, install the root-owned runner (0644), executable bridge (0755), and unit
+(0644) explicitly:
+
+```bash
+sudo install -d -o root -g root -m 0755 /opt/lhr-runner
+sudo install -o root -g root -m 0644 apps/job_runner/runner.py /opt/lhr-runner/runner.py
+sudo install -o root -g root -m 0755 apps/job_runner/deploy/bridge /opt/lhr-runner/bridge
+sudo install -o root -g root -m 0644 apps/job_runner/deploy/lhr-runner.service /etc/systemd/system/lhr-runner.service
+```
+
+Use `/var/lib/lhr-runner` for state. The bridge must be executable for sudo's
+forced SSH command to work. It runs Python in isolated mode and never
+interprets `SSH_ORIGINAL_COMMAND`.
 
 Generate a dedicated worker key on telemetry. On HIL, its authorized_keys
 entry must have `from="100.88.194.126",restrict,command="sudo -n
