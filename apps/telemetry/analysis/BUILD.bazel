@@ -4,6 +4,12 @@ load("@rules_python//python:defs.bzl", "py_library")
 load("@rules_python//python:pip.bzl", "compile_pip_requirements")
 load("//apps/telemetry:compatibility.bzl", "NOT_WINDOWS")
 
+# The recorded drive paho_testing replays; tests replay it too.
+exports_files(
+    ["database/data/autox_uta_2026-10-17.pb.gz"],
+    visibility = ["//apps/telemetry:__subpackages__"],
+)
+
 # This target bundles all python files in the analysis directory
 # into a library that can be used by other targets (like tests).
 py_library(

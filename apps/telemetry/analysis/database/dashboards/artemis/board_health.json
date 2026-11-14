@@ -1,0 +1,521 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "preload": false,
+  "schemaVersion": 40,
+  "tags": [
+    "artemis",
+    "board_health"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-1m",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Board Health - Artemis (Real-time)",
+  "uid": "artemis_board_health_rt",
+  "version": 1,
+  "weekStart": "",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "DUI",
+      "datasource": {
+        "type": "lhre-artemis-datasource",
+        "uid": "artemis"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.5
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "lhre-artemis-datasource",
+            "uid": "artemis"
+          },
+          "refId": "A",
+          "signals": [
+            "board_status.dui_last_seen_s"
+          ],
+          "agg": "max",
+          "bucket_ms": 0,
+          "alias": "DUI",
+          "live": true
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "HVC",
+      "datasource": {
+        "type": "lhre-artemis-datasource",
+        "uid": "artemis"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 5,
+        "y": 0
+      },
+      "id": 2,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.5
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "lhre-artemis-datasource",
+            "uid": "artemis"
+          },
+          "refId": "A",
+          "signals": [
+            "board_status.hvc_last_seen_s"
+          ],
+          "agg": "max",
+          "bucket_ms": 0,
+          "alias": "HVC",
+          "live": true
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Inverter",
+      "datasource": {
+        "type": "lhre-artemis-datasource",
+        "uid": "artemis"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 10,
+        "y": 0
+      },
+      "id": 3,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.5
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "lhre-artemis-datasource",
+            "uid": "artemis"
+          },
+          "refId": "A",
+          "signals": [
+            "board_status.inverter_last_seen_s"
+          ],
+          "agg": "max",
+          "bucket_ms": 0,
+          "alias": "Inverter",
+          "live": true
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "PDU",
+      "datasource": {
+        "type": "lhre-artemis-datasource",
+        "uid": "artemis"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 15,
+        "y": 0
+      },
+      "id": 4,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.5
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "lhre-artemis-datasource",
+            "uid": "artemis"
+          },
+          "refId": "A",
+          "signals": [
+            "board_status.pdu_last_seen_s"
+          ],
+          "agg": "max",
+          "bucket_ms": 0,
+          "alias": "PDU",
+          "live": true
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "VCU",
+      "datasource": {
+        "type": "lhre-artemis-datasource",
+        "uid": "artemis"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "id": 5,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.5
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "lhre-artemis-datasource",
+            "uid": "artemis"
+          },
+          "refId": "A",
+          "signals": [
+            "board_status.vcu_last_seen_s"
+          ],
+          "agg": "max",
+          "bucket_ms": 0,
+          "alias": "VCU",
+          "live": true
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Seconds since each board's last CAN frame",
+      "datasource": {
+        "type": "lhre-artemis-datasource",
+        "uid": "artemis"
+      },
+      "id": 10,
+      "gridPos": {
+        "h": 14,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "description": "board_health marks a board STALE once this passes 0.5 s (red line).",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.5
+              }
+            ]
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "line+area"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "lhre-artemis-datasource",
+            "uid": "artemis"
+          },
+          "refId": "A",
+          "signals": [
+            "board_status.dui_last_seen_s"
+          ],
+          "agg": "max",
+          "bucket_ms": 0,
+          "alias": "DUI",
+          "live": true
+        },
+        {
+          "datasource": {
+            "type": "lhre-artemis-datasource",
+            "uid": "artemis"
+          },
+          "refId": "B",
+          "signals": [
+            "board_status.hvc_last_seen_s"
+          ],
+          "agg": "max",
+          "bucket_ms": 0,
+          "alias": "HVC",
+          "live": true
+        },
+        {
+          "datasource": {
+            "type": "lhre-artemis-datasource",
+            "uid": "artemis"
+          },
+          "refId": "C",
+          "signals": [
+            "board_status.inverter_last_seen_s"
+          ],
+          "agg": "max",
+          "bucket_ms": 0,
+          "alias": "Inverter",
+          "live": true
+        },
+        {
+          "datasource": {
+            "type": "lhre-artemis-datasource",
+            "uid": "artemis"
+          },
+          "refId": "D",
+          "signals": [
+            "board_status.pdu_last_seen_s"
+          ],
+          "agg": "max",
+          "bucket_ms": 0,
+          "alias": "PDU",
+          "live": true
+        },
+        {
+          "datasource": {
+            "type": "lhre-artemis-datasource",
+            "uid": "artemis"
+          },
+          "refId": "E",
+          "signals": [
+            "board_status.vcu_last_seen_s"
+          ],
+          "agg": "max",
+          "bucket_ms": 0,
+          "alias": "VCU",
+          "live": true
+        }
+      ]
+    }
+  ]
+}

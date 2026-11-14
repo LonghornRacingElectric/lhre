@@ -12,3 +12,23 @@ are retired; unqualified analysis aliases now select Orion.
 
 See [SQL utilities](sql_utils/README.md) and
 [the viewer](database/viewer_tool/README.md) for consumers.
+
+## Board health demo
+
+`database/paho_testing.py --replay` publishes the recorded UTA autocross run
+(`database/data/`) to MQTT `artemis/data` as the car's `TelemetryBatch`
+messages, looped at its recorded pace and restamped to now. Add
+`--dropout-board dui --dropout-after 20 --dropout-for 10` to make one board stop
+reporting: its `last_seen_s` climbs past board_health's 0.5 s threshold, goes
+STALE, then recovers. Replay needs the stack running but not the database.
+
+```
+cd apps/telemetry
+python -m analysis.database.paho_testing --replay --dropout-board dui
+```
+
+The **Board Health - Artemis (Real-time)** dashboard
+(`database/dashboards/artemis/board_health.json`) graphs each board's
+`last_seen_s` against the threshold. `bazel test
+//apps/telemetry/analysis/tests:artemis_replay_test` replays the recording
+through the real decoder and board_health's tracker.
