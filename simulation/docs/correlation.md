@@ -1,20 +1,20 @@
 # BobSim correlation plan
 
-Status: draft for the Nov 15 review.
+Status: draft for the Nov 15 review. Answers to the open questions from Nov 14 are folded in.
 
-Correlate BobSim's high-fidelity tier, the BobLib Modelica model, to Orionwatch one subsystem at a time, scored with the wheel speeds, the CSM corner boards and the IMU. Fix the inputs and the measured parameters first, tune only the few parameters each test isolates, and keep laps for validation only. Every stage has a numeric gate no tighter than the car's own run-to-run scatter, and every test those three sensor groups cannot score is marked with what would unlock it.
+Correlate BobSim's high-fidelity tier, the BobLib Modelica model, to Orionwatch one subsystem at a time, scored with the wheel speeds, the CSM corner boards, the IMU and the GPS. Fix the inputs and the known parameters first, tune only the few parameters each test isolates, and keep laps for validation only. Every stage has a numeric gate no tighter than the car's own run-to-run scatter, and every test the sensors cannot score is marked with what would unlock it.
 
 ## What changes from the original plan
 
 The original idea holds: a fixed spec list, simple to complex, steady state before transient, run on the car then in the sim, fix the gap, repeat. Seven changes make it work in practice.
 
 1. **Correlate the Modelica model through a replay of the car's own inputs.** BobLib's `VehicleFMI` takes handwheel angle and pedal positions, the same entry point lhre already builds for the autonomy plant. Logged inputs drive it, and its outputs are scored against the car.
-2. **Add a Stage 0 with no driving.** `vehicle/bundle.yml` marks the hardpoints, springs, toe, camber, bar rates and brake bias as copied from BobSim's own car (status `assumed`), and the masses and inertias have no named source. Stage 0 measures Orionwatch as it runs now, so real errors don't hide inside fitted numbers.
-3. **Add a sensor check before any comparison.** On the UTA drive days the CSM and USM boards never reported. The plan assumes the wheel speeds, the CSMs and the IMU are live, and each channel gets a known-input check before its data counts.
+2. **Add a Stage 0 with no driving.** `vehicle/bundle.yml` marks the hardpoints, springs, toe, camber, bar rates and brake bias as copied from BobSim's own car (status `assumed`), and the masses and inertias have no named source. Orionwatch's values are all set by its design, so Stage 0 is mostly bookkeeping: replace every copied value with Orionwatch's own, so real errors don't hide inside fitted numbers.
+3. **Add a sensor check before any comparison.** On the UTA drive days the CSM and USM boards never reported. The plan assumes the wheel speeds, the CSMs, the IMU and the GPS are live, and each channel gets a known-input check before its data counts. The USM firmware has two known limits that this check has to cover (see [USM firmware limits](#usm-firmware-limits)).
 4. **Correlate subsystems on measured states before full replay.** Each stage first feeds one sub-model measured states (for example, measured lateral acceleration into the roll model), and only then replays the whole vehicle. One error can't then compound across every trace.
 5. **Vertical, then longitudinal, then lateral.** Ride and pitch behaviour sets the normal loads that every tire force depends on, and speed and drag set the operating point of every lateral test, so they are frozen first.
 6. **Replay the driver's measured inputs instead of asking for perfect maneuvers.** Driver variation becomes an input, not an error, and repeats only need to measure the car's scatter.
-7. **Mark what three sensor groups can't score.** Body sideslip, path and absolute speed under wheel slip need GPS or an optical speed sensor. Those gates are listed as blocked, with what unlocks them, rather than quietly dropped.
+7. **Mark what the sensors can't score.** The GPS covers path, segment times and absolute speed under wheel slip. Body sideslip also needs heading. If the GPS has one antenna, it gives course but not heading, so sideslip comes from GPS course fused with IMU yaw rate over short windows. Gates the sensors still can't score are listed with what unlocks them, rather than quietly dropped.
 
 Full laps stay a hold-out: they validate the frozen model and are never used to tune it. The gate for every metric is the larger of an engineering tolerance and twice the measured run-to-run spread of that metric on the car.
 
@@ -40,10 +40,10 @@ BobSim already scores this model with `standard-eval-steady-state`, `standard-ev
 
 **Gaps that remain.** If a stage keeps failing after its parameters are fitted within physical limits, the cause is likely one of these, and the fix is a model change, not a bigger fudge factor:
 
-- **Pedals, not torque.** `VehicleFMI` takes pedal positions, so a replay also scores BobLib's VCU against Orionwatch's. The fix is a variant that takes measured motor torque and brake pressure (BobLib work), or the SIL VCU in the loop. Until then, Stage 4 compares torque before anything else.
+- **Pedals, not torque.** `VehicleFMI` takes pedal positions, so a replay also scores BobLib's VCU against Orionwatch's. For now, replay through the pedals. If the torque paths disagree, set Orionwatch's VCU to a plain upper bound at the 80 kW rules limit and set BobLib's VCU to the same limit. A variant that takes measured motor torque and brake pressure (BobLib work), or the SIL VCU in the loop, can come later. Stage 4 compares torque before anything else.
 - **Starting state.** lhre sets `modelica_initialization: legacy`, so the model settles from a pose solved for no particular car. Replays need to start from measured speed and ride heights, which needs a solved pose for our record (BobLib work, per `simulation/docs/bobsim.md`).
 - **Rigid links and hubs.** No bushing or upright compliance, and wheel compliance is off and uncalibrated. Toe compliance was already raised in #dynamics.
-- **Aero is constant.** The ride-height reference points sit above both CFD grids, so aero clamps at the grid corner, as in DynPy.
+- **Aero is constant.** The ride-height reference points sit above both CFD grids, so aero clamps at the grid corner, as in DynPy. Orionwatch runs aero, but the only aero maps vary with pitch, not with ride height. Removing the aero package for the correlation days may be possible. That takes aero out of Stages 2 to 7, and a later aero stage adds it back.
 - **Fixed air density, no wind.**
 - **Tire file with no source.** The `.tir` has no named origin; grip is scaled per session (see the staged plan).
 
@@ -51,7 +51,7 @@ One parameter is worth a quick check before any fitting: wheel inertia is 0.02 k
 
 ## What the car can measure
 
-With wheel speeds, the CSMs and the IMU live, every model DOF can be scored except body sideslip, and frame twist only as a bound. The critical bus (steering, pedals, torque, brake pressure) did log at UTA, so replay inputs are there. Rates are from `lib/spec`.
+With wheel speeds, the CSMs, the IMU and the GPS live, every model DOF can be scored, frame twist only as a bound and body sideslip through GPS and IMU fusion. The critical bus (steering, pedals, torque, brake pressure) did log at UTA, so replay inputs are there. Rates are from `lib/spec`.
 
 | Quantity | Live channel (rate) | Status |
 | --- | --- | --- |
@@ -64,9 +64,10 @@ With wheel speeds, the CSMs and the IMU live, every model DOF can be scored exce
 | Tire deflection | Ride height minus suspension travel | Estimate only (inferred); good enough to check tire vertical rate. |
 | Lateral and longitudinal acceleration | IMU | At the CG after lever-arm correction. |
 | Frame twist | Front roll minus rear roll from the four ride heights | Bound only. |
-| Unsprung vertical acceleration | USM accel (333 Hz) | Only if the USM sends it as well as wheel speed. |
-| **Body sideslip** | None | **Blocked.** See below. |
-| **Position and path** | None | **Blocked.** See below. |
+| Unsprung acceleration (3 axes) | USM accel, in the same frame as wheel speed (333 Hz frames, 104 Hz samples) | Direct. The accelerometer range is ±4 g, so it can clip on a curb. See [USM firmware limits](#usm-firmware-limits). |
+| Absolute speed | GPS | Direct, also while all four wheels slip. |
+| Position and path | GPS | Direct. |
+| Body sideslip | GPS course and IMU yaw rate | Estimate over short windows. Direct if the GPS gives heading (two antennas). |
 
 **Inputs for replay.** Steering column angle (333 Hz), pedal positions, inverter torque command and feedback (333 Hz), the VCU torque path (100 Hz), and front and rear brake pressure (333 Hz) are all on the critical bus.
 
@@ -76,28 +77,36 @@ With wheel speeds, the CSMs and the IMU live, every model DOF can be scored exce
 
 | Blocked | Stages hit | What unlocks it |
 | --- | --- | --- |
-| Body sideslip (gradient and trace) | 5, 7 | RTK GPS velocity with a solid lock, or an optical ground-speed sensor |
-| Path and segment times | 8 | GPS, or timing beacons at segment lines |
-| Absolute speed while all four wheels slip | 4 | GPS speed; until then, IMU integration over short windows |
+| Body sideslip as a direct measurement | 5, 7 | A GPS with heading (two antennas), or an optical ground-speed sensor. Until then, the GPS and IMU estimate scores the gates. |
 | Road-wheel angle and steering compliance | 0, 5, 6 | A rack position sensor, or toe measured under load in Stage 0 |
 | Frame twist as a number | 5, 7 | Strain gauges on the frame; the ride-height bound is enough to rule it in or out |
 | Wind | 3 | An anemometer, or coastdowns on still-air days in both directions |
 
+### USM firmware limits
+
+The USM firmware from last season ([lhre-2026](https://github.com/LonghornRacingElectric/lhre-2026) at `d981057`) sends one frame per corner: 3-axis unsprung acceleration and wheel speed, IDs 1026 to 1029, 333 Hz, on the Data Acq bus to the VCU and the Pi. lhre's `lib/spec/messages/usm.textproto` has the same frames. Two limits in that firmware affect correlation.
+
+- **Accelerometer.** [`imu.c`](https://github.com/LonghornRacingElectric/lhre-2026/blob/d981057/USM/firmware/usm/imu.c) sets the ASM330 to 104 Hz and ±4 g. The 333 Hz frames repeat samples, so the real accel bandwidth is about 50 Hz. That is enough for wheel hop. A curb or a plank may push the unsprung mass past 4 g and clip the signal. Set the range to ±8 g or ±16 g before Stage 2.
+- **Wheel speed.** [`wheel_speed.c`](https://github.com/LonghornRacingElectric/lhre-2026/blob/d981057/USM/firmware/usm/wheel_speed.c) times the interval between magnet crossings with a 1 ms tick, and the wheel has 6 magnets. At 20 m/s on a 0.2 m radius, a crossing comes about every 10 ms, so one reading may be off by about 10%. That is wider than the Stage 7 gate on rear left-versus-right speed, and too coarse for slip ratio in Stage 4. Time the crossings with a microsecond timer.
+- **Missed crossings at speed (not tested).** The firmware smooths the raw field with an EMA (`WS_EMA_ALPHA = 0.05`) before the crossing check. At speed, the magnet frequency may be well above the filter cutoff, so the field may stay under the 3.0 hysteresis and crossings may be lost. The Stage 1 check against GPS up to top speed finds this.
+
 ## The staged test plan
 
-Nine stages, each freezing what later stages depend on. Gates are proposed starting values for the Base review to challenge; each widens to twice the car's own run-to-run spread if that is larger. A gate marked blocked can't be scored with wheel speed, CSM and IMU alone.
+Nine stages, each freezing what later stages depend on. Gates are proposed starting values for the Base review to challenge; each widens to twice the car's own run-to-run spread if that is larger.
+
+The test surface is a Class B surface. It is not flat, but it is consistent. Run every lateral test in both directions so that the slope cancels. The run-to-run spread rule widens a gate where the surface adds scatter.
 
 | Stage | Car test | Live sensors used | Isolates, then tunes and freezes | Gate (proposed) |
 | --- | --- | --- | --- | --- |
-| 0. Measure Orionwatch | Corner scales with driver; CG height by axle-lift tilt; unsprung parts weighed; hardpoints from CAD or measurement; spring rig and damper dyno; motion ratios by pushing each corner; steering ratio and toe under load on turn plates; tire loaded radius and vertical rate under known loads; wheel inertia by spin-down | CSM ride heights and sus pots at rest | Replaces every `assumed` value in `bundle.yml` with `measured`. Nothing is fitted. | Static loads within 1% per corner; static ride heights within 1 mm; camber and toe gain within 10% of BobLib's K&C rig |
-| 1. Check the sensors | Static tilt for IMU orientation; jack each corner to known heights; known loads on the strain gauges; known steering angles; a measured roll-out for wheel-speed radius; one sharp tap for timing across USM, CSM and IMU | All | Calibration tables and time offsets for every channel. Nothing in the model changes. | Each channel within its rated accuracy; cross-board timing under 5 ms |
-| 2. Vertical | Push-and-release heave and pitch at rest; slow drive over a plank or curb | CSM ride heights, sus pots, corner accels; USM accel if sent | Damper tables, tire vertical rate and damping; compared on BobLib's four-post model first | Heave and pitch frequency within 5%; damping ratio within 0.05; wheel-hop frequency within 10% (needs USM accel) |
+| 0. Set Orionwatch's values | Take hardpoints, springs, dampers, bars, steering ratio, masses and inertias from Orionwatch's design. Check the few that the build can change: corner weights with driver, static ride heights, toe and camber. | CSM ride heights and sus pots at rest | Replaces every `assumed` value in `bundle.yml` with Orionwatch's value and its source. Nothing is fitted. | Static loads within 1% per corner; static ride heights within 1 mm; camber and toe gain within 10% of BobLib's K&C rig |
+| 1. Check the sensors | Static tilt for IMU orientation; jack each corner to known heights; known loads on the strain gauges; known steering angles; a measured roll-out for wheel-speed radius, then a constant-speed run checked against GPS up to top speed; one sharp tap for timing across USM, CSM and IMU | All | Calibration tables and time offsets for every channel. Nothing in the model changes. | Each channel within its rated accuracy; cross-board timing under 5 ms; wheel speed within 1% of GPS speed at every speed tested |
+| 2. Vertical | Push-and-release heave and pitch at rest; slow drive over a plank or curb | CSM ride heights, sus pots, corner accels; USM accel | Damper tables, tire vertical rate and damping; compared on BobLib's four-post model first | Heave and pitch frequency within 5%; damping ratio within 0.05; wheel-hop frequency within 10% (USM accel; check for clipping at ±4 g on the plank) |
 | 3. Longitudinal, steady | Coastdowns both directions with zero torque; constant-speed runs at 3 to 4 speeds | Front wheel speeds; IMU ax | Drag area, rolling resistance, driveline loss | Drag area within 5%; speed trace RMS under 0.3 m/s |
-| 4. Longitudinal, transient | Straight-line launches at stepped torque limits; stops at stepped brake pressures | Wheel speeds (slip ratio); IMU ax; CSM pitch and loads | First the pedal-to-torque path, then longitudinal tire stiffness and peak grip, brake gain, pitch gradient (checks anti geometry) | Motor torque trace NRMSE under 5%; peak ax within 5%; pitch gradient within 10%; ax trace NRMSE under 10%; speed under full slip is blocked |
-| 5. Lateral, steady | Constant radius with slowly rising speed, both directions; slow ramp steer at constant speed | IMU ay and yaw; CSM roll and loads; wheel speeds | Linear range first: front and rear cornering stiffness, roll stiffness split. Then the limit: front and rear peak lateral grip. | Understeer gradient within 0.5 deg/g; roll gradient within 10%; lateral load transfer within 10% (strain gauges); max ay within 3%; sideslip gradient blocked |
+| 4. Longitudinal, transient | Straight-line launches at stepped torque limits; stops at stepped brake pressures | Wheel speeds (slip ratio); GPS speed; IMU ax; CSM pitch and loads | First the pedal-to-torque path, then longitudinal tire stiffness and peak grip, brake gain, pitch gradient (checks anti geometry) | Motor torque trace NRMSE under 5%; peak ax within 5%; pitch gradient within 10%; ax trace NRMSE under 10%; speed under full slip within 0.3 m/s of GPS |
+| 5. Lateral, steady | Constant radius with slowly rising speed, both directions; slow ramp steer at constant speed | IMU ay and yaw; CSM roll and loads; wheel speeds; GPS | Linear range first: front and rear cornering stiffness, roll stiffness split. Then the limit: front and rear peak lateral grip. | Understeer gradient within 0.5 deg/g; roll gradient within 10%; lateral load transfer within 10% (strain gauges); max ay within 3%; sideslip gradient within 0.5 deg/g (GPS and IMU estimate) |
 | 6. Lateral, transient | Step steer and sine steer at 15 and 20 m/s and 5 deg (the speeds BobSim's TransientEval uses); a swept or random steer for frequency response | IMU yaw and ay; steering angle | Yaw inertia if not measured; tire relaxation length, which this model now has | Yaw and ay steady gain within 5%; response time within 20 ms; overshoot within 5 points; frequency-response gain within 1 dB and phase within 10 deg up to 2 Hz |
-| 7. Combined | Brake in turn, lift-off in turn, power-on exit | IMU; rear left and right wheel speeds; CSM loads | Combined-slip tire terms; LSD preload and locking | Yaw rate and ay trace NRMSE under 15%; rear wheel-speed difference within 10%; sideslip trace blocked |
-| 8. Laps (hold-out) | Autocross and endurance laps | IMU; wheel speeds | Nothing. Validation only. | Overlapping GG envelopes; minimum corner speeds within 3%; lap time within 2% (timing beam); segment times blocked without GPS or beacons |
+| 7. Combined | Brake in turn, lift-off in turn, power-on exit | IMU; rear left and right wheel speeds; CSM loads; GPS | Combined-slip tire terms; LSD preload and locking | Yaw rate and ay trace NRMSE under 15%; rear wheel-speed difference within 10% (needs the wheel-speed fix); sideslip trace NRMSE under 20% (GPS and IMU estimate) |
+| 8. Laps (hold-out) | Autocross and endurance laps | IMU; wheel speeds; GPS | Nothing. Validation only. | Overlapping GG envelopes; minimum corner speeds within 3%; lap time within 2% (timing beam); segment times within 3% (GPS) |
 
 **Each stage runs in two passes.** Pass A drives one sub-model with measured states: for example, measured ay into the roll model, or measured slip and strain-gauge load into the tire. Pass B replays the logged driver inputs through `VehicleFMI`. Pass A localizes an error to one subsystem before Pass B can blur it across all of them.
 
@@ -148,20 +157,28 @@ A stage that keeps failing after a bounded fit points at a model-form gap from t
 
 ## Open questions
 
-Settled on Nov 14: the model is BobLib's Modelica model, the car is Orionwatch, and wheel speed, the CSMs and the IMU are the sensors to plan around.
+Settled on Nov 14:
 
-- Who owns the Stage 0 measurements of Orionwatch that replace the copied BobSim geometry and setup?
-- Which IMU: one on the sprung mass near the CG, or only the CSM corner gyros and accels? The gates assume one near the CG; corner-only works with lever-arm corrections.
-- Does the USM send unsprung acceleration as well as wheel speed? The wheel-hop gate in Stage 2 needs it.
-- Replay through pedals and BobLib's VCU for now, or add a `VehicleFMI` variant that takes measured torque and brake pressure first?
-- Is a GPS lock or an optical speed sensor possible later? It unblocks the sideslip gates in Stages 5 and 7 and segment times in Stage 8.
-- Does the car run aero? If so, the ride-height reference points need a named source before Stage 3.
-- Is there a flat pad big enough for constant-radius runs and step steer at 20 m/s?
-- Do the proposed gates match the measurable goals reviewers asked VMS to show?
+- The model is BobLib's Modelica model, and the car is Orionwatch.
+- The sensors are wheel speed, the CSMs, an IMU and a GPS.
+- Stage 0 values come from Orionwatch's design. They are known before testing.
+- The USM sends 3-axis unsprung acceleration with wheel speed (see [USM firmware limits](#usm-firmware-limits)).
+- Replay goes through the pedals and BobLib's VCU for now. If necessary, both VCUs get a plain 80 kW upper bound.
+- Orionwatch runs aero. The aero maps vary with pitch only. The aero package may come off for the correlation days.
+- The test surface is a Class B surface: not flat, but consistent.
+
+Still open:
+
+- Where is the IMU: on the sprung mass near the CG, or elsewhere? The gates assume near the CG. Other positions work with lever-arm corrections.
+- Which GPS, at what rate, and with one antenna or two? Two antennas give heading, and so a direct sideslip measurement.
+- Does the aero package come off for correlation days? If it stays on, the model needs the pitch-variant maps and a named source for the ride-height reference points before Stage 3.
+- Who changes the USM firmware (accel range and wheel-speed timing) before Stage 1?
+- Do the proposed gates match any accuracy targets that reviewers or judges asked the VMS team to show? If nobody asked, the proposed gates stand until the review changes them.
 
 ## Sources
 
 - [LonghornRacingElectric/lhre](https://github.com/LonghornRacingElectric/lhre) at `ed05b95` (Nov 11): `simulation/README.md`, `simulation/docs/bobsim.md`, `vehicle/vehicle.yml`, `vehicle/bundle.yml`, `docs/can-matrix.md`, `lib/spec/messages/` (CSM and USM), `autonomy/ros2/src/lhr_sim_fmu/README.md`.
+- [LonghornRacingElectric/lhre-2026](https://github.com/LonghornRacingElectric/lhre-2026) at `d981057`: `USM/firmware/usm/` (`usm_can.c`, `imu.c`, `wheel_speed.c`) and `USM/firmware/Core/Src/app_freertos.c`.
 - [BobDyn/BobSim](https://github.com/BobDyn/BobSim) at the lhre pin `f58f932`: `simulations/response/mbd/` (Modelica steady-state, transient, ramp-steer and four-post evals and the FMU runner), `docs/boblib-submodule.md`.
 - [BobDyn/BobLib](https://github.com/BobDyn/BobLib) at the BobSim pin `75b6e03`: `README.md`, `RELEASE_READINESS.md`, `BobLib.UsersGuide`, `Experiments/Standards/` (VehicleSim, VehicleFMI, K&C rigs), `Chassis/` (frame, suspension, MF5.2 tire and wheel models), `Drivelines/`.
-- LHRE Slack: the #vehicle-modeling-and-software correlation thread (Nov 12), #orionwatch-operations ISO-test discussion (Nov 1), #electronics on CSM and USM status (Oct 20 to Nov 10), #dynamics on sensor needs (Jul 11) and toe compliance (Sep 17), and Arnav's answers on model, car and sensors (Nov 14).
+- LHRE Slack: the #vehicle-modeling-and-software correlation thread (Nov 12), #orionwatch-operations ISO-test discussion (Nov 1), #electronics on CSM and USM status (Oct 20 to Nov 10), #dynamics on sensor needs (Jul 11) and toe compliance (Sep 17), and Arnav's answers on model, car, sensors, Stage 0, VCU, aero and test surface (Nov 14).
