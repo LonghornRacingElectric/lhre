@@ -10,9 +10,11 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_INPUT_TOPIC: sensor_data
       KAFKA_OUTPUT_TOPIC: board_health
+      KAFKA_STATE_TOPIC: board_health_state
       KAFKA_GROUP_ID: board-health-group
-      BOARD_STALE_AFTER_S: ${BOARD_STALE_AFTER_S:-5}
+      BOARD_STALE_AFTER_S: ${BOARD_STALE_AFTER_S:-0.5}
       BOARD_TELEMETRY_TIMEOUT_S: ${BOARD_TELEMETRY_TIMEOUT_S:-10}
+      BOARD_SNAPSHOT_INTERVAL_S: ${BOARD_SNAPSHOT_INTERVAL_S:-2}
     networks:
       - telemetry_network
 

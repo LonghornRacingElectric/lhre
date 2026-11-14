@@ -1,8 +1,9 @@
 """Board communication-state processor.
 
-Decodes Artemis native updates, tracks per-board communication states, and
-publishes one event per state change. Health-packet interpretation is
-future work. See README.md.
+Decodes Artemis native updates, tracks per-board communication states,
+publishes one event per state change, and publishes a snapshot of every
+board's state on any change and on a heartbeat. Health-packet interpretation
+is future work. See README.md.
 """
 
 import json
@@ -16,7 +17,8 @@ from stack.ingest.protobuf import artemis_pb2
 from stack.ingest.sensor_decode import decode_updates, payload_format
 from google.protobuf.message import DecodeError
 
-from classifier import BoardStateTracker, change_events, event_time_ms
+from classifier import (BoardStateTracker, SnapshotTimer, change_events,
+                        event_time_ms, snapshot_event)
 
 logging.basicConfig(level=os.getenv("LOGLEVEL", "INFO"))
 logging.getLogger("kafka").setLevel(logging.WARNING)
@@ -24,6 +26,7 @@ logging.getLogger("kafka").setLevel(logging.WARNING)
 BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 INPUT_TOPIC = os.getenv("KAFKA_INPUT_TOPIC", "sensor_data")
 OUTPUT_TOPIC = os.getenv("KAFKA_OUTPUT_TOPIC", "board_health")
+STATE_TOPIC = os.getenv("KAFKA_STATE_TOPIC", "board_health_state")
 GROUP_ID = os.getenv("KAFKA_GROUP_ID", "board-health-group")
 SENSOR_TYPE = artemis_pb2.ArtemisSensorData
 AGE_SUFFIX = "_last_seen_s"
@@ -34,9 +37,11 @@ BOARD_FIELDS = {
 }
 CAR = SENSOR_TYPE.DESCRIPTOR.file.package
 
-# Experimental settings for sim data
-STALE_AFTER_S = float(os.getenv("BOARD_STALE_AFTER_S", "5"))
+# 0.5 s is about 4.5x the slowest healthy gap in the UTA autocross recording
+# (DUI, 0.111 s). One global value until per-board thresholds come from the spec.
+STALE_AFTER_S = float(os.getenv("BOARD_STALE_AFTER_S", "0.5"))
 TELEMETRY_TIMEOUT_S = float(os.getenv("BOARD_TELEMETRY_TIMEOUT_S", "10"))
+SNAPSHOT_INTERVAL_S = float(os.getenv("BOARD_SNAPSHOT_INTERVAL_S", "2"))
 
 stop = False
 
@@ -71,8 +76,15 @@ def _publish(producer, changes, board_status, cause, t_ms, t_source):
         producer.send(OUTPUT_TOPIC, key=event["board"].encode(), value=event).get(timeout=10)
 
 
+def _publish_snapshot(producer, states, t_ms, t_source):
+    # Keyed by car so snapshots stay ordered on a multi-partition topic.
+    snapshot = snapshot_event(states, t_ms, t_source, car=CAR)
+    producer.send(STATE_TOPIC, key=CAR.encode(), value=snapshot).get(timeout=10)
+
+
 def main():
     tracker = BoardStateTracker(STALE_AFTER_S, TELEMETRY_TIMEOUT_S, BOARD_FIELDS)
+    snapshots = SnapshotTimer(SNAPSHOT_INTERVAL_S)
     signal.signal(signal.SIGTERM, _request_stop)
     signal.signal(signal.SIGINT, _request_stop)
     consumer = KafkaConsumer(
@@ -87,12 +99,16 @@ def main():
         value_serializer=lambda v: json.dumps(v).encode("utf-8"),
         acks="all",
     )
-    logging.info("board_health ready. in=%s out=%s", INPUT_TOPIC, OUTPUT_TOPIC)
+    logging.info("board_health ready. in=%s out=%s state=%s stale_after=%ss",
+                 INPUT_TOPIC, OUTPUT_TOPIC, STATE_TOPIC, STALE_AFTER_S)
 
     seen = 0
     try:
         while not stop:
             batch = consumer.poll(timeout_ms=1000)
+            changed = False
+            # Time of the newest update in this poll; server time when none arrived.
+            snapshot_time = None
             for records in batch.values():
                 for record in records:
                     seen += 1
@@ -116,12 +132,23 @@ def main():
                         changes = tracker.observe(board_status, time.monotonic())
                         t_ms, t_source = event_time_ms(update["time"], _server_now_ms())
                         _publish(producer, changes, board_status, "frame", t_ms, t_source)
+                        changed = changed or bool(changes)
+                        snapshot_time = (t_ms, t_source)
 
             # A dead feed produces no records, so this is the only place a car
             # going silent is noticed. It runs after every poll, empty or not.
             # No frame stands behind a timeout, so it carries server time.
-            _publish(producer, tracker.expire(time.monotonic()), None,
-                     "telemetry_timeout", _server_now_ms(), "server")
+            expired = tracker.expire(time.monotonic())
+            _publish(producer, expired, None, "telemetry_timeout", _server_now_ms(), "server")
+            changed = changed or bool(expired)
+
+            # One snapshot per poll at most: after any change, and on the heartbeat
+            # so a live client always has every board's current state.
+            now = time.monotonic()
+            if snapshots.due(now, changed):
+                t_ms, t_source = snapshot_time or (_server_now_ms(), "server")
+                _publish_snapshot(producer, tracker.states, t_ms, t_source)
+                snapshots.sent(now)
 
             # Commit only after every event from this batch is acknowledged, so a
             # crash or failed send replays the batch instead of losing events.

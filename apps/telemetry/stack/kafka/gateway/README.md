@@ -183,8 +183,11 @@ and fits within a 32 MiB SSE event; oversized windows report a gap. Live windows
 do not follow public continuation tokens while ingestion changes the recording.
 
 Existing JSON state feeds use `GET /v1/topics/<topic>`. The allowlist defaults to
-`grafana_data_artemis`, `grafana_data_artemis_derived` and `car_status`; configure
-`QUERY_LIVE_TOPICS` explicitly for other Artemis producers. These are best-effort
+`grafana_data_artemis`, `grafana_data_artemis_derived`, `car_status`,
+`board_health_state`, `board_health` and `fault_events`; configure
+`QUERY_LIVE_TOPICS` explicitly for other Artemis producers. Each feed keeps one
+latest message per topic, so `board_health_state` carries every board's state
+in each message. These are best-effort
 latest-state feeds. They have no implied historical representation. They share
 the gateway Kafka consumer with native telemetry; clients open no consumers.
 On assignment these feeds start at each partition's resolved log-end offset,
