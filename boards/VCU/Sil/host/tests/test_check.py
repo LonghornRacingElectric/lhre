@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 from test_firmware import hold, parked
+from test_scenario_file import without_expect
 
 from vcusil import check, scenario_file
 from vcusil.firmware import HVC_STATES, SATURATION_BITS, Firmware, FirmwareError
@@ -816,7 +817,14 @@ false, shutdown_loop_v 24.0
   1000  1002         at[3]  rtd        rtd_pressed true (the firmware sees it at 1023 ms)
   1500  1500         at[4]  brake-off  brake_psi 0.0
   2000  2001         at[5]  pedal-on   accelerator 1.0
-  6000  6000         at[6]  pedal-off  accelerator 0.0'''
+  6000  6000         at[6]  pedal-off  accelerator 0.0
+
+  expect: the samples each is judged on (README, Checks after the run)
+    [0] states IDLE -> PRECHARGE -> TS_ACTIVE -> RTD_WAIT -> DRIVE: the whole run
+    [1] reach state DRIVE from rtd within 24 ms, not before 18 ms: first at or after 1002 ms, \
+due from 1020 to 1026 ms
+    [2] never any fault from the start until the end: 0..6999 ms
+    [3] peak torque_nm between 209.95 and 210.05 from the start until the end: 0..6999 ms'''
 
 
 def test_explain(capsys):
@@ -837,7 +845,8 @@ def test_explain(capsys):
 
 def _sets(text: str) -> dict[int, str]:
     """explain's sets column by block t_ms."""
-    rows = check.explain(scenario_file.loads(text.encode(), 'lint-test')).splitlines()[2:]
+    table = check.explain(scenario_file.loads(text.encode(), 'lint-test')).split('\n\n')[0]
+    rows = table.splitlines()[2:]
     return {int(row.split()[0]): re.split(r'  at\[\d+\]  +(?:\S+  +)?', row, maxsplit=1)[1]
             for row in rows}
 
@@ -899,5 +908,9 @@ def test_the_readme_examples_load_and_lint_clean():
     texts = re.findall(r'^```yaml\n(.*?)^```', (SIL / 'README.md').read_text(), re.M | re.S)
     assert texts
     for text in texts:
+        if 'schema:' not in text:
+            # A part of a file, such as an expect: example, for launch.yml:
+            # it must load there, so the marks it names are launch's.
+            text = without_expect((SIL / 'scenarios' / 'launch.yml').read_text()) + text
         findings = lint(text)
         assert findings.active == (), findings.active

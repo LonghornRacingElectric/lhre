@@ -9,7 +9,7 @@ import pytest
 from fakes import Launch
 
 from vcusil import __main__ as cli
-from vcusil import cosim, report, scenario_file
+from vcusil import cosim, expectations, report, scenario_file
 from vcusil.firmware import STATE_DRIVE, Firmware
 from vcusil.plant import OUTPUTS, Plant, PlantInputs
 from test_mcaplog import read_all
@@ -31,10 +31,20 @@ def test_launch_completes_and_the_car_accelerates(launch_run):
     meta = json.loads((out / 'meta.json').read_text())
     s = meta['summary']
     assert meta['status'] == 'completed'
-    assert s['states'] == ['IDLE', 'PRECHARGE', 'TS_ACTIVE', 'RTD_WAIT', 'DRIVE']
-    assert 1020 <= s['first_drive_ms'] <= 1026
-    assert s['left_drive_after_entering'] is False
-    assert s['faults_seen'] == ['SHUTDOWN_OPEN']  # boot only, before the loop debounce
+    # What the firmware must do is launch.yml's expect:, judged by the run
+    # itself: these were this test's asserts (states, DRIVE between 1020 and
+    # 1026 ms, never leaving DRIVE, no fault after the loop's boot debounce,
+    # the 210 N.m peak). Each must be there and pass.
+    checks = meta['checks']
+    assert checks['status'] == 'passed'
+    assert [(e['text'], e['result']) for e in checks['expectations']] == [
+        ('states IDLE -> PRECHARGE -> TS_ACTIVE -> RTD_WAIT -> DRIVE', 'pass'),
+        ('reach state DRIVE from rtd within 24 ms, not before 18 ms', 'pass'),
+        ('never any fault from the start until the end', 'pass'),
+        ('peak torque_nm between 209.95 and 210.05 from the start until the end', 'pass')]
+    assert {r['result'] for r in checks['invariants']} == {'pass'}
+    assert checks['accepted'] == [expectations.BOOT_ACCEPTED]
+    # The car model's own numbers stay here: only the FMU defines them.
     assert s['peak_speed_m_s'] > 25.0
     # Rolling backward is invisible to the firmware (wheel sensors report |w|),
     # so it is checked here.
@@ -99,6 +109,12 @@ def test_every_scenario_completes_on_the_car_model(name, fmu_path, can_table_pat
     meta = json.loads((tmp_path / 'meta.json').read_text())
     assert status == cli.EXIT_COMPLETED and meta['status'] == 'completed'
     assert meta['summary']['min_speed_m_s'] > -0.1
+    # Every shipped drive says what the firmware must do, and does it.
+    assert meta['checks']['status'] == 'passed', meta['checks']['report']
+    assert meta['checks']['expectations'], 'a shipped drive has no expect:'
+    assert all(e['result'] == 'pass' for e in meta['checks']['expectations'])
+    waived = set(scenario_file.load(name).waive)
+    assert {r['name'] for r in meta['checks']['invariants'] if r['result'] == 'waived'} == waived
     # A file sets off only the warnings its allow names, and each of those.
     assert meta['scenario_warnings'] == []
     assert ({w['code'] for w in meta['scenario_allowed']}

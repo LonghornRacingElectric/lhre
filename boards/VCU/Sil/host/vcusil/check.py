@@ -435,7 +435,20 @@ def explain(sf: ScenarioFile) -> str:
         cells = [row[0].rjust(widths[0]), row[1].rjust(widths[1]), row[2].rjust(widths[2]),
                  row[3].ljust(widths[3]), row[4].ljust(widths[4]), row[5]]
         lines.append(('  ' + '  '.join(cells)).rstrip())
+    if sf.expectations:
+        lines += ['', '  expect: the samples each is judged on (README, Checks after the run)']
+        lines += [f'    [{e.index}] {e.text()}: {_window(e, d)}' for e in sf.expectations]
     return '\n'.join(lines)
+
+
+def _window(e, duration_ms: int) -> str:
+    if e.verb == 'states':
+        return 'the whole run'
+    if e.verb == 'reach':
+        return (f'first at or after {e.anchor_ms} ms, due from {e.anchor_ms + e.not_before_ms} '
+                f'to {e.anchor_ms + e.within_ms} ms')
+    last = last_step_ms(duration_ms) if e.stop_ms is None else first_step_ms(e.stop_ms) - STEP_MS
+    return f'{first_step_ms(e.start_ms)}..{last} ms'
 
 
 def _positive(text: str) -> float:

@@ -6,6 +6,8 @@ import os
 
 import pytest
 from fakes import ToyCar
+from test_mcaplog import read_all
+from test_scenario_file import without_expect
 
 from vcusil import __main__ as cli
 from vcusil import check, firmware, plant, report, scenario_file
@@ -113,13 +115,83 @@ def test_a_failed_car_model_exits_1(run_cli):
     status, out, meta, _, _ = run_cli(fail_at=100)
     assert status == cli.EXIT_PLANT_FAILED
     assert meta['status'] == 'plant_failed' and 'step 100' in meta['failure']
+    # The run stopped at 300 ms, before any of launch.yml's windows end: none
+    # of them is judged, so the checks fail nothing.
+    assert meta['checks']['status'] == 'passed'
+    assert {e['result'] for e in meta['checks']['expectations']} == {'not_evaluated'}
     assert len(report.read_trace(out / 'trace.csv')) == 101
+
+
+LATE_DRIVE = ('    not_before_ms: 18\n    within_ms: 24\n', '    within_ms: 10\n')
+
+
+def _late(tmp_path, *more) -> str:
+    """launch.yml with DRIVE due 10 ms after the RTD press's sample: the
+    firmware's debounce takes 21, so the expectation fails."""
+    text = LAUNCH.read_text().replace(*LATE_DRIVE)
+    for old, new in more:
+        text = text.replace(old, new)
+    return _write(tmp_path / 'late.yml', text)
+
+
+def test_a_failed_expectation_exits_3_and_says_where(run_cli, tmp_path, capsys):
+    path = _late(tmp_path)
+    status, out, meta, _, _ = run_cli('--scenario', path)
+    assert status == cli.EXIT_CHECKS_FAILED == 3
+    # The run itself completed: the firmware, not the harness, failed.
+    assert meta['status'] == 'completed'
+    checks = meta['checks']
+    assert checks['status'] == 'failed'
+    line = next(n for n, row in enumerate((tmp_path / 'late.yml').read_text().splitlines(), 1)
+                if row == '  - reach: {state: DRIVE}')
+    failure = (f'{path}:{line}: FAIL: expect[1] reach state DRIVE from rtd within 10 ms: first at '
+               '1023 ms, 21 ms after rtd: 11 ms late [expect_failed]')
+    assert checks['report'] == [failure]
+    assert failure in capsys.readouterr().err
+    summary = (out / 'summary.txt').read_text()
+    assert ('  checks failed: 9/9 invariants passed, 3/4 expectations passed\n'
+            f'    {failure}\n') in summary
+    assert {'t_ms': 1023, 'level': 4, 'name': 'check.expect',
+            'message': 'expect[1] fail: reach state DRIVE from rtd within 10 ms: first at 1023 '
+                       'ms, 21 ms after rtd: 11 ms late'} in meta['events']
+    # The run log says so too: its metadata, and /events in time order.
+    messages, _, _, tags = read_all(out / 'run.mcap')
+    assert tags['vcusil']['checks'] == 'failed'
+    logged = [m['message'] for _, m in messages['/events']]
+    assert logged[-2:] == ['checks failed: 9/9 invariants passed, 3/4 expectations passed',
+                           'scenario late completed']
+
+
+def test_an_unused_waiver_exits_3(run_cli, tmp_path, capsys):
+    text = LAUNCH.read_text() + ('\nwaive:\n  bspd_not_tripped: "a stop that would trip the '
+                                 'BSPD"\n')
+    path = _write(tmp_path / 'waived.yml', text)
+    status, _, meta, _, _ = run_cli('--scenario', path)
+    assert status == cli.EXIT_CHECKS_FAILED
+    result = next(r for r in meta['checks']['invariants'] if r['name'] == 'bspd_not_tripped')
+    assert result['result'] == 'unused_waiver'
+    assert result['reason'] == 'a stop that would trip the BSPD'
+    assert '[unused_waiver]' in capsys.readouterr().err
+
+
+def test_a_check_that_failed_before_the_car_model_did_exits_3(run_cli, tmp_path):
+    # The run stops at 1500 ms, after the DRIVE expectation failed at 1023:
+    # what the firmware did still counts, so 3 wins over 1.
+    status, _, meta, _, _ = run_cli('--scenario', _late(tmp_path), fail_at=500)
+    assert status == cli.EXIT_CHECKS_FAILED
+    assert meta['status'] == 'plant_failed'
+    results = [e['result'] for e in meta['checks']['expectations']]
+    assert results == ['not_evaluated', 'fail', 'not_evaluated', 'not_evaluated']
 
 
 def test_options_reach_the_run(run_cli, capsys):
     status, out, meta, made, modes = run_cli('--brake-psi-full', '500', '--soc', '0.5',
                                              '--event-mode', '2')
-    assert status == cli.EXIT_COMPLETED
+    # SKIDPAD's pedal map caps torque at 70 %, so launch.yml's 210 N.m peak
+    # is not reached: the mode reached the firmware, and the check says so.
+    assert status == cli.EXIT_CHECKS_FAILED and meta['status'] == 'completed'
+    failed = [e for e in meta['checks']['expectations'] if e['result'] == 'fail']
+    assert [(e['index'], e['measured']) for e in failed] == [(3, 'highest 147 at 2001 ms')]
     assert {r['u_brake'] for r in report.read_trace(out / 'trace.csv')} == {350.0 / 500.0, 0.0}
     assert [p.soc_start for p in made] == [0.5] and modes == [2]
     assert meta['brake_psi_at_full_plant_brake'] == 500.0 and meta['event_mode'] == 2
@@ -138,7 +210,8 @@ def _write(path, text):
 
 
 def test_a_scenario_file_outside_the_repo(run_cli, tmp_path, capsys):
-    text = LAUNCH.read_text()
+    # RTD is refused on purpose, which launch.yml's expectations would fail.
+    text = without_expect(LAUNCH.read_text())
     text = text[:text.index('  # Off the brake')]  # stop before 1500 ms
     text = text.replace('duration_ms: 7000', 'duration_ms: 1500')
     text = text.replace('brake_psi: 350.0', 'brake_psi: 0.0')  # RTD refused

@@ -21,7 +21,18 @@ from vcusil.scenario import (CAR_SIGNALS, DEFAULTS, DRIVER_SIGNALS, Driver, Rest
 from vcusil.scenario_file import (MAX_MARK, NAME, SCENARIO_DIR, Ramp, ScenarioError, Setup,
                                   first_step_ms, last_step_ms)
 
-LAUNCH = (SCENARIO_DIR / 'launch.yml').read_text()
+LAUNCH_FILE = (SCENARIO_DIR / 'launch.yml').read_text()
+
+
+def without_expect(text: str) -> str:
+    """A shipped file without its expect: section, which the file's own
+    comment opens. The tests below edit launch.yml's blocks, and its
+    expectations name their marks; test_expect.py tests the expectations."""
+    start = text.index('# What the run must show')
+    return text[:start] + text[text.index('\nat:\n', start) + 1:]
+
+
+LAUNCH = without_expect(LAUNCH_FILE)
 PARAMS = Path(__file__).resolve().parents[3] / 'App' / 'config' / 'params.hpp'
 STATE_FAULT = 3
 # faults.hpp FaultBit, and the kTorqueCutFaults that exit DRIVE.
@@ -166,8 +177,9 @@ CASES = [
      'at[4].brake_front_psi', 'brake_front_psi', 'planned: separate front and rear brake', 1),
     ('planned-after', [('  - t_ms: 1500\n', '  - t_ms: 1500\n    after: "state:DRIVE"\n')],
      'unknown_key', 'at[4].after', 'after:',
-     'planned: times relative to a firmware state, stage 4', 1),
-    ('planned-expect', [top('expect: 1')], 'unknown_key', 'expect', 'expect: 1', 'stage 4', 1),
+     'planned: block times relative to a firmware state', 1),
+    ('expect-not-a-list', [top('expect: 1')], 'wrong_type', 'expect', 'expect: 1',
+     '1 is not a list of expectations', 1),
     ('planned-can', [top('can: 1')], 'unknown_key', 'can', 'can: 1', 'stage 6', 1),
     ('unknown-key-word', [top('colour: red')], 'unknown_key', 'colour', 'colour: red',
      'is not an lhre.vcu-sil-scenario.v1 key', 1),
@@ -179,8 +191,8 @@ CASES = [
     ('setup-key-in-a-block', [('    mark: rtd\n', '    mark: rtd\n    event_mode: SKIDPAD\n')],
      'unknown_key', 'at[3].event_mode', 'event_mode: SKIDPAD',
      'is not an lhre.vcu-sil-scenario.v1 key; event_mode goes under setup:', 1),
-    ('planned-expect-as-a-list', [top('expect:\n  - x')], 'unknown_key', 'expect', 'expect:',
-     'stage 4', 1),
+    ('expect-item-not-a-mapping', [top('expect:\n  - x')], 'wrong_type', 'expect[0]', '  - x',
+     'x is not an expectation', 1),
     ('near-miss-setup-on-the-next-line', [('event_mode: UNASSIGNED', 'event:\n    UNASSIGNED')],
      'unknown_key', 'setup.event', 'event:', 'is not a setup key; did you mean event_mode?', 1),
     ('near-miss-allow-on-the-next-line', [allow('brake_hihg:\n    why')], 'unknown_key',
@@ -508,7 +520,7 @@ def value(sf, signal: str, t_ms: int):
 
 
 def same_drive(sf) -> bool:
-    return sf.parameters() == scenario_file.load('launch').parameters()
+    return sf.parameters() == scenario_file.loads(LAUNCH.encode(), 'launch').parameters()
 
 
 # The other side of a boundary above, or a file the format allows that no
@@ -1222,7 +1234,7 @@ def test_a_missing_key_indented_under_another_says_where_it_went():
 
 
 def test_all_problems_are_reported_at_once():
-    text = edited((LAUNCH.splitlines(True)[6], 'description: 5\n'), top('expect: 1'),
+    text = edited((LAUNCH.splitlines(True)[6], 'description: 5\n'), top('can: 1'),
                   ('accelerator: 1.0', 'accelerator: 1.5'))
     problems = problems_of(text)
     assert [p.code for p in problems] == ['wrong_type', 'unknown_key', 'out_of_range']
@@ -1473,11 +1485,12 @@ def test_every_file_reads_the_same_to_yaml_safe_load(name):
 
 
 def as_safe_load_reads_it(sf) -> dict:
-    """yaml.safe_load's reading, with setup and allow as the loader has
-    them when left out or emptied: setup: with its keys commented out is
-    null to safe_load and no keys to the loader, the same drive."""
+    """yaml.safe_load's reading, with setup, allow, waive and expect as the
+    loader has them when left out or emptied: setup: with its keys commented
+    out is null to safe_load and no keys to the loader, the same drive."""
     safe = yaml.safe_load(sf.data)
-    return {**safe, 'setup': safe.get('setup') or {}, 'allow': safe.get('allow') or {}}
+    return {**safe, 'setup': safe.get('setup') or {}, 'allow': safe.get('allow') or {},
+            'waive': safe.get('waive') or {}, 'expect': safe.get('expect') or []}
 
 
 def test_a_setup_with_its_keys_commented_out_reads_the_same_to_yaml_safe_load():
@@ -1682,7 +1695,7 @@ def test_same_bytes_same_sha256_and_parameters(tmp_path):
 
 def test_comment_only_change_keeps_the_timeline_and_changes_the_sha256():
     a = scenario_file.load('launch')
-    b = scenario_file.loads((LAUNCH + '# one more comment\n').encode(), 'launch')
+    b = scenario_file.loads((LAUNCH_FILE + '# one more comment\n').encode(), 'launch')
     assert a.timeline == b.timeline and a.parameters() == b.parameters()
     assert a.sha256 != b.sha256
 
