@@ -76,15 +76,16 @@ from the `App/` directory instead of boards restating it:
   automatically — Cortex-M port + the board's CubeMX `FreeRTOSConfig.h`
   (exposed as `{name}_freertos_config`) when cross-compiling, simulator
   port + host config otherwise — so task code runs unmodified on the host.
-  It compiles with `-Wall -Wextra -Werror`: app code is ours and starts
-  warning-clean, so new warnings get fixed when they appear instead of
-  piling up. That covers
-  headers it includes from `app_deps` too. `Core/` and `Board/` stay
+  It compiles with the [firmware warnings](#warnings) as errors. That
+  covers headers it includes from `app_deps` too. `Core/` and `Board/` stay
   outside it, since they compile alongside CubeMX and ST HAL sources that
   aren't warning-clean.
 - `App/**/*_test.cpp` → one small `cc_test` per file, named by its stem,
   against `{name}_app` + the LHAL host fakes + gtest. Stems must be unique
-  across `App/`.
+  across `App/`. A test function's stack frame over 256 KiB is a build
+  error: Windows gives tests 1 MB of stack, so a whole app object as a local
+  passes on Linux and crashes there. Hold it in a `std::unique_ptr` or a
+  fixture member instead.
 - `App/**/*_sim.cpp` → one host `cc_binary` per file, named by its stem.
 
 `app_deps` adds host-buildable dependencies to the app library (e.g.
@@ -99,6 +100,23 @@ simply stop being compiled). The scaffolder's `--no-test` / `--no-sim`
 flags are the front-door version: they skip writing those starter files in
 the first place (a `*_test.cpp` / `*_sim.cpp` added later still becomes a
 target automatically).
+
+## Warnings
+
+[`warnings.bzl`](https://github.com/LonghornRacingElectric/lhre/blob/main/tools/firmware/warnings.bzl)
+holds `FIRMWARE_WARNINGS`: `-Wall -Wextra -Werror` plus the warnings that
+catch real firmware bugs, each one commented with what it catches.
+`-Wdouble-promotion` matters most on the car: the M4F's FPU is single
+precision, so a stray `double` turns into slow software math in the control
+loop. Write `1.0f`, not `1.0`, and cast on purpose where a `double` is
+wanted, as with an accumulator.
+
+The app library and the hand-written `drivers/longhorn` libraries compile
+with them, on both the ARM GCC and host clang builds. Everything was clean
+when they went on, so there's no baseline: a new warning fails the build.
+`Core/`, `Board/`, ST HAL and generated CAN code stay outside, since they
+aren't ours to fix. To silence one on purpose, use
+`#pragma GCC diagnostic` around the line, with a comment saying why.
 
 ## App code can't reach the ST HAL — by construction
 
@@ -194,6 +212,34 @@ A region meant to be full, like a DTCM stack, gets its own budget:
 `size_budget_overrides = {"DTCMRAM": 100}`. The test is tagged
 `firmware_size`, which `--config=ubsan` filters out (see
 [tools/ubsan](../ubsan/README.md)).
+
+## Shell-free, including the flash wrappers
+
+Nothing this macro produces needs bash, so all of it builds on a Windows
+laptop with no MSYS2 or Git Bash
+([ADR-018](../../docs/architecture/018-windows-shell-free.md)):
+
+- `.bin` / `.hex` come from `run_binary`, which execs objcopy directly. A
+  genrule's `cmd` would run under bash. (`.elf` is still a genrule: it is a
+  plain copy, with a `cmd_bat` for Windows.)
+- `:openocd` / `:dfu` are native launchers built with
+  [`hermetic_launcher`](https://registry.bazel.build/modules/hermetic_launcher):
+  a small binary that execs the flash script and exports the runfiles
+  environment it needs. It replaced a generated `.cmd` on Windows and a bash
+  script elsewhere. Those two had to be kept in step by hand, and both
+  looked for the tool in a runfiles tree beside the wrapper, which exists
+  only when the flash target is the top-level `bazel run` target.
+
+The launcher hands the flash script its files as rlocation paths, not real
+ones. `tools/openocd/flash.py` and `tools/dfu/flash.py` resolve them through
+the runfiles library, so a new file for the script goes in the list passed
+to `_flash_launcher` and gets resolved the same way on the Python side.
+
+`flash_launcher_test` covers that wiring without hardware. It instantiates
+both flash rules with `flash_probe.py` standing in for the flash script and
+the flashing tool, then checks that the tool starts, can resolve every path
+it is handed, receives the user's extra arguments intact, and has its exit
+code passed back.
 
 ## Build provenance
 

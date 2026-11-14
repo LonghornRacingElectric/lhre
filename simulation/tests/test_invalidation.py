@@ -291,6 +291,23 @@ def test_stale_check_never_calls_an_unavailable_key_current(tree, tmp_path, caps
     assert "bobsim:engines" in out
 
 
+def test_a_record_without_keys_is_stale_once_its_vehicle_changed(tmp_path, capsys):
+    tree = build_tree(tmp_path, bundle=False)
+    vehicle = tree / "vehicle/vehicle.yml"
+    path = tmp_path / "provenance.json"
+    record = {"study": "demo", "vehicle_sha256": invalidation.sha256_file(vehicle)}
+    path.write_text(json.dumps(record), encoding="utf-8")
+    code, out = _stale(tree, path, capsys)
+    assert code == invalidation.EXIT_UNKNOWN
+    assert out.startswith("UNKNOWN demo")
+
+    _append(vehicle, "\n")
+    code, out = _stale(tree, path, capsys)
+    assert code == 1
+    assert out.startswith("STALE demo")
+    assert "vehicle" in out
+
+
 def test_a_changed_key_wins_over_an_unknown_key(tree, tmp_path, capsys):
     path = _record(tree, tmp_path)
     shutil.rmtree(tree / BOBSIM / ".git")

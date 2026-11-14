@@ -144,6 +144,15 @@ def test_every_axle_tire_must_be_a_member(root):
     assert ("members.tires", "tire_mismatch") in _codes(_check(root, bundle))
 
 
+def test_a_tire_cannot_list_an_axle_that_uses_another_tire(root):
+    def add_spare(data):
+        tires = data["members"]["tires"]
+        tires.append(dict(tires[0], id="spare", axles=["rear"]))
+
+    codes = _codes(_check(root, _edit(root, add_spare)))
+    assert ("members.tires[1].axles", "tire_mismatch") in codes
+
+
 def test_released_needs_the_approval_record(root):
     bundle = _edit(root, lambda data: data.update(status="released"))
     codes = _codes(_check(root, bundle))

@@ -160,7 +160,7 @@ void TestApp::IoTick(uint32_t now) {
       st.max_v = c.source_v > st.max_v ? c.source_v : st.max_v;
       st.min_counts = c.counts < st.min_counts ? c.counts : st.min_counts;
       st.max_counts = c.counts > st.max_counts ? c.counts : st.max_counts;
-      st.sum_v += c.source_v;
+      st.sum_v += static_cast<double>(c.source_v);
     }
     ++s.capture_samples;
   }

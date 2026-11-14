@@ -1,5 +1,5 @@
 load("@rules_python//python:defs.bzl", "py_binary")
-load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
 package(default_visibility = ["//apps/BEVO:__subpackages__"])
@@ -27,6 +27,12 @@ rust_binary(
         "@platforms//os:linux": ["@crates//:socketcan"],
         "//conditions:default": [],
     }),
+)
+
+rust_test(
+    name = "cand_test",
+    crate = ":cand",
+    target_compatible_with = NOT_WINDOWS,
 )
 
 # Full cand replacement with no CAN hardware dependency — the mock feed for

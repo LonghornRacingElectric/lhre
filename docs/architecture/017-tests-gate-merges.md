@@ -20,8 +20,8 @@ main guard against all of that, and it doesn't scale with the volume.
   and tests are never weakened to get green.
 - Gates use the tools' own mechanisms, with no baseline files or scripts
   of ours: existing violations are fixed or suppressed inline with a
-  reason, stale suppressions fail, and coverage is checked on changed
-  lines only.
+  reason, stale suppressions fail. Coverage is reported on changed lines
+  only, with no enforced percent.
 - Reviews (human and CodeRabbit) focus on intent, design and whether the
   tests actually pin the behavior, and push back on any new suppression
   or loosened test.
