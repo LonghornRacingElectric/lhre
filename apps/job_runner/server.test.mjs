@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {scryptSync} from 'node:crypto';
-import {mkdtemp, rm} from 'node:fs/promises';
+import {mkdtemp, rm, mkdir, writeFile, readdir, stat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {Readable} from 'node:stream';
@@ -31,13 +31,13 @@ test('job bounds reject injection, unknown settings, booleans and oversubscripti
 });
 test('unauthenticated access cannot reach the runner', async () => {
   let calls = 0;
-  const app = createApplication({config, rpc: async () => {calls++;}});
+  const app = createApplication({config, now: () => 10000, rpc: async () => {calls++;}});
   assert.equal((await request(app, '/api/state', {headers: {authorization: ''}})).status, 401);
   assert.equal(calls, 0);
 });
 test('cross-site and non-JSON mutations are rejected before calling HIL', async () => {
   let calls = 0;
-  const app = createApplication({config, rpc: async () => {calls++;}});
+  const app = createApplication({config, now: () => 10000, rpc: async () => {calls++;}});
   for (const headers of [{origin: 'https://evil.test'}, {'x-lhr-request': ''}, {'content-type': 'text/plain'}, {'sec-fetch-site': 'cross-site'}]) {
     assert.equal((await request(app, '/api/pause', {method: 'POST', data: {paused: true}, headers})).status, 403);
   }
@@ -45,7 +45,7 @@ test('cross-site and non-JSON mutations are rejected before calling HIL', async 
 });
 test('submission is bounded and forwards only structured job settings', async () => {
   let received;
-  const app = createApplication({config, rpc: async value => {received = value; return value.job;}});
+  const app = createApplication({config, now: () => 10000, rpc: async value => {received = value; return value.job;}});
   const job = {id, template: 'cpu', parallel: 2, seconds: 5};
   const response = await request(app, '/api/runs', {method: 'POST', data: job});
   assert.equal(response.status, 201);
@@ -72,7 +72,7 @@ test('offline state preserves history and marks it stale; reconnect recovers', a
 });
 test('cancel and pause operations cannot select executable commands or paths', async () => {
   const calls = [];
-  const app = createApplication({config, rpc: async value => {calls.push(value); return {ok: true};}});
+  const app = createApplication({config, now: () => 10000, rpc: async value => {calls.push(value); return {ok: true};}});
   assert.equal((await request(app, `/api/runs/${id}/cancel`, {method: 'POST', data: {}})).status, 200);
   assert.equal((await request(app, '/api/pause', {method: 'POST', data: {paused: true}})).status, 200);
   assert.deepEqual(calls, [{op: 'cancel', id}, {op: 'pause', paused: true}]);
@@ -83,7 +83,7 @@ test('result downloads are stored on telemetry and reused without contacting HIL
   t.after(() => rm(dataDir, {recursive: true, force: true}));
   let calls = 0;
   const bytes = Buffer.from('archive fixture');
-  const app = createApplication({config: {...config, dataDir}, rpc: async value => {
+  const app = createApplication({config: {...config, dataDir}, now: () => 10000, rpc: async value => {
     calls++;
     assert.deepEqual(value, {op: 'archive', id});
     return {base64: bytes.toString('base64')};
@@ -94,4 +94,86 @@ test('result downloads are stored on telemetry and reused without contacting HIL
   assert.deepEqual(first.raw, bytes);
   assert.deepEqual((await request(app, `/api/runs/${id}/results`)).raw, bytes);
   assert.equal(calls, 1);
+});
+
+test('failed sign-ins are globally rate limited, cached credentials still work, and fixed time resets the limit', async () => {
+  let clock = 10000;
+  const app = createApplication({config, now: () => clock, rpc: async () => ({})});
+  assert.equal((await request(app, '/missing')).status, 404);
+  const headers = {authorization: 'Basic ' + Buffer.from('test:wrong').toString('base64')};
+  for (let attempt = 0; attempt < 5; attempt++) assert.equal((await request(app, '/api/state', {headers})).status, 401);
+  assert.equal((await request(app, '/api/state', {headers})).status, 429);
+  assert.equal((await request(app, '/missing')).status, 404);
+  clock += 60000;
+  assert.equal((await request(app, '/api/state', {headers})).status, 401);
+});
+
+test('logs are coalesced and cached with a fixed expiry', async () => {
+  let clock = 10000, calls = 0, complete;
+  const app = createApplication({config, now: () => clock, rpc: () => {calls++; return new Promise(resolve => {complete = resolve;});}});
+  const first = request(app, `/api/runs/${id}/logs`);
+  const second = request(app, `/api/runs/${id}/logs`);
+  assert.equal(calls, 1);
+  complete({stdout: 'cached', stderr: ''});
+  assert.equal((await first).status, 200);
+  assert.equal((await second).body.stdout, 'cached');
+  assert.equal((await request(app, `/api/runs/${id}/logs`)).status, 200);
+  assert.equal(calls, 1);
+  clock += 3000;
+  const next = request(app, `/api/runs/${id}/logs`);
+  assert.equal(calls, 2); complete({stdout: 'new', stderr: ''});
+  assert.equal((await next).body.stdout, 'new');
+});
+
+test('dashboard caps in-flight SSH requests and releases reservations after failures', async () => {
+  const pending = [];
+  const app = createApplication({config, now: () => 10000, rpc: () => new Promise((resolve, reject) => pending.push({resolve, reject}))});
+  const first = request(app, `/api/runs/${id}/logs`);
+  const second = request(app, `/api/runs/${'b'.repeat(32)}/logs`);
+  assert.equal((await request(app, `/api/runs/${'c'.repeat(32)}/logs`)).status, 503);
+  pending[0].reject(new Error('connection unavailable')); pending[1].resolve({stdout: '', stderr: ''});
+  assert.equal((await first).status, 503); assert.equal((await second).status, 200);
+  const next = request(app, `/api/runs/${id}/logs`);
+  pending[2].resolve({stdout: 'recovered', stderr: ''});
+  assert.equal((await next).status, 200);
+});
+
+test('archive downloads are serialized and cache pruning enforces bytes as well as count', async t => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), 'lhr-cache-bounds-'));
+  t.after(() => rm(dataDir, {recursive: true, force: true}));
+  const directory = path.join(dataDir, 'results'); await mkdir(directory);
+  // Sparse files exercise byte accounting without allocating large buffers or downloading them.
+  const {open} = await import('node:fs/promises');
+  for (let number = 0; number < 13; number++) {
+    const file = await open(path.join(directory, number.toString(16).padStart(32, '0') + '.tar.gz'), 'w');
+    await file.truncate(11 * 1024 * 1024); await file.close();
+  }
+  let finish, entered;
+  const ready = new Promise(resolve => {entered = resolve;});
+  const app = createApplication({config: {...config, dataDir}, now: () => 10000, rpc: () => {entered(); return new Promise(resolve => {finish = resolve;});}});
+  const first = request(app, `/api/runs/${id}/results`);
+  await ready;
+  assert.equal((await request(app, `/api/runs/${'b'.repeat(32)}/results`)).status, 429);
+  finish({base64: Buffer.from('archive').toString('base64')});
+  assert.equal((await first).status, 200);
+  const files = await readdir(directory);
+  let bytes = 0;
+  for (const file of files) bytes += (await stat(path.join(directory, file))).size;
+  assert.ok(bytes <= 128 * 1024 * 1024);
+  assert.ok(files.length < 14);
+  assert.equal((await request(app, `/api/runs/${id}/results`)).status, 200);
+});
+
+test('cache pruning retains at most 200 completed archives and leaves unrelated files alone', async t => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), 'lhr-cache-count-'));
+  t.after(() => rm(dataDir, {recursive: true, force: true}));
+  const directory = path.join(dataDir, 'results'); await mkdir(directory);
+  for (let number = 0; number < 202; number++) await writeFile(path.join(directory, number.toString(16).padStart(32, '0') + '.tar.gz'), 'fixture');
+  await writeFile(path.join(directory, 'operator-notes.txt'), 'keep');
+  const app = createApplication({config: {...config, dataDir}, now: () => 10000, rpc: async () => ({base64: Buffer.from('archive').toString('base64')})});
+  assert.equal((await request(app, `/api/runs/${id}/results`)).status, 200);
+  const files = await readdir(directory);
+  assert.equal(files.filter(file => file.endsWith('.tar.gz')).length, 200);
+  assert.ok(files.includes('operator-notes.txt'));
+  assert.ok(files.includes(id + '.tar.gz'));
 });

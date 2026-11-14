@@ -4,26 +4,25 @@ import argparse
 import concurrent.futures
 import json
 import math
-from pathlib import Path
 import subprocess
 import sys
 import time
 
 
-def cpu(seconds):
-    start, events = time.perf_counter(), 0
-    while time.perf_counter() - start < seconds:
+def cpu(seconds, clock=time.perf_counter):
+    start, events = clock(), 0
+    while clock() - start < seconds:
         for value in range(2, 12000):
             if all(value % divisor for divisor in range(2, math.isqrt(value) + 1)):
                 events += 1
-    return {'events': events, 'wall_s': round(time.perf_counter() - start, 3)}
+    return {'events': events, 'wall_s': round(clock() - start, 3)}
 
 
 def fmu(instance):
     result = subprocess.run([sys.executable, '/bench/input/fmu_bench.py', '1e-6',
                              f'worker-{instance}', '/bench/OrionFMI.fmu'],
                             capture_output=True, text=True, timeout=600, check=False)
-    Path(f'/results/fmu-{instance}.log').write_text((result.stdout + result.stderr)[-262144:])
+    print((result.stdout + result.stderr)[-262144:], flush=True)
     records = []
     for line in result.stdout.splitlines():
         try:
@@ -52,5 +51,4 @@ if __name__ == '__main__':
     output = {'template': args.template, 'parallel': args.parallel,
               'wall_s': round(time.perf_counter() - started, 3), 'results': results,
               'note': 'Standalone benchmark, not a full Gazebo/autonomy validation'}
-    Path('/results/results.json').write_text(json.dumps(output, indent=2))
     print(json.dumps(output), flush=True)

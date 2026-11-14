@@ -82,7 +82,7 @@ It runs on every PR, on every push to `main`, weekly, and by hand.
 - `Changes` lists the files a PR touches, renamed files' old paths
   included. Each area's job runs only when its paths changed: Bazel on
   Linux and Windows, simulation fast checks, FourPost, autonomy (colcon),
-  BEVO, docs and telemetry. `Format` always runs.
+  BEVO, docs, telemetry and the HIL job dashboard. `Format` always runs.
 - `Lint` always runs: ruff for Python and shellcheck for scripts outside
   `autonomy/`, and actionlint for the workflows (see
   [tools/lint/README.md](tools/lint/README.md)). Fix a new violation; a

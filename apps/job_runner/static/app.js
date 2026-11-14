@@ -30,14 +30,17 @@ function render() {
   $('updated').textContent = (connected ? 'Updated ' : 'Last connected ') + (state.checked_at ? new Date(state.checked_at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '—');
   if (!connected) message(state.error || 'The HIL worker is offline. Existing jobs remain on HIL; reconnect before submitting new work.');
   const jobs = state.jobs.filter(j => filter === 'all' || (filter === 'finished' ? terminal.has(j.status) : !terminal.has(j.status)));
+  const focusedRun = document.activeElement?.dataset.runId;
   $('runs').replaceChildren();
   if (!jobs.length) $('runs').append(element('div', filter === 'all' ? 'No runs yet. Queue a workload to get started.' : 'No runs in this view.', 'empty'));
   for (const job of jobs) {
     const row = element('div', undefined, 'run'), button = element('button', undefined, 'run-main');
+    button.dataset.runId = job.id;
     button.append(element('strong', titles[job.settings.template]), element('span', `${job.id.slice(0, 8)} · ${job.settings.parallel} process${job.settings.parallel === 1 ? '' : 'es'} · ${new Date(job.created).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}`));
     button.addEventListener('click', () => {selected = job.id; showDetails(); $('details').scrollIntoView({behavior: 'smooth', block: 'nearest'});});
     const status = element('div', undefined, 'run-status'); status.append(element('span', job.cancel_requested && !terminal.has(job.status) ? 'cancelling' : job.status, 'badge ' + job.status), element('small', elapsed(job)));
     row.append(button, status); $('runs').append(row);
+    if (focusedRun === job.id) button.focus();
   }
 }
 async function showDetails() {
@@ -47,7 +50,7 @@ async function showDetails() {
   $('detail-title').textContent = titles[job.settings.template] + ' / ' + job.id.slice(0, 8);
   $('detail-meta').textContent = `${job.status} · ${job.settings.parallel} process(es) · ${elapsed(job)}${job.exit_code !== null ? ' · exit ' + job.exit_code : ''}`;
   $('detail-error').textContent = job.error || ''; $('detail-error').hidden = !job.error;
-  $('cancel').hidden = terminal.has(job.status); $('cancel').disabled = !!job.cancel_requested || state.connection !== 'connected';
+  $('cancel').hidden = terminal.has(job.status); $('cancel').disabled = !!job.cancel_requested || state.connection !== 'connected' || !state.online;
   $('download').hidden = !terminal.has(job.status); $('download').href = `/api/runs/${id}/results`;
   try {
     const logs = await api(`/api/runs/${id}/logs`);
@@ -59,12 +62,14 @@ async function refresh() {
   if (refreshing) return;
   refreshing = true;
   try {state = await api('/api/state'); render(); if (selected) await showDetails();}
-  catch (error) {message(error.message); $('submit').disabled = true; $('connection').textContent = 'Disconnected';}
+  catch (error) {state = {...(state || {jobs: [], templates: {}}), connection: 'disconnected', online: false, error: error.message}; render(); $('cancel').disabled = true;}
   finally {refreshing = false;}
 }
 function workload() {
   const template = $('template').value;
   $('description').textContent = descriptions[template]; $('duration').hidden = template !== 'cpu';
+  $('seconds').disabled = template !== 'cpu';
+  if (template !== 'cpu') $('seconds').value = 15;
   $('parallel').disabled = template === 'gpu'; if (template === 'gpu') $('parallel').value = 1;
   if (state) render();
 }

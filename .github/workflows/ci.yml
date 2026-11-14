@@ -553,6 +553,7 @@ jobs:
 
   job-runner:
     name: HIL dashboard
+    timeout-minutes: 5
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.runner != 'false' }}
     runs-on: ubuntu-latest
@@ -562,7 +563,7 @@ jobs:
         with:
           node-version: 22
       - name: Test dashboard API
-        run: node --test apps/job_runner/server.test.mjs
+        run: node --test apps/job_runner/*.test.mjs
 
   # On main, docs.yml builds and publishes the site instead.
   docs:

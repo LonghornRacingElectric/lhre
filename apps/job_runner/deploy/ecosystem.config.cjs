@@ -10,6 +10,6 @@ module.exports = {
     max_restarts: 10,
     min_uptime: '10s',
     time: true,
-    env: {NODE_ENV: 'production', LHR_JOBS_CONFIG: '/home/electric/.config/lhr-jobs/dashboard.json'},
+    env: {NODE_ENV: 'production', LHR_JOBS_CONFIG: '/home/lhr-jobs/.config/lhr-jobs/dashboard.json'},
   }],
 };

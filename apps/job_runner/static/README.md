@@ -5,3 +5,9 @@ allowlist. No frontend package installation or CDN access is required. The
 page polls the authenticated same-origin API, labels stale data, and renders
 job names and output with textContent. It does not accept shell commands or
 hold the worker's SSH key. Verify desktop and narrow layouts when editing it.
+
+A failed state refresh persists the offline state until the next successful
+refresh, including across template changes. Mutation controls remain disabled.
+History refresh restores keyboard focus by run ID. Non-CPU templates disable
+the CPU duration input and submit a bounded default. Browser tests use a stub
+DOM, fetch and timers: `node --test apps/job_runner/browser.test.mjs`.

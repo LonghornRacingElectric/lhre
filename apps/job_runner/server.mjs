@@ -1,7 +1,7 @@
 import http from 'node:http';
 import {spawn} from 'node:child_process';
 import {createHash, randomBytes, scryptSync, timingSafeEqual} from 'node:crypto';
-import {readFile, writeFile, mkdir, rename, readdir, unlink} from 'node:fs/promises';
+import {readFile, writeFile, mkdir, rename, readdir, unlink, stat} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
@@ -18,22 +18,23 @@ export function validateJob(input) {
   return {id: input.id, template: input.template, parallel: input.parallel, seconds: input.seconds};
 }
 
-export function sshRpc(config, request) {
+export function sshRpc(config, request, {spawnProcess = spawn, schedule = setTimeout, unschedule = clearTimeout} = {}) {
   return new Promise((resolve, reject) => {
     const args = ['-T', '-i', config.sshKey, '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes',
       '-o', 'StrictHostKeyChecking=yes', '-o', `UserKnownHostsFile=${config.knownHosts}`,
       '-o', 'ConnectTimeout=5', '-o', 'ServerAliveInterval=5', '-o', 'ServerAliveCountMax=2', config.sshHost];
-    const child = spawn('/usr/bin/ssh', args, {stdio: ['pipe', 'pipe', 'pipe']});
+    const child = spawnProcess('/usr/bin/ssh', args, {stdio: ['pipe', 'pipe', 'pipe']});
     const chunks = [];
     let size = 0, errors = '', settled = false;
     const finish = (error, value) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      unschedule(timer);
       if (error) reject(error); else resolve(value);
     };
-    const timer = setTimeout(() => {child.kill('SIGKILL'); finish(new Error('HIL did not respond within 40 seconds'));}, 40000);
+    const timer = schedule(() => {child.kill('SIGKILL'); finish(new Error('HIL did not respond within 40 seconds'));}, 40000);
     child.stdout.on('data', chunk => {
+      if (settled) return;
       size += chunk.length;
       if (size > 16 * 1024 * 1024) {child.kill('SIGKILL'); finish(new Error('HIL response is too large'));}
       else chunks.push(chunk);
@@ -46,6 +47,7 @@ export function sshRpc(config, request) {
       let response;
       try {response = JSON.parse(Buffer.concat(chunks).toString());}
       catch {return finish(new Error('HIL connection unavailable' + (errors ? ': ' + errors.trim() : '')));}
+      if (!response || typeof response !== 'object' || Array.isArray(response) || typeof response.ok !== 'boolean') return finish(new Error('HIL connection returned an invalid response'));
       if (code !== 0 || !response.ok) return finish(new Error(response.error || 'Runner request failed'));
       finish(null, response.result);
     });
@@ -85,6 +87,14 @@ async function body(req) {
 
 export function createApplication({config, rpc = request => sshRpc(config, request), now = () => Date.now(), staticRoot = path.join(here, 'static')}) {
   const authCache = new Map();
+  let authWindow = now(), authFailures = 0, inFlight = 0, downloading = false;
+  const transport = rpc;
+  rpc = async request => {
+    if (inFlight >= 2) throw new Error('HIL connection busy; retry shortly');
+    inFlight++;
+    try {return await transport(request);} finally {inFlight--;}
+  };
+  const logCache = new Map();
   let snapshot = null, checkedAt = 0, pending = null;
   async function state() {
     if (pending) return pending;
@@ -115,7 +125,12 @@ export function createApplication({config, rpc = request => sshRpc(config, reque
       const authorization = req.headers.authorization || '';
       const fingerprint = createHash('sha256').update(authorization).digest('hex');
       if (!(authCache.has(fingerprint) && authCache.get(fingerprint) > now())) {
-        if (!authenticate(authorization, config)) return respond(res, 401, {error: 'Sign in with your dashboard credentials'}, {'WWW-Authenticate': 'Basic realm="LHR Jobs", charset="UTF-8"'});
+        if (now() - authWindow >= 60000) {authWindow = now(); authFailures = 0;}
+        if (authFailures >= 5) return respond(res, 429, {error: 'Too many sign-in attempts; retry in a minute'}, {'Retry-After': '60'});
+        if (!authenticate(authorization, config)) {
+          authFailures++;
+          return respond(res, 401, {error: 'Sign in with your dashboard credentials'}, {'WWW-Authenticate': 'Basic realm="LHR Jobs", charset="UTF-8"'});
+        }
         if (authCache.size >= 32) authCache.clear();
         authCache.set(fingerprint, now() + 300000);
       }
@@ -151,34 +166,46 @@ export function createApplication({config, rpc = request => sshRpc(config, reque
           checkedAt = 0;
           return respond(res, 200, result);
         }
-        if (action === 'logs' && req.method === 'GET') return respond(res, 200, await rpc({op: 'logs', id}));
+        if (action === 'logs' && req.method === 'GET') {
+          const cached = logCache.get(id);
+          if (cached && now() - cached.at < 2500) return respond(res, 200, await cached.value);
+          if (logCache.size >= 32) logCache.clear();
+          const value = rpc({op: 'logs', id});
+          logCache.set(id, {at: now(), value});
+          try {return respond(res, 200, await value);} catch (error) {logCache.delete(id); throw error;}
+        }
         if (action === 'results' && req.method === 'GET') {
-          const directory = path.join(config.dataDir, 'results');
-          await mkdir(directory, {recursive: true});
-          const filename = path.join(directory, id + '.tar.gz');
-          let content;
-          try {content = await readFile(filename);} catch {
-            const result = await rpc({op: 'archive', id});
-            content = Buffer.from(result.base64, 'base64');
-            if (content.length > 11 * 1024 * 1024) throw new Error('Result archive is too large');
-            const temporary = filename + '.' + randomBytes(4).toString('hex');
-            await writeFile(temporary, content, {mode: 0o600});
-            await rename(temporary, filename);
-            // Match the worker's 200 completed-job retention bound, without touching other files.
-            const files = (await readdir(directory)).filter(name => /^[a-f0-9]{32}\.tar\.gz$/.test(name)).sort();
-            const retained = new Set((snapshot?.jobs || []).map(job => job.id));
-            if (files.length > 200) {
-              let remaining = files.length;
-              const removable = [...files.filter(file => !retained.has(file.slice(0, 32))), ...files.filter(file => retained.has(file.slice(0, 32)))];
-              for (const file of removable) {
-                if (remaining <= 200) break;
-                if (file === id + '.tar.gz') continue;
-                await unlink(path.join(directory, file));
-                remaining--;
+          if (downloading) return respond(res, 429, {error: 'Another result download is in progress; retry shortly'});
+          downloading = true;
+          try {
+            const directory = path.join(config.dataDir, 'results');
+            await mkdir(directory, {recursive: true});
+            const filename = path.join(directory, id + '.tar.gz');
+            let content;
+            try {content = await readFile(filename);} catch {
+              const result = await rpc({op: 'archive', id});
+              content = Buffer.from(result.base64, 'base64');
+              if (content.length > 11 * 1024 * 1024) throw new Error('Result archive is too large');
+              const temporary = filename + '.' + randomBytes(4).toString('hex');
+              await writeFile(temporary, content, {mode: 0o600});
+              await rename(temporary, filename);
+              // A single download owns pruning; bound both file count and SSD bytes.
+              const files = [];
+              for (const name of (await readdir(directory)).filter(name => /^[a-f0-9]{32}\.tar\.gz$/.test(name)).sort()) {
+                try {files.push({name, bytes: (await stat(path.join(directory, name))).size});}
+                catch (error) {if (error.code !== 'ENOENT') throw error;}
+              }
+              let total = files.reduce((sum, file) => sum + file.bytes, 0), remaining = files.length;
+              for (const file of files) {
+                if (remaining <= 200 && total <= 128 * 1024 * 1024) break;
+                if (file.name === id + '.tar.gz') continue;
+                try {await unlink(path.join(directory, file.name));}
+                catch (error) {if (error.code !== 'ENOENT') throw error;}
+                remaining--; total -= file.bytes;
               }
             }
-          }
-          return respond(res, 200, content, {'Content-Type': 'application/gzip', 'Content-Disposition': `attachment; filename="lhr-${id}.tar.gz"`});
+            return respond(res, 200, content, {'Content-Type': 'application/gzip', 'Content-Disposition': `attachment; filename="lhr-${id}.tar.gz"`});
+          } finally {downloading = false;}
         }
       }
       return respond(res, 404, {error: 'Not found'});

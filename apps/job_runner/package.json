@@ -4,5 +4,5 @@
   "version": "0.1.0",
   "type": "module",
   "engines": {"node": ">=18"},
-  "scripts": {"start": "node server.mjs", "test": "node --test server.test.mjs"}
+  "scripts": {"start": "node server.mjs", "test": "node --test *.test.mjs"}
 }

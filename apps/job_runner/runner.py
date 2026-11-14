@@ -3,6 +3,7 @@
 import argparse
 import base64
 import datetime
+from contextlib import ExitStack
 import fcntl
 import io
 import json
@@ -25,6 +26,7 @@ IMAGES = {
     'gpu': 'lhr/worker-gpu-check:2026-11-13',
 }
 MAX_ARCHIVE = 10 * 1024 * 1024
+WORKER_ERRORS = (ValueError, KeyError, TypeError, OSError, RuntimeError, sqlite3.Error, subprocess.SubprocessError)
 
 
 def timestamp():
@@ -61,13 +63,13 @@ def command(settings, directory):
     settings = validate(settings)
     template, parallel = settings['template'], settings['parallel']
     args = ['docker', 'run', '-d', '--name', container_name(settings['id']),
-            '--label', 'lhr.runner=jobs-v1', '--network', 'none',
+            '--pull=never', '--label', 'lhr.runner=jobs-v1', '--network', 'none',
             '--cpus', str(parallel), '--memory', str(512 + 512 * parallel) + 'm',
+            '--memory-swap', str(512 + 512 * parallel) + 'm',
             '--pids-limit', '256', '--cap-drop', 'ALL', '--security-opt',
             'no-new-privileges', '--read-only', '--mount',
             'type=tmpfs,destination=/tmp,tmpfs-size=536870912', '--log-driver', 'local',
             '--log-opt', 'max-size=2m', '--log-opt', 'max-file=2',
-            '--mount', f'type=bind,src={directory},dst=/results',
             '-e', 'OPENBLAS_NUM_THREADS=1', '-e', 'OMP_NUM_THREADS=1']
     if template == 'gpu':
         args += ['--gpus', 'all', '-e', 'NVIDIA_DRIVER_CAPABILITIES=graphics,utility',
@@ -185,6 +187,18 @@ def capture(queue, job_id):
     directory = queue.directory(job_id)
     directory.mkdir(exist_ok=True)
     result = docker(['logs', '--tail', '2000', container_name(job_id)])
+    # Fixed workloads publish results on bounded Docker stdout, with no writable host mount.
+    for line in reversed(result.stdout.splitlines()):
+        try:
+            record = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(record, dict) and 'results' in record and 'template' in record:
+            target = directory / 'results.json'
+            target.unlink(missing_ok=True)
+            with target.open('x') as stream:
+                json.dump(record, stream)
+            break
     for name, content in [('stdout.log', result.stdout[-262144:]),
                           ('stderr.log', result.stderr[-262144:])]:
         target = directory / name
@@ -193,38 +207,92 @@ def capture(queue, job_id):
             stream.write(content)
 
 
-def tick(queue):
-    jobs = queue.jobs()
-    for job in jobs:
+def reconcile(queue, job):
+    info = inspect(job['id'])
+    if info is None:
+        if job['cancel_requested']:
+            queue.update(job['id'], status='cancelled', finished=queue.now())
+        elif job['status'] == 'starting':
+            age = time.time() - datetime.datetime.fromisoformat(job['started']).timestamp()
+            if age > 60:
+                queue.update(job['id'], status='failed', finished=queue.now(),
+                             error=job['error'] or 'Container did not appear within 60 seconds')
+        else:
+            queue.update(job['id'], status='failed', finished=queue.now(), error='Job container is missing')
+        return
+    state = info['State']
+    age = time.time() - datetime.datetime.fromisoformat(job['started']).timestamp()
+    if state.get('Status') in {'created', 'restarting'}:
+        if job['cancel_requested'] or age > 60:
+            docker(['rm', '-f', container_name(job['id'])])
+            queue.update(job['id'], status='cancelled' if job['cancel_requested'] else 'failed',
+                         finished=queue.now(), error=job['error'] or 'Container did not start within 60 seconds')
+        return
+    timed_out = state['Running'] and age > 900
+    if state['Running'] and (job['cancel_requested'] or timed_out):
+        # Enforce safety even if a full disk prevents recording the state transition.
+        docker(['stop', '-t', '5', container_name(job['id'])], check=False)
+        queue.update(job['id'], status='cancelling', error='Runtime limit (15 min)' if timed_out else None)
+        info = inspect(job['id'])
+        state = info['State']
+    if not state['Running']:
+        # A failed capture must leave the job live so the next tick retries;
+        # terminal jobs are immediately eligible for cached result downloads.
+        capture(queue, job['id'])
+        cancelled = job['cancel_requested'] or job['status'] == 'cancelling' or timed_out
+        queue.update(job['id'], status='cancelled' if cancelled else ('succeeded' if state['ExitCode'] == 0 else 'failed'),
+                     finished=queue.now(), exit_code=state['ExitCode'],
+                     error='Container exceeded its memory limit' if state.get('OOMKilled') else ('Runtime limit (15 min)' if timed_out else job['error']))
+    elif job['status'] == 'starting':
+        queue.update(job['id'], status='running')
+
+
+def cache_logs(queue):
+    for job in queue.jobs():
         if job['status'] not in LIVE:
             continue
-        info = inspect(job['id'])
-        if info is None:
-            if job['cancel_requested']:
-                queue.update(job['id'], status='cancelled', finished=queue.now())
-            elif job['status'] == 'starting':
-                queue.update(job['id'], status='queued')
-            else:
-                queue.update(job['id'], status='failed', finished=queue.now(), error='Job container is missing')
+        try:
+            result = docker(['logs', '--tail', '250', container_name(job['id'])])
+            directory = queue.directory(job['id'])
+            directory.mkdir(exist_ok=True)
+            for name, content in [('stdout.log', result.stdout), ('stderr.log', result.stderr)]:
+                target = directory / name
+                target.unlink(missing_ok=True)
+                with target.open('x') as stream:
+                    stream.write(content[-262144:])
+        except WORKER_ERRORS as error:
+            print(json.dumps({'job': job['id'], 'log_error': str(error)[:1000]}), flush=True)
+
+
+def tick(queue):
+    for job in queue.jobs():
+        if job['status'] not in LIVE:
             continue
-        state = info['State']
-        age = time.time() - datetime.datetime.fromisoformat(job['started']).timestamp()
-        timed_out = state['Running'] and age > 900
-        if state['Running'] and (job['cancel_requested'] or timed_out):
-            queue.update(job['id'], status='cancelling', error='Runtime limit (15 min)' if timed_out else None)
-            docker(['stop', '-t', '5', container_name(job['id'])], check=False)
-            info = inspect(job['id'])
-            state = info['State']
-        if not state['Running']:
-            # A failed capture must leave the job live so the next tick retries;
-            # terminal jobs are immediately eligible for cached result downloads.
-            capture(queue, job['id'])
-            cancelled = job['cancel_requested'] or job['status'] == 'cancelling' or timed_out
-            queue.update(job['id'], status='cancelled' if cancelled else ('succeeded' if state['ExitCode'] == 0 else 'failed'),
-                         finished=queue.now(), exit_code=state['ExitCode'],
-                         error='Container exceeded its memory limit' if state.get('OOMKilled') else ('Runtime limit (15 min)' if timed_out else job['error']))
-        elif job['status'] == 'starting':
-            queue.update(job['id'], status='running')
+        try:
+            reconcile(queue, job)
+            with queue.connect() as db:
+                db.execute('DELETE FROM settings WHERE key=?', ('errors:' + job['id'],))
+        except WORKER_ERRORS as error:
+            try:
+                # One damaged result must not prevent cancellation/runtime enforcement for others.
+                with queue.connect() as db:
+                    key = 'errors:' + job['id']
+                    row = db.execute('SELECT value FROM settings WHERE key=?', (key,)).fetchone()
+                    attempts = int(row['value']) + 1 if row else 1
+                    db.execute('INSERT OR REPLACE INTO settings VALUES(?,?)', (key, str(attempts)))
+                print(json.dumps({'job': job['id'], 'worker_error': str(error)[:1000]}), flush=True)
+                if attempts >= 3:
+                    try:
+                        info = inspect(job['id'])
+                        if info and (info['State']['Running'] or info['State'].get('Status') in {'created', 'restarting'}):
+                            docker(['rm', '-f', container_name(job['id'])])
+                        queue.update(job['id'], status='failed', finished=queue.now(),
+                                     error='Reconciliation failed after 3 attempts: ' + str(error)[-800:])
+                    except WORKER_ERRORS as stop_error:
+                        # Unknown Docker state still reserves resources and is retried next tick.
+                        print(json.dumps({'job': job['id'], 'worker_error': str(stop_error)[:1000]}), flush=True)
+            except WORKER_ERRORS as persistence_error:
+                print(json.dumps({'job': job['id'], 'worker_error': str(persistence_error)[:1000]}), flush=True)
     if queue.paused():
         return
     jobs = queue.jobs()
@@ -238,7 +306,7 @@ def tick(queue):
         if slots + settings['parallel'] > 8 or (settings['template'] == 'gpu' and gpu_busy):
             continue
         with queue.connect() as db:
-            claimed = db.execute("UPDATE jobs SET status='starting',started=? WHERE id=? AND status='queued' AND cancel_requested=0", (queue.now(), job['id'])).rowcount
+            claimed = db.execute("UPDATE jobs SET status='starting',started=? WHERE id=? AND status='queued' AND cancel_requested=0 AND NOT EXISTS (SELECT 1 FROM settings WHERE key='paused' AND value='1')", (queue.now(), job['id'])).rowcount
         if not claimed:
             continue
         directory = queue.directory(job['id'])
@@ -251,31 +319,39 @@ def tick(queue):
             gpu_busy |= settings['template'] == 'gpu'
         except (subprocess.SubprocessError, OSError) as error:
             # A timeout can occur after Docker has started; reconcile by deterministic name.
-            if inspect(job['id']) is None:
-                detail = getattr(error, 'stderr', '') or str(error)
-                queue.update(job['id'], status='failed', finished=queue.now(), error=detail[-1000:])
+            detail = getattr(error, 'stderr', '') or str(error)
+            if isinstance(detail, bytes):
+                detail = detail.decode(errors='replace')
+            queue.update(job['id'], error=detail[-1000:])
+            if inspect(job['id']) is None and not isinstance(error, subprocess.TimeoutExpired):
+                queue.update(job['id'], status='failed', finished=queue.now())
+            else:
+                # Even a merely created container owns its reservations until reconciled.
+                active.append(job)
+                slots += settings['parallel']
+                gpu_busy |= settings['template'] == 'gpu'
 
 
 def prune(queue):
     finished = [j for j in queue.jobs() if j['status'] in TERMINAL]
     for job in finished[200:]:
-        docker(['rm', container_name(job['id'])], check=False)
+        result = docker(['rm', container_name(job['id'])], check=False)
+        if result.returncode and 'No such' not in result.stderr:
+            continue
         shutil.rmtree(queue.directory(job['id']), ignore_errors=True)
         with queue.connect() as db:
             db.execute('DELETE FROM jobs WHERE id=?', (job['id'],))
+            db.execute('DELETE FROM settings WHERE key=?', ('errors:' + job['id'],))
 
 
 def logs(queue, job_id):
     job = queue.get(job_id)
     directory = queue.directory(job_id)
-    if job['status'] in TERMINAL:
+    if job['status'] in TERMINAL or job['status'] in LIVE:
         return {stream: (directory / (stream + '.log')).read_text()[-262144:]
                 if (directory / (stream + '.log')).is_file()
                 and not (directory / (stream + '.log')).is_symlink() else '' for stream in ['stdout', 'stderr']}
-    if job['status'] == 'queued':
-        return {'stdout': '', 'stderr': ''}
-    result = docker(['logs', '--tail', '250', container_name(job_id)], check=False)
-    return {'stdout': result.stdout[-262144:], 'stderr': result.stderr[-262144:]}
+    return {'stdout': '', 'stderr': ''}
 
 
 def archive(queue, job_id):
@@ -320,22 +396,46 @@ def rpc(queue, request):
     if op == 'archive':
         return archive(queue, request.get('id', ''))
     if op == 'status':
-        root_usage = shutil.disk_usage(queue.root)
-        templates = {}
-        for template, image in IMAGES.items():
-            templates[template] = docker(['image', 'inspect', image], check=False).returncode == 0
         try:
-            gpu = subprocess.run(['nvidia-smi', '--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu',
-                                  '--format=csv,noheader,nounits'], capture_output=True, text=True, timeout=5, check=False).stdout.strip()
-        except (OSError, subprocess.SubprocessError):
-            gpu = ''
+            snapshot = json.loads((queue.root / 'status.json').read_text())
+        except (OSError, ValueError):
+            snapshot = {'templates': {}, 'online': False}
         heartbeat = queue.root / 'heartbeat'
-        healthy = heartbeat.exists() and time.time() - heartbeat.stat().st_mtime < 60
-        return {'host': 'hil', 'online': healthy, 'paused': queue.paused(), 'jobs': queue.jobs(),
+        snapshot.update(jobs=queue.jobs(), paused=queue.paused(),
+                        online=heartbeat.exists() and time.time() - heartbeat.stat().st_mtime < 60)
+        return snapshot
+    raise ValueError('Unknown operation')
+
+
+def cache_status(queue):
+    root_usage = shutil.disk_usage(queue.root)
+    templates = {}
+    for template, image in IMAGES.items():
+        templates[template] = docker(['image', 'inspect', image], check=False).returncode == 0
+    try:
+        gpu = subprocess.run(['nvidia-smi', '--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu',
+                              '--format=csv,noheader,nounits'], capture_output=True, text=True, timeout=5, check=False).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        gpu = ''
+    heartbeat = queue.root / 'heartbeat'
+    healthy = heartbeat.exists() and time.time() - heartbeat.stat().st_mtime < 60
+    snapshot = {'host': 'hil', 'online': healthy, 'paused': queue.paused(), 'jobs': queue.jobs(),
                 'templates': templates, 'gpu': gpu, 'cpu_threads': os.cpu_count(),
                 'load': list(os.getloadavg()), 'disk_free_bytes': root_usage.free,
                 'limits': {'cpu_slots': 8, 'concurrent_jobs': 4, 'gpu_jobs': 1, 'retained_jobs': 200}}
-    raise ValueError('Unknown operation')
+    target = queue.root / 'status.json'
+    temporary = target.with_suffix('.tmp')
+    temporary.write_text(json.dumps(snapshot))
+    temporary.replace(target)
+
+
+def worker_cycle(queue):
+    for operation in (tick, prune, cache_status, cache_logs):
+        try:
+            operation(queue)
+        except WORKER_ERRORS as error:
+            print(json.dumps({'worker_error': str(error)[:1000]}), flush=True)
+    (queue.root / 'heartbeat').touch()
 
 
 def main():
@@ -343,28 +443,36 @@ def main():
     parser.add_argument('mode', choices=['worker', 'rpc'])
     parser.add_argument('--root', default='/var/lib/lhr-runner')
     args = parser.parse_args()
-    queue = Queue(args.root)
-    if args.mode == 'rpc':
-        try:
-            data = sys.stdin.buffer.read(8193)
-            if len(data) > 8192:
-                raise ValueError('Request is too large')
-            result = rpc(queue, json.loads(data))
-            print(json.dumps({'ok': True, 'result': result}))
-        except (ValueError, KeyError, TypeError, OSError, RuntimeError, subprocess.SubprocessError) as error:
-            print(json.dumps({'ok': False, 'error': str(error)[:1000]}))
-            raise SystemExit(1) from error
-        return
-    with (queue.root / 'worker.lock').open('w') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        while True:
+    with ExitStack() as locks:
+        if args.mode == 'rpc':
+            Path(args.root).mkdir(parents=True, exist_ok=True)
+            for slot in range(4):
+                lock = locks.enter_context((Path(args.root) / f'rpc-{slot}.lock').open('w'))
+                try:
+                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    lock.close()
+            else:
+                print(json.dumps({'ok': False, 'error': 'Runner is busy; retry shortly'}))
+                raise SystemExit(1)
+        queue = Queue(args.root)
+        if args.mode == 'rpc':
             try:
-                tick(queue)
-                prune(queue)
-                (queue.root / 'heartbeat').touch()
-            except (ValueError, KeyError, OSError, RuntimeError, sqlite3.Error, subprocess.SubprocessError) as error:
-                print(json.dumps({'worker_error': str(error)[:1000]}), flush=True)
-            time.sleep(2)
+                data = sys.stdin.buffer.read(8193)
+                if len(data) > 8192:
+                    raise ValueError('Request is too large')
+                result = rpc(queue, json.loads(data))
+                print(json.dumps({'ok': True, 'result': result}))
+            except (ValueError, KeyError, TypeError, OSError, RuntimeError, subprocess.SubprocessError) as error:
+                print(json.dumps({'ok': False, 'error': str(error)[:1000]}))
+                raise SystemExit(1) from error
+            return
+        with (queue.root / 'worker.lock').open('w') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            while True:
+                worker_cycle(queue)
+                time.sleep(2)
 
 
 if __name__ == '__main__':
