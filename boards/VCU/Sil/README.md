@@ -73,9 +73,12 @@ What a failed run leaves depends on how far it got:
 - **The firmware doesn't build, or an option is wrong** (2). Nothing is
   written. Nothing is cleared either: the host deletes the previous run's
   files only once it starts, so in a reused `--out` every file there,
-  `meta.json` included, is the earlier run's, and run.sh still prints its
-  `wrote` line for them. The default `--out` is new for every run; reuse a
-  directory only if you check the exit status.
+  `meta.json` included, is the earlier run's. run.sh prints its `wrote`
+  line whenever a `meta.json` is there once the container exits, so a
+  failed build or an option `vcusil` rejects still announces the old files;
+  an option run.sh rejects itself stops it before that line. The default
+  `--out` is new for every run; reuse a directory only if you check the
+  exit status.
 
 Other options pass through to `python -m vcusil`:
 
