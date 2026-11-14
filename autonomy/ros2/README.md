@@ -1046,8 +1046,14 @@ for the contact model and off-track-distance uncertainty.
 | `rate_hz` | `20.0` | Check, heartbeat and status rate |
 | `lidar_topic` | `"/lhr/lidar/points"` | Cloud whose age is checked |
 | `monitor_lidar` | `true` | Check LiDAR age (the Gazebo launch sets it from `perception`) |
+| `imu_topic` | `"/lhr/imu/data"` | IMU whose age is checked, and whose gyro the yaw-rate fallback reads |
+| `wheel_topic` | `"/lhr/sensor/wheel_speeds"` | Wheel speeds whose age is checked |
+| `monitor_imu`, `monitor_wheels` | `true` | Check the EKF's inputs (the Gazebo launch sets both from `estimator`) |
 | `lidar_timeout_s` | `0.3` | Cloud age (s) that counts as stale, about three missed frames |
 | `odom_timeout_s` | `0.25` | Odometry age (s) that counts as stale |
+| `imu_timeout_s` | `0.25` | IMU age (s) that counts as stale; 100 Hz in Gazebo |
+| `wheel_timeout_s` | `0.25` | Wheel-speed age (s) that counts as stale; 50 Hz in Gazebo |
+| `mission_timeout_s` | `0.5` | Mission-status age (s) that counts as a dead `mission_manager` while the last state was `READY` or `DRIVING`; it publishes at 10 Hz |
 | `cmd_timeout_s` | `0.25` | Control command age (s) that counts as stale; the controller publishes at 20 Hz once it has a mission status |
 | `max_position_std_m` | `0.0` | Largest pose standard deviation (m) before the EKF counts as diverged; 0 is off, the default until GNSS bounds the EKF's covariance |
 | `max_speed_factor` | `1.5` | Speed above this multiple of `vehicle.yaml`'s top speed counts as diverged |
@@ -1063,10 +1069,10 @@ for the contact model and off-track-distance uncertainty.
 | `steer_window_s` | `1.0` | Yaw-rate fallback: how long (s) a mismatch must last before it trips |
 
 The Gazebo launch exposes every threshold as `safety_<param>` and starts
-the node only with `safety:=true`. `monitor_lidar` follows `perception`, and
-`rate_hz`, `lidar_topic`, `steering_measured_topic` and
-`require_steer_measurement` are not launch arguments; the package README says
-why. See [lhr_safety](src/lhr_safety/README.md)
+the node only with `safety:=true`. `monitor_lidar` follows `perception`,
+`monitor_imu` and `monitor_wheels` follow `estimator`, and `rate_hz`, the
+topics and `require_steer_measurement` are not launch arguments; the package
+README says why. See [lhr_safety](src/lhr_safety/README.md)
 for what a trip does.
 
 The MVS launcher also accepts `plant:=fmu` for the optional

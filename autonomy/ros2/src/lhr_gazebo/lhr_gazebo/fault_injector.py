@@ -29,7 +29,7 @@ from nav_msgs.msg import Odometry
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
-from sensor_msgs.msg import PointCloud2
+from sensor_msgs.msg import Imu, JointState, PointCloud2
 from std_msgs.msg import String
 
 
@@ -53,8 +53,11 @@ class FaultKind:
 
 EKF = 'lib/lhr_state_estimation/ekf_node'
 CONTROLLER = 'lib/lhr_control/pursuit_node'
+MISSION = 'lib/lhr_mission_manager/mission_manager'
 ODOM = '/lhr/vehicle/odom'
 CMD = '/lhr/vehicle/cmd'
+IMU = '/lhr/imu/data'
+WHEELS = '/lhr/sensor/wheel_speeds'
 # Remapped by the launch to the plant's own odometry.
 PLANT_ODOM = '/lhr/sim/plant_odom'
 
@@ -80,6 +83,17 @@ FAULTS = {
     # the real one, so the measured steering angle stops following it.
     'steer_freeze': FaultKind(
         'STEER_TRACKING', CMD, CMD + '_actuated', AckermannDriveStamped),
+    # The EKF keeps publishing fresh, finite odometry after these (#126), and
+    # safety_node only watches its inputs under estimator:=ekf.
+    'imu_drop': FaultKind(
+        'IMU_STALE', IMU + '_raw', IMU, Imu, needs=(('estimator', 'ekf'),)),
+    'wheel_drop': FaultKind(
+        'WHEEL_STALE', WHEELS + '_raw', WHEELS, JointState,
+        needs=(('estimator', 'ekf'),)),
+    # Trips, but nothing in sim stops the car afterwards: the stop goes
+    # through the dead node, and the hardware loop the heartbeat feeds on
+    # the car is not modelled (#127).
+    'mission_kill': FaultKind('MISSION_STALE', process=MISSION, sig=signal.SIGKILL),
 }
 
 
@@ -231,7 +245,7 @@ class FaultInjector(Node):
     def _corrupt(self, msg):
         """Return the faulted message, or None to drop it."""
         kind = self._kind
-        if kind == 'lidar_drop':
+        if kind in ('lidar_drop', 'imu_drop', 'wheel_drop'):
             return None
         if kind == 'odom_nan':
             msg.pose.pose.position.x = math.nan

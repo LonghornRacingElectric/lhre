@@ -19,6 +19,9 @@ a fault, a crash or a hang all look the same to whatever is listening.
 |---|---|---|
 | `ODOM_STALE` | No odometry for `odom_timeout_s` (the EKF or bridge died or hung) | `/lhr/vehicle/odom` |
 | `EKF_DIVERGED` | Any non-finite field, speed over `max_speed_factor` x the car's top speed from `vehicle.yaml`, or (once enabled) position standard deviation over `max_position_std_m` | `/lhr/vehicle/odom` |
+| `IMU_STALE` | No IMU sample for `imu_timeout_s` (only with `monitor_imu`). The EKF predicts on its own timer, so after the IMU dies its odometry stays fresh and finite and `ODOM_STALE` never fires; the pose drifts on the last yaw rate and acceleration instead | `/lhr/imu/data` |
+| `WHEEL_STALE` | No wheel speeds for `wheel_timeout_s` (only with `monitor_wheels`), for the same reason | `/lhr/sensor/wheel_speeds` |
+| `MISSION_STALE` | No mission status for `mission_timeout_s` while the last one was `READY` or `DRIVING`: `mission_manager` (10 Hz) died with the car armed, so nothing would act on an emergency | `/lhr/mission/status` |
 | `CMD_STALE` | No `/lhr/vehicle/cmd` for `cmd_timeout_s`. Once it has a mission status, `pure_pursuit` publishes at 20 Hz, so silence means the controller died while the actuators hold its last command | `/lhr/vehicle/cmd` |
 | `CMD_INVALID` | A non-finite steering command, which the Gazebo adapter would clamp to full lock | `/lhr/vehicle/cmd` |
 | `LIDAR_STALE` | No cloud for `lidar_timeout_s` (only with `monitor_lidar`) | `/lhr/lidar/points` |
@@ -27,7 +30,8 @@ a fault, a crash or a hang all look the same to whatever is listening.
 
 The order above is the priority when several fire at once: a dead or
 diverged pose explains everything downstream of it, so it is reported
-first. None of the checks read ground truth. A topic that never arrives
+first, then a dead EKF input, which explains the pose drifting, then a dead
+mission manager. None of the checks read ground truth. A topic that never arrives
 counts as stale from node startup, and a clock that jumps backwards (a sim
 reset) counts as stale rather than as perfectly fresh.
 
@@ -64,10 +68,11 @@ expected rate, for 1 s: a freeze mid-corner kept widening the band while
 the controller asked for more steering, and at 5.3 m/s the car left the
 course before the 1 s window filled. That rule remains only as the
 fallback for a plant with no steering measurement, with
-`require_steer_measurement` off, from `steer_min_speed_mps` up. It reads the yaw rate in `/lhr/vehicle/odom`,
-which under `estimator:=ekf` is the EKF's estimate, not the gyro itself, so
-it freezes if the IMU dies. IMU and wheel-speed dropouts are not caught yet
-([#126](https://github.com/LonghornRacingElectric/lhre/issues/126)).
+`require_steer_measurement` off, from `steer_min_speed_mps` up. With
+`monitor_imu` it reads the gyro itself rather than the EKF's yaw rate, which
+holds the last gyro value when the IMU dies, so a frozen estimate cannot hide
+a stuck actuator ([#126](https://github.com/LonghornRacingElectric/lhre/issues/126));
+without an IMU it reads the yaw rate in `/lhr/vehicle/odom`.
 
 A stuck actuator is invisible while the command still asks for the angle it
 is stuck at, and no check can see it. The fault tools time `steer_freeze`
@@ -136,15 +141,18 @@ add `safety_lidar_timeout_s:=1.5` there:
 `safety:=true` is off by default until the fault-injection runs
 ([#117](https://github.com/LonghornRacingElectric/lhre/issues/117)) have
 tuned the thresholds. Every threshold is a `safety_*` launch argument with
-the same default as the node. Five parameters are deliberately not
+the same default as the node. These parameters are deliberately not
 arguments:
 
 - `monitor_lidar` follows `perception`: the Gazebo LiDAR always publishes,
   but under `perception:=sim` nothing reads the cloud, so its age says
   nothing about what the car can see.
+- `monitor_imu` and `monitor_wheels` follow `estimator`: only the EKF reads
+  the IMU and the wheel speeds, and the wheel speeds only exist under it.
 - `rate_hz` (20) is the check and heartbeat rate, not a threshold; the
   timeouts are what get tuned.
-- `lidar_topic` is fixed by the bridge config.
+- `lidar_topic` and `imu_topic` are fixed by the bridge config, and
+  `wheel_topic` by `inertial_sim`.
 - `steering_measured_topic` is fixed by `joint_cmd_adapter`.
 - `require_steer_measurement` stays on: Gazebo always publishes the measured
   steering angle, so a run without it is a broken run, not an option.
@@ -158,8 +166,13 @@ arguments:
 - Normal braking is still the controller commanding speed 0, so stops in
   sim are optimistic. A regen and spring-brake model is
   [#199](https://github.com/LonghornRacingElectric/lhre/issues/199).
-- A dead `mission_manager` is not detected
-  ([#127](https://github.com/LonghornRacingElectric/lhre/issues/127)).
+- After `MISSION_STALE` nothing in sim stops the car. The stop goes through
+  `mission_manager`, the dead node, and the hardware loop the heartbeat feeds
+  on the car is not modelled. The trip still latches and the heartbeat stops,
+  which is what the car's loop acts on
+  ([#127](https://github.com/LonghornRacingElectric/lhre/issues/127)). The
+  fault tools' `mission_kill` shows the trip and the missing stop, so it is
+  not in the default matrix.
 - Thresholds are starting points; #117 measures time to trip and stop
   distance against the PDR table with
   [the fault injection tools](../../../testing/tools/fault_injection/README.md).

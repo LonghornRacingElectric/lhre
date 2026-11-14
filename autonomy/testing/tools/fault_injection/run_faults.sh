@@ -20,7 +20,7 @@ source "$HERE/../gate/stack.sh"
 STACK=$(gate_stack) || exit 2
 
 # Empty means none, like CLEAN_SEEDS: CASES= runs only the clean laps.
-CASES=${CASES-"ekf_kill controller_kill controller_pause odom_nan odom_spike lidar_drop cmd_nan steer_freeze geofence"}
+CASES=${CASES-"ekf_kill controller_kill controller_pause odom_nan odom_spike lidar_drop cmd_nan steer_freeze imu_drop wheel_drop geofence"}
 SPEEDS=${SPEEDS:-"3 5 8"}
 REPEATS=${REPEATS:-2}
 CLEAN_SEEDS=${CLEAN_SEEDS-"1 2 3 4 5"}   # clean autocross laps: false trips

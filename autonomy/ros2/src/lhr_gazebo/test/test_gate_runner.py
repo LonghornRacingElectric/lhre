@@ -122,6 +122,18 @@ def test_fault_plan_runs_every_case_and_clean_lap_on_the_gate_stack(tmp_path):
     assert rows['controller_pause_v3_r1'][5]['fault_duration_s'] == '3'
 
 
+def test_default_fault_matrix_is_the_sim_v2_cases(tmp_path):
+    """The Sim v2 criteria's fault cases; mission_kill has no stop path in sim yet (#127)."""
+    env = dict(os.environ, SPEEDS='3', REPEATS='1', CLEAN_SEEDS='', OUT=str(tmp_path))
+    env.pop('CASES', None)
+    result = subprocess.run(['bash', '-c', fault_prefix() + '\nplan'],
+                            env=env, text=True, capture_output=True, check=True)
+    kinds = {line.split()[1] for line in result.stdout.splitlines()}
+    assert kinds == {'ekf_kill', 'controller_kill', 'controller_pause', 'odom_nan',
+                     'odom_spike', 'lidar_drop', 'cmd_nan', 'steer_freeze', 'imu_drop',
+                     'wheel_drop', 'geofence'}
+
+
 @pytest.mark.parametrize('share, gate', [('0.5', 4.0), ('1', 8.0), ('0', 0.0)])
 def test_fault_plan_scales_the_speed_gate_with_at_speed(tmp_path, share, gate):
     env = dict(os.environ, CASES='ekf_kill', SPEEDS='8', REPEATS='1', CLEAN_SEEDS='',

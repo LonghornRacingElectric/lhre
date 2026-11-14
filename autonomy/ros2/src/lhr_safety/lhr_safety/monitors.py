@@ -28,6 +28,9 @@ class Fault(IntEnum):
     STEER_TRACKING = 5
     CMD_STALE = 6
     CMD_INVALID = 7
+    IMU_STALE = 8
+    WHEEL_STALE = 9
+    MISSION_STALE = 10
 
 
 @dataclass(frozen=True)
@@ -37,10 +40,21 @@ class SafetyConfig:
     wheelbase_m: float
     max_speed_mps: float
     monitor_lidar: bool = True
+    # The EKF predicts on its own timer, so its odometry stays fresh and
+    # finite after the IMU or the wheel speeds die, and only these see it
+    # (#126). Off for a stack that does not read them.
+    monitor_imu: bool = True
+    monitor_wheels: bool = True
     # Three missed frames at 10 Hz. One late frame is normal jitter.
     lidar_timeout_s: float = 0.3
     # The EKF and the Gazebo bridge both publish odom at 50 Hz or more.
     odom_timeout_s: float = 0.25
+    # The IMU runs at 100 Hz and the wheel speeds at 50 Hz in Gazebo.
+    imu_timeout_s: float = 0.25
+    wheel_timeout_s: float = 0.25
+    # mission_manager publishes its state at 10 Hz. Silence while the last
+    # state was armed means the supervisor died with the car moving (#127).
+    mission_timeout_s: float = 0.5
     # pure_pursuit publishes at 20 Hz once it has a mission status, so
     # silence means the controller died; the actuators would hold the last
     # command.
@@ -80,7 +94,9 @@ class SafetyConfig:
     require_steer_measurement: bool = True
     # The fallback when require_steer_measurement is off and no measured
     # angle has arrived: compare the yaw rate with what the command should
-    # produce.
+    # produce. It reads the gyro itself when monitor_imu is on, since the
+    # EKF's yaw rate freezes at the last gyro value and a frozen estimate
+    # could hide a stuck actuator (#126); without an IMU, the odometry's.
     # Yaw rate is noise-dominated near standstill, so this only runs above
     # steer_min_speed_mps.
     steer_min_speed_mps: float = 2.0
@@ -99,6 +115,12 @@ class SafetyMonitor:
         self._last_lidar: Optional[float] = None
         self._last_odom: Optional[float] = None
         self._last_cmd: Optional[float] = None
+        self._last_imu: Optional[float] = None
+        self._last_wheels: Optional[float] = None
+        self._last_mission: Optional[float] = None
+        self._mission_armed = False
+        # Forward speed from the odometry, for the yaw-rate rule on the gyro.
+        self._forward: Optional[float] = None
         self._pose: Optional[tuple] = None
         self._origin: Optional[tuple] = None
         # Odom arrives faster than check() runs, so a one-sample excursion
@@ -119,6 +141,21 @@ class SafetyMonitor:
 
     def on_lidar(self, now: float):
         self._last_lidar = now
+
+    def on_imu(self, now: float, yaw_rate: float):
+        """Feed one IMU sample: the gyro's yaw rate (rad/s)."""
+        self._last_imu = now
+        if (self._config.monitor_imu and self._forward is not None
+                and math.isfinite(yaw_rate)):
+            self._check_steering(now, self._forward, yaw_rate)
+
+    def on_wheels(self, now: float):
+        self._last_wheels = now
+
+    def on_mission(self, now: float, armed: bool):
+        """Feed one mission status; armed means READY or DRIVING."""
+        self._last_mission = now
+        self._mission_armed = armed
 
     def on_command(self, now: float, steering_angle: float):
         self._last_cmd = now
@@ -156,7 +193,9 @@ class SafetyMonitor:
             self._outside = dist > cfg.geofence_radius_m
             self._outside_seen |= self._outside
 
-        self._check_steering(now, vx, yaw_rate)
+        self._forward = vx
+        if not cfg.monitor_imu:
+            self._check_steering(now, vx, yaw_rate)
 
     def on_steering(self, now: float, angle: float):
         """Feed one measured steering angle (rad, bicycle-equivalent)."""
@@ -229,6 +268,16 @@ class SafetyMonitor:
             return Fault.ODOM_STALE
         if diverged:
             return Fault.EKF_DIVERGED
+        # A dead sensor explains the estimate drifting, so it ranks next.
+        if cfg.monitor_imu and self._age(self._last_imu, now) > cfg.imu_timeout_s:
+            return Fault.IMU_STALE
+        if cfg.monitor_wheels and self._age(self._last_wheels, now) > cfg.wheel_timeout_s:
+            return Fault.WHEEL_STALE
+        # Only while armed: before the first status the manager is still
+        # starting, and after FINISHED or EMERGENCY the car is already stopped.
+        if (self._mission_armed
+                and self._age(self._last_mission, now) > cfg.mission_timeout_s):
+            return Fault.MISSION_STALE
         if self._age(self._last_cmd, now) > cfg.cmd_timeout_s:
             return Fault.CMD_STALE
         if cmd_invalid:
