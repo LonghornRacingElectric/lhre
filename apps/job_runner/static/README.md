@@ -11,3 +11,7 @@ refresh, including across template changes. Mutation controls remain disabled.
 History refresh restores keyboard focus by run ID. Non-CPU templates disable
 the CPU duration input and submit a bounded default. Browser tests use a stub
 DOM, fetch and timers: `node --test apps/job_runner/browser.test.mjs`.
+
+When the SSH request queue is saturated, a previously connected snapshot stays
+connected with a cached-status label. Controls remain usable and requests wait
+for the bounded transport capacity; overflow is reported as busy, not offline.

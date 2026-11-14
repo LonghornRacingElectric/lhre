@@ -19,7 +19,7 @@ function elapsed(job) {
 }
 function render() {
   const connected = state.connection === 'connected' && state.online;
-  $('connection').textContent = !connected ? 'Offline' : state.paused ? 'Queue paused' : 'Ready';
+  $('connection').textContent = !connected ? 'Offline' : state.stale ? 'Busy · cached status' : state.paused ? 'Queue paused' : 'Ready';
   $('connection').className = 'badge' + (!connected ? ' offline' : '');
   $('hardware').textContent = state.cpu_threads ? `${state.cpu_threads} CPU threads · ${state.gpu?.split(',')[0] || 'GPU status unavailable'} · ${state.limits?.cpu_slots || 8} job CPU slots` : 'Waiting for worker details';
   $('running').textContent = state.jobs.filter(j => ['starting', 'running', 'cancelling'].includes(j.status)).length;
@@ -27,7 +27,7 @@ function render() {
   $('disk').textContent = state.disk_free_bytes ? (state.disk_free_bytes / 1024 ** 4).toFixed(1) + ' TiB' : '—';
   $('pause').disabled = !connected; $('pause').textContent = state.paused ? 'Resume queue' : 'Pause new jobs';
   $('submit').disabled = !connected || launching || !state.templates?.[$('template').value];
-  $('updated').textContent = (connected ? 'Updated ' : 'Last connected ') + (state.checked_at ? new Date(state.checked_at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '—');
+  $('updated').textContent = (state.stale ? 'Cached status from ' : connected ? 'Updated ' : 'Last connected ') + (state.checked_at ? new Date(state.checked_at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '—');
   if (!connected) message(state.error || 'The HIL worker is offline. Existing jobs remain on HIL; reconnect before submitting new work.');
   const jobs = state.jobs.filter(j => filter === 'all' || (filter === 'finished' ? terminal.has(j.status) : !terminal.has(j.status)));
   const focusedRun = document.activeElement?.dataset.runId;

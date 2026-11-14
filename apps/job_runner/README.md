@@ -75,17 +75,21 @@ containers. Cancellation is reported complete only after Docker confirms the
 container stopped. Pausing prevents new starts while existing jobs continue. The
 runtime limit applies only to containers observed still running; a delayed
 worker check preserves an already-exited container's actual result. Normal
-completion becomes terminal and downloadable only after log capture succeeds. Failed captures are
-retried on later worker ticks. After three consecutive reconciliation failures,
-the worker removes any surviving container before failing the job with an
-explicit diagnostic; failed captures never report successful completion. Each
-job is reconciled independently, so a damaged result cannot indefinitely block
-another job's runtime enforcement. Pruning/status errors do not suppress the
-worker heartbeat. Archive metadata uses the final queue state. A timed-out
-launch reserves CPU/concurrency/GPU capacity even when Docker has only created
-the container. Created/restarting containers must start within 60 seconds or are
-removed and failed. Launch stderr remains in the job record. Pause state is
-checked atomically as each queued job is claimed.
+completion becomes terminal and downloadable only after log capture succeeds.
+Failed captures are retried on later worker ticks. After at least three
+consecutive reconciliation failures over a two-minute retry window, the worker
+removes any surviving container before failing the job with an explicit
+diagnostic; failed captures never report successful completion. Each job is
+reconciled independently, so a damaged result cannot indefinitely block another
+job's runtime enforcement. Pruning/status errors do not suppress the worker
+heartbeat, but online status also requires a recent successful Docker health
+sample. Log cache updates use atomic replacement. Archive metadata uses the
+final queue state. A timed-out launch reserves CPU/concurrency/GPU capacity even
+when Docker has only created the container. Created/restarting containers must
+start within 60 seconds or are removed and failed. Each worker cycle also
+removes labelled containers whose job is missing or no longer live, catching
+containers that appear late. Launch stderr remains in the job record. Pause
+state is checked atomically as each queued job is claimed.
 
 Results come from Docker's bounded rotating stdout/stderr logs. CPU/FMUs emit a
 final JSON summary, which the worker saves as `results.json`; FMU diagnostics
@@ -97,12 +101,18 @@ The dashboard runs as a dedicated `lhr-jobs` user without Docker/sudo access.
 Its SSH key logs in as `lhr-job-ssh`, which may invoke only the bridge as
 `lhr-runner`. The worker's Docker group is administrator-equivalent on HIL; this
 is a trusted service account, not a Docker privilege boundary. At most four
-bridge RPCs and two dashboard SSH requests run concurrently. Status and live
-logs are sampled by the supervised worker; read RPCs do not invoke Docker or
-NVIDIA. The dashboard coalesces log reads for 2.5 seconds. Sign-in checks allow
-five failures per minute globally; cached valid logins bypass that limit. If HIL
-cannot be reached, the dashboard labels cached history as disconnected and
-disables new submissions.
+bridge RPCs and two dashboard SSH requests run concurrently. Eight additional
+dashboard requests may wait for capacity; overflow returns 429. A busy state
+read keeps the last connected snapshot labelled as cached, rather than reporting
+a connection failure. Hardware/image status is sampled every 30 seconds and live
+logs each worker cycle; both are sampled by the supervised worker; read RPCs do
+not invoke Docker or NVIDIA. The dashboard coalesces log reads for 2.5 seconds.
+Sign-in checks allow five failed credential checks per source per minute; cached
+valid logins bypass that limit. Empty credentials always receive a 401 browser
+challenge without using an attempt. Sources are the socket peer, or the source
+IP supplied by Tailscale Serve over the loopback proxy. Different tailnet
+clients have separate limits. If HIL cannot be reached, the dashboard labels
+cached history as disconnected and disables new submissions.
 
 ## Development and checks
 

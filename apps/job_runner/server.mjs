@@ -1,4 +1,5 @@
 import http from 'node:http';
+import {isIP} from 'node:net';
 import {spawn} from 'node:child_process';
 import {createHash, randomBytes, scryptSync, timingSafeEqual} from 'node:crypto';
 import {readFile, writeFile, mkdir, rename, readdir, unlink, stat} from 'node:fs/promises';
@@ -85,14 +86,32 @@ async function body(req) {
   try {return JSON.parse(result);} catch {throw new Error('Invalid JSON request');}
 }
 
+// Tailscale Serve replaces X-Forwarded-For; accept proxy headers only on loopback.
+function requestSource(req) {
+  const peer = req.socket?.remoteAddress || 'unknown';
+  if (['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(peer)) {
+    const forwarded = req.headers['x-forwarded-for'];
+    if (typeof forwarded === 'string') {
+      const source = forwarded.split(',').at(-1).trim();
+      if (isIP(source)) return source;
+    }
+  }
+  return peer;
+}
+
 export function createApplication({config, rpc = request => sshRpc(config, request), now = () => Date.now(), staticRoot = path.join(here, 'static')}) {
   const authCache = new Map();
-  let authWindow = now(), authFailures = 0, inFlight = 0, downloading = false;
+  const authFailures = new Map(), waiters = [];
+  let inFlight = 0, downloading = false;
   const transport = rpc;
   rpc = async request => {
-    if (inFlight >= 2) throw new Error('HIL connection busy; retry shortly');
-    inFlight++;
-    try {return await transport(request);} finally {inFlight--;}
+    if (inFlight >= 2) {
+      if (waiters.length >= 8) throw Object.assign(new Error('HIL request queue is busy; retry shortly'), {code: 'RPC_BUSY'});
+      await new Promise(resolve => waiters.push(resolve));
+    } else inFlight++;
+    try {return await transport(request);} finally {
+      if (waiters.length) waiters.shift()(); else inFlight--;
+    }
   };
   const logCache = new Map();
   let snapshot = null, checkedAt = 0, pending = null;
@@ -108,6 +127,10 @@ export function createApplication({config, rpc = request => sshRpc(config, reque
         await writeFile(path.join(config.dataDir, 'state.tmp'), JSON.stringify(snapshot));
         await rename(path.join(config.dataDir, 'state.tmp'), path.join(config.dataDir, 'state.json'));
       } catch (error) {
+        if (error.code === 'RPC_BUSY') {
+          if (snapshot) return {...snapshot, stale: true, error: error.message};
+          throw error;
+        }
         if (!snapshot) {
           try {snapshot = JSON.parse(await readFile(path.join(config.dataDir, 'state.json'), 'utf8'));} catch {snapshot = {jobs: [], templates: {}};}
         }
@@ -125,12 +148,19 @@ export function createApplication({config, rpc = request => sshRpc(config, reque
       const authorization = req.headers.authorization || '';
       const fingerprint = createHash('sha256').update(authorization).digest('hex');
       if (!(authCache.has(fingerprint) && authCache.get(fingerprint) > now())) {
-        if (now() - authWindow >= 60000) {authWindow = now(); authFailures = 0;}
-        if (authFailures >= 5) return respond(res, 429, {error: 'Too many sign-in attempts; retry in a minute'}, {'Retry-After': '60'});
-        if (!authenticate(authorization, config)) {
-          authFailures++;
-          return respond(res, 401, {error: 'Sign in with your dashboard credentials'}, {'WWW-Authenticate': 'Basic realm="LHR Jobs", charset="UTF-8"'});
+        const challenge = {'WWW-Authenticate': 'Basic realm="LHR Jobs", charset="UTF-8"'};
+        if (!authorization) return respond(res, 401, {error: 'Sign in with your dashboard credentials'}, challenge);
+        const source = requestSource(req), failure = authFailures.get(source);
+        if (failure && now() - failure.at < 60000 && failure.count >= 5) {
+          return respond(res, 429, {error: 'Too many sign-in attempts; retry in a minute'}, {...challenge, 'Retry-After': '60'});
         }
+        if (!authenticate(authorization, config)) {
+          for (const [key, entry] of authFailures) if (now() - entry.at >= 60000) authFailures.delete(key);
+          if (authFailures.size >= 256 && !authFailures.has(source)) authFailures.delete(authFailures.keys().next().value);
+          authFailures.set(source, {at: failure && now() - failure.at < 60000 ? failure.at : now(), count: failure && now() - failure.at < 60000 ? failure.count + 1 : 1});
+          return respond(res, 401, {error: 'Sign in with your dashboard credentials'}, challenge);
+        }
+        authFailures.delete(source);
         if (authCache.size >= 32) authCache.clear();
         authCache.set(fingerprint, now() + 300000);
       }
@@ -210,6 +240,7 @@ export function createApplication({config, rpc = request => sshRpc(config, reque
       }
       return respond(res, 404, {error: 'Not found'});
     } catch (error) {
+      if (error.code === 'RPC_BUSY') return respond(res, 429, {error: error.message}, {'Retry-After': '2'});
       const unavailable = /connection|respond|unavailable/i.test(error.message);
       return respond(res, unavailable ? 503 : 400, {error: error.message.slice(0, 1000)});
     }

@@ -104,6 +104,7 @@ test('failed sign-ins are limited per source, cached credentials still work, and
   for (let attempt = 0; attempt < 5; attempt++) assert.equal((await request(app, '/api/state', {headers})).status, 401);
   assert.equal((await request(app, '/api/state', {headers})).status, 429);
   assert.equal((await request(app, '/missing', {source: '192.0.2.2'})).status, 404);
+  assert.equal((await request(app, '/api/state', {headers, source: '192.0.2.2'})).status, 401);
   assert.equal((await request(app, '/missing')).status, 404);
   clock += 60000;
   assert.equal((await request(app, '/api/state', {headers})).status, 401);

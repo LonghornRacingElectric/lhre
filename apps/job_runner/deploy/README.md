@@ -57,9 +57,9 @@ existing 443 handler and Funnel flag, and verify the new port is private. The
 dashboard uses HTTP Basic authentication over that HTTPS connection, salted
 scrypt password verification, same-origin mutation checks and a restrictive
 content security policy. The backend does not log credentials. It permits five
-failed sign-ins per minute globally before returning 429; cached valid
-credentials keep working. The port deliberately lies outside Funnel's supported
-ports; verify Serve status before handing out access.
+failed credential checks per source per minute before returning 429; cached
+valid credentials keep working. The port deliberately lies outside Funnel's
+supported ports; verify Serve status before handing out access.
 
 Deployment acceptance: queue/run a CPU job, download its archive, cancel queued
 and running jobs, pause/resume, restart the dashboard and worker during a job,
@@ -75,3 +75,16 @@ results and diagnostics on stdout/stderr; they cannot write to the host's result
 directory. Rebuild the runtime image with the updated `task.py`; an older image
 that writes `/results` is incompatible. Full Gazebo campaigns need a separate
 output-storage and isolation design.
+
+Build the stdout-based runtime under the new tag
+`lhr/job-runtime:2026-11-14-stdout-v2`, for both CPU and FMU templates. Do not
+reuse the older `2026-11-14` tag: it expects a writable `/results` mount. Record
+the resulting local image ID before enabling jobs; the runner never pulls it.
+
+The dashboard trusts source IP forwarding only from its loopback Tailscale Serve
+proxy. Serve [sets the forwarded source
+itself](https://github.com/tailscale/tailscale/blob/main/ipn/ipnlocal/serve.go),
+overwriting client-supplied forwarding headers. Keep the application bound to
+loopback, with Serve as the only external proxy; verify distinct clients arrive
+with distinct source IPs during acceptance. Unauthenticated initial page loads
+always get a 401 challenge without consuming a login attempt.
