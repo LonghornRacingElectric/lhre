@@ -15,6 +15,7 @@ import type { KafkaTransport, LiveLapExportRequest, LiveSample } from "./types";
 export function kafkaTopicFor(source: string, settings: Settings, requested?: string | null): string {
   const t = (requested || "").trim();
   if (t) return t;
+  if (source.trim().toLowerCase() === "artemis") return "sensor_data";
   const prefix = (settings as unknown as { kafkaTopicPrefix?: string }).kafkaTopicPrefix?.trim()
     || process.env.KAFKA_TOPIC_PREFIX?.trim()
     || "grafana_data";
@@ -29,6 +30,7 @@ export function kafkaTransportFor(requested?: string | null): KafkaTransport {
 }
 
 function num(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
   const n = typeof value === "number" ? value : Number(value);
   return Number.isFinite(n) ? n : null;
 }
@@ -71,7 +73,14 @@ function numArray(value: unknown): number[] | undefined {
   return value.map((v) => { const n = num(v); return n === null ? 0 : n; });
 }
 
-function gpsOf(payload: Record<string, unknown>): [number | null, number | null] {
+function gpsOf(payload: Record<string, unknown>, source: string): [number | null, number | null] {
+  if (source === "artemis") {
+    const precise = first(payload, ["dynamics.gps_precise", "dynamics.gpsPrecise", "gps_precise", "gpsPrecise"]);
+    if (Array.isArray(precise) && precise.length >= 2) {
+      const lat = num(precise[0]), lon = num(precise[1]);
+      if (lat !== null && lon !== null) return [lat, lon];
+    }
+  }
   const lat = num(first(payload, ["latitude", "lat", "gps_latitude", "dynamics_gps_latitude", "dynamics.latitude"]));
   const lon = num(first(payload, ["longitude", "lon", "lng", "gps_longitude", "dynamics_gps_longitude", "dynamics.longitude"]));
   if (lat !== null && lon !== null) return [lat, lon];
@@ -101,7 +110,7 @@ export function normalizeLivePayload(raw: string | Record<string, unknown>, sour
 
   const values = flattenNumeric(payload);
   const t = timestampMs(first(payload, ["time", "timestamp", "packet_time", "packet.time"]));
-  const [lat, lon] = gpsOf(payload);
+  const [lat, lon] = gpsOf(payload, source);
   // Prefer a speed source that's actually carrying signal: a flatlined 0 on the
   // top-level `speed` channel used to shadow a real gps/wheel speed (and leaves
   // the live delta bar with nothing to work from). Walk GPS → derived avg →
@@ -112,14 +121,15 @@ export function normalizeLivePayload(raw: string | Record<string, unknown>, sour
   for (const k of ["gps_speed", "dynamics.gps_speed", "dynamics_gps_speed", "gps_velocity", "dash_speed", "wheel_speed_avg", "wheel_speed", "speed"]) {
     const v = num(first(payload, [k]));
     if (v === null) continue;
-    if (v > 0) { speed = v; break; }
+    if (v > 0) { speed = source === "artemis" && ["gps_speed", "dynamics.gps_speed", "dynamics_gps_speed"].includes(k) ? v * 0.5144444444444445 : v; break; }
     sawZeroSpeed = true;
   }
-  if (speed === null) {
+  if (speed === null && source !== "artemis") {
     const wheels = ["flw_speed", "frw_speed", "blw_speed", "brw_speed"].map((k) => num(first(payload, [k, `dynamics.${k}`]))).filter((v): v is number => v !== null && v > 0);
     if (wheels.length) speed = wheels.reduce((a, b) => a + b, 0) / wheels.length;
     else if (sawZeroSpeed) speed = 0;
   }
+  if (speed === null && sawZeroSpeed) speed = 0;
   const dcV = num(first(payload, ["dc_bus_v", "bus_voltage", "pack.dc_bus_v", "pack.bus_voltage"]));
   const dcC = num(first(payload, ["dc_bus_current", "pack.dc_bus_current"]));
   const hvVraw = num(first(payload, ["hv_pack_v", "pack_hv_pack_v", "pack.hv_pack_v"]));

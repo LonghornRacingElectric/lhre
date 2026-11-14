@@ -138,26 +138,15 @@ def run_telemetry_flow_test():
     
     try:
         with MQTTTestClient(config) as mqtt:
-            # 1. Start an event
-            logger.info("  Sending start event...")
-            start_event = {"event_id": 99999}
-            mqtt.publish("config/flask", json.dumps(start_event).encode(), qos=1)
-            time.sleep(1)
-            
-            # 2. Send sensor data
+            # Recording sessions are assigned downstream from receipt time.
             logger.info("  Sending sensor data...")
             for i in range(10):
                 data = generator.generate_protobuf_message(packet_id=i + 1)
                 if data:
-                    mqtt.publish("data", data, qos=0)
+                    mqtt.publish("artemis/data", data, qos=1)
                 time.sleep(0.1)
             
             time.sleep(2)
-            
-            # 3. End the event
-            logger.info("  Sending end event...")
-            mqtt.publish("config/flask", b"end_event", qos=1)
-            time.sleep(1)
             
             return True
             

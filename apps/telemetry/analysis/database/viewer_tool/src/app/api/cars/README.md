@@ -1,14 +1,13 @@
 # Car signal discovery
 
-`GET /api/cars/{car}/signals` serves generated signal metadata. It uses the
-existing `/api/*` middleware exclusion. The current spec generates Artemis's
-catalog; any car with its own published archive can use the endpoint.
+`GET /api/cars/artemis/signals` serves the gateway's deployed signal metadata.
+It requires a viewer session or the query API bearer token. The optional
+`schema_version` must match the deployed catalog. The viewer returns the signal
+array and identifies its version in `X-Schema-Version`.
 
-The optional `schema_version` query parameter selects an exact catalog-content
-hash inside the requested car's folder; omission follows that car's `current.json`.
-Responses are signal arrays, with the selected version also in
-`X-Schema-Version`. Errors use `{error: {code, message}}`. As with the v0 API,
-API-key authentication is not implemented here.
+Historical car catalogs retain the filesystem reader: `schema_version` selects
+an exact archived hash, otherwise `current.json` selects it. Those metadata-only
+reads retain their existing public access. Errors use `{error: {code, message}}`.
 
 See the [catalog reader](../../../lib/signals/README.md) for deployment and
 validation rules.

@@ -11,7 +11,20 @@ Bucket requests batch up to ten signals and size their time windows for at most
 and means across chunks. Pagination still handles session boundaries and the
 gateway's response byte limit.
 
-Channel definitions come from the generated storage contract. Existing labels
-remain usable; pool placement is not hardcoded. Other car readers retain their
+Channel definitions and query selection come from the deployed gateway catalog,
+including units and supported aggregates. The generated local contract provides
+default width hints; the gateway enforces its actual native-rate floor. Existing
+channel aliases remain usable; pool placement is not hardcoded. Other car readers retain their
 separate legacy connections. Track files, chart configuration and export files
 remain local analysis metadata.
+
+Artemis live input defaults to the gateway's native feed. GPS speed is converted
+from knots to m/s for Trackside, while discovered historical channels keep their
+declared units. Missing values remain missing; voltage and current can derive
+power when no explicit channel is present. Angular wheel speed requires a wheel
+radius before it can represent vehicle speed.
+Artemis live maps prefer the double-precision `gps_precise` latitude/longitude
+and fall back to `gps` when no precise fix is present. GPS history requests
+only those two arrays, using their last fresh observations per bucket.
+An Artemis export with no explicit channel selection includes the deployed
+numeric channels, so newly added channels do not require a legacy-list edit.

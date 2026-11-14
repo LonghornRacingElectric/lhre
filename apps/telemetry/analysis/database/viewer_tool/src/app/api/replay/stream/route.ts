@@ -96,7 +96,8 @@ async function buildReplayState(
       },
       map_data: {
         dynamics: {
-          gps: d.gps ?? d.f_gps ?? d.fGps ?? null,
+          gps: car === "artemis" && Array.isArray(d.gps_precise) && d.gps_precise.length >= 2
+            ? d.gps_precise.slice(0, 2) : d.gps ?? d.f_gps ?? d.fGps ?? null,
         },
       },
       driver_input_visualizer: {
@@ -104,6 +105,7 @@ async function buildReplayState(
           steerV: c.steer_v ?? c.steerV ?? null,
           steerColAngle: d.steer_col_angle ?? d.steerColAngle ?? null,
           throttlePct:
+            c.apps1_travel ??
             d.accel_pedal_travel ??
             d.accelPedalTravel ??
             c.apps1_t ??
@@ -181,31 +183,38 @@ export async function GET(req: NextRequest) {
 
     const wallStart = Date.now();
     const replayStartMs = startAtMs;
+    let stopStream = () => {};
 
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         controller.enqueue(encodeSseComment("connected"));
 
         let closed = false;
+        let interval: ReturnType<typeof setInterval> | undefined = undefined;
+        const abortSignal = req.signal;
         const stop = () => {
           if (closed) return;
           closed = true;
+          clearInterval(interval);
+          abortSignal.removeEventListener("abort", stop);
           try {
             controller.close();
           } catch {
             // ignore
           }
         };
+        stopStream = stop;
 
         // Abort when client disconnects.
-        const abortSignal: AbortSignal | undefined = (req as any).signal;
-        abortSignal?.addEventListener("abort", stop);
+        abortSignal.addEventListener("abort", stop, { once: true });
 
         const sendOnce = async () => {
+          if (closed) return;
           const elapsed = Date.now() - wallStart;
           const at = replayStartMs + BigInt(Math.max(0, elapsed));
 
           const state = await buildReplayState(eventId, at, requestedCar);
+          if (closed) return;
           if (state.status !== 200) {
             controller.enqueue(encodeSseEvent({ ...state.body, is_end: true }));
             stop();
@@ -223,17 +232,16 @@ export async function GET(req: NextRequest) {
         await sendOnce();
         if (closed) return;
 
-        const interval = setInterval(() => {
+        interval = setInterval(() => {
           sendOnce().catch(() => {
             // If something fails mid-stream, just terminate.
             stop();
           });
         }, tickMs);
 
-        abortSignal?.addEventListener("abort", () => clearInterval(interval));
       },
       cancel() {
-        // no-op; interval cleanup handled by abort listener
+        stopStream();
       },
     });
 

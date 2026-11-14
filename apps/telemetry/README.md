@@ -64,7 +64,7 @@ and tuning details.
 The viewer serves schema-generated signal discovery at `/api/cars/artemis/signals`.
 Run `//tools/spec:publish_signals` first; serving per-car archived versions
 and deployment paths are covered in the
-[viewer README](analysis/database/viewer_tool/README.md#signal-discovery-v0).
+[viewer README](analysis/database/viewer_tool/README.md#signal-discovery).
 
 The viewer remains an npm/PM2 application rather than a Bazel image:
 
@@ -80,7 +80,11 @@ npm ci   # postinstall generates the Prisma clients and syncs the auth database
 npm run dev -- --hostname 0.0.0.0 --port 3001
 ```
 
-The viewer reads the repository-root `.env`. To have `npm ci` create a login,
+The viewer reads the repository-root `.env`. Its default live car is
+`artemis`; set `NEXT_PUBLIC_DEFAULT_LIVE_CAR=artemis`
+in an existing dotenv that still selects Orion, then rebuild the viewer.
+Choose Artemis in the car picker if this browser remembers another car.
+To have `npm ci` create a login,
 set `VIEWER_USERNAME` and `VIEWER_PASSWORD` (and `VIEWER_ADMIN=1` for an admin)
 there first; otherwise seed one with
 `npm run prisma-auth-seed -- <username> <password> [admin]`.

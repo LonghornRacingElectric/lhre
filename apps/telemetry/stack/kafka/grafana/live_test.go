@@ -6,13 +6,140 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 )
 
 type frameRecorder struct {
 	packets []*backend.StreamPacket
+}
+
+func TestHistoryQueriesDiscoverConcurrently(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	discovery, release := context.WithCancel(ctx)
+	defer release()
+	entered := make(chan struct{}, 3)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/signals" {
+			entered <- struct{}{}
+			<-discovery.Done()
+			fmt.Fprint(w, `{"schema_version":"demo","signals":[{"signal":"pack.voltage","value_type":"float","aggregates":["last"]}]}`)
+			return
+		}
+		fmt.Fprint(w, `{"schema_version":"demo","data":[{"ts":"2026-11-12T12:00:00Z","signal":"pack.voltage","value":420}]}`)
+	}))
+	defer upstream.Close()
+	adapter := &Adapter{url: upstream.URL, client: upstream.Client()}
+	results := make(chan error, 3)
+	for range 3 {
+		go func() {
+			response, err := adapter.QueryData(ctx, &backend.QueryDataRequest{
+				Queries: []backend.DataQuery{{RefID: "A", JSON: json.RawMessage(`{"signals":["pack.voltage"],"agg":"last"}`)}},
+			})
+			if err == nil {
+				result := response.Responses["A"]
+				err = result.Error
+				if err == nil && len(result.Frames) != 1 {
+					err = fmt.Errorf("expected one history frame, got %d", len(result.Frames))
+				}
+			}
+			results <- err
+		}()
+	}
+	for range 3 {
+		select {
+		case <-entered:
+		case <-ctx.Done():
+			t.Fatal("panel queries waited for another panel's discovery request")
+		}
+	}
+	release()
+	for range 3 {
+		if err := <-results; err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestHistoryResolvesPoolsAndDiscoversNewSchemaSignals(t *testing.T) {
+	var revision atomic.Int32
+	queries := make(chan Query, 2)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		version := revision.Load()
+		if r.URL.Path == "/v1/signals" {
+			if version == 0 {
+				fmt.Fprint(w, `{"schema_version":"v0","signals":[{"signal":"controls.apps","pool":"controls","value_type":"float","aggregates":["last"]},{"signal":"pack.voltage","pool":"pack","value_type":"float","aggregates":["last"]}]}`)
+			} else {
+				fmt.Fprint(w, `{"schema_version":"v1","signals":[{"signal":"pack.power","pool":"pack","value_type":"float","unit":"kW","aggregates":["last"]}]}`)
+			}
+			return
+		}
+		var q Query
+		if err := json.NewDecoder(r.Body).Decode(&q); err != nil || len(q.Signals) == 0 {
+			t.Errorf("invalid history query: %+v, %v", q, err)
+			http.Error(w, "invalid query", 400)
+			return
+		}
+		queries <- q
+		fmt.Fprintf(w, `{"schema_version":"v%d","data":[{"ts":"2026-11-12T12:00:00Z","signal":%q,"value":42}]}`, version, q.Signals[0])
+	}))
+	defer upstream.Close()
+	adapter := &Adapter{url: upstream.URL, client: upstream.Client()}
+	run := func(payload string) backend.DataResponse {
+		t.Helper()
+		response, err := adapter.QueryData(context.Background(), &backend.QueryDataRequest{
+			Queries: []backend.DataQuery{{RefID: "A", JSON: json.RawMessage(payload)}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		result := response.Responses["A"]
+		if result.Error != nil || len(result.Frames) != 1 {
+			t.Fatalf("history response: %+v", result)
+		}
+		return result
+	}
+	run(`{"signals":["controls.apps","pack.voltage"],"pools":["controls"],"agg":"last"}`)
+	first := <-queries
+	if len(first.Signals) != 1 || first.Signals[0] != "controls.apps" || len(first.Pools) != 0 {
+		t.Fatalf("unresolved history selection: %+v", first)
+	}
+	revision.Store(1)
+	result := run(`{"signals":["pack.power"],"agg":"last"}`)
+	<-queries
+	if result.Frames[0].Fields[1].Config.Unit != "kwatt" {
+		t.Fatal("new schema's signal unit was not applied")
+	}
+}
+
+func TestChartMetadataAndUnsupportedArrays(t *testing.T) {
+	queries := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/signals" {
+			fmt.Fprint(w, `{"schema_version":"demo","signals":[{"signal":"pack.voltage","value_type":"float","unit":"V","aggregates":["last"]},{"signal":"controls.enable","value_type":"bool","unit":"","aggregates":["last"]},{"signal":"pack.cells","value_type":"float","repeated":true,"aggregates":["last"]}]}`)
+			return
+		}
+		queries++
+		fmt.Fprint(w, `{"schema_version":"demo","bucket_ms":100,"data":[{"ts":"2026-11-12T12:00:00Z","signal":"pack.voltage","value":420},{"ts":"2026-11-12T12:00:00Z","signal":"controls.enable","value":false}]}`)
+	}))
+	defer upstream.Close()
+	a := &Adapter{url: upstream.URL, client: upstream.Client()}
+	req := &backend.QueryDataRequest{Queries: []backend.DataQuery{{RefID: "A", JSON: json.RawMessage(`{"signals":["pack.voltage","controls.enable"],"agg":"last"}`)}, {RefID: "B", JSON: json.RawMessage(`{"signals":["pack.cells"],"agg":"last"}`)}}}
+	response, err := a.QueryData(context.Background(), req)
+	if err != nil || response.Responses["A"].Error != nil || response.Responses["B"].Error == nil || queries != 1 {
+		t.Fatalf("queries=%d response=%+v err=%v", queries, response, err)
+	}
+	frames := response.Responses["A"].Frames
+	if len(frames) != 2 || frames[0].Fields[1].Config.Unit != "volt" || *frames[1].Fields[1].At(0).(*float64) != 0 {
+		t.Fatalf("frames: %+v", frames)
+	}
+	if frames[0].Meta.Custom.(map[string]any)["bucket_ms"] != int64(100) {
+		t.Fatal("effective bucket missing")
+	}
 }
 
 func (recorder *frameRecorder) Send(packet *backend.StreamPacket) error {
@@ -22,6 +149,10 @@ func (recorder *frameRecorder) Send(packet *backend.StreamPacket) error {
 
 func TestLiveWindowsPreserveCorrectionsRemovalAndEmptyFrames(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/v1/signals" {
+			fmt.Fprint(writer, `{"schema_version":"demo","signals":[{"signal":"controls.apps","value_type":"float","unit":"%","aggregates":["mean"]}]}`)
+			return
+		}
 		writer.Header().Set("Content-Type", "text/event-stream")
 		for _, observations := range []string{
 			`[{"ts":"2026-11-12T12:00:00.000Z","signal":"controls.apps","value":10},{"ts":"2026-11-12T12:00:01.000Z","signal":"controls.apps","value":20}]`,

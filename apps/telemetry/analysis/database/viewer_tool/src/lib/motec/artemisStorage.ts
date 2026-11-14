@@ -1,4 +1,4 @@
-import { gatewayRows } from "../query/client";
+import { gatewayRows, gatewayJSON, type GatewayCatalog } from "../query/client";
 import { storageContract } from "./artemisContract";
 export { storageContract } from "./artemisContract";
 
@@ -14,10 +14,11 @@ export function bucketWidth(groups: string[], requestedMs = 100, fields?: string
 
 export async function readBuckets(groups: string[], startMs: number, endMs: number, requestedMs = 100, aggregate: BucketAggregate = "avg", fields?: string[]) {
   if (!Number.isSafeInteger(startMs) || !Number.isSafeInteger(endMs) || endMs <= startMs || !Number.isFinite(requestedMs) || requestedMs <= 0) throw new Error("Invalid telemetry bounds");
-  const pools = storageContract().pools.filter(p => groups.includes(p.group));
-  if (groups.some(g => !pools.some(p => p.group === g))) throw new Error("Unknown Artemis group");
-  const width = bucketWidth(groups, requestedMs, fields);
-  const selections = pools.flatMap(p => p.fields.filter(f => !fields || fields.includes(f.name)).map(f => ({ signal: `${p.group}.${f.name}`, numeric: ["double precision", "integer", "bigint", "smallint", "numeric"].includes(f.sql_type) && (aggregate !== "avg" || f.aggregate === "avg") })));
+  const catalog = await gatewayJSON<GatewayCatalog>("/v1/signals");
+  if (groups.some(group => !catalog.signals.some(s => s.group === group))) throw new Error("Unknown Artemis group");
+  const selected = catalog.signals.filter(s => groups.includes(s.group) && (!fields || fields.includes(s.signal.split(".")[1])));
+  const width = Math.max(1, Math.ceil(requestedMs), ...selected.filter(s => (s.rate_hz || 0) > 0).map(s => Math.ceil(1000 / s.rate_hz!)));
+  const selections = selected.map(s => ({ signal:s.signal, numeric:s.aggregates.includes(aggregate === "avg" ? "mean" : aggregate) }));
   const merged = new Map<string, BucketRow>();
   for (const numeric of [true, false]) {
     const signals = selections.filter(s => s.numeric === numeric).map(s => s.signal);

@@ -114,7 +114,7 @@ export type LiveSample = {
 };
 
 export type LiveStreamEvent =
-  | { type: "status"; ok: boolean; topic: string; transport?: KafkaTransport; message: string; detail?: string }
+  | { type: "status"; ok: boolean; topic: string; transport?: KafkaTransport; message: string; detail?: string; live?: import("../query/client").GatewayLiveStatus }
   | { type: "heartbeat"; topic: string; transport?: KafkaTransport; t: number }
   | { type: "sample"; topic: string; transport?: KafkaTransport; sample: LiveSample };
 

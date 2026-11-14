@@ -61,7 +61,7 @@ export function getSettings(source?: string | null): Settings {
   if (car !== "orion" && car !== "artemis") throw new Error(`Unknown telemetry source: ${source}`);
   const base = baseSettings();
   const prefix = car.toUpperCase();
-  const settings: Settings = { ...base, car, usePostgres: base.usePostgres || car === "artemis" && Boolean(process.env.QUERY_API_TOKEN), dbHost: process.env[`${prefix}_DB_HOST`] || base.dbHost,
+  const settings: Settings = { ...base, car, usePostgres: car === "artemis" || base.usePostgres, dbHost: process.env[`${prefix}_DB_HOST`] || base.dbHost,
     dbPort: envNum(`${prefix}_DB_PORT`, base.dbPort), dbName: process.env[`${prefix}_DB_NAME`] || car,
     dbUser: process.env[`${prefix}_DB_USER`] || base.dbUser,
     dbPassword: process.env[`${prefix}_DB_PASSWORD`] || base.dbPassword,

@@ -19,7 +19,7 @@ import {
 
 const STORAGE_KEY = "liveViewerSelectedCar";
 const DEFAULT_CAR =
-  normalizeLiveCar(process.env.NEXT_PUBLIC_DEFAULT_LIVE_CAR) ?? "orion";
+  normalizeLiveCar(process.env.NEXT_PUBLIC_DEFAULT_LIVE_CAR) ?? "artemis";
 const MULTI_CAR_ENABLED = isMultiCarViewerEnabled();
 
 type KafkaEventLike = {

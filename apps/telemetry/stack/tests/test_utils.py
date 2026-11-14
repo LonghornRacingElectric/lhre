@@ -226,7 +226,6 @@ def check_db_connection(
 class TestDataGenerator:
     """
     Generator for test data that mimics real telemetry sensor data.
-    Based on patterns from paho_testing.py DataTester class.
     """
     
     def __init__(self, seed: Optional[int] = None):
@@ -258,12 +257,24 @@ class TestDataGenerator:
             },
         }
     
-    def generate_protobuf_message(self, packet_id: int = 1, car: str = "Orion"):
+    def generate_protobuf_message(self, packet_id: int = 1, car: str = "Artemis"):
         """Generate a protobuf-encoded sensor data message."""
         import time
         import json
         
         try:
+            if car == "Artemis":
+                from stack.ingest.protobuf import artemis_pb2
+                stamp = time.time_ns()
+                batch = artemis_pb2.TelemetryBatch(format_version=1)
+                update = batch.updates.add(sample_time_ns=stamp)
+                update.values.time = stamp // 1_000_000
+                for group, name, value in [("dynamics", "steer_col_angle", float(self.rng.random() * 2.5)), ("controls", "apps1_travel", float(self.rng.random() * 100))]:
+                    descriptor = update.values.DESCRIPTOR.fields_by_name[group]
+                    field = descriptor.message_type.fields_by_name[name]
+                    setattr(getattr(update.values, group), name, value)
+                    update.updated_fields.add(group=descriptor.number, field=field.number)
+                return batch.SerializeToString()
             from stack.ingest.sensor_decode import CAR_MESSAGES
             data = CAR_MESSAGES[car]()
             data.packet_id = packet_id

@@ -2,70 +2,48 @@
 
 Next.js viewer for live telemetry and replay workflows.
 
-## Current multi-car status
+## Artemis applications
 
-Implemented:
-- Header-driven live routing for `Orion` and `Artemis` (`car_type` respected end-to-end).
-- Server-side car filtering in `/api/kafka-stream` via `?car=<orion|artemis>`.
-- Canonical live topics from raw `sensor_data`: `car_visualization`, `driver_input_visualizer`, `map`, `live_banner`.
-- Additional normalized live topics for remaining widgets: `dashboard_screen`, `timing_deltas`, `shutdown_screen`, `thermal_headroom`, `energy_budget`.
-- Live car selector in `LiveViewerBanner` with URL/localStorage persistence and keyboard cycling (`[` / `]`).
-- Rollout flag support with `NEXT_PUBLIC_VIEWER_MULTI_CAR` (set `false`/`0` to lock viewer to active/default car).
-- Car-aware replay packet reads and handshake/end-event/status packet-end lookups.
-- Thermal, energy, dashboard, shutdown, and timing widgets now consume live telemetry-backed contracts.
+Artemis history, discovery and live reads use the query gateway. Set
+`QUERY_GATEWAY_URL` and `QUERY_API_TOKEN` on the viewer server; the token is never
+sent to browser code. Sign in normally, then use `/trackside-live`.
+`/live-viewer` redirects there. Artemis requires a configured gateway and does
+not silently substitute sample telemetry.
 
-Still pending:
-- Full sector/lap timing delta integration (current timing tile is telemetry pace-trend based).
-- Add integration tests for simultaneous two-car streams and full widget parity.
+Live widgets use native `sensor_data` through `/v1/stream`; the gateway owns the
+Kafka consumer. The viewer converts snake_case fields at the widget boundary.
+Trackside converts Artemis GPS speed from knots to m/s. Angular wheel speed is
+not used as vehicle speed without a wheel radius. Voltage/current can supply
+power when an explicit power channel is absent.
 
-## Kafka routing model
+Status events include Kafka lag and latest sample/observation timestamps.
+Connection readiness alone does not establish freshness. Widget samples are a
+latest-value view of independently arriving fields; they are not an atomic
+cross-pool measurement. Query streams replace bounded windows. Historical
+pagination errors discard the partial request and require a new query.
+Trackside uses sample time for its freshness badge, marks Kafka backlog as
+delayed, and reconnects after coverage gaps.
 
-- Raw topics are consumed once by the backend Kafka consumer.
-- Live widget topics are emitted on the in-process event bus.
-- `kafka.routes.json` handles pass-through routing for derived topics (`gg-plot`, `track-mapper`).
-- `sensor_data` normalization is handled directly in `src/lib/kafka/kafkaConsumer.ts`.
+## Signal discovery
 
-## Signal discovery (v0)
+`GET /api/cars/artemis/signals` uses the authenticated gateway's deployed
+`/v1/signals`, with its hash in `X-Schema-Version`. A requested version must
+match the deployed version. Trackside channel discovery uses the same catalog
+and units. Scalar numeric channels support charts; GPS arrays have explicit
+latitude/longitude projections in the historical adapter.
 
-Build and publish the current car's catalog from the repo root:
+Historical Orion tools retain their file-based catalogs, generated with
+`bazel run --config=local //tools/spec:publish_signals`. Those archives use
+`SIGNAL_CATALOG_DIR` and support exact versions and rollback through
+`current.json`; see the [archive guide](../../../catalogs/README.md).
 
-```bash
-bazel run --config=local //tools/spec:publish_signals
-```
+The legacy Orion Kafka/bus routes remain for historical workflows. Artemis
+logical widget topics are normalized from the gateway's native feed; optional
+derived processor topics can still be requested explicitly.
 
-The current spec declares `car: "artemis"` in `groups.textproto`.
-With the viewer running, `GET /api/cars/artemis/signals` returns its signal array,
-including CAN, GPS, and board-status fields.
-`?schema_version=<64-character-lowercase-hash>` selects an exact version in that
-car's folder; omitting it follows that car's `current.json` pointer.
-The catalog file stores its schema hash only at the top level. The API returns
-the signal array, with the hash in `X-Schema-Version` rather than in each row.
-Every car uses the same catalog shape but its own archive; there is no cross-car
-fallback. No Kafka or
-database connection is needed for discovery. This v0 read endpoint has no
-API-key authentication; adding reader/admin keys remains a later phase.
-
-The archive root defaults to `apps/telemetry/catalogs`. For deployment, set
-`SIGNAL_CATALOG_DIR` in both the publisher and viewer, or pass
-`-- --catalog-root /absolute/path` to the publishing command. It stores
-`<car>/<hash>.json` and atomically updates `<car>/current.json`. An identical
-publish is a no-op; old versions are immutable. Hashes identify canonical
-catalog contents, including car, independently of paths or textproto formatting.
-Build outputs still live in `bazel-bin` and are not used as the archive.
-See the [archive guide](../../../catalogs/README.md) for storage, backups, and
-rollback. Unpublished current versions return 503; unknown cars or missing
-requested versions return 404; malformed car slugs/hashes return 400.
-No rates are guessed and mixed-unit GPS arrays have a null unit. CAN shared
-sources and repeated array slots appear once per protobuf field.
-
-External telemetry must declare an uplink limit; the four GPS fields declare
-50 Hz. Publishd applies that explicit per-field limit while preserving the
-newest pending receipt; CAN fields without a lower limit publish as received. The catalog exposes only `rate_hz`: the explicit uplink rate, otherwise
-the CAN message frequency. External signals have no native-frequency fallback;
-their rate is null when no uplink rate is declared. Numeric scalar
-external signals require explicit units; mixed-unit arrays may omit them.
-
-Catalog serving tests: `npx vitest run tests/signals/catalog.test.ts`.
+Run `npx vitest run --config vitest.config.mjs` for application tests and
+`npx tsc --noEmit` for type checking. The [demo guide](../README.md) covers
+publishing and the provisioned Grafana dashboard.
 
 ## Historical queries
 

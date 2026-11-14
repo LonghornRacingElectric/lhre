@@ -3,9 +3,10 @@
 `gateway.ts` authenticates viewer sessions or script tokens and proxies the
 shared Go gateway. `client.ts` supplies server-side paged reads for analysis and
 exports. `live.ts` adapts gateway streams to existing viewer event shapes;
-Artemis routes open no Kafka consumers. Logical dashboard topics use the
-existing latest-state JSON feed, while native raw queries preserve fresh field
-presence. These paths must not substitute one representation for the other.
+Artemis routes open no Kafka consumers. Logical dashboard topics normalize the
+native gateway stream into latest-value widget shapes. Explicit derived JSON
+topics remain available for processors. Historical raw queries preserve fresh
+field presence and nanosecond identity.
 Disconnecting a viewer stream immediately stops its heartbeat and upstream
 readers.
 Native SSE forwards gateway freshness in status and sample messages, including
@@ -13,6 +14,8 @@ status changes when no new sample arrives. Catch-up status keeps the connection
 usable; coverage gaps remain errors. The latest-value adapter suppresses repeated
 samples from replacement windows. Paged reads discard their accumulated result
 when the gateway returns `409 query_changed`; callers restart the read explicitly.
+Artemis channel discovery and historical selection use deployed catalog metadata;
+the generated local storage contract remains a default width hint, not discovery.
 
 Set `QUERY_GATEWAY_URL` (default `http://127.0.0.1:8090`) and `QUERY_API_TOKEN` in
 the viewer server environment. The public query routes require a signed-in

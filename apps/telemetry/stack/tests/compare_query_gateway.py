@@ -149,7 +149,7 @@ def run(report, name, call, cases, expected, args, direct=None):
     for case, body in cases.items():
         result["queries"][case] = measure(call, body, expected[case], args.repeats, direct)
         print(json.dumps({"variant": name, "case": case, **{k:v for k,v in result["queries"][case].items() if k != "samples_ms"}}), flush=True)
-    result["concurrent"] = concurrent(call, cases, expected, args.clients, 10, direct)
+    result["concurrent"] = {str(clients): concurrent(call, cases, expected, clients, 10, direct) for clients in args.clients}
     print(json.dumps({"variant": name, "concurrent": {k:v for k,v in result["concurrent"].items() if k != "samples_ms"}}), flush=True)
 
 
@@ -206,6 +206,19 @@ def grafana_comparison(report, cases, catalog, args):
         result = {label: {**bench.quantiles(times), "samples_ms": times} for label, times in samples.items()}
         result["median_speedup"] = round(result["direct"]["p50_ms"] / result["gateway"]["p50_ms"], 3)
         result["observations"] = len(expected)
+        result["concurrent"] = {}
+        for clients in args.clients:
+            timings = {}
+            for label, body in (("direct", direct), ("gateway", gateway)):
+                def refresh(_):
+                    began = time.perf_counter()
+                    assert fetch(body) == expected, name
+                    return (time.perf_counter() - began) * 1000
+                with ThreadPoolExecutor(max_workers=clients) as workers:
+                    before = telemetry_reads(None)
+                    values = list(workers.map(refresh, range(clients * 5)))
+                timings[label] = {**bench.quantiles(values), "gateway_telemetry_reads": telemetry_reads(None) - before}
+            result["concurrent"][str(clients)] = timings
         report["grafana_comparison"][name] = result
         print(json.dumps({"grafana_case": name, "direct_ms": result["direct"]["p50_ms"], "gateway_ms": result["gateway"]["p50_ms"], "speedup": result["median_speedup"]}), flush=True)
 
@@ -214,11 +227,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--minutes", type=int, default=10)
     parser.add_argument("--repeats", type=int, default=20)
-    parser.add_argument("--clients", type=int, default=3)
+    parser.add_argument("--clients", type=int, nargs="+", default=[3])
     parser.add_argument("--grafana-only", action="store_true")
     parser.add_argument("--report", type=Path, required=True)
     args = parser.parse_args()
-    if args.minutes < 4 or args.repeats < 5 or args.clients < 1:
+    if args.minutes < 4 or args.repeats < 5 or min(args.clients) < 1:
         parser.error("Use at least four minutes, five repeats and one client")
     report = {"started_utc": bench.iso(time.time_ns() // 1_000_000), "host": platform.platform(), "variants": {}, "configuration": {**vars(args), "report": str(args.report)}}
     engine = create_engine("postgresql+psycopg2://electric:gateway-test-password@localhost:35432/artemis")

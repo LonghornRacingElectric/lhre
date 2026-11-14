@@ -38,22 +38,22 @@ import type {
 const NATURAL_COLLATOR = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 
 const DEFAULT_TRACK: TrackDefinition = {
-  name: "Orion Test Track",
-  slug: "orion-test-track",
+  name: "Artemis Test Track",
+  slug: "artemis-test-track",
   notes: "",
   gates: [],
 };
 
 const DEFAULT_CHANNEL_CHART: ChannelChartDefinition = {
-  name: "Orion Default",
-  slug: "orion-default",
-  notes: "Default Orion channel quantity/unit chart.",
+  name: "Artemis Default",
+  slug: "artemis-default",
+  notes: "Default Artemis channel quantity/unit chart.",
   entries: [],
 };
 const ARTEMIS_CHANNEL_CHART_SLUG = DEFAULT_CHANNEL_CHART.slug;
 const DEFAULT_SOURCES: SourceDef[] = [
-  { key: "orion", label: "Orion" },
   { key: "artemis", label: "Artemis" },
+  { key: "orion", label: "Orion" },
 ];
 const VCU_MAX_MOTOR_RPM = 6000;
 type VcuTorqueParamSet = {
@@ -403,8 +403,8 @@ function defaultCarPresets(): CarPreset[] {
       id: "artemis",
       name: "Artemis",
       source: "artemis",
-      topic: "grafana_data_artemis",
-      transport: "local",
+      topic: "sensor_data",
+      transport: "kafka",
       trackSlug: DEFAULT_TRACK.slug,
       channelChartSlug: ARTEMIS_CHANNEL_CHART_SLUG,
       metadata: {
@@ -435,14 +435,14 @@ function normalizeCarPreset(value: unknown): CarPreset | null {
   const metadata = { ...EMPTY_METADATA, ...(raw.metadata || {}) };
   const channelChartSlug = String(raw.channelChartSlug || defaultChannelChartSlugForSource(source));
   const migratedChannelChartSlug =
-    source === "artemis" && raw.id === "artemis" && channelChartSlug === DEFAULT_CHANNEL_CHART.slug
+    source === "artemis" && raw.id === "artemis" && channelChartSlug === "orion-default"
       ? ARTEMIS_CHANNEL_CHART_SLUG
       : channelChartSlug;
   return {
     id: String(raw.id || slugifyTrackName(name) || source),
     name,
     source,
-    topic: String(raw.topic || (source === "orion" ? "orion" : `grafana_data_${source}`)),
+    topic: String(raw.topic || (source === "orion" ? "orion" : "sensor_data")),
     transport: raw.transport === "mqtt" ? "mqtt" : raw.transport === "kafka" ? "kafka" : "local",
     trackSlug: String(raw.trackSlug || DEFAULT_TRACK.slug),
     channelChartSlug: migratedChannelChartSlug,
@@ -554,11 +554,11 @@ function App() {
   const [liveTopic, setLiveTopic] = useState(() => localStorage.getItem("motec-live-topic") || "");
   const [liveTransport, setLiveTransport] = useState<KafkaTransport>(() => {
     const stored = localStorage.getItem("motec-live-transport");
-    return stored === "mqtt" || stored === "kafka" ? stored : "local";
+    return stored === "mqtt" || stored === "local" ? stored : "kafka";
   });
   const [carPresets, setCarPresets] = useState<CarPreset[]>(loadCarPresets);
-  const [selectedCarPresetId, setSelectedCarPresetId] = useState(() => localStorage.getItem("motec-selected-car-preset") || "orion");
-  const [carPresetDraft, setCarPresetDraft] = useState<CarPreset>(() => loadCarPresets()[0] ?? defaultCarPresets()[0]);
+  const [selectedCarPresetId, setSelectedCarPresetId] = useState(() => localStorage.getItem("motec-selected-car-preset") || "artemis");
+  const [carPresetDraft, setCarPresetDraft] = useState<CarPreset>(() => loadCarPresets().find(preset => preset.id === (localStorage.getItem("motec-selected-car-preset") || "artemis")) ?? defaultCarPresets()[1]);
   const [liveState, setLiveState] = useState<LiveSessionState>(EMPTY_LIVE_STATE);
   // Dash pacing signals (publishes targetPower + lapTrigger to the on-car dash).
   const dashSignals = useDashSignals();
@@ -817,11 +817,9 @@ function App() {
   const liveBadgeClass = liveState.lastSample ? "liveBadge liveOn" : liveState.connected ? "liveBadge liveListening" : liveState.running ? "liveBadge liveConnecting" : "liveBadge";
 
   // ── Real liveness ───────────────────────────────────────────────────────────
-  // Wall-clock arrival time of the last live *sample* (not heartbeats). This is
-  // the truthful "telemetry is flowing right now" signal, independent of the
-  // sample's own timestamp (which is replay-time for the simulator). Updated
-  // from handleLiveEvent on every "sample" event.
+  // Artemis sample time prevents replayed backlog from appearing fresh.
   const [lastDataAtMs, setLastDataAtMs] = useState<number | null>(null);
+  const [gatewayFreshness, setGatewayFreshness] = useState<import("@/lib/query/client").GatewayLiveStatus | null>(null);
   const [liveNowMs, setLiveNowMs] = useState(() => Date.now());
   // Tick once a second unconditionally so the data-age stays accurate even if
   // the local `running` flag briefly flips (e.g. a mirror mid-adopt) while real
@@ -846,7 +844,9 @@ function App() {
   // used to flip the badge to "Offline" even while gauges kept updating. We
   // only fall back to the connection state when no data is actually flowing.
   const uplink: "idle" | "connecting" | "waiting" | "live" | "stale" | "down" =
-    dataAgeMs != null && dataAgeMs < 3500
+    source === "artemis" && liveState.running && gatewayFreshness?.ready === false ? "connecting"
+      : source === "artemis" && liveState.running && (gatewayFreshness?.kafka_lag_messages ?? 0) > 0 ? "stale"
+      : dataAgeMs != null && dataAgeMs < 3500
       ? "live"
       : dataAgeMs != null && dataAgeMs < 12000
         ? "stale"
@@ -1857,6 +1857,7 @@ function App() {
   }
 
   async function startLiveData(sourceOverride?: "orion" | "artemis") {
+    setGatewayFreshness(null);
     const useSource = sourceOverride ?? source;
     setEventEnded(false);
     liveSourceRef.current?.close();
@@ -1872,7 +1873,7 @@ function App() {
       ...(shouldResumeSession ? existing : EMPTY_LIVE_STATE),
       running: true,
       connected: false,
-      status: liveTransport === "local" ? "Connecting to local replay topic..." : liveTransport === "mqtt" ? "Connecting to MQTT..." : "Connecting to Kafka...",
+      status: useSource === "artemis" ? "Connecting to query gateway..." : liveTransport === "local" ? "Connecting to local replay topic..." : liveTransport === "mqtt" ? "Connecting to MQTT..." : "Connecting to Kafka...",
       startedAt: existing.startedAt ?? Date.now(),
     };
     liveStateRef.current = nextLiveState;
@@ -2305,17 +2306,19 @@ function App() {
 
   function handleLiveEvent(event: LiveStreamEvent) {
     if (event.type === "status") {
+      if (event.live) setGatewayFreshness(event.live);
       if (!event.ok) {
         liveSourceRef.current?.close();
         liveSourceRef.current = null;
       }
       setLiveState((prev) => ({
         ...prev,
-        running: event.ok ? prev.running : false,
+        running: prev.running,
         connected: event.ok,
         status: event.ok ? event.message : `${event.message}${event.detail ? ` ${event.detail}` : ""}`,
         topic: event.topic || prev.topic,
       }));
+      if (!event.ok) scheduleLiveReconnect();
       return;
     }
     if (event.type === "heartbeat") {
@@ -2333,7 +2336,7 @@ function App() {
     }
     if (event.type !== "sample") return;
     lastSampleWallRef.current = Date.now();
-    setLastDataAtMs(lastSampleWallRef.current);
+    setLastDataAtMs(event.sample.source === "artemis" ? Math.min(lastSampleWallRef.current, event.sample.t) : lastSampleWallRef.current);
     const completedLap = processLiveSample(event.sample);
     if (completedLap && liveAutoDownloadRef.current) {
       void downloadLiveLap(completedLap);
@@ -4025,15 +4028,15 @@ function App() {
                     <summary>Connection (advanced)</summary>
                     <label>
                       <span>Topic source</span>
-                      <select value={liveTransport} disabled={liveState.running} onChange={(e) => setLiveTransport(e.target.value as KafkaTransport)}>
+                      <select value={source === "artemis" ? "kafka" : liveTransport} disabled={liveState.running || source === "artemis"} onChange={(e) => setLiveTransport(e.target.value as KafkaTransport)}>
                         <option value="local">Local replay bus (simulator)</option>
-                        <option value="kafka">Kafka broker (car)</option>
+                        <option value="kafka">{source === "artemis" ? "Query gateway" : "Kafka broker (car)"}</option>
                         <option value="mqtt">MQTT broker (car direct)</option>
                       </select>
                     </label>
                     <label>
                       <span>Topic</span>
-                      <input value={liveTopic} placeholder={liveTransport === "mqtt" ? "orion" : `grafana_data_${source}`} disabled={liveState.running} onChange={(e) => setLiveTopic(e.target.value)} />
+                      <input value={liveTopic} placeholder={source === "artemis" ? "sensor_data" : liveTransport === "mqtt" ? "orion" : `grafana_data_${source}`} disabled={liveState.running} onChange={(e) => setLiveTopic(e.target.value)} />
                     </label>
                     <label>
                       <span>Sample rate</span>
