@@ -1,5 +1,25 @@
 # Telemetry stack tests
 
+The isolated query runner also starts MQTT, ingest and the bridge. Its demo
+publisher sends generated Artemis pools at independent rates, verifies live and
+persisted reads, and queries every provisioned Grafana example panel. Use
+`bash apps/telemetry/stack/tests/run_query_gateway_test.sh --demo` for a
+60-second interactive sender and the dashboard on port 33000. It removes the
+test containers and volumes on exit. Test MQTT is on 31883 and the gateway on
+38090; production credentials are not used. See the
+[application guide](../../analysis/database/README.md).
+
+Paho replay coverage sends Artemis logger CSV rows through actual MQTT and
+Kafka, then checks database and gateway values for exact receipt timestamps,
+zero/false values and sparse field presence.
+
+The comparison runner accepts `--compare --minutes 4 --repeats 5 --clients 1 3 8
+--report /tmp/query-comparison.json`. Add `--grafana-only` after `--compare` to
+compare identical Grafana results through its direct Timescale and gateway
+datasources. Reports stay outside the checkout. Latencies and telemetry read
+counts are reported separately; cache hits can still require metadata reads.
+These are synthetic local measurements, not production server capacity claims.
+
 Connectivity and data-flow tests are `manual`, local targets: they require loaded telemetry
 images, Docker, the server credentials and a running core stack. See the
 [stack guide](../README.md) for startup.

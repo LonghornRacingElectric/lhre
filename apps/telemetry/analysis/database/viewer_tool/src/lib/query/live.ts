@@ -5,11 +5,11 @@ import { gatewayRequest } from "./gateway";
 import type { GatewayLiveStatus, GatewayRow } from "./client";
 
 const logicalTopics = new Set(["sensor_data", "car_visualization", "driver_input_visualizer", "map", "live_banner", "dashboard_screen", "timing_deltas", "shutdown_screen", "thermal_headroom", "energy_budget"]);
-const sourceFor = (topic: string) => topic === "sensor_data" ? topic : logicalTopics.has(topic) ? "grafana_data_artemis" : topic;
+const sourceFor = (topic: string) => logicalTopics.has(topic) ? "sensor_data" : topic;
 
 // Preserve existing viewer SSE shapes while the gateway owns Kafka access.
 export async function gatewayLive(req: NextRequest, mode: "kafka" | "motec" | "status") {
-  const requested = (req.nextUrl.searchParams.get("topics") || req.nextUrl.searchParams.get("topic") || (mode === "status" ? "car_status" : mode === "motec" ? "grafana_data_artemis_derived" : "sensor_data")).split(",").filter(Boolean);
+  const requested = (req.nextUrl.searchParams.get("topics") || req.nextUrl.searchParams.get("topic") || (mode === "status" ? "car_status" : "sensor_data")).split(",").filter(Boolean);
   const sources = [...new Set(requested.map(sourceFor))];
   const encoder = new TextEncoder();
   const latest: Record<string, unknown> = { car_type: "artemis" };
@@ -46,7 +46,7 @@ export async function gatewayLive(req: NextRequest, mode: "kafka" | "motec" | "s
               for (const line of chunk.split("\n")) {
                 if (!line.startsWith("data: ")) continue;
                 const event = JSON.parse(line.slice(6));
-                if (event.type === "gap") { send(mode === "motec" ? { type: "status", ok: false, message: event.message } : { kind: "status", ok: false, message: event.message }); continue; }
+                if (event.type === "gap") { send(mode === "motec" ? { type: "status", topic, ok: false, message: event.message } : { kind: "status", ok: false, message: event.message }); continue; }
                 let payload: Record<string, unknown>;
                 let timestamp: string;
                 if (topic === "sensor_data") {
@@ -54,7 +54,7 @@ export async function gatewayLive(req: NextRequest, mode: "kafka" | "motec" | "s
                   if (live && JSON.stringify(live) !== previousFreshness) {
                     previousFreshness = JSON.stringify(live);
                     const message = !live.ready ? "Live consumer reconnecting" : live.kafka_lag_messages === null ? "Live consumer lag unknown" : live.kafka_lag_messages > 0 ? `Live consumer catching up (${live.kafka_lag_messages} messages)` : "Live consumer caught up";
-                    send({ ...(mode === "motec" ? { type: "status" } : { kind: "status" }), ok: true, message, live });
+                    send({ ...(mode === "motec" ? { type: "status", topic } : { kind: "status" }), ok: true, message, live });
                   }
                   let changed = false;
                   for (const row of (event.page?.data || []) as GatewayRow[]) {

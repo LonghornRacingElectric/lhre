@@ -35,4 +35,4 @@ that car's folder, and the JSON car/version must match. Orion archives remain le
 bundle neither overwrites nor selects an Orion catalog.
 
 See the [generator](../../../lib/codegen/telemetry/README.md) and
-[viewer](../analysis/database/viewer_tool/README.md#signal-discovery-v0).
+[viewer](../analysis/database/viewer_tool/README.md#signal-discovery).

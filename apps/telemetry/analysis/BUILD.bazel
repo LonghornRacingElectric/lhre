@@ -1,6 +1,8 @@
 # telemetry/analysis/BUILD.bazel
 
-load("@rules_python//python:defs.bzl", "py_library")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
+load("@telemetry_reqs//:requirements.bzl", analysis_requirement = "requirement")
 load("@rules_python//python:pip.bzl", "compile_pip_requirements")
 load("//apps/telemetry:compatibility.bzl", "NOT_WINDOWS")
 
@@ -29,5 +31,64 @@ compile_pip_requirements(
     requirements_txt = "requirements_lock.txt",
     requirements_windows = "requirements_lock_windows.txt",
     tags = ["manual", "requirements"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_library(
+    name = "query_client",
+    srcs = ["query_client.py"],
+    imports = [".."],
+    deps = [requirement("requests")],
+    visibility = ["//apps/telemetry:__subpackages__"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_library(
+    name = "native_demo",
+    srcs = ["database/native_demo.py"],
+    imports = [".."],
+    data = ["//apps/telemetry/stack/ingest:artemis_pb2", "//lib/codegen/telemetry:storage_contract", "//lib/codegen/telemetry:artemis_schema_contract"],
+    deps = [requirement("paho-mqtt"), requirement("protobuf"), "@lhre_pypi//bazel_runfiles"],
+    visibility = ["//apps/telemetry:__subpackages__"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_binary(
+    name = "publish_demo",
+    srcs = ["database/paho_testing.py"],
+    main = "database/paho_testing.py",
+    deps = [":paho_testing"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_library(
+    name = "paho_testing",
+    srcs = ["database/paho_testing.py"],
+    imports = [".."],
+    deps = [":native_demo", requirement("numpy"), requirement("pandas"), requirement("requests"), analysis_requirement("tqdm")],
+    visibility = ["//apps/telemetry:__subpackages__"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_test(
+    name = "paho_testing_test",
+    srcs = ["database/paho_testing_test.py"],
+    deps = [":paho_testing", "//apps/telemetry/stack/ingest:sensor_decode"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_binary(
+    name = "validate_live_viewer",
+    visibility = ["//apps/telemetry:__subpackages__"],
+    srcs = ["database/validate_live_viewer.py"],
+    main = "database/validate_live_viewer.py",
+    deps = [":query_client", ":native_demo"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_test(
+    name = "query_client_test",
+    srcs = ["query_client_test.py"],
+    deps = [":query_client"],
     target_compatible_with = NOT_WINDOWS,
 )

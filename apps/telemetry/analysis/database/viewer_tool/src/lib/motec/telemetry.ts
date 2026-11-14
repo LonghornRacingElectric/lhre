@@ -5,8 +5,8 @@ import { Channel, DataLog, type Sample } from "./datalog";
 import { DEFAULT_CHANNEL_KEY, ORION_CHANNELS, getChannel } from "./channels";
 import type { Settings } from "./config";
 import { ReadOnlyDatabase } from "./db";
-import { readBuckets, storageContract, bucketWidth, type BucketAggregate } from "./artemisStorage";
-import { gatewaySessions, gatewayJSON } from "../query/client";
+import { readBuckets, bucketWidth, type BucketAggregate } from "./artemisStorage";
+import { gatewaySessions, gatewayJSON, type GatewayCatalog } from "../query/client";
 import { detectSplitRanges } from "./split";
 import type {
   ChannelDef, DayDetail, DriveDay, GpsResponse, SegmentSummary, SeriesPoint, SeriesResponse, SessionSummary,
@@ -447,16 +447,18 @@ export class TelemetryService {
 
   private async loadChannels(): Promise<ChannelDef[]> {
     if (this.settings.car === "artemis") {
-      return storageContract().pools.flatMap(pool => pool.fields.flatMap(field => {
-        if (["double precision", "integer", "bigint", "smallint", "numeric"].includes(field.sql_type)) {
-          return [{ key: ORION_CHANNELS.find(c => c.table === pool.group && c.column === field.name)?.key || `${pool.group}_${field.name}`, label: labelFor(field.name), table: pool.group, column: field.name,
-            unit: unitFor(field.name), quantity: quantityFor(field.name), default: field.name === "motor_speed", split_candidate: isSplitCandidate(field.name) }];
+      const catalog = await gatewayJSON<GatewayCatalog>("/v1/signals");
+      return catalog.signals.flatMap(signal => {
+        const [group, name] = signal.signal.split(".");
+        if (!signal.repeated && signal.aggregates.includes("mean")) {
+          return [{ key: ORION_CHANNELS.find(c => c.table === group && c.column === name)?.key || `${group}_${name}`, label: labelFor(name), table: group, column: name,
+            unit: signal.unit || "", quantity: quantityFor(name), default: name === "motor_speed", split_candidate: isSplitCandidate(name) }];
         }
-        if (field.name === "gps" && field.sql_type.endsWith("[]")) {
-          return ORION_CHANNELS.filter(channel => channel.table === pool.group && channel.column.startsWith("gps["));
+        if (name === "gps" && signal.repeated) {
+          return ORION_CHANNELS.filter(channel => channel.table === group && channel.column.startsWith("gps["));
         }
         return [];
-      }));
+      });
     }
     const rows = await this.db.query<{ table_name: string; column_name: string; data_type: string }>(
       `select table_name, column_name, data_type from information_schema.columns

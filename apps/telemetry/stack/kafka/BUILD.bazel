@@ -138,7 +138,7 @@ go_test(
 
 go_library(
     name = "grafana_query_lib",
-    srcs = ["grafana/adapter.go", "grafana/live.go"],
+    srcs = ["grafana/adapter.go", "grafana/live.go", "grafana/catalog.go"],
     importpath = "github.com/LonghornRacingElectric/lhre/apps/telemetry/stack/kafka/grafana",
     deps = [
         "@com_github_grafana_grafana_plugin_sdk_go//backend",

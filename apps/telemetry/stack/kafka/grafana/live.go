@@ -81,7 +81,9 @@ func wideFrames(rows []observation, alias string, body map[string]any) data.Fram
 		if alias != "" {
 			label = strings.ReplaceAll(alias, "{{signal}}", name)
 		}
-		frame.Fields = append(frame.Fields, data.NewField(label, nil, values))
+		field := data.NewField(label, nil, values)
+		field.Config = &data.FieldConfig{Path: name}
+		frame.Fields = append(frame.Fields, field)
 	}
 	return data.Frames{frame}
 }

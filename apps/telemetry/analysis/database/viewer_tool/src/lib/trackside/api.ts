@@ -72,7 +72,7 @@ export const api = {
   saveChannelChart: (chart: ChannelChartDefinition) => postJson<ChannelChartDefinition>("/api/motec/channel-charts", chart),
   export: (body: unknown) => postJson<ExportResponse>("/api/motec/export", body),
   liveConfig: (source: string, topic = "", transport: KafkaTransport = "local") =>
-    getJson<{ source: string; topic: string; transport: KafkaTransport; bootstrap_servers: string; mqtt_host?: string; mqtt_port?: number }>(
+    getJson<{ source: string; topic: string; transport: KafkaTransport; gateway?: boolean; bootstrap_servers?: string; mqtt_host?: string; mqtt_port?: number }>(
       `/api/motec/live/config?source=${encodeURIComponent(source)}&topic=${encodeURIComponent(topic)}&transport=${encodeURIComponent(transport)}`,
     ),
   exportLiveLap: (body: unknown) => postJson<LiveLapExportResponse>("/api/motec/live/export-lap", body),

@@ -61,7 +61,7 @@ and tuning details.
 The viewer serves schema-generated signal discovery at `/api/cars/artemis/signals`.
 Run `//tools/spec:publish_signals` first; serving per-car archived versions
 and deployment paths are covered in the
-[viewer README](analysis/database/viewer_tool/README.md#signal-discovery-v0).
+[viewer README](analysis/database/viewer_tool/README.md#signal-discovery).
 
 The viewer remains an npm/PM2 application rather than a Bazel image:
 
