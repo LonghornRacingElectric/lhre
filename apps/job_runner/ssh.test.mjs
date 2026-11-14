@@ -9,7 +9,7 @@ function transport() {
   child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
   const killed = [], calls = [], timers = new Map();
   child.kill = signal => killed.push(signal);
-  const config = {sshKey: 'fixture-key', knownHosts: 'fixture-hosts', sshHost: 'worker@hil'};
+  const config = {sshKey: 'fixture-key', knownHosts: 'fixture-hosts', sshHost: 'worker@hil.invalid'};
   const promise = sshRpc(config, {op: 'status'}, {
     spawnProcess: (...args) => {calls.push(args); return child;},
     schedule: (callback, delay) => {assert.equal(delay, 40000); timers.set(1, callback); return 1;},
@@ -22,7 +22,7 @@ test('SSH uses fixed argv and bounded JSON; split UTF-8 decodes after concatenat
   const fake = transport();
   const [executable, args, options] = fake.calls[0];
   assert.equal(executable, '/usr/bin/ssh');
-  assert.deepEqual(args, ['-T', '-i', 'fixture-key', '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'UserKnownHostsFile=fixture-hosts', '-o', 'ConnectTimeout=5', '-o', 'ServerAliveInterval=5', '-o', 'ServerAliveCountMax=2', 'worker@hil']);
+  assert.deepEqual(args, ['-T', '-i', 'fixture-key', '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'UserKnownHostsFile=fixture-hosts', '-o', 'ConnectTimeout=5', '-o', 'ServerAliveInterval=5', '-o', 'ServerAliveCountMax=2', 'worker@hil.invalid']);
   assert.deepEqual(options, {stdio: ['pipe', 'pipe', 'pipe']});
   assert.equal(fake.child.stdin.read().toString(), '{"op":"status"}');
   const bytes = Buffer.from(JSON.stringify({ok: true, result: '✓'}));

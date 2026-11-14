@@ -200,13 +200,14 @@ class RunnerTest(unittest.TestCase):
         self.queue.update(ID, status='running', started=NOW)
         state = {'State': {'Running': False, 'ExitCode': 0}}
         success = subprocess.CompletedProcess(['docker', 'logs'], 0, 'complete output', 'complete stderr')
-        with patch.object(runner, 'inspect', return_value=state), patch.object(runner, 'docker', side_effect=[subprocess.TimeoutExpired('docker logs', 25), success]), patch.object(runner.time, 'time', side_effect=[1794686405, 1794688000]):
+        with patch.object(runner, 'inspect', return_value=state), patch.object(runner, 'docker', side_effect=[subprocess.TimeoutExpired('docker logs', 25), success]), patch.object(runner.time, 'time', return_value=1794686405) as clock:
             runner.tick(self.queue)
             with self.queue.connect() as db:
                 self.assertEqual(db.execute('SELECT value FROM settings WHERE key=?', ('errors:' + ID,)).fetchone()[0], '1')
             self.assertEqual(self.queue.get(ID)['status'], 'running')
             with self.assertRaises(ValueError):
                 runner.archive(self.queue, ID)
+            clock.return_value = 1794688000
             runner.tick(self.queue)
         self.assertEqual(self.queue.get(ID)['status'], 'succeeded')
         archive = runner.archive(self.queue, ID)
@@ -254,8 +255,9 @@ class RunnerTest(unittest.TestCase):
         self.assertEqual(self.queue.get(ID)['status'], 'starting')
         self.assertEqual(self.queue.get('b' * 32)['status'], 'queued')
         self.queue.pause(True)
-        with patch.object(runner, 'inspect', return_value=None), patch.object(runner.time, 'time', return_value=1794686500):
+        with patch.object(runner, 'inspect', return_value=None), patch.object(runner, 'docker', return_value=subprocess.CompletedProcess([], 1, '', 'No such container')) as docker, patch.object(runner.time, 'time', return_value=1794686500):
             runner.tick(self.queue)
+            docker.assert_called_once_with(['rm', '-f', runner.container_name(ID)], check=False)
         self.assertEqual(self.queue.get(ID)['status'], 'failed')
 
     def test_created_container_has_deadline_and_is_removed_before_failure(self):
@@ -298,13 +300,14 @@ class RunnerTest(unittest.TestCase):
         def capture(queue, job_id):
             if job_id == ID:
                 raise OSError('corrupt log')
-        with patch.object(runner, 'inspect', side_effect=inspect), patch.object(runner, 'docker', side_effect=docker), patch.object(runner, 'capture', side_effect=capture), patch.object(runner.subprocess, 'run') as launch, patch.object(runner.time, 'time', return_value=1794688000):
+        with patch.object(runner, 'inspect', side_effect=inspect), patch.object(runner, 'docker', side_effect=docker), patch.object(runner, 'capture', side_effect=capture), patch.object(runner.subprocess, 'run') as launch, patch.object(runner.time, 'time', return_value=1794688000) as clock:
             runner.tick(self.queue)
             launch.assert_called_once()
             self.assertIn(older, stopped)
             self.assertEqual(self.queue.get(older)['status'], 'cancelled')
             self.assertEqual(self.queue.get(ID)['status'], 'running')
             for _ in range(2):
+                clock.return_value += 60
                 runner.tick(self.queue)
         self.assertEqual(self.queue.get(ID)['status'], 'failed')
         self.assertIn('3 attempts', self.queue.get(ID)['error'])
@@ -362,7 +365,7 @@ class RunnerTest(unittest.TestCase):
         self.assertEqual(json.loads((self.queue.directory(ID) / 'results.json').read_text()), output)
 
     def test_heartbeat_and_prune_continue_when_tick_fails(self):
-        with patch.object(runner, 'tick', side_effect=OSError('disk full')), patch.object(runner, 'prune') as prune, patch.object(runner, 'cache_status') as status, patch.object(runner, 'cache_logs'):
+        with patch.object(runner, 'sweep_orphans', return_value=True), patch.object(runner, 'tick', side_effect=OSError('disk full')), patch.object(runner, 'prune') as prune, patch.object(runner, 'cache_status') as status, patch.object(runner, 'cache_logs'):
             runner.worker_cycle(self.queue)
             prune.assert_called_once_with(self.queue)
             status.assert_called_once_with(self.queue)
@@ -374,7 +377,7 @@ class RunnerTest(unittest.TestCase):
         directory = self.queue.directory(ID)
         directory.mkdir()
         (directory / 'stdout.log').write_text('cached output')
-        (self.queue.root / 'status.json').write_text(json.dumps({'templates': {'cpu': True}}))
+        (self.queue.root / 'status.json').write_text(json.dumps({'templates': {'cpu': True}, 'online': True, 'sampled_at': 1000}))
         (self.queue.root / 'heartbeat').touch()
         os.utime(self.queue.root / 'heartbeat', (1000, 1000))
         with patch.object(runner.subprocess, 'run') as run, patch.object(runner.time, 'time', return_value=1005):
@@ -434,6 +437,92 @@ class RunnerTest(unittest.TestCase):
             runner.cache_logs(self.queue)
         self.assertEqual(json.loads((self.queue.root / 'status.json').read_text())['gpu'], 'fixture gpu')
         self.assertEqual(runner.logs(self.queue, ID), {'stdout': 'cached log', 'stderr': 'warning'})
+
+    def test_orphan_sweep_removes_late_failed_and_unknown_jobs_but_preserves_live_jobs(self):
+        self.queue.submit(SETTINGS)
+        self.queue.update(ID, status='running', started=NOW)
+        failed, unknown = 'b' * 32, 'c' * 32
+        self.queue.submit({**SETTINGS, 'id': failed})
+        self.queue.update(failed, status='failed', finished=NOW)
+        names = '\n'.join([runner.container_name(ID), runner.container_name(failed), runner.container_name(unknown), 'unrelated-service'])
+        def docker(args, **kwargs):
+            return subprocess.CompletedProcess(args, 0, names if args[0] == 'ps' else '', '')
+        with patch.object(runner, 'docker', side_effect=docker) as run:
+            self.assertTrue(runner.sweep_orphans(self.queue))
+        self.assertEqual(run.call_args_list[0].args[0], ['ps', '-a', '--filter', 'label=lhr.runner=jobs-v1', '--format', '{{.Names}}'])
+        self.assertEqual([call.args[0] for call in run.call_args_list[1:]], [['rm', '-f', runner.container_name(failed)], ['rm', '-f', runner.container_name(unknown)]])
+
+    def test_failed_orphan_cleanup_blocks_new_launches_without_blocking_runtime_checks(self):
+        self.queue.submit(SETTINGS)
+        self.queue.submit({**SETTINGS, 'id': 'b' * 32})
+        self.queue.update(ID, status='running', started=NOW)
+        with patch.object(runner, 'sweep_orphans', return_value=False), patch.object(runner, 'inspect', return_value={'State': {'Running': True}}) as inspect, patch.object(runner.time, 'time', return_value=1794686405), patch.object(runner.subprocess, 'run') as run, patch.object(runner, 'prune'), patch.object(runner, 'cache_status'), patch.object(runner, 'cache_logs'):
+            runner.worker_cycle(self.queue)
+            inspect.assert_called_once_with(ID)
+            run.assert_not_called()
+        self.assertEqual(self.queue.get('b' * 32)['status'], 'queued')
+
+    def test_short_capture_hiccup_remains_retryable_for_two_minutes(self):
+        self.queue.submit(SETTINGS)
+        self.queue.update(ID, status='running', started=NOW)
+        state = {'State': {'Running': False, 'ExitCode': 0}}
+        with patch.object(runner, 'inspect', return_value=state), patch.object(runner, 'capture', side_effect=OSError('temporary log failure')), patch.object(runner.time, 'time', return_value=1794686405) as clock:
+            for delta in [0, 2, 6]:
+                clock.return_value = 1794686405 + delta
+                runner.tick(self.queue)
+        self.assertEqual(self.queue.get(ID)['status'], 'running')
+        with patch.object(runner, 'inspect', return_value=state), patch.object(runner, 'capture'), patch.object(runner.time, 'time', return_value=1794686415):
+            runner.tick(self.queue)
+        self.assertEqual(self.queue.get(ID)['status'], 'succeeded')
+        with self.queue.connect() as db:
+            self.assertIsNone(db.execute('SELECT value FROM settings WHERE key=?', ('error_since:' + ID,)).fetchone())
+
+    def test_status_hardware_sampling_is_throttled_to_thirty_seconds(self):
+        with patch.object(runner, 'docker', return_value=subprocess.CompletedProcess([], 0, '', '')) as docker, patch.object(runner.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, 'fixture GPU', '')) as nvidia, patch.object(runner.time, 'time', return_value=1000) as clock, patch.object(runner.os, 'getloadavg', return_value=(0, 0, 0)):
+            runner.cache_status(self.queue)
+            self.assertEqual(docker.call_count, 3)  # One daemon check and two unique images.
+            self.assertEqual(nvidia.call_count, 1)
+            clock.return_value = 1029
+            runner.cache_status(self.queue)
+            self.assertEqual(docker.call_count, 3)
+            self.assertEqual(nvidia.call_count, 1)
+            clock.return_value = 1030
+            runner.cache_status(self.queue)
+            self.assertEqual(docker.call_count, 6)
+            self.assertEqual(nvidia.call_count, 2)
+
+    def test_fresh_heartbeat_does_not_hide_docker_failure_or_stale_status(self):
+        heartbeat = self.queue.root / 'heartbeat'
+        heartbeat.touch()
+        os.utime(heartbeat, (1000, 1000))
+        with patch.object(runner, 'docker', side_effect=RuntimeError('Docker unavailable')), patch.object(runner.time, 'time', return_value=1005), patch.object(runner.os, 'getloadavg', return_value=(0, 0, 0)):
+            runner.cache_status(self.queue)
+            status = runner.rpc(self.queue, {'op': 'status'})
+            self.assertFalse(status['online'])
+            self.assertIn('Docker unavailable', status['error'])
+        (self.queue.root / 'status.json').write_text(json.dumps({'online': True, 'sampled_at': 900}))
+        with patch.object(runner.time, 'time', return_value=1005):
+            self.assertFalse(runner.rpc(self.queue, {'op': 'status'})['online'])
+
+    def test_log_cache_replacement_preserves_old_content_until_atomic_rename(self):
+        self.queue.submit(SETTINGS)
+        self.queue.update(ID, status='running', started=NOW)
+        directory = self.queue.directory(ID)
+        directory.mkdir()
+        for name in ['stdout.log', 'stderr.log']:
+            (directory / name).write_text('previous')
+        replace = Path.replace
+        def checked_replace(temporary, target):
+            self.assertEqual(target.read_text(), 'previous')
+            self.assertEqual(temporary.read_text(), 'new output')
+            return replace(temporary, target)
+        with patch.object(runner, 'docker', return_value=subprocess.CompletedProcess([], 0, 'new output', 'new output')), patch.object(Path, 'replace', checked_replace):
+            runner.cache_logs(self.queue)
+        self.assertEqual(runner.logs(self.queue, ID), {'stdout': 'new output', 'stderr': 'new output'})
+
+    def test_stdout_workload_contract_uses_a_new_local_image_tag(self):
+        self.assertEqual(runner.IMAGES['cpu'], 'lhr/job-runtime:2026-11-14-stdout-v2')
+        self.assertEqual(runner.IMAGES['fmu'], runner.IMAGES['cpu'])
 
 
 class TaskTest(unittest.TestCase):

@@ -24,19 +24,19 @@ async function browser() {
   document.querySelectorAll = () => filters;
   const get = document.getElementById;
   get('template').value = 'cpu'; get('parallel').value = '1'; get('seconds').value = '15';
-  let offline = false;
+  let offline = false, stale = false;
   const context = vm.createContext({document, console, crypto: {randomUUID: () => id}, Date: class extends Date {static now() {return 1794686405000;}},
     setInterval: (callback, delay) => intervals.push({callback, delay}),
     fetch: async (url, options) => {
       calls.push({url, options});
       if (offline && url === '/api/state') throw new Error('connection lost');
-      const value = url === '/api/state' ? {connection: 'connected', online: true, jobs: [job(id, 'running'), job(other, 'succeeded')], templates: {cpu: true, fmu: true, gpu: true}} : url.endsWith('/logs') ? {stdout: 'fixture output', stderr: ''} : {id};
+      const value = url === '/api/state' ? {connection: 'connected', online: true, stale, jobs: [job(id, 'running'), job(other, 'succeeded')], templates: {cpu: true, fmu: true, gpu: true}} : url.endsWith('/logs') ? {stdout: 'fixture output', stderr: ''} : {id};
       return {ok: true, json: async () => value};
     }});
   vm.runInContext(source, context);
   const flush = async () => {for (let step = 0; step < 20; step++) await Promise.resolve();};
   await flush();
-  return {get, calls, filters, intervals, document, flush, offline: value => {offline = value;}, refresh: () => vm.runInContext('refresh()', context)};
+  return {get, calls, filters, intervals, document, flush, offline: value => {offline = value;}, stale: value => {stale = value;}, refresh: () => vm.runInContext('refresh()', context)};
 }
 
 test('browser initializes CPU launch, submits settings and polls every three seconds', async () => {
@@ -96,4 +96,15 @@ test('switching a cleared CPU duration to FMU or GPU disables validation and sub
     assert.equal(b.get('seconds').disabled, false);
     assert.equal(b.get('duration').hidden, false);
   }
+});
+
+test('busy cached state stays connected and labels its stale status', async () => {
+  const b = await browser();
+  b.stale(true); await b.refresh();
+  assert.equal(b.get('submit').disabled, false);
+  assert.equal(b.get('pause').disabled, false);
+  assert.equal(b.get('connection').textContent, 'Busy · cached status');
+  assert.ok(b.get('updated').textContent.startsWith('Cached status from'));
+  b.stale(false); await b.refresh();
+  assert.equal(b.get('connection').textContent, 'Ready');
 });

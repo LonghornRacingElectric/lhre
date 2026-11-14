@@ -11,9 +11,9 @@ const password = 'test-password', salt = 'fixed-test-salt';
 const config = {username: 'test', passwordSalt: salt, passwordHash: scryptSync(password, salt, 32).toString('hex'), publicOrigin: 'https://jobs.test'};
 const authorization = 'Basic ' + Buffer.from('test:' + password).toString('base64');
 const id = 'a'.repeat(32);
-async function request(app, url, {method = 'GET', data, headers = {}} = {}) {
+async function request(app, url, {method = 'GET', data, headers = {}, source = '192.0.2.1'} = {}) {
   const req = Readable.from(data === undefined ? [] : [Buffer.from(JSON.stringify(data))]);
-  req.url = url; req.method = method;
+  req.url = url; req.method = method; req.socket = {remoteAddress: source};
   req.headers = {authorization, ...(method === 'POST' ? {'content-type': 'application/json', 'x-lhr-request': 'dashboard', origin: config.publicOrigin} : {}), ...headers};
   const result = {};
   await app(req, {writeHead(status, values) {result.status = status; result.headers = values;}, end(body) {result.raw = body; try {result.body = JSON.parse(body);} catch {result.body = body;}}});
@@ -96,13 +96,14 @@ test('result downloads are stored on telemetry and reused without contacting HIL
   assert.equal(calls, 1);
 });
 
-test('failed sign-ins are globally rate limited, cached credentials still work, and fixed time resets the limit', async () => {
+test('failed sign-ins are limited per source, cached credentials still work, and fixed time resets the limit', async () => {
   let clock = 10000;
   const app = createApplication({config, now: () => clock, rpc: async () => ({})});
   assert.equal((await request(app, '/missing')).status, 404);
   const headers = {authorization: 'Basic ' + Buffer.from('test:wrong').toString('base64')};
   for (let attempt = 0; attempt < 5; attempt++) assert.equal((await request(app, '/api/state', {headers})).status, 401);
   assert.equal((await request(app, '/api/state', {headers})).status, 429);
+  assert.equal((await request(app, '/missing', {source: '192.0.2.2'})).status, 404);
   assert.equal((await request(app, '/missing')).status, 404);
   clock += 60000;
   assert.equal((await request(app, '/api/state', {headers})).status, 401);
@@ -125,16 +126,20 @@ test('logs are coalesced and cached with a fixed expiry', async () => {
   assert.equal((await next).body.stdout, 'new');
 });
 
-test('dashboard caps in-flight SSH requests and releases reservations after failures', async () => {
+test('dashboard queues RPCs without exceeding two in-flight requests and releases slots after failures', async () => {
   const pending = [];
   const app = createApplication({config, now: () => 10000, rpc: () => new Promise((resolve, reject) => pending.push({resolve, reject}))});
   const first = request(app, `/api/runs/${id}/logs`);
   const second = request(app, `/api/runs/${'b'.repeat(32)}/logs`);
-  assert.equal((await request(app, `/api/runs/${'c'.repeat(32)}/logs`)).status, 503);
-  pending[0].reject(new Error('connection unavailable')); pending[1].resolve({stdout: '', stderr: ''});
-  assert.equal((await first).status, 503); assert.equal((await second).status, 200);
+  const third = request(app, `/api/runs/${'c'.repeat(32)}/logs`);
+  assert.equal(pending.length, 2);
+  pending[0].reject(new Error('connection unavailable'));
+  assert.equal((await first).status, 503);
+  assert.equal(pending.length, 3);
+  pending[1].resolve({stdout: '', stderr: ''}); pending[2].resolve({stdout: 'queued', stderr: ''});
+  assert.equal((await second).status, 200); assert.equal((await third).body.stdout, 'queued');
   const next = request(app, `/api/runs/${id}/logs`);
-  pending[2].resolve({stdout: 'recovered', stderr: ''});
+  pending[3].resolve({stdout: 'recovered', stderr: ''});
   assert.equal((await next).status, 200);
 });
 
@@ -176,4 +181,65 @@ test('cache pruning retains at most 200 completed archives and leaves unrelated 
   assert.equal(files.filter(file => file.endsWith('.tar.gz')).length, 200);
   assert.ok(files.includes('operator-notes.txt'));
   assert.ok(files.includes(id + '.tar.gz'));
+});
+
+test('empty browser challenges never consume login attempts or prevent a correct password', async () => {
+  const app = createApplication({config, now: () => 10000});
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const response = await request(app, '/', {headers: {authorization: ''}});
+    assert.equal(response.status, 401); assert.ok(response.headers['WWW-Authenticate']);
+  }
+  assert.equal((await request(app, '/')).status, 200);
+});
+
+test('trusted loopback proxy uses the final forwarded source and ignores spoofed prefixes', async () => {
+  const app = createApplication({config, now: () => 10000});
+  const bad = 'Basic ' + Buffer.from('test:wrong').toString('base64');
+  for (let attempt = 0; attempt < 5; attempt++) {
+    assert.equal((await request(app, '/', {source: '127.0.0.1', headers: {authorization: bad, 'x-forwarded-for': `192.0.2.${attempt + 10}, 192.0.2.1`}})).status, 401);
+  }
+  assert.equal((await request(app, '/', {source: '127.0.0.1', headers: {authorization: bad, 'x-forwarded-for': '192.0.2.50, 192.0.2.1'}})).status, 429);
+  assert.equal((await request(app, '/', {source: '127.0.0.1', headers: {'x-forwarded-for': '192.0.2.2'}})).status, 200);
+  assert.equal((await request(app, '/', {source: '192.0.2.1', headers: {authorization: bad, 'x-forwarded-for': '192.0.2.99'}})).status, 429);
+});
+
+test('state waits for an available SSH slot instead of marking a busy worker offline', async t => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), 'lhr-busy-state-'));
+  t.after(() => rm(dataDir, {recursive: true, force: true}));
+  let clock = 10000;
+  const pending = [];
+  const app = createApplication({config: {...config, dataDir}, now: () => clock, rpc: async value => {
+    if (value.op === 'status') return {online: true, jobs: [], templates: {cpu: true}};
+    return new Promise(resolve => pending.push(resolve));
+  }});
+  assert.equal((await request(app, '/api/state')).body.connection, 'connected');
+  clock += 5000;
+  const first = request(app, `/api/runs/${id}/logs`), second = request(app, `/api/runs/${'b'.repeat(32)}/logs`);
+  const state = request(app, '/api/state');
+  pending[0]({stdout: '', stderr: ''});
+  assert.equal((await state).body.connection, 'connected');
+  pending[1]({stdout: '', stderr: ''}); await Promise.all([first, second]);
+});
+
+test('a full bounded RPC queue returns connected stale state and rejects excess mutations', async t => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), 'lhr-rpc-queue-'));
+  t.after(() => rm(dataDir, {recursive: true, force: true}));
+  let clock = 10000;
+  const pending = [];
+  const app = createApplication({config: {...config, dataDir}, now: () => clock, rpc: async value => {
+    if (value.op === 'status') return {online: true, jobs: [], templates: {cpu: true}};
+    return new Promise(resolve => pending.push(resolve));
+  }});
+  assert.equal((await request(app, '/api/state')).body.connection, 'connected');
+  clock += 5000;
+  const requests = Array.from({length: 10}, (_, number) => request(app, `/api/runs/${number.toString(16).padStart(32, '0')}/logs`));
+  assert.equal(pending.length, 2);
+  const stale = (await request(app, '/api/state')).body;
+  assert.equal(stale.connection, 'connected'); assert.equal(stale.online, true); assert.equal(stale.stale, true);
+  assert.equal((await request(app, '/api/pause', {method: 'POST', data: {paused: true}})).status, 429);
+  for (let index = 0; index < requests.length; index++) {
+    pending[index]({stdout: '', stderr: ''});
+    assert.equal((await requests[index]).status, 200);
+  }
+  assert.equal(pending.length, 10);
 });
