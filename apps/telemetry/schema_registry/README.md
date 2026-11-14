@@ -5,6 +5,15 @@ metadata; the separate preparation command applies additive storage changes.
 Neither downloading a candidate nor checking out a commit changes the active
 schema. Server executables remain operator-deployed.
 
+## Decoder table
+
+[decoders.json](https://github.com/LonghornRacingElectric/lhre/blob/main/apps/telemetry/schema_registry/decoders.json)
+records known schema IDs, their Artemis payload format and operator approval.
+The [decode router](../stack/ingest/README.md#decode-router) has one compiled
+decoder for the deployed schema. Approving another ID does not make its bytes
+decodable; it remains quarantined with `decoder_unavailable`. The checked-in
+unapproved entry is a synthetic demo ID, not a downloadable schema bundle.
+
 ## Automatic catalog and deployment
 
 An explicit manual CI publication run publishes digest-pinned BEVO and server

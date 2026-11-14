@@ -128,7 +128,8 @@ func (a *Adapter) QueryData(ctx context.Context, req *backend.QueryDataRequest) 
 		}
 		catalog, err := a.loadCatalog(ctx, "")
 		if err == nil {
-			_, err = catalog.chartSignals(q)
+			q.Signals, err = catalog.chartSignals(q)
+			q.Pools = nil
 		}
 		if err != nil {
 			response.Responses[query.RefID] = backend.DataResponse{Error: err}

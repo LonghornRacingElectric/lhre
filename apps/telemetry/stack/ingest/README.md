@@ -1,7 +1,8 @@
 # Ingest
 
-Forwards Artemis `TelemetryBatch` payloads from MQTT `artemis/data` through the
-gRPC bridge to Kafka. Other telemetry topics are rejected. The bridge request
+Forwards Artemis `TelemetryBatch` payloads from MQTT `artemis/data` or
+`artemis/data/<schema_id>` through the gRPC bridge to Kafka. Other telemetry
+topics are rejected. The bridge request
 sets `car_type: Artemis` and `payload_format: artemis_updates_v1`.
 
 The MQTT callback queues raw bytes without blocking on network I/O. A single
@@ -49,12 +50,57 @@ Compose runs the [Artemis gateway](../kafka/gateway/README.md) alongside the
 existing writer. Set `QUERY_API_TOKEN` in the root environment and the viewer's
 server environment. Artemis Grafana uses UID `artemis` with the gateway
 datasource and generated signal builder; convert any old SQL panel targets.
+The [Grafana and API setup guide](../kafka/grafana/README.md) covers token
+generation, container versus host URLs, dashboard selection and troubleshooting.
+`GRAFANA_ROOT_URL` and `GRAFANA_SERVE_FROM_SUB_PATH` select local root access or
+the production `/grafana/` proxy; recreate containers after changing dotenv.
 The query port is published only on loopback. Existing Postgres access remains
 available for metadata and legacy clients; restrict it after those clients have
 completed their cutover. The `analysis` role
 receives read grants on fresh database initialization. Existing installations
 must apply the generated schema and provision equivalent grants before rollout.
+Compose explicitly preloads Timescale so existing PostgreSQL volumes acquire
+the required extension setting when the database container is recreated.
 
 The query ring and its baseline start with conservative 64 MiB bootstrap
 budgets. Sealed L1/L2 caches default off; configure measured budgets through
 `QUERY_L1_BYTES` and `QUERY_L2_BYTES`. The cache volume is disposable.
+
+## Decode router
+
+Every `sensor_data` record carries a `schema_fingerprint` header: the
+`schema_id` of the wire contract its payload was encoded with
+(`//lib/codegen/telemetry:artemis_schema_contract`). The bridge stamps its own
+deployed `schema_id` (from `/schema/schema_contract.json` in its image) unless
+the publisher named one by sending to `artemis/data/<schema_id>`.
+Before decoding, the bridge sends foreign-schema bytes to
+`sensor_data_quarantine` with a `quarantine_reason: schema_mismatch` header.
+Malformed deployed-schema batches go there with `invalid_payload` instead.
+Kafka retains the original bytes and headers for inspection and later replay;
+the RPC succeeds only after Kafka acknowledges them. This lets subsequent
+valid batches continue through the existing MQTT worker.
+Only valid deployed-schema batches reach `sensor_data` and the best-effort
+`grafana_data_artemis` feed. The database writer, processors and gateway ring
+continue consuming `sensor_data` with the deployed decoder.
+
+`decode_router.route()` decodes Artemis records only with the deployed schema.
+The [decoder table](../../schema_registry/README.md#decoder-table) distinguishes
+unknown and unapproved fingerprints. Approval alone does not provide a decoder:
+an approved non-deployed entry raises `decoder_unavailable`. Other rejection
+reasons are `unknown_schema`, `unapproved_bundle` and `invalid_payload`.
+Records with no fingerprint from older bridges retain the deployed-schema
+assumption. Per-bundle decoders and automatic replay are not implemented.
+BEVO still needs to send its fingerprint explicitly; an unlabelled publisher
+asserts that its bytes match the deployed schema.
+
+```bash
+# inspect accepted and quarantined records on the running stack (read-only)
+bazel run --config=local //apps/telemetry/stack/ingest:decode_router_demo -- --from-kafka localhost:29092
+# publish one batch per case through MQTT -> ingest -> bridge
+bazel run --config=local //apps/telemetry/stack/ingest:decode_router_demo -- --send localhost:1883
+# no stack: route the same cases plus malformed records in-process
+bazel run --config=local //apps/telemetry/stack/ingest:decode_router_demo -- --samples
+
+bazel test --config=local //apps/telemetry/stack/ingest:decode_router_test
+bazel test --config=local //apps/telemetry/stack/ingest:decode_router_integration_test
+```

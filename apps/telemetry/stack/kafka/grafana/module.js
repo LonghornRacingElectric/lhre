@@ -8,6 +8,7 @@ System.register(['@grafana/data', '@grafana/runtime', '@grafana/ui', 'react', 'r
       var chartable = s => !s.repeated && !['string', 'bytes'].includes(s.value_type);
       var functionsFor = selected => ['mean', 'min', 'max', 'last', 'raw'].filter(agg => selected.every(s => (s.aggregates || []).includes(agg)));
       class DataSource extends runtime.DataSourceWithBackend {
+        constructor(instanceSettings) { super(instanceSettings); }
         getDefaultQuery() { return { signals: [], agg: 'mean', bucket_ms: 0, alias: '', live: false }; }
         filterQuery(q) { return !q.hide && ((q.signals || []).length > 0 || (q.pools || []).length > 0); }
         applyTemplateVariables(q, vars) {

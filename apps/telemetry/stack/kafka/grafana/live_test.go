@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
@@ -13,6 +14,57 @@ import (
 
 type frameRecorder struct {
 	packets []*backend.StreamPacket
+}
+
+func TestHistoryResolvesPoolsAndDiscoversNewSchemaSignals(t *testing.T) {
+	var revision atomic.Int32
+	queries := make(chan Query, 2)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		version := revision.Load()
+		if r.URL.Path == "/v1/signals" {
+			if version == 0 {
+				fmt.Fprint(w, `{"schema_version":"v0","signals":[{"signal":"controls.apps","pool":"controls","value_type":"float","aggregates":["last"]},{"signal":"pack.voltage","pool":"pack","value_type":"float","aggregates":["last"]}]}`)
+			} else {
+				fmt.Fprint(w, `{"schema_version":"v1","signals":[{"signal":"pack.power","pool":"pack","value_type":"float","unit":"kW","aggregates":["last"]}]}`)
+			}
+			return
+		}
+		var q Query
+		if err := json.NewDecoder(r.Body).Decode(&q); err != nil || len(q.Signals) == 0 {
+			t.Errorf("invalid history query: %+v, %v", q, err)
+			http.Error(w, "invalid query", 400)
+			return
+		}
+		queries <- q
+		fmt.Fprintf(w, `{"schema_version":"v%d","data":[{"ts":"2026-11-12T12:00:00Z","signal":%q,"value":42}]}`, version, q.Signals[0])
+	}))
+	defer upstream.Close()
+	adapter := &Adapter{url: upstream.URL, client: upstream.Client()}
+	run := func(payload string) backend.DataResponse {
+		t.Helper()
+		response, err := adapter.QueryData(context.Background(), &backend.QueryDataRequest{
+			Queries: []backend.DataQuery{{RefID: "A", JSON: json.RawMessage(payload)}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		result := response.Responses["A"]
+		if result.Error != nil || len(result.Frames) != 1 {
+			t.Fatalf("history response: %+v", result)
+		}
+		return result
+	}
+	run(`{"signals":["controls.apps","pack.voltage"],"pools":["controls"],"agg":"last"}`)
+	first := <-queries
+	if len(first.Signals) != 1 || first.Signals[0] != "controls.apps" || len(first.Pools) != 0 {
+		t.Fatalf("unresolved history selection: %+v", first)
+	}
+	revision.Store(1)
+	result := run(`{"signals":["pack.power"],"agg":"last"}`)
+	<-queries
+	if result.Frames[0].Fields[1].Config.Unit != "kwatt" {
+		t.Fatal("new schema's signal unit was not applied")
+	}
 }
 
 func TestChartMetadataAndUnsupportedArrays(t *testing.T) {

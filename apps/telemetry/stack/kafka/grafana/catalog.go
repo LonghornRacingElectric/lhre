@@ -26,7 +26,8 @@ type catalog struct {
 func (a *Adapter) loadCatalog(ctx context.Context, version string) (catalog, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.catalog.Version != "" && (version == "" || version == a.catalog.Version) {
+	// New queries rediscover the schema; subsequent pages/windows reuse its version.
+	if version != "" && version == a.catalog.Version {
 		return a.catalog, nil
 	}
 	response, err := a.request(ctx, "GET", "/v1/signals", nil)

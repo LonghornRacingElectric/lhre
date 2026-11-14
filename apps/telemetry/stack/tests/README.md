@@ -104,6 +104,9 @@ The test publishes native Artemis updates into real Kafka, pauses the real
 database writer, checks that the API serves pending samples from its ring,
 resumes persistence without duplicate observations, follows raw pagination,
 and executes a maximum query through Grafana's actual backend datasource.
+It provisions the shipped Artemis board-health dashboard and executes its
+targets through Grafana, checking that current-age tiles recover while the
+plot retains the maximum dropout age within a bucket.
 It also restarts the gateway over retained JSON feed messages and verifies that
 new live events are served without replay. An undecodable native record reports
 a coverage gap; later records remain consumed, and the real writer recovers
@@ -195,3 +198,14 @@ the combined-cache gateway datasource. Requests alternate between them after
 priming; plotted timestamps, names and values must match. The datasource and
 generated SQL exist only in the isolated benchmark stack. This variant uses
 one sequential client; `--clients` applies to the backend burst comparison.
+
+## PDR performance matrix
+
+The [PDR benchmarks](PDR-Benchmarks/README.md) compare plain Postgres, Timescale
+and gateway cache variants over 24-hour native-rate history, including random
+10/600-second windows, long overviews, 50 cold/warm/distinct readers and Kafka
+visibility. A separate runner
+compares the actual `lhre-2026` ingest pipeline with the current Kafka database
+writer at 10, 100 and 333 Hz for 30 minutes each, with latency and queue time-series
+graphs. These are opt-in
+measurements, not presubmit checks; each run owns an isolated disposable stack.

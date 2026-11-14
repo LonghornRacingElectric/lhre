@@ -18,6 +18,7 @@ from google.protobuf.descriptor import FieldDescriptor
 from paho.mqtt import client as mqtt_client
 from tqdm import tqdm
 
+from analysis.database import artemis_replay
 from analysis.database.native_demo import contract, field_definitions, publish
 from stack.ingest.protobuf import artemis_pb2
 
@@ -60,10 +61,10 @@ class DataTester:
         self._viewer_story_packet = None
         self._viewer_story_data = None
         
-        if csv_path:
-            self.load_csv(csv_path)
         if mapping_path:
             self.load_mapping(mapping_path)
+        if csv_path:
+            self.load_csv(csv_path)
 
     @staticmethod
     def _is_int_dtype(dtype: type) -> bool:
@@ -537,9 +538,7 @@ class DataTester:
             [pd.read_csv(file, dtype=str, keep_default_na=False) for file in files],
             ignore_index=True,
         ).fillna("")
-        if self.mapping is None and "sample_time_ns" in self.csv_data:
-            order = sorted(range(len(self.csv_data)), key=lambda i: int(self.csv_data.iloc[i]["sample_time_ns"]))
-            self.csv_data = self.csv_data.iloc[order].reset_index(drop=True)
+        self._sort_csv()
         if self.csv_data.empty:
             raise ValueError("CSV contains no observations")
         self.csv_index = 0
@@ -553,6 +552,14 @@ class DataTester:
         for name in self.mapping:
             if name not in ("time", "sample_time_ns", "updated_fields") and name.split("[")[0] not in self.definitions:
                 raise ValueError(f"Unknown Artemis mapping field: {name}")
+        self._sort_csv()
+
+    def _sort_csv(self):
+        column = (self.mapping or {}).get("sample_time_ns", "sample_time_ns")
+        if self.csv_data is not None and isinstance(column, str) and column in self.csv_data:
+            order = sorted(range(len(self.csv_data)), key=lambda i: int(self.csv_data.iloc[i][column]))
+            self.csv_data = self.csv_data.iloc[order].reset_index(drop=True)
+            self.csv_index = 0
 
     @staticmethod
     def _coerce(value, field):
@@ -860,6 +867,13 @@ def main(argv=None):
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--rows", type=int, help="Number of fixture rows to publish (default: 500000).")
     mode.add_argument("--duration", type=float, help="Publish independent frequency pools for this many seconds.")
+    mode.add_argument("--replay", nargs="?", type=Path,
+                      const=Path(__file__).parent / "data" / "autox_uta_2026-10-17.pb.gz",
+                      help="Loop the bundled drive recording, or PATH, as Artemis batches at recorded pace.")
+    parser.add_argument("--dropout-board", choices=artemis_replay.BOARDS,
+                        help="Recording replay only: simulate this board going quiet.")
+    parser.add_argument("--dropout-after", type=float, default=20)
+    parser.add_argument("--dropout-for", type=float, default=10, help="Dropout seconds; 0 means until stopped.")
     parser.add_argument("--delay", type=float, help="Delay between fixture rows; defaults to 0.02 s (viewer) or 0.001 s (generic).")
     parser.add_argument("--csv", type=Path, help="Artemis logger CSV or directory of pool CSVs.")
     parser.add_argument("--mapping", type=Path, help="Optional qualified-field-to-CSV-column JSON mapping.")
@@ -874,11 +888,15 @@ def main(argv=None):
         os.environ["ARTEMIS_STORAGE_CONTRACT"] = args.contract
     if args.mapping and not args.csv:
         parser.error("--mapping requires --csv")
+    if args.dropout_board and args.replay is None:
+        parser.error("--dropout-board requires --replay")
+    if args.replay is not None and (args.csv or args.tables or args.delay is not None or args.schema_source != "proto"):
+        parser.error("--replay cannot be combined with row generation or CSV options")
     if args.duration is None and args.rate_scale != 1:
         parser.error("--rate-scale requires --duration")
     if args.duration is not None and (args.csv or args.tables or args.delay is not None or args.schema_source != "proto"):
         parser.error("--duration uses generated pool rates; CSV, tables, delay and ORM selection use --rows")
-    tester = DataTester(None, args.seed, args.csv, args.mapping, args.profile)
+    tester = DataTester(None, args.seed, args.csv, args.mapping, args.profile) if args.replay is None else None
     if args.duration is not None:
         result = publish(args.duration, args.rate_scale, args.seed, args.mqtt_host,
                          args.mqtt_port, update_factory=tester.native_update)
@@ -891,10 +909,23 @@ def main(argv=None):
         client.connect(args.mqtt_host, args.mqtt_port)
         client.loop_start()
         try:
-            tester.mqtt = client
-            sent = tester.send_proto_rows(args.tables, rows, delay, use_csv=args.csv is not None,
-                                          schema_source=args.schema_source, target=args.car)
-            result = {"rows": sent, "profile": args.profile, "schema_source": args.schema_source}
+            if args.replay is not None:
+                recording = artemis_replay.load_recording(args.replay)
+                dropout = artemis_replay.Dropout(args.dropout_board, args.dropout_after, args.dropout_for or None) if args.dropout_board else None
+                def send_recorded(payload):
+                    result = client.publish("artemis/data", payload, qos=1)
+                    result.wait_for_publish(timeout=5)
+                    if not result.is_published():
+                        raise TimeoutError("MQTT publish did not complete")
+                try:
+                    result = {"rows": artemis_replay.replay(recording, send_recorded, dropout=dropout)}
+                except KeyboardInterrupt:
+                    result = {"stopped": True}
+            else:
+                tester.mqtt = client
+                sent = tester.send_proto_rows(args.tables, rows, delay, use_csv=args.csv is not None,
+                                              schema_source=args.schema_source, target=args.car)
+                result = {"rows": sent, "profile": args.profile, "schema_source": args.schema_source}
         finally:
             client.disconnect()
             client.loop_stop()

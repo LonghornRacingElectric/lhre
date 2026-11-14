@@ -9,6 +9,9 @@ target reference and the build/load distinction are in
 
 Copy the repository-root `.env.example` to `.env` and replace its local-only
 credentials. Docker, Docker Compose v2, and Bazel are required.
+For an existing `.env`, merge missing gateway settings instead of replacing
+credentials. Follow the [Grafana and API setup guide](stack/kafka/grafana/README.md)
+to generate the shared token and select local or production Grafana URLs.
 
 ```bash
 cp .env.example .env

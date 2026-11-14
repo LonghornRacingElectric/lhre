@@ -125,6 +125,14 @@ class MQTTHandler:
             os.environ['RTC_START'] = str(datetime.datetime.strptime(msg.payload.decode(), "%Y-%m-%dT%H:%M:%S.%f").timestamp() * 1000)
         elif msg.topic == 'artemis/data':
             self._send_to_bridge(msg.payload)
+        elif msg.topic.startswith('artemis/data/'):
+            # artemis/data/<schema_id> names the schema the payload was encoded
+            # with; plain artemis/data lets the bridge stamp its deployed one.
+            fingerprint = msg.topic.removeprefix('artemis/data/')
+            if not fingerprint or len(fingerprint) > 128 or '/' in fingerprint:
+                logging.warning("Unsupported telemetry topic: %s", msg.topic)
+            else:
+                self._send_to_bridge(msg.payload, fingerprint)
         else:
             logging.warning("Unsupported telemetry topic: %s", msg.topic)
 
@@ -142,9 +150,9 @@ class MQTTHandler:
         ])
 
 
-    def _send_to_bridge(self, payload):
+    def _send_to_bridge(self, payload, fingerprint=""):
         try:
-            self.bridge_queue.put_nowait(payload)
+            self.bridge_queue.put_nowait((payload, fingerprint))
         except queue.Full:
             logging.error("Bridge queue full; dropping Artemis telemetry")
 
@@ -156,11 +164,12 @@ class MQTTHandler:
             if item is None:
                 self.bridge_queue.task_done()
                 break
-            payload = item
+            payload, fingerprint = item
             try:
                 while not self._shutdown:
                     try:
-                        request = bridge_pb2.SensorDataRequest(payload=payload, car_type="Artemis", payload_format="artemis_updates_v1")
+                        request = bridge_pb2.SensorDataRequest(payload=payload, car_type="Artemis", payload_format="artemis_updates_v1",
+                                                               schema_fingerprint=fingerprint)
                         response = self.bridge_stub.SendSensorData(request, timeout=10)
                         if not response.success:
                             raise RuntimeError(response.message)

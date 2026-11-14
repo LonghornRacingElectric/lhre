@@ -226,6 +226,25 @@ class QueryGatewayTest(unittest.TestCase):
             result = frames["results"]["A"]
             self.assertNotIn("error", result, result)
             self.assertIn(80, result["frames"][0]["data"]["values"][1])
+            dashboard = self.wait_for(lambda: call("/api/dashboards/uid/artemis_board_health_rt", grafana=True))["dashboard"]
+            for offset, age in [(0, .02), (10, 1.2), (20, .03)]:
+                board_record = send(stamp + offset, "board_status", "dui_last_seen_s", age)
+            self.wait_for(lambda: persisted(board_record))
+            # Execute the shipped dashboard's queries through Grafana itself.
+            # Put all three observations in one bucket: current age recovers
+            # while the plot preserves the dropout peak.
+            for panel in dashboard["panels"]:
+                targets = [{**target, "live": False, "bucket_ms": 1000,
+                            "maxDataPoints": 1000, "intervalMs": 1000}
+                           for target in panel["targets"]]
+                rendered = call("/api/ds/query", {"from": str(stamp), "to": str(stamp + 1000),
+                                                 "queries": targets}, grafana=True)["results"]
+                for target in targets:
+                    result = rendered[target["refId"]]
+                    self.assertNotIn("error", result, result)
+                    if "board_status.dui_last_seen_s" in target["signals"]:
+                        self.assertAlmostEqual(result["frames"][0]["data"]["values"][1][-1],
+                                               .03 if panel["type"] == "stat" else 1.2, places=5)
             stream_query = urllib.parse.quote(json.dumps({**query, "page_size": 1}))
             request = urllib.request.Request("http://127.0.0.1:38090/v1/stream?query=" + stream_query, headers={"Authorization": "Bearer gateway-test-token"})
             with urllib.request.urlopen(request, timeout=15) as response:

@@ -55,6 +55,8 @@ array. Indexed values preserve their positions; an interior blank is rejected.
 An optional `--mapping` JSON object maps qualified Artemis names to input column
 names or lists of columns. Exact timestamps are retained on replay; cycling the
 input repeats those same observation identities.
+Mappings are loaded before pool files are ordered, so a renamed
+`sample_time_ns` column still determines exact integer receipt order.
 
 ```bash
 bazel run //apps/telemetry/analysis:publish_demo -- --csv /absolute/path/to/logger-recording --rows 100 --delay 0.02
@@ -62,6 +64,17 @@ bazel run //apps/telemetry/analysis:publish_demo -- --csv /absolute/path/to/logg
 
 `--rows`, `--delay`, `--schema-source`, `--tables`, `--csv` and `--mapping` use the
 row-based path. `--duration` uses native pool rates and is a separate mode.
+`--replay [PATH]` is another mode: it loops the bundled UTA drive recording
+(or a supplied recording) at recorded pace and restamps it to now. Archived
+Orion frames are converted by field name into native Artemis batches before
+MQTT publication. This is a snapshot replay, not a native CAN-rate simulation.
+`--dropout-board dui --dropout-after 20 --dropout-for 10` simulates silence and
+recovery for one board; a zero duration keeps it quiet until stopped.
+
+```bash
+bazel run //apps/telemetry/analysis:publish_demo -- --replay --dropout-board dui
+```
+
 `bazel test //apps/telemetry/analysis:paho_testing_test` verifies profile/schema
 selection, pacing, logger CSV replay and mappings.
 

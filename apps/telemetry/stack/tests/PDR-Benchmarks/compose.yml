@@ -1,0 +1,89 @@
+services:
+  kafka:
+    environment:
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://127.0.0.1:39092
+  postgres:
+    image: postgres:17
+    platform: linux/amd64
+    environment:
+      POSTGRES_USER: electric
+      POSTGRES_PASSWORD: gateway-test-password
+      POSTGRES_DB: artemis
+    ports: ["127.0.0.1:35433:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U electric -d artemis"]
+      interval: 2s
+      retries: 40
+  query_gateway:
+    environment:
+      QUERY_L1_BYTES: "${PDR_L1_BYTES:-0}"
+      QUERY_L2_BYTES: "${PDR_L2_BYTES:-0}"
+    volumes:
+      - pdr_cache:/cache
+  mosquitto:
+    image: eclipse-mosquitto:2
+    command: ["mosquitto", "-c", "/mosquitto-no-auth.conf"]
+    ports: ["127.0.0.1:31883:1883"]
+    volumes:
+      - ${PDR_DIR}/mosquitto.conf:/mosquitto-no-auth.conf:ro
+  kafka-bridge:
+    image: lhre/telemetry-kafka-bridge:dev
+    profiles: [current]
+    environment:
+      IN_DOCKER: "1"
+      KAFKA_BROKER: kafka:9092
+  ingest:
+    image: lhre/pdr-ingest-probe:local
+    profiles: [current]
+    environment:
+      IN_DOCKER: "1"
+      LOGLEVEL: INFO
+      PDR_QUEUE_STATE: /pdr-state/current.json
+    volumes:
+      - ${PDR_STATE_DIR}:/pdr-state
+  legacy_kafka:
+    image: lhre/telemetry-kafka:4.1.0
+    platform: linux/amd64
+    profiles: [legacy]
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://legacy_kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@legacy_kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null"]
+      interval: 3s
+      retries: 40
+  legacy_bridge:
+    image: lhre/pdr-legacy-bridge:local
+    platform: linux/amd64
+    profiles: [legacy]
+    environment:
+      IN_DOCKER: "1"
+      KAFKA_BROKER: legacy_kafka:9092
+    networks:
+      default:
+        aliases: [kafka-bridge]
+  legacy_ingest:
+    image: ${PDR_LEGACY_INGEST_IMAGE:-lhre/pdr-legacy-ingest:local}
+    command: ["python", "/pdr-probe.py"]
+    volumes:
+      - ${PDR_DIR}/probe.py:/pdr-probe.py:ro
+      - ${PDR_STATE_DIR}:/pdr-state
+    platform: linux/amd64
+    profiles: [legacy]
+    environment:
+      IN_DOCKER: "1"
+      ELECTRIC_PWD: gateway-test-password
+      GRAFANA_PWD: gateway-test-password
+      ANALYSIS_PWD: gateway-test-analysis
+      LOGLEVEL: INFO
+      PYTHONPATH: /app
+      PDR_QUEUE_STATE: /pdr-state/legacy.json
+volumes:
+  pdr_cache:
