@@ -298,7 +298,10 @@ never sees it. Those ticks come from the lint's models of the firmware
   the RTD switch's debounce (`EdgeButton`), the brake and pedal filters,
   brake-pressed and the shutdown loop's taps. The thresholds are
   `check.THRESHOLDS`, copied from `params.hpp` and tested against it, and
-  `tests/test_check_firmware.py` holds each model to the library.
+  `tests/test_check_firmware.py` holds each model to the library. The
+  check runs models rather than the library so that it needs no firmware
+  build: `run.sh --check` never builds one, and the check runs natively on
+  a Mac, where `libvcu_sil.so` does not build.
 
 | Code | Fires when | Why (firmware) |
 | ---- | ---------- | -------------- |
