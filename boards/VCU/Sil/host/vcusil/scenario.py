@@ -1,14 +1,15 @@
 """Scripted drives: what the driver and the rest of the car do over time.
 
-Times are integer milliseconds. The firmware's filters and debounces count
-milliseconds, so every boundary here is chosen to sit well clear of them.
+Times are integer milliseconds. A drive is a Timeline, compiled from a
+scenarios/<name>.yml file by scenario_file.py; the format and its exact
+semantics are in boards/VCU/Sil/README.md, section Scenarios.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, fields
 
-from .firmware import HVC_ENERGIZED, HVC_NOT_ENERGIZED, HVC_PRECHARGING
+from .firmware import HVC_NOT_ENERGIZED
 
 
 @dataclass(frozen=True)
@@ -27,40 +28,51 @@ class RestOfCar:
     shutdown_loop_v: float = 24.0
 
 
-@dataclass(frozen=True)
-class Launch:
-    """Power up, ready to drive on the brake, then full pedal from rest.
+DRIVER_SIGNALS = tuple(f.name for f in fields(Driver))
+CAR_SIGNALS = tuple(f.name for f in fields(RestOfCar))
+# What a signal no block sets holds: the dataclasses are the one source.
+DEFAULTS = {**asdict(Driver()), **asdict(RestOfCar())}
 
-    The brake hold is 350 psi: over RTD's 30 psi and clear of the 300 psi
-    brake-pressed threshold, where ADC rounding would decide the state. It is
-    released 500 ms before the pedal, long after the brake filter has fallen
-    under the brake-over-throttle threshold. The RTD switch is a toggle and
-    stays on: releasing it leaves DRIVE.
-    """
-    name: str = 'launch'
-    precharge_ms: int = 200
-    energized_ms: int = 600
-    rtd_ms: int = 1000
-    brake_off_ms: int = 1500
-    pedal_on_ms: int = 2000
-    pedal_off_ms: int = 6000
-    duration_ms: int = 7000
-    brake_hold_psi: float = 350.0
+
+@dataclass(frozen=True)
+class Segment:
+    """From t_ms the signal goes from start (the value it held) to end in a
+    straight line over ramp_ms, or at once when ramp_ms is 0, then holds."""
+    t_ms: int
+    start: object
+    end: object
+    ramp_ms: int = 0
+
+
+@dataclass(frozen=True)
+class Timeline:
+    """Every signal as a function of integer time: the cosim.Scenario a
+    scenario file compiles to. tracks holds (signal, segments in time order)
+    for the signals the file sets."""
+    name: str
+    duration_ms: int
+    tracks: tuple[tuple[str, tuple[Segment, ...]], ...]
+
+    def value(self, signal: str, t_ms: int) -> object:
+        if t_ms < 0:
+            raise ValueError(f'{self.name}: no value at {t_ms} ms; time starts at 0')
+        current = None
+        for name, segments in self.tracks:
+            if name == signal:
+                for segment in segments:
+                    if segment.t_ms > t_ms:
+                        break
+                    current = segment
+                break
+        if current is None:
+            return DEFAULTS[signal]
+        if t_ms >= current.t_ms + current.ramp_ms:
+            return current.end
+        a, b = current.start, current.end
+        v = a + (b - a) * ((t_ms - current.t_ms) / current.ramp_ms)
+        # Rounding must not step past either end: they are the ABI's limits.
+        return min(max(v, min(a, b)), max(a, b))
 
     def at(self, t_ms: int) -> tuple[Driver, RestOfCar]:
-        if t_ms < self.precharge_ms:
-            hvc = HVC_NOT_ENERGIZED
-        elif t_ms < self.energized_ms:
-            hvc = HVC_PRECHARGING
-        else:
-            hvc = HVC_ENERGIZED
-        car = RestOfCar(hvc_state=hvc, contactors_closed=hvc == HVC_ENERGIZED)
-        driver = Driver(
-            accelerator=1.0 if self.pedal_on_ms <= t_ms < self.pedal_off_ms else 0.0,
-            brake_psi=self.brake_hold_psi if t_ms < self.brake_off_ms else 0.0,
-            rtd_pressed=t_ms >= self.rtd_ms,
-        )
-        return driver, car
-
-
-SCENARIOS = {s.name: s for s in (Launch(),)}
+        return (Driver(**{s: self.value(s, t_ms) for s in DRIVER_SIGNALS}),
+                RestOfCar(**{s: self.value(s, t_ms) for s in CAR_SIGNALS}))

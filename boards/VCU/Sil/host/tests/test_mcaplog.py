@@ -4,13 +4,12 @@ import json
 import math
 
 import pytest
-from fakes import ToyCar
+from fakes import Launch, ToyCar
 from mcap.reader import make_reader
 
 from vcusil import cosim, events, mcaplog
 from vcusil.candecode import CanTable
 from vcusil.firmware import Firmware
-from vcusil.scenario import Launch
 
 @pytest.fixture(scope='module')
 def run(lib, can_table_path, tmp_path_factory):
@@ -124,3 +123,16 @@ def test_the_file_is_byte_identical_when_written_again(run):
 def test_non_finite_values_become_null():
     assert mcaplog._clean({'a': math.nan, 'b': [math.inf, 1.0], 'c': {'d': -math.inf}}) == {
         'a': None, 'b': [None, 1.0], 'c': {'d': None}}
+
+
+def test_attachments_get_their_media_type(tmp_path):
+    path = tmp_path / 'run.mcap'
+    mcaplog.write(path, cosim.Result(scenario='x'), [], str, str, str, None, metadata={},
+                  attachments={'meta.json': b'{}', 'scenario.yml': b'schema: 1\n',
+                               'summary.txt': b'ok\n'})
+    with open(path, 'rb') as f:
+        types = {a.name: (a.media_type, a.data, a.log_time, a.create_time)
+                 for a in make_reader(f).iter_attachments()}
+    assert types == {'meta.json': ('application/json', b'{}', 0, 0),
+                     'scenario.yml': ('application/yaml', b'schema: 1\n', 0, 0),
+                     'summary.txt': ('text/plain', b'ok\n', 0, 0)}

@@ -44,6 +44,8 @@ SNAPSHOT_GROUPS = {
 # Top-level snapshot fields whose names happen to start with a group prefix.
 STATUS_FIELDS = {'torque_command_nm'}
 FAULT_BITS = 22  # lib/spec/types.textproto VcuFaultBits
+# Attachment media types by suffix; anything else is text/plain.
+MEDIA_TYPES = {'.json': 'application/json', '.yml': 'application/yaml'}
 
 # The foxglove.Log JSON schema (foxglove/schemas jsonschema/Log.json), trimmed
 # to what the Log panel reads.
@@ -201,7 +203,7 @@ def write(path: Path, result: cosim.Result, events: list[Event],
         writer.add_metadata('vcusil', {k: str(v) for k, v in metadata.items()})
         for name, data in attachments.items():
             writer.add_attachment(create_time=0, log_time=0, name=name,
-                                  media_type='application/json' if name.endswith('.json')
-                                  else 'text/plain', data=data)
+                                  media_type=MEDIA_TYPES.get(Path(name).suffix, 'text/plain'),
+                                  data=data)
         writer.finish()
     return {'topics': len(counts), 'messages': sum(counts.values()), 'per_topic': counts}

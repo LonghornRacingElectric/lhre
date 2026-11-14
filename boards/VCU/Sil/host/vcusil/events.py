@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Iterable
 
 from . import cosim
 from .firmware import SATURATION_BITS
@@ -25,9 +25,11 @@ class Event:
 
 def derive(result: cosim.Result, state_name: Callable[[int], str],
            fault_name: Callable[[int], str],
-           transition_reason: Callable[[int], str]) -> list[Event]:
+           transition_reason: Callable[[int], str],
+           marks: Iterable[tuple[str, int, int]] = ()) -> list[Event]:
     """Events in time order: state changes, faults raised and cleared,
-    saturation, car-model backward spin, the BSPD condition, the end."""
+    saturation, car-model backward spin, the BSPD condition, the scenario's
+    marks ((name, t_ms, first sample), shown at the sample), the end."""
     events = [Event(0, INFO, 'run', f'scenario {result.scenario} starts')]
     prev_state = prev_faults = prev_saturated = None
     spinning = False
@@ -70,10 +72,16 @@ def derive(result: cosim.Result, state_name: Callable[[int], str],
                                 'would trip here (not modelled)'))
         prev_state, prev_faults, prev_saturated = state, faults, saturated
     end = int(result.rows[-1]['t_ms']) if result.rows else 0
+    # A mark after the last row (a run cut short) never happened. Marks go
+    # after the derived events, so a sort keeps those first at an equal ms.
+    if result.rows:
+        events += [Event(step, INFO, 'scenario', f'mark {name} (t_ms {t_ms})')
+                   for name, t_ms, step in marks if step <= end]
     if result.status == 'plant_failed':
         events.append(Event(end, FATAL, 'model.failure', f'car model failed: {result.failure}'))
     elif result.status == 'harness_error':
         events.append(Event(end, ERROR, 'harness', f'harness error: {result.failure}'))
     else:
         events.append(Event(end, INFO, 'run', f'scenario {result.scenario} completed'))
+    # Stable: the start stays first and the end last.
     return sorted(events, key=lambda e: e.t_ms)

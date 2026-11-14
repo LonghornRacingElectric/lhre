@@ -1,16 +1,17 @@
 """The real firmware against the real car model. Needs VCU_SIL_LIB and VCU_SIL_FMU."""
 
+import dataclasses
 import json
 import os
 from pathlib import Path
 
 import pytest
+from fakes import Launch
 
 from vcusil import __main__ as cli
-from vcusil import cosim, report
+from vcusil import cosim, report, scenario_file
 from vcusil.firmware import STATE_DRIVE, Firmware
 from vcusil.plant import OUTPUTS, Plant, PlantInputs
-from vcusil.scenario import Launch
 from test_mcaplog import read_all
 
 LAYOUT = Path(__file__).resolve().parents[2] / 'foxglove' / 'vcu_sil.json'
@@ -80,6 +81,28 @@ def test_two_runs_are_identical(lib, fmu_path):
         with Firmware(lib) as fw, Plant(fmu_path) as car:
             return cosim.run(Launch(duration_ms=3000), fw, car).rows
     assert once() == once()
+
+
+def test_launch_file_drives_the_car_model_like_the_stage_2_launch(lib, fmu_path):
+    def rows(scenario):
+        with Firmware(lib) as fw, Plant(fmu_path) as car:
+            return cosim.run(scenario, fw, car).rows
+    timeline = dataclasses.replace(scenario_file.load('launch').timeline, duration_ms=3000)
+    assert rows(timeline) == rows(Launch(duration_ms=3000))
+
+
+@pytest.mark.parametrize('name', scenario_file.names())
+def test_every_scenario_completes_on_the_car_model(name, fmu_path, can_table_path, tmp_path):
+    status = cli.main(['--lib', os.environ['VCU_SIL_LIB'], '--fmu', str(fmu_path),
+                       '--can-table', str(can_table_path), '--out', str(tmp_path),
+                       '--scenario', name, '--no-plot'])
+    meta = json.loads((tmp_path / 'meta.json').read_text())
+    assert status == cli.EXIT_COMPLETED and meta['status'] == 'completed'
+    assert meta['summary']['min_speed_m_s'] > -0.1
+    # A file sets off only the warnings its allow names, and each of those.
+    assert meta['scenario_warnings'] == []
+    assert ({w['code'] for w in meta['scenario_allowed']}
+            == set(scenario_file.load(name).allow))
 
 
 def test_the_held_brake_reaches_the_model(launch_run):
@@ -155,7 +178,7 @@ def test_the_run_log_holds_firmware_frames_and_model_truth(launch_run):
         assert msg['motor_speed'] == round(row['motorSpeed'] * 30 / 3.141592653589793)
     states = {m['state_name'] for _, m in messages['/can/vcu/VCU_FAULTS']}
     assert 'DRIVE' in states
-    assert set(attachments) == {'meta.json', 'summary.txt'}
+    assert set(attachments) == {'meta.json', 'summary.txt', 'scenario.yml'}
     levels = [m['level'] for _, m in messages['/events']]
     assert max(levels) == 3  # warnings (boot fault, launch ring), no errors
 

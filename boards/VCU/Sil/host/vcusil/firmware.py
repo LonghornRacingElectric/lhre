@@ -20,6 +20,12 @@ HVC_NOT_ENERGIZED = 0
 HVC_PRECHARGING = 1
 HVC_ENERGIZED = 2
 
+# lhre HvcState and EventMode by name (lib/spec/types.textproto), as
+# scenario files write them. A test checks them against the generated table.
+HVC_STATES = {'NOT_ENERGIZED': 0, 'PRECHARGING': 1, 'ENERGIZED': 2, 'CHARGING_PRECHARGING': 3,
+              'CHARGING': 4}
+EVENT_MODES = {'UNASSIGNED': 0, 'ACCELERATION': 1, 'SKIDPAD': 2, 'AUTOCROSS': 3, 'ENDURANCE': 4}
+
 # vcu_sil.h VCU_SIL_SAT_* bits.
 SATURATION_BITS = {
     'wheel_speed': 1 << 0,
