@@ -132,6 +132,15 @@ def summary_text(summary: dict[str, object], result: Result, meta: dict[str, obj
                 f'{spin["first_ms"]} and {spin["last_ms"]} ms (min motor '
                 f'{summary["min_motor_speed_rad_s"]:.1f} rad/s); the BobLib driveline rings '
                 f'when torque steps up from rest')
+    if 'scenario_file' in meta:
+        file = meta['scenario_file']
+        lines.append(f'  scenario file {file["path"]} (sha256 {file["sha256"][:12]})')
+        if 'scenario_parameters' in meta:
+            lines.append(f'  scenario description: {meta["scenario_parameters"]["description"]}')
+        active = list(dict.fromkeys(w['code'] for w in meta.get('scenario_warnings', [])))
+        allowed = list(dict.fromkeys(w['code'] for w in meta.get('scenario_allowed', [])))
+        lines.append(f'  scenario warnings: {", ".join(active) or "none"}'
+                     + (f'; allowed: {", ".join(allowed)}' if allowed else ''))
     repo = meta.get('repo', {})
     if repo.get('vehicle_matches_fmu') is False:
         lines.append('  WARNING: the FMU was built from a different vehicle.yml than this checkout')

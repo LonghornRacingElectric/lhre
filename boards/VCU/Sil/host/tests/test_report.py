@@ -56,3 +56,25 @@ def test_trace_round_trips_floats_exactly(tmp_path):
     back = report.read_trace(tmp_path / 'trace.csv')[0]
     assert back['rearU'] == 0.1 + 0.2 and back['dcBusVoltage'] == math.pi
     assert list(back) == list(cosim.COLUMNS)
+
+
+def test_summary_names_the_scenario_file_and_its_warnings():
+    result = cosim.Result(scenario='launch')
+    assert 'scenario file' not in report.summary_text(summary(), result, {})
+    meta = {'scenario_file': {'path': 'boards/VCU/Sil/scenarios/launch.yml',
+                              'sha256': '1a2b3c4d5e6f' + '0' * 52},
+            'scenario_warnings': [], 'scenario_allowed': []}
+    file_line = '  scenario file boards/VCU/Sil/scenarios/launch.yml (sha256 1a2b3c4d5e6f)'
+    lines = report.summary_text(summary(), result, meta).splitlines()
+    assert lines[-2:] == [file_line, '  scenario warnings: none']
+    # The description comes from the parsed file, between the two.
+    meta['scenario_parameters'] = {'description': 'Power up, then full pedal.'}
+    lines = report.summary_text(summary(), result, meta).splitlines()
+    assert lines[-3:] == [file_line, '  scenario description: Power up, then full pedal.',
+                          '  scenario warnings: none']
+    meta['scenario_warnings'] = [{'code': 'rtd_without_brake'}, {'code': 'brake_high'},
+                                 {'code': 'brake_high'}]
+    meta['scenario_allowed'] = [{'code': 'brake_over_throttle'}]
+    lines = report.summary_text(summary(), result, meta).splitlines()
+    assert ('  scenario warnings: rtd_without_brake, brake_high; allowed: brake_over_throttle'
+            in lines)

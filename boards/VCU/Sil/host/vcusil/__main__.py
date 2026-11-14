@@ -13,8 +13,8 @@ import sys
 import traceback
 from pathlib import Path
 
-from . import candecode, cosim, events, firmware, mcaplog, plant, provenance, report
-from .scenario import SCENARIOS
+from . import (candecode, check, cosim, events, firmware, mcaplog, plant, provenance, report,
+               scenario_file)
 
 EXIT_COMPLETED, EXIT_PLANT_FAILED, EXIT_HARNESS = 0, 1, 2
 EXIT_FOR_STATUS = {'completed': EXIT_COMPLETED, 'plant_failed': EXIT_PLANT_FAILED,
@@ -25,18 +25,29 @@ REPO = Path(__file__).resolve().parents[5]
 
 # What a run writes; a reused --out loses the previous run's copies first.
 OUTPUT_FILES = ('meta.json', 'trace.csv', 'run.mcap', 'plot.png', 'summary.txt', 'console.log',
-                'fmu.log')
+                'fmu.log', 'scenario.yml')
+# What a run gets when neither the command line nor the file's setup says.
+DEFAULT_EVENT_MODE, DEFAULT_SOC = 0, 0.9
+
+
+def _float(text: str) -> float:
+    """nan for text that is not a number, so the caller's message covers it
+    (argparse would name the private function instead)."""
+    try:
+        return float(text)
+    except ValueError:
+        return math.nan
 
 
 def _fraction(text: str) -> float:
-    value = float(text)
+    value = _float(text)
     if not 0.0 <= value <= 1.0:  # also false for nan
         raise argparse.ArgumentTypeError(f'{text} is not a fraction in [0, 1] (0.9 means 90%)')
     return value
 
 
 def _positive(text: str) -> float:
-    value = float(text)
+    value = _float(text)
     if not (math.isfinite(value) and value > 0.0):
         raise argparse.ArgumentTypeError(f'{text} is not a positive number')
     return value
@@ -51,12 +62,14 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     p.add_argument('--can-table', type=Path,
                    help='vcu_sil_can.json from //boards/VCU:vcu_sil_can_table; without it '
                         'run.mcap keeps CAN frames undecoded')
-    p.add_argument('--scenario', choices=sorted(SCENARIOS), default='launch')
-    p.add_argument('--soc', type=_fraction, default=0.9,
-                   help='initial state of charge, 0..1 (default 0.9; at 1.0 the model '
-                        'accepts no regen)')
-    p.add_argument('--event-mode', type=int, default=0, choices=range(5),
-                   help='lhre EventMode: 0 boots like the car (ENDURANCE), 1-4 pick an event')
+    p.add_argument('--scenario', default='launch', metavar='NAME|FILE',
+                   help='a name from boards/VCU/Sil/scenarios/ or a .yml file (default launch)')
+    p.add_argument('--soc', type=_fraction, default=None,
+                   help="initial state of charge, 0..1; overrides the scenario's setup "
+                        '(default 0.9; at 1.0 the model accepts no regen)')
+    p.add_argument('--event-mode', type=int, default=None, choices=range(5),
+                   help='lhre EventMode: 0 boots like the car (ENDURANCE), 1-4 pick an event; '
+                        "overrides the scenario's setup (default 0)")
     p.add_argument('--brake-psi-full', type=_positive,
                    default=cosim.BRAKE_PSI_AT_FULL_PLANT_BRAKE,
                    help='line pressure that is full brake in the car model (default 1500)')
@@ -69,9 +82,18 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)  # bad arguments exit 2 here, through argparse
+    try:
+        sf = scenario_file.load(args.scenario, repo=args.repo)
+    except scenario_file.ScenarioError as exc:
+        # Before anything is written: a file that cannot run leaves no run.
+        print(exc.report(), file=sys.stderr)
+        return EXIT_HARNESS
     meta: dict[str, object] = {}
     try:
-        return _run(args, meta)
+        findings = check.lint(sf, args.brake_psi_full)
+        for problem in findings.active:
+            print(problem.format(sf.display), file=sys.stderr)
+        return _run(args, sf, findings, meta)
     except Exception as exc:  # noqa: BLE001 anything unplanned is a harness error, reported below
         traceback.print_exc()
         print(f'vcusil: harness error: {exc}', file=sys.stderr)
@@ -83,18 +105,43 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_HARNESS
 
 
-def _run(args: argparse.Namespace, meta: dict[str, object]) -> int:
+def _setup(args: argparse.Namespace, sf: scenario_file.ScenarioFile):
+    """event_mode and soc_start: the command line, else the file's setup,
+    else the default, and which of the three each came from."""
+    chosen, source = {}, {}
+    for key, flag, default in (('event_mode', args.event_mode, DEFAULT_EVENT_MODE),
+                               ('soc_start', args.soc, DEFAULT_SOC)):
+        from_file = getattr(sf.setup, key)
+        if flag is not None:
+            chosen[key], source[key] = flag, 'cli'
+        elif from_file is not None:
+            chosen[key], source[key] = from_file, 'scenario'
+        else:
+            chosen[key], source[key] = default, 'default'
+    return chosen['event_mode'], chosen['soc_start'], source
+
+
+def _run(args: argparse.Namespace, sf: scenario_file.ScenarioFile, findings: check.Findings,
+         meta: dict[str, object]) -> int:
     args.out.mkdir(parents=True, exist_ok=True)
     for name in OUTPUT_FILES:
         (args.out / name).unlink(missing_ok=True)
-    scenario = SCENARIOS[args.scenario]
+    (args.out / 'scenario.yml').write_bytes(sf.data)
+    event_mode, soc, setup_from = _setup(args, sf)
+    recorded_path = sf.repo_path or str(sf.path)
     meta.update({
-        'scenario': scenario.name,
-        'scenario_parameters': vars(scenario),
+        'scenario': sf.name,
+        'scenario_file': {'path': recorded_path, 'sha256': sf.sha256, 'schema': sf.schema},
+        'scenario_parameters': sf.parameters(),
+        'scenario_warnings': [{'code': p.code, 't_ms': p.t_ms, 'line': p.line,
+                               'message': p.message} for p in findings.active],
+        'scenario_allowed': [{'code': p.code, 'reason': reason, 't_ms': p.t_ms, 'line': p.line,
+                              'message': p.message} for p, reason in findings.allowed],
         'step_ms': cosim.STEP_MS,
         'brake_psi_at_full_plant_brake': args.brake_psi_full,
-        'event_mode': args.event_mode,
-        'soc_start_requested': args.soc,
+        'event_mode': event_mode,
+        'soc_start_requested': soc,
+        'setup_from': setup_from,
     })
     try:
         meta['fmu'] = provenance.fmu_provenance(args.fmu, args.allow_unverified_fmu)
@@ -112,17 +159,17 @@ def _run(args: argparse.Namespace, meta: dict[str, object]) -> int:
 
     fmu_log = args.out / 'fmu.log'
     fmu_log.write_bytes(b'')
-    with firmware.Firmware(lib, args.event_mode) as fw:
+    with firmware.Firmware(lib, event_mode) as fw:
         meta['library']['build'] = fw.build_info()
         try:
             with plant.capture_output(fmu_log):
-                with plant.Plant(args.fmu, soc_start=args.soc) as car:
+                with plant.Plant(args.fmu, soc_start=soc) as car:
                     meta['plant'] = {'soc_start': car.soc_start, 'series_cells': car.series_cells,
                                      'peak_timer': car.peak_timer, 'guid': car.guid,
                                      'truth_units': car.truth_units,
                                      'truth_missing': car.truth_missing,
                                      'slip_from_states': car.slip_from_states}
-                    result = cosim.run(scenario, fw, car, args.brake_psi_full)
+                    result = cosim.run(sf.timeline, fw, car, args.brake_psi_full)
         except plant.InterfaceError as exc:
             return _fail(meta, args.out, 'harness_error', str(exc))
         except plant.PlantError as exc:
@@ -130,7 +177,8 @@ def _run(args: argparse.Namespace, meta: dict[str, object]) -> int:
                          _log_lines(fmu_log))
         (args.out / 'console.log').write_text(fw.read_console())
         summary = cosim.summarize(result, fw.state_name, fw.fault_names)
-        marks = events.derive(result, fw.state_name, fw.fault_name, fw.transition_reason)
+        marks = events.derive(result, fw.state_name, fw.fault_name, fw.transition_reason,
+                              marks=sf.marks)
 
     meta.update(status=result.status, failure=result.failure, wall_s=result.wall_s,
                 failure_lines=result.failure_lines + _log_lines(fmu_log) if result.failure else [],
@@ -145,19 +193,21 @@ def _run(args: argparse.Namespace, meta: dict[str, object]) -> int:
     meta['mcap'] = mcaplog.write(
         args.out / 'run.mcap', result, marks, fw.state_name, fw.fault_name,
         fw.transition_reason, table,
-        metadata={'scenario': scenario.name, 'status': result.status,
+        metadata={'scenario': sf.name, 'status': result.status,
                   'firmware': meta['library']['build']['git_describe'],
                   'firmware_dirty': meta['library']['build']['dirty'],
-                  'fmu_sha256': meta['fmu']['fmu_sha256']},
+                  'fmu_sha256': meta['fmu']['fmu_sha256'],
+                  'scenario_path': recorded_path, 'scenario_sha256': sf.sha256},
         attachments={
             'summary.txt': (report.summary_text(summary, result, meta, wall_time=False)
                             + '\n').encode(),
-            'meta.json': json.dumps(logged_meta, indent=2, sort_keys=True).encode()})
+            'meta.json': json.dumps(logged_meta, indent=2, sort_keys=True).encode(),
+            'scenario.yml': sf.data})
     report.write_meta(meta, args.out / 'meta.json')
     if not args.no_plot and result.rows:
         report.plot(result, args.out / 'plot.png',
                     f'VCU firmware {meta["library"]["build"]["git_describe"]} '
-                    f'driving the car model: {scenario.name}')
+                    f'driving the car model: {sf.name}')
     (args.out / 'summary.txt').write_text(text + '\n')
     print(text)
     return EXIT_FOR_STATUS[result.status]

@@ -31,6 +31,9 @@ CI `Lint` job always runs; it's seconds.
 
 Config is the repo-root
 [`ruff.toml`](https://github.com/LonghornRacingElectric/lhre/blob/main/ruff.toml).
+[`boards/VCU/Sil/host/ruff.toml`](https://github.com/LonghornRacingElectric/lhre/blob/main/boards/VCU/Sil/host/ruff.toml)
+extends it with Python 3.11 as the target, since the SIL's scenario check
+runs natively on 3.11; it changes nothing else.
 The rules catch bugs and unsafe habits, not style: undefined names, unused
 imports, mutable default arguments, loop-variable closures, `except
 Exception` that swallows everything, `subprocess.run` without `check=`,

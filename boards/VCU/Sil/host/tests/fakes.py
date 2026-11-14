@@ -1,10 +1,12 @@
-"""Stand-ins shared by the tests: a scripted car and a fake FMU description."""
+"""Stand-ins shared by the tests: a scripted car, the stage 2 Launch and a
+fake FMU description."""
 
 from dataclasses import dataclass
 from types import SimpleNamespace
 
+from vcusil.firmware import HVC_ENERGIZED, HVC_NOT_ENERGIZED, HVC_PRECHARGING
 from vcusil.plant import INPUTS, OUTPUTS, PARAMETERS, PlantError, PlantInputs
-from vcusil.scenario import Launch
+from vcusil.scenario import Driver, RestOfCar
 
 WHEEL_RADIUS_M = 0.2045
 FINAL_DRIVE = 3.31
@@ -50,6 +52,45 @@ class ToyCar:
 
     def failure_lines(self) -> list[str]:
         return ['CVODE: the corrector convergence test failed repeatedly']
+
+
+@dataclass(frozen=True)
+class Launch:
+    """Power up, ready to drive on the brake, then full pedal from rest.
+
+    The brake hold is 350 psi: over RTD's 30 psi and clear of the 300 psi
+    brake-pressed threshold, where ADC rounding would decide the state. It is
+    released 500 ms before the pedal, long after the brake filter has fallen
+    under the brake-over-throttle threshold. The RTD switch is a toggle and
+    stays on: releasing it leaves DRIVE.
+
+    The stage 2 scenario, kept as the reference scenarios/launch.yml must
+    reproduce at every millisecond, and as the base of the Python variants.
+    """
+    name: str = 'launch'
+    precharge_ms: int = 200
+    energized_ms: int = 600
+    rtd_ms: int = 1000
+    brake_off_ms: int = 1500
+    pedal_on_ms: int = 2000
+    pedal_off_ms: int = 6000
+    duration_ms: int = 7000
+    brake_hold_psi: float = 350.0
+
+    def at(self, t_ms: int) -> tuple[Driver, RestOfCar]:
+        if t_ms < self.precharge_ms:
+            hvc = HVC_NOT_ENERGIZED
+        elif t_ms < self.energized_ms:
+            hvc = HVC_PRECHARGING
+        else:
+            hvc = HVC_ENERGIZED
+        car = RestOfCar(hvc_state=hvc, contactors_closed=hvc == HVC_ENERGIZED)
+        driver = Driver(
+            accelerator=1.0 if self.pedal_on_ms <= t_ms < self.pedal_off_ms else 0.0,
+            brake_psi=self.brake_hold_psi if t_ms < self.brake_off_ms else 0.0,
+            rtd_pressed=t_ms >= self.rtd_ms,
+        )
+        return driver, car
 
 
 @dataclass(frozen=True)

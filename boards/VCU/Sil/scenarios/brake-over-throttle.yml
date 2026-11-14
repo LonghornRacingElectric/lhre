@@ -1,0 +1,63 @@
+# Left-foot braking without lifting (EV.4.7). Brake-over-throttle must cut
+# torque, keep it cut after the brake comes off, and give it back only once
+# the pedal has been under 5 %. It is not a drive-exit fault: the VCU stays
+# in DRIVE throughout.
+schema: lhre.vcu-sil-scenario.v1
+description: At 60 % pedal the driver brakes to 400 psi for 600 ms without lifting, then lifts and reapplies.
+duration_ms: 8000
+
+# This drive sets off the brake-over-throttle warning on purpose.
+allow:
+  brake_over_throttle: "the point of this drive: brake-over-throttle must cut torque"
+
+at:
+  # Power up on the brake, as in launch.yml.
+  - t_ms: 0
+    accelerator: 0.0
+    brake_psi: 350.0
+    steering_deg: 0.0
+    rtd_pressed: false
+    hvc_state: NOT_ENERGIZED
+    contactors_closed: false
+    shutdown_loop_v: 24.0
+
+  - t_ms: 200
+    mark: precharge
+    hvc_state: PRECHARGING
+
+  - t_ms: 600
+    mark: energized
+    hvc_state: ENERGIZED
+    contactors_closed: true
+
+  - t_ms: 1000
+    mark: rtd
+    rtd_pressed: true
+
+  - t_ms: 1500
+    mark: brake-off
+    brake_psi: {to: 0.0, ramp_ms: 150}
+
+  - t_ms: 2000
+    mark: roll-on
+    accelerator: {to: 0.6, ramp_ms: 300}
+
+  # 400 psi is clearly brake-pressed (on at 300 psi) and under the hard-brake
+  # comparators (about 531 psi), so the BSPD condition never starts.
+  - t_ms: 4000
+    mark: brake-on
+    brake_psi: {to: 400.0, ramp_ms: 100}
+
+  # Brake off with the pedal still down: torque must stay cut.
+  - t_ms: 4600
+    mark: brake-released
+    brake_psi: {to: 0.0, ramp_ms: 100}
+
+  # Under 5 % pedal the latch clears.
+  - t_ms: 5200
+    mark: lift
+    accelerator: {to: 0.0, ramp_ms: 150}
+
+  - t_ms: 5800
+    mark: reapply
+    accelerator: {to: 0.6, ramp_ms: 300}

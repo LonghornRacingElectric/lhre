@@ -5,12 +5,12 @@ import math
 from dataclasses import dataclass
 
 import pytest
-from fakes import Short, ToyCar
+from fakes import Launch, Short, ToyCar
 
 from vcusil import cosim, firmware
 from vcusil.firmware import STATE_DRIVE, Firmware, Outputs
 from vcusil.plant import OUTPUTS
-from vcusil.scenario import Driver, Launch, RestOfCar
+from vcusil.scenario import Driver, RestOfCar
 
 def test_loop_reads_then_steps_once_per_control_tick(lib):
     car = ToyCar()
