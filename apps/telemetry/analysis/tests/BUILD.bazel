@@ -1,6 +1,7 @@
 # telemetry/analysis/tests/BUILD.bazel
 
 load("@rules_python//python:defs.bzl", "py_test")
+load("@telemetry_stack_reqs//:requirements.bzl", "requirement")
 load("//apps/telemetry:compatibility.bzl", "NOT_WINDOWS")
 
 py_test(
@@ -12,5 +13,22 @@ py_test(
     ],
     main = "sample_analysis_test.py",
     tags = ["manual"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+# Replays the recorded drive through the real Artemis decoder and the
+# board_health classifier, the same path the demo takes.
+py_test(
+    name = "artemis_replay_test",
+    srcs = ["artemis_replay_test.py"],
+    data = ["//apps/telemetry/analysis:database/data/autox_uta_2026-10-17.pb.gz"],
+    imports = ["../..", "../../.."],
+    main = "artemis_replay_test.py",
+    deps = [
+        "//apps/telemetry/analysis:analysis_lib",
+        "//apps/telemetry/stack/ingest:sensor_decode",
+        "//apps/telemetry/stack/processors/board_health:classifier",
+        requirement("protobuf"),
+    ],
     target_compatible_with = NOT_WINDOWS,
 )

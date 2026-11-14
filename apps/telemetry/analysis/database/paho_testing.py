@@ -32,6 +32,7 @@ from analysis.sql_utils.models import OrionPacket, ArtemisTransportState
 from stack.ingest.protobuf.can_packets_pb2 import OrionSensorData
 from stack.ingest.protobuf.artemis_pb2 import ArtemisSensorData
 from stack.ingest.sensor_decode import CAR_MESSAGES
+from analysis.database import artemis_replay
 
 
 
@@ -820,7 +821,12 @@ class DataTester:
         for i in tqdm(range(num_rows)):
             packet_id = start_packet_id + i
             data = self.create_proto_message(packet_id, db_desc, use_csv=use_csv, target=target)
-            self.mqtt.publish(topic, data.SerializeToString(), qos=0)
+            if target == "Artemis":
+                # Artemis ingest only accepts the car's TelemetryBatch wrapper.
+                payload = artemis_replay.batch_payload(data, artemis_replay.present_fields(data), time.time_ns())
+            else:
+                payload = data.SerializeToString()
+            self.mqtt.publish(topic, payload, qos=0)
             time.sleep(delay)
 
     def create_proto_message(self, packet: int, db_desc, use_csv=False, target="Orion"):
@@ -837,7 +843,8 @@ class DataTester:
             row = self.create_row_from_csv(packet, db_desc)
 
         data = CAR_MESSAGES[target]()
-        data.packet_id = int(packet)
+        if "packet_id" in data.DESCRIPTOR.fields_by_name:  # Artemis has no packet_id
+            data.packet_id = int(packet)
         data.time = int(time.time() * 1000)
         
         # Get data from CSV once if needed
@@ -895,7 +902,44 @@ if __name__ == '__main__':
     )
     parser.add_argument("--rows", type=int, default=500000, help="Number of protobuf rows to publish.")
     parser.add_argument("--delay", type=float, default=None, help="Delay between publishes in seconds.")
+    parser.add_argument(
+        "--replay",
+        nargs="?",
+        const=str(Path(__file__).resolve().parent / "data" / "autox_uta_2026-10-17.pb.gz"),
+        default=None,
+        metavar="PATH",
+        help="Replay a recording as Artemis telemetry, looped at its recorded pace. "
+             "With no PATH, replays the bundled UTA autocross run.",
+    )
+    parser.add_argument(
+        "--dropout-board",
+        choices=artemis_replay.BOARDS,
+        default=None,
+        help="Replay only: make this board stop reporting (its last_seen_s keeps climbing).",
+    )
+    parser.add_argument("--dropout-after", type=float, default=20.0,
+                        help="Replay only: seconds into the replay the dropout starts.")
+    parser.add_argument("--dropout-for", type=float, default=10.0,
+                        help="Replay only: seconds the board stays quiet; 0 means until stopped.")
     args = parser.parse_args()
+
+    if args.dropout_board and not args.replay:
+        parser.error("--dropout-board needs --replay")
+    if args.replay:
+        recording = artemis_replay.load_recording(args.replay)
+        dropout = None
+        if args.dropout_board:
+            dropout = artemis_replay.Dropout(args.dropout_board, args.dropout_after, args.dropout_for or None)
+        logging.info("Replaying %s (%d frames) to artemis/data%s", args.replay, len(recording),
+                     f"; {args.dropout_board} drops out at {args.dropout_after:g} s" if dropout else "")
+        # Replay needs no database: the payload carries its own timestamps.
+        with MQTTHandler('paho_test', target=MQTTTarget.get()) as mqtt:
+            try:
+                artemis_replay.replay(recording, lambda payload: mqtt.publish("artemis/data", payload, qos=0),
+                                      dropout=dropout)
+            except KeyboardInterrupt:
+                logging.info("Replay stopped")
+        sys.exit(0)
 
     car_name = args.car
 
