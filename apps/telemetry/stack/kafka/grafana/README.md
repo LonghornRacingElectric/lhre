@@ -169,6 +169,7 @@ Add separate query rows for minimum and maximum on one panel.
 History and live reads resolve the same scalar signals and pool filters before
 querying. A new query or subscription refreshes discovery; subsequent pages and
 stream windows reuse the catalog while its schema version matches.
+Waiting for discovery does not block other panels or reads of the cached catalog.
 
 Filter signals by subsystem, then search names, units, rates and pools. The
 editor lists scalar numeric and Boolean signals; selecting a Boolean changes

@@ -25,10 +25,11 @@ type catalog struct {
 
 func (a *Adapter) loadCatalog(ctx context.Context, version string) (catalog, error) {
 	a.mu.Lock()
-	defer a.mu.Unlock()
+	cached := a.catalog
+	a.mu.Unlock()
 	// New queries rediscover the schema; subsequent pages/windows reuse its version.
-	if version != "" && version == a.catalog.Version {
-		return a.catalog, nil
+	if version != "" && version == cached.Version {
+		return cached, nil
 	}
 	response, err := a.request(ctx, "GET", "/v1/signals", nil)
 	if err != nil {
@@ -45,7 +46,9 @@ func (a *Adapter) loadCatalog(ctx context.Context, version string) (catalog, err
 	if version != "" && version != next.Version {
 		return catalog{}, fmt.Errorf("gateway schema changed; rerun the query")
 	}
+	a.mu.Lock()
 	a.catalog = next
+	a.mu.Unlock()
 	return next, nil
 }
 

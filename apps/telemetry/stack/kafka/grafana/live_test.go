@@ -8,12 +8,61 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 )
 
 type frameRecorder struct {
 	packets []*backend.StreamPacket
+}
+
+func TestHistoryQueriesDiscoverConcurrently(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	discovery, release := context.WithCancel(ctx)
+	defer release()
+	entered := make(chan struct{}, 3)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/signals" {
+			entered <- struct{}{}
+			<-discovery.Done()
+			fmt.Fprint(w, `{"schema_version":"demo","signals":[{"signal":"pack.voltage","value_type":"float","aggregates":["last"]}]}`)
+			return
+		}
+		fmt.Fprint(w, `{"schema_version":"demo","data":[{"ts":"2026-11-12T12:00:00Z","signal":"pack.voltage","value":420}]}`)
+	}))
+	defer upstream.Close()
+	adapter := &Adapter{url: upstream.URL, client: upstream.Client()}
+	results := make(chan error, 3)
+	for range 3 {
+		go func() {
+			response, err := adapter.QueryData(ctx, &backend.QueryDataRequest{
+				Queries: []backend.DataQuery{{RefID: "A", JSON: json.RawMessage(`{"signals":["pack.voltage"],"agg":"last"}`)}},
+			})
+			if err == nil {
+				result := response.Responses["A"]
+				err = result.Error
+				if err == nil && len(result.Frames) != 1 {
+					err = fmt.Errorf("expected one history frame, got %d", len(result.Frames))
+				}
+			}
+			results <- err
+		}()
+	}
+	for range 3 {
+		select {
+		case <-entered:
+		case <-ctx.Done():
+			t.Fatal("panel queries waited for another panel's discovery request")
+		}
+	}
+	release()
+	for range 3 {
+		if err := <-results; err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 func TestHistoryResolvesPoolsAndDiscoversNewSchemaSignals(t *testing.T) {
