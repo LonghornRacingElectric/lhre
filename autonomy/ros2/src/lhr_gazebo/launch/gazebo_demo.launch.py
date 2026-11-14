@@ -664,8 +664,13 @@ def _launch_setup(context: LaunchContext):
                     LaunchConfiguration('fault_after_s'), value_type=float),
                 'fault_duration_s': ParameterValue(
                     LaunchConfiguration('fault_duration_s'), value_type=float),
+                'fault_min_speed_mps': ParameterValue(
+                    LaunchConfiguration('fault_min_speed_mps'), value_type=float),
                 'use_sim_time': True,
             }],
+            # The speed gate reads the plant, like the caster: an odometry
+            # fault must not decide when it starts itself.
+            remappings=[('/lhr/sim/plant_odom', caster_odom)],
             output='screen',
         ))
 
@@ -873,6 +878,8 @@ def generate_launch_description():
             description='One fault_injector kind, e.g. ekf_kill, lidar_drop'),
         DeclareLaunchArgument('fault_after_s', default_value='30.0'),
         DeclareLaunchArgument('fault_duration_s', default_value='0.0'),
+        DeclareLaunchArgument('fault_min_speed_mps', default_value='0.0',
+                              description='Also wait until the car is this fast (0 = any)'),
         # Safety monitor (lhr_safety). Off until #117's fault injection
         # has tuned the thresholds; defaults match the node's.
         DeclareLaunchArgument(

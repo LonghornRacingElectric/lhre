@@ -1,0 +1,3 @@
+# Install root-owned at /etc/sudoers.d/lhr-runner after validating with visudo.
+# Empty argument string means the bridge cannot be invoked with arguments.
+lhr-job-ssh ALL=(lhr-runner) NOPASSWD: /opt/lhr-runner/bridge ""

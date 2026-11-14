@@ -12,3 +12,5 @@ how to run it (host binaries run via `bazel run --config=local`).
   processors, Postgres, the analysis webtool (Python, Go, TypeScript).
   Container images build on Linux only; see
   [BAZEL_BUILD.md](telemetry/BAZEL_BUILD.md).
+- [HIL jobs](job_runner/README.md) — private PM2 dashboard and a persistent
+  SSH-controlled Docker job runner on HIL.
