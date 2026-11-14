@@ -27,4 +27,4 @@ Artemis live maps prefer the double-precision `gps_precise` latitude/longitude
 and fall back to `gps` when no precise fix is present. GPS history requests
 only those two arrays, using their last fresh observations per bucket.
 An Artemis export with no explicit channel selection includes the deployed
-scalar catalog, so newly added channels do not require a legacy-list edit.
+numeric channels, so newly added channels do not require a legacy-list edit.
