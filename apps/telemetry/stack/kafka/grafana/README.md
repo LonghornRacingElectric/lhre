@@ -192,6 +192,8 @@ persistent data volume. Compose selects that plugin directory. The checked-in
 using Grafana's provided libraries; it needs no separate npm build. The
 explicit one-argument datasource constructor is required because Grafana 11
 uses constructor arity to distinguish React sources from legacy Angular ones.
+Bump `plugin.json`'s version when changing `module.js` so Grafana refreshes its
+cached frontend bundle.
 The `lhre-artemis-datasource` ID is permitted as an unsigned local plugin by Compose.
 Provision its URL as `http://query_gateway:8090` and store the gateway token in
 `secureJsonData.apiToken`. Browser code never receives that token.
