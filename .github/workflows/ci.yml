@@ -31,6 +31,7 @@ jobs:
       bevo: ${{ steps.check.outputs.bevo }}
       docs: ${{ steps.check.outputs.docs }}
       telemetry: ${{ steps.check.outputs.telemetry }}
+      runner: ${{ steps.check.outputs.runner }}
     steps:
       - name: Find the areas this change touches
         id: check
@@ -59,6 +60,7 @@ jobs:
           }
           if [ "$everything" = true ] || grep -qvE '^(autonomy|simulation)/' <<< "$files"; then echo "bazel=true"; else echo "bazel=false"; fi | tee -a "$GITHUB_OUTPUT"
           area sim '^(simulation/|vehicle/|\.gitmodules$|\.github/workflows/ci\.yml$)'
+          area runner '^(apps/job_runner/|\.github/workflows/ci\.yml$)'
           if [ "$EVENT" = schedule ]; then
             echo "car=false" | tee -a "$GITHUB_OUTPUT"
           else
@@ -549,6 +551,19 @@ jobs:
       - name: Run the video helper test
         run: npm run test:video-helper
 
+  job-runner:
+    name: HIL dashboard
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.runner != 'false' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Test dashboard API
+        run: node --test apps/job_runner/server.test.mjs
+
   # On main, docs.yml builds and publishes the site instead.
   docs:
     name: Docs
@@ -658,7 +673,7 @@ jobs:
   # Jobs skip only on an untouched area, and run if Changes fails.
   all-checks:
     name: All checks passed
-    needs: [changes, format, lint, bazel, bazel-windows, sim-fast, four-post, autonomy, bevo, bevo-frontend, docs, telemetry, telemetry-viewer]
+    needs: [changes, format, lint, bazel, bazel-windows, sim-fast, four-post, autonomy, bevo, bevo-frontend, docs, telemetry, telemetry-viewer, job-runner]
     if: always()
     runs-on: ubuntu-latest
     steps:

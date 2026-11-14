@@ -1,0 +1,13 @@
+load("@rules_python//python:defs.bzl", "py_test")
+
+py_test(
+    name = "runner_test",
+    size = "small",
+    srcs = ["runner.py", "test_runner.py"],
+    main = "test_runner.py",
+    imports = ["."],
+    target_compatible_with = select({
+        "@platforms//os:linux": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+)
