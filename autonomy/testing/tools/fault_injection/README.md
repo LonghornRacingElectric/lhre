@@ -5,7 +5,13 @@ stops the car, and measures how fast
 ([#117](https://github.com/LonghornRacingElectric/lhre/issues/117)). Each
 stop is scored against the PDR formula d = v(T + 0.2 s) + v²/2a, with T the
 measured time to trip and a the spring brake's 6 m/s² floor. Clean laps
-count false trips.
+count false trips. Every run launches with the gate stack in
+[`stack.args`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/testing/tools/gate/stack.args), the same file the
+[gate runner](../gate/README.md) reads
+([#237](https://github.com/LonghornRacingElectric/lhre/issues/237)), so the
+fault matrix runs the Mid-360 caster and camera fusion like the gate. Matrices
+from before #237 ran the Gazebo GPU LiDAR without cameras, so their numbers
+are not directly comparable.
 
 ## Files
 
@@ -45,7 +51,8 @@ Environment variables pick the matrix: `CASES` (empty for none), `SPEEDS` (`v_ma
 default `3 5 8`), `REPEATS` (2), `TRACK` (for the fault cases, `oval`),
 `CLEAN_SEEDS` (`1 2 3 4 5`, empty for none), `AFTER` (fault seconds after
 `DRIVING`, 25), `RUN_S` (60), `CLEAN_S` (150), `HANG_S` (60), `OUT` and
-`EXTRA` (more launch arguments). `AFTER`, `RUN_S` and `CLEAN_S` are sim
+`EXTRA` (more launch arguments; the gate stack and each case's own arguments
+follow it and take precedence). `AFTER`, `RUN_S` and `CLEAN_S` are sim
 seconds, so a machine that runs below real time gets the same runs, only
 later ([#227](https://github.com/LonghornRacingElectric/lhre/issues/227)).
 `HANG_S` is the one wall-time setting: a run whose `/clock` stands still that
