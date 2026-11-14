@@ -598,8 +598,10 @@ and rejection of either stale generated SDF. Both models passed `gz sdf -k`.
 
 ### Original stereo interface check
 
-Checked on 2026-10-11 in the repository's Ubuntu 24.04 / ROS 2 Jazzy /
-Gazebo Harmonic Docker image on Apple Silicon with software OpenGL:
+Historical results from 2026-10-11, using the earlier level camera mount at
+`base_link` (1.8, 0, 0.65) m, in the repository's Ubuntu 24.04 / ROS 2 Jazzy /
+Gazebo Harmonic Docker image on Apple Silicon with software OpenGL. These
+results do not validate disparity at the current 5° nose-down mount:
 
 - Full workspace `colcon test`: 208 tests, no errors/failures/skips.
 - Generated model passes `gz sdf -k` and the model freshness check.
@@ -614,7 +616,8 @@ Gazebo Harmonic Docker image on Apple Silicon with software OpenGL:
   RViz displayed both rendered cone views.
 - A 1 m green target face at 5 m yielded 11 px horizontal disparity against
   10.76 px predicted, with zero vertical disparity. RViz showed both images
-  and a valid map fixed frame.
+  and a valid map fixed frame. This measured/predicted pair applies only to
+  the earlier level mount; it is unvalidated for the current mount.
 
 The 100 paired sets took 20.94 wall-clock seconds including startup. This
 measures matched-set delivery through the checker, not sensor generation
@@ -627,8 +630,12 @@ calibration, rolling shutter/exposure effects, and performance on the eventual
 compute platform remain unvalidated. This is camera-interface acceptance,
 not validation of camera-based cone detection or driving behavior.
 
-The stationary target fixture is `test/stereo_target.sdf`. For a visual repeat
-from the ROS workspace on a machine with a display:
+The current stationary target fixture, `test/stereo_target.sdf`, is
+**unvalidated at the new mount**: no quantitative disparity measurement has
+been recorded since repositioning it. Manual simulation inspection on
+2026-11-14 confirmed the rig TF at (0.609, 0, 0.92) m with 5° pitch and a
+usable-looking camera view; it did not measure stereo disparity. To run the
+fixture from the ROS workspace on a machine with a display:
 
 ```bash
 ros2 launch lhr_gazebo gazebo_demo.launch.py \
@@ -641,7 +648,11 @@ its odometry plugin publishes TF. Its green target front face is at world
 x=5.609 m, 5 m in front of the rig center and centred at its height, so
 changed mount geometry requires recomputing the measured target distance.
 The 10/11 disparity check above used the earlier level mount at x=1.8 m;
-with the 5° pitch the face is no longer square to the optical axis.
+with the 5° pitch the face is no longer square to the optical axis. Before
+claiming disparity validation, recompute optical-axis depth for the sampled
+points on the tilted face and compare their measured disparities against
+`fx * baseline / depth`. The 5 m world-x separation is not that depth, so
+the old 10.76 px prediction must not be reused as the current expectation.
 
 Camera extrinsics are fixed relative to `base_link`. The existing vehicle
 state/TF is planar, so the map-frame camera pose does not fully represent
