@@ -21,6 +21,9 @@ car ──MQTT──▶ ingest ──▶ kafka-bridge ──▶ [sensor_data] �
   message, with `car_type: Artemis` and `payload_format: artemis_updates_v1`.
 - **Writes** `board_health`: small JSON events, one per board state change.
   The format is in [README.md](README.md#output-events).
+- **Writes** `board_health_state`: complete board-state snapshots on change and
+  every two seconds. Clients use the gateway's authenticated
+  `/v1/topics/board_health_state` SSE endpoint for the current state.
 
 ## Run it locally
 
@@ -57,22 +60,25 @@ Environment variables, all set in `docker-compose.yml`:
 | `KAFKA_BOOTSTRAP_SERVERS` | `kafka:9092` | Broker inside Docker. From your host it is `localhost:29092`. |
 | `KAFKA_INPUT_TOPIC` | `sensor_data` | Protobuf frames in |
 | `KAFKA_OUTPUT_TOPIC` | `board_health` | JSON events out |
+| `KAFKA_STATE_TOPIC` | `board_health_state` | Complete state snapshots out |
 | `KAFKA_GROUP_ID` | `board-health-group` | Consumer group |
+| `BOARD_STALE_AFTER_S` | `0.5` | Allowed board-reported silence, seconds |
+| `BOARD_TELEMETRY_TIMEOUT_S` | `10` | Local arrival timeout, seconds |
+| `BOARD_SNAPSHOT_INTERVAL_S` | `2` | Snapshot heartbeat interval, seconds |
 | `LOGLEVEL` | `INFO` | `DEBUG` while you work |
 
 A healthy start logs `board_health ready. in=sensor_data out=board_health`.
-The processor reads from the *latest* offset, so it sits silent until
-something new is published. See the hints below for how to feed it.
+The processor reads from the *latest* offset. Until board observations arrive,
+snapshots contain `UNKNOWN` for each generated board. See the hints below for
+how to feed it.
 
-## What you fill in
+## Processing flow
 
-TODO 1 decodes Artemis input. TODO 2 calls the state tracker in `classifier.py`;
-see [README.md](README.md) for states, experimental thresholds, and limitations.
-Tests are registered as `:classifier_test` and run without Kafka.
-
-TODO 3 publishes each change the tracker returns, from both decoded frames and
-the telemetry-timeout check. Event format and initial-event policy are in
-[README.md](README.md#output-events).
+The poll loop decodes Artemis native batches and applies only fields in their
+presence masks. It publishes acknowledged transitions and complete snapshots
+before committing input offsets. Silence is checked after every poll, including
+empty polls. See [README.md](README.md) for thresholds, timestamps and limits.
+`:classifier_test` and `:main_test` run without Kafka.
 
 ## Hints for getting unstuck
 

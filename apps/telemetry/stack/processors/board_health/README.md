@@ -6,8 +6,9 @@ communication; health packets report the board's health. A board can be live
 while reporting a fault.
 
 Currently, the processor decodes Artemis frames from `sensor_data`, tracks communication
-state independently for the boards declared by the generated schema, and publishes one JSON event to
-`board_health` per state change. Start with [GETTING_STARTED.md](GETTING_STARTED.md).
+state independently for the boards declared by the generated schema, publishes one JSON event to
+`board_health` per state change, and publishes a snapshot of every board's state to
+`board_health_state`. Start with [GETTING_STARTED.md](GETTING_STARTED.md).
 
 ## Input and states
 
@@ -25,6 +26,11 @@ and untagged frames are skipped and do not count as a live feed. The board list 
 
 `last_seen_s` is elapsed seconds since communication, or `-1` for never seen.
 `stale_after_s` is the allowed silence, configured by `BOARD_STALE_AFTER_S`.
+The 0.5 s default is five times the slowest expected inter-frame gap for an
+active monitored board in the current CAN spec (100 ms). BEVO publishes board
+ages once per second, so this threshold does not imply 0.5 s detection latency.
+It is one value for every board until per-board thresholds are generated from
+the spec.
 Negative values other than `-1`, booleans, nonnumeric values, NaN, and infinity
 are invalid. Only fields in an update's presence mask are observations, including zero.
 Absent fields and malformed batches do not refresh a board's arrival timeout.
@@ -76,10 +82,34 @@ after every event from a poll is acknowledged. A failed send stops the
 processor, and on restart it reprocesses the uncommitted frames, so an event
 can repeat but is never silently dropped.
 
-The first observation after startup publishes `UNKNOWN -> ...` for that board; that
-is the policy, so a consumer gets an initial state without a separate snapshot.
-Nothing is re-sent while states hold, so a consumer that starts later sees
-nothing until the next change. A heartbeat like `car_status`'s would fix that.
+The first observation after startup publishes `UNKNOWN -> ...` for that board.
+Change events are not re-sent while states hold; the snapshot topic below
+covers consumers that start later.
+
+## State snapshots
+
+`board_health_state` carries every board's current state in one message:
+
+```json
+{"car": "artemis",
+ "boards": {"dui": "LIVE", "hvc": "LIVE", "inverter": "STALE", "vcu": "LIVE"},
+ "t_ms": 1767225600000, "t_source": "car"}
+```
+
+A snapshot is published after any poll in which a board changed, and every
+`BOARD_SNAPSHOT_INTERVAL_S` otherwise, including before the first frame (all
+`UNKNOWN`). At most one goes out per poll. `t_ms` and `t_source` come from the
+newest board-status observation in that poll. A heartbeat with no board
+observations, or a snapshot containing a timeout transition, uses server time.
+The gateway's `/v1/topics` feeds keep only a topic's latest message, so each snapshot
+is complete on its own: a client that connects late or misses one still sees
+every board. The Kafka topic `board_health` contains transition events;
+`board_health_state` provides the current picture. The gateway's latest-message
+feeds do not provide a complete transition history.
+Clients check the gateway envelope's Kafka `timestamp` for heartbeat freshness.
+`t_ms` retains the newest observed car time even when unchanged states arrive
+from delayed input. A fresh heartbeat alone does not prove the source is caught
+up, and the gateway can keep the last snapshot after this processor stops.
 
 Timeout events come from the poll loop's silence check, not from a frame, so
 they are the only signal that the whole feed died. A per-board `UNKNOWN` with
@@ -121,15 +151,33 @@ for m in KafkaConsumer('board_health', bootstrap_servers='localhost:29092'): pri
 
 ## Tests
 
-`classifier.py` holds the decisions and the event builder (`change_events`)
-without Kafka. `test_classifier.py` covers threshold boundaries, invalid/missing
-data, initial stale state, repeated silence, recovery, reader reset,
-independent/simultaneous boards, telemetry timeout, and event shape (including
-JSON-safe nulls for NaN/infinity). Run without Docker:
+`classifier.py` holds the decisions, the event builder (`change_events`) and the
+snapshot builder and timer (`snapshot_event`, `SnapshotTimer`) without Kafka.
+`test_classifier.py` covers threshold boundaries, invalid/missing data, initial
+stale state, repeated silence, recovery, reader reset, independent/simultaneous
+boards, telemetry timeout, and event shape (including JSON-safe nulls for
+NaN/infinity).
+
+Snapshots are tested end to end in `events_faults`' Kafka integration test, which
+runs the real `board_health` and `events_faults` images against a Kafka container
+and real Artemis batches. It checks that every snapshot names every board, that
+the heartbeat repeats unchanged states, that a feed timeout reaches the snapshot,
+and that a board going quiet shows `STALE` with the car's timestamp. It needs
+Docker and loaded images:
+
+```bash
+bazel test --config=local //apps/telemetry/stack/processors/events_faults:kafka_integration_test
+```
+
+Run without Docker:
 
 ```bash
 bazel test --config=local //apps/telemetry/stack/processors/board_health:classifier_test
+bazel test --config=local //apps/telemetry/stack/processors/board_health:main_test
 ```
+
+`main_test` checks snapshot timestamps for out-of-order observations and a poll
+where one board updates while another expires.
 
 ## Configuration
 
@@ -140,15 +188,17 @@ Override the timeout environment variables when starting the service.
 | --- | --- | --- |
 | `KAFKA_BOOTSTRAP_SERVERS` | `kafka:9092` | Broker address inside `telemetry_network` |
 | `KAFKA_INPUT_TOPIC` | `sensor_data` | Raw protobuf frames |
-| `KAFKA_OUTPUT_TOPIC` | `board_health` | Where your events go |
+| `KAFKA_OUTPUT_TOPIC` | `board_health` | Per-board change events |
+| `KAFKA_STATE_TOPIC` | `board_health_state` | Snapshots of every board's state |
 | `KAFKA_GROUP_ID` | `board-health-group` | Consumer group |
-| `BOARD_STALE_AFTER_S` | `5` | Experimental `stale_after_s` threshold, seconds |
+| `BOARD_STALE_AFTER_S` | `0.5` | `stale_after_s` threshold, seconds |
 | `BOARD_TELEMETRY_TIMEOUT_S` | `10` | Experimental arrival timeout, seconds |
+| `BOARD_SNAPSHOT_INTERVAL_S` | `2` | Heartbeat between snapshots when nothing changes, seconds |
 | `LOGLEVEL` | `INFO` | Use `DEBUG` for decoded frames |
 
 ## Files
 
-`main.py` the poll loop and producer; `classifier.py` the state tracker and event builder.
+`main.py` the poll loop and producer; `classifier.py` the state tracker, event builder and snapshot builder.
 The `:classifier` library and `:classifier_test` target isolate the decisions. `Dockerfile` / `docker-compose.yml` the legacy Docker
 path. `BUILD.bazel` the Bazel path: targets follow the standard
 `board_health_binary`, `_image`, `_load`, `_push`, and `_smoke_test` contract. It

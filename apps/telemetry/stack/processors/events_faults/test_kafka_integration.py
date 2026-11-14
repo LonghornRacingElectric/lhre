@@ -98,12 +98,13 @@ class KafkaIntegrationTest(unittest.TestCase):
         admin = KafkaAdminClient(bootstrap_servers=bootstrap)
         self.addCleanup(admin.close)
         admin.create_topics([NewTopic(topic, 1, 1) for topic in
-                             ("sensor_data", "fault_events", "board_health")])
+                             ("sensor_data", "fault_events", "board_health", "board_health_state")])
         producer = KafkaProducer(bootstrap_servers=bootstrap, acks="all")
         self.addCleanup(producer.close)
         consumer = KafkaConsumer(bootstrap_servers=bootstrap, enable_auto_commit=False)
         self.addCleanup(consumer.close)
-        consumer.assign([TopicPartition(topic, 0) for topic in ("fault_events", "board_health")])
+        consumer.assign([TopicPartition(topic, 0)
+                         for topic in ("fault_events", "board_health", "board_health_state")])
         consumer.seek_to_beginning()
         groups = {"faults": "faults-test", "health": "health-test"}
         for service, image in (("faults", "lhre/telemetry-events-faults:dev"),
@@ -111,10 +112,12 @@ class KafkaIntegrationTest(unittest.TestCase):
             self.start(service, image, {
                 "KAFKA_BOOTSTRAP_SERVERS": "kafka:9092", "KAFKA_GROUP_ID": groups[service],
             })
-        age_field = next(field.name for field in artemis_pb2.ArtemisSensorData.DESCRIPTOR
-                         .fields_by_name["board_status"].message_type.fields
-                         if field.name.endswith("_last_seen_s"))
+        age_fields = [field.name for field in artemis_pb2.ArtemisSensorData.DESCRIPTOR
+                      .fields_by_name["board_status"].message_type.fields
+                      if field.name.endswith("_last_seen_s")]
+        age_field = age_fields[0]
         board = age_field.removesuffix("_last_seen_s")
+        all_boards = {field.removesuffix("_last_seen_s") for field in age_fields}
         headers = [("car_type", b"Artemis"), ("payload_format", b"artemis_updates_v1")]
         def send(updates):
             payload = artemis_pb2.TelemetryBatch(format_version=1, updates=updates).SerializeToString()
@@ -134,10 +137,16 @@ class KafkaIntegrationTest(unittest.TestCase):
             return committed(1)
         self.wait(readers_ready)
         baseline = []
+        snapshots = []
         def initial_board_event():
             for records in consumer.poll(timeout_ms=500).values():
-                baseline.extend(json.loads(record.value) for record in records if record.topic == "board_health")
-            return any(event["board"] == board and event["state"] == "LIVE" for event in baseline)
+                for record in records:
+                    if record.topic == "board_health":
+                        baseline.append(json.loads(record.value))
+                    elif record.topic == "board_health_state":
+                        snapshots.append(json.loads(record.value))
+            return (any(event["board"] == board and event["state"] == "LIVE" for event in baseline)
+                    and any(snapshot["boards"].get(board) == "LIVE" for snapshot in snapshots))
         self.wait(initial_board_event)
         t_ms = int(time.time() * 1000)
         sent = send([
@@ -148,13 +157,17 @@ class KafkaIntegrationTest(unittest.TestCase):
             update(t_ms + 4, board_status={age_field: 0}, diagnostics_high={"run_faults": 0}),
             update(t_ms + 5, board_status={age_field: 0}, diagnostics_high={"run_faults": 0}),
         ])
-        events = {"fault_events": [], "board_health": []}
+        events = {"fault_events": [], "board_health": [], "board_health_state": []}
         def transitions_received():
             for records in consumer.poll(timeout_ms=500).values():
                 for record in records:
                     events[record.topic].append(json.loads(record.value))
+            # board_health sends the timeout event before the snapshot that
+            # reflects it, so wait for both.
             return (len(events["fault_events"]) >= 4
-                    and any(event["cause"] == "telemetry_timeout" for event in events["board_health"]))
+                    and any(event["cause"] == "telemetry_timeout" for event in events["board_health"])
+                    and any(snapshot["boards"].get(board) == "UNKNOWN"
+                            for snapshot in events["board_health_state"]))
         self.wait(transitions_received, timeout=30)
         self.wait(lambda: committed(sent.offset + 1))
         self.assertEqual(events["fault_events"], [
@@ -164,6 +177,23 @@ class KafkaIntegrationTest(unittest.TestCase):
                 ("fault_cleared", "stomp_fault", 3), ("fault_cleared", "run_faults[2]", 4),
             )
         ])
+        # Snapshots: every message names every board, so a late client on the
+        # gateway's latest-message feed still sees the whole car. A snapshot shows
+        # the state after each poll: the STALE and recovery above share one batch,
+        # so the board reads LIVE until the feed times out. The heartbeat repeats
+        # unchanged states while nothing arrives.
+        states = events["board_health_state"]
+        self.assertTrue(states)
+        for snapshot in states:
+            self.assertEqual(snapshot["car"], "artemis")
+            self.assertEqual(set(snapshot["boards"]), all_boards)
+        sequence = [snapshot["boards"][board] for snapshot in states]
+        changes = [state for i, state in enumerate(sequence) if i == 0 or state != sequence[i - 1]]
+        self.assertEqual(changes[-2:], ["LIVE", "UNKNOWN"])
+        self.assertTrue(any(states[i]["boards"] == states[i - 1]["boards"]
+                            for i in range(1, len(states))), "no heartbeat snapshot")
+        self.assertEqual(states[-1]["t_source"], "server")
+
         health = events["board_health"]
         self.assertEqual([(event["previous"], event["state"], event["cause"]) for event in health], [
             ("LIVE", "STALE", "frame"), ("STALE", "LIVE", "frame"),
@@ -172,6 +202,21 @@ class KafkaIntegrationTest(unittest.TestCase):
         self.assertTrue(all(event["car"] == "artemis" and event["board"] == board for event in health))
         self.assertEqual([event["t_ms"] for event in health[:2]], [t_ms, t_ms + 4])
         self.assertEqual([event["t_source"] for event in health], ["car", "car", "server"])
+
+        # A board that goes quiet on its own shows STALE in the next snapshot.
+        quiet_ms = int(time.time() * 1000)
+        send([update(quiet_ms, board_status={age_field: 6})])
+        def stale_snapshot():
+            for records in consumer.poll(timeout_ms=500).values():
+                for record in records:
+                    if record.topic == "board_health_state":
+                        snapshot = json.loads(record.value)
+                        if snapshot["boards"].get(board) == "STALE":
+                            self.assertEqual((snapshot["t_ms"], snapshot["t_source"]), (quiet_ms, "car"))
+                            self.assertEqual(set(snapshot["boards"]), all_boards)
+                            return True
+            return False
+        self.wait(stale_snapshot, timeout=30)
 
 
 if __name__ == "__main__":
