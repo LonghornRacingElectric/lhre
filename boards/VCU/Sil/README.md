@@ -308,7 +308,10 @@ judged on.
   the RTD switch's debounce (`EdgeButton`), the brake and pedal filters,
   brake-pressed and the shutdown loop's taps (`fwmodel.py`). The thresholds
   are `fwmodel.THRESHOLDS`, copied from `params.hpp` and tested against it, and
-  `tests/test_check_firmware.py` holds each model to the library.
+  `tests/test_check_firmware.py` holds each model to the library. The
+  check runs models rather than the library so that it needs no firmware
+  build: `run.sh --check` never builds one, and the check runs natively on
+  a Mac, where `libvcu_sil.so` does not build.
 
 | Code | Fires when | Why (firmware) |
 | ---- | ---------- | -------------- |
@@ -737,7 +740,8 @@ reverse `direction` is refused: the model cannot take it.
   Why YAML under [Scenarios](#scenarios)) and checks them.
 - `check.py`: the warnings, `--explain`, and `python -m vcusil.check`. It
   needs only PyYAML beyond the standard library, so it runs on any Python
-  3.11 or newer that has it.
+  3.11 or newer that has it. `host/ruff.toml` lints all of `host/` for
+  3.11, so syntax only 3.12 reads fails CI's Lint job.
 - `fwmodel.py`: the models of the firmware (debounce, `EdgeButton`, the
   filters, brake-pressed, the loop's taps) and `THRESHOLDS`, shared by the
   lint and the invariants.

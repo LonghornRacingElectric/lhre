@@ -565,7 +565,7 @@ LOADS = [
                        ('rtd_pressed: false', 'rtd_pressed: FALSE'),
                        ('contactors_closed: false', 'contactors_closed: False')], same_drive),
     ('a-comment-after-quoted-text', [(LAUNCH.splitlines(True)[6],
-                                      f'{LAUNCH.splitlines()[6].replace(": ", ": \"", 1)}" #2\n')],
+                                      LAUNCH.splitlines()[6].replace(': ', ': "', 1) + '" #2\n')],
      same_drive),
     ('a-comment-after-text', [('4 s, coast.\n', '4 s, coast.  # #2 of 4\n'), ('mark: rtd', 'mark: rtd  # on')],
      same_drive),

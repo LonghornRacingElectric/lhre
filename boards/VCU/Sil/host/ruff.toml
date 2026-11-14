@@ -1,0 +1,5 @@
+# The repo's rules, for Python 3.11: the scenario check runs natively on any
+# Python 3.11 or newer (README, Scenarios), older than the repo's 3.12, so
+# syntax only 3.12 reads (a backslash inside an f-string's braces) fails here.
+extend = "../../../../ruff.toml"
+target-version = "py311"
