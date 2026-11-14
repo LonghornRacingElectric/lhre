@@ -14,6 +14,19 @@ sections describe earlier configurations; later sections supersede statements
 such as “live calibration is not integrated.” Do not treat every historical
 result as a measurement of the current code.
 
+## New continuation checkpoint (2026-11-14)
+
+The sensor-verified stationary correction is now implemented as an experimental
+opt-in and enabled by the gyro-heading visual wrapper. Fresh headless stationary
+and moving captures plus 412 passing software tests are documented in the
+[continuation results](README.md#sensor-verified-stationary-correction).
+Post-confirmation temporal position scatter p95 fell from 0.402 m to 0.066 m,
+and maximum false speed from 0.947 m/s to 0.009 m/s. The moving control released
+all stationary corrections before physical motion and ran to 30 s without an
+armed emergency or observed cone contact. This is not a full-lap/gate or
+physical-car pass; moving error, uncertain heading and map consistency remain.
+The sections below preserve the earlier checkpoint and its evidence.
+
 ## 1. Current status and continuation point
 
 **Implemented and simulator-tested:** native Gazebo gyro/accelerometer noise

@@ -62,6 +62,7 @@ class Checkpoint:
     gyro_variance: float
     state: np.ndarray
     covariance: np.ndarray
+    speed_variance: float | None = None
 
 
 class PositionHistory:
@@ -74,11 +75,12 @@ class PositionHistory:
         self.duration_ns = int(duration_s*1e9)
         self.records = []
         self.last_fix_ns = -1
+        self.last_speed_ns = -1
         self.last_correction = {}
 
-    def record(self, stamp_ns, accel, gyro, variance):
+    def record(self, stamp_ns, accel, gyro, variance, speed_variance=None):
         self.records.append(Checkpoint(stamp_ns, accel, gyro, variance,
-                                       self.ekf.x.copy(), self.ekf.P.copy()))
+                                       self.ekf.x.copy(), self.ekf.P.copy(), speed_variance))
         while len(self.records) > 2 and self.records[1].stamp_ns < stamp_ns-self.duration_ns:
             self.records.pop(0)
 
@@ -125,7 +127,10 @@ class PositionHistory:
             self.ekf.predict((old.stamp_ns-previous)*1e-9, .5*(accel+old.accel))
             if old.gyro is not None:
                 self.ekf.update_yaw_rate(old.gyro, old.gyro_variance)
-            self.record(old.stamp_ns, old.accel, old.gyro, old.gyro_variance)
+            if old.speed_variance is not None:
+                self.ekf.update_stationary_speed(old.speed_variance)
+            self.record(old.stamp_ns, old.accel, old.gyro, old.gyro_variance,
+                        old.speed_variance)
             previous, accel = old.stamp_ns, old.accel
         self.last_fix_ns = stamp_ns
         self.last_correction.update({
@@ -136,3 +141,39 @@ class PositionHistory:
             'current_speed_after_m_s': float(self.ekf.x[3]),
         })
         return True, 'fused', innovation
+
+    def correct_stationary_speed(self, stamp_ns, variance):
+        """Insert scan-timed zero speed, retaining it for subsequent GPS replay."""
+        if not math.isfinite(variance) or variance <= 0:
+            raise ValueError('stationary speed variance must be positive and finite')
+        # A scan older than an already fused fix would erase that fix on rewind.
+        # Reject it rather than claiming unsupported arbitrary event ordering.
+        if (not self.records or stamp_ns < self.records[0].stamp_ns
+                or stamp_ns < self.last_fix_ns or stamp_ns <= self.last_speed_ns
+                or stamp_ns > self.records[-1].stamp_ns):
+            return False
+        index = max(i for i, r in enumerate(self.records) if r.stamp_ns <= stamp_ns)
+        anchor = self.records[index]
+        self.ekf.x, self.ekf.P = anchor.state.copy(), anchor.covariance.copy()
+        accel = anchor.accel
+        if stamp_ns > anchor.stamp_ns:
+            following = self.records[index+1]
+            fraction = (stamp_ns-anchor.stamp_ns)/(following.stamp_ns-anchor.stamp_ns)
+            accel += fraction*(following.accel-anchor.accel)
+            self.ekf.predict((stamp_ns-anchor.stamp_ns)*1e-9, .5*(anchor.accel+accel))
+        self.ekf.update_stationary_speed(variance)
+        later = self.records[index+1:]
+        self.records = self.records[:index+1]
+        self.record(stamp_ns, accel, None, 0., variance)
+        previous = stamp_ns
+        for old in later:
+            self.ekf.predict((old.stamp_ns-previous)*1e-9, .5*(accel+old.accel))
+            if old.gyro is not None:
+                self.ekf.update_yaw_rate(old.gyro, old.gyro_variance)
+            if old.speed_variance is not None:
+                self.ekf.update_stationary_speed(old.speed_variance)
+            self.record(old.stamp_ns, old.accel, old.gyro, old.gyro_variance,
+                        old.speed_variance)
+            previous, accel = old.stamp_ns, old.accel
+        self.last_speed_ns = stamp_ns
+        return True

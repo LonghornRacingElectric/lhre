@@ -8,6 +8,7 @@ from geometry_msgs.msg import Quaternion, TransformStamped, Vector3
 from lhr_state_estimation.ekf import IDX_V, IDX_X, IDX_Y, IDX_YAW, IDX_YAW_RATE, VehicleEkf
 from lhr_state_estimation.gnss import LocalENU, PositionHistory
 from lhr_state_estimation.gyro_calibration import CALIBRATION_DEFAULTS, GyroCalibration
+from lhr_state_estimation.stationary import STATIONARY_DEFAULTS, StationaryEvidence
 from lhr_state_estimation.wheel_odometry import body_speed
 from lhr_vehicle import load_vehicle
 from nav_msgs.msg import Odometry
@@ -60,6 +61,9 @@ class EkfNode(Node):
         self.declare_parameter('gnss_max_delay_s', 1.0)
         self.declare_parameter('gnss_gate_chi2', 25.0)
         self.declare_parameter('gnss_heading_gain', 1.0)
+        self.declare_parameter('use_stationary_updates', False)
+        for name, value in STATIONARY_DEFAULTS.items():
+            self.declare_parameter(name, value)
         self.declare_parameter('calibrate_gyro', False)
         for name, value in CALIBRATION_DEFAULTS.items():
             self.declare_parameter(name, value)
@@ -161,6 +165,19 @@ class EkfNode(Node):
             self.create_subscription(NavSatFix, self._str_param('gnss_topic'),
                                      self._gnss_cb, qos_profile_sensor_data)
 
+        self._stationary = None
+        self._stationary_pending = None
+        if self.get_parameter('use_stationary_updates').value:
+            if self._calibration is None or not self._use_gnss:
+                raise ValueError('stationary updates require calibrate_gyro and use_gnss')
+            self._stationary = StationaryEvidence({
+                name: self.get_parameter(name).value for name in STATIONARY_DEFAULTS})
+            self._stationary_pub = self.create_publisher(
+                String, '/lhr/state_estimation/stationary_status', 10)
+            self.create_subscription(
+                PointCloud2, self._str_param('gyro_calibration_lidar_topic'),
+                self._stationary_cloud_cb, QoSProfile(depth=50, reliability=reliability))
+
         init_topic = self._str_param('init_pose_topic')
         self._awaiting_init = bool(init_topic)
         if init_topic:
@@ -232,6 +249,9 @@ class EkfNode(Node):
             # ticks; publish-rate sampling can miss an entire impact pulse.
             self._ekf.predict(dt, 0.5*(self._previous_accel_x+accel_x))
         gyro_z = msg.angular_velocity.z-self._gyro_bias
+        if self._stationary is not None:
+            g, a = msg.angular_velocity, msg.linear_acceleration
+            self._stationary.add_imu(stamp_ns, [g.x, g.y, gyro_z], [a.x, a.y, a.z])
         self._ekf.update_yaw_rate(gyro_z, self._yaw_rate_var)
         self._last_imu_stamp_ns = stamp_ns
         self._previous_accel_x = accel_x
@@ -245,6 +265,54 @@ class EkfNode(Node):
                     self._float_param('gnss_gate_chi2'), self._gnss_heading_gain)
                 self._report_gnss(fix_stamp, accepted, reason, nis,
                                   self._gnss_history.last_correction)
+
+        self._apply_stationary()
+
+    def _apply_stationary(self):
+        if self._stationary_pending is None or self._last_imu_stamp_ns is None:
+            return
+        stamp_ns = self._stationary_pending
+        if stamp_ns > self._last_imu_stamp_ns:
+            return
+        self._stationary_pending = None
+        applied = False
+        if self._stationary.fresh(self._last_imu_stamp_ns):
+            applied = self._gnss_history.correct_stationary_speed(
+                stamp_ns, self._stationary.get('speed_variance'))
+        self._stationary_pub.publish(String(data=json.dumps({
+            'stamp_s': stamp_ns*1e-9, 'stationary': self._stationary.ready,
+            'reason': self._stationary.reason, 'applied': applied})))
+
+    def _stationary_cloud_cb(self, msg):
+        if not self._calibration_applied or self._last_imu_stamp_ns is None:
+            return
+        stamp_ns = msg.header.stamp.sec*1_000_000_000+msg.header.stamp.nanosec
+        if (stamp_ns <= 0 or msg.header.frame_id != self._calibration_frame
+                or abs(self.get_clock().now().nanoseconds-stamp_ns)*1e-9
+                > self._stationary.get('max_gap_s')):
+            self._stationary.reset('stale_or_changed_frame')
+        else:
+            self._stationary.add_cloud(stamp_ns, self._scene_points(msg))
+        if self._stationary.ready:
+            self._stationary_pending = stamp_ns
+            self._apply_stationary()
+        else:
+            self._stationary_pending = None
+            self._stationary_pub.publish(String(data=json.dumps({
+                'stamp_s': stamp_ns*1e-9, 'stationary': False,
+                'reason': self._stationary.reason, 'applied': False})))
+
+    def _scene_points(self, msg):
+        points = point_cloud2.read_points_numpy(
+            msg, field_names=('x', 'y', 'z'), skip_nans=True).reshape(-1, 3)
+        points = points[np.isfinite(points).all(axis=1)]+self._calibration_mount
+        rear, front, half_width = self._calibration_car
+        body = ((points[:, 0] > rear) & (points[:, 0] < front)
+                & (abs(points[:, 1]) < half_width))
+        ranges = np.linalg.norm(points[:, :2]-self._calibration_mount[:2], axis=1)
+        valid = (~body & (points[:, 2] > .05) & (points[:, 2] < .55)
+                 & (ranges > .8) & (ranges < 20))
+        return points[valid, :2]
 
     def _report_calibration(self, stamp_ns):
         status = self._calibration.status()
@@ -273,16 +341,7 @@ class EkfNode(Node):
             self._calibration.fail('lidar_frame_changed')
         else:
             self._calibration_frame = msg.header.frame_id
-            points = point_cloud2.read_points_numpy(
-                msg, field_names=('x', 'y', 'z'), skip_nans=True).reshape(-1, 3)
-            points = points[np.isfinite(points).all(axis=1)]+self._calibration_mount
-            rear, front, half_width = self._calibration_car
-            body = ((points[:, 0] > rear) & (points[:, 0] < front)
-                    & (abs(points[:, 1]) < half_width))
-            ranges = np.linalg.norm(points[:, :2]-self._calibration_mount[:2], axis=1)
-            valid = (~body & (points[:, 2] > .05) & (points[:, 2] < .55)
-                     & (ranges > .8) & (ranges < 20))
-            self._calibration.add_cloud(stamp_ns, points[valid, :2])
+            self._calibration.add_cloud(stamp_ns, self._scene_points(msg))
         self._report_calibration(stamp_ns)
 
     def _report_gnss(self, stamp_ns, accepted, reason, nis=None, details=None):

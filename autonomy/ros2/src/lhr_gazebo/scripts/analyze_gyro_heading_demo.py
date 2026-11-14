@@ -78,6 +78,7 @@ def analyze(capture, out):
     summary = {
         'capture': str(capture), 'actual_calibrate_gyro': actual['calibrate_gyro'],
         'actual_gnss_heading_gain': actual['gnss_heading_gain'], 'calibration': ready,
+        'actual_use_stationary_updates': actual.get('use_stationary_updates', False),
         'calibration_physics_motion': motion,
         'native_mean_gyro_z_over_calibration_rad_s': float(selected[:, 3].mean()),
         'bias_vs_native_mean_difference_rad_s': float(ready['bias_z_rad_s']-selected[:, 3].mean()),
@@ -97,7 +98,8 @@ def analyze(capture, out):
         'native_capture_end_s': float(native[-1, 0]),
         'limits': 'Live simulator profile, not physical-car calibration or validation of '
                   'uncertain initial heading. Existing one-time Gazebo start-pose seed remains. '
-                  'No zero-velocity/accelerometer calibration or map retention change.',
+                  'Stationary corrections, if enabled, are experimental; no accelerometer '
+                  'calibration or map retention change.',
     }
     metrics = []
     if (capture / 'metrics.csv').exists():

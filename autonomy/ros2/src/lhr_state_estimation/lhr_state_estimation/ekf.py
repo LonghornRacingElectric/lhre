@@ -104,6 +104,12 @@ class VehicleEkf:
         """Correct the longitudinal speed from a wheel-derived measurement."""
         self._update_scalar(IDX_V, speed, variance)
 
+    def update_stationary_speed(self, variance: float) -> None:
+        """Fuse independently verified zero speed without changing gyro heading."""
+        if not math.isfinite(variance) or variance <= 0:
+            raise ValueError('stationary speed variance must be positive and finite')
+        self._update_scalar(IDX_V, 0., variance, heading_gain=0.)
+
     def update_yaw_rate(self, yaw_rate: float, variance: float) -> None:
         """Correct the yaw rate from a gyro measurement."""
         self._update_scalar(IDX_YAW_RATE, yaw_rate, variance)
@@ -141,12 +147,13 @@ class VehicleEkf:
         return True, nis
 
     def _update_scalar(self, index: int, measurement: float,
-                       variance: float) -> None:
+                       variance: float, heading_gain: float = 1.) -> None:
         H = np.zeros((1, STATE_DIM))
         H[0, index] = 1.0
         innovation = measurement - self.x[index]
         S = (H @ self.P @ H.T).item() + variance
         K = (self.P @ H.T) / S
+        K[[IDX_YAW, IDX_YAW_RATE], :] *= heading_gain
 
         self.x = self.x + (K * innovation).ravel()
         self.x[IDX_YAW] = wrap_angle(self.x[IDX_YAW])

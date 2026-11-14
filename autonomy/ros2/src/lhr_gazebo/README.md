@@ -1205,3 +1205,39 @@ The [saved live tests](../../../testing/2026-11-08-native-imu/README.md#live-cal
 include successful calibration, a headless execution of this exact wrapper,
 and a short moving run. The moving run ended on ODOM_STALE; it is not a clean
 full lap or gate pass. GUI rendering itself remains for the user to verify.
+
+### Sensor-verified stationary correction
+
+The experimental `run_gyro_heading_demo.sh` profile now enables
+`use_stationary_updates:=true`; append `use_stationary_updates:=false` for the baseline. It requires gyro calibration and GNSS; it uses
+raw LiDAR and IMU evidence, not simulated truth or wheel speed. All
+`stationary_*` settings in the [estimator guide](../lhr_state_estimation/README.md#experimental-ongoing-stationary-correction)
+are typed launch arguments in both perception modes. General launch defaults
+remain off. A new confirmation window is needed after every loss of evidence.
+
+For a bounded stationary capture and separate jitter/accuracy scores:
+
+```bash
+python3 src/lhr_gazebo/scripts/record_ekf_stop.py data/stationary-check \
+  --stationary --perception-study --gnss --calibrate-gyro \
+  --stationary-updates --gnss-heading-gain 0 --stop-sim-time 20
+python3 src/lhr_gazebo/scripts/analyze_stationary_fusion.py \
+  data/stationary-check --start 9 --end 20
+```
+
+Omit `--stationary-updates` for a baseline; omit `--stationary` for a moving
+control. Keep separate output directories. The recorder now also captures
+`/tf`, `/tf_static` and stationary-evidence status. The analyzer reports
+position error against truth separately from temporal spread about the
+estimate's mean, step displacement and false speed. Its fixed window must
+have at least 90% temporal coverage; it does not convert a partial capture
+into a complete-window result. A constant position offset is error, not jitter.
+
+For visual inspection after rebuilding:
+
+```bash
+./scripts/run_gyro_heading_demo.sh auto_go:=false
+```
+
+Remove `auto_go:=false` for the moving control. These are experimental simulator
+profiles; the stationary improvement is not a full-lap or physical-car pass.

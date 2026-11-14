@@ -361,3 +361,51 @@ one-time Gazebo starting pose is still used. This cannot recover an erroneous
 starting heading, replace a survey/alignment procedure or bound long-term
 heading drift. The [live results](../../../testing/2026-11-08-native-imu/README.md#live-calibrated-gyro-heading-and-gps-position-visual-profile)
 are short simulator experiments, not physical-car or full-gate certification.
+
+## Experimental ongoing stationary correction
+
+`use_stationary_updates:=true` requires `calibrate_gyro:=true`, `use_gnss:=true`
+and wheel fusion disabled. The general default is false. After startup, a
+separate raw-LiDAR subscription remains active on the calibration cloud topic,
+using the same mount, body exclusion, geometry checks and QoS. No truth,
+commanded speed, wheel speed or estimated speed decides whether the car is still.
+
+A fresh three-second window must have quiet calibrated gyro/accelerometer
+samples and scan motion within 0.03 m / 0.15 degrees of a fixed anchor.
+The anchor is retained after confirmation, so small displacements accumulate
+instead of being erased by comparing only adjacent scans. Each verified cloud
+contributes an uncertain zero-speed observation at its sensor timestamp.
+The correction leaves yaw/yaw-rate gain zero and uses the same gain in Joseph
+covariance. It does not freeze position or disable GNSS position information.
+
+Detected scan motion, poor geometry, changed frames, sensor gaps, excessive
+rate, acceleration impulses or noisy IMU windows revoke evidence. Re-entry
+requires a complete new window. Correction stops when clouds stop; stale
+odometry timestamps are never advanced to hide dropouts. A scan older than
+an already fused GPS fix is rejected rather than rewinding away that fix.
+Accepted scan corrections are retained and replayed when a later-arriving
+GPS fix rewinds across them. `/lhr/state_estimation/stationary_status` reports
+scan timestamp, evidence state/reason and whether a correction was applied.
+
+| Parameter | Default | Meaning |
+| --- | --- | --- |
+| `use_stationary_updates` | false | Opt into the experimental correction |
+| `stationary_duration_s` | 3.0 | Quiet evidence window; must exceed maximum gap |
+| `stationary_max_gap_s` | 0.25 | Maximum sensor gap, relative age and cloud delivery age |
+| `stationary_max_translation_m` | 0.03 | Maximum displacement from retained scan anchor |
+| `stationary_max_yaw_deg` | 0.15 | Maximum anchor-relative scan rotation |
+| `stationary_max_gyro_rad_s` | 0.02 | Maximum absolute corrected gyro component |
+| `stationary_max_accel_std_m_s2` | 0.15 | Maximum per-axis window standard deviation; consecutive changes above three times this revoke evidence |
+| `stationary_speed_variance` | 0.0025 | Zero-speed observation variance in (m/s)² |
+
+Every numeric parameter must be positive and finite. Gazebo forwards these
+startup parameters with explicit types in both perception branches. The
+existing `gyro_calibration_lidar_topic` and `_qos` select the raw sensor input.
+
+These thresholds and the speed variance are experimental assumptions. Motion
+below the scan thresholds, repetitive/symmetric geometry, moving scenery and
+mount errors can defeat registration. Repeated scan evidence is correlated;
+this is not a calibrated physical-car standstill detector. It does not solve
+uncertain initial heading, acceleration/gravity modelling, driving drift or
+historical cone-map distortion. See the
+[stationary correction experiment](../../../testing/2026-11-08-native-imu/README.md#sensor-verified-stationary-correction).

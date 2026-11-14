@@ -1,0 +1,75 @@
+{
+  "baseline": {
+    "window_s": [
+      9.0,
+      20.0
+    ],
+    "odom_samples": 543,
+    "position_error_p95_m": 0.4047383125795856,
+    "position_error_max_m": 0.6657996044651804,
+    "temporal_radial_scatter_p95_m": 0.4017240050255511,
+    "position_step_p95_m": 0.14117381166022122,
+    "position_step_max_m": 0.39727391482255797,
+    "odom_interval_max_s": 0.08399999999999963,
+    "estimated_abs_speed_p95_m_s": 0.6251926170714397,
+    "estimated_abs_speed_max_m_s": 0.9466647522257219,
+    "truth_span_xy_m": [
+      0.0,
+      0.0
+    ],
+    "truth_abs_speed_max_m_s": 0.0,
+    "first_stationary_correction_s": null,
+    "last_stationary_correction_s": null,
+    "stationary_corrections_in_window": 0
+  },
+  "stationary_updates": {
+    "window_s": [
+      9.0,
+      20.0
+    ],
+    "odom_samples": 550,
+    "position_error_p95_m": 0.08560057418529467,
+    "position_error_max_m": 0.12189258763105017,
+    "temporal_radial_scatter_p95_m": 0.06638107485994427,
+    "position_step_p95_m": 0.01171403165809635,
+    "position_step_max_m": 0.0202280711187681,
+    "odom_interval_max_s": 0.027000000000001023,
+    "estimated_abs_speed_p95_m_s": 0.004202219003633231,
+    "estimated_abs_speed_max_m_s": 0.009021446375380713,
+    "truth_span_xy_m": [
+      0.0,
+      0.0
+    ],
+    "truth_abs_speed_max_m_s": 0.0,
+    "first_stationary_correction_s": 8.200000000000001,
+    "last_stationary_correction_s": 19.900000000000002,
+    "stationary_corrections_in_window": 110
+  },
+  "moving_release": {
+    "first_correction_s": 8.200000000000001,
+    "last_correction_s": 12.200000000000001,
+    "applied_count": 41,
+    "max_truth_speed_at_correction_m_s": 0.0,
+    "first_truth_motion_over_0_01_m_s": 12.32,
+    "corrections_after_12_s": [
+      {
+        "stamp_s": 12.0,
+        "stationary": true,
+        "reason": "stationary_verified",
+        "applied": true
+      },
+      {
+        "stamp_s": 12.100000000000001,
+        "stationary": true,
+        "reason": "stationary_verified",
+        "applied": true
+      },
+      {
+        "stamp_s": 12.200000000000001,
+        "stationary": true,
+        "reason": "stationary_verified",
+        "applied": true
+      }
+    ]
+  }
+}

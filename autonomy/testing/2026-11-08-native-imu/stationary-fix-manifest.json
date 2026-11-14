@@ -1,0 +1,33 @@
+{
+  "base_commit": "dfd995c4d23a09fb2f5cfa0b8fc56093b6aeb2e0",
+  "date": "2026-11-14",
+  "runtime": "existing lhr-autonomy-dev Docker image, ROS 2 Jazzy, Gazebo Harmonic",
+  "capture_dirs": [
+    "autonomy/ros2/data/fix-baseline",
+    "autonomy/ros2/data/stationary-fix",
+    "autonomy/ros2/data/moving-fix"
+  ],
+  "comparison": "stationary-fix-comparison.json",
+  "validation": "16 packages built; 412 affected tests passed",
+  "source_sha256": {
+    "autonomy/ros2/scripts/run_gyro_heading_demo.sh": "c8882c0fddcc334972c5c26764e48b8dcc1d604eaa6f5e25ef91bfdc755ebfb0",
+    "autonomy/ros2/src/lhr_gazebo/launch/gazebo_demo.launch.py": "4b120665094efb2b958724b3772a0c9ee494c0485a59174320f384d52e5b5340",
+    "autonomy/ros2/src/lhr_gazebo/scripts/analyze_gyro_heading_demo.py": "11badf5ab8fd6123189bdb49b9c3e1d804f1634dc6bac869ba975384f581f0c3",
+    "autonomy/ros2/src/lhr_gazebo/scripts/analyze_stationary_fusion.py": "68afea8722b1ddd2fbc8d38e5cf213e3aa5b3a72ba5ab29aee7a2422553b100c",
+    "autonomy/ros2/src/lhr_gazebo/scripts/record_ekf_stop.py": "5a78244430f5542ab1e661ece9a6b204b3c7dda0a8403d94ed9746565c4d46de",
+    "autonomy/ros2/src/lhr_gazebo/test/test_gnss_launch.py": "4de66631c28aa3f8f5dc200531fc3bc21a9d9c3330ae9f7b1ae02bdbed0b942c",
+    "autonomy/ros2/src/lhr_gazebo/test/test_stationary_fusion_analysis.py": "7333f05f2c146caf464b1ef8cbc16b544264a0713a5b290a01f76c09f44e544b",
+    "autonomy/ros2/src/lhr_state_estimation/lhr_state_estimation/ekf.py": "ebed8f2a602a66205d41d6277d3c3251b1f5fd9bd2cee6308922d612b7d98aed",
+    "autonomy/ros2/src/lhr_state_estimation/lhr_state_estimation/ekf_node.py": "fba375a6ef9c0096cba1ecd00d38fbf99996d086f3d04595961dee210b111228",
+    "autonomy/ros2/src/lhr_state_estimation/lhr_state_estimation/gnss.py": "bb8f048b8c32dcd4b6d919e63d751c5de76250211ae55e29ecb801cf3e2d4e04",
+    "autonomy/ros2/src/lhr_state_estimation/lhr_state_estimation/stationary.py": "eb13770bd97485529bf7b1eb1db10b3ca3f3b3c230e94e752fc815de0b3748a3",
+    "autonomy/ros2/src/lhr_state_estimation/test/test_stationary.py": "efecaa5f6f9c24499e4a4e87930b99345e5f8cb1d48cdcfe35ee350b51a39fc8",
+    "autonomy/ros2/src/lhr_state_estimation/test/test_stationary_node.py": "91f0c8214077a34cacd39a128ea6b5352078581551976c2f8c7b13f99902ebaa"
+  },
+  "limitations": [
+    "single live baseline/corrected pair",
+    "30 second moving control only",
+    "no GUI or physical-car validation",
+    "no SharePoint upload"
+  ]
+}

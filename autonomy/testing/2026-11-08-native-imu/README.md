@@ -1622,3 +1622,67 @@ correction without heading change, real gyro-turn preservation and missing
 LiDAR preventing startup. Default/non-default calibration controls, including
 QoS, were verified through actual estimator and metrics startup in both
 perception branches. Strict repository documentation passed.
+
+## Sensor-verified stationary correction
+
+Continuation on **2026-11-14** from `koa/imu-gnss-calibration-handoff`.
+A fresh headless Docker/Jazzy/Harmonic baseline reproduced horizontal false
+motion after successful gyro calibration: 8–20 s maximum position error
+0.666 m and maximum pre-GPS estimated speed 0.946 m/s, while physics stayed
+still. This establishes the planar estimator problem; it does not inspect
+the teammate's GUI, camera-follow behavior, vertical motion or actual viewer.
+
+The experimental correction uses ongoing raw-LiDAR registration plus quiet
+calibrated IMU evidence, a retained scan anchor, fresh timestamps and a full
+three-second entry/re-entry window. It adds an uncertain zero-speed observation
+at each verified cloud stamp. Delayed GPS replay preserves these observations.
+It does not use truth, wheel speed, estimated speed or a zero command as the
+standstill decision. General launch defaults remain off; the experimental
+`run_gyro_heading_demo.sh` now enables it. See the
+[estimator settings and limits](../../ros2/src/lhr_state_estimation/README.md#experimental-ongoing-stationary-correction)
+and [capture commands](../../ros2/src/lhr_gazebo/README.md#sensor-verified-stationary-correction).
+
+The first new correction was at 8.2 s. Both captures are scored over the same
+**9–20 s** post-confirmation window below. Raw physics position span and speed
+were zero in both. These are separate live noisy realizations, not an exact
+same-input replay or a statistical multi-seed result. An additional seeded
+identical-input unit regression checks that speed and position scatter improve
+without changing GPS noise or inertial process settings.
+
+| Quantity, 9–20 s | Baseline | Stationary correction |
+| --- | ---: | ---: |
+| Position truth error p95 | 0.405 m | 0.086 m |
+| Position truth error maximum | 0.666 m | 0.122 m |
+| Temporal radial scatter p95 about own mean | 0.402 m | 0.066 m |
+| Per-published-update displacement p95 | 0.141 m | 0.012 m |
+| Maximum estimated absolute speed | 0.947 m/s | 0.009 m/s |
+| Estimated absolute speed p95 | 0.625 m/s | 0.004 m/s |
+
+The wider 8–20 s window includes detector entry: corrected position-error
+p95/max were 0.140/0.416 m and pre-fix maximum speed was 0.578 m/s. Do not omit
+that initial transient when describing startup behavior. Heading remained
+stable and direct GPS heading changes remained zero at angular gain zero.
+
+A separate 30 s moving control entered DRIVING at 12.2 s. All 41 stationary
+corrections occurred at zero truth speed; the last was at 12.2 s, before truth
+speed first exceeded 0.01 m/s at 12.32 s. No corrections resumed during driving.
+No EMERGENCY transition or native cone contact was observed in this bounded
+run. An early pre-arm ODOM_STALE indication while calibration withheld odometry
+remained. The earlier armed ODOM_STALE failure was not reproduced, not proven
+fixed. Moving position-error p95/max over 8–20 s were 0.421/0.564 m, so this is
+not a 0.5 m maximum-error gate pass. No complete lap or GUI/hardware validation
+is claimed. Metrics CSV was unavailable for this bounded run.
+
+Verification: all 16 ROS packages built; 86 estimator and 326 Gazebo tests
+passed (412 total, including lint and both perception branches' actual node
+startup with defaults/overrides). New cases cover slow translation/coasting,
+slow turns, start/stop re-entry, impacts, sparse/degenerate scenes, sensor loss,
+frame changes, stale delivery, invalid settings, covariance, retained delayed
+corrections and separation of fixed bias from temporal jitter. Repetitive or
+symmetric scenes and subthreshold motion remain detector limitations.
+
+Retained summaries: `stationary-fix-comparison.json` and
+`stationary-fix-manifest.json`. Raw recordings remain ignored under
+`autonomy/ros2/data/fix-baseline`, `stationary-fix` and `moving-fix` in the fix
+checkout; they have not been uploaded to SharePoint. Original historical
+manifests have not been rewritten.

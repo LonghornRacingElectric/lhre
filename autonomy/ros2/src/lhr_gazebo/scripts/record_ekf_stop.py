@@ -41,6 +41,7 @@ def main():
     parser.add_argument('--gnss-stddev-m', type=float, default=gnss.horizontal_stddev_m)
     parser.add_argument('--gnss-latency-s', type=float, default=gnss.latency_s)
     parser.add_argument('--calibrate-gyro', action='store_true')
+    parser.add_argument('--stationary-updates', action='store_true')
     parser.add_argument('--gnss-heading-gain', type=float, default=1.)
     parser.add_argument('--perception-study', action='store_true',
                         help='record raw clouds/maps/paths and passive physics contact probes')
@@ -170,12 +171,14 @@ def main():
         launch_args += ['use_gnss:=true', f'gnss_rate_hz:={args.gnss_rate_hz}',
                         f'gnss_horizontal_stddev_m:={args.gnss_stddev_m}',
                         f'gnss_latency_s:={args.gnss_latency_s}']
-    launch_args += [f'calibrate_gyro:={str(args.calibrate_gyro).lower()}',
+    launch_args += [f'use_stationary_updates:={str(args.stationary_updates).lower()}',
+                    f'calibrate_gyro:={str(args.calibrate_gyro).lower()}',
                     f'gnss_heading_gain:={args.gnss_heading_gain}']
     if args.stationary:
         launch_args.append('auto_go:=false')
     topics = ['/clock', '/lhr/imu/data', '/lhr/vehicle/odom', '/lhr/vehicle/odom_truth',
               '/lhr/vehicle/cmd', '/lhr/mission/status', '/lhr/safety/status']
+    topics += ['/tf', '/tf_static', '/lhr/state_estimation/stationary_status']
     if args.perception_study:
         topics += ['/lhr/lidar/points', '/lhr/sensor/cones_detected',
                    '/lhr/track/centerline', '/lhr/control/lookahead']
@@ -192,6 +195,7 @@ def main():
     metadata['emergency_at_s'] = args.emergency_at
     metadata['perception_study'] = args.perception_study
     metadata['use_gnss'] = args.gnss
+    metadata['use_stationary_updates'] = args.stationary_updates
     metadata['calibrate_gyro'] = args.calibrate_gyro
     metadata['gnss_heading_gain'] = args.gnss_heading_gain
     metadata['stationary_requested'] = args.stationary

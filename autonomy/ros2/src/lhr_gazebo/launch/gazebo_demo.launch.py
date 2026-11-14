@@ -30,6 +30,7 @@ from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from lhr_state_estimation.gyro_calibration import CALIBRATION_DEFAULTS
+from lhr_state_estimation.stationary import STATIONARY_DEFAULTS
 from lhr_vehicle import load_vehicle
 import yaml
 
@@ -324,6 +325,9 @@ def _launch_setup(context: LaunchContext):
                 'gnss_gate_chi2': _float('gnss_gate_chi2'),
                 'gnss_heading_gain': _float('gnss_heading_gain'),
                 'yaw_rate_variance': _float('yaw_rate_variance'),
+                'use_stationary_updates': ParameterValue(
+                    LaunchConfiguration('use_stationary_updates'), value_type=bool),
+                **{name: _float(name) for name in STATIONARY_DEFAULTS},
                 'calibrate_gyro': ParameterValue(
                     LaunchConfiguration('calibrate_gyro'), value_type=bool),
                 **{name: ParameterValue(LaunchConfiguration(name), value_type=type(value))
@@ -786,6 +790,10 @@ def generate_launch_description():
         DeclareLaunchArgument('gnss_gate_chi2', default_value='25.0'),
         DeclareLaunchArgument('gnss_heading_gain', default_value='1.0'),
         DeclareLaunchArgument('yaw_rate_variance', default_value='0.0004'),
+        DeclareLaunchArgument('use_stationary_updates', default_value='false',
+                              choices=['true', 'false']),
+        *[DeclareLaunchArgument(name, default_value=str(value))
+          for name, value in STATIONARY_DEFAULTS.items()],
         DeclareLaunchArgument('calibrate_gyro', default_value='false', choices=['true', 'false']),
         *[DeclareLaunchArgument(name, default_value=str(value))
           for name, value in CALIBRATION_DEFAULTS.items()],
