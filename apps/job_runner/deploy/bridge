@@ -1,0 +1,3 @@
+#!/bin/sh
+# The forced SSH command cannot select executable paths, arguments or environment.
+exec /usr/bin/python3 -I /opt/lhr-runner/runner.py rpc
