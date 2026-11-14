@@ -1,7 +1,8 @@
 # Ingest
 
-Forwards Artemis `TelemetryBatch` payloads from MQTT `artemis/data` through the
-gRPC bridge to Kafka. Other telemetry topics are rejected. The bridge request
+Forwards Artemis `TelemetryBatch` payloads from MQTT `artemis/data` or
+`artemis/data/<schema_id>` through the gRPC bridge to Kafka. Other telemetry
+topics are rejected. The bridge request
 sets `car_type: Artemis` and `payload_format: artemis_updates_v1`.
 
 The MQTT callback queues raw bytes without blocking on network I/O. A single
@@ -65,21 +66,29 @@ Every `sensor_data` record carries a `schema_fingerprint` header: the
 `schema_id` of the wire contract its payload was encoded with
 (`//lib/codegen/telemetry:artemis_schema_contract`). The bridge stamps its own
 deployed `schema_id` (from `/schema/schema_contract.json` in its image) unless
-the publisher named one by sending to `artemis/data/<schema_id>`. Batches in
-any other schema stay out of the live `grafana_data_artemis` feed, which the
-bridge decodes with its own schema.
+the publisher named one by sending to `artemis/data/<schema_id>`.
+Before decoding, the bridge sends foreign-schema bytes to
+`sensor_data_quarantine` with a `quarantine_reason: schema_mismatch` header.
+Malformed deployed-schema batches go there with `invalid_payload` instead.
+Kafka retains the original bytes and headers for inspection and later replay;
+the RPC succeeds only after Kafka acknowledges them. This lets subsequent
+valid batches continue through the existing MQTT worker.
+Only valid deployed-schema batches reach `sensor_data` and the best-effort
+`grafana_data_artemis` feed. The database writer, processors and gateway ring
+continue consuming `sensor_data` with the deployed decoder.
 
-`decode_router.route()` decodes a record only when its fingerprint is the
-deployed schema or an approved entry in
-[`schema_registry/decoders.json`](../../schema_registry/decoders.json).
-Anything else raises `Quarantined` with `unknown_schema`, `unapproved_bundle`
-or `invalid_payload`. Records with no fingerprint (from an older bridge) decode
-as the deployed schema. Consumers still decode by car name; moving them onto
-`route()`, keeping quarantined bytes for replay, and having BEVO send the
-fingerprint itself are the next steps.
+`decode_router.route()` decodes Artemis records only with the deployed schema.
+The [decoder table](../../schema_registry/README.md#decoder-table) distinguishes
+unknown and unapproved fingerprints. Approval alone does not provide a decoder:
+an approved non-deployed entry raises `decoder_unavailable`. Other rejection
+reasons are `unknown_schema`, `unapproved_bundle` and `invalid_payload`.
+Records with no fingerprint from older bridges retain the deployed-schema
+assumption. Per-bundle decoders and automatic replay are not implemented.
+BEVO still needs to send its fingerprint explicitly; an unlabelled publisher
+asserts that its bytes match the deployed schema.
 
 ```bash
-# watch the router on the running stack's sensor_data (read-only)
+# inspect accepted and quarantined records on the running stack (read-only)
 bazel run --config=local //apps/telemetry/stack/ingest:decode_router_demo -- --from-kafka localhost:29092
 # publish one batch per case through MQTT -> ingest -> bridge
 bazel run --config=local //apps/telemetry/stack/ingest:decode_router_demo -- --send localhost:1883

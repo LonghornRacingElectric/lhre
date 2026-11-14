@@ -240,8 +240,7 @@ py_test(
     target_compatible_with = NOT_WINDOWS,
 )
 
-# Runtime decode router: picks a decoder per sensor_data record by its
-# schema_fingerprint header, or quarantines it. See decode_router.py.
+# Decode only records matching the deployed Artemis schema fingerprint.
 py_library(
     name = "decode_router",
     srcs = ["decode_router.py"],
@@ -290,7 +289,7 @@ py_test(
     target_compatible_with = NOT_WINDOWS,
 )
 
-# MQTT -> ingest -> bridge -> sensor_data -> router with the real images.
+# MQTT -> ingest -> bridge: isolate foreign/malformed bytes in Kafka.
 py_test(
     name = "decode_router_integration_test",
     srcs = ["decode_router_integration_test.py"],

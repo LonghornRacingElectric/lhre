@@ -1,6 +1,6 @@
 """Watch the decode router pick a decoder (or quarantine) for each record.
 
-    # tail the running stack's sensor_data and route every record
+    # tail sensor_data and sensor_data_quarantine and route every record
     bazel run --config=local //apps/telemetry/stack/ingest:decode_router_demo -- --from-kafka localhost:29092
 
     # in another terminal: publish one batch per case through MQTT -> ingest -> bridge
@@ -26,6 +26,7 @@ from stack.ingest.protobuf import artemis_pb2
 UNKNOWN_SCHEMA = hashlib.sha256(b"decode-router-demo: unknown").hexdigest()
 UNAPPROVED_SCHEMA = hashlib.sha256(b"decode-router-demo: unapproved").hexdigest()
 ARTEMIS_HEADERS = [("car_type", b"Artemis"), ("payload_format", b"artemis_updates_v1")]
+TOPICS = ("sensor_data", "sensor_data_quarantine")
 
 
 def default_paths():
@@ -120,15 +121,18 @@ def tail(bootstrap, table, from_beginning=False, limit=None, out=sys.stdout):
 
     consumer = KafkaConsumer(bootstrap_servers=bootstrap, enable_auto_commit=False)
     try:
-        partitions = [TopicPartition("sensor_data", p) for p in sorted(consumer.partitions_for_topic("sensor_data") or [0])]
+        partitions = [TopicPartition(topic, p) for topic in TOPICS
+                      for p in sorted(consumer.partitions_for_topic(topic) or [0])]
         consumer.assign(partitions)
         (consumer.seek_to_beginning if from_beginning else consumer.seek_to_end)(*partitions)
-        print(f"routing sensor_data from {bootstrap} (deployed schema {table.deployed[:12]})", file=out, flush=True)
+        print(f"routing {', '.join(TOPICS)} from {bootstrap} (deployed schema {table.deployed[:12]})",
+              file=out, flush=True)
         seen = 0
         while limit is None or seen < limit:
             for records in consumer.poll(timeout_ms=500).values():
                 for record in records:
-                    print(f"offset {record.offset:<7} {describe(record.headers, record.value, table)}", file=out, flush=True)
+                    print(f"{record.topic} offset {record.offset:<7} {describe(record.headers, record.value, table)}",
+                          file=out, flush=True)
                     seen += 1
     finally:
         consumer.close()
@@ -137,7 +141,7 @@ def tail(bootstrap, table, from_beginning=False, limit=None, out=sys.stdout):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--from-kafka", metavar="BOOTSTRAP", help="tail sensor_data, e.g. localhost:29092")
+    mode.add_argument("--from-kafka", metavar="BOOTSTRAP", help="tail accepted and quarantined data, e.g. localhost:29092")
     mode.add_argument("--send", metavar="HOST:PORT", help="publish one batch per case over MQTT, e.g. localhost:1883")
     mode.add_argument("--samples", action="store_true", help="route built-in cases in-process, no stack needed")
     parser.add_argument("--from-beginning", action="store_true", help="with --from-kafka: start at the oldest record")

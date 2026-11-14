@@ -27,7 +27,9 @@ The standalone Dockerfile was removed; build images through Bazel only.
 The image also packages the generated contract/descriptor under `/schema/`
 for the [deployed authority](../../schema_registry/README.md). That metadata
 must match the running ingest image before the authority advertises a schema
-to BEVO. Both images must advertise the active Artemis schema.
+to BEVO. Both images must advertise the active Artemis schema. The bridge
+requires a readable contract with a valid schema ID at startup; local executable
+runs can set `SCHEMA_CONTRACT` to their generated `schema_contract.json` path.
 
 Compose expects both `lhre/telemetry-kafka:4.1.0` and
 `lhre/telemetry-kafka-bridge:dev` to be loaded. The root
@@ -36,7 +38,8 @@ Compose expects both `lhre/telemetry-kafka:4.1.0` and
 ## Raw persistence contract
 
 A successful `SendSensorData` RPC means Kafka acknowledged the raw protobuf
-record on `sensor_data` with its `car_type` and `payload_format` headers. Producer errors return failure;
+record on `sensor_data` or `sensor_data_quarantine`, with its `car_type`,
+`payload_format` and `schema_fingerprint` headers. Producer errors return failure;
 there is no intermediate raw-data channel that can drop a successful request.
 An uncertain RPC may be retried, producing duplicates; the
 [database writer](../processors/db_writer/README.md) handles replayed Artemis observations.
@@ -44,7 +47,7 @@ The Grafana queue remains best effort and cannot prevent raw persistence.
 The single-broker deployment uses all available replica acknowledgments but does
 not provide resilience to loss of that broker's disk.
 
-The bridge configures `sensor_data` retention on startup, including existing
+The bridge configures retention for both topics on startup, including existing
 topics, using incremental config changes. `SENSOR_DATA_RETENTION_MS` defaults to
 604800000 (7 days), and `SENSOR_DATA_RETENTION_BYTES` to 8589934592 (8 GiB per
 partition). Whichever limit is reached first bounds database recovery. Size both
@@ -56,6 +59,16 @@ and reconstructs latest state only for best-effort Grafana output. Per-field
 receipt clocks prevent late updates from overwriting fresher live values.
 Arrays are replaced as whole observations, including a recorded empty array.
 The raw Kafka record always remains the original fresh batch.
+
+Plain MQTT `artemis/data` asserts the deployed schema; a publisher can name
+its schema on `artemis/data/<schema_id>`. Foreign-schema payloads go directly
+to `sensor_data_quarantine` before any protobuf decoding, with
+`quarantine_reason: schema_mismatch`. Malformed deployed-schema batches also
+go there with `invalid_payload`, so a rejected batch does not block later MQTT
+traffic. Quarantined records stay out of all `sensor_data` consumers and live
+JSON output. The [router demo](../ingest/README.md#decode-router) inspects both
+topics. Retention bounds the inspection/replay window; there is no automatic
+quarantine replay.
 
 The Bazel image packages its generated Artemis schema, CAN and storage metadata
 and is labeled as a schema consumer for deployment agreement checks. See the

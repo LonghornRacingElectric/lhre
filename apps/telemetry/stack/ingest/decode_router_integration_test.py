@@ -2,10 +2,10 @@
 
 Starts Kafka, Mosquitto, the kafka bridge and ingest from Bazel-built images on
 a private Docker network, publishes the demo's cases over MQTT exactly as
-`decode_router_demo --send` does, then routes what lands in sensor_data:
+`decode_router_demo --send` does, then checks both Kafka destinations:
 
 - plain artemis/data gets the bridge's deployed schema_id and decodes
-- artemis/data/<unknown> and artemis/data/<unapproved> are quarantined
+- foreign and malformed payloads are retained on sensor_data_quarantine
 - only the deployed-schema batch reaches the live grafana_data_artemis feed
 """
 
@@ -19,6 +19,7 @@ import unittest
 import uuid
 
 from kafka import KafkaConsumer, TopicPartition
+from paho.mqtt.publish import multiple
 from runfiles import Runfiles
 from stack.ingest import decode_router_demo as demo
 from stack.ingest.decode_router import FINGERPRINT_HEADER, Quarantined, route
@@ -121,10 +122,11 @@ class DecodeRouterIntegrationTest(unittest.TestCase):
         bootstrap = f"127.0.0.1:{kafka_port}"
         consumer = KafkaConsumer(bootstrap_servers=bootstrap, enable_auto_commit=False)
         self.addCleanup(consumer.close)
-        raw, live = TopicPartition("sensor_data", 0), TopicPartition("grafana_data_artemis", 0)
-        consumer.assign([raw, live])
-        consumer.seek_to_beginning(raw, live)
-        records = {"sensor_data": [], "grafana_data_artemis": []}
+        topics = (*demo.TOPICS, "grafana_data_artemis")
+        partitions = [TopicPartition(topic, 0) for topic in topics]
+        consumer.assign(partitions)
+        consumer.seek_to_beginning(*partitions)
+        records = {topic: [] for topic in topics}
 
         def drain():
             for partition, batch in consumer.poll(timeout_ms=200).items():
@@ -134,13 +136,29 @@ class DecodeRouterIntegrationTest(unittest.TestCase):
         def sent_and_landed():
             demo.send(f"127.0.0.1:{mqtt_port}", table)
             drain()
-            return len(records["sensor_data"]) >= 3
-        self.wait(sent_and_landed, "the demo batches to reach sensor_data", timeout=60)
+            return bool(records["sensor_data"]) and len(records["sensor_data_quarantine"]) >= 2
+        self.wait(sent_and_landed, "accepted and quarantined demo batches", timeout=60)
+
+        # Foreign bytes need no deployed decoder. A malformed deployed batch
+        # must also be retained without blocking the next valid MQTT message.
+        final_time = int(time.time() * 1000) + 1000
+        foreign_payload, malformed_payload = b"opaque foreign-schema bytes", b"invalid Artemis batch"
+        multiple([
+            {"topic": f"artemis/data/{demo.UNKNOWN_SCHEMA}", "payload": foreign_payload, "qos": 1},
+            {"topic": "artemis/data", "payload": malformed_payload, "qos": 1},
+            {"topic": "artemis/data", "payload": demo.board_batch(final_time), "qos": 1},
+        ], hostname="127.0.0.1", port=mqtt_port)
+
+        def final_batch_landed():
+            drain()
+            return any(route(r.headers, r.value, table)["updates"][0]["time"] == final_time
+                       for r in records["sensor_data"])
+        self.wait(final_batch_landed, "valid data after rejected batches", timeout=30)
         time.sleep(2)  # let the live feed catch up before checking what it got
         drain()
 
         outcomes = []
-        for record in records["sensor_data"]:
+        for record in records["sensor_data"] + records["sensor_data_quarantine"]:
             fingerprint = dict(record.headers).get(FINGERPRINT_HEADER, b"").decode()
             try:
                 result = route(record.headers, record.value, table)
@@ -148,14 +166,19 @@ class DecodeRouterIntegrationTest(unittest.TestCase):
             except Quarantined as q:
                 outcomes.append((fingerprint, q.reason, None))
 
-        # Every send round produced the same three outcomes, in publish order.
         decoded_times = {t for _, verdict, t in outcomes if verdict == "decoded"}
         self.assertTrue(decoded_times, outcomes)
         self.assertEqual({(fp, verdict) for fp, verdict, _ in outcomes}, {
             (table.deployed, "decoded"),
             (demo.UNKNOWN_SCHEMA, "unknown_schema"),
             (demo.UNAPPROVED_SCHEMA, "unapproved_bundle"),
+            (table.deployed, "invalid_payload"),
         }, outcomes)
+        self.assertTrue(all(dict(r.headers)[FINGERPRINT_HEADER].decode() == table.deployed
+                            for r in records["sensor_data"]))
+        quarantined = {r.value: dict(r.headers) for r in records["sensor_data_quarantine"]}
+        self.assertEqual(quarantined[foreign_payload]["quarantine_reason"], b"schema_mismatch")
+        self.assertEqual(quarantined[malformed_payload]["quarantine_reason"], b"invalid_payload")
 
         # The live feed only carries batches in the bridge's own schema. Each
         # round's quarantined batches are stamped 1 and 2 ms after its good one.
@@ -167,9 +190,10 @@ class DecodeRouterIntegrationTest(unittest.TestCase):
         self.assertTrue(decoded_times <= live_times, (decoded_times, live_times))
         self.assertFalse(quarantined_times & live_times, (quarantined_times, live_times))
 
-        # And the demo's own tail prints the same verdicts.
+        # The demo reads both destinations without changing consumer offsets.
         out = io.StringIO()
-        demo.tail(bootstrap, table, from_beginning=True, limit=3, out=out)
+        demo.tail(bootstrap, table, from_beginning=True,
+                  limit=sum(len(records[topic]) for topic in demo.TOPICS), out=out)
         printed = out.getvalue()
         self.assertIn("DECODED", printed)
         self.assertIn("unknown_schema", printed)

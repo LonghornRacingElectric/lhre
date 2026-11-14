@@ -5,35 +5,28 @@ encoded with (`//lib/codegen/telemetry:artemis_schema_contract`). The bridge
 stamps it as the `schema_fingerprint` Kafka header: its own deployed schema by
 default, or the one a publisher named on `artemis/data/<schema_id>`.
 
-A record is decoded only when its fingerprint is the deployed schema or an
-approved entry in the decoder table (`apps/telemetry/schema_registry/
-decoders.json`). Anything else is quarantined with a reason instead of being
-decoded with definitions that might not match:
+A record is decoded only with the deployed Artemis schema. The decoder table
+records approval but does not supply a matching decoder for another schema.
+Other records are quarantined with a reason:
 
 - `unknown_schema`: no entry for this fingerprint
 - `unapproved_bundle`: the entry exists but is not approved
+- `decoder_unavailable`: approved, but no matching compiled decoder is available
 - `invalid_payload`: bad or contradictory headers, or bytes that do not decode
 
-Records without the header predate fingerprints (or came from a bridge with no
-packaged contract) and are decoded as the deployed schema, as before.
-
-Today every approved Artemis schema uses the one compiled decoder; per-bundle
-decoders come with versioned bundles. See section 10 of the telemetry design
-sprint ("Runtime decode router").
+Records without the header predate fingerprints and are decoded as the
+deployed schema. The bridge retains foreign-schema bytes on
+sensor_data_quarantine, away from deployed consumers.
 """
 
 import json
 import re
 
 from google.protobuf.message import DecodeError
-from stack.ingest.sensor_decode import car_from_headers, decode_sensor, decode_updates, payload_format
+from stack.ingest.sensor_decode import NATIVE_FORMAT, car_from_headers, decode_updates, payload_format
 
 FINGERPRINT_HEADER = "schema_fingerprint"
 SCHEMA_ID = re.compile(r"[a-f0-9]{64}\Z")
-DECODERS = {
-    "artemis_updates_v1": decode_updates,
-    "snapshot_v1": lambda payload: [decode_sensor(payload, "Orion")],
-}
 ENTRY_FIELDS = {"schema_id", "car", "payload_format", "approved", "note"}
 
 
@@ -64,7 +57,8 @@ class DecoderTable:
                 raise ValueError(f"invalid decoder table entry: {entry!r}")
             if not isinstance(entry["schema_id"], str) or not SCHEMA_ID.fullmatch(entry["schema_id"]):
                 raise ValueError(f"invalid schema_id: {entry['schema_id']!r}")
-            if entry["payload_format"] not in DECODERS or not isinstance(entry["approved"], bool):
+            if entry["car"] != "Artemis" or entry["payload_format"] != NATIVE_FORMAT \
+                    or not isinstance(entry["approved"], bool):
                 raise ValueError(f"invalid decoder table entry: {entry!r}")
             if entry["schema_id"] in self.entries:
                 raise ValueError(f"duplicate schema_id {entry['schema_id']}")
@@ -100,11 +94,13 @@ def route(headers, payload, table):
     """Decode one sensor_data record or raise Quarantined.
 
     Returns {"car", "payload_format", "schema_id", "source", "updates"} where
-    source is "deployed", "table" or "unlabelled" (no fingerprint header).
+    source is "deployed" or "unlabelled" (no fingerprint header).
     """
     schema_id = _single_header(headers, FINGERPRINT_HEADER)
     try:
         car = car_from_headers(headers)
+        if car != "Artemis":
+            raise ValueError("decode router requires Artemis native updates")
         fmt = payload_format(headers, car)
     except ValueError as error:
         raise Quarantined("invalid_payload", str(error), schema_id) from None
@@ -120,9 +116,11 @@ def route(headers, payload, table):
         if (entry["car"], entry["payload_format"]) != (car, fmt):
             raise Quarantined("invalid_payload",
                               f"headers say {car}/{fmt}, schema is {entry['car']}/{entry['payload_format']}", schema_id)
+        if source != "deployed":
+            raise Quarantined("decoder_unavailable", "no matching decoder for this approved schema", schema_id)
 
     try:
-        updates = DECODERS[fmt](payload)
+        updates = decode_updates(payload)
     except (DecodeError, ValueError) as error:
         raise Quarantined("invalid_payload", str(error) or type(error).__name__, schema_id) from None
     return {"car": car, "payload_format": fmt, "schema_id": schema_id, "source": source, "updates": updates}

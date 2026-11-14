@@ -19,6 +19,7 @@ message SensorDataRequest {
 }
 
 message SensorDataResponse {
+  // Kafka retained the bytes on sensor_data or sensor_data_quarantine.
   bool success = 1;
   string message = 2;
 }

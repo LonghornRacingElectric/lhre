@@ -55,7 +55,7 @@ class DecodeRouterTest(unittest.TestCase):
             "wrong payload_format": ("quarantined", "invalid_payload"),
             "older bridge, no fingerprint": ("decoded", "unlabelled"),
             "two fingerprints": ("quarantined", "invalid_payload"),
-            "Orion snapshot": ("decoded", "unlabelled"),
+            "Orion snapshot": ("quarantined", "invalid_payload"),
             "deployed schema id on an Orion record": ("quarantined", "invalid_payload"),
         })
 
@@ -66,7 +66,7 @@ class DecodeRouterTest(unittest.TestCase):
         self.assertTrue(update["board_status"])
         self.assertTrue(all(abs(v - 0.02) < 1e-6 for v in update["board_status"].values()))
 
-    def test_approving_a_schema_in_the_table_lets_it_through(self):
+    def test_approval_without_a_matching_decoder_stays_quarantined(self):
         t_ms = int(time.time() * 1000)
         _, _, headers, payload = demo.cases(self.table.deployed, t_ms)[2]  # the unapproved schema
         entries = [dict(entry) for entry in self.table.entries.values()]
@@ -75,7 +75,7 @@ class DecodeRouterTest(unittest.TestCase):
                 entry["approved"] = True
         approved = DecoderTable(entries, self.table.deployed)
         self.assertEqual(outcome(headers, payload, self.table), ("quarantined", "unapproved_bundle"))
-        self.assertEqual(outcome(headers, payload, approved), ("decoded", "table"))
+        self.assertEqual(outcome(headers, payload, approved), ("quarantined", "decoder_unavailable"))
 
 
 if __name__ == "__main__":
