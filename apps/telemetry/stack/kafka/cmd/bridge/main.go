@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -164,6 +165,17 @@ func rawRetention() map[string]*string {
 	return map[string]*string{"retention.ms": strPtr(age), "retention.bytes": strPtr(size)}
 }
 
+func configureRawRetention(admin sarama.ClusterAdmin, topic string) error {
+	if topic != "sensor_data" && topic != quarantineTopic {
+		return nil
+	}
+	entries := map[string]sarama.IncrementalAlterConfigsEntry{}
+	for key, value := range rawRetention() {
+		entries[key] = sarama.IncrementalAlterConfigsEntry{Operation: sarama.IncrementalAlterConfigsOperationSet, Value: value}
+	}
+	return admin.IncrementalAlterConfig(sarama.TopicResource, topic, entries, false)
+}
+
 // ensureTopicExists creates the topic if it doesn't already exist
 func ensureTopicExists(admin sarama.ClusterAdmin, topic string) error {
 	// Retry logic for listing topics
@@ -185,15 +197,8 @@ func ensureTopicExists(admin sarama.ClusterAdmin, topic string) error {
 	}
 
 	if _, ok := topics[topic]; ok {
-		if topic == "sensor_data" || topic == quarantineTopic {
-			entries := map[string]sarama.IncrementalAlterConfigsEntry{}
-			for key, value := range rawRetention() {
-				entries[key] = sarama.IncrementalAlterConfigsEntry{Operation: sarama.IncrementalAlterConfigsOperationSet, Value: value}
-			}
-			return admin.IncrementalAlterConfig(sarama.TopicResource, topic, entries, false)
-		}
 		log.Printf("Topic %s already exists", topic)
-		return nil
+		return configureRawRetention(admin, topic)
 	}
 
 	log.Printf("Creating topic %s...", topic)
@@ -212,6 +217,10 @@ func ensureTopicExists(admin sarama.ClusterAdmin, topic string) error {
 		}
 	}
 	err = admin.CreateTopic(topic, detail, false)
+	if errors.Is(err, sarama.ErrTopicAlreadyExists) {
+		log.Printf("Topic %s was created concurrently", topic)
+		return configureRawRetention(admin, topic)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to create topic %s: %w", topic, err)
 	}
