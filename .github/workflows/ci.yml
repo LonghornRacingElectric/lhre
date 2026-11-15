@@ -545,6 +545,13 @@ jobs:
           npm ci --ignore-scripts --no-audit --no-fund
           npm rebuild ffmpeg-static
 
+      # vitest only loads the modules a test imports, so a component that
+      # names an undefined variable passes it and still breaks `next build`.
+      # The Prisma clients are generated first because src/lib/prisma imports
+      # them; generating needs no database.
+      - name: Type-check
+        run: npm run typecheck
+
       - name: Run the vitest suite
         run: npm run test:driveday
 

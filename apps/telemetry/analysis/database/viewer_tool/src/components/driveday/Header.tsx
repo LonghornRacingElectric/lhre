@@ -1,6 +1,6 @@
 "use client";
 
-import { useContext, useMemo, useState } from "react";
+import { useContext, useMemo, useRef, useState } from "react";
 import { sampleQuality } from "@/lib/driveday/review";
 import { fmt } from "@/lib/driveday/format";
 import type { Player } from "@/lib/driveday/player";
@@ -18,6 +18,10 @@ interface Props {
   onTheme: () => void;
   onSelect: (id: string) => void;
   onDb: (day: number) => void;
+  /** Trackside Live session exports picked from disk. */
+  onImport: (files: FileList) => void;
+  /** The session Trackside Live last saved on the server. */
+  onCache: () => void;
   onRemove: (id: string) => void;
 }
 
@@ -152,7 +156,7 @@ function RunSettings({ p, theme, onTheme }: Pick<Props, "theme" | "onTheme"> & {
 
 interface DbDayEntry { day_id: number; date: string; track_name: string | null; event_type: string | null; driver_name: string | null; laps: number; flags: number }
 
-/** Drive days in the orion database that have laps; picking one loads it like an imported file. */
+/** The import menu: Trackside Live JSON exports, the last Trackside session, and drive days in the orion database that have laps. */
 export function ImportMenu({ onDb, onJson, onCache }: { onDb: (day: number) => void; onJson: () => void; onCache: () => void }) {
   const [days, setDays] = useState<DbDayEntry[] | string | null>(null);
   const load = () => {
@@ -181,8 +185,9 @@ export function ImportMenu({ onDb, onJson, onCache }: { onDb: (day: number) => v
   );
 }
 
-export function Header({ runs, current, theme, onTheme, onSelect, onRemove, onDb }: Props) {
+export function Header({ runs, current, theme, onTheme, onSelect, onRemove, onDb, onImport, onCache }: Props) {
   const p = useContext(PlayerCtx);
+  const file = useRef<HTMLInputElement>(null);
   return (
     <header className="top">
       <div className="header-main">
