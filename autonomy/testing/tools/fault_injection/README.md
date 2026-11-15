@@ -58,7 +58,8 @@ container:
 
 Environment variables pick the matrix: `CASES` (empty for none), `SPEEDS` (`v_max` values,
 default `3 5 8`), `REPEATS` (2), `TRACK` (for the fault cases, `oval`),
-`CLEAN_SEEDS` (`1 2 3 4 5`, empty for none), `AFTER` (fault seconds after
+`CLEAN_SEEDS` (`1 2 3 4 5`, empty for none; with `CASES` empty too there is
+nothing to run and the runner refuses), `AFTER` (fault seconds after
 `DRIVING`, 25), `AT_SPEED` (0.95: the fault also waits for this share of
 `v_max`; 0 to 1, 0 fires on time alone, anything else stops the runner), `RUN_S` (60), `CLEAN_S` (150), `HANG_S` (60), `OUT` and
 `EXTRA` (more launch arguments; the gate stack and each case's own arguments

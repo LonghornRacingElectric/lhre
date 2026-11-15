@@ -150,11 +150,12 @@ plan() {  # one line per run: id kind track seed v_max seconds, then launch argu
 }
 
 # The campaign. Tests load the functions above without running it.
+PLAN=$(checked_plan) || exit 2
 cleanup
 while read -r id kind track seed v secs args <&3; do
     # $args is split on purpose: one launch argument per word.
     one_run "$id" "$kind" "$track" "$seed" "$v" "$secs" $args
-done 3< <(plan)
+done 3<<< "$PLAN"
 python3 "$HERE/summarize.py" "$OUT/results.csv" > "$OUT/summary.md"
 if [ -n "$failed" ]; then
     printf '\nRuns with no world or a failed analysis:%s\n' "$failed" \

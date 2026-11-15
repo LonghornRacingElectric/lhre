@@ -216,3 +216,58 @@ one_run "$RUN_ID" track_style:="$1" seed:=9
     assert options['--hang'] == '30'
     assert int(options['--pid']) > 0
     assert options['--out'] == str(out / 'runs' / f'{style}_s9_r1' / 'end.txt')
+
+
+# --- A plan that dies part way never runs half a campaign ---
+
+RUNNERS = {
+    'gate': (TOOLS / 'run_gate.sh', '# Skidpad joins the matrix', TOOLS),
+    'faults': (FAULT_TOOLS / 'run_faults.sh', '# The campaign.', FAULT_TOOLS),
+}
+# Everything the campaign would start or kill, so no test touches a process.
+CAMPAIGN_STUBS = r"""
+pkill() { :; }
+pgrep() { return 1; }
+setsid() { :; }
+ros2() { :; }
+python3() { :; }
+one_run() { echo "$1" >> "$OUT/ran.txt"; }
+"""
+
+
+def campaign(runner, plan):
+    """Return the whole runner with its processes stubbed and plan() replaced."""
+    path, marker, here = RUNNERS[runner]
+    script = path.read_text()
+    assert marker in script
+    head, tail = script.split(marker, 1)
+    return head.replace(HERE_LINE, f'HERE="{here}"') + CAMPAIGN_STUBS + plan + marker + tail
+
+
+@pytest.mark.parametrize('runner', ['gate', 'faults'])
+@pytest.mark.parametrize('plan', [
+    # set -u ends it at the stale name, after one row is out (#223, #218).
+    'plan() { echo "first_r1 x:=1"; echo "$STALE_NAME"; echo "last_r1 x:=2"; }\n',
+    'plan() { :; }\n',
+])
+def test_runners_refuse_a_plan_that_fails_or_is_empty(tmp_path, runner, plan):
+    env = dict(os.environ, OUT=str(tmp_path))
+    env.pop('STALE_NAME', None)
+    result = subprocess.run(['bash', '-c', campaign(runner, plan)],
+                            env=env, text=True, capture_output=True)
+    assert result.returncode == 2
+    assert 'plan failed or is empty' in result.stderr
+    assert not (tmp_path / 'ran.txt').exists(), 'part of the plan ran'
+    assert not (tmp_path / 'expected.txt').exists()
+
+
+@pytest.mark.parametrize('runner', ['gate', 'faults'])
+def test_runners_run_every_planned_row_in_order(tmp_path, runner):
+    plan = 'plan() { echo "first_r1 x:=1"; echo "second_r1 x:=2"; }\n'
+    result = subprocess.run(['bash', '-c', campaign(runner, plan)],
+                            env=dict(os.environ, OUT=str(tmp_path)),
+                            text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / 'ran.txt').read_text().split() == ['first_r1', 'second_r1']
+    if runner == 'gate':
+        assert (tmp_path / 'expected.txt').read_text().split() == ['first_r1', 'second_r1']

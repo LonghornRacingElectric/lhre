@@ -18,7 +18,7 @@ require the remaining gate work.
 |---|---|
 | `run_gate.sh` | Runs the matrix: autocross seeds 1 to 5 three times each, acceleration three times and skidpad three times on the gate stack. One headless launch per run, recorded to a bag |
 | `stack.args` | The gate stack: the launch arguments every gated run of this runner and `run_faults.sh` adds, one per line |
-| `stack.sh` | Reads `stack.args` for both runners, and refuses a line that is not one `name:=value` argument |
+| `stack.sh` | Reads `stack.args` for both runners, and refuses a line that is not one `name:=value` argument. Its `checked_plan` makes both runners read their whole run plan before starting and refuse to run if planning fails part way or plans nothing, so a stale variable after a merge cannot quietly drop runs from a campaign that still scores PASS |
 | `score_gate.py` | Reads every run folder and writes `results.csv` (one row per run) and `summary.md` (the pass/fail table). Rerunnable, it only reads |
 | `watch_run.py` | Ends each run in sim time and writes how it ended to `end.txt`. The fault tools use it too |
 

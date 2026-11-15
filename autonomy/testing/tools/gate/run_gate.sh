@@ -157,10 +157,12 @@ SKIDPAD_WORLD=$HERE/../../../ros2/src/lhr_gazebo/worlds/skidpad_seed1.sdf
 } > "$OUT/waived.txt"
 
 # The scorer fails every planned run with no result, so a campaign that was
-# cut short can never read as a pass.
-plan | cut -d' ' -f1 > "$OUT/expected.txt"
+# cut short can never read as a pass. That only holds if the plan itself
+# was not cut short, which checked_plan (stack.sh) makes sure of.
+PLAN=$(checked_plan) || exit 2
+printf '%s\n' "$PLAN" | cut -d' ' -f1 > "$OUT/expected.txt"
 cleanup
 while read -r id args <&3; do
     one_run "$id" $args
-done 3< <(plan)
+done 3<<< "$PLAN"
 python3 "$HERE/score_gate.py" "$OUT"
