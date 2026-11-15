@@ -4,6 +4,7 @@ import argparse
 import csv
 import json
 import os
+import signal
 from pathlib import Path
 import subprocess
 import sys
@@ -16,6 +17,19 @@ def campaign_environment(args, environ):
             'RUN_S': str(args.sim_seconds), 'SETTLE_S': '5', 'HANG_S': '60',
             'ROS_DOMAIN_ID': '42', 'GZ_PARTITION': 'lhr-campaign',
             'EXTRA': ''}
+
+
+def execute_campaign(env):
+    with subprocess.Popen(['/bin/bash', '/workspace/autonomy/testing/tools/gate/run_gate.sh'],
+                          env=env, start_new_session=True) as process:
+        def forward(signum, frame):
+            os.killpg(process.pid, signum)
+        previous = {sig: signal.signal(sig, forward) for sig in (signal.SIGTERM, signal.SIGINT)}
+        try:
+            return process.wait()
+        finally:
+            for sig, handler in previous.items():
+                signal.signal(sig, handler)
 
 
 def main():
@@ -31,13 +45,12 @@ def main():
                      'safety': True, 'stereo_camera': True, 'camera_lidar_fusion': True}
     Path('/results/configuration.json').write_text(json.dumps(configuration, indent=2))
     print(json.dumps({'event': 'started', **configuration}), flush=True)
-    result = subprocess.run(['/bin/bash', '/workspace/autonomy/testing/tools/gate/run_gate.sh'],
-                            env=campaign_environment(args, os.environ), check=False)
+    returncode = execute_campaign(campaign_environment(args, os.environ))
     table = Path('/results/results.csv')
     rows = list(csv.DictReader(table.open())) if table.is_file() else []
     print(json.dumps({'template': 'gazebo', 'results': rows,
-                      'passed': result.returncode == 0 and bool(rows)}), flush=True)
-    return result.returncode if result.returncode else (0 if rows else 1)
+                      'passed': returncode == 0 and bool(rows)}), flush=True)
+    return returncode if returncode else (0 if rows else 1)
 
 
 if __name__ == '__main__':

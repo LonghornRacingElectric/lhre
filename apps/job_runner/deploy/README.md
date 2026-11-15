@@ -130,7 +130,8 @@ recorded during deployment. A rebuild may resolve newer apt packages, so retain
 the accepted image ID for reproducible runs.
 
 Replace the revision and image placeholders in `jobs.example.json`, validate
-with `runner.definitions()`, and install as `/opt/lhr-runner/jobs.json`, owned by
+with `python3 -I /opt/lhr-runner/runner.py check-catalog --catalog <candidate>`,
+and install as `/opt/lhr-runner/jobs.json`, owned by
 root and mode 0644. Stage and validate a replacement before atomically renaming
 it. Each job must declare explicit parameters/resources and an image entrypoint;
 no arbitrary shell-command field is exposed in the browser. The worker reads

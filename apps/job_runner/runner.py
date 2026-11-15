@@ -408,7 +408,8 @@ def reconcile(queue, job):
     timed_out = state['Running'] and age > timeout
     if state['Running'] and (job['cancel_requested'] or timed_out or artifact_error):
         # Enforce safety even if a full disk prevents recording the state transition.
-        docker(['stop', '-t', '5', container_name(job['id'])], check=False)
+        grace = '20' if job['settings'].get('definition') else '5'
+        docker(['stop', '-t', grace, container_name(job['id'])], check=False)
         queue.update(job['id'], status='cancelling', error=artifact_error or (timeout_error if timed_out else None))
         info = inspect(job['id'])
         state = info['State']
@@ -472,7 +473,7 @@ def tick(queue, allow_launch=True):
                         print(json.dumps({'job': job['id'], 'worker_error': str(stop_error)[:1000]}), flush=True)
             except WORKER_ERRORS as persistence_error:
                 print(json.dumps({'job': job['id'], 'worker_error': str(persistence_error)[:1000]}), flush=True)
-    if not allow_launch or queue.paused():
+    if not allow_launch or queue.paused() or shutil.disk_usage(queue.root).free < 2 * 1024**3:
         return
     jobs = queue.jobs()
     active = [j for j in jobs if j['status'] in LIVE]
@@ -641,10 +642,16 @@ def worker_cycle(queue):
 
 
 def main():
+    global DEFINITIONS
     parser = argparse.ArgumentParser()
-    parser.add_argument('mode', choices=['worker', 'rpc'])
+    parser.add_argument('mode', choices=['worker', 'rpc', 'check-catalog'])
     parser.add_argument('--root', default='/var/lib/lhr-runner')
+    parser.add_argument('--catalog', default=str(DEFINITIONS))
     args = parser.parse_args()
+    DEFINITIONS = Path(args.catalog)
+    if args.mode == 'check-catalog':
+        print(json.dumps(list(definitions().values()), indent=2))
+        return
     with ExitStack() as locks:
         if args.mode == 'rpc':
             Path(args.root).mkdir(parents=True, exist_ok=True)

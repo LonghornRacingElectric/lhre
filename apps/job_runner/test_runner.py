@@ -705,9 +705,29 @@ class CatalogTest(unittest.TestCase):
         states = [{'State': {'Running': True}}, {'State': {'Running': False, 'ExitCode': 137}}]
         with patch.object(runner, 'artifacts', return_value=[{'bytes': runner.MAX_ARTIFACT_BYTES + 1}]), patch.object(runner, 'inspect', side_effect=states), patch.object(runner, 'docker') as docker, patch.object(runner, 'capture'), patch.object(runner.time, 'time', return_value=1794686405):
             runner.tick(self.queue)
-        docker.assert_called_once_with(['stop', '-t', '5', 'lhr-job-' + ID], check=False)
+        docker.assert_called_once_with(['stop', '-t', '20', 'lhr-job-' + ID], check=False)
         self.assertEqual(self.queue.get(ID)['status'], 'failed')
         self.assertIn('256 MiB', self.queue.get(ID)['error'])
+
+    def test_campaign_cancellation_forwards_signal_and_restores_handlers(self):
+        import campaign
+        from unittest.mock import MagicMock
+        process = MagicMock()
+        process.__enter__.return_value = process
+        process.pid = 1234
+        handlers = {}
+        def register(sig, handler):
+            handlers[sig] = handler
+            return 'previous'
+        def wait():
+            handlers[campaign.signal.SIGTERM](campaign.signal.SIGTERM, None)
+            return 143
+        process.wait.side_effect = wait
+        with patch.object(campaign.subprocess, 'Popen', return_value=process), patch.object(campaign.signal, 'signal', side_effect=register), patch.object(campaign.os, 'killpg') as kill:
+            self.assertEqual(campaign.execute_campaign({'OUT': '/results'}), 143)
+            kill.assert_called_once_with(1234, campaign.signal.SIGTERM)
+        self.assertEqual(handlers[campaign.signal.SIGTERM], 'previous')
+        self.assertEqual(handlers[campaign.signal.SIGINT], 'previous')
 
     def test_campaign_environment_cannot_inherit_a_different_matrix_or_extra_command(self):
         import argparse

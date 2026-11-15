@@ -127,7 +127,9 @@ The compact archive remains available for metadata and the console summary.
 Campaign outputs have a 256 MiB / 512-file **monitored budget**, checked each
 worker cycle; exceeding it stops the job. This is not a filesystem quota: writes
 can overshoot between checks. Only installed, trusted programs may use this
-profile. New starts also require 2 GiB free. See
+profile. New starts also require 2 GiB free. Campaign cancellation forwards the signal to
+the gate process group and allows 20 seconds for recorder cleanup before Docker
+kills remaining processes. See
 [ADR-021](../../docs/architecture/021-versioned-hil-job-catalog.md).
 
 ## Adding a useful job
