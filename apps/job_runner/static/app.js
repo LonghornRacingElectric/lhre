@@ -42,7 +42,7 @@ function catalog() {
     [...Object.keys(titles), ...entries.map(e => e.id)].includes(previous) ? previous : 'cpu';
   workload(false);
 }
-function allocation(job) {return job.settings.definition ? `${job.settings.parallel} CPU slots · GPU reserved` : `${job.settings.parallel} process${job.settings.parallel === 1 ? '' : 'es'}`;}
+function allocation(job) {return job.settings.definition ? `${job.settings.parallel} CPU slots${job.settings.definition.gpu ? ' · GPU reserved' : ''}` : `${job.settings.parallel} process${job.settings.parallel === 1 ? '' : 'es'}`;}
 function title(job) {return job.settings.definition?.title || titles[job.settings.template] || job.settings.template;}
 function render() {
   catalog();

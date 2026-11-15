@@ -1,6 +1,7 @@
 # Deployment templates
 
-The [initial deployment record](2026-11-14.md) lists verified live-host checks,
+The [initial deployment record](2026-11-14.md) and
+[versioned campaign rollout](2026-11-15.md) list verified live-host checks,
 current access and rollback.
 
 `lhr-runner.service` supervises the queue on HIL. From the repository root on
