@@ -155,7 +155,7 @@ tr.cur td { font-weight: 600; }
     <aside class="rail">
       <section class="card">
         <h2>Mount</h2>
-        <p>Above-LiDAR candidate: camera at 1.090 m, LiDAR lowered to 1.030 m. CAD clearance and validation pending; LiDAR housing is not drawn.</p>
+        <p>Above fixed LiDAR: camera at 1.125 m, LiDAR stays at 1.060 m. Compare camera pitch; CAD clearance pending and LiDAR housing is not drawn.</p>
         <div class="seg" role="group" aria-label="Mount position">
           <button id="m-nose" aria-pressed="false">Sim baseline</button>
           <button id="m-hoop" aria-pressed="false">Hoop, front face</button>
@@ -289,7 +289,7 @@ const BODY = { x: 0.043, y: 0.030, z: 0.175 };       // ZED 2i: 175 wide, 30 tal
 const MOUNTS = {
   nose: { x: 0.609 - WHEELBASE, z: 0.92 },           // current below-LiDAR sim baseline
   hoop: { x: -0.97, z: 1.085 },
-  top: { x: 0.625 - WHEELBASE, z: 1.090 },          // candidate with LiDAR lowered to 1.030 m
+  top: { x: 0.625 - WHEELBASE, z: 1.125 },          // above fixed LiDAR at 1.060 m
 };
 const ORIENT = [0, 5, 10, 15, 20].map((p, i) => ({ key: 'p' + p, label: p ? `${p}° down` : 'Level', pitch: p, color: `--s${i + 1}` }));
 

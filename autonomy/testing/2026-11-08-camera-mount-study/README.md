@@ -13,66 +13,78 @@ centreline, initially comparing 0–10° nose-down pitch. This supersedes the
 below-LiDAR recommendation as the direction to investigate, not as a final
 mount pose. Helmet interference is deferred for this iteration.
 
-### Recommended candidate from housing geometry
+### Fixed LiDAR, camera pitch recommendation
 
-Use camera `base_link` **(0.625, 0, 1.090) m**, **5° nose down**, above
-LiDAR **(0.609, 0, 1.030) m**, still upside down and 7° nose down. This
-lowers the LiDAR 30 mm, raises the camera 170 mm from the below-LiDAR
-baseline, and puts the camera centre 16 mm ahead of the LiDAR centre.
-Keep camera adjustment within 0–10°. This is a candidate for CAD and sim
-comparison, not a proven optimum or a released physical mount.
+The committed LiDAR centre **(0.609, 0, 1.060) m is fixed**. Retain its
+upside-down orientation, nominal 7° down and 4–10° bracket adjustment.
+The previous proposal to lower it to 1.030 m is withdrawn: changing the
+LiDAR height is outside this study's scope.
 
-The earlier 1.105 m camera / 1.060 m LiDAR proposal is discarded: it has
-neither a useful bracket gap nor hoop-height margin once housing pitch is
-included. A directly stacked camera over the unchanged LiDAR cannot meet
-both requirements using these housing bounds.
+Recommend **5° nose-down camera pitch**, with 0–10° adjustment. For the
+above-LiDAR comparison, use camera `base_link` **(0.625, 0, 1.125) m**:
+65 mm above and 16 mm ahead of the LiDAR centre. Height is a provisional
+housing/bracket allowance; the camera's actual optical origin and bracket
+thickness still need measurement. The pitch recommendation does not depend
+on accepting a lower LiDAR mount.
 
-Calculated on 2026-11-14 from the manufacturer's bounding dimensions:
-[Mid-360](https://www.livoxtech.com/mid-360/specs), 65 × 65 × 60 mm;
-[ZED 2i](https://docs.stereolabs.com/docs/products/cameras/zed/specifications),
-175.3 × 30.3 × 43.1 mm. These calculations assume the configured sensor
-origin is at its housing centre; actual optical origins require CAD.
+Calculated on 2026-11-14 using the existing viewer's ideal rectified optics
+(1280 × 720, 110° horizontal FOV, fx = fy = 448.13 px) and five-slice
+325 mm cone approximation. The camera is at 1.125 m, the left lens is
+60 mm left of centre, and cones are 1.5 m left of the track centreline.
+Distances below are **past the nose**, not from the camera. These are
+unoccluded pinhole calculations, not a mesh-raycast or Gazebo run.
 
-For pitch p, camera vertical half-extent is
-`(30.3 cos(p) + 43.1 sin(p)) / 2` mm. The LiDAR's at 7° is
-`(60 cos(7°) + 65 sin(7°)) / 2 = 33.74` mm. Subtract those bounds
-from the 60 mm centre separation to get the conservative vertical gap:
-
-| Camera pitch | Camera top | Gap above LiDAR housing | Below 1.115 m hoop top |
+| Camera pitch | Cone outline pixels at 4 / 8 / 12 m | Ideal sky fraction | Bottom centre ray ground distance ahead of camera |
 | --- | --- | --- | --- |
-| 0° | 1.10515 m | 11.11 mm | 9.85 mm |
-| **5°** | **1.10697 m** | **9.29 mm** | **8.03 mm** |
-| 10° | 1.10866 m | 7.60 mm | 6.34 mm |
+| 0° | 264 / 91 / 46 | 50.0% | 1.40 m |
+| **5°** | **256 / 90 / 45** | **44.6%** | **1.17 m** |
+| 10° | 253 / 90 / 46 | 39.0% | 0.99 m |
+| 15° | 256 / 93 / 48 | 33.3% | 0.82 m |
+| 20° | 266 / 98 / 51 | 27.3% | 0.68 m |
 
-The gap is the total available space for bracket thickness, assembly
-clearance and tolerances, not free clearance after a bracket is installed.
-The forward offset puts the camera's housing front bound about 2.87 mm
-ahead of the LiDAR's at 5°; it is not a verified lens/window offset.
-A height check alone does not establish primary-structure envelope fit:
-the 175 mm camera is wider than the narrow hoop top. Check the complete
-housing, bracket, connectors and cables against the assembly envelope.
-Helmet interference remains deferred.
+For reproduction: rotate each cone slice into the camera frame, with
+`depth = dx cos(pitch) - dz sin(pitch)`. Sum the viewer's slice-area estimate
+`width * slice_height * range * fx * fy / depth^3` over five slices.
+Sky fraction is `(360 - fy tan(pitch)) / 720`; bottom-ray ground distance
+is `height / tan(pitch + atan(360 / fy))`. Neither metric includes car
+occlusion; cone outlines are an upper bound on usable HSV patches.
 
-Keep 5° as the initial pitch: the original study found little cone-pixel
-benefit from larger angles, while larger angles put more car in the image.
-At 1.09 m, the ideal pinhole's bottom centre ray reaches flat ground 1.14 m
-ahead of the camera (0°: 1.36 m; 10°: 0.96 m), before mesh occlusion. This
-is not the visible-ground limit beyond the nose. No new rendered coverage
-or HSV measurement is claimed. Lowering the LiDAR shifts the ideal -3.5°
-dense-band ground intercept from 15.44 to 14.94 m past the nose at 7°;
-the previous gate results at 1.06 m do not validate the lowered mount.
+**Why 5°:** it trims sky while retaining essentially the same far-cone
+outline size as 0° or 10°. More downward pitch moves the lower view farther
+onto the car without a meaningful 8–12 m pixel gain. The original study
+reported that car-in-image tradeoff, but it has not been rerun against the
+mesh at this new height. Treat 5° as the recommended starting angle, not a
+numerically proven optimum; compare 5° and 10° in rendered images before
+final acceptance.
 
-The working viewer opens at this camera candidate. It still contains no
-LiDAR housing/bracket and cannot validate mutual occlusion. Validate the
-housing-centre assumption and envelope in CAD, then compare the proposed
-pair against the baseline with stationary stereo disparity and the fusion
-gate before accepting the placement.
+### Above-LiDAR housing clearance
 
-Placement is pending. Keep the current below-LiDAR simulation pose until the
-camera position, orientation and any revised LiDAR pose are decided. Then
-update `vehicle.yaml`, regenerate both Gazebo models, update the stereo
-fixture and pose tests, and rerun the stationary disparity and fusion checks.
-Do not apply the viewer's provisional YAML directly to the simulation.
+Using manufacturer bounding dimensions
+([Mid-360](https://www.livoxtech.com/mid-360/specs): 65 × 65 × 60 mm;
+[ZED 2i](https://docs.stereolabs.com/docs/products/cameras/zed/specifications):
+175.3 × 30.3 × 43.1 mm), and assuming origins at housing centres, the
+LiDAR vertical half-extent is at most 35.19 mm over its 4–10° adjustment.
+The camera half-extent is `(30.3 cos(p) + 43.1 sin(p)) / 2` mm.
+At the 65 mm centre separation:
+
+| Camera pitch | Minimum vertical housing gap over LiDAR 4–10° | Camera top |
+| --- | --- | --- |
+| 0° | 14.66 mm | 1.14015 m |
+| **5°** | **12.84 mm** | **1.14197 m** |
+| 10° | 11.15 mm | 1.14366 m |
+
+This gap must accommodate the bracket, clearance and tolerances. It does
+not validate optical-origin offsets, connectors, cable routing or mutual
+sensor occlusion. At 5° the camera top is about **27 mm above the study's
+1.115 m hoop top**. Record that envelope conflict for CAD review; do not
+resolve it by silently changing the fixed LiDAR height. Helmet interference
+remains deferred. The working viewer draws neither LiDAR nor bracket.
+
+The sim remains the below-LiDAR baseline while this camera placement is
+being selected. Once accepted, change only the camera pose in
+`vehicle.yaml`, regenerate both models, update the stereo fixture and pose
+tests, and rerun disparity and fusion checks. Preserve the committed LiDAR
+position and its nominal orientation.
 
 ## Original recommendation — superseded
 
