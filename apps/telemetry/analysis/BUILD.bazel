@@ -99,3 +99,19 @@ py_test(
     deps = [":query_client"],
     target_compatible_with = NOT_WINDOWS,
 )
+
+py_binary(
+    name = "verify_can_demo",
+    srcs = ["database/verify_can_demo.py"],
+    main = "database/verify_can_demo.py",
+    deps = [":query_client"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+py_test(
+    name = "verify_can_demo_test",
+    srcs = ["database/verify_can_demo.py", "database/verify_can_demo_test.py"],
+    main = "database/verify_can_demo_test.py",
+    deps = [":query_client"],
+    target_compatible_with = NOT_WINDOWS,
+)

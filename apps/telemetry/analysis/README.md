@@ -46,3 +46,21 @@ The **Board Health - Artemis (Real-time)** dashboard
 `last_seen_s` against the threshold. `bazel test
 //apps/telemetry/analysis/tests:artemis_replay_test` replays the recording
 through the real decoder and board_health's tracker.
+
+## CAN-to-client demo verification
+
+The [two-laptop runbook](../../BEVO/nonhermetic/DEMO.md) starts with SocketCAN
+and updater-installed binaries. Run `//apps/telemetry/analysis:verify_can_demo`
+with `--evidence /tmp/can-demo.json` to observe seven channels through the
+gateway, check freshness, save resolved live identities/values and compare a
+query over the same time range. It reports provisional results without calling
+them persisted. It sends no telemetry. Set `QUERY_API_TOKEN` and
+`QUERY_GATEWAY_URL` on the server.
+
+After stopping the sender, closing live clients and restarting the gateway, use
+`--check /tmp/can-demo.json --require-postgres` to verify those observations
+through storage. Coverage errors and value mismatches fail; pagination revision
+changes restart the historical read within a bounded wait. This is a manual
+deployment check, not automatic GHCR publication or hardware CI.
+`bazel test //apps/telemetry/analysis:verify_can_demo_test` checks live-to-history
+matching and rejects altered values or missing samples.

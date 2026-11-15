@@ -5,6 +5,11 @@ Runtime scripts for already-built BEVO executables on the Pi. Build the core
 `bazel build //apps/BEVO:pi_core_binaries`. These scripts configure real CAN
 interfaces and GPIO; they do not compile Rust or generate schemas.
 
+The [two-laptop demo](DEMO.md) uses Linux ARM64 virtual CAN, the real GHCR
+updater and the three core daemons. Build `//apps/BEVO:demo_bundle` for its
+standalone support bundle. `run_demo_stack.sh [seconds]` defaults to five minutes;
+core executables are downloaded by the updater.
+
 ## Files
 
 - `run_mock_stack.sh` — run `cand + dashd + loggerd + mock_can` locally
@@ -40,6 +45,11 @@ For mock publishing, set `BEVO_CORE_RELEASE_ROOT` to a plan for the same
 Artemis schema compiled into its installed mock executables.
 An explicit updater admin override can prepare an offline identity plan;
 the mock launcher does not invent a plan or bypass publisher validation.
+
+`run_real_stack.sh` defaults to `DASHD_ENABLED=1`. Set it to `0` to run the
+managed core without a separately installed driver dashboard; it then waits
+for cand. Shutdown waits for loggerd to flush before removing IPC sockets.
+`LOGGERD_ENABLED=0` also removes loggerd's executable requirement.
 
 The CAN mapping and CSV column layout are compiled from the shared textproto
 at build time. Acquisition and logging do not read runtime `can.json`; the Python mock traffic
