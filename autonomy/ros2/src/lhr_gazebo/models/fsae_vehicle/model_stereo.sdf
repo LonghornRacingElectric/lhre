@@ -96,7 +96,7 @@
     <!-- One ZED 2i rig. Shared parent preserves Harmonic's stereo baseline
          calculation when mount yaw/pitch changes. Inertia is sim bookkeeping. -->
     <link name="zed2i_link">
-      <pose relative_to="chassis">-0.1657 0 0.57 0 0.0872664626 0</pose>
+      <pose relative_to="chassis">-0.1497 0 0.775 0 0.0872664626 0</pose>
       <inertial>
         <mass>0.001</mass>
         <inertia><ixx>0.000001</ixx><iyy>0.000001</iyy><izz>0.000001</izz></inertia>

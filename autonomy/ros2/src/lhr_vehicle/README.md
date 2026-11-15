@@ -170,8 +170,8 @@ pixel intrinsics to the model generator and camera transforms. Invalid or
 missing camera configuration fails explicitly; rebuild installed packages
 after updating the YAML.
 
-The mount is the 11/8 study's design pose, not a measured one: on the LiDAR
-bracket at `base_link` (0.609, 0, 0.92), 5° nose down
+The mount is the revised camera study's simulation pose, not a measured one: on the LiDAR
+bracket above the LiDAR at `base_link` (0.625, 0, 1.125) m, 5° nose down
 ([camera mount study](../../../testing/2026-11-08-camera-mount-study/README.md)).
 A seated driver's helmet may block it; the study's CAD has no driver. Images use an ideal rectified pinhole with
 zero distortion and square pixels, rather than a physical camera calibration.

@@ -9,8 +9,9 @@ Orion STL using the same millimetre quantization and packing as the
 On 2026-11-14 the presets and initial view changed to study above-LiDAR
 placement: (0.625, 0, 1.125) m in `base_link`, 5° down, above the fixed
 LiDAR height of 1.060 m. The earlier LiDAR-lowering proposal is withdrawn. This housing-geometry candidate is not an accepted
-mount; see the study for its calculated clearances and assumptions. The baseline
-preset retains the below-LiDAR sim pose. Geometry/optics calculations are
+mount; see the study for its calculated clearances and assumptions. The comparison
+preset retains the previous below-LiDAR pose. The simulation now uses the
+above-LiDAR candidate (selected 2026-11-15). Geometry/optics calculations are
 unchanged; no driver or LiDAR/bracket collision model has been added.
 The original template is preserved in git commit `5257aaa0`; current builds
 no longer match the source attachment hash below.

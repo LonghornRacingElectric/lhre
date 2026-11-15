@@ -119,8 +119,9 @@ def test_stereo_optics_describe_a_wide_rectified_pair():
     assert camera.baseline_m == 0.12
     assert (camera.image_width, camera.image_height) == (1280, 720)
     assert camera.update_rate_hz == 30.0
-    assert camera.position_m == (0.609, 0.0, 0.92)
+    assert camera.position_m == (0.625, 0.0, 1.125)
     assert camera.rpy_rad == (0.0, 0.0872664626, 0.0)
+    assert veh.lidar_position_m == (0.609, 0.0, 1.06)
     assert camera.fx_px == pytest.approx(448.132824)
     assert camera.fy_px == camera.fx_px
     assert (camera.cx_px, camera.cy_px) == (640.0, 360.0)

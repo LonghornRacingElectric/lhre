@@ -157,7 +157,7 @@ tr.cur td { font-weight: 600; }
         <h2>Mount</h2>
         <p>Above fixed LiDAR: camera at 1.125 m, LiDAR stays at 1.060 m. Compare camera pitch; CAD clearance pending and LiDAR housing is not drawn.</p>
         <div class="seg" role="group" aria-label="Mount position">
-          <button id="m-nose" aria-pressed="false">Sim baseline</button>
+          <button id="m-nose" aria-pressed="false">Previous below-LiDAR</button>
           <button id="m-hoop" aria-pressed="false">Hoop, front face</button>
           <button id="m-top" aria-pressed="true">Above LiDAR (provisional)</button>
         </div>
@@ -287,7 +287,7 @@ const VFOV = 2 * Math.atan(CY / FY) * R2D;
 const MIN_AREA = 25, MAX_RANGE = 20, EDGE_Y = 1.5;   // sample height 0.1625 m is slice 2's centre
 const BODY = { x: 0.043, y: 0.030, z: 0.175 };       // ZED 2i: 175 wide, 30 tall, 43 deep (mm)
 const MOUNTS = {
-  nose: { x: 0.609 - WHEELBASE, z: 0.92 },           // current below-LiDAR sim baseline
+  nose: { x: 0.609 - WHEELBASE, z: 0.92 },           // previous below-LiDAR sim pose
   hoop: { x: -0.97, z: 1.085 },
   top: { x: 0.625 - WHEELBASE, z: 1.125 },          // above fixed LiDAR at 1.060 m
 };

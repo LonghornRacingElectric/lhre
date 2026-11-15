@@ -456,7 +456,8 @@ variants against `vehicle.yaml` and the templates.
 The camera-only link has no collision and uses 0.001 kg mass / 0.000001 kg m2
 diagonal inertia for simulation bookkeeping. The mount is the
 [camera mount study](../../../testing/2026-11-08-camera-mount-study/README.md)'s
-design pose, below the Mid-360 at the main hoop and 5° nose down; mount and
+simulation pose, above the Mid-360 at (0.625, 0, 1.125) m in `base_link`
+and 5° nose down. The LiDAR remains at (0.609, 0, 1.06) m; mount and
 optics still await measurement and physical device calibration.
 
 ## Stereo images in ROS/RViz
@@ -628,7 +629,10 @@ calibration, rolling shutter/exposure effects, and performance on the eventual
 compute platform remain unvalidated. This is camera-interface acceptance,
 not validation of camera-based cone detection or driving behavior.
 
-The stationary target fixture is `test/stereo_target.sdf`. For a visual repeat
+The stationary target fixture is `test/stereo_target.sdf`. Disparity at the
+current above-LiDAR mount is **unvalidated**: the historical 11 px measured /
+10.76 px predicted result above refers only to the earlier level mount, not
+the current fixture. For a visual check
 from the ROS workspace on a machine with a display:
 
 ```bash
@@ -639,7 +643,7 @@ ros2 launch lhr_gazebo gazebo_demo.launch.py \
 
 The fixture disables gravity to hold the dynamic vehicle stationary while
 its odometry plugin publishes TF. Its green target front face is at world
-x=5.609 m, 5 m in front of the rig center and centred at its height, so
+x=5.625 m, 5 m in front of the rig center and centred at its height, so
 changed mount geometry requires recomputing the measured target distance.
 The 10/11 disparity check above used the earlier level mount at x=1.8 m; with
 the 5° pitch the face is no longer square to the optical axis.

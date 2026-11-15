@@ -80,11 +80,11 @@ sensor occlusion. At 5° the camera top is about **27 mm above the study's
 resolve it by silently changing the fixed LiDAR height. Helmet interference
 remains deferred. The working viewer draws neither LiDAR nor bracket.
 
-The sim remains the below-LiDAR baseline while this camera placement is
-being selected. Once accepted, change only the camera pose in
-`vehicle.yaml`, regenerate both models, update the stereo fixture and pose
-tests, and rerun disparity and fusion checks. Preserve the committed LiDAR
-position and its nominal orientation.
+On 2026-11-15 the above-LiDAR camera pose was selected for simulation:
+(0.625, 0, 1.125) m, 5° down. `vehicle.yaml`, the generated stereo model and
+stationary target fixture now use it. The LiDAR position and nominal
+orientation are unchanged. Physical bracket acceptance, a new disparity
+measurement and the full fusion gate remain pending.
 
 ## Original recommendation — superseded
 
@@ -105,11 +105,11 @@ approximately `base_link` (0.609, 0, 0.92) m, `rpy_rad: [0, 0.087, 0]`.
   driver visibility remain unresolved, not demonstrated by the viewer.
 
 This records the design study, not a measured mount or acceptance test.
-No camera-mount sim A/B or field test has been run. The proposed mount is
-now the design mount in `vehicle.yaml` and both generated Gazebo models
+No camera-mount sim A/B or field test has been run. The original proposed mount was
+previously the design mount in `vehicle.yaml` and both generated Gazebo models
 ([#242](https://github.com/LonghornRacingElectric/lhre/issues/242)), tagged
 `ASSUMED (design)` like the LiDAR's. The fusion gate has not been rerun at
-this mount, and it remains the simulation baseline while the above-LiDAR study is open.
+this original mount; it has now been superseded by the above-LiDAR sim pose.
 
 ## Viewer
 
