@@ -105,7 +105,7 @@ def needs_gpu(settings):
 def artifact_path(queue, job_id, name):
     # Resolve every component with O_NOFOLLOW, including intermediate directories.
     parts = name.split('/') if isinstance(name, str) else []
-    if not parts or any(not part or part in {'.', '..'} or '\\' in part for part in parts):
+    if not parts or len(name) > 1024 or len(parts) > 32 or any(not part or part in {'.', '..'} or '\\' in part for part in parts):
         raise ValueError('Invalid artifact path')
     root = queue.directory(job_id) / 'artifacts'
     with ExitStack() as stack:
@@ -136,7 +136,7 @@ def artifact_chunk(queue, job_id, name, offset):
     import stat
     if queue.get(job_id)['status'] not in TERMINAL:
         raise ValueError('Artifacts are available after the job finishes')
-    if type(offset) is not int or offset < 0:
+    if type(offset) is not int or not 0 <= offset <= MAX_ARTIFACT_BYTES:
         raise ValueError('Invalid artifact offset')
     with os.fdopen(artifact_path(queue, job_id, name), 'rb') as stream:
         info = os.fstat(stream.fileno())
@@ -252,7 +252,17 @@ class Queue:
         return {**dict(row), 'settings': json.loads(row['settings'])}
 
     def submit(self, request):
-        settings = validate(request)
+        # Retries use the accepted snapshot even after an administrator upgrades the catalog.
+        saved = None
+        if isinstance(request, dict) and isinstance(request.get('id'), str):
+            with self.connect() as db:
+                row = db.execute('SELECT settings FROM jobs WHERE id=?', (request['id'],)).fetchone()
+            if row:
+                saved = json.loads(row['settings'])
+        if saved and saved.get('definition') and request.get('template') == saved['template']:
+            settings = custom_settings(request, {saved['template']: saved['definition']})
+        else:
+            settings = validate(request)
         encoded = json.dumps(settings, sort_keys=True)
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')

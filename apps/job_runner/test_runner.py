@@ -632,6 +632,9 @@ class CatalogTest(unittest.TestCase):
         self.definition['image'] = 'sha256:' + '2' * 64
         self.definition['revision'] = 'b' * 40
         self.save()
+        self.assertEqual(self.queue.submit(self.request), job)
+        with self.assertRaises(ValueError):
+            self.queue.submit({**self.request, 'parameters': {'seed': 4}})
         settings = self.queue.get(job['id'])['settings']
         args = runner.command(settings, self.queue.directory(ID))
         self.assertIn('sha256:' + '1' * 64, args)
@@ -684,8 +687,9 @@ class CatalogTest(unittest.TestCase):
         for name in ['../jobs.json', '/etc/passwd', 'bag/../run.mcap', 'bag//run.mcap']:
             with self.subTest(name=name), self.assertRaises(ValueError):
                 runner.artifact_chunk(self.queue, ID, name, 0)
-        with self.assertRaises(ValueError):
-            runner.artifact_chunk(self.queue, ID, 'bag/run.mcap', -1)
+        for offset in [-1, True, 10**100]:
+            with self.assertRaises(ValueError):
+                runner.artifact_chunk(self.queue, ID, 'bag/run.mcap', offset)
 
     def test_artifacts_never_follow_file_or_directory_symlinks_or_fifos(self):
         directory = self.artifact_directory()
