@@ -7,14 +7,12 @@ import { fmt } from "@/lib/driveday/format";
 import { clock } from "@/lib/driveday/format";
 import { usePlayer, useUi } from "../context";
 import { Field } from "./Tile";
-import { ValidityControls } from "./ReviewPanels";
 
-const FLAGS: [string, string][] = [["", "Unmarked"], ["clean", "Clean"], ["cone", "Cone hit"], ["offcourse", "Off course"], ["incomplete", "Incomplete"], ["off", "Off line"], ["traffic", "Traffic"], ["spin", "Spin"], ["mistake", "Mistake"], ["skip", "Skip lap"]];
 
 function ConeList() {
   const p = usePlayer();
   const { ce } = p.user;
-  if (!ce.length) return <div className="conelist"><span className="cl-empty">Press C the moment a cone is hit. It is pinned to that moment and to that spot on the track.</span></div>;
+  if (!ce.length) return null;
   return (
     <div className="conelist">
       {ce.map((e, i) => {
@@ -47,7 +45,6 @@ export function LapsPanel() {
   const m = p.session.D.meta;
   return (
     <>
-      <details className="review-details"><summary>Lap eligibility rules</summary><ValidityControls /></details>
       <div className="scroll">
         <table>
           <thead>
@@ -56,18 +53,16 @@ export function LapsPanel() {
               <th><i style={{ background: "var(--s1)" }} />S1</th>
               <th><i style={{ background: "var(--s2)" }} />S2</th>
               <th><i style={{ background: "var(--s3)" }} />S3</th>
-              <th>Real</th><th>Cones</th><th>Adjusted</th><th>Mark</th>
+              <th>Real</th><th>Cones</th><th>Adjusted</th><th>Include</th>
             </tr>
           </thead>
           <tbody id="tb">
-            {order.map((i, n) => {
+            {order.filter(i => laps[i].kind !== "out").map((i, n, visible) => {
               const l = laps[i];
               const isLap = l.kind === "lap";
               const c = a.conesOf(l);
               const no = i + 1;
-              const f = p.user.flags[no] || {};
-              const cur = f.x ? "skip" : f.f || "";
-              const prev = n > 0 ? laps[order[n - 1]].kind : null;
+              const prev = n > 0 ? laps[visible[n - 1]].kind : null;
               const sep = (n > 0 && prev !== l.kind && l.kind !== "out") || (isLap && prev === "out");
               const bestR = isLap && a.valid(l) && Math.abs(l.dur - a.bestLap) < 1;
               const bestA = isLap && a.valid(l) && Math.abs(a.adj(l) - bA) < 1;
@@ -111,16 +106,11 @@ export function LapsPanel() {
                   <td>
                     {isLap && (
                       <>
-                        <button className="gbtn" type="button" title="Use this lap as the ghost" onClick={() => { p.set("cmp", "lap"); p.set("ghostLapI", i); }}>Ghost</button>
-                        <select
-                          className="flagsel"
-                          aria-label={"Mark for " + l.name}
-                          title="Skip leaves the lap out of the bests, the debrief and the consistency view"
-                          value={cur}
-                          onChange={(e) => p.setFlag(no, e.target.value === "skip" ? { f: "", x: 1 } : { f: e.target.value, x: 0 })}
-                        >
-                          {FLAGS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
-                        </select>
+                        <button className="gbtn" type="button" title="Use this lap as the ghost" onClick={() => { p.set("cmp", "lap"); p.set("ghostLapI", i); }}>Compare</button>
+                        <input type="checkbox" aria-label={"Include " + l.name + " in best times"} title="Include in best times" checked={a.valid(l)} onChange={e => {
+                          const include = e.currentTarget.checked;
+                          p.update(user => { const next = { ...(user.flags[no] ?? {}), include }; if (include) delete next.x; user.flags[no] = next; });
+                        }} />
                       </>
                     )}
                   </td>
@@ -132,7 +122,6 @@ export function LapsPanel() {
       </div>
       <div className="penrow">
         <Field label="Penalty per cone (s)" k="pen" value={p.user.setup.pen} placeholder="2" onValue={(v) => p.setSetup("pen", v)} />
-        <span>Real time plus the penalty for each cone. Click a lap to jump to it.</span>
       </div>
       <div className="penrow" style={{ borderTop: "1px solid var(--line)" }}>
         <button

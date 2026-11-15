@@ -21,6 +21,21 @@ interface Props {
   onRemove: (id: string) => void;
 }
 
+function placeMetricTooltip(element: HTMLDivElement) {
+  const popup = element.querySelector<HTMLElement>(".pop");
+  if (!popup) return;
+  const anchor = element.getBoundingClientRect();
+  popup.style.position = "fixed";
+  popup.style.right = "auto";
+  popup.style.maxWidth = "calc(100vw - 16px)";
+  popup.style.maxHeight = "calc(100dvh - 16px)";
+  popup.style.overflow = "auto";
+  const bounds = popup.getBoundingClientRect();
+  popup.style.left = Math.max(8, Math.min(anchor.left, window.innerWidth - bounds.width - 8)) + "px";
+  const below = anchor.bottom + 8;
+  popup.style.top = Math.max(8, Math.min(below + bounds.height <= window.innerHeight - 8 ? below : anchor.top - bounds.height - 8, window.innerHeight - bounds.height - 8)) + "px";
+}
+
 function Kpis() {
   const p = useContext(PlayerCtx)!;
   useUi(p);
@@ -67,7 +82,7 @@ function Kpis() {
   return (
     <div className="kpis" id="kpis">
       {shown.map(([label, value, pop]) => (
-        <div className="kpi has" tabIndex={0} key={label}>
+        <div className="kpi has" tabIndex={0} key={label} onMouseEnter={e => placeMetricTooltip(e.currentTarget)} onMouseMove={e => placeMetricTooltip(e.currentTarget)} onFocus={e => placeMetricTooltip(e.currentTarget)}>
           <b>{value}</b>
           <span>{label} ⓘ</span>
           {pop}
@@ -137,17 +152,20 @@ function RunSettings({ p, theme, onTheme }: Pick<Props, "theme" | "onTheme"> & {
 
 interface DbDayEntry { day_id: number; date: string; track_name: string | null; event_type: string | null; driver_name: string | null; laps: number; flags: number }
 
-/** Drive days in the orion database that have laps; picking one loads it into the run list. */
-export function DbMenu({ onDb }: { onDb: (day: number) => void }) {
+/** Drive days in the orion database that have laps; picking one loads it like an imported file. */
+export function ImportMenu({ onDb, onJson, onCache }: { onDb: (day: number) => void; onJson: () => void; onCache: () => void }) {
   const [days, setDays] = useState<DbDayEntry[] | string | null>(null);
   const load = () => {
     setDays(null);
     fetch("/api/driveday/db")
-      .then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error || r.statusText); setDays(j.days); })
+      .then(async (r) => { if (!r.headers.get("content-type")?.includes("application/json")) throw new Error("The database service is not available here."); const j = await r.json(); if (!r.ok) throw new Error(j.error || r.statusText); setDays(j.days); })
       .catch((e: Error) => setDays(e.message));
   };
   return (
-    <div className="run-selector"><Menu wide ariaLabel="Load a drive day from the database" label="From database" onToggle={(open) => { if (open) load(); }}>
+    <div className="run-selector import-menu"><Menu wide ariaLabel="Import session" label="Import" onToggle={(open) => { if (open) load(); }}>
+      <button className="btn" type="button" onClick={onJson}>JSON files…</button>
+      <button className="btn" type="button" onClick={onCache}>Last Trackside session</button>
+      <strong className="import-source-heading">From database</strong>
       {days === null ? <p className="run-selector-note">Loading drive days…</p>
         : typeof days === "string" ? <p className="run-selector-note">Database unavailable: {days}</p>
         : !days.length ? <p className="run-selector-note">No drive days with laps yet.</p>
@@ -167,11 +185,11 @@ export function Header({ runs, current, theme, onTheme, onSelect, onRemove, onDb
   const p = useContext(PlayerCtx);
   return (
     <header className="top">
-      <div>
-        <Title run={runs.find((r) => r.id === current)} />
+      <div className="header-main">
+        <div className="header-title"><Title run={runs.find((r) => r.id === current)} /></div>
         <div className="runbar">
           {runs.length > 0 && (
-            <div className="run-selector"><Menu wide ariaLabel="Select run" label={<span className="run-selector-label">{runs.find(r => r.id === current)?.name || "Choose run"}</span>}>
+            <div className="run-selector run-picker"><Menu wide ariaLabel="Select run" label={<span className="run-selector-label">Runs</span>}>
               <div className="run-selector-list" aria-label="Saved runs">
                 {runs.map(r => <div className={"run-selector-row" + (r.id === current ? " selected" : "")} key={r.id}>
                   <button className="run-choice" type="button" aria-current={r.id === current ? "true" : undefined} title={runLabel(r)} onClick={() => onSelect(r.id)}><strong>{r.name || "Untitled run"}</strong><small>{runLabel(r)}</small></button>
@@ -180,7 +198,18 @@ export function Header({ runs, current, theme, onTheme, onSelect, onRemove, onDb
               </div>
             </Menu></div>
           )}
-          <DbMenu onDb={onDb} />
+          <ImportMenu onDb={onDb} onJson={() => file.current?.click()} onCache={onCache} />
+          <input
+            ref={file}
+            type="file"
+            accept=".json,application/json"
+            multiple
+            hidden
+            onChange={(e) => {
+              if (e.target.files?.length) onImport(e.target.files);
+              e.target.value = "";
+            }}
+          />
           <SettingsMenu theme={theme} onTheme={onTheme} />
           <div id="workspace-actions" />
         </div>

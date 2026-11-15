@@ -44,7 +44,7 @@ export function VideoPanel({ visible = true }: { visible?: boolean } = {}) {
   const compressionAbort = useRef<AbortController | null>(null);
   const restoreFrame = useRef<number | null>(null);
   const overlayKey = "video-overlay:" + p.session.D.meta.sessId + ":" + p.videoKey;
-  const defaults: OverlaySettings = { ...defaultLine, hud: true, map: true, line: false, ghost: false, position: "left" };
+  const defaults: OverlaySettings = { ...defaultLine, hud: true, map: true, line: false, ghost: false, ghostCar: false, cameraHeight: 1.1, position: "left" };
   const [overlays, setOverlays] = useState<OverlaySettings>(() => ({ ...defaults, ...lsGet<Partial<OverlaySettings>>(overlayKey, {}) }));
   const [aspect, setAspect] = useState(16 / 9);
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
@@ -53,7 +53,7 @@ export function VideoPanel({ visible = true }: { visible?: boolean } = {}) {
     setOverlays(next); lsSet(overlayKey, next);
   };
   useEffect(() => {
-    setOverlays({ ...defaultLine, hud: true, map: true, line: false, ghost: false, position: "left", ...lsGet<Partial<OverlaySettings>>(overlayKey, {}) });
+    setOverlays({ ...defaultLine, hud: true, map: true, line: false, ghost: false, ghostCar: false, cameraHeight: 1.1, position: "left", ...lsGet<Partial<OverlaySettings>>(overlayKey, {}) });
   }, [overlayKey]);
   useEffect(() => {
     const element = stage.current;
@@ -205,7 +205,7 @@ export function VideoPanel({ visible = true }: { visible?: boolean } = {}) {
           onSeeked={e => { setCurrent(e.currentTarget.currentTime); p.videoCurrentTime = e.currentTarget.currentTime; p.schedule(); }}
           onError={() => { setReady(false); p.play(false); setError("This browser could not decode the video."); }} />
         {ready && linked && !outside && !error && <div className="video-overlay-frame" style={{ width: frameSize.width, height: frameSize.height }}>
-          <VideoOverlay settings={overlays} onCenter={center => changeOverlay({ center })} />
+          <VideoOverlay settings={{ ...overlays, ghostCar: false }} onCenter={center => changeOverlay({ center })} />
         </div>}
         {!ready && !error && <div className="video-stage-message" role="status">Loading video preview…</div>}
         {error && <div className="video-stage-message video-error" role="alert"><strong>Video unavailable</strong><span>{error}</span>
@@ -236,14 +236,15 @@ export function VideoPanel({ visible = true }: { visible?: boolean } = {}) {
               <label><input type="checkbox" checked={overlays.line} onChange={e => changeOverlay({ line: e.target.checked })} /> Racing line</label>
             </div>
             <label className="video-overlay-field">HUD corner<select value={overlays.position} onChange={e => changeOverlay({ position: e.target.value as "left" | "right" })}><option value="left">Bottom left</option><option value="right">Bottom right</option></select></label>
-            {overlays.line && <div className="video-line-settings">
-              <details className="review-details"><summary>Camera calibration presets</summary><label>Mounting position<select aria-label="Camera preset" value={cameraSelection} onChange={e => { setCameraSelection(e.target.value); const preset = cameraPresets[e.target.value]; if (preset) changeOverlay(preset); }}><option value="">Choose saved camera</option>{Object.keys(cameraPresets).map(name => <option key={name} value={name}>{name}</option>)}</select></label><input aria-label="Camera preset name" value={cameraName} onChange={e => setCameraName(e.target.value)} placeholder="e.g. GoPro nose mount" /><button className="btn" disabled={!cameraName.trim()} onClick={() => { const name = cameraName.trim(); const preset = { center: overlays.center, horizon: overlays.horizon, scale: overlays.scale, lookahead: overlays.lookahead }; const next = { ...cameraPresets, [name]: preset }; setCameraPresets(next); lsSet("camera-presets", next); setCameraSelection(name); setCameraName(""); }}>Save camera calibration</button><p className="note2">Reusable manual camera positioning; it does not track road features automatically.</p></details>
-              <label className="video-overlay-field">Line source<select value={overlays.ghost ? "ghost" : "current"} onChange={e => changeOverlay({ ghost: e.target.value === "ghost" })}><option value="current">Watched lap</option><option value="ghost" disabled={!p.refLap()}>Ghost lap</option></select></label>
+            {(overlays.line || overlays.ghostCar) && <div className="video-line-settings">
+              {overlays.ghostCar && <><label className="video-overlay-field">Ghost car lap<select aria-label="Ghost car lap" value={p.cmp === "lap" ? String(p.ghostLapI) : p.cmp === "best" ? "best" : p.cmp === "external" ? "external" : "none"} onChange={e => { const value = e.target.value; if (value === "best" || value === "external") p.set("cmp", value); else { p.set("ghostLapI", +value); p.set("cmp", "lap"); } }}><option value="none" disabled>Choose a recorded lap</option><option value="best">Best lap</option>{p.externalGhost && <option value="external">Other file: {p.externalGhost.name}</option>}{p.session.laps.map((lap,i) => lap.kind === "lap" ? <option key={i} value={i} disabled={i === p.sel}>{lap.name}{i === p.sel ? " (watched)" : ""}</option> : null)}</select></label><p className="note2">Uses the lap selected in the playback Ghost menu at equal elapsed lap time. Choose a different recorded lap; Best sectors is not a physical car. GPS drift and camera movement can shift the overlay. No automatic image tracking or occlusion.</p><label>Camera height (m)<input aria-label="Ghost camera height" type="range" min="0.3" max="2.5" step="0.05" value={overlays.cameraHeight ?? 1.1} onInput={e => changeOverlay({ cameraHeight: +e.currentTarget.value })} /></label></>}
+              <details className="review-details"><summary>Camera calibration presets</summary><label>Mounting position<select aria-label="Camera preset" value={cameraSelection} onChange={e => { setCameraSelection(e.target.value); const preset = cameraPresets[e.target.value]; if (preset) changeOverlay(preset); }}><option value="">Choose saved camera</option>{Object.keys(cameraPresets).map(name => <option key={name} value={name}>{name}</option>)}</select></label><input aria-label="Camera preset name" value={cameraName} onChange={e => setCameraName(e.target.value)} placeholder="e.g. GoPro nose mount" /><button className="btn" disabled={!cameraName.trim()} onClick={() => { const name = cameraName.trim(); const preset = { center: overlays.center, horizon: overlays.horizon, scale: overlays.scale, lookahead: overlays.lookahead, cameraHeight: overlays.cameraHeight ?? 1.1 }; const next = { ...cameraPresets, [name]: preset }; setCameraPresets(next); lsSet("camera-presets", next); setCameraSelection(name); setCameraName(""); }}>Save camera calibration</button><p className="note2">Reusable manual camera positioning; it does not track road features automatically.</p></details>
+              {overlays.line && <label className="video-overlay-field">Line source<select value={overlays.ghost ? "ghost" : "current"} onChange={e => changeOverlay({ ghost: e.target.value === "ghost" })}><option value="current">Watched lap</option><option value="ghost" disabled={!p.refLap()}>Ghost lap</option></select></label>}
               <label>Horizon<input aria-label="Racing line horizon" type="range" min="0.1" max="0.7" step="0.01" value={overlays.horizon} onInput={e => changeOverlay({ horizon: +e.currentTarget.value })} /></label>
               <label>Horizontal position<input aria-label="Racing line horizontal position" type="range" min="0.1" max="0.9" step="0.01" value={overlays.center} onInput={e => changeOverlay({ center: +e.currentTarget.value })} /></label>
               <label>Perspective scale<input aria-label="Racing line perspective" type="range" min="0.2" max="3" step="0.05" value={overlays.scale} onInput={e => changeOverlay({ scale: +e.currentTarget.value })} /></label>
-              <button className="btn" onClick={() => changeOverlay(defaultLine)}>Reset line position</button>
-              <p>Recorded GPS line projected ahead of the car. Green: throttle · yellow: lift · red: braking. Drag it sideways or adjust the sliders to fit the camera. This is an approximate preview, not a tracked or ideal racing line; camera movement, hills and GPS error affect alignment.</p>
+              <button className="btn" onClick={() => changeOverlay(defaultLine)}>Reset camera alignment</button>
+              {overlays.line && <p>Recorded GPS line projected ahead of the car. Green: throttle · yellow: lift · red: braking. Drag it sideways or adjust the sliders to fit the camera. This is an approximate preview, not a tracked or ideal racing line; camera movement, hills and GPS error affect alignment.</p>}
             </div>}
           </details>
         </> : <div className="video-sync-card"><p>Pause video and the timeline at the same moment.</p><button className="btn primary" disabled={!ready} onClick={align}>Sync this frame / first checkpoint</button>{checkpoints.length > 0 && <button className="btn" disabled={!ready} onClick={secondCheckpoint}>Set second sync checkpoint</button>}{syncError && <p role="alert">{syncError}</p>}</div>}
