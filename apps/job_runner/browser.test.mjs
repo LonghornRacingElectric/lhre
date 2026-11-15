@@ -6,7 +6,7 @@ import vm from 'node:vm';
 const source = await readFile(new URL('./static/app.js', import.meta.url), 'utf8');
 const id = 'a'.repeat(32), other = 'b'.repeat(32);
 const job = (jobId, status) => ({id: jobId, status, settings: {template: 'cpu', parallel: 1}, created: '2026-11-14T20:00:00Z', exit_code: null});
-async function browser() {
+async function browser(catalog = []) {
   const nodes = new Map(), calls = [], intervals = [];
   const document = {activeElement: null};
   class Element {
@@ -30,7 +30,7 @@ async function browser() {
     fetch: async (url, options) => {
       calls.push({url, options});
       if (offline && url === '/api/state') throw new Error('connection lost');
-      const value = url === '/api/state' ? {connection: 'connected', online: true, stale, jobs: [job(id, 'running'), job(other, 'succeeded')], templates: {cpu: true, fmu: true, gpu: true}} : url.endsWith('/logs') ? {stdout: 'fixture output', stderr: ''} : {id};
+      const value = url === '/api/state' ? {connection: 'connected', online: true, stale, catalog, jobs: [job(id, 'running'), job(other, 'succeeded')], templates: {cpu: true, fmu: true, gpu: true, campaign: true}} : url.endsWith('/logs') ? {stdout: 'fixture output', stderr: ''} : {id};
       return {ok: true, json: async () => value};
     }});
   vm.runInContext(source, context);
@@ -107,4 +107,23 @@ test('busy cached state stays connected and labels its stale status', async () =
   assert.ok(b.get('updated').textContent.startsWith('Cached status from'));
   b.stale(false); await b.refresh();
   assert.equal(b.get('connection').textContent, 'Ready');
+});
+
+
+test('catalog renders real campaign parameters, retains edits across polling and submits the installed revision', async () => {
+  const b = await browser([{id: 'campaign', title: 'Autonomy course', description: 'Full stack', revision: 'a'.repeat(40),
+    parameters: {seed: {type: 'integer', label: 'Seed', min: 1, max: 5, default: 1}, course: {type: 'enum', label: 'Course', choices: ['autocross', 'rules_autocross'], default: 'autocross'}}}]);
+  assert.equal(b.get('template').value, 'campaign');
+  assert.equal(b.get('check-settings').hidden, true);
+  assert.equal(b.get('job-settings').hidden, false);
+  assert.equal(b.get('parallel').disabled, true);
+  assert.equal(b.get('seconds').disabled, true);
+  const seed = b.get('parameters').children[1], course = b.get('parameters').children[3];
+  seed.value = '4'; course.value = 'rules_autocross';
+  await b.refresh();
+  assert.equal(b.get('parameters').children[1], seed);
+  assert.equal(seed.value, '4');
+  await b.get('launch').emit('submit');
+  const data = JSON.parse(b.calls.find(call => call.url === '/api/runs').options.body);
+  assert.deepEqual(data, {id, template: 'campaign', revision: 'a'.repeat(40), parameters: {seed: 4, course: 'rules_autocross'}});
 });

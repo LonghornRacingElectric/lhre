@@ -8,16 +8,17 @@
   <p id="message" role="status" class="message" hidden></p>
   <section class="machine" aria-label="Worker status"><div><span id="connection" class="badge">Connecting</span><h2>HIL<span class="muted"> / compute worker</span></h2><p id="hardware" class="muted">Waiting for the runner…</p></div><div class="metrics"><div><span class="label">RUNNING</span><strong id="running">—</strong></div><div><span class="label">QUEUED</span><strong id="queued">—</strong></div><div><span class="label">FREE DISK</span><strong id="disk">—</strong></div></div><button id="pause" class="secondary" disabled>Pause new jobs</button></section>
   <div class="workspace">
-    <section class="panel launch"><p class="eyebrow">NEW RUN</p><h2>Choose a workload</h2><form id="launch">
-      <label for="template">Workload</label><select id="template"><option value="cpu">CPU smoke test</option><option value="fmu">FMU timing benchmark</option><option value="gpu">GPU rendering check</option></select>
+    <section class="panel launch"><p class="eyebrow">NEW RUN</p><h2>Choose a job</h2><form id="launch">
+      <label for="template">Job type</label><select id="template"><option value="cpu">CPU smoke test</option><option value="fmu">FMU timing benchmark</option><option value="gpu">GPU rendering check</option></select>
       <p id="description" class="muted description"></p>
-      <label for="parallel">Parallel processes</label><input id="parallel" type="number" value="1" min="1" max="8" required>
+      <div id="job-settings" hidden><label for="revision">Code revision (installed on HIL)</label><input id="revision" readonly><div id="parameters"></div></div>
+      <div id="check-settings"><label for="parallel">Parallel processes</label><input id="parallel" type="number" value="1" min="1" max="8" required>
       <div id="duration"><label for="seconds">Duration per process (seconds)</label><input id="seconds" type="number" value="15" min="5" max="120" required></div>
-      <p class="hint">Up to 8 CPU slots and 4 jobs at once. GPU checks reserve the whole GPU.</p>
+      </div><p class="hint">Up to 8 CPU slots and 4 jobs at once. GPU checks reserve the whole GPU.</p>
       <button id="submit" type="submit" disabled>Queue run <span aria-hidden="true">↗</span></button>
-    </form><div class="coming"><span class="label">NEXT WORKLOAD</span><strong>Gazebo campaign</strong><p class="muted">Requires a validated job image. Standalone FMU results do not validate the full autonomy stack.</p></div></section>
+    </form><div class="coming"><span class="label">JOB CATALOG</span><strong>Versioned autonomy jobs</strong><p class="muted">Campaigns run installed code with your chosen parameters. Infrastructure checks verify the worker. Every run retains its configuration and results.</p></div></section>
     <section class="panel history"><div class="section-title"><div><p class="eyebrow">ACTIVITY</p><h2>Run history</h2></div><span id="updated" class="muted"></span></div><div class="filters" aria-label="Filter runs"><button class="filter selected" data-filter="all">All runs</button><button class="filter" data-filter="active">Active</button><button class="filter" data-filter="finished">Finished</button></div><div id="runs" aria-live="polite"><div class="empty">Connecting to HIL…</div></div></section>
   </div>
-  <section id="details" class="panel details" hidden><div class="section-title"><div><p class="eyebrow">RUN DETAILS</p><h2 id="detail-title"></h2><p id="detail-meta" class="muted"></p></div><div class="actions"><a id="download" class="button secondary" hidden>Download results</a><button id="cancel" class="danger" hidden>Cancel run</button><button id="close" class="secondary" aria-label="Close run details">Close</button></div></div><p id="detail-error" class="message" hidden></p><h3>Live output</h3><pre id="logs" tabindex="0">Loading output…</pre></section>
+  <section id="details" class="panel details" hidden><div class="section-title"><div><p class="eyebrow">RUN DETAILS</p><h2 id="detail-title"></h2><p id="detail-meta" class="muted"></p></div><div class="actions"><a id="download" class="button secondary" hidden>Download results</a><button id="cancel" class="danger" hidden>Cancel run</button><button id="close" class="secondary" aria-label="Close run details">Close</button></div></div><p id="detail-error" class="message" hidden></p><p id="detail-settings" class="muted"></p><div id="artifacts"></div><h3>Live output</h3><pre id="logs" tabindex="0">Loading output…</pre></section>
   <footer><span>Telemetry coordinates. HIL computes.</span><span id="limits">Jobs survive dashboard restarts.</span></footer>
 </main></body></html>

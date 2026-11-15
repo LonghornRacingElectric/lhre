@@ -1,4 +1,5 @@
 import http from 'node:http';
+import {once} from 'node:events';
 import {isIP} from 'node:net';
 import {spawn} from 'node:child_process';
 import {createHash, randomBytes, scryptSync, timingSafeEqual} from 'node:crypto';
@@ -11,8 +12,15 @@ const idPattern = /^[a-f0-9]{32}$/;
 const staticFiles = new Map([['/', ['index.html', 'text/html']], ['/app.js', ['app.js', 'text/javascript']], ['/style.css', ['style.css', 'text/css']]]);
 
 export function validateJob(input) {
-  if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(k => !['id', 'template', 'parallel', 'seconds'].includes(k))) throw new Error('Unknown job settings');
-  if (!idPattern.test(input.id) || !['cpu', 'fmu', 'gpu'].includes(input.template)) throw new Error('Invalid workload or request ID');
+  if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(k => !['id', 'template', 'parallel', 'seconds', 'parameters', 'revision'].includes(k))) throw new Error('Unknown job settings');
+  if (!idPattern.test(input.id) || typeof input.template !== 'string' || !/^[a-z][a-z0-9_-]{0,47}$/.test(input.template)) throw new Error('Invalid workload or request ID');
+  if (!['cpu', 'fmu', 'gpu'].includes(input.template)) {
+    if (Object.keys(input).some(k => !['id', 'template', 'parameters', 'revision'].includes(k)) || !/^[a-f0-9]{40}$/.test(input.revision || '')) throw new Error('Invalid job revision or settings');
+    const values = input.parameters;
+    if (!values || typeof values !== 'object' || Array.isArray(values) || Object.keys(values).length > 20 || Object.entries(values).some(([k,v]) => !/^[a-z][a-z0-9_]{0,31}$/.test(k) || !(Number.isSafeInteger(v) || (typeof v === 'string' && v.length <= 128)))) throw new Error('Invalid job parameters');
+    return {id: input.id, template: input.template, revision: input.revision, parameters: values};
+  }
+  if ('parameters' in input || 'revision' in input) throw new Error('Unknown job settings');
   if (!Number.isInteger(input.parallel) || input.parallel < 1 || input.parallel > 8) throw new Error('Parallelism must be 1 to 8');
   if (!Number.isInteger(input.seconds) || input.seconds < 5 || input.seconds > 120) throw new Error('CPU duration must be 5 to 120 seconds');
   if (input.template === 'gpu' && input.parallel !== 1) throw new Error('GPU checks reserve the whole GPU');
@@ -186,6 +194,35 @@ export function createApplication({config, rpc = request => sshRpc(config, reque
         const result = await rpc({op: 'pause', paused: input.paused});
         checkedAt = 0;
         return respond(res, 200, result);
+      }
+      const artifactRoute = url.pathname.match(/^\/api\/runs\/([a-f0-9]{32})\/(artifacts|files)$/);
+      if (artifactRoute && req.method === 'GET') {
+        const [, id, action] = artifactRoute;
+        if (action === 'artifacts') return respond(res, 200, await rpc({op: 'artifacts', id}));
+        if (downloading) return respond(res, 429, {error: 'Another result download is in progress; retry shortly'});
+        downloading = true;
+        try {
+          const name = url.searchParams.get('path') || '';
+          let offset = 0, total;
+          do {
+            const chunk = await rpc({op: 'artifact', id, path: name, offset});
+            const bytes = Buffer.from(chunk.base64, 'base64');
+            if (!Number.isSafeInteger(chunk.size) || chunk.size < 0 || chunk.size > 256 * 1024 * 1024 ||
+                bytes.length > 512 * 1024 || (total !== undefined && total !== chunk.size) ||
+                offset + bytes.length > chunk.size || (!bytes.length && offset < chunk.size)) throw new Error('Invalid artifact response');
+            total = chunk.size;
+            if (offset === 0) res.writeHead(200, {'Content-Type': 'application/octet-stream', 'Content-Length': total,
+              'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
+              'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(name.split('/').at(-1))}`});
+            if (res.destroyed) break;
+            if (!res.write(bytes)) await once(res, 'drain');
+            offset += bytes.length;
+          } while (offset < total && !res.destroyed);
+          res.end();
+        } catch (error) {
+          if (res.headersSent) res.destroy(error); else throw error;
+        } finally {downloading = false;}
+        return;
       }
       const match = url.pathname.match(/^\/api\/runs\/([a-f0-9]{32})\/(cancel|logs|results)$/);
       if (match) {

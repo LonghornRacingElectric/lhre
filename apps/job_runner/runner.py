@@ -1,4 +1,4 @@
-"""Fixed-template Docker job runner; SSH RPC and worker share a durable SQLite queue."""
+"""Catalog-based Docker job runner; SSH RPC and worker share a durable SQLite queue."""
 
 import argparse
 import base64
@@ -25,6 +25,9 @@ IMAGES = {
     'fmu': 'lhr/job-runtime:2026-11-14-stdout-v2',
     'gpu': 'lhr/worker-gpu-check:2026-11-13',
 }
+DEFINITIONS = Path(__file__).with_name('jobs.json')
+MAX_ARTIFACT_BYTES = 256 * 1024**2
+MAX_ARTIFACT_FILES = 512
 MAX_ARCHIVE = 10 * 1024 * 1024
 WORKER_ERRORS = (ValueError, KeyError, TypeError, OSError, RuntimeError, sqlite3.Error, subprocess.SubprocessError)
 
@@ -33,16 +36,131 @@ def timestamp():
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
 
+def definitions():
+    """Only administrators install definitions; browsers supply parameter values."""
+    if not DEFINITIONS.exists():
+        return {}
+    entries = json.loads(DEFINITIONS.read_text())['jobs']
+    result = {}
+    for entry in entries:
+        name = entry['id']
+        if not re.fullmatch(r'[a-z][a-z0-9_-]{0,47}', name) or name in IMAGES or name in result:
+            raise ValueError('Invalid or duplicate job definition')
+        if not re.fullmatch(r'sha256:[a-f0-9]{64}', entry['image']):
+            raise ValueError('Job images must use immutable local image IDs')
+        if not re.fullmatch(r'[a-f0-9]{40}', entry['revision']):
+            raise ValueError('Job definitions must pin their source revision')
+        for key, low, high in [('cpu_slots', 1, 8), ('memory_mib', 512, 16384),
+                               ('tmp_mib', 64, 4096), ('timeout_s', 30, 3600)]:
+            if type(entry[key]) is not int or not low <= entry[key] <= high:
+                raise ValueError('Invalid job resource: ' + key)
+        if type(entry['gpu']) is not bool or not isinstance(entry['command'], list):
+            raise ValueError('Invalid job command or GPU reservation')
+        for key, spec in entry['parameters'].items():
+            if not re.fullmatch(r'[a-z][a-z0-9_]{0,31}', key):
+                raise ValueError('Invalid parameter name')
+            parameter(spec, spec['default'])
+        for arg in entry['command']:
+            if not isinstance(arg, str) or len(arg) > 1024:
+                raise ValueError('Invalid job argument')
+            for key in re.findall(r'\{([^{}]+)\}', arg):
+                if key not in entry['parameters']:
+                    raise ValueError('Unknown job argument parameter')
+        result[name] = entry
+    return result
+
+
+def parameter(spec, value):
+    if spec['type'] == 'integer':
+        if type(value) is not int or not spec['min'] <= value <= spec['max']:
+            raise ValueError(f"{spec['label']} must be {spec['min']} to {spec['max']}")
+    elif spec['type'] == 'enum':
+        if not isinstance(value, str) or value not in spec['choices']:
+            raise ValueError('Invalid choice for ' + spec['label'])
+    else:
+        raise ValueError('Unsupported parameter type')
+    return value
+
+
+def custom_settings(request, catalog):
+    if set(request) - {'id', 'template', 'parameters', 'revision'}:
+        raise ValueError('Unknown job settings')
+    definition = catalog[request['template']]
+    if request.get('revision') != definition['revision']:
+        raise ValueError('Job revision changed; refresh before submitting')
+    values = request.get('parameters', {})
+    if not isinstance(values, dict) or set(values) - definition['parameters'].keys():
+        raise ValueError('Unknown job parameters')
+    values = {key: parameter(spec, values.get(key, spec['default']))
+              for key, spec in definition['parameters'].items()}
+    return {'id': request['id'], 'template': request['template'],
+            'parallel': definition['cpu_slots'], 'parameters': values,
+            'definition': definition, 'revision': definition['revision']}
+
+
+def needs_gpu(settings):
+    return settings.get('definition', {}).get('gpu', settings['template'] == 'gpu')
+
+
+def artifact_path(queue, job_id, name):
+    # Resolve every component with O_NOFOLLOW, including intermediate directories.
+    parts = name.split('/') if isinstance(name, str) else []
+    if not parts or any(not part or part in {'.', '..'} or '\\' in part for part in parts):
+        raise ValueError('Invalid artifact path')
+    root = queue.directory(job_id) / 'artifacts'
+    with ExitStack() as stack:
+        fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        stack.callback(os.close, fd)
+        for part in parts[:-1]:
+            fd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            stack.callback(os.close, fd)
+        return os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
+
+
+def artifacts(queue, job_id):
+    root = queue.directory(job_id) / 'artifacts'
+    items = []
+    for directory, dirs, files in os.walk(root, followlinks=False):
+        dirs[:] = [d for d in dirs if not (Path(directory) / d).is_symlink()]
+        for filename in sorted(files):
+            path = Path(directory) / filename
+            if path.is_symlink() or not path.is_file():
+                continue
+            items.append({'path': str(path.relative_to(root)), 'bytes': path.stat().st_size})
+            if len(items) > MAX_ARTIFACT_FILES:
+                raise ValueError('Job exceeded 512 artifact files')
+    return sorted(items, key=lambda item: item['path'])
+
+
+def artifact_chunk(queue, job_id, name, offset):
+    import stat
+    if queue.get(job_id)['status'] not in TERMINAL:
+        raise ValueError('Artifacts are available after the job finishes')
+    if type(offset) is not int or offset < 0:
+        raise ValueError('Invalid artifact offset')
+    with os.fdopen(artifact_path(queue, job_id, name), 'rb') as stream:
+        info = os.fstat(stream.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_ARTIFACT_BYTES:
+            raise ValueError('Invalid or oversized artifact')
+        stream.seek(offset)
+        return {'base64': base64.b64encode(stream.read(512 * 1024)).decode(), 'size': info.st_size}
+
+
 def validate(request):
     """Only bounded workload settings cross the SSH boundary, never commands or paths."""
-    if not isinstance(request, dict) or set(request) - {'id', 'template', 'parallel', 'seconds'}:
+    if not isinstance(request, dict):
         raise ValueError('Unknown job settings')
     job_id = request.get('id', '')
     if not isinstance(job_id, str) or not re.fullmatch(r'[a-f0-9]{32}', job_id):
         raise ValueError('Invalid job ID')
     template = request.get('template')
     if template not in IMAGES:
-        raise ValueError('Choose CPU, FMU or GPU')
+        catalog = definitions()
+        if not isinstance(template, str) or template not in catalog:
+            raise ValueError('Choose an installed job type')
+        return custom_settings(request, catalog)
+    if set(request) - {'id', 'template', 'parallel', 'seconds'}:
+        raise ValueError('Unknown job settings')
     parallel, seconds = request.get('parallel', 1), request.get('seconds', 15)
     if type(parallel) is not int or not 1 <= parallel <= 8:
         raise ValueError('Parallelism must be 1 to 8')
@@ -60,24 +178,38 @@ def container_name(job_id):
 
 
 def command(settings, directory):
-    settings = validate(settings)
+    definition = settings.get('definition')
+    if definition:
+        settings = custom_settings({k: settings[k] for k in ('id', 'template', 'parameters', 'revision')},
+                                   {settings['template']: definition})
+    else:
+        settings = validate(settings)
     template, parallel = settings['template'], settings['parallel']
     args = ['docker', 'run', '-d', '--name', container_name(settings['id']),
             '--pull=never', '--label', 'lhr.runner=jobs-v1', '--network', 'none',
-            '--cpus', str(parallel), '--memory', str(512 + 512 * parallel) + 'm',
-            '--memory-swap', str(512 + 512 * parallel) + 'm',
-            '--pids-limit', '256', '--cap-drop', 'ALL', '--security-opt',
+            '--cpus', str(parallel), '--memory', str(definition['memory_mib'] if definition else 512 + 512 * parallel) + 'm',
+            '--memory-swap', str(definition['memory_mib'] if definition else 512 + 512 * parallel) + 'm',
+            '--pids-limit', '1024' if definition else '256', '--cap-drop', 'ALL', '--security-opt',
             'no-new-privileges', '--read-only', '--log-driver', 'local',
             '--log-opt', 'max-size=2m', '--log-opt', 'max-file=2',
             '-e', 'OPENBLAS_NUM_THREADS=1', '-e', 'OMP_NUM_THREADS=1']
-    if template == 'fmu':
-        # FMPy extracts native shared libraries into /tmp before loading them.
-        args += ['--tmpfs=/tmp:rw,exec,nosuid,nodev,size=536870912']
+    if definition:
+        args += [f"--tmpfs=/tmp:rw,exec,nosuid,nodev,size={definition['tmp_mib'] * 1024**2}",
+                 '--shm-size=512m', '--user', f'{os.getuid()}:{os.getgid()}',
+                 '--mount', f'type=bind,source={Path(directory).resolve() / "artifacts"},destination=/results']
+    elif template == 'fmu':
+        # Each FMPy process extracts its own native libraries before loading them.
+        scratch_bytes = 512 * 1024**2 * parallel
+        args += [f'--tmpfs=/tmp:rw,exec,nosuid,nodev,size={scratch_bytes}']
     else:
         args += ['--mount', 'type=tmpfs,destination=/tmp,tmpfs-size=536870912']
-    if template == 'gpu':
-        args += ['--gpus', 'all', '-e', 'NVIDIA_DRIVER_CAPABILITIES=graphics,utility',
-                 IMAGES[template]]
+    if needs_gpu(settings):
+        args += ['--gpus', 'all', '-e', 'NVIDIA_DRIVER_CAPABILITIES=graphics,utility']
+    if definition:
+        args += [definition['image'], *[re.sub(r'\{([^{}]+)\}',
+                 lambda m: str(settings['parameters'][m[1]]), arg) for arg in definition['command']]]
+    elif template == 'gpu':
+        args += [IMAGES[template]]
     else:
         args += [IMAGES[template], 'python3', '/runner/task.py', template,
                  '--parallel', str(parallel), '--seconds', str(settings['seconds'])]
@@ -228,7 +360,7 @@ def capture(queue, job_id):
     directory = queue.directory(job_id)
     directory.mkdir(exist_ok=True)
     result = docker(['logs', '--tail', '2000', container_name(job_id)])
-    # Fixed workloads publish results on bounded Docker stdout, with no writable host mount.
+    # Compact summaries use stdout; campaign recordings remain in their output mount.
     for line in reversed(result.stdout.splitlines()):
         try:
             record = json.loads(line)
@@ -265,11 +397,19 @@ def reconcile(queue, job):
             queue.update(job['id'], status='cancelled' if job['cancel_requested'] else 'failed',
                          finished=queue.now(), error=job['error'] or 'Container did not start within 60 seconds')
         return
-    timed_out = state['Running'] and age > 900
-    if state['Running'] and (job['cancel_requested'] or timed_out):
+    timeout = job['settings'].get('definition', {}).get('timeout_s', 900)
+    timeout_error = f'Runtime limit ({timeout} seconds)' if job['settings'].get('definition') else 'Runtime limit (15 min)'
+    artifact_error = None
+    try:
+        if sum(item['bytes'] for item in artifacts(queue, job['id'])) > MAX_ARTIFACT_BYTES:
+            artifact_error = 'Job exceeded 256 MiB of artifacts'
+    except ValueError as error:
+        artifact_error = str(error)
+    timed_out = state['Running'] and age > timeout
+    if state['Running'] and (job['cancel_requested'] or timed_out or artifact_error):
         # Enforce safety even if a full disk prevents recording the state transition.
         docker(['stop', '-t', '5', container_name(job['id'])], check=False)
-        queue.update(job['id'], status='cancelling', error='Runtime limit (15 min)' if timed_out else None)
+        queue.update(job['id'], status='cancelling', error=artifact_error or (timeout_error if timed_out else None))
         info = inspect(job['id'])
         state = info['State']
     if not state['Running']:
@@ -277,9 +417,9 @@ def reconcile(queue, job):
         # terminal jobs are immediately eligible for cached result downloads.
         capture(queue, job['id'])
         cancelled = job['cancel_requested'] or job['status'] == 'cancelling' or timed_out
-        queue.update(job['id'], status='cancelled' if cancelled else ('succeeded' if state['ExitCode'] == 0 else 'failed'),
+        queue.update(job['id'], status='cancelled' if cancelled else ('succeeded' if state['ExitCode'] == 0 and not artifact_error else 'failed'),
                      finished=queue.now(), exit_code=state['ExitCode'],
-                     error='Container exceeded its memory limit' if state.get('OOMKilled') else ('Runtime limit (15 min)' if timed_out else job['error']))
+                     error='Container exceeded its memory limit' if state.get('OOMKilled') else (artifact_error or (timeout_error if timed_out else job['error'])))
     elif job['status'] == 'starting':
         queue.update(job['id'], status='running')
 
@@ -337,12 +477,12 @@ def tick(queue, allow_launch=True):
     jobs = queue.jobs()
     active = [j for j in jobs if j['status'] in LIVE]
     slots = sum(j['settings']['parallel'] for j in active)
-    gpu_busy = any(j['settings']['template'] == 'gpu' for j in active)
+    gpu_busy = any(needs_gpu(j['settings']) for j in active)
     for job in reversed(jobs):
         if job['status'] != 'queued' or len(active) >= 4:
             continue
         settings = job['settings']
-        if slots + settings['parallel'] > 8 or (settings['template'] == 'gpu' and gpu_busy):
+        if slots + settings['parallel'] > 8 or (needs_gpu(settings) and gpu_busy):
             continue
         with queue.connect() as db:
             claimed = db.execute("UPDATE jobs SET status='starting',started=? WHERE id=? AND status='queued' AND cancel_requested=0 AND NOT EXISTS (SELECT 1 FROM settings WHERE key='paused' AND value='1')", (queue.now(), job['id'])).rowcount
@@ -350,12 +490,14 @@ def tick(queue, allow_launch=True):
             continue
         directory = queue.directory(job['id'])
         directory.mkdir(exist_ok=True)
+        if settings.get('definition'):
+            (directory / 'artifacts').mkdir(exist_ok=True)
         try:
             subprocess.run(command(settings, directory), capture_output=True, text=True, timeout=40, check=True)
             queue.update(job['id'], status='running')
             active.append(job)
             slots += settings['parallel']
-            gpu_busy |= settings['template'] == 'gpu'
+            gpu_busy |= needs_gpu(settings)
         except (subprocess.SubprocessError, OSError) as error:
             # A timeout can occur after Docker has started; reconcile by deterministic name.
             detail = getattr(error, 'stderr', '') or str(error)
@@ -368,7 +510,7 @@ def tick(queue, allow_launch=True):
                 # Even a merely created container owns its reservations until reconciled.
                 active.append(job)
                 slots += settings['parallel']
-                gpu_busy |= settings['template'] == 'gpu'
+                gpu_busy |= needs_gpu(settings)
 
 
 def prune(queue):
@@ -421,7 +563,7 @@ def archive(queue, job_id):
 
 
 def rpc(queue, request):
-    if not isinstance(request, dict) or set(request) - {'op', 'job', 'id', 'paused'}:
+    if not isinstance(request, dict) or set(request) - {'op', 'job', 'id', 'paused', 'path', 'offset'}:
         raise ValueError('Invalid request')
     op = request.get('op')
     if op == 'submit':
@@ -434,13 +576,17 @@ def rpc(queue, request):
         return logs(queue, request.get('id', ''))
     if op == 'archive':
         return archive(queue, request.get('id', ''))
+    if op == 'artifacts':
+        return artifacts(queue, request.get('id', ''))
+    if op == 'artifact':
+        return artifact_chunk(queue, request.get('id', ''), request.get('path', ''), request.get('offset', 0))
     if op == 'status':
         try:
             snapshot = json.loads((queue.root / 'status.json').read_text())
         except (OSError, ValueError):
             snapshot = {'templates': {}, 'online': False}
         heartbeat = queue.root / 'heartbeat'
-        snapshot.update(jobs=queue.jobs(), paused=queue.paused(),
+        snapshot.update(jobs=queue.jobs(), catalog=list(definitions().values()), paused=queue.paused(),
                         online=bool(snapshot.get('online')) and heartbeat.exists()
                         and time.time() - heartbeat.stat().st_mtime < 60
                         and 0 <= time.time() - snapshot.get('sampled_at', 0) < 60)
@@ -463,8 +609,9 @@ def cache_status(queue):
         docker(['info', '--format', '{{.ServerVersion}}'])
         online = True
         images = {image: docker(['image', 'inspect', image], check=False).returncode == 0
-                  for image in sorted(set(IMAGES.values()))}
+                  for image in sorted(set(IMAGES.values()) | {d['image'] for d in definitions().values()})}
         templates = {template: images[image] for template, image in IMAGES.items()}
+        templates.update({name: images[d['image']] for name, d in definitions().items()})
         try:
             gpu = subprocess.run(['nvidia-smi', '--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu',
                                   '--format=csv,noheader,nounits'], capture_output=True, text=True, timeout=5, check=False).stdout.strip()

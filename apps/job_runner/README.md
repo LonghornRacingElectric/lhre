@@ -1,6 +1,6 @@
 # HIL jobs
 
-A small PM2-managed Node application on telemetry commands a fixed-template
+A small PM2-managed Node application on telemetry commands a catalog-based
 Docker runner on HIL over SSH. It has no npm runtime dependencies. The browser
 can queue jobs, view status/output, cancel, pause new placements, and download
 result archives. Nomad is not used.
@@ -29,8 +29,10 @@ from the operator's machine:
 ssh -N -L 127.0.0.1:8091:127.0.0.1:8091 electric@telemetry
 ```
 
-Open `http://127.0.0.1:8091`; `publicOrigin` must match that local URL. No new
-Tailscale Serve listener or domain route is installed. Telemetry's existing
+The current configured origin is `https://autonomous.lhre.org`; the backend
+still listens on loopback. Preserve the existing domain/proxy setup when
+updating the app. For a separate local deployment, `publicOrigin` must match
+the tunnel URL. This deployment does not change network routes. Telemetry's existing
 public Funnel on 443, viewer, Grafana, ingestion and database services keep
 their routes. A separate HTTPS listener can be configured later when requested.
 
@@ -46,20 +48,30 @@ their routes. A separate HTTPS listener can be configured later when requested.
   [recorded red-mesa campaign](../../autonomy/testing/2026-11-07-fmu-gazebo-red-mesa/README.md).
 - **GPU rendering:** the existing NVIDIA EGL/pixel preflight, reserving the
   whole GPU. This verifies rendering, not Gazebo performance.
-- **Gazebo campaigns:** not enabled until a validated image and isolation
-  profile are available. The UI labels this explicitly.
+- **Gazebo autonomy campaign:** a parameterized, headless gate campaign on an
+  installed revision. Choose autocross or rules-compliant autocross, seed 1–5,
+  30–180 simulated seconds and 1–3 repetitions. The plant is Gazebo; the stack
+  uses Mid-360 LiDAR, stereo fusion, EKF and safety. This is real course scoring,
+  with metrics, launch logs and ROS bags. It reserves eight CPU slots and the
+  GPU, so campaigns run one at a time. A failed score is a failed job; completing
+  the program alone is not a pass. It is offered only after its image is installed.
 
-The worker allows eight CPU slots, four concurrent jobs and one GPU job. Each
-container gets a CPU quota matching its process count, 512 MiB plus 512 MiB per
-process, a 512 MiB temporary filesystem and at most 256 processes. Containers
-have no network, a read-only root filesystem, dropped capabilities, no Docker
-socket or writable host mounts. Swap is disabled by setting the memory-plus-swap
-limit equal to the memory limit. Missing local images fail with `--pull=never`;
-a job never pulls a replacement from Docker Hub. GPU access is granted only to
-the GPU template. Jobs stop after 15 minutes. FMU scratch is explicitly
-executable because FMPy extracts native shared libraries there before loading
-them. It remains a 512 MiB in-memory mount with `nosuid,nodev`; CPU/GPU
-templates retain Docker's default non-executable scratch mount.
+The worker allows eight CPU slots, four concurrent jobs and one GPU job.
+Infrastructure checks get a CPU quota matching their process count and 512 MiB
+plus 512 MiB per process, with no swap. CPU/GPU checks get 512 MiB of non-executable
+scratch; FMUs get 512 MiB **per process** of executable `nosuid,nodev` scratch.
+Each FMU process extracts its own approximately 107 MiB copy before loading
+native libraries; five copies cannot fit the old shared 512 MiB mount.
+Their overall memory limits are unchanged and include scratch usage.
+
+Catalog jobs declare CPU slots, memory, scratch, GPU and timeout in a root-owned
+definition. The initial Gazebo job gets eight CPU slots, 8 GiB memory (no swap),
+2 GiB scratch, 512 MiB shared memory, 1,024 processes and a 30-minute wall-time
+hang guard. Infrastructure checks retain 256 processes and a 15-minute runtime
+limit. All containers have no external network, a read-only root, dropped
+capabilities and no Docker socket. Images are local (`--pull=never`); catalog
+jobs pin full image IDs rather than mutable tags. Only jobs declaring GPU access
+receive it.
 
 The worker process itself has a 256 MiB memory cap and 25% of one CPU; Docker
 job limits are independent. PM2 restarts the dashboard above 256 MiB RSS and
@@ -102,11 +114,41 @@ removes labelled containers whose job is missing or no longer live, catching
 containers that appear late. Launch stderr remains in the job record. Pause
 state is checked atomically as each queued job is claimed.
 
-Results come from Docker's bounded rotating stdout/stderr logs. CPU/FMUs emit a
-final JSON summary, which the worker saves as `results.json`; FMU diagnostics
-are included in stdout. The workloads have no writable host output mount, so
-they cannot fill HIL's disk through `/results`. Detailed older output may rotate
-out; these are smoke/timing templates, not general artifact-producing studies.
+Infrastructure check summaries come from rotating stdout/stderr and are saved
+as `results.json`. They have no writable host output mount. Campaigns instead
+run under the worker's numeric UID/GID and can write only their own per-job
+`artifacts/` directory mounted at `/results`. Results survive container exit.
+Individual campaign files, including `.mcap` bags, download in 512 KiB chunks
+without the compact archive's 2 MiB-per-file truncation or 10 MiB total limit.
+Downloads require authentication and final job state; paths cannot traverse or
+follow symlinks, including intermediate directory symlinks and special files.
+The compact archive remains available for metadata and the console summary.
+
+Campaign outputs have a 256 MiB / 512-file **monitored budget**, checked each
+worker cycle; exceeding it stops the job. This is not a filesystem quota: writes
+can overshoot between checks. Only installed, trusted programs may use this
+profile. New starts also require 2 GiB free. See
+[ADR-021](../../docs/architecture/021-versioned-hil-job-catalog.md).
+
+## Adding a useful job
+
+Build its image from an identified Git commit on HIL, then install a root-owned
+`/opt/lhr-runner/jobs.json` catalog. The
+[example definition](https://github.com/LonghornRacingElectric/lhre/blob/main/apps/job_runner/deploy/jobs.example.json)
+shows the format. Each entry has an ID, title, description, 40-character source
+revision, immutable local `sha256:` image ID, argument list, resource bounds
+and typed parameters (`integer` with min/max, or `enum` with choices).
+The image entrypoint is the program; `{parameter}` placeholders become argument
+values, without shell evaluation. The dashboard discovers entries and renders
+their fields automatically; no frontend or scheduler edit is needed for another
+job. Browsers cannot supply image names, commands, host paths or resource limits.
+
+Queued jobs snapshot the complete installed definition and normalized values.
+Changing the catalog cannot silently change a queued job's image or command.
+Submission includes the displayed revision; a stale form is rejected after an
+upgrade. Different installed revisions can use separate catalog IDs, allowing
+comparison without building arbitrary browser-supplied branches on production
+hosts. Build and validate a new revision before offering it in the catalog.
 
 The initial dashboard runs as the existing `electric` account alongside
 `viewer_tool`, as recorded in [ADR-020](../../docs/architecture/020-shared-telemetry-dashboard-account.md).

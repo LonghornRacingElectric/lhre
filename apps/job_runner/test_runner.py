@@ -110,6 +110,21 @@ class RunnerTest(unittest.TestCase):
             self.assertEqual(args[args.index('--cap-drop') + 1], 'ALL')
             self.assertEqual(args[args.index('--security-opt') + 1], 'no-new-privileges')
 
+    def test_parallel_fmu_extractions_fit_scratch_without_raising_memory_limits(self):
+        # The deployed, hash-pinned FMU expands to this size; five copies exceed 512 MiB.
+        unpacked_fmu_bytes = 112_160_245
+        self.assertGreater(5 * unpacked_fmu_bytes, 512 * 1024**2)
+        for parallel in range(1, 9):
+            with self.subTest(parallel=parallel):
+                args = runner.command({**SETTINGS, 'parallel': parallel}, self.temp.name)
+                mount = next(arg for arg in args if arg.startswith('--tmpfs='))
+                scratch_bytes = int(mount.rsplit('size=', 1)[1])
+                self.assertGreater(scratch_bytes, parallel * unpacked_fmu_bytes)
+                self.assertEqual(scratch_bytes, parallel * 512 * 1024**2)
+                self.assertEqual(args[args.index('--memory') + 1], str(512 + 512 * parallel) + 'm')
+                self.assertEqual(args[args.index('--memory-swap') + 1], args[args.index('--memory') + 1])
+                self.assertLess(scratch_bytes, (512 + 512 * parallel) * 1024**2)
+
     def test_runtime_reconciliation_uses_docker_state(self):
         self.queue.submit(SETTINGS)
         self.queue.update(ID, status='running', started=NOW)
@@ -578,6 +593,134 @@ class TaskTest(unittest.TestCase):
         with patch.object(task.subprocess, 'run', side_effect=subprocess.TimeoutExpired('benchmark', 600)):
             with self.assertRaises(subprocess.TimeoutExpired):
                 task.fmu(1)
+
+
+class CatalogTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.file = self.root / 'jobs.json'
+        self.definition = {'id': 'campaign', 'title': 'Course campaign', 'description': 'Test',
+                           'image': 'sha256:' + '1' * 64, 'revision': 'a' * 40,
+                           'command': ['--seed', '{seed}', '--course', '{course}'],
+                           'cpu_slots': 8, 'memory_mib': 8192, 'tmp_mib': 2048,
+                           'timeout_s': 1800, 'gpu': True,
+                           'parameters': {'seed': {'type': 'integer', 'label': 'Seed', 'min': 1, 'max': 5, 'default': 1},
+                                          'course': {'type': 'enum', 'label': 'Course', 'choices': ['autocross'], 'default': 'autocross'}}}
+        self.save()
+        self.catalog_patch = patch.object(runner, 'DEFINITIONS', self.file)
+        self.catalog_patch.start()
+        self.addCleanup(self.catalog_patch.stop)
+        self.queue = runner.Queue(self.root / 'queue', now=lambda: NOW)
+        self.request = {'id': ID, 'template': 'campaign', 'revision': 'a' * 40,
+                        'parameters': {'seed': 3}}
+
+    def save(self):
+        self.file.write_text(json.dumps({'jobs': [self.definition]}))
+
+    def test_custom_parameters_reject_injection_unknowns_booleans_and_stale_revision(self):
+        for change in [{'parameters': {'seed': True}}, {'parameters': {'seed': 6}},
+                       {'parameters': {'seed': '1;id'}}, {'parameters': {'course': '../../etc'}},
+                       {'parameters': {'command': 'id'}}, {'revision': 'b' * 40},
+                       {'definition': self.definition}, {'parallel': 1}]:
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                runner.validate({**self.request, **change})
+
+    def test_saved_definition_pins_image_parameters_and_resources_across_updates(self):
+        job = self.queue.submit(self.request)
+        self.definition['image'] = 'sha256:' + '2' * 64
+        self.definition['revision'] = 'b' * 40
+        self.save()
+        settings = self.queue.get(job['id'])['settings']
+        args = runner.command(settings, self.queue.directory(ID))
+        self.assertIn('sha256:' + '1' * 64, args)
+        self.assertNotIn('sha256:' + '2' * 64, args)
+        self.assertEqual(args[-4:], ['--seed', '3', '--course', 'autocross'])
+        self.assertIn('--gpus', args)
+        self.assertEqual(args[args.index('--cpus') + 1], '8')
+        self.assertEqual(args[args.index('--memory') + 1], '8192m')
+        self.assertIn('--read-only', args)
+        self.assertIn('none', args)
+        self.assertIn('--user', args)
+        self.assertEqual(settings['revision'], 'a' * 40)
+
+    def test_definition_requires_image_id_revision_and_bounded_resources(self):
+        original = self.definition.copy()
+        for change in [{'image': 'image:latest'}, {'revision': 'main'}, {'cpu_slots': 9},
+                       {'memory_mib': True}, {'timeout_s': 4000}, {'gpu': 'yes'},
+                       {'command': ['{unknown}']}]:
+            self.definition = {**original, **change}
+            self.save()
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                runner.definitions()
+
+    def test_custom_gpu_job_reserves_gpu_against_existing_checks(self):
+        self.queue.submit(self.request)
+        self.queue.update(ID, status='running', started=NOW)
+        self.queue.submit({**SETTINGS, 'id': 'b' * 32, 'template': 'gpu'})
+        with patch.object(runner, 'inspect', return_value={'State': {'Running': True}}), patch.object(runner.subprocess, 'run') as run, patch.object(runner.time, 'time', return_value=1794686405):
+            runner.tick(self.queue)
+            run.assert_not_called()
+        self.assertEqual(self.queue.get('b' * 32)['status'], 'queued')
+
+    def artifact_directory(self):
+        self.queue.submit(self.request)
+        directory = self.queue.directory(ID) / 'artifacts'
+        directory.mkdir(parents=True)
+        self.queue.update(ID, status='succeeded')
+        return directory
+
+    def test_artifact_chunks_preserve_full_binary_files_and_reject_traversal(self):
+        directory = self.artifact_directory()
+        (directory / 'bag').mkdir()
+        content = bytes(range(256)) * 3000
+        (directory / 'bag' / 'run.mcap').write_bytes(content)
+        first = runner.artifact_chunk(self.queue, ID, 'bag/run.mcap', 0)
+        second = runner.artifact_chunk(self.queue, ID, 'bag/run.mcap', 512 * 1024)
+        self.assertEqual(base64.b64decode(first['base64']) + base64.b64decode(second['base64']), content)
+        self.assertEqual(first['size'], len(content))
+        self.assertEqual(runner.artifacts(self.queue, ID), [{'path': 'bag/run.mcap', 'bytes': len(content)}])
+        for name in ['../jobs.json', '/etc/passwd', 'bag/../run.mcap', 'bag//run.mcap']:
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                runner.artifact_chunk(self.queue, ID, name, 0)
+        with self.assertRaises(ValueError):
+            runner.artifact_chunk(self.queue, ID, 'bag/run.mcap', -1)
+
+    def test_artifacts_never_follow_file_or_directory_symlinks_or_fifos(self):
+        directory = self.artifact_directory()
+        secret = self.root / 'secret'
+        secret.write_text('private')
+        (directory / 'link').symlink_to(secret)
+        (directory / 'parent').symlink_to(self.root, target_is_directory=True)
+        os.mkfifo(directory / 'fifo')
+        for name in ['link', 'parent/secret', 'fifo']:
+            with self.subTest(name=name), self.assertRaises((OSError, ValueError)):
+                runner.artifact_chunk(self.queue, ID, name, 0)
+        self.assertEqual(runner.artifacts(self.queue, ID), [])
+
+    def test_running_artifact_budget_violation_stops_job_and_records_failure(self):
+        self.artifact_directory()
+        self.queue.update(ID, status='running', started=NOW)
+        states = [{'State': {'Running': True}}, {'State': {'Running': False, 'ExitCode': 137}}]
+        with patch.object(runner, 'artifacts', return_value=[{'bytes': runner.MAX_ARTIFACT_BYTES + 1}]), patch.object(runner, 'inspect', side_effect=states), patch.object(runner, 'docker') as docker, patch.object(runner, 'capture'), patch.object(runner.time, 'time', return_value=1794686405):
+            runner.tick(self.queue)
+        docker.assert_called_once_with(['stop', '-t', '5', 'lhr-job-' + ID], check=False)
+        self.assertEqual(self.queue.get(ID)['status'], 'failed')
+        self.assertIn('256 MiB', self.queue.get(ID)['error'])
+
+    def test_campaign_environment_cannot_inherit_a_different_matrix_or_extra_command(self):
+        import argparse
+        import campaign
+        args = argparse.Namespace(course='rules_autocross', seed=4, repeats=2, sim_seconds=90)
+        env = campaign.campaign_environment(args, {'EXTRA': 'unsafe', 'SEEDS': '99', 'OTHER': 'preserved'})
+        self.assertEqual(env['EXTRA'], '')
+        self.assertEqual(env['SEEDS'], '4')
+        self.assertEqual(env['REPEATS'], '2')
+        self.assertEqual(env['RUN_S'], '90')
+        self.assertEqual(env['TRACK_STYLE'], 'rules_autocross')
+        self.assertEqual(env['ACCEL_REPEATS'], '0')
+        self.assertEqual(env['OTHER'], 'preserved')
 
 
 if __name__ == '__main__':

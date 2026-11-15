@@ -30,6 +30,8 @@ three years after everyone who made the decision graduated.
 | [019](019-hil-job-service.md) | PM2 dashboard and restricted SSH runner for HIL jobs | Telemetry account choice superseded by ADR-020 |
 | [020](020-shared-telemetry-dashboard-account.md) | Run the initial jobs dashboard under telemetry's existing account | Accepted |
 
+| [021](021-versioned-hil-job-catalog.md) | Versioned HIL jobs and campaign artifacts | Accepted |
+
 ## ADRs vs. READMEs
 
 Both exist, on purpose, and they don't overlap:

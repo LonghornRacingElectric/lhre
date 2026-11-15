@@ -15,3 +15,12 @@ DOM, fetch and timers: `node --test apps/job_runner/browser.test.mjs`.
 When the SSH request queue is saturated, a previously connected snapshot stays
 connected with a cached-status label. Controls remain usable and requests wait
 for the bounded transport capacity; overflow is reported as busy, not offline.
+
+
+The launch form separates installed autonomy jobs from infrastructure checks.
+The worker catalog supplies titles, descriptions, installed revisions and typed
+parameter fields. Polling preserves edited values when the catalog is unchanged.
+A catalog upgrade resets the form to the newly installed definition. Campaign
+history uses the saved definition's title and revision, with authenticated links
+to metrics, logs and binary bag files after completion. File downloads stream
+individually; the compact archive remains a separate option.

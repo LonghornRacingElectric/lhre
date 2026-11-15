@@ -1,0 +1,58 @@
+{
+  "jobs": [
+    {
+      "id": "gazebo",
+      "title": "Gazebo autonomy campaign",
+      "description": "Run the full Mid-360, stereo fusion, EKF and safety stack. Score the course and retain metrics, logs and ROS bags. Plant: Gazebo; perception: LiDAR + camera fusion.",
+      "revision": "REPLACE_WITH_SOURCE_COMMIT",
+      "image": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "command": [
+        "--course",
+        "{course}",
+        "--seed",
+        "{seed}",
+        "--repeats",
+        "{repeats}",
+        "--sim-seconds",
+        "{sim_seconds}"
+      ],
+      "cpu_slots": 8,
+      "memory_mib": 8192,
+      "tmp_mib": 2048,
+      "timeout_s": 1800,
+      "gpu": true,
+      "parameters": {
+        "course": {
+          "label": "Course",
+          "type": "enum",
+          "choices": [
+            "autocross",
+            "rules_autocross"
+          ],
+          "default": "autocross"
+        },
+        "seed": {
+          "label": "Seed",
+          "type": "integer",
+          "min": 1,
+          "max": 5,
+          "default": 1
+        },
+        "sim_seconds": {
+          "label": "Simulation limit (seconds)",
+          "type": "integer",
+          "min": 30,
+          "max": 180,
+          "default": 180
+        },
+        "repeats": {
+          "label": "Repetitions",
+          "type": "integer",
+          "min": 1,
+          "max": 3,
+          "default": 1
+        }
+      }
+    }
+  ]
+}

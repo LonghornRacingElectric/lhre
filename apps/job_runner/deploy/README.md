@@ -105,7 +105,49 @@ with distinct source IPs during acceptance. Unauthenticated initial page loads
 always get a 401 challenge without consuming a login attempt.
 
 FMU jobs need executable scratch: FMPy extracts the model's native `.so` into
-`/tmp` before loading it. The runner uses a 512 MiB `exec,nosuid,nodev` tmpfs
+`/tmp` before loading it. The runner uses a 512 MiB-per-process `exec,nosuid,nodev` tmpfs
 for this template only. The root filesystem stays read-only and CPU/GPU
 scratch keeps Docker's default `noexec` setting. This fixes the live
 "failed to map segment from shared object" error without a writable host mount.
+
+
+## Versioned autonomy runtime
+
+Build `Campaign.Dockerfile` from a clean feature-branch source archive containing
+`autonomy/` and `apps/job_runner/`, with `SOURCE_REVISION` set to that commit:
+
+```bash
+sudo docker build --build-arg SOURCE_REVISION="$REVISION" \
+  -f apps/job_runner/deploy/Campaign.Dockerfile -t lhr/autonomy-campaign:"$REVISION" .
+sudo docker image inspect lhr/autonomy-campaign:"$REVISION" --format '{{.Id}}'
+```
+
+The image builds the ROS workspace and runs the existing gate/scoring tools.
+The `gz` wrapper enables EGL headless rendering for the existing server launch;
+it does not force software rendering. No X server or desktop is exposed.
+The official ROS base digest is pinned; package versions and final image ID are
+recorded during deployment. A rebuild may resolve newer apt packages, so retain
+the accepted image ID for reproducible runs.
+
+Replace the revision and image placeholders in `jobs.example.json`, validate
+with `runner.definitions()`, and install as `/opt/lhr-runner/jobs.json`, owned by
+root and mode 0644. Stage and validate a replacement before atomically renaming
+it. Each job must declare explicit parameters/resources and an image entrypoint;
+no arbitrary shell-command field is exposed in the browser. The worker reads
+catalog changes without a restart, and checks image availability every 30 seconds.
+Validate a new image with a private candidate catalog before installing the
+production definition. Preserve previous images needed by queued jobs.
+
+Campaign artifacts live under `/var/lib/lhr-runner/jobs/<id>/artifacts`, owned by
+`lhr-runner`, retained with the job (200 finished jobs). This mount is the only
+writable host directory available to a campaign. A 256 MiB / 512-file monitored
+budget terminates oversized jobs; it is not a hard disk quota. Never use this
+profile for untrusted uploads. Individual authenticated file downloads stream
+chunks and do not populate telemetry's archive cache. The compact download keeps
+its existing bounds. A separate filesystem quota is required before supporting
+untrusted artifact-producing code.
+
+Roll back code by restoring the saved runner and telemetry app and restarting
+only `lhr-runner` / `lhr-jobs`. Remove a catalog entry to disable new submissions;
+queued jobs retain their accepted definitions. Cancel a campaign before removing
+its image. Keep dashboard credentials, configured origin, queue and worker key.

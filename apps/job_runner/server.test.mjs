@@ -15,8 +15,8 @@ async function request(app, url, {method = 'GET', data, headers = {}, source = '
   const req = Readable.from(data === undefined ? [] : [Buffer.from(JSON.stringify(data))]);
   req.url = url; req.method = method; req.socket = {remoteAddress: source};
   req.headers = {authorization, ...(method === 'POST' ? {'content-type': 'application/json', 'x-lhr-request': 'dashboard', origin: config.publicOrigin} : {}), ...headers};
-  const result = {};
-  await app(req, {writeHead(status, values) {result.status = status; result.headers = values;}, end(body) {result.raw = body; try {result.body = JSON.parse(body);} catch {result.body = body;}}});
+  const result = {}, chunks = [];
+  await app(req, {write(bytes) {chunks.push(bytes); return true;}, writeHead(status, values) {result.status = status; result.headers = values;}, end(body) {if (chunks.length) body = Buffer.concat(chunks); result.raw = body; try {result.body = JSON.parse(body);} catch {result.body = body;}}});
   return result;
 }
 
@@ -243,4 +243,40 @@ test('a full bounded RPC queue returns connected stale state and rejects excess 
     assert.equal((await requests[index]).status, 200);
   }
   assert.equal(pending.length, 10);
+});
+
+
+test('catalog jobs forward typed parameters and pinned revisions without permitting executable settings', async () => {
+  const job = {id, template: 'campaign', revision: 'a'.repeat(40), parameters: {seed: 3, course: 'autocross'}};
+  assert.deepEqual(validateJob(job), job);
+  for (const extra of [{revision: 'main'}, {parameters: {seed: true}}, {parameters: []}, {parameters: {'../command': 'id'}}, {command: 'id'}, {parallel: 8}]) assert.throws(() => validateJob({...job, ...extra}));
+  const calls = [];
+  const app = createApplication({config, rpc: async value => {calls.push(value); return value.job;}});
+  assert.equal((await request(app, '/api/runs', {method: 'POST', data: job})).status, 201);
+  assert.deepEqual(calls, [{op: 'submit', job}]);
+});
+
+test('campaign file download streams all binary chunks without the compact archive limit', async () => {
+  const content = Buffer.alloc(1200000, 177), calls = [];
+  const app = createApplication({config, rpc: async value => {
+    calls.push(value);
+    if (value.op === 'artifacts') return [{path: 'runs/bag/run.mcap', bytes: content.length}];
+    return {size: content.length, base64: content.subarray(value.offset, value.offset + 512 * 1024).toString('base64')};
+  }});
+  const listing = await request(app, `/api/runs/${id}/artifacts`);
+  assert.equal(listing.body[0].bytes, content.length);
+  const download = await request(app, `/api/runs/${id}/files?path=runs%2Fbag%2Frun.mcap`);
+  assert.equal(download.status, 200);
+  assert.equal(download.headers['Content-Length'], content.length);
+  assert.deepEqual(download.raw, content);
+  assert.deepEqual(calls.slice(1).map(value => value.offset), [0, 524288, 1048576]);
+  assert.ok(calls.slice(1).every(value => value.path === 'runs/bag/run.mcap'));
+  const previous = calls.length;
+  assert.equal((await request(app, `/api/runs/${id}/files?path=x`, {headers: {authorization: ''}})).status, 401);
+  assert.equal(calls.length, previous);
+});
+
+test('malformed campaign download is rejected before sending headers', async () => {
+  const app = createApplication({config, rpc: async () => ({size: 500, base64: ''})});
+  assert.equal((await request(app, `/api/runs/${id}/files?path=x`)).status, 400);
 });

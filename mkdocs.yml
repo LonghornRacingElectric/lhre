@@ -28,6 +28,7 @@ nav:
       - ADR-018 Windows Shell-Free: docs/architecture/018-windows-shell-free.md
       - ADR-019 HIL Job Service: docs/architecture/019-hil-job-service.md
       - ADR-020 Shared Telemetry Account: docs/architecture/020-shared-telemetry-dashboard-account.md
+      - ADR-021 HIL Job Catalog: docs/architecture/021-versioned-hil-job-catalog.md
       - Build System: docs/build-system.md
       - Testing: docs/testing.md
       - Cookbook: docs/cookbook.md
