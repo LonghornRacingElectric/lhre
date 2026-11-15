@@ -1,0 +1,105 @@
+# Hard braking with the pedal still down, past the hard-brake comparators
+# (about 531 psi). Brake-over-throttle must cut torque before the BSPD
+# condition (hard braking with more than 5 kW, EV.7.7.2) can last 500 ms,
+# which would trip the car. Then, with the brake held, the driver lifts and
+# presses the pedal again: BOT must latch as the raw pedal passes 25 %.
+schema: lhre.vcu-sil-scenario.v1
+description: At 60 % pedal a 600 psi stop without lifting, then the pedal pressed again under the brake.
+duration_ms: 8500
+
+# This drive sets off the brake-over-throttle warning on purpose.
+allow:
+  brake_over_throttle: "the point of this drive: brake-over-throttle must cut torque under a hard stop"
+
+# What the run must show (README, Checks after the run). Every run is also
+# held to the invariants: no torque while BRAKE_OVER_THROTTLE is set, the
+# latch on every tick the brake is surely pressed with the pedal over 25 %,
+# and no BSPD condition.
+expect:
+  - states: [IDLE, PRECHARGE, TS_ACTIVE, RTD_WAIT, DRIVE]
+  - reach: {fault: BRAKE_OVER_THROTTLE}
+    from: hard-brake
+    within_ms: 120
+  # Cut through the stop and the lift. Torque may come back once the driver
+  # presses again under the brake: under 25 % pedal the rules allow it.
+  - hold: {signal: torque_nm, at_most: 0.0}
+    from: hard-brake
+    after_ms: 120
+    until: repress
+  - never: {fault: BRAKE_OVER_THROTTLE}
+    from: brake-again
+    until: repress
+  - reach: {fault: BRAKE_OVER_THROTTLE}
+    from: repress
+    within_ms: 300
+  - hold: {signal: torque_nm, at_most: 0.0}
+    from: repress
+    after_ms: 300
+    until: reapply
+
+at:
+  # Power up, as in launch.yml.
+  - t_ms: 0
+    accelerator: 0.0
+    brake_psi: 350.0
+    steering_deg: 0.0
+    rtd_pressed: false
+    hvc_state: NOT_ENERGIZED
+    contactors_closed: false
+    shutdown_loop_v: 24.0
+
+  - t_ms: 200
+    mark: precharge
+    hvc_state: PRECHARGING
+
+  - t_ms: 600
+    mark: energized
+    hvc_state: ENERGIZED
+    contactors_closed: true
+
+  - t_ms: 1000
+    mark: rtd
+    rtd_pressed: true
+
+  - t_ms: 1500
+    mark: brake-off
+    brake_psi: {to: 0.0, ramp_ms: 150}
+
+  - t_ms: 2000
+    mark: roll-on
+    accelerator: {to: 0.6, ramp_ms: 300}
+
+  # 600 psi is past both hard-brake comparators and well under the car
+  # model's reversing brake (about 1000 psi at the default 1500). It is held
+  # for 700 ms, so a VCU that kept the torque on would trip the BSPD.
+  - t_ms: 5000
+    mark: hard-brake
+    brake_psi: {to: 600.0, ramp_ms: 100}
+
+  - t_ms: 5700
+    mark: brake-light
+    brake_psi: {to: 0.0, ramp_ms: 100}
+
+  # Under 5 % pedal the latch clears.
+  - t_ms: 6000
+    mark: lift
+    accelerator: {to: 0.0, ramp_ms: 150}
+
+  # Brake on again (clear of the 250..300 psi hysteresis), then the pedal
+  # pressed under it.
+  - t_ms: 6500
+    mark: brake-again
+    brake_psi: {to: 350.0, ramp_ms: 100}
+
+  - t_ms: 6700
+    mark: repress
+    accelerator: {to: 0.6, ramp_ms: 300}
+
+  - t_ms: 7200
+    mark: release
+    brake_psi: {to: 0.0, ramp_ms: 100}
+    accelerator: {to: 0.0, ramp_ms: 150}
+
+  - t_ms: 7700
+    mark: reapply
+    accelerator: {to: 0.4, ramp_ms: 300}

@@ -25,6 +25,18 @@ HVC_ENERGIZED = 2
 HVC_STATES = {'NOT_ENERGIZED': 0, 'PRECHARGING': 1, 'ENERGIZED': 2, 'CHARGING_PRECHARGING': 3,
               'CHARGING': 4}
 EVENT_MODES = {'UNASSIGNED': 0, 'ACCELERATION': 1, 'SKIDPAD': 2, 'AUTOCROSS': 3, 'ENDURANCE': 4}
+# lhre VcuStateMachine and VcuFaultCode by name, as expectations write them
+# (a fault's bit in the mask is its code - 1). A test checks them against the
+# generated table.
+VCU_STATES = {'INIT': 0, 'IDLE': 1, 'DRIVE': 2, 'FAULT': 3, 'PRECHARGE': 4, 'TS_ACTIVE': 5,
+              'RTD_WAIT': 6, 'BSPD_TRIPPED': 7}
+VCU_FAULTS = {'APPS_IMPLAUSIBLE': 1, 'APPS1_RANGE': 2, 'APPS2_RANGE': 3, 'BSE1_RANGE': 4,
+              'BSE2_RANGE': 5, 'STEERING_RANGE': 6, 'BRAKE_FLAG_LATCHED': 7,
+              'BRAKE_OVER_THROTTLE': 8, 'SHUTDOWN_OPEN': 9, 'HVC_TIMEOUT': 10,
+              'INVERTER_TIMEOUT': 11, 'PDU_TIMEOUT': 12, 'INVERTER_FAULT': 13, 'BSPD_TRIPPED': 14,
+              'HARD_BRAKE_MISMATCH': 15, 'DUI_TIMEOUT': 16, 'BSE3_UNAVAILABLE': 17,
+              'CONTACTORS_OPEN': 18, 'MOTOR_DISCONNECT': 19, 'SHUTDOWN_SENSE_IMPLAUSIBLE': 20,
+              'ADC_STALE': 21, 'COOLANT_OVERTEMP': 22}
 
 # vcu_sil.h VCU_SIL_SAT_* bits.
 SATURATION_BITS = {

@@ -2,10 +2,10 @@
 
 A warning marks a firmware trap: a value too close to a threshold to rely
 on, an RTD press the firmware never sees or may refuse, the pedal and the
-brake together. Where the firmware's past decides, the rules run a model of
-it, one control tick per 3 ms sample: the RTD switch's debounce, the brake
-and pedal filters, the brake-pressed hysteresis and the shutdown loop's
-taps. test_check_firmware.py holds each model to the library. Fault drives
+brake together. Where the firmware's past decides, the rules run fwmodel.py's
+models of it, one control tick per 3 ms sample: the RTD switch's debounce,
+the brake and pedal filters, the brake-pressed hysteresis and the shutdown
+loop's taps. test_check_firmware.py holds each model to the library. Fault drives
 cross the traps on purpose, so a run still goes ahead. A file's allow:
 waives one with a reason; --strict (CI) fails on any other. It needs only
 PyYAML beyond the standard library: no Docker, no build and no FMU.
@@ -32,49 +32,15 @@ from dataclasses import dataclass
 
 from .cosim import BRAKE_PSI_AT_FULL_PLANT_BRAKE, STEP_MS
 from .firmware import HVC_ENERGIZED, HVC_STATES
+from .fwmodel import (CONTACTOR_STATUS_PERIOD_MS, HARD_BRAKE_PSI, LOOP_HIGH_V, LOOP_LOW_V,
+                      LOOP_MS, RTD_MS, SURE_PEDAL, SURE_PSI, THRESHOLDS, Change, debounced, ema,
+                      rtd_switch, shutdown_loop)
 from .scenario import DEFAULTS
 from .scenario_file import (Block, Problem, Ramp, ScenarioError, ScenarioFile, _count, _yaml,
                             first_step_ms, last_step_ms, load, misnamed_paths,
                             scenario_paths)
 
-# Firmware constants the warnings stand on, as boards/VCU/App/config/params.hpp
-# sets them. Every event mode shares them: params.cpp changes only the pedal
-# map and the torque table. test_check.py reads each back from the header,
-# fails if params.cpp overrides one, and steps the library across the bands
-# built from them.
-THRESHOLDS = {
-    'AnalogParams::sensor_divider_ratio': 10.0 / (5.1 + 10.0),
-    'AnalogParams::shutdown_divider_ratio': 13.7 / (100.0 + 13.7),
-    'AppsParams::ema_alpha': 0.35,
-    'AppsParams::min_travel_deadzone': 0.09,
-    'AppsParams::max_travel_deadzone': 0.74,
-    'BseParams::v_at_0_psi': 0.5,
-    'BseParams::v_at_full': 4.5,
-    'BseParams::full_scale_psi': 3000.0,
-    'BseParams::ema_alpha': 0.10,
-    'BseParams::pressed_on_psi': 300.0,
-    'BseParams::pressed_off_psi': 250.0,
-    'BseParams::brake_light_psi': 30.0,
-    'BseParams::bot_pedal_on': 0.25,
-    'BseParams::bot_pedal_off': 0.05,
-    'BseParams::hard_brake_pin_v': 0.80,
-    'ShutdownParams::high_pin_v': 2.31,
-    'ShutdownParams::low_pin_v': 2.00,
-    'ShutdownParams::debounce_ms': 10,
-    'DigitalParams::rtd_debounce_ms': 20,
-    'DriveParams::rtd_max_pedal': 0.0,
-}
 _T = THRESHOLDS
-
-# The line pressure at which both BSE pins pass the hard-brake comparators
-# (about 531 psi), and the loop voltages the sense taps call high and low
-# (about 19.17 and 16.60 V).
-HARD_BRAKE_PSI = ((_T['BseParams::hard_brake_pin_v'] / _T['AnalogParams::sensor_divider_ratio']
-                   - _T['BseParams::v_at_0_psi'])
-                  / (_T['BseParams::v_at_full'] - _T['BseParams::v_at_0_psi'])
-                  * _T['BseParams::full_scale_psi'])
-LOOP_HIGH_V = _T['ShutdownParams::high_pin_v'] / _T['AnalogParams::shutdown_divider_ratio']
-LOOP_LOW_V = _T['ShutdownParams::low_pin_v'] / _T['AnalogParams::shutdown_divider_ratio']
 
 # A count of the 12-bit ADC is about 0.9 psi and 7 mV of loop, so these
 # margins leave rounding no say. A ramp passing through a band is fine:
@@ -106,11 +72,6 @@ BRAKE_HIGH_FRACTION = 2.0 / 3.0
 # for full-pedal torque.
 PEDAL_NONE = _T['AppsParams::min_travel_deadzone']
 PEDAL_FULL = _T['AppsParams::max_travel_deadzone']
-# The models below leave out ADC rounding, which moves a filter by under
-# half a count (about 0.5 psi, or 0.0002 of pedal travel). So a press is
-# called refused only past its threshold by more than these.
-SURE_PSI = 1.0
-SURE_PEDAL = 0.001
 # Brake-over-throttle latches on brake-pressed with the raw pedal over 25 %
 # and holds until the pedal is under 5 %. Brake-pressed is a hysteresis on
 # the filtered brake (on at 300, off under 250 psi); the lint's brake "may be
@@ -131,29 +92,15 @@ RTD_PEDAL = round(PEDAL_NONE - 0.04, 6)
 RTD_WINDOW_MS = 50
 RTD_LOOP_V = LOOP_BAND[1]
 DISAGREE_MS = 100
-# CONTACTOR_STATUS is 100 Hz, sent in phase from 0 (rig.cpp).
-CONTACTOR_STATUS_PERIOD_MS = 10
-# The rig's ADCs: 12 bits, with VDDA at 3.3 V from VREFINT
-# (App/test/bench.hpp). Only the loop's model rounds to counts: its explain
-# note gives the tick a ramp crosses a threshold, where one count decides.
-ADC_FULL_SCALE = 4095
-ADC_VDDA_V = 3.3
 
 
 def _pct(fraction: float) -> str:
     return f'{fraction * 100:g} %'
 
 
-def _debounced(ms: int) -> int:
-    """The tick a debounce of ms passes, counted from the first sample."""
-    return -(-ms // STEP_MS) * STEP_MS
-
-
-_RTD_MS = _T['DigitalParams::rtd_debounce_ms']
-_LOOP_MS = _T['ShutdownParams::debounce_ms']
 # A change must hold on every sample through the one its debounce passes on,
 # so the next change can come this long after it at the earliest.
-_RTD_HOLD_MS = _debounced(_RTD_MS) + STEP_MS
+_RTD_HOLD_MS = debounced(RTD_MS) + STEP_MS
 
 RULES = {
     'brake_near_threshold': f'a held brake_psi within {BRAKE_MARGIN_PSI:g} psi of 30, 250, 300 '
@@ -169,9 +116,9 @@ RULES = {
                            f'may hold brake-pressed (from {BOT_ON_PSI:g} psi until under '
                            f'{BOT_OFF_PSI:g}; the firmware\'s is 300/250): torque is cut until '
                            'the pedal is under 5 %',
-    'rtd_at_boot': f'an RTD press before the switch has read released for {_RTD_MS} ms since '
+    'rtd_at_boot': f'an RTD press before the switch has read released for {RTD_MS} ms since '
                    'boot: it starts as pressed, so the firmware never sees the press',
-    'rtd_too_short': f'an rtd_pressed change that does not hold for the {_RTD_MS} ms debounce (it '
+    'rtd_too_short': f'an rtd_pressed change that does not hold for the {RTD_MS} ms debounce (it '
                      'changes back, or the run ends, first): the firmware never sees it',
     'rtd_without_brake': f'the modelled filtered brake at a debounced RTD press edge under '
                          f'{RTD_BRAKE_PSI:g} psi: RTD needs '
@@ -197,122 +144,6 @@ class Findings:
     allowed: tuple[tuple[Problem, str], ...]  # (warning, the file's reason)
 
 
-@dataclass(frozen=True)
-class Change:
-    """A change of a raw input at sample index k, and what the firmware's
-    debounce makes of it: seen is the index of the tick its debounced level
-    takes it. Otherwise why says: 'boot' (an RTD press before the switch has
-    read released), 'short' (it changes back first), 'end' (the run ends
-    first) or 'held' (the debounced level already reads it)."""
-    k: int
-    to: bool
-    seen: int | None
-    why: str = ''
-
-
-def _debounce(raw: list[bool], times: list[int], ms: int, initial: bool) -> list[bool]:
-    """longhorn::Debouncer ticked once per sample: the level after each tick."""
-    value = candidate = initial
-    started, since = False, 0
-    levels = []
-    for t, r in zip(times, raw, strict=True):
-        if not started or r != candidate:
-            started, candidate, since = True, r, t
-        if candidate != value and t - since >= ms:  # lhal::ElapsedMs
-            value = candidate
-        levels.append(value)
-    return levels
-
-
-def _changes(raw: list[bool], reported: list[bool | None], before: bool | None,
-             unarmed: list[bool] | None = None) -> list[Change]:
-    """Each change of raw, and the first sample against before: what the
-    reported level (None while the firmware reports nothing) does with it."""
-    found = []
-    for k, r in enumerate(raw):
-        if k and r == raw[k - 1]:
-            continue
-        if r == (reported[k - 1] if k else before):
-            why = 'boot' if r and unarmed is not None and unarmed[k] else 'held'
-            found.append(Change(k, r, None, why))
-            continue
-        j = k
-        while j < len(raw) and raw[j] == r and reported[j] != r:
-            j += 1
-        if j == len(raw):
-            found.append(Change(k, r, None, 'end'))
-        elif raw[j] != r:
-            found.append(Change(k, r, None, 'short'))
-        else:
-            found.append(Change(k, r, j))
-    return found
-
-
-@dataclass(frozen=True)
-class Switch:
-    """The RTD switch as the firmware reads it: longhorn::EdgeButton."""
-    levels: list[bool]  # the debounced level after each tick (din_rtd_pressed)
-    edges: list[int]  # the ticks EdgeButton reports a press on
-    changes: list[Change]
-
-
-def _rtd_switch(raw: list[bool], times: list[int]) -> Switch:
-    # EdgeButton holds Debouncer{true} and last_ = true, so the switch reads
-    # pressed from boot and arms only once it has read released.
-    levels = _debounce(raw, times, _RTD_MS, True)
-    armed, last = False, True
-    edges, unarmed = [], []
-    for k, pressed in enumerate(levels):
-        if not pressed:
-            armed = True
-        elif not last and armed:
-            edges.append(k)
-        last = pressed
-        unarmed.append(not armed)
-    return Switch(levels, edges, _changes(raw, levels, True, unarmed))
-
-
-def _loop_pin_v(volts: float) -> float:
-    """A sense tap's pin volts as the firmware computes them from the ADC
-    counts the rig sets for shutdown_loop_v (bench.hpp SetLoop, analog.cpp)."""
-    counts = int(volts * _T['AnalogParams::shutdown_divider_ratio'] / ADC_VDDA_V
-                 * ADC_FULL_SCALE + 0.5)
-    return min(counts, ADC_FULL_SCALE) * ADC_VDDA_V / ADC_FULL_SCALE
-
-
-@dataclass(frozen=True)
-class Loop:
-    """ShutdownLoop::Update on both taps, which the rig drives alike."""
-    taps: list[bool]  # each tap's hysteresis, high or not
-    reported: list[bool | None]  # closed, open, or None while UNKNOWN
-    changes: list[Change]
-
-
-def _loop(volts: list[float], times: list[int]) -> Loop:
-    high, taps = False, []
-    for v in volts:
-        pin = _loop_pin_v(v)
-        if pin >= _T['ShutdownParams::high_pin_v']:
-            high = True
-        elif pin < _T['ShutdownParams::low_pin_v']:
-            high = False
-        taps.append(high)
-    levels = _debounce(taps, times, _LOOP_MS, False)
-    # UNKNOWN until both taps have had a full debounce from the first tick.
-    reported = [level if t >= _LOOP_MS else None
-                for t, level in zip(times, levels, strict=True)]
-    return Loop(taps, reported, _changes(taps, reported, None))
-
-
-def _ema(samples: list[float], alpha: float) -> list[float]:
-    """longhorn::Ema per tick, seeded by the first sample."""
-    filtered, y = [], 0.0
-    for k, x in enumerate(samples):
-        y = x if k == 0 else alpha * x + (1.0 - alpha) * y
-        filtered.append(y)
-    return filtered
-
-
 class _Lint:
     def __init__(self, sf: ScenarioFile):
         self.sf = sf
@@ -321,8 +152,8 @@ class _Lint:
                        for s in ('accelerator', 'brake_psi', 'rtd_pressed', 'hvc_state',
                                  'contactors_closed', 'shutdown_loop_v')}
         # The models, tick by tick (pedals.cpp, debounce.hpp, shutdown_loop.cpp).
-        self.brake = _ema(self.values['brake_psi'], _T['BseParams::ema_alpha'])
-        self.pedal = _ema(self.values['accelerator'], _T['AppsParams::ema_alpha'])
+        self.brake = ema(self.values['brake_psi'], _T['BseParams::ema_alpha'])
+        self.pedal = ema(self.values['accelerator'], _T['AppsParams::ema_alpha'])
         self.may_press = []
         pressed = False
         for f in self.brake:
@@ -331,8 +162,8 @@ class _Lint:
             elif f < BOT_OFF_PSI:
                 pressed = False
             self.may_press.append(pressed)
-        self.rtd = _rtd_switch(self.values['rtd_pressed'], self.times)
-        self.loop = _loop(self.values['shutdown_loop_v'], self.times)
+        self.rtd = rtd_switch(self.values['rtd_pressed'], self.times)
+        self.loop = shutdown_loop(self.values['shutdown_loop_v'], self.times)
         self.found: list[Problem] = []
 
     def source(self, signals: tuple[str, ...], t_ms: int) -> tuple[Block | None, str]:
@@ -430,20 +261,20 @@ class _Lint:
             what = 'press' if change.to else 'release'
             if change.why == 'boot':
                 self.warn('rtd_at_boot', s, f'the RTD switch starts as pressed and needs '
-                          f'{_RTD_MS} ms released before a press counts, so the firmware never '
+                          f'{RTD_MS} ms released before a press counts, so the firmware never '
                           f'sees this press; hold rtd_pressed false for {_RTD_HOLD_MS} ms first',
                           block, 'rtd_pressed')
             elif change.why == 'short' and change.k > 0:  # 0 is the boot reading
                 back = next(self.times[j] for j in range(change.k, len(self.times))
                             if self.values['rtd_pressed'][j] != change.to)
                 self.warn('rtd_too_short', s, f'this {what} changes back at {back} ms, but the '
-                          f'{_RTD_MS} ms debounce needs it held through '
-                          f'{s + _debounced(_RTD_MS)} ms, so the firmware never sees it; hold it '
+                          f'{RTD_MS} ms debounce needs it held through '
+                          f'{s + debounced(RTD_MS)} ms, so the firmware never sees it; hold it '
                           f'for {_RTD_HOLD_MS} ms or more', block, 'rtd_pressed')
             elif change.why == 'end' and change.k > 0:
                 self.warn('rtd_too_short', s, f'the last sample is at {last} ms, but the '
-                          f'{_RTD_MS} ms debounce needs this {what} held through '
-                          f'{s + _debounced(_RTD_MS)} ms, so the firmware never sees it; lengthen '
+                          f'{RTD_MS} ms debounce needs this {what} held through '
+                          f'{s + debounced(RTD_MS)} ms, so the firmware never sees it; lengthen '
                           'the run or move it earlier', block, 'rtd_pressed')
         presses = {c.seen: c for c in self.rtd.changes if c.to and c.seen is not None}
         for e in self.rtd.edges:
@@ -524,12 +355,12 @@ class _Lint:
         if signal == 'rtd_pressed':
             k = first_step_ms(block.t_ms) // STEP_MS
             change = next((c for c in self.rtd.changes if c.k == k and c.to == value), None)
-            return _note(change, self.times, _RTD_MS, _yaml(value))
+            return _note(change, self.times, RTD_MS, _yaml(value))
         if signal == 'shutdown_loop_v' and block.t_ms > 0:
             # At 0 it would only say the loop boots: UNKNOWN until 12 ms.
             lo, hi = self.span(block, signal)
             change = next((c for c in self.loop.changes if lo <= c.k < hi), None)
-            return _note(change, self.times, _LOOP_MS,
+            return _note(change, self.times, LOOP_MS,
                          'the loop ' + ('closed' if change and change.to else 'open'))
         return ''
 
@@ -604,7 +435,20 @@ def explain(sf: ScenarioFile) -> str:
         cells = [row[0].rjust(widths[0]), row[1].rjust(widths[1]), row[2].rjust(widths[2]),
                  row[3].ljust(widths[3]), row[4].ljust(widths[4]), row[5]]
         lines.append(('  ' + '  '.join(cells)).rstrip())
+    if sf.expectations:
+        lines += ['', '  expect: the samples each is judged on (README, Checks after the run)']
+        lines += [f'    [{e.index}] {e.text()}: {_window(e, d)}' for e in sf.expectations]
     return '\n'.join(lines)
+
+
+def _window(e, duration_ms: int) -> str:
+    if e.verb == 'states':
+        return 'the whole run'
+    if e.verb == 'reach':
+        return (f'first at or after {e.anchor_ms} ms, due from {e.anchor_ms + e.not_before_ms} '
+                f'to {e.anchor_ms + e.within_ms} ms')
+    last = last_step_ms(duration_ms) if e.stop_ms is None else first_step_ms(e.stop_ms) - STEP_MS
+    return f'{first_step_ms(e.start_ms)}..{last} ms'
 
 
 def _positive(text: str) -> float:

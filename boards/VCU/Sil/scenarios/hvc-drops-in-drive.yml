@@ -1,0 +1,72 @@
+# The HVC reports NOT_ENERGIZED, with both AIRs open, while the car is
+# driving and the shutdown loop stays closed (an HVC that opens the AIRs on
+# its own fault). The VCU must cut torque and leave DRIVE on the tick it
+# reads the next CONTACTOR_STATUS. No torque-cut fault is left once the HVC
+# is merely not energized, so FAULT lasts one tick and the VCU goes on to
+# IDLE: a known non-failure, written as reach FAULT then reach IDLE.
+schema: lhre.vcu-sil-scenario.v1
+description: At 40 % pedal the HVC reports NOT_ENERGIZED with the AIRs open; FAULT for one tick, then IDLE.
+duration_ms: 5000
+
+# What the run must show (README, Checks after the run). Every run is also
+# held to the invariants, such as no torque outside DRIVE.
+expect:
+  - states: [IDLE, PRECHARGE, TS_ACTIVE, RTD_WAIT, DRIVE, FAULT, IDLE]
+  # The next 10 ms CONTACTOR_STATUS reaches the VCU 0 to 9 ms after the
+  # mark's sample (the default deadline is 12 ms).
+  - reach: {state: FAULT}
+    from: hvc-off
+  - reach: {fault: CONTACTORS_OPEN}
+    from: hvc-off
+  - reach: {signal: torque_nm, at_most: 0.0}
+    from: hvc-off
+  - reach: {state: IDLE}
+    from: hvc-off
+    within_ms: 15
+  - never: {state: DRIVE}
+    from: hvc-off
+    after_ms: 12
+  - hold: {signal: torque_nm, at_most: 0.0}
+    from: hvc-off
+    after_ms: 12
+
+at:
+  # Power up, as in launch.yml.
+  - t_ms: 0
+    accelerator: 0.0
+    brake_psi: 350.0
+    steering_deg: 0.0
+    rtd_pressed: false
+    hvc_state: NOT_ENERGIZED
+    contactors_closed: false
+    shutdown_loop_v: 24.0
+
+  - t_ms: 200
+    mark: precharge
+    hvc_state: PRECHARGING
+
+  - t_ms: 600
+    mark: energized
+    hvc_state: ENERGIZED
+    contactors_closed: true
+
+  - t_ms: 1000
+    mark: rtd
+    rtd_pressed: true
+
+  - t_ms: 1500
+    mark: brake-off
+    brake_psi: {to: 0.0, ramp_ms: 150}
+
+  - t_ms: 2000
+    mark: roll-on
+    accelerator: {to: 0.4, ramp_ms: 300}
+
+  - t_ms: 3000
+    mark: hvc-off
+    hvc_state: NOT_ENERGIZED
+    contactors_closed: false
+
+  - t_ms: 3300
+    mark: lift
+    accelerator: {to: 0.0, ramp_ms: 200}

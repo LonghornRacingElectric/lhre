@@ -133,9 +133,10 @@ def test_help_is_the_header_comment(sh):
     assert lines[0] == 'Runs the VCU firmware against the car model in the SIL dev container.'
     assert '  boards/VCU/Sil/run.sh --check [--strict] [--explain] [--errors-only]' in lines
     assert "needs neither, just Python 3.11+ with PyYAML. --test runs the SIL's C++" in lines
+    assert 'check passed, 1 the car model failed, 3 a check failed (an invariant or' in lines
     assert lines[-2:] == [
-        'a scenario that cannot run. A run that stops before it starts leaves no run',
-        'directory, and a reused --out as it was.']
+        'that does not build or a scenario that cannot run. A run that stops before',
+        'it starts leaves no run directory, and a reused --out as it was.']
 
 
 def test_a_value_may_follow_its_option_after_an_equals(sh):
@@ -272,6 +273,9 @@ def test_a_run_hands_the_container_the_checkout_caches_fmu_and_run_directory(sh)
 RUN_DIRECTORIES = {
     'new-and-completed': ('none', 'new', '0', 0, True, True),
     'new-and-the-car-model-failed': ('none', 'new', '1', 1, True, True),
+    'new-and-a-check-failed': ('none', 'new', '3', 3, True, True),
+    # Docker's own statuses start at 125; a signal is 128 + its number.
+    'new-and-killed-by-a-signal': ('none', 'new', '137', 2, True, True),
     # A directory run.sh made holds only this run, whatever the file clock.
     'new-with-a-meta-older-than-the-stamp': ('none', 'old', '0', 0, True, True),
     'new-and-stopped-before-it-started': ('none', None, '2', 2, False, False),

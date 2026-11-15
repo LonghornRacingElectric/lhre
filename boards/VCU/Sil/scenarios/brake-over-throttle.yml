@@ -10,6 +10,34 @@ duration_ms: 8000
 allow:
   brake_over_throttle: "the point of this drive: brake-over-throttle must cut torque"
 
+# What the run must show (README, Checks after the run). Every run is also
+# held to the invariants: no torque while BRAKE_OVER_THROTTLE is set, and the
+# latch held until the pedal is under 5 %.
+expect:
+  # BOT is not a drive exit: the VCU stays in DRIVE throughout.
+  - states: [IDLE, PRECHARGE, TS_ACTIVE, RTD_WAIT, DRIVE]
+  # The brake ramps to 400 psi over 100 ms and its filter passes 300 psi
+  # 102 ms after the mark's sample (4104 ms).
+  - reach: {fault: BRAKE_OVER_THROTTLE}
+    from: brake-on
+    within_ms: 120
+  # Cut through the brake release, until the driver lifts.
+  - hold: {fault: BRAKE_OVER_THROTTLE}
+    from: brake-on
+    after_ms: 120
+    until: lift
+  - hold: {signal: torque_nm, at_most: 0.0}
+    from: brake-on
+    after_ms: 120
+    until: reapply
+  # Under 5 % pedal the latch clears, and the torque comes back on the
+  # reapply (50 N.m about 174 ms after it).
+  - never: {fault: BRAKE_OVER_THROTTLE}
+    from: reapply
+  - reach: {signal: torque_nm, at_least: 50.0}
+    from: reapply
+    within_ms: 300
+
 at:
   # Power up on the brake, as in launch.yml.
   - t_ms: 0

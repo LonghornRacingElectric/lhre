@@ -1,7 +1,10 @@
 """python -m vcusil: run one scenario of the VCU firmware against the car model.
 
-Exit status: 0 the run completed, 1 the car model failed, 2 the harness or
-its inputs are wrong (nothing about the firmware can be concluded).
+Exit status: 0 the run completed and every check passed, 1 the car model
+failed, 2 the harness or its inputs are wrong (nothing about the firmware
+can be concluded), 3 a check failed: an invariant or one of the file's
+expectations (README, Checks after the run). 3 wins over 1: what the
+firmware did before the car model failed still counts.
 """
 
 from __future__ import annotations
@@ -14,9 +17,9 @@ import traceback
 from pathlib import Path
 
 from . import (candecode, check, cosim, events, firmware, mcaplog, plant, provenance, report,
-               scenario_file)
+               scenario_file, verdict)
 
-EXIT_COMPLETED, EXIT_PLANT_FAILED, EXIT_HARNESS = 0, 1, 2
+EXIT_COMPLETED, EXIT_PLANT_FAILED, EXIT_HARNESS, EXIT_CHECKS_FAILED = 0, 1, 2, 3
 EXIT_FOR_STATUS = {'completed': EXIT_COMPLETED, 'plant_failed': EXIT_PLANT_FAILED,
                    'harness_error': EXIT_HARNESS}
 
@@ -180,6 +183,14 @@ def _run(args: argparse.Namespace, sf: scenario_file.ScenarioFile, findings: che
         marks = events.derive(result, fw.state_name, fw.fault_name, fw.transition_reason,
                               marks=sf.marks)
 
+    # A harness error breaks the run's contract, so its rows judge nothing.
+    checks = verdict.judge(sf, result.rows) if result.status != 'harness_error' else None
+    if checks is not None:
+        marks = verdict.with_events(marks, checks)
+        for line in checks.lines(sf):
+            print(line, file=sys.stderr)
+        meta['checks'] = {**checks.meta(), 'headline': checks.headline(),
+                          'report': checks.lines(sf)}
     meta.update(status=result.status, failure=result.failure, wall_s=result.wall_s,
                 failure_lines=result.failure_lines + _log_lines(fmu_log) if result.failure else [],
                 summary=summary,
@@ -197,7 +208,8 @@ def _run(args: argparse.Namespace, sf: scenario_file.ScenarioFile, findings: che
                   'firmware': meta['library']['build']['git_describe'],
                   'firmware_dirty': meta['library']['build']['dirty'],
                   'fmu_sha256': meta['fmu']['fmu_sha256'],
-                  'scenario_path': recorded_path, 'scenario_sha256': sf.sha256},
+                  'scenario_path': recorded_path, 'scenario_sha256': sf.sha256,
+                  'checks': checks.status if checks is not None else 'not_run'},
         attachments={
             'summary.txt': (report.summary_text(summary, result, meta, wall_time=False)
                             + '\n').encode(),
@@ -210,6 +222,8 @@ def _run(args: argparse.Namespace, sf: scenario_file.ScenarioFile, findings: che
                     f'driving the car model: {sf.name}')
     (args.out / 'summary.txt').write_text(text + '\n')
     print(text)
+    if result.status != 'harness_error' and checks is not None and checks.failed:
+        return EXIT_CHECKS_FAILED
     return EXIT_FOR_STATUS[result.status]
 
 

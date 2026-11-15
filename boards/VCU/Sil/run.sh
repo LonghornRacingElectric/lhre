@@ -20,10 +20,11 @@
 # run too. --view serves a run's run.mcap with the SIL layout in Lichtblick,
 # an open-source Foxglove viewer, on localhost. The FMU (GPL, never
 # committed) may also come from VCU_SIL_FMU. A value may follow its option
-# after a space or an = (--out=DIR). Exit status: 0 completed, 1 the car
-# model failed, 2 anything else, including a firmware that does not build or
-# a scenario that cannot run. A run that stops before it starts leaves no run
-# directory, and a reused --out as it was.
+# after a space or an = (--out=DIR). Exit status: 0 completed with every
+# check passed, 1 the car model failed, 3 a check failed (an invariant or
+# one of the scenario's expectations), 2 anything else, including a firmware
+# that does not build or a scenario that cannot run. A run that stops before
+# it starts leaves no run directory, and a reused --out as it was.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -186,8 +187,9 @@ docker run --rm "${mounts[@]}" -v "$out:/out" -e TARGETS="$targets" "$image" bas
     --can-table "$bin/boards/VCU/vcu_sil_can.json" --fmu "$fmu" --out /out \
     --scenario "$scenario" "$@"
 ' run.sh "$fmu_in_container" "$scenario_c" "${pass[@]+"${pass[@]}"}" || status=$?
-# vcusil exits 0, 1 or 2; any other status (docker, a signal) is the harness.
-case "$status" in 0 | 1 | 2) ;; *) status=2 ;; esac
+# vcusil exits 0, 1, 2 or 3; any other status (docker, a signal) is the
+# harness.
+case "$status" in 0 | 1 | 2 | 3) ;; *) status=2 ;; esac
 # find -newer, not [[ -nt ]]: macOS's bash 3.2 compares whole seconds.
 wrote_meta() {
   [[ -f "$out/meta.json" ]] || return 1
