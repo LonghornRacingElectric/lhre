@@ -56,6 +56,24 @@ scorer ends; mission state and speed continue to show the final stop. Truth
 cones use `/lhr/viewer/cones_truth`; the fixed reference path uses
 `/lhr/viewer/centerline_truth`. Neither feeds perception or planning.
 
+## Truth view
+
+`lhr_gazebo.json` follows `base_link`, which the EKF owns, so the view moves
+with every estimator correction. `lhr_gazebo_truth.json` is the same layout
+following `truth_base_link`, Gazebo's true pose, with the car body drawn
+there and the steering plot showing both front wheels' measured angles
+against the command. Gazebo publishes the true pose on `/tf_truth`, which
+Foxglove does not read as a frame, so
+[`truth_relay.py`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/ros2/foxglove/truth_relay.py)
+republishes it on `/tf` as `map -> truth_base_link`, and the body markers on
+that frame. It is display-only: nothing in the stack reads `truth_base_link`.
+[`docker/demo.sh`](../docker/README.md#demo-runs-of-the-full-gazebo-stack)
+starts it with every run; by hand, inside the container:
+
+```bash
+python3 ~/autonomy/ros2/foxglove/truth_relay.py
+```
+
 ## Record and check the layout
 
 Gazebo has no `record:=true` argument. While it runs, use another sourced

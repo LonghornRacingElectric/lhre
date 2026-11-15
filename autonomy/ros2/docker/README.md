@@ -89,6 +89,42 @@ installs `lhr_vehicle`'s mesh into `share/`, and that is what makes the car's
 `package://` URI resolve. Skipping it gives a broken-asset error rather than
 an older car.
 
+## Demo runs of the full Gazebo stack
+
+`demo.sh` runs the gate stack in Gazebo with the GUI on the noVNC desktop
+and the Foxglove bridge on `ws://localhost:8765`, for showing the car to
+people rather than scoring it. It needs the container to be built (above);
+it starts colima and the container if they are stopped.
+
+```bash
+cd autonomy/ros2/docker
+./demo.sh lap           # autocross seed 1, stops by itself after the finish
+./demo.sh fault         # oval at 8 m/s, steer_freeze trips STEER_TRACKING, car stops
+./demo.sh loop          # rules_autocross seed 1, laps until stopped
+./demo.sh extreme       # #218's extreme_combined course, laps until stopped
+./demo.sh fsi           # #223's real FSI layout (fsg for FSG), laps until stopped
+./demo.sh fsi paused    # car on the line, sim paused; ./demo.sh resume to go
+./demo.sh pause | resume | stop
+```
+
+The terminal prints state changes, faults, trips and lap scores. The
+Gazebo camera follows the car; double-click the window's title bar to
+maximize it. In Foxglove, import
+[`lhr_gazebo_truth.json`](../foxglove/README.md#truth-view) to follow
+the car's true pose instead of the EKF's.
+
+- Gazebo renders on the CPU here, so runs go at about half real time, and
+  about a quarter with Foxglove subscribed to the camera. Sim time drives
+  everything, so the runs are the same, only slower.
+- `extreme`, `fsi` and `fsg` fetch their worlds from the unmerged
+  [#218](https://github.com/LonghornRacingElectric/lhre/pull/218) and
+  [#223](https://github.com/LonghornRacingElectric/lhre/pull/223) branches
+  and run them on this checkout's stack. Until those merge, `world_viz` on
+  `main` cannot draw the imported FSI/FSG layouts (no truth cones in
+  Foxglove), and the FSG car went off course after 9 m in #223's own check.
+- `lap` is the only one with a scored pass on a Mac (33.6 s, 0 cones,
+  11/15). The looping runs turn metrics off, so nothing scores them.
+
 After a reboot: `colima start && docker start lhr-autonomy`. If the
 `Dockerfile` or `compose.yaml` changed since the image was built (e.g. after a
 pull), `docker start` resumes the stale image, so run `docker compose up -d
