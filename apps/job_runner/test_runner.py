@@ -38,6 +38,20 @@ class RunnerTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             runner.validate({**SETTINGS, 'template': 'gpu', 'parallel': 2})
 
+    def test_database_connections_close_after_commit_and_rollback(self):
+        with self.queue.connect() as committed:
+            committed.execute("INSERT OR REPLACE INTO settings VALUES('paused','1')")
+        self.assertTrue(self.queue.paused())
+        with self.assertRaises(sqlite3.ProgrammingError):
+            committed.execute('SELECT 1')
+        with self.assertRaisesRegex(RuntimeError, 'rollback'):
+            with self.queue.connect() as rolled_back:
+                rolled_back.execute("UPDATE settings SET value='0' WHERE key='paused'")
+                raise RuntimeError('rollback')
+        self.assertTrue(self.queue.paused())
+        with self.assertRaises(sqlite3.ProgrammingError):
+            rolled_back.execute('SELECT 1')
+
     def test_idempotent_submit_and_conflicting_retry(self):
         self.queue.submit(SETTINGS)
         self.queue.submit(SETTINGS)
@@ -82,6 +96,19 @@ class RunnerTest(unittest.TestCase):
         self.assertNotIn('/var/run/docker.sock', ' '.join(args))
         gpu = runner.command({**SETTINGS, 'template': 'gpu'}, '/trusted/results')
         self.assertEqual(gpu[gpu.index('--gpus') + 1], 'all')
+
+    def test_only_fmu_scratch_allows_loading_native_libraries(self):
+        fmu = runner.command(SETTINGS, self.temp.name)
+        self.assertIn('--tmpfs=/tmp:rw,exec,nosuid,nodev,size=536870912', fmu)
+        for template in ['cpu', 'gpu']:
+            args = runner.command({**SETTINGS, 'template': template}, self.temp.name)
+            self.assertFalse(any(arg.startswith('--tmpfs') for arg in args))
+            self.assertIn('type=tmpfs,destination=/tmp,tmpfs-size=536870912', args)
+        for args in [fmu, runner.command({**SETTINGS, 'template': 'cpu'}, self.temp.name)]:
+            self.assertIn('--read-only', args)
+            self.assertEqual(args[args.index('--network') + 1], 'none')
+            self.assertEqual(args[args.index('--cap-drop') + 1], 'ALL')
+            self.assertEqual(args[args.index('--security-opt') + 1], 'no-new-privileges')
 
     def test_runtime_reconciliation_uses_docker_state(self):
         self.queue.submit(SETTINGS)
@@ -321,11 +348,11 @@ class RunnerTest(unittest.TestCase):
         connect = self.queue.connect
         class FullDatabase:
             def __enter__(self):
-                self.db = connect()
-                self.db.__enter__()
+                self.context = connect()
+                self.db = self.context.__enter__()
                 return self
             def __exit__(self, *args):
-                return self.db.__exit__(*args)
+                return self.context.__exit__(*args)
             def execute(self, sql, *args):
                 if sql.startswith('INSERT OR REPLACE INTO settings'):
                     raise sqlite3.OperationalError('database full')

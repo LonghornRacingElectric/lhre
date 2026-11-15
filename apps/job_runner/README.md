@@ -9,7 +9,7 @@ result archives. Nomad is not used.
 
 | Component | Location | Supervision |
 | --- | --- | --- |
-| Dashboard and API | `/mnt/server_ssd/lhr-jobs/app` on telemetry | PM2 app `lhr-jobs`, Node >=18 |
+| Dashboard and API | `/mnt/server_ssd/lhr-jobs/app` on telemetry | PM2 app `lhr-jobs` under `electric`, Node >=18 |
 | Dashboard configuration/key | `~/.config/lhr-jobs` on telemetry | User-only files; never committed |
 | Runner executable | `/opt/lhr-runner` on HIL | Root-owned code, systemd runs as `lhr-runner` |
 | Queue, logs and results | `/var/lib/lhr-runner` on HIL | SQLite WAL and per-run directories |
@@ -22,12 +22,17 @@ bridge. The runner exposes no network listener or Docker TCP port. Docker socket
 access stays on HIL. Browser credentials and worker SSH credentials are
 separate; neither is sent to jobs.
 
-The dashboard listens on `127.0.0.1:8091`. A separate private Tailscale Serve
-HTTPS listener on port 8444 forwards to it. This port cannot be enabled for
-Funnel. The existing public Funnel on 443, telemetry viewer, Grafana, ingestion
-and database services keep their own routes. Check `tailscale serve status
---json` after changes: the new 8444 listener must not appear as enabled under
-`AllowFunnel`.
+The initial deployment listens on `127.0.0.1:8091` only. Use an SSH tunnel
+from the operator's machine:
+
+```bash
+ssh -N -L 127.0.0.1:8091:127.0.0.1:8091 electric@telemetry
+```
+
+Open `http://127.0.0.1:8091`; `publicOrigin` must match that local URL. No new
+Tailscale Serve listener or domain route is installed. Telemetry's existing
+public Funnel on 443, viewer, Grafana, ingestion and database services keep
+their routes. A separate HTTPS listener can be configured later when requested.
 
 ## Workloads and limits
 
@@ -51,11 +56,15 @@ have no network, a read-only root filesystem, dropped capabilities, no Docker
 socket or writable host mounts. Swap is disabled by setting the memory-plus-swap
 limit equal to the memory limit. Missing local images fail with `--pull=never`;
 a job never pulls a replacement from Docker Hub. GPU access is granted only to
-the GPU template. Jobs stop after 15 minutes.
+the GPU template. Jobs stop after 15 minutes. FMU scratch is explicitly
+executable because FMPy extracts native shared libraries there before loading
+them. It remains a 512 MiB in-memory mount with `nosuid,nodev`; CPU/GPU
+templates retain Docker's default non-executable scratch mount.
 
 The worker process itself has a 256 MiB memory cap and 25% of one CPU; Docker
 job limits are independent. PM2 restarts the dashboard above 256 MiB RSS and
-Node's JS heap is limited to 128 MiB. A PM2 restart threshold is not a hard
+Node's old generation is limited to 128 MiB and its semi-space to 8 MiB.
+A PM2 restart threshold is not a hard
 operating-system memory or CPU quota. Measure actual usage with `pm2 list` and
 `systemctl status lhr-runner`.
 
@@ -68,7 +77,9 @@ bound archive decoding memory and serialize cache pruning. New jobs are refused
 below 2 GiB free on HIL. Do not put outputs under HIL's unconfigured `/data`
 mount.
 
-SQLite is authoritative for queue/history. IDs make retrying a submission
+SQLite is authoritative for queue/history. Each transaction closes its owned
+connection after commit or rollback, so the long-running worker does not depend
+on garbage collection to release database file handles. IDs make retrying a submission
 idempotent. Worker restarts reconcile deterministic container names instead of
 starting duplicates. Dashboard restarts or SSH disconnects do not stop
 containers. Cancellation is reported complete only after Docker confirms the
@@ -97,8 +108,10 @@ are included in stdout. The workloads have no writable host output mount, so
 they cannot fill HIL's disk through `/results`. Detailed older output may rotate
 out; these are smoke/timing templates, not general artifact-producing studies.
 
-The dashboard runs as a dedicated `lhr-jobs` user without Docker/sudo access.
-Its SSH key logs in as `lhr-job-ssh`, which may invoke only the bridge as
+The initial dashboard runs as the existing `electric` account alongside
+`viewer_tool`, as recorded in [ADR-020](../../docs/architecture/020-shared-telemetry-dashboard-account.md).
+It inherits that account's existing Docker/admin access. Its separate worker
+key logs in as `lhr-job-ssh`, which may invoke only the bridge as
 `lhr-runner`. The worker's Docker group is administrator-equivalent on HIL; this
 is a trusted service account, not a Docker privilege boundary. At most four
 bridge RPCs and two dashboard SSH requests run concurrently. Eight additional
@@ -129,7 +142,7 @@ inject fixed times. They cover bounds/injection, authentication, CSRF,
 idempotency, pause/cancel, restart reconciliation, resource slots and archive
 symlinks, launch timeouts, per-job failures, transport decoding/limits, login
 throttling, archive retention, browser focus, stale-state controls, workload
-switching and fixed polling. CPU and FMU tests fake clocks and subprocesses
+switching, fixed polling and native PM2 entrypoint startup. CPU and FMU tests fake clocks and subprocesses
 without real benchmark files. Linux runs the runner tests through Bazel; CI also
 runs Node tests. Real host/container tests are a separate deployment check,
 never unit tests.
@@ -146,11 +159,13 @@ host verification.
 Deployment source and service templates are described in
 [deploy](deploy/README.md). Keep keys, password hashes, databases, model
 binaries and outputs outside the checkout. Pin the source FMU and base runtime
-image in the deployment record before enabling a new workload.
+image in the deployment record before enabling a new workload. The PM2
+template executes Node directly in fork mode: PM2's JavaScript wrapper changes
+`argv[1]` and otherwise bypasses this app's ESM entrypoint guard.
 
 To stop this service without touching telemetry: `pm2 stop lhr-jobs` on
 telemetry, pause the worker queue, and `sudo systemctl stop lhr-runner` on HIL.
 Stopping the worker alone leaves already-running job containers running; cancel
-those jobs first if they should stop. Remove only the 8444 Serve listener when
-withdrawing browser access. Do not reset Tailscale Serve or stop unrelated
+those jobs first if they should stop. Close the operator's SSH tunnel when
+withdrawing local browser access. Do not reset Tailscale Serve or stop unrelated
 Compose projects.

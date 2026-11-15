@@ -3,7 +3,7 @@
 import argparse
 import base64
 import datetime
-from contextlib import ExitStack
+from contextlib import ExitStack, closing, contextmanager
 import fcntl
 import io
 import json
@@ -67,10 +67,14 @@ def command(settings, directory):
             '--cpus', str(parallel), '--memory', str(512 + 512 * parallel) + 'm',
             '--memory-swap', str(512 + 512 * parallel) + 'm',
             '--pids-limit', '256', '--cap-drop', 'ALL', '--security-opt',
-            'no-new-privileges', '--read-only', '--mount',
-            'type=tmpfs,destination=/tmp,tmpfs-size=536870912', '--log-driver', 'local',
+            'no-new-privileges', '--read-only', '--log-driver', 'local',
             '--log-opt', 'max-size=2m', '--log-opt', 'max-file=2',
             '-e', 'OPENBLAS_NUM_THREADS=1', '-e', 'OMP_NUM_THREADS=1']
+    if template == 'fmu':
+        # FMPy extracts native shared libraries into /tmp before loading them.
+        args += ['--tmpfs=/tmp:rw,exec,nosuid,nodev,size=536870912']
+    else:
+        args += ['--mount', 'type=tmpfs,destination=/tmp,tmpfs-size=536870912']
     if template == 'gpu':
         args += ['--gpus', 'all', '-e', 'NVIDIA_DRIVER_CAPABILITIES=graphics,utility',
                  IMAGES[template]]
@@ -94,10 +98,13 @@ class Queue:
                 error TEXT, cancel_requested INTEGER NOT NULL DEFAULT 0)''')
             db.execute('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)')
 
+    @contextmanager
     def connect(self):
-        db = sqlite3.connect(self.root / 'jobs.db', timeout=10)
-        db.row_factory = sqlite3.Row
-        return db
+        # SQLite's transaction context commits/rolls back but does not close the connection.
+        with closing(sqlite3.connect(self.root / 'jobs.db', timeout=10)) as db:
+            db.row_factory = sqlite3.Row
+            with db:
+                yield db
 
     def jobs(self):
         with self.connect() as db:
