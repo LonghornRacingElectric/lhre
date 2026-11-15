@@ -78,7 +78,10 @@ def test_gate_plan_and_scoring_keep_course_styles_separate(tmp_path):
         scorer.judge(row, {('autocross', '1'): 10., ('rules_autocross', '1'): 60.})
         assert row['lap_time'] == ('pass' if style == 'rules_autocross' else 'FAIL')
     # Evaluate the runner's real plan without launching or killing processes.
-    script = (tools/'run_gate.sh').read_text().split('# Skidpad joins the matrix')[0]
+    script = (tools/'run_gate.sh').read_text()
+    # Without the marker the whole campaign would run, cleanup included.
+    assert '# Skidpad joins the matrix' in script
+    script = script.split('# Skidpad joins the matrix')[0]
     script = script.replace('HERE=$(cd "$(dirname "$0")" && pwd)', f'HERE="{tools}"')
     for style in ('autocross', 'rules_autocross'):
         # Truth-stack baselines are opt-in since the reference lap (#232).
@@ -140,7 +143,10 @@ def test_a_corrupt_world_fails_its_run_not_the_score(tmp_path):
 
 def test_fault_runner_generates_the_requested_rules_world(tmp_path):
     tools = Path(__file__).parents[4]/'testing/tools/fault_injection'
-    script = (tools/'run_faults.sh').read_text().split('\ncleanup\nfor kind')[0]
+    script = (tools/'run_faults.sh').read_text()
+    # Without the marker the whole campaign would run, cleanup included.
+    assert '# The campaign.' in script
+    script = script.split('# The campaign.')[0]
     script = script.replace('HERE=$(cd "$(dirname "$0")" && pwd)', f'HERE="{tools}"')
     env = dict(os.environ, OUT=str(tmp_path))
     result = subprocess.run(['bash', '-c', script+'\nworld_for rules_autocross 9'],

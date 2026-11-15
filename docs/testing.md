@@ -11,6 +11,13 @@ test" means here, and which gate catches what.
 - **A behavior change ships with a test that fails without it.** Bug fixes
   get a regression test; new logic gets tests for its edges (limits,
   saturation, faults, units), not only the happy path.
+- **Changed lines run under a test.** No percent is enforced, but aim for
+  nearly every line a PR adds or changes to be covered; CI reports the
+  number on every PR ([coverage](../tools/coverage/README.md)), and a
+  reviewer asks about a low one.
+- **Big overhauls go tests first.** Land a PR that pins today's behavior
+  with tests, then the refactor on top, so the refactor's diff shows
+  whether behavior moved.
 - **Tests are never weakened to get green.** Don't delete, skip, loosen a
   tolerance, widen a size budget, add `flaky = True`, or add a lint
   suppression to make CI pass. If a test is wrong, fix it in its own
@@ -42,20 +49,26 @@ no network. Concretely:
 
 ## Gates
 
-`All checks passed` is the one required check; every gate below feeds it.
+`All checks passed` is the one required check; every gate below feeds it
+except coverage, which is reported, not enforced.
 
 | Gate | What it catches | Run it locally |
 | ---- | --------------- | -------------- |
 | Bazel build + test (Linux, Windows) | Broken builds, failing unit tests, firmware over its flash/RAM budget | `bazel test //...` |
 | Network off in tests | A unit test that reaches the internet or a service | `bazel test //tools/hermetic:network_off_test` |
+| Changed-line coverage (report only) | How many firmware lines a PR adds or changes run under a host test, on the run's summary page | `bazel coverage //boards/... //drivers/...`, then diff-cover ([how](../tools/coverage/README.md)) |
 | UBSan | Undefined behavior in host C++ (overflow, bad shifts, misaligned access) | `bazel test --config=ubsan //boards/... //drivers/... //lib/codegen/cpp/...` |
-| `-Wall -Wextra -Werror` on app code | Warnings in firmware application code | part of `bazel build //...` |
+| ASan | Memory errors in host C++ (out of bounds, use after free, leaks) | `bazel test --config=asan //boards/... //drivers/... //lib/codegen/cpp/... //tools/asan:overflow_test` |
+| Firmware warnings as errors | Shadowed variables, `float` silently widened to `double` (slow on the M4F), unchecked format strings, fallthrough, `#if` on undefined macros, in app and longhorn code ([list](../tools/firmware/README.md#warnings)) | part of `bazel build //...` |
 | Format | Unformatted C/C++ | `bazel run //tools/format:check` |
 | Lint: Python (ruff) | Undefined names, unused imports, swallowed exceptions, unchecked subprocesses, unsafe calls. Stale `noqa` fails. | `uv run --group lint ruff check` |
 | Lint: shell (shellcheck) | Word splitting, unused variables, masked failures in scripts | see [tools/lint](../tools/lint/README.md) |
 | No switched-off tests | `flaky = True` or `enable_tests = False` in BUILD files, `DISABLED_` or `GTEST_SKIP` in C++, unconditional skips in Python | see [tools/lint](../tools/lint/README.md) |
 | Lint: workflows (actionlint) | Broken expressions and job references in CI, shellcheck on `run:` blocks | `uv run --group lint actionlint` |
 | Simulation fast checks | lhre's simulation tools, vehicle bundle and study contracts (BobSim itself is tested in BobDyn) | `make -C simulation test`; on a PR also `make -C simulation check-vehicle BASE=origin/<base>` |
+| Simulation coverage (report only) | How much of `simulation/tools/` the unit tests run, on the run's summary page | `make -C simulation unit COVERAGE=1` ([how](../simulation/docs/tests.md#coverage)) |
+| BEVO dash frontend | The kiosk UI's jest tests (driver messages from the trackside site, first render) | `cd apps/BEVO/dashd/frontend && npm ci --ignore-scripts && CI=true npm test` |
+| Telemetry viewer | The drive-day viewer's vitest suite (session conversion, timeline, laps, sectors) and the video helper | see the [viewer README](../apps/telemetry/analysis/database/viewer_tool/README.md#tests) |
 | Docs | Broken links, missing nav entries | `uv run --group docs mkdocs build --strict` |
 
 ## No baselines
@@ -64,4 +77,4 @@ Gates have no grandfather lists. An existing violation is fixed, or
 suppressed on its own line (`# noqa: <code>`, `# shellcheck disable=<code>`)
 with the reason next to it, so every exception sits where a reviewer sees
 it. A suppression that no longer matches anything fails lint. Coverage is
-judged on the lines a PR changes, not on whole files.
+reported on the lines a PR changes, not on whole files.

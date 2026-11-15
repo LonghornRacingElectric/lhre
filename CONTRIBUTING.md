@@ -20,8 +20,10 @@ everywhere.
 - Reviews are routed by `.github/CODEOWNERS`: a PR touching `autonomy/`
   automatically requests the `@LonghornRacingElectric/autonomous` team,
   and the approving review must come from one of its members (code-owner
-  review is required). Paths without an owner can be approved by anyone
-  with write access.
+  review is required). The CI gates and the testing contract (workflows,
+  lint and coverage tooling, `.bazelrc`, `AGENTS.md`, `docs/testing.md`)
+  are owned by `@LonghornRacingElectric/ci-owners`. Paths without an owner
+  can be approved by anyone with write access.
 - Repository admins can bypass these rules (the ruleset lists the admin
   role as a bypass actor); every bypass is logged and shown on the PR, so
   use it for stalled reviews, not as the normal path.

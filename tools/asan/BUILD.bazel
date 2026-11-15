@@ -1,0 +1,13 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+# Passes only when --config=asan really instruments the build: it reads past
+# a heap buffer on purpose and expects ASan to stop the process. Without the
+# sanitizer that read is silent, so `manual` keeps it out of wildcards and
+# presubmit's ASan step names it explicitly, like //tools/ubsan:trap_test.
+cc_test(
+    name = "overflow_test",
+    size = "small",
+    srcs = ["overflow_test.cpp"],
+    tags = ["manual"],
+    deps = ["@googletest//:gtest_main"],
+)
