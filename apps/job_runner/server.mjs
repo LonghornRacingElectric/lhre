@@ -1,5 +1,4 @@
 import http from 'node:http';
-import {once} from 'node:events';
 import {isIP} from 'node:net';
 import {spawn} from 'node:child_process';
 import {createHash, randomBytes, scryptSync, timingSafeEqual} from 'node:crypto';
@@ -215,7 +214,11 @@ export function createApplication({config, rpc = request => sshRpc(config, reque
               'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
               'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(name.split('/').at(-1))}`});
             if (res.destroyed) break;
-            if (!res.write(bytes)) await once(res, 'drain');
+            if (!res.write(bytes)) await new Promise(resolve => {
+              const finish = () => {res.off('drain', finish); res.off('close', finish); resolve();};
+              res.once('drain', finish); res.once('close', finish);
+              if (res.destroyed) finish();
+            });
             offset += bytes.length;
           } while (offset < total && !res.destroyed);
           res.end();

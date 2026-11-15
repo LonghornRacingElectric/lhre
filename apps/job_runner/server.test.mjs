@@ -1,4 +1,5 @@
 import {test} from 'node:test';
+import {EventEmitter} from 'node:events';
 import assert from 'node:assert/strict';
 import {scryptSync} from 'node:crypto';
 import {mkdtemp, rm, mkdir, writeFile, readdir, stat} from 'node:fs/promises';
@@ -279,4 +280,23 @@ test('campaign file download streams all binary chunks without the compact archi
 test('malformed campaign download is rejected before sending headers', async () => {
   const app = createApplication({config, rpc: async () => ({size: 500, base64: ''})});
   assert.equal((await request(app, `/api/runs/${id}/files?path=x`)).status, 400);
+});
+
+
+test('closing a backpressured artifact download stops reads and releases the download lock', async () => {
+  let calls = 0;
+  const app = createApplication({config, rpc: async () => {calls++; return {size: 1000000, base64: Buffer.alloc(512 * 1024).toString('base64')};}});
+  const run = async () => {
+    const req = Readable.from([]); req.url = `/api/runs/${id}/files?path=bag.mcap`; req.method = 'GET';
+    req.headers = {authorization}; req.socket = {remoteAddress: '192.0.2.1'};
+    const res = new EventEmitter(); res.destroyed = false;
+    res.writeHead = status => {assert.equal(status, 200);};
+    res.write = () => {queueMicrotask(() => {res.destroyed = true; res.emit('close');}); return false;};
+    res.end = () => {};
+    await app(req, res);
+  };
+  await run();
+  assert.equal(calls, 1);
+  await run();
+  assert.equal(calls, 2);
 });

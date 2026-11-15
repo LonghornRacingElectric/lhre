@@ -120,6 +120,7 @@ run under the worker's numeric UID/GID and can write only their own per-job
 `artifacts/` directory mounted at `/results`. Results survive container exit.
 Individual campaign files, including `.mcap` bags, download in 512 KiB chunks
 without the compact archive's 2 MiB-per-file truncation or 10 MiB total limit.
+Closed downloads stop further chunk reads and release their download slot.
 Downloads require authentication and final job state; paths cannot traverse or
 follow symlinks, including intermediate directory symlinks and special files.
 The compact archive remains available for metadata and the console summary.
