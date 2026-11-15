@@ -74,6 +74,52 @@ void ConfigureInputs() {
   }
 }
 
+#ifdef ENABLE_DFU
+// PB9 = BOOT0trig, connected to PB8 (BOOT0) RC on the Rev A schematic.
+constexpr uint16_t kBoot0TrigPin = GPIO_PIN_9;
+
+void ConfigureBoot0Trigger() {
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+  HAL_GPIO_WritePin(GPIOB, kBoot0TrigPin, GPIO_PIN_RESET);
+  GPIO_InitTypeDef init = {};
+  init.Pin = kBoot0TrigPin;
+  init.Mode = GPIO_MODE_OUTPUT_PP;
+  init.Pull = GPIO_NOPULL;
+  init.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &init);
+}
+
+[[noreturn]] void EnterBootloader() {
+  // Flash to bank 1 on DFU (tools/dfu flashes 0x08000000); clear BFB2 if set.
+  if ((FLASH->OPTR & FLASH_OPTR_BFB2) != 0) {
+    __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_OPTVERR);
+    FLASH_OBProgramInitTypeDef options = {};
+    options.OptionType = OPTIONBYTE_USER;
+    options.USERType = OB_USER_BFB2;
+    options.USERConfig = OB_BFB2_DISABLE;
+    if (HAL_FLASH_Unlock() != HAL_OK || HAL_FLASH_OB_Unlock() != HAL_OK ||
+        HAL_FLASHEx_OBProgram(&options) != HAL_OK) {
+      Error_Handler();
+    }
+    HAL_FLASH_OB_Lock();
+    HAL_FLASH_Lock();
+  }
+  __disable_irq();
+  HAL_GPIO_WritePin(GPIOB, kBoot0TrigPin, GPIO_PIN_SET);
+  // Hold PB9 high for 50 ms to charge the BOOT0 RC before reset; count CPU
+  // cycles so an optimized loop is not elided.
+  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+  const uint32_t start = DWT->CYCCNT;
+  while (static_cast<uint32_t>(DWT->CYCCNT - start) < SystemCoreClock / 20) {
+  }
+  __DSB();
+  NVIC_SystemReset();
+  for (;;) {
+  }
+}
+#endif  // ENABLE_DFU
+
 }  // namespace
 
 int main() {
@@ -81,6 +127,9 @@ int main() {
   MX_GPIO_Init();
   MX_TIM2_Init();  // also muxes PA0-PA2 to TIM2 (HAL_TIM_MspPostInit)
   ConfigureInputs();
+#ifdef ENABLE_DFU
+  ConfigureBoot0Trigger();
+#endif
 
   // Everything the tasks touch must be static: the Cortex-M port reclaims
   // main()'s stack for interrupts when the scheduler starts.
@@ -116,10 +165,13 @@ int main() {
     peripherals.inputs[i] = &inputs[i];
   }
   peripherals.console = &console;
+#ifdef ENABLE_DFU
+  peripherals.enter_bootloader = &EnterBootloader;
+#endif
 
-  // Construct the app (which sets every LED channel to "off") before
-  // starting the outputs: a channel started at CubeMX's default 0% duty
-  // would hold its pin low, i.e. fully lit.
+  // Construct the app (which initializes the LED channels to boot white)
+  // before starting the PWM outputs: a channel left at CubeMX's default
+  // 0% duty would hold its pin low, i.e. fully lit.
   static dui::App app(peripherals);
   if (!lhal::IsOk(led_red.Start()) || !lhal::IsOk(led_green.Start()) ||
       !lhal::IsOk(led_blue.Start())) {

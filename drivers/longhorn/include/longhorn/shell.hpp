@@ -70,6 +70,15 @@ class Shell {
     return true;
   }
 
+  // Optional handler for lines that do not start with '/' (e.g. "update."
+  // for tools/dfu). When unset, such lines print the '/' help hint.
+  void SetPlainLineHandler(void (*handler)(void* context, Console& out,
+                                           const char* line),
+                           void* context) {
+    plain_line_handler_ = handler;
+    plain_line_context_ = context;
+  }
+
   // Drains pending RX bytes, echoing and dispatching completed lines.
   void Poll() {
     if (stream_ == nullptr) {
@@ -143,7 +152,11 @@ class Shell {
     }
 
     if (line_[0] != '/') {
-      console_.Println("commands start with '/' (try /help)");
+      if (plain_line_handler_ != nullptr) {
+        plain_line_handler_(plain_line_context_, console_, line_);
+      } else {
+        console_.Println("commands start with '/' (try /help)");
+      }
       if (lock) {
         xSemaphoreGive(mutex_);
       }
@@ -221,6 +234,9 @@ class Shell {
 
   ShellCommand commands_[kMaxCommands];
   size_t num_commands_ = 0;
+  void (*plain_line_handler_)(void* context, Console& out,
+                              const char* line) = nullptr;
+  void* plain_line_context_ = nullptr;
 
   char line_[kMaxLineLength];
   size_t line_len_ = 0;

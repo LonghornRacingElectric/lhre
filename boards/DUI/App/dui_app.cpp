@@ -1,5 +1,7 @@
 #include "dui_app.hpp"
 
+#include <cstring>
+
 namespace dui {
 
 namespace {
@@ -22,7 +24,10 @@ constexpr SwitchPair kSwitches[] = {
 
 App::App(const Peripherals& peripherals)
     : p_(peripherals),
-      led_(p_.led_red, p_.led_green, p_.led_blue, p_.led_active_low),
+      red_ch_(p_.led_red, p_.led_active_low),
+      green_ch_(p_.led_green, p_.led_active_low),
+      blue_ch_(p_.led_blue, p_.led_active_low),
+      led_(&red_ch_, &green_ch_, &blue_ch_),
       inputs_(p_.inputs),
       console_mutex_(xSemaphoreCreateMutexStatic(&console_mutex_control_)),
       shell_(p_.console, p_.clock, "DUI", console_mutex_),
@@ -32,6 +37,7 @@ App::App(const Peripherals& peripherals)
                        static_cast<App*>(context)->PrintInputs(out);
                      },
                      this});
+  shell_.SetPlainLineHandler(&App::OnPlainLine, this);
   shell_.PrintBanner();
 }
 
@@ -108,16 +114,10 @@ void App::Step() {
 
 void App::UpdateLed() {
   if (elapsed_ms_ < kLampTestMs) {
-    led_.Set(Color::kWhite);
+    led_.Set(0.5f, 0.5f, 0.5f);
+    elapsed_ms_ += kUpdatePeriodMs;
   } else {
-    const uint32_t phase_ms = (elapsed_ms_ - kLampTestMs) % kRainbowPeriodMs;
-    led_.SetRgb(HueToRgb(static_cast<float>(phase_ms) /
-                         static_cast<float>(kRainbowPeriodMs)));
-  }
-  elapsed_ms_ += kUpdatePeriodMs;
-  // Fold whole laps back so the counter never wraps into the lamp test.
-  if (elapsed_ms_ >= kLampTestMs + kRainbowPeriodMs) {
-    elapsed_ms_ -= kRainbowPeriodMs;
+    led_.Rainbow(static_cast<float>(kUpdatePeriodMs) / 1000.0f);
   }
   ++updates_;
 }
@@ -156,6 +156,17 @@ void App::PrintInputs(longhorn::Console& out) {
                : down     ? "DOWN"
                           : "neutral");
   }
+}
+
+void App::OnPlainLine(void* context, longhorn::Console& out, const char* line) {
+  auto* self = static_cast<App*>(context);
+  if (std::strcmp(line, "update.") == 0 &&
+      self->p_.enter_bootloader != nullptr) {
+    out.Println("Entering DFU bootloader...");
+    self->p_.enter_bootloader();
+    return;
+  }
+  out.Println("commands start with '/' (try /help)");
 }
 
 }  // namespace dui

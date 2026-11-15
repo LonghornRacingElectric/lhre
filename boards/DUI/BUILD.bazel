@@ -9,9 +9,11 @@ firmware_project(
     # Debug console over USB CDC (shell + logger); tools/monitor is the
     # laptop side.
     app_deps = [
+        "//drivers/longhorn:led",
         "//drivers/longhorn:logger",
         "//drivers/longhorn:shell",
     ],
+    enable_dfu = True,
     enable_freertos = True,
     enable_usb = True,
     mcu = "stm32g474xx",

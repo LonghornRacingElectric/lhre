@@ -36,6 +36,9 @@ TOP_L=UP
 
 Commands: `/inputs`, plus the shell built-ins `/help`, `/version`,
 `/uptime`. Log lines are only produced while a terminal has the port open.
+`enable_dfu = True` in `BUILD.bazel` also wires `update.\n` (used by
+`bazel run //boards/DUI:dfu`) to drive `PB9` (`BOOT0trig`) high for 50 ms
+and reset into the ST ROM bootloader.
 
 ## Targets
 
@@ -44,7 +47,7 @@ Commands: `/inputs`, plus the shell built-ins `/help`, `/version`,
 | `:dui`          | Firmware ELF (plus `:dui.elf` / `:dui.hex` / `:dui.bin`). |
 | `:openocd`      | `bazel run`: flash over ST-Link (STDC14 header J3).       |
 | `:dfu`          | `bazel run`: flash over USB DFU.                          |
-| `:dui_app_test` | Host tests: LED (lamp test, hue wheel, gamma, active-low) and console (input logs, `/inputs`, fault check). |
+| `:dui_app_test` | Host tests: LED (lamp test, `longhorn::RgbLed` rainbow, active-low) and console (input logs, `/inputs`, fault check). |
 | `:driver_inputs_test` | Host tests: debounce timing, bounce, glitches, clock wrap. |
 | `:dui_sim`      | Host sim running the real tasks: scripted button presses, printed as the console would show them (`bazel run --config=local`). |
 | `:release`      | elf/bin/hex bundle for CI artifacts.                      |
@@ -55,12 +58,10 @@ Same split as [VCU](../VCU/README.md), the reference board:
 
 - `App/`: application logic against LHAL plus the raw FreeRTOS API. Runs
   unchanged in the host tests and sim.
-  - `rgb_led.*` turns a brightness per channel (or a `Color`) into three
-    PWM duties.
   - `driver_inputs.*` debounces the 10 input lines. `Input`'s order is the
     planned CAN bit order, so append only.
   - `dui_app.*` owns the tasks (inputs 1 kHz, LED 100 Hz, shell, logger
-    drain) and the `/inputs` command.
+    drain), the `/inputs` command, and drives `longhorn::RgbLed`.
 - `Board/main.cpp`: bring-up. Calls the CubeMX inits (`MX_TIM2_Init`,
   `MX_USB_Device_Init`), configures the input pins, wraps everything in
   LHAL adapters, starts the scheduler.

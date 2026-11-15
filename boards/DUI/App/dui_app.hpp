@@ -5,9 +5,9 @@
 #include "FreeRTOS.h"
 #include "driver_inputs.hpp"
 #include "lhal/lhal.hpp"
+#include "longhorn/led.hpp"
 #include "longhorn/logger.hpp"
 #include "longhorn/shell.hpp"
-#include "rgb_led.hpp"
 #include "semphr.h"
 #include "task.h"
 
@@ -23,12 +23,16 @@ struct Peripherals {
   lhal::Pwm* led_red = nullptr;
   lhal::Pwm* led_green = nullptr;
   lhal::Pwm* led_blue = nullptr;
-  // D11 is common-anode (see RgbLed). Tests flip this to read duties plainly.
+  // D11 is common-anode (hardware is active-low). Tests flip this to read
+  // duties plainly.
   bool led_active_low = true;
   // Driver buttons and steering switches, indexed by Input.
   lhal::Gpio* inputs[kInputCount] = {};
   // Debug console: USB CDC on the board (tools/monitor is the laptop side).
   lhal::Uart* console = nullptr;
+  // Reboots into the ST ROM bootloader (USB DFU) when tools/dfu sends
+  // "update.". Left null in host tests and sims.
+  void (*enter_bootloader)() = nullptr;
 };
 
 // DUI application logic. LHAL interfaces + raw FreeRTOS only — no ST HAL —
@@ -50,10 +54,8 @@ struct Peripherals {
 // Both paths call the same underlying logic (UpdateLed, SampleInputs).
 class App {
  public:
-  // All three channels at full for this long after boot.
+  // All three channels at mid-brightness white for this long after boot.
   static constexpr uint32_t kLampTestMs = 500;
-  // One full trip around the color wheel.
-  static constexpr uint32_t kRainbowPeriodMs = 3000;
   // LED refresh rate: 100 Hz is smooth to the eye and trivial for the CPU.
   static constexpr uint32_t kUpdatePeriodMs = 10;
   // Input sampling: 1 kHz gives the 5 ms debounce 1 ms resolution.
@@ -72,12 +74,34 @@ class App {
   // One iteration of the scheduler-less main loop. Non-blocking.
   void Step();
 
-  const Rgb& rgb() const { return led_.rgb(); }
   uint32_t updates() const { return updates_; }
   const DriverInputs& inputs() const { return inputs_; }
   longhorn::Logger& logger() { return logger_; }
 
  private:
+  // Adapts an optional lhal::Pwm channel for longhorn::RgbLed, handling null
+  // channels (tests without LEDs) and active-low common-anode inversion.
+  class PwmChannel final : public lhal::Pwm {
+   public:
+    PwmChannel(lhal::Pwm* inner, bool active_low)
+        : inner_(inner), active_low_(active_low) {}
+
+    void SetDuty(float duty) override {
+      if (inner_ == nullptr) {
+        return;
+      }
+      if (duty < 0.0f) {
+        duty = 0.0f;
+      } else if (duty > 1.0f) {
+        duty = 1.0f;
+      }
+      inner_->SetDuty(active_low_ ? 1.0f - duty : duty);
+    }
+
+   private:
+    lhal::Pwm* inner_;
+    bool active_low_;
+  };
   // In words, relative to the platform's minimum (the host simulator port
   // needs page-sized pthread stacks; see drivers/freertos/host). Tasks that
   // format text need room for the logger's 256-byte line plus vsnprintf.
@@ -104,8 +128,15 @@ class App {
   // /inputs command payload.
   void PrintInputs(longhorn::Console& out);
 
+  // Handles non-'/' console lines (e.g. tools/dfu's "update." command).
+  static void OnPlainLine(void* context, longhorn::Console& out,
+                          const char* line);
+
   Peripherals p_;
-  RgbLed led_;
+  PwmChannel red_ch_;
+  PwmChannel green_ch_;
+  PwmChannel blue_ch_;
+  longhorn::RgbLed led_;
   DriverInputs inputs_;
   StaticSemaphore_t console_mutex_control_;
   SemaphoreHandle_t console_mutex_ = nullptr;

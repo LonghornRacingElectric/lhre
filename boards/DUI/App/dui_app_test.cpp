@@ -9,14 +9,11 @@
 #include "lhal/host/pwm.hpp"
 #include "lhal/host/system.hpp"
 #include "lhal/host/uart.hpp"
-#include "rgb_led.hpp"
 
 namespace {
 
 using dui::App;
-using dui::Color;
 using dui::Input;
-using dui::Rgb;
 
 struct Leds {
   lhal::host::Pwm red;
@@ -35,10 +32,10 @@ dui::Peripherals MakePeripherals(lhal::Clock* clock, Leds* leds,
   return p;
 }
 
-void ExpectRgb(const Rgb& actual, float r, float g, float b) {
-  EXPECT_NEAR(actual.red, r, 1e-4f);
-  EXPECT_NEAR(actual.green, g, 1e-4f);
-  EXPECT_NEAR(actual.blue, b, 1e-4f);
+void ExpectDuty(const Leds& actual, float r, float g, float b) {
+  EXPECT_NEAR(actual.red.duty(), r, 1e-3f);
+  EXPECT_NEAR(actual.green.duty(), g, 1e-3f);
+  EXPECT_NEAR(actual.blue.duty(), b, 1e-3f);
 }
 
 // Advances the clock to `t_ms` in update-period ticks, stepping the app at
@@ -50,30 +47,13 @@ void StepUntil(App& app, lhal::host::TestClock& clock, uint32_t t_ms) {
   }
 }
 
-TEST(HueToRgb, HitsTheSixWheelColors) {
-  ExpectRgb(dui::HueToRgb(0.0f), 1, 0, 0);         // red
-  ExpectRgb(dui::HueToRgb(1.0f / 6.0f), 1, 1, 0);  // yellow
-  ExpectRgb(dui::HueToRgb(2.0f / 6.0f), 0, 1, 0);  // green
-  ExpectRgb(dui::HueToRgb(3.0f / 6.0f), 0, 1, 1);  // cyan
-  ExpectRgb(dui::HueToRgb(4.0f / 6.0f), 0, 0, 1);  // blue
-  ExpectRgb(dui::HueToRgb(5.0f / 6.0f), 1, 0, 1);  // magenta
-}
-
-TEST(HueToRgb, BlendsBetweenColorsAndWraps) {
-  ExpectRgb(dui::HueToRgb(0.5f / 6.0f), 1, 0.5f, 0);  // halfway to yellow
-  ExpectRgb(dui::HueToRgb(1.0f), 1, 0, 0);            // full lap = red
-  ExpectRgb(dui::HueToRgb(1.25f), 0.5f, 1, 0);        // wraps like 0.25
-}
-
-TEST(DuiApp, StartsWithLedOff) {
-  // Common-anode: "off" is 100% duty (pin held high) on every channel.
+TEST(DuiApp, StartsWithBootWhite) {
   lhal::host::TestClock clock;
   Leds leds;
   App app(MakePeripherals(&clock, &leds, /*active_low=*/true));
 
-  EXPECT_FLOAT_EQ(leds.red.duty(), 1.0f);
-  EXPECT_FLOAT_EQ(leds.green.duty(), 1.0f);
-  EXPECT_FLOAT_EQ(leds.blue.duty(), 1.0f);
+  // longhorn::RgbLed boots at mid-brightness white (0.5 -> 1 - 0.5 = 0.5).
+  ExpectDuty(leds, 0.5f, 0.5f, 0.5f);
 }
 
 TEST(DuiApp, LampTestThenRainbow) {
@@ -81,17 +61,25 @@ TEST(DuiApp, LampTestThenRainbow) {
   Leds leds;
   App app(MakePeripherals(&clock, &leds, /*active_low=*/false));
 
-  // White straight away, for the whole lamp test.
+  // Mid-brightness white straight away, for the whole lamp test.
   app.Step();
-  ExpectRgb(app.rgb(), 1, 1, 1);
+  ExpectDuty(leds, 0.5f, 0.5f, 0.5f);
   StepUntil(app, clock, App::kLampTestMs - App::kUpdatePeriodMs);
-  ExpectRgb(app.rgb(), 1, 1, 1);
+  ExpectDuty(leds, 0.5f, 0.5f, 0.5f);
 
-  // Then the wheel: red, and a sixth of a lap later, yellow.
+  // Then longhorn::RgbLed::Rainbow advances from red toward green, reaching
+  // green a third of a cycle later.
+  const uint32_t third_cycle_ms =
+      static_cast<uint32_t>(longhorn::RgbLed::kRainbowCycleS * 1000.0f / 3.0f);
   StepUntil(app, clock, App::kLampTestMs);
-  ExpectRgb(app.rgb(), 1, 0, 0);
-  StepUntil(app, clock, App::kLampTestMs + App::kRainbowPeriodMs / 6);
-  ExpectRgb(app.rgb(), 1, 1, 0);
+  EXPECT_GT(leds.red.duty(), 0.0f);
+  EXPECT_GT(leds.green.duty(), 0.0f);
+  EXPECT_FLOAT_EQ(leds.blue.duty(), 0.0f);
+
+  StepUntil(app, clock, App::kLampTestMs + third_cycle_ms);
+  EXPECT_NEAR(leds.red.duty(), 0.0f, 1e-2f);
+  EXPECT_NEAR(leds.green.duty(), 0.5f, 1e-2f);
+  EXPECT_GT(leds.blue.duty(), 0.0f);
 }
 
 TEST(DuiApp, RainbowLoopsWithoutRepeatingLampTest) {
@@ -99,9 +87,13 @@ TEST(DuiApp, RainbowLoopsWithoutRepeatingLampTest) {
   Leds leds;
   App app(MakePeripherals(&clock, &leds, /*active_low=*/false));
 
+  const uint32_t cycle_ms =
+      static_cast<uint32_t>(longhorn::RgbLed::kRainbowCycleS * 1000.0f);
   app.Step();
-  StepUntil(app, clock, App::kLampTestMs + 3 * App::kRainbowPeriodMs);
-  ExpectRgb(app.rgb(), 1, 0, 0);  // three laps later: red, not white
+  StepUntil(app, clock, App::kLampTestMs + 3 * cycle_ms);
+  // Three full cycles later: back near red, not white.
+  EXPECT_GT(leds.red.duty(), 0.45f);
+  EXPECT_FLOAT_EQ(leds.blue.duty(), 0.0f);
 }
 
 TEST(DuiApp, UpdatesAtTheConfiguredRate) {
@@ -236,48 +228,47 @@ TEST(DuiConsole, InputsStillDebouncedWithNoTerminalAttached) {
   EXPECT_TRUE(rig.TakeOutput().empty());  // logger skips when nobody listens
 }
 
-TEST(RgbLed, ActiveLowInvertsDuty) {
+TEST(DuiApp, ActiveLowInvertsDuty) {
+  lhal::host::TestClock clock;
   Leds leds;
-  dui::RgbLed led(&leds.red, &leds.green, &leds.blue, /*active_low=*/true);
+  App app(MakePeripherals(&clock, &leds, /*active_low=*/true));
 
-  led.SetRgb({1.0f, 0.0f, 0.0f});
-  EXPECT_FLOAT_EQ(leds.red.duty(), 0.0f);    // full on = pin low all the time
-  EXPECT_FLOAT_EQ(leds.green.duty(), 1.0f);  // off = pin high all the time
+  app.Step();
+  StepUntil(app, clock, App::kLampTestMs);
+  // Blue is 0% brightness on the red->green edge -> 100% duty (pin high).
+  EXPECT_LT(leds.red.duty(), 1.0f);
   EXPECT_FLOAT_EQ(leds.blue.duty(), 1.0f);
 }
 
-TEST(RgbLed, GammaCorrectsBrightness) {
-  Leds leds;
-  dui::RgbLed led(&leds.red, &leds.green, &leds.blue, /*active_low=*/false);
+TEST(DuiConsole, UpdateCommandTriggersBootloaderCallback) {
+  static int calls = 0;
+  calls = 0;
 
-  // Half brightness to the eye is ~22% duty (0.5^2.2), not 50%.
-  led.SetRgb({0.5f, 1.0f, 0.0f});
-  EXPECT_NEAR(leds.red.duty(), 0.2176f, 1e-3f);
-  EXPECT_FLOAT_EQ(leds.green.duty(), 1.0f);
-  EXPECT_FLOAT_EQ(leds.blue.duty(), 0.0f);
-  // rgb() reports what was asked for, before correction.
-  EXPECT_FLOAT_EQ(led.rgb().red, 0.5f);
+  lhal::host::TestClock clock;
+  lhal::host::Uart console;
+  console.set_connected(true);
 
-  // Out-of-range brightness is clamped, not raised to a power.
-  led.SetRgb({-1.0f, 2.0f, 0.0f});
-  EXPECT_FLOAT_EQ(leds.red.duty(), 0.0f);
-  EXPECT_FLOAT_EQ(leds.green.duty(), 1.0f);
-}
+  dui::Peripherals p;
+  p.clock = &clock;
+  p.console = &console;
+  p.enter_bootloader = []() { ++calls; };
+  App app(p);
+  console.TakeTx();
 
-TEST(RgbLed, OnOffColorsSetFullChannels) {
-  Leds leds;
-  dui::RgbLed led(&leds.red, &leds.green, &leds.blue, /*active_low=*/false);
+  const std::string bad_cmd = "hello\n";
+  console.InjectRx(reinterpret_cast<const uint8_t*>(bad_cmd.data()),
+                   bad_cmd.size());
+  app.Step();
+  EXPECT_EQ(calls, 0);
+  const auto tx = console.TakeTx();
+  const std::string out(tx.begin(), tx.end());
+  EXPECT_NE(out.find("commands start with '/'"), std::string::npos) << out;
 
-  led.Set(Color::kCyan);
-  EXPECT_FLOAT_EQ(leds.red.duty(), 0.0f);
-  EXPECT_FLOAT_EQ(leds.green.duty(), 1.0f);
-  EXPECT_FLOAT_EQ(leds.blue.duty(), 1.0f);
-}
-
-TEST(RgbLed, NamesEveryColor) {
-  for (uint8_t bits = 0; bits < 8; ++bits) {
-    EXPECT_STRNE(dui::ColorName(static_cast<Color>(bits)), "?");
-  }
+  const std::string dfu_cmd = "update.\n";
+  console.InjectRx(reinterpret_cast<const uint8_t*>(dfu_cmd.data()),
+                   dfu_cmd.size());
+  app.Step();
+  EXPECT_EQ(calls, 1);
 }
 
 }  // namespace
