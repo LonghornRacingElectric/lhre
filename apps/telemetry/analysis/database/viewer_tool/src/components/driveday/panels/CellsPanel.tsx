@@ -74,9 +74,7 @@ export function CellsPanel() {
           <Tile label="Voltage spread" value={((vmax - vmin) * 1000).toFixed(0)} unit="mV" />
         </div>
       </div>
-      <div className="note2">
-        The log has {idx.length} live temperature sensors out of {NSLOT} channels. Dashed squares are channels that never reported. Sensors appear in the order the battery management system numbers them, because the physical layout is not in the log. Per-cell voltage is not logged either, only the lowest, average and highest cell.
-      </div>
+      <div className="analysis-status">{idx.length}/{NSLOT} temperature sensors · voltage min / avg / max only</div>
     </>
   );
 }

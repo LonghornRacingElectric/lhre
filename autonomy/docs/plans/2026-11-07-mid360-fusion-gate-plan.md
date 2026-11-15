@@ -54,7 +54,7 @@ before acceptance repeats. See the
 - Use the same sensor and planner settings across every course. No per-seed tuning or timeout relaxation for acceptance.
 - No autonomy node may consume truth except for the explicitly allowed initialization and sensor-model uses in the criteria. Truth remains available for scoring.
 - Raw recordings remain outside git; results, provenance and selected figures belong under `autonomy/testing/`.
-- The full Sim v2 gate also requires `plant:=fmu`, the expanded 35-run matrix and 59-run fault matrix. This issue owns its sensor configuration and validation, not the FMU integration or the whole gate rewrite.
+- The full Sim v2 gate also requires `plant:=fmu`, the expanded 35-run matrix and 71-run fault matrix. This issue owns its sensor configuration and validation, not the FMU integration or the whole gate rewrite.
 
 ## Current state and dependencies
 

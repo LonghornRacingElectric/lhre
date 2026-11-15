@@ -19,6 +19,7 @@ from nav_msgs.msg import Odometry
 import pytest
 import rclpy
 from rclpy.qos import ReliabilityPolicy
+from sensor_msgs.msg import Imu, JointState
 from std_msgs.msg import String
 
 
@@ -130,6 +131,12 @@ def test_odom_nan(injector):
 @pytest.mark.parametrize('injector', ['lidar_drop'], indirect=True)
 def test_lidar_drop_drops(injector):
     assert injector._corrupt(b'cloud bytes') is None
+
+
+@pytest.mark.parametrize('injector, msg', [('imu_drop', Imu()), ('wheel_drop', JointState())],
+                         indirect=['injector'])
+def test_sensor_drops_drop(injector, msg):
+    assert injector._corrupt(msg) is None
 
 
 @pytest.mark.parametrize('injector', ['cmd_nan'], indirect=True)
@@ -284,6 +291,10 @@ def test_no_fault_changes_nothing(monkeypatch):
      ('/lhr/vehicle/cmd', '/lhr/vehicle/cmd_raw')),
     ('steer_freeze', 'ekf', 'joint_cmd_adapter',
      ('/lhr/vehicle/cmd', '/lhr/vehicle/cmd_actuated')),
+    ('imu_drop', 'ekf', 'parameter_bridge',
+     ('/lhr/imu/data', '/lhr/imu/data_raw')),
+    ('wheel_drop', 'ekf', 'inertial_sim',
+     ('/lhr/sensor/wheel_speeds', '/lhr/sensor/wheel_speeds_raw')),
 ])
 def test_topic_faults_splice_the_injector_in(monkeypatch, fault, estimator,
                                              owner, rule):
@@ -320,8 +331,9 @@ def test_speed_gate_reaches_the_injector_on_the_plant_odometry(
     assert type(params['fault_min_speed_mps']) is float
 
 
-def test_process_faults_need_no_rewiring(monkeypatch):
-    _, nodes, remaps = _launch(monkeypatch, fault='ekf_kill', estimator='ekf')
+@pytest.mark.parametrize('fault', ['ekf_kill', 'mission_kill'])
+def test_process_faults_need_no_rewiring(monkeypatch, fault):
+    _, nodes, remaps = _launch(monkeypatch, fault=fault, estimator='ekf')
     assert 'fault_injector' in remaps
     assert all('_raw' not in b for rules in remaps.values() for _, b in rules)
 
@@ -334,6 +346,8 @@ def test_unknown_fault_fails_the_launch(monkeypatch):
 @pytest.mark.parametrize('fault, estimator, perception', [
     ('ekf_kill', 'truth', 'lidar'),   # no ekf_node to kill
     ('lidar_drop', 'ekf', 'sim'),     # safety_node ignores the LiDAR
+    ('imu_drop', 'truth', 'lidar'),   # nothing reads the IMU, so it is not watched
+    ('wheel_drop', 'truth', 'lidar'),  # no wheel speeds without the EKF
 ])
 def test_fault_that_cannot_trip_fails_the_launch(monkeypatch, fault,
                                                  estimator, perception):

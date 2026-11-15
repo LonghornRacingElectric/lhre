@@ -35,8 +35,17 @@ The faults themselves come from `lhr_gazebo`'s `fault_injector`
 | `lidar_drop` | Stop forwarding the point cloud | `LIDAR_STALE` |
 | `cmd_nan` | NaN steering in every command | `CMD_INVALID` |
 | `steer_freeze` | The actuators keep the steering angle from the fault on; `safety_node` still sees the real command, and the measured angle stops following it | `STEER_TRACKING` |
+| `imu_drop` | Stop forwarding the IMU; the EKF keeps publishing fresh odometry ([#126](https://github.com/LonghornRacingElectric/lhre/issues/126)) | `IMU_STALE` |
+| `wheel_drop` | Stop forwarding the wheel speeds, likewise | `WHEEL_STALE` |
 | `geofence` | No injection: the fence shrinks to `FENCE` m (20) | `GEOFENCE` |
 | `clean` | None, on autocross seeds (a seed with no committed world gets one generated into `$OUT/worlds`) | Nothing |
+
+`mission_kill` (kill `mission_manager`, should trip `MISSION_STALE`) is a
+fault kind but not a default case: nothing in sim stops the car after it,
+since the stop goes through the dead node and the car's hardware loop is not
+modelled, so every run would fail the stop check. `CASES=mission_kill` shows
+the trip. It joins the matrix with
+[#290](https://github.com/LonghornRacingElectric/lhre/issues/290).
 
 ## Running
 
@@ -49,7 +58,8 @@ container:
 
 Environment variables pick the matrix: `CASES` (empty for none), `SPEEDS` (`v_max` values,
 default `3 5 8`), `REPEATS` (2), `TRACK` (for the fault cases, `oval`),
-`CLEAN_SEEDS` (`1 2 3 4 5`, empty for none), `AFTER` (fault seconds after
+`CLEAN_SEEDS` (`1 2 3 4 5`, empty for none; with `CASES` empty too there is
+nothing to run and the runner refuses), `AFTER` (fault seconds after
 `DRIVING`, 25), `AT_SPEED` (0.95: the fault also waits for this share of
 `v_max`; 0 to 1, 0 fires on time alone, anything else stops the runner), `RUN_S` (60), `CLEAN_S` (150), `HANG_S` (60), `OUT` and
 `EXTRA` (more launch arguments; the gate stack and each case's own arguments
@@ -59,8 +69,8 @@ later ([#227](https://github.com/LonghornRacingElectric/lhre/issues/227)).
 `HANG_S` is the one wall-time setting: a run whose `/clock` stands still that
 long ends as `hung` (the gate's
 [`watch_run.py`](../gate/README.md#sim-time-not-wall-time) does this for
-both tools, and writes `bags/<id>.end.txt`). The full matrix is 59 runs, 71
-minutes in the Mac container on 11/1. A quick check:
+both tools, and writes `bags/<id>.end.txt`). The full matrix is 71 runs; the
+59 it had on 11/1 took 71 minutes in the Mac container. A quick check:
 
 ```bash
 CASES="ekf_kill steer_freeze" SPEEDS=5 REPEATS=1 CLEAN_SEEDS= \

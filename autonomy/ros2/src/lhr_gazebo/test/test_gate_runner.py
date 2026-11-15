@@ -122,6 +122,18 @@ def test_fault_plan_runs_every_case_and_clean_lap_on_the_gate_stack(tmp_path):
     assert rows['controller_pause_v3_r1'][5]['fault_duration_s'] == '3'
 
 
+def test_default_fault_matrix_is_the_sim_v2_cases(tmp_path):
+    """The Sim v2 criteria's fault cases; mission_kill has no stop path in sim yet (#127)."""
+    env = dict(os.environ, SPEEDS='3', REPEATS='1', CLEAN_SEEDS='', OUT=str(tmp_path))
+    env.pop('CASES', None)
+    result = subprocess.run(['bash', '-c', fault_prefix() + '\nplan'],
+                            env=env, text=True, capture_output=True, check=True)
+    kinds = {line.split()[1] for line in result.stdout.splitlines()}
+    assert kinds == {'ekf_kill', 'controller_kill', 'controller_pause', 'odom_nan',
+                     'odom_spike', 'lidar_drop', 'cmd_nan', 'steer_freeze', 'imu_drop',
+                     'wheel_drop', 'geofence'}
+
+
 @pytest.mark.parametrize('share, gate', [('0.5', 4.0), ('1', 8.0), ('0', 0.0)])
 def test_fault_plan_scales_the_speed_gate_with_at_speed(tmp_path, share, gate):
     env = dict(os.environ, CASES='ekf_kill', SPEEDS='8', REPEATS='1', CLEAN_SEEDS='',
@@ -204,3 +216,104 @@ one_run "$RUN_ID" track_style:="$1" seed:=9
     assert options['--hang'] == '30'
     assert int(options['--pid']) > 0
     assert options['--out'] == str(out / 'runs' / f'{style}_s9_r1' / 'end.txt')
+
+
+# --- A plan that dies part way never runs half a campaign ---
+
+RUNNERS = {
+    'gate': (TOOLS / 'run_gate.sh', '# Skidpad joins the matrix', TOOLS),
+    'faults': (FAULT_TOOLS / 'run_faults.sh', '# The campaign.', FAULT_TOOLS),
+}
+# Everything the campaign would start or kill, so no test touches a process.
+CAMPAIGN_STUBS = r"""
+pkill() { :; }
+pgrep() { return 1; }
+setsid() { :; }
+ros2() { :; }
+python3() { :; }
+one_run() { echo "$1" >> "$OUT/ran.txt"; }
+"""
+# The runners' own settings: a stray one in the caller's environment must not
+# change what a test plans.
+RUNNER_VARS = ('SEEDS', 'REPEATS', 'ACCEL_REPEATS', 'SKIDPAD_REPEATS', 'BASELINE',
+               'TRACK_STYLE', 'EXTRA', 'GATE_STACK_FILE', 'CASES', 'SPEEDS',
+               'CLEAN_SEEDS', 'TRACK', 'AT_SPEED', 'STALE_NAME')
+
+
+def runner_env(tmp_path, **settings):
+    """Return a clean environment for one runner, writing only under tmp_path."""
+    env = {k: v for k, v in os.environ.items() if k not in RUNNER_VARS}
+    env.update(OUT=str(tmp_path), TMPDIR=str(tmp_path), **settings)
+    return env
+
+
+def campaign(runner, plan):
+    """Return the whole runner with its processes stubbed and plan() replaced."""
+    path, marker, here = RUNNERS[runner]
+    script = path.read_text()
+    assert marker in script
+    head, tail = script.split(marker, 1)
+    return head.replace(HERE_LINE, f'HERE="{here}"') + CAMPAIGN_STUBS + plan + marker + tail
+
+
+@pytest.mark.parametrize('runner', ['gate', 'faults'])
+@pytest.mark.parametrize('plan', [
+    # set -u ends it at the stale name, after one row is out (#223, #218).
+    'plan() { echo "first_r1 x:=1"; echo "$STALE_NAME"; echo "last_r1 x:=2"; }\n',
+    # Inside a $(...) the stale name only kills that subshell, and plan()
+    # carries on and returns 0 with the rows around it.
+    'plan() { echo "first_r1 x:=1"; for r in $(seq 1 "$STALE_NAME"); do echo "r$r x:=2"; done;'
+    ' echo "last_r1 x:=3"; }\n',
+    'plan() { :; }\n',
+])
+def test_runners_refuse_a_plan_that_fails_or_is_empty(tmp_path, runner, plan):
+    result = subprocess.run(['bash', '-c', campaign(runner, plan)],
+                            env=runner_env(tmp_path), text=True, capture_output=True)
+    assert result.returncode == 2
+    assert 'plan failed or is empty' in result.stderr
+    assert not (tmp_path / 'ran.txt').exists(), 'part of the plan ran'
+    if runner == 'gate':
+        assert not (tmp_path / 'expected.txt').exists()
+
+
+@pytest.mark.parametrize('runner', ['gate', 'faults'])
+def test_runners_run_every_planned_row_in_order(tmp_path, runner):
+    plan = 'plan() { echo "first_r1 x:=1"; echo "second_r1 x:=2"; }\n'
+    result = subprocess.run(['bash', '-c', campaign(runner, plan)],
+                            env=runner_env(tmp_path), text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / 'ran.txt').read_text().split() == ['first_r1', 'second_r1']
+    if runner == 'gate':
+        assert (tmp_path / 'expected.txt').read_text().split() == ['first_r1', 'second_r1']
+
+
+@pytest.mark.parametrize('skidpad, rows', [(False, 18), (True, 21)])
+def test_real_gate_plan_passes_the_check(tmp_path, skidpad, rows):
+    """Skidpad's world is still missing on main: a complete plan without it is not refused."""
+    world = tmp_path / 'skidpad.sdf'
+    if skidpad:
+        world.touch()
+    result = subprocess.run(
+        ['bash', '-c', runner_prefix() + '\nSKIDPAD_WORLD="$1"\nchecked_plan', 'test', str(world)],
+        env=runner_env(tmp_path), text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+    assert len(result.stdout.splitlines()) == rows
+
+
+@pytest.mark.parametrize('repeats', ['3x', '-'])
+def test_real_gate_plan_with_a_bad_repeat_count_is_refused(tmp_path, repeats):
+    # seq fails inside a $(...): the autocross runs would have silently
+    # dropped out and acceleration alone could score PASS.
+    result = subprocess.run(
+        ['bash', '-c', runner_prefix() + '\nSKIDPAD_WORLD=/nonexistent\nchecked_plan'],
+        env=runner_env(tmp_path, REPEATS=repeats), text=True, capture_output=True)
+    assert result.returncode == 2
+    assert result.stdout == ''
+
+
+def test_real_fault_plan_passes_the_check(tmp_path):
+    result = subprocess.run(['bash', '-c', fault_prefix() + '\nchecked_plan'],
+                            env=runner_env(tmp_path), text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+    # 11 cases at 3 speeds twice each, plus 5 clean laps.
+    assert len(result.stdout.splitlines()) == 71

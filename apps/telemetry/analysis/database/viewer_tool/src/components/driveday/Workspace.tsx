@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { lsGet, lsSet } from "@/lib/driveday/storage";
-import { defaultWorkspace, movePane, resizePair, restoreWorkspace, workspacePreset, PANE_IDS, type SavedWorkspace, type PaneId, type PaneState, type WorkspaceLayout } from "@/lib/driveday/workspace";
+import { defaultWorkspace, movePane, resizePair, restoreWorkspace, workspacePreset, workspacePanels, WORKSPACE_ROLES, PANE_IDS, type SavedWorkspace, type PaneId, type PaneState, type WorkspaceLayout } from "@/lib/driveday/workspace";
 import { Menu } from "./Menu";
 import { Dock } from "./Dock";
 import { MapTools } from "./MapTools";
@@ -17,11 +17,11 @@ import { usePlayer } from "./context";
 /** Independent video, track and analysis windows share one playback clock. */
 export function Workspace() {
   const p = usePlayer();
-  const [layout, setLayout] = useState(() => restoreWorkspace(lsGet<WorkspaceLayout | null>("workspace", null)));
+  const [layout, setLayout] = useState(() => restoreWorkspace(lsGet<WorkspaceLayout | null>("workspace", null) ?? workspacePreset("Driver").layout));
   const [timelineMode, setTimelineMode] = useState<"full" | "track">(() => lsGet<string>("timeline-layout", "full") === "track" ? "track" : "full");
   const [toolbarHost, setToolbarHost] = useState<HTMLElement | null>(null);
   useEffect(() => { setToolbarHost(document.getElementById("workspace-actions")); }, []);
-  const [timelineHeight, setTimelineHeight] = useState(() => Math.max(48, Math.min(240, lsGet<number>("timeline-height", 108))));
+  const [timelineHeight, setTimelineHeight] = useState(() => Math.max(48, Math.min(240, lsGet<number>("timeline-height", 48))));
   const [presetName, setPresetName] = useState("");
   const [savedPresets, setSavedPresets] = useState<Record<string, SavedWorkspace>>(() => lsGet<Record<string, SavedWorkspace>>("workspace-presets", {}));
   const resizeTimeline = (height: number) => { setTimelineHeight(height); lsSet("timeline-height", height); };
@@ -35,9 +35,10 @@ export function Workspace() {
   const docked = layout.order.filter(id => layout.panes[id].visible && !layout.panes[id].floating);
   const toggleTimelineDock = () => { const next = timelineMode === "track" ? "full" : "track"; setTimelineMode(next); lsSet("timeline-layout", next); };
   const applyPreset = (preset: SavedWorkspace) => {
+    p.setShowBetweenLaps(preset.showBetweenLaps ?? p.showBetweenLaps);
     update(() => restoreWorkspace(preset.layout)); resizeTimeline(Math.max(48, Math.min(240, preset.timelineHeight || 108)));
     const mode = preset.timelineMode === "track" ? "track" : "full"; setTimelineMode(mode); lsSet("timeline-layout", mode);
-    lsSet("panel", preset.panel); window.dispatchEvent(new CustomEvent("driveday:panel", { detail: preset.panel }));
+    const panels = workspacePanels(preset); lsSet("panels", panels); lsSet("panel", panels[0] ?? null); window.dispatchEvent(new CustomEvent("driveday:panels", { detail: panels }));
     requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
   };
 
@@ -66,6 +67,7 @@ export function Workspace() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
+      if (t?.closest(".driver-pedal-svg") && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
       if (t?.closest(".video-panel, .pane-header, .layout-toolbar, .pane-divider, .pane-resize, .timeline-resize")) return;
       if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && (t as HTMLInputElement).type !== "range" && (t as HTMLInputElement).type !== "checkbox") return;
       if (t && (t.tagName === "BUTTON" || t.tagName === "SUMMARY") && (e.key === " " || e.key === "Enter")) return;
@@ -106,14 +108,13 @@ export function Workspace() {
   }, [p]);
 
   const toolbar = <div className="layout-toolbar" aria-label="Workspace layout">
-        <span className="lab">Windows</span>
         {PANE_IDS.map(id => <button className="chip" key={id} aria-pressed={layout.panes[id].visible} onClick={() => patch(id, { visible: !layout.panes[id].visible })}>{names[id]}</button>)}
         <span className="sp" /><span className="layout-hint">Drag headers to move · dividers to resize</span>
         <Menu label="Layouts" right wide ariaLabel="Workspace layouts">
-          {(["Driving review", "Battery analysis", "Video comparison"] as const).map(name => <button className="btn" key={name} onClick={() => applyPreset(workspacePreset(name))}>{name}</button>)}
-          <button className="btn" onClick={() => { update(() => defaultWorkspace()); setTimelineMode("full"); lsSet("timeline-layout", "full"); resizeTimeline(108); }}>Reset layout</button>
+          {WORKSPACE_ROLES.map(name => <button className="btn" key={name} onClick={() => applyPreset(workspacePreset(name))}>{name}</button>)}
+          <button className="btn" onClick={() => { update(() => defaultWorkspace()); setTimelineMode("full"); lsSet("timeline-layout", "full"); resizeTimeline(48); }}>Reset layout</button>
           <input aria-label="Workspace preset name" placeholder="Name this layout" value={presetName} onChange={e => setPresetName(e.target.value)} />
-          <button className="btn" disabled={!presetName.trim()} onClick={() => { const name = presetName.trim(); const preset: SavedWorkspace = { layout, timelineHeight, timelineMode, panel: lsGet<string | null>("panel", "laps") }; const next = { ...savedPresets, [name]: preset }; setSavedPresets(next); lsSet("workspace-presets", next); setPresetName(""); }}>Save current layout</button>
+          <button className="btn" disabled={!presetName.trim()} onClick={() => { const name = presetName.trim(); const preset: SavedWorkspace = { layout, timelineHeight, timelineMode, showBetweenLaps: p.showBetweenLaps, panel: lsGet<string | null>("panel", "driver"), panels: lsGet<string[]>("panels", [lsGet<string>("panel", "driver")]) }; const next = { ...savedPresets, [name]: preset }; setSavedPresets(next); lsSet("workspace-presets", next); setPresetName(""); }}>Save current layout</button>
           {Object.entries(savedPresets).map(([name, preset]) => <div className="mrow" key={name}><button className="btn" onClick={() => applyPreset(preset)}>{name}</button><button className="x" aria-label={"Delete layout " + name} onClick={() => { const next = { ...savedPresets }; delete next[name]; setSavedPresets(next); lsSet("workspace-presets", next); }}>×</button></div>)}
         </Menu>
       </div>;
@@ -121,13 +122,13 @@ export function Workspace() {
     <div className="workspace" id="main">
       {toolbarHost ? createPortal(toolbar, toolbarHost) : toolbar}
       <div className="workspace-panes">
-        {PANE_IDS.map(id => <WorkspacePane key={id} id={id} title={names[id]} state={layout.panes[id]} order={layout.order.indexOf(id)} z={z[id]}
+        {PANE_IDS.map(id => <WorkspacePane key={id} id={id} title={names[id]} headerControls={id === "track" ? <MapTools /> : undefined} state={layout.panes[id]} order={layout.order.indexOf(id)} z={z[id]}
           onRaise={() => setZ(current => ({ ...current, [id]: ++nextZ.current }))}
           onPatch={changes => patch(id, changes)}
           onMove={direction => { const target = layout.order[layout.order.indexOf(id) + direction]; if (target) update(current => movePane(current, id, target)); }}
           onDrop={source => update(current => movePane(current, source, id))}>
           {id === "video" ? <VideoPanel visible={layout.panes.video.visible} /> : id === "analysis" ? <Dock /> :
-            <section className="stage" aria-label="Player"><MapTools /><MapView /><SegStrip />{timelineMode === "track" && layout.panes.track.visible && <Transport height={timelineHeight} onHeight={resizeTimeline} docked onPlacement={toggleTimelineDock} />}</section>}
+            <section className="stage" aria-label="Player"><MapView /><SegStrip />{timelineMode === "track" && layout.panes.track.visible && <Transport height={timelineHeight} onHeight={resizeTimeline} docked onPlacement={toggleTimelineDock} />}</section>}
         </WorkspacePane>)}
         {docked.slice(0, -1).map((id, i) => <PaneDivider key={id + docked[i + 1]} left={id} right={docked[i + 1]} order={layout.order.indexOf(id)} fraction={layout.panes[id].weight / (layout.panes[id].weight + layout.panes[docked[i + 1]].weight)} onResize={fraction => update(current => resizePair(current, id, docked[i + 1], fraction))} />)}
         {!docked.length && <div className="workspace-empty">All windows are hidden or floating. Use the buttons above to restore them.</div>}
