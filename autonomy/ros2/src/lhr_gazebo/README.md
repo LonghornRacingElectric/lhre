@@ -385,11 +385,15 @@ never opens shows in the launch log. It exists to test `lhr_safety`
 | `lidar_drop` | The selected source publishes `/lhr/lidar/points_raw`; the injector stops relaying |
 | `cmd_nan` | `pure_pursuit` publishes `/lhr/vehicle/cmd_raw`; the injector relays it with NaN steering |
 | `steer_freeze` | `joint_cmd_adapter` reads `/lhr/vehicle/cmd_actuated`, which the injector holds at the fault's steering angle |
+| `imu_drop` | The bridge publishes Gazebo's IMU on `/lhr/imu/data_raw`; the injector stops relaying |
+| `wheel_drop` | `inertial_sim` publishes `/lhr/sensor/wheel_speeds_raw`; the injector stops relaying |
+| `mission_kill` | `pkill -9` `mission_manager`. It trips `MISSION_STALE`, but nothing in sim stops the car afterwards (see [lhr_safety](../lhr_safety/README.md#not-done-here)) |
 
-`ekf_kill` needs `estimator:=ekf` (there is no `ekf_node` otherwise) and
+`ekf_kill`, `imu_drop` and `wheel_drop` need `estimator:=ekf` (there is no
+`ekf_node` otherwise, and `safety_node` only watches its inputs under it) and
 `lidar_drop` needs `perception:=lidar` (`safety_node` only watches the LiDAR
-there); the launch refuses either combination rather than run a fault that
-cannot trip. The `/lhr/sim/fault` event goes out before the signal, and the
+there); the launch refuses any of these combinations rather than run a fault
+that cannot trip. The `/lhr/sim/fault` event goes out before the signal, and the
 injector logs an error if `pkill` finds no process.
 
 The matrix runner and scoring are in

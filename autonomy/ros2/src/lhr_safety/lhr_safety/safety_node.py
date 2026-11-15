@@ -12,14 +12,14 @@ hang all read as a fault to whatever listens to the heartbeat.
 
 from ackermann_msgs.msg import AckermannDriveStamped
 from diagnostic_msgs.msg import DiagnosticStatus, KeyValue
-from lhr_safety.latch import SafetyLatch
+from lhr_safety.latch import ARMED_STATES, SafetyLatch
 from lhr_safety.monitors import Fault, SafetyConfig, SafetyMonitor
 from lhr_vehicle import load_vehicle
 from nav_msgs.msg import Odometry
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
-from sensor_msgs.msg import JointState, PointCloud2
+from sensor_msgs.msg import Imu, JointState, PointCloud2
 from std_msgs.msg import Bool, String, UInt32
 
 
@@ -37,9 +37,17 @@ class SafetyNode(Node):
         # Gazebo's steering joints to it.
         self.declare_parameter('steering_measured_topic', '/lhr/vehicle/steering_measured')
         self.declare_parameter('lidar_topic', '/lhr/lidar/points')
+        # The EKF's inputs (lhr_state_estimation's ekf_node defaults).
+        self.declare_parameter('imu_topic', '/lhr/imu/data')
+        self.declare_parameter('wheel_topic', '/lhr/sensor/wheel_speeds')
         self.declare_parameter('monitor_lidar', defaults.monitor_lidar)
+        self.declare_parameter('monitor_imu', defaults.monitor_imu)
+        self.declare_parameter('monitor_wheels', defaults.monitor_wheels)
         self.declare_parameter('lidar_timeout_s', defaults.lidar_timeout_s)
         self.declare_parameter('odom_timeout_s', defaults.odom_timeout_s)
+        self.declare_parameter('imu_timeout_s', defaults.imu_timeout_s)
+        self.declare_parameter('wheel_timeout_s', defaults.wheel_timeout_s)
+        self.declare_parameter('mission_timeout_s', defaults.mission_timeout_s)
         self.declare_parameter('cmd_timeout_s', defaults.cmd_timeout_s)
         self.declare_parameter('max_position_std_m', defaults.max_position_std_m)
         self.declare_parameter('max_speed_factor', defaults.max_speed_factor)
@@ -62,8 +70,13 @@ class SafetyNode(Node):
             wheelbase_m=vehicle.wheelbase_m,
             max_speed_mps=vehicle.max_speed_mps,
             monitor_lidar=bool(param('monitor_lidar')),
+            monitor_imu=bool(param('monitor_imu')),
+            monitor_wheels=bool(param('monitor_wheels')),
             lidar_timeout_s=float(param('lidar_timeout_s')),
             odom_timeout_s=float(param('odom_timeout_s')),
+            imu_timeout_s=float(param('imu_timeout_s')),
+            wheel_timeout_s=float(param('wheel_timeout_s')),
+            mission_timeout_s=float(param('mission_timeout_s')),
             cmd_timeout_s=float(param('cmd_timeout_s')),
             max_position_std_m=float(param('max_position_std_m')),
             max_speed_factor=float(param('max_speed_factor')),
@@ -96,6 +109,12 @@ class SafetyNode(Node):
             self.create_subscription(
                 PointCloud2, param('lidar_topic'), self._lidar_cb,
                 qos_profile_sensor_data, raw=True)
+        if self._config.monitor_imu:
+            self.create_subscription(Imu, param('imu_topic'), self._imu_cb, 10)
+        if self._config.monitor_wheels:
+            # Only arrival matters, like the cloud.
+            self.create_subscription(
+                JointState, param('wheel_topic'), self._wheels_cb, 10, raw=True)
         self.create_subscription(
             Odometry, '/lhr/vehicle/odom', self._odom_cb, 10)
         self.create_subscription(
@@ -108,9 +127,11 @@ class SafetyNode(Node):
             Bool, '/lhr/mission/reset', self._reset_cb, 10)
 
         self.create_timer(1.0 / float(param('rate_hz')), self._tick)
+        on = {True: 'on', False: 'off'}
         self.get_logger().info(
-            f'Safety monitor up (lidar check '
-            f'{"on" if self._config.monitor_lidar else "off"}, geofence '
+            f'Safety monitor up (lidar check {on[self._config.monitor_lidar]}, '
+            f'IMU {on[self._config.monitor_imu]}, wheel speeds '
+            f'{on[self._config.monitor_wheels]}, geofence '
             f'{self._config.geofence_radius_m:.0f} m)')
 
     def _now(self) -> float:
@@ -118,6 +139,12 @@ class SafetyNode(Node):
 
     def _lidar_cb(self, _msg):
         self._monitor.on_lidar(self._now())
+
+    def _imu_cb(self, msg: Imu):
+        self._monitor.on_imu(self._now(), msg.angular_velocity.z)
+
+    def _wheels_cb(self, _msg):
+        self._monitor.on_wheels(self._now())
 
     def _cmd_cb(self, msg: AckermannDriveStamped):
         self._monitor.on_command(self._now(), msg.drive.steering_angle)
@@ -136,6 +163,7 @@ class SafetyNode(Node):
 
     def _status_cb(self, msg: String):
         self._mission_state = msg.data
+        self._monitor.on_mission(self._now(), msg.data in ARMED_STATES)
 
     def _reset_cb(self, msg: Bool):
         if not msg.data:
