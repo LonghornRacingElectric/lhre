@@ -31,15 +31,8 @@ namespace vcu::bench {
 class FakeBoard final : public BoardServices {
  public:
   void EnterBootloader() override { ++bootloader_requests; }
-  uint32_t LoadFaultLatch() override { return stored; }
-  void SaveFaultLatch(uint32_t value) override {
-    stored = value;
-    ++saves;
-  }
 
   int bootloader_requests = 0;
-  uint32_t stored = 0;
-  int saves = 0;
 };
 
 // Analog setup that makes VDDA come out at exactly 3.3 V from VREFINT.
@@ -160,7 +153,6 @@ struct Bench {
   bool pdu_alive = true;
   float bse3_psi = 0.0f;
   bool dui_alive = true;
-  bool fault_reset = false;
   bool indicators_alive = true;
   bool bms_error = false;
   bool imd_error = false;
@@ -235,7 +227,6 @@ struct Bench {
     }
     if (dui_alive) {
       dui::DuiDriverInputs d;
-      d.fault_reset = fault_reset;
       car.Send(d.ToFrame());
     }
   }

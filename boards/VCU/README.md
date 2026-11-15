@@ -65,15 +65,15 @@ The DUI is a plain CAN peripheral this year.
   - `main.cpp`: reset cause, clocks, safe outputs, the `MX_*_Init` calls,
     LHAL adapters, and the app.
   - `analog_setup.cpp`: what the `.ioc` doesn't express yet (see [IOC gaps](#ioc-gaps)).
-  - `fault_store.cpp`: flash persistence and bootloader entry.
+  - `fault_store.cpp`: bootloader entry.
   - `board_safe_state.cpp`: the safe output levels, also used from
     `Error_Handler` and the fault handlers.
   - `rtos_hooks.cpp`, `irq_handlers.cpp`.
 - `Core/`: CubeMX-generated from `VCU.ioc`; change through regeneration,
   not hand edits.
 - `STM32G474XX_FLASH.ld` / `startup_stm32g474xx.s`: linker script and
-  startup. The linker script stops 2 KB short of the end of flash: the last
-  page of bank 2 holds the brake fault latch.
+  startup. The linker script stops 2 KB short of the end of flash: that last
+  page of bank 2 used to hold the brake fault latch and is now unused.
 
 ## Tasks and timing
 
@@ -81,7 +81,7 @@ The DUI is a plain CAN peripheral this year.
 | ---------- | ------ | -------- | --- |
 | supervisor | 20 ms  | idle+6   | Feeds the IWDG (100 ms) only if control and telemetry both made progress; otherwise forces safe outputs and lets the IWDG reset. |
 | control    | 3 ms   | idle+5   | Inputs, plausibility, state machine, torque, outputs, Critical-bus TX (333 Hz, as on the 2026 car). |
-| telemetry  | 10 ms  | idle+3   | Data-bus diagnostics, flash writes for the fault latch. |
+| telemetry  | 10 ms  | idle+3   | Data-bus diagnostics. |
 | LED status | 33 ms | idle+2 | Applies the state/fault color selected by control. |
 | shell ×2, logger | — | idle+1 | Debug consoles on the STDC14 VCP (USART3) and USB CDC. |
 
@@ -147,11 +147,9 @@ The DUI is a plain CAN peripheral this year.
   BSPD_TRIPPED. Only a power cycle clears it, in hardware and in firmware.
 - **Brake comparator flags**: B1 disconnect, B2 disconnect, B1 overvoltage
   and B2 overvoltage each cut torque, disable the inverter and exit DRIVE
-  after the 10 ms input debounce. They share a soft latch that a power
-  cycle clears, as long as no flag is still active at boot; within a power
-  cycle only the dash's `DUI_DRIVER_INPUTS.fault_reset`, pressed while no
-  flag is active, clears it. (The latch is still written to flash but no
-  longer restored at boot.)
+  after the 10 ms input debounce. They share a soft latch that only a power
+  cycle clears, and only if no flag is still active at boot. There is no
+  in-session reset, and nothing is written to flash.
 - **RTD sound**: a 1 kHz sine from the DAC for 1.2 s on entering DRIVE.
   There is a local 1.5 s ceiling, and the amp is cut immediately if the
   shutdown loop opens.

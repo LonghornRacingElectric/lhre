@@ -173,7 +173,6 @@ class App {
   WheelSlipController wheel_control_;
   uint16_t sine_[kSineSamples] = {};
   bool dac_playing_ = false;
-  bool prev_fault_reset_ = false;
   uint32_t handled_mode_commands_ = 0;
   int pending_mode_ = -1;  // EventMode waiting to apply outside DRIVE
   uint32_t boot_ms_ = 0;
@@ -196,8 +195,6 @@ class App {
   std::atomic<int> shell_mode_request_{-1};
   std::atomic<uint32_t> control_beats_{0};
   std::atomic<uint32_t> telemetry_beats_{0};
-  std::atomic<bool> latch_save_pending_{false};
-  std::atomic<uint32_t> latch_save_value_{0};
 
   // Telemetry state
   longhorn::RateGate diag_fast_gate_;

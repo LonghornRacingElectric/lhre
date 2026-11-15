@@ -145,10 +145,9 @@ void PrintSerialReport(longhorn::Console& out, const ControlSnapshot& s,
   out.Printf("  BSPD combined/confirmed/latch: %d/%d/%d  Loop: %s",
              i.combined_condition, i.fault_confirmed, i.latch_state,
              lhre::can::ToString(s.loop));
-  out.Printf(
-      "  Hard brake HW/FW/mismatch: %d/%d/%d  Brake latch: %d  Clears: %u",
-      i.hard_braking, p.firmware_hard_brake, p.hard_brake_mismatch,
-      s.brake_flags_latched, s.fault_resets);
+  out.Printf("  Hard brake HW/FW/mismatch: %d/%d/%d  Brake latch: %d",
+             i.hard_braking, p.firmware_hard_brake, p.hard_brake_mismatch,
+             s.brake_flags_latched);
   out.Printf("  OUT linelock=%d amp=%d BMS=%d IMD=%d crit_stb=%d data_stb=%d",
              o.linelock_ctrl, o.amp_enable, o.bms_led, o.imd_led, o.crit_stb,
              o.data_stb);

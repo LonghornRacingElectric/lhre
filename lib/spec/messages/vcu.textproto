@@ -1112,7 +1112,7 @@ message {
   bus: "Critical"
   dlc: 8
   frequency_hz: 10.0
-  description: "Active VCU faults for the dash. Brake comparator faults stay latched until DUI_DRIVER_INPUTS.fault_reset."
+  description: "Active VCU faults for the dash. The brake comparator fault stays latched until a power cycle."
   signal {
     name: "active_faults"
     encoding {
@@ -1168,7 +1168,7 @@ message {
       physical {
       }
     }
-    description: "Accepted dash fault resets since boot (wraps)"
+    description: "Unused: always 0, the VCU has no in-session fault reset"
   }
 }
 message {

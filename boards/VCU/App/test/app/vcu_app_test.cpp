@@ -256,7 +256,7 @@ TEST_F(VcuAppTest, RtdReleaseReturnsToTractiveActive) {
   EXPECT_EQ(app_->state(), VcuState::kRtdWait);  // via TS_ACTIVE
 }
 
-TEST_F(VcuAppTest, BrakeFlagLatchClearsOnPowerCycleWhenFlagsAreLow) {
+TEST_F(VcuAppTest, BrakeFlagLatchClearsOnlyOnPowerCycleWhenFlagsAreLow) {
   b_.b1_disconnect.Write(true);
   b_.Run(*app_, 30);
   b_.b1_disconnect.Write(false);
@@ -274,31 +274,10 @@ TEST_F(VcuAppTest, BrakeFlagLatchClearsOnPowerCycleWhenFlagsAreLow) {
   b_.Run(*app_, 30);
   EXPECT_NE(app_->faults() & vcu::kFaultBrakeFlagLatched, 0u);
 
-  // Within a power cycle only the dash reset clears it, and only with the
-  // flag low.
+  // Within a power cycle nothing clears it, even with the flag low.
   b_.b1_disconnect.Write(false);
-  b_.Run(*app_, 30);
+  b_.Run(*app_, 300);
   EXPECT_NE(app_->faults() & vcu::kFaultBrakeFlagLatched, 0u);
-  b_.fault_reset = true;
-  b_.Run(*app_, 30);
-  EXPECT_EQ(app_->faults() & vcu::kFaultBrakeFlagLatched, 0u);
-}
-
-TEST_F(VcuAppTest, DashResetIgnoredWhileFlagActive) {
-  b_.b2_overvoltage.Write(true);
-  b_.Run(*app_, 30);
-  b_.fault_reset = true;
-  b_.Run(*app_, 30);
-  EXPECT_NE(app_->faults() & vcu::kFaultBrakeFlagLatched, 0u);
-  // The reset has to be a fresh press after the flag clears.
-  b_.b2_overvoltage.Write(false);
-  b_.Run(*app_, 30);
-  EXPECT_NE(app_->faults() & vcu::kFaultBrakeFlagLatched, 0u);
-  b_.fault_reset = false;
-  b_.Run(*app_, 30);
-  b_.fault_reset = true;
-  b_.Run(*app_, 30);
-  EXPECT_EQ(app_->faults() & vcu::kFaultBrakeFlagLatched, 0u);
 }
 
 TEST_F(VcuAppTest, ErrorLedsOnlyAddIndication) {
@@ -713,9 +692,8 @@ TEST_F(VcuAppTest, EachBrakeComparatorFlagCutsTorqueAndLatches) {
     b.Run(*app, 50);
     EXPECT_NE(app->faults() & vcu::kFaultBrakeFlagLatched, 0u) << flag;
     EXPECT_EQ(app->torque_command(), 0.0f) << flag;
-    b.fault_reset = true;
-    b.Run(*app, 30);
-    EXPECT_EQ(app->faults() & vcu::kFaultBrakeFlagLatched, 0u) << flag;
+    b.Run(*app, 300);
+    EXPECT_NE(app->faults() & vcu::kFaultBrakeFlagLatched, 0u) << flag;
     EXPECT_NE(app->state(), VcuState::kDrive) << flag;
   }
 }

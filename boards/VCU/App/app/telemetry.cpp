@@ -31,11 +31,6 @@ void App::TelemetryTick(uint32_t now) {
         p_.data_can != nullptr ? p_.data_can->stats() : lhal::CanStats{};
     SendHealthDiag(p_.data_can, p_.reset_cause, now, crit, data);
   }
-
-  // Flash writes for the brake latch happen here, off the control loop.
-  if (latch_save_pending_.exchange(false) && p_.board != nullptr) {
-    p_.board->SaveFaultLatch(latch_save_value_.load());
-  }
   telemetry_beats_.fetch_add(1);
 }
 

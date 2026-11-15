@@ -123,7 +123,6 @@ msg::VcuFaults FaultsFrame(const ControlSnapshot& s) {
   vf.primary_fault = s.primary_fault;
   vf.state = s.state;
   vf.brake_flags_latched = s.brake_flags_latched;
-  vf.fault_resets = s.fault_resets;
   return vf;
 }
 

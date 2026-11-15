@@ -41,10 +41,6 @@ const volatile uint16_t* const kVrefintCal =
 class Board final : public vcu::BoardServices {
  public:
   void EnterBootloader() override { vcu_board::EnterBootloader(); }
-  uint32_t LoadFaultLatch() override { return vcu_board::LoadFaultLatch(); }
-  void SaveFaultLatch(uint32_t value) override {
-    vcu_board::SaveFaultLatch(value);
-  }
 };
 
 }  // namespace

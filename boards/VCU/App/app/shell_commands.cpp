@@ -37,10 +37,9 @@ void App::StateCommand(void* ctx, longhorn::Console& out, const char*) {
              static_cast<int>(s.pedals.pedal_travel * 100.0f),
              static_cast<int>(s.pedals.bse_psi_filtered),
              s.pedals.brake_over_throttle ? 1 : 0);
-  out.Printf("reset=%s brake_latch=%d resets=%u soe=%d%% buzzer=%d",
+  out.Printf("reset=%s brake_latch=%d soe=%d%% buzzer=%d",
              lhal::ToString(app->p_.reset_cause), s.brake_flags_latched ? 1 : 0,
-             s.fault_resets, static_cast<int>(s.battery.soe_pct),
-             s.buzzer ? 1 : 0);
+             static_cast<int>(s.battery.soe_pct), s.buzzer ? 1 : 0);
   out.Printf("adc_fresh=%d launch_armed=%d regen_current_cut=%d", s.adc_fresh,
              s.launch_armed, s.regen_current_cut);
   out.Printf("wheel_feedback=%d drive_slip=%d%% brake_slip=%d%%",

@@ -97,19 +97,9 @@ bool App::ReadInputs(uint32_t now) {
 
 void App::UpdateBrakeLatch(uint32_t now) {
   const DigitalInputs& in = live_.inputs;
-  // Brake comparator soft latch: cleared only by the dash's reset.
-  const bool dui_fresh = rx_.dui_driver_inputs.Fresh(now);
-  const bool reset_level = dui_fresh && rx_.dui_driver_inputs.msg.fault_reset;
-  const bool reset_edge = reset_level && !prev_fault_reset_;
-  prev_fault_reset_ = reset_level;
+  // Brake comparator soft latch: cleared only by a power cycle.
   brake_latch_.Update(in.b1_disconnect || in.b1_overvoltage ||
-                          in.b2_disconnect || in.b2_overvoltage,
-                      reset_edge);
-  if (brake_latch_.dirty()) {
-    latch_save_value_.store(brake_latch_.persisted_value());
-    latch_save_pending_.store(true);
-    brake_latch_.MarkPersisted();
-  }
+                      in.b2_disconnect || in.b2_overvoltage);
 
   // BSE3 from the PDU: regen blending needs it; no blending without it.
   live_.bse3_available = rx_.bse_3.Fresh(now);
@@ -372,7 +362,6 @@ void App::UpdateStatus(uint32_t now) {
   live_.faults = faults_;
   live_.primary_fault = PrimaryFault(faults_);
   live_.brake_flags_latched = brake_latch_.latched();
-  live_.fault_resets = brake_latch_.resets();
 }
 
 void App::DriveOutputs(uint32_t now) {
