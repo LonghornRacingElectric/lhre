@@ -1,0 +1,18 @@
+load("//tools/firmware:firmware_project.bzl", "firmware_project")
+
+# The whole board: firmware image, flash targets, and — synthesized
+# from the App/ file names — the app library, host tests, and sims.
+# Everything else is derived from mcu or the CubeMX layout; see
+# tools/firmware/README.md. State only what this board adds.
+firmware_project(
+    name = "dui",
+    # Debug console over USB CDC (shell + logger); tools/monitor is the
+    # laptop side.
+    app_deps = [
+        "//drivers/longhorn:logger",
+        "//drivers/longhorn:shell",
+    ],
+    enable_freertos = True,
+    enable_usb = True,
+    mcu = "stm32g474xx",
+)

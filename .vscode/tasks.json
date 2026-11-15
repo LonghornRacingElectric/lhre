@@ -65,6 +65,68 @@
         "//boards/VCU:${input:flashMethod-vcu}"
       ],
       "problemMatcher": []
+    },
+    {
+      "label": "build-dui-debug",
+      "detail": "Build DUI firmware and stage the hermetic debug tools",
+      "type": "shell",
+      "command": "bazel",
+      "args": [
+        "build",
+        "//boards/DUI:dui.elf",
+        "//tools/debug:debug_tools"
+      ],
+      "group": "build",
+      "problemMatcher": [
+        "$gcc"
+      ]
+    },
+    {
+      "label": "flash-dui",
+      "detail": "Flash the DUI over ST-Link without starting a debug session",
+      "type": "shell",
+      "command": "bazel",
+      "args": [
+        "run",
+        "//boards/DUI:openocd"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "flash-dui-dfu",
+      "detail": "Flash the DUI over USB DFU",
+      "type": "shell",
+      "command": "bazel",
+      "args": [
+        "run",
+        "//boards/DUI:dfu"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "monitor-dui",
+      "detail": "Open serial monitor for DUI",
+      "type": "shell",
+      "command": "bazel",
+      "args": [
+        "run",
+        "//tools/monitor"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "flash-and-monitor-dui",
+      "detail": "Flash the DUI (prompts for ST-Link vs DFU) and open serial monitor",
+      "type": "shell",
+      "command": "bazel",
+      "args": [
+        "run",
+        "//tools/monitor",
+        "--",
+        "--flash",
+        "//boards/DUI:${input:flashMethod-dui}"
+      ],
+      "problemMatcher": []
     }
   ],
   "inputs": [
@@ -72,6 +134,22 @@
       "id": "flashMethod-vcu",
       "type": "pickString",
       "description": "Select flash method for VCU",
+      "options": [
+        {
+          "label": "ST-Link (OpenOCD)",
+          "value": "openocd"
+        },
+        {
+          "label": "DFU (USB)",
+          "value": "dfu"
+        }
+      ],
+      "default": "openocd"
+    },
+    {
+      "id": "flashMethod-dui",
+      "type": "pickString",
+      "description": "Select flash method for DUI",
       "options": [
         {
           "label": "ST-Link (OpenOCD)",
