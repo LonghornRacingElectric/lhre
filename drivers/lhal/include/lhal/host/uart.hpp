@@ -48,11 +48,18 @@ class Uart final : public lhal::Uart {
     return Status::kOk;
   }
 
+  bool SetRxObserver(RxObserver observer, void* context) override {
+    observer_ = observer;
+    observer_context_ = context;
+    return true;
+  }
+
   // Test helpers -----------------------------------------------------------
   bool connected() const override { return connected_; }
   void set_connected(bool connected) { connected_ = connected; }
 
   void InjectRx(const uint8_t* data, size_t len) {
+    if (observer_ != nullptr) observer_(observer_context_, data, len);
     rx_.insert(rx_.end(), data, data + len);
   }
   const std::vector<uint8_t>& tx_data() const { return tx_; }
@@ -63,6 +70,8 @@ class Uart final : public lhal::Uart {
   }
 
  private:
+  RxObserver observer_ = nullptr;
+  void* observer_context_ = nullptr;
   bool connected_ = true;
   std::vector<uint8_t> tx_;
   std::deque<uint8_t> rx_;

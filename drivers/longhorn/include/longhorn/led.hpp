@@ -15,7 +15,10 @@ class RgbLed {
   // Seconds for the rainbow animation to cycle back to its starting color.
   static constexpr float kRainbowCycleS = 5.0f;
 
-  RgbLed(lhal::Pwm* red, lhal::Pwm* green, lhal::Pwm* blue);
+  // `rainbow_brightness` caps Rainbow(). `boot_brightness` is the white
+  // shown at construction.
+  RgbLed(lhal::Pwm* red, lhal::Pwm* green, lhal::Pwm* blue,
+         float rainbow_brightness = 0.5f, float boot_brightness = 0.5f);
 
   // Sets each color's brightness as a fraction in [0.0, 1.0].
   void Set(float r, float g, float b);
@@ -34,6 +37,7 @@ class RgbLed {
   lhal::Pwm* green_;
   lhal::Pwm* blue_;
   float phase_ = 0.0f;
+  float brightness_;
   bool disabled_ = false;
 };
 

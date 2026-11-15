@@ -1,9 +1,13 @@
 """Macro for creating firmware projects, binary/hex outputs, and flash targets."""
 
+load("@aspect_bazel_lib//lib:run_binary.bzl", "run_binary")
 load("@aspect_bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
+load("@hermetic_launcher//launcher:lib.bzl", "launcher")
 load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("@rules_python//python:defs.bzl", "py_test")
+load(":warnings.bzl", "FIRMWARE_WARNINGS")
 
 # ---------------------------------------------------------------------------
 # Target platform per family. Each platform's CPU-core constraint selects the
@@ -19,53 +23,49 @@ FAMILY_PLATFORMS = {
 }
 
 # ---------------------------------------------------------------------------
-# Helpers – runfiles path resolution
-# ---------------------------------------------------------------------------
-
-def _runfiles_path(f):
-    if f.owner.workspace_name:
-        prefix = "../" + f.owner.workspace_name + "/"
-        if f.short_path.startswith(prefix):
-            return f.owner.workspace_name + "/" + f.short_path[len(prefix):]
-        return f.short_path
-    else:
-        return "_main/" + f.short_path
-
-# ---------------------------------------------------------------------------
 # Flash rules  (OpenOCD + DFU)
+#
+# The executable each rule emits is a hermetic_launcher stub: a small native
+# binary that execs the flash script with the runfiles environment set up.
+# One code path on every OS, in place of a generated .cmd on Windows and a
+# bash script elsewhere. See README.md ("Shell-free, including the flash
+# wrappers").
 # ---------------------------------------------------------------------------
+
+_LAUNCHER_TOOLCHAINS = [
+    launcher.finalizer_toolchain_type,
+    launcher.template_toolchain_type,
+]
+
+def _flash_launcher(ctx, tool, files):
+    """Declares the rule's executable: a native launcher that runs `tool`.
+
+    Args:
+        ctx: the rule context. Needs _LAUNCHER_TOOLCHAINS and the
+            _windows_constraint attribute.
+        tool: the flash script's executable File.
+        files: Files handed to `tool` as leading arguments, in order.
+
+    Returns:
+        The launcher File.
+    """
+    is_windows = ctx.target_platform_has_constraint(ctx.attr._windows_constraint[platform_common.ConstraintValueInfo])
+    executable = ctx.actions.declare_file(ctx.label.name + (".exe" if is_windows else ""))
+
+    # The files are passed as rlocation paths, unresolved: the flash scripts
+    # look them up through the runfiles library themselves, using the
+    # RUNFILES_* environment the launcher exports. Only the tool itself is
+    # resolved by the launcher.
+    (launcher.entrypoint(tool)
+        .embedded_args(*[launcher.to_rlocation_path(f) for f in files])
+        .compile(ctx, output_file = executable))
+    return executable
 
 def _openocd_flash_impl(ctx):
-    is_windows = ctx.target_platform_has_constraint(ctx.attr._windows_constraint[platform_common.ConstraintValueInfo])
-
-    if is_windows:
-        executable = ctx.actions.declare_file(ctx.label.name + ".cmd")
-        content = """@echo off
-set RUNFILES_DIR=%~dp0{exe_name}.runfiles
-"%RUNFILES_DIR%\\{tool}" "{openocd}" "{elf}" "{cfg}" %*
-""".format(
-            exe_name = executable.basename,
-            tool = _runfiles_path(ctx.executable.flash_tool).replace("/", "\\"),
-            openocd = _runfiles_path(ctx.executable.openocd),
-            elf = _runfiles_path(ctx.file.elf),
-            cfg = _runfiles_path(ctx.file.cfg),
-        )
-    else:
-        executable = ctx.actions.declare_file(ctx.label.name)
-        content = """#!/bin/bash
-export RUNFILES_DIR="$0.runfiles"
-exec "$0.runfiles/{tool}" "{openocd}" "{elf}" "{cfg}" "$@"
-""".format(
-            tool = _runfiles_path(ctx.executable.flash_tool),
-            openocd = _runfiles_path(ctx.executable.openocd),
-            elf = _runfiles_path(ctx.file.elf),
-            cfg = _runfiles_path(ctx.file.cfg),
-        )
-
-    ctx.actions.write(
-        output = executable,
-        content = content,
-        is_executable = True,
+    executable = _flash_launcher(
+        ctx,
+        ctx.executable.flash_tool,
+        [ctx.executable.openocd, ctx.file.elf, ctx.file.cfg],
     )
 
     runfiles = ctx.runfiles(files = [
@@ -110,37 +110,14 @@ openocd_flash_target = rule(
             default = "@platforms//os:windows",
         ),
     },
+    toolchains = _LAUNCHER_TOOLCHAINS,
 )
 
 def _dfu_flash_impl(ctx):
-    is_windows = ctx.target_platform_has_constraint(ctx.attr._windows_constraint[platform_common.ConstraintValueInfo])
-
-    if is_windows:
-        executable = ctx.actions.declare_file(ctx.label.name + ".cmd")
-        content = """@echo off
-set RUNFILES_DIR=%~dp0{exe_name}.runfiles
-"%RUNFILES_DIR%\\{tool}" "{dfu_util}" "{bin_file}" %*
-""".format(
-            exe_name = executable.basename,
-            tool = _runfiles_path(ctx.executable.flash_tool).replace("/", "\\"),
-            dfu_util = _runfiles_path(ctx.executable.dfu_util),
-            bin_file = _runfiles_path(ctx.file.bin_file),
-        )
-    else:
-        executable = ctx.actions.declare_file(ctx.label.name)
-        content = """#!/bin/bash
-export RUNFILES_DIR="$0.runfiles"
-exec "$0.runfiles/{tool}" "{dfu_util}" "{bin_file}" "$@"
-""".format(
-            tool = _runfiles_path(ctx.executable.flash_tool),
-            dfu_util = _runfiles_path(ctx.executable.dfu_util),
-            bin_file = _runfiles_path(ctx.file.bin_file),
-        )
-
-    ctx.actions.write(
-        output = executable,
-        content = content,
-        is_executable = True,
+    executable = _flash_launcher(
+        ctx,
+        ctx.executable.flash_tool,
+        [ctx.executable.dfu_util, ctx.file.bin_file],
     )
 
     runfiles = ctx.runfiles(files = [
@@ -180,10 +157,14 @@ dfu_flash_target = rule(
             default = "@platforms//os:windows",
         ),
     },
+    toolchains = _LAUNCHER_TOOLCHAINS,
 )
 
 # ---------------------------------------------------------------------------
 # Objcopy output helpers
+#
+# run_binary, not genrule: a genrule's `cmd` runs under bash, and Windows
+# builds have none (ADR-018). run_binary execs objcopy directly.
 # ---------------------------------------------------------------------------
 
 def binary_out(name, src, visibility = None, **kwargs):
@@ -193,14 +174,15 @@ def binary_out(name, src, visibility = None, **kwargs):
       name: The name of the output target. The output filename will be `name + ".bin"`.
       src: The label of the single source file to convert.
       visibility: The visibility of the generated rule.
-      **kwargs: Additional arguments to pass to the underlying genrule.
+      **kwargs: Additional arguments to pass to the underlying run_binary.
     """
-    native.genrule(
+    run_binary(
         name = "{}_bin".format(name),
         srcs = [src],
         outs = ["{}.bin".format(name)],
-        cmd = "$(execpath @arm_none_eabi//:objcopy) -O binary $< $@",
-        tools = ["@arm_none_eabi//:objcopy"],
+        args = ["-O", "binary", "$<", "$@"],
+        mnemonic = "Objcopy",
+        tool = "@arm_none_eabi//:objcopy",
         visibility = visibility,
         **kwargs
     )
@@ -212,14 +194,15 @@ def hex_out(name, src, visibility = None, **kwargs):
       name: The name of the output target. The output filename will be `name + ".hex"`.
       src: The label of the single source file to convert.
       visibility: The visibility of the generated rule.
-      **kwargs: Additional arguments to pass to the underlying genrule.
+      **kwargs: Additional arguments to pass to the underlying run_binary.
     """
-    native.genrule(
+    run_binary(
         name = "{}_hex".format(name),
         srcs = [src],
         outs = ["{}.hex".format(name)],
-        cmd = "$(execpath @arm_none_eabi//:objcopy) -O ihex $< $@",
-        tools = ["@arm_none_eabi//:objcopy"],
+        args = ["-O", "ihex", "$<", "$@"],
+        mnemonic = "Objcopy",
+        tool = "@arm_none_eabi//:objcopy",
         visibility = visibility,
         **kwargs
     )
@@ -411,7 +394,10 @@ def firmware_project(
         enable_usb = False,
         enable_dfu = False,
         locations = [],
+        variants = {},
         enable_printf_float = False,
+        size_budget_percent = 85,
+        size_budget_overrides = {},
         linker_script = None,
         startup_script = None,
         driver_headers = None,
@@ -432,9 +418,9 @@ def firmware_project(
         App/**/*.cpp|hpp    → cc_library {name}_app (LHAL + raw FreeRTOS
                               API), linked into the firmware and built for
                               the host
-        App/*_test.cpp      → one small cc_test each, named by file stem,
+        App/**/*_test.cpp   → one small cc_test each, named by file stem,
                               against {name}_app + the LHAL host fakes
-        App/*_sim.cpp       → one host cc_binary each, named by file stem
+        App/**/*_sim.cpp    → one host cc_binary each, named by file stem
 
     Args:
         name (string): name of the project
@@ -457,12 +443,12 @@ def firmware_project(
             for a board that outgrows the convention and hand-writes its app
             library, tests, and sims. Defaults to True.
         enable_tests (bool, optional): Synthesize a cc_test per
-            App/*_test.cpp. Set False to keep the app library but skip the
+            App/**/*_test.cpp. Set False to keep the app library but skip the
             host tests — the escape hatch for boards that don't maintain
             them (the files, if present, simply stop being compiled).
             Defaults to True.
         enable_sims (bool, optional): Synthesize a host cc_binary per
-            App/*_sim.cpp. Same escape hatch as enable_tests, for the
+            App/**/*_sim.cpp. Same escape hatch as enable_tests, for the
             sims. Defaults to True.
         enable_freertos (bool, optional): Whether or not to use FreeRTOS. Defaults to False.
         enable_usb (bool, optional): Wire in USB CDC (virtual COM port): ST's USB Device
@@ -472,7 +458,21 @@ def firmware_project(
             USB_DEVICE/ directory exists. Defaults to False.
         enable_dfu (bool, optional): Whether or not to accept strings to go into DFU. Defaults to False.
         locations (list, optional): A list of location identifiers (e.g., ["FR", "FL"]).
+        variants (dict, optional): Extra firmware images built from the same
+            sources, as {"suffix": ["DEFINE", ...]}. Each variant adds
+            :{name}_{suffix} (+ .elf/.bin/.hex), :openocd_{suffix} and
+            :dfu_{suffix}, compiled with the extra defines, alongside the
+            plain image (and per location, if any). For build-time image
+            selection in Board/ code, e.g. a bring-up test image. Defaults
+            to {}.
         enable_printf_float (bool, optional): Whether to link -u _printf_float (adds ~10KB). Defaults to False.
+        size_budget_percent (int, optional): Each image gets a
+            {image}_size_test that fails when any MEMORY region of the
+            linker script is filled past this percent. The linker alone
+            only fails at 100%. Defaults to 85.
+        size_budget_overrides (dict, optional): Per-region budgets that
+            replace size_budget_percent, e.g. {"DTCMRAM": 100} for a region
+            meant to be filled. Defaults to {}.
         linker_script (path, optional): Override for the mcu-derived linker script.
         startup_script (path, optional): Override for the mcu-derived startup file.
         driver_headers (label, optional): Override for the driver headers target. Defaults to //drivers/stm32/{family}:headers.
@@ -544,14 +544,29 @@ def firmware_project(
             srcs = app_srcs,
             hdrs = native.glob(["App/**/*.hpp"], allow_empty = True),
             includes = ["App"],
+            copts = FIRMWARE_WARNINGS,
             deps = final_app_deps,
         )
 
-        for test_src in native.glob(["App/*_test.cpp"], allow_empty = True) if enable_tests else []:
+        for test_src in native.glob(["App/**/*_test.cpp"], allow_empty = True) if enable_tests else []:
             cc_test(
-                name = test_src[len("App/"):-len(".cpp")],
+                name = test_src.split("/")[-1][:-len(".cpp")],
                 size = "small",
                 srcs = [test_src],
+                # Windows gives a test 1 MB of stack and Linux 8 MB, so a
+                # big local (a whole App is over 1 MB) passes here and
+                # overflows there. Fail the build on every OS instead. Host
+                # tests build with hermetic clang, but GCC and clang spell
+                # the error differently and each rejects the other's form.
+                copts = select({
+                    "@rules_cc//cc/compiler:gcc": [
+                        "-Werror=frame-larger-than=262144",
+                    ],
+                    "//conditions:default": [
+                        "-Wframe-larger-than=262144",
+                        "-Werror=frame-larger-than",
+                    ],
+                }),
                 deps = [
                     ":" + app_name,
                     "//drivers/lhal:host",
@@ -559,9 +574,9 @@ def firmware_project(
                 ],
             )
 
-        for sim_src in native.glob(["App/*_sim.cpp"], allow_empty = True) if enable_sims else []:
+        for sim_src in native.glob(["App/**/*_sim.cpp"], allow_empty = True) if enable_sims else []:
             cc_binary(
-                name = sim_src[len("App/"):-len(".cpp")],
+                name = sim_src.split("/")[-1][:-len(".cpp")],
                 srcs = [sim_src],
                 deps = [
                     ":" + app_name,
@@ -640,12 +655,22 @@ def firmware_project(
     else:
         locations_to_build = locations
 
-    for location in locations_to_build:
-        target_name = name
-        location_defines = []
+    # (suffix, defines) per image: the plain image plus one per variant.
+    images = [(None, [])] + sorted(variants.items())
 
+    for location, (variant, variant_defines) in [
+        (loc, image)
+        for loc in locations_to_build
+        for image in images
+    ]:
+        target_name = name
+        location_defines = list(variant_defines)
+        flash_suffix = "_".join([part for part in [variant, location] if part])
+
+        if variant:
+            target_name = "{}_{}".format(target_name, variant)
         if location:
-            target_name = "{}_{}".format(name, location)
+            target_name = "{}_{}".format(target_name, location)
             location_defines.append("BOARD_{}".format(location))
 
         _firmware_binary(
@@ -670,6 +695,25 @@ def firmware_project(
             src = target_name,
             visibility = ["//visibility:public"],
         )
+        py_test(
+            name = "{}_size_test".format(target_name),
+            size = "small",
+            srcs = ["//tools/firmware:size_check.py"],
+            tags = ["firmware_size"],
+            main = "//tools/firmware:size_check.py",
+            args = [
+                "$(rootpath :{}_elf)".format(target_name),
+                "$(rootpath {})".format(linker_script),
+                str(size_budget_percent),
+            ] + [
+                "{}={}".format(region, percent)
+                for region, percent in size_budget_overrides.items()
+            ],
+            data = [
+                ":{}_elf".format(target_name),
+                linker_script,
+            ],
+        )
         hex_out(
             name = target_name,
             src = target_name,
@@ -686,14 +730,14 @@ def firmware_project(
         release_srcs.append("{}.hex".format(target_name))
 
         openocd_flash_target(
-            name = "openocd_{}".format(location) if location else "openocd",
+            name = "openocd_{}".format(flash_suffix) if flash_suffix else "openocd",
             elf = ":{}.elf".format(target_name),
             cfg = "//drivers/stm32/{}:openocd_cfg".format(family),
             tags = ["local", "flasher"],
         )
 
         dfu_flash_target(
-            name = "dfu_{}".format(location) if location else "dfu",
+            name = "dfu_{}".format(flash_suffix) if flash_suffix else "dfu",
             bin_file = ":{}.bin".format(target_name),
             tags = ["local", "flasher"],
         )

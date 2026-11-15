@@ -1,7 +1,8 @@
 # ZED 2i Stereo Simulation
 
-Status: design approved by Celina on 2026-10-11. Implementation is on branch `celina/zed2i-stereo`; runtime evidence is recorded
-in the [Gazebo README](../../ros2/src/lhr_gazebo/README.md#stereo-validation).
+Status: design approved by Celina on 2026-10-11, implementation merged in
+[#96](https://github.com/LonghornRacingElectric/lhre/pull/96) on 2026-10-18; runtime evidence is
+recorded in the [Gazebo README](../../ros2/src/lhr_gazebo/README.md#stereo-validation).
 See the [implementation plan](zed2i-stereo-implementation.md).
 
 ## Outcome
@@ -108,8 +109,12 @@ Expose `enable_stereo_camera`, default `false`, independently of `perception`
 mode. Enabling it starts the camera bridges and static TF publishers in
 both `sim` and `lidar` modes, with truth or EKF odometry. When disabled,
 there are no camera bridges/subscribers or camera TF publishers. Lazy
-rendering avoids image work when no camera subscribers are connected;
-verify this behavior on the installed Gazebo version.
+rendering did not avoid image work: the cameras rendered on every run and
+halved the LiDAR rate ([#123](https://github.com/LonghornRacingElectric/lhre/issues/123)). Since
+[#160](https://github.com/LonghornRacingElectric/lhre/pull/160) the default
+`model.sdf` has no cameras, and `enable_stereo_camera:=true` loads the
+generated `model_stereo.sdf` in its place
+([`stereo_camera.py`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/ros2/src/lhr_gazebo/lhr_gazebo/stereo_camera.py)).
 
 Add left/right RViz Image displays using the proposed topics. The disabled
 camera mode must retain the current RViz configuration; select a stereo

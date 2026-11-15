@@ -1,0 +1,228 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { convertSession } from "@/lib/driveday/convert";
+import { invalidatePalette } from "@/lib/driveday/draw/palette";
+import { Player, type Prefs } from "@/lib/driveday/player";
+import { rebuildRun } from "@/lib/driveday/rebuild";
+import { Session } from "@/lib/driveday/session";
+import { loadUserState, lsDel, lsGet, lsSet, metaOf, runStore, saveUserState, storageProblem } from "@/lib/driveday/storage";
+import { isConeLabel, seedFlags, type RunListEntry, type SessionExport } from "@/lib/driveday/types";
+import { defaultUnits } from "@/lib/driveday/units";
+import { ImportMenu, Header, type Theme } from "./Header";
+import { Workspace } from "./Workspace";
+import { PlayerCtx, ToastProvider, useToast } from "./context";
+
+const NEXT_THEME: Record<Theme, Theme> = { auto: "light", light: "dark", dark: "auto" };
+
+function applyTheme(t: Theme) {
+  const r = document.querySelector(".ddv");
+  if (!r) return;
+  if (t === "auto") r.removeAttribute("data-theme");
+  else r.setAttribute("data-theme", t);
+  invalidatePalette();
+}
+
+function Shell() {
+  const toast = useToast();
+  const [runs, setRuns] = useState<RunListEntry[]>([]);
+  const [current, setCurrent] = useState<string | null>(null);
+  const [player, setPlayer] = useState<Player | null>(null);
+  const [ready, setReady] = useState(false);
+  const [theme, setTheme] = useState<Theme>("auto");
+  const file = useRef<HTMLInputElement>(null);
+  const live = useRef<Player | null>(null);
+  const openReq = useRef(0);
+
+  const open = useCallback(
+    async (id: string | null) => {
+      const req = ++openReq.current;
+      live.current?.savePos();
+      live.current?.dispose();
+      live.current = null;
+      setPlayer(null);
+      setCurrent(id);
+      if (!id) return;
+      try {
+        const D0 = await runStore.get(id);
+        if (req !== openReq.current) return;
+        if (!D0) throw new Error("That run is no longer stored in this browser.");
+        const D = rebuildRun(D0);
+        const session = new Session(D);
+        const prefs = lsGet<Partial<Prefs>>("prefs", {});
+        const p = new Player(session, loadUserState(D.meta.sessId, D), prefs.units ?? defaultUnits(), prefs);
+        p.toast = toast;
+        live.current = p;
+        lsSet("run", id);
+        setPlayer(p);
+      } catch (e) {
+        toast("Could not open this run: " + (e as Error).message, "err");
+      }
+    },
+    [toast],
+  );
+
+  /* first load: restore runs, theme, and the last run opened */
+  useEffect(() => {
+    const t = lsGet<Theme>("theme", "auto");
+    setTheme(t);
+    applyTheme(t);
+    void (async () => {
+      try {
+        const list = (await runStore.list()).sort((a, b) => b.added - a.added);
+        setRuns(list);
+        if (storageProblem) toast(storageProblem, "err");
+        const last = lsGet<string | null>("run", null);
+        const pick = list.find((r) => r.id === last)?.id ?? list[0]?.id ?? null;
+        await open(pick);
+      } catch (error) {
+        toast("Could not read saved runs: " + (error as Error).message, "err");
+      }
+      setReady(true);
+    })();
+    return () => {
+      live.current?.dispose();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* stores one session export as runs (one per course) and returns the first run's id */
+  const ingest = useCallback(async (J: SessionExport, name: string, label: string) => {
+    let first: string | null = null;
+    const courses = convertSession(J, name, await runStore.tracks());
+    const now = Date.now();
+    for (const [ci, { D, track, isNew, renamed }] of courses.entries()) {
+      if (isNew || renamed) await runStore.putTrack(track);
+      /* newest first in the list, so the courses of one session stay in order */
+      await runStore.put({ ...metaOf(D), added: now - ci }, D);
+      if (J.flags?.length) {
+        const S = new Session(rebuildRun(D));
+        const flags = J.flags.filter(f => f.t >= S.T0 && f.t <= S.T0 + S.TD &&
+          !isConeLabel(f.label));
+        saveUserState(D.meta.sessId, seedFlags(loadUserState(D.meta.sessId, D), flags, S.T0));
+      }
+      first ??= D.meta.sessId;
+    }
+    const n = courses.reduce((a, c) => a + c.D.laps.filter((l) => l.kind === "lap").length, 0);
+    const note = courses[0].D.warnings.join(" ");
+    toast(label + ": " + n + " laps" + (courses.length > 1 ? " in " + courses.length + " courses" : "") + "." + (note ? " " + note : ""));
+    return first;
+  }, [toast]);
+
+  const showImported = useCallback(async (last: string | null) => {
+    setRuns((await runStore.list()).sort((a, b) => b.added - a.added));
+    if (last) await open(last);
+  }, [open]);
+
+  /* Trackside Live session exports picked from disk */
+  const importFiles = useCallback(async (files: FileList | File[]) => {
+    let last: string | null = null;
+    for (const f of Array.from(files)) {
+      try {
+        toast("Reading " + f.name + "…", "busy");
+        const J = JSON.parse(await f.text()) as SessionExport;
+        last ??= await ingest(J, f.name, f.name);
+      } catch (e) {
+        toast(f.name + ": " + (e as Error).message, "err");
+      }
+    }
+    await showImported(last);
+  }, [ingest, showImported, toast]);
+
+  /* the session Trackside Live last saved on the server */
+  const importCache = useCallback(async () => {
+    try {
+      const response = await fetch("/api/motec/live/session-cache");
+      if (!response.ok) throw new Error("No saved Trackside session on the server.");
+      await importFiles([new File([await response.blob()], "trackside-saved_session.json")]);
+    } catch (error) { toast((error as Error).message, "err"); }
+  }, [importFiles, toast]);
+
+  /* a drive day straight from the database, built server-side in the trackside-live export format */
+  const importDb = useCallback(async (day: number) => {
+    toast("Loading day " + day + " from the database…", "busy");
+    const r = await fetch("/api/driveday/db?day=" + day).catch(() => null);
+    if (!r?.ok) return toast(((await r?.json().catch(() => null))?.error as string) || "Could not reach the database.", "err");
+    let last: string | null = null;
+    try {
+      last = await ingest((await r.json()) as SessionExport, "orion-day-" + day + ".json", "Day " + day);
+    } catch (e) {
+      toast("Day " + day + ": " + (e as Error).message, "err");
+    }
+    await showImported(last);
+  }, [ingest, showImported, toast]);
+
+  const remove = useCallback(async (id: string) => {
+    const run = runs.find(r => r.id === id);
+    if (!run) return;
+    if (!window.confirm('Delete "' + (run.name || "Untitled run") + '" from saved runs? Its notes are deleted for good; the database day or JSON export can be loaded again.')) return;
+    try {
+      /* open the next run first, so the old player saves its position before that is cleared */
+      if (id === current) await open(runs.find((r) => r.id !== id)?.id ?? null);
+      await runStore.del(id);
+      for (const key of ["state:", "pos:", "base:"]) lsDel(key + id);
+      setRuns((await runStore.list()).sort((a, b) => b.added - a.added));
+      toast("Run removed.");
+    } catch (e) { toast("Could not delete this run: " + (e as Error).message, "err"); }
+  }, [current, runs, open, toast]);
+
+  /* repaint canvases when the theme or the OS colour scheme changes */
+  useEffect(() => {
+    const mq = matchMedia("(prefers-color-scheme: dark)");
+    const f = () => {
+      invalidatePalette();
+      player?.schedule(true);
+    };
+    mq.addEventListener("change", f);
+    return () => mq.removeEventListener("change", f);
+  }, [player]);
+
+  useEffect(() => {
+    if (document.fonts?.ready) void document.fonts.ready.then(() => player?.schedule(true));
+  }, [player]);
+
+  const cycleTheme = () => {
+    const t = NEXT_THEME[theme];
+    setTheme(t);
+    lsSet("theme", t);
+    applyTheme(t);
+    player?.schedule(true);
+  };
+
+  return (
+      <PlayerCtx.Provider value={player}>
+        <div className="app">
+          <Header
+            runs={runs}
+            current={current}
+            theme={theme}
+            onTheme={cycleTheme}
+            onSelect={(id) => void open(id)}
+            onDb={(day) => void importDb(day)}
+            onImport={(files) => void importFiles(files)}
+            onCache={() => void importCache()}
+            onRemove={(id) => void remove(id)}
+          />
+          {player && <Workspace key={player.session.D.meta.sessId} />}
+        </div>
+        {ready && !player && !current && (
+          <div className="welcome">
+            <div>
+              <h2>Give LAPDOG a lap to follow.</h2>
+              <p>Choose a drive day from the database, or import a Trackside Live session export. LAPDOG keeps your runs in this browser, ready for the next debrief.</p>
+              <ImportMenu onDb={(day) => void importDb(day)} onJson={() => file.current?.click()} onCache={() => void importCache()} />
+              <input ref={file} type="file" accept=".json,application/json" multiple hidden onChange={(e) => { if (e.target.files?.length) void importFiles(e.target.files); e.target.value = ""; }} />
+            </div>
+          </div>
+        )}
+      </PlayerCtx.Provider>
+  );
+}
+
+export function App() {
+  return (
+    <ToastProvider>
+      <Shell />
+    </ToastProvider>
+  );
+}

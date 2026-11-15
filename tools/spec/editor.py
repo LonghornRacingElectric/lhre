@@ -96,7 +96,7 @@ def derived_types(protos):
     will emit."""
     try:
         return wire.signal_types(loader.Spec(protos))
-    except Exception:
+    except Exception:  # noqa: BLE001 pre-existing when the lint gate went on
         return {}  # malformed mid-edit; the validator reports why
 
 
@@ -146,7 +146,7 @@ class _Handler(BaseHTTPRequestHandler):
                 self._reply(200, spec_payload(self.root))
             else:
                 self._reply(404, {"error": "not found"})
-        except Exception as err:  # surface everything to the page
+        except Exception as err:  # surface everything to the page  # noqa: BLE001 pre-existing when the lint gate went on
             self._reply(500, {"error": str(err)})
 
     def do_POST(self):
@@ -165,7 +165,7 @@ class _Handler(BaseHTTPRequestHandler):
                     self._reply(409, {"error": str(err)})
             else:
                 self._reply(404, {"error": "not found"})
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001 pre-existing when the lint gate went on
             self._reply(500, {"error": str(err)})
 
     def log_message(self, fmt, *args):  # keep the terminal quiet
@@ -182,7 +182,7 @@ def serve(root, port, open_browser=True):
     if open_browser:
         try:
             webbrowser.open(url)
-        except Exception:
+        except Exception:  # noqa: BLE001 pre-existing when the lint gate went on
             pass
     try:
         server.serve_forever()

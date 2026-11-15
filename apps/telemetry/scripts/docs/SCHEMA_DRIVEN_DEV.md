@@ -1,5 +1,9 @@
 # Schema Driven Development (SDD) Overhaul
 
+This is a historical design. Current Orion protobuf, CAN JSON and SQL are
+Bazel outputs from textproto; use the [current workflow](../README.md).
+`sync_schema.sh` no longer runs the source-patching steps described below.
+
 ## 1. Motivation & Problem Statement
 
 Currently, adding a new sensor or configuring a new car in the LHR Telemetry Stack requires manual synchronization across 4 different languages:

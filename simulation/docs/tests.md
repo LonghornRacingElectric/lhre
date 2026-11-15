@@ -23,11 +23,16 @@ The BobSim test takes about 6 s of `make unit`.
 - `test_committed_results.py`: each committed study result is current, or
   its README marks it historical or stale. See
   [studies.md](studies.md#status).
+- `test_new_study.py`: `make new-study` copies the template, and the
+  template `run.py` writes `summary.json` and `readme.json` that fill its
+  README. The target refuses a bad name and a name that exists.
 - `test_car_wrapper.py`: `make car` on a small fake BobSim git repo. The
   target sees our vehicle. `bobsim/` is restored after a pass, a failed
   target, failed records and an interrupt. A target that leaves `bobsim/`
   changed fails. An executable older than the records fails. No `.tir`
-  file reaches the outputs. It runs no Modelica.
+  file reaches the outputs. A candidate `VEHICLE` runs to its own folder.
+  A candidate that fails the check stops before the target. It runs no
+  Modelica.
 - `test_four_post_acceptance.py`: the FourPost acceptance on small
   synthetic metrics files and run manifests. The metrics files use the
   `fe03bab` format, and a format with a `status` column.
@@ -42,10 +47,27 @@ The BobSim test takes about 6 s of `make unit`.
 - `test_anti_paths.py`: `tools/anti_paths.py` against the oracle. A changed
   brake reaction alone does not change inboard-drive anti-squat. A negated
   sign fails.
-
+- `test_parallel.py`: `STUDY_WORKERS` and the CPU count set the worker
+  count, and `map_cases` keeps the case order, serial or in a pool.
 
 The anti tests check a model against an oracle. They do not validate the
 car. See [anti-paths.md](anti-paths.md).
+
+## Coverage
+
+CI runs `make unit COVERAGE=1` and puts the line coverage of `tools/` on
+the run's summary page. It's a report, not a gate: aim high on the code you
+change, and say why in the PR if a new tool goes untested. To get the same
+report locally, download the wheel the container can't fetch itself:
+
+```bash
+pip download --no-deps --only-binary=:all: --platform any --python-version 3.11 \
+  --implementation py --require-hashes -r coverage-requirements.txt -d out/wheels
+make unit COVERAGE=1   # writes out/coverage.md
+```
+
+`car_identity.py` is left out: `test_car_wrapper.py` runs it from a copy,
+which coverage can't tie back to the file.
 
 ## Add a test
 
@@ -70,11 +92,16 @@ works in a worktree too.
 
 ## CI
 
-`.github/workflows/simulation.yml` runs on pull requests that touch
-`simulation/`, `vehicle/`, `.gitmodules` or the workflow. It also runs on
-pushes to `main`, every Monday and by hand. It has these jobs.
+The repo's `.github/workflows/ci.yml` runs the simulation checks on pull
+requests, on pushes to `main`, every Monday and by hand. Its `Changes` job
+decides which jobs run. Both jobs are part of the required `All checks passed`
+check. The full run of every standard evaluation is in
+`.github/workflows/simulation.yml`.
 
 ### fast
+
+The `Simulation fast checks` job runs when a change touches
+`simulation/`, `vehicle/`, `.gitmodules` or `ci.yml`.
 
 1. Build the image with the GitHub Actions layer cache. A layer is built
    again only when the BobSim `Dockerfile` or `requirements.txt` changes.
@@ -92,23 +119,23 @@ if the job runs a `make` target other than `build`, `smoke`, `unit` or
 
 ### four-post
 
-It runs FourPost on our car: `make car T=standard-eval-four-post`, then
+The `FourPost` job runs FourPost on our car: `make car T=standard-eval-four-post`, then
 `make four-post-acceptance`. See
 [bobsim.md](bobsim.md#run-a-bobsim-target-on-our-car).
 
-The `changes` job decides if it runs. It runs when a pull request or a
-push changes `vehicle/`, the BobSim pin, `simulation/tools/`,
-`simulation/Makefile`, `simulation/docker-compose.yml` or the workflow.
-If the `changes` job fails, `four-post` runs. A manual run always runs it.
-The weekly run does not, because `full-regeneration` covers FourPost.
+It runs when a pull request or a push changes `vehicle/`, the BobSim pin,
+`simulation/tools/`, `simulation/Makefile`, `simulation/docker-compose.yml`
+or `ci.yml`. If the `Changes` job fails, it runs anyway and `All checks passed`
+fails. A manual run of `ci.yml` always runs it. The weekly run does not,
+because `full-regeneration` covers FourPost.
 
-At BobSim `fe03bab` the acceptance fails for our car. FourPost runs its
-own anti-roll bar rates, not ours. See
+At BobSim `f58f932` the acceptance accepts our car. FourPost runs our
+spring tables and anti-roll bar rates. See
 [bobsim.md](bobsim.md#run-a-bobsim-target-on-our-car).
 
 ### full-regeneration
 
-It runs every standard evaluation on our car:
+This job is in `simulation.yml`. It runs every standard evaluation on our car:
 `make car T=standard-eval-all`, then `make four-post-acceptance`. It runs
 every Monday, and on a manual run with `full_regeneration` set. It runs
 no optimization, envelope, lap or study target.

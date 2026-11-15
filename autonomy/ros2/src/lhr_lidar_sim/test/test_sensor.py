@@ -122,7 +122,7 @@ def test_returns_per_cone_fall_off_with_range():
 
 def test_single_frame_scan_gap_does_not_imply_an_invisible_cone():
     # Fix the study mount: changing vehicle YAML must not change this scan-gap fixture.
-    sensor = Mid360Sensor(config=NO_NOISE, mount=MountPose(z_m=0.62), seed=1)
+    sensor = Mid360Sensor(config=NO_NOISE, mount=MountPose(1.8, 0.0, 0.62, 0.0, 0.0, 0.0), seed=1)
     assert points_on_cone(sensor, 0.0, 6.0) == 0
     assert points_on_cone(sensor, 0.1, 6.0) > 0
     assert points_on_cone(sensor, 0.0, 6.0, frames=40) > 0
@@ -156,3 +156,19 @@ def test_default_mount_uses_vehicle_config():
 
     mount = MountPose()
     assert (mount.x_m, mount.y_m, mount.z_m) == load_vehicle().lidar_position_m
+
+
+def test_vehicle_height_and_attitude_preserve_world_ground():
+    mount = MountPose(pitch_rad=.12)
+    sensor = Mid360Sensor(config=NO_NOISE, mount=mount)
+    points, labels = sensor.frame_labeled(
+        .1, 3., -2., .8, np.empty((0, 2)),
+        vehicle_z=.08, vehicle_roll=.04, vehicle_pitch=-.03)
+    vehicle_rotation = rotation_zyx(.04, -.03, .8)
+    sensor_rotation = vehicle_rotation @ mount.rotation()
+    origin = np.array([3., -2., .08]) + vehicle_rotation @ np.array(
+        [mount.x_m, mount.y_m, mount.z_m])
+    world = points @ sensor_rotation.T + origin
+    assert len(world) > 100
+    assert not labels.any()
+    assert world[:, 2] == pytest.approx(np.zeros(len(world)), abs=1e-9)

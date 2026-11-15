@@ -1,0 +1,252 @@
+{
+  "configById": {
+    "3D!lhrgz3d": {
+      "foxglovePanelTitle": "Gazebo: truth, detections and planned centerline",
+      "followMode": "follow-pose",
+      "followTf": "base_link",
+      "scene": {
+        "backgroundColor": "#15151a",
+        "meshUpAxis": "z_up"
+      },
+      "transforms": {
+        "frame:map": {
+          "visible": true
+        },
+        "frame:base_link": {
+          "visible": true
+        }
+      },
+      "cameraState": {
+        "perspective": true,
+        "distance": 45,
+        "phi": 55,
+        "thetaOffset": 0,
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOffset": [
+          0,
+          0,
+          0
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "fovy": 45,
+        "near": 0.5,
+        "far": 5000
+      },
+      "topics": {
+        "/lhr/vehicle/body": {
+          "visible": true
+        },
+        "/lhr/sensor/cones_detected": {
+          "visible": true
+        },
+        "/lhr/track/centerline": {
+          "visible": true,
+          "color": "#44ff44"
+        },
+        "/lhr/lidar/points": {
+          "visible": false,
+          "colorMode": "colormap",
+          "colorField": "z",
+          "colorMap": "turbo"
+        },
+        "/lhr/viewer/cones_truth": {
+          "visible": true
+        },
+        "/lhr/vehicle/odom": {
+          "visible": true,
+          "color": "#ff8c00"
+        },
+        "/lhr/vehicle/odom_truth": {
+          "visible": true,
+          "color": "#00ffff"
+        },
+        "/lhr/viewer/centerline_truth": {
+          "visible": true,
+          "color": "#bb88ff"
+        }
+      },
+      "layers": {},
+      "publish": {}
+    },
+    "Plot!lhrgzspeed": {
+      "foxglovePanelTitle": "Speed (m/s)",
+      "paths": [
+        {
+          "value": "/lhr/vehicle/cmd.drive.speed",
+          "label": "command",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/lhr/vehicle/odom.twist.twist.linear.x",
+          "label": "estimate",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/lhr/vehicle/odom_truth.twist.twist.linear.x",
+          "label": "truth",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!lhrgzx": {
+      "foxglovePanelTitle": "Position X (m)",
+      "paths": [
+        {
+          "value": "/lhr/vehicle/odom.pose.pose.position.x",
+          "label": "estimate",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/lhr/vehicle/odom_truth.pose.pose.position.x",
+          "label": "truth",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!lhrgzy": {
+      "foxglovePanelTitle": "Position Y (m)",
+      "paths": [
+        {
+          "value": "/lhr/vehicle/odom.pose.pose.position.y",
+          "label": "estimate",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/lhr/vehicle/odom_truth.pose.pose.position.y",
+          "label": "truth",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!lhrgzorientation": {
+      "foxglovePanelTitle": "Orientation: quaternion Z / W",
+      "paths": [
+        {
+          "value": "/lhr/vehicle/odom.pose.pose.orientation.z",
+          "label": "estimate z",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/lhr/vehicle/odom_truth.pose.pose.orientation.z",
+          "label": "truth z",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/lhr/vehicle/odom.pose.pose.orientation.w",
+          "label": "estimate w",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/lhr/vehicle/odom_truth.pose.pose.orientation.w",
+          "label": "truth w",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "RawMessages!lhrgzmission": {
+      "foxglovePanelTitle": "Mission state",
+      "topicPath": "/lhr/mission/status"
+    },
+    "RawMessages!lhrgzmetrics": {
+      "foxglovePanelTitle": "Run metrics (m, s, rad)",
+      "topicPath": "/lhr/metrics/live"
+    },
+    "Plot!lhrgzsteer": {
+      "foxglovePanelTitle": "Steering command (rad)",
+      "paths": [
+        {
+          "value": "/lhr/vehicle/cmd.drive.steering_angle",
+          "label": "command",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "first": {
+      "first": "3D!lhrgz3d",
+      "second": {
+        "first": "RawMessages!lhrgzmetrics",
+        "second": "RawMessages!lhrgzmission",
+        "direction": "row",
+        "splitPercentage": 75
+      },
+      "direction": "column",
+      "splitPercentage": 75
+    },
+    "second": {
+      "first": "Plot!lhrgzspeed",
+      "second": {
+        "first": "Plot!lhrgzsteer",
+        "second": {
+          "first": "Plot!lhrgzx",
+          "second": {
+            "first": "Plot!lhrgzy",
+            "second": "Plot!lhrgzorientation",
+            "direction": "column",
+            "splitPercentage": 50
+          },
+          "direction": "column",
+          "splitPercentage": 33
+        },
+        "direction": "column",
+        "splitPercentage": 25
+      },
+      "direction": "column",
+      "splitPercentage": 20
+    },
+    "direction": "row",
+    "splitPercentage": 65
+  }
+}

@@ -11,6 +11,7 @@ from common.vehicle_io import load_yaml, require_side, tire_template_name, tire_
 SCHEMA = "lhre.car-run.v1"
 LISTS = ("failure", "executable")
 NOT_OUTPUTS = {"identity.json", ".facts"}
+COMMITTED_VEHICLE = "vehicle/vehicle.yml"
 
 
 def _sha256(path):
@@ -73,6 +74,7 @@ def build_identity(out, vehicle):
     facts, lists = _read_facts(out / ".facts")
     failures = list(lists["failure"])
     vehicle_sha256 = _sha256(vehicle)
+    candidate = vehicle.resolve() != (Path.cwd().parent / COMMITTED_VEHICLE).resolve()
     executed = out / "vehicle.yml"
     executed_sha256 = _sha256(executed) if executed.is_file() else None
     if executed_sha256 not in (None, vehicle_sha256):
@@ -123,6 +125,8 @@ def build_identity(out, vehicle):
             "name": facts.get("vehicle_name"),
             "sha256": vehicle_sha256,
             "executed_sha256": executed_sha256,
+            "candidate": candidate,
+            "note": "A candidate copy. It is not the vehicle member of vehicle/bundle.yml." if candidate else None,
         },
         "bundle": bundle,
         "tires": tires,
@@ -139,6 +143,8 @@ def main(argv):
     print(f"{out / 'identity.json'}: status {identity['status']}")
     for failure in identity["failures"]:
         print(f"  {failure}")
+    if identity["vehicle"]["candidate"]:
+        print(f"  Candidate: {identity['vehicle']['path']} is not the vehicle member of vehicle/bundle.yml.")
     bundle = identity["bundle"]
     if bundle and bundle["describes_vehicle"] is not True:
         print(f"  Warning: bundle {bundle['bundle_id']} does not describe {identity['vehicle']['path']}.")

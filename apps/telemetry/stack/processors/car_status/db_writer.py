@@ -38,7 +38,7 @@ def _ensure_imports() -> bool:
         _QueryBuilder = QueryBuilder
         _CarStatusSegment = CarStatusSegment
         _import_ok = True
-    except Exception as exc:  # pragma: no cover - environment dependent
+    except Exception as exc:  # pragma: no cover - environment dependent  # noqa: BLE001 pre-existing when the lint gate went on
         logging.warning("car_status persistence disabled (sql_utils import failed): %s", exc)
         _import_ok = False
     return _import_ok
@@ -85,6 +85,6 @@ def write_segment(segment: dict) -> bool:
                 commit=True,
             )
         return True
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 pre-existing when the lint gate went on
         logging.warning("car_status segment write failed (%s): %s", car_db, exc)
         return False

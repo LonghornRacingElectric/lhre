@@ -85,9 +85,12 @@ Under `ekf` the simulator's ground truth is remapped to
 `/lhr/vehicle/odom_truth` and `/tf_truth`, the estimator takes over
 `/lhr/vehicle/odom` and `/tf`, and
 [`lhr_sensor_sim`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/ros2/src/lhr_sensor_sim/lhr_sensor_sim/inertial_sim_node.py)'s
-`inertial_sim` synthesizes the sensors. Nothing downstream is reconfigured —
-`track_builder`, `pure_pursuit`, `mission_manager` and `metrics` read the same
-topic names they always did.
+`inertial_sim` synthesizes the sensors. `track_builder`, `pure_pursuit`,
+`mission_manager` and the LiDAR detector read the same topic names they
+always did, so they run on the estimate. Two consumers move to truth on
+purpose: the kinematic demo's `lidar_sim` renders from truth odometry, so
+the scene stays put while the estimate drifts, and `metrics` scores
+cross-track error, progress and the lap on truth.
 
 Dial in error to see the filter work for its living:
 
@@ -104,12 +107,16 @@ blank under `estimator:=truth`, since nothing publishes a truth topic then.
 
 Measured on the kinematic autocross lap, default noise: mean 0.03 m,
 max 0.24 m. With `gyro_bias:=0.03 wheel_scale_error:=1.03`: mean 5.2 m,
-max 16.6 m.
+max 16.6 m. Both were measured before #154 moved scoring to truth and #168
+compared each estimate with truth interpolated at the estimate's own
+stamp, so current rows are not directly comparable.
 
-Note that cross-track error barely moves between those runs. Perception,
-the centerline and the controller all live in the *estimated* frame, so the
-loop stays self-consistent while the car quietly drives somewhere else. The
-position-error columns are what expose that; CTE alone will not.
+Cross-track error barely moved between those runs, because it was then
+scored from the estimate, the same pose the controller steers by: the
+loop stayed self-consistent while the car quietly drove somewhere else.
+Under `ekf` metrics now scores CTE, progress and the lap on truth, so
+drift shows up there and can fail the run. The position-error columns
+still say how much of it the estimate caused.
 
 ## Tests
 

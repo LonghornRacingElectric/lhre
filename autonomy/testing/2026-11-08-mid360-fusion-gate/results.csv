@@ -1,0 +1,6 @@
+campaign,safety_lidar_timeout_s,id,kind,event,track_style,seed,outcome,lap_time_s,baseline_lap_s,lap_ratio,max_cte,off_track_count,cones_hit,max_pos_error,stop_dist_m,stop_time_s,max_v_after_stop,finished,emergency,early_exits,invalid_reason,completes,stops,off_course,cones,cte,ekf,lap_time,health,passed
+default_timeout,0.3,autocross_s1_r1,gate,autocross,autocross,1,emergency,,33.63,,0.2453,0,0,0.0508,,,,False,True,,,FAIL,FAIL,pass,pass,pass,pass,FAIL,FAIL,False
+default_timeout,0.3,baseline_autocross_s1,baseline,autocross,autocross,1,lap,33.6264,,,0.2582,0,0,,1.95,0.68,0.01,True,False,,,,,,,,,,,
+mac_diagnostic,1.5,acceleration_r1,gate,acceleration,acceleration,,mission_finished,,,,0.0064,0,0,0.0490,1.97,0.58,0.69,True,False,,,pass,FAIL,pass,pass,pass,pass,pass,pass,False
+mac_diagnostic,1.5,autocross_s1_r1,gate,autocross,autocross,1,lap,33.6086,33.63,1.00,0.2487,0,0,0.0506,1.44,0.60,0.00,True,False,,,pass,pass,pass,pass,pass,pass,pass,pass,True
+mac_diagnostic,1.5,baseline_autocross_s1,baseline,autocross,autocross,1,lap,33.6267,,,0.2537,0,0,,1.87,0.68,0.04,True,False,,,,,,,,,,,

@@ -1,8 +1,10 @@
 # lhr_demo
 
-Launch files for the kinematic stack. `mvs_demo.launch.py` is the one the
-gate and the stability check both run, so it is where a run's independent
-variables are declared and where its provenance is stamped.
+Launch files for the kinematic stack. `mvs_demo.launch.py` is the one
+`run_headless.sh` and `check_stability.sh` both run, so it is where a run's
+independent variables are declared and where its provenance is stamped.
+The [MVP gate](../../../testing/tools/gate/README.md) runs the Gazebo demo
+instead.
 
 ## Why the launch file owns provenance
 
@@ -25,8 +27,8 @@ Beyond the node parameters listed in
 
 | Argument | Default | What it does |
 | --- | --- | --- |
-| `use_sim_time` | `true` | Every node but `sim_kinematic` follows `/clock`. Off means wall time, and averaged metrics wander |
-| `timeout_sec` | `0.0` | Optional wall-clock watchdog; disabled by default. `run_headless.sh` sets 120 s |
+| `use_sim_time` | `true` | Every node but the plant (`sim_kinematic` or `sim_bobsim`) follows `/clock`. Off means wall time, and averaged metrics wander |
+| `timeout_sec` | `0.0` | Optional metrics watchdog in sim seconds, with a wall-time hang guard; disabled by default. `run_headless.sh` sets 120 s |
 | `output_csv` | `data/metrics.csv` | Where the metrics row goes |
 | `run_id` | timestamp | Shared by the metrics row and the bag directory |
 | `record` | `false` | Record an MCAP bag of the contract topics |
@@ -36,8 +38,9 @@ Beyond the node parameters listed in
 | `vehicle_mesh` | `true` | Draw the CAD car; `false` draws primitives a bag can render |
 | `scenario` | `mvs_demo` | Name recorded on the row |
 
-`use_sim_time` reaches `sim_kinematic` as `publish_clock` instead, because
-a clock source that waits on its own clock never ticks.
+`use_sim_time` reaches the plant (`sim_kinematic` or `sim_bobsim`) as
+`publish_clock` instead, because a clock source that waits on its own
+clock never ticks.
 
 ## Recording
 
@@ -55,9 +58,9 @@ number names the recording that explains it.
 The viz topics republish every cone marker at rate and would dominate the
 bag, and the list doubles as a statement of what the seam between lanes
 is. `/clock` is in it because a sim-time bag without it has no timeline a
-viewer can read. `/lhr/lidar/points` stays in even though the kinematic
-stack never publishes it, so the same recorder works unchanged under
-Gazebo and on the car; a topic nothing publishes costs nothing.
+viewer can read. `/lhr/lidar/points` is in it because `lidar_sim`
+publishes it under `lidar:=true` or `perception:=lidar`, and so do Gazebo
+and the car; in a run where nothing publishes it, it costs nothing.
 
 Expect roughly 6 MiB per 17 s lap, dominated by the cone `MarkerArray`
 topics. That is why `record` is off by default: the gate runs many seeds.
@@ -167,7 +170,7 @@ in `lhr_metrics`, the process exits, and its exit emits `Shutdown`. About
 `enable_metrics:=false` removes that. Nothing then publishes
 `/lhr/metrics/lap_complete`, so `mission_manager` never leaves `DRIVING`,
 the car keeps lapping, and no process exit tears the launch down. It runs
-until Ctrl-C. `timeout_sec:=0.0` disables only the wall-clock deadline
+until Ctrl-C. `timeout_sec:=0.0` disables only the watchdog deadline
 and leaves lap completion in place, so it is not enough on its own.
 
 ```bash
@@ -190,10 +193,10 @@ unconfirmed, because that cannot be tested from here. If a panel is
 empty after `check_layout.sh` passes, fix the layout in the app and
 re-export over the file.
 
-Note that `lidar:=true` is what publishes the `base_link -> lidar`
-transform. Without it a recorded cloud has no frame to sit in. The car
-itself comes from `vehicle_viz`, which always runs, whether or not the
-lidar was on.
+Note that `lidar:=true` (or `perception:=lidar`) is what publishes the
+`base_link -> lidar` transform. Without it a recorded cloud has no frame
+to sit in. The car itself comes from `vehicle_viz`, which always runs,
+whether or not the lidar was on.
 
 What the car looks like depends on `vehicle_mesh`, and it matters more
 for a bag than for a live run. The default, `true`, draws Orion's CAD as
@@ -216,6 +219,10 @@ perception and control still use their existing inputs. An empty
 Closed-course spawn snapping applies to both simplified and LiDAR perception;
 `start_on_track:=false` preserves the exact supplied pose. Open acceleration
 poses remain explicit rather than snapping the default guess into the course.
+`track_style:=acceleration` is Gazebo-only for now: this launch neither
+forces `mission:=acceleration` nor gives the track builder the 5.13 m
+acceleration pairing width, so the builder keeps its 3.5 m default and
+rejects every cross-track pair.
 
 The launch exposes `reference_closed` (true for circuits, false for acceleration), `off_track_threshold` (2.0 m legacy progress-continuity scale),
 `start_radius` (2.0 m gate half-width), `min_lap_time` (5.0 s),
@@ -242,6 +249,11 @@ track. `lidar:=true` alone previews the cloud without changing perception.
 `perception:=lidar` enables the Mid-360 cloud simulator, disables simplified
 detections and selects the cloud detector, local `boundary_graph` planning and
 open-path control. That mode defaults to `v_max:=4.0` rather than 12 m/s.
+Adding `lidar_classify_sides:=true` turns on the detector's side inference
+while retaining `boundary_graph` planning. Labels now wait for independent
+travelled observations; the geometry planner must handle the unknown cones
+that bootstrap that motion. The local corridor uses geometry regardless of
+the inferred labels.
 
 `start_on_track:=true` aligns both closed-course perception modes' initial pose with the nearest
 generated centerline and its forward tangent; `false` preserves explicit
@@ -302,9 +314,12 @@ The runner exits nonzero if any case misses a circuit or travels off track.
 For a short diagnostic use `--sim-seconds 12`; incomplete circuits then
 remain `sim_limit` results, not successful laps.
 
-`clean` uses frozen scans and no clutter. `motion` uses rolling scans.
-`clutter` adds trackside objects to rolling scans. `outdoor` also enables
-the recording-informed overcast dropout profile. See
+`clean` uses frozen scans and no clutter (`motion_distortion:=false`,
+`clutter_profile:=none`). `motion` uses rolling scans
+(`motion_distortion:=true`). `clutter` adds trackside objects to rolling
+scans (`clutter_profile:=trackside`). `outdoor` also enables the
+recording-informed overcast dropout profile
+(`return_profile:=acceptance_overcast`). See
 [LiDAR](../lhr_lidar_sim/README.md#motion-and-clutter-studies) for assumptions.
 
 Scores use ground truth only in the observer: centerline error, distance
@@ -334,7 +349,9 @@ cone locations; it is not a realistic sensing model under drift.
 into metrics and bag provenance. Bags also record truth odometry, IMU,
 wheel speeds and truth TF. Metrics retain distance-weighted track error and
 append estimate-versus-truth errors. Side inference is opt-in; it estimates
-track side from geometry and can lock an incorrect early label.
+track side from geometry. Labels require independent travelled observations
+and can recover after sustained corrective evidence; see
+[side inference](../lhr_perception/README.md#optional-side-inference).
 
 Docker mounts autonomy separately from the repository. Code provenance falls
 back to `/opt/lhr` (or `LHRE_ROOT`) when the launch file has no Git metadata
@@ -349,3 +366,19 @@ geometric contacts, and either a contact or excursion fails the run. See
 [footprint scoring](../lhr_metrics/README.md#footprint-boundaries-and-contacts)
 for sweep padding and limitations; the separate driving study runner still
 uses its existing point-based diagnostics.
+
+## Full-vehicle FMU plant
+
+Select `plant:=fmu` for the [BobLib co-simulation plant](../lhr_sim_fmu/README.md).
+It shares the snapped spawn, clock and truth/EKF remappings of the other
+plants. `fmu_path` is a typed string (empty resolves the standard build
+artifact). `fmu_pedal_gain` is a typed double (0.1), recorded in metrics.
+It maps speed error to driver pedals; it does not impose the DynPy plant
+acceleration clamps. The handwheel command follows the canonical KinPy rack
+calibration. Build the artifact before launching. A missing, stale or failed
+FMU stops the plant and shuts down the launch. Gazebo remains a separate plant.
+
+The study matrix accepts `--plants fmu` after building the standard artifact.
+Its default plant list stays `kinematic bobsim`. Each case retains the FMU
+manifest from `/lhr/sim/provenance` in `result.json`. The study probe remains
+a separate point-based diagnostic, not the MVP acceptance scorer.

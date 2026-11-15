@@ -8,10 +8,13 @@ import sys
 import time
 from typing import Optional, Tuple
 
+from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
+from lhr_metrics.alignment import TruthAligner
 from lhr_metrics.course import CourseEnvelope, FOOTPRINT_MODEL, SWEEP_STEP_M
 from lhr_metrics.reference import (
     CircuitProgress, paired_centerline, ReferenceTrack, world_geometry)
 from lhr_metrics.track_error import TrackErrorAccumulator
+from lhr_metrics.watchdog import RunWatchdog
 from lhr_vehicle import load_vehicle, vehicle_sha256
 from nav_msgs.msg import Odometry
 from rcl_interfaces.msg import ParameterDescriptor
@@ -36,6 +39,7 @@ RUN_PARAMS = (
     ('mission', ''),
     ('perception', 'sim'),
     ('plant', 'kinematic'),
+    ('fmu_pedal_gain', .1),
     ('estimator', 'truth'),
     ('gyro_bias', 0.0),
     ('wheel_scale_error', 1.0),
@@ -154,6 +158,8 @@ class MetricsNode(Node):
         for name, default in RUN_PARAMS:
             self.declare_parameter(name, default)
             self._run_params[name] = str(self.get_parameter(name).value)
+        if self._run_params['plant'] != 'fmu':
+            self._run_params['fmu_pedal_gain'] = ''
 
         try:
             self._vehicle_sha = vehicle_sha256()
@@ -184,8 +190,8 @@ class MetricsNode(Node):
         self._speed_sum = 0.0
         self._speed_max = 0.0
 
-        # Wall time on purpose: this is the watchdog that stops a
-        # headless run hanging when the sim dies and sim time freezes.
+        # Sim seconds under use_sim_time, with a wall-time hang guard; see
+        # lhr_metrics/watchdog.py.
         self.timeout_sec = self.get_parameter(
             'timeout_sec').get_parameter_value().double_value
 
@@ -194,6 +200,7 @@ class MetricsNode(Node):
         self._outcome = 'interrupted'
         # --- Estimate-vs-truth stats (only when a truth topic is given) ---
         self._truth: Optional[Tuple[float, float, float]] = None
+        self._aligner = TruthAligner()
         self._err_samples = 0
         self._pos_err_sum = 0.0
         self._pos_err_max = 0.0
@@ -204,6 +211,10 @@ class MetricsNode(Node):
         # --- Publisher ---
         self._lap_pub = self.create_publisher(
             Bool, '/lhr/metrics/lap_complete', 10)
+        self._live_pub = self.create_publisher(
+            DiagnosticArray, '/lhr/metrics/live', 1)
+        # Mirror existing scoring state for viewers; never score a second time.
+        self.create_timer(0.5, self._publish_live)
 
         # --- Subscribers ---
         self._truth_topic = self.get_parameter('truth_odom_topic').value
@@ -295,8 +306,10 @@ class MetricsNode(Node):
             if (self._truth is not None and not self.finished and self._lap is not None
                     and self._lap.started_at is not None and self._mission_state in ('', 'DRIVING')
                     and stamp is not None and stamp >= self._lap.started_at):
-                self._accumulate_error(msg.pose.pose.position.x, msg.pose.pose.position.y,
-                                       msg.pose.pose.orientation)
+                for errors in self._aligner.add_estimate(
+                        stamp, msg.pose.pose.position.x, msg.pose.pose.position.y,
+                        quat_to_yaw(msg.pose.pose.orientation)):
+                    self._accumulate_error(*errors)
         else:
             self._score_odom(msg)
 
@@ -370,6 +383,11 @@ class MetricsNode(Node):
             msg.pose.pose.position.x,
             msg.pose.pose.position.y,
             quat_to_yaw(msg.pose.pose.orientation))
+        stamp = self._stamp_sec(msg.header.stamp)
+        if stamp is not None and not self.finished:
+            # Estimates that were waiting for truth at their stamp score now.
+            for errors in self._aligner.add_truth(stamp, *self._truth):
+                self._accumulate_error(*errors)
         self._score_odom(msg)
 
     # ------------------------------------------------------------------
@@ -392,12 +410,8 @@ class MetricsNode(Node):
     # ------------------------------------------------------------------
     # Geometry
     # ------------------------------------------------------------------
-    def _accumulate_error(self, px: float, py: float, orientation):
-        """Score the published estimate against the latest truth sample."""
-        tx, ty, tyaw = self._truth
-        pos_err = math.hypot(px - tx, py - ty)
-        yaw_err = abs(wrap_angle(quat_to_yaw(orientation) - tyaw))
-
+    def _accumulate_error(self, pos_err: float, yaw_err: float):
+        """Add one estimate's error against truth at the same stamp."""
         self._err_samples += 1
         self._pos_err_sum += pos_err
         self._yaw_err_sum += yaw_err
@@ -411,6 +425,28 @@ class MetricsNode(Node):
     # ------------------------------------------------------------------
     # Reporting
     # ------------------------------------------------------------------
+    def _publish_live(self):
+        """Expose the existing score without changing progress or lifecycle."""
+        # SIGINT can invalidate the context before main records 'interrupted'.
+        if not self.context.ok():
+            return
+        row = self._build_row()
+        status = DiagnosticStatus(name='Run metrics', hardware_id=self._run_id)
+        status.message = self._outcome if self.finished else (
+            'running' if self._cte.samples else 'waiting for scored odometry')
+        status.level = DiagnosticStatus.OK
+        if not self._cte.samples:
+            status.level = DiagnosticStatus.STALE
+        elif self.finished and self._outcome not in CLEAN_OUTCOMES:
+            status.level = DiagnosticStatus.WARN
+        fields = ('duration_s', 'samples', 'mean_cte', 'max_cte', 'off_track_dist_m',
+                  'cones_hit', 'lap_progress_m', 'lap_completed', 'lap_invalid_reason',
+                  'mean_pos_error', 'max_pos_error', 'mean_yaw_error')
+        status.values = [KeyValue(key=key, value=str(row[key])) for key in fields]
+        message = DiagnosticArray(status=[status])
+        message.header.stamp = self.get_clock().now().to_msg()
+        self._live_pub.publish(message)
+
     def _build_row(self) -> dict:
         samples = self._cte.samples
         duration = (
@@ -518,6 +554,7 @@ class MetricsNode(Node):
             return
         self._outcome = outcome
         self.finished = True
+        self._publish_live()
         self.get_logger().info(f'Run ended: {outcome}')
 
     def finalize(self) -> int:
@@ -540,13 +577,14 @@ def main():
     """Entry point."""
     rclpy.init()
     node = MetricsNode()
-    deadline = (time.monotonic() + node.timeout_sec
-                if node.timeout_sec > 0.0 else None)
+    watchdog = RunWatchdog(node.timeout_sec, time.monotonic())
     try:
         while rclpy.ok() and not node.finished:
             rclpy.spin_once(node, timeout_sec=0.1)
-            if deadline is not None and time.monotonic() > deadline:
-                node.finish('timeout')
+            ending = watchdog.check(
+                node.get_clock().now().nanoseconds * 1e-9, time.monotonic())
+            if ending:
+                node.finish(ending)
     except KeyboardInterrupt:
         node.finish('interrupted')
     code = node.finalize()

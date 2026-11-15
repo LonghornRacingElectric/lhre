@@ -1,0 +1,167 @@
+{
+  "campaign": "2026-10-26-fmu-seeds",
+  "file_count": 32,
+  "total_bytes": 4405825351,
+  "files": [
+    {
+      "path": "audit.json",
+      "bytes": 9080,
+      "sha256": "de0b8bf17056e4778b4a72c8af48350c457fa146008f421c9830e4bddfaa3123"
+    },
+    {
+      "path": "fmu_autocross_seed1_run1/args.txt",
+      "bytes": 105,
+      "sha256": "fc7b5135eac264cf337baf297fb8ced861fa3733e8757f68c417da287402016d"
+    },
+    {
+      "path": "fmu_autocross_seed1_run1/bags/fmu_autocross_seed1_run1/fmu_autocross_seed1_run1_0.mcap",
+      "bytes": 879058725,
+      "sha256": "1d942ad0e2dd317c6fe2a6ebe8e6ea2618f5e4b014b4bddfeee8113141b42cf0"
+    },
+    {
+      "path": "fmu_autocross_seed1_run1/bags/fmu_autocross_seed1_run1/metadata.yaml",
+      "bytes": 15790,
+      "sha256": "53814fa6fbeb6ae75e8bc174c84658a19e488810d533cbe35638a34e3d5868ae"
+    },
+    {
+      "path": "fmu_autocross_seed1_run1/exit_code.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "fmu_autocross_seed1_run1/launch.log",
+      "bytes": 28174,
+      "sha256": "70cfcb2e4acb3896a66dfbaddc934dc9e7c26cab4b72c8ac62605496420fd1f7"
+    },
+    {
+      "path": "fmu_autocross_seed1_run1/metrics.csv",
+      "bytes": 1671,
+      "sha256": "f939a1fb560e8e0c727aac4efbc43d844da370e7fbba08600f16c86963c074d2"
+    },
+    {
+      "path": "fmu_autocross_seed2_run1/args.txt",
+      "bytes": 105,
+      "sha256": "d65ee2ab5f26903cab54fdbf9462cd9b32dcab7bc2ed37757a30cf2a578d2eae"
+    },
+    {
+      "path": "fmu_autocross_seed2_run1/bags/fmu_autocross_seed2_run1/fmu_autocross_seed2_run1_0.mcap",
+      "bytes": 881927817,
+      "sha256": "9b9cd70ffbeceef40ccacc9f8c944fff5efad2f14474dc63c307134cc908f01b"
+    },
+    {
+      "path": "fmu_autocross_seed2_run1/bags/fmu_autocross_seed2_run1/metadata.yaml",
+      "bytes": 15790,
+      "sha256": "03a92f59adf975ef9b276c2a852d61e93daded9c663fa661e0afc36464381fd7"
+    },
+    {
+      "path": "fmu_autocross_seed2_run1/exit_code.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "fmu_autocross_seed2_run1/launch.log",
+      "bytes": 29754,
+      "sha256": "d4bd22a2805afef16f25cd3277904d6033a1353c059cc4fdce5b961866647cd5"
+    },
+    {
+      "path": "fmu_autocross_seed2_run1/metrics.csv",
+      "bytes": 1671,
+      "sha256": "b8e17543868a2097940428f0efa9f1ffd175456423805d329cdfc42870fcf992"
+    },
+    {
+      "path": "fmu_autocross_seed3_run1/args.txt",
+      "bytes": 105,
+      "sha256": "ada6d27d1115c590dc76db47f7943cab823ca30dc4f021136e5091f4c1377baa"
+    },
+    {
+      "path": "fmu_autocross_seed3_run1/bags/fmu_autocross_seed3_run1/fmu_autocross_seed3_run1_0.mcap",
+      "bytes": 870925338,
+      "sha256": "e2f2791e7a0f13254120967ec7d8400bab82bcc93c1bf3e10e018484b9a27dba"
+    },
+    {
+      "path": "fmu_autocross_seed3_run1/bags/fmu_autocross_seed3_run1/metadata.yaml",
+      "bytes": 15790,
+      "sha256": "16d3efe5bdbacab7aeb1aa934f43e267a6f1ceeacca274c0a4c89bf55d9b5bac"
+    },
+    {
+      "path": "fmu_autocross_seed3_run1/exit_code.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "fmu_autocross_seed3_run1/launch.log",
+      "bytes": 27671,
+      "sha256": "5fa46e2b85d278b323a699e24ba1ed7bbe71a741a71a1b05bd60ecc381928f22"
+    },
+    {
+      "path": "fmu_autocross_seed3_run1/metrics.csv",
+      "bytes": 1671,
+      "sha256": "84486caea5cec6ae3f247c1db1a73fea23c54ffdd81fa12743f5e2ff2f26828c"
+    },
+    {
+      "path": "fmu_autocross_seed4_run1/args.txt",
+      "bytes": 105,
+      "sha256": "65015de783fff37e5c7a7d9f26b7df4e5fcceabb897d5e6ec54bce47ccf65462"
+    },
+    {
+      "path": "fmu_autocross_seed4_run1/bags/fmu_autocross_seed4_run1/fmu_autocross_seed4_run1_0.mcap",
+      "bytes": 857070589,
+      "sha256": "68ed8d573bdf0cb57378a0351c01baf2a7a718abb888971f69bb9b655e350e66"
+    },
+    {
+      "path": "fmu_autocross_seed4_run1/bags/fmu_autocross_seed4_run1/metadata.yaml",
+      "bytes": 15790,
+      "sha256": "1a43a2007a1bec4b4dfa1982c0cee70ff630a5bdf3ed5b41e74d5743cf70f778"
+    },
+    {
+      "path": "fmu_autocross_seed4_run1/exit_code.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "fmu_autocross_seed4_run1/launch.log",
+      "bytes": 27168,
+      "sha256": "052e768cc2918dd31ed2f96f8000a8c14f3221dd6675769a2696e158136d9a1d"
+    },
+    {
+      "path": "fmu_autocross_seed4_run1/metrics.csv",
+      "bytes": 1671,
+      "sha256": "fb00394d2b97805918fe9fa0bd3250e37b312b6d70a12408e6e2027b9dafd39b"
+    },
+    {
+      "path": "fmu_autocross_seed5_run1/args.txt",
+      "bytes": 105,
+      "sha256": "610551af6cf567f2414ef026599c1852a87a4c7dad5f487574acd69db5972635"
+    },
+    {
+      "path": "fmu_autocross_seed5_run1/bags/fmu_autocross_seed5_run1/fmu_autocross_seed5_run1_0.mcap",
+      "bytes": 916605712,
+      "sha256": "648748c02a6d7da93af644d5415ad36bb0d9627762882ac655c43cbd1f80b7f5"
+    },
+    {
+      "path": "fmu_autocross_seed5_run1/bags/fmu_autocross_seed5_run1/metadata.yaml",
+      "bytes": 15790,
+      "sha256": "5b00bd02366e7be11f4a3b7c4aa1c8afef03dff6c37770a00a772dc2e19587dd"
+    },
+    {
+      "path": "fmu_autocross_seed5_run1/exit_code.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "fmu_autocross_seed5_run1/launch.log",
+      "bytes": 26871,
+      "sha256": "ce656f05adbd5846ae86ebbbfdb62bdf8c5ca90da9db0754aa184d84ad2e3e14"
+    },
+    {
+      "path": "fmu_autocross_seed5_run1/metrics.csv",
+      "bytes": 1670,
+      "sha256": "85be5b73f4b939e427106cb52eeb1d79ab517676e9150f41f29ca83fec0863d5"
+    },
+    {
+      "path": "provenance.json",
+      "bytes": 613,
+      "sha256": "177b7e1eff68c08eaf65968e5d51584cbed01043cbccfdb85e560b31c9c65394"
+    }
+  ]
+}

@@ -3,7 +3,6 @@ import logging
 import math
 import os
 import signal
-import time
 
 import yaml
 from kafka import KafkaConsumer, KafkaProducer
@@ -36,7 +35,7 @@ def _load_config() -> list[dict]:
         _fields = cfg.get("fields", [])
         _config_mtime = mtime
         logging.info("Loaded %d derived fields from %s", len(_fields), CONFIG_PATH)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
         logging.error("Failed to load config %s: %s", CONFIG_PATH, e)
     return _fields
 
@@ -54,7 +53,7 @@ def _enrich(msg: dict, fields: list[dict]) -> dict:
             result = eval(expr, {"__builtins__": {}}, ns)  # noqa: S307
             out[name] = result
             ns[name] = result
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
             logging.debug("Field '%s' eval error: %s", name, e)
     return out
 
@@ -101,7 +100,7 @@ try:
                     raw = json.loads(record.value.decode("utf-8"))
                     enriched = _enrich(raw, fields)
                     producer.send(OUTPUT_TOPIC, enriched, headers=record.headers)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
                     logging.error("Error processing message: %s", e)
         consumer.commit()
     logging.info("field_enricher shutdown cleanly.")

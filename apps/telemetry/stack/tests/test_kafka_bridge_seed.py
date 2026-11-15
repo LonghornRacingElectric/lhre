@@ -53,7 +53,7 @@ class TestKafkaBridgeSeed(unittest.TestCase):
                         for record in records:
                             try:
                                 payload = json.loads(record.value.decode("utf-8"))
-                            except Exception:
+                            except Exception:  # noqa: BLE001 pre-existing when the lint gate went on
                                 continue
 
                             if payload.get("packet_id") == 0 and payload.get("car_type") == car:

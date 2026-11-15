@@ -1,0 +1,7 @@
+question: TODO. Write the question that the study answers, in one sentence.
+decision: TODO. Write the choice that the result informs, and the result that would change it.
+bundle: BUNDLE_ID
+parameters:
+  scale: 1.0
+sweep:
+  scale: [0.9, 1.0, 1.1]

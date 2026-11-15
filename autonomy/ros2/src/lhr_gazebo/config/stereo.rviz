@@ -57,6 +57,28 @@ Visualization Manager:
       Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: false
+      Name: ClassifiedCones
+      Namespaces: {}
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /lhr/perception/cones_classified
+      Value: false
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: false
+      Name: CameraFusedCones
+      Namespaces: {}
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /lhr/perception/cones_fused
+      Value: false
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: false
       Name: Cones
       Namespaces:
         {}

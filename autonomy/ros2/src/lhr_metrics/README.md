@@ -5,6 +5,23 @@ distance spent off track, speed stats, and lap completion. Writes one CSV
 row per run to `data/metrics.csv` (never committed, see
 `autonomy/AGENTS.md`).
 
+## Live viewer summary
+
+`/lhr/metrics/live` (`diagnostic_msgs/DiagnosticArray`) mirrors the existing
+score at 2 Hz on the node clock and once at finish. Its named values include
+CTE, off-track distance, cone contacts, progress, elapsed time and
+timestamp-aligned estimator errors. Units match the CSV: metres, seconds
+and radians. Missing estimator errors stay blank. The diagnostic message
+says `waiting for scored odometry`, `running` or the terminal outcome;
+it is viewer telemetry, not a safety input. It does not change scoring,
+completion, CSV output or exit status.
+
+This publication has a fixed topic and rate rather than new launch knobs.
+It exists whenever the metrics node runs (`enable_metrics:=true` in Gazebo).
+The node exits at the scored outcome, so the viewer's final summary can precede
+the vehicle reaching `FINISHED`; continue watching mission state and speed.
+See the [Gazebo layout guide](../../foxglove/README.md).
+
 ## What a row holds
 
 Rows include configuration, fixed-reference identity, and outcomes so two
@@ -13,9 +30,10 @@ runs can be compared without guessing which geometry or gate was used.
 | Group | Columns |
 | --- | --- |
 | Identity | `run_id` |
-| Provenance | `vehicle_sha256`, `git_sha`, `scenario` |
+| Provenance | `vehicle_sha256`, `git_sha`, `scenario`, `plant` |
 | Scenario | `seed`, `track_style`, `num_waypoints`, `mission`, `perception`, `start_on_track`, `start_finish_cones` |
-| Sensor | `lidar`, `mount_pitch_rad`, `elevation_profile`, `return_profile`, `stack_window_sec`, `min_cluster_points`, `ground_z_min`, `fov_deg`, `max_range_m`, `noise_std_m`, `false_negative_rate` |
+| Sensor | `lidar`, `mount_pitch_rad`, `elevation_profile`, `return_profile`, `stack_window_sec`, `min_cluster_points`, `ground_z_min`, `fov_deg`, `max_range_m`, `noise_std_m`, `false_negative_rate`, `motion_distortion`, `clutter_profile` |
+| Estimator | `estimator`, `gyro_bias`, `wheel_scale_error`, `lidar_classify_sides`, `mean_pos_error`, `max_pos_error`, `mean_yaw_error` |
 | Control | `lookahead_dist`, `a_lat_max`, `v_min`, `v_max`, `max_accel`, `max_decel` |
 | Reference | `reference_sha256`, `reference_source`, `reference_length_m`, `reference_world`, `reference_closed` |
 | Scoring | `course_sha256`, `footprint_model`, `sweep_step_m`, `off_track_threshold`, `start_radius`, `min_lap_time`, `min_progress_fraction`, `lap_start_speed`, `max_odom_gap_sec` |
@@ -25,7 +43,12 @@ runs can be compared without guessing which geometry or gate was used.
 
 `git_sha` comes from the launch file and carries a `-dirty` suffix when the
 tree has uncommitted changes, since a clean-looking id on a modified tree
-is worse than no id. `vehicle_sha256` hashes `lhr_vehicle`'s config file
+is worse than no id. Only `mvs_demo.launch.py` fills `git_sha` and the
+Sensor columns. `gazebo_demo.launch.py` passes neither, so Gazebo rows read
+`unknown` and the node's MVS defaults there (`lidar` false,
+`min_cluster_points` 3 while Gazebo runs 1); take a Gazebo run's commit and
+sensor settings from its launch arguments. Both launches fill the Control
+columns, which the gate's reference lap reads (below). `vehicle_sha256` hashes `lhr_vehicle`'s config file
 with the same formula the study harness in `simulation/tools` uses, so a
 sim run and a BobDyn study are comparable on that field.
 
@@ -33,6 +56,10 @@ The independent variables are declared in `RUN_PARAMS` and passed in by
 the launch file. **A new launch argument that changes a result belongs in
 that tuple too**, or rows quietly stop explaining themselves. Scoring
 settings live in `SCORING_PARAMS` and are also written on every row.
+
+`fmu_pedal_gain` is recorded only when `plant=fmu`; other plants leave the
+column blank. It belongs to the MVS FMU adapter, so the Gazebo launcher does
+not expose it.
 
 A `data/metrics.csv` written under an older column set is moved aside to
 `data/metrics.csv.old` with a warning rather than having its extra fields
@@ -98,8 +125,23 @@ reference supports CTE/progress but never publishes a circuit lap.
 
 The accepted flag is published once on `/lhr/metrics/lap_complete`, which
 the mission manager latches. Autocross `FINISHED` without a verified lap is
-recorded as `invalid_completion` and fails. Braking/mission-controller changes
-remain separate work; this node does not feed reference geometry to control.
+recorded as `invalid_completion` and fails. The mission manager then
+publishes `/lhr/mission/complete` and pursuit brakes to a stop before
+FINISHED; this node never feeds reference geometry to control.
+
+## Reference lap
+
+[`reference_lap.py`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/ros2/src/lhr_metrics/lhr_metrics/reference_lap.py)
+computes the time to drive the reference centerline once around, from rest
+at the start/finish gate, under the Control columns' limits: `v_max`, the
+lateral-acceleration limit `a_lat_max` floored at `v_min` (as `pursuit_node`
+floors it), `max_accel` and `max_decel`. Curvature at each 0.5 m sample is
+the circle through the points 3 m either side, so cone jitter between
+vertices does not read as a corner. The Sim v2 gate scores lap time against
+it ([#232](https://github.com/LonghornRacingElectric/lhre/issues/232)); see
+the [gate tools](../../../testing/tools/gate/README.md#the-reference-lap).
+The node itself does not use it: it is plain Python for the scorer, tested
+against closed-form circle laps.
 
 ## Footprint, boundaries and contacts
 
@@ -184,7 +226,8 @@ Beyond `RUN_PARAMS`, which only ever reach the CSV:
 | `lap_start_speed` | 0.1 | Minimum speed to start the simulation-time timer, m/s |
 | `max_odom_gap_sec` | 1.0 | Largest gap allowed during a scored circuit |
 | `min_lap_time` | 5.0 | Reject a lap shorter than this |
-| `timeout_sec` | 0.0 | Optional wall-clock watchdog; zero disables it |
+| `timeout_sec` | 0.0 | Optional watchdog in node-clock (sim) seconds, with a wall-time hang guard; zero disables it |
+| `truth_odom_topic` | empty | Truth odometry to score; the estimate on `/lhr/vehicle/odom` then only feeds the error columns |
 | `output_csv` | `data/metrics.csv` | Where the row goes |
 | `run_id` | wall clock | Row identifier |
 
@@ -206,19 +249,27 @@ still exiting zero.
 | `lap` | A lap completed | 0 |
 | `mission_finished` | Mission state reached `FINISHED` | 0 |
 | `emergency` | Mission state reached `EMERGENCY` | 1 |
-| `timeout` | `timeout_sec` watchdog fired | 1 |
+| `timeout` | `timeout_sec` of sim time passed | 1 |
+| `hung` | The clock stood still for `timeout_sec` wall seconds | 1 |
 | `interrupted` | Ctrl+C | 1 |
 | `invalid_completion` | Autocross finished without a verified circuit | 1 |
 | `invalid_lap` | Scoring continuity or course check invalidated the run | 1 |
 
-`timeout_sec` is deliberately **wall** time, not sim time: its job is to
-stop a headless run hanging when the simulator dies and sim time freezes.
-It is disabled by default so a slow Gazebo run can finish.
+`timeout_sec` counts the node's clock, which is sim time under
+`use_sim_time`, so a run on a slow machine gets the same sim seconds before
+it times out
+([#227](https://github.com/LonghornRacingElectric/lhre/issues/227)). Wall
+time only catches a simulator that died: if the clock stands still for
+`timeout_sec` wall seconds, counting from startup so a clock that never
+starts counts too, the run ends `hung`
+([`watchdog.py`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/ros2/src/lhr_metrics/lhr_metrics/watchdog.py)).
+It is disabled by default.
 `scripts/run_headless.sh` explicitly enables a 120 s deadline; a later
 `timeout_sec:=...` launch argument overrides that deadline. The driving study
 runner disables metrics and enforces its own `--wall-timeout`.
-`scripts/check_stability.sh` also sets a 120 s deadline; pass
-`timeout_sec:=...` to either script when using a slower plant.
+`scripts/check_stability.sh` also sets a 120 s deadline. Neither needs
+changing for a slower plant; pass `timeout_sec:=...` only for a run that
+needs more than 120 sim seconds.
 
 `mission_finished` is what lets missions with no lap record a row, which
 the 75 m acceleration run needs.
@@ -263,7 +314,10 @@ separated from the simplified baseline. Existing CSV files with an older
 header use the existing schema-mismatch handling; do not compare modes using
 only the outcome columns.
 
-The `plant` field distinguishes `kinematic` and `bobsim` runs. BobSim's
+The `plant` field distinguishes `kinematic`, `bobsim` and `fmu` runs.
+`fmu_pedal_gain` records the FMU driver gain. The FMU manifest and latched
+`/lhr/sim/provenance` message carry its artifact/vehicle/tire hashes and
+exporter commit; retain them with results because CSV alone lacks that identity. BobSim's
 commit and dynamics vehicle hash are in the recorded `/lhr/sim/provenance`
 message; the existing `vehicle_sha256` column still hashes the autonomy YAML.
 
@@ -279,7 +333,11 @@ They remain blank without a truth stream. The CSV includes `estimator`,
 `gyro_bias`, `wheel_scale_error`, and `lidar_classify_sides` alongside the
 existing run parameters. Distance-weighted CTE and run outcome checks remain
 active. Error accumulation starts only after driving/scoring onset and excludes
-stationary READY observations. Estimator errors compare to the latest truth sample, so callback
-timing can affect them; they are not a timestamp-aligned accuracy guarantee.
+stationary READY observations. Each estimate is compared with truth
+interpolated at the estimate's own stamp (`alignment.py`): an estimate waits
+until truth at or past its stamp arrives, and one older than the 2 s truth
+buffer is skipped. Comparing with the latest received truth sample instead
+scored scheduling, since a 0.1 s stall at 5 m/s reads as 0.5 m of error
+([#165](https://github.com/LonghornRacingElectric/lhre/issues/165)).
 
 Node cleanup tolerates an already-stopped ROS context after launch shutdown.

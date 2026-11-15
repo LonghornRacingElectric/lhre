@@ -2,11 +2,10 @@
 """
 A Mid-360 bolted to the car: mount pose, scan, cast, noise. Still no ROS.
 
-The mount position comes from ``lhr_vehicle`` because vehicle numbers
-live in one file. The mount *orientation* does not: it is the answer the
-mount study has yet to produce, so it stays a parameter here and gets
-written into ``vehicle.yaml`` once measured rather than guessed into it
-now.
+The default mount pose, position and orientation, comes from
+``lhr_vehicle`` because vehicle numbers live in one file. It holds the
+11/8 mount study's design (upside down inside the main hoop, 7 degrees
+nose down) until the bracket is built and measured.
 """
 
 from dataclasses import dataclass, field
@@ -47,9 +46,9 @@ class MountPose:
     x_m: float = field(default_factory=lambda: load_vehicle().lidar_position_m[0])
     y_m: float = field(default_factory=lambda: load_vehicle().lidar_position_m[1])
     z_m: float = field(default_factory=lambda: load_vehicle().lidar_position_m[2])
-    roll_rad: float = 0.0
-    pitch_rad: float = 0.0
-    yaw_rad: float = 0.0
+    roll_rad: float = field(default_factory=lambda: load_vehicle().lidar_rpy_rad[0])
+    pitch_rad: float = field(default_factory=lambda: load_vehicle().lidar_rpy_rad[1])
+    yaw_rad: float = field(default_factory=lambda: load_vehicle().lidar_rpy_rad[2])
 
     def rotation(self) -> np.ndarray:
         """Return the sensor-to-base_link rotation."""
@@ -78,7 +77,8 @@ class Mid360Sensor:
 
     def frame_labeled(self, t: float, vehicle_x: float, vehicle_y: float,
                       vehicle_yaw: float,
-                      cones_xy: np.ndarray, boxes=None, poses=None) -> tuple:
+                      cones_xy: np.ndarray, boxes=None, poses=None, *,
+                      vehicle_z=0.0, vehicle_roll=0.0, vehicle_pitch=0.0) -> tuple:
         """
         Return (points, on_cone) for one frame, in the sensor frame.
 
@@ -90,28 +90,32 @@ class Mid360Sensor:
         """
         az, el = beam_angles(self.config, t)
         dirs_sensor = unit_directions(az, el)
+        attitude = {'vehicle_z': vehicle_z, 'vehicle_roll': vehicle_roll,
+                    'vehicle_pitch': vehicle_pitch}
 
         if poses is None:
             return self._cast_beams(dirs_sensor, vehicle_x, vehicle_y, vehicle_yaw,
-                                    cones_xy, boxes)
+                                    cones_xy, boxes, **attitude)
         chunks, labels = [], []
         for directions, pose in zip(np.array_split(dirs_sensor, len(poses)), poses):
-            points, on_cone = self._cast_beams(directions, *pose, cones_xy, boxes)
+            points, on_cone = self._cast_beams(
+                directions, *pose, cones_xy, boxes, **attitude)
             chunks.append(points)
             labels.append(on_cone)
         return np.concatenate(chunks), np.concatenate(labels)
 
-    def _cast_beams(self, dirs_sensor, vehicle_x, vehicle_y, vehicle_yaw, cones_xy, boxes):
+    def _cast_beams(self, dirs_sensor, vehicle_x, vehicle_y, vehicle_yaw, cones_xy, boxes,
+                    *, vehicle_z=0.0, vehicle_roll=0.0, vehicle_pitch=0.0):
         """Cast a chronological beam chunk from its acquisition pose."""
         # Each chunk returns coordinates in the sensor frame at acquisition time.
-        world_from_sensor = (rotation_zyx(0.0, 0.0, vehicle_yaw)
-                             @ self.mount.rotation())
+        world_from_vehicle = rotation_zyx(vehicle_roll, vehicle_pitch, vehicle_yaw)
+        world_from_sensor = world_from_vehicle @ self.mount.rotation()
         dirs_world = dirs_sensor @ world_from_sensor.T
 
         mount_offset = np.array(
             [self.mount.x_m, self.mount.y_m, self.mount.z_m])
-        origin = (np.array([vehicle_x, vehicle_y, 0.0])
-                  + rotation_zyx(0.0, 0.0, vehicle_yaw) @ mount_offset)
+        origin = (np.array([vehicle_x, vehicle_y, vehicle_z])
+                  + world_from_vehicle @ mount_offset)
 
         cones = np.asarray(cones_xy, dtype=np.float64)
         if cones.size:

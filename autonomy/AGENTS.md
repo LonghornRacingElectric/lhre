@@ -13,10 +13,11 @@ here. Do not add `BUILD.bazel` files.
   ([ros2/docker](ros2/docker/README.md)). No WSL.
 - Build: `cd ros2 && ./scripts/build.sh` (colcon). Test: `colcon test`
   from `ros2/` (ament lint plus unit and generated-track regression tests).
-- CI: `.github/workflows/autonomy.yml` at the repo root runs the same
-  build and `colcon test` on every PR that touches `autonomy/`. Not a
-  required check. PRs that touch only `autonomy/` skip the Bazel jobs in
-  presubmit. The lint rules it enforces are listed in
+- CI: the `Autonomy (colcon)` job in the repo's `.github/workflows/ci.yml`
+  runs the same build and `colcon test` when a PR touches `autonomy/`,
+  `vehicle/` or the BobSim pin. The required `All checks passed` check fails if it
+  fails. PRs that touch only `autonomy/` skip the Bazel jobs. The lint
+  rules it enforces are listed in
   [ros2/README.md](ros2/README.md#tests-and-ci); run them locally before
   pushing if you can.
 - PRs touching `autonomy/` need an approving review from a member of the
@@ -25,9 +26,12 @@ here. Do not add `BUILD.bazel` files.
 - Title every autonomy PR `Autonomous: <summary>`. The prefix tells other
   teams which PRs are ours, and it is what makes CodeRabbit skip the PR
   (`.coderabbit.yaml` at the repo root; it also ignores `autonomy/` files).
-- The demo scripts (`run_demo.sh`, `run_gazebo_demo.sh`, `rviz_demo.sh`)
-  need a display and a ROS install. Do not run them in CI or from a
-  headless agent.
+- Every demo script needs a ROS install. `rviz_demo.sh` and a default
+  `run_gazebo_demo.sh` (Gazebo GUI plus RViz) also need a display; do not
+  run those in CI or from a headless agent. `run_demo.sh` opens no window.
+  Headless runs use `scripts/run_headless.sh` (kinematic) or
+  `run_gazebo_demo.sh gui:=false rviz:=false` (needs Gazebo, which CI does
+  not install).
 - Without a ROS install (any Windows machine, most agents) you can edit and
   reason about the code but cannot build or run it. Say so instead of
   claiming a change was verified.
@@ -48,10 +52,12 @@ here. Do not add `BUILD.bazel` files.
 - Vehicle numbers (wheelbase, track, steering limit, masses, sensor
   mounts) live only in `ros2/src/lhr_vehicle/config/vehicle.yaml`; nodes
   read them through `lhr_vehicle.load_vehicle()`. Never hardcode them.
-  `lhr_gazebo/models/fsae_vehicle/model.sdf` is generated from that file
-  by `lhr_gazebo/scripts/generate_vehicle_model.py`. Edit the YAML or
-  `lhr_gazebo/templates/model.sdf.in`, rerun the generator, and commit
-  both. `lhr_gazebo`'s tests fail if the committed `model.sdf` is stale.
+  `lhr_gazebo/models/fsae_vehicle/model.sdf` (no cameras) and
+  `model_stereo.sdf` (with cameras) are generated from that file
+  by `lhr_gazebo/scripts/generate_vehicle_model.py` — edit the YAML or
+  the templates in `lhr_gazebo/templates/`, rerun the generator, and commit
+  the YAML and both generated SDFs. `lhr_gazebo`'s tests fail if either
+  committed model is stale.
 - Packages map to software lanes (table in [README.md](README.md)). Keep a
   change inside the owning lane's packages where possible.
 - Docs next to code, same as the root rule: change behavior, change the

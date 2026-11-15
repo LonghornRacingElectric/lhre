@@ -82,6 +82,10 @@ relative to the repo root. The check fails if the candidate keeps the
 `bundle_id` of `vehicle/bundle.yml`. A candidate copy can never be
 `released`.
 
+To run a BobSim target on the candidate, run
+`make car T=<target> VEHICLE=out/my-candidate/vehicle.yml`. See
+[bobsim.md](../../bobsim.md#run-a-bobsim-target-on-a-candidate).
+
 ## Evidence status
 
 Use the weakest status that is true.

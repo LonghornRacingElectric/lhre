@@ -31,7 +31,8 @@ class Console {
 
   void Println(const char* message);
   void Printf(const char* format, ...) __attribute__((format(printf, 2, 3)));
-  void VPrintf(const char* format, va_list args);
+  void VPrintf(const char* format, va_list args)
+      __attribute__((format(printf, 2, 0)));
 
   // True when the transport is connected and receiving data.
   bool connected() const { return stream_ != nullptr && stream_->connected(); }

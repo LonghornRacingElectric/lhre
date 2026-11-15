@@ -2,8 +2,9 @@
 # Run the #117 fault-injection matrix in Gazebo and score every run.
 #
 # Run from autonomy/ros2 after ./scripts/build.sh, on Ubuntu or inside the
-# Docker container. Each run is one headless launch with safety:=true and at
-# most one fault from fault_injector. Bags go to $OUT/bags (never into git,
+# Docker container. Each run is one headless launch of the gate stack in
+# ../gate/stack.args, shared with run_gate.sh (#237), with at most one fault
+# from fault_injector. Bags go to $OUT/bags (never into git,
 # see testing/README.md) and analyze_run.py writes one row per run to
 # $OUT/results.csv (a rerun replaces its row); summarize.py turns that into
 # $OUT/summary.md.
@@ -15,21 +16,34 @@
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROS2=$(cd "$HERE/../../../ros2" && pwd)
+source "$HERE/../gate/stack.sh"
+STACK=$(gate_stack) || exit 2
 
-CASES=${CASES:-"ekf_kill controller_kill controller_pause odom_nan odom_spike lidar_drop cmd_nan steer_freeze geofence"}
+# Empty means none, like CLEAN_SEEDS: CASES= runs only the clean laps.
+CASES=${CASES-"ekf_kill controller_kill controller_pause odom_nan odom_spike lidar_drop cmd_nan steer_freeze imu_drop wheel_drop geofence"}
 SPEEDS=${SPEEDS:-"3 5 8"}
 REPEATS=${REPEATS:-2}
 CLEAN_SEEDS=${CLEAN_SEEDS-"1 2 3 4 5"}   # clean autocross laps: false trips
 TRACK=${TRACK:-oval}
-AFTER=${AFTER:-25}          # fault starts this many seconds after DRIVING
-RUN_S=${RUN_S:-60}          # wall seconds per faulted run
-CLEAN_S=${CLEAN_S:-150}
+CLEAN_TRACK=${CLEAN_TRACK:-autocross}
+AFTER=${AFTER:-25}          # fault starts this many sim seconds after DRIVING
+AT_SPEED=${AT_SPEED:-0.95}  # ...and once the car is at this share of v_max
+RUN_S=${RUN_S:-60}          # sim seconds per faulted run
+CLEAN_S=${CLEAN_S:-150}     # sim seconds per clean lap
+HANG_S=${HANG_S:-60}        # wall seconds of a stopped /clock: hung (#227)
 FENCE=${FENCE:-20}          # geofence case: radius well inside the track
 OUT=${OUT:-$HOME/lhr-test-data/$(date +%F)-fault-injection}
 EXTRA=${EXTRA:-}
+# awk reads a typo such as 0,95 as 0, which would silently turn the gate off.
+if ! [[ $AT_SPEED =~ ^[0-9]*\.?[0-9]+$ ]] \
+        || ! awk -v f="$AT_SPEED" 'BEGIN { exit !(f <= 1) }'; then
+    echo "run_faults: AT_SPEED must be a number from 0 to 1 (0 fires on time alone), got '$AT_SPEED'" >&2
+    exit 2
+fi
 
 TOPICS="/clock /lhr/safety/status /lhr/safety/heartbeat /lhr/mission/status
-/lhr/vehicle/odom /lhr/vehicle/odom_truth /lhr/vehicle/cmd /lhr/sim/fault"
+/lhr/vehicle/odom /lhr/vehicle/odom_truth /lhr/vehicle/cmd /lhr/sim/fault
+/lhr/vehicle/steering_measured"
 mkdir -p "$OUT/bags"
 failed=''
 
@@ -40,9 +54,21 @@ cleanup() {
     sleep 2
 }
 
+stop_launch() {  # pid of a setsid launch: stop it and every node it started
+    # TERM to ros2 launch alone leaves its nodes running, still publishing
+    # into the next run, so the whole process group gets it.
+    kill -TERM -- -"$1" 2>/dev/null
+    ( sleep 15; kill -KILL -- -"$1" ) 2>/dev/null &
+    local guard=$!
+    wait "$1" 2>/dev/null
+    kill "$guard" 2>/dev/null
+    sleep 1
+    kill -KILL -- -"$1" 2>/dev/null  # whatever ignored TERM
+}
+
 world_for() {  # track seed: prints world:=<sdf>, or nothing if one is committed
-    # Without a committed <track>_seed<N>.sdf the launch quietly falls back
-    # to another world, so generate the one the seed asks for.
+    # Without a committed <track>_seed<N>.sdf the launch refuses to start,
+    # so generate the one the seed asks for.
     local track=$1 seed=$2
     [ -f "$ROS2/src/lhr_gazebo/worlds/${track}_seed${seed}.sdf" ] && return 0
     local sdf="$OUT/worlds/${track}_seed${seed}.sdf"
@@ -69,44 +95,67 @@ one_run() {  # id kind track seed v_max seconds [launch args...]
     ros2 bag record -s mcap -o "$bag" --topics $TOPICS \
         > "$OUT/bags/$id.record.log" 2>&1 &
     local rec=$!
-    timeout -s INT "$secs" ros2 launch lhr_gazebo gazebo_demo.launch.py \
+    # Metrics off: a finished lap ends the mission (#132) and safety only
+    # arms in READY and DRIVING, so a fault after the first lap would score
+    # missed. An 8 m/s oval lap is shorter than AFTER. setsid gives the
+    # launch its own process group for stop_launch.
+    setsid ros2 launch lhr_gazebo gazebo_demo.launch.py \
         gui:=false rviz:=false track_style:="$track" seed:="$seed" \
-        perception:=lidar estimator:=ekf safety:=true \
-        v_max:="$vmax" ${world:+"$world"} \
-        $EXTRA "$@" > "$OUT/bags/$id.launch.log" 2>&1
+        v_max:="$vmax" ${world:+"$world"} enable_metrics:=false \
+        $EXTRA "$@" > "$OUT/bags/$id.launch.log" 2>&1 &
+    local launch=$!
+    # The run lasts $secs sim seconds however slow the machine; only a
+    # stopped /clock ends it early, as hung.
+    local code=0
+    python3 "$HERE/../gate/watch_run.py" --cap "$secs" --hang "$HANG_S" \
+        --pid "$launch" --out "$OUT/bags/$id.end.txt" || code=$?
     # A background job ignores SIGINT in a non-interactive shell; TERM is
     # what makes the recorder close the bag.
+    stop_launch "$launch"
     kill -TERM "$rec"
     wait "$rec" 2>/dev/null
     cleanup
+    if [ "$code" = 130 ]; then
+        echo "interrupted during $id" >&2
+        exit 130
+    fi
     python3 "$HERE/analyze_run.py" "$bag" --id "$id" --case "$kind" \
         --track "$track" --seed "$seed" --v-max "$vmax" --fence "$FENCE" \
-        --csv "$OUT/results.csv" || failed="$failed $id"
+        --end "$OUT/bags/$id.end.txt" --csv "$OUT/results.csv" \
+        || failed="$failed $id"
 }
 
-cleanup
-for kind in $CASES; do
-    for v in $SPEEDS; do
-        for r in $(seq 1 "$REPEATS"); do
-            id="${kind}_v${v}_r${r}"
-            case $kind in
-                geofence)
-                    one_run "$id" "$kind" "$TRACK" 1 "$v" "$RUN_S" \
-                        safety_geofence_radius_m:="$FENCE" ;;
-                controller_pause)
-                    one_run "$id" "$kind" "$TRACK" 1 "$v" "$RUN_S" \
-                        fault:="$kind" fault_after_s:="$AFTER" \
-                        fault_duration_s:=3 ;;
-                *)
-                    one_run "$id" "$kind" "$TRACK" 1 "$v" "$RUN_S" \
-                        fault:="$kind" fault_after_s:="$AFTER" ;;
-            esac
+plan() {  # one line per run: id kind track seed v_max seconds, then launch arguments
+    local kind v r s args gate
+    for kind in $CASES; do
+        for v in $SPEEDS; do
+            # The fault also waits for the car to be at its tier's speed:
+            # on the oval a time alone landed the 8 m/s tier in a corner (#207).
+            gate="fault_min_speed_mps:=$(awk -v v="$v" -v f="$AT_SPEED" 'BEGIN { print v * f }')"
+            for r in $(seq 1 "$REPEATS"); do
+                case $kind in
+                    # Not an injection: the car trips where it crosses the fence.
+                    geofence) args="safety_geofence_radius_m:=$FENCE" ;;
+                    controller_pause)
+                        args="fault:=$kind fault_after_s:=$AFTER $gate fault_duration_s:=3" ;;
+                    *) args="fault:=$kind fault_after_s:=$AFTER $gate" ;;
+                esac
+                echo "${kind}_v${v}_r${r} $kind $TRACK 1 $v $RUN_S $STACK $args"
+            done
         done
     done
-done
-for s in $CLEAN_SEEDS; do
-    one_run "clean_s$s" clean autocross "$s" 5 "$CLEAN_S"
-done
+    for s in $CLEAN_SEEDS; do
+        echo "clean_s$s clean $CLEAN_TRACK $s 5 $CLEAN_S $STACK"
+    done
+}
+
+# The campaign. Tests load the functions above without running it.
+PLAN=$(checked_plan) || exit 2
+cleanup
+while read -r id kind track seed v secs args <&3; do
+    # $args is split on purpose: one launch argument per word.
+    one_run "$id" "$kind" "$track" "$seed" "$v" "$secs" $args
+done 3<<< "$PLAN"
 python3 "$HERE/summarize.py" "$OUT/results.csv" > "$OUT/summary.md"
 if [ -n "$failed" ]; then
     printf '\nRuns with no world or a failed analysis:%s\n' "$failed" \

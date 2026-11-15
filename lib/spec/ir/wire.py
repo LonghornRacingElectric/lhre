@@ -1,23 +1,30 @@
 """The off-vehicle wire contract: proto types and the lock manifest.
 
-The type a telemetry field takes in the snapshot proto is *derived*, not
-declared — encoding sign/width/scale/offset plus the logical kind
-determine it completely (see lib/spec/README.md). This module is the one
-place that rule lives: the lock file, the editor's type display, and the
-future proto/ingest generators all call it, so they cannot disagree.
+The type a telemetry field takes in the snapshot proto is derived from its
+encoding and logical kind unless an existing deployed field carries an
+explicit compatibility override. This module is the one place that rule
+lives: the lock file, editor, proto generator, and ingest generator all call
+it, so they cannot disagree.
 
-The derived type is part of the wire contract, which is why it lands in
-wire.lock: changing a signal's `scale` flips its proto type without
-changing any id, and the lock diff is what makes that visible in review.
+The resulting type is part of the wire contract, which is why it lands in
+wire.lock: changing an encoding can flip a non-overridden proto type without
+changing any id, and the lock diff makes that visible in review.
 """
 
 from lib.spec.ir import validator
 from lib.spec.proto import can_spec_pb2
 
-# Proto type for a repeated numeric field's elements. One shared message
-# for every indexed array (cell temps, cell voltages, ...) rather than a
-# generated per-field entry type.
-INDEXED_ELEMENT = "IndexedFloat"
+PROTO_SCALAR_TYPES = {
+    can_spec_pb2.PROTO_FLOAT: "float",
+    can_spec_pb2.PROTO_DOUBLE: "double",
+    can_spec_pb2.PROTO_INT32: "int32",
+    can_spec_pb2.PROTO_UINT32: "uint32",
+    can_spec_pb2.PROTO_INT64: "int64",
+    can_spec_pb2.PROTO_UINT64: "uint64",
+    can_spec_pb2.PROTO_BOOL: "bool",
+    can_spec_pb2.PROTO_STRING: "string",
+    can_spec_pb2.PROTO_BYTES: "bytes",
+}
 
 
 def proto_type(signal):
@@ -62,6 +69,13 @@ def _binding_key(telemetry):
     return (telemetry.group, telemetry.field)
 
 
+def scalar_type(value):
+    try:
+        return PROTO_SCALAR_TYPES[value]
+    except KeyError as error:
+        raise ValueError(f"unsupported protobuf scalar type {value}") from error
+
+
 def field_types(spec):
     """Every telemetry-bound field's wire type.
 
@@ -72,16 +86,36 @@ def field_types(spec):
     slots = {}
     for _, message, signal, bit, telemetry in validator.telemetry_bindings(spec):
         key = _binding_key(telemetry)
+        override = telemetry.wire_type
+        element_type = scalar_type(override) if override else (
+            bit_proto_type() if bit is not None else proto_type(signal)
+        )
         if telemetry.repeated:
             # Each binding is one slot per frame; the block repeats over
             # the message's quantity-expanded ID range.
             slots[key] = slots.get(key, 0) + validator.effective_quantity(message)
-            out[key] = (f"repeated {INDEXED_ELEMENT}", slots[key])
-        elif bit is not None:
-            out[key] = (bit_proto_type(), None)
+            out[key] = (f"repeated {element_type}", slots[key])
         else:
-            out[key] = (proto_type(signal), None)
+            out[key] = (element_type, None)
+    for _, group in spec.groups():
+        for field in group.external_field:
+            ptype = scalar_type(field.type)
+            out[(group.name, field.name)] = (
+                f"repeated {ptype}" if field.repeated else ptype,
+                None,
+            )
     return out
+
+
+def field_ids(spec):
+    """Stable protobuf field numbers keyed by (group, field)."""
+    ids = {}
+    for _, _, _, _, telemetry in validator.telemetry_bindings(spec):
+        ids[_binding_key(telemetry)] = telemetry.id
+    for _, group in spec.groups():
+        for field in group.external_field:
+            ids[(group.name, field.name)] = field.id
+    return ids
 
 
 def signal_types(spec):
@@ -106,21 +140,19 @@ HEADER = """# Generated wire contract — DO NOT EDIT.
 # Update with: bazel run //tools/spec:lock
 #
 # One line per telemetry field: <group>.<field> <id> <proto type>, plus
-# each group's tombstones. This is what the gateway publishes and the
-# telemetry server decodes: changing any existing line breaks deployed
-# consumers and archived data, which is why it is committed and reviewed
+# each group's root snapshot id and tombstones. This is what the gateway
+# publishes and the telemetry server decodes: changing an existing line breaks
+# deployed consumers and archived data, so it is committed and reviewed
 # rather than silently regenerated. Types are derived from the spec's
-# encodings (lib/spec/wire.py) — note that editing a signal's `scale` can
-# change its type here without changing its id.
+# encodings unless a deployed field has a compatibility override
+# (lib/spec/ir/wire.py). Encoding edits can still change a non-overridden type.
 """
 
 
 def manifest(spec):
     """The wire.lock contents for a spec."""
     types = field_types(spec)
-    ids = {}
-    for _, _, _, _, telemetry in validator.telemetry_bindings(spec):
-        ids[_binding_key(telemetry)] = telemetry.id
+    ids = field_ids(spec)
 
     by_group = {}
     for (group, field), (ptype, count) in types.items():
@@ -130,7 +162,7 @@ def manifest(spec):
     lines = [HEADER]
     for _, group in sorted(spec.groups(), key=lambda g: g[1].name):
         entries = sorted(by_group.get(group.name, []))
-        lines.append(f"[{group.name}] next_free_id={group.next_free_id}")
+        lines.append(f"[{group.name}] snapshot_id={group.snapshot_id} next_free_id={group.next_free_id}")
         for field_id, field, rendered in entries:
             lines.append(f"{group.name}.{field} {field_id} {rendered}")
         for reserved in sorted(group.reserved_ids):

@@ -190,7 +190,10 @@ exports_files([
 sh_test(
     name = "stack_integration_test",
     srcs = ["run_integration_test.sh"],
+    args = ["$(rlocationpath //apps/telemetry:current_schema_sql)"],
     data = [
+        "//apps/telemetry:current_schema_sql",
+        "//apps/telemetry/stack:orion_schema.sh",
         ":stack_test_client",
         "//apps/telemetry/stack/ingest:docker-compose.yml",
         "//apps/telemetry/stack/kafka:docker-compose.yml",

@@ -6,15 +6,16 @@ markers on `/lhr/track/centerline_markers`.
 
 ## Pairing
 
-The `pairing_strategy` parameter selects one of three algorithms:
+The `pairing_strategy` parameter selects one of four algorithms. The
+fourth, `boundary_graph`, has [its own section](#local-unclassified-corridor).
 
 - `nearest` pairs each blue (`left_cones`) cone with the nearest unused yellow
   (`right_cones`) cone. This strategy requires classified cones.
 - `classified` computes a minimum-cost one-to-one left/right assignment within
   `track_width +/- track_width_tolerance`, leaving unmatched cones unused.
-  The Gazebo launch selects it with
-  `perception:=lidar lidar_classify_sides:=true`. It depends on correct side
-  labels; sparse detections can cause the experimental classifier to mislabel
+  Neither demo launch selects it; it remains available by setting
+  `pairing_strategy:=classified` when running `track_builder` directly.
+  It depends on correct side labels; sparse detections can cause the experimental classifier to mislabel
   a boundary and leave gaps or an incorrect path.
 - `boundary` (default) Delaunay-triangulates all cone positions without considering
   color, extracts the unique triangle edges, then rejects blue-blue and
@@ -47,6 +48,35 @@ All candidate midpoints are ordered with the configured `chaining_alg` before
 the published path is capped by `max_points`. With odometry, chaining starts
 at the midpoint nearest the vehicle, even when it lies beyond the first
 `max_points` candidates. Without odometry, it starts at midpoint zero.
+
+## Camera fusion in Gazebo
+
+With `perception:=lidar enable_stereo_camera:=true
+enable_camera_lidar_fusion:=true`, Gazebo launch connects `cone_topic` to
+`/lhr/perception/cones_classified` and selects `pairing_strategy:=boundary`
+with `boundary_use_color:=true`. Camera blue/yellow arrive as `left_cones`/
+`right_cones`; same-known-color Delaunay edges are rejected, while edges
+involving unknown `cones` keep the width filter. For orange, fusion preserves
+the LiDAR namespace (`left_cones`, `right_cones`, or `cones`) so geometry can
+still pair acceleration finish/exit cones. Physical orange is retained on the
+separate inspection map; it is not an exclusion from planning.
+
+Fusion automatically enables the existing LiDAR side classifier as fallback,
+even if `lidar_classify_sides:=false` was supplied. Camera labels override those
+sides only with confirmed fresh evidence. Losing a match or exceeding the
+camera-age limit returns to the current LiDAR side; if that side is unknown,
+boundary pairing still uses geometry. The fallback classifier is experimental:
+its errors can still affect the path during camera loss.
+
+Without fusion, Gazebo keeps `/lhr/sensor/cones_detected` and uses
+`boundary` pairing with `boundary_use_color:=false` to bootstrap motion
+before inferred side labels are available. The `sim` perception branch is
+unchanged. Fusion launch tests check actual node subscription topics in both
+estimators and a real image/TF/DDS integration exercises camera priority,
+conflicts, dropout, recovery, pairing results and orange geometry fallback. Live
+Gazebo autocross/EKF visuals were confirmed manually; see the
+[validation record](../lhr_gazebo/README.md#fusion-planner-validation-2026-11-01)
+for the stationary run and remaining live-interruption evidence.
 
 ## Chaining
 
@@ -153,9 +183,11 @@ for topics and all parameters.
 
 ## Local unclassified corridor
 
-`pairing_strategy:=boundary_graph` selects the harness's geometry-only local
-corridor. It connects Delaunay edge midpoints through shared triangles, limits
-gaps to `max_path_gap_m` (4 m), turns to `max_path_turn_deg` (60 degrees), and
+`pairing_strategy:=boundary_graph` selects a geometry-only local corridor.
+`mvs_demo.launch.py` uses it under `perception:=lidar`, including when
+`lidar_classify_sides:=true`; the Gazebo launch never does. It connects
+Delaunay edge midpoints through shared triangles, limits gaps to
+`max_path_gap_m` (4 m), turns to `max_path_turn_deg` (60 degrees), and
 length to `planning_horizon_m` (30 m). It needs odometry and publishes an empty
 path when no forward corridor exists. The controller then stops. This option
 does not replace the default color-aware `boundary` pairing or its configurable

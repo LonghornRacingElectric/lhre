@@ -123,6 +123,23 @@ message Telemetry {
   // message. A 4-slot message with quantity 4 is a 16-element array.
   uint32 array_index = 5;  // slot within one frame; presence via has-bit
   bool repeated = 6;
+  ProtoScalarType wire_type = 7;  // compatibility override for an existing
+                                  // deployed protobuf field; new fields derive
+                                  // their type from the logical/encoding layers
+  bool shared_source = 8;
+}
+
+enum ProtoScalarType {
+  PROTO_SCALAR_TYPE_UNSPECIFIED = 0;
+  PROTO_FLOAT = 1;
+  PROTO_DOUBLE = 2;
+  PROTO_INT32 = 3;
+  PROTO_UINT32 = 4;
+  PROTO_INT64 = 5;
+  PROTO_UINT64 = 6;
+  PROTO_BOOL = 7;
+  PROTO_STRING = 8;
+  PROTO_BYTES = 9;
 }
 
 enum RateTier {
@@ -177,5 +194,17 @@ message Group {
   uint32 next_free_id = 2;        // high-water mark, only ever increases
   repeated uint32 reserved_ids = 3;     // tombstones of removed fields
   repeated string reserved_names = 4;   // never reuse a dead field's name
+  string description = 5;
+  uint32 snapshot_id = 6;         // field number of this group in the root
+                                  // telemetry snapshot message
+  repeated SnapshotField external_field = 7;  // fields produced outside CAN,
+                                               // such as GPS and board liveness
+}
+
+message SnapshotField {
+  string name = 1;
+  uint32 id = 2;
+  ProtoScalarType type = 3;
+  bool repeated = 4;
   string description = 5;
 }

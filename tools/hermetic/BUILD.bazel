@@ -1,0 +1,20 @@
+load("@rules_python//python:defs.bzl", "py_test")
+
+# Proves tests run without network (see README.md). Windows has no sandbox,
+# so Bazel can't take the network away there; the test is skipped on it.
+py_test(
+    name = "network_off_test",
+    size = "small",
+    srcs = ["network_off_test.py"],
+    # Never served from a cache: sandbox flags aren't part of the cache key,
+    # so a cached pass would hide a removed .bazelrc line. `external` skips
+    # the local test-result cache, `no-cache` the remote one.
+    tags = [
+        "external",
+        "no-cache",
+    ],
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
+)

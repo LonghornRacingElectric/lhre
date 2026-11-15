@@ -48,8 +48,10 @@ tool has them. They come from the LHRe knowledge base, not from this repo.
   Import BobSim instead.
 - Do not edit Modelica `.mo` files with regular expressions. Change
   `vehicle.yml`.
-- Do not commit `out/`. Commit the study `README.md`, `run.py` and at most
-  two small figures.
+- A study is `README.md`, `study.yml` and `run.py`. Make one with
+  `make new-study S=<name>`. See [docs/studies.md](docs/studies.md).
+- Do not commit `out/`. Commit the study files and at most two small
+  figures.
 - Keep each study in its own folder. Do not import one study from another.
   Put code that more than one study needs in `tools/`. Treat BobSim as a
   black box: do not change it for a study.

@@ -586,7 +586,7 @@ def check_immutable(base: Bundle | None, head: Bundle) -> list[Problem]:
 
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
+    return subprocess.run(  # noqa: PLW1510 pre-existing when the lint gate went on
         ["git", "--no-optional-locks", "-C", str(repo), *args],
         capture_output=True,
         text=True,
@@ -619,7 +619,7 @@ def bobsim_checks(vehicle: Path) -> tuple[list[Problem], list[str]]:
     try:
         inputs = load_active_envelope_inputs(vehicle)
         lines.append(f"BobSim load: OK ({type(inputs).__name__})")
-    except Exception as error:  # BobSim raises many error types for a bad vehicle file.
+    except Exception as error:  # BobSim raises many error types for a bad vehicle file.  # noqa: BLE001 pre-existing when the lint gate went on
         problems.append(Problem("members.vehicle.path", "bobsim_load", f"BobSim cannot load {vehicle}: {error}"))
     return problems, lines
 

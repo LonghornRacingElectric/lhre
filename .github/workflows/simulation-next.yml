@@ -1,0 +1,76 @@
+name: simulation against BobSim main
+
+on:
+  schedule:
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/simulation-next.yml"
+
+jobs:
+  bobsim-main:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      LHRE_REQUIRE_GIT: "1"
+    defaults:
+      run:
+        working-directory: simulation
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Move BobSim to its main branch
+        run: |
+          git -C bobsim fetch --no-tags origin main
+          make bump-bobsim REF="$(git -C bobsim rev-parse FETCH_HEAD)"
+          {
+            echo "BobSim pin: $(git rev-parse HEAD:simulation/bobsim)"
+            echo "BobSim main: $(git -C bobsim rev-parse HEAD)"
+            echo "BobLib in BobSim main: $(git -C bobsim rev-parse HEAD:engines/boblib)"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: simulation/bobsim
+          file: simulation/bobsim/Dockerfile
+          tags: lhre-simulation:local
+          load: true
+          cache-from: type=gha,scope=lhre-simulation-next
+          cache-to: type=gha,mode=max,scope=lhre-simulation-next
+
+      - name: Check that BobSim loads the vehicle
+        run: make smoke
+
+      - name: Run the unit and contract tests
+        if: ${{ !cancelled() }}
+        run: make unit
+
+      - name: Run FourPost on our car
+        if: ${{ !cancelled() }}
+        run: make car T=standard-eval-four-post
+
+      - name: Check the FourPost acceptance
+        if: ${{ !cancelled() }}
+        run: make four-post-acceptance T=standard-eval-four-post
+
+      - name: Upload the run record
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: bobsim-main-${{ github.run_id }}
+          retention-days: 5
+          if-no-files-found: warn
+          path: |
+            simulation/out/car/*/identity.json
+            simulation/out/car/*/four_post_acceptance.json
+            simulation/out/car/*/*.log
+            simulation/out/car/*/generated_results/*metrics*
+            simulation/out/car/*/runs/*/*/manifest.json
+            simulation/out/car/*/runs/*/*/run.log
+            !simulation/out/car/**/*.tir

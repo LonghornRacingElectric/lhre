@@ -1,0 +1,867 @@
+# proto-file: lib/spec/proto/can_spec.proto
+# proto-message: lhre.canspec.SpecFile
+
+message {
+  name: "FL_ACCEL_RIDE_HEIGHT"
+  can_id: 1280
+  from_board: "CSM"
+  to_boards: "Pi"
+  bus: "Data Acq"
+  dlc: 8
+  frequency_hz: 100.0
+  description: "FL Accel + Ride Height"
+  signal {
+    name: "x"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "fl_sprung_accel"
+      id: 19
+      repeated: true
+    }
+    description: "X"
+  }
+  signal {
+    name: "y"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "fl_sprung_accel"
+      id: 19
+      array_index: 1
+      repeated: true
+    }
+    description: "Y"
+  }
+  signal {
+    name: "z"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "fl_sprung_accel"
+      id: 19
+      array_index: 2
+      repeated: true
+    }
+    description: "Z"
+  }
+  signal {
+    name: "ride_height"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      scale: 0.002
+    }
+    logical {
+      physical {
+        unit: "mm"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "fl_ride_height"
+      id: 28
+    }
+    description: "Ride Height"
+  }
+}
+message {
+  name: "FL_STRAIN_GAUGE_SUS_POT"
+  can_id: 1281
+  from_board: "CSM"
+  to_boards: "Pi"
+  bus: "Data Acq"
+  dlc: 4
+  frequency_hz: 100.0
+  description: "FL Strain Gauge + Sus Pot."
+  signal {
+    name: "front_left_strain_gauge_voltage"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.0002
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "fl_strain_gauge_v"
+      id: 29
+    }
+    description: "Front Left Strain Gauge Voltage"
+  }
+  signal {
+    name: "front_left_suspension_potentiometer"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "fl_sus_pot_v"
+      id: 30
+    }
+    description: "Front Left Suspension Potentiometer"
+  }
+}
+message {
+  name: "FR_ACCEL_RIDE_HEIGHT"
+  can_id: 1282
+  from_board: "CSM"
+  to_boards: "Pi"
+  bus: "Data Acq"
+  dlc: 8
+  frequency_hz: 100.0
+  description: "FR Accel + Ride Height"
+  signal {
+    name: "x"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "fr_sprung_accel"
+      id: 21
+      repeated: true
+    }
+    description: "X"
+  }
+  signal {
+    name: "y"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "fr_sprung_accel"
+      id: 21
+      array_index: 1
+      repeated: true
+    }
+    description: "Y"
+  }
+  signal {
+    name: "z"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "fr_sprung_accel"
+      id: 21
+      array_index: 2
+      repeated: true
+    }
+    description: "Z"
+  }
+  signal {
+    name: "ride_height"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      scale: 0.002
+    }
+    logical {
+      physical {
+        unit: "mm"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "fr_ride_height"
+      id: 31
+    }
+    description: "Ride Height"
+  }
+}
+message {
+  name: "FR_STRAIN_GAUGE_SUS_POT"
+  can_id: 1283
+  from_board: "CSM"
+  to_boards: "Pi"
+  bus: "Data Acq"
+  dlc: 4
+  frequency_hz: 100.0
+  description: "FR Strain Gauge + Sus Pot."
+  signal {
+    name: "front_right_strain_gauge_voltage"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.0002
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "fr_strain_gauge_v"
+      id: 32
+    }
+    description: "Front Right Strain Gauge Voltage"
+  }
+  signal {
+    name: "front_right_suspension_potentiometer"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "fr_sus_pot_v"
+      id: 33
+    }
+    description: "Front Right Suspension Potentiometer"
+  }
+}
+message {
+  name: "RL_ACCEL_RIDE_HEIGHT"
+  can_id: 1284
+  from_board: "CSM"
+  to_boards: "Pi"
+  bus: "Data Acq"
+  dlc: 8
+  frequency_hz: 100.0
+  description: "RL Accel + Ride Height"
+  signal {
+    name: "x"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "bl_sprung_accel"
+      id: 15
+      repeated: true
+    }
+    description: "X"
+  }
+  signal {
+    name: "y"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "bl_sprung_accel"
+      id: 15
+      array_index: 1
+      repeated: true
+    }
+    description: "Y"
+  }
+  signal {
+    name: "z"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "bl_sprung_accel"
+      id: 15
+      array_index: 2
+      repeated: true
+    }
+    description: "Z"
+  }
+  signal {
+    name: "ride_height"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      scale: 0.002
+    }
+    logical {
+      physical {
+        unit: "mm"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "bl_ride_height"
+      id: 22
+    }
+    description: "Ride Height"
+  }
+}
+message {
+  name: "RL_STRAIN_GAUGE_SUS_POT"
+  can_id: 1285
+  from_board: "CSM"
+  to_boards: "Pi"
+  bus: "Data Acq"
+  dlc: 4
+  frequency_hz: 100.0
+  description: "RL Strain Gauge + Sus Pot."
+  signal {
+    name: "back_left_strain_gauge_voltage"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.0002
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "bl_strain_gauge_v"
+      id: 23
+    }
+    description: "Back Left Strain Gauge Voltage"
+  }
+  signal {
+    name: "back_left_suspension_potentiometer"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "bl_sus_pot_v"
+      id: 24
+    }
+    description: "Back Left Suspension Potentiometer"
+  }
+}
+message {
+  name: "RR_ACCEL_RIDE_HEIGHT"
+  can_id: 1286
+  from_board: "CSM"
+  to_boards: "Pi"
+  bus: "Data Acq"
+  dlc: 8
+  frequency_hz: 100.0
+  description: "RR Accel + Ride Height"
+  signal {
+    name: "x"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "br_sprung_accel"
+      id: 17
+      repeated: true
+    }
+    description: "X"
+  }
+  signal {
+    name: "y"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "br_sprung_accel"
+      id: 17
+      array_index: 1
+      repeated: true
+    }
+    description: "Y"
+  }
+  signal {
+    name: "z"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "m/s^2"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "br_sprung_accel"
+      id: 17
+      array_index: 2
+      repeated: true
+    }
+    description: "Z"
+  }
+  signal {
+    name: "ride_height"
+    encoding {
+      start_bit: 48
+      bit_length: 16
+      scale: 0.002
+    }
+    logical {
+      physical {
+        unit: "mm"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "br_ride_height"
+      id: 25
+    }
+    description: "Ride Height"
+  }
+}
+message {
+  name: "RR_STRAIN_GAUGE_SUS_POT"
+  can_id: 1287
+  from_board: "CSM"
+  to_boards: "Pi"
+  bus: "Data Acq"
+  dlc: 4
+  frequency_hz: 100.0
+  description: "RR Strain Gauge + Sus Pot."
+  signal {
+    name: "back_right_strain_gauge_voltage"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.0002
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "br_strain_gauge_v"
+      id: 26
+    }
+    description: "Back Right Strain Gauge Voltage"
+  }
+  signal {
+    name: "back_right_suspension_potentiometer"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "V"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "br_sus_pot_v"
+      id: 27
+    }
+    description: "Back Right Suspension Potentiometer"
+  }
+}
+message {
+  name: "FL_GYRO"
+  can_id: 1288
+  from_board: "CSM"
+  to_boards: "Pi"
+  bus: "Data Acq"
+  dlc: 6
+  frequency_hz: 100.0
+  description: "FL Gyro"
+  signal {
+    name: "x"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "rad/s"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "fl_gyro"
+      id: 18
+      repeated: true
+    }
+    description: "X"
+  }
+  signal {
+    name: "y"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "rad/s"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "fl_gyro"
+      id: 18
+      array_index: 1
+      repeated: true
+    }
+    description: "Y"
+  }
+  signal {
+    name: "z"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "rad/s"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "fl_gyro"
+      id: 18
+      array_index: 2
+      repeated: true
+    }
+    description: "Z"
+  }
+}
+message {
+  name: "FR_GYRO"
+  can_id: 1289
+  from_board: "CSM"
+  to_boards: "Pi"
+  bus: "Data Acq"
+  dlc: 6
+  frequency_hz: 100.0
+  description: "FR Gyro"
+  signal {
+    name: "x"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "rad/s"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "fr_gyro"
+      id: 20
+      repeated: true
+    }
+    description: "X"
+  }
+  signal {
+    name: "y"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "rad/s"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "fr_gyro"
+      id: 20
+      array_index: 1
+      repeated: true
+    }
+    description: "Y"
+  }
+  signal {
+    name: "z"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "rad/s"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "fr_gyro"
+      id: 20
+      array_index: 2
+      repeated: true
+    }
+    description: "Z"
+  }
+}
+message {
+  name: "RL_GYRO"
+  can_id: 1290
+  from_board: "CSM"
+  to_boards: "Pi"
+  bus: "Data Acq"
+  dlc: 6
+  frequency_hz: 100.0
+  description: "RL Gyro"
+  signal {
+    name: "x"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "rad/s"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "bl_gyro"
+      id: 14
+      repeated: true
+    }
+    description: "X"
+  }
+  signal {
+    name: "y"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "rad/s"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "bl_gyro"
+      id: 14
+      array_index: 1
+      repeated: true
+    }
+    description: "Y"
+  }
+  signal {
+    name: "z"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "rad/s"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "bl_gyro"
+      id: 14
+      array_index: 2
+      repeated: true
+    }
+    description: "Z"
+  }
+}
+message {
+  name: "RR_GYRO"
+  can_id: 1291
+  from_board: "CSM"
+  to_boards: "Pi"
+  bus: "Data Acq"
+  dlc: 6
+  frequency_hz: 100.0
+  description: "RR Gyro"
+  signal {
+    name: "x"
+    encoding {
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "rad/s"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "br_gyro"
+      id: 16
+      repeated: true
+    }
+    description: "X"
+  }
+  signal {
+    name: "y"
+    encoding {
+      start_bit: 16
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "rad/s"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "br_gyro"
+      id: 16
+      array_index: 1
+      repeated: true
+    }
+    description: "Y"
+  }
+  signal {
+    name: "z"
+    encoding {
+      start_bit: 32
+      bit_length: 16
+      sign: SIGNED
+      scale: 0.001
+    }
+    logical {
+      physical {
+        unit: "rad/s"
+      }
+    }
+    telemetry {
+      group: "Dynamics"
+      field: "br_gyro"
+      id: 16
+      array_index: 2
+      repeated: true
+    }
+    description: "Z"
+  }
+}

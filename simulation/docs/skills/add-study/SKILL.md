@@ -15,37 +15,50 @@ description: Answer one vehicle dynamics question about the current car with a n
 
 ## Procedure
 
-1. Make the folder `simulation/studies/<name>/`. Use a short kebab-case
-   name that says the question.
-2. Write `run.py`:
-   - Read the vehicle path from `os.environ["BOBSIM_VEHICLE"]`.
+1. Make the study from `simulation/`. Use a short kebab-case name that
+   says the question:
+
+   ```bash
+   make new-study S=<name>
+   ```
+
+   It copies `tools/study_template/` to `studies/<name>/`: `README.md`,
+   `study.yml` and `run.py`. See [studies.md](../../studies.md).
+2. Write `study.yml`: the question, the decision, the bundle, the
+   parameters and the sweep grid. Put every study choice here, not in
+   `run.py`. See [studies.md](../../studies.md#studyyml).
+3. Write `run.py`:
+   - Read the inputs from `study.yml`.
+   - Read the vehicle path from `os.environ["BOBSIM_VEHICLE"]`. Take car
+     numbers from the vehicle and its bundle. Do not hard-code them.
    - Write every output to `os.environ["OUT_DIR"]`.
    - To change a parameter, load the vehicle, change the value, and write
      the changed copy to `OUT_DIR`. Do not edit `vehicle/vehicle.yml`.
    - Import BobSim. Do not copy its code. Do not change BobSim.
+   - Write `summary.json` and `readme.json` to `OUT_DIR`.
    - If the study solves many independent cases, run them with
      `tools.parallel.map_cases`. See
      [studies.md](../../studies.md#parallel-cases).
-3. Write `README.md` with four sections: Question, Method, Result,
-   Provenance. See [studies.md](../../studies.md#readmemd). Keep it short
-   and in simple technical English. Start the Result with the answer.
-   Give the inputs that people will want to change a command-line
-   argument, so a variant needs no code change. See
-   [studies.md](../../studies.md#variants).
-4. Run the study from `simulation/`:
+4. Write `README.md` with a status line and four sections: Question,
+   Method, Result, Provenance. See [studies.md](../../studies.md#readmemd).
+   Keep it short and in simple technical English. Start the Result with the
+   answer. A variant is a second config file, so it needs no code change.
+   See [studies.md](../../studies.md#variants).
+5. Run the study from `simulation/`:
 
    ```bash
    make study S=<name>
    ```
 
-5. Read the outputs in `out/<name>/`. Check that the numbers make physical
+6. Read the outputs in `out/<name>/`. Check that the numbers make physical
    sense: signs, units and order of magnitude.
-6. Put the result in `README.md`. Use `out:` markers for numbers, tables,
+7. Put the result in `README.md`. Use `out:` markers for numbers, tables,
    figures and provenance, so the next run updates them. See
    [studies.md](../../studies.md#numbers-from-the-run). Check that the text
    still matches the new numbers.
-7. Commit `README.md`, `run.py` and at most two small figures. Do not
-   commit `out/`.
+8. Commit `README.md`, `study.yml`, `run.py`, any helper modules or extra
+   config files, and at most two small figures. Do not commit `out/`. Do
+   not add tests to the study folder.
 
 ## Checks before you finish
 

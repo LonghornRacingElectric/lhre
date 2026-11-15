@@ -1,21 +1,19 @@
 name: docs
 
-# Builds the MkDocs site (docs live next to the code — see mkdocs.yml) on
-# every PR that touches docs, and publishes it to GitHub Pages on main.
+# Builds the MkDocs site (docs live next to the code — see mkdocs.yml) and
+# publishes it to GitHub Pages on main. PRs build it from ci.yml.
 # Pages must be enabled once in repo settings: Settings → Pages → Source:
 # "GitHub Actions".
 
 on:
   push:
     branches: [main]
-  pull_request:
-    paths:
-      - "**.md"
-      - "docs/**"
-      - "mkdocs.yml"
-      - "pyproject.toml"
-      - "uv.lock"
-      - ".github/workflows/docs.yml"
+
+# A new push to a PR cancels that PR's older run. Every other run gets its
+# own group, so no push, schedule or manual run is dropped.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:

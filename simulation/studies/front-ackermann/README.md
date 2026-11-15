@@ -1,10 +1,10 @@
 # front-ackermann
 
-**Status: historical.** BobSim `4da577a` made these results. They are stale at BobSim `fe03bab`. BobSim changed the KinPy corner solver that the study uses (#83, #84), and other modules that it calls. See [the BobSim changes](../../docs/bobsim.md#what-changed-in-bobsim-from-4da577a-to-fe03bab). Run the study again before you use a result.
+**Status: historical.** BobSim `4da577a` made these results on 2026-10-11 with the Front V34 front geometry. `2027_FrontV43.shk` (SVN r11810) supersedes Front V34. The study was not run again. The results are also stale at BobSim `fe03bab`. BobSim changed the KinPy corner solver that the study uses (#83, #84), and other modules that it calls. See [the BobSim changes](../../docs/bobsim.md#what-changed-in-bobsim-from-4da577a-to-fe03bab). Run the study again before you use a result.
 
 ## Question
 
-Is pro-Ackermann or anti-Ackermann steering better for the 2027 car, and which laws stay good when the inputs we do not trust change? The study compares constant steering laws from −50% to +100% against parallel steer on one car, one tire and one track. Front V34 is the current design point. It is a screening model. It gives the direction and the robust range, not an exact percentage.
+<!-- out:readme.json#question -->Is pro-Ackermann or anti-Ackermann steering better for the 2027 car, and which laws stay good when the inputs we do not trust change?<!-- /out --> The study compares constant steering laws from −50% to +100% against parallel steer on one car, one tire and one track. Front V34 is the current design point. It is a screening model. It gives the direction and the robust range, not an exact percentage.
 
 ## Answer
 
@@ -232,7 +232,7 @@ Before a full run: `make study S=front-ackermann ARGS="--quick" V=smoke`.
 2. **Roll stiffness split.** Measure the installed bar rates and rerun at that LLTD. It moves the result the most.
 3. **Brake bias and differential.** Get the 2027 hydraulic bias and the diff preload and ramps. Log rear wheel speeds in 3.5 to 8 m corners to see whether the axle locks.
 4. **A/B on track.** Compare two linkages with the same static toe at 3.5 and 4.5 m: steer gradient, yaw rate, lateral g and wheel speeds, A-B-A order, several runs, accept only differences above the run-to-run scatter.
-5. **Geometry.** `run.py` holds a copy of the Front V34 hardpoints. Copy any `.shk` change into it.
+5. **Geometry.** `study.yml` holds a copy of the Front V34 hardpoints. Copy any `.shk` change into it.
 
 ## Inputs
 
@@ -249,7 +249,7 @@ Before a full run: `make study S=front-ackermann ARGS="--quick" V=smoke`.
 | Static toe and camber, aero | 0, 0, none | assumption |
 | Track, power limit | Michigan 2019 endurance, 32 kW | BobSim lap config |
 
-`out/front-ackermann/vehicle_front.yml` holds the front geometry only. `summary.json` `effective_inputs` holds every value the run used. BobSim interfaces: public `solve_qss_lap`, `GGVMap.from_arrays`, `optimize_racing_line`, `CornerKinematics`, `project_vehicle_yaml` and the loaders, plus private `_mf52_fx_pure` and `_mf52_fy_pure` from `app.tire_eval` (see the [bobsim-boundary skill](../../docs/skills/bobsim-boundary/SKILL.md)).
+`study.yml` holds the inputs and the source of each car and geometry value. The static camber and toe come from `vehicle.yml`. A variant is a copy of `study.yml` passed with `ARGS="--config <file>"`. In a curve list, `$design` is `front_geometry.name`. The report racks always include `rack_travel_mm`. `out/front-ackermann/vehicle_front.yml` holds the front geometry only. `summary.json` `effective_inputs` holds every value the run used. BobSim interfaces: public `solve_qss_lap`, `GGVMap.from_arrays`, `optimize_racing_line`, `CornerKinematics`, `project_vehicle_yaml` and the loaders, plus private `_mf52_fx_pure` and `_mf52_fy_pure` from `app.tire_eval` (see the [bobsim-boundary skill](../../docs/skills/bobsim-boundary/SKILL.md)).
 
 ## Provenance
 

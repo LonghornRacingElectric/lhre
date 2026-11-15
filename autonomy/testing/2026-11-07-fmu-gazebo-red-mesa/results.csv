@@ -1,0 +1,16 @@
+id,code,set,runs_at_once,wall_cap_s,outcome,lap_time_s,max_cte_m,cones_hit,off_course,max_ekf_error_m,fmu_step_mean_ms,fmu_step_max_ms,pose_lag_max_s,notes
+autocross_s1_r1,221,gate,1,300,no_metrics,,,,,,,,10+,FMU crashed after pull-away; lag grew ~0.9 s per s
+autocross_s2_r1,221,gate,1,300,no_metrics,,,,,,,,,FMU crashed after pull-away
+autocross_s3_r1,221,gate,1,300,interrupted,,0.0134,0,0,,,,,FMU crashed after pull-away
+autocross_s4_r1,221,gate,1,300,no_metrics,,,,,,,,,FMU crashed after pull-away
+autocross_s5_r1,221,gate,1,300,no_metrics,,,,,,,,,FMU crashed after pull-away
+acceleration_r1,221,gate,1,300,interrupted,,0.0005,0,0,,,,,FMU crashed after pull-away
+baseline_autocross_s1-5,221,baseline,1,300,no_metrics,,,,,,,,,all five tripped ODOM_STALE
+baseline_autocross_s1,222,baseline,1,300,timeout,,,,,,128.6,384.0,0.018,did not finish inside the wall cap
+autocross_s1_r1,222,gate,1,1200,lap,35.2041,0.2410,0,0,0.2037,125.2,608.2,0.019,never stopped: 0.12 m/s at end of recording
+acceleration_r1,222,gate,1,1200,mission_finished,,0.0329,0,0,0.2854,140.8,667.8,0.019,never stopped: 0.21 m/s at end of recording
+s1,222,parallel,2,1200,emergency,,,,,,223.1,452.5,0.019,LIDAR_STALE in READY
+s2,222,parallel,2,1200,emergency,,,,,,223.1,450.7,0.019,LIDAR_STALE in READY
+s1,222,parallel,3,1200,emergency,,,,,,277.3,537.0,0.019,LIDAR_STALE in READY
+s2,222,parallel,3,1200,emergency,,,,,,279.1,560.7,0.019,LIDAR_STALE in READY
+acc,222,parallel,3,1200,mission_finished,,0.0339,0,0,0.2289,182.5,902.6,0.019,

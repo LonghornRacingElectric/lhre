@@ -7,7 +7,6 @@ Requires the PostgreSQL (db) container to be running.
 
 import unittest
 import os
-import sys
 
 from sqlalchemy import text
 
@@ -57,7 +56,7 @@ class TestDatabaseConnectivity(unittest.TestCase):
             cursor.close()
             conn.close()
             
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
             self.fail(f"Database query failed: {e}")
     
     def test_nightwatch_database_exists(self):

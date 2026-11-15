@@ -11,6 +11,8 @@ export default function PageLayout({ children }) {
   useEffect(() => {
     if (pathname === '/') {
       document.title = 'Telemetry | Home';
+    } else if (pathname.startsWith('/trackside-retro')) {
+      document.title = 'LAPDOG | Trackside Retro';
     } else if (pathname.startsWith('/driveday')) {
       document.title = 'Telemetry | Create Driveday';
     } else if (pathname.startsWith('/event/new')) {

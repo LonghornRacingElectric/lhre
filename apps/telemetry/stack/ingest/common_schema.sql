@@ -273,3 +273,19 @@ CREATE TABLE public.track_point (
     CONSTRAINT fk_day_id FOREIGN KEY (day_id) REFERENCES drive_day(day_id)
 );
 CREATE INDEX track_point_day_idx ON public.track_point (day_id);
+
+-- publishd's GPS-only feed (MQTT orion/gps), up to PUBLISHD_GPS_HZ rows/s. Hand-written, no
+-- packet row and no FK on purpose; the ORM model OrionGpsPrecise creates it on existing volumes.
+CREATE TABLE public.gps_precise (
+    id              bigserial PRIMARY KEY,
+    "time"          bigint    NOT NULL,
+    packet_id       bigint,
+    lat_precise     double precision,
+    lon_precise     double precision,
+    gps_h_m         double precision,
+    gps_sigma_h_m   double precision,
+    gps_src         smallint,
+    gps_fix_time    double precision,
+    gps_speed_kn    double precision
+);
+CREATE INDEX IF NOT EXISTS idx_gps_precise_time ON public.gps_precise ("time");

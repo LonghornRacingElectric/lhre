@@ -1,0 +1,13 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+# Passes only when --config=ubsan really instruments the build: it overflows
+# a signed int on purpose and expects the trap. Without the sanitizer that
+# overflow is silent, so plain `bazel test //...` would fail it; `manual`
+# keeps it out of wildcards, and presubmit's UBSan step names it explicitly.
+cc_test(
+    name = "trap_test",
+    size = "small",
+    srcs = ["trap_test.cpp"],
+    tags = ["manual"],
+    deps = ["@googletest//:gtest_main"],
+)

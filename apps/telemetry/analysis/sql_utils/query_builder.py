@@ -2,9 +2,7 @@ import pandas as pd
 import numpy as np
 import datetime
 import logging
-import time
 from sqlalchemy import text, insert
-from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import Query, aliased
 from .db_session import get_db
 from .models import (
@@ -38,12 +36,10 @@ from .models import (
     OrionDiagnosticsLow,
     OrionThermal,
     OrionBoardStatus,
+    OrionGpsPrecise,
 )
 from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy.dialects.postgresql import JSONB # Added for JSONB type handling
 
-import json
-import os
 
 class QueryBuilder:
 
@@ -90,12 +86,13 @@ class QueryBuilder:
             self._models["Thermal"] = OrionThermal
             self._models["BoardStatus"] = OrionBoardStatus
             self._models["Packet"] = OrionPacket
+            self._models["GpsPrecise"] = OrionGpsPrecise
         else:
             raise ValueError(f"Car {car} is not supported.")
 
     def get_table_column_specs(self, force=False, verbose=False, target=None):
         table_specs = {}
-        for model_name, model_class in self._models.items():
+        for model_name, model_class in self._models.items():  # noqa: B007 pre-existing when the lint gate went on
             table_name = model_class.__tablename__
             
             if table_name not in table_specs:
@@ -279,7 +276,7 @@ class QueryBuilder:
             return val.encode('utf-8')
         try:
             return expected_type(val)
-        except Exception:
+        except Exception:  # noqa: BLE001 pre-existing when the lint gate went on
             return val
 
     @staticmethod
@@ -295,20 +292,20 @@ class QueryBuilder:
                 return np.isnan(val)
             return False
 
-        # --- Find missing columns ---
-        missing_cols = [col for col in table_desc if col not in data]
+        # --- Find missing columns (a serial id is the database's to fill) ---
+        missing_cols = [col for col in table_desc if col not in data and model.__table__.c[col].autoincrement is not True]
         if missing_cols:
             logging.warning(f"Missing columns in {table}: {', '.join(missing_cols)}")
 
         # --- Handle NaN/None values ---
         missing_flags = [not is_missing_value(val) for _, val in data.items()]
-        nans = {k: v for (k, v), ok in zip(data.items(), missing_flags) if not ok}
+        nans = {k: v for (k, v), ok in zip(data.items(), missing_flags) if not ok}  # noqa: B905 pre-existing when the lint gate went on
         if nans:
             logging.warning(f"NaN-like data in {table}: {nans}")
 
         # --- Normalize values ---
         processed = {}
-        for (key, val), ok in zip(data.items(), missing_flags):
+        for (key, val), ok in zip(data.items(), missing_flags):  # noqa: B905 pre-existing when the lint gate went on
             if not ok:
                 continue
             if key not in table_desc:
@@ -349,7 +346,7 @@ class QueryBuilder:
         if car == "Angelique":
             return shared_models + [AngeliquePacket, AngeliqueDynamics, AngeliqueControls, AngeliquePack, AngeliqueDiagnostics, AngeliqueThermal]
         if car == "Orion":
-            return shared_models + [OrionPacket, OrionDynamics, OrionControls, OrionPack, OrionDiagnosticsHigh, OrionDiagnosticsLow, OrionThermal, OrionBoardStatus]
+            return shared_models + [OrionPacket, OrionDynamics, OrionControls, OrionPack, OrionDiagnosticsHigh, OrionDiagnosticsLow, OrionThermal, OrionBoardStatus, OrionGpsPrecise]
         raise ValueError(f"Car {car} is not supported.")
 
     @staticmethod
@@ -394,7 +391,10 @@ class QueryBuilder:
                 QueryBuilder.get_insert_values(table_name, row, model, table_spec)
                 for row in table_rows
             ]
-            
+            # One multi-row insert needs the same keys in every row; get_insert_values drops None/NaN.
+            all_keys = set().union(*processed_rows)
+            processed_rows = [{k: r.get(k) for k in all_keys} for r in processed_rows]
+
             stmt = insert(model.__table__).values(processed_rows)
             session.execute(stmt)
         

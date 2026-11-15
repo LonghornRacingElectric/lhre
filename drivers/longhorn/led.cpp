@@ -3,16 +3,11 @@
 #include <cmath>
 
 namespace longhorn {
-namespace {
 
-// Rainbow brightness cap so the LED doesn't blind anyone at close range.
-constexpr float kRainbowBrightness = 0.5f;
-
-}  // namespace
-
-RgbLed::RgbLed(lhal::Pwm* red, lhal::Pwm* green, lhal::Pwm* blue)
-    : red_(red), green_(green), blue_(blue) {
-  Set(0.5f, 0.5f, 0.5f);
+RgbLed::RgbLed(lhal::Pwm* red, lhal::Pwm* green, lhal::Pwm* blue,
+               float rainbow_brightness, float boot_brightness)
+    : red_(red), green_(green), blue_(blue), brightness_(rainbow_brightness) {
+  Set(boot_brightness, boot_brightness, boot_brightness);
 }
 
 void RgbLed::Set(float r, float g, float b) {
@@ -45,7 +40,7 @@ void RgbLed::Rainbow(float dt_s) {
     r = phase_ - 2.0f;
   }
 
-  Set(r * kRainbowBrightness, g * kRainbowBrightness, b * kRainbowBrightness);
+  Set(r * brightness_, g * brightness_, b * brightness_);
 }
 
 }  // namespace longhorn

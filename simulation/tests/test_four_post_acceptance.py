@@ -1,7 +1,9 @@
 import csv
 import hashlib
 import json
+import math
 
+import numpy as np
 import pytest
 
 from tools import four_post_acceptance as acceptance
@@ -29,25 +31,25 @@ rear:
 """
 EXECUTED_SETUP = {
     "heaveMagnitude": 0.03,
-    "pVehicle.pFrAxleDW.springFreeLength": 0.2,
+    "pVehicle.chassis.frontAxle.actuation.springFreeLength": 0.2,
     "pFrStabar.barRate": 250.0,
-    "pVehicle.pFrStabar.barRate": 250.0,
+    "pVehicle.chassis.frontAxle.stabilizer.barRate": 250.0,
     "pRrStabar.barRate": 535.0,
-    "pVehicle.pRrStabar.barRate": 535.0,
-    "pVehicle.pFrAxleDW.springTable[1,1]": 0.0,
-    "pVehicle.pFrAxleDW.springTable[1,2]": 0.0,
-    "pVehicle.pFrAxleDW.springTable[2,1]": 1.0,
-    "pVehicle.pFrAxleDW.springTable[2,2]": 1000.0,
-    "pVehicle.pRrAxleDW.springTable[1,1]": 0.0,
-    "pVehicle.pRrAxleDW.springTable[1,2]": 0.0,
-    "pVehicle.pRrAxleDW.springTable[2,1]": 1.0,
-    "pVehicle.pRrAxleDW.springTable[2,2]": 2000.0,
+    "pVehicle.chassis.rearAxle.stabilizer.barRate": 535.0,
+    "pVehicle.chassis.frontAxle.actuation.springTable[1,1]": 0.0,
+    "pVehicle.chassis.frontAxle.actuation.springTable[1,2]": 0.0,
+    "pVehicle.chassis.frontAxle.actuation.springTable[2,1]": 1.0,
+    "pVehicle.chassis.frontAxle.actuation.springTable[2,2]": 1000.0,
+    "pVehicle.chassis.rearAxle.actuation.springTable[1,1]": 0.0,
+    "pVehicle.chassis.rearAxle.actuation.springTable[1,2]": 0.0,
+    "pVehicle.chassis.rearAxle.actuation.springTable[2,1]": 1.0,
+    "pVehicle.chassis.rearAxle.actuation.springTable[2,2]": 2000.0,
 }
 FE03BAB_BAR_RATES = {
     "pFrStabar.barRate": 390.0,
-    "pVehicle.pFrStabar.barRate": 390.0,
+    "pVehicle.chassis.frontAxle.stabilizer.barRate": 390.0,
     "pRrStabar.barRate": 525.0,
-    "pVehicle.pRrStabar.barRate": 525.0,
+    "pVehicle.chassis.rearAxle.stabilizer.barRate": 525.0,
 }
 FE03BAB_CONFIG = """\
 standard: FourPostEval
@@ -90,6 +92,12 @@ FE03BAB_KEYS = (
 DRIFT_REASON = "closure 4.10e-03 of load scale exceeds 1e-04 at t = 118 s"
 CORNER_REASON = "corner load differs from target by 12.3 N"
 SPRING_REASON = "spring force differs from the executed table by 130 N"
+DRIFT = {"status": "fail", "reason": DRIFT_REASON, "closure": "False"}
+
+
+@pytest.fixture(autouse=True)
+def _hardpoints_match_the_rows(monkeypatch):
+    monkeypatch.setattr(acceptance, "contact_patch_coefficient", lambda car, axle: 1.5)
 
 
 def _sha256(path):
@@ -103,7 +111,7 @@ def _legacy_rows():
     return rows
 
 
-def _measured_rows(*, status="fail", reason=DRIFT_REASON, closure="False", corner_n="0.9", spring_n="1e-12"):
+def _measured_rows(*, status="pass", reason="", closure="True", corner_n="0.9", spring_n="1e-12"):
     """Metrics CSV of FourPost after the measured static balance: same keys, measured balance keys."""
     rows = {key: "1.5" for key in FE03BAB_KEYS if key != "static_balance_iterations"}
     rows.update({
@@ -113,10 +121,10 @@ def _measured_rows(*, status="fail", reason=DRIFT_REASON, closure="False", corne
         "static_balance_max_abs_fz_error_n": corner_n,
         "static_balance_max_abs_fz_error_pct": "0.13",
         "static_equilibrium_pass": closure,
-        "static_equilibrium_max_force_residual_n": "4.39",
-        "static_equilibrium_max_moment_residual_nm": "7.5",
-        "static_equilibrium_max_relative_residual": "0.0041",
-        "static_equilibrium_worst_time_s": "118.0",
+        "static_equilibrium_max_force_residual_n": "1.6e-12",
+        "static_equilibrium_max_moment_residual_nm": "1e-12",
+        "static_equilibrium_max_relative_residual": "1e-15",
+        "static_equilibrium_worst_time_s": "0.0",
         "static_equilibrium_rows": "60",
         "static_spring_max_residual_n": spring_n,
     })
@@ -270,7 +278,7 @@ def test_vehicle_bar_rates_pass_even_when_the_config_has_overrides(tmp_path, mon
 
 
 def test_a_run_that_does_not_show_a_bar_rate_is_unavailable(tmp_path, monkeypatch):
-    case = {key: value for key, value in EXECUTED_SETUP.items() if "RrStabar" not in key}
+    case = {key: value for key, value in EXECUTED_SETUP.items() if "RrStabar" not in key and "rearAxle.stabilizer" not in key}
     run, vehicle = _write_run(tmp_path, _legacy_rows(), case=case)
     code, checks, _ = _accept(run, vehicle, monkeypatch)
     assert code == 0
@@ -287,7 +295,7 @@ def test_a_run_that_does_not_show_the_spring_tables_is_unavailable(tmp_path, mon
 
 @pytest.mark.parametrize("statuses", [None, {}], ids=["measured", "measured-with-status"])
 def test_a_measured_static_balance_pass_passes(tmp_path, monkeypatch, statuses):
-    rows = (_labelled_rows if statuses is not None else _measured_rows)(status="pass", reason="", closure="True")
+    rows = _labelled_rows() if statuses is not None else _measured_rows()
     run, vehicle = _write_run(tmp_path, rows, statuses=statuses)
     code, checks, report = _accept(run, vehicle, monkeypatch)
     assert code == 0, report
@@ -299,36 +307,34 @@ def test_a_measured_static_balance_pass_passes(tmp_path, monkeypatch, statuses):
 
 
 @pytest.mark.parametrize("statuses", [None, {}], ids=["measured", "measured-with-status"])
-def test_a_closure_failure_from_the_time_drift_alone_is_known_upstream(tmp_path, monkeypatch, capsys, statuses):
-    rows = _labelled_rows() if statuses is not None else _measured_rows()
+def test_a_closure_failure_fails(tmp_path, monkeypatch, statuses):
+    rows = (_labelled_rows if statuses is not None else _measured_rows)(**DRIFT)
+    rows.update(static_equilibrium_max_force_residual_n="4.39", static_equilibrium_worst_time_s="118.0")
     run, vehicle = _write_run(tmp_path, rows, statuses=statuses)
     code, checks, report = _accept(run, vehicle, monkeypatch)
-    assert code == 0, report
-    assert report["result"] == "accepted"
-    drift = checks["static balance: closure drift"]
-    assert drift["result"] == "KNOWN-UPSTREAM"
-    assert "closure residual grows with simulated time" in drift["detail"]
-    assert "t = 118 s" in drift["detail"]
-    assert checks["static balance: design-pose closure"]["result"] == "UNAVAILABLE"
+    assert code == 1, report
+    closure = checks["static balance: closure"]
+    assert closure["result"] == "FAIL"
+    assert "force 4.39 N" in closure["detail"] and "t = 118 s" in closure["detail"]
+    assert "static balance: closure drift" not in checks
     assert checks["static balance: corner loads"]["result"] == "PASS"
     assert checks["static balance: springs"]["result"] == "PASS"
-    assert "closure residual grows with simulated time" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(
     ("reason", "kwargs", "failed"),
     [
-        (f"{DRIFT_REASON}; {CORNER_REASON}", {"corner_n": "12.3"}, "static balance: corner loads"),
-        (CORNER_REASON, {"closure": "True", "corner_n": "12.3"}, "static balance: corner loads"),
-        (f"{DRIFT_REASON}; {SPRING_REASON}", {"spring_n": "130"}, "static balance: springs"),
-        (f"{DRIFT_REASON}; non-finite sample: frKnC.heave", {}, "static balance"),
-        (f"{DRIFT_REASON}; a check that BobSim adds later", {}, "static balance"),
+        (f"{DRIFT_REASON}; {CORNER_REASON}", {"closure": "False", "corner_n": "12.3"}, "static balance: corner loads"),
+        (CORNER_REASON, {"corner_n": "12.3"}, "static balance: corner loads"),
+        (f"{DRIFT_REASON}; {SPRING_REASON}", {"closure": "False", "spring_n": "130"}, "static balance: springs"),
+        (f"{DRIFT_REASON}; non-finite sample: frKnC.heave", {"closure": "False"}, "static balance"),
+        (f"{DRIFT_REASON}; a check that BobSim adds later", {"closure": "False"}, "static balance"),
         ("", {}, "static balance"),
     ],
     ids=["corner-and-drift", "corner-only", "spring", "non-finite", "unknown-clause", "no-reason"],
 )
 def test_a_measured_static_balance_failure_beyond_the_drift_fails(tmp_path, monkeypatch, reason, kwargs, failed):
-    rows = _labelled_rows(reason=reason, **kwargs)
+    rows = _labelled_rows(status="fail", reason=reason, **kwargs)
     run, vehicle = _write_run(tmp_path, rows, statuses={})
     code, checks, _ = _accept(run, vehicle, monkeypatch)
     assert code == 1
@@ -349,7 +355,7 @@ def test_a_measured_corner_error_without_a_finite_value_fails(tmp_path, monkeypa
     ids=["pass-with-closure-reason", "fail-without-closure-reason", "no-closure-value"],
 )
 def test_static_balance_keys_that_disagree_fail(tmp_path, monkeypatch, closure, reason):
-    run, vehicle = _write_run(tmp_path, _measured_rows(closure=closure, reason=reason, corner_n="12.3"))
+    run, vehicle = _write_run(tmp_path, _measured_rows(status="fail", closure=closure, reason=reason, corner_n="12.3"))
     code, checks, _ = _accept(run, vehicle, monkeypatch)
     assert code == 1
     assert checks["static balance: closure"]["result"] == "FAIL"
@@ -522,9 +528,9 @@ def test_the_executed_setup_matches_the_vehicle(tmp_path, monkeypatch):
     ("key", "value", "check"),
     [
         ("pFrStabar.barRate", 390.0, "executed bar rates"),
-        ("pVehicle.pFrStabar.barRate", 390.0, "executed bar rates"),
+        ("pVehicle.chassis.frontAxle.stabilizer.barRate", 390.0, "executed bar rates"),
         ("pRrStabar.barRate", 525.0, "executed bar rates"),
-        ("pVehicle.pRrAxleDW.springTable[2,2]", 2500.0, "executed spring tables"),
+        ("pVehicle.chassis.rearAxle.actuation.springTable[2,2]", 2500.0, "executed spring tables"),
     ],
 )
 def test_a_fourpost_override_that_differs_from_the_vehicle_fails(tmp_path, monkeypatch, key, value, check):
@@ -536,7 +542,7 @@ def test_a_fourpost_override_that_differs_from_the_vehicle_fails(tmp_path, monke
 
 
 def test_a_spring_table_that_differs_fails_even_with_config_overrides(tmp_path, monkeypatch):
-    case = {**EXECUTED_SETUP, **FE03BAB_BAR_RATES, "pVehicle.pFrAxleDW.springTable[2,2]": 1100.0}
+    case = {**EXECUTED_SETUP, **FE03BAB_BAR_RATES, "pVehicle.chassis.frontAxle.actuation.springTable[2,2]": 1100.0}
     run, vehicle = _write_run(tmp_path, _legacy_rows(), case=case, config=FE03BAB_CONFIG)
     code, checks, _ = _accept(run, vehicle, monkeypatch)
     assert code == 1
@@ -558,3 +564,55 @@ def test_a_fourpost_manifest_that_changed_after_the_run_fails(tmp_path, monkeypa
     code, checks, _ = _accept(run, vehicle, monkeypatch)
     assert code == 1
     assert checks["executed spring tables"]["result"] == "FAIL"
+
+
+def test_anti_coefficients_that_match_the_hardpoints_pass(tmp_path, monkeypatch):
+    run, vehicle = _write_run(tmp_path, _labelled_rows())
+    _, checks, _ = _accept(run, vehicle, monkeypatch)
+    assert checks["anti geometry"]["result"] == "PASS"
+
+
+@pytest.mark.parametrize("expected", [-1.5, 1.6, 1.4])
+def test_anti_coefficients_outside_the_tolerance_fail(tmp_path, monkeypatch, expected):
+    monkeypatch.setattr(acceptance, "contact_patch_coefficient", lambda car, axle: expected)
+    run, vehicle = _write_run(tmp_path, _labelled_rows())
+    code, checks, _ = _accept(run, vehicle, monkeypatch)
+    assert code == 1
+    assert checks["anti geometry"]["result"] == "FAIL"
+
+
+def test_an_anti_coefficient_without_a_finite_value_fails(tmp_path, monkeypatch):
+    rows = {**_labelled_rows(), "avg_longitudinal_jacking_coeff_rear": "nan"}
+    run, vehicle = _write_run(tmp_path, rows)
+    _, checks, _ = _accept(run, vehicle, monkeypatch)
+    assert checks["anti geometry"]["result"] == "FAIL"
+
+
+def test_a_csv_without_jacking_coefficients_is_unavailable(tmp_path, monkeypatch):
+    rows = {key: value for key, value in _labelled_rows().items() if "longitudinal_jacking" not in key}
+    run, vehicle = _write_run(tmp_path, rows)
+    _, checks, _ = _accept(run, vehicle, monkeypatch)
+    assert checks["anti geometry"]["result"] == "UNAVAILABLE"
+
+
+@pytest.mark.parametrize("pitch_deg", [-5.0, 0.0, 8.0])
+def test_parallel_wishbones_give_the_tangent_of_their_side_view_pitch(monkeypatch, pitch_deg):
+    monkeypatch.undo()
+    pitch = math.radians(pitch_deg)
+    axis = np.array([math.cos(pitch), 0.0, math.sin(pitch)])
+
+    def arm(y, z):
+        inner = np.array([0.0, y, z])
+        return {"fore": inner + 0.1 * axis, "aft": inner - 0.1 * axis, "outer": np.array([0.0, 0.55, z])}
+
+    lower, upper, tie = arm(0.2, 0.1), arm(0.25, 0.3), arm(0.22, 0.2)
+    car = {"front": {
+        "suspension": {
+            "lower_fore_i_m": lower["fore"], "lower_aft_i_m": lower["aft"], "lower_o_m": lower["outer"],
+            "upper_fore_i_m": upper["fore"], "upper_aft_i_m": upper["aft"], "upper_o_m": upper["outer"],
+            "tie_o_m": tie["outer"] + np.array([0.05, 0.0, 0.0]), "wheel_center_m": [0.0, 0.6, 0.2],
+        },
+        "steering": {"rack_pickup_m": tie["aft"] + np.array([0.05, 0.0, 0.0]) + 0.1 * axis},
+        "wheel": {"radius_m": 0.2, "camber_deg": 0.0, "toe_deg": 0.0},
+    }}
+    assert acceptance.contact_patch_coefficient(car, "front") == pytest.approx(math.tan(pitch), abs=1e-12)

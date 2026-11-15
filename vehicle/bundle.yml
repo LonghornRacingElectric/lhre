@@ -1,5 +1,5 @@
 schema: lhre.vehicle-bundle.v1
-bundle_id: orion-baseline-1
+bundle_id: orion-baseline-2
 status: candidate
 superseded_by: null
 release:
@@ -18,7 +18,7 @@ release:
 members:
   vehicle:
     path: vehicle/vehicle.yml
-    sha256: e024a5e36ac3660889e298a8f88e599718b5fd97e23a39e1ec58f60f4df200f5
+    sha256: c4dc19eb29749755054802385e6930261e6ec3720bc7e4730fb217cdc4acaaa0
     schema: boblib.vehicle.v1
   tires:
     - id: 16x7p5_10_12psi

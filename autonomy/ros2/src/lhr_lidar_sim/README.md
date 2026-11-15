@@ -8,8 +8,8 @@ Livox's complete simulator plugin targets Gazebo Classic 9 and ROS 1.
 Our workspace uses Gazebo Harmonic and ROS 2 Jazzy, so we import its scan
 data into the existing headless caster rather than depend on that plugin.
 A regular Gazebo `gpu_lidar` uses a uniform angular grid and does not
-replay this table. This package currently runs in the kinematic demo;
-the Gazebo demo still uses its own sensor.
+replay this table. This package runs in the kinematic demo, and in the
+Gazebo demo with `lidar_source:=mid360` (see below).
 
 ## Layout
 
@@ -18,6 +18,9 @@ the Gazebo demo still uses its own sensor.
 | `mid360.py` | Beam pattern and range model. No ROS. |
 | `scene.py` | Ray casting against ground and cones. No ROS. |
 | `sensor.py` | Mount pose and the per-frame pipeline. No ROS. |
+| `return_profile.py` | Recorded small-cone return-density profile. No ROS. |
+| `acceptance.py` | `compare_acceptance` entry point. No ROS. |
+| `patterns/acceptance_*` | Bundled acceptance results and the fitted overcast profile |
 | `lidar_sim_node.py` | The ROS wrapper. |
 
 Only the ROS wrapper imports ROS. The numerical modules run and are tested
@@ -102,9 +105,36 @@ print(points_on_cone(sensor, 0.0, distance_m=10.0, frames=10))
 
 The table is decoded once on first use and cached for subsequent frames.
 
+## Gazebo world input
+
+Use `perception:=lidar lidar_source:=mid360` in the
+[Gazebo launch](../lhr_gazebo/README.md#mid-360-cloud-source-and-foxglove).
+Its internal read-only `world_sdf` selects the actual loaded world; empty
+`world_sdf` retains scene-marker studies.
+
+World mode accepts flat ground and upright nominal cone includes. Unsupported
+obstacles, frames, transforms and scaling fail explicitly. Cone envelopes are
+ideal surfaces; terrain, self-occlusion and real reflectivity are not modeled.
+Gazebo launch preflights the same loader before starting processes. The caster
+always receives clean plant pose, including under injected driving-odometry faults.
+Conservative azimuth culling speeds up casting without changing geometric hits.
+
+Cloud and mount TF share the truth acquisition stamp. Duplicate stamps suppress
+extra scans and repeated mount TFs; a backward-time reset resumes both. Vehicle height/attitude and
+the shared mount are applied, although current Gazebo odometry is planar.
+
+World mode takes its mount at startup and keeps it for the run, so a scored
+run never mixes mounts; runtime mount edits are rejected. The Gazebo launch sets
+it with `mid360_mount_*` and then requires the detector to read it from tf. World
+mode also requires snapshot scans without synthetic clutter, and rejects other
+startup values. Motion and clutter studies remain available in marker mode.
+Gazebo exposes the supported startup rate, range, noise, dropout and profile
+settings as `mid360_*` launch arguments; its [argument table](../lhr_gazebo/README.md#mid-360-cloud-source-and-foxglove)
+also documents the fixed world-mode exceptions.
+
 ## Moving the sensor without restarting
 
-All six mount degrees of freedom accept a new value while the node runs,
+In marker mode, all six mount degrees of freedom accept a new value while the node runs,
 so the mount study is a slider and a look rather than a rebuild per
 guess:
 
@@ -166,10 +196,10 @@ every viewer draws stays where it started. A transform that can change
 is not static.
 
 ```
-map -> base_link -> lidar     (1.80, 0.00, 0.55), pitch as parameterised
+map -> base_link -> lidar     (0.609, 0.00, 1.06), roll pi, pitch 0.1222 (vehicle.yaml)
 ```
 
-Both the ROS node and offline `MountPose()` read their default position
+Both the ROS node and offline `MountPose()` read their default pose
 from vehicle YAML. The coordinates above remain assumed mount values.
 
 ### In the `lidar` frame, `z` is not height
@@ -193,26 +223,32 @@ height. To check flatness, transform into `base_link` first.
 | `mount_x_m` | `vehicle.yaml` | Mount position in `base_link`. Live |
 | `mount_y_m` | `vehicle.yaml` | Live |
 | `mount_z_m` | `vehicle.yaml` | Live |
-| `mount_roll_rad` | `0.0` | Live |
-| `mount_pitch_rad` | `0.0` | Positive is nose down. Live |
-| `mount_yaw_rad` | `0.0` | Live |
+| `mount_roll_rad` | `vehicle.yaml` | π is upside down. Live |
+| `mount_pitch_rad` | `vehicle.yaml` | Positive is nose down. Live |
+| `mount_yaw_rad` | `vehicle.yaml` | Live |
 | `seed` | `1` | Node-local stream, so a seed repeats |
 | `frame_rate_hz` | `10.0` | |
 | `point_rate_hz` | `200000.0` | Datasheet |
 | `max_range_m` | `40.0` | Datasheet, at 10% reflectivity |
-| `range_noise_std_m` | `0.02` | Applied along the beam, not per axis |
+| `range_noise_std_m` | vehicle YAML (currently `0.02`) | Applied along the beam, not per axis; startup default shared with GPU model |
 | `dropout_rate` | `0.0` | Returns lost outright |
 | `elevation_profile` | `livox` | Imported vendor table; `rosette`/`uniform` are legacy approximations |
+| `return_profile` | `baseline` | `acceptance_overcast` thins small-cone returns by range |
+| `motion_distortion` | `false` | Cast each frame from interpolated poses |
+| `clutter_profile` | `none` | `trackside` adds solid boxes beside the boundaries |
+
+`range_noise_std_m` is a node parameter here, not read from `vehicle.yaml`
+like Gazebo's range noise (#161), so change both together.
 
 Passed through the launch file these are type-coerced, so
 `mount_pitch_rad:=0` works as well as `0.0`. See
 [lhr_demo](../lhr_demo/README.md) for why that is not automatic.
 
-The mount **position** comes from
+The mount **pose**, position and orientation, comes from
 [`lhr_vehicle`](../lhr_vehicle/README.md), because vehicle numbers live
-in one file. The mount **orientation** does not, because it is the
-answer the mount study owes and guessing it into `vehicle.yaml` would
-make a placeholder look like a measurement.
+in one file. It holds the
+[mount study's](../../../testing/2026-11-08-lidar-mount-study/README.md)
+design, marked `ASSUMED`, until the bracket is built and measured.
 
 ## Gotchas
 
@@ -238,13 +274,16 @@ make a placeholder look like a measurement.
 
 ## Not done yet
 
-- Cones are opaque cones of a single size, with no reflectivity model,
-  so `dropout_rate` is a flat fraction rather than a function of range
-  and colour. A dark cone at 30 m is the case that matters and this does
-  not yet capture it.
-- No motion within a frame. All 20,000 beams are cast from one pose, so
+- No reflectivity model, so `dropout_rate` is a flat fraction rather
+  than a function of range and colour. Only
+  `return_profile=acceptance_overcast` adds range dependence, and only
+  for small cones. A dark cone at 30 m is the case that matters and this
+  does not yet capture it.
+- Motion within a frame is off by default. With the default
+  `motion_distortion=false` all 20,000 beams are cast from one pose, so
   at 15 m/s the 1.5 m travelled during a frame is ignored. That flatters
-  the model at speed.
+  the model at speed; `motion_distortion:=true` casts interpolated poses
+  instead (see [motion and clutter studies](#motion-and-clutter-studies)).
 
 ## Hardware comparison
 

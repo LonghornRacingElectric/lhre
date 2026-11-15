@@ -14,7 +14,8 @@ SIM = Path(__file__).resolve().parents[1]
 NAME = "TestCar"
 BOBLIB = "engines/boblib/BobLib"
 RECORD = f"{BOBLIB}/Records/VehicleDefn/{NAME}Record.mo"
-TEMPLATE = f"{BOBLIB}/Experiments/Standards/Templates/FourPost/FourPostSim_{NAME}.mo"
+TEMPLATES = f"{BOBLIB}/Experiments/Standards/BobSimTemplates"
+STANDARDS_ORDER = f"{BOBLIB}/Experiments/Standards/package.order"
 METRICS = "simulations/mbd/generated_results/four_post_eval_report_metrics.csv"
 RUN_DIR = "simulations/mbd/BuildBobLib/FourPostSim/results/run_new"
 EXE = "simulations/mbd/BuildBobLib/FourPostSim/BobLib.Experiments.Standards.FourPostSim"
@@ -71,11 +72,17 @@ def main(argv):
     name = data["vehicle"]["name"]
     boblib = Path(data["paths"]["boblib"])
     record = boblib / "Records/VehicleDefn" / f"{name}Record.mo"
-    template = boblib / "Experiments/Standards/Templates/FourPost" / f"FourPostSim_{name}.mo"
+    templates = boblib / "Experiments/Standards/BobSimTemplates"
+    template = templates / f"FourPostSim_{name}.mo"
     expected = "record " + hashlib.sha256(vehicle.read_bytes()).hexdigest() + "\\n"
     if write:
         record.write_text(expected, encoding="utf-8")
+        templates.mkdir(exist_ok=True)
         template.write_text(expected, encoding="utf-8")
+        (templates / "package.mo").write_text("package BobSimTemplates\\n", encoding="utf-8")
+        (templates / "package.order").write_text(f"FourPostSim_{name}\\n", encoding="utf-8")
+        order = boblib / "Experiments/Standards/package.order"
+        order.write_text(order.read_text(encoding="utf-8") + "BobSimTemplates\\n", encoding="utf-8")
     current = record.is_file() and record.read_text(encoding="utf-8") == expected
     print(f"vehicle:  {name}")
     print("state:    " + ("written" if current else "stale"))
@@ -175,6 +182,21 @@ assert args.pop(0) == "sim", args
 sys.exit(subprocess.call(args, cwd=SIM, env=env))
 '''
 
+FAKE_BUNDLE_CHECK = '''\
+import hashlib
+import sys
+from pathlib import Path
+
+import yaml
+
+bundle = Path(sys.argv[sys.argv.index("--bundle") + 1])
+vehicle = Path(sys.argv[sys.argv.index("--vehicle") + 1])
+expected = yaml.safe_load(bundle.read_text(encoding="utf-8"))["members"]["vehicle"]["sha256"]
+if hashlib.sha256(vehicle.read_bytes()).hexdigest() != expected:
+    print("FAIL: members.vehicle.sha256 does not match the vehicle.")
+    sys.exit(1)
+'''
+
 
 def _git(cwd, *args):
     subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, env={**os.environ, **GIT_ENV})
@@ -194,6 +216,7 @@ def lhre(tmp_path):
     sim = root / "simulation"
     for name in ("Makefile", "tools/car.sh", "tools/car_identity.py"):
         _write(sim / name, (SIM / name).read_text(encoding="utf-8"))
+    _write(sim / "tools" / "bundle.py", FAKE_BUNDLE_CHECK)
     bobsim = sim / "bobsim"
     _write(bobsim / "vehicle.yml", BOBSIM_VEHICLE)
     _write(bobsim / "README.md", "fake BobSim\n")
@@ -205,7 +228,7 @@ def lhre(tmp_path):
     _write(bobsim / "common" / "vehicle_io.py", FAKE_VEHICLE_IO)
     _write(bobsim / RECORD, "record of the BobSim car\n")
     _write(bobsim / BOBLIB / "Records/VehicleDefn/package.order", f"{NAME}Record\n")
-    _write(bobsim / BOBLIB / "Experiments/Standards/Templates/FourPost/package.order", "")
+    _write(bobsim / STANDARDS_ORDER, "VehicleSim\nFourPostSim\n")
     _write(bobsim / "simulations/mbd/generated_results/old_car_metrics.csv", "metric,value\nold,1\n")
     _write(bobsim / FOUR_POST_CONFIG, "procedure:\n  heaveMagnitude: 0.03\n")
     _git(bobsim, "init", "-q")
@@ -219,10 +242,10 @@ def lhre(tmp_path):
     return root
 
 
-def _make_car(lhre, target):
+def _make_car(lhre, target, *args):
     compose = f"{sys.executable} {lhre.parent / 'compose.py'}"
-    result = subprocess.run(
-        ["make", "car", f"T={target}", f"COMPOSE={compose}"],
+    result = subprocess.run(  # noqa: PLW1510 pre-existing when the lint gate went on
+        ["make", "car", f"T={target}", f"COMPOSE={compose}", *args],
         cwd=lhre / "simulation",
         capture_output=True,
         text=True,
@@ -259,7 +282,8 @@ def test_make_car_runs_the_target_on_our_vehicle_and_restores_bobsim(lhre):
     assert (bobsim / "simulations/mbd/generated_results/seen_vehicle.yml").read_bytes() == our_vehicle.read_bytes()
     assert (bobsim / "vehicle.yml").read_text(encoding="utf-8") == BOBSIM_VEHICLE
     assert (bobsim / RECORD).read_text(encoding="utf-8") == "record of the BobSim car\n"
-    assert not (bobsim / TEMPLATE).exists()
+    assert not list((bobsim / TEMPLATES).glob("*"))
+    assert (bobsim / STANDARDS_ORDER).read_text(encoding="utf-8") == "VehicleSim\nFourPostSim\n"
     assert _bobsim_status(lhre) == ""
     assert not (bobsim / "simulations/mbd/generated_results/old_car_metrics.csv").exists()
 
@@ -295,6 +319,46 @@ def test_make_car_runs_the_target_on_our_vehicle_and_restores_bobsim(lhre):
     metrics = out / "generated_results" / "four_post_eval_report_metrics.csv"
     assert outputs["generated_results/four_post_eval_report_metrics.csv"] == _sha256(metrics)
     assert outputs["four_post_eval_config.yml"] == _sha256(bobsim / FOUR_POST_CONFIG)
+
+
+def _candidate(lhre, bundle_sha256=None):
+    vehicle = OUR_VEHICLE.replace("mass_kg: 160.0", "mass_kg: 170.0")
+    folder = lhre / "simulation" / "out" / "cand"
+    _write(folder / "vehicle.yml", vehicle)
+    _write(folder / "bundle.yml", BUNDLE.format(sha256=bundle_sha256 or hashlib.sha256(vehicle.encode()).hexdigest()))
+    return folder / "vehicle.yml"
+
+
+def test_make_car_runs_a_candidate_vehicle_into_its_own_folder(lhre):
+    assert _make_car(lhre, "ok").returncode == 0
+    candidate = _candidate(lhre)
+    result = _make_car(lhre, "ok", "VEHICLE=out/cand/vehicle.yml")
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    seen = lhre / "simulation/bobsim/simulations/mbd/generated_results/seen_vehicle.yml"
+    assert seen.read_bytes() == candidate.read_bytes()
+    assert _bobsim_status(lhre) == ""
+    car = lhre / "simulation" / "out" / "car"
+    assert (car / "ok--cand" / "vehicle.yml").read_bytes() == candidate.read_bytes()
+    assert (car / "ok" / "vehicle.yml").read_bytes() == (lhre / "vehicle" / "vehicle.yml").read_bytes()
+    identity = _identity(lhre, "ok--cand")
+    assert identity["status"] == "ok", identity
+    assert identity["vehicle"]["path"] == "simulation/out/cand/vehicle.yml"
+    assert identity["vehicle"]["sha256"] == _sha256(candidate)
+    assert identity["vehicle"]["candidate"] is True
+    assert identity["bundle"]["path"] == "simulation/out/cand/bundle.yml"
+    assert identity["bundle"]["describes_vehicle"] is True
+    assert _identity(lhre, "ok")["vehicle"]["candidate"] is False
+
+
+def test_make_car_stops_before_the_target_on_a_candidate_that_fails_the_check(lhre):
+    _candidate(lhre, bundle_sha256="0" * 64)
+    result = _make_car(lhre, "ok", "VEHICLE=out/cand/vehicle.yml")
+    assert result.returncode != 0
+    assert "fails the candidate check" in result.stderr
+    assert not (lhre / "simulation/bobsim/simulations/mbd/generated_results/seen_vehicle.yml").exists()
+    assert not (lhre / "simulation/out/car/ok--cand").exists()
+    assert _bobsim_status(lhre) == ""
 
 
 def test_make_car_fails_without_a_vehicle_bundle(lhre):
@@ -402,7 +466,15 @@ def test_make_car_refuses_a_bobsim_with_local_changes(lhre):
     assert not (bobsim / "simulations/mbd/generated_results/seen_vehicle.yml").exists()
 
 
-@pytest.mark.parametrize("target", ["ok VEHICLE=x", "-B", "../ok"])
+def test_make_car_rejects_a_candidate_in_a_nested_folder(lhre):
+    _write(lhre / "simulation/out/a/b/vehicle.yml", OUR_VEHICLE)
+    result = _make_car(lhre, "ok", "VEHICLE=out/a/b/vehicle.yml")
+    assert result.returncode != 0
+    assert "is not a file under out/<name>/" in result.stderr
+    assert not (lhre / "simulation/out/car").exists()
+
+
+@pytest.mark.parametrize("target", ["ok VEHICLE=x", "-B", "../ok", "ok--cand"])
 def test_make_car_rejects_a_target_that_is_not_a_name(lhre, target):
     result = _make_car(lhre, target)
     assert result.returncode != 0
@@ -412,7 +484,7 @@ def test_make_car_rejects_a_target_that_is_not_a_name(lhre, target):
 
 
 def test_make_car_is_not_run_by_a_dry_run():
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: PLW1510 pre-existing when the lint gate went on
         ["make", "-n", "car", "T=dry-run-probe", "COMPOSE=compose"],
         cwd=SIM,
         capture_output=True,
@@ -427,5 +499,5 @@ def test_car_script_is_posix_sh():
     dash = shutil.which("dash")
     if dash is None:
         pytest.skip("dash is not installed")
-    result = subprocess.run([dash, "-n", str(SIM / "tools" / "car.sh")], capture_output=True, text=True)
+    result = subprocess.run([dash, "-n", str(SIM / "tools" / "car.sh")], capture_output=True, text=True)  # noqa: PLW1510 pre-existing when the lint gate went on
     assert result.returncode == 0, result.stderr

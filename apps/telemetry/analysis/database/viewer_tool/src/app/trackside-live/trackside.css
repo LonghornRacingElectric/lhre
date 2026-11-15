@@ -1734,3 +1734,50 @@ textarea:focus-visible,
   .heroMetricRow .metric { padding: 8px 9px; }
   .heroMetricRow .metric strong { font-size: var(--fs-md); }
 }
+
+/* ── Phone drive view ───────────────────────────────────────────────────────
+   Phones (<=760px) get only what the timing person needs while the car runs;
+   the full page stays one tap away ("Full view"). Desktop never sees it. */
+.driveView, .driveToggle { display: none; }
+@media (max-width: 760px) {
+  .driveToggle { display: inline-flex; }
+  .topActions, .syncBanner { flex-wrap: wrap; }
+  .syncBanner > span:first-of-type { flex: 1 1 80%; }
+  /* 66px clears the global fixed Banner (56px). */
+  .shell.driveMode { padding: 66px var(--s-4) var(--s-4); }
+  .shell.driveMode > :not(.driveView):not(.modalOverlay):not(.error) { display: none; }
+  .shell.driveMode > .driveView {
+    display: flex; flex-direction: column; gap: var(--s-2);
+    min-height: calc(100dvh - 66px - var(--s-4));
+  }
+}
+.driveChips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.driveChips button { min-height: var(--ctl-h); }
+.driveChips .driveFull { order: 9; margin-left: auto; }
+.driveTimer { display: flex; flex-direction: column; line-height: 1; }
+.driveTimer b { font-size: clamp(48px, 16vw, 80px); font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.driveTimer small { color: var(--muted-text); font-size: var(--fs-md); margin-top: 2px; }
+.driveLap { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-2); padding-bottom: var(--s-2); border-bottom: 1px solid var(--border-strong); }
+.driveLap > b { font-size: var(--fs-2xl); font-weight: 750; }
+.driveLap span { color: var(--muted-text); font-size: var(--fs-md); }
+.driveLap span b { color: var(--text); font-size: var(--fs-xl); font-variant-numeric: tabular-nums; }
+.driveFlags { flex: 1 1 0; min-height: 112px; display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-3); }
+.driveBtn {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  border: 2px solid var(--border-strong); border-radius: var(--r-lg);
+  background: var(--surface-alt); color: var(--text);
+  font-size: var(--fs-xl); font-weight: 750; cursor: pointer;
+  touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
+}
+.driveBtn:active:not(:disabled) { transform: scale(0.97); }
+.driveFlags .driveBtn:active:not(:disabled) { background: var(--accent-soft); }
+.driveStart:active:not(:disabled) { filter: brightness(0.88); }
+.driveBtn:disabled { opacity: 0.45; cursor: not-allowed; }
+.driveBtn small { font-size: var(--fs-sm); font-weight: 500; }
+.driveGlyph { font-size: 36px; line-height: 1; }
+.driveCone .driveGlyph { color: var(--warning); }
+.driveOff .driveGlyph { color: var(--danger); font-weight: 900; }
+.driveCount { font-size: var(--fs-2xl); font-variant-numeric: tabular-nums; }
+.driveFlagLine { font-size: var(--fs-base); color: var(--muted-text); min-height: var(--ctl-h); display: flex; align-items: center; }
+.driveStart { flex: 1 1 0; min-height: 96px; font-size: 44px; background: var(--good); border-color: transparent; color: #fff; }
+.driveStatus { color: var(--muted-text); font-size: var(--fs-sm); text-align: center; }

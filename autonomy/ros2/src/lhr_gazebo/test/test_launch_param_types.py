@@ -27,7 +27,8 @@ NODES = {
         'a_lat_max', 'v_min', 'v_max', 'max_accel', 'max_decel']),
     'mission_manager': (MissionManager, ['mission', 'auto_go', 'ready_hold_sec']),
     'inertial_sim': (InertialSim, ['gyro_bias', 'wheel_scale_error']),
-    'publish_cones': (ConePublisher, ['seed', 'track_style', 'num_waypoints']),
+    'publish_cones': (ConePublisher, ['seed', 'track_style', 'num_waypoints',
+                                      'width_m', 'cone_spacing_m']),
     'sensor_sim': (SensorSim, ['fov_deg', 'max_range_m']),
 }
 
@@ -51,6 +52,8 @@ OVERRIDES = {
     'seed': ('7', 7),
     'track_style': ('oval', 'oval'),
     'num_waypoints': ('12', 12),
+    'width_m': ('4', 4.0),
+    'cone_spacing_m': ('3', 3.0),
     'fov_deg': ('360', 360.0),
     'max_range_m': ('30', 30.0),
 }
@@ -168,7 +171,7 @@ def test_every_forwarded_argument_is_typed(monkeypatch, config, expected):
     if config.get('lidar_classify_sides') == 'true':
         (builder,) = [n for n in nodes if n.node_executable == 'track_builder']
         params = evaluate_parameters(context, builder._Node__parameters)[0]
-        assert params['pairing_strategy'] == 'classified'
+        assert params['pairing_strategy'] == 'boundary'
     # Per node, not per executable: several share one (parameter_bridge).
     untyped = [(n.node_executable, _untyped(n)) for n in nodes]
     assert [(exe, names) for exe, names in untyped if names] == []

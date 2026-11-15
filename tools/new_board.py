@@ -10,8 +10,8 @@ is derived from it by firmware_project) and which middleware CubeMX has
 enabled. This script reads exactly that and emits the minimal call.
 
 firmware_project synthesizes the rest of the board's targets from file
-names (App/**/*.cpp → the app library, App/*_test.cpp → host tests,
-App/*_sim.cpp → host sims, Board/ → firmware entry point), so the script
+names (App/**/*.cpp → the app library, App/**/*_test.cpp → host tests,
+App/**/*_sim.cpp → host sims, Board/ → firmware entry point), so the script
 also writes compiling starter files for each of those (see
 new_board_templates.py) — a new board blinks, host-tests, and simulates
 out of the box. Existing files are never overwritten.
@@ -36,7 +36,7 @@ import urllib.request
 # Under `bazel run` the runfiles root (not this file's directory) is on
 # sys.path, so the sibling templates module needs the explicit path.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import new_board_templates  # noqa: E402
+import new_board_templates
 
 
 def ioc_values(path):
@@ -93,7 +93,7 @@ SVD_LOCK = {entries}
 def load_svd_lock(lock_path):
     ns = {}
     with open(lock_path, encoding="utf-8") as f:
-        exec(f.read(), ns)  # trusted, script-generated file of literals
+        exec(f.read(), ns)  # trusted, script-generated file of literals  # noqa: S102 pre-existing when the lint gate went on
     return ns["SVD_REPO"], ns["SVD_REPO_COMMIT"], ns["SVD_LOCK"]
 
 
@@ -165,7 +165,7 @@ def load_jsonc(path):
     if not os.path.exists(path):
         return None
     with open(path, encoding="utf-8") as f:
-        lines = [l for l in f if not l.lstrip().startswith("//")]
+        lines = [l for l in f if not l.lstrip().startswith("//")]  # noqa: E741 pre-existing when the lint gate went on
     return json.loads("".join(lines))
 
 
@@ -456,11 +456,11 @@ def main():
         print()
         print("next steps:")
         print(f"  - flesh out the starter files: App/{name}_app.* is the application")
-        print(f"    (LHAL-only; new App/*.cpp files join the library, new App/*_test.cpp /")
-        print(f"    App/*_sim.cpp files become their own test/sim targets automatically),")
-        print(f"    Board/main.cpp is bring-up + wiring (fix the status-LED TODO)")
+        print("    (LHAL-only; new App/*.cpp files join the library, new App/**/*_test.cpp /")
+        print("    App/**/*_sim.cpp files become their own test/sim targets automatically),")
+        print("    Board/main.cpp is bring-up + wiring (fix the status-LED TODO)")
         print(f"  - add //boards/{board}:release to //boards:all_firmware")
-        print(f"  - add a post_cubemx.sh like VCU's")
+        print("  - add a post_cubemx.sh like VCU's")
         print(f"  - write boards/{board}/README.md (see AGENTS.md — docs are part of the change)")
 
 

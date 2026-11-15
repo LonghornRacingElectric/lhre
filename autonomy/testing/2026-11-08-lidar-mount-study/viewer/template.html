@@ -1,0 +1,699 @@
+<title>Orion LiDAR Placement</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: the real car fills a working viewport with a control rail beside it; below, where the beams land and how many hit a cone, per orientation. On phones everything stacks. */
+:root {
+  --bg: #eef0ee;
+  --panel: #ffffff;
+  --ink: #1b2124;
+  --muted: #5a666b;
+  --line: #d3d9d7;
+  --scene: #e4e8e6;
+  --car: #9ba7ae;
+  --accent: #d9481a;
+  --seen: #2a9a66;
+  --part: #c99416;
+  --blind: #7d878c;
+  --sky: #c3ccd0;
+  --seq: #2a78d6;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4;
+  --font-display: 'Barlow Semi Condensed', 'Arial Narrow', 'Helvetica Neue', sans-serif;
+  --font-body: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121618; --panel: #1a1f22; --ink: #e4e9ea; --muted: #97a3a8; --line: #2b3236;
+    --scene: #0e1113; --car: #6b7880; --accent: #ff7440; --seen: #3cc285; --part: #e6b63a; --blind: #59646a;
+    --sky: #3a4347; --seq: #3987e5;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121618; --panel: #1a1f22; --ink: #e4e9ea; --muted: #97a3a8; --line: #2b3236;
+  --scene: #0e1113; --car: #6b7880; --accent: #ff7440; --seen: #3cc285; --part: #e6b63a; --blind: #59646a;
+  --sky: #3a4347; --seq: #3987e5;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181;
+  color-scheme: dark;
+}
+html, body { background: var(--bg); color: var(--ink); }
+body {
+  font-family: var(--font-body); font-size: 14px; line-height: 1.5;
+  padding-block: 20px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1320px; margin: 0 auto; display: grid; gap: 16px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 24px; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: 30px; letter-spacing: 0.01em; margin: 0; text-wrap: balance; }
+.sub { color: var(--muted); margin: 0; max-width: 72ch; }
+.frame { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+@media (max-width: 980px) { .main { grid-template-columns: minmax(0, 1fr); } }
+
+.stage { position: relative; background: var(--scene); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; min-width: 0; }
+.stage canvas { display: block; width: 100%; height: clamp(360px, 62vh, 720px); touch-action: none; }
+.views { position: absolute; top: 10px; left: 10px; display: flex; flex-wrap: wrap; gap: 4px; }
+.views button, .seg button {
+  font: 600 13px var(--font-display); letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 4px;
+  padding: 5px 10px; cursor: pointer;
+}
+.views button[aria-pressed="true"], .seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.legend { position: absolute; left: 10px; bottom: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 12px; max-width: calc(100% - 20px);
+  background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--line); border-radius: 4px; padding: 5px 9px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 11px; height: 11px; border-radius: 2px; display: inline-block; flex: none; }
+.ramp { width: 120px; height: 10px; border-radius: 2px; background: linear-gradient(90deg, color-mix(in srgb, var(--seq) 8%, transparent), var(--seq)); }
+.tag { position: absolute; pointer-events: none; font: 600 12px var(--font-display); letter-spacing: 0.03em; color: var(--ink);
+  background: color-mix(in srgb, var(--panel) 85%, transparent); border: 1px solid var(--line); border-radius: 3px; padding: 1px 6px;
+  transform: translate(-50%, -140%); white-space: nowrap; }
+.tag.lidar { color: var(--accent); border-color: var(--accent); }
+.busy { position: absolute; right: 10px; top: 10px; font: 500 12px var(--font-mono); color: var(--muted); }
+
+.rail { display: grid; gap: 12px; min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; display: grid; gap: 10px; min-width: 0; }
+.card h2 { font-family: var(--font-display); font-size: 15px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; margin: 0; color: var(--muted); }
+.card .lede { margin: 0; color: var(--muted); font-size: 13px; max-width: 80ch; }
+.seg { display: flex; flex-wrap: wrap; gap: 4px; }
+.field { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; font-size: 13px; }
+.field input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+.field output { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.check { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.check input { accent-color: var(--accent); }
+dl.read { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; margin: 0; font-size: 13px; }
+dl.read dt { color: var(--muted); }
+dl.read dd { margin: 0; font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+dl.read .sep { grid-column: 1 / -1; border-top: 1px solid var(--line); margin: 2px 0; }
+.flag { font-size: 12px; padding: 6px 8px; border-radius: 4px; border: 1px solid var(--accent); color: var(--accent); }
+
+.charts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 980px) { .charts { grid-template-columns: minmax(0, 1fr); } }
+.chart { position: relative; min-width: 0; }
+.chart svg { display: block; width: 100%; height: 260px; overflow: visible; }
+.chart text { font-family: var(--font-mono); font-size: 11px; fill: var(--muted); }
+.chart .axis line, .chart .grid line { stroke: var(--line); stroke-width: 1; }
+.keys { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink); }
+.keys span { display: inline-flex; align-items: center; gap: 6px; }
+.keys .cur { font-weight: 600; }
+.tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px;
+  font-size: 12px; box-shadow: 0 2px 8px color-mix(in srgb, var(--ink) 14%, transparent); white-space: nowrap; z-index: 2; }
+.tip b { font-weight: 600; }
+.tip .row { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+details summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 6px 9px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--font-display); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); font-size: 12px; }
+td.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.cur td { font-weight: 600; }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px 24px; font-size: 13px; color: var(--muted); }
+.notes p { margin: 0; max-width: 62ch; }
+.notes strong { color: var(--ink); font-weight: 600; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Orion LiDAR Placement</h1>
+      <p class="sub">Livox Mid-360 on Orion's own CAD geometry, with Livox's scan table for where its beams go. See where the dense bands land for each mount and orientation, and how many beams a small cone (325 mm) catches.</p>
+    </div>
+    <span class="frame">Frame: front axle centreline at ground, x forward, z up. base_link x = CAD x + 1.5494 m</span>
+  </header>
+
+  <div class="main">
+    <div class="stage" id="stage">
+      <canvas id="view" aria-label="3D view of Orion with the LiDAR mount, its beams and its ground coverage"></canvas>
+      <div class="views" role="group" aria-label="Camera view">
+        <button id="v-side" aria-pressed="true">Side</button>
+        <button id="v-top" aria-pressed="false">Top</button>
+        <button id="v-front" aria-pressed="false">Front</button>
+        <button id="v-iso" aria-pressed="false">3/4</button>
+        <button id="v-eye" aria-pressed="false">From the LiDAR</button>
+      </div>
+      <div class="busy" id="busy">Loading the car…</div>
+      <div class="legend" id="legend"></div>
+      <div id="tags"></div>
+    </div>
+
+    <aside class="rail">
+      <section class="card">
+        <h2>Mount</h2>
+        <div class="seg" role="group" aria-label="Mount position">
+          <button id="m-hoop" aria-pressed="true">Hoop, inside + forward</button>
+          <button id="m-top" aria-pressed="false">On the hoop top</button>
+          <button id="m-nose" aria-pressed="false">Sim today (nose)</button>
+        </div>
+        <div class="field"><label for="px">Forward (CAD x)</label><output id="px-o"></output>
+          <input type="range" id="px" min="-1.30" max="1.00" step="0.005"></div>
+        <div class="field"><label for="pz">Height above ground</label><output id="pz-o"></output>
+          <input type="range" id="pz" min="0.30" max="1.40" step="0.005"></div>
+      </section>
+
+      <section class="card">
+        <h2>Orientation</h2>
+        <div class="seg" role="group" aria-label="Orientation preset" id="o-seg"></div>
+        <div class="field"><label for="pitch">Pitch (nose down)</label><output id="pitch-o"></output>
+          <input type="range" id="pitch" min="-15" max="35" step="0.5"></div>
+        <label class="check"><input type="checkbox" id="inv"> Mounted upside down</label>
+      </section>
+
+      <section class="card">
+        <h2>Show</h2>
+        <div class="seg" role="group" aria-label="Ground map">
+          <button id="g-pts" aria-pressed="true">Points on a cone</button>
+          <button id="g-vis" aria-pressed="false">Cone visibility</button>
+        </div>
+        <label class="check"><input type="checkbox" id="fan" checked> Beam density, straight ahead and behind</label>
+        <label class="check"><input type="checkbox" id="rays"> Field-of-view edges all round</label>
+      </section>
+
+      <section class="card">
+        <h2>Where the beams land</h2>
+        <dl class="read">
+          <dt id="r-lo-l">Dense band</dt><dd id="r-lo">…</dd>
+          <dt id="r-hi-l">Upper band</dt><dd id="r-hi">…</dd>
+          <dt>Beams below the horizon</dt><dd id="r-down">…</dd>
+          <div class="sep"></div>
+          <dt>Cone points, 4 m past nose</dt><dd id="r-p4">…</dd>
+          <dt>Cone points, 8 m past nose</dt><dd id="r-p8">…</dd>
+          <dt>Cone points, 12 m past nose</dt><dd id="r-p12">…</dd>
+          <div class="sep"></div>
+          <dt>Cone base visible from</dt><dd id="r-ground">…</dd>
+          <dt>Cone fully visible from</dt><dd id="r-cone">…</dd>
+          <dt>Ground covered ahead, to 15 m</dt><dd id="r-fwd">…</dd>
+          <dt>Ground covered behind, to 10 m</dt><dd id="r-rear">…</dd>
+          <div class="sep"></div>
+          <dt>Sensor top vs hoop top</dt><dd id="r-hoop">…</dd>
+          <dt>Centre, base_link</dt><dd id="r-bl">…</dd>
+        </dl>
+        <div class="flag" id="flag" hidden></div>
+      </section>
+    </aside>
+  </div>
+
+  <div class="charts">
+    <section class="card">
+      <h2>Where each elevation band lands, straight ahead</h2>
+      <p class="lede">Bars are the Mid-360's beam density at each elevation in its own frame (beams per square degree per 10 Hz frame). Colour says where that band ends up straight ahead with the current mount and orientation.</p>
+      <div class="keys" id="band-keys"></div>
+      <div class="chart" id="band-chart"></div>
+    </section>
+    <section class="card">
+      <h2>Points on a small cone, straight ahead</h2>
+      <p class="lede">Beams per frame that land on a small cone at each distance past the nose, for every orientation at the current mount. The car blocking the view is included.</p>
+      <div class="keys" id="line-keys"></div>
+      <div class="chart" id="line-chart"></div>
+      <details><summary>Show as a table</summary><div class="scroll" id="line-table"></div></details>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>At this mount, by orientation</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Orientation</th><th>Cone points, 4 m</th><th>8 m</th><th>12 m</th><th>Cone base visible from</th><th>Cone fully visible from</th><th>Ground covered ahead, to 15 m</th><th>Behind, to 10 m</th></tr></thead>
+        <tbody id="cmp"><tr><td colspan="8">Computing…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="notes">
+    <p><strong>Car geometry.</strong> <code>orion.stl</code> in <code>lhr_vehicle/meshes</code>, exported from the SOLIDWORKS full-car assembly <code>_26-000.SLDASM</code> (SVN r9480) and reduced on a 20 mm grid. Nothing sits more than 13.7 mm outside the real surface. Parts under 40 mm across were dropped.</p>
+    <p><strong>Not in the model.</strong> No driver, helmet or head restraint, and no LiDAR bracket or cable. A gap narrower than the 20 mm grid may show as blocked or open. The real space claim belongs in the SOLIDWORKS assembly.</p>
+    <p><strong>Beams.</strong> All 800,000 directions in Livox's Mid-360 scan table (the one <code>lhr_lidar_sim</code> replays), −7.2° to +52.2°, 20,000 beams per 10 Hz frame. Points on a cone are density times the cone's size as seen from the sensor, before range dropout. Against <code>lhr_lidar_sim</code>'s full model this agrees within about 20%, except where the densest band lands, which the full model shows up to about 40% higher.</p>
+    <p><strong>Main hoop.</strong> Top at 1.115 m, front face at x = −0.995 m, on the centreline. The rear wing reaches 1.083 m right behind it. Distances are along the ground past the nose tip (x = 0.955 m).</p>
+  </section>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+  "three-mesh-bvh": "https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.7.3/build/index.module.js"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { MeshBVH } from 'three-mesh-bvh';
+
+// ---- Embedded data: car mesh (CAD frame, mm) and Livox scan-table density by elevation ----
+const V64 = '__V64__';
+const I64 = '__I64__';
+const D64 = '__D64__';
+const D_LO = __DLO__, D_BIN = __DBIN__, EL_MIN = __ELMIN__, EL_MAX = __ELMAX__;
+function bytes(b64) { const s = atob(b64); const a = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; }
+const vmm = new Int16Array(bytes(V64).buffer);
+const faces = new Uint16Array(bytes(I64).buffer);
+const DENS = new Float32Array(bytes(D64).buffer);   // beams per square degree per frame
+const density = el => { const i = Math.floor((el - D_LO) / D_BIN); return i >= 0 && i < DENS.length ? DENS[i] : 0; };
+function density1(el) {   // 1-degree average, for display
+  let s = 0, n = 0; for (let e = el - 0.5 + D_BIN / 2; e < el + 0.5; e += D_BIN) { s += density(e); n++; } return s / n;
+}
+
+// three.js frame: x forward, y up, z right (CAD y is left).
+const pos = new Float32Array(vmm.length);
+for (let i = 0; i < vmm.length; i += 3) { pos[i] = vmm[i] / 1000; pos[i + 1] = vmm[i + 2] / 1000; pos[i + 2] = -vmm[i + 1] / 1000; }
+const indexed = new THREE.BufferGeometry();
+indexed.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+indexed.setIndex(new THREE.BufferAttribute(faces, 1));
+const bvh = new MeshBVH(indexed);
+const shaded = indexed.toNonIndexed(); shaded.computeVertexNormals();
+
+const NOSE_X = 0.955, REAR_X = -1.916, HOOP_TOP = 1.115, HOOP_FACE = -0.995, WHEELBASE = 1.5494;
+const CONE_H = 0.325, CONE_BASE = 0.228, CONE_TOP = 0.04, SLICES = 5;
+const BODY = { x: 0.065, y: 0.060, z: 0.065 };
+const MOUNTS = {
+  hoop: { x: -0.94, z: 1.06 },
+  top: { x: -1.005, z: 1.165 },
+  nose: { x: 1.8 - WHEELBASE, z: 0.55 },
+};
+const ORIENT = [
+  { key: 'd6', label: 'Upright, 6° down', pitch: 6, inv: false, color: '--s1' },
+  { key: 'inv', label: 'Upside down, level', pitch: 0, inv: true, color: '--s2' },
+  { key: 'i6', label: 'Upside down, 6° down', pitch: 6, inv: true, color: '--s3' },
+  { key: 'i7', label: 'Upside down, 7° down', pitch: 7, inv: true, color: '--s4' },
+  { key: 'i8', label: 'Upside down, 8° down', pitch: 8, inv: true, color: '--s5' },
+];
+
+const css = () => getComputedStyle(document.documentElement);
+const cssv = name => css().getPropertyValue(name).trim() || '#888';
+const tok = name => new THREE.Color(cssv(name));
+
+// ---- Scene ----
+const canvas = document.getElementById('view');
+if (!window.WebGLRenderingContext) document.getElementById('busy').textContent = 'This browser has no WebGL, so the 3D view cannot draw.';
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const scene = new THREE.Scene();
+scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.1));
+const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(3, 6, -4); scene.add(sun);
+const carMat = new THREE.MeshStandardMaterial({ roughness: 0.75, metalness: 0.05, side: THREE.DoubleSide });
+scene.add(new THREE.Mesh(shaded, carMat));
+
+const GROUND_HALF = 26, TEX = 2048, CENTER_X = -0.5;
+const groundCanvas = document.createElement('canvas'); groundCanvas.width = groundCanvas.height = TEX;
+const groundTex = new THREE.CanvasTexture(groundCanvas); groundTex.colorSpace = THREE.SRGBColorSpace; groundTex.anisotropy = 8;
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(2 * GROUND_HALF, 2 * GROUND_HALF),
+  new THREE.MeshBasicMaterial({ map: groundTex, transparent: true, depthWrite: false }));
+ground.rotation.x = -Math.PI / 2; ground.position.set(CENTER_X, 0.001, 0); scene.add(ground);
+
+const sensorMat = new THREE.MeshStandardMaterial({ roughness: 0.5 });
+const sensor = new THREE.Mesh(new THREE.BoxGeometry(BODY.x, BODY.y, BODY.z), sensorMat); scene.add(sensor);
+function lines() { const g = new THREE.BufferGeometry(); const l = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ vertexColors: true })); scene.add(l); return l; }
+const edgeLines = lines(), fanLines = lines();
+
+// ---- Cameras ----
+const persp = new THREE.PerspectiveCamera(40, 1, 0.01, 200);
+const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, -100, 200);
+let camera = persp, controls = null, view = 'side';
+const CAR_C = new THREE.Vector3(-0.48, 0.55, 0);
+function setView(name) {
+  view = name;
+  for (const v of ['side', 'top', 'front', 'iso', 'eye']) document.getElementById('v-' + v).setAttribute('aria-pressed', String(v === name));
+  const s = sensor.position, f = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
+  if (controls) controls.dispose();
+  if (name === 'side' || name === 'top' || name === 'front') {
+    camera = ortho; ortho.userData.span = name === 'top' ? 9 : 2.2; ortho.up.set(0, 1, 0); ortho.zoom = 1;
+    if (name === 'side') ortho.position.set(CAR_C.x + 1.5, CAR_C.y, -20);
+    if (name === 'front') ortho.position.set(20, CAR_C.y, 0);
+    if (name === 'top') ortho.position.set(CAR_C.x + 3 - 0.001, 40, 0);   // a hair behind, so forward is up the screen
+  } else {
+    camera = persp; persp.up.set(0, 1, 0);
+    if (name === 'iso') { persp.fov = 40; persp.position.set(3.6, 2.9, -4.6); }
+    if (name === 'eye') { persp.fov = 95; persp.position.copy(s).addScaledVector(f, -0.12).add(new THREE.Vector3(0, 0.03, 0)); }
+  }
+  resize();
+  controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
+  if (name === 'eye') controls.target.copy(s).addScaledVector(f, 4).setY(Math.max(0.2, s.y - 0.6));
+  else if (name === 'top') controls.target.set(CAR_C.x + 3, 0, 0);
+  else if (name === 'side') controls.target.set(CAR_C.x + 1.5, CAR_C.y, 0);
+  else controls.target.copy(CAR_C);
+  controls.update();
+}
+function resize() {
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  renderer.setSize(w, h, false);
+  persp.aspect = w / h; persp.updateProjectionMatrix();
+  const span = ortho.userData.span || 2, a = w / h;
+  Object.assign(ortho, { left: -span * a, right: span * a, top: span, bottom: -span }); ortho.updateProjectionMatrix();
+}
+new ResizeObserver(() => { resize(); }).observe(canvas);
+
+// ---- State ----
+const state = { x: MOUNTS.hoop.x, z: MOUNTS.hoop.z, pitch: 7, inv: true, fan: true, rays: false, map: 'pts' };
+const q = new THREE.Quaternion();
+function orientation(pitchDeg, inv) {
+  const roll = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), inv ? Math.PI : 0);
+  const pitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -pitchDeg * Math.PI / 180);
+  return pitch.multiply(roll);
+}
+const sensorDir = (el, az, quat) => new THREE.Vector3(Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az)).applyQuaternion(quat);
+
+// ---- Rays ----
+const ray = new THREE.Ray();
+const D2R = Math.PI / 180, R2D = 180 / Math.PI;
+function blocked(s, dx, dy, dz, len) {
+  ray.origin.copy(s); ray.direction.set(dx / len, dy / len, dz / len);
+  const hit = bvh.raycastFirst(ray, THREE.DoubleSide);
+  return !!hit && hit.distance < len - 0.02;
+}
+// Expected beams per frame on a small cone standing at (gx, gz), and whether its base and top are in view.
+function coneAt(s, up, gx, gz) {
+  let pts = 0, seen = 0;
+  const dz = CONE_H / SLICES;
+  for (let k = 0; k < SLICES; k++) {
+    const h = (k + 0.5) * dz, dx = gx - s.x, dy = h - s.y, dzz = gz - s.z, len = Math.hypot(dx, dy, dzz);
+    const el = Math.asin((dx * up.x + dy * up.y + dzz * up.z) / len) * R2D;
+    if (el < EL_MIN || el > EL_MAX || blocked(s, dx, dy, dzz, len)) continue;
+    seen++;
+    const w = CONE_BASE - (CONE_BASE - CONE_TOP) * h / CONE_H;
+    pts += density(el) * w * dz / (len * len) * R2D * R2D;
+  }
+  return { pts, seen };
+}
+// Where one beam (sensor elevation el, azimuth az) ends: on the car, on the ground (distance past the nose) or in the sky.
+function landing(s, quat, elDeg, azDeg) {
+  const d = sensorDir(elDeg * D2R, azDeg * D2R, quat);
+  ray.origin.copy(s); ray.direction.copy(d);
+  const hit = bvh.raycastFirst(ray, THREE.DoubleSide);
+  const tCar = hit ? hit.distance : Infinity, tGround = d.y < -1e-6 ? -s.y / d.y : Infinity;
+  if (tCar < tGround) return { kind: 'car', t: tCar, d };
+  if (tGround < Infinity) return { kind: 'ground', t: tGround, d, past: s.x + d.x * tGround - NOSE_X, back: REAR_X - (s.x + d.x * tGround) };
+  return { kind: 'sky', t: Infinity, d };
+}
+
+// ---- Surveys ----
+function survey(s, quat, az = 2, rs = 0.25, rmax = 22) {
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(quat);
+  const cells = [];
+  let firstBase = null, firstFull = null, fA = 0, fS = 0, bA = 0, bS = 0;
+  for (let a = 0; a < 360; a += az) {
+    const ca = Math.cos(a * D2R), sa = Math.sin(a * D2R);
+    for (let r = rs / 2; r < rmax; r += rs) {
+      const gx = s.x + r * ca, gz = s.z + r * sa, c = coneAt(s, up, gx, gz);
+      cells.push(a, r, c.seen, c.pts);
+      if (a === 0 && gx > NOSE_X) {
+        if (c.seen > 0 && firstBase === null) firstBase = gx - NOSE_X;
+        if (c.seen === SLICES && firstFull === null) firstFull = gx - NOSE_X;
+      }
+      // Polar cells grow with range; weight by area so shares are of ground, not of cells.
+      if (gx > NOSE_X && Math.hypot(gx - NOSE_X, gz) <= 15) { fA += r; if (c.seen === SLICES) fS += r; }
+      if (gx < REAR_X && Math.hypot(gx - REAR_X, gz) <= 10) { bA += r; if (c.seen === SLICES) bS += r; }
+    }
+  }
+  return { cells, az, rs, firstBase, firstFull, fwd: fA ? fS / fA : 0, rear: bA ? bS / bA : null };
+}
+const LINE_D = []; for (let d = 0; d <= 22.001; d += 0.25) LINE_D.push(+d.toFixed(2));
+function coneLine(s, quat) {
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(quat);
+  return LINE_D.map(d => coneAt(s, up, NOSE_X + d, s.z).pts);
+}
+const at = (line, d) => line[Math.round(d / 0.25)];
+
+// ---- Painting ----
+function paintGround(s, res) {
+  const g = groundCanvas.getContext('2d'), k = TEX / (2 * GROUND_HALF);
+  const toPx = (x, z) => [(x - (CENTER_X - GROUND_HALF)) * k, (z + GROUND_HALF) * k];
+  g.clearRect(0, 0, TEX, TEX);
+  const seq = cssv('--seq'), blind = cssv('--blind'), seen = cssv('--seen'), part = cssv('--part');
+  const { cells, az, rs } = res;
+  for (let i = 0; i < cells.length; i += 4) {
+    const a = cells[i], r = cells[i + 1], n = cells[i + 2], p = cells[i + 3];
+    if (state.map === 'pts') {
+      if (n === 0) { g.globalAlpha = 0.22; g.fillStyle = blind; }
+      else { g.globalAlpha = 0.08 + 0.82 * Math.min(1, Math.log1p(p) / Math.log1p(10)); g.fillStyle = seq; }
+    } else {
+      const v = n === SLICES ? 2 : n > 0 ? 1 : 0;
+      g.globalAlpha = [0.30, 0.55, 0.55][v]; g.fillStyle = [blind, part, seen][v];
+    }
+    const a0 = (a - az / 2) * D2R, a1 = (a + az / 2) * D2R, r0 = r - rs / 2, r1 = r + rs / 2;
+    const P = [[r0, a0], [r1, a0], [r1, a1], [r0, a1]].map(([rr, aa]) => toPx(s.x + rr * Math.cos(aa), s.z + rr * Math.sin(aa)));
+    g.beginPath(); g.moveTo(...P[0]); for (let j = 1; j < 4; j++) g.lineTo(...P[j]); g.closePath(); g.fill();
+  }
+  g.globalAlpha = 0.9; g.strokeStyle = cssv('--muted'); g.fillStyle = g.strokeStyle; g.lineWidth = 2;
+  g.font = `${Math.round(0.45 * k)}px ${getComputedStyle(document.body).fontFamily}`;
+  for (let d = 5; d <= 20; d += 5) {   // rings from the nose tip, the distances the readouts use
+    const [cx, cz] = toPx(NOSE_X, 0); g.beginPath(); g.arc(cx, cz, d * k, -Math.PI / 2, Math.PI / 2); g.stroke();
+    g.fillText(`${d} m`, cx + d * k + 6, cz - 6);
+  }
+  g.globalAlpha = 1; groundTex.needsUpdate = true;
+}
+function setLines(obj, pts, cols) {
+  obj.geometry.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  obj.geometry.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+}
+function drawEdges(s, quat) {
+  const pts = [], cols = [], carC = tok('--blind'), edge = tok('--accent'), sky = tok('--muted');
+  for (const el of [EL_MIN, EL_MAX]) for (let az = 0; az < 360; az += 6) {
+    const L = landing(s, quat, el, az), t = Math.min(L.t, 9), c = L.kind === 'car' ? carC : L.kind === 'ground' ? edge : sky;
+    pts.push(s.x, s.y, s.z, s.x + L.d.x * t, s.y + L.d.y * t, s.z + L.d.z * t); cols.push(c.r, c.g, c.b, c.r, c.g, c.b);
+  }
+  setLines(edgeLines, pts, cols); edgeLines.visible = state.rays;
+}
+// Straight ahead and straight behind, every 0.5 degree, shaded from the scene colour to the accent by density.
+function drawFan(s, quat) {
+  const pts = [], cols = [], bg = tok('--scene'), acc = tok('--accent'), c = new THREE.Color();
+  for (const az of [0, 180]) for (let el = Math.ceil(EL_MIN * 2) / 2; el <= EL_MAX; el += 0.5) {
+    const L = landing(s, quat, el, az), t = Math.min(L.t, 14);
+    // The even middle band (about 0.9) stays faint so the dense bands (up to 1.6) stand out.
+    c.copy(bg).lerp(acc, Math.min(1, Math.max(0.12, (density1(el) - 0.7) / 0.9)));
+    pts.push(s.x, s.y, s.z, s.x + L.d.x * t, s.y + L.d.y * t, s.z + L.d.z * t); cols.push(c.r, c.g, c.b, c.r, c.g, c.b);
+  }
+  setLines(fanLines, pts, cols); fanLines.visible = state.fan;
+}
+function stageLegend() {
+  const el = document.getElementById('legend');
+  el.innerHTML = state.map === 'pts'
+    ? `<span>Points on a cone per frame</span><span>0</span><i class="ramp" aria-hidden="true"></i><span>10+</span><span><i class="sw" style="background:var(--blind);opacity:.5"></i>Hidden</span><span><i class="sw" style="background:var(--accent)"></i>Beam density fan</span>`
+    : `<span><i class="sw" style="background:var(--seen)"></i>Cone fully in view</span><span><i class="sw" style="background:var(--part)"></i>Partly in view</span><span><i class="sw" style="background:var(--blind)"></i>Hidden</span><span><i class="sw" style="background:var(--accent)"></i>Beam density fan</span>`;
+}
+
+// ---- Readouts ----
+const m1 = v => v === null || v === undefined ? 'not within 22 m' : `${v.toFixed(1)} m past the nose`;
+const pct = v => v === null ? '–' : `${Math.round(v * 100)}%`;
+const pts1 = v => v === undefined ? '–' : v < 0.05 ? '0' : v.toFixed(1);
+function bandPeak(lo, hi) { let best = lo, bv = -1; for (let e = lo; e <= hi; e += 0.5) { const v = density1(e); if (v > bv) { bv = v; best = e; } } return best; }
+const PEAK_LO = bandPeak(-6, 4), PEAK_HI = bandPeak(38, 51);
+function landText(L) {
+  if (L.kind === 'car') return 'on the car';
+  if (L.kind === 'sky') return 'into the sky';
+  return L.past >= 0 ? `ground ${L.past.toFixed(1)} m past the nose` : 'ground under the car';
+}
+function readouts(res, line) {
+  const s = sensor.position;
+  document.getElementById('r-lo-l').textContent = `Dense band (${PEAK_LO.toFixed(1)}°), ahead`;
+  document.getElementById('r-hi-l').textContent = `Upper band (+${PEAK_HI.toFixed(1)}°), ahead`;
+  document.getElementById('r-lo').textContent = landText(landing(s, q, PEAK_LO, 0));
+  document.getElementById('r-hi').textContent = landText(landing(s, q, PEAK_HI, 0));
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(q);
+  let below = 0, all = 0;   // share of the table's beams pointing below the horizon, averaged round the sensor
+  for (let e = EL_MIN; e < EL_MAX; e += 0.5) for (let a = 0; a < 360; a += 10) {
+    const w = density(e) * Math.cos(e * D2R); all += w; if (sensorDir(e * D2R, a * D2R, q).y < 0) below += w;
+  }
+  document.getElementById('r-down').textContent = pct(below / all);
+  document.getElementById('r-p4').textContent = pts1(at(line, 4));
+  document.getElementById('r-p8').textContent = pts1(at(line, 8));
+  document.getElementById('r-p12').textContent = pts1(at(line, 12));
+  document.getElementById('r-ground').textContent = m1(res.firstBase);
+  document.getElementById('r-cone').textContent = m1(res.firstFull);
+  document.getElementById('r-fwd').textContent = pct(res.fwd);
+  document.getElementById('r-rear').textContent = pct(res.rear);
+  const gap = HOOP_TOP - (state.z + BODY.y / 2);
+  document.getElementById('r-hoop').textContent = `${Math.abs(gap * 1000).toFixed(0)} mm ${gap >= 0 ? 'below' : 'above'}`;
+  document.getElementById('r-bl').textContent = `x ${(state.x + WHEELBASE).toFixed(3)}, z ${state.z.toFixed(3)}`;
+  const notes = [];
+  if (gap < 0) notes.push('Above the hoop top: outside the DT.2.3 primary-structure volume.');
+  const upHit = bvh.raycastFirst(new THREE.Ray(new THREE.Vector3(state.x, state.z, 0), new THREE.Vector3(0, 1, 0)), THREE.DoubleSide);
+  const downHit = bvh.raycastFirst(new THREE.Ray(new THREE.Vector3(state.x, state.z, 0), new THREE.Vector3(0, -1, 0)), THREE.DoubleSide);
+  if (upHit && downHit && upHit.distance < 0.6 && downHit.distance < 0.6 && upHit.face && upHit.face.normal.y > 0.2) notes.push('The sensor centre is inside the car body here.');
+  const f = document.getElementById('flag'); f.hidden = !notes.length; f.textContent = notes.join(' ');
+}
+
+// ---- Charts (SVG) ----
+const SVGNS = 'http://www.w3.org/2000/svg';
+const mk = (tag, attrs, parent) => { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+function niceMax(v) { const steps = [1, 2, 4, 5, 8, 10, 12, 15, 20]; return steps.find(x => x >= v) || Math.ceil(v); }
+function frameChart(host, xMax, yMax, xLabel, yLabel, xTicks, yTicks) {
+  host.querySelectorAll('svg').forEach(n => n.remove());
+  const W = host.clientWidth || 600, H = 260, M = { l: 40, r: 12, t: 10, b: 34 };
+  const svg = mk('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img' }); host.appendChild(svg);
+  const X = v => M.l + (v - xTicks[0]) / (xMax - xTicks[0]) * (W - M.l - M.r);
+  const Y = v => H - M.b - v / yMax * (H - M.t - M.b);
+  const grid = mk('g', { class: 'grid' }, svg);
+  for (const t of yTicks) { mk('line', { x1: M.l, x2: W - M.r, y1: Y(t), y2: Y(t) }, grid); mk('text', { x: M.l - 6, y: Y(t) + 4, 'text-anchor': 'end' }, svg).textContent = t; }
+  for (const t of xTicks) mk('text', { x: X(t), y: H - M.b + 16, 'text-anchor': 'middle' }, svg).textContent = t;
+  mk('text', { x: (M.l + W - M.r) / 2, y: H - 4, 'text-anchor': 'middle' }, svg).textContent = xLabel;
+  mk('text', { x: 10, y: M.t + 2, 'text-anchor': 'start' }, svg).textContent = yLabel;
+  return { svg, X, Y, W, H, M };
+}
+function tipAt(host, html, x, y) {
+  let t = host.querySelector('.tip'); if (!t) { t = document.createElement('div'); t.className = 'tip'; host.appendChild(t); }
+  t.innerHTML = html; t.hidden = false;
+  const w = t.offsetWidth; t.style.left = `${Math.min(Math.max(0, x + 12), host.clientWidth - w)}px`; t.style.top = `${Math.max(0, y - 10)}px`;
+}
+const hideTip = host => { const t = host.querySelector('.tip'); if (t) t.hidden = true; };
+
+const BANDS = [
+  { key: 'near', label: 'Ground, 0–15 m past the nose', color: '--seen' },
+  { key: 'far', label: 'Ground beyond 15 m', color: '--part' },
+  { key: 'car', label: 'Blocked by the car', color: '--blind' },
+  { key: 'sky', label: 'Sky', color: '--sky' },
+];
+function bandChart() {
+  const host = document.getElementById('band-chart'), s = sensor.position;
+  document.getElementById('band-keys').innerHTML = BANDS.map(b => `<span><i class="sw" style="background:var(${b.color})"></i>${b.label}</span>`).join('');
+  const bins = [];
+  for (let e = Math.ceil(EL_MIN); e < Math.floor(EL_MAX); e += 1) {
+    const L = landing(s, q, e + 0.5, 0);
+    const kind = L.kind === 'ground' ? (L.past < 0 ? 'car' : L.past <= 15 ? 'near' : 'far') : L.kind;
+    bins.push({ e, v: density1(e + 0.5), kind, L });
+  }
+  const yMax = niceMax(Math.max(...bins.map(b => b.v)) * 1.05);
+  const yTicks = []; for (let t = 0; t <= yMax + 1e-9; t += yMax <= 2 ? 0.5 : 1) yTicks.push(+t.toFixed(1));
+  const xTicks = [-7, 0, 10, 20, 30, 40, 52];
+  const c = frameChart(host, 52, yMax, 'Elevation in the sensor frame (°)', 'beams / sq.deg / frame', xTicks, yTicks);
+  const bw = c.X(1) - c.X(0);
+  const colorOf = k => `var(${BANDS.find(b => b.key === k).color})`;
+  for (const b of bins) {
+    const h = c.Y(0) - c.Y(b.v), x = c.X(b.e) + 1, w = Math.max(1, bw - 2);
+    mk('rect', { x, y: c.Y(b.v), width: w, height: Math.max(0, h), rx: 2, fill: colorOf(b.kind) }, c.svg);
+  }
+  const hit = mk('rect', { x: c.M.l, y: c.M.t, width: c.W - c.M.l - c.M.r, height: c.H - c.M.t - c.M.b, fill: 'transparent' }, c.svg);
+  hit.addEventListener('pointermove', ev => {
+    const r = c.svg.getBoundingClientRect(), px = (ev.clientX - r.left) * c.W / r.width;
+    const e = Math.floor(-7 + (px - c.M.l) / bw * 1), b = bins.find(x => x.e === Math.max(Math.ceil(EL_MIN), Math.min(51, e)));
+    if (!b) return;
+    tipAt(host, `<b>${b.e}° to ${b.e + 1}°</b><div class="row">${b.v.toFixed(2)} beams / sq.deg / frame</div><div class="row">Lands: ${landText(b.L)}</div>`, ev.clientX - host.getBoundingClientRect().left, ev.clientY - host.getBoundingClientRect().top);
+  });
+  hit.addEventListener('pointerleave', () => hideTip(host));
+}
+
+let presetLines = null;
+function currentKey() { const o = ORIENT.find(o => o.pitch === state.pitch && o.inv === state.inv); return o ? o.key : null; }
+function lineChart(curLine) {
+  const host = document.getElementById('line-chart'), cur = currentKey();
+  const series = ORIENT.map(o => ({ ...o, line: presetLines[o.key] }));
+  if (!cur) series.push({ key: 'cur', label: `Current (${state.inv ? 'upside down, ' : ''}${state.pitch}° ${state.pitch >= 0 ? 'down' : 'up'})`, color: '--ink', line: curLine, dash: true });
+  document.getElementById('line-keys').innerHTML = series.map(sr => `<span class="${sr.key === cur || sr.key === 'cur' ? 'cur' : ''}"><i class="sw" style="background:var(${sr.color})"></i>${sr.label}${sr.key === cur ? ' (current)' : ''}</span>`).join('');
+  const yMax = niceMax(Math.max(1, ...series.flatMap(sr => sr.line)) * 1.05);
+  const yTicks = []; const step = yMax <= 5 ? 1 : yMax <= 10 ? 2 : 4; for (let t = 0; t <= yMax + 1e-9; t += step) yTicks.push(t);
+  const c = frameChart(host, 22, yMax, 'Distance past the nose tip (m)', 'beams on the cone / frame', [0, 4, 8, 12, 16, 20], yTicks);
+  for (const sr of series) {
+    const d = sr.line.map((v, i) => `${i ? 'L' : 'M'}${c.X(LINE_D[i]).toFixed(1)},${c.Y(Math.min(v, yMax)).toFixed(1)}`).join('');
+    const isCur = sr.key === cur || sr.key === 'cur';
+    mk('path', { d, fill: 'none', stroke: `var(${sr.color})`, 'stroke-width': isCur ? 3 : 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round',
+      'stroke-dasharray': sr.dash ? '6 4' : 'none', opacity: cur && !isCur ? 0.55 : 1 }, c.svg);
+  }
+  const cross = mk('line', { y1: c.M.t, y2: c.H - c.M.b, stroke: 'var(--muted)', 'stroke-width': 1, visibility: 'hidden' }, c.svg);
+  const hit = mk('rect', { x: c.M.l, y: c.M.t, width: c.W - c.M.l - c.M.r, height: c.H - c.M.t - c.M.b, fill: 'transparent' }, c.svg);
+  hit.addEventListener('pointermove', ev => {
+    const r = c.svg.getBoundingClientRect(), px = (ev.clientX - r.left) * c.W / r.width;
+    const d = Math.max(0, Math.min(22, (px - c.M.l) / (c.W - c.M.l - c.M.r) * 22)), i = Math.round(d / 0.25);
+    cross.setAttribute('x1', c.X(LINE_D[i])); cross.setAttribute('x2', c.X(LINE_D[i])); cross.setAttribute('visibility', 'visible');
+    const rows = series.map(sr => `<div class="row"><i class="sw" style="background:var(${sr.color})"></i>${pts1(sr.line[i]).padStart(4)} ${sr.label}</div>`).join('');
+    tipAt(host, `<b>${LINE_D[i].toFixed(2)} m past the nose</b>${rows}`, ev.clientX - host.getBoundingClientRect().left, ev.clientY - host.getBoundingClientRect().top);
+  });
+  hit.addEventListener('pointerleave', () => { hideTip(host); cross.setAttribute('visibility', 'hidden'); });
+  const ds = [2, 3, 4, 5, 6, 8, 10, 12, 15, 18, 22];
+  document.getElementById('line-table').innerHTML = `<table><thead><tr><th>Orientation</th>${ds.map(d => `<th>${d} m</th>`).join('')}</tr></thead><tbody>${
+    series.map(sr => `<tr class="${sr.key === cur || sr.key === 'cur' ? 'cur' : ''}"><td>${sr.label}</td>${ds.map(d => `<td class="num">${pts1(at(sr.line, d))}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+}
+
+// ---- Comparison table (coarser grid, filled in one orientation at a time) ----
+let cmpTicket = 0;
+function compareTable() {
+  const ticket = ++cmpTicket, s = sensor.position.clone(), rows = [];
+  const body = document.getElementById('cmp');
+  body.innerHTML = `<tr><td colspan="8">Computing…</td></tr>`;
+  const cur = currentKey();
+  ORIENT.forEach((o, i) => setTimeout(() => {
+    if (ticket !== cmpTicket) return;
+    const quat = orientation(o.pitch, o.inv), res = survey(s, quat, 3, 0.3, 20), line = presetLines[o.key];
+    rows[i] = `<tr class="${o.key === cur ? 'cur' : ''}"><td><i class="sw" style="background:var(${o.color})"></i> ${o.label}</td><td class="num">${pts1(at(line, 4))}</td><td class="num">${pts1(at(line, 8))}</td><td class="num">${pts1(at(line, 12))}</td><td class="num">${m1(res.firstBase)}</td><td class="num">${m1(res.firstFull)}</td><td class="num">${pct(res.fwd)}</td><td class="num">${pct(res.rear)}</td></tr>`;
+    body.innerHTML = rows.filter(Boolean).join('') + (rows.filter(Boolean).length < ORIENT.length ? `<tr><td colspan="8">Computing…</td></tr>` : '');
+  }, 60 + i * 30));
+}
+
+// ---- Update pipeline ----
+const segO = document.getElementById('o-seg');
+segO.innerHTML = ORIENT.map(o => `<button id="o-${o.key}" aria-pressed="false">${o.label}</button>`).join('');
+let pending = 0, lastMount = '';
+function update() {
+  q.copy(orientation(state.pitch, state.inv));
+  sensor.position.set(state.x, state.z, 0); sensor.quaternion.copy(q);
+  document.getElementById('px-o').textContent = `${state.x.toFixed(3)} m`;
+  document.getElementById('pz-o').textContent = `${state.z.toFixed(3)} m`;
+  document.getElementById('pitch-o').textContent = `${state.pitch}°`;
+  document.getElementById('px').value = state.x; document.getElementById('pz').value = state.z;
+  document.getElementById('pitch').value = state.pitch; document.getElementById('inv').checked = state.inv;
+  for (const m of Object.keys(MOUNTS)) document.getElementById('m-' + m).setAttribute('aria-pressed', String(Math.abs(MOUNTS[m].x - state.x) < 1e-6 && Math.abs(MOUNTS[m].z - state.z) < 1e-6));
+  const cur = currentKey(); for (const o of ORIENT) document.getElementById('o-' + o.key).setAttribute('aria-pressed', String(o.key === cur));
+  document.getElementById('g-pts').setAttribute('aria-pressed', String(state.map === 'pts'));
+  document.getElementById('g-vis').setAttribute('aria-pressed', String(state.map === 'vis'));
+  stageLegend();
+  drawEdges(sensor.position, q); drawFan(sensor.position, q);
+  const mountKey = `${state.x.toFixed(4)},${state.z.toFixed(4)}`;
+  if (mountKey !== lastMount) {
+    lastMount = mountKey; presetLines = {};
+    for (const o of ORIENT) presetLines[o.key] = coneLine(sensor.position, orientation(o.pitch, o.inv));
+    compareTable();
+  }
+  const curLine = coneLine(sensor.position, q);
+  bandChart(); lineChart(curLine);
+  const ticket = ++pending;
+  document.getElementById('busy').textContent = 'Tracing rays…';
+  setTimeout(() => {
+    if (ticket !== pending) return;
+    const res = survey(sensor.position.clone(), q);
+    paintGround(sensor.position, res); readouts(res, curLine);
+    document.getElementById('busy').textContent = '';
+    if (view === 'eye') setView('eye');
+  }, 30);
+}
+for (const m of Object.keys(MOUNTS)) document.getElementById('m-' + m).addEventListener('click', () => { state.x = MOUNTS[m].x; state.z = MOUNTS[m].z; update(); });
+for (const o of ORIENT) document.getElementById('o-' + o.key).addEventListener('click', () => { state.pitch = o.pitch; state.inv = o.inv; update(); });
+document.getElementById('px').addEventListener('input', e => { state.x = +e.target.value; update(); });
+document.getElementById('pz').addEventListener('input', e => { state.z = +e.target.value; update(); });
+document.getElementById('pitch').addEventListener('input', e => { state.pitch = +e.target.value; update(); });
+document.getElementById('inv').addEventListener('change', e => { state.inv = e.target.checked; update(); });
+document.getElementById('fan').addEventListener('change', e => { state.fan = e.target.checked; fanLines.visible = state.fan; });
+document.getElementById('rays').addEventListener('change', e => { state.rays = e.target.checked; edgeLines.visible = state.rays; });
+document.getElementById('g-pts').addEventListener('click', () => { state.map = 'pts'; update(); });
+document.getElementById('g-vis').addEventListener('click', () => { state.map = 'vis'; update(); });
+for (const v of ['side', 'top', 'front', 'iso', 'eye']) document.getElementById('v-' + v).addEventListener('click', () => setView(v));
+
+// ---- Labels projected from 3D ----
+const tagsEl = document.getElementById('tags');
+function mkTag(text, cls) { const e = document.createElement('div'); e.className = 'tag' + (cls ? ' ' + cls : ''); e.textContent = text; tagsEl.appendChild(e); return e; }
+const tags = [
+  { el: mkTag('Mid-360', 'lidar'), at: () => sensor.position.clone().add(new THREE.Vector3(0, 0.05, 0)) },
+  { el: mkTag('Main hoop 1.115 m'), at: () => new THREE.Vector3(HOOP_FACE - 0.01, HOOP_TOP + 0.02, 0) },
+  { el: mkTag('Nose tip'), at: () => new THREE.Vector3(NOSE_X, 0.45, 0) },
+];
+function layoutTags() {
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  for (const t of tags) {
+    const p = t.at().project(camera), show = view !== 'eye' && p.z < 1 && Math.abs(p.x) < 1 && Math.abs(p.y) < 1;
+    t.el.hidden = !show; if (show) { t.el.style.left = `${(p.x + 1) / 2 * w}px`; t.el.style.top = `${(1 - p.y) / 2 * h}px`; }
+  }
+}
+
+function applyTheme() { scene.background = tok('--scene'); carMat.color = tok('--car'); sensorMat.color = tok('--accent'); update(); }
+new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+let resizeTimer = 0;
+window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { bandChart(); lineChart(coneLine(sensor.position, q)); }, 150); });
+
+applyTheme();
+setView('side');
+(function loop() { requestAnimationFrame(loop); if (controls) controls.update(); renderer.render(scene, camera); layoutTags(); })();
+</script>

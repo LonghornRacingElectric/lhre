@@ -3,3 +3,17 @@
 /autonomy/  @LonghornRacingElectric/autonomous
 /simulation/ @LonghornRacingElectric/vehicle-modeling
 /vehicle/    @LonghornRacingElectric/vehicle-modeling
+
+# The CI gates and the testing contract. A change here changes what a green
+# PR means, so a ci-owners member reviews it even when everything passes.
+# A team instead of names keeps the list short and the review off one person.
+/.github/CODEOWNERS                         @LonghornRacingElectric/ci-owners
+/.github/workflows/                         @LonghornRacingElectric/ci-owners
+/.bazelrc                                   @LonghornRacingElectric/ci-owners
+/.coderabbit.yaml                           @LonghornRacingElectric/ci-owners
+/ruff.toml                                  @LonghornRacingElectric/ci-owners
+/tools/lint/                                @LonghornRacingElectric/ci-owners
+/tools/coverage/                            @LonghornRacingElectric/ci-owners
+/AGENTS.md                                  @LonghornRacingElectric/ci-owners
+/docs/testing.md                            @LonghornRacingElectric/ci-owners
+/docs/architecture/017-tests-gate-merges.md @LonghornRacingElectric/ci-owners

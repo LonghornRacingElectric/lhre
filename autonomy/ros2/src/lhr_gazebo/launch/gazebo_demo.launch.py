@@ -14,6 +14,7 @@ Usage:
 """
 
 import os
+import xml.etree.ElementTree as ET
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchContext, LaunchDescription
@@ -21,17 +22,52 @@ from launch.actions import (
     DeclareLaunchArgument,
     ExecuteProcess,
     OpaqueFunction,
+    RegisterEventHandler,
     SetEnvironmentVariable,
 )
+from launch.event_handlers import OnShutdown
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+from lhr_vehicle import load_vehicle
 import yaml
 
 
 def _float(name):
     """Forward a launch argument as a double, so v_max:=5 is not an int."""
     return ParameterValue(LaunchConfiguration(name), value_type=float)
+
+
+MID360_MOUNT = ('x_m', 'y_m', 'z_m', 'roll_rad', 'pitch_rad', 'yaw_rad')
+# The base_link cut the old sensor-frame band (-0.40 m) gave at the old nose mount.
+# At 0.05 m, range noise on ground hits near the car became 123 false cones
+# on one lap (testing/2026-11-08-lidar-mount-study).
+MID360_MIN_GROUND_CUT_M = 0.15
+
+
+def _mid360_mount_default():
+    """Return the mount the detector assumes without tf: vehicle.yaml's."""
+    vehicle = load_vehicle()
+    return dict(zip(MID360_MOUNT, (*vehicle.lidar_position_m, *vehicle.lidar_rpy_rad)))
+
+
+def _check_mid360_mount(configs):
+    """
+    Refuse a moved Mid-360 unless the detector reads the move.
+
+    By default the detector places the cloud at the vehicle.yaml mount, so a
+    caster moved, pitched or flipped away from it would hand the detector a
+    cloud it misplaces, silently.
+    """
+    moved = any(float(configs.get(f'mid360_mount_{name}', value)) != value
+                for name, value in _mid360_mount_default().items())
+    if moved and (configs.get('lidar_sensor_transform_source') != 'tf'
+                  or configs.get('lidar_height_filter_frame') != 'base_link'
+                  or float(configs.get('lidar_ground_z_min', '0')) < MID360_MIN_GROUND_CUT_M):
+        raise ValueError(
+            'A moved Mid-360 mount needs lidar_sensor_transform_source:=tf, '
+            'lidar_height_filter_frame:=base_link and '
+            f'lidar_ground_z_min of at least {MID360_MIN_GROUND_CUT_M} m')
 
 
 def _find_world(context: LaunchContext):
@@ -42,14 +78,18 @@ def _find_world(context: LaunchContext):
       1. Explicit ``world`` argument (if the user overrode it)
       2. ``<worlds_dir>/<track_style>_seed<seed>.sdf`` in the source tree
       3. Same pattern in the installed share directory
-      4. Fall back to any SDF in the source worlds directory
+
+    Nothing else: any other world would disagree with the cones
+    publish_cones generates for this track_style and seed.
     """
     world_arg = context.launch_configurations.get('world', '')
     track_style = context.launch_configurations.get('track_style', 'autocross')
     seed = context.launch_configurations.get('seed', '1')
 
-    # If the user explicitly passed a valid world path, use it
-    if world_arg and os.path.isfile(world_arg):
+    # An explicit typo must not silently select a different scene.
+    if world_arg:
+        if not os.path.isfile(world_arg):
+            raise ValueError(f'World file does not exist: {world_arg!r}')
         return world_arg
 
     expected = f'{track_style}_seed{seed}.sdf'
@@ -69,12 +109,6 @@ def _find_world(context: LaunchContext):
             return share_path
     except Exception:
         pass
-
-    # Fallback: first SDF found in source worlds directory
-    if os.path.isdir(src_worlds):
-        for f in sorted(os.listdir(src_worlds)):
-            if f.endswith('.sdf'):
-                return os.path.abspath(os.path.join(src_worlds, f))
 
     return ''
 
@@ -100,11 +134,17 @@ def _fault_remaps(fault: str, use_ekf: bool, configs: dict) -> dict:
     odom_raw = [('/lhr/vehicle/odom', '/lhr/vehicle/odom_raw')]
     # Under ekf the bridge's odom is already truth; corrupt the estimate.
     odom_owner = 'ekf_node' if use_ekf else 'ros_gz_bridge'
+    cloud_owner = 'lidar_sim' if configs.get('lidar_source') == 'mid360' else 'ros_gz_bridge'
     return {
         'odom_nan': {odom_owner: odom_raw},
         'odom_spike': {odom_owner: odom_raw},
-        'lidar_drop': {'ros_gz_bridge': [
+        'lidar_drop': {cloud_owner: [
             ('/lhr/lidar/points', '/lhr/lidar/points_raw')]},
+        # Gazebo's physics IMU comes over the bridge; inertial_sim makes the
+        # wheel speeds from truth.
+        'imu_drop': {'ros_gz_bridge': [('/lhr/imu/data', '/lhr/imu/data_raw')]},
+        'wheel_drop': {'inertial_sim': [
+            ('/lhr/sensor/wheel_speeds', '/lhr/sensor/wheel_speeds_raw')]},
         'cmd_nan': {'pure_pursuit': [
             ('/lhr/vehicle/cmd', '/lhr/vehicle/cmd_raw')]},
         'steer_freeze': {'joint_cmd_adapter': [
@@ -119,36 +159,73 @@ def _launch_setup(context: LaunchContext):
     Called via OpaqueFunction so we can resolve the world path from
     track_style + seed at launch time.
     """
+    track_style = context.launch_configurations.get('track_style', 'autocross')
     world_path = _find_world(context)
     if not world_path:
+        seed = context.launch_configurations.get('seed', '1')
         raise RuntimeError(
-            'No world SDF found. Generate one with: '
-            'python3 scripts/generate_world.py --style <style> --seed <seed>')
+            f'No world for track_style:={track_style} seed:={seed}. Generate it '
+            f'from autonomy/ros2 with: python3 src/lhr_gazebo/scripts/generate_world.py '
+            f'--style {track_style} --seed {seed} '
+            f'--output src/lhr_gazebo/worlds/{track_style}_seed{seed}.sdf, then rebuild')
+
+    # The event follows the track: the acceleration course only completes
+    # under the acceleration mission, which means nothing on a loop.
+    mission = context.launch_configurations.get('mission', 'autocross')
+    if track_style == 'acceleration':
+        mission = 'acceleration'
+    elif mission == 'acceleration':
+        raise RuntimeError('mission:=acceleration needs track_style:=acceleration')
+    from lhr_trackgen.publish_cones import pairing_width_m
+    track_width = pairing_width_m(
+        track_style, float(context.launch_configurations.get('width_m', '3.5')))
 
     pkg_share = get_package_share_directory('lhr_gazebo')
     models_dir = os.path.join(pkg_share, 'models')
     config_dir = os.path.join(pkg_share, 'config')
 
     perception = context.launch_configurations.get('perception', 'sim')
+    lidar_source = context.launch_configurations.get('lidar_source', 'gazebo')
+    if lidar_source not in ('gazebo', 'mid360'):
+        raise ValueError('lidar_source must be gazebo or mid360')
+    if lidar_source == 'mid360' and perception != 'lidar':
+        raise ValueError('lidar_source:=mid360 requires perception:=lidar')
+    if lidar_source == 'mid360':
+        from lhr_lidar_sim.world import load_world_cones
+        try:
+            load_world_cones(world_path)
+        except (OSError, ET.ParseError, ValueError) as error:
+            raise ValueError(f'Unsupported Mid-360 world {world_path!r}: {error}') from error
+        _check_mid360_mount(context.launch_configurations)
     classify_sides = context.launch_configurations.get(
         'lidar_classify_sides', 'false').lower() == 'true'
     use_ekf = context.launch_configurations.get(
         'estimator', 'truth').lower() == 'ekf'
     fault = context.launch_configurations.get('fault', '')
     fault_remaps = _fault_remaps(fault, use_ekf, context.launch_configurations)
+    # The sensor sim observes the plant, never the injected driving estimate.
+    caster_odom = '/lhr/vehicle/odom_truth' if use_ekf else (
+        '/lhr/vehicle/odom_raw' if fault in ('odom_nan', 'odom_spike')
+        else '/lhr/vehicle/odom')
 
     enable_stereo = context.launch_configurations.get(
         'enable_stereo_camera', 'false').lower() == 'true'
     camera_nodes = []
     enable_color = context.launch_configurations.get(
         'enable_camera_color_classifier', 'false').lower() == 'true'
+    enable_fusion = context.launch_configurations.get(
+        'enable_camera_lidar_fusion', 'false').lower() == 'true'
+    if enable_fusion and (not enable_stereo or perception != 'lidar'):
+        raise RuntimeError(
+            'Camera fusion requires enable_stereo_camera:=true and perception:=lidar')
+    # Fusion needs inferred sides whenever camera evidence is unavailable.
+    classify_sides = classify_sides or enable_fusion
     if enable_color and not enable_stereo:
         raise RuntimeError('Camera classification requires enable_stereo_camera:=true')
     if enable_stereo:
         from lhr_gazebo.stereo_camera import stereo_actions
-        from lhr_vehicle import load_vehicle
         camera_nodes = stereo_actions(load_vehicle().stereo_camera, config_dir)
-    if enable_color:
+    if enable_color or enable_fusion:
         from lhr_perception.cone_color import DEFAULT_THRESHOLDS, validate_config
         thresholds = {
             color: yaml.safe_load(context.launch_configurations[f'cone_color_{color}_hsv'])
@@ -156,21 +233,49 @@ def _launch_setup(context: LaunchContext):
         }
         min_area = int(context.launch_configurations['cone_color_min_region_area'])
         validate_config(thresholds, min_area)
-        camera_nodes.append(Node(
-            package='lhr_perception',
-            executable='camera_color_classifier',
-            name='camera_color_classifier',
-            parameters=[{
-                'use_sim_time': True,
-                'min_region_area': ParameterValue(
-                    LaunchConfiguration('cone_color_min_region_area'), value_type=int),
-                **{f'{color}_hsv': bounds for color, bounds in thresholds.items()},
-            }],
-            output='screen',
-        ))
+        color_parameters = {
+            'use_sim_time': True,
+            'min_region_area': ParameterValue(
+                LaunchConfiguration('cone_color_min_region_area'), value_type=int),
+            **{f'{color}_hsv': bounds for color, bounds in thresholds.items()},
+        }
+        if enable_color:
+            camera_nodes.append(Node(
+                package='lhr_perception', executable='camera_color_classifier',
+                name='camera_color_classifier', parameters=[color_parameters], output='screen'))
+        if enable_fusion:
+            from lhr_perception.camera_lidar_geometry import FUSION_DEFAULTS
+            camera_nodes.append(Node(
+                package='lhr_perception', executable='camera_lidar_fusion',
+                name='camera_lidar_fusion', parameters=[{
+                    **color_parameters,
+                    **{name: ParameterValue(LaunchConfiguration(f'fusion_{name}'),
+                                            value_type=type(default))
+                       for name, default in FUSION_DEFAULTS.items()},
+                }], output='screen'))
 
+    qt_platform = os.environ.get('QT_QPA_PLATFORM', '')
+    qt_env = {}
+    if (os.environ.get('WAYLAND_DISPLAY') and os.environ.get('DISPLAY')
+            and (not qt_platform or qt_platform.split(';', 1)[0] == 'wayland')):
+        # Ogre's GLX windows need XWayland even when Qt prefers Wayland.
+        qt_env['QT_QPA_PLATFORM'] = 'xcb'
+
+    resource_path = models_dir
+    resource_cleanup = []
+    if enable_stereo:
+        from lhr_gazebo.stereo_camera import stereo_model_resources
+        # Keep world URIs and mesh paths identical in both modes. The overlay
+        # lives for this launch only; concurrent runs never edit shared models.
+        resources = stereo_model_resources(models_dir)
+        resource_path = os.pathsep.join((resources.name, models_dir))
+        resource_cleanup.append(RegisterEventHandler(OnShutdown(
+            on_shutdown=lambda event, context: resources.cleanup())))
     _gz_env = {
-        'GZ_SIM_RESOURCE_PATH': models_dir,
+        'GZ_SIM_RESOURCE_PATH': resource_path,
+        'FONTCONFIG_FILE': os.environ.get('FONTCONFIG_FILE') or os.path.join(
+            config_dir, 'gazebo-fontconfig.conf'),
+        **qt_env,
     }
 
     # ----- Gazebo server -----
@@ -195,6 +300,9 @@ def _launch_setup(context: LaunchContext):
             ('/lhr/vehicle/odom', '/lhr/vehicle/odom_truth'),
             ('/tf', '/tf_truth'),
         ]
+
+    if lidar_source == 'mid360':
+        bridge_remaps.append(('/lhr/lidar/points', '/lhr/lidar/gazebo_points'))
 
     bridge = Node(
         package='ros_gz_bridge',
@@ -222,6 +330,7 @@ def _launch_setup(context: LaunchContext):
                 'wheel_scale_error': _float('wheel_scale_error'),
                 'use_sim_time': True,
             }],
+            remappings=fault_remaps.get('inertial_sim', []),
             output='screen',
         ))
         estimation_nodes.append(Node(
@@ -266,6 +375,8 @@ def _launch_setup(context: LaunchContext):
                     LaunchConfiguration('track_style'), value_type=str),
                 'num_waypoints': ParameterValue(
                     LaunchConfiguration('num_waypoints'), value_type=int),
+                'width_m': _float('width_m'),
+                'cone_spacing_m': _float('cone_spacing_m'),
                 'use_sim_time': True,
             }],
             output='screen',
@@ -282,6 +393,27 @@ def _launch_setup(context: LaunchContext):
             output='screen',
         ))
     elif perception == 'lidar':
+        if lidar_source == 'mid360':
+            perception_nodes.append(Node(
+                package='lhr_lidar_sim',
+                executable='lidar_sim',
+                name='lidar_sim',
+                parameters=[{
+                    'world_sdf': ParameterValue(world_path, value_type=str),
+                    'seed': ParameterValue(LaunchConfiguration('seed'), value_type=int),
+                    **{name: _float(f'mid360_{name}') for name in (
+                        'frame_rate_hz', 'point_rate_hz', 'max_range_m',
+                        'range_noise_std_m', 'dropout_rate')},
+                    **{f'mount_{name}': _float(f'mid360_mount_{name}') for name in MID360_MOUNT},
+                    **{name: ParameterValue(LaunchConfiguration(f'mid360_{name}'),
+                                            value_type=str)
+                       for name in ('elevation_profile', 'return_profile')},
+                    'use_sim_time': True,
+                }],
+                remappings=[('/lhr/vehicle/odom', caster_odom),
+                            *fault_remaps.get('lidar_sim', [])],
+                output='screen',
+            ))
         perception_nodes.append(Node(
             package='lhr_perception',
             executable='lidar_cone_detector',
@@ -324,8 +456,12 @@ def _launch_setup(context: LaunchContext):
             name='track_builder',
             parameters=[{
                 'use_sim_time': True,
-                'pairing_strategy': (
-                    'classified' if classify_sides else 'boundary'),
+                'cone_topic': ('/lhr/perception/cones_classified' if enable_fusion
+                               else '/lhr/sensor/cones_detected'),
+                # Side inference waits for motion; geometry bootstraps unknown cones.
+                'pairing_strategy': 'boundary',
+                # Geometry-only inferred sides must not stop their own recovery motion.
+                'boundary_use_color': enable_fusion,
                 'chaining_alg': ParameterValue(
                     LaunchConfiguration('chaining_alg'), value_type=str),
                 'min_step_m': ParameterValue(
@@ -342,7 +478,7 @@ def _launch_setup(context: LaunchContext):
                     LaunchConfiguration('beam_width'), value_type=int),
                 'beam_depth': ParameterValue(
                     LaunchConfiguration('beam_depth'), value_type=int),
-                'track_width': 3.5,
+                'track_width': track_width,
                 'track_width_tolerance': 1.0,
             }],
             output='screen',
@@ -371,6 +507,7 @@ def _launch_setup(context: LaunchContext):
                     LaunchConfiguration('beam_width'), value_type=int),
                 'beam_depth': ParameterValue(
                     LaunchConfiguration('beam_depth'), value_type=int),
+                'track_width': track_width,
             }],
             output='screen',
         )
@@ -394,6 +531,9 @@ def _launch_setup(context: LaunchContext):
             'closed_path': False,
             'path_timeout_sec': ParameterValue(
                 LaunchConfiguration('path_timeout_sec'), value_type=float),
+            # Not an argument: this launch always starts the mission manager,
+            # so the car must never move before it says DRIVING.
+            'wait_for_mission': True,
         }],
         remappings=fault_remaps.get('pure_pursuit', []),
         output='screen',
@@ -411,7 +551,9 @@ def _launch_setup(context: LaunchContext):
                 'reference_world': ParameterValue(
                     context.launch_configurations.get('reference_world', '') or world_path,
                     value_type=str),
-                'mission': ParameterValue(LaunchConfiguration('mission'), value_type=str),
+                # The forced mission, so a finished acceleration run is not
+                # scored as an autocross that never lapped.
+                'mission': mission,
                 'output_csv': ParameterValue(LaunchConfiguration('output_csv'), value_type=str),
                 'off_track_threshold': ParameterValue(
                     LaunchConfiguration('off_track_threshold'), value_type=float),
@@ -441,6 +583,10 @@ def _launch_setup(context: LaunchContext):
                 'wheel_scale_error': ParameterValue(
                     LaunchConfiguration('wheel_scale_error'), value_type=float),
                 'lidar_classify_sides': classify_sides,
+                # What pure_pursuit drives under, recorded so a row says what
+                # it ran with and the gate can compute its reference lap (#232).
+                **{name: _float(name) for name in (
+                    'lookahead_dist', 'a_lat_max', 'v_min', 'v_max', 'max_accel', 'max_decel')},
                 'use_sim_time': True,
             }],
             output='screen',
@@ -453,6 +599,7 @@ def _launch_setup(context: LaunchContext):
             package='rviz2',
             executable='rviz2',
             name='rviz2',
+            additional_env=qt_env,
             arguments=['-d', os.path.join(
                 config_dir, 'stereo.rviz' if enable_stereo else 'default.rviz')],
             parameters=[{'use_sim_time': True}],
@@ -460,16 +607,20 @@ def _launch_setup(context: LaunchContext):
         ))
 
     # ----- Mission manager -----
+    safety_on = context.launch_configurations.get('safety', 'false').lower() == 'true'
     mission_mgr = Node(
         package='lhr_mission_manager',
         executable='mission_manager',
         name='mission_manager',
         parameters=[{
-            'mission': ParameterValue(
-                LaunchConfiguration('mission'), value_type=str),
+            'mission': mission,
             'auto_go': ParameterValue(
                 LaunchConfiguration('auto_go'), value_type=bool),
             'ready_hold_sec': _float('ready_hold_sec'),
+            # Follows safety:= rather than being an argument: without
+            # safety_node there is no heartbeat to wait for.
+            'require_safety_heartbeat': safety_on,
+            'safety_settle_s': _float('safety_settle_s'),
             'use_sim_time': True,
         }],
         output='screen',
@@ -477,7 +628,7 @@ def _launch_setup(context: LaunchContext):
 
     # ----- Safety monitor -----
     safety_nodes = []
-    if context.launch_configurations.get('safety', 'false').lower() == 'true':
+    if safety_on:
         safety_nodes.append(Node(
             package='lhr_safety',
             executable='safety_node',
@@ -487,12 +638,22 @@ def _launch_setup(context: LaunchContext):
                 # the Gazebo LiDAR always publishes, but under
                 # perception:=sim nothing reads the cloud.
                 'monitor_lidar': perception == 'lidar',
+                # Likewise the estimator: only the EKF reads the IMU and the
+                # wheel speeds, and the wheel speeds only exist under it.
+                'monitor_imu': use_ekf,
+                'monitor_wheels': use_ekf,
                 'lidar_timeout_s': _float('safety_lidar_timeout_s'),
                 'odom_timeout_s': _float('safety_odom_timeout_s'),
+                'imu_timeout_s': _float('safety_imu_timeout_s'),
+                'wheel_timeout_s': _float('safety_wheel_timeout_s'),
+                'mission_timeout_s': _float('safety_mission_timeout_s'),
                 'cmd_timeout_s': _float('safety_cmd_timeout_s'),
                 'max_position_std_m': _float('safety_max_position_std_m'),
                 'max_speed_factor': _float('safety_max_speed_factor'),
                 'geofence_radius_m': _float('safety_geofence_radius_m'),
+                'steer_angle_tol_rad': _float('safety_steer_angle_tol_rad'),
+                'steer_angle_window_s': _float('safety_steer_angle_window_s'),
+                'steer_angle_timeout_s': _float('safety_steer_angle_timeout_s'),
                 'steer_min_speed_mps': _float('safety_steer_min_speed_mps'),
                 'steer_yaw_rate_tol': _float('safety_steer_yaw_rate_tol'),
                 'steer_rel_tol': _float('safety_steer_rel_tol'),
@@ -516,13 +677,52 @@ def _launch_setup(context: LaunchContext):
                     LaunchConfiguration('fault_after_s'), value_type=float),
                 'fault_duration_s': ParameterValue(
                     LaunchConfiguration('fault_duration_s'), value_type=float),
+                'fault_min_speed_mps': ParameterValue(
+                    LaunchConfiguration('fault_min_speed_mps'), value_type=float),
+                'use_sim_time': True,
+            }],
+            # The speed gate reads the plant, like the caster: an odometry
+            # fault must not decide when it starts itself.
+            remappings=[('/lhr/sim/plant_odom', caster_odom)],
+            output='screen',
+        ))
+
+    # ----- Optional Foxglove viewer -----
+    viewer_nodes = []
+    if context.launch_configurations.get('foxglove', 'false').lower() == 'true':
+        viewer_nodes.append(Node(
+            package='foxglove_bridge',
+            executable='foxglove_bridge',
+            name='foxglove_bridge',
+            parameters=[{
+                'port': ParameterValue(LaunchConfiguration('foxglove_port'), value_type=int),
+                'use_sim_time': True,
+            }],
+            output='screen',
+        ))
+        viewer_nodes.append(Node(
+            package='lhr_vehicle',
+            executable='vehicle_viz',
+            name='vehicle_viz',
+            parameters=[{'use_mesh': False, 'use_sim_time': True}],
+            output='screen',
+        ))
+        viewer_nodes.append(Node(
+            package='lhr_gazebo',
+            executable='world_viz',
+            name='world_viz',
+            parameters=[{
+                # Fixed to the rendered world, not the scoring override.
+                'world_sdf': ParameterValue(world_path, value_type=str),
+                'acceleration': mission == 'acceleration',
                 'use_sim_time': True,
             }],
             output='screen',
         ))
 
     return [
-        SetEnvironmentVariable('GZ_SIM_RESOURCE_PATH', models_dir),
+        SetEnvironmentVariable('GZ_SIM_RESOURCE_PATH', resource_path),
+        *resource_cleanup,
         gz_sim,
         bridge,
         cmd_adapter,
@@ -536,6 +736,7 @@ def _launch_setup(context: LaunchContext):
         *safety_nodes,
         *fault_nodes,
         *rviz_nodes,
+        *viewer_nodes,
     ]
 
 
@@ -552,8 +753,26 @@ def generate_launch_description():
             'perception', default_value='sim',
             description='Perception mode: "sim" or "lidar"'),
         DeclareLaunchArgument(
+            'lidar_source', default_value='gazebo', choices=['gazebo', 'mid360'],
+            description='Raw cloud source; mid360 requires perception:=lidar'),
+        DeclareLaunchArgument('foxglove', default_value='false', choices=['true', 'false']),
+        DeclareLaunchArgument('foxglove_port', default_value='8765'),
+        DeclareLaunchArgument('mid360_frame_rate_hz', default_value='10.0'),
+        DeclareLaunchArgument('mid360_point_rate_hz', default_value='200000.0'),
+        DeclareLaunchArgument('mid360_max_range_m', default_value='40.0'),
+        DeclareLaunchArgument('mid360_range_noise_std_m',
+                              default_value=str(load_vehicle().lidar_range_noise_std_m)),
+        DeclareLaunchArgument('mid360_dropout_rate', default_value='0.0'),
+        DeclareLaunchArgument('mid360_elevation_profile', default_value='livox',
+                              choices=['livox', 'rosette', 'uniform']),
+        DeclareLaunchArgument('mid360_return_profile', default_value='baseline',
+                              choices=['baseline', 'acceptance_overcast']),
+        # The mount study's six numbers, in base_link; roll pi is upside down.
+        *[DeclareLaunchArgument(f'mid360_mount_{name}', default_value=str(value))
+          for name, value in _mid360_mount_default().items()],
+        DeclareLaunchArgument(
             'lidar_classify_sides', default_value='false',
-            description='Infer LiDAR cone sides (opt in; false publishes unlabeled cones)'),
+            description='Infer LiDAR sides; always enabled when camera fusion is enabled'),
         DeclareLaunchArgument(
             'track_style', default_value='autocross',
             description='Track style: "autocross", "oval", or "simple"'),
@@ -562,20 +781,39 @@ def generate_launch_description():
             description='Odometry source: "truth" (Gazebo) or "ekf"'),
         DeclareLaunchArgument(
             'gyro_bias', default_value='0.0',
-            description='Simulated gyro bias (rad/s); drives heading drift'),
+            description='Gyro bias (rad/s); recorded only, Gazebo bridges its own IMU'),
         DeclareLaunchArgument(
             'wheel_scale_error', default_value='1.0',
             description='Simulated rolling-radius error (1.0 = exact)'),
         DeclareLaunchArgument('seed', default_value='1'),
         DeclareLaunchArgument('num_waypoints', default_value='10'),
+        DeclareLaunchArgument('width_m', default_value='3.5'),
+        DeclareLaunchArgument('cone_spacing_m', default_value='2.0'),
         DeclareLaunchArgument(
             'enable_stereo_camera', default_value='false',
             choices=['true', 'false'],
-            description='Bridge ZED 2i stereo images/calibration and camera TF'),
+            description='Spawn ZED 2i sensors and bridge stereo images/calibration and TF'),
         DeclareLaunchArgument(
             'enable_camera_color_classifier', default_value='false',
             choices=['true', 'false'],
             description='Label ZED color regions; requires enable_stereo_camera'),
+        DeclareLaunchArgument(
+            'enable_camera_lidar_fusion', default_value='false', choices=['true', 'false'],
+            description='Color a separate LiDAR map; requires stereo and perception:=lidar'),
+        *[DeclareLaunchArgument(
+            f'fusion_{name}', default_value=str(default), description=description)
+          for name, default, description in (
+              ('process_hz', 10.0, 'Maximum fusion processing frequency'),
+              ('map_max_age_sec', 0.5, 'Maximum map age at image time, at most 2 seconds'),
+              ('camera_max_age_sec', 0.5, 'Maximum camera age before using LiDAR sides'),
+              ('sample_height_m', 0.1625, 'Height above planar map points to sample color'),
+              ('max_color_range_m', 20.0, 'Maximum 3D camera-to-sample distance'),
+              ('pixel_margin', 6.0, 'Region bounding-box expansion in pixels'),
+              ('vote_window', 5, 'Maximum accepted color votes per cone'),
+              ('min_color_votes', 3, 'Minimum matching votes to confirm a color'),
+              ('min_color_fraction', 0.7, 'Minimum fraction of matching color votes'),
+              ('id_reset_distance_m', 0.5, 'Map displacement that clears camera evidence'),
+          )],
         DeclareLaunchArgument(
             'cone_color_min_region_area', default_value='25',
             description='Minimum connected color region area in pixels'),
@@ -591,9 +829,11 @@ def generate_launch_description():
         # Sensor sim
         DeclareLaunchArgument('fov_deg', default_value='200.0'),
         DeclareLaunchArgument('max_range_m', default_value='20.0'),
-        # Gazebo keeps its sensor-frame detector defaults.
-        DeclareLaunchArgument('lidar_ground_z_min', default_value='-0.40'),
-        DeclareLaunchArgument('lidar_ground_z_max', default_value='0.5'),
+        # Height is cut in base_link, at ground level, because the sensor
+        # is mounted upside down and pitched (vehicle.yaml): its own z is
+        # not height. 0.15 m keeps range noise on near ground hits out.
+        DeclareLaunchArgument('lidar_ground_z_min', default_value=str(MID360_MIN_GROUND_CUT_M)),
+        DeclareLaunchArgument('lidar_ground_z_max', default_value='1.05'),
         DeclareLaunchArgument('lidar_min_cluster_points', default_value='1'),
         DeclareLaunchArgument('lidar_dedup_radius', default_value='1.5'),
         DeclareLaunchArgument('lidar_max_cluster_points', default_value='50'),
@@ -601,7 +841,7 @@ def generate_launch_description():
         DeclareLaunchArgument('lidar_stack_max_frames', default_value='10'),
         DeclareLaunchArgument('lidar_transform_wait_sec', default_value='0.5'),
         DeclareLaunchArgument('lidar_sensor_transform_source', default_value='vehicle_config'),
-        DeclareLaunchArgument('lidar_height_filter_frame', default_value='sensor'),
+        DeclareLaunchArgument('lidar_height_filter_frame', default_value='base_link'),
         # Track builder chaining (both perception modes)
         DeclareLaunchArgument('chaining_alg', default_value='constrained_greedy'),
         DeclareLaunchArgument('min_step_m', default_value='0.3'),
@@ -651,17 +891,27 @@ def generate_launch_description():
             description='One fault_injector kind, e.g. ekf_kill, lidar_drop'),
         DeclareLaunchArgument('fault_after_s', default_value='30.0'),
         DeclareLaunchArgument('fault_duration_s', default_value='0.0'),
+        DeclareLaunchArgument('fault_min_speed_mps', default_value='0.0',
+                              description='Also wait until the car is this fast (0 = any)'),
         # Safety monitor (lhr_safety). Off until #117's fault injection
         # has tuned the thresholds; defaults match the node's.
         DeclareLaunchArgument(
             'safety', default_value='false',
             description='Run safety_node: trips the mission on stack faults'),
+        # READY waits until safety's heartbeat has been steady this long
+        DeclareLaunchArgument('safety_settle_s', default_value='2.0'),
         DeclareLaunchArgument('safety_lidar_timeout_s', default_value='0.3'),
         DeclareLaunchArgument('safety_odom_timeout_s', default_value='0.25'),
+        DeclareLaunchArgument('safety_imu_timeout_s', default_value='0.25'),
+        DeclareLaunchArgument('safety_wheel_timeout_s', default_value='0.25'),
+        DeclareLaunchArgument('safety_mission_timeout_s', default_value='0.5'),
         DeclareLaunchArgument('safety_cmd_timeout_s', default_value='0.25'),
         DeclareLaunchArgument('safety_max_position_std_m', default_value='0.0'),
         DeclareLaunchArgument('safety_max_speed_factor', default_value='1.5'),
-        DeclareLaunchArgument('safety_geofence_radius_m', default_value='150.0'),
+        DeclareLaunchArgument('safety_geofence_radius_m', default_value='300.0'),
+        DeclareLaunchArgument('safety_steer_angle_tol_rad', default_value='0.035'),
+        DeclareLaunchArgument('safety_steer_angle_window_s', default_value='0.2'),
+        DeclareLaunchArgument('safety_steer_angle_timeout_s', default_value='0.25'),
         DeclareLaunchArgument('safety_steer_min_speed_mps', default_value='2.0'),
         DeclareLaunchArgument('safety_steer_yaw_rate_tol', default_value='0.15'),
         DeclareLaunchArgument('safety_steer_rel_tol', default_value='0.5'),
