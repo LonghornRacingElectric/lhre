@@ -9,7 +9,7 @@ tokens, datasource provisioning, local URLs and connection checks.
 `signals`, `agg`, `bucket_ms` and `live` settings. Its stat tiles show the last
 board age; the time-series panel keeps maximum ages within each bucket. It
 requires actual `board_status` observations, such as the
-[recorded replay](../../README.md#board-health-demo). It shows communication
+[recorded replay](../../README.md#board-health-and-fault-demo). It shows communication
 ages rather than interpreting the processor's board-state snapshots.
 
 The `orion`, `angelique` and `nightwatch` folders retain legacy SQL and direct

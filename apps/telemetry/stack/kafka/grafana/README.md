@@ -116,7 +116,7 @@ the plot preserves bucket maxima. Select a recent time window while publishing
 live data. No data means there are no observations in the selected range; the
 gateway does not synthesize readings merely because a dashboard is installed.
 
-The [board-health replay](../../../analysis/README.md#board-health-demo) provides
+The [board-health replay](../../../analysis/README.md#board-health-and-fault-demo) provides
 continuous native Artemis demo data and an optional board dropout. The separate
 `board_health` processor is needed for its state/transition Kafka topics, not
 for this dashboard's direct age signals.
