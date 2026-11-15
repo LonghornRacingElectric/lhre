@@ -121,12 +121,15 @@ test it are in [src/lib/driveday/README.md](src/lib/driveday/README.md);
 
 ## Tests
 
-CI's `Telemetry viewer` job runs both suites on every change under
-`apps/telemetry/`. Locally:
+CI's `Telemetry viewer` job type-checks the app and runs both suites on
+every change under `apps/telemetry/`. The type-check is what catches a
+component that names something it never defines: vitest only loads the
+modules a test imports, so it passes while `next build` fails. Locally:
 
 ```bash
 npm ci --ignore-scripts      # postinstall wants the auth database; tests don't
 npm rebuild ffmpeg-static    # fetches the ffmpeg the video helper test uses
+npm run typecheck            # generates the Prisma clients, then tsc --noEmit
 npm run test:driveday        # vitest: tests/driveday and tests/trackside
 npm run test:video-helper    # node --test: tools/video-helper.test.mjs
 ```
