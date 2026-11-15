@@ -7,8 +7,9 @@ placeholders in `template.html`. `build.py` restores them from the shared
 Orion STL using the same millimetre quantization and packing as the
 [LiDAR viewer](../../2026-11-08-lidar-mount-study/README.md#viewer).
 On 2026-11-14 the presets and initial view changed to study above-LiDAR
-placement: (0.609, 0, 1.105) m in `base_link`, 5° down. This is the original
-study's approximate zero-clearance case, not an accepted mount. The baseline
+placement: (0.625, 0, 1.090) m in `base_link`, 5° down, paired with a proposed
+LiDAR height of 1.030 m. This housing-geometry candidate is not an accepted
+mount; see the study for its calculated clearances and assumptions. The baseline
 preset retains the below-LiDAR sim pose. Geometry/optics calculations are
 unchanged; no driver or LiDAR/bracket collision model has been added.
 The original template is preserved in git commit `5257aaa0`; current builds
