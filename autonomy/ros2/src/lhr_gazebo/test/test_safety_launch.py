@@ -129,8 +129,17 @@ def test_node_feeds_the_sensors_and_mission_status_to_the_monitor(monkeypatch):
         assert (monitor._last_mission, monitor._mission_armed) == (10.0, True)
         now[0] = 10.5
         imu = Imu()
-        imu.angular_velocity.z = 0.25
+        # Only the yaw axis is the steering rule's gyro.
+        imu.angular_velocity.x, imu.angular_velocity.y, imu.angular_velocity.z = 3.0, 2.0, 0.25
+        fed = []
+        on_imu = monitor.on_imu
+
+        def record(t, yaw):
+            fed.append((t, yaw))
+            on_imu(t, yaw)
+        monkeypatch.setattr(monitor, 'on_imu', record)
         started._imu_cb(imu)
+        assert fed == [(10.5, 0.25)]
         started._wheels_cb(b'raw wheel speeds')
         assert monitor._last_imu == 10.5 and monitor._last_wheels == 10.5
         started._status_cb(String(data='FINISHED'))

@@ -26,13 +26,14 @@ a fault, a crash or a hang all look the same to whatever is listening.
 | `CMD_INVALID` | A non-finite steering command, which the Gazebo adapter would clamp to full lock | `/lhr/vehicle/cmd` |
 | `LIDAR_STALE` | No cloud for `lidar_timeout_s` (only with `monitor_lidar`) | `/lhr/lidar/points` |
 | `GEOFENCE` | Further than `geofence_radius_m` from where the car armed (entered `READY`) | `/lhr/vehicle/odom` |
-| `STEER_TRACKING` | The measured steering angle differs from the command by more than `steer_angle_tol_rad` for `steer_angle_window_s`, after allowing the actuator `vehicle.yaml`'s rate limit to get there; or the measured angle stops arriving, or never arrives, for `steer_angle_timeout_s`. The yaw-rate fallback below runs only with `require_steer_measurement` off | `/lhr/vehicle/cmd`, `/lhr/vehicle/steering_measured` (`/lhr/vehicle/odom` for the fallback) |
+| `STEER_TRACKING` | The measured steering angle differs from the command by more than `steer_angle_tol_rad` for `steer_angle_window_s`, after allowing the actuator `vehicle.yaml`'s rate limit to get there; or the measured angle stops arriving, or never arrives, for `steer_angle_timeout_s`. The yaw-rate fallback below runs only with `require_steer_measurement` off | `/lhr/vehicle/cmd`, `/lhr/vehicle/steering_measured` (for the fallback, the gyro on `/lhr/imu/data` with `monitor_imu`, else `/lhr/vehicle/odom`, and the forward speed from `/lhr/vehicle/odom`) |
 
 The order above is the priority when several fire at once: a dead or
 diverged pose explains everything downstream of it, so it is reported
 first, then a dead EKF input, which explains the pose drifting, then a dead
 mission manager. None of the checks read ground truth. A topic that never arrives
-counts as stale from node startup, and a clock that jumps backwards (a sim
+counts as stale from node startup, except the mission status, which only
+counts once a status has armed the car, and a clock that jumps backwards (a sim
 reset) counts as stale rather than as perfectly fresh.
 
 Odometry arrives faster than the 20 Hz checks run, so a bad sample (a NaN, a
@@ -172,7 +173,8 @@ arguments:
   which is what the car's loop acts on
   ([#127](https://github.com/LonghornRacingElectric/lhre/issues/127)). The
   fault tools' `mission_kill` shows the trip and the missing stop, so it is
-  not in the default matrix.
+  not in the default matrix until the sim stands in for that loop
+  ([#290](https://github.com/LonghornRacingElectric/lhre/issues/290)).
 - Thresholds are starting points; #117 measures time to trip and stop
   distance against the PDR table with
   [the fault injection tools](../../../testing/tools/fault_injection/README.md).

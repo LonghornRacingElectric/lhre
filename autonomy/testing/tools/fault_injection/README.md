@@ -44,7 +44,8 @@ The faults themselves come from `lhr_gazebo`'s `fault_injector`
 fault kind but not a default case: nothing in sim stops the car after it,
 since the stop goes through the dead node and the car's hardware loop is not
 modelled, so every run would fail the stop check. `CASES=mission_kill` shows
-the trip.
+the trip. It joins the matrix with
+[#290](https://github.com/LonghornRacingElectric/lhre/issues/290).
 
 ## Running
 
@@ -67,8 +68,8 @@ later ([#227](https://github.com/LonghornRacingElectric/lhre/issues/227)).
 `HANG_S` is the one wall-time setting: a run whose `/clock` stands still that
 long ends as `hung` (the gate's
 [`watch_run.py`](../gate/README.md#sim-time-not-wall-time) does this for
-both tools, and writes `bags/<id>.end.txt`). The full matrix is 59 runs, 71
-minutes in the Mac container on 11/1. A quick check:
+both tools, and writes `bags/<id>.end.txt`). The full matrix is 71 runs; the
+59 it had on 11/1 took 71 minutes in the Mac container. A quick check:
 
 ```bash
 CASES="ekf_kill steer_freeze" SPEEDS=5 REPEATS=1 CLEAN_SEEDS= \

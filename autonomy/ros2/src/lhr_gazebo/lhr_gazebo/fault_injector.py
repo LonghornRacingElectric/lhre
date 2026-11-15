@@ -92,7 +92,7 @@ FAULTS = {
         needs=(('estimator', 'ekf'),)),
     # Trips, but nothing in sim stops the car afterwards: the stop goes
     # through the dead node, and the hardware loop the heartbeat feeds on
-    # the car is not modelled (#127).
+    # the car is not modelled yet (#290).
     'mission_kill': FaultKind('MISSION_STALE', process=MISSION, sig=signal.SIGKILL),
 }
 

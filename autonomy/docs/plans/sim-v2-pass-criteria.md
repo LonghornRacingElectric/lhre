@@ -132,7 +132,7 @@ passed. IMU and wheel-speed dropouts joined the matrix with their checks
 ([#127](https://github.com/LonghornRacingElectric/lhre/issues/127)) but has no
 case yet: the sim stops the car through `mission_manager` itself, so nothing
 stops it once that node is dead. It joins when the sim models the hardware
-loop the heartbeat feeds.
+loop the heartbeat feeds ([#290](https://github.com/LonghornRacingElectric/lhre/issues/290)).
 
 ## Gaps in the sim
 

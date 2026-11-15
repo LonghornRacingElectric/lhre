@@ -25,7 +25,6 @@ def _healthy(monitor, t, x=0.0, y=0.0, speed=5.0, steer=0.0):
     yaw_rate = speed * math.tan(steer) / WHEELBASE
     monitor.on_odom(t, x, y, speed, 0.0, yaw_rate, 0.01, 0.01)
     _sensors(monitor, t, yaw_rate)
-    _sensors(monitor, t, yaw_rate)
 
 
 def _drive(monitor, start, end, dt=0.05, **kwargs):
@@ -572,3 +571,32 @@ def test_dead_mission_manager_ranks_above_the_command():
         m.on_odom(t, 5.0 * t, 0.0, 5.0, 0.0, 0.0, 0.01, 0.01)
         _sensors(m, t)
     assert m.check(t) == Fault.MISSION_STALE
+
+
+def _yaw_tick(m, t, gyro):
+    """Command 0.3 rad on the yaw-rate rule; the gyro says how much the car turns."""
+    m.on_lidar(t)
+    m.on_command(t, 0.3)
+    m.on_odom(t, 0.0, 0.0, 5.0, 0.0, 0.0, 0.01, 0.01)
+    m.on_imu(t, gyro)
+    m.on_wheels(t)
+
+
+def test_a_gap_in_the_gyro_restarts_the_mismatch_window():
+    # 0.85 s of mismatch, a 4 s gap of NaN gyro samples, then one more
+    # mismatching sample: the gap does not count as mismatch.
+    m = SafetyMonitor(YAW_CFG, now=0.0)
+    t = 0.0
+    while t < 0.9:
+        _yaw_tick(m, t, 0.0)
+        t += 0.05
+    while t < 4.9:
+        _yaw_tick(m, t, math.nan)
+        t += 0.05
+    _yaw_tick(m, t, 0.0)
+    assert m.check(t) == Fault.NONE
+    end = t + YAW_CFG.steer_window_s + 0.1
+    while t < end:
+        t += 0.05
+        _yaw_tick(m, t, 0.0)
+    assert m.check(t) == Fault.STEER_TRACKING

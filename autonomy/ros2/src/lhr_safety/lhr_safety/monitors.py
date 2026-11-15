@@ -145,9 +145,13 @@ class SafetyMonitor:
     def on_imu(self, now: float, yaw_rate: float):
         """Feed one IMU sample: the gyro's yaw rate (rad/s)."""
         self._last_imu = now
-        if (self._config.monitor_imu and self._forward is not None
-                and math.isfinite(yaw_rate)):
+        if not self._config.monitor_imu or self._forward is None:
+            return
+        if math.isfinite(yaw_rate):
             self._check_steering(now, self._forward, yaw_rate)
+        else:
+            # A gap in the gyro is not a mismatch that lasted through it.
+            self._mismatch_since = None
 
     def on_wheels(self, now: float):
         self._last_wheels = now
