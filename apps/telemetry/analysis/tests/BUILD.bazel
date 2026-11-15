@@ -16,8 +16,9 @@ py_test(
     target_compatible_with = NOT_WINDOWS,
 )
 
-# Replays the recorded drive through the real Artemis decoder and the
-# board_health classifier, the same path the demo takes.
+# Replays the recorded drive through the real Artemis decoder, the
+# board_health classifier and events_faults' record handler, the same path
+# the demo takes.
 py_test(
     name = "artemis_replay_test",
     srcs = ["artemis_replay_test.py"],
@@ -28,6 +29,8 @@ py_test(
         "//apps/telemetry/analysis:analysis_lib",
         "//apps/telemetry/stack/ingest:sensor_decode",
         "//apps/telemetry/stack/processors/board_health:classifier",
+        "//apps/telemetry/stack/processors/events_faults:events_faults_lib",
+        "//apps/telemetry/stack/processors/events_faults:faults_lib",
         requirement("protobuf"),
     ],
     target_compatible_with = NOT_WINDOWS,

@@ -1,0 +1,478 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "pdr_demo"
+      ],
+      "title": "Demos",
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "icon": "external link",
+      "tooltip": ""
+    }
+  ],
+  "panels": [
+    {
+      "type": "state-timeline",
+      "title": "VCU pedal and STOMP faults",
+      "description": "diagnostics_high flags as the car sends them, every sample (raw), in one query so the rows keep this order. events_faults turns each OK→FAULT and FAULT→OK edge into one fault_events message.",
+      "datasource": {
+        "type": "lhre-artemis-datasource",
+        "uid": "artemis"
+      },
+      "gridPos": {
+        "h": 14,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "OK",
+                  "color": "green",
+                  "index": 0
+                },
+                "1": {
+                  "text": "FAULT",
+                  "color": "red",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0,
+            "spanNulls": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "diagnostics_high.apps1_disconnect"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "APPS1 disconnect"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "diagnostics_high.apps2_disconnect"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "APPS2 disconnect"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "diagnostics_high.apps1_out_range"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "APPS1 out of range"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "diagnostics_high.apps2_out_range"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "APPS2 out of range"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "diagnostics_high.apps_mismatch"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "APPS mismatch"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "diagnostics_high.apps_implause"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "APPS implausibility"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "diagnostics_high.bpps1_disconnect"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BPPS1 disconnect"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "diagnostics_high.bpps2_disconnect"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BPPS2 disconnect"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "diagnostics_high.bpps1_out_range"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BPPS1 out of range"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "diagnostics_high.bpps2_out_range"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BPPS2 out of range"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "diagnostics_high.bpps_mismatch"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BPPS mismatch"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "diagnostics_high.bse1_disconnect"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BSE1 disconnect"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "diagnostics_high.bse2_disconnect"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BSE2 disconnect"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "diagnostics_high.bse1_out_range"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BSE1 out of range"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "diagnostics_high.bse2_out_range"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BSE2 out of range"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "diagnostics_high.stomp_fault"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "STOMP (brake over throttle)"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "mergeValues": true,
+        "showValue": "never",
+        "alignValue": "left",
+        "rowHeight": 0.8,
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "lhre-artemis-datasource",
+            "uid": "artemis"
+          },
+          "refId": "A",
+          "signals": [
+            "diagnostics_high.apps1_disconnect",
+            "diagnostics_high.apps2_disconnect",
+            "diagnostics_high.apps1_out_range",
+            "diagnostics_high.apps2_out_range",
+            "diagnostics_high.apps_mismatch",
+            "diagnostics_high.apps_implause",
+            "diagnostics_high.bpps1_disconnect",
+            "diagnostics_high.bpps2_disconnect",
+            "diagnostics_high.bpps1_out_range",
+            "diagnostics_high.bpps2_out_range",
+            "diagnostics_high.bpps_mismatch",
+            "diagnostics_high.bse1_disconnect",
+            "diagnostics_high.bse2_disconnect",
+            "diagnostics_high.bse1_out_range",
+            "diagnostics_high.bse2_out_range",
+            "diagnostics_high.stomp_fault"
+          ],
+          "agg": "raw",
+          "bucket_ms": 0,
+          "alias": "",
+          "live": true
+        }
+      ]
+    },
+    {
+      "type": "state-timeline",
+      "title": "Inverter fault words",
+      "description": "post_faults and run_faults bitmasks; any set bit is a fault (events_faults reports bits 0-23 as run_faults[N]). The value shown is the whole word.",
+      "datasource": {
+        "type": "lhre-artemis-datasource",
+        "uid": "artemis"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      },
+      "id": 2,
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "range",
+              "options": {
+                "from": 0,
+                "to": 0.5,
+                "result": {
+                  "text": "OK",
+                  "color": "green",
+                  "index": 0
+                }
+              }
+            }
+          ],
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0,
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "mergeValues": true,
+        "showValue": "auto",
+        "alignValue": "left",
+        "rowHeight": 0.8,
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "lhre-artemis-datasource",
+            "uid": "artemis"
+          },
+          "refId": "A",
+          "signals": [
+            "diagnostics_high.post_faults"
+          ],
+          "agg": "max",
+          "bucket_ms": 0,
+          "alias": "POST faults",
+          "live": true
+        },
+        {
+          "datasource": {
+            "type": "lhre-artemis-datasource",
+            "uid": "artemis"
+          },
+          "refId": "B",
+          "signals": [
+            "diagnostics_high.run_faults"
+          ],
+          "agg": "max",
+          "bucket_ms": 0,
+          "alias": "Run faults",
+          "live": true
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "title": "Where the fault events are",
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 19
+      },
+      "id": 3,
+      "options": {
+        "mode": "markdown",
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "These panels show the raw flags the car sends. The `events_faults` processor publishes only the changes, one `fault_raised` and one `fault_cleared` per fault, to the Kafka topic `fault_events`. Grafana cannot read that topic yet, so watch it in a terminal:\n\n```\n./apps/telemetry/stack/server_devtool.sh enable events_faults\ndocker exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:29092 --topic fault_events\n```"
+      }
+    }
+  ],
+  "preload": false,
+  "schemaVersion": 40,
+  "tags": [
+    "artemis",
+    "faults",
+    "pdr_demo"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-1m",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Faults - Artemis (Real-time)",
+  "uid": "artemis_faults_rt",
+  "version": 1,
+  "weekStart": ""
+}

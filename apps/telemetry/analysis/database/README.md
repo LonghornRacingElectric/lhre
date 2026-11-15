@@ -69,7 +69,10 @@ row-based path. `--duration` uses native pool rates and is a separate mode.
 Orion frames are converted by field name into native Artemis batches before
 MQTT publication. This is a snapshot replay, not a native CAN-rate simulation.
 `--dropout-board dui --dropout-after 20 --dropout-for 10` simulates silence and
-recovery for one board; a zero duration keeps it quiet until stopped.
+recovery for one board; a zero duration keeps it quiet until stopped. `--fault NAME` holds a
+`diagnostics_high` fault active (`--fault-after`, `--fault-for`), `--repeat-every S`
+repeats both windows, and `--start S` begins partway through the drive. See the
+[demo](../README.md#board-health-and-fault-demo).
 
 ```bash
 bazel run //apps/telemetry/analysis:publish_demo -- --replay --dropout-board dui

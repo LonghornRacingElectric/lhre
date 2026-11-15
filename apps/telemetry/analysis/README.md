@@ -28,21 +28,46 @@ are retired; unqualified analysis aliases now select Orion.
 See [SQL utilities](sql_utils/README.md) and
 [the viewer](database/viewer_tool/README.md) for consumers.
 
-## Board health demo
+## Board health and fault demo
 
-`database/paho_testing.py --replay` publishes the recorded UTA autocross run
-(`database/data/`) to MQTT `artemis/data` as the car's `TelemetryBatch`
-messages, looped at its recorded pace and restamped to now. Add
-`--dropout-board dui --dropout-after 20 --dropout-for 10` to make one board stop
-reporting: its `last_seen_s` climbs past board_health's 0.5 s threshold, goes
-STALE, then recovers. Replay needs the stack running but not the database.
+`database/paho_testing.py --replay` (Bazel target `publish_demo`) publishes the
+recorded UTA autocross run (`database/data/`) to MQTT `artemis/data` as the
+car's `TelemetryBatch` messages, looped at its recorded pace and restamped to
+now. It needs the stack running, not the database. For the demo:
 
 ```
-bazel run //apps/telemetry/analysis:publish_demo -- --replay --dropout-board dui
+./apps/telemetry/stack/server_devtool.sh enable board_health
+./apps/telemetry/stack/server_devtool.sh enable events_faults
+bazel run --config=local //apps/telemetry/analysis:publish_demo -- --replay \
+    --dropout-board dui --fault apps_mismatch --start 60 --repeat-every 45
 ```
 
-The **Board Health - Artemis (Real-time)** dashboard
-(`database/dashboards/artemis/board_health.json`) graphs each board's
-`last_seen_s` against the threshold. `bazel test
-//apps/telemetry/analysis/tests:artemis_replay_test` replays the recording
-through the real decoder and board_health's tracker.
+| Option | Effect | Default |
+| --- | --- | --- |
+| `--dropout-board B` | `B`'s `last_seen_s` climbs past board_health's 0.5 s threshold, goes STALE, then recovers | 20-30 s in |
+| `--fault NAME` | holds a `diagnostics_high` fault active, then clears it; repeatable. `NAME` is a flag (`apps_mismatch`, `stomp_fault`) or an inverter mask bit (`run_faults[2]`) | 5-10 s in |
+| `--repeat-every S` | repeats both windows every `S` seconds, so they show again without a restart | 0, once |
+| `--start S` | begins `S` seconds into the drive and wraps around | 0 |
+
+All times count from when the replay starts. `--start 60` brings the run's own
+brake-over-throttle blip (one `stomp_fault` frame, 72.6 s into the drive) to
+about 12.6 s. Faults are sent on every frame, with the recorded value outside
+the window, because events_faults treats a missing field as "not reported",
+never as "cleared". Fuse and contactor flags are accepted but events_faults
+does not watch them.
+
+Two dashboards in `database/dashboards/artemis/`, linked under **Demos**, show
+the result: **Board Health - Artemis (Real-time)** graphs each board's
+`last_seen_s` against the threshold, and **Faults - Artemis (Real-time)** shows
+the VCU pedal and STOMP flags and the inverter fault words as OK/FAULT
+timelines. Both read the car's raw signals through the gateway; the processors'
+Kafka topics are not readable from Grafana yet. Watch the fault events with:
+
+```
+docker exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
+    --bootstrap-server localhost:29092 --topic fault_events
+```
+
+`bazel test //apps/telemetry/analysis/tests:artemis_replay_test` replays the
+recording through the real decoder, board_health's tracker and events_faults'
+record handler with the demo's options.

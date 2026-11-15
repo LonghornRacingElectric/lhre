@@ -19,13 +19,26 @@ class PahoFixturesTest(unittest.TestCase):
             return receipt
         mqtt.publish.side_effect = receive
         replay = paho_testing.artemis_replay.replay
-        def first_two(recording, publish, dropout=None):
-            return replay(recording[:2], publish, dropout=dropout, loop=False, sleep=lambda _: None)
+        def first_two(recording, publish, dropout=None, faults=()):
+            return replay(recording[:2], publish, dropout=dropout, faults=faults, loop=False, sleep=lambda _: None)
         with patch.object(paho_testing.mqtt_client, "Client", return_value=mqtt), \
                 patch.object(paho_testing.artemis_replay, "replay", side_effect=first_two):
             paho_testing.main(["--replay"])
-        self.assertEqual(len(messages), 2)
-        self.assertTrue(all(row.get("board_status") and row.get("dynamics") for row in messages))
+            self.assertEqual(len(messages), 2)
+            self.assertTrue(all(row.get("board_status") and row.get("dynamics") for row in messages))
+
+            # The demo flags: a fault held from the first frame, a repeating dropout, a later start.
+            messages.clear()
+            paho_testing.main(["--replay", "--start", "60", "--fault", "apps_mismatch", "--fault-after", "0",
+                               "--dropout-board", "dui", "--repeat-every", "45"])
+            self.assertEqual(len(messages), 2)
+            self.assertTrue(all(row["diagnostics_high"]["apps_mismatch"] for row in messages))
+
+        for argv in (["--fault", "apps_mismatch"], ["--replay", "--fault", "not_a_fault"],
+                     ["--replay", "--start", "500"],
+                     ["--replay", "--dropout-board", "dui", "--dropout-after", "40", "--repeat-every", "45"]):
+            with self.subTest(argv=argv), self.assertRaises(SystemExit), patch("sys.stderr"):
+                paho_testing.main(argv)
 
     def test_profiles_schema_selection_and_row_controls(self):
         viewer = DataTester(None, seed=42, value_profile="viewer")

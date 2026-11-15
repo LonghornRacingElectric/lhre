@@ -874,6 +874,15 @@ def main(argv=None):
                         help="Recording replay only: simulate this board going quiet.")
     parser.add_argument("--dropout-after", type=float, default=20)
     parser.add_argument("--dropout-for", type=float, default=10, help="Dropout seconds; 0 means until stopped.")
+    parser.add_argument("--fault", action="append", default=[], metavar="NAME",
+                        help="Recording replay only: hold this diagnostics_high fault active, e.g. apps_mismatch, "
+                             "stomp_fault or run_faults[2]; repeatable.")
+    parser.add_argument("--fault-after", type=float, default=5)
+    parser.add_argument("--fault-for", type=float, default=5, help="Fault seconds before it clears.")
+    parser.add_argument("--repeat-every", type=float, default=0, metavar="SECONDS",
+                        help="Recording replay only: repeat the dropout and fault windows every SECONDS; 0 runs each once.")
+    parser.add_argument("--start", type=float, default=0, metavar="SECONDS",
+                        help="Recording replay only: begin SECONDS into the recording and wrap around.")
     parser.add_argument("--delay", type=float, help="Delay between fixture rows; defaults to 0.02 s (viewer) or 0.001 s (generic).")
     parser.add_argument("--csv", type=Path, help="Artemis logger CSV or directory of pool CSVs.")
     parser.add_argument("--mapping", type=Path, help="Optional qualified-field-to-CSV-column JSON mapping.")
@@ -888,14 +897,29 @@ def main(argv=None):
         os.environ["ARTEMIS_STORAGE_CONTRACT"] = args.contract
     if args.mapping and not args.csv:
         parser.error("--mapping requires --csv")
-    if args.dropout_board and args.replay is None:
-        parser.error("--dropout-board requires --replay")
+    replay_only = args.dropout_board or args.fault or args.repeat_every or args.start
+    if replay_only and args.replay is None:
+        parser.error("--dropout-board, --fault, --repeat-every and --start require --replay")
+    if args.repeat_every and args.dropout_board and not args.dropout_for:
+        parser.error("--repeat-every needs a finite --dropout-for")
     if args.replay is not None and (args.csv or args.tables or args.delay is not None or args.schema_source != "proto"):
         parser.error("--replay cannot be combined with row generation or CSV options")
     if args.duration is None and args.rate_scale != 1:
         parser.error("--rate-scale requires --duration")
     if args.duration is not None and (args.csv or args.tables or args.delay is not None or args.schema_source != "proto"):
         parser.error("--duration uses generated pool rates; CSV, tables, delay and ORM selection use --rows")
+    if args.replay is not None:
+        # Build the replay before connecting, so a bad window or fault name fails fast.
+        every = args.repeat_every or None
+        try:
+            recording = artemis_replay.load_recording(args.replay)
+            if args.start:
+                recording = artemis_replay.start_at(recording, args.start)
+            dropout = artemis_replay.Dropout(args.dropout_board, args.dropout_after,
+                                             args.dropout_for or None, every) if args.dropout_board else None
+            faults = [artemis_replay.Fault(name, args.fault_after, args.fault_for, every) for name in args.fault]
+        except ValueError as error:
+            parser.error(str(error))
     tester = DataTester(None, args.seed, args.csv, args.mapping, args.profile) if args.replay is None else None
     if args.duration is not None:
         result = publish(args.duration, args.rate_scale, args.seed, args.mqtt_host,
@@ -910,15 +934,13 @@ def main(argv=None):
         client.loop_start()
         try:
             if args.replay is not None:
-                recording = artemis_replay.load_recording(args.replay)
-                dropout = artemis_replay.Dropout(args.dropout_board, args.dropout_after, args.dropout_for or None) if args.dropout_board else None
                 def send_recorded(payload):
                     result = client.publish("artemis/data", payload, qos=1)
                     result.wait_for_publish(timeout=5)
                     if not result.is_published():
                         raise TimeoutError("MQTT publish did not complete")
                 try:
-                    result = {"rows": artemis_replay.replay(recording, send_recorded, dropout=dropout)}
+                    result = {"rows": artemis_replay.replay(recording, send_recorded, dropout=dropout, faults=faults)}
                 except KeyboardInterrupt:
                     result = {"stopped": True}
             else:

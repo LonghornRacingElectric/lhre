@@ -1,17 +1,31 @@
-"""Replays the recorded UTA autocross run the way the board health demo does.
+"""Replays the recorded UTA autocross run the way the board health and fault demos do.
 
 Every payload goes through the decoder ingest's consumers use
-(`decode_updates`) and into board_health's state tracker with the deployed
-0.5 s threshold. Time comes from a fake clock that advances by the recorded
-gaps, so 110 s of driving replays instantly with the same timing.
+(`decode_updates`) into board_health's state tracker with the deployed 0.5 s
+threshold, and through events_faults' own record handler. Time comes from a
+fake clock that advances by the recorded gaps, so 110 s of driving replays
+instantly with the same timing.
 """
 
+import importlib.util
 import os
 import unittest
+from types import SimpleNamespace
+from unittest.mock import Mock
 
-from analysis.database.artemis_replay import BOARDS, Dropout, load_recording, replay
+from analysis.database.artemis_replay import BOARDS, Dropout, Fault, load_recording, replay, start_at
 from classifier import BoardStateTracker
+import faults
+from faults import BOOLEAN_FAULTS
 from stack.ingest.sensor_decode import decode_updates
+
+# events_faults' handler lives in main.py, like board_health's; load it by path
+# so the two processors' `main` modules cannot shadow each other.
+_spec = importlib.util.spec_from_file_location(
+    "events_faults_main", os.path.join(os.path.dirname(faults.__file__), "main.py"))
+events_faults_main = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(events_faults_main)
+process_record = events_faults_main.process_record
 
 RECORDING = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                          "..", "database", "data", "autox_uta_2026-10-17.pb.gz")
@@ -31,11 +45,26 @@ class FakeClock:
         return self.ns
 
 
+def publish(recording, dropout=None, faults=()):
+    clock, payloads = FakeClock(), []
+    replay(recording, payloads.append, dropout=dropout, faults=faults, loop=False,
+           sleep=clock.sleep, now_ns=clock.now_ns)
+    return payloads
+
+
+def fault_events(payloads):
+    """Feeds every payload to events_faults as Kafka records; returns (kind, fault, seconds in)."""
+    diagnostics, events = {}, []
+    for payload in payloads:
+        record = SimpleNamespace(headers=[("car_type", b"Artemis"), ("payload_format", b"artemis_updates_v1")],
+                                 value=payload)
+        events += process_record(record, Mock(), diagnostics, "fault_events")
+    return [(e["kind"], e["fault"], (e["t_ms"] * 1_000_000 - START_NS) / 1e9) for e in events]
+
+
 def run(recording, dropout=None):
     """Replays once and feeds board_health. Returns (decoded updates, transitions)."""
-    clock, payloads = FakeClock(), []
-    replay(recording, payloads.append, dropout=dropout, loop=False,
-           sleep=clock.sleep, now_ns=clock.now_ns)
+    payloads = publish(recording, dropout)
 
     tracker = BoardStateTracker(STALE_AFTER_S, 10, {b: b + "_last_seen_s" for b in BOARDS})
     updates, transitions = [], []
@@ -80,6 +109,56 @@ class ArtemisReplayTest(unittest.TestCase):
         self.assertLess(recovered, 25.2)
         others = [t for t in transitions if t[0] != "dui" and t[2] == "STALE"]
         self.assertFalse(others, "only the dropped board should go stale")
+
+    def test_demo_command_repeats_the_dropout_and_faults(self):
+        # What `publish_demo -- --replay --dropout-board dui --fault apps_mismatch
+        # --fault 'run_faults[2]' --start 60 --repeat-every 45` builds.
+        recording = start_at(self.recording, 60)
+        dropout = Dropout("dui", 20, 10, every_s=45)
+        faults = [Fault(name, 5, 5, every_s=45) for name in ("apps_mismatch", "run_faults[2]")]
+        payloads = publish(recording, dropout, faults)
+
+        events = fault_events(payloads)
+        injected = [(kind, round(t)) for kind, fault, t in events if fault == "apps_mismatch"]
+        self.assertEqual(injected, [("fault_raised", 5), ("fault_cleared", 10), ("fault_raised", 50),
+                                    ("fault_cleared", 55), ("fault_raised", 95), ("fault_cleared", 100)])
+        self.assertEqual([(k, round(t)) for k, f, t in events if f == "run_faults[2]"], injected)
+        # Starting 60 s in brings the run's own brake-over-throttle blip forward from 72.6 s.
+        stomp = [(kind, t) for kind, fault, t in events if fault == "stomp_fault"]
+        self.assertEqual([kind for kind, _ in stomp], ["fault_raised", "fault_cleared"])
+        self.assertGreater(stomp[0][1], 12)
+        self.assertLess(stomp[0][1], 13.5)
+        self.assertEqual({fault for _, fault, _ in events}, {"apps_mismatch", "run_faults[2]", "stomp_fault"})
+
+        tracker = BoardStateTracker(STALE_AFTER_S, 10, {b: b + "_last_seen_s" for b in BOARDS})
+        stale = []
+        for payload in payloads:
+            (update,) = decode_updates(payload)
+            elapsed_s = (update["sample_time_ns"] - START_NS) / 1e9
+            for board, (_, current) in tracker.observe(update["board_status"], elapsed_s).items():
+                if current == "STALE":
+                    stale.append((board, elapsed_s))
+        # The dropout opens 20 s into each 45 s cycle; DUI crosses 0.5 s about half a second later.
+        self.assertEqual([board for board, _ in stale], ["dui", "dui"])
+        for (_, t), opened in zip(stale, (20, 65)):
+            self.assertGreater(t, opened + 0.3)
+            self.assertLess(t, opened + 0.7)
+
+    def test_every_watched_fault_can_be_injected(self):
+        recording = self.recording[:200]  # 10 s
+        for name in BOOLEAN_FAULTS:
+            with self.subTest(fault=name):
+                events = fault_events(publish(recording, faults=[Fault(name, after_s=2, for_s=3)]))
+                self.assertEqual([(kind, fault, round(t)) for kind, fault, t in events],
+                                 [("fault_raised", name, 2), ("fault_cleared", name, 5)])
+
+    def test_bad_demo_windows_are_rejected(self):
+        for build in (lambda: Fault("not_a_fault", 5, 5), lambda: start_at(self.recording, 500),
+                      lambda: Dropout("dui", 40, 10, every_s=45),
+                      # Mask bits above 23 do not survive the float32 the masks travel as.
+                      lambda: Fault("run_faults[24]", 0, 1)):
+            with self.assertRaises(ValueError):
+                build()
 
     def test_loop_seam_keeps_time_moving_forward(self):
         frames = len(self.recording) + 50
