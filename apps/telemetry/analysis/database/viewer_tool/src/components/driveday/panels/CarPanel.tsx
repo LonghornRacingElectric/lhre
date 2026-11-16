@@ -121,7 +121,6 @@ export function CarPanel() {
           <Tile label="Pack module C" value={T("modC").toFixed(0)} unit={tU(u)} />
         </div>
       </div>
-      <div className="note2">Follows the playhead. Lateral g is estimated from GPS speed and path curvature; L/R indicates the turn direction. A dash means too little movement or insufficient fixes. Colours run cool blue to hot red as a display scale, not a limit. Tire pressure and wheel speed are not in this log, so the corners show the pressures you enter in Setup.</div>
     </>
   );
 }
