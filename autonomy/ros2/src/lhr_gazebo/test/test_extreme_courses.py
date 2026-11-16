@@ -8,17 +8,19 @@ import subprocess
 import xml.etree.ElementTree as ET
 
 from launch import LaunchContext
+from lhr_metrics.course import CourseEnvelope
 from lhr_metrics.reference import (
     CircuitProgress, paired_centerline, ReferenceTrack, world_geometry)
 from lhr_track_builder.track_builder_node import TrackBuilder
 from lhr_trackgen.extreme_autocross import generate_extreme_track, SCENARIOS
 from lhr_trackgen.publish_cones import ConePublisher, GENERATORS, pairing_width_m
 from lhr_trackgen.rules_autocross import check_envelope
+from lhr_vehicle import load_vehicle
 import pytest
 from test_acceleration_event import _launch, _params
+from test_gate_runner import gate_stack, runner_prefix
 from test_launch_param_types import _start
 from test_rules_autocross import load
-from test_gate_runner import gate_stack, runner_prefix
 
 PACKAGE = Path(__file__).parents[1]
 TOOLS = Path(__file__).parents[4]/'testing/tools/gate'
@@ -84,10 +86,11 @@ def test_fixed_style_reaches_both_perception_branches(monkeypatch, name, percept
     assert Path(module._find_world(launch_context)).name == f'{name}_seed1.sdf'
 
 
-def plan(tmp_path, extremes):
+def plan(tmp_path, extremes, **overrides):
     script = runner_prefix()
     env = dict(os.environ, SEEDS='', EXTREMES=extremes, REPEATS='2', BASELINE='1',
                ACCEL_REPEATS='0', SKIDPAD_REPEATS='0', OUT=str(tmp_path))
+    env.update(overrides)
     return subprocess.run(['bash', '-c', script+'\nSKIDPAD_WORLD=/missing\nplan'],
                           env=env, text=True, capture_output=True)
 
@@ -136,9 +139,9 @@ def test_gate_accepts_subsets_and_rejects_unknown_names(tmp_path):
     assert 'unsupported extreme' in invalid.stderr
 
 
-@pytest.mark.parametrize('name', ['extreme_hairpin', 'extreme_slalom_chicane'])
+@pytest.mark.parametrize('name', SCENARIOS)
 def test_fixture_spawn_precedes_the_entire_approach(name):
-    left, right, _ = world_geometry(PACKAGE/f'worlds/{name}_seed1.sdf')
+    left, right, cones = world_geometry(PACKAGE/f'worlds/{name}_seed1.sdf')
     expected = [(a+b)/2 for a, b in zip(left[0], right[0])]
     root = ET.parse(PACKAGE/f'worlds/{name}_seed1.sdf')
     include = next(x for x in root.findall('world/include')
@@ -146,3 +149,42 @@ def test_fixture_spawn_precedes_the_entire_approach(name):
     spawn = [float(v) for v in include.findtext('pose').split()]
     assert spawn[:2] == pytest.approx(expected, abs=1e-4)
     assert spawn[5] == 0.
+    course = CourseEnvelope(left, right, cones, load_vehicle(), True)
+    assert course.pose_check(spawn[0], spawn[1], spawn[5]) == (False, set())
+
+
+@pytest.mark.parametrize('repeats', ['-1', 'bad', '1.5'])
+def test_bad_extreme_repeat_count_fails_before_planning(tmp_path, repeats):
+    result = plan(tmp_path, 'all', EXTREME_REPEATS=repeats)
+    assert result.returncode == 2
+    assert 'EXTREME_REPEATS' in result.stderr
+    assert result.stdout == ''
+
+
+def test_explicit_extreme_repeats_are_independent_of_regular_repeats(tmp_path):
+    result = plan(tmp_path, 'extreme_hairpin', EXTREME_REPEATS='3', REPEATS='7')
+    assert result.returncode == 0
+    assert [line.split()[0] for line in result.stdout.splitlines()] == [
+        'baseline_extreme_hairpin_s1', *(f'extreme_hairpin_s1_r{i}' for i in (1, 2, 3))]
+
+
+def test_extreme_and_imported_rows_preserve_later_events(tmp_path):
+    world = tmp_path/'skidpad.sdf'
+    world.touch()
+    env = dict(os.environ, SEEDS='', EXTREMES='extreme_hairpin',
+               REAL_TRACKS='amz_fsg amz_fsi', ALLOW_NONCOMPLIANT='1', BASELINE='1',
+               ACCEL_REPEATS='1', SKIDPAD_REPEATS='1', OUT=str(tmp_path))
+    result = subprocess.run(
+        ['bash', '-c', runner_prefix()+'\nSKIDPAD_WORLD="$1"\nchecked_plan', 'test', str(world)],
+        env=env, text=True, capture_output=True, check=True)
+    rows = {line.split()[0]: dict(arg.split(':=', 1) for arg in line.split()[1:])
+            for line in result.stdout.splitlines()}
+    expected = {'acceleration_r1', 'skidpad_r1'}
+    expected |= {f'{name}_s1_r1' for name in ('extreme_hairpin', 'amz_fsg', 'amz_fsi')}
+    expected |= {f'baseline_{name}_s1' for name in ('extreme_hairpin', 'amz_fsg', 'amz_fsi')}
+    assert set(rows) == expected
+    for name, args in rows.items():
+        assert (args['perception'] == 'sim') == name.startswith('baseline_')
+        assert args['safety'] == 'true'
+        if not name.startswith('baseline_'):
+            assert gate_stack().items() <= args.items()

@@ -25,7 +25,7 @@ if os.path.isdir(_trackgen_pkg):
     sys.path.insert(0, _trackgen_pkg)
 
 from lhr_trackgen.cone_geometry import CONE_SPECS  # noqa: E402
-from lhr_trackgen.extreme_autocross import SCENARIOS  # noqa: E402
+from lhr_trackgen.extreme_autocross import extreme_spawn, SCENARIOS  # noqa: E402
 from lhr_trackgen.publish_cones import (  # noqa: E402
     ACCEL_STAGING_M, cone_kinds, GENERATORS)
 from lhr_trackgen.rules_autocross import check_envelope  # noqa: E402
@@ -283,8 +283,12 @@ def main():
         vy = 0.0 if vy is None else vy
         vyaw = 0.0 if vyaw is None else vyaw
 
-    precision = 12 if args.style in SCENARIOS else 4
+    precision = 10 if args.style in SCENARIOS else 4
     if args.style in SCENARIOS:
+        sx, sy, syaw = extreme_spawn(args.style)
+        vx = sx if vx is None else vx
+        vy = sy if vy is None else vy
+        vyaw = syaw if vyaw is None else vyaw
         saved = [[[round(v, precision) for v in p] for p in side] for side in (left, right)]
         print(f'Rules envelope: {check_envelope(*saved)}')
 
@@ -297,6 +301,8 @@ def main():
         right_kinds=right_kinds,
         coordinate_precision=precision,
     )
+    if args.style in SCENARIOS:
+        sdf = sdf.replace('-0.0000000000', '0.0000000000')
 
     if args.output is None:
         # Default output path relative to this script's parent (lhr_gazebo/)

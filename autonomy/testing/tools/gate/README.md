@@ -237,7 +237,8 @@ to the planned matrix. It defaults to empty, preserving the MVP campaign.
 Use a quoted space-separated subset, for example
 `EXTREMES="extreme_hairpin extreme_500m"`, to run fewer cases; an unknown
 name fails before recording or process cleanup. Each case uses its committed
-seed-1 world, `REPEATS` LiDAR/EKF rows, and one simplified-perception/truth
+seed-1 world, `EXTREME_REPEATS` LiDAR/EKF rows (default 1, independent of
+the regular-course `REPEATS`), and one simplified-perception/truth
 baseline when `BASELINE=1`. Run IDs and CSV styles distinguish every fixture;
 course-derived reference laps supply the lap-time check. Truth comparisons
 remain optional; legacy baseline matching still requires the same style and seed.
@@ -245,11 +246,13 @@ remain optional; legacy baseline matching still requires the same style and seed
 From `autonomy/ros2`, to run the set alone:
 
 ```bash
-SEEDS= EXTREMES=all REPEATS=1 ACCEL_REPEATS=0 SKIDPAD_REPEATS=0 \
+SEEDS= EXTREMES=all EXTREME_REPEATS=1 ACCEL_REPEATS=0 SKIDPAD_REPEATS=0 \
   RUN_S=900 OUT="$HOME/lhr-test-data/extreme-autocross" \
   ../testing/tools/gate/run_gate.sh
 ```
 
+`EXTREME_REPEATS` must be a nonnegative integer. Extreme and imported rows
+share one planning loop, preserving the complete gate stack and later events.
 Build `lhr_gazebo` first to install all seven worlds. `RUN_S` is a simulation-time
 cap; slow CPU rendering does not require a larger cap. The usual `EXTRA` settings still pass to
 every launch. Every planned missing result fails; none is silently omitted

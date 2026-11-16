@@ -2,9 +2,11 @@
 
 Committed SDF scenes use the same ordered cone pairs as
 [lhr_trackgen](../../lhr_trackgen/README.md). Launch finds
-`<track_style>_seed<seed>.sdf` in this directory or the installed package.
+`<track_style>_seed<seed>.sdf` in this directory or the installed package;
+fixed competition imports use `<layout_id>.sdf` with a verified reference sidecar.
 An explicit `world:=...` overrides that lookup; metrics and the viewer read
-that actual file. These are synthetic courses, not competition recordings.
+that actual file. Generated courses are synthetic; see the
+[competition imports](competition/README.md) for the preserved AMZ layouts.
 
 ## Extreme autocross set
 
@@ -15,25 +17,29 @@ rules-envelope check, including segment crossings and return-lane separation.
 
 | Style | Limit or feature | Measured reference | Stack behavior stressed |
 | --- | --- | --- | --- |
-| `extreme_narrow` | 3 m clear width throughout | 226.658 m lap; clear width 3.000–3.005 m | Side classification (#85), pairing, lateral clearance |
-| `extreme_hairpin` | 80 m straight directly into a 9 m turning-diameter half-turn | 201.563 m lap; 80.000 m straight; 4.500 m radius | Speed-profile braking, pursuit lookahead and steering |
-| `extreme_decreasing` | Turn tightens from roughly 9 m radius toward a 4.5 m design apex | 206.019 m lap; sampled minimum radius 4.554 m | Curvature preview, speed reduction and steering response |
-| `extreme_slalom_chicane` | Alternating slalom and a separate chicane | 259.305 m lap; minimum radius 4.630 m | Side classifier, rapid curvature reversals, track chaining |
-| `extreme_doubleback` | Opposite-direction lanes 9 m apart | 218.395 m lap; 4.500 m turns | Cross-lane association, planner shortcuts and reference progress |
+| `extreme_narrow` | 3 m minimum clear width | 226.607 m lap; minimum clear width 3.004 m | Side classification (#85), pairing, lateral clearance |
+| `extreme_hairpin` | 80 m straight directly into a 9 m turning-diameter half-turn | 201.460 m lap; 80.000 m straight; 4.500 m radius | Speed-profile braking, pursuit lookahead and steering |
+| `extreme_decreasing` | Turn tightens from roughly 9 m radius toward a 4.5 m design apex | 205.934 m lap; sampled minimum radius 4.687 m | Curvature preview, speed reduction and steering response |
+| `extreme_slalom_chicane` | Alternating slalom and a separate chicane | 259.213 m lap; minimum radius 4.897 m | Side classifier, rapid curvature reversals, track chaining |
+| `extreme_doubleback` | Opposite-direction lanes 9 m apart | 218.309 m lap; 4.500 m turns | Cross-lane association, planner shortcuts and reference progress |
 | `extreme_500m` | Maximum lap length | 499.99999 m reference lap | Mapping, accumulated EKF error and lap bookkeeping |
-| `extreme_combined` | 3 m corridor, 80 m approach, 9 m turning diameter, slalom/chicane and nearby return lane | 329.109 m lap; 3.000–3.005 m clear width | Interaction of speed planning, pursuit, pairing and limited clearance |
+| `extreme_combined` | 3 m minimum corridor, 80 m approach, 9 m turning diameter, slalom/chicane and nearby return lane | 328.988 m lap; minimum clear width 3.007 m | Interaction of speed planning, pursuit, pairing and limited clearance |
 
 Clear width uses the square cone bases' circumscribed diameter, matching the
-conservative checker from #211. A tiny chord reserve makes the 3 m corridor
-at most 1 cm wider between paired stations; it does not use the 0.10 m reserve
-of the random generator. Turning diameter refers to the centerline. A legal
+conservative checker from #211. Physical cones are sampled along boundary
+arc length independently of the dense construction geometry. Boundary gaps
+stay below 2 m and above 0.5 m, including tight inside turns. A curvature-based
+chord reserve keeps the narrowest clearance within 1 cm of 3 m; cone-pair
+distance includes that reserve. Turning diameter refers to the centerline. A legal
 layout does not establish vehicle drivability or full event compliance:
 staging, timing gates and exit lanes are not supplied by these fixtures.
 
 The 500 m target is the closed polyline metrics scores. Its 10 micrometre
 reserve keeps serialization inside the upper limit. Extreme worlds store XY
-at 12 decimal places so four-decimal rounding cannot tighten the 4.5 m
-hairpins below the limit. Existing worlds retain their four-decimal output.
+at 10 decimal places, with negative zero normalized, so the strict radius
+regressions survive serialization without twelve-decimal platform noise.
+Other styles retain their existing precision. Fixtures stage before the first
+feature, preserving the complete hairpin and slalom approaches.
 
 ## Regenerate and run
 
@@ -53,7 +59,7 @@ world freshness, matching simplified cone publication, launch parameter
 startup, and complete progress around the saved references.
 
 Fixed styles ignore generic `width_m`, `cone_spacing_m`, radius, jitter and
-waypoint flags; their named dimensions and adaptive cone sampling are part
+waypoint flags; their named dimensions and boundary cone sampling are part
 of the fixture. Seed values other than 1 fail. Both perception branches use
 the corresponding cone-center pairing width. Metrics remains on the
 `autocross` mission and scores the selected world's ordered reference;
@@ -62,7 +68,7 @@ perception and control receive no route from that reference.
 To run just this set with course-derived reference laps:
 
 ```bash
-SEEDS= EXTREMES=all REPEATS=1 ACCEL_REPEATS=0 SKIDPAD_REPEATS=0 \
+SEEDS= EXTREMES=all EXTREME_REPEATS=1 ACCEL_REPEATS=0 SKIDPAD_REPEATS=0 \
   RUN_S=900 OUT="$HOME/lhr-test-data/extreme-autocross" \
   ../testing/tools/gate/run_gate.sh
 ```
@@ -76,13 +82,5 @@ these scenarios. Each row selects the current Mid-360 and camera-fusion stack.
 reference. `RUN_S` counts simulation seconds. Geometry acceptance is
 not a claim that any course has passed the driving gate.
 
-## Validation
-
-The affected trackgen, Gazebo and metrics suites pass 568 tests, including
-all seven saved references and gate plan/scorer coverage. Strict MkDocs also
-passes. A bounded headless `extreme_hairpin` run with LiDAR and EKF reached
-`DRIVING`; a 30-second observer received 909 truth odometry messages, 111
-clouds and 90 planner paths, measuring 89.3 m of travel and 0.585 m maximum
-centerline distance during that window. Safety and metrics were disabled
-for this smoke run. It establishes scene integration, not a complete lap,
-cone-contact result or full-set gate pass.
+Validation and earlier smoke-run limits live in the
+[review record](../../../../testing/2026-11-16-extreme-review/README.md).

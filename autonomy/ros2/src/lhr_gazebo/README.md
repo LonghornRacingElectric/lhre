@@ -766,7 +766,7 @@ The [world catalog](worlds/README.md#extreme-autocross-set) provides seven
 committed, rules-checked `extreme_*_seed1.sdf` scenes for #212. Select their
 style directly through `track_style`; both perception branches retain the
 same fixed scene and pairing width, and metrics uses that saved reference.
-`generate_world.py --style <name>` regenerates each scene with twelve-decimal
+`generate_world.py --style <name>` regenerates each scene with ten-decimal
 XY coordinates and validates its serialized geometry. Other styles retain
 their prior precision. Rebuild after regeneration; freshness and geometry
 checks run in `lhr_gazebo`'s tests. The catalog lists usage and the intended

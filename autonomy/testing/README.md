@@ -34,6 +34,7 @@ scope and defers the repair.
 | Campaign | Question | Status |
 | --- | --- | --- |
 | [2026-10-24 PR #133 integration](2026-10-24-pr133-integration/README.md) | Does the source integration preserve launch/fault behavior and drive under current scoring? | **Open:** replacement GPU seed-2 cone contact; default GPU LiDAR timeout fails on the test laptop |
+| [2026-11-16 extreme-course review](2026-11-16-extreme-review/README.md) | Are saved extreme fixtures legal, physically spaced, correctly staged and completely planned? | Focused geometry and launch checks pass; full-set driving acceptance unverified |
 
 ## Rules
 
