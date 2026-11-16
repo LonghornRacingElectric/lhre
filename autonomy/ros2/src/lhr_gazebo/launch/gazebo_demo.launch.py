@@ -287,7 +287,10 @@ def _launch_setup(context: LaunchContext):
         gz_cmd = ['gz', 'sim', '-r', world_path]
     else:
         gz_cmd = ['gz', 'sim', '-r', '-s', world_path]
-    gz_cmd += ['--seed', context.launch_configurations.get('seed', '1')]
+    imu_seed = int(context.launch_configurations.get('imu_seed', '1'))
+    if not 0 <= imu_seed <= 4294967295:
+        raise ValueError('imu_seed must be an unsigned 32-bit integer')
+    gz_cmd += ['--seed', str(imu_seed)]
 
     gz_sim = ExecuteProcess(
         cmd=gz_cmd,
@@ -584,6 +587,7 @@ def _launch_setup(context: LaunchContext):
                 'estimator': 'ekf' if use_ekf else 'truth',
                 'gyro_bias': ParameterValue(LaunchConfiguration('gyro_bias'), value_type=float),
                 'imu_noise': ParameterValue(LaunchConfiguration('imu_noise'), value_type=bool),
+                'imu_seed': ParameterValue(LaunchConfiguration('imu_seed'), value_type=int),
                 'wheel_scale_error': ParameterValue(
                     LaunchConfiguration('wheel_scale_error'), value_type=float),
                 'lidar_classify_sides': classify_sides,
@@ -789,6 +793,9 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'imu_noise', default_value='false', choices=['true', 'false'],
             description='Native gyro/accelerometer noise and startup bias from vehicle.yaml'),
+        DeclareLaunchArgument(
+            'imu_seed', default_value='1',
+            description='Gazebo random seed, independent of the track seed (all native sensors)'),
         DeclareLaunchArgument(
             'wheel_scale_error', default_value='1.0',
             description='Simulated rolling-radius error (1.0 = exact)'),

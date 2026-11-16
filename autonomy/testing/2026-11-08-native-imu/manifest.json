@@ -3,6 +3,7 @@
   "branch": "koa/gazebo-imu-noise",
   "platform": "Linux-7.0.0-42-generic-x86_64-with-glibc2.39",
   "working_tree_modified": true,
+  "provenance_note": "Retained historical uncommitted-tree snapshot, already including native noise and the signed-bias overlay; not a clean revision or a noise-only implementation. Source hashes are preserved, not regenerated for review fixes.",
   "source_sha256": {
     "ros2/src/lhr_control/lhr_control/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "ros2/src/lhr_control/lhr_control/pursuit_node.py": "f05293bd993d49e57dd7a7c5ac3dd0d17f4e0197f3595b48ad505968da254b18",
@@ -286,7 +287,8 @@
     "safety": true,
     "lidar_source": "gazebo"
   },
-  "raw_data_path": "/home/black-book/lhre/autonomy/ros2/data/imu171",
+  "raw_data_path": "autonomy/ros2/data/imu171",
+  "raw_data_path_base": "repository root in the preserved experimental checkout; ignored captures are not in git",
   "sharepoint_upload": false,
   "runtime": {
     "gazebo": "8.15.0",

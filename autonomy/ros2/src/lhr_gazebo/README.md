@@ -776,11 +776,19 @@ thresholds retain their existing behavior.
   [validation record](../../../testing/2026-11-08-native-imu/README.md).
 - `gyro_bias:=<rad/s>` adds a signed native z-gyro offset in either mode;
   an explicit bias remains active when nominal noise is disabled.
-- `seed:=` also reaches Gazebo's random generator. Matching seeds does not
-  guarantee identical scheduling, trajectories or random-number consumption.
+- `seed:=` selects the track and existing synthetic wheel stream.
+  `imu_seed:=<uint32>` (default `1`) independently selects Gazebo's random
+  seed. This seeds all native Gazebo sensors, not an isolated IMU stream.
+  Matching seeds does not guarantee identical scheduling, trajectories or
+  random-number consumption. Use different `imu_seed` values on the same
+  track to sample noise and startup bias independently of track geometry.
 - Launch-local overlays preserve both standard and stereo sensors and do
   not modify installed SDFs. Concurrent launches do not share mutable models.
-- Metrics record `imu_noise`, `gyro_bias` and the vehicle YAML fingerprint.
+- Metrics record `imu_noise`, `imu_seed`, track `seed`, `gyro_bias` and the
+  vehicle YAML fingerprint. The launch and metrics defaults match for
+  `imu_noise` (`false`) and `imu_seed` (`1`); other plants do not use the
+  Gazebo seed. The gate runner assigns a distinct seed to each gated run;
+  see the [gate tools](../../../testing/tools/gate/README.md#running).
 
 From the ROS workspace after building and sourcing `install/setup.bash`:
 
@@ -813,7 +821,13 @@ settings identical; any machine-specific timeout override must be applied to
 both modes and recorded explicitly. The gate runner cleans up Gazebo/ROS
 processes between runs: use a dedicated simulation session.
 
-The comparison retains missing values, failed checks and early stops. The
-independent bag checker recomputes timestamp-aligned errors without reusing
-the metrics alignment code. See the [retained historical evidence and current
-validation limits](../../../testing/2026-11-08-native-imu/README.md).
+The comparison retains missing values, failed checks and early stops. Bars
+are hatched for any failed gate check, even if the mission finished; a
+baseline-only campaign writes an empty CSV and a plot saying no gate rows
+were scored. `imu_seed` is blank in historical CSVs that predate the field.
+The independent bag checker recomputes timestamp-aligned errors without
+reusing the metrics alignment code. An unreadable bag, missing truth or
+unknown scored interval produces a failed row with an `error` reason,
+without stopping later runs; its exit status remains nonzero if any row
+fails. It never invents a lap start or reports missing error as zero. See
+the [retained historical evidence and current validation limits](../../../testing/2026-11-08-native-imu/README.md).

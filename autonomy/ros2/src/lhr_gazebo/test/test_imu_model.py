@@ -1,5 +1,6 @@
 """Native IMU configuration, signed faults, and launch-to-sensor routing."""
 
+import os
 from pathlib import Path
 import tempfile
 import xml.etree.ElementTree as ET
@@ -81,11 +82,12 @@ def test_model_without_six_native_noise_channels_is_rejected(tmp_path):
 @pytest.mark.parametrize('perception', ['sim', 'lidar'])
 @pytest.mark.parametrize('estimator', ['truth', 'ekf'])
 @pytest.mark.parametrize('stereo', ['false', 'true'])
+@pytest.mark.parametrize('imu_seed', [None, '19'])
 @pytest.mark.parametrize('enabled,bias', [
-    (None, '0'), ('true', '0'), ('false', '-0.03'),
+    (None, '0'), ('true', '0'), ('false', '-0.03'), ('true', '0.03'), ('true', '-0.03'),
 ])
 def test_launch_routes_native_settings_and_records_them(
-        monkeypatch, perception, estimator, stereo, enabled, bias):
+        monkeypatch, perception, estimator, stereo, imu_seed, enabled, bias):
     # Evaluate all launch actions, including the server's resource overlay.
     import importlib.util
     pkg = Path(__file__).parents[1]
@@ -105,11 +107,13 @@ def test_launch_routes_native_settings_and_records_them(
         gyro_bias=bias, seed='7')
     if enabled is not None:
         context.launch_configurations['imu_noise'] = enabled
+    if imu_seed is not None:
+        context.launch_configurations['imu_seed'] = imu_seed
     actions = module._launch_setup(context)
     server = next(a for a in actions if type(a) is ExecuteProcess)
     env = {perform_substitutions(context, k): perform_substitutions(context, v)
            for k, v in server.additional_env}
-    resource = env['GZ_SIM_RESOURCE_PATH'].split(':')[0]
+    resource = env['GZ_SIM_RESOURCE_PATH'].split(os.pathsep)[0]
     imu = ET.parse(Path(resource) / 'fsae_vehicle/model.sdf').find(
         ".//sensor[@type='imu']/imu")
     assert float(imu.findtext('angular_velocity/z/noise/mean')) == float(bias)
@@ -118,12 +122,15 @@ def test_launch_routes_native_settings_and_records_them(
             value = float(noise.findtext(field))
             assert value > 0 if enabled == 'true' else value == 0
     command = [perform_substitutions(context, part) for part in server.cmd]
-    assert command[-2:] == ['--seed', '7']
+    assert command[-2:] == ['--seed', imu_seed or '1']
     nodes = [a for a in actions if isinstance(a, Node)]
     metrics = next(n for n in nodes if n.node_executable == 'metrics_node')
     params = evaluate_parameters(context, metrics._Node__parameters)[0]
     assert params['imu_noise'] is (enabled == 'true')
     assert params['gyro_bias'] == float(bias)
+    assert params['seed'] == 7
+    assert params['imu_seed'] == int(imu_seed or '1')
+    assert type(params['imu_seed']) is int
     for action in actions:
         if isinstance(action, RegisterEventHandler):
             action.event_handler.handle(Shutdown(reason='test complete'), context)
@@ -131,15 +138,41 @@ def test_launch_routes_native_settings_and_records_them(
 
 @pytest.mark.parametrize('perception', ['sim', 'lidar'])
 @pytest.mark.parametrize('enabled', [None, 'true'])
-def test_metrics_node_accepts_native_noise_provenance(monkeypatch, perception, enabled):
+@pytest.mark.parametrize('imu_seed', [None, '19'])
+def test_metrics_node_accepts_native_noise_provenance(monkeypatch, perception, enabled, imu_seed):
     from lhr_metrics.metrics_node import MetricsNode
     from test_launch_param_types import _start
     overrides = {} if enabled is None else {'imu_noise': enabled}
+    if imu_seed is not None:
+        overrides['imu_seed'] = imu_seed
     context, nodes = _launch(
         monkeypatch, perception=perception, estimator='ekf', **overrides)
     metrics = next(n for n in nodes if n.node_executable == 'metrics_node')
     params = evaluate_parameters(context, metrics._Node__parameters)[0]
     assert params['imu_noise'] is (enabled == 'true')
     # Read the evaluated default or override back from an actual node.
-    values = {'imu_noise': params['imu_noise']}
-    assert _start(MetricsNode, values, ['imu_noise']) == values
+    values = {'imu_noise': params['imu_noise'], 'imu_seed': params['imu_seed']}
+    assert values['imu_seed'] == int(imu_seed or '1')
+    assert type(values['imu_seed']) is int
+    assert _start(MetricsNode, values, list(values)) == values
+
+
+@pytest.mark.parametrize('seed', ['-1', '4294967296', 'not-a-seed'])
+def test_invalid_imu_seed_is_rejected(monkeypatch, seed):
+    with pytest.raises(ValueError):
+        _launch(monkeypatch, imu_seed=seed)
+
+
+def test_stereo_imu_overlay_reuses_stereo_resources(monkeypatch):
+    import lhr_gazebo.imu_model as module
+    original = module.stereo_model_resources
+    calls = []
+
+    def resources(models):
+        calls.append(models)
+        return original(models)
+
+    monkeypatch.setattr(module, 'stereo_model_resources', resources)
+    models = Path(__file__).parents[1] / 'models'
+    with module.imu_model_resources(models, stereo=True, gyro_bias=0.03):
+        assert calls == [models]

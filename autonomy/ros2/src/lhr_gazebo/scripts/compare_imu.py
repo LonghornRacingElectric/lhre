@@ -7,7 +7,8 @@ from pathlib import Path
 
 CHECKS = ('completes', 'stops', 'off_course', 'cones', 'cte', 'ekf', 'lap_time', 'health')
 FIELDS = ('campaign', 'id', 'imu_noise', 'gyro_bias', 'vehicle_sha256', 'track_style',
-          'seed', 'outcome', 'duration_s', 'mean_pos_error', 'max_pos_error', 'mean_yaw_error',
+          'seed', 'imu_seed', 'outcome', 'duration_s',
+          'mean_pos_error', 'max_pos_error', 'mean_yaw_error',
           'max_cte', 'cones_hit', 'off_track_count', 'passed', 'failed_checks')
 
 
@@ -29,11 +30,11 @@ def read_campaign(label, path):
         yield {field: merged.get(field, '') for field in FIELDS}
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('out', type=Path)
     parser.add_argument('--campaign', action='append', required=True, metavar='LABEL=PATH')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     args.out.mkdir(parents=True, exist_ok=True)
     rows = []
     for campaign in args.campaign:
@@ -52,7 +53,10 @@ def main():
     labels = list(dict.fromkeys(row['campaign'] for row in rows))
     ids = list(dict.fromkeys(row['id'] for row in rows))
     fig, axes = plt.subplots(2, 1, figsize=(max(9, len(ids) * 1.2), 7), sharex=True)
-    width = 0.8 / len(labels)
+    width = 0.8 / max(1, len(labels))
+    if not rows:
+        axes[0].text(0.5, 0.5, 'No scored gate rows', transform=axes[0].transAxes,
+                     ha='center')
     for j, label in enumerate(labels):
         indexed = {row['id']: row for row in rows if row['campaign'] == label}
         positions = [i - 0.4 + width * (j + 0.5) for i in range(len(ids))]
@@ -60,7 +64,9 @@ def main():
             values = [float(indexed.get(run, {}).get(field) or 'nan') for run in ids]
             bars = axis.bar(positions, values, width, label=label)
             for bar, run in zip(bars, ids):
-                if indexed.get(run, {}).get('outcome') not in ('lap', 'mission_finished'):
+                row = indexed.get(run, {})
+                if (row.get('passed', '').lower() != 'true' or row.get('failed_checks')
+                        or row.get('outcome') not in ('lap', 'mission_finished')):
                     bar.set_hatch('///')
                     bar.set_edgecolor('black')
                     bar.set_linewidth(0.8)
@@ -74,7 +80,7 @@ def main():
         axis.grid(axis='y', alpha=0.25)
     axes[1].set_xticks(range(len(ids)), ids, rotation=35, ha='right')
     fig.suptitle('Native Gazebo IMU comparison — EKF tuning unchanged')
-    fig.text(0.5, 0.01, 'Hatched bars: early stop or invalid lap; compare CSV durations/outcomes.',
+    fig.text(0.5, 0.01, 'Hatched bars: any failed gate check or partial run; inspect CSV.',
              ha='center', fontsize=9)
     fig.tight_layout(rect=(0, 0.035, 1, 1))
     fig.savefig(args.out / 'position-error.png', dpi=160)

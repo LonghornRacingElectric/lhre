@@ -13,10 +13,16 @@ stationary corrections and jitter-reduction prototypes are separate work.
 
 ## Historical gate rerun
 
-These retained results are from the original **2026-11-08** noise-only
+These retained results are from the **2026-11-08** native IMU noise-and-bias
 implementation on base `da9d5a95a9a49679a05c5a313432dfb8a55626dd` plus its
 fingerprinted working tree. They are not a fresh gate run of the current
-branch. `manifest.json` preserves the original source/model/config hashes;
+branch. The retained `manifest.json` fingerprints an uncommitted working
+tree, not a clean revision. It already lists `imu_model.py` and
+`validate_imu.py` with the same hashes as the pre-review branch snapshot in
+`branch-verification.json`; the stationary ±0.03 rad/s cases exercised that
+signed-bias overlay. Calling that implementation "noise-only" was wrong.
+The hashes have been preserved rather than refreshed from today's files.
+The manifest's raw-data location is now relative to the repository root;
 the historical vehicle YAML SHA is
 `123ad891ed3db8737fffe52b529775337c824bb150e2c602345abb0b0ec398dd`.
 
@@ -71,7 +77,7 @@ The EKF still consumes gyro/acceleration, not Gazebo's ideal orientation.
 One-time truth initialization and truth used for metrics retain their
 existing roles; this is a fidelity fix, not removal of a truth shortcut.
 
-## Current branch validation
+## Pre-review branch validation, 2026-11-15
 
 The isolated branch is based on current `main`,
 `1a99e0372958cd70ee7cf1ff2ff714a666cb3c46`. The historical results above are
@@ -93,22 +99,75 @@ records this branch's source fingerprints and software results separately
 from the original campaign manifest.
 
 A fresh stationary measurement and matched gate campaign could not run in
-the preparation environment: opening/binding a local UDP socket raises
+the original preparation environment: opening/binding a local UDP socket raised
 `PermissionError: [Errno 1] Operation not permitted`, preventing normal
 ROS/Gazebo transport. This is not a scored driving failure or a successful
-rerun. A current-branch gate comparison remains pending on a simulation host.
+rerun. A gate comparison could not be collected locally. Reviewer-supplied
+host evidence for `08e459e` is recorded below; it is separate from local
+checks and does not validate the subsequent seed-scheduling changes.
 
 Use the [current reproduction commands](../../ros2/src/lhr_gazebo/README.md#native-imu-noise-and-bias)
 to collect clean/noisy campaigns with otherwise identical settings. Preserve
 all failed trials, unknown errors, default-timeout outcomes and exact launch
 arguments. No new passing estimator or autonomous-lap claim is made here.
 
+## Reviewer-supplied red-mesa campaign, 2026-11-15
+
+The PR review reports a full matched campaign on `08e459e`: five autocross
+seeds × three repeats plus three acceleration runs, skidpad waived, with
+the default **0.3 s LiDAR timeout**. Raw data is reported at
+`red-mesa:~/lhr-test-data/2026-11-15-pr296-imu`. These are the reviewer's
+results supplied with the review, not measurements collected or raw bags
+independently inspected during this revision.
+
+| Check | Noise off | Noise on |
+| --- | --- | --- |
+| Gate | PASS, 18/18 | FAIL, 0/18 |
+| Maximum EKF position error | 0.05–0.07 m | 1.9–8.4 m; every run fails `ekf` |
+| Other failures | None reported | Seed 4: cone, invalid lap and never stopped in all three repeats; seed 3: 1.29–1.38× reference lap time and two failed stop checks |
+
+The reviewer reports all stationary checks passing and 36/36 bag
+cross-checks agreeing. Noisy maximum errors agree with the historical
+campaign: seed 1 2.39 vs 2.30 m, seed 3 8.43 vs 8.19 m, acceleration
+3.38 vs 3.28 m. The three seed-3 repeats measured 8.42, 8.45 and 8.43 m.
+At that revision track seed also seeded Gazebo: repeats reused their bias
+draw, so these 18 runs represented six course/seed groups, not 18
+independent noise realizations.
+
+`imu_noise` now defaults to `false` in launch and metrics. Bias estimation
+remains follow-up [#87](https://github.com/LonghornRacingElectric/lhre/issues/87),
+starting with confirmed standstill during READY; enabling noise in the
+required gate stack waits for that work. The new `imu_seed` separates
+Gazebo randomness from track geometry, is recorded in metrics, and advances
+once per gated run. This changes future draw assignments; neither historical
+campaign is relabeled as a run of that new schedule. A fresh noisy gate
+pass is not claimed.
+
+## Review-fix verification, 2026-11-16
+
+All 16 ROS packages build. The affected-package suites pass **694 tests**:
+530 Gazebo, 92 metrics and 72 vehicle, including Python lint. Strict MkDocs
+and whitespace checks pass. Tests cover default-off noise, enabled noise
+with both signs of injected bias, standard/stereo overlays, distinct track
+and Gazebo seeds, metrics node startup in both perception modes, per-repeat
+draw assignment and seed-range errors. Incomplete bag cases and baseline-only
+plots are covered without launching a simulator.
+
+The updated checker passes all eight retained historical bag measurements.
+Regenerating the comparison preserves all eight existing CSV rows exactly;
+the figure above was rerendered with failure hatching corrected for completed
+runs that fail `ekf`. Historical source hashes exactly match the manifest
+retained beside the original raw captures. `review-verification.json` records
+the software checks and current source hashes separately from historical
+provenance. No fresh simulator campaign of the new seed schedule was run.
+
 ## Evidence and preservation
 
 `bag-crosscheck.csv` independently recomputes the eight available historical
 EKF measurements from timestamped poses. All eight agree within the stated
 0.02 m / 0.002 rad delivery/rounding tolerances. Historical `verification.txt`
-and `manifest.json` describe that original campaign, not current test counts.
+and `manifest.json` describe that historical native-noise-and-bias campaign,
+not current test counts.
 
 Raw historical bags remain locally in the preserved experimental workspace
 under `autonomy/ros2/data/imu171`; they have not been uploaded to SharePoint

@@ -12,6 +12,10 @@ from rosbag2_py import ConverterOptions, SequentialReader, StorageOptions
 from rosidl_runtime_py.utilities import get_message
 
 TOPICS = ('/lhr/vehicle/odom', '/lhr/vehicle/odom_truth')
+ERROR_FIELDS = ('mean_pos_error', 'max_pos_error', 'mean_yaw_error')
+FIELDS = ('campaign', 'id', 'samples', 'start_stamp_s', 'end_stamp_s') + tuple(
+    f'{field}_{suffix}' for field in ERROR_FIELDS for suffix in ('reported', 'bag', 'delta')
+) + ('crosscheck_passed', 'error')
 
 
 def poses(bag):
@@ -30,18 +34,31 @@ def poses(bag):
         yaw = math.atan2(2 * (q.w*q.z + q.x*q.y), 1 - 2 * (q.y*q.y + q.z*q.z))
         data[topic].append((msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9,
                             msg.pose.pose.position.x, msg.pose.pose.position.y, yaw))
-    return [np.asarray(sorted(set(data[topic])), dtype=float) for topic in TOPICS]
+    return [np.asarray(sorted(set(data[topic])), dtype=float).reshape(-1, 4) for topic in TOPICS]
 
 
-def verify(run, campaign):
+def _verify(run, campaign):
     """Compare the same scored time window, allowing small delivery/rounding differences."""
     with (run / 'metrics.csv').open(newline='') as stream:
-        metrics = list(csv.DictReader(stream))[-1]
+        records = list(csv.DictReader(stream))
+    if not records:
+        raise ValueError('empty metrics table')
+    metrics = records[-1]
     if metrics['estimator'] != 'ekf' or not metrics['max_pos_error']:
         return None
-    estimate, truth = poses(run / 'bag')
+    if not metrics.get('lap_start_stamp_s'):
+        raise ValueError('missing lap_start_stamp_s; scored interval cannot be reconstructed')
     start = float(metrics['lap_start_stamp_s'])
     end = start + float(metrics['lap_time_s'] or metrics['duration_s'])
+    if not math.isfinite(start) or not math.isfinite(end) or end < start:
+        raise ValueError('invalid scored interval')
+    estimate, truth = poses(run / 'bag')
+    if not len(estimate):
+        raise ValueError('bag has no estimated odometry')
+    if len(truth) < 2:
+        raise ValueError('bag needs at least two truth odometry samples')
+    if not np.isfinite(estimate).all() or not np.isfinite(truth).all():
+        raise ValueError('bag contains nonfinite odometry')
     estimate = estimate[(estimate[:, 0] >= max(start, truth[0, 0]))
                         & (estimate[:, 0] <= min(end, truth[-1, 0]))]
     if not len(estimate):
@@ -53,7 +70,7 @@ def verify(run, campaign):
     yaw = estimate[:, 3] - interpolated[:, 2]
     yaw = np.abs(np.arctan2(np.sin(yaw), np.cos(yaw)))
     row = {'campaign': campaign, 'id': run.name, 'samples': len(estimate),
-           'start_stamp_s': start, 'end_stamp_s': end}
+           'start_stamp_s': start, 'end_stamp_s': end, 'error': ''}
     passed = True
     for field, measured, tolerance in (
         ('mean_pos_error', np.mean(position), 0.02),
@@ -65,14 +82,25 @@ def verify(run, campaign):
                     f'{field}_delta': float(measured - reported)})
         passed = passed and abs(measured - reported) <= tolerance
     row['crosscheck_passed'] = passed
+    if not passed:
+        row['error'] = 'reported and bag errors differ beyond tolerance'
     return row
 
 
-def main():
+def verify(run, campaign):
+    """Keep an unusable run as a failed row without aborting the campaign."""
+    try:
+        return _verify(run, campaign)
+    except (OSError, ValueError, RuntimeError, KeyError) as error:
+        return {'campaign': campaign, 'id': run.name, 'samples': 0,
+                'crosscheck_passed': False, 'error': str(error)}
+
+
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('out', type=Path)
     parser.add_argument('--campaign', action='append', required=True, metavar='LABEL=PATH')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     rows = []
     for item in args.campaign:
         label, path = item.split('=', 1)
@@ -85,7 +113,7 @@ def main():
         raise ValueError('No EKF error measurements to cross-check')
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open('w', newline='') as stream:
-        writer = csv.DictWriter(stream, fieldnames=list(rows[0]), lineterminator='\n')
+        writer = csv.DictWriter(stream, fieldnames=FIELDS, lineterminator='\n')
         writer.writeheader()
         writer.writerows(rows)
     passed = sum(row['crosscheck_passed'] for row in rows)

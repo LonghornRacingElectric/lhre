@@ -4,6 +4,8 @@ import csv
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 
 def comparison_module():
     """Load the report helper without starting ROS or a simulator."""
@@ -48,3 +50,36 @@ def test_comparison_preserves_failed_and_missing_errors_and_omits_truth_baseline
     assert rows[1]['max_pos_error'] == ''
     assert rows[1]['mean_pos_error'] == ''
     assert rows[1]['imu_noise'] == ''
+
+
+def test_baseline_only_campaign_writes_empty_csv_and_explanatory_plot(tmp_path):
+    module = comparison_module()
+    write_csv(tmp_path / 'results.csv', [{'id': 'truth', 'kind': 'baseline'}])
+    out = tmp_path / 'comparison'
+    module.main([str(out), '--campaign', f'baseline={tmp_path}'])
+    with (out / 'comparison.csv').open() as stream:
+        assert list(csv.DictReader(stream)) == []
+    assert (out / 'position-error.png').stat().st_size > 0
+
+
+@pytest.mark.parametrize('outcome', ['lap', 'mission_finished'])
+def test_completed_runs_with_failed_checks_are_hatched(tmp_path, monkeypatch, outcome):
+    module = comparison_module()
+    checks = {name: 'pass' for name in module.CHECKS}
+    write_csv(tmp_path / 'results.csv', [
+        {**checks, 'id': 'failed', 'kind': 'gate', 'passed': 'False', 'ekf': 'FAIL',
+         'outcome': outcome, 'mean_pos_error': '1', 'max_pos_error': '2'},
+        {**checks, 'id': 'passed', 'kind': 'gate', 'passed': 'True',
+         'outcome': outcome, 'mean_pos_error': '0.01', 'max_pos_error': '0.05'},
+    ])
+    from matplotlib.figure import Figure
+    hatches = []
+    save = Figure.savefig
+
+    def capture(figure, *args, **kwargs):
+        hatches.extend([[bar.get_hatch() for bar in axis.patches] for axis in figure.axes])
+        return save(figure, *args, **kwargs)
+
+    monkeypatch.setattr(Figure, 'savefig', capture)
+    module.main([str(tmp_path / 'comparison'), '--campaign', f'native={tmp_path}'])
+    assert hatches == [['///', None], ['///', None]]

@@ -5,6 +5,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import xml.etree.ElementTree as ET
 
+from lhr_gazebo.stereo_camera import stereo_model_resources
+
 
 def imu_model_resources(models_dir, *, stereo=False, noise_enabled=True,
                         gyro_bias=0.0) -> TemporaryDirectory:
@@ -22,12 +24,17 @@ def imu_model_resources(models_dir, *, stereo=False, noise_enabled=True,
                 value.text = '0'
     # Gaussian mean is signed; Gazebo's startup bias sampling randomizes sign.
     imu.find('angular_velocity/z/noise/mean').text = format(gyro_bias, '.17g')
-    resources = TemporaryDirectory(prefix='lhr-imu-')
+    resources = (stereo_model_resources(models_dir) if stereo
+                 else TemporaryDirectory(prefix='lhr-imu-'))
     try:
         model = Path(resources.name) / 'fsae_vehicle'
-        model.mkdir()
-        for name in ('model.config', 'meshes'):
-            (model / name).symlink_to(source / name, target_is_directory=name == 'meshes')
+        if stereo:
+            # Replace the overlay's symlink, never write through it to the installed SDF.
+            (model / 'model.sdf').unlink()
+        else:
+            model.mkdir()
+            for name in ('model.config', 'meshes'):
+                (model / name).symlink_to(source / name, target_is_directory=name == 'meshes')
         tree.write(model / 'model.sdf', encoding='unicode')
     except Exception:
         resources.cleanup()

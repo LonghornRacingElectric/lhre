@@ -344,6 +344,10 @@ Node cleanup tolerates an already-stopped ROS context after launch shutdown.
 
 For Gazebo, `imu_noise` identifies native six-axis noise/startup bias and
 `gyro_bias` is an additional signed offset applied to the physics z gyro.
+`imu_seed` records Gazebo's random seed (default `1`), independently of the
+track `seed`. It applies to all native Gazebo randomness. The shared metrics
+default matches Gazebo launch; other plants leave this provenance field at
+`1` and do not use it. `imu_noise` defaults to `false` in both node and launch.
 The noise-free control disables nominal noise and startup bias; it does not
 cancel an explicitly requested bias fault. Other plants retain their own
 sensor models. The vehicle SHA identifies the density/bandwidth/bias settings.

@@ -1,0 +1,49 @@
+{
+  "date": "2026-11-16",
+  "parent_commit": "a34fc88e1a4b33c40b0c835f71bae8d51cb0f62e",
+  "scope": "PR #296 review fixes; default-off IMU noise, independent Gazebo seeds and robust evidence tools",
+  "source_sha256": {
+    "autonomy/docs/plans/mvp-pass-criteria.md": "286f57f94e61a60278940ddd688249e5c9dd9085be0dfc70bcc61f8d3d6056ed",
+    "autonomy/ros2/src/lhr_gazebo/README.md": "0c4a2249a9c3f4834ed067217fc2e548b628a967e25a3d8f3dba68c84914e4fd",
+    "autonomy/ros2/src/lhr_gazebo/launch/gazebo_demo.launch.py": "33cde47f70b55dccc571717e2c386af6c8f1df66f3055b6f7774cad6fbb98349",
+    "autonomy/ros2/src/lhr_gazebo/lhr_gazebo/imu_model.py": "de6ff4e539338033b955879095049329c119e1844de09bfe1f7bad2bc0b8bfa8",
+    "autonomy/ros2/src/lhr_gazebo/scripts/compare_imu.py": "563fed3f4fd56fae0ac0b3f5e7aeb2a43d517ff90ca88fdadadf88f4bdb2f351",
+    "autonomy/ros2/src/lhr_gazebo/scripts/verify_imu_bags.py": "b10507c42cb96e077b645c6c5ff03d31cf84ccf9b226da00b6fc4c96e01f3189",
+    "autonomy/ros2/src/lhr_gazebo/test/test_gate_runner.py": "d29f8a918a1ceda614e48aff26f51de64a7bdbdf48638fd1f0d339a816a027c9",
+    "autonomy/ros2/src/lhr_gazebo/test/test_imu_bag_verification.py": "8c1ff003b0ebc0b0ed378913e172a3293f858e6ea046a493c6f22b28da9edf7b",
+    "autonomy/ros2/src/lhr_gazebo/test/test_imu_comparison.py": "dabb1a16fb9c346c20c48777136cd967f0a028ad47946808d00c4e7f098e43ea",
+    "autonomy/ros2/src/lhr_gazebo/test/test_imu_model.py": "dd9726cb2228ac449e8321cec4072ba0fd17b447648ccc0422831eecb4e21db7",
+    "autonomy/ros2/src/lhr_gazebo/test/test_stereo_camera.py": "d892922fd0d1bb776d91c8800fdfbbd8cc51a9973f07b3f70f1efb258be05822",
+    "autonomy/ros2/src/lhr_metrics/README.md": "554e2545d4bbab7c816b560a50c4ac11b845413cf5d76492e511d25b297ecb6a",
+    "autonomy/ros2/src/lhr_metrics/lhr_metrics/metrics_node.py": "36e27bd5f467f705505d1850a0b1f7dc04f1c16cfa65866a84e686dbcdeb79de",
+    "autonomy/ros2/src/lhr_sensor_sim/README.md": "c7693ca3a9d21e975e6787e0574e79c8a953ce3627c22aeb6a7947f377ebed97",
+    "autonomy/testing/2026-11-08-native-imu/README.md": "4f40b32a420e5d8ce59f9a755958acb81240a6681f2e2929d0bec8a31e52fa48",
+    "autonomy/testing/2026-11-08-native-imu/figures/position-error.png": "2617152f4e2f190e490941a74c60a63ac7fc77ce7b216574276bdb2cc87b824b",
+    "autonomy/testing/2026-11-08-native-imu/manifest.json": "f2e86e3c057607ef0c6efea4ec3b2a8ddc1e314f6dc3a9ef5d68a8545b44e4db",
+    "autonomy/testing/tools/gate/README.md": "9d2b6572f127249cc4dce74298f2152a44687f406c73a97f4f0090231df1508e",
+    "autonomy/testing/tools/gate/run_gate.sh": "839f4ede41ff886df21b5584dc240facb35487723c4b9640bc6bc4a76a3bfd58"
+  },
+  "build": "All 16 ROS packages passed",
+  "affected_package_tests": {
+    "lhr_gazebo": 530,
+    "lhr_metrics": 92,
+    "lhr_vehicle": 72,
+    "total": 694,
+    "failures": 0
+  },
+  "launch_validation": "Default and override noise/seeds through sim and lidar, truth and ekf, standard and stereo; actual metrics node startup/readback",
+  "historical_replay": "8/8 independent bag cross-checks pass; all 8 existing comparison CSV rows unchanged; plot hatching corrected",
+  "provenance": "Historical source hashes compared with original raw-campaign manifest and retained unchanged; local data path normalized relative to repository root",
+  "docs": "Strict MkDocs passed after final documentation edits",
+  "fresh_simulation": "Not run for new seed schedule; reviewer-reported 08e459e host campaign is attributed separately in README",
+  "reviewer_campaign": {
+    "revision": "08e459e",
+    "host": "red-mesa",
+    "source": "review text supplied by user; raw host data not independently inspected",
+    "gate_clean": "18/18 pass",
+    "gate_noisy": "0/18 pass",
+    "bag_crosscheck": "36/36 reported pass"
+  },
+  "full_workspace_tests": "Not run for this review-fix pass; selected affected packages only",
+  "lint": "Affected ament flake8 and pep257 checks passed in colcon; root ruff excludes autonomy/"
+}
