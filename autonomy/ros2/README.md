@@ -208,6 +208,14 @@ Dependencies are installed from each package's `package.xml` with `rosdep`,
 so declare new ones there. Gazebo (`ros_gz_*`) is skipped in CI since
 nothing there launches a simulator.
 
+The image is pinned by digest, so an upstream rebuild of
+`ros:jazzy-ros-base` never changes a PR's result on its own. To move to a
+newer image, read the current digest of the `jazzy-ros-base` tag on
+[Docker Hub](https://hub.docker.com/_/ros/tags?name=jazzy-ros-base),
+replace the `@sha256:` in the job's `container:` line, and land that alone
+so a break points at the image. `apt-get` and `rosdep update` still fetch
+at run time, so the package versions inside the image can still move.
+
 The ament linters are stricter than plain flake8. What trips people up:
 
 - Single quotes for strings (`Q000`).
