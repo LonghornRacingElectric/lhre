@@ -9,6 +9,24 @@ simulation. Other packages can use it too.
 | `bundle.yml` | Which car `vehicle.yml` is, and how much of that is known. Schema `lhre.vehicle-bundle.v1`. See [The bundle](#the-bundle). |
 | `tires/*.tir` | Tire models that `vehicle.yml` names. |
 
+## Artemis definition snapshot
+
+`artemis.yml` preserves Abishek's local BobSim `2027.yml`, copied on
+2026-11-16. It contains the frozen Fv43/Rv60 hardpoints, effective actuation,
+54% rear static weight distribution, and the source provenance recorded
+on 2026-11-01. The source SHA-256 is recorded in the publishing commit.
+
+This file uses `bobsim.frozen_effective.v1` and needs the local BobSim
+effective-suspension loader extensions. Its `paths` entries resolve in that
+source BobSim checkout. The monorepo runtime has not been validated with
+this snapshot. The current simulation entry points continue to read
+`vehicle.yml` and its bundle.
+
+Mass allocation, inertias, tires, alignment, powertrain, brake bias, and
+chassis stiffness include provisional Orion carryovers. The supplied CAD
+mass and inertia readout was not incorporated into this snapshot. Its
+provenance lists the remaining assumptions and model limits.
+
 ## Use it
 
 - **Simulation:** `make test`, `make records` and studies read this file
