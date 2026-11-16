@@ -2,7 +2,7 @@ import { Analysis } from "./analysis";
 import { clock } from "./format";
 import { posAt } from "./geometry";
 import { interp, wrap } from "./math";
-import { timelineWindow, zoomWindow } from "./timeline-window";
+import { lapTimelineAxis, timelineWindow, zoomWindow } from "./timeline-window";
 import { pieces, segAt, zoneAt } from "./segments";
 import { sectorTimes, suggestGates, validGates, type SectorGates } from "./sectors";
 import type { Session } from "./session";
@@ -84,15 +84,31 @@ export class Player {
   hoverT: number | null = null;
   timelineStart = 0;
   timelineEnd: number | null = null;
-  get timelineRange() { return timelineWindow(this.TD, this.timelineStart, this.timelineEnd ?? this.TD); }
+  showBetweenLaps = lsGet<boolean>("timeline-between-laps", false);
+  private timelineAxisCache?: { session: Session; show: boolean; axis: ReturnType<typeof lapTimelineAxis> };
+  get timelineAxis() {
+    const cached = this.timelineAxisCache;
+    if (cached?.session === this.session && cached.show === this.showBetweenLaps) return cached.axis;
+    const axis = lapTimelineAxis(this.TD, this.session.TLAPS.filter(l => l.kind !== "out").map(l => ({ start: l.t0 - this.T0, end: l.t1 - this.T0 })), this.showBetweenLaps);
+    this.timelineAxisCache = { session: this.session, show: this.showBetweenLaps, axis }; return axis;
+  }
+  get timelineDuration() { return this.timelineAxis.duration; }
+  timelineTime(time: number) { return this.timelineAxis.toDisplay(time); }
+  timelineSessionTime(time: number) { return this.timelineAxis.toSession(time); }
+  setShowBetweenLaps(show: boolean) {
+    this.showBetweenLaps = show; lsSet("timeline-between-laps", show);
+    this.timelineStart = 0; this.timelineEnd = null; this.hoverT = null;
+    this.ui.bump(); this.schedule(true);
+  }
+  get timelineRange() { return timelineWindow(this.timelineDuration, this.timelineStart, this.timelineEnd ?? this.timelineDuration); }
   setTimelineWindow(start: number, end: number) {
-    const range = timelineWindow(this.TD, start, end);
+    const range = timelineWindow(this.timelineDuration, start, end);
     this.timelineStart = range.start; this.timelineEnd = range.end;
     this.hoverT = null; this.ui.bump(); this.schedule(true);
   }
-  zoomTimeline(factor: number, anchor = this.T) {
+  zoomTimeline(factor: number, anchor = this.timelineTime(this.T)) {
     const r = this.timelineRange;
-    const next = zoomWindow(this.TD, r.start, r.end, factor, Math.max(r.start, Math.min(r.end, anchor)));
+    const next = zoomWindow(this.timelineDuration, r.start, r.end, factor, Math.max(r.start, Math.min(r.end, anchor)));
     this.setTimelineWindow(next.start, next.end);
   }
   /* camera */
@@ -322,7 +338,8 @@ export class Player {
     this.setT(this.laps[i].t0 - this.T0);
   }
   stepLap(d: number) {
-    const order = this.session.TLAPS.map((l) => this.laps.indexOf(l));
+    const order = this.session.TLAPS.filter(l => l.kind !== "out").map((l) => this.laps.indexOf(l));
+    if (!order.length) return;
     const k = order.indexOf(this.sel);
     const rel = this.T + this.T0 - this.laps[this.sel].t0;
     let n = k + d;
@@ -344,7 +361,7 @@ export class Player {
     if (!this.playing || this.disposed) return;
     const dt = (now - this.lastTs) * this.rate;
     this.lastTs = now;
-    let nt = this.T + dt;
+    let nt = this.showBetweenLaps || this.endMode !== "go" || (this.loopA != null && this.loopB != null) ? this.T + dt : this.timelineSessionTime(this.timelineTime(this.T) + dt);
     if (this.loopA != null && this.loopB != null && this.loopB > this.loopA && this.T <= this.loopB && nt > this.loopB) nt = this.loopA + (nt - this.loopB);
     const l = this.laps[this.sel];
     const end = l.t1 - this.T0;
@@ -356,8 +373,8 @@ export class Player {
         return;
       }
     }
-    if (nt >= this.TD) {
-      this.setT(this.TD);
+    if (nt >= this.TD || (!this.showBetweenLaps && this.endMode === "go" && nt >= this.timelineSessionTime(this.timelineDuration) && !(this.loopA != null && this.loopB != null))) {
+      this.setT(this.showBetweenLaps ? this.TD : Math.max(0, this.timelineSessionTime(this.timelineDuration) - 1));
       this.play(false);
       return;
     }

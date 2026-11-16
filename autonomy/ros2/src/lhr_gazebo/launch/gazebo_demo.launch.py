@@ -142,6 +142,11 @@ def _fault_remaps(fault: str, use_ekf: bool, configs: dict) -> dict:
         'odom_spike': {odom_owner: odom_raw},
         'lidar_drop': {cloud_owner: [
             ('/lhr/lidar/points', '/lhr/lidar/points_raw')]},
+        # Gazebo's physics IMU comes over the bridge; inertial_sim makes the
+        # wheel speeds from truth.
+        'imu_drop': {'ros_gz_bridge': [('/lhr/imu/data', '/lhr/imu/data_raw')]},
+        'wheel_drop': {'inertial_sim': [
+            ('/lhr/sensor/wheel_speeds', '/lhr/sensor/wheel_speeds_raw')]},
         'cmd_nan': {'pure_pursuit': [
             ('/lhr/vehicle/cmd', '/lhr/vehicle/cmd_raw')]},
         'steer_freeze': {'joint_cmd_adapter': [
@@ -343,6 +348,7 @@ def _launch_setup(context: LaunchContext):
                 'wheel_scale_error': _float('wheel_scale_error'),
                 'use_sim_time': True,
             }],
+            remappings=fault_remaps.get('inertial_sim', []),
             output='screen',
         ))
         estimation_nodes.append(Node(
@@ -656,8 +662,15 @@ def _launch_setup(context: LaunchContext):
                 # the Gazebo LiDAR always publishes, but under
                 # perception:=sim nothing reads the cloud.
                 'monitor_lidar': perception == 'lidar',
+                # Likewise the estimator: only the EKF reads the IMU and the
+                # wheel speeds, and the wheel speeds only exist under it.
+                'monitor_imu': use_ekf,
+                'monitor_wheels': use_ekf,
                 'lidar_timeout_s': _float('safety_lidar_timeout_s'),
                 'odom_timeout_s': _float('safety_odom_timeout_s'),
+                'imu_timeout_s': _float('safety_imu_timeout_s'),
+                'wheel_timeout_s': _float('safety_wheel_timeout_s'),
+                'mission_timeout_s': _float('safety_mission_timeout_s'),
                 'cmd_timeout_s': _float('safety_cmd_timeout_s'),
                 'max_position_std_m': _float('safety_max_position_std_m'),
                 'max_speed_factor': _float('safety_max_speed_factor'),
@@ -688,8 +701,13 @@ def _launch_setup(context: LaunchContext):
                     LaunchConfiguration('fault_after_s'), value_type=float),
                 'fault_duration_s': ParameterValue(
                     LaunchConfiguration('fault_duration_s'), value_type=float),
+                'fault_min_speed_mps': ParameterValue(
+                    LaunchConfiguration('fault_min_speed_mps'), value_type=float),
                 'use_sim_time': True,
             }],
+            # The speed gate reads the plant, like the caster: an odometry
+            # fault must not decide when it starts itself.
+            remappings=[('/lhr/sim/plant_odom', caster_odom)],
             output='screen',
         ))
 
@@ -906,6 +924,8 @@ def generate_launch_description():
             description='One fault_injector kind, e.g. ekf_kill, lidar_drop'),
         DeclareLaunchArgument('fault_after_s', default_value='30.0'),
         DeclareLaunchArgument('fault_duration_s', default_value='0.0'),
+        DeclareLaunchArgument('fault_min_speed_mps', default_value='0.0',
+                              description='Also wait until the car is this fast (0 = any)'),
         # Safety monitor (lhr_safety). Off until #117's fault injection
         # has tuned the thresholds; defaults match the node's.
         DeclareLaunchArgument(
@@ -915,6 +935,9 @@ def generate_launch_description():
         DeclareLaunchArgument('safety_settle_s', default_value='2.0'),
         DeclareLaunchArgument('safety_lidar_timeout_s', default_value='0.3'),
         DeclareLaunchArgument('safety_odom_timeout_s', default_value='0.25'),
+        DeclareLaunchArgument('safety_imu_timeout_s', default_value='0.25'),
+        DeclareLaunchArgument('safety_wheel_timeout_s', default_value='0.25'),
+        DeclareLaunchArgument('safety_mission_timeout_s', default_value='0.5'),
         DeclareLaunchArgument('safety_cmd_timeout_s', default_value='0.25'),
         DeclareLaunchArgument('safety_max_position_std_m', default_value='0.0'),
         DeclareLaunchArgument('safety_max_speed_factor', default_value='1.5'),

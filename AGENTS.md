@@ -82,7 +82,7 @@ It runs on every PR, on every push to `main`, weekly, and by hand.
 - `Changes` lists the files a PR touches, renamed files' old paths
   included. Each area's job runs only when its paths changed: Bazel on
   Linux and Windows, simulation fast checks, FourPost, autonomy (colcon),
-  BEVO, docs and telemetry. `Format` always runs.
+  BEVO, docs, telemetry and the HIL job dashboard. `Format` always runs.
 - `Lint` always runs: ruff for Python and shellcheck for scripts outside
   `autonomy/`, and actionlint for the workflows (see
   [tools/lint/README.md](tools/lint/README.md)). Fix a new violation; a
@@ -124,6 +124,15 @@ don't run them.
   instead of hand-editing. The on-target debug architecture (hermetic
   gdb/OpenOCD/SVD staged under `bazel-bin/tools/debug/`) is documented in
   [tools/debug/README.md](tools/debug/README.md).
+- Windows builds are shell-free: nothing that builds on Windows may need
+  bash. No `genrule` without `cmd_bat`, no `ctx.actions.run_shell`, no
+  generated wrapper scripts — exec the tool (`ctx.actions.run`,
+  `run_binary`, `hermetic_launcher` for `bazel run` wrappers) or mark the
+  target non-Windows. `.bazelrc` pins the shell there to a path that doesn't
+  exist, so a violation fails the Windows CI job with
+  `lhre-windows-builds-are-shell-free` in the error. The fix is never
+  "install bash" (see
+  [docs/build-system.md](docs/build-system.md#windows-builds-are-shell-free)).
 - Every module extension must end with
   `return ctx.extension_metadata(reproducible = True)` and pin its fetches
   (sha256/commit) — otherwise `MODULE.bazel.lock` churns across OSes (see

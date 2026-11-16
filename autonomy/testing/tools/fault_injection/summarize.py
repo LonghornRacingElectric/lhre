@@ -34,10 +34,11 @@ def main():
     unscored = [r for r in rows
                 if r['result'] not in FAULT_RESULTS + CLEAN_RESULTS]
 
-    print('| Fault | v_max (m/s) | Runs | Caught by expected check | '
-          'Tripped before the fault | Trip latency, median (s) | '
-          'Stop distance, max (m) | PDR formula, max (m) | Within formula |')
-    print('|---|---|---|---|---|---|---|---|---|')
+    print('| Fault | v_max (m/s) | Speed at fault, median (m/s) | Runs | '
+          'Caught by expected check | Tripped before the fault | '
+          'Trip latency, median (s) | Stop distance, max (m) | '
+          'PDR formula, max (m) | Within formula |')
+    print('|---|---|---|---|---|---|---|---|---|---|')
     groups = {}
     for r in faulted:
         groups.setdefault((r['case'], r['v_max']), []).append(r)
@@ -45,7 +46,8 @@ def main():
         caught = sum(r['result'] == 'caught' for r in rs)
         early = sum(r['result'] == 'early_trip' for r in rs)
         within = sum(r['within_pdr'] == 'True' for r in rs)
-        print(f'| `{case}` | {v} | {len(rs)} | {caught}/{len(rs)} | {early} | '
+        print(f"| `{case}` | {v} | {fmt([r['v_at_fault'] for r in rs], median)} | "
+              f'{len(rs)} | {caught}/{len(rs)} | {early} | '
               f"{fmt([r['trip_latency_s'] for r in rs], median)} | "
               f"{fmt([r['stop_dist_m'] for r in rs], max)} | "
               f"{fmt([r['pdr_dist_m'] for r in rs], max)} | "
@@ -60,6 +62,13 @@ def main():
         print(f'`steer_freeze`: visible {fmt([r["visible_after_s"] for r in freezes], median)} s '
               f'after the freeze (median), then tripped within '
               f'{fmt([r["latency_from_visible_s"] for r in freezes], max)} s.')
+
+    slow = [r for r in faulted if r.get('at_speed') == 'False']
+    if slow:
+        # A tier is only tested at its speed (#207); say which runs were not.
+        print()
+        print('Faulted under 90% of v_max, so they do not test their tier: '
+              + ', '.join(f"{r['id']} ({r['v_at_fault']} m/s)" for r in slow))
 
     if clean:
         trips = [r for r in clean if r['result'] == 'false_trip']

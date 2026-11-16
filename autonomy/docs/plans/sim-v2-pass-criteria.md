@@ -39,7 +39,7 @@ No autonomy node may read ground truth. Truth is for scoring only.
 | Cones | `perception:=lidar lidar_source:=mid360` |
 | Cone color | `enable_stereo_camera:=true enable_camera_lidar_fusion:=true` |
 | Safety | `safety:=true`, default `safety_lidar_timeout_s` (0.3 s) |
-| Parameters | The gate and fault tools set the rows above for every run ([#237](https://github.com/LonghornRacingElectric/lhre/issues/237)); everything else stays at launch defaults. No run gets its own settings |
+| Parameters | The gate and fault tools set the rows above for every run from one file, [`stack.args`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/testing/tools/gate/stack.args) ([#237](https://github.com/LonghornRacingElectric/lhre/issues/237)); everything else stays at launch defaults. No run gets its own settings |
 
 Allowed truth, and only this:
 
@@ -109,15 +109,15 @@ milestone and is repeated after the fix, never dropped.
 
 ## Fault matrix
 
-Gating in Sim v2, and separate from the 35 gate runs: each of the 9 fault
-cases at `v_max` 3, 5 and 8 m/s, twice each (54 runs), plus 5 clean laps on
-`rules_autocross` seeds 1 to 5, so 59 runs, on the FMU plant with the stack
+Gating in Sim v2, and separate from the 35 gate runs: each of the 11 fault
+cases at `v_max` 3, 5 and 8 m/s, twice each (66 runs), plus 5 clean laps on
+`rules_autocross` seeds 1 to 5, so 71 runs, on the FMU plant with the stack
 above. Run with the [fault tools](../../testing/tools/fault_injection/README.md).
 
 | Check | Threshold |
 | --- | --- |
 | Caught | Every fault trips its expected check, never a different one |
-| Trip time, stale streams (`ODOM_STALE`, `CMD_STALE`, `LIDAR_STALE`) | At most the check's timeout plus 0.2 s |
+| Trip time, stale streams (`ODOM_STALE`, `CMD_STALE`, `LIDAR_STALE`, `IMU_STALE`, `WHEEL_STALE`) | At most the check's timeout plus 0.2 s |
 | Trip time, invalid or diverged values (`EKF_DIVERGED`, `CMD_INVALID`, `GEOFENCE`) | At most 0.2 s |
 | Trip time, `STEER_TRACKING` | At most 1.0 s from when the command moves 0.035 rad off the frozen angle: a stuck actuator is invisible until then ([#208](https://github.com/LonghornRacingElectric/lhre/issues/208)) |
 | Stop distance | Within d = v(T + 0.2 s) + v²/2a, with T the check's trip-time limit above (not the measured trip time) and a the spring brake's 6 m/s² floor |
@@ -126,10 +126,13 @@ above. Run with the [fault tools](../../testing/tools/fault_injection/README.md)
 
 Using the trip-time limit instead of the measured trip time closes the gap
 the 11/1 matrix showed: a slow check got a longer allowed stop and still
-passed. Two checks have no fault case yet: IMU and wheel-speed dropouts
-([#126](https://github.com/LonghornRacingElectric/lhre/issues/126)) and a dead
-`mission_manager` ([#127](https://github.com/LonghornRacingElectric/lhre/issues/127)).
-Each joins the matrix with its check.
+passed. IMU and wheel-speed dropouts joined the matrix with their checks
+([#126](https://github.com/LonghornRacingElectric/lhre/issues/126)). A dead
+`mission_manager` trips `MISSION_STALE`
+([#127](https://github.com/LonghornRacingElectric/lhre/issues/127)) but has no
+case yet: the sim stops the car through `mission_manager` itself, so nothing
+stops it once that node is dead. It joins when the sim models the hardware
+loop the heartbeat feeds ([#290](https://github.com/LonghornRacingElectric/lhre/issues/290)).
 
 ## Gaps in the sim
 
