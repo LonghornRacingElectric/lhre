@@ -25,4 +25,8 @@ Times are Central.
   with `/clock` never advancing.
 - **2:09 PM.** Four isolated campaigns started at once on hil (containers,
   `--network none`); **2:10 PM** four on black-ridge (`unshare` namespaces in
-  WSL). Results pending.
+  WSL).
+- **2:42 PM.** hil's four finish together, 33 min each, all 18 of 18.
+- **2:52 PM.** black-ridge's four finish, 42 min each: three 18 of 18, one
+  17 of 18 (`acceleration_r3` failed stays-stopped, 5.00 m/s after the stop).
+  hil containers removed.

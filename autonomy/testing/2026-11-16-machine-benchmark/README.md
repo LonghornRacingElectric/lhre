@@ -16,7 +16,8 @@ and does the gate's result depend on the machine it runs on?
 - **One run tops out near 0.8x real time whatever the hardware.** black-ridge
   (Ryzen 9 5950X, RTX 4070 SUPER) ran at 26% CPU and 16% GPU and still did not
   beat red-mesa. Per-run speed is limited by the stack, not the machine, so
-  more throughput has to come from running gates in parallel
+  more throughput has to come from running gates in parallel. Four at once
+  gives 2.7x the gates per hour on hil (all pass) and 1.8x on black-ridge
   ([below](#parallel-runs)).
 - **WSL2 with an NVIDIA GPU works** once Mesa is pointed at the GPU with
   `GALLIUM_DRIVER=d3d12`. Without it, WSL silently renders on the CPU
@@ -55,11 +56,30 @@ run was stopped there.
 
 ## Parallel runs
 
-Pending. Four isolated gate campaigns at once on hil and on black-ridge,
-started 11/16 2:09 PM. `run_gate.sh`'s `cleanup()` pkills every `gz sim` and
-bridge it can see, so campaigns that share a process namespace kill each
-other. Each campaign therefore gets its own namespace and network, plus its
-own `ROS_DOMAIN_ID` and `GZ_PARTITION`:
+Four full gate campaigns at once on hil and on black-ridge, started 11/16
+2:09 PM.
+
+| Machine | One campaign | Four at once, each | Gates per hour | CPU / GPU busy at 4x |
+| --- | --- | --- | --- | --- |
+| hil | 18/18, 0.66x, 22 min | **4 of 4 pass 18/18**, 0.41 to 0.47x, 33 min | 2.7 to **7.2** (2.7x) | 78% / 22% |
+| black-ridge | 18/18, 0.77x, 19 min | **3 pass 18/18, 1 at 17/18**, 0.32 to 0.38x, 42 min | 3.2 to **5.7** (1.8x) | 73% / 35% |
+
+- **hil scales best** and passed all 72 runs. It is the home for Sim v2
+  campaigns. At four campaigns CPU is the limit (78%), so five is about the
+  ceiling.
+- **black-ridge's one failure** is `acceleration_r3` in campaign 2: it
+  finished and stopped, then failed the stays-stopped check with a peak speed
+  after the stop of 5.00 m/s, exactly `v_max`. The 11/08 fusion checks on the
+  Mac failed acceleration on the same check, so this looks like a
+  load-sensitive flake in the acceleration stop, or in how the scorer reads
+  odometry after it, rather than something parallel runs introduce. Open.
+- Parallel runs make each run slower but more runs finish per hour, because a
+  single run leaves most of the hardware idle (see the [Answer](#answer)).
+
+`run_gate.sh`'s `cleanup()` pkills every `gz sim` and bridge it can see, so
+campaigns that share a process namespace kill each other. Each campaign
+therefore gets its own namespace and network, plus its own `ROS_DOMAIN_ID`
+and `GZ_PARTITION`:
 
 - hil: one GPU container per campaign with `--network none`
   ([`par-hil.sh`](https://github.com/LonghornRacingElectric/lhre/blob/main/autonomy/testing/2026-11-16-machine-benchmark/par-hil.sh)).
