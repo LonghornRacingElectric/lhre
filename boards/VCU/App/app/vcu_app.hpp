@@ -64,7 +64,6 @@ class App {
   uint32_t faults() const { return faults_; }
   float torque_command() const { return torque_command_; }
   longhorn::Logger& logger() { return logger_; }
-  uint32_t watchdog_refreshes() const { return watchdog_refreshes_; }
 
  private:
   // Stacks are multiples of the host FreeRTOS port's minimum stack size.
@@ -101,6 +100,7 @@ class App {
   void DrainCan(uint32_t now_ms);
   bool ReadInputs(uint32_t now_ms);  // returns the RTD press edge
   void UpdateBrakeLatch(uint32_t now_ms);
+  StateInputs HvcInputs(uint32_t now_ms) const;
   uint32_t ComputeFaults(uint32_t now_ms, bool inverter_fresh,
                          bool inverter_faulted) const;
   void UpdateState(uint32_t now_ms, bool rtd_edge, bool inverter_fresh,
@@ -206,7 +206,6 @@ class App {
   uint32_t seen_telemetry_beats_ = 0;
   uint32_t control_progress_ms_ = 0;
   uint32_t telemetry_progress_ms_ = 0;
-  uint32_t watchdog_refreshes_ = 0;
 
   // Scheduler-less timing
   bool stepped_ = false;

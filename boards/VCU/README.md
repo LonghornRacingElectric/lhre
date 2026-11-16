@@ -65,7 +65,7 @@ The DUI is a plain CAN peripheral this year.
   - `main.cpp`: reset cause, clocks, safe outputs, the `MX_*_Init` calls,
     LHAL adapters, and the app.
   - `analog_setup.cpp`: what the `.ioc` doesn't express yet (see [IOC gaps](#ioc-gaps)).
-  - `fault_store.cpp`: bootloader entry.
+  - `bootloader.cpp`: bootloader entry.
   - `board_safe_state.cpp`: the safe output levels, also used from
     `Error_Handler` and the fault handlers.
   - `rtos_hooks.cpp`, `irq_handlers.cpp`.

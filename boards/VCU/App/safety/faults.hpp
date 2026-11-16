@@ -24,7 +24,7 @@ enum FaultBit : uint32_t {
   kFaultInverterFault = 1u << 12,
   kFaultBspdTripped = 1u << 13,
   kFaultHardBrakeMismatch = 1u << 14,
-  kFaultDuiTimeout = 1u << 15,
+  kFaultDuiTimeout = 1u << 15,  // reserved: a missing DUI is never a fault
   kFaultBse3Unavailable = 1u << 16,
   kFaultContactorsOpen = 1u << 17,
   kFaultMotorDisconnect = 1u << 18,

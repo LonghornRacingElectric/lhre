@@ -67,11 +67,10 @@ Params MakeMotorSpin() {
   p.torque.zero_torque_rpm = 1500.0f;
   // The inverter enforces the same cap on its side of the command.
   p.inverter.torque_limit_nm = p.torque.peak_torque_nm;
-  // TEMP: the bench spin has only the HVC, inverter, pedals and motor, so
-  // don't wait for the PDU or the shutdown loop, and ignore the faults of
-  // sensors that aren't wired: steering, the motor-cable sense, the loop
-  // taps, and the hard-brake cross-check. APPS, BSE, inverter, HVC and BSPD
-  // faults all stay live.
+  // TEMP: bench spin with only the HVC, inverter, pedals and motor. Skip the
+  // PDU and shutdown loop gates and ignore the faults of unwired sensors
+  // (steering, motor-cable sense, loop taps, hard-brake cross-check). APPS,
+  // BSE, inverter, HVC and BSPD faults stay live.
   p.drive.require_pdu = false;
   p.drive.require_loop = false;
   p.drive.ignored_faults = kFaultShutdownOpen | kFaultShutdownSenseImplausible |

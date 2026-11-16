@@ -221,7 +221,6 @@ struct RegenParams {
   float voltage_reserve_v = 6.0f;
   float pack_resistance_ohm = 0.0f;
   float series_cells = 132.0f;
-  uint32_t parallel_cells = 3;
   uint32_t close_delay_ms = 200;
 };
 

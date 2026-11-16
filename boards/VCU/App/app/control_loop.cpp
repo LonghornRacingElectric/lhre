@@ -107,6 +107,16 @@ void App::UpdateBrakeLatch(uint32_t now) {
       live_.bse3_available ? rx_.bse_3.msg.brake_pressure_3() : 0.0f;
 }
 
+StateInputs App::HvcInputs(uint32_t now) const {
+  StateInputs in;
+  in.hvc_fresh = rx_.contactor_status.Fresh(now);
+  in.hvc_state = static_cast<lhre::can::HvcState>(
+      rx_.contactor_status.msg.hvc_state_machine);
+  in.contactors_closed = rx_.contactor_status.msg.positive_hv_contactor &&
+                         rx_.contactor_status.msg.negative_hv_contactor;
+  return in;
+}
+
 uint32_t App::ComputeFaults(uint32_t now, bool inverter_fresh,
                             bool inverter_faulted) const {
   const PedalOutputs& ped = live_.pedals;
@@ -129,19 +139,12 @@ uint32_t App::ComputeFaults(uint32_t now, bool inverter_fresh,
   if (inverter_faulted) f |= kFaultInverterFault;
   if (live_.inputs.latch_state) f |= kFaultBspdTripped;
   if (ped.hard_brake_mismatch) f |= kFaultHardBrakeMismatch;
-  // A missing DUI is not a fault: the car drives without it (kFaultDuiTimeout
-  // stays defined for the dash message but is never raised).
   if (live_.inputs.motor_disconnect) f |= kFaultMotorDisconnect;
   if (live_.loop == ShutdownLoopState::kImplausible) {
     f |= kFaultShutdownSenseImplausible;
   }
-  StateInputs hvc;
-  hvc.hvc_fresh = rx_.contactor_status.Fresh(now);
-  hvc.hvc_state = static_cast<lhre::can::HvcState>(
-      rx_.contactor_status.msg.hvc_state_machine);
-  hvc.contactors_closed = rx_.contactor_status.msg.positive_hv_contactor &&
-                          rx_.contactor_status.msg.negative_hv_contactor;
-  if (sm_.state() == VcuState::kDrive && !StateConditions::Energized(hvc)) {
+  if (sm_.state() == VcuState::kDrive &&
+      !StateConditions::Energized(HvcInputs(now))) {
     f |= kFaultContactorsOpen;
   }
   return f & ~params_->drive.ignored_faults;
@@ -152,13 +155,8 @@ void App::UpdateState(uint32_t now, bool rtd_edge, bool inverter_fresh,
   const Params& P = *params_;
   const DigitalInputs& in = live_.inputs;
   const PedalOutputs& ped = live_.pedals;
-  StateInputs si;
+  StateInputs si = HvcInputs(now);
   si.bspd_latched = in.latch_state;
-  si.hvc_fresh = rx_.contactor_status.Fresh(now);
-  si.hvc_state = static_cast<lhre::can::HvcState>(
-      rx_.contactor_status.msg.hvc_state_machine);
-  si.contactors_closed = rx_.contactor_status.msg.positive_hv_contactor &&
-                         rx_.contactor_status.msg.negative_hv_contactor;
   si.loop_closed = shutdown_loop_.closed() || !P.drive.require_loop;
   si.torque_cut_fault = (faults_ & kTorqueCutFaults) != 0;
   si.inverter_ready = inverter_fresh && !inverter_faulted;
