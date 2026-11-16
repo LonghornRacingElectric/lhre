@@ -46,8 +46,10 @@ Follow [docs/testing.md](docs/testing.md); the rules that matter most:
 
 - A behavior change ships with a test that fails without it. Cover the
   edges (limits, saturation, faults, units), not only the happy path.
-- Aim for high coverage of the lines you add or change. CI reports it on
-  every PR without a fixed percent; a low number needs a reason.
+- Cover the lines you add or change. CI fails a PR when under 80% of its
+  changed firmware lines run under a host test, or a changed firmware
+  source isn't linked into one. The `coverage-exempt` label waives it and
+  needs a reason in the PR.
 - For a big overhaul, land a tests-first PR that pins current behavior,
   then the refactor.
 - Never delete, skip or loosen a test, widen a size budget, mark a test

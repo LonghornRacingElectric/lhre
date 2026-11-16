@@ -10,10 +10,21 @@ uv run --only-group coverage diff-cover \
 Line coverage of firmware code from the host tests, on the lines a PR
 changes. A suite can pass while new code never runs under it; this is the
 report that shows it. CI runs both lines in the `Bazel (Linux)` job on PRs
-and puts diff-cover's report on the run's summary page. It never fails the
-build: no percent is enforced, but high coverage of changed lines is the
-expectation ([testing.md](../../docs/testing.md)), and a reviewer asks
-about a low one.
+and puts diff-cover's report on the run's summary page.
+
+## The gate
+
+The `Gate changed-line coverage` step fails the PR when under 80% of its
+changed firmware lines run under a host test (`MIN_COVERAGE` in
+[`ci.yml`](https://github.com/LonghornRacingElectric/lhre/blob/main/.github/workflows/ci.yml)),
+when a changed firmware source isn't linked into any host test, or when
+firmware changed and `bazel coverage` left no report
+([ADR-020](../../docs/architecture/020-firmware-coverage-gate.md)). A PR
+that touches no firmware passes.
+
+For the rare change that can't be host-tested, add the `coverage-exempt`
+label, say why in the PR, and re-run the failed jobs: the label is read
+when the step runs, so a re-run sees it. The failure becomes a warning.
 
 ## What's measured
 
@@ -36,7 +47,7 @@ average ([ADR-017](../../docs/architecture/017-tests-gate-merges.md)).
 ## Gotcha
 
 A source that no host test links isn't in the report at all, so
-diff-cover can't see its lines. CI warns on a PR that adds or edits such
+diff-cover can't see its lines. CI fails a PR that adds or edits such
 a file under `boards/`, `drivers/longhorn/` or `drivers/lhal/`: link it into
 a host test. Firmware app code is linked by the app's host tests; code
 reachable only from `Board/` (the target entry point), CubeMX's `Core/` and

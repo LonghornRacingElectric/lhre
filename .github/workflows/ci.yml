@@ -210,45 +210,61 @@ jobs:
           //boards/... //drivers/... //lib/codegen/cpp/... //tools/asan:overflow_test
 
       # Firmware line coverage from the host tests on the lines this PR
-      # changes, reported on the summary page and never failing the build
-      # (tools/coverage/README.md). The checkout is the PR merged into its
-      # base, so HEAD^1 is the base and the diff is exactly this PR.
+      # changes (tools/coverage/README.md, ADR-020). The checkout is the PR
+      # merged into its base, so HEAD^1 is the base and the diff is exactly
+      # this PR. The run itself may fail; the gate below decides.
       - name: Measure firmware line coverage
         if: ${{ !cancelled() && github.event_name == 'pull_request' }}
         continue-on-error: true
         run: bazel coverage //boards/... //drivers/...
 
-      - name: Report changed-line coverage
+      # Fails under MIN_COVERAGE percent of changed firmware lines, or when
+      # a changed firmware source isn't linked into any host test. The
+      # coverage-exempt label turns the failure into a warning; labels are
+      # read at run time, so add it and re-run the failed jobs.
+      - name: Gate changed-line coverage
         if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          MIN_COVERAGE: 80
         run: |
           report="$(bazel info output_path)/_coverage/_coverage_report.dat"
-          uv run --only-group coverage diff-cover "$report" \
-            --compare-branch=HEAD^1 \
-            --format "markdown:$RUNNER_TEMP/diff-cover.md" ||
-            echo "::warning::diff-cover failed, so this PR has no coverage report"
-          cat "$RUNNER_TEMP/diff-cover.md" >> "$GITHUB_STEP_SUMMARY" || true
-          # diff-cover skips files the report doesn't list, so a changed
-          # source no host test links would read as fine. Board/, Core/ and
-          # the STM32 LHAL backend only run on target and are never measured.
+          # Board/, Core/ and the STM32 LHAL backend only run on target and
+          # are never measured.
           changed=$(git diff --name-only --no-renames --diff-filter=AM HEAD^1 HEAD -- \
             'boards/*.cpp' 'boards/*.cc' 'drivers/longhorn/*.cpp' 'drivers/longhorn/*.cc' \
             'drivers/lhal/*.cpp' 'drivers/lhal/*.cc' \
             ':!boards/*/Board/*' ':!boards/*/Core/*' ':!drivers/lhal/stm32/*' \
             ':!*_test.*' ':!*_sim.*')
-          # With no report every file would read as unlinked; say so once.
-          if [ ! -s "$report" ]; then
-            echo "::warning::no coverage report, so changed sources weren't checked for a host test"
+          failed=0
+          if [ -s "$report" ]; then
+            uv run --only-group coverage diff-cover "$report" \
+              --compare-branch=HEAD^1 --fail-under="$MIN_COVERAGE" \
+              --format "markdown:$RUNNER_TEMP/diff-cover.md" || failed=1
+            cat "$RUNNER_TEMP/diff-cover.md" >> "$GITHUB_STEP_SUMMARY" || true
+            # diff-cover skips files the report doesn't list, so a changed
+            # source no host test links would read as covered. Read the SF:
+            # lines once: piping a big report into grep -q fails under
+            # pipefail when grep exits early (SIGPIPE).
+            sources=$(grep '^SF:' "$report" || true)
+            while IFS= read -r f; do
+              [ -n "$f" ] || continue
+              grep -qF -- "$f" <<< "$sources" && continue
+              echo "::error file=$f::no host test links this file, so its coverage isn't measured"
+              failed=1
+            done <<< "$changed"
+          elif [ -n "$changed" ]; then
+            echo "::error::bazel coverage left no report, so changed firmware lines weren't measured"
+            failed=1
+          fi
+          [ "$failed" = 1 ] || exit 0
+          if gh api "repos/$GITHUB_REPOSITORY/issues/$PR/labels" --jq '.[].name' | grep -qx coverage-exempt; then
+            echo "::warning::changed-line coverage is below ${MIN_COVERAGE}% or unmeasured, allowed by the coverage-exempt label"
             exit 0
           fi
-          # Read the SF: lines once. Piping a big report into grep -q would
-          # fail under pipefail when grep exits early (SIGPIPE), and warn
-          # about files that are listed.
-          sources=$(grep '^SF:' "$report" || true)
-          while IFS= read -r f; do
-            [ -n "$f" ] || continue
-            grep -qF -- "$f" <<< "$sources" ||
-              echo "::warning file=$f::no host test links this file, so its coverage isn't measured"
-          done <<< "$changed"
+          echo "::error::changed firmware lines need ${MIN_COVERAGE}% host-test coverage (summary page has the lines). Add tests, or the coverage-exempt label with a reason in the PR."
+          exit 1
 
   # Windows builds run fully locally (see .bazelrc: Bazel can't drive the
   # Linux remote executors from a Windows client) but still share the

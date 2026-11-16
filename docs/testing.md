@@ -11,10 +11,13 @@ test" means here, and which gate catches what.
 - **A behavior change ships with a test that fails without it.** Bug fixes
   get a regression test; new logic gets tests for its edges (limits,
   saturation, faults, units), not only the happy path.
-- **Changed lines run under a test.** No percent is enforced, but aim for
-  nearly every line a PR adds or changes to be covered; CI reports the
-  number on every PR ([coverage](../tools/coverage/README.md)), and a
-  reviewer asks about a low one.
+- **Changed lines run under a test.** At least 80% of the firmware lines
+  a PR adds or changes must run under a host test, and every changed
+  firmware source must be linked into one; CI fails otherwise
+  ([coverage](../tools/coverage/README.md),
+  [ADR-020](architecture/020-firmware-coverage-gate.md)). Aim for nearly
+  all of them. The `coverage-exempt` label waives it for a PR that says
+  why.
 - **Big overhauls go tests first.** Land a PR that pins today's behavior
   with tests, then the refactor on top, so the refactor's diff shows
   whether behavior moved.
@@ -50,13 +53,13 @@ no network. Concretely:
 ## Gates
 
 `All checks passed` is the one required check; every gate below feeds it
-except coverage, which is reported, not enforced.
+except simulation coverage, which is reported, not enforced.
 
 | Gate | What it catches | Run it locally |
 | ---- | --------------- | -------------- |
 | Bazel build + test (Linux, Windows) | Broken builds, failing unit tests, firmware over its flash/RAM budget | `bazel test //...` |
 | Network off in tests | A unit test that reaches the internet or a service | `bazel test //tools/hermetic:network_off_test` |
-| Changed-line coverage (report only) | How many firmware lines a PR adds or changes run under a host test, on the run's summary page | `bazel coverage //boards/... //drivers/...`, then diff-cover ([how](../tools/coverage/README.md)) |
+| Changed-line coverage | Firmware lines a PR adds or changes that no host test runs: under 80%, or a changed source no host test links, fails unless the PR has the `coverage-exempt` label. The lines are on the run's summary page | `bazel coverage //boards/... //drivers/...`, then diff-cover ([how](../tools/coverage/README.md)) |
 | UBSan | Undefined behavior in host C++ (overflow, bad shifts, misaligned access) | `bazel test --config=ubsan //boards/... //drivers/... //lib/codegen/cpp/...` |
 | ASan | Memory errors in host C++ (out of bounds, use after free, leaks) | `bazel test --config=asan //boards/... //drivers/... //lib/codegen/cpp/... //tools/asan:overflow_test` |
 | Firmware warnings as errors | Shadowed variables, `float` silently widened to `double` (slow on the M4F), unchecked format strings, fallthrough, `#if` on undefined macros, in app and longhorn code ([list](../tools/firmware/README.md#warnings)) | part of `bazel build //...` |
