@@ -766,7 +766,7 @@ passing the geometry checks does not imply the autonomy gate passes.
 (`seed:=1` only). See [competition data](worlds/competition/README.md) for
 provenance, normalization, importer commands and measured envelope flags.
 `allow_noncompliant_track:=false` rejects flagged imports by default; set it
-to `true` to acknowledge the logged violations for diagnostic runs.
+to `true` to acknowledge the logged violations, including in acceptance runs.
 
 The world and its hash-bound `.reference.json` must stay together. An explicit
 `world:=...` import must use its metadata's `layout_id` as `track_style`.
@@ -776,4 +776,5 @@ publishes only the original physical cones to `/lhr/track/cones`, where
 from the existing `world` selection rather than a second, independent launch
 argument. LiDAR mode does not start this publisher. The inferred centerline
 is available only to metrics and viewer truth. Imported nominal width is the
-median aligned gate width; procedural width/spacing knobs do not move cones.
+median aligned gate width for auditing, not a planner input. The planner keeps
+its normal configured width; procedural width/spacing knobs do not move cones.

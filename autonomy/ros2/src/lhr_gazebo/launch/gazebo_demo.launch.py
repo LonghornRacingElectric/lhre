@@ -204,8 +204,8 @@ def _launch_setup(context: LaunchContext):
     elif mission == 'acceleration':
         raise RuntimeError('mission:=acceleration needs track_style:=acceleration')
     from lhr_trackgen.publish_cones import pairing_width_m
-    track_width = (imported['nominal_width_m'] if imported else pairing_width_m(
-        track_style, float(context.launch_configurations.get('width_m', '3.5'))))
+    track_width = pairing_width_m(
+        track_style, float(context.launch_configurations.get('width_m', '3.5')))
 
     pkg_share = get_package_share_directory('lhr_gazebo')
     models_dir = os.path.join(pkg_share, 'models')

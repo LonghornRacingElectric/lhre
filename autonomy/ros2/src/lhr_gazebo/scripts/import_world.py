@@ -43,7 +43,7 @@ def normalize_fssim(path, output):
 
 
 def main(argv=None):
-    """Fail flagged geometry unless the caller explicitly requests a diagnostic world."""
+    """Fail flagged geometry unless the caller explicitly acknowledges the violations."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, required=True)
     parser.add_argument('--format', choices=('csv', 'fssim'), default='csv')

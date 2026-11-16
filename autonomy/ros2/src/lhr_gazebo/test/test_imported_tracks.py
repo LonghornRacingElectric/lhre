@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import shutil
@@ -64,11 +65,22 @@ def test_original_physical_cones_and_scoring_route(name, counts):
     for a, b in zip(rebuilt['centerline'], data['centerline']):
         assert a == pytest.approx(b, abs=1e-9)
     assert rebuilt['rules']['status'] == data['rules']['status'] == 'outside_envelope'
+    assert rebuilt['rules']['violations'] == data['rules']['violations']
+    assert rebuilt['rules']['straight_deviation_m'] == data['rules']['straight_deviation_m']
+    assert rebuilt['rules']['radius_half_window_m'] == data['rules']['radius_half_window_m']
+    assert rebuilt['rules']['radius_samples'] == data['rules']['radius_samples']
+    assert rebuilt['rules']['radius_method'] == data['rules']['radius_method']
+    assert rebuilt['rules']['measurements'] == pytest.approx(
+        data['rules']['measurements'], rel=0, abs=1e-8)
+    assert rebuilt['nominal_width_m'] == pytest.approx(data['nominal_width_m'])
+    assert checked_spawn(normalized, rebuilt, data['alignment_spawn'],
+                         fit=data['fit_spawn']) == pytest.approx(data['spawn'])
     raw_midpoints = [((left[i][0]+right[i][0])/2, (left[i][1]+right[i][1])/2)
                      for i in range(len(left))]
     assert rebuilt['rules']['geometry'] == 'unsmoothed_gate_midpoints'
-    for key, value in measure_route(raw_midpoints).items():
-        assert rebuilt['rules']['measurements'][key] == pytest.approx(value, abs=1e-8)
+    assert rebuilt['rules'] == audit(
+        [(x, y) for x, y, kind in normalized if kind == 'blue'],
+        [(x, y) for x, y, kind in normalized if kind == 'yellow'], raw_midpoints)
     assert len(left) == len(right) >= max(counts[:2])
     course = CourseEnvelope(left, right, cones, load_vehicle(), True)
     assert course.pose_check(*data['spawn'], padding=.05) == (False, set())
@@ -139,6 +151,8 @@ def test_imported_launch_and_node_parameters(monkeypatch, tmp_path, perception, 
         monkeypatch, perception=perception, estimator=estimator,
         allow_noncompliant_track='true', output_csv=str(tmp_path/'metrics.csv'))
     nodes = {a.node_executable: a for a in actions if isinstance(a, Node)}
+    planner = evaluate_parameters(context, nodes['track_builder']._Node__parameters)[0]
+    assert planner['track_width'] == 3.5  # Never take a planner prior from truth cones.
     assert ('world_cones' in nodes) == (perception == 'sim')
     assert 'publish_cones' not in nodes
     if perception == 'lidar':
@@ -209,8 +223,31 @@ def test_audit_preserves_long_straights_and_tight_turns_before_smoothing():
     assert 'straight exceeds 80 m' in report['violations']
     tight = [(0., 0.), (2., 0.), (2., 2.), (0., 2.), (-2., 2.), (-2., 0.)]
     report = audit(left, right, tight)
-    assert report['measurements']['minimum_radius_m'] == pytest.approx(2**.5)
+    # The small rectangle caps the fit window at lap/4, with 21 samples per fit.
+    assert report['measurements']['minimum_radius_m'] == pytest.approx(1.411149288204582)
     assert 'reference turn radius below 4.5 m' in report['violations']
+
+
+def test_import_audit_detects_long_straight_despite_cone_jitter():
+    points = [(float(x), .08*math.sin(x)) for x in range(91)]
+    points += [(90., 10.)]
+    points += [(float(x), 20.+.08*math.cos(x)) for x in range(90, -1, -1)]
+    points += [(0., 10.)]
+    assert measure_route(points)['longest_straight_m'] < 80
+    report = audit([(x, y+2) for x, y in points], [(x, y-2) for x, y in points], points)
+    assert report['measurements']['longest_straight_m'] >= 90.
+    assert 'straight exceeds 80 m' in report['violations']
+
+
+@pytest.mark.parametrize('radius', [4., 6.])
+def test_import_radius_uses_spatial_window_instead_of_adjacent_jitter(radius):
+    points = [((radius+.025*math.sin(i*7))*math.cos(i*math.tau/80),
+               (radius+.025*math.sin(i*7))*math.sin(i*math.tau/80)) for i in range(80)]
+    assert measure_route(points)['minimum_radius_m'] < 4.5
+    report = audit([(x*1.3, y*1.3) for x, y in points],
+                   [(x*.7, y*.7) for x, y in points], points)
+    assert radius-.2 < report['measurements']['minimum_radius_m'] < radius+.2
+    assert ('reference turn radius below 4.5 m' in report['violations']) == (radius < 4.5)
 
 
 def test_gate_plan_has_matched_baselines_and_no_side_effects(tmp_path):
@@ -218,10 +255,10 @@ def test_gate_plan_has_matched_baselines_and_no_side_effects(tmp_path):
     result = subprocess.run(['bash', str(GATE/'run_gate.sh')], env=env,
                             capture_output=True, text=True, check=True)
     lines = result.stdout.splitlines()
-    assert len(lines) == 6
+    assert len(lines) == 4
     for name in COURSES:
         assert any(s.startswith(f'baseline_{name}_s1 ') for s in lines)
-        assert sum(s.startswith(name+'_s1_r') for s in lines) == 2
+        assert sum(s.startswith(name+'_s1_r') for s in lines) == 1
     assert all('allow_noncompliant_track:=true' in s for s in lines)
     for line in lines:
         if 'perception:=lidar' in line:
@@ -235,6 +272,16 @@ def test_gate_plan_has_matched_baselines_and_no_side_effects(tmp_path):
                                 capture_output=True, text=True)
         assert result.returncode == 2
         assert not Path(env['OUT']).exists()
+
+
+@pytest.mark.parametrize('repeats', ['-1', 'oops', '1.5'])
+def test_import_repeats_refuse_invalid_plan_before_side_effects(tmp_path, repeats):
+    env = {**gate_env(tmp_path), 'REAL_REPEATS': repeats}
+    result = subprocess.run(['bash', str(GATE/'run_gate.sh')], env=env,
+                            capture_output=True, text=True)
+    assert result.returncode == 2
+    assert 'REAL_REPEATS' in result.stderr
+    assert not Path(env['OUT']).exists()
 
 
 def test_scorer_recognizes_imports_and_fails_missing_runs(tmp_path):

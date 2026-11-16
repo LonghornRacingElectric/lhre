@@ -1,5 +1,6 @@
 """Preserve ordered source cones and derive a separate, checked scoring reference."""
 
+import bisect
 import csv
 import hashlib
 import json
@@ -102,7 +103,50 @@ def reference_curve(left, right, pairs):
 
 def audit(left, right, gate_midpoints):
     """Flag the same length/straight/radius/width envelope as rules_autocross."""
+    import numpy as np
     measured = measure_route(gate_midpoints)
+    # Survey jitter must not split an actual straight into individual cone gaps
+    # or turn one short chord into an implausibly sharp corner.
+    lengths = [math.dist(a, b) for a, b in edges(gate_midpoints)]
+    arc = [0.]
+    for length in lengths:
+        arc.append(arc[-1]+length)
+
+    def sample(distance):
+        distance %= arc[-1]
+        i = min(len(lengths)-1, bisect.bisect_right(arc, distance)-1)
+        fraction = (distance-arc[i])/lengths[i]
+        a, b = gate_midpoints[i], gate_midpoints[(i+1) % len(lengths)]
+        return tuple(a[k]+fraction*(b[k]-a[k]) for k in (0, 1))
+
+    window = min(5., arc[-1]/4)
+    radii = []
+    for distance, point in zip(arc, gate_midpoints):
+        samples = np.array([sample(distance+offset)
+                            for offset in np.linspace(-window, window, 21)])-point
+        # Fit the entire arc window so one perturbed cone cannot set the radius.
+        system = np.column_stack((2*samples, np.ones(len(samples))))
+        coefficients, _, rank, _ = np.linalg.lstsq(
+            system, (samples*samples).sum(axis=1), rcond=None)
+        radius_squared = sum(coefficients[:2]**2)+coefficients[2]
+        if rank == 3 and radius_squared > 0:
+            radii.append(math.sqrt(radius_squared))
+    measured['minimum_radius_m'] = min(radii, default=math.inf)
+    longest = 0.
+    for start, a in enumerate(gate_midpoints):
+        between, distance = [], 0.
+        for offset in range(1, len(lengths)):
+            end = (start+offset) % len(lengths)
+            b = gate_midpoints[end]
+            distance += lengths[(end-1) % len(lengths)]
+            chord = math.dist(a, b)
+            if chord < 1e-8 or any(
+                    abs((b[0]-a[0])*(p[1]-a[1])-(b[1]-a[1])*(p[0]-a[0]))/chord > .5
+                    for p in between):
+                break
+            longest = max(longest, distance)
+            between.append(b)
+    measured['longest_straight_m'] = longest
     sides = [edges(left), edges(right)]
     measured['minimum_clear_width_m'] = min(
         segment_distance(a, b, c, d) for a, b in sides[0] for c, d in sides[1])-BASE
@@ -132,6 +176,8 @@ def audit(left, right, gate_midpoints):
             violations.append('remote boundaries crowd each other')
             break
     return {'geometry': 'unsmoothed_gate_midpoints',
+            'straight_deviation_m': .5, 'radius_half_window_m': window,
+            'radius_samples': 21, 'radius_method': 'least_squares_circle',
             'measurements': measured, 'violations': violations,
             'status': 'outside_envelope' if violations else 'within_envelope'}
 

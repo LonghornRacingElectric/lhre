@@ -2113,15 +2113,18 @@
   ],
   "rules": {
     "geometry": "unsmoothed_gate_midpoints",
+    "straight_deviation_m": 0.5,
+    "radius_half_window_m": 5.0,
+    "radius_samples": 21,
+    "radius_method": "least_squares_circle",
     "measurements": {
       "lap_length_m": 217.57995938886586,
-      "longest_straight_m": 4.233089675133565,
-      "minimum_radius_m": 2.4963150052249845,
+      "longest_straight_m": 30.974713776606848,
+      "minimum_radius_m": 4.653747383050412,
       "minimum_clear_width_m": 2.8249476006627123,
       "maximum_cone_spacing_m": 4.567618441149174
     },
     "violations": [
-      "reference turn radius below 4.5 m",
       "conservative cone-base clear width below 3 m"
     ],
     "status": "outside_envelope"
@@ -2147,5 +2150,5 @@
       "Derive a scoring-only closed reference by monotone ordered-boundary alignment, 0.5 m arc sampling and periodic Gaussian smoothing at a 2 m spatial scale. Do not feed it to perception or control."
     ]
   },
-  "world_sha256": "b91598804a0de3fc93df9bb5cef052777699797c4412689753715786f9af0453"
+  "world_sha256": "93ad8919053a96178feab5e1d43f08ccc3a894541971fbc4f8e45cd79a766204"
 }

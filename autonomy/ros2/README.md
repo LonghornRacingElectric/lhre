@@ -291,7 +291,7 @@ launch lists what it takes:
 ./scripts/run_gazebo_demo.sh perception:=lidar estimator:=ekf safety:=true  # trip the mission on stack faults (lhr_safety)
 ```
 
-The `track_style` argument selects the track generator (`oval`, `autocross`, `acceleration` or `simple`). The world SDF is auto-resolved from `track_style` + `seed` (e.g. `oval_seed1.sdf`). Pre-generated worlds are installed by colcon from `worlds/*.sdf`: `autocross_seed1` to `seed5` (the MVP gate's seeds), `oval_seed1` and `acceleration_seed1`. The acceleration layout ignores the seed and always runs the acceleration mission; `mission:=acceleration` on any other track is an error. A missing world is an error that names the generate command, never a substitute world. `simple` has no pre-generated world, so run `./scripts/generate_gazebo_world.sh --style simple --seed 1` and rebuild first. Acceleration is Gazebo-only for now: `mvs_demo.launch.py` neither forces the mission nor gives the track builder the course's pairing width ([lhr_demo](src/lhr_demo/README.md)).
+The `track_style` argument selects a generator (`oval`, `autocross`, `rules_autocross`, `acceleration` or `simple`) or a fixed imported layout (`amz_fsg`, `amz_fsi`). Imports use seed 1 and require acknowledgement of their envelope flags; see [competition layouts](src/lhr_gazebo/worlds/competition/README.md). The world SDF is auto-resolved from `track_style` + `seed` (e.g. `oval_seed1.sdf`). Pre-generated worlds are installed by colcon from `worlds/*.sdf`: `autocross_seed1` to `seed5` (the MVP gate's seeds), `oval_seed1` and `acceleration_seed1`. The acceleration layout ignores the seed and always runs the acceleration mission; `mission:=acceleration` on any other track is an error. A missing world is an error that names the generate command, never a substitute world. `simple` has no pre-generated world, so run `./scripts/generate_gazebo_world.sh --style simple --seed 1` and rebuild first. Acceleration is Gazebo-only for now: `mvs_demo.launch.py` neither forces the mission nor gives the track builder the course's pairing width ([lhr_demo](src/lhr_demo/README.md)).
 
 The track builder's eight chaining parameters are also launch arguments in
 both `perception:=sim` and `perception:=lidar`: `chaining_alg`, `min_step_m`,
@@ -437,7 +437,7 @@ flowchart TB
 
 | Component | Kinematic | Gazebo (`perception:=sim`) | Gazebo (`perception:=lidar`) |
 |-----------|-----------|----------------------------|------------------------------|
-| Cone source | `publish_cones` | `publish_cones` (reused) | Gazebo GPU LiDAR or world-backed Mid-360 caster |
+| Cone source | `publish_cones` | `publish_cones`, or `world_cones` for imported layouts | Gazebo GPU LiDAR or world-backed Mid-360 caster |
 | Perception | `sensor_sim` (FOV filter) | `sensor_sim` (reused) | `lidar_cone_detector` (pointcloud clustering) |
 | Physics / vehicle | `sim_kinematic` | Gazebo | Gazebo |
 | `track_builder` pairing | boundary (Delaunay) | boundary (Delaunay) | boundary, including side inference and camera fusion |
@@ -540,7 +540,7 @@ reproducible exactly. Gate on a tolerance band, not on equality.
 
 | Topic | Type | Description |
 |-------|------|-------------|
-| `/lhr/track/cones` | `visualization_msgs/MarkerArray` | Left (`left_cones`) and right (`right_cones`) cone markers (ground truth). Blue and yellow, plus orange gate and lane cones on the acceleration course; the namespace is the side, the color is only for display |
+| `/lhr/track/cones` | `visualization_msgs/MarkerArray` | Ground-truth physical cone markers: `left_cones` and `right_cones`, plus orange gate/lane cones on acceleration. Imported `world_cones` uses `start_finish` for its orange cones; colors are available as marker metadata |
 | `/lhr/sensor/cones_detected` | `visualization_msgs/MarkerArray` | Cones detected by sensor sim (accumulated, FOV-filtered) |
 | `/lhr/sensor/cones_viz` | `visualization_msgs/MarkerArray` | All cones: detected = bright, unseen = dim/transparent |
 | `/lhr/sensor/fov_viz` | `visualization_msgs/MarkerArray` | Sensor FOV frustum visualization |
@@ -616,7 +616,7 @@ With `enable_stereo_camera:=true`, Gazebo adds static transforms from
 | `seed` | `1` | Random seed for track generation |
 | `frame_id` | `"map"` | TF frame |
 | `publish_hz` | `5.0` | Publishing rate (Hz) |
-| `track_style` | `"autocross"` | Generator: `autocross` (Catmull-Rom spline), `simple` (original oval), `oval` (dedicated oval generator), or `acceleration` (fixed rules layout: 75 m start to finish, 4.9 m clear between cone bases, large orange cones flanking both lines, a 75 m small-orange exit lane; only `cone_spacing_m` applies) |
+| `track_style` | `"autocross"` | Generator or fixed import: `rules_autocross`, `amz_fsg`, `amz_fsi`, `autocross` (Catmull-Rom spline), `simple` (original oval), `oval` (dedicated oval generator), or `acceleration` (fixed rules layout: 75 m start to finish, 4.9 m clear between cone bases, large orange cones flanking both lines, a 75 m small-orange exit lane; only `cone_spacing_m` applies) |
 | `num_waypoints` | `10` | Number of waypoints around the loop (autocross only) |
 | `radius_m` | `25.0` | Base radius of the track (autocross only) |
 | `jitter_m` | `10.0` | Radial jitter per waypoint (autocross only) |

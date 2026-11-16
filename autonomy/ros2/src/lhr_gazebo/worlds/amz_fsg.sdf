@@ -24,7 +24,7 @@
 
     <gravity>0 0 -9.81</gravity>
 
-    <physics name="lhr_imported_reference_v1_05c4a03dd37b5b7749bedf9807f84c858e0a0698bb7a136248921af24ee99399" type="ode">
+    <physics name="lhr_imported_reference_v1_1dd203fa12a84e9759f217f62b978d847d50bdfe4cadd515075dcec9de93f9ec" type="ode">
       <max_step_size>0.001</max_step_size>
       <real_time_factor>1.0</real_time_factor>
     </physics>
@@ -74,7 +74,7 @@
     <include>
       <uri>model://fsae_vehicle</uri>
       <name>fsae_vehicle</name>
-      <pose>-1.9701 -0.6256 0.0000 0 0 0.1465</pose>
+      <pose>-1.8747 0.0000 0.0000 0 0 0.0000</pose>
     </include>
 
     <!-- ===== Cones ===== -->

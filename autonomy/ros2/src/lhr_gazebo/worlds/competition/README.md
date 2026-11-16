@@ -31,11 +31,12 @@ rescaling, recentering, widening or moving cones to pass rules checks.
 
 The source spawn is at the front wing. The importer moves only the vehicle's
 requested spawn backward by the canonical car's nose-to-rear-axle distance.
-The original FSI pose does not fit our full vehicle envelope. Bundled worlds
-explicitly use `--fit-spawn`: select the nearest reference vertex within 5 m
+The original FSI pose does not fit our full vehicle envelope. Its bundled world
+uses `--fit-spawn`: select the nearest reference vertex within 5 m
 and align with its tangent, requiring the whole canonical footprint to clear
 road edges and cones with 5 cm reserve. Both the requested alignment pose and
-executed spawn are recorded. Without that option an unsafe spawn is rejected.
+executed spawn are recorded. FSG preserves the valid source spawn without
+fitting. Without that option an unsafe spawn is rejected.
 Map axes and all cone coordinates are preserved. Cones use this repo's existing
 FSAE cone models and collision envelopes, rather than AMZ meshes.
 
@@ -45,11 +46,13 @@ From `autonomy/ros2`, with the ROS workspace and SciPy installed:
 
 ```bash
 for name in amz_fsg amz_fsi; do
+  fit=()
+  [ "$name" = amz_fsi ] && fit=(--fit-spawn)
   python3 src/lhr_gazebo/scripts/import_world.py \
     --source src/lhr_gazebo/worlds/competition/$name.yaml --format fssim \
     --normalized-csv src/lhr_gazebo/worlds/competition/$name.csv \
     --name $name --provenance src/lhr_gazebo/worlds/competition/provenance.json \
-    --output src/lhr_gazebo/worlds/$name.sdf --allow-out-of-envelope --fit-spawn
+    --output src/lhr_gazebo/worlds/$name.sdf --allow-out-of-envelope "${fit[@]}"
 done
 ./scripts/build.sh
 ```
@@ -72,21 +75,26 @@ hashes bind the reference, audit and exact world bytes; missing or edited files 
 
 ## Envelope flags and running
 
-The shared [rules checker](../../../lhr_trackgen/README.md#rules-compliant-autocross)
-measures length, segment straightness and circumradius on the unsmoothed
-paired gate midpoints, including closure. Smoothing applies only to the scoring
+The import audit uses the [rules envelope](../../../lhr_trackgen/README.md#rules-compliant-autocross)
+on unsmoothed paired gate midpoints, including closure. Length follows their
+polygon. A straight can contain jitter: all intervening midpoints must stay
+within 0.5 m of its endpoint chord. Radius fits a circle to 21 equally spaced
+samples of the polygon over 5 m on either side of each midpoint (capped at a
+quarter lap for short inputs), rather than three adjacent cones. The fit
+method and spatial settings are stored in the sidecar. Smoothing applies only to the scoring
 route; it cannot erase a long straight or soften an audited corner. Cone-base
 clearance uses the original boundary segments.
 Self-intersections and nearby remote boundaries are also flagged. This is a
 geometric simulator audit, not full sporting-rule or physical validation.
 Radius and straightness describe the inferred gate polygon, not an official
-racing line. Only collinear segments count as one straight; near-straight
-sections with small bends are not combined. Maximum original cone spacing is recorded as a diagnostic.
+racing line. Maximum original cone spacing is recorded as a diagnostic.
 
 | Layout | Gate-polygon length | Minimum gate-polygon radius | Minimum clear width | Flags |
 | --- | --- | --- | --- | --- |
-| `amz_fsg` | 308.84 m | 3.46 m | 2.95 m | radius <4.5 m, width <3 m, remote boundary crowding |
-| `amz_fsi` | 217.58 m | 2.50 m | 2.82 m | radius <4.5 m, width <3 m |
+| `amz_fsg` | 308.84 m | 4.63 m | 2.95 m | width <3 m, remote boundary crowding |
+| `amz_fsi` | 217.58 m | 4.65 m | 2.82 m | width <3 m |
+
+Longest audited straights are 34.24 m (FSG) and 30.97 m (FSI).
 
 Generation requires `--allow-out-of-envelope` for these retained inputs.
 Launch independently requires acknowledgement and always logs the violations:
@@ -94,29 +102,43 @@ Launch independently requires acknowledgement and always logs the violations:
 ```bash
 ros2 launch lhr_gazebo gazebo_demo.launch.py \
   track_style:=amz_fsg seed:=1 allow_noncompliant_track:=true \
-  perception:=lidar estimator:=ekf gui:=false rviz:=false max_step_m:=8
+  perception:=lidar lidar_source:=mid360 estimator:=ekf safety:=true \
+  enable_stereo_camera:=true enable_camera_lidar_fusion:=true gui:=false rviz:=false
 ```
 
 Both layouts are fixed (`seed:=1` only). The simplified `perception:=sim`
 branch observes the physical source cones through `sensor_sim`; the LiDAR
 branch observes the rendered scene or Mid-360 caster. Neither branch receives
-the scoring centerline. Pairing uses the imported median gate width instead
-of the procedural generator's width. Other generator knobs do not edit imports.
+the scoring centerline or a width prior measured from truth cones. The planner
+uses its normal configured width; the imported median width is audit metadata
+only. Generator knobs do not move imported cones. Upstream `tk_device` timing
+device coordinates remain in the verbatim YAML but are not cones and are not
+rendered as obstacles or used as our scoring gate.
 
 The [gate runner](../../../../../testing/tools/gate/README.md#imported-competition-layouts)
-can append these as diagnostic scenarios. The [Sim v2 criteria](../../../../../docs/plans/sim-v2-pass-criteria.md)
+appends these as acceptance scenarios. The [Sim v2 criteria](../../../../../docs/plans/sim-v2-pass-criteria.md)
 include these layouts. Clean laps at default planner settings remain tracked
 in [#225](https://github.com/LonghornRacingElectric/lhre/issues/225).
 The runner keeps imports opt-in and uses the current Mid-360/fusion stack.
 Course-derived lap times use the same smoothed reference as metrics;
 truth-stack baselines remain optional comparisons.
 
-FSG's sparse source gates exceed the default planner `max_step_m:=4`;
-`max_step_m:=8` above is an explicit diagnostic override, not a new planner
-default or a gate pass. FSI can also use the same override for a combined
-campaign. Preserving the original cones deliberately exposes these limits.
+FSG's sparse source gates exceed the default planner `max_step_m:=4`.
+Acceptance uses defaults; planner fixes belong in #225 rather than per-course
+overrides. Preserving the original cones deliberately exposes these limits.
 
 ## Verification
+
+The 2026-11-16 review fixes were tested on current main (`1a99e037`) with
+the Gazebo, metrics and trackgen package suites: 685 checks, no failures or
+skips, including ROS lint. Regressions cover noisy straight/radius audits,
+full stored-audit and spawn regeneration, default planner width, one imported
+repeat independent of the MVP repeat count, and complete shared-stack plans.
+The strict docs build and repository Ruff check pass. No fresh driving run
+or default-setting clean lap is claimed; that remains #225.
+
+The following evidence predates these fixes, including FSG's restored source
+spawn and removal of the truth-derived planner-width prior.
 
 On 2026-11-07, the affected trackgen, metrics and Gazebo checks reported
 953 tests, no failures and 3 skips; the strict docs build passed. Regression

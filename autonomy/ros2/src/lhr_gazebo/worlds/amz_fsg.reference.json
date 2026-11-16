@@ -5,16 +5,16 @@
   "normalized_csv_sha256": "ab7fc7b28acac50a49b134e04cc5b35977e511b8cc77a81adfa82d1da55b1463",
   "source_file": "amz_fsg.yaml",
   "spawn": [
-    -1.97008665325,
-    -0.625570182067,
-    0.14648328152110787
+    -1.8747000000000003,
+    0.0,
+    0.0
   ],
   "alignment_spawn": [
     -1.8747000000000003,
     0.0,
     0.0
   ],
-  "fit_spawn": true,
+  "fit_spawn": false,
   "removed_closing_vertices": [
     "cones_left",
     "cones_right"
@@ -2894,15 +2894,18 @@
   ],
   "rules": {
     "geometry": "unsmoothed_gate_midpoints",
+    "straight_deviation_m": 0.5,
+    "radius_half_window_m": 5.0,
+    "radius_samples": 21,
+    "radius_method": "least_squares_circle",
     "measurements": {
       "lap_length_m": 308.84242432901806,
-      "longest_straight_m": 5.604790551160851,
-      "minimum_radius_m": 3.4637087363044046,
+      "longest_straight_m": 34.24132114677029,
+      "minimum_radius_m": 4.628894580279324,
       "minimum_clear_width_m": 2.9493626893855436,
       "maximum_cone_spacing_m": 7.221162287204705
     },
     "violations": [
-      "reference turn radius below 4.5 m",
       "conservative cone-base clear width below 3 m",
       "remote boundaries crowd each other"
     ],
@@ -2929,5 +2932,5 @@
       "Derive a scoring-only closed reference by monotone ordered-boundary alignment, 0.5 m arc sampling and periodic Gaussian smoothing at a 2 m spatial scale. Do not feed it to perception or control."
     ]
   },
-  "world_sha256": "9412cefe6a447f48a299a7281508d5f32521a634b4493650ede419d218769903"
+  "world_sha256": "3d46fc8691fd6e9c4ff1c31938fd917cd7519c7f98050dfb12d1ed06bbb6c162"
 }

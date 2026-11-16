@@ -31,8 +31,13 @@ OUT=${OUT:-$HOME/lhr-test-data/$(date +%F)-mid360-fusion-gate}
 EXTRA=${EXTRA:-}
 TRACK_STYLE=${TRACK_STYLE:-autocross}
 REAL_TRACKS=${REAL_TRACKS:-}       # opt-in fixed imported layouts, seed 1
+REAL_REPEATS=${REAL_REPEATS-1}     # Sim v2 runs each imported layout once
 ALLOW_NONCOMPLIANT=${ALLOW_NONCOMPLIANT:-0}
 PLAN_ONLY=${PLAN_ONLY:-0}         # print the audited matrix, do not launch or clean up
+if [[ ! "$REAL_REPEATS" =~ ^[0-9]+$ ]]; then
+    echo 'REAL_REPEATS must be a nonnegative integer' >&2
+    exit 2
+fi
 case "$TRACK_STYLE" in
     autocross|rules_autocross) ;;
     *) echo "unsupported gate TRACK_STYLE=$TRACK_STYLE" >&2; exit 2 ;;
@@ -150,10 +155,10 @@ plan() {  # one line per run: the id, then its launch arguments
         local acknowledge=''
         [ "$ALLOW_NONCOMPLIANT" = 1 ] && acknowledge='allow_noncompliant_track:=true'
         if [ "$BASELINE" != 0 ]; then
-            echo "baseline_${style}_s1 track_style:=$style seed:=1 perception:=sim estimator:=truth lidar_source:=gazebo enable_stereo_camera:=false enable_camera_lidar_fusion:=false $acknowledge"
+            echo "baseline_${style}_s1 track_style:=$style seed:=1 $truth $acknowledge"
         fi
-        for r in $(seq 1 "$REPEATS"); do
-            echo "${style}_s1_r$r track_style:=$style seed:=1 perception:=lidar estimator:=ekf $sensors $acknowledge"
+        for r in $(seq 1 "$REAL_REPEATS"); do
+            echo "${style}_s1_r$r track_style:=$style seed:=1 $STACK $acknowledge"
         done
     done
     for r in $(seq 1 "${ACCEL_REPEATS:-0}"); do
@@ -171,7 +176,7 @@ plan() {  # one line per run: the id, then its launch arguments
 # runs.
 SKIDPAD_WORLD=$HERE/../../../ros2/src/lhr_gazebo/worlds/skidpad_seed1.sdf
 if [ "$PLAN_ONLY" = 1 ]; then
-    plan
+    checked_plan || exit 2
     exit 0
 fi
 mkdir -p "$OUT/runs"

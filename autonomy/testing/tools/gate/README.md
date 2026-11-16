@@ -232,7 +232,8 @@ thresholds in the official Sim v2 gate belong to
 ## Imported competition layouts
 
 `REAL_TRACKS="amz_fsg amz_fsi"` appends fixed imported circuits, each with its
-own `REPEATS` LiDAR/EKF runs and an optional seed-1 truth comparison
+own `REAL_REPEATS` LiDAR/EKF runs (default 1, independent of `REPEATS`)
+and an optional seed-1 truth comparison
 (`BASELINE=1`). The default is empty.
 Imports are verified before output creation or process cleanup. Flagged
 layouts require `ALLOW_NONCOMPLIANT=1`, which forwards the launch's explicit
@@ -245,9 +246,10 @@ SEEDS="" ACCEL_REPEATS=0 SKIDPAD_REPEATS=0 REPEATS=1   REAL_TRACKS="amz_fsg amz_
 ```
 
 Remove `PLAN_ONLY=1` to run it; choose a fresh `OUT` for a new campaign.
-FSG needs an explicit `EXTRA="max_step_m:=8"` to chain its sparse original
-gates with the current planner. Record this override beside results; importing
-a layout does not change controller or planner defaults.
+Use default planner settings for acceptance; importing a layout does not
+change them or derive a width prior from truth cones. Sparse-gate failures
+remain failures to fix in #225. Per-course planner overrides do not qualify
+as a Sim v2 pass. `REAL_REPEATS` must be a nonnegative integer.
 `PLAN_ONLY` prints the audited matrix without launching or stopping processes.
 The runner saves `course_audits.json`; the scorer includes flags in the
 summary. Course-derived lap times use the same imported scoring reference
