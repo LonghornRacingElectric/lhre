@@ -418,7 +418,10 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.autonomy != 'false' }}
     runs-on: ubuntu-latest
-    container: ros:jazzy-ros-base
+    # Pinned by digest so a new upstream image can't change a PR's result
+    # without a commit here. To update, take the jazzy-ros-base digest from
+    # Docker Hub and bump it in its own PR (autonomy/ros2/README.md).
+    container: ros:jazzy-ros-base@sha256:00b8d47a6e6384a2834e3d01fa87ae767876543baa574f2d64a75c04ea33c698
     defaults:
       run:
         shell: bash
