@@ -5,8 +5,10 @@ from lhr_gazebo.fmu_pose import FmuPose
 from nav_msgs.msg import Odometry
 import pytest
 import rclpy
+from rclpy.parameter import Parameter
 from rclpy.task import Future
 from rclpy.time import Time
+from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import PointCloud2
 from tf2_msgs.msg import TFMessage
 
@@ -104,9 +106,75 @@ def test_lost_pose_response_fails_on_wall_time(node):
 def test_missing_pose_service_cannot_wait_forever_on_paused_clock(node):
     from types import SimpleNamespace
     node._client = SimpleNamespace(service_is_ready=lambda: False)
+    node.set_parameters([Parameter('startup_timeout_sec', value=5.)])
     node._started -= 10.
     with pytest.raises(RuntimeError, match='unavailable'):
         node._send()
+
+
+def test_bootstrap_waits_for_gazebo_clock_not_just_bridge_services(coordinated):
+    from std_msgs.msg import String
+    node = coordinated
+    node._clock_seen = False
+    node._provenance(String(data='{"plant":"fmu"}'))
+    assert not node._control.requests
+    node._gazebo_clock(Clock())
+    assert len(node._control.requests) == 1
+
+
+def test_startup_can_exceed_service_timeout_but_is_bounded(coordinated, monkeypatch):
+    node = coordinated
+    monkeypatch.setattr('lhr_gazebo.fmu_pose.time.monotonic', lambda: node._started + 10.)
+    node._send()
+    assert not node._control.requests
+    monkeypatch.setattr('lhr_gazebo.fmu_pose.time.monotonic', lambda: node._started + 61.)
+    with pytest.raises(RuntimeError, match='unavailable'):
+        node._send()
+
+
+def test_slow_fmu_step_has_its_own_deadline(coordinated, monkeypatch):
+    node = coordinated
+    node._ready = node._startup_complete = True
+    node._cycle_target_ns = 21_000_000
+    node._bootstrap = False
+    monkeypatch.setattr('lhr_gazebo.fmu_pose.time.monotonic', lambda: node._cycle_started + 10.)
+    node._send()
+    monkeypatch.setattr('lhr_gazebo.fmu_pose.time.monotonic', lambda: node._cycle_started + 31.)
+    with pytest.raises(RuntimeError, match='did not produce'):
+        node._send()
+
+
+def test_world_control_response_keeps_short_service_deadline(coordinated, monkeypatch):
+    node = coordinated
+    node._startup_complete = True
+    node._step_world(node._physics_ns)
+    monkeypatch.setattr('lhr_gazebo.fmu_pose.time.monotonic', lambda: node._cycle_started + 6.)
+    with pytest.raises(RuntimeError, match='world-control response timed out'):
+        node._send()
+
+
+@pytest.mark.parametrize('name', [
+    'request_timeout_sec', 'startup_timeout_sec', 'step_timeout_sec'])
+@pytest.mark.parametrize('value', ['0.0', '-1.0', '.nan', '.inf'])
+def test_invalid_timeouts_rejected_at_startup(name, value):
+    rclpy.init(args=['--ros-args', '-p', f'{name}:={value}'])
+    try:
+        with pytest.raises(ValueError, match=f'{name} must be finite and positive'):
+            FmuPose()
+    finally:
+        rclpy.shutdown()
+
+
+def test_pose_observer_subscribes_to_selected_rendered_cloud():
+    rclpy.init(args=['--ros-args', '-p', 'lidar_topic:=/lhr/lidar/gazebo_points'])
+    node = FmuPose()
+    try:
+        topics = {subscription.topic_name for subscription in node.subscriptions}
+        assert '/lhr/lidar/gazebo_points' in topics
+        assert '/lhr/lidar/points' not in topics
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
 
 
 @pytest.fixture
@@ -114,6 +182,7 @@ def coordinated():
     rclpy.init()
     result = FmuPose()
     result._client, result._control = Client(), Client()
+    result._gazebo_clock(Clock())
     yield result
     result.destroy_node()
     rclpy.shutdown()
@@ -144,6 +213,7 @@ def test_world_waits_for_fmu_readiness_and_applied_pose(coordinated):
     node._control.futures[-1].set_result(ControlWorld.Response(success=True))
     node._send()
     assert len(node._control.requests) == 2
+    node.set_parameters([Parameter('step_timeout_sec', value=5.)])
     node._cycle_started -= 10.
     with pytest.raises(RuntimeError, match='did not produce'):
         node._send()

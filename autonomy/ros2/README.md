@@ -1091,4 +1091,8 @@ with `make -C simulation fmu`. `fmu_path` selects the artifact and
 also accepts `plant:=fmu`: the FMU owns motion and Gazebo renders sensors.
 `fmu_lockstep:=true` (default in FMU mode) holds Gazebo between accepted
 20 ms plant steps. See the [timing setting and Mac measurements](src/lhr_sim_fmu/README.md#gazebo-timing-report).
+Startup waits for the world's clock and FMU readiness for at most
+`fmu_startup_timeout_sec` (60 wall seconds); subsequent FMU steps have a
+separate `fmu_step_timeout_sec` (30 wall seconds). Pose and steady-state
+world-control responses use `fmu_pose_timeout_sec` (5 wall seconds).
 The default Gazebo plant choice is unchanged.

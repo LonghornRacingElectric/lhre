@@ -19,7 +19,7 @@ def distribution(values):
             'p95': values[math.ceil(.95*len(values))-1], 'min': values[0], 'max': values[-1]}
 
 
-def summarize(steps, poses, *, stereo=False):
+def summarize(steps, poses, *, stereo=False, lidar_topic=LIDAR):
     """Fail missing streams, unmeasured speeds, unmatched poses or frame-age violations."""
     groups = {}
     for name, rows in (('all', steps), ('speed_4_to_5_mps', [
@@ -36,7 +36,7 @@ def summarize(steps, poses, *, stereo=False):
     origin = next(iter(origins)) if len(origins) == 1 and None not in origins else None
     start = origin+min(r['fmu_time_sec'] for r in steps) if origin is not None else None
     sensors = {}
-    for topic in (LIDAR, *CAMERAS) if stereo else (LIDAR,):
+    for topic in (lidar_topic, *CAMERAS) if stereo else (lidar_topic,):
         stream = [r for r in poses if r['topic'] == topic]
         rows = [r for r in stream if r['sensor_stamp_sec'] > 0
                 and (start is None or r['sensor_stamp_sec'] >= start)]
@@ -65,6 +65,8 @@ def main():
     parser.add_argument('--seconds', type=float, default=180.)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--stereo', action='store_true')
+    parser.add_argument('--lidar-source', choices=('gazebo', 'mid360'), default='gazebo',
+                        help='Match the launch source; always measure Gazebo-rendered clouds')
     args = parser.parse_args()
     if not math.isfinite(args.seconds) or args.seconds <= 0:
         parser.error('--seconds must be finite and positive')
@@ -95,7 +97,8 @@ def main():
     finally:
         node.destroy_node()
         rclpy.try_shutdown()
-    report = summarize(steps, poses, stereo=args.stereo)
+    report = summarize(steps, poses, stereo=args.stereo, lidar_topic=(
+        '/lhr/lidar/gazebo_points' if args.lidar_source == 'mid360' else LIDAR))
     report['provenance'] = provenance
     report['timing_passed'] = report['timing_passed'] and bool(provenance)
     report['observed_real_time_factor'] = (

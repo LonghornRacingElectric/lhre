@@ -40,8 +40,10 @@ batch of physics steps, waits for the corresponding accepted FMU state, sends
 its pose through `set_pose`, and waits for the response before allowing the
 next batch. It keeps at most one pose request and one world-control request
 in flight. A slow solver increases wall time while simulation time waits.
-The first two physics ticks bootstrap the clock after FMU provenance is
-available. A missing state, lost/rejected request or exited FMU component
+The first two physics ticks bootstrap the FMU after its provenance and the
+world's initial clock are available. Startup has a separate wall-time budget,
+so a ready ROS service bridge alone cannot trigger stepping before Gazebo starts.
+A missing state, lost/rejected request or exited FMU component
 shuts down the launch. Manually playing or resetting the world is unsupported
 in this mode; use the launch to restart a run.
 
@@ -63,10 +65,14 @@ tools still use their ROS domain.
 | `fmu_path` | empty | Artifact and adjacent manifest; see the FMU package |
 | `fmu_pedal_gain` | 0.1 | Proportional speed-to-pedal gain, recorded only for FMU runs |
 | `fmu_command_timeout_sec` | 0.5 | Simulation seconds before braking on expired commands |
-| `fmu_pose_timeout_sec` | 5.0 | Wall seconds allowed for pose service startup/response |
+| `fmu_pose_timeout_sec` | 5.0 | Wall seconds allowed for a pose response or steady-state world-control response |
+| `fmu_startup_timeout_sec` | 60.0 | Total wall seconds for readiness and the first applied pose |
+| `fmu_step_timeout_sec` | 30.0 | Wall seconds allowed for a coordinated FMU state after startup |
 
 The internal `world_name`, `physics_step_sec` and `truth_topic` pose-node
-parameters come from the selected world and estimator/fault routing. The
+parameters come from the selected world and estimator/fault routing. The internal
+`lidar_topic` follows the bridge's rendered-cloud remapping: `/lhr/lidar/gazebo_points`
+with Mid-360, `/lhr/lidar/points` otherwise. All timeouts must be finite and positive. The
 plant update rate is the inverse of `fmu_step_sec`. `external_clock` and
 `publish_clock` are fixed by plant mode, so they are not user launch flags.
 Use `EXTRA="plant:=fmu"` with either the gate or fault runner; their defaults
@@ -76,6 +82,8 @@ Until #205 supplies native FMU IMU/wheel outputs, EKF mode uses the existing
 noisy `inertial_sim` adapter on FMU truth, including synthesized IMU. No Gazebo
 IMU is bridged in FMU mode. This is an explicit interim sensor model, not
 native suspension/wheel sensor fidelity.
+`imu_drop` therefore intercepts `inertial_sim` in FMU mode; it intercepts
+the Gazebo bridge in the Gazebo plant. Both feed the same fault injector.
 
 `/lhr/sim/render_pose` reports Gazebo's model pose. The follower matches this
 to accepted FMU poses, then logs cumulative mean/max `FMU pose lag` for each
@@ -275,7 +283,8 @@ not a measured completion probability or validation of the real sensor.
 
 Edit the template or vehicle YAML, then run
 `python3 src/lhr_gazebo/scripts/generate_vehicle_model.py` from the ROS workspace.
-Commit both regenerated models (`model.sdf` and `model_stereo.sdf`) alongside
+Commit all four regenerated models (`model.sdf`, `model_stereo.sdf`,
+`model_fmu.sdf` and `model_fmu_stereo.sdf`) alongside
 the source. The model consistency tests
 run with `colcon test --packages-select lhr_gazebo` and need no GUI.
 
@@ -607,7 +616,7 @@ LiDAR-only runs pay no camera initialization or rendering cost.
 RGB pinhole sensors, parallel axes, and a 0.12 m local-y separation. Both
 sensors share `zed2i_link`, so rotating the mount preserves Gazebo's stereo
 baseline calculation. Geometry and optics come from `lhr_vehicle`'s YAML;
-regenerate both models after changing them:
+regenerate all four models after changing them:
 
 ```bash
 cd autonomy/ros2
@@ -616,8 +625,8 @@ python3 src/lhr_gazebo/scripts/generate_vehicle_model.py --check
 ./scripts/build.sh
 ```
 
-Commit both generated SDFs. The generator and freshness tests check both
-variants against `vehicle.yaml` and the templates.
+Commit all four generated SDFs. The generator and freshness tests check every
+variant against `vehicle.yaml` and the templates.
 
 The camera-only link has no collision and uses 0.001 kg mass / 0.000001 kg m2
 diagonal inertia for simulation bookkeeping. The initial mount and optics

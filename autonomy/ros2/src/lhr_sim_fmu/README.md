@@ -91,6 +91,9 @@ the launch default remains 0.3 s. It does not change the 0.1 s pose-age
 acceptance limit.
 
 Repeat with observer `--stereo` and launch `enable_stereo_camera:=true`.
+For the gate's `lidar_source:=mid360`, also pass observer `--lidar-source mid360`:
+pose-age acceptance must use Gazebo's rendered `/lhr/lidar/gazebo_points`,
+not the synthetic caster's `/lhr/lidar/points`. A missing selected stream fails.
 Reports include artifact provenance and raw timing/pose-age samples. Keep
 these files in ignored run-data storage. `timing_passed` requires measured
 4–5 m/s motion, an explicit FMU clock origin, each selected sensor stream,

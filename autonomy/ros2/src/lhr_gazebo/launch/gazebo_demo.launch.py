@@ -212,6 +212,9 @@ def _launch_setup(context: LaunchContext):
     if external_plant:
         if fault == 'steer_freeze':
             fault_remaps = {'sim_fmu': fault_remaps['joint_cmd_adapter']}
+        elif fault == 'imu_drop':
+            # FMU mode uses inertial_sim until native sensor outputs land (#205).
+            fault_remaps = {'inertial_sim': fault_remaps['ros_gz_bridge']}
     # The sensor sim observes the plant, never the injected driving estimate.
     caster_odom = '/lhr/vehicle/odom_truth' if use_ekf else (
         '/lhr/vehicle/odom_raw' if fault in ('odom_nan', 'odom_spike')
@@ -776,6 +779,8 @@ def generate_launch_description():
         DeclareLaunchArgument('fmu_pedal_gain', default_value='0.1'),
         DeclareLaunchArgument('fmu_command_timeout_sec', default_value='0.5'),
         DeclareLaunchArgument('fmu_pose_timeout_sec', default_value='5.0'),
+        DeclareLaunchArgument('fmu_startup_timeout_sec', default_value='60.0'),
+        DeclareLaunchArgument('fmu_step_timeout_sec', default_value='30.0'),
         DeclareLaunchArgument(
             'world', default_value='',
             description='Override: absolute path to world SDF file'),

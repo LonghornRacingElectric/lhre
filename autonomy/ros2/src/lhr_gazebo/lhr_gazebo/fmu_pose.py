@@ -12,6 +12,7 @@ from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, qos_profile_sensor_data, QoSProfile
 from ros_gz_interfaces.msg import Entity
 from ros_gz_interfaces.srv import ControlWorld, SetEntityPose
+from rosgraph_msgs.msg import Clock as ClockMessage
 from sensor_msgs.msg import Image, PointCloud2
 from std_msgs.msg import String
 from tf2_msgs.msg import TFMessage
@@ -38,6 +39,13 @@ class FmuPose(Node):
         self.declare_parameter('world_name', 'fsae_world')
         self.declare_parameter('truth_topic', '/lhr/vehicle/odom_truth')
         self.declare_parameter('request_timeout_sec', 5.0)
+        self.declare_parameter('startup_timeout_sec', 60.0)
+        self.declare_parameter('step_timeout_sec', 30.0)
+        self.declare_parameter('lidar_topic', '/lhr/lidar/points')
+        for name in ('request_timeout_sec', 'startup_timeout_sec', 'step_timeout_sec'):
+            value = self.get_parameter(name).value
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError(f'{name} must be finite and positive')
         self.declare_parameter('lockstep', True)
         self.declare_parameter('step_sec', .02)
         self.declare_parameter('physics_step_sec', .001)
@@ -58,6 +66,8 @@ class FmuPose(Node):
         self._bootstrap = True
         self._applied_ns = self._sent_ns = None
         self._ready = not self._lockstep
+        self._clock_seen = False
+        self._startup_complete = False
         self._cycle_started = time.monotonic()
         self._client = self.create_client(
             SetEntityPose, '/world/' + self.get_parameter('world_name').value + '/set_pose')
@@ -73,16 +83,23 @@ class FmuPose(Node):
         if self._lockstep:
             qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
             self.create_subscription(String, '/lhr/sim/provenance', self._provenance, qos)
+            self.create_subscription(
+                ClockMessage, '/clock', self._gazebo_clock, qos_profile_sensor_data)
         self.create_subscription(Odometry, self.get_parameter('truth_topic').value,
                                  self._truth, 1)
         self.create_subscription(TFMessage, '/lhr/sim/render_pose', self._render_pose, 10)
-        for topic, kind in (('/lhr/lidar/points', PointCloud2),
+        for topic, kind in ((self.get_parameter('lidar_topic').value, PointCloud2),
                             ('/lhr/sensor/zed2i/left/image_rect', Image),
                             ('/lhr/sensor/zed2i/right/image_rect', Image)):
             self.create_subscription(kind, topic, lambda msg, t=topic: self._sensor(msg, t),
                                      qos_profile_sensor_data)
         # A stopped Gazebo clock must not hide a missing service or lost response.
         self.create_timer(.02, self._send, clock=Clock(clock_type=ClockType.STEADY_TIME))
+
+    def _gazebo_clock(self, message):
+        # The ROS service bridge can be ready before Gazebo's world exists.
+        self._clock_seen = True
+        self._send()
 
     def _truth(self, message):
         self._history.append((stamp_ns(message.header.stamp), pose_key(message.pose.pose)))
@@ -118,8 +135,10 @@ class FmuPose(Node):
 
     def _send(self):
         timeout = self.get_parameter('request_timeout_sec').value
-        if not math.isfinite(timeout) or timeout <= 0:
-            raise ValueError('request_timeout_sec must be finite and positive')
+        startup_timeout = self.get_parameter('startup_timeout_sec').value
+        if not self._startup_complete and time.monotonic() - self._started > startup_timeout:
+            raise RuntimeError(
+                'Gazebo pose/control service, clock or FMU readiness is unavailable')
         if self._future is not None:
             if not self._future.done():
                 if time.monotonic() - self._request_started > timeout:
@@ -129,9 +148,11 @@ class FmuPose(Node):
                 raise RuntimeError('Gazebo rejected FMU pose')
             self._future = None
             self._applied_ns = self._sent_ns
+            self._startup_complete = True
         if self._lockstep and self._control_future is not None:
             if not self._control_future.done():
-                if time.monotonic() - self._cycle_started > timeout:
+                if time.monotonic() - self._cycle_started > (
+                        timeout if self._startup_complete else startup_timeout):
                     raise RuntimeError('Gazebo world-control response timed out')
                 return
             if not self._control_future.result().success:
@@ -139,8 +160,8 @@ class FmuPose(Node):
             self._control_future = None
         services_ready = self._client.service_is_ready() and (
             not self._lockstep or self._control.service_is_ready())
-        if not services_ready or not self._ready:
-            if time.monotonic() - self._started > timeout:
+        if not services_ready or not self._ready or (self._lockstep and not self._clock_seen):
+            if self._startup_complete and time.monotonic() - self._cycle_started > timeout:
                 raise RuntimeError('Gazebo pose/control service or FMU readiness is unavailable')
             return
         if self._lockstep:
@@ -150,7 +171,8 @@ class FmuPose(Node):
             if self._applied_ns == self._cycle_target_ns:
                 self._step_world(self._cycle_target_ns + self._step_ns)
                 return
-            if time.monotonic() - self._cycle_started > timeout:
+            if self._startup_complete and time.monotonic() - self._cycle_started > (
+                    self.get_parameter('step_timeout_sec').value):
                 raise RuntimeError('FMU did not produce the coordinated Gazebo state')
         if self._pending is None:
             return

@@ -13,7 +13,7 @@ def stereo_model_resources(models_dir, *, external_plant=False, stereo=True) -> 
     variant = ('model_fmu_stereo.sdf' if stereo else 'model_fmu.sdf') if external_plant else (
         'model_stereo.sdf' if stereo else 'model.sdf')
     if not (source / variant).is_file():
-        raise FileNotFoundError('Missing model_stereo.sdf; regenerate the models and rebuild')
+        raise FileNotFoundError(f'Missing {variant}; regenerate the models and rebuild')
     resources = TemporaryDirectory(prefix='lhr-stereo-')
     model = Path(resources.name) / 'fsae_vehicle'
     model.mkdir()

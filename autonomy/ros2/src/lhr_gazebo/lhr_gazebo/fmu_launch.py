@@ -62,6 +62,12 @@ def fmu_actions(context, world_path, truth_topic, use_ekf, fault_remaps):
             'lockstep': ParameterValue(LaunchConfiguration('fmu_lockstep'), value_type=bool),
             'step_sec': ParameterValue(LaunchConfiguration('fmu_step_sec'), value_type=float),
             'physics_step_sec': physics_sec,
+            'lidar_topic': ('/lhr/lidar/gazebo_points' if context.launch_configurations.get(
+                'lidar_source', 'gazebo') == 'mid360' else '/lhr/lidar/points'),
+            'startup_timeout_sec': ParameterValue(
+                LaunchConfiguration('fmu_startup_timeout_sec'), value_type=float),
+            'step_timeout_sec': ParameterValue(
+                LaunchConfiguration('fmu_step_timeout_sec'), value_type=float),
             'request_timeout_sec': ParameterValue(
                 LaunchConfiguration('fmu_pose_timeout_sec'), value_type=float),
         }], output='screen')

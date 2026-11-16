@@ -256,3 +256,14 @@ def test_failed_external_clock_step_cannot_publish_a_new_stamp(monkeypatch):
     finally:
         node.destroy_node()
         rclpy.shutdown()
+
+
+def test_external_clock_cannot_also_publish_clock(monkeypatch):
+    monkeypatch.setattr('lhr_sim_fmu.sim_node.FmuPlant', lambda *a, **k: pytest.fail(
+        'Invalid clock configuration must fail before loading the native FMU'))
+    rclpy.init(args=['--ros-args', '-p', 'external_clock:=true', '-p', 'publish_clock:=true'])
+    try:
+        with pytest.raises(ValueError, match='mutually exclusive'):
+            SimFmu()
+    finally:
+        rclpy.shutdown()

@@ -34,6 +34,7 @@ scope and defers the repair.
 | Campaign | Question | Status |
 | --- | --- | --- |
 | [2026-10-24 PR #133 integration](2026-10-24-pr133-integration/README.md) | Does the source integration preserve launch/fault behavior and drive under current scoring? | **Open:** replacement GPU seed-2 cone contact; default GPU LiDAR timeout fails on the test laptop |
+| [2026-11-16 FMU integration review](2026-11-16-fmu-integration-review/README.md) | Can the combined FMU/lockstep launch start safely and route faults and timing observations? | 555 checks, no failures; three native-artifact skips. Production FMU driving remains unverified |
 
 ## Rules
 

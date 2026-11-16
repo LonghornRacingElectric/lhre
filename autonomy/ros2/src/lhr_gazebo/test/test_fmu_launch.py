@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import os
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -38,6 +39,8 @@ def test_fmu_launch_owns_truth_and_sensor_model(
     if override:
         context.launch_configurations.update(fmu_path='/tmp/a.fmu', fmu_pedal_gain='1',
                                              fmu_command_timeout_sec='2', fmu_pose_timeout_sec='9',
+                                             fmu_startup_timeout_sec='90',
+                                             fmu_step_timeout_sec='45',
                                              fmu_lockstep='false', fmu_step_sec='0.04')
     actions = module._launch_setup(context)
     from launch.utilities import perform_substitutions
@@ -80,6 +83,8 @@ def test_fmu_launch_owns_truth_and_sensor_model(
         rclpy.shutdown()
     pose = evaluate_parameters(context, nodes['fmu_pose']._Node__parameters)[0]
     assert pose['request_timeout_sec'] == (9. if override else 5.)
+    assert pose['startup_timeout_sec'] == (90. if override else 60.)
+    assert pose['step_timeout_sec'] == (45. if override else 30.)
     assert pose['lockstep'] is (not override)
     assert pose['step_sec'] == (.04 if override else .02)
     assert pose['physics_step_sec'] == .001
@@ -90,7 +95,8 @@ def test_fmu_launch_owns_truth_and_sensor_model(
     rclpy.init(args=args)
     pose_node = FmuPose()
     try:
-        for name in ('lockstep', 'step_sec', 'physics_step_sec', 'request_timeout_sec'):
+        for name in ('lockstep', 'step_sec', 'physics_step_sec', 'request_timeout_sec',
+                     'startup_timeout_sec', 'step_timeout_sec', 'lidar_topic'):
             assert pose_node.get_parameter(name).value == pose[name]
     finally:
         pose_node.destroy_node()
@@ -110,7 +116,7 @@ def test_fmu_launch_owns_truth_and_sensor_model(
         if isinstance(action, SetEnvironmentVariable):
             action.execute(context)
     assert context.environment['GZ_PARTITION']
-    model_path = Path(context.environment['GZ_SIM_RESOURCE_PATH'].split(':')[0])
+    model_path = Path(context.environment['GZ_SIM_RESOURCE_PATH'].split(os.pathsep)[0])
     model = ET.parse(model_path/'fsae_vehicle/model.sdf')
     assert model.findtext('model/static') == 'true'
     assert len(model.findall(".//sensor[@type='camera']")) == (2 if stereo == 'true' else 0)
@@ -126,6 +132,106 @@ def test_spawn_is_the_saved_world_pose():
     world, pose = world_spawn(PKG/'worlds/autocross_seed1.sdf')
     assert world == 'fsae_world'
     assert pose == pytest.approx((18.1095, -14.7442, .9405))
+
+
+@pytest.mark.parametrize('fault', ['steer_freeze', 'odom_nan', 'odom_spike'])
+@pytest.mark.parametrize('estimator', ['truth', 'ekf'])
+@pytest.mark.parametrize('lidar_source', ['gazebo', 'mid360'])
+def test_fmu_fault_routing_preserves_truth_and_rendered_sensor_stream(
+        fault, estimator, lidar_source, monkeypatch):
+    spec = importlib.util.spec_from_file_location(
+        'fault_launch', PKG/'launch/gazebo_demo.launch.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module, 'get_package_share_directory', lambda _: str(PKG))
+    context = LaunchContext()
+    for action in module.generate_launch_description().entities:
+        if isinstance(action, DeclareLaunchArgument):
+            action.execute(context)
+    context.launch_configurations.update(
+        plant='fmu', perception='lidar', estimator=estimator, fault=fault,
+        lidar_source=lidar_source, enable_stereo_camera='true',
+        enable_camera_lidar_fusion='true', safety='true')
+    actions = module._launch_setup(context)
+    nodes = {n._Node__node_name: n for n in actions if isinstance(n, Node)}
+
+    def remaps(name):
+        node = nodes[name]
+        node._perform_substitutions(context)
+        return dict(node.expanded_remapping_rules or [])
+
+    truth = ('/lhr/vehicle/odom_truth' if estimator == 'ekf' else
+             '/lhr/vehicle/odom_raw' if fault.startswith('odom_') else '/lhr/vehicle/odom')
+    assert remaps('sim_fmu')['/lhr/vehicle/odom'] == truth
+    if fault == 'steer_freeze':
+        assert remaps('sim_fmu')['/lhr/vehicle/cmd'] == '/lhr/vehicle/cmd_actuated'
+        assert 'joint_cmd_adapter' not in nodes
+    else:
+        assert '/lhr/vehicle/cmd' not in remaps('sim_fmu')
+        if estimator == 'ekf':
+            assert remaps('ekf_node')['/lhr/vehicle/odom'] == '/lhr/vehicle/odom_raw'
+    pose = evaluate_parameters(context, nodes['fmu_pose']._Node__parameters)[0]
+    assert pose['truth_topic'] == truth
+    cloud = '/lhr/lidar/gazebo_points' if lidar_source == 'mid360' else '/lhr/lidar/points'
+    assert pose['lidar_topic'] == cloud
+    assert remaps('ros_gz_bridge').get('/lhr/lidar/points', '/lhr/lidar/points') == cloud
+    if lidar_source == 'mid360':
+        assert remaps('lidar_sim')['/lhr/vehicle/odom'] == truth
+    for action in actions:
+        if isinstance(action, RegisterEventHandler):
+            from launch.event_handlers import OnShutdown
+            if isinstance(action.event_handler, OnShutdown):
+                action.event_handler.handle(Shutdown(reason='test'), context)
+
+
+@pytest.mark.parametrize('pose,match', [
+    ('0 0 0 0 0 0', 'world-relative'),
+    ('0 0 1 0 0 0', 'planar'),
+    ('0 0 0 0.1 0 0', 'planar'),
+    ('nan 0 0 0 0 0', 'Invalid'),
+    ('0 0', 'Invalid'),
+])
+def test_invalid_world_spawn_is_rejected(tmp_path, pose, match):
+    relative = ' relative_to="track"' if match == 'world-relative' else ''
+    world = tmp_path/'world.sdf'
+    world.write_text('<sdf><world name="test"><include><uri>model://fsae_vehicle</uri>'
+                     f'<pose{relative}>{pose}</pose></include></world></sdf>')
+    with pytest.raises(ValueError, match=match):
+        world_spawn(world)
+
+
+def test_fractional_physics_step_is_rejected(monkeypatch):
+    from lhr_gazebo.fmu_launch import fmu_actions
+    context = LaunchContext()
+    context.launch_configurations['fmu_step_sec'] = '0.0205'
+    with pytest.raises(ValueError, match='multiple of the world physics step'):
+        fmu_actions(context, PKG/'worlds/autocross_seed1.sdf', '/truth', False, {})
+
+
+def test_fmu_imu_dropout_routes_the_interim_inertial_publisher(monkeypatch):
+    spec = importlib.util.spec_from_file_location(
+        'imu_fault_launch', PKG/'launch/gazebo_demo.launch.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module, 'get_package_share_directory', lambda _: str(PKG))
+    context = LaunchContext()
+    for action in module.generate_launch_description().entities:
+        if isinstance(action, DeclareLaunchArgument):
+            action.execute(context)
+    context.launch_configurations.update(
+        plant='fmu', perception='lidar', estimator='ekf', fault='imu_drop',
+        lidar_source='mid360', enable_stereo_camera='true',
+        enable_camera_lidar_fusion='true', safety='true')
+    actions = module._launch_setup(context)
+    nodes = {n._Node__node_name: n for n in actions if isinstance(n, Node)}
+    inertial = nodes['inertial_sim']
+    inertial._perform_substitutions(context)
+    assert ('/lhr/imu/data', '/lhr/imu/data_raw') in (inertial.expanded_remapping_rules or [])
+    for action in actions:
+        if isinstance(action, RegisterEventHandler):
+            from launch.event_handlers import OnShutdown
+            if isinstance(action.event_handler, OnShutdown):
+                action.event_handler.handle(Shutdown(reason='test'), context)
 
 
 def test_fmu_launch_preserves_requested_transport_partition(monkeypatch):

@@ -56,3 +56,11 @@ def test_missing_timebase_cannot_claim_timing_acceptance():
     row = step()
     del row['clock_origin_sec']
     assert not summarize([row], [pose()])['timing_passed']
+
+
+def test_mid360_timing_requires_rendered_cloud_not_synthetic_caster():
+    rendered = '/lhr/lidar/gazebo_points'
+    assert not summarize([step()], [pose()], lidar_topic=rendered)['timing_passed']
+    result = summarize([step()], [pose(rendered)], lidar_topic=rendered)
+    assert result['timing_passed']
+    assert set(result['sensors']) == {rendered}
