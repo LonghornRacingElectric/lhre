@@ -27,10 +27,13 @@ def test_fixed_course_envelope_spacing_and_identity(name):
 
 
 @pytest.mark.parametrize('name', ['extreme_narrow', 'extreme_combined'])
-def test_clear_width_is_three_metres_throughout_within_one_centimetre(name):
+def test_minimum_clear_width_hits_three_metres_within_one_centimetre(name):
     left, right = generate_extreme_track(name)
-    assert check_envelope(left, right)['minimum_clear_width_m'] >= 3.
-    assert max(math.dist(a, b)-BASE for a, b in zip(left, right)) <= 3.01
+    # The fixture targets the narrowest road clearance, not the paired cone
+    # distance: finite chords need extra reserve on a turn to remain legal.
+    minimum = check_envelope(left, right)['minimum_clear_width_m']
+    assert 3. <= minimum <= 3.01
+    assert all(math.dist(a, b)-BASE >= minimum for a, b in zip(left, right))
 
 
 @pytest.mark.parametrize('name', ['extreme_hairpin', 'extreme_combined'])
