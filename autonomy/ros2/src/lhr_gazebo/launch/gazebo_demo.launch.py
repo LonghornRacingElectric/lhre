@@ -263,11 +263,14 @@ def _launch_setup(context: LaunchContext):
 
     resource_path = models_dir
     resource_cleanup = []
-    if enable_stereo:
-        from lhr_gazebo.stereo_camera import stereo_model_resources
+    imu_noise = context.launch_configurations.get('imu_noise', 'true').lower() == 'true'
+    gyro_bias = float(context.launch_configurations.get('gyro_bias', '0.0'))
+    if enable_stereo or not imu_noise or gyro_bias != 0.0:
+        from lhr_gazebo.imu_model import imu_model_resources
         # Keep world URIs and mesh paths identical in both modes. The overlay
         # lives for this launch only; concurrent runs never edit shared models.
-        resources = stereo_model_resources(models_dir)
+        resources = imu_model_resources(models_dir, stereo=enable_stereo,
+                                        noise_enabled=imu_noise, gyro_bias=gyro_bias)
         resource_path = os.pathsep.join((resources.name, models_dir))
         resource_cleanup.append(RegisterEventHandler(OnShutdown(
             on_shutdown=lambda event, context: resources.cleanup())))
@@ -284,6 +287,7 @@ def _launch_setup(context: LaunchContext):
         gz_cmd = ['gz', 'sim', '-r', world_path]
     else:
         gz_cmd = ['gz', 'sim', '-r', '-s', world_path]
+    gz_cmd += ['--seed', context.launch_configurations.get('seed', '1')]
 
     gz_sim = ExecuteProcess(
         cmd=gz_cmd,
@@ -326,7 +330,6 @@ def _launch_setup(context: LaunchContext):
             name='inertial_sim',
             parameters=[{
                 'publish_imu': False,
-                'gyro_bias': _float('gyro_bias'),
                 'wheel_scale_error': _float('wheel_scale_error'),
                 'use_sim_time': True,
             }],
@@ -580,6 +583,7 @@ def _launch_setup(context: LaunchContext):
                 'perception': perception,
                 'estimator': 'ekf' if use_ekf else 'truth',
                 'gyro_bias': ParameterValue(LaunchConfiguration('gyro_bias'), value_type=float),
+                'imu_noise': ParameterValue(LaunchConfiguration('imu_noise'), value_type=bool),
                 'wheel_scale_error': ParameterValue(
                     LaunchConfiguration('wheel_scale_error'), value_type=float),
                 'lidar_classify_sides': classify_sides,
@@ -781,7 +785,10 @@ def generate_launch_description():
             description='Odometry source: "truth" (Gazebo) or "ekf"'),
         DeclareLaunchArgument(
             'gyro_bias', default_value='0.0',
-            description='Gyro bias (rad/s); recorded only, Gazebo bridges its own IMU'),
+            description='Additional signed native IMU z-gyro offset (rad/s)'),
+        DeclareLaunchArgument(
+            'imu_noise', default_value='true', choices=['true', 'false'],
+            description='Native gyro/accelerometer noise and startup bias from vehicle.yaml'),
         DeclareLaunchArgument(
             'wheel_scale_error', default_value='1.0',
             description='Simulated rolling-radius error (1.0 = exact)'),

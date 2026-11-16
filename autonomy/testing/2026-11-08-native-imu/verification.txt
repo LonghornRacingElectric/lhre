@@ -1,0 +1,14 @@
+Build: 16 packages completed (scripts/build.sh, system Python / ROS Jazzy).
+Gazebo package: 292 passed.
+Aggregate completed test XML: 1067 tests, 0 errors, 0 failures, 2 skipped.
+This is NOT a complete workspace pass: 3 BobSim functional tests did not complete.
+Initial BobSim failures were missing native BOBSIM_ROOT/BOBSIM_VEHICLE settings.
+Rerun used the documented paths, but the solver was interrupted after 206.42 s.
+Final ament_flake8: 62 files checked, no problems found.
+Final ament_pep257: no problems found.
+Generator --check: both committed SDFs in sync.
+gz sdf -k: both standard and stereo models Valid.
+Stationary checks: cadence, six-axis noise spreads, signed +/-0.03 gyro bias, startup bias pass.
+Strict MkDocs: final report/navigation build passed (4.78 s). Command: uv run --group docs mkdocs build --strict --site-dir /tmp/lhre-imu171-docs
+Detailed original build/test/lint/docs logs remain under data/imu171/verification/.
+Independent bag cross-check: 8/8 pass; max discrepancy 0.00004875 m.

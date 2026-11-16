@@ -759,3 +759,58 @@ within the original 200 m plane serialize unchanged.
 Metrics scores the actual world's paired centerline without a style-specific
 route shortcut. These courses can expose failures in perception and planning;
 passing the geometry checks does not imply the autonomy gate passes.
+
+## Native IMU noise and bias
+
+Gazebo's physics IMU supplies the EKF; `inertial_sim` still publishes wheel
+speeds with `publish_imu:=false`. Native gyro/accelerometer white noise and
+startup bias now come from `sensors.imu` in vehicle.yaml. See the
+[component specifications and assumptions](../lhr_vehicle/README.md#native-gazebo-imu).
+The estimator, wheel-speed source, sensor cadence, actuator model and gate
+thresholds retain their existing behavior.
+
+- `imu_noise:=true` is the Gazebo default. `imu_noise:=false` zeros native
+  nominal noise and startup bias for a clean control.
+- `gyro_bias:=<rad/s>` adds a signed native z-gyro offset in either mode;
+  an explicit bias remains active when nominal noise is disabled.
+- `seed:=` also reaches Gazebo's random generator. Matching seeds does not
+  guarantee identical scheduling, trajectories or random-number consumption.
+- Launch-local overlays preserve both standard and stereo sensors and do
+  not modify installed SDFs. Concurrent launches do not share mutable models.
+- Metrics record `imu_noise`, `gyro_bias` and the vehicle YAML fingerprint.
+
+From the ROS workspace after building and sourcing `install/setup.bash`:
+
+```bash
+python3 src/lhr_gazebo/scripts/validate_imu.py data/imu-fidelity-stationary
+```
+
+This checks actual bridged six-axis signals while parked: white-noise spread,
+startup offsets, clean output, cadence and both signs of `gyro_bias`.
+To compare the current gate with identical settings except nominal IMU noise,
+run the campaigns separately so an expected failed gate does not suppress the
+second run:
+
+```bash
+SEEDS="1 2 3" REPEATS=1 ACCEL_REPEATS=1 SKIDPAD_REPEATS=0 \
+  OUT="$PWD/data/imu-fidelity-clean" EXTRA="imu_noise:=false gyro_bias:=0.0" \
+  ../testing/tools/gate/run_gate.sh
+SEEDS="1 2 3" REPEATS=1 ACCEL_REPEATS=1 SKIDPAD_REPEATS=0 \
+  OUT="$PWD/data/imu-fidelity-native" EXTRA="imu_noise:=true gyro_bias:=0.0" \
+  ../testing/tools/gate/run_gate.sh
+python3 src/lhr_gazebo/scripts/compare_imu.py data/imu-fidelity-comparison \
+  --campaign clean=data/imu-fidelity-clean --campaign native=data/imu-fidelity-native
+python3 src/lhr_gazebo/scripts/verify_imu_bags.py data/imu-fidelity-bag-check.csv \
+  --campaign clean=data/imu-fidelity-clean --campaign native=data/imu-fidelity-native
+```
+
+These are bounded diagnostic campaigns. Use the gate runner's full default
+seed/repeat/event matrix for a full acceptance claim. Keep safety and sensor
+settings identical; any machine-specific timeout override must be applied to
+both modes and recorded explicitly. The gate runner cleans up Gazebo/ROS
+processes between runs: use a dedicated simulation session.
+
+The comparison retains missing values, failed checks and early stops. The
+independent bag checker recomputes timestamp-aligned errors without reusing
+the metrics alignment code. See the [retained historical evidence and current
+validation limits](../../../testing/2026-11-08-native-imu/README.md).
