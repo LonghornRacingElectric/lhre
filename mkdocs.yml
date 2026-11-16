@@ -25,6 +25,8 @@ nav:
       - ADR-015 Study Layout: docs/architecture/015-study-layout.md
       - ADR-016 FMU Artifact Boundary: docs/architecture/016-fmu-artifact-boundary.md
       - ADR-017 Tests Gate Merges: docs/architecture/017-tests-gate-merges.md
+      - ADR-018 Windows Shell-Free: docs/architecture/018-windows-shell-free.md
+      - ADR-019 HIL Job Service: docs/architecture/019-hil-job-service.md
       - Build System: docs/build-system.md
       - Testing: docs/testing.md
       - Cookbook: docs/cookbook.md
@@ -83,6 +85,9 @@ nav:
       - Perception Tests: autonomy/ros2/src/lhr_perception/test/README.md
       - Gazebo: autonomy/ros2/src/lhr_gazebo/README.md
       - Gazebo Worlds: autonomy/ros2/src/lhr_gazebo/worlds/README.md
+
+      - Competition Layouts: autonomy/ros2/src/lhr_gazebo/worlds/competition/README.md
+      - Competition Data License: autonomy/ros2/src/lhr_gazebo/worlds/competition/LICENSE.md
       - Mid-360 Lidar Sim: autonomy/ros2/src/lhr_lidar_sim/README.md
       - State Estimation: autonomy/ros2/src/lhr_state_estimation/README.md
       - Safety Monitor: autonomy/ros2/src/lhr_safety/README.md
@@ -135,6 +140,7 @@ nav:
       - Agent Instructions: simulation/AGENTS.md
   - Apps:
       - Overview: apps/README.md
+      - HIL Jobs: apps/job_runner/README.md
       - BEVO:
           - Overview: apps/BEVO/README.md
           - cand: apps/BEVO/cand/README.md

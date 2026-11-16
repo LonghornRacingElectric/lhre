@@ -1,0 +1,48 @@
+--- a/bazel/private/oss/toolchains/prebuilt/protoc_authenticity.bzl
++++ b/bazel/private/oss/toolchains/prebuilt/protoc_authenticity.bzl
+@@ -15,6 +15,45 @@
+     proto_lang_toolchain_info = toolchain.proto
+     validation_output = ctx.actions.declare_file("validation_output.txt")
+ 
++    # lhre patch: run_shell needs bash, and Windows builds have none. Do the
++    # same version comparison there with cmd.exe builtins, so the check keeps
++    # running on Windows instead of being skipped.
++    if ctx.configuration.host_path_separator == ";":
++        script = ctx.actions.declare_file("validation.bat")
++        ctx.actions.write(
++            output = script,
++            is_executable = True,
++            content = "\r\n".join([
++                "@echo off",
++                "\"{protoc}\" --version > \"{out}\"",
++                "if errorlevel 1 exit /b 1",
++                "findstr /e /c:\"-dev\" \"{out}\" >nul && exit /b 0",
++                "findstr /b /c:\"libprotoc {version}\" \"{out}\" >nul && exit /b 0",
++                "echo {severity}: protoc version does not match protobuf Bazel module; we do not support this. 1>&2",
++                "echo Expected: libprotoc {version} 1>&2",
++                "type \"{out}\" 1>&2",
++                "exit /b {mismatch_exit_code}",
++                "",
++            ]).format(
++                protoc = proto_lang_toolchain_info.proto_compiler.executable.path.replace("/", "\\"),
++                out = validation_output.path.replace("/", "\\"),
++                version = RELEASE_VERSION.removeprefix("v"),
++                mismatch_exit_code = 1 if ctx.attr.fail_on_mismatch else 0,
++                severity = "ERROR" if ctx.attr.fail_on_mismatch else "INFO",
++            ),
++        )
++        ctx.actions.run(
++            mnemonic = "ProtocAuthenticityCheck",
++            outputs = [validation_output],
++            inputs = [script],
++            tools = [proto_lang_toolchain_info.proto_compiler],
++            executable = "cmd.exe",
++            arguments = ["/d", "/c", script.path.replace("/", "\\")],
++            # findstr is resolved through PATH (System32).
++            use_default_shell_env = True,
++        )
++        return [OutputGroupInfo(_validation = depset([validation_output]))]
++
+     ctx.actions.run_shell(
+         mnemonic = "ProtocAuthenticityCheck",
+         outputs = [validation_output],

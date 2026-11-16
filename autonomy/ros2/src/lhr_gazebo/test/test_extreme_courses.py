@@ -5,6 +5,7 @@ import math
 import os
 from pathlib import Path
 import subprocess
+import xml.etree.ElementTree as ET
 
 from launch import LaunchContext
 from lhr_metrics.reference import (
@@ -17,6 +18,7 @@ import pytest
 from test_acceleration_event import _launch, _params
 from test_launch_param_types import _start
 from test_rules_autocross import load
+from test_gate_runner import gate_stack, runner_prefix
 
 PACKAGE = Path(__file__).parents[1]
 TOOLS = Path(__file__).parents[4]/'testing/tools/gate'
@@ -28,6 +30,10 @@ def test_saved_world_is_current_legal_and_has_a_complete_reference(name, tmp_pat
     left, right, cones = world_geometry(committed)
     report = check_envelope(left, right)
     assert len(cones) == len(left)+len(right)
+    for side in (left, right):
+        gaps = [math.dist(a, b) for a, b in zip(side, side[1:]+side[:1])]
+        assert min(gaps) >= .5, f'{name}: overlapping or wall-like cone placement'
+        assert max(gaps) <= 2.01
     expected = generate_extreme_track(name)
     for actual_side, expected_side in zip((left, right), expected):
         assert len(actual_side) == len(expected_side)
@@ -44,6 +50,7 @@ def test_saved_world_is_current_legal_and_has_a_complete_reference(name, tmp_pat
     subprocess.run(['python3', str(PACKAGE/'scripts/generate_world.py'),
                     '--style', name, '--output', str(output)], check=True, capture_output=True)
     regenerated = world_geometry(output)
+    assert output.read_text() == committed.read_text()  # Include the saved vehicle spawn.
     for actual_side, expected_side in zip(regenerated[:2], (left, right)):
         assert len(actual_side) == len(expected_side)
         assert max(math.dist(a, b) for a, b in zip(actual_side, expected_side)) < 1e-8
@@ -78,8 +85,7 @@ def test_fixed_style_reaches_both_perception_branches(monkeypatch, name, percept
 
 
 def plan(tmp_path, extremes):
-    script = (TOOLS/'run_gate.sh').read_text().split('# Skidpad joins the matrix')[0]
-    script = script.replace('HERE=$(cd "$(dirname "$0")" && pwd)', f'HERE="{TOOLS}"')
+    script = runner_prefix()
     env = dict(os.environ, SEEDS='', EXTREMES=extremes, REPEATS='2', BASELINE='1',
                ACCEL_REPEATS='0', SKIDPAD_REPEATS='0', OUT=str(tmp_path))
     return subprocess.run(['bash', '-c', script+'\nSKIDPAD_WORLD=/missing\nplan'],
@@ -90,18 +96,17 @@ def test_gate_plans_all_cases_and_keeps_matching_baselines(tmp_path):
     result = plan(tmp_path, 'all')
     assert result.returncode == 0, result.stderr
     lines = result.stdout.splitlines()
-    assert len(lines) == 3*len(SCENARIOS)
+    assert len(lines) == 2*len(SCENARIOS)
     assert len({line.split()[0] for line in lines}) == len(lines)
     for line in lines:
         if 'perception:=lidar' in line:
-            assert 'lidar_source:=mid360' in line
-            assert 'enable_stereo_camera:=true' in line
-            assert 'enable_camera_lidar_fusion:=true' in line
+            args = dict(arg.split(':=', 1) for arg in line.split()[1:])
+            assert gate_stack().items() <= args.items()
         else:
             assert 'enable_stereo_camera:=false' in line
     scorer = load('extreme_gate', TOOLS/'score_gate.py')
     for name in SCENARIOS:
-        expected = [f'baseline_{name}_s1', f'{name}_s1_r1', f'{name}_s1_r2']
+        expected = [f'baseline_{name}_s1', f'{name}_s1_r1']
         actual = [line.split()[0] for line in lines if f'track_style:={name} ' in line]
         assert actual == expected
         row = scorer.score(str(tmp_path/'missing'), expected[1])
@@ -125,7 +130,19 @@ def test_gate_plans_all_cases_and_keeps_matching_baselines(tmp_path):
 def test_gate_accepts_subsets_and_rejects_unknown_names(tmp_path):
     subset = plan(tmp_path, 'extreme_hairpin extreme_500m')
     assert subset.returncode == 0
-    assert len(subset.stdout.splitlines()) == 6
+    assert len(subset.stdout.splitlines()) == 4
     invalid = plan(tmp_path, 'extreme_typo')
     assert invalid.returncode == 2
     assert 'unsupported extreme' in invalid.stderr
+
+
+@pytest.mark.parametrize('name', ['extreme_hairpin', 'extreme_slalom_chicane'])
+def test_fixture_spawn_precedes_the_entire_approach(name):
+    left, right, _ = world_geometry(PACKAGE/f'worlds/{name}_seed1.sdf')
+    expected = [(a+b)/2 for a, b in zip(left[0], right[0])]
+    root = ET.parse(PACKAGE/f'worlds/{name}_seed1.sdf')
+    include = next(x for x in root.findall('world/include')
+                   if x.findtext('uri') == 'model://fsae_vehicle')
+    spawn = [float(v) for v in include.findtext('pose').split()]
+    assert spawn[:2] == pytest.approx(expected, abs=1e-4)
+    assert spawn[5] == 0.

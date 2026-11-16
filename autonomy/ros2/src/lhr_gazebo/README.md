@@ -363,9 +363,17 @@ driving.
 ## Fault injection
 
 `fault:=<kind>` starts `fault_injector`, which breaks one thing
-`fault_after_s` (30) after the mission reaches `DRIVING`, for
-`fault_duration_s` (0 = until shutdown), and announces it on
-`/lhr/sim/fault`. It exists to test `lhr_safety`
+`fault_after_s` (30) after the mission reaches `DRIVING`, once the car is at
+least `fault_min_speed_mps` (0 = any speed) fast, for `fault_duration_s`
+(0 = until shutdown), and announces it on `/lhr/sim/fault`. The speed comes
+from the plant's own odometry, the same clean pose the Mid-360 caster reads,
+so an odometry fault cannot decide when it starts. A time alone is not
+enough to test a speed: on the oval the 8 m/s tier was always at a tight
+end, doing 5.3 m/s, when 25 s came round
+([#207](https://github.com/LonghornRacingElectric/lhre/issues/207)). When the
+delay is over but the car is still under the speed, the injector logs it once,
+with the plant's speed and whether any plant odometry arrived, so a gate that
+never opens shows in the launch log. It exists to test `lhr_safety`
 ([#117](https://github.com/LonghornRacingElectric/lhre/issues/117)); without
 `fault:=` nothing is rewired.
 
@@ -377,11 +385,15 @@ driving.
 | `lidar_drop` | The selected source publishes `/lhr/lidar/points_raw`; the injector stops relaying |
 | `cmd_nan` | `pure_pursuit` publishes `/lhr/vehicle/cmd_raw`; the injector relays it with NaN steering |
 | `steer_freeze` | `joint_cmd_adapter` reads `/lhr/vehicle/cmd_actuated`, which the injector holds at the fault's steering angle |
+| `imu_drop` | The bridge publishes Gazebo's IMU on `/lhr/imu/data_raw`; the injector stops relaying |
+| `wheel_drop` | `inertial_sim` publishes `/lhr/sensor/wheel_speeds_raw`; the injector stops relaying |
+| `mission_kill` | `pkill -9` `mission_manager`. It trips `MISSION_STALE`, but nothing in sim stops the car afterwards (see [lhr_safety](../lhr_safety/README.md#not-done-here)) |
 
-`ekf_kill` needs `estimator:=ekf` (there is no `ekf_node` otherwise) and
+`ekf_kill`, `imu_drop` and `wheel_drop` need `estimator:=ekf` (there is no
+`ekf_node` otherwise, and `safety_node` only watches its inputs under it) and
 `lidar_drop` needs `perception:=lidar` (`safety_node` only watches the LiDAR
-there); the launch refuses either combination rather than run a fault that
-cannot trip. The `/lhr/sim/fault` event goes out before the signal, and the
+there); the launch refuses any of these combinations rather than run a fault
+that cannot trip. The `/lhr/sim/fault` event goes out before the signal, and the
 injector logs an error if `pkill` finds no process.
 
 The matrix runner and scoring are in
@@ -759,3 +771,22 @@ XY coordinates and validates its serialized geometry. Other styles retain
 their prior precision. Rebuild after regeneration; freshness and geometry
 checks run in `lhr_gazebo`'s tests. The catalog lists usage and the intended
 failure modes; a valid scene is not a successful autonomy gate run.
+
+## Imported competition worlds
+
+`track_style:=amz_fsg` and `track_style:=amz_fsi` select fixed source layouts
+(`seed:=1` only). See [competition data](worlds/competition/README.md) for
+provenance, normalization, importer commands and measured envelope flags.
+`allow_noncompliant_track:=false` rejects flagged imports by default; set it
+to `true` to acknowledge the logged violations, including in acceptance runs.
+
+The world and its hash-bound `.reference.json` must stay together. An explicit
+`world:=...` import must use its metadata's `layout_id` as `track_style`.
+In `perception:=sim`, `world_cones` replaces the procedural publisher and
+publishes only the original physical cones to `/lhr/track/cones`, where
+`sensor_sim` applies visibility. Its typed `world_sdf` node parameter derives
+from the existing `world` selection rather than a second, independent launch
+argument. LiDAR mode does not start this publisher. The inferred centerline
+is available only to metrics and viewer truth. Imported nominal width is the
+median aligned gate width for auditing, not a planner input. The planner keeps
+its normal configured width; procedural width/spacing knobs do not move cones.

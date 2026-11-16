@@ -3,6 +3,7 @@
 import hashlib
 import json
 import math
+from pathlib import Path
 import xml.etree.ElementTree as ET
 
 
@@ -44,6 +45,15 @@ def world_geometry(filename, *, acceleration=False):
         if key in sides[side]:
             raise ValueError('duplicate world boundary position or cone index')
         sides[side][key] = pose[:2]
+    imported = imported_reference(filename)
+    if imported is not None:
+        ordered = [[sides[k][i] for i in sorted(sides[k])] for k in (0, 1)]
+        pairs = imported['pairs']
+        for k in (0, 1):
+            if {p[k] for p in pairs} != set(range(len(ordered[k]))):
+                raise ValueError('imported pairing must cover every original boundary cone')
+        left, right = [[ordered[k][p[k]] for p in pairs] for k in (0, 1)]
+        return left, right, cones
     # Indices may have gaps where another model replaced a cone. Missing
     # partners must still fail, rather than zip unrelated boundary vertices.
     keys = sorted(sides[0])
@@ -57,7 +67,42 @@ def world_geometry(filename, *, acceleration=False):
 def world_centerline(filename, *, acceleration=False):
     """Read the reference centerline, preserving the geometry-only API."""
     left, right, _ = world_geometry(filename, acceleration=acceleration)
-    return paired_centerline(left, right)
+    imported = imported_reference(filename)
+    return imported['centerline'] if imported is not None else paired_centerline(left, right)
+
+
+def imported_reference(filename):
+    """Bind an imported route to exact scene bytes; a missing/stale sidecar fails closed."""
+    path = Path(filename)
+    sidecar = path.with_suffix('.reference.json')
+    marker = ET.parse(path).find('world/physics')
+    required = (marker is not None
+                and marker.get('name', '').startswith('lhr_imported_reference_v1_'))
+    if not required and not sidecar.exists():
+        return None
+    if not required or not sidecar.is_file():
+        raise ValueError('imported world requires its matching .reference.json sidecar')
+    data = json.loads(sidecar.read_text())
+    if data.get('schema') != 'lhre.imported-course.v1':
+        raise ValueError('unsupported imported reference schema')
+    if hashlib.sha256(path.read_bytes()).hexdigest() != data.get('world_sha256'):
+        raise ValueError('imported reference world hash mismatch')
+    payload = {k: v for k, v in data.items() if k != 'world_sha256'}
+    expected = hashlib.sha256(json.dumps(
+        payload, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    if marker.get('name') != 'lhr_imported_reference_v1_'+expected:
+        raise ValueError('imported reference metadata hash mismatch')
+    ReferenceTrack(data['centerline'])
+    pairs = data.get('pairs', [])
+    if not pairs or any(len(p) != 2 or any(type(i) is not int or i < 0 for i in p) for p in pairs):
+        raise ValueError('invalid imported boundary pairing')
+    if data['rules'].get('status') not in ('within_envelope', 'outside_envelope'):
+        raise ValueError('imported reference is missing its rules audit')
+    if bool(data['rules']['violations']) != (data['rules']['status'] == 'outside_envelope'):
+        raise ValueError('inconsistent imported rules audit')
+    if not math.isfinite(data['nominal_width_m']) or data['nominal_width_m'] <= 0:
+        raise ValueError('invalid imported nominal track width')
+    return data
 
 
 class ReferenceTrack:

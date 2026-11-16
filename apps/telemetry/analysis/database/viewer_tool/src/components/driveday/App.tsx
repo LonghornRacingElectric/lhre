@@ -9,7 +9,7 @@ import { Session } from "@/lib/driveday/session";
 import { loadUserState, lsDel, lsGet, lsSet, metaOf, runStore, saveUserState, storageProblem } from "@/lib/driveday/storage";
 import { isConeLabel, seedFlags, type RunListEntry, type SessionExport } from "@/lib/driveday/types";
 import { defaultUnits } from "@/lib/driveday/units";
-import { DbMenu, Header, type Theme } from "./Header";
+import { ImportMenu, Header, type Theme } from "./Header";
 import { Workspace } from "./Workspace";
 import { PlayerCtx, ToastProvider, useToast } from "./context";
 
@@ -30,6 +30,7 @@ function Shell() {
   const [player, setPlayer] = useState<Player | null>(null);
   const [ready, setReady] = useState(false);
   const [theme, setTheme] = useState<Theme>("auto");
+  const file = useRef<HTMLInputElement>(null);
   const live = useRef<Player | null>(null);
   const openReq = useRef(0);
 
@@ -85,6 +86,58 @@ function Shell() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /* stores one session export as runs (one per course) and returns the first run's id */
+  const ingest = useCallback(async (J: SessionExport, name: string, label: string) => {
+    let first: string | null = null;
+    const courses = convertSession(J, name, await runStore.tracks());
+    const now = Date.now();
+    for (const [ci, { D, track, isNew, renamed }] of courses.entries()) {
+      if (isNew || renamed) await runStore.putTrack(track);
+      /* newest first in the list, so the courses of one session stay in order */
+      await runStore.put({ ...metaOf(D), added: now - ci }, D);
+      if (J.flags?.length) {
+        const S = new Session(rebuildRun(D));
+        const flags = J.flags.filter(f => f.t >= S.T0 && f.t <= S.T0 + S.TD &&
+          !isConeLabel(f.label));
+        saveUserState(D.meta.sessId, seedFlags(loadUserState(D.meta.sessId, D), flags, S.T0));
+      }
+      first ??= D.meta.sessId;
+    }
+    const n = courses.reduce((a, c) => a + c.D.laps.filter((l) => l.kind === "lap").length, 0);
+    const note = courses[0].D.warnings.join(" ");
+    toast(label + ": " + n + " laps" + (courses.length > 1 ? " in " + courses.length + " courses" : "") + "." + (note ? " " + note : ""));
+    return first;
+  }, [toast]);
+
+  const showImported = useCallback(async (last: string | null) => {
+    setRuns((await runStore.list()).sort((a, b) => b.added - a.added));
+    if (last) await open(last);
+  }, [open]);
+
+  /* Trackside Live session exports picked from disk */
+  const importFiles = useCallback(async (files: FileList | File[]) => {
+    let last: string | null = null;
+    for (const f of Array.from(files)) {
+      try {
+        toast("Reading " + f.name + "…", "busy");
+        const J = JSON.parse(await f.text()) as SessionExport;
+        last ??= await ingest(J, f.name, f.name);
+      } catch (e) {
+        toast(f.name + ": " + (e as Error).message, "err");
+      }
+    }
+    await showImported(last);
+  }, [ingest, showImported, toast]);
+
+  /* the session Trackside Live last saved on the server */
+  const importCache = useCallback(async () => {
+    try {
+      const response = await fetch("/api/motec/live/session-cache");
+      if (!response.ok) throw new Error("No saved Trackside session on the server.");
+      await importFiles([new File([await response.blob()], "trackside-saved_session.json")]);
+    } catch (error) { toast((error as Error).message, "err"); }
+  }, [importFiles, toast]);
+
   /* a drive day straight from the database, built server-side in the trackside-live export format */
   const importDb = useCallback(async (day: number) => {
     toast("Loading day " + day + " from the database…", "busy");
@@ -92,35 +145,17 @@ function Shell() {
     if (!r?.ok) return toast(((await r?.json().catch(() => null))?.error as string) || "Could not reach the database.", "err");
     let last: string | null = null;
     try {
-      const J = (await r.json()) as SessionExport;
-      const courses = convertSession(J, "orion-day-" + day + ".json", await runStore.tracks());
-      const now = Date.now();
-      for (const [ci, { D, track, isNew, renamed }] of courses.entries()) {
-        if (isNew || renamed) await runStore.putTrack(track);
-        /* newest first in the list, so the courses of one day stay in order */
-        await runStore.put({ ...metaOf(D), added: now - ci }, D);
-        if (J.flags?.length) {
-          const S = new Session(rebuildRun(D));
-          const flags = J.flags.filter(f => f.t >= S.T0 && f.t <= S.T0 + S.TD &&
-            !isConeLabel(f.label));
-          saveUserState(D.meta.sessId, seedFlags(loadUserState(D.meta.sessId, D), flags, S.T0));
-        }
-        last ??= D.meta.sessId;
-      }
-      const n = courses.reduce((a, c) => a + c.D.laps.filter((l) => l.kind === "lap").length, 0);
-      const note = courses[0].D.warnings.join(" ");
-      toast("Day " + day + ": " + n + " laps" + (courses.length > 1 ? " in " + courses.length + " courses" : "") + "." + (note ? " " + note : ""));
+      last = await ingest((await r.json()) as SessionExport, "orion-day-" + day + ".json", "Day " + day);
     } catch (e) {
       toast("Day " + day + ": " + (e as Error).message, "err");
     }
-    setRuns((await runStore.list()).sort((a, b) => b.added - a.added));
-    if (last) await open(last);
-  }, [open, toast]);
+    await showImported(last);
+  }, [ingest, showImported, toast]);
 
   const remove = useCallback(async (id: string) => {
     const run = runs.find(r => r.id === id);
     if (!run) return;
-    if (!window.confirm('Delete "' + (run.name || "Untitled run") + '" from saved runs? Its notes are deleted for good; database days can be loaded again, older imported runs cannot.')) return;
+    if (!window.confirm('Delete "' + (run.name || "Untitled run") + '" from saved runs? Its notes are deleted for good; the database day or JSON export can be loaded again.')) return;
     try {
       /* open the next run first, so the old player saves its position before that is cleared */
       if (id === current) await open(runs.find((r) => r.id !== id)?.id ?? null);
@@ -164,6 +199,8 @@ function Shell() {
             onTheme={cycleTheme}
             onSelect={(id) => void open(id)}
             onDb={(day) => void importDb(day)}
+            onImport={(files) => void importFiles(files)}
+            onCache={() => void importCache()}
             onRemove={(id) => void remove(id)}
           />
           {player && <Workspace key={player.session.D.meta.sessId} />}
@@ -172,8 +209,9 @@ function Shell() {
           <div className="welcome">
             <div>
               <h2>Give LAPDOG a lap to follow.</h2>
-              <p>Choose a drive day from the database. LAPDOG keeps your runs in this browser, ready for the next debrief.</p>
-              <DbMenu onDb={(day) => void importDb(day)} />
+              <p>Choose a drive day from the database, or import a Trackside Live session export. LAPDOG keeps your runs in this browser, ready for the next debrief.</p>
+              <ImportMenu onDb={(day) => void importDb(day)} onJson={() => file.current?.click()} onCache={() => void importCache()} />
+              <input ref={file} type="file" accept=".json,application/json" multiple hidden onChange={(e) => { if (e.target.files?.length) void importFiles(e.target.files); e.target.value = ""; }} />
             </div>
           </div>
         )}

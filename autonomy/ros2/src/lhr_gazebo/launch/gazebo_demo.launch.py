@@ -2,7 +2,7 @@
 Launch the FSAE autonomy stack with Gazebo Harmonic physics simulation.
 
 Replaces lhr_sim_kinematic with Gazebo for physics and odometry.
-Perception is selectable: 'sim' (trackgen + sensor_sim) or 'lidar' (LiDAR).
+Perception is selectable: 'sim' (physical cones + sensor_sim) or 'lidar' (LiDAR).
 The upper stack (track_builder, control, mission_manager, metrics) is unchanged.
 
 Usage:
@@ -21,6 +21,7 @@ from launch import LaunchContext, LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
     ExecuteProcess,
+    LogInfo,
     OpaqueFunction,
     RegisterEventHandler,
     SetEnvironmentVariable,
@@ -76,11 +77,11 @@ def _find_world(context: LaunchContext):
 
     Search order:
       1. Explicit ``world`` argument (if the user overrode it)
-      2. ``<worlds_dir>/<track_style>_seed<seed>.sdf`` in the source tree
+      2. Generated ``<track_style>_seed<seed>.sdf`` or fixed ``<layout>.sdf`` in source
       3. Same pattern in the installed share directory
 
-    Nothing else: any other world would disagree with the cones
-    publish_cones generates for this track_style and seed.
+    Fixed competition layouts use seed 1 and observe their physical world cones.
+    Generated layouts must agree with trackgen for the selected style and seed.
     """
     world_arg = context.launch_configurations.get('world', '')
     track_style = context.launch_configurations.get('track_style', 'autocross')
@@ -92,7 +93,11 @@ def _find_world(context: LaunchContext):
             raise ValueError(f'World file does not exist: {world_arg!r}')
         return world_arg
 
-    expected = f'{track_style}_seed{seed}.sdf'
+    from lhr_gazebo.imported_tracks import COURSES
+    if track_style in COURSES and seed != '1':
+        raise ValueError('competition layouts are fixed; use seed:=1')
+    expected = (f'{track_style}.sdf' if track_style in COURSES
+                else f'{track_style}_seed{seed}.sdf')
 
     # Source tree (launch/ is one level below the package root)
     launch_dir = os.path.dirname(os.path.abspath(__file__))
@@ -140,6 +145,11 @@ def _fault_remaps(fault: str, use_ekf: bool, configs: dict) -> dict:
         'odom_spike': {odom_owner: odom_raw},
         'lidar_drop': {cloud_owner: [
             ('/lhr/lidar/points', '/lhr/lidar/points_raw')]},
+        # Gazebo's physics IMU comes over the bridge; inertial_sim makes the
+        # wheel speeds from truth.
+        'imu_drop': {'ros_gz_bridge': [('/lhr/imu/data', '/lhr/imu/data_raw')]},
+        'wheel_drop': {'inertial_sim': [
+            ('/lhr/sensor/wheel_speeds', '/lhr/sensor/wheel_speeds_raw')]},
         'cmd_nan': {'pure_pursuit': [
             ('/lhr/vehicle/cmd', '/lhr/vehicle/cmd_raw')]},
         'steer_freeze': {'joint_cmd_adapter': [
@@ -163,6 +173,28 @@ def _launch_setup(context: LaunchContext):
             f'from autonomy/ros2 with: python3 src/lhr_gazebo/scripts/generate_world.py '
             f'--style {track_style} --seed {seed} '
             f'--output src/lhr_gazebo/worlds/{track_style}_seed{seed}.sdf, then rebuild')
+
+    from lhr_gazebo.imported_tracks import COURSES
+    from lhr_metrics.reference import imported_reference
+    try:
+        imported = imported_reference(world_path) if os.path.isfile(world_path) else None
+    except ET.ParseError as error:
+        source = context.launch_configurations.get('lidar_source', 'gazebo')
+        reason = 'Unsupported Mid-360 world' if source == 'mid360' else 'Invalid world'
+        raise ValueError(f'{reason} {world_path!r}: {error}') from error
+    notices = []
+    if imported:
+        if (track_style != imported['layout_id']
+                or context.launch_configurations.get('seed', '1') != '1'):
+            raise ValueError('imported world requires its layout_id as track_style and seed:=1')
+        violations = imported['rules']['violations']
+        if violations:
+            if context.launch_configurations.get('allow_noncompliant_track', 'false') != 'true':
+                raise ValueError(f'{track_style}: {violations}; acknowledge with '
+                                 'allow_noncompliant_track:=true')
+            notices.append(LogInfo(msg=f'{track_style} OUTSIDE RULES ENVELOPE: {violations}'))
+    elif track_style in COURSES:
+        raise ValueError('competition world needs its verified reference sidecar')
 
     # The event follows the track: the acceleration course only completes
     # under the acceleration mission, which means nothing on a loop.
@@ -325,6 +357,7 @@ def _launch_setup(context: LaunchContext):
                 'wheel_scale_error': _float('wheel_scale_error'),
                 'use_sim_time': True,
             }],
+            remappings=fault_remaps.get('inertial_sim', []),
             output='screen',
         ))
         estimation_nodes.append(Node(
@@ -359,22 +392,30 @@ def _launch_setup(context: LaunchContext):
     perception_nodes = []
 
     if perception == 'sim':
-        perception_nodes.append(Node(
-            package='lhr_trackgen',
-            executable='publish_cones',
-            name='publish_cones',
-            parameters=[{
-                'seed': ParameterValue(LaunchConfiguration('seed'), value_type=int),
-                'track_style': ParameterValue(
-                    LaunchConfiguration('track_style'), value_type=str),
-                'num_waypoints': ParameterValue(
-                    LaunchConfiguration('num_waypoints'), value_type=int),
-                'width_m': _float('width_m'),
-                'cone_spacing_m': _float('cone_spacing_m'),
-                'use_sim_time': True,
-            }],
-            output='screen',
-        ))
+        if imported:
+            perception_nodes.append(Node(
+                package='lhr_gazebo', executable='world_cones', name='world_cones',
+                parameters=[{
+                    'world_sdf': ParameterValue(world_path, value_type=str),
+                    'use_sim_time': True,
+                }], output='screen'))
+        else:
+            perception_nodes.append(Node(
+                package='lhr_trackgen',
+                executable='publish_cones',
+                name='publish_cones',
+                parameters=[{
+                    'seed': ParameterValue(LaunchConfiguration('seed'), value_type=int),
+                    'track_style': ParameterValue(
+                        LaunchConfiguration('track_style'), value_type=str),
+                    'num_waypoints': ParameterValue(
+                        LaunchConfiguration('num_waypoints'), value_type=int),
+                    'width_m': _float('width_m'),
+                    'cone_spacing_m': _float('cone_spacing_m'),
+                    'use_sim_time': True,
+                }],
+                output='screen',
+            ))
         perception_nodes.append(Node(
             package='lhr_sensor_sim',
             executable='sensor_sim',
@@ -632,8 +673,15 @@ def _launch_setup(context: LaunchContext):
                 # the Gazebo LiDAR always publishes, but under
                 # perception:=sim nothing reads the cloud.
                 'monitor_lidar': perception == 'lidar',
+                # Likewise the estimator: only the EKF reads the IMU and the
+                # wheel speeds, and the wheel speeds only exist under it.
+                'monitor_imu': use_ekf,
+                'monitor_wheels': use_ekf,
                 'lidar_timeout_s': _float('safety_lidar_timeout_s'),
                 'odom_timeout_s': _float('safety_odom_timeout_s'),
+                'imu_timeout_s': _float('safety_imu_timeout_s'),
+                'wheel_timeout_s': _float('safety_wheel_timeout_s'),
+                'mission_timeout_s': _float('safety_mission_timeout_s'),
                 'cmd_timeout_s': _float('safety_cmd_timeout_s'),
                 'max_position_std_m': _float('safety_max_position_std_m'),
                 'max_speed_factor': _float('safety_max_speed_factor'),
@@ -664,8 +712,13 @@ def _launch_setup(context: LaunchContext):
                     LaunchConfiguration('fault_after_s'), value_type=float),
                 'fault_duration_s': ParameterValue(
                     LaunchConfiguration('fault_duration_s'), value_type=float),
+                'fault_min_speed_mps': ParameterValue(
+                    LaunchConfiguration('fault_min_speed_mps'), value_type=float),
                 'use_sim_time': True,
             }],
+            # The speed gate reads the plant, like the caster: an odometry
+            # fault must not decide when it starts itself.
+            remappings=[('/lhr/sim/plant_odom', caster_odom)],
             output='screen',
         ))
 
@@ -703,6 +756,7 @@ def _launch_setup(context: LaunchContext):
         ))
 
     return [
+        *notices,
         SetEnvironmentVariable('GZ_SIM_RESOURCE_PATH', resource_path),
         *resource_cleanup,
         gz_sim,
@@ -768,6 +822,9 @@ def generate_launch_description():
             'wheel_scale_error', default_value='1.0',
             description='Simulated rolling-radius error (1.0 = exact)'),
         DeclareLaunchArgument('seed', default_value='1'),
+        DeclareLaunchArgument(
+            'allow_noncompliant_track', default_value='false', choices=['true', 'false'],
+            description='Acknowledge explicitly flagged imported course geometry'),
         DeclareLaunchArgument('num_waypoints', default_value='10'),
         DeclareLaunchArgument('width_m', default_value='3.5'),
         DeclareLaunchArgument('cone_spacing_m', default_value='2.0'),
@@ -873,6 +930,8 @@ def generate_launch_description():
             description='One fault_injector kind, e.g. ekf_kill, lidar_drop'),
         DeclareLaunchArgument('fault_after_s', default_value='30.0'),
         DeclareLaunchArgument('fault_duration_s', default_value='0.0'),
+        DeclareLaunchArgument('fault_min_speed_mps', default_value='0.0',
+                              description='Also wait until the car is this fast (0 = any)'),
         # Safety monitor (lhr_safety). Off until #117's fault injection
         # has tuned the thresholds; defaults match the node's.
         DeclareLaunchArgument(
@@ -882,6 +941,9 @@ def generate_launch_description():
         DeclareLaunchArgument('safety_settle_s', default_value='2.0'),
         DeclareLaunchArgument('safety_lidar_timeout_s', default_value='0.3'),
         DeclareLaunchArgument('safety_odom_timeout_s', default_value='0.25'),
+        DeclareLaunchArgument('safety_imu_timeout_s', default_value='0.25'),
+        DeclareLaunchArgument('safety_wheel_timeout_s', default_value='0.25'),
+        DeclareLaunchArgument('safety_mission_timeout_s', default_value='0.5'),
         DeclareLaunchArgument('safety_cmd_timeout_s', default_value='0.25'),
         DeclareLaunchArgument('safety_max_position_std_m', default_value='0.0'),
         DeclareLaunchArgument('safety_max_speed_factor', default_value='1.5'),

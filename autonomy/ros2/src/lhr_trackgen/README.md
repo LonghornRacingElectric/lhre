@@ -147,3 +147,9 @@ The three-metre courses use a smaller chord reserve than random courses,
 and the 500 m target is the scored closed polyline. Every returned layout
 passes the same envelope checker. Each call returns independent lists so a
 consumer cannot mutate a cached fixture. Legacy generators are unchanged.
+
+`rules_autocross.measure_route` and `segment_distance` expose the same closed
+route measurements and exact boundary separation used by the checker. The
+[competition importer](../lhr_gazebo/worlds/competition/README.md) reuses them
+for an explicit audit without changing source cone geometry or registering
+fixed competition layouts as procedural generators.

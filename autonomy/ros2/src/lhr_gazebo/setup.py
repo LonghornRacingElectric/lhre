@@ -38,7 +38,9 @@ setup(
         (os.path.join('share', package_name, 'models', 'cone_orange_large', 'meshes'),
             glob('models/cone_orange_large/meshes/*')),
         (os.path.join('share', package_name, 'worlds'),
-            glob('worlds/*.sdf')),
+            glob('worlds/*.sdf') + glob('worlds/*.reference.json')),
+        (os.path.join('share', package_name, 'worlds', 'competition'),
+            glob('worlds/competition/*')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -51,6 +53,7 @@ setup(
         'console_scripts': [
             'joint_cmd_adapter = lhr_gazebo.joint_cmd_adapter:main',
             'fault_injector = lhr_gazebo.fault_injector:main',
+            'world_cones = lhr_gazebo.world_cones:main',
             'world_viz = lhr_gazebo.world_viz:main',
         ],
     },

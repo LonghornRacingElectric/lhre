@@ -5,11 +5,11 @@ import { posAt } from "@/lib/driveday/geometry";
 import { interp } from "@/lib/driveday/math";
 import { fmt } from "@/lib/driveday/format";
 import { cvS, sU } from "@/lib/driveday/units";
-import { lineChevron, roadLine, type LineCalibration } from "@/lib/driveday/video-overlay";
+import { ghostCar, lineChevron, roadLine, type LineCalibration } from "@/lib/driveday/video-overlay";
 import { useFrame, usePlayer, useUi } from "../context";
 
 export interface OverlaySettings extends LineCalibration {
-  hud: boolean; map: boolean; line: boolean; ghost: boolean; position: "left" | "right";
+  ghostCar?: boolean; cameraHeight?: number; hud: boolean; map: boolean; line: boolean; ghost: boolean; position: "left" | "right";
 }
 
 export function VideoOverlay({ settings, onCenter }: { settings: OverlaySettings; onCenter: (center: number) => void }) {
@@ -19,6 +19,7 @@ export function VideoOverlay({ settings, onCenter }: { settings: OverlaySettings
   const drag = useRef<{ x: number; center: number } | null>(null);
   const { L, rel } = p.curState();
   const target = settings.ghost ? p.refLap() ?? L : L;
+  const ghost = settings.ghostCar ? ghostCar(L, p.refLap(), rel, settings, settings.cameraHeight ?? 1.1) : null;
   const points = settings.line ? roadLine(L, target, rel, settings) : [];
   const V = (key: "spd" | "thr" | "brkp" | "glat") => interp(L.ch.t, L.ch[key], rel);
   const lat = V("glat");
@@ -43,6 +44,12 @@ export function VideoOverlay({ settings, onCenter }: { settings: OverlaySettings
         })}
       </svg>
       <span className="video-line-caption">GPS line preview · {target === L ? "watched lap" : "ghost"}</span>
+    </>}
+    {ghost && <>
+      <svg className="video-ghost-car" viewBox="0 0 1000 562.5" preserveAspectRatio="none" aria-label="Experimental 3D ghost car at equal elapsed lap time">
+        {ghost.faces.map((face,i) => <polygon key={i} points={face.points} fill={face.tire ? "#081923" : "#50e4ff"} fillOpacity={face.tire ? 0.55 : 0.25} stroke="#9af0ff" strokeWidth="1.3" strokeOpacity=".8" />)}
+      </svg>
+      <span className="video-ghost-caption">Ghost · {p.refLap()?.name ?? "not selected"} · {ghost.status}<small>Experimental · equal lap time · flat-road GPS estimate</small></span>
     </>}
     {settings.hud && <div className={"video-telemetry video-telemetry-" + settings.position}>
       <div className="video-speed"><strong>{cvS(p.units, V("spd")).toFixed(0)}</strong><span>{sU(p.units)}</span></div>

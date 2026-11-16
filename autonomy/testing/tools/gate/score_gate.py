@@ -23,12 +23,14 @@ scored.
 
 import bisect
 import csv
+import json
 import math
 import os
 import re
 import sys
 
-from lhr_metrics.reference import paired_centerline, world_geometry
+from lhr_gazebo.imported_tracks import COURSES
+from lhr_metrics.reference import imported_reference, paired_centerline, world_geometry
 from lhr_metrics.reference_lap import reference_lap
 from lhr_trackgen.extreme_autocross import SCENARIOS
 from rclpy.serialization import deserialize_message
@@ -54,10 +56,9 @@ FIELDS = (['id', 'kind', 'event', 'track_style', 'seed', 'outcome', 'lap_time_s'
            'off_track_count', 'cones_hit', 'max_pos_error',
            'stop_dist_m', 'stop_time_s', 'max_v_after_stop', 'finished', 'emergency',
            'early_exits', 'end', 'sim_s', 'wall_s', 'invalid_reason'] + CHECKS + ['passed'])
-COURSE_STYLES = ('autocross', 'rules_autocross', 'acceleration', 'skidpad', *SCENARIOS)
-RUN_ID = re.compile(
-    r'^(baseline_)?(' + '|'.join(map(re.escape, COURSE_STYLES))
-    + r')(?:_s(\d+))?(?:_r(\d+))?$')
+AUTOCROSS_STYLES = ('autocross', 'rules_autocross', *COURSES, *SCENARIOS)
+RUN_ID = re.compile(r'^(baseline_)?(' + '|'.join(map(re.escape, (
+    *AUTOCROSS_STYLES, 'acceleration', 'skidpad'))) + r')(?:_s(\d+))?(?:_r(\d+))?$')
 
 
 def read(bag):
@@ -134,7 +135,9 @@ def course_reference(metrics, out):
                       os.path.join(WORLDS, os.path.basename(world))):
         if world and os.path.isfile(candidate):
             left, right, _ = world_geometry(candidate)
-            return reference_lap(paired_centerline(left, right), start=gate[:2],
+            imported = imported_reference(candidate)
+            points = imported['centerline'] if imported else paired_centerline(left, right)
+            return reference_lap(points, start=gate[:2],
                                  tangent=gate[2:], **limits)
     return None
 
@@ -179,7 +182,7 @@ def score(run_dir, run_id):
     if not match:
         return None
     baseline, style, seed, _ = match.groups()
-    event = style if style in ('acceleration', 'skidpad') else 'autocross'
+    event = 'autocross' if style in AUTOCROSS_STYLES else style
     row = {'id': run_id, 'kind': 'baseline' if baseline else 'gate', 'event': event,
            'seed': seed or '', 'track_style': style}
     if not os.path.isdir(run_dir):
@@ -320,6 +323,16 @@ def main(out):
                   '| --- | --- | --- | --- |']
         lines += [f'| {r["track_style"]} | {r["seed"]} | {r["outcome"]} | '
                   f'{r.get("lap_time_s", "")} |' for r in baseline_rows]
+    audit_path = os.path.join(out, 'course_audits.json')
+    if os.path.exists(audit_path):
+        with open(audit_path) as f:
+            audits = json.load(f)
+        if audits:
+            lines += ['', '## Imported course audits', '',
+                      'Imported geometry flags; default-setting planner acceptance is tracked in #225.', '']
+            for name, audit in sorted(audits.items()):
+                flags = '; '.join(audit['violations']) or 'no envelope violations'
+                lines.append(f'- {name}: **{audit["status"]}** — {flags}')
     if waived:
         lines += ['', '## Waived', ''] + [f'- {w}' for w in waived]
     failed = [r for r in gate if not r['passed']]

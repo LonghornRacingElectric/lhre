@@ -2,12 +2,12 @@
 # Run the 10/28 Software MVP gate (#109) in Gazebo and score it.
 #
 # Run from autonomy/ros2 after ./scripts/build.sh, on Ubuntu or inside the
-# Docker container. Every gate run uses the no-shortcuts stack from
-# docs/plans/mvp-pass-criteria.md: perception:=lidar estimator:=ekf with
-# safety on, the Mid-360 caster and stereo camera fusion (#206). Lap time
-# is scored against a reference lap computed from the course (#232).
+# Docker container. Every gate run launches with the gate stack in
+# stack.args, which run_faults.sh shares (#237): perception:=lidar
+# estimator:=ekf with safety on, the Mid-360 caster and stereo camera fusion.
+# Lap time is scored against a reference lap computed from the course (#232).
 # BASELINE=1 adds one truth-stack run per seed (perception:=sim
-# estimator:=truth) for comparison only. A run
+# estimator:=truth) for comparison only, and names its own arguments. A run
 # ends SETTLE_S sim seconds after the mission reaches FINISHED or EMERGENCY,
 # or at RUN_S sim seconds, so a slow machine runs the same campaign, only
 # longer. Wall time only catches a hung sim: /clock stopped for HANG_S
@@ -30,13 +30,27 @@ HANG_S=${HANG_S:-60}               # wall seconds of a stopped /clock: hung
 OUT=${OUT:-$HOME/lhr-test-data/$(date +%F)-mid360-fusion-gate}
 EXTRA=${EXTRA:-}
 TRACK_STYLE=${TRACK_STYLE:-autocross}
+REAL_TRACKS=${REAL_TRACKS:-}       # opt-in fixed imported layouts, seed 1
+REAL_REPEATS=${REAL_REPEATS-1}     # Sim v2 runs each imported layout once
+EXTREMES=${EXTREMES-}
+EXTREME_REPEATS=${EXTREME_REPEATS-1}
+ALLOW_NONCOMPLIANT=${ALLOW_NONCOMPLIANT:-0}
+PLAN_ONLY=${PLAN_ONLY:-0}         # print the audited matrix, do not launch or clean up
+if [[ ! "$REAL_REPEATS" =~ ^[0-9]+$ ]]; then
+    echo 'REAL_REPEATS must be a nonnegative integer' >&2
+    exit 2
+fi
+if [[ ! "$EXTREME_REPEATS" =~ ^[0-9]+$ ]]; then
+    echo 'EXTREME_REPEATS must be a nonnegative integer' >&2
+    exit 2
+fi
 case "$TRACK_STYLE" in
     autocross|rules_autocross) ;;
     *) echo "unsupported gate TRACK_STYLE=$TRACK_STYLE" >&2; exit 2 ;;
 esac
 ROS2=$(cd "$HERE/../../../ros2" && pwd)
-# Opt-in extension; the historical MVP matrix stays unchanged.
-EXTREMES=${EXTREMES-}
+source "$HERE/stack.sh"
+STACK=$(gate_stack) || exit 2
 if [ -n "$EXTREMES" ]; then
     NAMED_STYLES=$(python3 -c 'from lhr_trackgen.extreme_autocross import SCENARIOS; print(" ".join(SCENARIOS))') || exit 2
     [ "$EXTREMES" = all ] && EXTREMES=$NAMED_STYLES
@@ -48,9 +62,16 @@ if [ -n "$EXTREMES" ]; then
     done
 fi
 
+# Validate imported references before creating output or stopping any processes.
+AUDIT='{}'
+if [ -n "$REAL_TRACKS" ]; then
+    audit_args=()
+    [ "$ALLOW_NONCOMPLIANT" = 1 ] && audit_args+=(--allow-noncompliant)
+    AUDIT=$(python3 -m lhr_gazebo.imported_tracks "${audit_args[@]}" $REAL_TRACKS) || exit 2
+fi
+
 TOPICS="/clock /lhr/mission/status /lhr/mission/complete /lhr/metrics/lap_complete
 /lhr/vehicle/odom /lhr/vehicle/odom_truth /lhr/safety/status"
-mkdir -p "$OUT/runs"
 
 REC='' LAUNCH='' WATCH=''
 
@@ -114,7 +135,7 @@ one_run() {  # id [launch args...]
     fi
     mkdir -p "$dir"
     local launch_cmd=(ros2 launch lhr_gazebo gazebo_demo.launch.py
-        gui:=false rviz:=false safety:=true output_csv:="$dir/metrics.csv"
+        gui:=false rviz:=false output_csv:="$dir/metrics.csv"
         ${world:+"world:=$world"} $EXTRA "$@")
     ros2 bag record -s mcap -o "$dir/bag" --topics $TOPICS \
         > "$dir/record.log" 2>&1 &
@@ -136,29 +157,38 @@ one_run() {  # id [launch args...]
 }
 
 plan() {  # one line per run: the id, then its launch arguments
-    local sensors='lidar_source:=mid360 enable_stereo_camera:=true enable_camera_lidar_fusion:=true'
+    # The truth baseline is the one run that opts out of the gate stack.
+    local truth='perception:=sim estimator:=truth safety:=true lidar_source:=gazebo enable_stereo_camera:=false enable_camera_lidar_fusion:=false'
     for s in $SEEDS; do
         if [ "$BASELINE" != 0 ]; then
-            echo "baseline_${TRACK_STYLE}_s$s track_style:=$TRACK_STYLE seed:=$s perception:=sim estimator:=truth lidar_source:=gazebo enable_stereo_camera:=false enable_camera_lidar_fusion:=false"
+            echo "baseline_${TRACK_STYLE}_s$s track_style:=$TRACK_STYLE seed:=$s $truth"
         fi
         for r in $(seq 1 "$REPEATS"); do
-            echo "${TRACK_STYLE}_s${s}_r$r track_style:=$TRACK_STYLE seed:=$s perception:=lidar estimator:=ekf $sensors"
+            echo "${TRACK_STYLE}_s${s}_r$r track_style:=$TRACK_STYLE seed:=$s $STACK"
         done
     done
-    for style in $EXTREMES; do
+    for style in $EXTREMES $REAL_TRACKS; do
+        local acknowledge=''
+        local repeats=$EXTREME_REPEATS
+        case " $REAL_TRACKS " in
+            *" $style "*)
+                repeats=$REAL_REPEATS
+                [ "$ALLOW_NONCOMPLIANT" = 1 ] && acknowledge='allow_noncompliant_track:=true'
+                ;;
+        esac
         if [ "$BASELINE" != 0 ]; then
-            echo "baseline_${style}_s1 track_style:=$style seed:=1 perception:=sim estimator:=truth lidar_source:=gazebo enable_stereo_camera:=false enable_camera_lidar_fusion:=false"
+            echo "baseline_${style}_s1 track_style:=$style seed:=1 $truth $acknowledge"
         fi
-        for r in $(seq 1 "$REPEATS"); do
-            echo "${style}_s1_r$r track_style:=$style seed:=1 perception:=lidar estimator:=ekf $sensors"
+        for r in $(seq 1 "$repeats"); do
+            echo "${style}_s1_r$r track_style:=$style seed:=1 $STACK $acknowledge"
         done
     done
     for r in $(seq 1 "${ACCEL_REPEATS:-0}"); do
-        echo "acceleration_r$r track_style:=acceleration perception:=lidar estimator:=ekf $sensors"
+        echo "acceleration_r$r track_style:=acceleration $STACK"
     done
     if [ -e "$SKIDPAD_WORLD" ]; then
         for r in $(seq 1 "${SKIDPAD_REPEATS:-0}"); do
-            echo "skidpad_r$r track_style:=skidpad mission:=skidpad perception:=lidar estimator:=ekf $sensors"
+            echo "skidpad_r$r track_style:=skidpad mission:=skidpad $STACK"
         done
     fi
 }
@@ -167,6 +197,12 @@ plan() {  # one line per run: the id, then its launch arguments
 # criteria record it as a waiver, which the summary states, not as missing
 # runs.
 SKIDPAD_WORLD=$HERE/../../../ros2/src/lhr_gazebo/worlds/skidpad_seed1.sdf
+if [ "$PLAN_ONLY" = 1 ]; then
+    checked_plan || exit 2
+    exit 0
+fi
+mkdir -p "$OUT/runs"
+printf '%s\n' "$AUDIT" > "$OUT/course_audits.json"
 {
     if [ "${SKIDPAD_REPEATS:-0}" != 0 ] && [ ! -e "$SKIDPAD_WORLD" ]; then
         echo "skidpad: no skidpad_seed1.sdf world in this checkout (#114)"
@@ -174,10 +210,12 @@ SKIDPAD_WORLD=$HERE/../../../ros2/src/lhr_gazebo/worlds/skidpad_seed1.sdf
 } > "$OUT/waived.txt"
 
 # The scorer fails every planned run with no result, so a campaign that was
-# cut short can never read as a pass.
-plan | cut -d' ' -f1 > "$OUT/expected.txt"
+# cut short can never read as a pass. That only holds if the plan itself
+# was not cut short, which checked_plan (stack.sh) makes sure of.
+PLAN=$(checked_plan) || exit 2
+printf '%s\n' "$PLAN" | cut -d' ' -f1 > "$OUT/expected.txt"
 cleanup
 while read -r id args <&3; do
     one_run "$id" $args
-done 3< <(plan)
+done 3<<< "$PLAN"
 python3 "$HERE/score_gate.py" "$OUT"
