@@ -769,8 +769,11 @@ startup bias now come from `sensors.imu` in vehicle.yaml. See the
 The estimator, wheel-speed source, sensor cadence, actuator model and gate
 thresholds retain their existing behavior.
 
-- `imu_noise:=true` is the Gazebo default. `imu_noise:=false` zeros native
-  nominal noise and startup bias for a clean control.
+- `imu_noise:=false` is the Gazebo default and zeros native
+  nominal noise and startup bias for a clean control. Use `imu_noise:=true`
+  to opt into the configured errors. Noise stays opt-in while gyro-bias
+  estimation is pending; the noisy EKF gate failures are retained in the
+  [validation record](../../../testing/2026-11-08-native-imu/README.md).
 - `gyro_bias:=<rad/s>` adds a signed native z-gyro offset in either mode;
   an explicit bias remains active when nominal noise is disabled.
 - `seed:=` also reaches Gazebo's random generator. Matching seeds does not

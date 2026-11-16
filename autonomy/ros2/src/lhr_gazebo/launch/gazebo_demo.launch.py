@@ -263,7 +263,7 @@ def _launch_setup(context: LaunchContext):
 
     resource_path = models_dir
     resource_cleanup = []
-    imu_noise = context.launch_configurations.get('imu_noise', 'true').lower() == 'true'
+    imu_noise = context.launch_configurations.get('imu_noise', 'false').lower() == 'true'
     gyro_bias = float(context.launch_configurations.get('gyro_bias', '0.0'))
     if enable_stereo or not imu_noise or gyro_bias != 0.0:
         from lhr_gazebo.imu_model import imu_model_resources
@@ -787,7 +787,7 @@ def generate_launch_description():
             'gyro_bias', default_value='0.0',
             description='Additional signed native IMU z-gyro offset (rad/s)'),
         DeclareLaunchArgument(
-            'imu_noise', default_value='true', choices=['true', 'false'],
+            'imu_noise', default_value='false', choices=['true', 'false'],
             description='Native gyro/accelerometer noise and startup bias from vehicle.yaml'),
         DeclareLaunchArgument(
             'wheel_scale_error', default_value='1.0',

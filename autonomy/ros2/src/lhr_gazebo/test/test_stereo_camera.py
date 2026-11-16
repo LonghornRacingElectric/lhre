@@ -143,7 +143,8 @@ def test_launch_camera_actions_and_rviz(perception, estimator, enabled, monkeypa
     for action in actions:
         if isinstance(action, RegisterEventHandler):
             action.event_handler.handle(Shutdown(reason='test complete'), context)
-    assert Path(resource_path).exists() == (enabled != 'true')
+    # The default noise-free model uses a launch-local overlay in either camera mode.
+    assert not Path(resource_path).exists()
 
 
 def test_stereo_rviz_preserves_existing_displays():
