@@ -97,9 +97,10 @@ It runs on every PR, on every push to `main`, weekly, and by hand.
 - To add a check, add a job to `ci.yml`, an area for it in `Changes` if it
   is path-gated, and the job to the `needs` of `all-checks`. `All checks passed` fails
   if a job is missing from its `needs`.
-- The telemetry job builds the images, smoke-tests them and runs the
-  integration tests against Docker Compose. Without the repo secrets it
-  skips the integration tests with a warning.
+- The telemetry job builds the images, smoke-tests every one of them and
+  runs the integration tests against Docker Compose. Without the repo
+  secrets it fails, except on fork PRs and Dependabot, which can't get
+  them and skip the integration tests with a warning.
 - GitHub runs no CI at all on a PR that conflicts with its base, so it
   shows no checks rather than red ones.
   [`pr-conflicts.yml`](https://github.com/LonghornRacingElectric/lhre/blob/main/.github/workflows/pr-conflicts.yml)
