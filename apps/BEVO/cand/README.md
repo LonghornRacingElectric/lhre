@@ -10,6 +10,10 @@ CAN transmit path stay shared with the existing dashboard implementation.
 - `:mock_can` feeds current spec IDs, payload sizes, frame-series IDs and native
   rates. Build `//lib/codegen/telemetry:can_json` first for direct Python use;
   Bazel supplies it automatically. `--can-json` selects an explicit fixture.
+  `--transport socketcan --critical-interface vcan0 --data-interface vcan1`
+  sends classic CAN frames on Linux instead. `--duration 30` bounds either
+  transport; otherwise it runs until interrupted. Values follow a shared
+  ten-second ramp capped by each field's encoding range and precision.
 - `:run_can_stack` / `:run_mock_can_stack` launch the daemon fleet.
 
 Each CAN frame receives Unix nanoseconds before entering the processing queue.

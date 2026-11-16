@@ -65,6 +65,11 @@ with append-only test fixtures, so it needs no registry or running stack.
 
 ## Deploying to the Pi
 
+For a hardware-free run of the updater and core on Linux ARM64, build
+`//apps/BEVO:demo_bundle` and follow the [two-laptop demo](nonhermetic/DEMO.md).
+That support bundle contains no core executables; the updater installs them
+from an approved GHCR release.
+
 The repo never goes on the Pi — deploys ship binaries:
 
 ```bash

@@ -9,6 +9,35 @@ import unittest
 
 
 class StartupTest(unittest.TestCase):
+    def test_core_only_shutdown_flushes_logger_without_a_dashboard(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            log = root / 'core.log'
+            for daemon in ('cand', 'publishd', 'loggerd'):
+                path = root / 'bin' / daemon
+                path.parent.mkdir(exist_ok=True)
+                path.write_text('#!/bin/sh\necho "$(basename "$0")" >> "$ORDER_LOG"\n'
+                                'trap \'echo "flushed $(basename "$0")" >> "$ORDER_LOG"; exit 0\' TERM\n'
+                                'while :; do sleep .1; done\n')
+                path.chmod(0o755)
+            env = dict(os.environ, BEVO_CORE_RELEASE=str(root), ORDER_LOG=str(log), DASHD_ENABLED='0')
+            script = Path(sys.argv[1]).resolve().with_name('run_real_stack.sh')
+            process = subprocess.Popen(['bash', str(script)], env=env, stdout=subprocess.PIPE,
+                                       stderr=subprocess.STDOUT)
+            try:
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline:
+                    if log.exists() and len(log.read_text().splitlines()) == 3:
+                        break
+                    if process.poll() is not None:
+                        self.fail(process.stdout.read().decode())
+                    time.sleep(.05)
+                self.assertEqual(set(log.read_text().splitlines()), {'cand', 'loggerd', 'publishd'})
+            finally:
+                process.terminate()
+                process.communicate(timeout=5)
+            self.assertIn('flushed loggerd', log.read_text().splitlines())
+
     def test_modem_then_sync_then_all_core_processes_use_the_new_release(self):
         self.startup("success")
 

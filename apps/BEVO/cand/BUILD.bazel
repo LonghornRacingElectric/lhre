@@ -4,6 +4,8 @@ load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
 package(default_visibility = ["//apps/BEVO:__subpackages__"])
 
+exports_files(["mock_can.py"])
+
 # The daemons use Unix domain sockets for IPC, so nothing here runs on Windows.
 NOT_WINDOWS = select({
     "@platforms//os:windows": ["@platforms//:incompatible"],
@@ -46,8 +48,7 @@ rust_binary(
     }),
 )
 
-# Pure-stdlib mock CAN traffic generator; feeds cand's CAND_USE_MOCK=1 UDP
-# reader (ports 5005/5006).
+# Pure-stdlib CAN generator. UDP is the portable default; SocketCAN uses Linux vcan.
 py_binary(
     name = "mock_can",
     srcs = ["mock_can.py"],

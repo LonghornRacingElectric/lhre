@@ -22,16 +22,26 @@ fi
 CAN_IFACE_0="${CAND_CAN_INTERFACE_0:-can0}"
 CAN_IFACE_1="${CAND_CAN_INTERFACE_1:-can1}"
 LOGGERD_ENABLED="${LOGGERD_ENABLED:-1}"
+DASHD_ENABLED="${DASHD_ENABLED:-1}"
 
 export LOGGERD_LOG_DIR="${LOGGERD_LOG_DIR:-$BEVO_ROOT/loggerd/logs}"
 
 cleanup() {
+  trap - EXIT INT TERM
   kill "${CAND_PID:-}" "${DASHD_PID:-}" "${PUBLISHD_PID:-}" "${LOGGERD_PID:-}" >/dev/null 2>&1 || true
+  for pid in ${CAND_PID:-} ${DASHD_PID:-} ${PUBLISHD_PID:-} ${LOGGERD_PID:-}; do
+    wait "$pid" 2>/dev/null || true
+  done
   rm -f /tmp/BEVO_cand.sock /tmp/BEVO_cand_publishd.sock /tmp/BEVO_cand_loggerd.sock
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
-for bin in "$CORE_BIN_DIR/cand" "$BIN_DIR/dashd" "$CORE_BIN_DIR/loggerd" "$CORE_BIN_DIR/publishd"; do
+bins=("$CORE_BIN_DIR/cand" "$CORE_BIN_DIR/publishd")
+[[ "$LOGGERD_ENABLED" != 1 ]] || bins+=("$CORE_BIN_DIR/loggerd")
+[[ "$DASHD_ENABLED" != 1 ]] || bins+=("$BIN_DIR/dashd")
+for bin in "${bins[@]}"; do
   if [[ ! -x "$bin" ]]; then
     echo "Missing binary: $bin" >&2
     echo "Install the Bazel-built executables in $BIN_DIR first." >&2
@@ -42,8 +52,10 @@ done
 "$CORE_BIN_DIR/publishd" &
 PUBLISHD_PID=$!
 
-"$BIN_DIR/dashd" &
-DASHD_PID=$!
+if [[ "$DASHD_ENABLED" == "1" ]]; then
+  "$BIN_DIR/dashd" &
+  DASHD_PID=$!
+fi
 
 if [[ "$LOGGERD_ENABLED" == "1" ]]; then
   "$CORE_BIN_DIR/loggerd" &
@@ -56,4 +68,4 @@ CAND_CAN_INTERFACE_1="$CAN_IFACE_1" \
 "$CORE_BIN_DIR/cand" &
 CAND_PID=$!
 
-wait "$DASHD_PID"
+wait "${DASHD_PID:-$CAND_PID}"

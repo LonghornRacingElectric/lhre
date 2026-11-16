@@ -188,6 +188,31 @@ _BUNDLE_FILES = [
     "requirements.txt",
 ]
 
+genrule(
+    name = "demo_bundle",
+    srcs = [
+        "nonhermetic/run_demo_stack.sh",
+        "nonhermetic/run_real_stack.sh",
+        "nonhermetic/DEMO.md",
+        "//apps/BEVO/cand:mock_can.py",
+        "//apps/BEVO/updater:standalone",
+    ],
+    outs = ["demo_bundle.tar.gz"],
+    cmd = """
+        STAGE=$$(mktemp -d)
+        mkdir -p $$STAGE/nonhermetic $$STAGE/cand
+        cp $(location nonhermetic/run_demo_stack.sh) $(location nonhermetic/run_real_stack.sh) $$STAGE/nonhermetic/
+        chmod +x $$STAGE/nonhermetic/*.sh
+        cp $(location //apps/BEVO/cand:mock_can.py) $$STAGE/cand/
+        cp $(location //apps/BEVO/updater:standalone) $$STAGE/bevo_updater.pyz
+        cp $(location nonhermetic/DEMO.md) $$STAGE/README.md
+        tar czf $@ -C $$STAGE .
+        rm -rf $$STAGE
+    """,
+    target_compatible_with = NOT_WINDOWS,
+    visibility = ["//visibility:public"],
+)
+
 # genrule needs bash; deploys happen from macOS/Linux machines.
 genrule(
     name = "pi_bundle",

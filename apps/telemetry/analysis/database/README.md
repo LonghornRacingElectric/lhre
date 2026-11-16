@@ -1,5 +1,9 @@
 # Telemetry applications and demo sender
 
+The [two-laptop CAN demo](../../../BEVO/nonhermetic/DEMO.md) runs the real
+updater, acquisition and publishing daemons. `//apps/telemetry/analysis:verify_can_demo`
+checks its live and historical API data without publishing replacement fixtures.
+
 Artemis readers use the query gateway. MQTT remains the vehicle's write path:
 the demo sender publishes native update batches to `artemis/data`, which ingest
 forwards through Kafka to the existing database writer. It uses no database
