@@ -1,4 +1,4 @@
-name: simulation against BobSim main
+name: Nightly sim on BobSim main
 
 on:
   schedule:
@@ -10,6 +10,7 @@ on:
 
 jobs:
   bobsim-main:
+    name: Tests and FourPost on BobSim main
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:

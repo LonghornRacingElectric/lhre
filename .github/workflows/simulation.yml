@@ -1,4 +1,4 @@
-name: simulation
+name: Weekly full simulation
 
 # The full standard-evaluation run on our car, weekly and by hand. PR and
 # main checks for simulation/ run from ci.yml.
@@ -14,6 +14,7 @@ on:
 
 jobs:
   full-regeneration:
+    name: Every standard evaluation
     if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_regeneration) }}
     runs-on: ubuntu-latest
     timeout-minutes: 300

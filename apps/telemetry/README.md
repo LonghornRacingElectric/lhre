@@ -100,5 +100,5 @@ and integration targets run on Linux and macOS and are intentionally
 incompatible with native Windows.
 
 Docker-backed targets are manual/local and are exercised by the
-`Telemetry` job in `ci.yml`. The Bazel jobs stay
+`Telemetry stack` job in `ci.yml`. The Bazel jobs stay
 service-free.

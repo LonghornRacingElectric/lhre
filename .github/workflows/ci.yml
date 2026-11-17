@@ -373,7 +373,7 @@ jobs:
           fi
 
   four-post:
-    name: FourPost
+    name: FourPost sim
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.car != 'false' }}
     runs-on: ubuntu-latest
@@ -414,7 +414,7 @@ jobs:
             !simulation/out/car/**/*.tir
 
   autonomy:
-    name: Autonomy (colcon)
+    name: Autonomy (ROS 2)
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.autonomy != 'false' }}
     runs-on: ubuntu-latest
@@ -559,7 +559,7 @@ jobs:
         run: npm run test:video-helper
 
   job-runner:
-    name: HIL dashboard
+    name: HIL dashboard API
     timeout-minutes: 5
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.runner != 'false' }}
@@ -574,7 +574,7 @@ jobs:
 
   # On main, docs.yml builds and publishes the site instead.
   docs:
-    name: Docs
+    name: Docs build
     needs: changes
     if: ${{ !cancelled() && github.event_name != 'push' && needs.changes.outputs.docs != 'false' }}
     runs-on: ubuntu-latest
@@ -595,7 +595,7 @@ jobs:
   # roles, so POSTGRES_USER must be "electric" and ELECTRIC_PWD must equal
   # POSTGRES_PASSWORD.
   telemetry:
-    name: Telemetry
+    name: Telemetry stack
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.telemetry != 'false' }}
     runs-on: ubuntu-latest

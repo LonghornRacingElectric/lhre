@@ -1,4 +1,4 @@
-name: docs
+name: Publish docs
 
 # Builds the MkDocs site (docs live next to the code — see mkdocs.yml) and
 # publishes it to GitHub Pages on main. PRs build it from ci.yml.
