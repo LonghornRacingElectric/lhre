@@ -131,6 +131,8 @@ bazel run //apps/telemetry/stack:requirements.update
 
 The Kafka bridge keeps `go.mod` and `go.sum` for Go tooling; rules_go and
 Gazelle use those files for the Bazel graph. The telemetry CI job builds
-`all_images`, runs `core_smoke_tests`, then starts the core with Compose
-`--no-build` before integration tests. Docker-backed tests are tagged `manual`
+`all_images`, runs `core_smoke_tests` and `optional_smoke_tests`, then starts
+the core with Compose `--no-build` before integration tests. A run without
+the repo secrets fails, except on fork PRs and Dependabot, which can't get
+them and only skip the integration tests. Docker-backed tests are tagged `manual`
 and `local`, so normal remote `bazel test //...` stays hermetic.
