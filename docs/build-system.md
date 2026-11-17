@@ -241,6 +241,24 @@ If you need a real bash for an experiment, a plain
 overrides the pin, because plain `build` lines expand after the per-OS
 config.
 
+### Downloads go through BuildBuddy
+
+Every `http_archive` and module source is fetched through BuildBuddy's
+remote downloader (`--experimental_remote_downloader` in `.bazelrc`).
+BuildBuddy keeps each file under its sha256, so once any machine has
+fetched a dependency, everyone else gets it from BuildBuddy instead of
+from github.com or the module registry. Without it, every CI job fetched
+from scratch, and on Nov 17 2026 a run of 502s from GitHub's release
+downloads turned four PRs and main red with nothing wrong in the code.
+
+A download BuildBuddy can't serve (no API key, BuildBuddy down, a file it
+has never seen while the source is also down) falls back to fetching the
+URL directly, which is what happened before. `--config=local` turns the
+remote downloader off with the rest of BuildBuddy. It is set on `build`
+(so `test`, `run` and `coverage` too) and not on `common`, because Bazel
+refuses the downloader on a command without a gRPC cache, and
+`--remote_cache` is a `build` flag. `query` and `mod` fetch directly.
+
 ### Build latency
 
 Measured at ~70 targets on macOS. Windows runs the same phases roughly
