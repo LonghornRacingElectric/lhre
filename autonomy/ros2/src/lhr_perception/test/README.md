@@ -22,7 +22,11 @@ intervals, out-of-order timestamps and stationary gravity alignment.
 wrap, simulation clock resets and sharp-turn reprojection.
 `test_cone_map.py` covers nearest-cone, one-to-one map association.
 `test_cone_side_classifier.py` covers side voting, boundary gap bridging,
-rejected cross-track links and label locking. `test_unclassified_mode.py`
+rejected cross-track links (including 2.8/3.0 m widths, partial votes and
+aligned gaps) and correction hysteresis. `test_side_recovery.py` checks
+stationary startup, duplicate stamps, unsupported confirmations, retained
+out-of-view evidence and DELETE/ADD namespace replacement after a correction.
+`test_unclassified_mode.py`
 checks that `classify_sides:=false` still deduplicates and publishes every
 cone. `test_cone_color.py` covers the camera color regions, thresholds and
 image decoding; `test_camera_color_classifier.py` checks that the node keeps

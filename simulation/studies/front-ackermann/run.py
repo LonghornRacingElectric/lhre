@@ -124,10 +124,10 @@ class Car:
         self.fx_max_n, self.kappa_peak, self.alpha_peak = {-1: [], 1: []}, {-1: [], 1: []}, []
         for t in (tires[0], tires[2]):
             for sign, bounds in ((-1, (-0.5, 0.0)), (1, (0.0, 0.5))):
-                fx = [minimize_scalar(lambda k: -abs(_mf52_fx_pure(t, fz, k, 0.0)), bounds=bounds, method="bounded") for fz in self.fz_grid]
+                fx = [minimize_scalar(lambda k: -abs(_mf52_fx_pure(t, fz, k, 0.0)), bounds=bounds, method="bounded") for fz in self.fz_grid]  # noqa: B023 pre-existing when the lint gate went on
                 self.fx_max_n[sign].append(np.array([abs(r.fun) for r in fx]))
                 self.kappa_peak[sign].append(np.array([abs(r.x) for r in fx]))
-            fy = [minimize_scalar(lambda a: -lateral_n(t, fz, a, 1.0), bounds=(0.0, 0.6), method="bounded") for fz in self.fz_grid]
+            fy = [minimize_scalar(lambda a: -lateral_n(t, fz, a, 1.0), bounds=(0.0, 0.6), method="bounded") for fz in self.fz_grid]  # noqa: B023 pre-existing when the lint gate went on
             self.alpha_peak.append(np.array([r.x for r in fy]))
 
     def loads(self, ay_g, decel_g=0.0):
@@ -239,7 +239,7 @@ def lsd_split(total_n, diff, radius, car, loads, speeds):
     tire = car.tires[2]
 
     def wheel_fx(wheel_speed):
-        return tuple(_mf52_fx_pure(tire, fz, (wheel_speed - v) / v, 0.0) for fz, v in zip(loads, speeds))
+        return tuple(_mf52_fx_pure(tire, fz, (wheel_speed - v) / v, 0.0) for fz, v in zip(loads, speeds))  # noqa: B905 pre-existing when the lint gate went on
 
     grid = np.linspace(min(speeds), 1.25 * max(speeds), 9)
     gap = [sum(wheel_fx(w)) - total_n for w in grid]
@@ -292,7 +292,7 @@ def state(car, curve, radius, side, beta, outer, ay_g, lon=None, lon_n=0.0):
     wheel_fx = lon.wheel_fx(lon_n, car, loads, rear_speeds) if lon else (0.0, 0.0, 0.0, 0.0)
     fx = fy = mz = 0.0
     alphas, forces, uses = [], [], []
-    for i, ((x, y), delta, fz, fx_w) in enumerate(zip(car.corners, steer, loads, wheel_fx)):
+    for i, ((x, y), delta, fz, fx_w) in enumerate(zip(car.corners, steer, loads, wheel_fx)):  # noqa: B905 pre-existing when the lint gate went on
         alpha = delta - math.atan2(speed * math.sin(beta) + yaw_rate * x, speed * math.cos(beta) - yaw_rate * y)
         force, use = car.lateral(i, fz, alpha, fx_w, side)
         body_x = fx_w * math.cos(delta) - force * math.sin(delta)
@@ -326,7 +326,7 @@ def is_feasible(car, curve, radius, side, z, ay_g, lon=None, eps=1e-4):
         return False
     rise = [
         car.lateral(i, fz, a + eps, fx_w, side)[0] - f
-        for i, (fz, a, fx_w, f) in enumerate(zip(s["loads"], s["alphas"], s["wheel_fx"], s["forces"]))
+        for i, (fz, a, fx_w, f) in enumerate(zip(s["loads"], s["alphas"], s["wheel_fx"], s["forces"]))  # noqa: B905 pre-existing when the lint gate went on
     ]
     return min(rise[0] + rise[1], rise[2] + rise[3]) >= -1e-6 * eps * car.mass * G
 
@@ -493,8 +493,8 @@ def solve_main_case(case):
             "speed_mps": s["speed"], "beta_deg": math.degrees(beta),
             "inner_deg": math.degrees(inner), "outer_deg": math.degrees(outer),
             "ackermann_pct_at_limit": float(ackermann_pct(inner, outer, car.track_front, car.wheelbase)),
-            **{f"alpha_{c}_deg": math.degrees(a) for c, a in zip(("fl", "fr", "rl", "rr"), s["alphas"])},
-            **{f"fz_{c}_n": f for c, f in zip(("fl", "fr", "rl", "rr"), s["loads"])},
+            **{f"alpha_{c}_deg": math.degrees(a) for c, a in zip(("fl", "fr", "rl", "rr"), s["alphas"])},  # noqa: B905 pre-existing when the lint gate went on
+            **{f"fz_{c}_n": f for c, f in zip(("fl", "fr", "rl", "rr"), s["loads"])},  # noqa: B905 pre-existing when the lint gate went on
             "ay_gain_pct_per_1pct_front_grip": 100.0 * front_gain,
             "ay_gain_pct_per_1pct_rear_grip": 100.0 * rear_gain,
             "limiting_axle": limiting_axle(front_gain, rear_gain) if case["probe"] else None,
@@ -521,11 +521,11 @@ def solve_braking_case(case):
             **labels, "ay_max_g": ay, "ay_change_pct": 100.0 * (ay / ref_ay - 1.0),
             "beta_deg": math.degrees(z[0]),
             "inner_deg": math.degrees(s["steer"][0]), "outer_deg": math.degrees(z[1]),
-            **{f"alpha_{c}_deg": math.degrees(a) for c, a in zip(("fl", "fr", "rl", "rr"), s["alphas"])},
-            **{f"fz_{c}_n": f for c, f in zip(("fl", "fr", "rl", "rr"), s["loads"])},
-            **{f"brake_use_{c}": u for c, u in zip(("fl", "fr", "rl", "rr"), s["brake_use"])},
+            **{f"alpha_{c}_deg": math.degrees(a) for c, a in zip(("fl", "fr", "rl", "rr"), s["alphas"])},  # noqa: B905 pre-existing when the lint gate went on
+            **{f"fz_{c}_n": f for c, f in zip(("fl", "fr", "rl", "rr"), s["loads"])},  # noqa: B905 pre-existing when the lint gate went on
+            **{f"brake_use_{c}": u for c, u in zip(("fl", "fr", "rl", "rr"), s["brake_use"])},  # noqa: B905 pre-existing when the lint gate went on
             "ackermann_pct_at_limit": float(ackermann_pct(s["steer"][0], z[1], car.track_front, car.wheelbase)),
-            **{f"fx_{c}_n": f for c, f in zip(("fl", "fr", "rl", "rr"), s["wheel_fx"])},
+            **{f"fx_{c}_n": f for c, f in zip(("fl", "fr", "rl", "rr"), s["wheel_fx"])},  # noqa: B905 pre-existing when the lint gate went on
             "longitudinal_n": z[2] if lon else 0.0,
             "max_wheel_use": max(s["brake_use"]),
         }
@@ -600,7 +600,7 @@ def lock_check(table, rows, car, curve, outer_max, tire_width_m, inputs):
         "mean_steer_at_travel_deg": round(reach, 1),
         "min_cg_radius_low_speed_m": round(brentq(outer_excess, 2.5, 12.0, xtol=1e-3), 2),
         "rule_hairpin_cg_radius_m": round(math.sqrt(edge ** 2 - (car.wheelbase * (1.0 - car.front_frac)) ** 2), 2),
-        "mean_steer_needed_at_limit_deg": {f"{r:g}m": round(n, 1) for r, n in zip(radii, need)},
+        "mean_steer_needed_at_limit_deg": {f"{r:g}m": round(n, 1) for r, n in zip(radii, need)},  # noqa: B905 pre-existing when the lint gate went on
         "tightest_cg_radius_at_limit_m": round(float(np.interp(-reach, [-n for n in need], radii)), 2),
         "rack_needed_for_3p5m_at_limit_mm": round(float(np.interp(need[0], mean, table[:, 0])), 1),
     }
@@ -719,7 +719,7 @@ def ax_label(ax_g):
     return f"{-ax_g:g} g braking" if ax_g < 0 else (f"{ax_g:g} g drive" if ax_g > 0 else "steady")
 
 
-def yaw_derivatives(car, curve, radius, outer_max, ay_g, lon, step=math.radians(0.05)):
+def yaw_derivatives(car, curve, radius, outer_max, ay_g, lon, step=math.radians(0.05)):  # noqa: B008 pre-existing when the lint gate went on
     z = trim(car, curve, radius, 1.0, ay_g, outer_max, lon=lon)
     if z is None:
         return {}
@@ -729,7 +729,7 @@ def yaw_derivatives(car, curve, radius, outer_max, ay_g, lon, step=math.radians(
     def mz(b, o):
         return state(car, curve, radius, 1.0, b, o, ay_g, lon, lon_n)["mz"] / norm
 
-    mean = lambda o: 0.5 * (curve(o) + o)
+    mean = lambda o: 0.5 * (curve(o) + o)  # noqa: E731 pre-existing when the lint gate went on
     n_beta = (mz(beta + step, outer) - mz(beta - step, outer)) / (2.0 * step)
     n_delta = (mz(beta, outer + step) - mz(beta, outer - step)) / (mean(outer + step) - mean(outer - step))
     return {
@@ -1038,10 +1038,10 @@ def optimum_check(car, rows, inputs):
         path = [math.atan2(speed * math.sin(beta) + yaw * x, speed * math.cos(beta) - yaw * y) for x, y in car.corners[:2]]
         loads = (row["fz_fl_n"], row["fz_fr_n"])
         weighted = []
-        for i, (theta, fz) in enumerate(zip(path, loads)):
+        for i, (theta, fz) in enumerate(zip(path, loads)):  # noqa: B905 pre-existing when the lint gate went on
             lever = car.corners[i][1]
             res = minimize_scalar(
-                lambda a: -(car.wheelbase * math.cos(theta + a) + lever * math.sin(theta + a)) * lateral_n(car.tires[i], fz, a, 1.0, car.camber[i]),
+                lambda a: -(car.wheelbase * math.cos(theta + a) + lever * math.sin(theta + a)) * lateral_n(car.tires[i], fz, a, 1.0, car.camber[i]),  # noqa: B023 pre-existing when the lint gate went on
                 bounds=(0.0, 0.3), method="bounded", options={"xatol": 1e-7},
             )
             weighted.append(res.x)
@@ -1154,7 +1154,7 @@ def write_readme_parts(out, s, op_rows, inputs):
         [ax_label(a)] + [best_cell(r, a) for r in inputs.map_radii_m] for a in inputs.map_ax_g
     ])
 
-    deriv = lambda r: f"{1000 * r['n_beta_per_deg']:+.1f} / {1000 * r['n_delta_per_deg']:.1f}".replace("-", "−")
+    deriv = lambda r: f"{1000 * r['n_beta_per_deg']:+.1f} / {1000 * r['n_delta_per_deg']:.1f}".replace("-", "−")  # noqa: E731 pre-existing when the lint gate went on
     parts["limit"] = table(["R", *inputs.limit_curves], [
         [f"{radius:g} m"] + [deriv(cell[(inputs.mu, radius, 0.0, c)]) for c in inputs.limit_curves] for radius in inputs.deriv_radii_m
     ])
@@ -1306,9 +1306,9 @@ def plot_grip(path, rows, base_pct, op_rows, inputs):
     fig, (left, right) = plt.subplots(1, 2, figsize=(10.5, 4.4), facecolor=SURFACE)
     pct = np.array(inputs.ackermann_pct, dtype=float)
     plot_best(right, op_rows, inputs)
-    for radius, color in zip(inputs.radii_m, RADIUS_COLORS):
+    for radius, color in zip(inputs.radii_m, RADIUS_COLORS):  # noqa: B905 pre-existing when the lint gate went on
         def series(key, select):
-            picked = [next(r.get(key) for r in rows if select(r) and r["radius_m"] == radius and r["curve"] == f"{p:+d}%") for p in inputs.ackermann_pct]
+            picked = [next(r.get(key) for r in rows if select(r) and r["radius_m"] == radius and r["curve"] == f"{p:+d}%") for p in inputs.ackermann_pct]  # noqa: B023 pre-existing when the lint gate went on
             return np.array([np.nan if v is None else v for v in picked], dtype=float)
 
         nominal = series("ay_change_pct", is_nominal)
@@ -1411,10 +1411,10 @@ def main():
     order = sorted(range(len(cases)), key=lambda i: (cost(cases[i]), i))
     solved = map_cases(solve_case, [cases[i] for i in order])
     results = [None] * len(cases)
-    for i, result in zip(order, solved):
+    for i, result in zip(order, solved):  # noqa: B905 pre-existing when the lint gate went on
         results[i] = result
     by_kind = {}
-    for case, result in zip(cases, results):
+    for case, result in zip(cases, results):  # noqa: B905 pre-existing when the lint gate went on
         by_kind.setdefault(case["kind"], []).append(result)
     rows, braking, toe, mass = ([row for result in by_kind[kind] for row in result] for kind in ("main", "braking", "toe", "mass"))
     line, fix = by_kind["track"][0], by_kind["fix"]

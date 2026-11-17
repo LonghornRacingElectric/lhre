@@ -25,6 +25,9 @@ three years after everyone who made the decision graduated.
 | [014](014-deployed-telemetry-schema.md) | Generate server artifacts while preserving the deployed telemetry schema | Accepted |
 | [015](015-study-layout.md) | A study is a README, a study.yml and a run.py | Accepted |
 | [016](016-fmu-artifact-boundary.md) | Identified full-vehicle FMU artifact for autonomy | Accepted |
+| [017](017-tests-gate-merges.md) | Tests and linters gate merges; reviews check intent | Accepted |
+| [018](018-windows-shell-free.md) | Windows builds are shell-free; no MSYS2 or Git Bash | Accepted |
+| [019](019-hil-job-service.md) | PM2 dashboard and restricted SSH runner for HIL jobs | Accepted |
 
 ## ADRs vs. READMEs
 

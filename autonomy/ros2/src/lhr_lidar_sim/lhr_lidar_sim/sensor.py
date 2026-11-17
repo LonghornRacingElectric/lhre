@@ -2,11 +2,10 @@
 """
 A Mid-360 bolted to the car: mount pose, scan, cast, noise. Still no ROS.
 
-The mount position comes from ``lhr_vehicle`` because vehicle numbers
-live in one file. The mount *orientation* does not: it is the answer the
-mount study has yet to produce, so it stays a parameter here and gets
-written into ``vehicle.yaml`` once measured rather than guessed into it
-now.
+The default mount pose, position and orientation, comes from
+``lhr_vehicle`` because vehicle numbers live in one file. It holds the
+11/8 mount study's design (upside down inside the main hoop, 7 degrees
+nose down) until the bracket is built and measured.
 """
 
 from dataclasses import dataclass, field
@@ -47,9 +46,9 @@ class MountPose:
     x_m: float = field(default_factory=lambda: load_vehicle().lidar_position_m[0])
     y_m: float = field(default_factory=lambda: load_vehicle().lidar_position_m[1])
     z_m: float = field(default_factory=lambda: load_vehicle().lidar_position_m[2])
-    roll_rad: float = 0.0
-    pitch_rad: float = 0.0
-    yaw_rad: float = 0.0
+    roll_rad: float = field(default_factory=lambda: load_vehicle().lidar_rpy_rad[0])
+    pitch_rad: float = field(default_factory=lambda: load_vehicle().lidar_rpy_rad[1])
+    yaw_rad: float = field(default_factory=lambda: load_vehicle().lidar_rpy_rad[2])
 
     def rotation(self) -> np.ndarray:
         """Return the sensor-to-base_link rotation."""

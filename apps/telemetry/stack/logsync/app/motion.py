@@ -74,7 +74,7 @@ class MotionMonitor:
         try:
             pool = await self._get_pool()
             row = await pool.fetchrow(_QUERY)
-        except Exception as e:  # DB down, schema mismatch, etc.
+        except Exception as e:  # DB down, schema mismatch, etc.  # noqa: BLE001 pre-existing when the lint gate went on
             # Fail open: we can't prove the car is moving, so don't block forever.
             return Motion(moving=False, speed_mps=None, sample_age_ms=None,
                           recent=False, error=str(e))

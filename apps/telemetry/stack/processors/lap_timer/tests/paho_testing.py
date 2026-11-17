@@ -7,6 +7,8 @@ import time
 import datetime
 import pickle
 import json
+import os
+import random
 import requests
 import logging
 from tqdm import tqdm
@@ -15,8 +17,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from multiprocessing import cpu_count
 from pathlib import Path
 from psycopg.types.json import Jsonb
-from typing import Union, Tuple
-import requests
 
 sys.path.append(str(Path(__file__).parents[2]))
 
@@ -108,7 +108,7 @@ class DataTester:
                    self.rng.random(size, dtype) + kwargs.get('low', kwargs.get('min', 0))).tolist()
         # If str, bacon
         elif dtype is str:
-            res = [requests.get('https://baconipsum.com/api/',
+            res = [requests.get('https://baconipsum.com/api/',  # noqa: S113 pre-existing when the lint gate went on
                                 params={'type': 'meat-and-filler', 'sentences': kwargs.get('length', 10),
                                         'start-with-lorem': 1}).text[2:-2] for _ in range(size)]
         else:
@@ -200,8 +200,8 @@ class DataTester:
     def send_base64_row(self, ver: int, high_freq=True):
         with open(os.getcwd().split('LHR')[0] + '/LHR/stack/ingest/car_configs/version01.json', 'r') as f:
             config = json.load(f)['high' if high_freq else 'low']
-        str_to_np = {np_clas.__name__: np_clas for np_clas in getattr(getattr(sys.modules[__name__], 'np'), 'ScalarType')}
-        scalar_or_list = lambda val, scalar: val.tolist()[0] if scalar else val.tolist()
+        str_to_np = {np_clas.__name__: np_clas for np_clas in sys.modules[__name__].np.ScalarType}
+        scalar_or_list = lambda val, scalar: val.tolist()[0] if scalar else val.tolist()  # noqa: E731 pre-existing when the lint gate went on
         payload_str = ver.to_bytes(1, 'big') + b''.join([scalar_or_list((np.array(
             dbtest.get_random_data(str_to_np[col_spec['type']], size=(shape := col_spec.get('shape', (1,)))),
             dtype=col_spec['type']) / col_spec.get('multiplier', 1)).flatten().reshape(shape), shape == (1,)).tobytes()
@@ -213,32 +213,32 @@ class DataTester:
         
         print("DICT: ", dict)
         
-        for index, row_dict in dict.items():
+        for index, row_dict in dict.items():  # noqa: B007 pre-existing when the lint gate went on
             packet_row = {}
             packet_row["packet_id"] = row_dict["packet_id"]
             packet_row["time"] = round(time.time() * 1000)
             
-            dynamics_row = {};
+            dynamics_row = {}
             dynamics_row["packet_id"] = row_dict["packet_id"]
             dynamics_row["gps"] = (float(row_dict["gps_lat"]), float(row_dict["gps_long"]))
             
             print("PACKET ROW: ", packet_row)
             print("DYNAMICS ROW: ", dynamics_row)
             
-            self.mqtt.publish(f'data/packet', pickle.dumps(packet_row))
-            self.mqtt.publish(f'data/dynamics', pickle.dumps(dynamics_row))
+            self.mqtt.publish('data/packet', pickle.dumps(packet_row))
+            self.mqtt.publish('data/dynamics', pickle.dumps(dynamics_row))
             time.sleep(delay)
         return 0
     
     def start_event_with_gate(self, event_id: str, gate: tuple[float, float]):
         config = {"event_id": event_id, "gate": gate, "status": 0, "start_packet": 0}
-        self.mqtt.publish(f'config/test', json.dumps(config))
+        self.mqtt.publish('config/test', json.dumps(config))
         return
     
     def test_page_sync(self):
         # self.mqtt.publish(f'page_sync', json.dumps({"laps": [14312, 24321, 34321, 44321]}))
         time = 32423423
-        requests.post("http://localhost:5000/new_lap", data={"time": time})
+        requests.post("http://localhost:5000/new_lap", data={"time": time})  # noqa: S113 pre-existing when the lint gate went on
         
 
 

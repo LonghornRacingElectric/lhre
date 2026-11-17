@@ -1,0 +1,23 @@
+[Unit]
+Description=LHR HIL job runner
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=simple
+User=lhr-runner
+Group=lhr-runner
+SupplementaryGroups=docker
+StateDirectory=lhr-runner
+StateDirectoryMode=0700
+ExecStart=/usr/bin/python3 -I /opt/lhr-runner/runner.py worker
+Restart=on-failure
+RestartSec=3
+MemoryMax=256M
+CPUQuota=25%
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

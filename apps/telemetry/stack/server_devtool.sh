@@ -75,7 +75,7 @@ fi
 #  is a plugin build helper — neither is a runtime service, so both are omitted.)
 STACK_COMPONENTS="
 kafka|kafka|docker||//apps/telemetry:kafka_load,//apps/telemetry/stack/kafka:kafka_bridge_load
-ingest|ingest|docker||//apps/telemetry:mqtt_load,//apps/telemetry:postgres_load,//apps/telemetry:grafana_load,//apps/telemetry/stack/ingest:ingest_load
+ingest|ingest|docker||//apps/telemetry:mqtt_load,//apps/telemetry:postgres_load,//apps/telemetry:grafana_load,//apps/telemetry/stack/ingest:ingest_load,//apps/telemetry/stack/processors/db_writer:db_writer_load
 field_enricher|processors/field_enricher|docker||//apps/telemetry/stack/processors/field_enricher:field_enricher_load
 gps_classifier|processors/gps_classifier|docker||//apps/telemetry/stack/processors/gps_classifier:gps_classifier_load
 lap_timer|processors/lap_timer|docker||//apps/telemetry/stack/processors/lap_timer:lap_timer_load
@@ -438,7 +438,7 @@ _logs_one() {  # _logs_one <name> <tail> <prefix>   (prefix empty = no fan-out)
 }
 logs_for() {  # logs_for <name...>  (default core); Ctrl-C detaches
     local names=("$@")
-    [[ ${#names[@]} -eq 0 ]] && names=($CORE_ORDER)
+    [[ ${#names[@]} -eq 0 ]] && read -ra names <<< "$CORE_ORDER"
     warn "Following logs — press Ctrl-C to DETACH (containers keep running)."; echo
     if [[ ${#names[@]} -eq 1 ]]; then
         _logs_one "${names[0]}" 100 ""

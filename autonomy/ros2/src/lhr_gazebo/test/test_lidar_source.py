@@ -9,11 +9,18 @@ from launch.actions import DeclareLaunchArgument
 from launch.utilities import perform_substitutions
 from launch_ros.utilities import evaluate_parameters, normalize_parameters
 from lhr_lidar_sim.lidar_sim_node import LidarSimNode
+from lhr_lidar_sim.sensor import MountPose
 from lhr_vehicle import load_vehicle
 import pytest
 import rclpy
+from rclpy.parameter import Parameter
 
 WORLD = Path(__file__).parents[1] / 'worlds/autocross_seed1.sdf'
+# The old sim mount in the nose, upright and level: moved from vehicle.yaml's.
+NOSE = {'mid360_mount_x_m': '1.8', 'mid360_mount_z_m': '0.55',
+        'mid360_mount_roll_rad': '0.0', 'mid360_mount_pitch_rad': '0.0'}
+TF_DETECTOR = {'lidar_sensor_transform_source': 'tf', 'lidar_height_filter_frame': 'base_link',
+               'lidar_ground_z_min': '0.15', 'lidar_ground_z_max': '1.05'}
 
 
 class NodeConfig:
@@ -33,7 +40,7 @@ def launch_nodes(monkeypatch, **overrides):
     monkeypatch.setattr(
         module, '_find_world', lambda context: context.launch_configurations.get('world')
         or str(WORLD))
-    monkeypatch.setattr(module, 'get_package_share_directory', lambda _: '/tmp/share')
+    monkeypatch.setattr(module, 'get_package_share_directory', lambda _: str(path.parents[1]))
     context = LaunchContext()
     for action in module.generate_launch_description().entities:
         if isinstance(action, DeclareLaunchArgument):
@@ -77,6 +84,29 @@ def test_source_changes_only_cloud_wiring(monkeypatch, estimator, classified):
                                      else '/lhr/vehicle/odom')]
     assert 'sensor_sim' not in selected
     assert 'publish_cones' not in selected
+
+
+@pytest.mark.parametrize('estimator', ['truth', 'ekf'])
+def test_mid360_fusion_keeps_sensor_pose_separate_from_driving(monkeypatch, estimator):
+    """The combined gate graph uses one cloud source and classified planner input."""
+    monkeypatch.setattr('launch_ros.actions.Node', NodeConfig)
+    nodes = launch_nodes(monkeypatch, perception='lidar', estimator=estimator,
+                         lidar_source='mid360', enable_stereo_camera='true',
+                         enable_camera_lidar_fusion='true', lidar_classify_sides='false',
+                         safety='true')
+    pose_topic = '/lhr/vehicle/odom_truth' if estimator == 'ekf' else '/lhr/vehicle/odom'
+    assert nodes['lidar_sim']['remappings'] == [('/lhr/vehicle/odom', pose_topic)]
+    assert ('/lhr/lidar/points', '/lhr/lidar/gazebo_points') in (
+        nodes['ros_gz_bridge']['remappings'])
+    assert nodes['lidar_sim']['parameters'][0]['world_sdf'] == str(WORLD)
+    assert nodes['lidar_cone_detector']['parameters'][0]['classify_sides'] is True
+    planner = nodes['track_builder']['parameters'][0]
+    assert planner['cone_topic'] == '/lhr/perception/cones_classified'
+    assert planner['pairing_strategy'] == 'boundary'
+    assert planner['boundary_use_color'] is True
+    assert {'camera_lidar_fusion', 'zed2i_bridge', 'safety_node'} <= nodes.keys()
+    assert ('ekf_node' in nodes) is (estimator == 'ekf')
+    assert 'sensor_sim' not in nodes
 
 
 @pytest.mark.parametrize('port', [None, '8771'])
@@ -230,5 +260,43 @@ def test_foxglove_rejects_misspelled_boolean():
 def test_caster_settings_do_not_change_other_sources(monkeypatch, perception):
     baseline = launch_nodes(monkeypatch, perception=perception)
     overridden = launch_nodes(monkeypatch, perception=perception,
-                              mid360_max_range_m='30', mid360_range_noise_std_m='0')
+                              mid360_max_range_m='30', mid360_range_noise_std_m='0', **NOSE)
     assert baseline == overridden
+
+
+@pytest.mark.parametrize('override', [False, True])
+def test_mount_defaults_and_overrides_reach_the_caster(monkeypatch, override):
+    options = {**NOSE, **TF_DETECTOR} if override else {}
+    nodes = launch_nodes(monkeypatch, perception='lidar', lidar_source='mid360', **options)
+    params = nodes['lidar_sim']['parameters'][0]
+    args = ['--ros-args']
+    for key, value in params.items():
+        args += ['-p', f'{key}:={json.dumps(value)}']
+    rclpy.init(args=args)
+    sensor = LidarSimNode()
+    try:
+        mount = sensor._sensor.mount
+        if override:
+            assert mount == MountPose(1.8, 0.0, 0.55, 0.0, 0.0, 0.0)
+        else:
+            assert mount == MountPose()
+        for name in ('x_m', 'y_m', 'z_m', 'roll_rad', 'pitch_rad', 'yaw_rad'):
+            assert type(params[f'mount_{name}']) is float
+        # One mount per scored run, moved or not.
+        assert not sensor.set_parameters([Parameter('mount_pitch_rad', value=.2)])[0].successful
+    finally:
+        sensor.destroy_node()
+        rclpy.shutdown()
+    detector = nodes['lidar_cone_detector']['parameters'][0]
+    assert detector['sensor_transform_source'] == ('tf' if override else 'vehicle_config')
+
+
+@pytest.mark.parametrize('detector', [
+    {}, {**TF_DETECTOR, 'lidar_height_filter_frame': 'sensor'},
+    {**TF_DETECTOR, 'lidar_ground_z_min': '-0.40'},
+    {**TF_DETECTOR, 'lidar_ground_z_min': '0.05'},
+])
+def test_moved_mount_needs_a_detector_that_reads_it(monkeypatch, detector):
+    with pytest.raises(ValueError, match='moved Mid-360 mount'):
+        launch_nodes(monkeypatch, perception='lidar', lidar_source='mid360',
+                     mid360_mount_pitch_rad='0.1', **detector)

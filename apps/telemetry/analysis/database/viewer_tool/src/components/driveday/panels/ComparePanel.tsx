@@ -64,7 +64,6 @@ export function ComparePanel() {
           })}
         </tbody>
       </table>
-      <div className="note2">Both laps are lined up at the start/finish line and played together. Red means this lap is slower than the ghost lap, green means faster.</div>
     </>
   );
 }

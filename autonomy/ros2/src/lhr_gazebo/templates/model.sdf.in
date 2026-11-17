@@ -59,7 +59,7 @@
            regressed cone-contact gates; vendor-pattern GPU sampling belongs
            in a separate experiment. -->
       <sensor name="lidar" type="gpu_lidar">
-        <pose>${lidar_dx} ${lidar_dy} ${lidar_dz} 0 0 0</pose>
+        <pose>${lidar_dx} ${lidar_dy} ${lidar_dz} ${lidar_roll} ${lidar_pitch} ${lidar_yaw}</pose>
         <always_on>true</always_on>
         <update_rate>10</update_rate>
         <visualize>true</visualize>
@@ -348,6 +348,19 @@ ${stereo_camera}
            joint's physical rate limit above -->
       <cmd_max>10.0</cmd_max>
       <cmd_min>-10.0</cmd_min>
+    </plugin>
+
+    <!-- ===== STEERING FEEDBACK: the joints' actual angles, standing in for
+         the car's steering encoder. joint_cmd_adapter turns them into
+         /lhr/vehicle/steering_measured for safety_node (#208). 50 Hz, not
+         every physics step. ===== -->
+    <plugin
+      filename="gz-sim-joint-state-publisher-system"
+      name="gz::sim::systems::JointStatePublisher">
+      <joint_name>front_left_steering_joint</joint_name>
+      <joint_name>front_right_steering_joint</joint_name>
+      <topic>/model/fsae_vehicle/steering_joint_state</topic>
+      <update_rate>50</update_rate>
     </plugin>
 
     <!-- ===== DRIVE: direct velocity control ===== -->

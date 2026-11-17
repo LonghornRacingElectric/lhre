@@ -14,7 +14,7 @@ RIGHT = -1
 
 
 class StableSideLabels:
-    """Lock side labels after consistent, independently spaced proposals."""
+    """Confirm side labels and require stronger persistence to reverse them."""
 
     def __init__(self, confirmations: int = 2):
         if confirmations < 1:
@@ -25,7 +25,7 @@ class StableSideLabels:
         self._counts: list[int] = []
 
     def labels(self, size: int) -> list[int]:
-        """Resize for newly mapped cones and return the locked labels."""
+        """Resize for newly mapped cones and return the accepted labels."""
         if size < len(self._labels):
             raise ValueError('cone map cannot shrink')
         extension = size - len(self._labels)
@@ -34,31 +34,35 @@ class StableSideLabels:
         self._counts.extend([0] * extension)
         return list(self._labels)
 
-    def update(self, proposed: Sequence[int], seed: bool = False) -> list[int]:
+    def update(self, proposed: Sequence[int]) -> list[int]:
         """Incorporate one independently observed set of proposed labels."""
         self.labels(len(proposed))
         for index, side in enumerate(proposed):
-            if self._labels[index] != UNKNOWN or side == UNKNOWN:
-                continue
-            if seed:
-                self._labels[index] = side
+            if side == UNKNOWN or side == self._labels[index]:
+                self._pending[index] = UNKNOWN
+                self._counts[index] = 0
                 continue
             if side == self._pending[index]:
                 self._counts[index] += 1
             else:
                 self._pending[index] = side
                 self._counts[index] = 1
-            if self._counts[index] >= self._confirmations:
+            required = self._confirmations * (1 if self._labels[index] == UNKNOWN else 2)
+            if self._counts[index] >= required:
                 self._labels[index] = side
+                self._pending[index] = UNKNOWN
+                self._counts[index] = 0
         return list(self._labels)
 
 
 class _DisjointSet:
     """Track connected boundary fragments."""
 
-    def __init__(self, size: int):
+    def __init__(self, votes: Sequence[float]):
+        size = len(votes)
         self._parents = list(range(size))
         self._sizes = [1] * size
+        self._votes = list(votes)
 
     def find(self, item: int) -> int:
         """Return the representative for one item."""
@@ -67,16 +71,27 @@ class _DisjointSet:
             item = self._parents[item]
         return item
 
-    def union(self, first: int, second: int):
-        """Join two components."""
+    def union(self, first: int, second: int) -> bool:
+        """Join fragments unless both have opposing side evidence."""
         first = self.find(first)
         second = self.find(second)
         if first == second:
-            return
+            return True
+        if (self._votes[first] * self._votes[second] < 0
+                and min(abs(self._votes[first]), abs(self._votes[second]))
+                >= MIN_OPPOSING_SIDE_VOTE):
+            return False
         if self._sizes[first] < self._sizes[second]:
             first, second = second, first
         self._parents[second] = first
         self._sizes[first] += self._sizes[second]
+        self._votes[first] += self._votes[second]
+        return True
+
+
+# Keep below a nominal 7m vote (~0.12); retune with the observation weights
+# or corridor limits so weak noise can merge without erasing opposing sides.
+MIN_OPPOSING_SIDE_VOTE = 0.1
 
 
 def vehicle_relative_side_vote(
@@ -115,22 +130,27 @@ def classify_cone_sides(
     link_distance: float = 3.0,
     gap_distance: float = 3.3,
     max_gap_angle: float = math.radians(40.0),
+    fresh_votes: Sequence[float] | None = None,
 ) -> list[int]:
-    """Classify cones after sharing votes along geometric boundary fragments."""
+    """Share boundary votes, proposing sides only on currently observed fragments."""
     if len(cone_positions) != len(side_votes):
         raise ValueError('cone_positions and side_votes must have equal length')
+    if fresh_votes is not None and len(fresh_votes) != len(side_votes):
+        raise ValueError('fresh_votes and side_votes must have equal length')
     if not cone_positions:
         return []
 
     points = np.asarray(
         [(float(point[0]), float(point[1])) for point in cone_positions])
+    unlinked = [_sign(vote) if fresh_votes is None or fresh_votes[index] else UNKNOWN
+                for index, vote in enumerate(side_votes)]
     if len(points) < 3:
-        return [_sign(vote) for vote in side_votes]
+        return unlinked
 
     try:
         triangulation = Delaunay(points)
     except QhullError:
-        return [_sign(vote) for vote in side_votes]
+        return unlinked
 
     edges: set[tuple[int, int]] = set()
     for simplex in triangulation.simplices:
@@ -139,14 +159,15 @@ def classify_cone_sides(
             second = int(simplex[(offset + 1) % 3])
             edges.add((min(first, second), max(first, second)))
 
-    components = _DisjointSet(len(points))
+    components = _DisjointSet(side_votes)
     neighbors: list[list[int]] = [[] for _ in points]
-    edge_lengths: dict[tuple[int, int], float] = {}
-    for first, second in edges:
-        distance = float(np.linalg.norm(points[first] - points[second]))
-        edge_lengths[(first, second)] = distance
-        if distance <= link_distance:
-            components.union(first, second)
+    edge_lengths = {edge: float(np.linalg.norm(points[edge[0]] - points[edge[1]]))
+                    for edge in edges}
+    # Grow nearby fragments before considering wider, potentially cross-track links.
+    ordered_edges = sorted(edges, key=lambda edge: (edge_lengths[edge], edge))
+    for first, second in ordered_edges:
+        distance = edge_lengths[(first, second)]
+        if distance <= link_distance and components.union(first, second):
             neighbors[first].append(second)
             neighbors[second].append(first)
 
@@ -155,7 +176,8 @@ def classify_cone_sides(
         for index, adjacent in enumerate(neighbors)
     ]
     minimum_alignment = math.cos(max_gap_angle)
-    for (first, second), distance in edge_lengths.items():
+    for first, second in ordered_edges:
+        distance = edge_lengths[(first, second)]
         if distance <= link_distance or distance > gap_distance:
             continue
         if components.find(first) == components.find(second):
@@ -175,8 +197,11 @@ def classify_cone_sides(
         root = components.find(index)
         component_votes[root] = component_votes.get(root, 0.0) + vote
 
+    observed = {components.find(index) for index in range(len(points))
+                if fresh_votes is None or fresh_votes[index]}
     return [
         _sign(component_votes[components.find(index)])
+        if components.find(index) in observed else UNKNOWN
         for index in range(len(points))
     ]
 

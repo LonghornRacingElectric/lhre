@@ -28,7 +28,7 @@ def check_module_status():
             return True, "Cellular module is currently powered ON"
         else:
             return False, "Cellular module is currently powered OFF"
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
         print(f"Error checking module status: {e}")
         return None, f"Error checking status: {e}"
 
@@ -48,7 +48,7 @@ def shutdown_module():
             print("Module Shutdown Failed")
     except serial.SerialException as e:
         print(f"SERIAL SHUTDOWN ERROR: {e}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
         print(f"UNEXPECTED SHUTDOWN ERROR: {e}")
 
 def power_on_module():
@@ -57,7 +57,7 @@ def power_on_module():
         lgpio.gpio_write(h, FULL_CARD_POWER_OFF, 1)  # Set pin HIGH
         time.sleep(1)
         print("Cellular module powered ON successfully")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
         print(f"UNEXPECTED POWER_ON ERROR: {e}")
 
 def main():
@@ -86,7 +86,7 @@ def main():
     except KeyboardInterrupt:
         print("\nOperation cancelled by user")
         sys.exit(1)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
         print(f"Error: {e}")
         sys.exit(1)
     finally:

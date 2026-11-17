@@ -77,6 +77,24 @@ def test_invalid_lidar_range_noise_is_rejected(tmp_path, stddev):
         load_vehicle(source)
 
 
+def test_lidar_orientation_is_loaded_from_yaml(tmp_path):
+    raw = yaml.safe_load(config_path().read_text())
+    raw['sensors']['lidar']['rpy_rad'] = [0.0, 0.25, 0]
+    source = tmp_path / 'vehicle.yaml'
+    source.write_text(yaml.safe_dump(raw))
+    assert load_vehicle(source).lidar_rpy_rad == (0.0, 0.25, 0.0)
+
+
+@pytest.mark.parametrize('rpy', [None, [0.0, 0.1], [0.0, float('nan'), 0.0], [0.0, '0.1', 0.0]])
+def test_invalid_lidar_orientation_is_rejected(tmp_path, rpy):
+    raw = yaml.safe_load(config_path().read_text())
+    raw['sensors']['lidar']['rpy_rad'] = rpy
+    source = tmp_path / 'vehicle.yaml'
+    source.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ValueError, match='rpy_rad'):
+        load_vehicle(source)
+
+
 def test_vehicle_sha256_matches_the_file_on_disk():
     expected = hashlib.sha256(config_path().read_bytes()).hexdigest()
     assert vehicle_sha256() == expected

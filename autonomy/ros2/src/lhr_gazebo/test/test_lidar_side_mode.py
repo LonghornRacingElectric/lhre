@@ -20,7 +20,7 @@ class _Node:
 
 @pytest.mark.parametrize('setting, enabled, strategy', [
     (None, False, 'boundary'),
-    ('true', True, 'classified'),
+    ('true', True, 'boundary'),
     ('false', False, 'boundary'),
 ])
 def test_lidar_side_mode_configures_detector_and_builder(
@@ -52,6 +52,7 @@ def test_lidar_side_mode_configures_detector_and_builder(
 
     assert nodes['lidar_cone_detector'].parameters['classify_sides'] is enabled
     assert nodes['track_builder'].parameters['pairing_strategy'] == strategy
+    assert nodes['track_builder'].parameters['boundary_use_color'] is False
 
 
 def test_lidar_side_launch_argument_defaults_to_false():

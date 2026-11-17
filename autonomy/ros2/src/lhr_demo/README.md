@@ -28,7 +28,7 @@ Beyond the node parameters listed in
 | Argument | Default | What it does |
 | --- | --- | --- |
 | `use_sim_time` | `true` | Every node but the plant (`sim_kinematic` or `sim_bobsim`) follows `/clock`. Off means wall time, and averaged metrics wander |
-| `timeout_sec` | `0.0` | Optional wall-clock watchdog; disabled by default. `run_headless.sh` sets 120 s |
+| `timeout_sec` | `0.0` | Optional metrics watchdog in sim seconds, with a wall-time hang guard; disabled by default. `run_headless.sh` sets 120 s |
 | `output_csv` | `data/metrics.csv` | Where the metrics row goes |
 | `run_id` | timestamp | Shared by the metrics row and the bag directory |
 | `record` | `false` | Record an MCAP bag of the contract topics |
@@ -170,7 +170,7 @@ in `lhr_metrics`, the process exits, and its exit emits `Shutdown`. About
 `enable_metrics:=false` removes that. Nothing then publishes
 `/lhr/metrics/lap_complete`, so `mission_manager` never leaves `DRIVING`,
 the car keeps lapping, and no process exit tears the launch down. It runs
-until Ctrl-C. `timeout_sec:=0.0` disables only the wall-clock deadline
+until Ctrl-C. `timeout_sec:=0.0` disables only the watchdog deadline
 and leaves lap completion in place, so it is not enough on its own.
 
 ```bash
@@ -250,7 +250,10 @@ track. `lidar:=true` alone previews the cloud without changing perception.
 detections and selects the cloud detector, local `boundary_graph` planning and
 open-path control. That mode defaults to `v_max:=4.0` rather than 12 m/s.
 Adding `lidar_classify_sides:=true` turns on the detector's side inference
-and swaps `boundary_graph` for `classified` pairing.
+while retaining `boundary_graph` planning. Labels now wait for independent
+travelled observations; the geometry planner must handle the unknown cones
+that bootstrap that motion. The local corridor uses geometry regardless of
+the inferred labels.
 
 `start_on_track:=true` aligns both closed-course perception modes' initial pose with the nearest
 generated centerline and its forward tangent; `false` preserves explicit
@@ -346,7 +349,9 @@ cone locations; it is not a realistic sensing model under drift.
 into metrics and bag provenance. Bags also record truth odometry, IMU,
 wheel speeds and truth TF. Metrics retain distance-weighted track error and
 append estimate-versus-truth errors. Side inference is opt-in; it estimates
-track side from geometry and can lock an incorrect early label.
+track side from geometry. Labels require independent travelled observations
+and can recover after sustained corrective evidence; see
+[side inference](../lhr_perception/README.md#optional-side-inference).
 
 Docker mounts autonomy separately from the repository. Code provenance falls
 back to `/opt/lhr` (or `LHRE_ROOT`) when the launch file has no Git metadata

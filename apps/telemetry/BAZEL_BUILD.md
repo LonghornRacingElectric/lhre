@@ -16,7 +16,8 @@ display telemetry:
 | PostgreSQL | durable telemetry storage | pinned upstream |
 | Kafka | live event transport | pinned upstream |
 | Grafana | dashboards | pinned upstream |
-| ingest | MQTT decode, database write, Kafka forward | this repo |
+| ingest | MQTT forward, legacy inputs, CSV | this repo |
+| db_writer | Kafka protobuf decode and batched PostgreSQL persistence | this repo |
 | kafka_bridge | gRPC-to-Kafka bridge | this repo |
 | field_enricher | configured derived fields | this repo |
 

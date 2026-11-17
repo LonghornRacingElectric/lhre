@@ -88,6 +88,7 @@ done
 [[ "$(wc -l < "$build_log")" == "$build_count" ]]
 
 (
+    # shellcheck source=/dev/null # the runner under test, path set above
     source "$integration_runner"
     REPO_ROOT="$missing_repo"
     unset ORION_DB_INIT_SQL
@@ -109,6 +110,7 @@ for selected_schema in "" "$override"; do
     (
         export TEST_SRCDIR="$fixture"
         ORION_DB_INIT_SQL="$selected_schema"
+        # shellcheck source=/dev/null # the runner under test, path set above
         source "$integration_runner" "bazel schema.sql"
         fail_build=1
         prepare_orion_schema "$REPO_ROOT" up
@@ -116,6 +118,7 @@ for selected_schema in "" "$override"; do
     )
 done
 build_count="$(wc -l < "$build_log")"
+# shellcheck disable=SC2034 # read by compose_in, from server_devtool.sh
 for SUDO in "" sudo; do
     unset ORION_DB_INIT_SQL
     ORION_DB_INIT_SQL="$override"
@@ -129,6 +132,7 @@ if compose_in "$ingest_dir" up; then
     exit 1
 fi
 
+# shellcheck disable=SC2034 # read by server_devtool.sh's functions
 OS="Linux"
 docker_root() {
     printf '/var/lib/docker\n'

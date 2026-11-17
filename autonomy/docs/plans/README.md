@@ -13,5 +13,7 @@ Working documents: integration plans, change logs, the year roadmap. Written as 
 | [gazebo-change-notes.md](gazebo-change-notes.md) | Chronological change log (historical) |
 | [retrofit-roadmap-2026-27.md](retrofit-roadmap-2026-27.md) | Year roadmap snapshot. The live version is the VMS Timeline in Notion |
 | [mvp-pass-criteria.md](mvp-pass-criteria.md) | What the 10/28 software MVP gate run must show |
+| [sim-v2-pass-criteria.md](sim-v2-pass-criteria.md) | The 11/14 Sim v2 stack, run matrix and acceptance thresholds |
+| [2026-11-07-mid360-fusion-gate-plan.md](2026-11-07-mid360-fusion-gate-plan.md) | Implementation and validation plan for #206: gate sensor selection, fallback and rates |
 
 For onboarding, start at [ros2/GETTING-STARTED.md](../../ros2/GETTING-STARTED.md).

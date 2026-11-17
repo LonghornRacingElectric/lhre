@@ -52,7 +52,7 @@ def test_fmu_git_reads_allow_differently_owned_checkouts(tmp_path, monkeypatch):
     monkeypatch.setenv('GIT_CONFIG_GLOBAL', '/dev/null')
     monkeypatch.setenv('GIT_CONFIG_SYSTEM', '/dev/null')
     monkeypatch.setenv('GIT_TEST_ASSUME_DIFFERENT_OWNER', '1')
-    unsafe = subprocess.run(['git', '-C', str(bobsim), 'rev-parse', 'HEAD'],
+    unsafe = subprocess.run(['git', '-C', str(bobsim), 'rev-parse', 'HEAD'],  # noqa: PLW1510 pre-existing when the lint gate went on
                             capture_output=True, text=True)
     assert unsafe.returncode != 0 and 'dubious ownership' in unsafe.stderr
     assert git_sha(bobsim) == expected

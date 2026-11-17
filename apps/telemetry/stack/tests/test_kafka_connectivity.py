@@ -6,8 +6,6 @@ Requires the Kafka container to be running.
 """
 
 import unittest
-import os
-import sys
 import time
 
 from telemetry.stack.tests.test_utils import (
@@ -58,7 +56,7 @@ class TestKafkaConnectivity(unittest.TestCase):
             start_time = time.time()
             while time.time() - start_time < 10:
                 batch = consumer.poll(timeout_ms=1000)
-                for partition, records in batch.items():
+                for partition, records in batch.items():  # noqa: B007 pre-existing when the lint gate went on
                     for record in records:
                         messages.append(record.value)
                 if messages:
@@ -93,11 +91,11 @@ class TestKafkaConnectivity(unittest.TestCase):
         
         try:
             # Both consumers in the same group should share messages
-            consumer1 = client1.create_consumer(
+            consumer1 = client1.create_consumer(  # noqa: F841 pre-existing when the lint gate went on
                 "test-consumer-groups",
                 group_id="test-shared-group"
             )
-            consumer2 = client2.create_consumer(
+            consumer2 = client2.create_consumer(  # noqa: F841 pre-existing when the lint gate went on
                 "test-consumer-groups",
                 group_id="test-shared-group"
             )

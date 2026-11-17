@@ -11,10 +11,8 @@ import pickle
 import json
 import requests
 import logging
-from itertools import count
 from tqdm import tqdm
 import sys
-import secrets
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from multiprocessing import cpu_count
 from pathlib import Path
@@ -26,7 +24,7 @@ from sqlalchemy import func, select
 
 sys.path.append(str(Path(__file__).parents[2]))
 from stack.ingest.mqtt_handler import MQTTHandler, MQTTTarget
-from analysis.sql_utils.db_session import get_db, DBTarget
+from analysis.sql_utils.db_session import get_db
 from analysis.sql_utils.query_builder import QueryBuilder
 from analysis.sql_utils.models import Packet, AngeliquePacket, OrionPacket
 from stack.ingest.protobuf.template_pb2 import SensorData
@@ -741,7 +739,7 @@ class DataTester:
                    self.rng.random(size, dtype) + kwargs.get('low', kwargs.get('min', 0))).tolist()
         # If str, bacon
         elif dtype is str:
-            res = [requests.get('https://baconipsum.com/api/',
+            res = [requests.get('https://baconipsum.com/api/',  # noqa: S113 pre-existing when the lint gate went on
                                 params={'type': 'meat-and-filler', 'sentences': kwargs.get('length', 10),
                                         'start-with-lorem': 1}).text[2:-2] for _ in range(size)]
         elif dtype is bytearray:
@@ -953,8 +951,8 @@ class DataTester:
     def send_base64_row(self, ver: int, high_freq=True):
         with open(os.getcwd().split('LHR')[0] + f'/LHR/stack/ingest/car_configs/version{ver:02}.json', 'r') as f:
             config = json.load(f)['high' if high_freq else 'low']
-        str_to_np = {np_clas.__name__: np_clas for np_clas in getattr(getattr(sys.modules[__name__], 'np'), 'ScalarType')}
-        scalar_or_list = lambda val, scalar: val.tolist()[0] if scalar else val.tolist()
+        str_to_np = {np_clas.__name__: np_clas for np_clas in sys.modules[__name__].np.ScalarType}
+        scalar_or_list = lambda val, scalar: val.tolist()[0] if scalar else val.tolist()  # noqa: E731 pre-existing when the lint gate went on
         payload_str = ver.to_bytes(1, 'big') + b''.join([scalar_or_list((np.array(
             self.get_random_data(str_to_np[col_spec['type']], size=(shape := col_spec.get('shape', (1,)))),
             dtype=col_spec['type']) / col_spec.get('multiplier', 1)).flatten().reshape(shape), shape == (1,)).tobytes()

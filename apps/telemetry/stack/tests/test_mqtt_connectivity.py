@@ -6,8 +6,6 @@ Requires the MQTT broker (mosquitto) container to be running.
 """
 
 import unittest
-import os
-import sys
 import time
 
 from telemetry.stack.tests.test_utils import (

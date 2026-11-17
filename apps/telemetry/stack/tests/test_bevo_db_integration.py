@@ -31,7 +31,7 @@ class TestBevoAndDatabaseIntegration(unittest.TestCase):
             with get_db("Orion") as session:
                 result = session.execute(text("SELECT to_regclass('public.packet')")).scalar()
                 return result is not None
-        except Exception:
+        except Exception:  # noqa: BLE001 pre-existing when the lint gate went on
             return False
 
     def _await_welcome_packet(self, client_id: str, announce_payload: str, timeout: float = 12.0):
@@ -182,7 +182,7 @@ class TestBevoAndDatabaseIntegration(unittest.TestCase):
             with get_db("Angelique") as session:
                 count = session.query(AngeliquePacket).count()
                 self.assertIsInstance(count, int, "Count should be an integer")
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 pre-existing when the lint gate went on
             self.fail(f"Querying AngeliquePacket raised an exception: {exc}")
 
     def test_nightwatch_model_query(self):
@@ -191,7 +191,7 @@ class TestBevoAndDatabaseIntegration(unittest.TestCase):
             with get_db("Nightwatch") as session:
                 count = session.query(Packet).count()
                 self.assertIsInstance(count, int, "Count should be an integer")
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 pre-existing when the lint gate went on
             self.fail(f"Querying Nightwatch model raised an exception: {exc}")
 
     def test_orion_model_query(self):
@@ -202,7 +202,7 @@ class TestBevoAndDatabaseIntegration(unittest.TestCase):
             with get_db("Orion") as session:
                 count = session.query(OrionPacket).count()
                 self.assertIsInstance(count, int, "Count should be an integer")
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 pre-existing when the lint gate went on
             self.fail(f"Querying OrionPacket raised an exception: {exc}")
 
 

@@ -18,7 +18,7 @@ def launch_context(monkeypatch):
         'gazebo_fusion_launch', path / 'launch/gazebo_demo.launch.py')
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    monkeypatch.setattr(module, '_find_world', lambda _: '/tmp/world.sdf')
+    monkeypatch.setattr(module, '_find_world', lambda _: str(path / 'worlds/autocross_seed1.sdf'))
     monkeypatch.setattr(module, 'get_package_share_directory', lambda _: str(path))
     context = launch.LaunchContext()
     for action in module.generate_launch_description().entities:
@@ -107,8 +107,9 @@ def test_fusion_parameters_reach_node(launch_context, estimator, debug_classifie
 @pytest.mark.parametrize('estimator', ['truth', 'ekf'])
 @pytest.mark.parametrize('fusion', [False, True])
 @pytest.mark.parametrize('side_argument', ['false', 'true'])
+@pytest.mark.parametrize('lidar_source', ['gazebo', 'mid360'])
 def test_fusion_wires_planner_and_enables_fallback(
-        launch_context, estimator, fusion, side_argument):
+        launch_context, estimator, fusion, side_argument, lidar_source):
     """Evaluated planner inputs must select fusion, boundary pairing and fallback together."""
     rclpy = pytest.importorskip('rclpy')
     from launch_ros.actions import Node
@@ -116,7 +117,7 @@ def test_fusion_wires_planner_and_enables_fallback(
     from lhr_track_builder.track_builder_node import TrackBuilder
     module, context = launch_context
     context.launch_configurations.update(
-        perception='lidar', estimator=estimator,
+        perception='lidar', estimator=estimator, lidar_source=lidar_source,
         enable_stereo_camera=str(fusion).lower(), enable_camera_lidar_fusion=str(fusion).lower(),
         lidar_classify_sides=side_argument)
     nodes = [n for n in module._launch_setup(context) if isinstance(n, Node)]
@@ -126,9 +127,8 @@ def test_fusion_wires_planner_and_enables_fallback(
     detector_params = evaluate_parameters(context, detector_action._Node__parameters)[0]
     topic = '/lhr/perception/cones_classified' if fusion else '/lhr/sensor/cones_detected'
     assert params.get('cone_topic', '/lhr/sensor/cones_detected') == topic
-    assert params['pairing_strategy'] == (
-        'classified' if not fusion and side_argument == 'true' else 'boundary')
-    assert params.get('boundary_use_color', True) is True
+    assert params['pairing_strategy'] == 'boundary'
+    assert params['boundary_use_color'] is fusion
     assert detector_params['classify_sides'] is (fusion or side_argument == 'true')
     args = ['--ros-args']
     for name, value in params.items():
@@ -140,7 +140,7 @@ def test_fusion_wires_planner_and_enables_fallback(
         subscriptions = list(planner.subscriptions)
         assert any(s.topic_name == topic for s in subscriptions)
         assert planner._pairing_strategy == params['pairing_strategy']
-        assert planner._boundary_use_color is True
+        assert planner._boundary_use_color is fusion
     finally:
         if planner is not None:
             planner.destroy_node()

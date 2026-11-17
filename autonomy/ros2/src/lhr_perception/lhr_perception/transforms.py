@@ -1,6 +1,17 @@
 """Shared full-pose rigid transforms for LiDAR registration and camera fusion."""
 
+import math
+
 import numpy as np
+
+
+def rpy_quaternion(roll, pitch, yaw):
+    """Return (x, y, z, w) for a ROS roll-pitch-yaw (fixed-axis XYZ) rotation."""
+    cr, sr = math.cos(roll / 2), math.sin(roll / 2)
+    cp, sp = math.cos(pitch / 2), math.sin(pitch / 2)
+    cy, sy = math.cos(yaw / 2), math.sin(yaw / 2)
+    return (sr * cp * cy - cr * sp * sy, cr * sp * cy + sr * cp * sy,
+            cr * cp * sy - sr * sp * cy, cr * cp * cy + sr * sp * sy)
 
 
 def rigid_transform_matrix(transform):

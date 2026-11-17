@@ -21,13 +21,13 @@ describe.skipIf(!path)("COTA course 1 manual-cut regression", () => {
     expect(courses[0].D.RL).toBeLessThan(430);
     expect(courses[0].D.laps.every((l) => l.dev < 3)).toBe(true);
   });
-  it("keeps logger labels and timings through analysis and CSV", () => {
+  it("keeps logged lap numbers and timings with concise labels through analysis and CSV", () => {
     const s = new Session(rebuildRun(courses[0].D));
-    expect(s.runs.map((l) => l.name)).toEqual(["Manual 3", "Manual 5"]);
-    s.runs.forEach((l) => expect(l.dur).toBe(data!.laps.find((source) => source.label === l.name)!.durationMs));
+    expect(s.runs.map((l) => l.name)).toEqual(["Lap 3", "Lap 5"]);
+    s.runs.forEach((l) => expect(l.dur).toBe(data!.laps.find((source) => source.label.replace(/^Manual/, "Lap") === l.name)!.durationMs));
     const a = new Analysis(s, emptyUserState());
-    expect(a.bestSec.every((b) => ["Manual 3", "Manual 5"].includes(b.label))).toBe(true);
-    expect(lapsCsv(a, defaultUnits())).toContain("Manual 3,");
+    expect(a.bestSec.every((b) => ["Lap 3", "Lap 5"].includes(b.label))).toBe(true);
+    expect(lapsCsv(a, defaultUnits())).toContain("Lap 3,");
   });
   it("draws a measured overlay without a closing chord and labels any untimed lap-cut join", () => {
     const s = new Session(rebuildRun(courses[0].D));

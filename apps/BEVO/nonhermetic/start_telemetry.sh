@@ -20,7 +20,9 @@ CAN_IFACE_0="${CAND_CAN_INTERFACE_0:-can0}"
 CAN_IFACE_1="${CAND_CAN_INTERFACE_1:-can1}"
 
 CAN_BITRATE="${BEVO_CAN_BITRATE:-1000000}"
+# shellcheck disable=SC2034 # for the VPN step below, commented out for now
 OPENVPN_CONFIG="${BEVO_OPENVPN_CONFIG:-/etc/openvpn/client/client.ovpn}"
+# shellcheck disable=SC2034 # for the VPN step below, commented out for now
 OPENVPN_CREDS="${BEVO_OPENVPN_CREDS:-$BEVO_ROOT/vpn_creds.txt}"
 
 echo "Starting BEVO telemetry system..."

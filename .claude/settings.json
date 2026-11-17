@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ \"$(uname -s)\" = Linux ] && ! docker info >/dev/null 2>&1; then sudo service docker start; fi; exit 0"
+          }
+        ]
+      }
+    ]
+  }
+}

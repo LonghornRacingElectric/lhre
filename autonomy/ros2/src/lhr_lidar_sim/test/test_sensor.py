@@ -122,7 +122,7 @@ def test_returns_per_cone_fall_off_with_range():
 
 def test_single_frame_scan_gap_does_not_imply_an_invisible_cone():
     # Fix the study mount: changing vehicle YAML must not change this scan-gap fixture.
-    sensor = Mid360Sensor(config=NO_NOISE, mount=MountPose(z_m=0.62), seed=1)
+    sensor = Mid360Sensor(config=NO_NOISE, mount=MountPose(1.8, 0.0, 0.62, 0.0, 0.0, 0.0), seed=1)
     assert points_on_cone(sensor, 0.0, 6.0) == 0
     assert points_on_cone(sensor, 0.1, 6.0) > 0
     assert points_on_cone(sensor, 0.0, 6.0, frames=40) > 0

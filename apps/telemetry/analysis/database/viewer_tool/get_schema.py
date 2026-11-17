@@ -1,5 +1,4 @@
 
-import os
 import sys
 from pathlib import Path
 import logging
@@ -17,7 +16,7 @@ def main():
             logging.debug("--- SCHEMA START ---")
             logging.debug(table_specs)
             logging.debug("--- SCHEMA END ---")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
         logging.error(f"An error occurred: {e}")
         logging.error(traceback.format_exc())
 

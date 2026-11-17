@@ -58,7 +58,7 @@ def main():
     try:
         subprocess.run(command, check=True)
         print("--- Flash Complete ---")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 pre-existing when the lint gate went on
         print(f"An unexpected error occurred: {e}", file=sys.stderr)
         sys.exit(1)
 

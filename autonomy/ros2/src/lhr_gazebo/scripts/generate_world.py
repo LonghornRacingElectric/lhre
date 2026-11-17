@@ -134,6 +134,9 @@ def generate_world_sdf(
                 CONE_SPECS[kind].height_m / 2.0))
 
     cones_xml = '\n'.join(cone_blocks)
+    # Long legal courses can extend beyond the legacy 200 m ground plane.
+    extent = max(100., max(abs(v) for p in left_cones + right_cones for v in p) + 10.)
+    ground_size = max(200, math.ceil(2*extent))
 
     # Vehicle spawn height: wheel radius so it sits on the ground
     veh_z = 0.0
@@ -187,7 +190,7 @@ def generate_world_sdf(
               <geometry>
                 <plane>
                   <normal>0 0 1</normal>
-                  <size>200 200</size>
+                  <size>{ground_size} {ground_size}</size>
                 </plane>
               </geometry>
               <surface>
@@ -200,7 +203,7 @@ def generate_world_sdf(
               <geometry>
                 <plane>
                   <normal>0 0 1</normal>
-                  <size>200 200</size>
+                  <size>{ground_size} {ground_size}</size>
                 </plane>
               </geometry>
               <material>

@@ -70,17 +70,17 @@ class LidarSimNode(Node):
     def __init__(self):
         super().__init__('lidar_sim')
 
-        # Mount *position* comes from vehicle.yaml, like every other
-        # vehicle number. Mount *orientation* does not: it is what the
-        # mount study has to determine, so it stays a parameter until
-        # there is a measured answer to write down.
+        # The mount pose comes from vehicle.yaml, like every other
+        # vehicle number: the 11/8 study's design until the bracket is
+        # measured.
         vehicle = load_vehicle()
         # lhr_vehicle's Vec3 is a plain (x, y, z) tuple, not an object.
         mount_x, mount_y, mount_z = vehicle.lidar_position_m
+        mount_roll, mount_pitch, mount_yaw = vehicle.lidar_rpy_rad
 
-        # Position defaults come from vehicle.yaml so that file stays
-        # the source of truth, but all six are parameters and all six
-        # are settable while the node runs. The study is someone
+        # Defaults come from vehicle.yaml so that file stays the source
+        # of truth, but all six are parameters and all six are settable
+        # while the node runs. The study is someone
         # dragging a slider and watching the cloud change, and a mount
         # pose that needs a rebuild per guess is why it has not happened.
         # The measured answer gets written back to vehicle.yaml, not
@@ -88,9 +88,9 @@ class LidarSimNode(Node):
         self.declare_parameter('mount_x_m', mount_x)
         self.declare_parameter('mount_y_m', mount_y)
         self.declare_parameter('mount_z_m', mount_z)
-        self.declare_parameter('mount_roll_rad', 0.0)
-        self.declare_parameter('mount_pitch_rad', 0.0)
-        self.declare_parameter('mount_yaw_rad', 0.0)
+        self.declare_parameter('mount_roll_rad', mount_roll)
+        self.declare_parameter('mount_pitch_rad', mount_pitch)
+        self.declare_parameter('mount_yaw_rad', mount_yaw)
         self.declare_parameter('seed', 1)
         self.declare_parameter('frame_rate_hz', 10.0)
         self.declare_parameter('point_rate_hz', 200_000.0)
@@ -133,8 +133,9 @@ class LidarSimNode(Node):
         self._world_sdf = str(param('world_sdf'))
         if self._world_sdf:
             self._cones = load_world_cones(self._world_sdf)
-            if mount != MountPose():
-                raise ValueError('World input requires the fixed vehicle.yaml mount')
+            # A world run may start at any mount: the Gazebo launch then
+            # has the detector read it from tf. It cannot move mid-run,
+            # so every frame of a scored run comes from one mount.
             if param('motion_distortion') or param('clutter_profile') != 'none':
                 raise ValueError('World input requires snapshot scans and no synthetic clutter')
 
@@ -220,7 +221,7 @@ class LidarSimNode(Node):
             if self._world_sdf:
                 return SetParametersResult(
                     successful=False,
-                    reason='World mode uses the fixed vehicle.yaml mount for perception')
+                    reason='World mode keeps its startup mount for the whole run')
             if param.type_ not in (Parameter.Type.DOUBLE,
                                    Parameter.Type.INTEGER):
                 return SetParametersResult(

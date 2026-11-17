@@ -43,11 +43,14 @@ limits:
   max_speed_mps: 15.0       # ASSUMED (kinematic sim command clamp)
 
 sensors:
-  # Positions in base_link. The Mid-360 sits on a mast ahead of the driver
-  # cell. The IMU is at the chassis link origin (half the wheelbase forward,
-  # chassis_z_m up) and is derived from that, not listed here.
+  # Positions in base_link. The IMU is at the chassis link origin (half the
+  # wheelbase forward, chassis_z_m up) and is derived from that, not listed here.
   lidar:
-    position_m: [1.8, 0.0, 0.55]     # ASSUMED (Gazebo mount)
+    # Design mount from the 11/8 study (autonomy/testing/2026-11-08-lidar-mount-study):
+    # just inside the main hoop, upside down (roll pi), 7 deg nose down.
+    # Replace with the as-built numbers once the bracket exists.
+    position_m: [0.609, 0.0, 1.06]                # ASSUMED (design)
+    rpy_rad: [3.141592653589793, 0.1221730476, 0.0]  # ASSUMED (design)
     # Provisional along-beam sigma, matching lhr_lidar_sim's Mid-360 model.
     # 10/4 acceptance floor-patch RMS was 0.9-1.9 cm; not a range calibration.
     range_noise_std_m: 0.02

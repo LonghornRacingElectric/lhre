@@ -70,7 +70,7 @@ def corner_from_vehicle(vehicle: Mapping, axle: str) -> Corner:
 
 
 def _directions(corner):
-    return [_unit(chassis - upright) for chassis, upright in zip(corner.chassis, corner.upright)]
+    return [_unit(chassis - upright) for chassis, upright in zip(corner.chassis, corner.upright)]  # noqa: B905 pre-existing when the lint gate went on
 
 
 def _nonspin(corner, moment):
@@ -109,7 +109,7 @@ def spin_torque(corner, force):
 def statics(corner, fx, reactions, given, balancing):
     arm = corner.r_cp - corner.r_wc
     matrix = np.zeros((7, 7))
-    for column, (u, upright) in enumerate(zip(_directions(corner), corner.upright)):
+    for column, (u, upright) in enumerate(zip(_directions(corner), corner.upright)):  # noqa: B905 pre-existing when the lint gate went on
         matrix[:3, column] = u
         matrix[3:6, column] = np.cross(upright - corner.r_wc, u)
     matrix[:3, 5] = Z
@@ -134,7 +134,7 @@ def statics_coeff(corner, reaction, fx=1.0):
 
 def twist(corner):
     matrix = np.zeros((6, 6))
-    for row, (u, upright) in enumerate(zip(_directions(corner), corner.upright)):
+    for row, (u, upright) in enumerate(zip(_directions(corner), corner.upright)):  # noqa: B905 pre-existing when the lint gate went on
         matrix[row, :3] = u
         matrix[row, 3:] = np.cross(upright - corner.r_cp, u)
     matrix[5, 2] = 1.0
