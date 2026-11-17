@@ -66,8 +66,13 @@ TEST_P(EveryMode, PowerCapStaysUnderTheRuleLimit) {
   // The learned trim only lowers the cap; it must never take it to zero.
   EXPECT_GE(pl.trim_max_w, 0.0f);
   EXPECT_LT(pl.trim_max_w, pl.limit_w);
-  EXPECT_GT(pl.dc_power_ratio, 0.0f);
-  EXPECT_LE(pl.dc_power_ratio, 1.0f);
+  // The cap is (limit_w - trim) / (dc_power_ratio * omega), so a lower ratio
+  // lets more DC power through and a higher one only costs torque. Bound it
+  // from below: never loosen it past today's value.
+  EXPECT_GE(pl.dc_power_ratio, 0.95f);
+  // Before the trim catches up, DC power is limit_w * (true ratio /
+  // dc_power_ratio). Even at a true ratio of 1.0 that must stay under 80 kW.
+  EXPECT_LE(pl.limit_w / pl.dc_power_ratio, 80000.0f);
   EXPECT_GT(pl.min_omega_rad_s, 0.0f);
 }
 
