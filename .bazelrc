@@ -64,9 +64,11 @@ build --remote_cache_async
 # once is served from BuildBuddy after that, so a github.com outage can't
 # fail the build: on Nov 17 2026 a run of 502s on rules_shell turned four
 # PRs and main red. The local fallback fetches straight from the URL when
-# BuildBuddy can't, e.g. with no API key. See docs/build-system.md.
-common --experimental_remote_downloader=grpcs://lhre.buildbuddy.io
-common --experimental_remote_downloader_local_fallback
+# BuildBuddy can't, e.g. with no API key. It's a `build` line, like
+# --remote_cache, because Bazel refuses the downloader without a gRPC cache
+# (a `common` line broke `bazel shutdown`). See docs/build-system.md.
+build --experimental_remote_downloader=grpcs://lhre.buildbuddy.io
+build --experimental_remote_downloader_local_fallback
 
 # Build provenance stamping: the workspace status script emits STABLE_GIT_*
 # keys into bazel-out/stable-status.txt; //tools/firmware:build_info turns
@@ -170,7 +172,7 @@ build:local --bes_backend=
 build:local --bes_results_url=
 build:local --extra_execution_platforms=
 build:local --jobs=auto
-common:local --experimental_remote_downloader=
+build:local --experimental_remote_downloader=
 
 build:offline --config=local
 build:offline --nofetch

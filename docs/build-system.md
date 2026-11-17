@@ -254,7 +254,10 @@ downloads turned four PRs and main red with nothing wrong in the code.
 A download BuildBuddy can't serve (no API key, BuildBuddy down, a file it
 has never seen while the source is also down) falls back to fetching the
 URL directly, which is what happened before. `--config=local` turns the
-remote downloader off with the rest of BuildBuddy.
+remote downloader off with the rest of BuildBuddy. It is set on `build`
+(so `test`, `run` and `coverage` too) and not on `common`, because Bazel
+refuses the downloader on a command without a gRPC cache, and
+`--remote_cache` is a `build` flag. `query` and `mod` fetch directly.
 
 ### Build latency
 
