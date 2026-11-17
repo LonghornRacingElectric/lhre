@@ -43,6 +43,11 @@ everywhere.
 - `All checks passed` is the one required check. It fails if any job failed or
   was cancelled, or if `Changes` failed. Its run page shows a table of
   every job's result.
+- A PR that conflicts with its base gets no CI run at all, so no
+  `All checks passed` either. A bot labels it `merge-conflict` and
+  comments
+  ([`pr-conflicts.yml`](https://github.com/LonghornRacingElectric/lhre/blob/main/.github/workflows/pr-conflicts.yml));
+  merge or rebase `main` in to get checks back.
 - Every change follows the testing contract in
   [docs/testing.md](docs/testing.md): behavior changes ship with a test,
   tests stay hermetic, and tests are never weakened to get green. That

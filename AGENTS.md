@@ -100,6 +100,11 @@ It runs on every PR, on every push to `main`, weekly, and by hand.
 - The telemetry job builds the images, smoke-tests them and runs the
   integration tests against Docker Compose. Without the repo secrets it
   skips the integration tests with a warning.
+- GitHub runs no CI at all on a PR that conflicts with its base, so it
+  shows no checks rather than red ones.
+  [`pr-conflicts.yml`](https://github.com/LonghornRacingElectric/lhre/blob/main/.github/workflows/pr-conflicts.yml)
+  labels such PRs `merge-conflict` and comments once, after every push to
+  `main` and every six hours. Merge or rebase the base to get CI back.
 
 Firmware for a board: `bazel build //boards/VCU:vcu`. Flashing targets
 (`:openocd`, `:dfu`) and the VS Code debug launches need hardware attached —
