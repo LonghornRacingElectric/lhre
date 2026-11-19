@@ -16,6 +16,7 @@ import { LapsPanel } from "./panels/LapsPanel";
 import { AlertsPanel, DebriefPanel, NotesPanel, SetupPanel } from "./panels/TextPanels";
 import { TracePanel } from "./panels/TracePanel";
 import { DrivingReviewPanel, QualityPanel, ReportPanel, SetupComparePanel } from "./panels/ReviewPanels";
+import { Button } from "@/components/ui/button";
 
 interface PanelDef {
   id: string;
@@ -84,14 +85,14 @@ export function Dock() {
     return d.chip;
   };
   const chip = (d: PanelDef) => (
-    <button key={d.id} className="chip" type="button" aria-pressed={open.includes(d.id)} onClick={() => toggle(d.id)}>{label(d)}</button>
+    <Button variant={open.includes(d.id) ? "default" : "outline"} size="sm" className="h-7 rounded-full px-3 text-xs" key={d.id} type="button" aria-pressed={open.includes(d.id)} onClick={() => toggle(d.id)}>{label(d)}</Button>
   );
   const selected = open.map(id => PANELS.find(d => d.id === id)!).filter(Boolean);
   return (
     <aside className="dock" aria-label="Panels">
       <div className="chips" id="chips">
         {[...new Set([...MAIN, ...open.filter(id => PANELS.some(panel => panel.id === id))])].map((id) => chip(PANELS.find((d) => d.id === id)!))}
-        <button className="chip" type="button" aria-label="Arrange analysis panels side by side" aria-pressed={axis === "horizontal"} onClick={() => changeAxis(axis === "horizontal" ? "vertical" : "horizontal")}>⇄</button>
+        <Button variant={axis === "horizontal" ? "default" : "outline"} size="sm" className="h-7 rounded-full px-3 text-xs" type="button" aria-label="Arrange analysis panels side by side" aria-pressed={axis === "horizontal"} onClick={() => changeAxis(axis === "horizontal" ? "vertical" : "horizontal")}>⇄</Button>
         <Menu label={p.analysis.alerts.length ? "More •" : "More"} chip wide>
           {PANELS.filter((d) => !MAIN.includes(d.id) && !open.includes(d.id)).map(chip)}
         </Menu>

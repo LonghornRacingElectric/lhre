@@ -6,6 +6,7 @@ import { RATES, type Cmp, type EndMode } from "@/lib/driveday/player";
 import { Menu } from "./Menu";
 import { Timeline } from "./Timeline";
 import { useFrame, usePlayer, useUi } from "./context";
+import { Button } from "@/components/ui/button";
 
 const GHOSTS: [Cmp, string, string][] = [
   ["theo", "Best sectors", "A lap stitched together from your fastest S1, S2 and S3"],
@@ -63,8 +64,8 @@ function NoteBar() {
           }
         }}
       />
-      <button className="btn primary" type="button" onClick={save}>Save</button>
-      <button className="btn" type="button" onClick={close}>Cancel</button>
+      <Button size="sm" type="button" onClick={save}>Save</Button>
+      <Button variant="outline" size="sm" type="button" onClick={close}>Cancel</Button>
     </div>
   );
 }
@@ -92,9 +93,9 @@ export function Transport({ height = 108, onHeight, docked = false, onPlacement 
         onKeyDown={e => { if (e.key === "ArrowUp" || e.key === "ArrowDown") { onHeight(Math.max(48, Math.min(240, height + (e.key === "ArrowUp" ? 12 : -12)))); e.preventDefault(); e.stopPropagation(); } }}><span /></div>}
       <div className="trow">
         <span className="timeline-legend" aria-label="Lap colours: purple fastest, yellow slowest, green other laps"><span className="best">Best</span><span className="slowest">Slowest</span><span className="other">Other</span></span>
-        <button className="btn" type="button" title="Previous lap (Shift+Left)" aria-label="Previous lap" onClick={() => p.stepLap(-1)}>⏮</button>
-        <button className="btn play" type="button" title="Play or pause (Space)" onClick={() => p.play(!p.playing)}>{p.playing ? "Pause" : "Play"}</button>
-        <button className="btn" type="button" title="Next lap (Shift+Right)" aria-label="Next lap" onClick={() => p.stepLap(1)}>⏭</button>
+        <Button variant="outline" size="sm" type="button" title="Previous lap (Shift+Left)" aria-label="Previous lap" onClick={() => p.stepLap(-1)}>⏮</Button>
+        <Button size="sm" className="min-w-20 font-semibold" type="button" title="Play or pause (Space)" onClick={() => p.play(!p.playing)}>{p.playing ? "Pause" : "Play"}</Button>
+        <Button variant="outline" size="sm" type="button" title="Next lap (Shift+Right)" aria-label="Next lap" onClick={() => p.stepLap(1)}>⏭</Button>
         <Clock />
         <span className="sp" />
         <Menu label={"Ghost: " + (p.cmp === "best" ? "Best" : p.cmp === "theo" ? "Best sectors" : p.cmp === "lap" ? "Lap" : p.cmp === "external" ? "Other file" : "Off")} right>
@@ -113,10 +114,10 @@ export function Transport({ height = 108, onHeight, docked = false, onPlacement 
             </select>
           </span>
         )}
-        {p.cmp === "external" && <button className="btn" title="Turn off the other-file ghost" onClick={() => p.set("cmp", "none")}>Other file ×</button>}
+        {p.cmp === "external" && <Button variant="outline" size="sm" title="Turn off the other-file ghost" onClick={() => p.set("cmp", "none")}>Other file ×</Button>}
         </Menu>
-        <button className="btn" type="button" title="Pin a note to the playhead (N)" onClick={() => p.setNoteOpen(true)}>+ Note</button>
-        <button className="btn" type="button" title="Add a cone to this lap (C). Shift+C removes one." onClick={() => p.coneKey(1)}>+ Cone</button>
+        <Button variant="outline" size="sm" type="button" title="Pin a note to the playhead (N)" onClick={() => p.setNoteOpen(true)}>+ Note</Button>
+        <Button variant="outline" size="sm" type="button" title="Add a cone to this lap (C). Shift+C removes one." onClick={() => p.coneKey(1)}>+ Cone</Button>
         <Menu label={p.rate + "×"} right>
           <div className="mrow">
             <span className="lab">Speed</span>
@@ -135,7 +136,7 @@ export function Transport({ height = 108, onHeight, docked = false, onPlacement 
         </Menu>
         <Menu label={p.loopA != null || p.loopB != null ? "More •" : "More"} right>
           <label className="chk"><input type="checkbox" checked={p.showBetweenLaps} onChange={e => p.setShowBetweenLaps(e.target.checked)} />Show between laps</label>
-          {onPlacement && <button className="btn" aria-label={docked ? "Expand timeline across workspace" : "Dock timeline into track"} onClick={onPlacement}>{docked ? "Undock timeline" : "Dock timeline into track"}</button>}
+          {onPlacement && <Button variant="outline" size="sm" aria-label={docked ? "Expand timeline across workspace" : "Dock timeline into track"} onClick={onPlacement}>{docked ? "Undock timeline" : "Dock timeline into track"}</Button>}
           <div className="mrow">
             <span className="lab">Loop</span>
             <div className="seg" role="group" aria-label="A to B loop">
@@ -146,7 +147,7 @@ export function Transport({ height = 108, onHeight, docked = false, onPlacement 
             </div>
           </div>
           <div className="mrow">
-            <button className="btn" type="button" aria-pressed={keys} title="Show the keyboard shortcuts" onClick={() => setKeys(!keys)}>Keyboard shortcuts</button>
+            <Button variant="outline" size="sm" type="button" aria-pressed={keys} title="Show the keyboard shortcuts" onClick={() => setKeys(!keys)}>Keyboard shortcuts</Button>
           </div>
         </Menu>
       </div>

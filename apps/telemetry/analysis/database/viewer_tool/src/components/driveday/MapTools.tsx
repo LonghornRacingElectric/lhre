@@ -1,15 +1,18 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import type { Mode } from "@/lib/driveday/player";
+import { Chk, Pick } from "./controls";
 import { Menu } from "./Menu";
 import { usePlayer, useUi } from "./context";
 
-const MODES: [Mode, string, string?][] = [
-  ["speed", "Speed"],
-  ["pedal", "Pedals"],
-  ["acc", "Accel"],
-  ["gain", "Gain", "Colour the lap by where it gains or loses time against the ghost"],
-  ["sec", "Sector"],
+const MODES: { value: Mode; label: string; title?: string }[] = [
+  { value: "speed", label: "Speed" },
+  { value: "pedal", label: "Pedals" },
+  { value: "acc", label: "Accel" },
+  { value: "gain", label: "Gain", title: "Colour the lap by where it gains or loses time against the ghost" },
+  { value: "sec", label: "Sector" },
 ];
 
 export function MapTools({ dockHidden, onToggleDock }: { dockHidden?: boolean; onToggleDock?: () => void } = {}) {
@@ -17,17 +20,14 @@ export function MapTools({ dockHidden, onToggleDock }: { dockHidden?: boolean; o
   useUi(p);
   const { session: s } = p;
   const check = (label: string, k: "showSeg" | "showCones" | "ghostAll" | "raceMode" | "consMode" | "layoutOnly", title?: string) => (
-    <label className="chk" title={title}>
-      <input type="checkbox" checked={p[k]} onChange={(e) => p.set(k, e.target.checked)} /> {label}
-    </label>
+    <Chk checked={p[k]} onChange={(v) => p.set(k, v)} title={title}>{label}</Chk>
   );
   return (
     <div className="maptools">
-      <label className="lab">Colour by{" "}
-        <select className="mini" aria-label="Colour the lap by" value={p.mode} onChange={(e) => p.set("mode", e.target.value as Mode)}>
-          {MODES.map(([m, label]) => <option key={m} value={m}>{label}</option>)}
-        </select>
-      </label>
+      <Label className="lab gap-2">
+        Colour by
+        <Pick value={p.mode} onChange={(m) => p.set("mode", m)} options={MODES} ariaLabel="Colour the lap by" />
+      </Label>
       <Menu label="Overlays">
         {check("Corners and braking zones", "showSeg")}
         {check("Cone hits", "showCones", "Show each cone hit where it happened on the track")}
@@ -37,23 +37,28 @@ export function MapTools({ dockHidden, onToggleDock }: { dockHidden?: boolean; o
         {check("Layout only", "layoutOnly", "Show only the standard track layout with its sector colours and gates")}
         <div className="mrow">
           <span className="lab">Base overlay</span>
-          <select aria-label="Base overlay lap" value={p.baseIdx} onChange={(e) => p.set("baseIdx", +e.target.value)}>
-            {s.TLAPS.map((l) => {
+          <Pick
+            ariaLabel="Base overlay lap"
+            value={String(p.baseIdx)}
+            onChange={(v) => p.set("baseIdx", +v)}
+            options={s.TLAPS.map((l) => {
               const i = s.laps.indexOf(l);
-              return <option key={i} value={i}>{l.kind === "out" ? "Out lap" : l.kind === "partial" ? l.name.replace(" (in progress)", "") : l.name}</option>;
+              return { value: String(i), label: l.kind === "out" ? "Out lap" : l.kind === "partial" ? l.name.replace(" (in progress)", "") : l.name };
             })}
-          </select>
+          />
         </div>
       </Menu>
       <Menu label="Sectors">
-        <span>{p.sectorMethod === "manual" ? "Custom boundaries" : "Automatic · balanced time, near corner/straight transitions"}</span>
-        <button className="btn" type="button" onClick={() => p.setSectorAtPlayhead(0)}>End S1 here</button>
-        <button className="btn" type="button" onClick={() => p.setSectorAtPlayhead(1)}>End S2 here</button>
-        <button className="btn" type="button" onClick={() => p.autoSectors()}>Auto-place sectors</button>
+        <span className="text-xs">{p.sectorMethod === "manual" ? "Custom boundaries" : "Automatic · balanced time, near corner/straight transitions"}</span>
+        <Button variant="outline" size="sm" onClick={() => p.setSectorAtPlayhead(0)}>End S1 here</Button>
+        <Button variant="outline" size="sm" onClick={() => p.setSectorAtPlayhead(1)}>End S2 here</Button>
+        <Button variant="outline" size="sm" onClick={() => p.autoSectors()}>Auto-place sectors</Button>
         <span className="note2">Pause a completed lap at a useful landmark, then set its boundary. Saved for this track in this browser.</span>
       </Menu>
       <span className="sp" />
-      {onToggleDock && <button className="btn" type="button" title="Hide or show the panels (D)" onClick={onToggleDock}>{dockHidden ? "Show panels" : "Hide panels"}</button>}
+      {onToggleDock && (
+        <Button variant="outline" size="sm" title="Hide or show the panels (D)" onClick={onToggleDock}>{dockHidden ? "Show panels" : "Hide panels"}</Button>
+      )}
     </div>
   );
 }

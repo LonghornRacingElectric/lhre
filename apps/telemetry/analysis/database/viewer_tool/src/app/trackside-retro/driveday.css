@@ -17,6 +17,18 @@
   --s1:#3fb0f5; --s2:#ff9a3d; --s3:#ff6b9d;
   --rival:#2dd4bf; --purple:#b88aff; --green:#3ddc84; --yellow:#f2c94c; --red:#ff6b6b; --blue:#6ea8ff;
   --chip-purple:#2a1d4a; --chip-green:#12301f; --chip-yellow:#3a3010; --sel:#1b2733; color-scheme:dark}
+/* shadcn/ui tokens, taken from the LAPDOG tokens above, so the shared ui components look like LAPDOG inside .ddv */
+.ddv{
+  --background:var(--bg); --foreground:var(--ink);
+  --card:var(--panel); --card-foreground:var(--ink);
+  --popover:var(--panel); --popover-foreground:var(--ink);
+  --primary:var(--ink); --primary-foreground:var(--bg);
+  --secondary:var(--sel); --secondary-foreground:var(--ink);
+  --muted:var(--sel); --muted-foreground:var(--mute);
+  --accent:var(--sel); --accent-foreground:var(--ink);
+  --destructive:var(--red); --border:var(--line); --input:var(--line); --ring:var(--s1);
+  --radius:.5rem;
+}
 .ddv *{box-sizing:border-box}
 .ddv,.ddv{height:100%}
 .ddv{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px}

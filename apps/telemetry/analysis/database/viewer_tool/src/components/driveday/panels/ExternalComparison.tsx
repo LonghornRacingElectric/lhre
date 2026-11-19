@@ -7,6 +7,7 @@ import { rebuildRun } from "@/lib/driveday/rebuild";
 import { runLabel, runStore } from "@/lib/driveday/storage";
 import type { RunData, RunListEntry } from "@/lib/driveday/types";
 import { usePlayer } from "../context";
+import { Pick } from "../controls";
 
 export function ExternalComparison() {
   const p = usePlayer();
@@ -30,17 +31,12 @@ export function ExternalComparison() {
   }, [id, p]);
   return <div className="external-comparison">
     <label>Compare another file
-      <select aria-label="Comparison run" value={id} onChange={e => setId(e.target.value)}>
-        <option value="">Choose a run on this route</option>
-        {runs.map(r => <option key={r.id} value={r.id}>{runLabel(r)}</option>)}
-      </select>
+      <Pick ariaLabel="Comparison run" value={id || "none"} onChange={v => setId(v === "none" ? "" : v)} options={[{ value: "none", label: "Choose a run on this route" }, ...runs.map(r => ({ value: r.id, label: runLabel(r) }))]} />
     </label>
     {data && <label>Ghost lap
-      <select aria-label="Comparison lap" value={p.cmp === "external" && p.externalKey.startsWith(id + ":") ? p.externalKey.slice(id.length + 1) : ""}
-        onChange={e => { if (e.target.value !== "") p.setExternalGhost(comparisonLap(p.session, data, +e.target.value), id + ":" + e.target.value); }}>
-        <option value="">Choose a completed lap</option>
-        {data.laps.map((l, i) => l.kind === "lap" && <option key={i} value={i}>{l.name} · {fmt(l.dur)}</option>)}
-      </select>
+      <Pick ariaLabel="Comparison lap" value={p.cmp === "external" && p.externalKey.startsWith(id + ":") ? p.externalKey.slice(id.length + 1) : "none"}
+        onChange={v => { if (v !== "none") p.setExternalGhost(comparisonLap(p.session, data, +v), id + ":" + v); }}
+        options={[{ value: "none", label: "Choose a completed lap" }, ...data.laps.flatMap((l, i) => l.kind === "lap" ? [{ value: String(i), label: l.name + " · " + fmt(l.dur) }] : [])]} />
     </label>}
     {!runs.length && <p className="note2">No other runs on this route.</p>}
   </div>;

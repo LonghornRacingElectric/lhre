@@ -13,6 +13,7 @@ import { WorkspacePane, PaneDivider } from "./WorkspacePane";
 import { VideoPanel } from "./panels/VideoPanel";
 import { Transport } from "./Transport";
 import { usePlayer } from "./context";
+import { Button } from "@/components/ui/button";
 
 /** Independent video, track and analysis windows share one playback clock. */
 export function Workspace() {
@@ -108,14 +109,14 @@ export function Workspace() {
   }, [p]);
 
   const toolbar = <div className="layout-toolbar" aria-label="Workspace layout">
-        {PANE_IDS.map(id => <button className="chip" key={id} aria-pressed={layout.panes[id].visible} onClick={() => patch(id, { visible: !layout.panes[id].visible })}>{names[id]}</button>)}
+        {PANE_IDS.map(id => <Button variant={layout.panes[id].visible ? "default" : "outline"} size="sm" className="h-7 rounded-full px-3 text-xs" key={id} aria-pressed={layout.panes[id].visible} onClick={() => patch(id, { visible: !layout.panes[id].visible })}>{names[id]}</Button>)}
         <span className="sp" /><span className="layout-hint">Drag headers to move · dividers to resize</span>
         <Menu label="Layouts" right wide ariaLabel="Workspace layouts">
-          {WORKSPACE_ROLES.map(name => <button className="btn" key={name} onClick={() => applyPreset(workspacePreset(name))}>{name}</button>)}
-          <button className="btn" onClick={() => { update(() => defaultWorkspace()); setTimelineMode("full"); lsSet("timeline-layout", "full"); resizeTimeline(48); }}>Reset layout</button>
+          {WORKSPACE_ROLES.map(name => <Button variant="outline" size="sm" key={name} onClick={() => applyPreset(workspacePreset(name))}>{name}</Button>)}
+          <Button variant="outline" size="sm" onClick={() => { update(() => defaultWorkspace()); setTimelineMode("full"); lsSet("timeline-layout", "full"); resizeTimeline(48); }}>Reset layout</Button>
           <input aria-label="Workspace preset name" placeholder="Name this layout" value={presetName} onChange={e => setPresetName(e.target.value)} />
-          <button className="btn" disabled={!presetName.trim()} onClick={() => { const name = presetName.trim(); const preset: SavedWorkspace = { layout, timelineHeight, timelineMode, showBetweenLaps: p.showBetweenLaps, panel: lsGet<string | null>("panel", "driver"), panels: lsGet<string[]>("panels", [lsGet<string>("panel", "driver")]) }; const next = { ...savedPresets, [name]: preset }; setSavedPresets(next); lsSet("workspace-presets", next); setPresetName(""); }}>Save current layout</button>
-          {Object.entries(savedPresets).map(([name, preset]) => <div className="mrow" key={name}><button className="btn" onClick={() => applyPreset(preset)}>{name}</button><button className="x" aria-label={"Delete layout " + name} onClick={() => { const next = { ...savedPresets }; delete next[name]; setSavedPresets(next); lsSet("workspace-presets", next); }}>×</button></div>)}
+          <Button variant="outline" size="sm" disabled={!presetName.trim()} onClick={() => { const name = presetName.trim(); const preset: SavedWorkspace = { layout, timelineHeight, timelineMode, showBetweenLaps: p.showBetweenLaps, panel: lsGet<string | null>("panel", "driver"), panels: lsGet<string[]>("panels", [lsGet<string>("panel", "driver")]) }; const next = { ...savedPresets, [name]: preset }; setSavedPresets(next); lsSet("workspace-presets", next); setPresetName(""); }}>Save current layout</Button>
+          {Object.entries(savedPresets).map(([name, preset]) => <div className="mrow" key={name}><Button variant="outline" size="sm" onClick={() => applyPreset(preset)}>{name}</Button><Button variant="ghost" size="icon" className="size-6" aria-label={"Delete layout " + name} onClick={() => { const next = { ...savedPresets }; delete next[name]; setSavedPresets(next); lsSet("workspace-presets", next); }}>×</Button></div>)}
         </Menu>
       </div>;
   return (

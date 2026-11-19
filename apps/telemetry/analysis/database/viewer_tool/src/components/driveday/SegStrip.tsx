@@ -1,6 +1,10 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { usePlayer, useFrame, useUi } from "./context";
+
+const chip = "h-6 shrink-0 rounded-full px-2.5 font-mono text-xs";
 
 /** Corners, straights and braking zones as chips. Click one to zoom the map there. */
 export function SegStrip() {
@@ -11,13 +15,13 @@ export function SegStrip() {
   const { segs, zones } = p.session;
   return (
     <div className="segstrip panel" id="segstrip" aria-label="Corners, straights and braking zones">
-      <button className="sc fit" type="button" onClick={() => p.flyFit()}>Full track</button>
+      <Button variant="outline" size="sm" className={chip} onClick={() => p.flyFit()}>Full track</Button>
       {segs.map((g, i) => (
-        <button key={g.name} className={"sc " + g.type + (i === p.curSeg ? " act" : "")} type="button" title={g.name + " · " + g.len.toFixed(0) + " m"} onClick={() => p.focusSeg(i)}>{g.name}</button>
+        <Button key={g.name} variant={i === p.curSeg ? "default" : "outline"} size="sm" className={cn(chip, i !== p.curSeg && (g.type === "c" ? "border-[var(--s2)]" : "border-[var(--blue)]"))} title={g.name + " · " + g.len.toFixed(0) + " m"} onClick={() => p.focusSeg(i)}>{g.name}</Button>
       ))}
       {zones.length > 0 && <span className="sepv" />}
       {zones.map((z, i) => (
-        <button key={z.name} className={"sc b" + (i === p.curZone ? " act" : "")} type="button" title={"Braking zone " + z.name} onClick={() => p.focusZone(i)}>{z.name}</button>
+        <Button key={z.name} variant={i === p.curZone ? "default" : "outline"} size="sm" className={cn(chip, i !== p.curZone && "border-[var(--red)] text-[var(--red)]")} title={"Braking zone " + z.name} onClick={() => p.focusZone(i)}>{z.name}</Button>
       ))}
     </div>
   );

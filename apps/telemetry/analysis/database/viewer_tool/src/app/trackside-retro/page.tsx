@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { App } from "@/components/driveday/App";
+import { DdvRoot } from "@/components/driveday/DdvRoot";
 import "./driveday.css";
+import "./lapdog-skin.css";
 
 
 export const metadata: Metadata = {
@@ -13,8 +15,8 @@ export const metadata: Metadata = {
 // database (/api/driveday/db) and are kept in IndexedDB.
 export default function TracksideRetroPage() {
   return (
-    <div className="ddv">
+    <DdvRoot className="">
       <App />
-    </div>
+    </DdvRoot>
   );
 }

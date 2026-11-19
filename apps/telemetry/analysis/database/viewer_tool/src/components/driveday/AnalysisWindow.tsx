@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { lsGet, lsSet } from "@/lib/driveday/storage";
+import { Button } from "@/components/ui/button";
 
 let nextWindowZ = 900;
 interface Position { floating: boolean; x: number; y: number; width: number; height: number }
@@ -59,8 +60,8 @@ export function AnalysisWindow({ id, title, children, onClose, onMove, layoutKey
         y: Math.max(8, Math.min(window.innerHeight - position.height - 8, drag.current.top + e.clientY - drag.current.y)) }); }}
       onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }}>
       <h3>{title}</h3><div className="analysis-window-actions">
-        <button className="btn" type="button" aria-label={(position.floating ? "Dock " : "Float ") + title} onClick={() => save({ ...position, floating: !position.floating })}>{position.floating ? "Dock" : "Float"}</button>
-        <button className="x" type="button" aria-label={"Close " + title} onClick={onClose}>×</button>
+        <Button variant="outline" size="sm" type="button" aria-label={(position.floating ? "Dock " : "Float ") + title} onClick={() => save({ ...position, floating: !position.floating })}>{position.floating ? "Dock" : "Float"}</Button>
+        <Button variant="ghost" size="icon" className="size-6" type="button" aria-label={"Close " + title} onClick={onClose}>×</Button>
       </div>
     </header><div className="pnb" role="region" aria-label={title + " content"} tabIndex={0}>{children}</div>
     {!position.floating && <div className="analysis-dock-resize" role="separator" tabIndex={0} aria-label={"Resize " + title + " panel"}

@@ -8,6 +8,8 @@ import type { RunListEntry } from "@/lib/driveday/types";
 import { runLabel } from "@/lib/driveday/storage";
 import { Menu } from "./Menu";
 import { PlayerCtx, useUi } from "./context";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export type Theme = "auto" | "light" | "dark";
 
@@ -115,7 +117,10 @@ function RunTitle({ p, run }: { p: Player; run: RunListEntry | undefined }) {
   ].filter(Boolean);
   return (
     <>
-      <h1 id="title">{m.name || "LAPDOG"}</h1>
+      <Tooltip delayDuration={0}>
+        <TooltipTrigger asChild><h1 id="title" tabIndex={0}>{m.name || "LAPDOG"}</h1></TooltipTrigger>
+        <TooltipContent side="bottom" align="start" sideOffset={8} className="title-tip">{parts.join(" · ")}</TooltipContent>
+      </Tooltip>
       <div className="sub" id="sub">{parts.join(" · ")}</div>
     </>
   );
@@ -127,7 +132,7 @@ function SettingsMenu({ theme, onTheme }: Pick<Props, "theme" | "onTheme">) {
     <Menu label={<span title="Settings" aria-label="Settings">⚙</span>}>
       <div className="mrow">
         <span className="lab">Theme</span>
-        <button className="btn" type="button" onClick={onTheme}>Theme: {theme}</button>
+        <Button variant="outline" size="sm" type="button" onClick={onTheme}>Theme: {theme}</Button>
       </div>
     </Menu>
   );
@@ -148,7 +153,7 @@ function RunSettings({ p, theme, onTheme }: Pick<Props, "theme" | "onTheme"> & {
       )}
       <div className="mrow">
         <span className="lab">Theme</span>
-        <button className="btn" type="button" title="Switch between automatic, light and dark" onClick={onTheme}>Theme: {theme}</button>
+        <Button variant="outline" size="sm" type="button" title="Switch between automatic, light and dark" onClick={onTheme}>Theme: {theme}</Button>
       </div>
     </Menu>
   );
@@ -167,18 +172,18 @@ export function ImportMenu({ onDb, onJson, onCache }: { onDb: (day: number) => v
   };
   return (
     <div className="run-selector import-menu"><Menu wide ariaLabel="Import session" label="Import" onToggle={(open) => { if (open) load(); }}>
-      <button className="btn" type="button" onClick={onJson}>JSON files…</button>
-      <button className="btn" type="button" onClick={onCache}>Last Trackside session</button>
+      <Button variant="outline" size="sm" type="button" onClick={onJson}>JSON files…</Button>
+      <Button variant="outline" size="sm" type="button" onClick={onCache}>Last Trackside session</Button>
       <strong className="import-source-heading">From database</strong>
       {days === null ? <p className="run-selector-note">Loading drive days…</p>
         : typeof days === "string" ? <p className="run-selector-note">Database unavailable: {days}</p>
         : !days.length ? <p className="run-selector-note">No drive days with laps yet.</p>
         : <div className="run-selector-list" aria-label="Drive days">
           {days.map((d) => <div className="run-selector-row" key={d.day_id}>
-            <button className="run-choice" type="button" onClick={() => onDb(d.day_id)}>
+            <Button variant="ghost" className="run-choice" type="button" onClick={() => onDb(d.day_id)}>
               <strong>{d.date}{d.track_name ? " · " + d.track_name : ""}</strong>
               <small>Day {d.day_id} · {d.laps} laps{d.flags ? " · " + d.flags + " flags" : ""}{d.event_type ? " · " + d.event_type : ""}{d.driver_name ? " · " + d.driver_name : ""}</small>
-            </button>
+            </Button>
           </div>)}
         </div>}
     </Menu></div>
@@ -197,8 +202,8 @@ export function Header({ runs, current, theme, onTheme, onSelect, onRemove, onDb
             <div className="run-selector run-picker"><Menu wide ariaLabel="Select run" label={<span className="run-selector-label">Runs</span>}>
               <div className="run-selector-list" aria-label="Saved runs">
                 {runs.map(r => <div className={"run-selector-row" + (r.id === current ? " selected" : "")} key={r.id}>
-                  <button className="run-choice" type="button" aria-current={r.id === current ? "true" : undefined} title={runLabel(r)} onClick={() => onSelect(r.id)}><strong>{r.name || "Untitled run"}</strong><small>{runLabel(r)}</small></button>
-                  <button className="run-delete" type="button" aria-label={"Delete " + (r.name || "Untitled run")} title="Delete this saved run" onClick={() => onRemove(r.id)}>Delete</button>
+                  <Button variant="ghost" className="run-choice" type="button" aria-current={r.id === current ? "true" : undefined} title={runLabel(r)} onClick={() => onSelect(r.id)}><strong>{r.name || "Untitled run"}</strong><small>{runLabel(r)}</small></Button>
+                  <Button variant="ghost" size="sm" className="run-delete" type="button" aria-label={"Delete " + (r.name || "Untitled run")} title="Delete this saved run" onClick={() => onRemove(r.id)}>Delete</Button>
                 </div>)}
               </div>
             </Menu></div>

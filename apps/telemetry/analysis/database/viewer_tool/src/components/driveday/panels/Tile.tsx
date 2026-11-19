@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Pick } from "../controls";
 
 /** A labelled reading, optionally with a bar under it (meter is 0 to 100 and a colour variable). */
 export function Tile({ label, value, unit, meter }: { label: string; value: ReactNode; unit?: string; meter?: [number, string] }) {
@@ -38,16 +41,20 @@ export function Field({ label, k, value, onValue, kind = "number", placeholder, 
     else onValue(v);
   };
   let control: ReactNode;
-  if (kind === "area") control = <textarea rows={3} data-k={k} value={text} onChange={(e) => change(e.target.value)} />;
+  if (kind === "area") control = <Textarea rows={3} data-k={k} value={text} onChange={(e) => change(e.target.value)} />;
   else if (kind === "select") {
     control = (
-      <select data-k={k} value={text} onChange={(e) => change(e.target.value)}>
-        {(options ?? []).map((o) => <option key={o} value={o}>{o || "Not set"}</option>)}
-      </select>
+      <Pick
+        ariaLabel={label}
+        className="w-full justify-between"
+        value={text || "unset"}
+        onChange={(v) => change(v === "unset" ? "" : v)}
+        options={(options ?? []).map((o) => ({ value: o || "unset", label: o || "Not set" }))}
+      />
     );
   } else {
     control = (
-      <input
+      <Input
         data-k={k}
         type={kind}
         step={kind === "number" ? "any" : undefined}
