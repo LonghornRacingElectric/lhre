@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode, type CSSProperties } from 
 import { createPortal } from "react-dom";
 import { lsGet, lsSet } from "@/lib/driveday/storage";
 import { Button } from "@/components/ui/button";
+import { floatTop } from "./floatTop";
 
 let nextWindowZ = 900;
 interface Position { floating: boolean; x: number; y: number; width: number; height: number }
@@ -29,7 +30,7 @@ export function AnalysisWindow({ id, title, children, onClose, onMove, layoutKey
     const fit = () => setPosition(current => {
       const next = { ...current, width: Math.min(current.width, window.innerWidth - 16), height: Math.min(current.height, window.innerHeight - 16),
         x: Math.max(8, Math.min(current.x, window.innerWidth - Math.min(current.width, window.innerWidth - 16) - 8)),
-        y: Math.max(8, Math.min(current.y, window.innerHeight - Math.min(current.height, window.innerHeight - 16) - 8)) };
+        y: Math.max(floatTop(), Math.min(current.y, window.innerHeight - Math.min(current.height, window.innerHeight - 16) - 8)) };
       lsSet("analysis-window-" + id, next); return next;
     });
     fit(); window.addEventListener("resize", fit); return () => window.removeEventListener("resize", fit);
@@ -57,7 +58,7 @@ export function AnalysisWindow({ id, title, children, onClose, onMove, layoutKey
       }}
       onPointerMove={e => { if (drag.current) save({ ...position,
         x: Math.max(8, Math.min(window.innerWidth - position.width - 8, drag.current.left + e.clientX - drag.current.x)),
-        y: Math.max(8, Math.min(window.innerHeight - position.height - 8, drag.current.top + e.clientY - drag.current.y)) }); }}
+        y: Math.max(floatTop(), Math.min(window.innerHeight - position.height - 8, drag.current.top + e.clientY - drag.current.y)) }); }}
       onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }}>
       <h3>{title}</h3><div className="analysis-window-actions">
         <Button variant="outline" size="sm" type="button" aria-label={(position.floating ? "Dock " : "Float ") + title} onClick={() => save({ ...position, floating: !position.floating })}>{position.floating ? "Dock" : "Float"}</Button>

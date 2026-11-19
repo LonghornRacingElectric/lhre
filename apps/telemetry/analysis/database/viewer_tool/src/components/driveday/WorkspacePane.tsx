@@ -3,6 +3,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import type { PaneId, PaneState } from "@/lib/driveday/workspace";
 import { Button } from "@/components/ui/button";
+import { floatTop } from "./floatTop";
 
 export function WorkspacePane({ id, title, state, order, z, children, headerControls, onPatch, onMove, onDrop, onRaise }: {
   id: PaneId; title: string; state: PaneState; order: number; z: number; children: ReactNode; headerControls?: ReactNode;
@@ -43,13 +44,13 @@ export function WorkspacePane({ id, title, state, order, z, children, headerCont
       onPointerMove={e => {
         if (!drag.current) return;
         onPatch({ x: Math.max(8, Math.min(window.innerWidth - Math.min(state.width, window.innerWidth - 16) - 8, drag.current.originX + e.clientX - drag.current.x)),
-          y: Math.max(8, Math.min(window.innerHeight - 60, drag.current.originY + e.clientY - drag.current.y)) });
+          y: Math.max(floatTop(), Math.min(window.innerHeight - 60, drag.current.originY + e.clientY - drag.current.y)) });
       }} onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }}>
       <strong aria-label={title + " drag handle"}><span aria-hidden="true">⠿</span></strong>
       {headerControls && <div className="pane-header-controls" onPointerDown={e => e.stopPropagation()} onDragStart={e => { e.preventDefault(); e.stopPropagation(); }}>{headerControls}</div>}
       <div className="pane-actions">
         {!state.floating && <><Button variant="ghost" size="sm" className="h-6 px-2 text-xs" aria-label={"Move " + title + " left"} title="Move left" disabled={order === 0} onClick={() => onMove(-1)}>←</Button><Button variant="ghost" size="sm" className="h-6 px-2 text-xs" aria-label={"Move " + title + " right"} title="Move right" disabled={order === 2} onClick={() => onMove(1)}>→</Button></>}
-        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" aria-label={(state.floating ? "Dock " : "Float ") + title} title={state.floating ? "Return to docked layout" : "Float this window"} onClick={() => onPatch({ floating: !state.floating, x: Math.max(8, Math.min(state.x, window.innerWidth - 280)), y: Math.max(8, Math.min(state.y, window.innerHeight - 100)), width: Math.min(state.width, window.innerWidth - 16), height: Math.min(state.height, window.innerHeight - 16) })}>{state.floating ? "Dock" : "Float"}</Button>
+        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" aria-label={(state.floating ? "Dock " : "Float ") + title} title={state.floating ? "Return to docked layout" : "Float this window"} onClick={() => onPatch({ floating: !state.floating, x: Math.max(8, Math.min(state.x, window.innerWidth - 280)), y: Math.max(floatTop(), Math.min(state.y, window.innerHeight - 100)), width: Math.min(state.width, window.innerWidth - 16), height: Math.min(state.height, window.innerHeight - 16) })}>{state.floating ? "Dock" : "Float"}</Button>
         <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" aria-label={"Hide " + title} title="Hide this window" onClick={() => onPatch({ visible: false })}>×</Button>
       </div>
     </header>

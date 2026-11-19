@@ -14,6 +14,7 @@ import { VideoPanel } from "./panels/VideoPanel";
 import { Transport } from "./Transport";
 import { usePlayer } from "./context";
 import { Button } from "@/components/ui/button";
+import { floatTop } from "./floatTop";
 
 /** Independent video, track and analysis windows share one playback clock. */
 export function Workspace() {
@@ -51,7 +52,7 @@ export function Workspace() {
         if (!pane.floating) continue;
         const width = Math.min(pane.width, window.innerWidth - 16), height = Math.min(pane.height, window.innerHeight - 16);
         const x = Math.max(8, Math.min(pane.x, window.innerWidth - width - 8));
-        const y = Math.max(8, Math.min(pane.y, window.innerHeight - height - 8));
+        const y = Math.max(floatTop(), Math.min(pane.y, window.innerHeight - height - 8));
         if (width !== pane.width || height !== pane.height || x !== pane.x || y !== pane.y) { panes[id] = { ...pane, width, height, x, y }; changed = true; }
       }
       if (!changed) return current;

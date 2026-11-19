@@ -162,7 +162,8 @@
 /* the top bar can shrink (Banner sets --nav-h) */
 .ddv{height:calc(100dvh - var(--nav-h,56px));margin-top:var(--nav-h,56px)}
 .ddv .welcome{top:var(--nav-h,56px)}
-@media(max-width:1100px){.ddv{height:auto;min-height:calc(100dvh - var(--nav-h,56px))}}
+/* narrow screens scroll the page instead (upstream stacks the panes), so the height is a minimum there */
+@media(max-width:900px){.ddv{height:auto;min-height:calc(100dvh - var(--nav-h,56px))}}
 
 /* title block: the detail line lives in the title's tooltip; best times sit at the top of the bar */
 .ddv .top .header-title .sub{display:none}
@@ -180,3 +181,50 @@
 /* same look as the best-time popups */
 .ddv .title-tip{max-width:min(420px,90vw);white-space:normal;background:var(--panel);color:var(--mute);border:1px solid var(--ink);border-radius:6px;padding:10px 12px;font:400 12px/1.45 var(--f-body);box-shadow:0 8px 24px rgba(0,0,0,.25);animation:none}
 .ddv .title-tip>svg{display:none}
+
+/* compact controls bar */
+.ddv .top .runbar{padding:2px 4px;gap:4px;border-radius:4px}
+.ddv .top .runbar [data-slot="button"],.ddv .top .runbar .menu-trigger{height:24px;min-height:24px;padding:0 8px;font-size:12px}
+.ddv .top .runbar .layout-toolbar{gap:4px}
+.ddv .top .kpis{gap:var(--s-3);padding:0 4px}
+.ddv .top .kpi b{font-size:16px}
+.ddv .top .kpi span{font-size:9px;letter-spacing:.06em}
+/* narrow screens only: the title and best times share a row and the controls take the full row under them */
+@media(max-width:900px){
+  .ddv .top{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"title kpis" "bar bar";column-gap:var(--s-3);row-gap:2px;align-items:center;padding:2px 0}
+  .ddv .top>.header-main{display:contents}
+  .ddv .top .header-title{grid-area:title;min-width:0;max-width:none}
+  .ddv .top .kpis{grid-area:kpis;align-self:center}
+  .ddv .top .runbar{grid-area:bar;flex-wrap:nowrap;overflow:hidden}
+  .ddv .top .runbar .layout-toolbar{flex:1 1 auto;flex-wrap:nowrap}
+  .ddv .top .runbar .layout-toolbar>:last-child{margin-left:auto}
+}
+/* panel titles stay on one line */
+.ddv .pnh h3,.ddv .pnh strong{min-width:0;overflow:hidden !important;text-overflow:ellipsis;white-space:nowrap}
+
+/* tighter header */
+.ddv .app{padding-top:4px}
+.ddv .top{padding:8px 0 !important;min-height:0}
+.ddv .top .header-title h1{font-size:15px;line-height:1.2}
+.ddv .top .runbar{padding:0 !important;border:0 !important;background:transparent !important;gap:3px}
+.ddv .top .runbar [data-slot="button"],.ddv .top .runbar .menu-trigger{height:26px;min-height:26px;padding:0 9px;font-size:12px}
+.ddv .top .kpis{padding:0 2px;gap:var(--s-3)}
+.ddv .top .kpi{padding:0 0 0 var(--s-3)}
+.ddv .top .kpi b{font-size:14px}
+.ddv .top .kpi span{margin-top:1px;padding-bottom:1px;font-size:8.5px}
+@media(max-width:900px){.ddv .top{row-gap:0}}
+
+/* everything in the top bar on one line: title | controls | best times (value and label side by side) */
+.ddv .top .kpi{flex-direction:row;align-items:baseline;gap:5px;white-space:nowrap}
+.ddv .top .kpi span{margin:0;padding:0;border-bottom:0}
+@media(min-width:901px){
+  .ddv .top{display:flex;flex-wrap:nowrap;gap:var(--s-3)}
+  .ddv .top>.header-main{flex:1 1 0;min-width:0;flex-wrap:nowrap;gap:var(--s-3)}
+  .ddv .top .header-title{flex:0 1 auto;min-width:90px;max-width:220px}
+  .ddv .top .runbar{flex:1 1 0;min-width:0;flex-basis:0;flex-wrap:nowrap;overflow:hidden}
+  .ddv .top .runbar .layout-toolbar{flex-wrap:nowrap}
+  .ddv .top .kpis{flex:none;align-self:center}
+}
+
+/* a lone docked analysis panel fills the pane instead of sitting at the 230px minimum with its content clipped */
+.ddv .panels:not(.multi-panels)>.analysis-window.is-docked{flex:1 1 0;min-height:0;height:auto}
