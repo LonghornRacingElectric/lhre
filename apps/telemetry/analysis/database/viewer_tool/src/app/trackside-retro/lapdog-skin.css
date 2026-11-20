@@ -19,10 +19,10 @@
 
 /* ---------- dropdowns, popovers, tooltips ---------- */
 .ddv [data-slot="select-trigger"]{
-  height:var(--ctl);border-radius:2px;border:1px solid var(--line);background:transparent;box-shadow:none;padding:0 8px;gap:6px;
+  height:var(--ctl);border-radius:2px;border:1px solid transparent;background:var(--sel);box-shadow:none;padding:0 8px;gap:6px;
   font:500 12.5px var(--f-body);
 }
-.ddv [data-slot="select-trigger"]:hover{background:var(--sel)}
+.ddv [data-slot="select-trigger"]:hover{border-color:var(--control-border)}
 .ddv [data-slot="select-trigger"]:focus-visible{box-shadow:none;border-color:var(--ink)}
 .ddv [data-slot="select-trigger"] svg{width:12px;height:12px}
 .ddv [data-slot="select-content"],.ddv [data-slot="popover-content"],.ddv [data-slot="dropdown-menu-content"]{
@@ -72,7 +72,7 @@
 .ddv .maptools{gap:var(--s-1) var(--s-2);padding:0}
 .ddv .maptools .lab{display:flex;align-items:center;gap:var(--s-2)}
 .ddv .viewer{border-radius:2px;min-height:0}
-.ddv .hud{padding:var(--s-2) var(--s-3);border-radius:2px;gap:var(--s-2)}
+.ddv .hud{padding:var(--s-2) var(--s-3);border:0;border-radius:2px;gap:var(--s-2)}
 .ddv .hud-l{left:var(--s-2);top:var(--s-2)}
 .ddv .hud-r{right:var(--s-2);top:var(--s-2)}
 .ddv .sch{border-radius:2px;padding:var(--s-1) 6px}

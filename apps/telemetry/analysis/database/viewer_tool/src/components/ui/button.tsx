@@ -19,9 +19,9 @@ const buttonVariants = cva(
         ghost:
           "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
         link: "text-primary underline-offset-4 hover:underline",
-        /* flat bordered control for dense tool bars; the border colour comes from --control-border when a page defines it */
+        /* flat filled control for dense tool bars; no border until hover (--control-border when a page defines it) */
         tool:
-          "border border-[var(--control-border,var(--border))] bg-transparent text-foreground hover:bg-accent hover:border-muted-foreground",
+          "border border-transparent bg-accent text-foreground hover:border-[var(--control-border,var(--border))]",
         /* underlined tab; aria-pressed marks the open one */
         tab:
           "rounded-none border-b-2 border-transparent bg-transparent text-muted-foreground hover:text-foreground aria-pressed:border-foreground aria-pressed:text-foreground",
