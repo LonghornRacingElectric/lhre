@@ -837,6 +837,7 @@ textarea:focus-visible,
 .modalHead h3 { margin: 0; font-size: var(--fs-lg, 1.2rem); }
 .modalFoot { display: flex; justify-content: flex-end; gap: var(--s-2); }
 .modalCard .trackForm small { grid-column: 1 / -1; }
+.modalCard .trackForm .tireSetField { grid-column: 1 / -1; }
 
 /* Multi-client sync banner (leader / mirror). */
 .syncBanner {

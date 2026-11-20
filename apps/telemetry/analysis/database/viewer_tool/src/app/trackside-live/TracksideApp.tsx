@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type Dispatch, 
 import { Activity, AlertTriangle, ArrowDown, ArrowUp, CalendarDays, ChevronLeft, ChevronRight, Crosshair, Disc3, Download, FileText, Flag, Gauge, GraduationCap, HelpCircle, History, MapPinned, Minus, MonitorCog, Moon, NotebookText, Plus, Power, Radio, RefreshCcw, Save, Scissors, SlidersHorizontal, Square, Sun, Target, Thermometer, Timer, Trash2, Upload, Users, WifiOff, X, Zap } from "lucide-react";
 import { api } from "@/lib/trackside/api";
 import { useCarStatus, CAR_STATE_META, humanizeReason, type CarState, type CarStatusFeed } from "@/lib/trackside/useCarStatus";
-import { EVENT_TYPES, upsertSession, patchSession, suggestSessionName, syncRegistryWithServer, type TracksideSessionInfo } from "@/lib/trackside/sessionRegistry";
+import { EVENT_TYPES, upsertSession, patchSession, syncRegistryWithServer, type TracksideSessionInfo } from "@/lib/trackside/sessionRegistry";
 import { usePresence } from "@/lib/trackside/usePresence";
 import { useSession } from "next-auth/react";
 import { DashLayoutEditor } from "@/components/dashlayout/DashLayoutEditor";
@@ -16,8 +16,10 @@ import { useMessageLibrary } from "@/lib/dash/useMessageLibrary";
 import { activeMessages, MESSAGE_ICON_GLYPH, type DashMessage } from "@/lib/dash/dashMessages";
 import { useRacePlan } from "@/lib/dash/useRacePlan";
 import { DriveDaySetupForm, driveDaySetupToPayload, type DriveDaySetup } from "@/components/trackside/DriveDaySetupForm";
+import { NewSessionModal } from "@/components/trackside/NewSessionModal";
 import { ManualLapEntry } from "@/components/trackside/ManualLapEntry";
 import { parseLapTimeInput } from "@/lib/trackside/lapTime";
+import { saveTireSetPreference } from "@/lib/trackside/tireSetPreferences";
 import type {
   ChannelDef,
   ChannelChartDefinition,
@@ -1975,8 +1977,9 @@ function App() {
 
   // Start a fresh, named session: close out any prior record, clear state, stamp
   // the metadata for exports + the logsync registry, and re-arm the feed.
-  function startNewSession(draft: { name: string; car: "orion" | "angelique"; driver: string; eventType: string; venue: string }) {
+  function startNewSession(draft: { name: string; car: "orion" | "angelique"; driver: string; eventType: string; venue: string; tireSetId: string }) {
     if (isMirrorRef.current) return;
+    saveTireSetPreference(draft.car, draft.tireSetId);
     if (sessionInfo) patchSession(sessionInfo.id, { endedAt: Date.now(), laps: liveStateRef.current.laps.length });
     clearLiveSessionState();
     clearLiveSessionEnded();
@@ -4740,86 +4743,6 @@ const METADATA_LONG_FIELDS = new Set<MetadataField>(["vehicle_comment", "short_c
 // Single source of truth for the MoTeC metadata field grid — used by the
 // exporter, the live pre-set panel, and the car-preset editor (previously three
 // near-identical copies).
-function NewSessionModal({
-  sources,
-  defaultCar,
-  defaultVenue,
-  defaultDriver,
-  onStart,
-  onClose,
-}: {
-  sources: SourceDef[];
-  defaultCar: "orion" | "angelique";
-  defaultVenue: string;
-  defaultDriver: string;
-  onStart: (draft: { name: string; car: "orion" | "angelique"; driver: string; eventType: string; venue: string }) => void;
-  onClose: () => void;
-}) {
-  const [car, setCar] = useState<"orion" | "angelique">(defaultCar);
-  const [driver, setDriver] = useState(defaultDriver);
-  const [eventType, setEventType] = useState<string>(EVENT_TYPES[0]);
-  const [venue, setVenue] = useState(defaultVenue);
-  const [name, setName] = useState("");
-  const suggestedName = suggestSessionName(venue, eventType);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  return (
-    <div className="modalOverlay" onMouseDown={onClose}>
-      <div className="modalCard" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="modalHead">
-          <h3>New session</h3>
-          <button className="tool iconOnly" onClick={onClose} aria-label="Close"><X size={16} /></button>
-        </div>
-        <div className="trackForm">
-          <label>
-            <span>Session name</span>
-            <input value={name} placeholder={suggestedName} autoFocus onChange={(e) => setName(e.target.value)} />
-          </label>
-          <label>
-            <span>Car</span>
-            <select value={car} onChange={(e) => setCar(e.target.value as "orion" | "angelique")}>
-              {sources.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Event type</span>
-            <select value={eventType} onChange={(e) => setEventType(e.target.value)}>
-              {EVENT_TYPES.map((ev) => <option key={ev} value={ev}>{ev}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Driver</span>
-            <input value={driver} placeholder="Name" onChange={(e) => setDriver(e.target.value)} />
-          </label>
-          <label>
-            <span>Venue / track</span>
-            <input value={venue} onChange={(e) => setVenue(e.target.value)} />
-          </label>
-          <small className="muted">
-            Starts now and clears the current run. The name, driver, event and venue tag this
-            session so its log CSV auto-fills in Log Sync.
-          </small>
-        </div>
-        <div className="modalFoot">
-          <button type="button" className="tool" onClick={onClose}>Cancel</button>
-          <button
-            type="button"
-            className="primary"
-            onClick={() => onStart({ name: name.trim() || suggestedName, car, driver, eventType, venue })}
-          >
-            <Flag size={15} /> Start session
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function MetadataFields({
   values,
   onChange,

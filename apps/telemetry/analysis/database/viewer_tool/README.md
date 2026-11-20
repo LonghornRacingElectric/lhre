@@ -105,6 +105,20 @@ energy plan, driver dash. Lap controls, in the Live Laps panel:
   and the average and nothing else.
 - A new session is named `<venue> · <event type> N · YYYY-MM-DD`, N counting
   this browser's sessions of that type today; type over it if you want.
+- **New session > Tire set** is optional. `NewSessionModal` accepts a
+  `tireSets` prop containing `{ id: string, label: string }` entries. No
+  catalogue is hardcoded: the default list is empty, offering only
+  **Unassigned** with **No tire sets available yet**.
+  Starting a session remembers the selected set (including **Unassigned**)
+  separately for Orion and Angelique in this browser. Switching cars restores
+  that car's selection; Cancel discards unsaved choices. An ID absent from the
+  supplied list displays and submits as Unassigned. Preferences are independent
+  of the catalogue, so a remembered ID can resolve when options finish loading.
+  The old sample preview storage keys are ignored. Preferences are not added
+  to session records, exports or backend requests. Backend integration must
+  load the Postgres catalogue and pass it as `tireSets`, and persist the
+  submitted `tireSetId` with the session (`""` means unassigned). Creating the
+  database table alone will not populate the dropdown; past sessions are unchanged.
 
 The page keeps the last 6,000 samples in memory and in the JSON export, so
 at 20 Hz the export holds the last 5 minutes of samples and at 50 Hz the last
