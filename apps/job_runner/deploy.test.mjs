@@ -5,9 +5,29 @@ import {mkdtemp, writeFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 
 const require = createRequire(import.meta.url);
 const {apps: [application]} = require('./deploy/ecosystem.config.cjs');
+
+for (const [label, override, expected] of [
+  ['unset', undefined, '/home/electric/.config/lhr-jobs/dashboard.json'],
+  ['empty', '', '/home/electric/.config/lhr-jobs/dashboard.json'],
+  ['custom', '/tmp/custom-dashboard.json', '/tmp/custom-dashboard.json'],
+]) {
+  test(`PM2 selects the dashboard config when LHR_JOBS_CONFIG is ${label}`, () => {
+    const configPath = fileURLToPath(new URL('./deploy/ecosystem.config.cjs', import.meta.url));
+    const child = spawnSync(process.execPath, [
+      '-e', 'console.log(require(process.argv[1]).apps[0].env.LHR_JOBS_CONFIG)', configPath,
+    ], {
+      env: override === undefined ? {} : {LHR_JOBS_CONFIG: override},
+      encoding: 'utf8',
+      timeout: 10000,
+    });
+    assert.equal(child.status, 0, child.stderr || child.error?.message);
+    assert.equal(child.stdout.trim(), expected);
+  });
+}
 
 test('PM2 launches a native Node process whose ESM entrypoint guard runs', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'lhr-native-entrypoint-'));

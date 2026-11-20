@@ -100,9 +100,11 @@ The dashboard trusts source IP forwarding only from its loopback Tailscale Serve
 proxy. Serve [sets the forwarded source
 itself](https://github.com/tailscale/tailscale/blob/main/ipn/ipnlocal/serve.go),
 overwriting client-supplied forwarding headers. Keep the application bound to
-loopback, with Serve as the only external proxy; verify distinct clients arrive
-with distinct source IPs during acceptance. Unauthenticated initial page loads
-always get a 401 challenge without consuming a login attempt.
+loopback. With Serve as the only external proxy, verify that distinct clients
+arrive with distinct source IPs during acceptance. For SSH tunnel access,
+browser requests share telemetry's loopback source-IP rate limit.
+Unauthenticated initial page loads always get a 401 challenge without consuming
+a login attempt.
 
 FMU jobs need executable scratch: FMPy extracts the model's native `.so` into
 `/tmp` before loading it. The runner uses a 512 MiB `exec,nosuid,nodev` tmpfs

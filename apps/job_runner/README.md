@@ -122,9 +122,10 @@ logs each worker cycle; both are sampled by the supervised worker; read RPCs do
 not invoke Docker or NVIDIA. The dashboard coalesces log reads for 2.5 seconds.
 Sign-in checks allow five failed credential checks per source per minute; cached
 valid logins bypass that limit. Empty credentials always receive a 401 browser
-challenge without using an attempt. Sources are the socket peer, or the source
-IP supplied by Tailscale Serve over the loopback proxy. Different tailnet
-clients have separate limits. If HIL cannot be reached, the dashboard labels
+challenge without using an attempt. SSH-tunneled browser sessions share
+telemetry's loopback rate limit. When Tailscale Serve is configured as the
+trusted loopback proxy, the forwarded source IP gives each client its own
+limit. If HIL cannot be reached, the dashboard labels
 cached history as disconnected and disables new submissions.
 
 ## Development and checks
