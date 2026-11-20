@@ -1,6 +1,6 @@
 # ADR-019: PM2 dashboard and restricted SSH runner for HIL jobs
 
-- **Status:** Accepted
+- **Status:** Accepted; telemetry account choice superseded by [ADR-020](020-shared-telemetry-dashboard-account.md)
 - **Date:** 2026-11
 
 ## Context

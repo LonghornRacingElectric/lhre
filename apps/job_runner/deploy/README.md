@@ -1,5 +1,8 @@
 # Deployment templates
 
+The [initial deployment record](2026-11-14.md) lists verified live-host checks,
+current access and rollback.
+
 `lhr-runner.service` supervises the queue on HIL. From the repository root on
 HIL, install the root-owned runner (0644), executable bridge (0755), and unit
 (0644) explicitly:
@@ -25,7 +28,7 @@ Use `/var/lib/lhr-runner` for state. The bridge must be executable for sudo's
 forced SSH command to work. It runs Python in isolated mode and never interprets
 `SSH_ORIGINAL_COMMAND`.
 
-Generate a dedicated worker key as `lhr-jobs` on telemetry. On HIL, create a
+Generate a dedicated worker key as `electric` on telemetry. On HIL, create a
 separate `lhr-job-ssh` account with a locked password, a valid `/bin/sh` login
 shell for the forced command, and no Docker group or general sudo access. Its
 only authorized_keys entry must have
@@ -43,23 +46,35 @@ Its context contains `task.py`, the prior campaign's `input/` directory and
 `lhr/worker-gpu-check:2026-11-13` image supplies the GPU template. No private
 FMU needs to leave HIL to construct the image.
 
-`ecosystem.config.cjs` defines a single PM2 application, `lhr-jobs`. Run it as a
-dedicated `lhr-jobs` account, without Docker membership or sudo privileges; do
-not reuse `electric` or its PM2 daemon. Install the application on telemetry's
-SSD with its data directory owned by `lhr-jobs`, create the mode-0600
-configuration/key and verified known_hosts under
-`/home/lhr-jobs/.config/lhr-jobs`, and set `sshHost` to `lhr-job-ssh@hil`. Start
-and persist only that account's PM2 process list. Keep existing `electric`
-services and their PM2 configuration unchanged.
+`ecosystem.config.cjs` defines one PM2 application, `lhr-jobs`. The initial
+deployment uses the existing `electric` account and PM2 daemon, alongside
+`viewer_tool`; this intentionally shares that account's existing privileges
+([ADR-020](../../../docs/architecture/020-shared-telemetry-dashboard-account.md)).
+The application code stays root-owned on telemetry's SSD. Its data directory,
+mode-0600 configuration/key and verified known_hosts belong to `electric`.
+The default config path is `/home/electric/.config/lhr-jobs/dashboard.json`;
+set `LHR_JOBS_CONFIG` before invoking PM2 to override it.
 
-Add `tailscale serve --bg --https=8444 http://127.0.0.1:8091`. Preserve the
-existing 443 handler and Funnel flag, and verify the new port is private. The
-dashboard uses HTTP Basic authentication over that HTTPS connection, salted
-scrypt password verification, same-origin mutation checks and a restrictive
-content security policy. The backend does not log credentials. It permits five
-failed credential checks per source per minute before returning 429; cached
-valid credentials keep working. The port deliberately lies outside Funnel's
-supported ports; verify Serve status before handing out access.
+The template starts the current Node executable as a native process in fork
+mode. Do not replace it with PM2's JavaScript import wrapper: that changes
+`argv[1]`, so the server's ESM entrypoint guard never starts the HTTP listener.
+Old-space and semi-space limits are passed directly to Node. Start or restart
+only `lhr-jobs`; never delete or restart `viewer_tool`. When saving PM2's
+process list, preserve both applications and the existing viewer configuration.
+
+For now, listen only on `127.0.0.1:8091` and set `publicOrigin` to
+`http://127.0.0.1:8091`. Use an SSH tunnel from the operator's machine:
+
+```bash
+ssh -N -L 127.0.0.1:8091:127.0.0.1:8091 electric@telemetry
+```
+
+No new Serve/Funnel route or domain is part of this deployment. The existing
+443 handler and Funnel flag stay unchanged. Configure a separate HTTPS origin
+only when requested. The dashboard requires HTTP Basic authentication, uses
+salted scrypt password verification and same-origin mutation checks, and never
+logs credentials. Five failed credential checks per source per minute return
+429; initial browser challenges do not consume an attempt.
 
 Deployment acceptance: queue/run a CPU job, download its archive, cancel queued
 and running jobs, pause/resume, restart the dashboard and worker during a job,
@@ -68,7 +83,7 @@ complete the FMU profile, verify NVIDIA output with a read-only root and no
 telemetry container IDs/status and public routes remain unchanged. Record
 results in the adjacent runbook after deployment.
 
-No service is deployed by this PR. Verify the installed image IDs, account/group
+Deployment records must verify installed image IDs, account/group
 memberships, sudo restriction, cache/result bounds and worker failure recovery
 on HIL before enabling the dashboard. The fixed templates publish compact
 results and diagnostics on stdout/stderr; they cannot write to the host's result
@@ -85,6 +100,14 @@ The dashboard trusts source IP forwarding only from its loopback Tailscale Serve
 proxy. Serve [sets the forwarded source
 itself](https://github.com/tailscale/tailscale/blob/main/ipn/ipnlocal/serve.go),
 overwriting client-supplied forwarding headers. Keep the application bound to
-loopback, with Serve as the only external proxy; verify distinct clients arrive
-with distinct source IPs during acceptance. Unauthenticated initial page loads
-always get a 401 challenge without consuming a login attempt.
+loopback. With Serve as the only external proxy, verify that distinct clients
+arrive with distinct source IPs during acceptance. For SSH tunnel access,
+browser requests share telemetry's loopback source-IP rate limit.
+Unauthenticated initial page loads always get a 401 challenge without consuming
+a login attempt.
+
+FMU jobs need executable scratch: FMPy extracts the model's native `.so` into
+`/tmp` before loading it. The runner uses a 512 MiB `exec,nosuid,nodev` tmpfs
+for this template only. The root filesystem stays read-only and CPU/GPU
+scratch keeps Docker's default `noexec` setting. This fixes the live
+"failed to map segment from shared object" error without a writable host mount.

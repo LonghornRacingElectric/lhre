@@ -27,7 +27,8 @@ three years after everyone who made the decision graduated.
 | [016](016-fmu-artifact-boundary.md) | Identified full-vehicle FMU artifact for autonomy | Accepted |
 | [017](017-tests-gate-merges.md) | Tests and linters gate merges; reviews check intent | Accepted |
 | [018](018-windows-shell-free.md) | Windows builds are shell-free; no MSYS2 or Git Bash | Accepted |
-| [019](019-hil-job-service.md) | PM2 dashboard and restricted SSH runner for HIL jobs | Accepted |
+| [019](019-hil-job-service.md) | PM2 dashboard and restricted SSH runner for HIL jobs | Telemetry account choice superseded by ADR-020 |
+| [020](020-shared-telemetry-dashboard-account.md) | Run the initial jobs dashboard under telemetry's existing account | Accepted |
 
 ## ADRs vs. READMEs
 
