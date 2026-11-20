@@ -138,11 +138,30 @@ jobs:
         if: ${{ !cancelled() }}
         run: uv run --group lint actionlint
 
+  # One job, one leg per OS. Linux builds and tests on the BuildBuddy
+  # remote executors, then runs the sanitizers and coverage. Windows builds
+  # fully locally (see .bazelrc: Bazel can't drive the Linux remote
+  # executors from a Windows client) but still shares the remote cache, and
+  # its short --output_user_root keeps Python codegen tools under Windows'
+  # 260-char MAX_PATH, the same setup .bazelrc.user.example asks of Windows
+  # dev machines.
   bazel:
-    name: Bazel (Linux)
+    name: Bazel (${{ matrix.os }})
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.bazel != 'false' }}
-    runs-on: ubuntu-latest
+    strategy:
+      # A Windows-only break still shows the Linux result, and vice versa.
+      fail-fast: false
+      matrix:
+        include:
+          - os: Linux
+            runner: ubuntu-latest
+            timeout: 360
+          - os: Windows
+            runner: windows-latest
+            timeout: 60
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: ${{ matrix.timeout }}
     defaults:
       run:
         shell: bash
@@ -153,20 +172,44 @@ jobs:
           fetch-depth: 2
 
       - uses: astral-sh/setup-uv@v9.0.0
+        if: matrix.os == 'Linux'
 
-      # With a BuildBuddy key, builds use the remote cache + executors and
-      # stream results. Fork PRs don't get secrets, so they fall back to a
-      # fully local build (hermetic toolchains make that work anywhere).
-      - name: Configure BuildBuddy
+      # With a BuildBuddy key, builds use the remote cache (+ executors on
+      # Linux) and stream results. Fork PRs don't get secrets, so they fall
+      # back to a fully local build (hermetic toolchains make that work
+      # anywhere).
+      - name: Configure Bazel
         env:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
         run: |
+          : > .bazelrc.user
+          if [ "$RUNNER_OS" = Windows ]; then
+            echo "startup --output_user_root=C:/_bzl" >> .bazelrc.user
+          fi
           if [ -n "$BUILDBUDDY_API_KEY" ]; then
-            echo "common --remote_header=x-buildbuddy-api-key=$BUILDBUDDY_API_KEY" > .bazelrc.user
+            echo "common --remote_header=x-buildbuddy-api-key=$BUILDBUDDY_API_KEY" >> .bazelrc.user
           else
-            echo "common --config=local" > .bazelrc.user
+            echo "common --config=local" >> .bazelrc.user
           fi
           echo "common --config=ci" >> .bazelrc.user
+
+      # Runs on main write the cache that PRs restore: GitHub scopes
+      # PR-created caches to their own branch, but caches created on main
+      # are visible to every PR. Keyed on the files that pin external deps,
+      # NOT the commit: an exact hit skips the multi-GB re-upload at job end
+      # (GitHub caps the whole repo at 10 GB, LRU-evicted). Stale bazel-out
+      # contents from older commits are safe (Bazel's action cache
+      # invalidates correctly) and action results come from BuildBuddy
+      # anyway; this cache exists to skip re-downloading and re-extracting
+      # toolchains. Linux doesn't need it: its actions run remotely.
+      - name: Cache Bazel
+        if: matrix.os == 'Windows'
+        uses: actions/cache@v6
+        with:
+          path: "C:/_bzl"
+          key: ${{ runner.os }}-bazel-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'requirements_lock.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-bazel-
 
       - name: Build everything
         run: bazel build //...
@@ -182,7 +225,7 @@ jobs:
       # log onto the run's summary page. !cancelled() so an over-budget
       # failure still shows which region blew it.
       - name: Summarize firmware memory use
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.os == 'Linux' }}
         run: |
           # shellcheck disable=SC2016 # the backticks are Markdown, not a command
           for label in $(bazel query 'attr(tags, firmware_size, tests(//...))'); do
@@ -197,6 +240,7 @@ jobs:
       # Host C++ tests again with undefined behavior trapping. trap_test is
       # the canary that proves the sanitizer is on (tools/ubsan/README.md).
       - name: Test host C++ under UBSan
+        if: matrix.os == 'Linux'
         run: >-
           bazel test --config=ubsan
           //boards/... //drivers/... //lib/codegen/cpp/... //tools/ubsan:trap_test
@@ -204,7 +248,7 @@ jobs:
       # And under ASan for memory errors; overflow_test is its canary
       # (tools/asan/README.md).
       - name: Test host C++ under ASan
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.os == 'Linux' }}
         run: >-
           bazel test --config=asan
           //boards/... //drivers/... //lib/codegen/cpp/... //tools/asan:overflow_test
@@ -214,12 +258,12 @@ jobs:
       # (tools/coverage/README.md). The checkout is the PR merged into its
       # base, so HEAD^1 is the base and the diff is exactly this PR.
       - name: Measure firmware line coverage
-        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        if: ${{ !cancelled() && matrix.os == 'Linux' && github.event_name == 'pull_request' }}
         continue-on-error: true
         run: bazel coverage //boards/... //drivers/...
 
       - name: Report changed-line coverage
-        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        if: ${{ !cancelled() && matrix.os == 'Linux' && github.event_name == 'pull_request' }}
         run: |
           report="$(bazel info output_path)/_coverage/_coverage_report.dat"
           uv run --only-group coverage diff-cover "$report" \
@@ -250,66 +294,10 @@ jobs:
               echo "::warning file=$f::no host test links this file, so its coverage isn't measured"
           done <<< "$changed"
 
-  # Windows builds run fully locally (see .bazelrc: Bazel can't drive the
-  # Linux remote executors from a Windows client) but still share the
-  # remote cache. The short --output_user_root keeps Python codegen tools
-  # under Windows' 260-char MAX_PATH — same setup the .bazelrc.user.example
-  # asks of Windows dev machines.
-  bazel-windows:
-    name: Bazel (Windows)
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.bazel != 'false' }}
-    runs-on: windows-latest
-    timeout-minutes: 60
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Configure Bazel
-        env:
-          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
-        run: |
-          echo "startup --output_user_root=C:/_bzl" > .bazelrc.user
-          if [ -n "$BUILDBUDDY_API_KEY" ]; then
-            echo "common --remote_header=x-buildbuddy-api-key=$BUILDBUDDY_API_KEY" >> .bazelrc.user
-          else
-            echo "common --config=local" >> .bazelrc.user
-          fi
-          echo "common --config=ci" >> .bazelrc.user
-
-      # Runs on main write the cache that PRs restore: GitHub scopes
-      # PR-created caches to their own branch, but caches created on main
-      # are visible to every PR. Keyed on the files that pin external deps,
-      # NOT the commit: an
-      # exact hit skips the multi-GB re-upload at job end (GitHub caps the
-      # whole repo at 10 GB, LRU-evicted). Stale bazel-out contents from
-      # older commits are safe — Bazel's action cache invalidates
-      # correctly — and action results come from BuildBuddy anyway; this
-      # cache exists to skip re-downloading and re-extracting toolchains.
-      - name: Cache Bazel
-        uses: actions/cache@v6
-        with:
-          path: "C:/_bzl"
-          key: ${{ runner.os }}-bazel-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'requirements_lock.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-bazel-
-
-      - name: Build everything
-        run: bazel build //...
-
-      - name: Test everything
-        run: bazel test //... 2>&1 | tee bazel-test.log
-
-      - name: List failed tests
-        if: failure()
-        run: bash tools/ci/failed_tests_summary.sh bazel-test.log >> "$GITHUB_STEP_SUMMARY"
-
       # The post-job cache save tars C:/_bzl; the Bazel server must not be
       # holding locks/open files in it when that happens.
       - name: Shut down Bazel
-        if: always()
+        if: ${{ always() && matrix.os == 'Windows' }}
         run: bazel shutdown
 
   sim-fast:
@@ -418,7 +406,10 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.autonomy != 'false' }}
     runs-on: ubuntu-latest
-    container: ros:jazzy-ros-base
+    # Pinned by digest so a new upstream image can't change a PR's result
+    # without a commit here. To update, take the jazzy-ros-base digest from
+    # Docker Hub and bump it in its own PR (autonomy/ros2/README.md).
+    container: ros:jazzy-ros-base@sha256:00b8d47a6e6384a2834e3d01fa87ae767876543baa574f2d64a75c04ea33c698
     defaults:
       run:
         shell: bash
@@ -618,12 +609,28 @@ jobs:
       - name: Build all telemetry images
         run: bazel build //apps/telemetry:all_images //lib/codegen/telemetry:server_schema
 
-      - name: Load and smoke-test core images
-        run: bazel test //apps/telemetry:core_smoke_tests --test_output=errors
+      # Every image all_images builds gets loaded and started once, the
+      # optional processors (car_status, lap_timer, ...) as well as the core.
+      - name: Load and smoke-test every image
+        run: >-
+          bazel test //apps/telemetry:core_smoke_tests
+          //apps/telemetry:optional_smoke_tests --test_output=errors
 
-      - name: Warn that the integration tests cannot run
+      # Fork PRs and Dependabot get no repo secrets, so skipping is all they
+      # can do. Anywhere else a missing secret means the integration tests
+      # silently stopped running, so that fails instead of warning.
+      - name: Check that the integration tests can run
         if: env.HAVE_SECRETS != 'true'
-        run: echo "::warning::Not every telemetry secret is set in this run, so the integration tests are skipped. Only the images and smoke tests ran."
+        env:
+          FORK: ${{ github.event.pull_request.head.repo.fork }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          if [ "$FORK" = true ] || [ "$ACTOR" = "dependabot[bot]" ]; then
+            echo "::warning::This run gets no repo secrets, so the telemetry integration tests are skipped. Only the images and smoke tests ran."
+            exit 0
+          fi
+          echo "::error::Not every telemetry secret (POSTGRES_USER, POSTGRES_PASSWORD, ELECTRIC_PWD, GRAFANA_PWD, ANALYSIS_PWD) is set, so the integration tests can't run. Set them in the repo's Actions secrets."
+          exit 1
 
       - name: Start services
         if: env.HAVE_SECRETS == 'true'
@@ -681,7 +688,7 @@ jobs:
   # Jobs skip only on an untouched area, and run if Changes fails.
   all-checks:
     name: All checks passed
-    needs: [changes, format, lint, bazel, bazel-windows, sim-fast, four-post, autonomy, bevo, bevo-frontend, docs, telemetry, telemetry-viewer, job-runner]
+    needs: [changes, format, lint, bazel, sim-fast, four-post, autonomy, bevo, bevo-frontend, docs, telemetry, telemetry-viewer, job-runner]
     if: always()
     runs-on: ubuntu-latest
     steps:

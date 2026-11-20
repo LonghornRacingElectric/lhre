@@ -26,7 +26,8 @@ def _metrics_params(monkeypatch, configs):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     monkeypatch.setattr(module, '_find_world', lambda _: str(WORLD))
-    monkeypatch.setattr(module, 'get_package_share_directory', lambda _: '/tmp/lhr_gazebo')
+    monkeypatch.setattr(module, 'get_package_share_directory',
+                        lambda _: str(Path(__file__).parents[1]))
     context = LaunchContext()
     for action in module.generate_launch_description().entities:
         if isinstance(action, DeclareLaunchArgument):
@@ -117,7 +118,8 @@ def test_acceleration_world_is_open_and_includes_stopping_lane(
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     monkeypatch.setattr(module, '_find_world', lambda _: str(world))
-    monkeypatch.setattr(module, 'get_package_share_directory', lambda _: '/tmp/lhr_gazebo')
+    monkeypatch.setattr(module, 'get_package_share_directory',
+                        lambda _: str(Path(__file__).parents[1]))
     context = LaunchContext()
     context.launch_configurations.update(perception=perception, estimator=estimator,
                                          mission='acceleration', track_style='acceleration')

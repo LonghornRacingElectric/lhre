@@ -24,6 +24,16 @@ REPEATS=${REPEATS:-3}
 ACCEL_REPEATS=${ACCEL_REPEATS-3}   # empty or 0 skips acceleration
 SKIDPAD_REPEATS=${SKIDPAD_REPEATS-3}  # empty or 0 skips skidpad
 BASELINE=${BASELINE:-0}            # 1 adds the truth-stack runs, for comparison
+IMU_SEED=${IMU_SEED:-1}            # first Gazebo draw; each gated run increments it
+if ! [[ $IMU_SEED =~ ^[0-9]+$ ]] || [ "${#IMU_SEED}" -gt 10 ]; then
+    echo "IMU_SEED must be an unsigned 32-bit integer" >&2
+    exit 2
+fi
+IMU_SEED=$((10#$IMU_SEED))
+if [ "$IMU_SEED" -gt 4294967295 ]; then
+    echo "IMU_SEED must be an unsigned 32-bit integer" >&2
+    exit 2
+fi
 RUN_S=${RUN_S:-180}                # sim-second cap per run
 SETTLE_S=${SETTLE_S:-5}            # sim seconds recorded after FINISHED
 HANG_S=${HANG_S:-60}               # wall seconds of a stopped /clock: hung
@@ -159,12 +169,15 @@ one_run() {  # id [launch args...]
 plan() {  # one line per run: the id, then its launch arguments
     # The truth baseline is the one run that opts out of the gate stack.
     local truth='perception:=sim estimator:=truth safety:=true lidar_source:=gazebo enable_stereo_camera:=false enable_camera_lidar_fusion:=false'
+    local imu_seed=$IMU_SEED
     for s in $SEEDS; do
         if [ "$BASELINE" != 0 ]; then
             echo "baseline_${TRACK_STYLE}_s$s track_style:=$TRACK_STYLE seed:=$s $truth"
         fi
         for r in $(seq 1 "$REPEATS"); do
-            echo "${TRACK_STYLE}_s${s}_r$r track_style:=$TRACK_STYLE seed:=$s $STACK"
+            [ "$imu_seed" -le 4294967295 ] || return 2
+            echo "${TRACK_STYLE}_s${s}_r$r track_style:=$TRACK_STYLE seed:=$s $STACK imu_seed:=$imu_seed"
+            imu_seed=$((imu_seed + 1))
         done
     done
     for style in $EXTREMES $REAL_TRACKS; do
@@ -184,11 +197,15 @@ plan() {  # one line per run: the id, then its launch arguments
         done
     done
     for r in $(seq 1 "${ACCEL_REPEATS:-0}"); do
-        echo "acceleration_r$r track_style:=acceleration $STACK"
+        [ "$imu_seed" -le 4294967295 ] || return 2
+        echo "acceleration_r$r track_style:=acceleration $STACK imu_seed:=$imu_seed"
+        imu_seed=$((imu_seed + 1))
     done
     if [ -e "$SKIDPAD_WORLD" ]; then
         for r in $(seq 1 "${SKIDPAD_REPEATS:-0}"); do
-            echo "skidpad_r$r track_style:=skidpad mission:=skidpad $STACK"
+            [ "$imu_seed" -le 4294967295 ] || return 2
+            echo "skidpad_r$r track_style:=skidpad mission:=skidpad $STACK imu_seed:=$imu_seed"
+            imu_seed=$((imu_seed + 1))
         done
     fi
 }
