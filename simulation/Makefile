@@ -161,7 +161,7 @@ clean:
 check-vehicle:
 	$(RUN) sim python tools/bundle.py check $(if $(BUNDLE),--bundle $(BUNDLE)) $(if $(VEHICLE),--vehicle $(VEHICLE)) $(if $(BASE),--base $(BASE))
 
-FMU_BOBLIB_SHA := 4741a5ec6201635051031ed356a1bb55932df89c
+FMU_BOBLIB_SHA := 75b6e031d8f9cb49acdb62b536c41c22e566a020
 FMU_SOURCE := out/fmu/boblib-source
 
 .PHONY: fmu-source fmu

@@ -3,8 +3,9 @@
 Run Orion's full BobLib Modelica vehicle through FMI 2.0 co-simulation.
 The upstream CVODE solver advances the model. The existing ROS simulator
 interface publishes `/clock`, rear-axle odometry and TF after accepted steps.
-The default plant remains kinematic. Gazebo keeps its own dynamics; this
-package is selected only by the MVS launcher.
+The MVS default plant remains kinematic. The Gazebo launcher also supports
+`plant:=fmu`, with Gazebo rendering sensors at the FMU pose; its default
+remains `plant:=gazebo`.
 
 ## Build and run
 
@@ -29,6 +30,7 @@ The standard Docker mount resolves the artifact at
 
 | Node parameter | Default | Meaning |
 | --- | --- | --- |
+| `external_clock` | false | Subscribe to Gazebo time instead of using the MVS timer |
 | `fmu_path` | empty | Artifact path; adjacent `provenance.json` is required |
 | `pedal_gain` | 0.1 | Pedal demand per m/s of speed error |
 | `command_timeout_sec` | 0.5 | Brake toward zero speed after commands expire |
@@ -37,6 +39,122 @@ The MVS launcher exposes `fmu_path` and `fmu_pedal_gain` with typed startup
 checks in both perception and estimator modes. It records `fmu_pedal_gain`
 in metrics. Shared initial pose, clock, odometry and EKF remappings match the
 other plants. Changing parameters is a startup operation, not live tuning.
+
+## Gazebo clock mode
+
+See the [Gazebo guide](../lhr_gazebo/README.md#fmu-motion) for launch flags,
+sensor limitations and observed pose-lag logging. Both perception branches
+forward artifact, pedal gain and command timeout with explicit ROS types.
+`external_clock=true` cancels the inherited timer and cannot be combined with
+`publish_clock=true`. The first positive Gazebo clock stamp anchors native
+FMU time zero. Each complete 20 ms interval advances the plant once; duplicate
+clock samples do nothing. Odometry and TF carry the accepted integration time,
+which never exceeds the received clock. Rewinding the world fails the node;
+restart the launch to create a fresh FMI instance.
+
+The fixed-step catch-up loop preserves elapsed simulation time; it is not a
+real-time speed guarantee. There is no second `/clock` publisher in FMU Gazebo
+mode. Each accepted external-clock step publishes its applied bicycle-model
+steering angle on `/lhr/vehicle/steering_measured` (`sensor_msgs/JointState`),
+stamped at the same integration time as odometry. Initial pose comes from the world's saved vehicle spawn.
+
+## Gazebo timing report
+
+Gazebo FMU mode now defaults to `fmu_lockstep:=true`. The coordinator pauses
+simulation time while the plant solves and its pose is sent to Gazebo. It
+allows the next interval only after that handshake. `fmu_step_sec:=0.02`
+sets both the plant integration interval and the coordinated physics batch.
+It must be a positive integer multiple of the world's physics step and less
+than 0.1 s. Missing states, failed control/pose requests and backward time
+jumps fail the run. `fmu_lockstep:=false` selects the earlier asynchronous
+comparison mode. MVS behavior and the default Gazebo dynamics plant are unchanged.
+
+`/lhr/sim/fmu_step_timing` publishes one JSON record per accepted step. Its
+wall duration includes the driver adapter, native FMI call and output mapping;
+it excludes waiting for Gazebo and rendering. Slow steps are reported, not
+hidden. The report shows their mean, nearest-rank p95, maximum, deadline
+misses and simulated seconds per plant-compute second. Its observed real-time
+factor also includes the coordinator and Gazebo overhead.
+
+Start the observer before the launch, in separate terminals with the same
+`ROS_DOMAIN_ID` and the workspace sourced:
+
+```bash
+ros2 run lhr_sim_fmu timing_report --seconds 135 \
+  --output data/fmu-timing/cameras-off.json
+# Other terminal, with a display available to the renderer:
+timeout -s INT -k 15 130 ros2 launch lhr_gazebo gazebo_demo.launch.py \
+  plant:=fmu perception:=lidar estimator:=ekf safety:=true \
+  safety_lidar_timeout_s:=1.5 gui:=false rviz:=false enable_metrics:=false
+```
+
+The 1.5 s LiDAR watchdog is the existing CPU-rendering diagnostic setting;
+the launch default remains 0.3 s. It does not change the 0.1 s pose-age
+acceptance limit.
+
+Repeat with observer `--stereo` and launch `enable_stereo_camera:=true`.
+For the gate's `lidar_source:=mid360`, also pass observer `--lidar-source mid360`:
+pose-age acceptance must use Gazebo's rendered `/lhr/lidar/gazebo_points`,
+not the synthetic caster's `/lhr/lidar/points`. A missing selected stream fails.
+Reports include artifact provenance and raw timing/pose-age samples. Keep
+these files in ignored run-data storage. `timing_passed` requires measured
+4–5 m/s motion, an explicit FMU clock origin, each selected sensor stream,
+no unmatched frames after its first observed accepted integration step, and a maximum observed age below 0.1 s. A missing stream or an empty
+speed band fails; a slow solver can pass when simulation time waits for it.
+Frames before the first observed accepted integration step are retained and
+counted as `pre_start`. This excludes the initial two-tick clock handshake
+and sensor frames rendered before any FMU step is available. The boundary
+is the recorded clock origin plus the first observed accepted FMU time. A missing timebase
+fails acceptance.
+
+This checks the sampled pose-age diagnostic from the Gazebo guide, not
+per-ray/per-pixel sensor truth or a full driving gate.
+
+### Mac container result (2026-11-06)
+
+Two autocross seed-1 measurements used 135 s observer windows and 130 s
+launch deadlines, including shutdown. Both used LiDAR/EKF, the gate's default
+5 m/s speed limit, `fmu_lockstep:=true` and `fmu_step_sec:=0.02`. Each launch
+used a different automatically generated Gazebo transport partition. Both
+passed the sampled timing check. Safety stayed enabled with the existing
+1.5 s CPU LiDAR watchdog override. The 0.3 s default still tripped
+`LIDAR_STALE` in an earlier READY run; that stationary report failed its
+unmeasured-speed check. This work does not establish sensor throughput or
+fix that separate freshness failure.
+
+| At 4–5 m/s | Cameras off | Stereo on |
+| --- | --- | --- |
+| Accepted steps in speed band | 849 | 968 |
+| Plant call mean | 26.24 ms | 27.51 ms |
+| Plant call p95 | 47.27 ms | 50.54 ms |
+| Plant call maximum | 95.35 ms | 241.11 ms |
+| Calls over the 20 ms interval | 511 | 615 |
+| Plant-compute speedup | 0.762x | 0.727x |
+
+Overall observed simulation/wall-time ratios were 0.230x with cameras off and
+0.247x with stereo on. These include startup, waiting and driving.
+
+| Sensor pose-age observations | Count | Mean | Maximum |
+| --- | --- | --- | --- |
+| Cameras-off LiDAR | 137 | 19.00 ms | 19.00 ms |
+| Stereo-on LiDAR | 139 | 19.00 ms | 19.00 ms |
+| Stereo left | 362 | 28.64 ms | 38.00 ms |
+| Stereo right | 350 | 28.10 ms | 38.00 ms |
+
+No post-bootstrap observations were unmatched. The stereo report retained
+1 LiDAR, 4 left-image and 3 right-image bootstrap frames as `pre_start`.
+Pose age is sampled from Gazebo's model-pose observations; camera observation
+age can add up to 19 ms. These are bounded timing measurements, not a lap,
+a full gate pass, a guaranteed real-time rate or per-pixel sensor validation.
+The native pull-away solver failure and native IMU/wheel work (#205) remain
+independent.
+
+The runs used the current artifact `fe1aadc873f7852993faf0691467093d78e83f9730f4efc52f79f83ceed2328b`,
+BobSim `f58f932`, BobLib `75b6e03` and canonical vehicle hash
+`c4dc19eb29749755054802385e6930261e6ec3720bc7e4730fb217cdc4acaaa0`.
+The JSON reports retain complete artifact provenance, timing samples and pose
+samples in ignored `data/issue203/` storage. Both runs kept the same settings;
+no solver tolerance or model input was changed to meet the pose-age limit.
 
 ## Vehicle and command contract
 
@@ -63,7 +181,7 @@ height), projected into XY. It exports heading and twist from the chassis
 frame. The loader checks that reference against the canonical vehicle.
 Roll, pitch and suspension remain internal; the ROS interface is planar. One fixed map transform places the native start at the requested
 ROS pose. The adapter does not integrate yaw rate or velocity to invent pose.
-The simulation clock starts at ROS time 1 s, while the FMU starts at 0 s;
+In MVS mode the simulation clock starts at ROS time 1 s, while the FMU starts at 0 s;
 accepted step increments are identical.
 
 The loader rejects altered artifact/vehicle/tire bytes and a different BobSim
@@ -89,8 +207,8 @@ LHR_TEST_FMU=/opt/lhr/simulation/out/fmu/OrionFMI.fmu \
 CI runs interface/error/provenance tests without building a large native FMU.
 The native test skips unless `LHR_TEST_FMU` is set; if set, a missing or stale
 artifact fails. It covers waiting, launch, both steering directions, stopping and
-relaunch. It also checks that compiled aero references match our car rather
-than the different BobLib defaults. Launch tests evaluate flags and start the node with an injected
+relaunch. It also checks that compiled aero references and front brake bias match our
+car rather than the BobLib defaults. Launch tests evaluate flags and start the node with an injected
 plant to check types and EKF routing without pretending to test physics.
 
 Any rejected FMI step or nonfinite state fails the process. Native resources

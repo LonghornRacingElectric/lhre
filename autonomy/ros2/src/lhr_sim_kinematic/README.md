@@ -26,6 +26,10 @@ waited on its own clock would never tick.
 Starting sim time is 1 s, not 0, because a zero stamp reads as "unset"
 downstream.
 
+The shared interface separates `_advance()` from `_publish_state(stamp)` so
+other plants can publish accepted states at their own integration timestamps.
+The FMU uses this for external Gazebo time; kinematic behavior is unchanged.
+
 ## Parameters
 
 | Parameter | Default | What it does |

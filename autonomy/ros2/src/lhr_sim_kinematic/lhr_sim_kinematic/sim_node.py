@@ -96,7 +96,7 @@ class SimKinematic(Node):
         # --- Timer ---
         self._dt = 1.0 / update_hz
         self._step_ns = int(round(self._dt * 1e9))
-        self.create_timer(self._dt, self._step)
+        self._timer = self.create_timer(self._dt, self._step)
         self.get_logger().info(
             f'Simulator interface ready  (L={self._L}, hz={update_hz}, '
             f'clock={"sim" if self._publish_clock else "wall"})')
@@ -130,6 +130,10 @@ class SimKinematic(Node):
         else:
             now = self.get_clock().now().to_msg()
 
+        self._publish_state(now)
+
+    def _publish_state(self, now):
+        """Publish an accepted state at its integration timestamp."""
         # --- Odometry ---
         odom = Odometry()
         odom.header.stamp = now

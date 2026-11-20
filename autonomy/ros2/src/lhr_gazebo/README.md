@@ -9,6 +9,173 @@ a forward prefix, so lookahead and curvature must not connect its ends.
 See [the workspace reference](../../README.md) for launch arguments and
 vehicle physics.
 
+## FMU motion
+
+`plant:=gazebo` remains the default. `plant:=fmu` runs the full BobLib plant
+with either perception mode and either estimator. Build the artifact as described
+in [lhr_sim_fmu](../lhr_sim_fmu/README.md), then run:
+
+```bash
+ros2 launch lhr_gazebo gazebo_demo.launch.py plant:=fmu \
+  track_style:=autocross seed:=1 perception:=lidar estimator:=ekf \
+  gui:=false rviz:=false
+```
+
+The FMU advances in 20 ms accepted steps up to Gazebo's `/clock`; pauses do
+not integrate and a backward clock jump requires restarting the run. Its
+odometry and TF own truth. With EKF selected they go to `odom_truth` and
+`tf_truth`; the estimate still owns the driving topics. The spawn is read
+from the saved world's vehicle include. This bridge requires a planar,
+world-relative spawn at z=0.
+
+The launch selects generated `model_fmu.sdf` or `model_fmu_stereo.sdf` through
+a temporary resource overlay. These share the normal model's template and
+YAML geometry and current LiDAR mount, have fixed joints and no collisions, IMU, drive controllers or
+Gazebo odometry. Gazebo therefore renders a rigid, planar sensor rig; suspension
+travel, roll/pitch and wheel articulation are not rendered yet. Cone contacts
+remain geometric metrics, not modeled impact forces.
+
+`fmu_lockstep:=true` starts Gazebo paused. The coordinator advances a small
+batch of physics steps, waits for the corresponding accepted FMU state, sends
+its pose through `set_pose`, and waits for the response before allowing the
+next batch. It keeps at most one pose request and one world-control request
+in flight. A slow solver increases wall time while simulation time waits.
+The first two physics ticks bootstrap the FMU after its provenance and the
+world's initial clock are available. Startup has a separate wall-time budget,
+so a ready ROS service bridge alone cannot trigger stepping before Gazebo starts.
+A missing state, lost/rejected request or exited FMU component
+shuts down the launch. Manually playing or resetting the world is unsupported
+in this mode; use the launch to restart a run.
+
+`fmu_lockstep:=false` retains the asynchronous comparison mode: Gazebo runs
+freely and the follower sends the newest available pose. It can render stale
+states under load. The [FMU timing report](../lhr_sim_fmu/README.md#gazebo-timing-report)
+records the selected mode and measures both cases.
+
+FMU launches choose a unique Gazebo transport partition unless `GZ_PARTITION`
+is already set. The launch logs that value and FMU provenance records it. This
+keeps a different Gazebo session from serving this run’s clock or pose calls.
+Set the same environment value when using native `gz` inspection tools; ROS
+tools still use their ROS domain.
+
+| Argument | Default | Meaning |
+| --- | --- | --- |
+| `fmu_lockstep` | true | Pause Gazebo between coordinated plant intervals |
+| `fmu_step_sec` | 0.02 | FMU interval; an integer number of world physics steps, below 0.1 s |
+| `fmu_path` | empty | Artifact and adjacent manifest; see the FMU package |
+| `fmu_pedal_gain` | 0.1 | Proportional speed-to-pedal gain, recorded only for FMU runs |
+| `fmu_command_timeout_sec` | 0.5 | Simulation seconds before braking on expired commands |
+| `fmu_pose_timeout_sec` | 5.0 | Wall seconds allowed for a pose response or steady-state world-control response |
+| `fmu_startup_timeout_sec` | 60.0 | Total wall seconds for readiness and the first applied pose |
+| `fmu_step_timeout_sec` | 30.0 | Wall seconds allowed for a coordinated FMU state after startup |
+
+The internal `world_name`, `physics_step_sec` and `truth_topic` pose-node
+parameters come from the selected world and estimator/fault routing. The internal
+`lidar_topic` follows the bridge's rendered-cloud remapping: `/lhr/lidar/gazebo_points`
+with Mid-360, `/lhr/lidar/points` otherwise. All timeouts must be finite and positive. The
+plant update rate is the inverse of `fmu_step_sec`. `external_clock` and
+`publish_clock` are fixed by plant mode, so they are not user launch flags.
+Use `EXTRA="plant:=fmu"` with either the gate or fault runner; their defaults
+still select Gazebo. `steer_freeze` routes to the FMU command input, while safety
+continues to compare feedback with the unmodified controller command.
+`adapter_cmd_timeout_s` applies only to the Gazebo plant. The FMU instead
+uses `fmu_command_timeout_sec` and proportional braking, so command-loss
+stopping distances are plant-specific.
+
+Until #205 supplies native FMU IMU/wheel outputs, EKF mode uses the existing
+noisy `inertial_sim` adapter on FMU truth, including synthesized IMU.
+`gyro_bias` adds bias to this synthesized stream, while `imu_noise` applies
+only to the native Gazebo IMU. No Gazebo IMU is bridged in FMU mode. This is an explicit interim sensor model, not
+native suspension/wheel sensor fidelity.
+`imu_drop` therefore intercepts `inertial_sim` in FMU mode; it intercepts
+the Gazebo bridge in the Gazebo plant. Both feed the same fault injector.
+
+`/lhr/sim/render_pose` reports Gazebo's model pose. The follower matches this
+to accepted FMU poses, then logs cumulative mean/max `FMU pose lag` for each
+LiDAR/stereo topic at its sensor stamp. `observation_age_s` is the gap to the
+most recent pose observation at or before the sensor stamp. Thus this is a
+sampled age diagnostic, not an exact per-ray/per-pixel pose trace; repeated
+stationary poses match the newest identical FMU state. Missing pose matches
+produce an explicit unmatched record, never a zero-lag claim.
+`/lhr/sim/fmu_pose_lag` publishes the same per-frame observations as JSON for
+the timing report. Bootstrap frames are retained separately from acceptance using the explicit
+FMU clock origin and first observed accepted integration step.
+Keep the launch log and report with study data.
+
+### Earlier asynchronous coupling checks (2026-11-06)
+
+Local autocross seed 1 smoke runs reached DRIVING with the real compiled FMU:
+LiDAR/EKF without cameras (70 s wall limit), and simulated cones/truth with
+stereo enabled (50 s wall limit). Last logged cumulative pose-age values were:
+
+| Run / sensor | Samples | Mean | Maximum |
+| --- | --- | --- | --- |
+| LiDAR/EKF: LiDAR | 151 | 18.53 ms | 38 ms |
+| Stereo/truth: LiDAR | 151 | 19.59 ms | 38 ms |
+| Stereo/truth: left image | 224 | 29.26 ms | 57 ms |
+| Stereo/truth: right image | 225 | 29.03 ms | 57 ms |
+
+These are bounded transport checks, not complete laps or a gate pass. They
+used the existing historical artifact (`93654e50…`) with its matching BobSim
+`22c5056` and vehicle hash `e024a5e3…` in an isolated temporary checkout;
+provenance checks stayed enabled. They do **not** validate current main's
+vehicle. The current-car build update below replaces that artifact for new runs.
+
+### Current-car checks (2026-11-06)
+
+The matching exporter now builds the current vehicle without changing BobSim
+or BobLib source. The artifact hash is
+`fe1aadc873f7852993faf0691467093d78e83f9730f4efc52f79f83ceed2328b`.
+It uses BobSim `f58f932`, BobLib `75b6e03` and canonical vehicle hash
+`c4dc19eb29749755054802385e6930261e6ec3720bc7e4730fb217cdc4acaaa0`.
+Native tests verify the current aero ride-height references and front brake
+bias (0.84). The model's public record layout and package-order API are now
+handled by the [build tool](../../../../simulation/docs/fmu.md).
+
+The native wait/step-steer/brake/relaunch profile fails on initial pull-away:
+after 5 s waiting, its second 20 ms drive step returns FMI error status 3 at
+FMU time 5.02 s. OpenModelica reports nonlinear system 12286, whose variables
+are `battery.v` and `inverter.inverter.V_abs`, at 5.033734645 s. The root cause
+is unconfirmed. This is not assumed to be the motor-latch defect in BobLib
+#32. The failure remains in the native test; no retry, altered tolerance or
+substitute plant hides it.
+
+Before synchronized stepping, the default seed-1 gate subset completed its truth baseline in 35.2144 s,
+with 0 cone contacts and 0.2268 m maximum CTE. Its LiDAR/EKF run failed in
+READY on `LIDAR_STALE`, so the subset failed. Baseline sampled pose age
+reached 198 ms during stopping in that asynchronous mode.
+A completed baseline is not a full gate pass or a native solver acceptance.
+Native IMU/wheel outputs still depend on #205.
+
+A separate seed-1 diagnostic with the documented CPU-rendering override
+`safety_lidar_timeout_s:=1.5` passed all selected MVP checks:
+
+| Run | Lap | Cone contacts | Maximum CTE | Maximum EKF position error |
+| --- | --- | --- | --- | --- |
+| Truth baseline | 35.2149 s | 0 | 0.2269 m | — |
+| LiDAR/EKF | 35.2048 s | 0 | 0.2345 m | 0.1934 m |
+
+LiDAR/EKF stopped within 1.85 m after finish. Its last logged cumulative pose
+age was 24.35 ms mean and 158 ms maximum, including stopping. This is one
+seed with a timeout override, not the full MVP matrix or a default-configuration
+pass. Run it from the built ROS workspace with a display available to Gazebo:
+
+```bash
+SEEDS=1 REPEATS=1 ACCEL_REPEATS=0 SKIDPAD_REPEATS=0 RUN_S=240 \
+  EXTRA="plant:=fmu safety_lidar_timeout_s:=1.5" \
+  OUT="$HOME/lhr-test-data/fmu-gazebo-seed1-cpu" \
+  ../testing/tools/gate/run_gate.sh
+```
+
+A 70 s wall-time stereo smoke run used the same current artifact, LiDAR/EKF
+and CPU timeout override. It reached DRIVING without a safety trip. Last
+logged cumulative pose-age measurements were 37.14 ms mean / 218 ms maximum
+for LiDAR, 52.63 ms / 237 ms for left images, and 53.13 ms / 237 ms for right
+images. It was bounded before a full lap and did not collect lap metrics.
+These asynchronous spikes motivated the synchronized mode. See the
+[Mac timing result](../lhr_sim_fmu/README.md#mac-container-result-2026-11-06)
+for the coordinated stepping measurements.
+
 The [gate runner](../../../testing/tools/gate/README.md) explicitly selects
 `perception:=lidar estimator:=ekf safety:=true lidar_source:=mid360
 enable_stereo_camera:=true enable_camera_lidar_fusion:=true`. This is the
@@ -121,7 +288,8 @@ not a measured completion probability or validation of the real sensor.
 
 Edit the template or vehicle YAML, then run
 `python3 src/lhr_gazebo/scripts/generate_vehicle_model.py` from the ROS workspace.
-Commit both regenerated models (`model.sdf` and `model_stereo.sdf`) alongside
+Commit all four regenerated models (`model.sdf`, `model_stereo.sdf`,
+`model_fmu.sdf` and `model_fmu_stereo.sdf`) alongside
 the source. The model consistency tests
 run with `colcon test --packages-select lhr_gazebo` and need no GUI.
 
@@ -351,7 +519,10 @@ steering encoder will report, `/lhr/vehicle/steering_measured`
 (`sensor_msgs/JointState`, joint `steering`), which `safety_node`'s
 `STEER_TRACKING` compares with the command
 ([#208](https://github.com/LonghornRacingElectric/lhre/issues/208)). The
-plugin lives in `templates/model.sdf.in`, so both generated models carry it.
+plugin lives in `templates/model.sdf.in`, so both generated Gazebo dynamics
+models carry it. With `plant:=fmu`, `sim_fmu` publishes the same message
+after each accepted step using the plant's applied, rate-limited bicycle angle.
+The rigid Gazebo model supplies no steering feedback in that mode.
 
 ## Command timeout
 
@@ -453,7 +624,7 @@ LiDAR-only runs pay no camera initialization or rendering cost.
 RGB pinhole sensors, parallel axes, and a 0.12 m local-y separation. Both
 sensors share `zed2i_link`, so rotating the mount preserves Gazebo's stereo
 baseline calculation. Geometry and optics come from `lhr_vehicle`'s YAML;
-regenerate both models after changing them:
+regenerate all four models after changing them:
 
 ```bash
 cd autonomy/ros2
@@ -462,8 +633,8 @@ python3 src/lhr_gazebo/scripts/generate_vehicle_model.py --check
 ./scripts/build.sh
 ```
 
-Commit both generated SDFs. The generator and freshness tests check both
-variants against `vehicle.yaml` and the templates.
+Commit all four generated SDFs. The generator and freshness tests check every
+variant against `vehicle.yaml` and the templates.
 
 The camera-only link has no collision and uses 0.001 kg mass / 0.000001 kg m2
 diagonal inertia for simulation bookkeeping. The initial mount and optics

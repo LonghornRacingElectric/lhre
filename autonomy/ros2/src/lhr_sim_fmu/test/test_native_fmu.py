@@ -50,8 +50,19 @@ def test_compiled_aero_references_are_our_car_instead_of_boblib_defaults(monkeyp
     from common.vehicle_io import load_yaml
     data = load_yaml(vehicle_file)
     variables = {v.name: v for v in read_model_description(ARTIFACT).modelVariables}
-    for prefix, key in [('FL', 'front_left_ride_height_ref_m'),
-                        ('RL', 'rear_left_ride_height_ref_m')]:
-        actual = [float(variables[f'pVehicle.pAero.{prefix}_RideHeightRef[{i}]'].start)
+    for side, key in [('front', 'front_left_ride_height_ref_m'),
+                      ('rear', 'rear_left_ride_height_ref_m')]:
+        actual = [float(variables[f'pVehicle.chassis.{side}Axle.rideHeightReference[{i}]'].start)
                   for i in range(1, 4)]
         assert actual == pytest.approx(data['aero'][key])
+
+
+def test_compiled_brake_bias_is_canonical(monkeypatch):
+    from fmpy import read_model_description
+    from lhr_sim_bobsim.plant import dependency_paths
+    root, vehicle_file = dependency_paths()
+    monkeypatch.syspath_prepend(str(root))
+    from common.vehicle_io import load_yaml
+    variables = {v.name: v for v in read_model_description(ARTIFACT).modelVariables}
+    assert float(variables['pVehicle.brakes.frontBrakeBias'].start) == pytest.approx(
+        load_yaml(vehicle_file)['brake']['front_bias'])
