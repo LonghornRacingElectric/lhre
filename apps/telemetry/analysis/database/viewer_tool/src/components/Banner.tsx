@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,6 +17,13 @@ const Banner = () => {
   const { data: session } = useSession();
   const [time, setTime] = useState("");
   const [date, setDate] = useState("");
+  /* The LAPDOG viewer is short on vertical space, so on its pages this bar is a slim strip. */
+  const pathname = usePathname();
+  const small = pathname.startsWith('/trackside-retro');
+  useEffect(() => {
+    document.documentElement.style.setProperty('--nav-h', small ? '32px' : '56px');
+    return () => { document.documentElement.style.removeProperty('--nav-h'); };
+  }, [small]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -32,12 +40,12 @@ const Banner = () => {
   };
 
   return (
-    <div className="bg-gray-800 text-white w-full h-14 flex items-center justify-between px-4 fixed top-0 left-0 right-0 z-[1000]">
+    <div className={`bg-gray-800 text-white w-full ${small ? 'h-8 text-xs' : 'h-14'} flex items-center justify-between px-4 fixed top-0 left-0 right-0 z-[1000]`}>
       <div className="flex items-center">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+            <Button variant="ghost" size="icon" className={small ? 'size-7' : undefined}>
+              <svg xmlns="http://www.w3.org/2000/svg" width={small ? 18 : 24} height={small ? 18 : 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent>
@@ -49,7 +57,7 @@ const Banner = () => {
             <DropdownMenuItem onClick={handleSignOut}>Logout</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <Image src="/telem_logo.png" alt="Telemetry Logo" width={40} height={40} className="ml-2" />
+        <Image src="/telem_logo.png" alt="Telemetry Logo" width={40} height={40} className={`ml-2 w-auto ${small ? 'h-5' : 'h-10'}`} />
         <span className="ml-2 hidden sm:inline truncate max-w-[40vw]">Welcome, {session?.user?.name || session?.user?.username || 'Guest'}</span>
       </div>
       <div className="flex items-center">

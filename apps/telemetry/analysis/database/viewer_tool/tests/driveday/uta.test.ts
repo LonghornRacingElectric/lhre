@@ -11,13 +11,13 @@ describe.skipIf(!directory)("UTA October 18 GPS regressions", () => {
     const courses = convertSession(load(""), "Oliver.json");
     expect(courses).toHaveLength(1);
     expect(courses[0].D.RL).toBeGreaterThan(800);
-    expect(courses[0].D.laps.filter(l => l.kind === "lap").map(l => l.name)).toEqual(["Manual 1", "Manual 3", "Manual 5", "Manual 7"]);
+    expect(courses[0].D.laps.filter(l => l.kind === "lap").map(l => l.name)).toEqual(["Lap 1", "Lap 2", "Lap 3", "Lap 4"]);
   });
   it("keeps Andrew's usable first lap and excludes frozen/missing GPS", () => {
     const courses = convertSession(load(" (1)"), "Andrew.json");
     expect(courses).toHaveLength(1);
     expect(courses[0].D.RL).toBeGreaterThan(800);
-    expect(courses[0].D.laps.filter(l => l.kind === "lap").map(l => l.name)).toEqual(["Manual 1"]);
+    expect(courses[0].D.laps.filter(l => l.kind === "lap").map(l => l.name)).toEqual(["Lap 1"]);
     expect(courses[0].D.warnings.join(" ")).toContain("incomplete GPS coverage");
   });
   it("explains that Shreyas's frozen coordinates cannot supply a map", () => {

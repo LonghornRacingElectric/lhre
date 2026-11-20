@@ -8,6 +8,8 @@ import { gradientCss, rampSpd } from "@/lib/driveday/draw/palette";
 import { cvS, sU } from "@/lib/driveday/units";
 import { Hud } from "./Hud";
 import { useFrame, usePainter, usePlayer, useUi } from "./context";
+import { Minus, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 /* The map stage: canvas, overlay, legend and zoom controls. */
 
@@ -146,10 +148,10 @@ export function MapView() {
       <Legend />
       <div className="maptip" id="maptip" ref={tip} hidden />
       <div className="zoomctl">
-        <button className="btn sq" type="button" aria-label="Zoom in" title="Zoom in (+)" onClick={() => p.zoomBy(1.6)}>+</button>
-        <button className="btn sq" type="button" aria-label="Zoom out" title="Zoom out (-)" onClick={() => p.zoomBy(1 / 1.6)}>−</button>
-        <button className="btn sq" type="button" title="Fit the whole track (0)" onClick={() => p.flyFit()}>Fit</button>
-        <button className="btn sq" type="button" aria-pressed={p.follow} title="Follow the car (F)" onClick={() => p.setFollow(!p.follow)}>Follow</button>
+        <Button variant="tool" size="icon-ctl" className="bg-card/90" aria-label="Zoom in" title="Zoom in (+)" onClick={() => p.zoomBy(1.6)}><Plus /></Button>
+        <Button variant="tool" size="icon-ctl" className="bg-card/90" aria-label="Zoom out" title="Zoom out (-)" onClick={() => p.zoomBy(1 / 1.6)}><Minus /></Button>
+        <Button variant="tool" size="ctl" className="bg-card/90 px-2" title="Fit the whole track (0)" onClick={() => p.flyFit()}>Fit</Button>
+        <Button variant={p.follow ? "default" : "tool"} size="ctl" className="bg-card/90 px-2" aria-pressed={p.follow} title="Follow the car (F)" onClick={() => p.setFollow(!p.follow)}>Follow</Button>
       </div>
     </div>
   );
