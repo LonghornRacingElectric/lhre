@@ -66,6 +66,13 @@ server-cache loading, event notes and the host's authentication. Styles and
 canvas theme tokens are scoped to the retro wrapper so other pages keep
 their own palette.
 
+Controls are the site's shadcn/ui components (`src/components/ui/`).
+`DdvRoot` portals their popovers, selects and tooltips back inside `.ddv`, so
+they read LAPDOG's tokens rather than the site's. `driveday.css` maps those
+tokens onto shadcn's variable names, and `lapdog-skin.css`, loaded after it,
+sets control sizes and spacing. `controls.tsx` holds the LAPDOG wrappers
+(`Pick`, `Seg`, `Chk`).
+
 ## Loading from the database
 
 `GET /api/driveday/db` lists the drive days that have laps. `GET

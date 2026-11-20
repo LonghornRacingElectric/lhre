@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 // database (/api/driveday/db) and are kept in IndexedDB.
 export default function TracksideRetroPage() {
   return (
-    <DdvRoot className="">
+    <DdvRoot>
       <App />
     </DdvRoot>
   );
