@@ -197,7 +197,10 @@ run gets an issue in the milestone and is repeated after the fix, never
 dropped.
 
 Select the opt-in Gazebo/FMU coupling with `EXTRA="plant:=fmu"`. See [FMU motion](../../../ros2/src/lhr_gazebo/README.md#fmu-motion)
-for artifact setup, sensor limitations and pose lag. Existing defaults are unchanged.
+for artifact setup, sensor limitations and pose lag. Keep measured steering
+required. In FMU mode the plant supplies the applied angle after each accepted
+step. Command-loss stopping distances use the FMU command timeout and
+proportional braking.
 
 ### The reference lap
 

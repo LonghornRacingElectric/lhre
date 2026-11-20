@@ -54,7 +54,9 @@ restart the launch to create a fresh FMI instance.
 
 The fixed-step catch-up loop preserves elapsed simulation time; it is not a
 real-time speed guarantee. There is no second `/clock` publisher in FMU Gazebo
-mode. Initial pose comes from the world's saved vehicle spawn.
+mode. Each accepted external-clock step publishes its applied bicycle-model
+steering angle on `/lhr/vehicle/steering_measured` (`sensor_msgs/JointState`),
+stamped at the same integration time as odometry. Initial pose comes from the world's saved vehicle spawn.
 
 ## Gazebo timing report
 

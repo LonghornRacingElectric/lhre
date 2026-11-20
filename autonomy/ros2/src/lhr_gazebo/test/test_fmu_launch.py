@@ -13,6 +13,7 @@ from launch.actions import (
 from launch.events import Shutdown
 from launch_ros.actions import Node
 from launch_ros.utilities import evaluate_parameters
+from lhr_gazebo.fault_injector import FAULTS, PLANT_ODOM
 from lhr_gazebo.fmu_launch import world_spawn
 import pytest
 import yaml
@@ -78,6 +79,8 @@ def test_fmu_launch_owns_truth_and_sensor_model(
         for name in ('pedal_gain', 'command_timeout_sec', 'fmu_path', 'external_clock'):
             assert node.get_parameter(name).value == plant[name]
         assert node._timer.is_canceled()
+        assert ('/lhr/vehicle/steering_measured', ['sensor_msgs/msg/JointState']) in (
+            node.get_publisher_names_and_types_by_node('sim_fmu', '/'))
     finally:
         node.destroy_node()
         rclpy.shutdown()
@@ -134,8 +137,12 @@ def test_spawn_is_the_saved_world_pose():
     assert pose == pytest.approx((18.1095, -14.7442, .9405))
 
 
-@pytest.mark.parametrize('fault', ['steer_freeze', 'odom_nan', 'odom_spike'])
-@pytest.mark.parametrize('estimator', ['truth', 'ekf'])
+@pytest.mark.parametrize(('fault', 'estimator'), [
+    (fault, estimator)
+    for fault, kind in FAULTS.items()
+    for estimator in ('truth', 'ekf')
+    if ('estimator', 'ekf') not in kind.needs or estimator == 'ekf'
+])
 @pytest.mark.parametrize('lidar_source', ['gazebo', 'mid360'])
 def test_fmu_fault_routing_preserves_truth_and_rendered_sensor_stream(
         fault, estimator, lidar_source, monkeypatch):
@@ -163,16 +170,28 @@ def test_fmu_fault_routing_preserves_truth_and_rendered_sensor_stream(
     truth = ('/lhr/vehicle/odom_truth' if estimator == 'ekf' else
              '/lhr/vehicle/odom_raw' if fault.startswith('odom_') else '/lhr/vehicle/odom')
     assert remaps('sim_fmu')['/lhr/vehicle/odom'] == truth
-    if fault == 'steer_freeze':
+    kind = FAULTS[fault]
+    assert remaps('fault_injector')[PLANT_ODOM] == truth
+    if kind.process:
+        assert any(node.node_executable == Path(kind.process).name for node in nodes.values())
+    elif fault == 'steer_freeze':
         assert remaps('sim_fmu')['/lhr/vehicle/cmd'] == '/lhr/vehicle/cmd_actuated'
         assert 'joint_cmd_adapter' not in nodes
+    elif fault.startswith('odom_'):
+        assert remaps('ekf_node' if estimator == 'ekf' else 'sim_fmu')[kind.dst] == kind.src
     else:
-        assert '/lhr/vehicle/cmd' not in remaps('sim_fmu')
-        if estimator == 'ekf':
-            assert remaps('ekf_node')['/lhr/vehicle/odom'] == '/lhr/vehicle/odom_raw'
+        producer = {
+            'imu_drop': 'inertial_sim',
+            'wheel_drop': 'inertial_sim',
+            'cmd_nan': 'pure_pursuit',
+            'lidar_drop': 'lidar_sim' if lidar_source == 'mid360' else 'ros_gz_bridge',
+        }[fault]
+        assert remaps(producer)[kind.dst] == kind.src
     pose = evaluate_parameters(context, nodes['fmu_pose']._Node__parameters)[0]
     assert pose['truth_topic'] == truth
     cloud = '/lhr/lidar/gazebo_points' if lidar_source == 'mid360' else '/lhr/lidar/points'
+    if fault == 'lidar_drop' and lidar_source == 'gazebo':
+        cloud = kind.src
     assert pose['lidar_topic'] == cloud
     assert remaps('ros_gz_bridge').get('/lhr/lidar/points', '/lhr/lidar/points') == cloud
     if lidar_source == 'mid360':

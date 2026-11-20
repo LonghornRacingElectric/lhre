@@ -76,11 +76,16 @@ with Mid-360, `/lhr/lidar/points` otherwise. All timeouts must be finite and pos
 plant update rate is the inverse of `fmu_step_sec`. `external_clock` and
 `publish_clock` are fixed by plant mode, so they are not user launch flags.
 Use `EXTRA="plant:=fmu"` with either the gate or fault runner; their defaults
-still select Gazebo. `steer_freeze` routes to the FMU command input in FMU mode.
+still select Gazebo. `steer_freeze` routes to the FMU command input, while safety
+continues to compare feedback with the unmodified controller command.
+`adapter_cmd_timeout_s` applies only to the Gazebo plant. The FMU instead
+uses `fmu_command_timeout_sec` and proportional braking, so command-loss
+stopping distances are plant-specific.
 
 Until #205 supplies native FMU IMU/wheel outputs, EKF mode uses the existing
-noisy `inertial_sim` adapter on FMU truth, including synthesized IMU. No Gazebo
-IMU is bridged in FMU mode. This is an explicit interim sensor model, not
+noisy `inertial_sim` adapter on FMU truth, including synthesized IMU.
+`gyro_bias` adds bias to this synthesized stream, while `imu_noise` applies
+only to the native Gazebo IMU. No Gazebo IMU is bridged in FMU mode. This is an explicit interim sensor model, not
 native suspension/wheel sensor fidelity.
 `imu_drop` therefore intercepts `inertial_sim` in FMU mode; it intercepts
 the Gazebo bridge in the Gazebo plant. Both feed the same fault injector.
@@ -514,7 +519,10 @@ steering encoder will report, `/lhr/vehicle/steering_measured`
 (`sensor_msgs/JointState`, joint `steering`), which `safety_node`'s
 `STEER_TRACKING` compares with the command
 ([#208](https://github.com/LonghornRacingElectric/lhre/issues/208)). The
-plugin lives in `templates/model.sdf.in`, so both generated models carry it.
+plugin lives in `templates/model.sdf.in`, so both generated Gazebo dynamics
+models carry it. With `plant:=fmu`, `sim_fmu` publishes the same message
+after each accepted step using the plant's applied, rate-limited bicycle angle.
+The rigid Gazebo model supplies no steering feedback in that mode.
 
 ## Command timeout
 

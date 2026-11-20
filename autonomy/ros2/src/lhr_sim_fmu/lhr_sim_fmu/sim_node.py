@@ -14,6 +14,7 @@ import rclpy
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from rclpy.time import Time
 from rosgraph_msgs.msg import Clock
+from sensor_msgs.msg import JointState
 from std_msgs.msg import String
 
 
@@ -34,6 +35,8 @@ class SimFmu(SimKinematic):
             self._timer.cancel()
             clock_qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT)
             self.create_subscription(Clock, '/clock', self._clock_cb, clock_qos)
+            self._steering_pub = self.create_publisher(
+                JointState, '/lhr/vehicle/steering_measured', 10)
         self._target_speed, self._target_steer = 0., 0.
         self._command_time = -math.inf
         root, _ = dependency_paths()
@@ -70,7 +73,13 @@ class SimFmu(SimKinematic):
         while self._sim_ns + self._step_ns <= stamp:
             self._advance()
             self._sim_ns += self._step_ns
-            self._publish_state(Time(nanoseconds=self._sim_ns).to_msg())
+            step_stamp = Time(nanoseconds=self._sim_ns).to_msg()
+            self._publish_state(step_stamp)
+            # The rigid Gazebo sensor model has no steering joints. Report the
+            # rate-limited angle actually applied to the accepted FMU step.
+            steering = JointState(name=['steering'], position=[self._plant.steering])
+            steering.header.stamp = step_stamp
+            self._steering_pub.publish(steering)
 
     def _cmd_cb(self, message):
         if not all(math.isfinite(v) for v in (message.drive.speed, message.drive.steering_angle)):

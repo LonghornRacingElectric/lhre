@@ -55,6 +55,11 @@ def fmu_actions(context, world_path, truth_topic, use_ekf, fault_remaps):
                         *([('/tf', '/tf_truth')] if use_ekf else []),
                         *[remap for remap in fault_remaps.get('sim_fmu', [])
                           if remap[0] != '/lhr/vehicle/odom']], output='screen')
+    lidar_topic = '/lhr/lidar/points'
+    if context.launch_configurations.get('lidar_source', 'gazebo') == 'mid360':
+        lidar_topic = '/lhr/lidar/gazebo_points'
+    else:
+        lidar_topic = dict(fault_remaps.get('ros_gz_bridge', [])).get(lidar_topic, lidar_topic)
     pose = Node(
         package='lhr_gazebo', executable='fmu_pose', name='fmu_pose',
         parameters=[{
@@ -62,8 +67,7 @@ def fmu_actions(context, world_path, truth_topic, use_ekf, fault_remaps):
             'lockstep': ParameterValue(LaunchConfiguration('fmu_lockstep'), value_type=bool),
             'step_sec': ParameterValue(LaunchConfiguration('fmu_step_sec'), value_type=float),
             'physics_step_sec': physics_sec,
-            'lidar_topic': ('/lhr/lidar/gazebo_points' if context.launch_configurations.get(
-                'lidar_source', 'gazebo') == 'mid360' else '/lhr/lidar/points'),
+            'lidar_topic': lidar_topic,
             'startup_timeout_sec': ParameterValue(
                 LaunchConfiguration('fmu_startup_timeout_sec'), value_type=float),
             'step_timeout_sec': ParameterValue(
