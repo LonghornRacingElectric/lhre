@@ -31,7 +31,7 @@ def test_chaining_launch_parameters(
     spec.loader.exec_module(module)
     monkeypatch.setattr(module, '_find_world', lambda context: '/tmp/test.sdf')
     monkeypatch.setattr(module, 'get_package_share_directory',
-                        lambda package: '/tmp/lhr_gazebo')
+                        lambda package: str(Path(__file__).parents[1]))
     context = LaunchContext()
     for action in module.generate_launch_description().entities:
         if isinstance(action, DeclareLaunchArgument):

@@ -429,7 +429,8 @@ export class Player {
     this.W = W;
     this.H = H;
     const { bbox } = this.session;
-    this.scFit = Math.min((W - 2 * Player.PADX) / (bbox.x[1] - bbox.x[0]), (H - Player.PADT - Player.PADB) / (bbox.y[1] - bbox.y[0]));
+    /* a pane dragged smaller than the padding would give a negative scale and draw the track mirrored */
+    this.scFit = Math.min(Math.max(1, W - 2 * Player.PADX) / (bbox.x[1] - bbox.x[0]), Math.max(1, H - Player.PADT - Player.PADB) / (bbox.y[1] - bbox.y[0]));
     this.cyScreen = (Player.PADT + H - Player.PADB) / 2;
     this.sc = this.scFit * this.view.z;
     this.ox = W / 2 - this.sc * this.view.cx;

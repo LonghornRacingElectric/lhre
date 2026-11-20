@@ -52,9 +52,12 @@ export function setupCanvas(c: HTMLCanvasElement): { g: CanvasRenderingContext2D
 
 export const MONO = (p: Palette) => "10px " + p.fMono;
 
+/** t clamped to 0..1, with NaN (a missing sample) at 0, so a ramp never indexes past its stops. */
+const unit = (t: number) => (Number.isNaN(t) ? 0 : Math.max(0, Math.min(1, t)));
+
 /** Viridis-style ramp for 0..1. */
 export function ramp(t: number): string {
-  t = Math.max(0, Math.min(1, t));
+  t = unit(t);
   const st = [[68, 1, 84], [59, 82, 139], [33, 145, 140], [94, 201, 98], [253, 231, 37]];
   const f = t * 4;
   const i = Math.min(3, Math.floor(f));
@@ -64,7 +67,7 @@ export function ramp(t: number): string {
 
 /** Blue to red speed ramp. */
 export function rampSpd(t: number): string {
-  t = Math.max(0, Math.min(1, t));
+  t = unit(t);
   const st = [[72, 104, 214], [44, 168, 206], [98, 196, 118], [236, 204, 74], [232, 122, 62]];
   const f = t * 4;
   const i = Math.min(3, Math.floor(f));
@@ -76,6 +79,7 @@ export const gradientCss = (f: (t: number) => string, stops = [0, 0.25, 0.5, 0.7
 
 /** Temperature heat colour: cool blue to hot red. */
 export function heat(v: number, lo: number, hi: number): string {
-  const t = Math.max(0, Math.min(1, (v - lo) / (hi - lo)));
+  /* hi === lo happens when every cell reads the same, or none has risen yet: show them all cool, not hsl(NaN) */
+  const t = hi > lo ? unit((v - lo) / (hi - lo)) : 0;
   return "hsl(" + Math.round(205 - t * 200) + " 78% 46%)";
 }

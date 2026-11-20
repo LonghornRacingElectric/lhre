@@ -60,7 +60,8 @@ def test_local_path_launch_parameters(
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     monkeypatch.setattr(module, '_find_world', lambda _: '/tmp/test.sdf')
-    monkeypatch.setattr(module, 'get_package_share_directory', lambda _: '/tmp/lhr_gazebo')
+    monkeypatch.setattr(module, 'get_package_share_directory',
+                        lambda _: str(Path(__file__).parents[1]))
     context = LaunchContext()
     for action in module.generate_launch_description().entities:
         if isinstance(action, DeclareLaunchArgument):

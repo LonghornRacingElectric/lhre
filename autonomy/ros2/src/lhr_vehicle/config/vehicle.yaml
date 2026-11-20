@@ -43,6 +43,17 @@ limits:
   max_speed_mps: 15.0       # ASSUMED (kinematic sim command clamp)
 
 sensors:
+  # Mid-360 IMU: ICM40609, approximated with TDK DS-000330 rev 1.2.
+  # Noise densities are datasheet values; bandwidth and bias distribution
+  # are assumptions documented in lhr_vehicle/README.md.
+  imu:
+    update_rate_hz: 100.0  # Existing Gazebo acquisition cadence.
+    noise_bandwidth_hz: 50.0  # ASSUMED one-sided Nyquist bandwidth.
+    gyro_noise_density_rad_s_sqrt_hz: 0.00007853981633974483  # 4.5 mdps/sqrt(Hz)
+    accel_noise_density_m_s2_sqrt_hz: 0.000980665  # 100 ug/sqrt(Hz)
+    gyro_bias_stddev_rad_s: 0.005817764173314432  # ASSUMED 1 deg/s / 3.
+    accel_bias_stddev_m_s2: 0.13075533333333333  # ASSUMED 40 mg / 3.
+
   # Positions in base_link. The IMU is at the chassis link origin (half the
   # wheelbase forward, chassis_z_m up) and is derived from that, not listed here.
   lidar:

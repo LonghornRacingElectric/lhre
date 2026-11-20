@@ -39,8 +39,13 @@ Allowed truth, and only this:
   matches reality.
 - `lhr_metrics` and the trackgen reference centerline, for scoring.
 - Sensor models built from sim state: `inertial_sim` wheel speeds (truth
-  pose plus noise, no slip) and Gazebo's physics IMU (no noise or bias yet,
-  [#171](https://github.com/LonghornRacingElectric/lhre/issues/171)). Both make the EKF error optimistic.
+  pose plus noise, no slip) and Gazebo's physics IMU. Native six-axis noise
+  and startup bias are available with `imu_noise:=true`; the gate inherits
+  the `false` default while gyro-bias estimation is pending
+  ([#87](https://github.com/LonghornRacingElectric/lhre/issues/87)). An explicit
+  `gyro_bias` fault applies in either mode. The default clean IMU and
+  slip-free wheels still make the EKF error optimistic. See
+  [native IMU controls](../../ros2/src/lhr_gazebo/README.md#native-imu-noise-and-bias).
 
 ## Run matrix
 
@@ -54,7 +59,10 @@ Seed 1 stays in on purpose: it was the known failure
 ([#93](https://github.com/LonghornRacingElectric/lhre/issues/93)), and the
 gate dry runs are the first evidence it laps. Repeats
 exist because message interleaving differs run to run; a stack that passes
-once and fails the next time has not passed.
+once and fails the next time has not passed. The gate runner also assigns
+a distinct `imu_seed` to each gated run, independently of the track seed.
+This varies native sensor draws when noise is enabled; it does not turn
+clean default runs into noisy runs.
 
 ## What every run must show
 

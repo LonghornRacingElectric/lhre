@@ -4,6 +4,7 @@ from dataclasses import replace
 import importlib
 import importlib.util
 import math
+import os
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -112,7 +113,7 @@ def test_launch_camera_actions_and_rviz(perception, estimator, enabled, monkeypa
     for action in actions:
         if isinstance(action, SetEnvironmentVariable):
             action.execute(context)
-    resource_path = context.environment['GZ_SIM_RESOURCE_PATH'].split(':')[0]
+    resource_path = context.environment['GZ_SIM_RESOURCE_PATH'].split(os.pathsep)[0]
     gazebo = next(a for a in actions if type(a) is ExecuteProcess)
     gazebo_env = {
         perform_substitutions(context, key): perform_substitutions(context, value)
@@ -143,7 +144,8 @@ def test_launch_camera_actions_and_rviz(perception, estimator, enabled, monkeypa
     for action in actions:
         if isinstance(action, RegisterEventHandler):
             action.event_handler.handle(Shutdown(reason='test complete'), context)
-    assert Path(resource_path).exists() == (enabled != 'true')
+    # The default noise-free model uses a launch-local overlay in either camera mode.
+    assert not Path(resource_path).exists()
 
 
 def test_stereo_rviz_preserves_existing_displays():

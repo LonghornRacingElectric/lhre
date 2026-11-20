@@ -46,7 +46,7 @@ def test_graphical_nodes_use_xwayland_when_needed(
     spec.loader.exec_module(module)
     monkeypatch.setattr(module, '_find_world', lambda context: '/tmp/test.sdf')
     monkeypatch.setattr(module, 'get_package_share_directory',
-                        lambda package: '/tmp/lhr_gazebo')
+                        lambda package: str(Path(__file__).parents[1]))
 
     context = LaunchContext()
     for action in module.generate_launch_description().entities:
@@ -67,4 +67,4 @@ def test_graphical_nodes_use_xwayland_when_needed(
         assert added_env.get('QT_QPA_PLATFORM') == expected
         if action is gazebo:
             assert added_env['FONTCONFIG_FILE'] == (
-                fontconfig or '/tmp/lhr_gazebo/config/gazebo-fontconfig.conf')
+                fontconfig or str(PKG_DIR / 'config/gazebo-fontconfig.conf'))

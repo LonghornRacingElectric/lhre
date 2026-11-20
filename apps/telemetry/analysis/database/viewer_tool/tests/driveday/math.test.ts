@@ -1,3 +1,4 @@
+import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { circDist, interp, med, nice, pctl, sd, theil, timeAverage, wrap } from "../../src/lib/driveday/math";
 
@@ -39,5 +40,23 @@ describe("math", () => {
     const n = nice(3.2, 47, 4);
     expect(n.lo).toBeLessThanOrEqual(3.2);
     expect(n.hi).toBeGreaterThanOrEqual(47);
+  });
+  it("nice axis bounds always contain the data and span more than nothing", () => {
+    fc.assert(fc.property(fc.double({ min: -1e6, max: 1e6, noNaN: true }), fc.double({ min: 0, max: 1e6, noNaN: true }), fc.integer({ min: 2, max: 6 }), (lo, span, n) => {
+      const r = nice(lo, lo + span, n);
+      expect(r.hi).toBeGreaterThan(r.lo);
+      /* nice() snaps a value within 1e-9 of a tick onto it, so containment holds to that */
+      const tol = 1e-8 * (r.hi - r.lo);
+      expect(r.lo).toBeLessThanOrEqual(lo + tol);
+      expect(r.hi).toBeGreaterThanOrEqual(lo + span - tol);
+      expect(r.t.length).toBeGreaterThanOrEqual(2);
+    }), { seed: 20261120, numRuns: 1000 });
+  });
+  it("nice gives a flat or empty series an axis instead of a zero range", () => {
+    for (const [lo, hi] of [[3.6, 3.6], [0, 0], [Infinity, -Infinity], [NaN, NaN]]) {
+      const r = nice(lo, hi, 4);
+      expect(Number.isFinite(r.lo) && Number.isFinite(r.hi)).toBe(true);
+      expect(r.hi).toBeGreaterThan(r.lo);
+    }
   });
 });

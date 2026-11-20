@@ -19,6 +19,7 @@ The DUI is a plain CAN peripheral this year.
 | `:openocd`                | `bazel run`: flash over ST-Link.                        |
 | `:dfu`                    | `bazel run`: flash over USB DFU (sends `update.`, then dfu-util). |
 | `:<module>_test`          | One host test per module, under `App/test/`: `pedals_test`, `torque_test`, `state_machine_test`, and so on. |
+| `:params_test`            | Invariants every event's parameter set must hold: torque curve falls with speed under the inverter limit, pedal map stays in 0 to 1, power cap under 80 kW even before the trim catches up, DC power ratio never loosened below 0.95, rule timings (APPS, BSE, brake overtravel, RTD sound). Edit a table and this tells you if it broke one. |
 | `:vcu_app_test`           | Vehicle app end to end through `Step()` with LHAL fakes. |
 | `:test_app_test`          | Host bench harness end to end.                          |
 | `:vcu_rtos_test`          | Real FreeRTOS tasks under the simulator port.           |
