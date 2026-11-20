@@ -34,6 +34,12 @@ lidar_source:=gazebo`, with stereo and fusion explicitly disabled, for
 comparison only. `test_gate_runner.py` in `lhr_gazebo` fails if any other
 planned run of either runner leaves out part of the stack. Lap time is
 scored against a [reference lap](#the-reference-lap) computed from the course.
+Native IMU noise and startup bias are **off**: both the gate and fault runner
+inherit `imu_noise:=false` from Gazebo launch. `stack.args` does not override
+it. Run a separate fidelity comparison with `EXTRA="imu_noise:=true"`;
+the noisy EKF currently fails the gate. Making noise part of the required
+stack is follow-up work after gyro-bias estimation
+([#87](https://github.com/LonghornRacingElectric/lhre/issues/87)).
 A run ends `SETTLE_S` sim seconds after the mission reaches `FINISHED` or
 `EMERGENCY`, so the bag holds the stop, or at `RUN_S` sim seconds.
 Skidpad joins the matrix on its own once
@@ -63,6 +69,17 @@ Environment variables pick the matrix: `SEEDS` (`1 2 3 4 5`), `REPEATS` (3),
 `BASELINE` (0; 1 adds one truth-stack run per seed, for comparison only),
 `RUN_S` (180 sim seconds), `SETTLE_S` (5 sim seconds), `HANG_S` (60 wall
 seconds), `OUT` and `EXTRA` (more launch arguments, split on whitespace).
+`IMU_SEED` (1) is the first Gazebo random seed. Each gated run increments
+it across autocross, acceleration and skidpad; optional truth baselines do
+not consume draws. Track `seed` stays fixed across repeats. The runner
+rejects invalid seeds or a plan exhausting the unsigned 32-bit seed range.
+Use the same matrix and `IMU_SEED` for a matched clean/noisy comparison,
+and change `IMU_SEED` to sample another sequence. The per-run `imu_seed`
+is saved in `args.txt` and metrics; it overrides an `EXTRA` seed value.
+It seeds **all Gazebo randomness**, including other native sensors, rather
+than creating an IMU-only random generator. `run_faults.sh` retains the
+standalone `imu_seed:=1` default unless overridden in `EXTRA`; its repeats
+are scheduling checks, not independent noise draws.
 The runner's per-run arguments, the gate stack among them, follow `EXTRA`,
 so the stack and baseline exclusions take precedence. The full matrix without skidpad is
 18 runs. Historical MVP timing predates the combined Mid-360/camera stack.

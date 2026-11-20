@@ -42,6 +42,8 @@ RUN_PARAMS = (
     ('fmu_pedal_gain', .1),
     ('estimator', 'truth'),
     ('gyro_bias', 0.0),
+    ('imu_noise', False),
+    ('imu_seed', 1),
     ('wheel_scale_error', 1.0),
     ('lidar_classify_sides', False),
     ('motion_distortion', False),

@@ -90,6 +90,46 @@ def test_gate_plan_selects_fusion_without_changing_truth_baselines(tmp_path, sty
     assert rows['skidpad_r1']['mission'] == 'skidpad'
 
 
+@pytest.mark.parametrize('baseline', ['0', '1'])
+@pytest.mark.parametrize('first', ['1', '101'])
+def test_gate_draws_are_distinct_recorded_and_independent_of_track(tmp_path, baseline, first):
+    env = dict(os.environ, SEEDS='7 9', REPEATS='2', ACCEL_REPEATS='3', SKIDPAD_REPEATS='1',
+               BASELINE=baseline, IMU_SEED=first, OUT=str(tmp_path))
+    world = tmp_path / 'skidpad.sdf'
+    world.touch()
+    command = ['bash', '-c', runner_prefix() + '\nSKIDPAD_WORLD="$1"\nplan', 'test', str(world)]
+    result = subprocess.run(command, env=env, text=True, capture_output=True, check=True)
+    assert result.stdout == subprocess.run(
+        command, env=env, text=True, capture_output=True, check=True).stdout
+    rows = {line.split()[0]: dict(arg.split(':=', 1) for arg in line.split()[1:])
+            for line in result.stdout.splitlines() if not line.startswith('baseline_')}
+    assert [int(args['imu_seed']) for args in rows.values()] == list(
+        range(int(first), int(first) + 8))
+    assert rows['autocross_s7_r1']['seed'] == rows['autocross_s7_r2']['seed'] == '7'
+    assert rows['autocross_s9_r1']['seed'] == rows['autocross_s9_r2']['seed'] == '9'
+
+
+@pytest.mark.parametrize('seed', ['-1', '4294967296', 'garbage'])
+def test_gate_rejects_invalid_imu_seed_before_planning(tmp_path, seed):
+    env = dict(os.environ, IMU_SEED=seed, OUT=str(tmp_path))
+    result = subprocess.run(['bash', '-c', runner_prefix() + '\necho planned'],
+                            env=env, text=True, capture_output=True)
+    assert result.returncode == 2
+    assert 'IMU_SEED' in result.stderr
+    assert 'planned' not in result.stdout
+
+
+def test_gate_seed_exhaustion_refuses_the_partial_plan(tmp_path):
+    env = dict(os.environ, IMU_SEED='4294967295', SEEDS='1', REPEATS='2',
+               ACCEL_REPEATS='0', SKIDPAD_REPEATS='0', BASELINE='0', OUT=str(tmp_path))
+    result = subprocess.run(
+        ['bash', '-c', runner_prefix() + '\nSKIDPAD_WORLD=/missing\nchecked_plan'],
+        env=env, text=True, capture_output=True)
+    assert result.returncode == 2
+    assert result.stdout == ''
+    assert 'plan failed' in result.stderr
+
+
 def test_fault_plan_runs_every_case_and_clean_lap_on_the_gate_stack(tmp_path):
     """The fault matrix gates on the same stack as the gate (#237)."""
     cases = ('ekf_kill controller_kill controller_pause odom_nan odom_spike lidar_drop '

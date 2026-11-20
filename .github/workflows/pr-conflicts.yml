@@ -1,0 +1,53 @@
+name: PR conflicts
+
+# GitHub runs no pull_request workflow on a PR that conflicts with its base,
+# so a conflicted PR shows no CI at all, not a red one, and is easy to read
+# as "nothing to check". This labels such PRs `merge-conflict` and comments
+# once, and takes the label off when the conflict is gone. A push to main is
+# what usually makes a PR conflict; the schedule catches the rest.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "41 */6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  label:
+    name: Label conflicted PRs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Label and comment on PRs that conflict with their base
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          LABEL: merge-conflict
+        run: |
+          gh api "repos/$GH_REPO/labels" -f name="$LABEL" -f color=B60205 \
+            -f description="Conflicts with its base, so CI is not running" > /dev/null 2>&1 || true
+          # GitHub computes mergeability lazily after a push to the base;
+          # asking starts it, so poll until no PR reads UNKNOWN.
+          for attempt in 1 2 3 4 5 6; do
+            prs=$(gh pr list --state open --limit 200 --json number,mergeable,labels)
+            jq -e 'any(.[]; .mergeable == "UNKNOWN")' <<< "$prs" > /dev/null || break
+            echo "Mergeability still computing (attempt $attempt)"
+            sleep 10
+          done
+          for n in $(jq -r --arg l "$LABEL" '.[] | select(.mergeable == "CONFLICTING" and (any(.labels[]; .name == $l) | not)) | .number' <<< "$prs"); do
+            echo "#$n conflicts with its base"
+            gh api -X POST "repos/$GH_REPO/issues/$n/labels" -f "labels[]=$LABEL" > /dev/null
+            gh api "repos/$GH_REPO/issues/$n/comments" > /dev/null -f body="This PR conflicts with its base branch, so GitHub isn't running CI on it and \`All checks passed\` will never report. Merge or rebase the base branch in to get checks back; this label comes off on its own once the conflict is gone."
+          done
+          for n in $(jq -r --arg l "$LABEL" '.[] | select(.mergeable == "MERGEABLE" and any(.labels[]; .name == $l)) | .number' <<< "$prs"); do
+            echo "#$n no longer conflicts"
+            gh api -X DELETE "repos/$GH_REPO/issues/$n/labels/$LABEL" > /dev/null
+          done

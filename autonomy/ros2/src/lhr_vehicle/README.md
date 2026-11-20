@@ -94,6 +94,36 @@ source-tree copy when imported straight from the checkout. The model
 generator always passes the source-tree path explicitly so an installed
 copy can never be stale relative to the YAML being edited.
 
+## Native Gazebo IMU
+
+`sensors.imu` configures independent Gaussian white noise and constant startup
+bias on all three gyro and accelerometer axes of both generated models.
+[Livox identifies the Mid-360 IMU as ICM40609](https://www.livoxtech.com/mid-360/specs).
+The component approximation uses
+[TDK DS-000330 revision 1.2, tables 1 and 2](https://product.tdk.com/system/files/dam/doc/product/sensor/mortion-inertial/imu/data_sheet/ds-000330_icm-40609-d_v1.2.pdf).
+The installed unit's chip suffix and firmware filtering are not confirmed.
+
+| Quantity | Datasheet value | Model in SI units |
+| --- | --- | --- |
+| Gyro noise density | 4.5 mdps/√Hz | 0.00007853981634 rad/s/√Hz |
+| Accelerometer noise density | 100 µg/√Hz | 0.000980665 m/s²/√Hz |
+| Initial gyro offset tolerance | ±1 °/s | Startup bias σ = 0.00581776417331 rad/s |
+| Initial accelerometer offset tolerance | ±40 mg | Startup bias σ = 0.130755333333 m/s² |
+
+The one-sided conversion is `sample_sigma = density * sqrt(bandwidth_hz)`.
+Acquisition stays at the existing 100 Hz. The assumed 50 Hz noise bandwidth
+gives 0.0005553604 rad/s gyro sigma and 0.0069343487 m/s² acceleration sigma.
+The ±offset scales are mapped to ±3σ as an assumed distribution, not a
+manufacturer probability or a hard bound. Unit conversion uses 9.80665 m/s².
+The loader rejects malformed/nonfinite/negative values, a nonpositive rate,
+and bandwidth above Nyquist. Regenerate both SDFs after configuration edits.
+
+This model does not implement sensor filtering, changing thermal bias,
+scale-factor errors, cross-axis coupling or clipping. The IMU remains at
+the chassis link origin. Its ideal orientation quaternion is not used by
+the EKF. Wheel-slip fidelity and estimator improvements are separate work.
+See [native IMU controls](../lhr_gazebo/README.md#native-imu-noise-and-bias).
+
 ## Regenerating the Gazebo model
 
 After editing `vehicle.yaml`:

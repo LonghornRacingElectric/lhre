@@ -1,0 +1,3 @@
+id,kind,event,track_style,seed,outcome,lap_time_s,baseline_lap_s,lap_ratio,max_cte,off_track_count,cones_hit,max_pos_error,stop_dist_m,stop_time_s,max_v_after_stop,finished,emergency,early_exits,invalid_reason,completes,stops,off_course,cones,cte,ekf,lap_time,health,passed
+autocross_s1_r1,gate,autocross,autocross,1,emergency,,33.68,,0.2426,0,0,0.0541,,,,False,True,,,FAIL,FAIL,pass,pass,pass,pass,FAIL,FAIL,False
+baseline_autocross_s1,baseline,autocross,autocross,1,lap,33.6784,,,0.2560,0,0,,1.65,0.64,0.01,True,False,,,,,,,,,,,

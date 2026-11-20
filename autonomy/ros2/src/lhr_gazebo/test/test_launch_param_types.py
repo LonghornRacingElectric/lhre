@@ -26,7 +26,7 @@ NODES = {
         'lookahead_dist', 'lookahead_min', 'lookahead_curvature_gain',
         'a_lat_max', 'v_min', 'v_max', 'max_accel', 'max_decel']),
     'mission_manager': (MissionManager, ['mission', 'auto_go', 'ready_hold_sec']),
-    'inertial_sim': (InertialSim, ['gyro_bias', 'wheel_scale_error']),
+    'inertial_sim': (InertialSim, ['wheel_scale_error']),
     'publish_cones': (ConePublisher, ['seed', 'track_style', 'num_waypoints',
                                       'width_m', 'cone_spacing_m']),
     'sensor_sim': (SensorSim, ['fov_deg', 'max_range_m']),

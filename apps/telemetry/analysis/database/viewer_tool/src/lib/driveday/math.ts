@@ -72,13 +72,17 @@ export const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.mi
 
 /** Round bounds out to "nice" axis ticks. */
 export function nice(lo: number, hi: number, n: number): { lo: number; hi: number; t: number[] } {
-  const span = hi - lo || 1;
+  /* no data (an empty or all-NaN series) still gets an axis, so the chart draws its frame instead of NaN paths */
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) [lo, hi] = [0, 1];
+  /* below float noise the range is flat; a step of 10^-324 underflows to 0 and every tick turns NaN */
+  const span = hi - lo > 1e-9 * Math.max(1, Math.abs(lo), Math.abs(hi)) ? hi - lo : 1;
   const raw = span / n;
   const mag = Math.pow(10, Math.floor(Math.log10(raw)));
   const f = raw / mag;
   const st = (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * mag;
   const a = Math.floor(lo / st + 1e-9) * st;
-  const b = Math.ceil(hi / st - 1e-9) * st;
+  /* a flat series (one value throughout) would round to lo === hi and every y would divide by zero */
+  const b = Math.max(a + st, Math.ceil(hi / st - 1e-9) * st);
   const t: number[] = [];
   for (let v = a; v <= b + st / 2; v += st) t.push(+v.toFixed(6));
   return { lo: a, hi: b, t };
