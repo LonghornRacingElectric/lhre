@@ -1,0 +1,310 @@
+{
+  "configById": {
+    "StateTransitions!silstate": {
+      "foxglovePanelTitle": "VCU state",
+      "lichtblickPanelTitle": "VCU state",
+      "isSynced": true,
+      "paths": [
+        {
+          "value": "/vcu/status.state_name",
+          "label": "VCU state",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/vcu/status.loop_state_name",
+          "label": "shutdown loop",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/vcu/inverter_command.enable",
+          "label": "inverter enable",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/vcu/pedals.brake_over_throttle",
+          "label": "brake over throttle",
+          "timestampMethod": "receiveTime"
+        }
+      ]
+    },
+    "Plot!silspeed": {
+      "foxglovePanelTitle": "Speed (m/s): model truth vs what the firmware sees",
+      "lichtblickPanelTitle": "Speed (m/s): model truth vs what the firmware sees",
+      "paths": [
+        {
+          "value": "/model/truth.velX",
+          "label": "true speed (model)",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/vcu/wheel_control.reference_m_s",
+          "label": "firmware: front wheel speed",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": false,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!siltorque": {
+      "foxglovePanelTitle": "Torque (N.m): firmware path vs motor",
+      "lichtblickPanelTitle": "Torque (N.m): firmware path vs motor",
+      "paths": [
+        {
+          "value": "/vcu/torque.lookup",
+          "label": "firmware: pedal map",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/vcu/torque.power_limited",
+          "label": "firmware: after power cap",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/vcu/inverter_command.torque_request_nm",
+          "label": "INVERTER_TORQUE_COMMAND",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/model/outputs.motorTorqueActual",
+          "label": "model: shaft torque",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": false,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!silpower": {
+      "foxglovePanelTitle": "DC power (W)",
+      "lichtblickPanelTitle": "DC power (W)",
+      "paths": [
+        {
+          "value": "/model/outputs.dcPower",
+          "label": "model: bus V x I",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/vcu/torque.power_w",
+          "label": "firmware: inverter-reported V x I",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": false,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!silslip": {
+      "foxglovePanelTitle": "Rear slip: model truth vs firmware estimate",
+      "lichtblickPanelTitle": "Rear slip: model truth vs firmware estimate",
+      "paths": [
+        {
+          "value": "/model/truth.kappa_RL",
+          "label": "true slip RL",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/model/truth.kappa_RR",
+          "label": "true slip RR",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/vcu/wheel_control.drive_slip",
+          "label": "firmware: drive slip",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": false,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!silpedals": {
+      "foxglovePanelTitle": "Accelerator (0..1)",
+      "lichtblickPanelTitle": "Accelerator (0..1)",
+      "paths": [
+        {
+          "value": "/driver.accelerator",
+          "label": "driver",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/vcu/pedals.pedal_travel",
+          "label": "firmware: torque pedal input",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": false,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!silbrake": {
+      "foxglovePanelTitle": "Brake (psi)",
+      "lichtblickPanelTitle": "Brake (psi)",
+      "paths": [
+        {
+          "value": "/driver.brake_psi",
+          "label": "driver",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/vcu/pedals.bse1_psi",
+          "label": "firmware: BSE1",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/vcu/pedals.bse_psi_filtered",
+          "label": "firmware: filtered",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": false,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!silloads": {
+      "foxglovePanelTitle": "Tire loads (N, model truth)",
+      "lichtblickPanelTitle": "Tire loads (N, model truth)",
+      "paths": [
+        {
+          "value": "/model/truth.Fz_FL",
+          "label": "FL",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/model/truth.Fz_FR",
+          "label": "FR",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/model/truth.Fz_RL",
+          "label": "RL",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/model/truth.Fz_RR",
+          "label": "RR",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": false,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "RosOut!silevents": {
+      "foxglovePanelTitle": "Events",
+      "lichtblickPanelTitle": "Events",
+      "topicToRender": "/events",
+      "minLogLevel": 1,
+      "searchTerms": []
+    },
+    "RawMessages!silstatus": {
+      "foxglovePanelTitle": "Firmware status",
+      "lichtblickPanelTitle": "Firmware status",
+      "topicPath": "/vcu/status",
+      "diffEnabled": false,
+      "diffMethod": "custom",
+      "diffTopicPath": "",
+      "showFullMessageForDiff": false,
+      "expansion": "all"
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "first": {
+      "first": "StateTransitions!silstate",
+      "second": {
+        "first": "Plot!silspeed",
+        "second": {
+          "first": "Plot!siltorque",
+          "second": "Plot!silpower",
+          "direction": "column",
+          "splitPercentage": 50.0
+        },
+        "direction": "column",
+        "splitPercentage": 33.3
+      },
+      "direction": "column",
+      "splitPercentage": 25.0
+    },
+    "second": {
+      "first": {
+        "first": "Plot!silslip",
+        "second": {
+          "first": "Plot!silpedals",
+          "second": {
+            "first": "Plot!silbrake",
+            "second": "Plot!silloads",
+            "direction": "column",
+            "splitPercentage": 50.0
+          },
+          "direction": "column",
+          "splitPercentage": 33.3
+        },
+        "direction": "column",
+        "splitPercentage": 25.0
+      },
+      "second": {
+        "first": "RosOut!silevents",
+        "second": "RawMessages!silstatus",
+        "direction": "column",
+        "splitPercentage": 45
+      },
+      "direction": "row",
+      "splitPercentage": 58
+    },
+    "direction": "row",
+    "splitPercentage": 45
+  }
+}
