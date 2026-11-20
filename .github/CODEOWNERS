@@ -20,9 +20,9 @@
 
 # LAPDOG (Trackside Retro): the drive-day viewer, its API route and the local
 # video helper.
-/apps/telemetry/analysis/database/viewer_tool/src/app/trackside-retro/  @PPilot2
-/apps/telemetry/analysis/database/viewer_tool/src/app/api/driveday/     @PPilot2
-/apps/telemetry/analysis/database/viewer_tool/src/components/driveday/  @PPilot2
-/apps/telemetry/analysis/database/viewer_tool/src/lib/driveday/         @PPilot2
-/apps/telemetry/analysis/database/viewer_tool/tests/driveday/           @PPilot2
-/apps/telemetry/analysis/database/viewer_tool/tools/video-helper*       @PPilot2
+/apps/telemetry/analysis/database/viewer_tool/src/app/trackside-retro/  @PPilot2 @bss2869
+/apps/telemetry/analysis/database/viewer_tool/src/app/api/driveday/     @PPilot2 @bss2869
+/apps/telemetry/analysis/database/viewer_tool/src/components/driveday/  @PPilot2 @bss2869
+/apps/telemetry/analysis/database/viewer_tool/src/lib/driveday/         @PPilot2 @bss2869
+/apps/telemetry/analysis/database/viewer_tool/tests/driveday/           @PPilot2 @bss2869
+/apps/telemetry/analysis/database/viewer_tool/tools/video-helper*       @PPilot2 @bss2869
