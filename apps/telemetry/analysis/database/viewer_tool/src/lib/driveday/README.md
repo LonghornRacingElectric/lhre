@@ -53,6 +53,26 @@ are in [the helper README](../../../tools/README.md).
 - `src/app/trackside-retro/`: route, fonts and styles scoped under `.ddv`.
 - `tests/driveday/`: synthetic regression fixtures; real exports stay local.
 
+Most of the suite runs on a synthetic drive day (`tests/driveday/fixtures/synth.ts`),
+so it needs no export, browser or database. Three kinds of test do the heavy lifting:
+
+- **Property tests** (fast-check, fixed seed so a failure reproduces). `player.test.ts`
+  drives the Player through random sequences of seeks, play, loops, rate changes, lap
+  steps and timeline zooms on a hand-cranked frame clock, and checks after every step
+  that the playhead stays on the session and the loop runs forwards. It also covers
+  playback end modes, the camera and what survives a reload.
+- **Recording canvas** (`fixtures/canvas.ts`). `draw.test.ts` paints the map, timeline,
+  every trace, every side-panel chart, the energy plot and the cell grid over random
+  viewer states into a fake 2D context. The test fails if a NaN reaches a path, a colour
+  or label is built from NaN or undefined, or `save()` and `restore()` don't pair up.
+  In the browser any of these just draws nothing, so nobody would see an error.
+- **Route tests**. `db-route.test.ts` runs the database route with the sign-in and
+  Postgres replaced. It checks that a bad day id never reaches SQL and that the response,
+  gzipped or not, opens in the viewer.
+
+A failing property prints its seed and the smallest counterexample it found. Paste
+them into a plain test to keep that case as a regression.
+
 ```bash
 npm run test:driveday
 npm run test:video-helper
