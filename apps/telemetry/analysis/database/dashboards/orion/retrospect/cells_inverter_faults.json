@@ -1,0 +1,5790 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "description": "Retrospective twin of Live Cells, Inverter & Faults (orion_live_kafka_rt_v1), from the orion Postgres DB. The time picker and Zoom both narrow the range; stats summarise the whole range.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "panels": [],
+      "title": "Cell temperatures",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "description": "Hottest reading of each cells_temps[i] in the range. Bars at 0 are sensors with no data.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisLabel": "",
+            "fillOpacity": 90,
+            "gradientMode": "none",
+            "lineWidth": 0
+          },
+          "decimals": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 40
+              },
+              {
+                "color": "red",
+                "value": 50
+              }
+            ]
+          },
+          "unit": "celsius"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cell index"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "string"
+              },
+              {
+                "id": "mappings",
+                "value": []
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 18,
+        "x": 0,
+        "y": 1
+      },
+      "id": 2,
+      "options": {
+        "barRadius": 0,
+        "barWidth": 0.9,
+        "colorByField": "Max",
+        "groupWidth": 0.9,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "orientation": "vertical",
+        "showValue": "never",
+        "stacking": "none",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "xField": "Cell index",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 40
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n)\nSELECT (u.i - 1)::text AS \"Cell index\", MAX(u.v) AS \"Max\"\nFROM packet JOIN pack USING (packet_id), unnest(pack.cells_temps) WITH ORDINALITY AS u(v, i)\nWHERE packet.time BETWEEN $__from AND $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE packet.time BETWEEN b.t0 AND b.t1)\n  AND packet.time % 500 < 50\nGROUP BY u.i\nORDER BY u.i",
+          "refId": "A"
+        }
+      ],
+      "title": "Cell temperatures, max per cell over range",
+      "transformations": [],
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 40
+              },
+              {
+                "color": "red",
+                "value": 50
+              }
+            ]
+          },
+          "unit": "celsius"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n)\nSELECT MAX(u.v) AS \"hottest\",\n  MIN(u.v) FILTER (WHERE u.v > 0.01) AS \"coldest\",\n  COUNT(DISTINCT u.i) FILTER (WHERE u.v > 0.01) AS \"active\"\nFROM packet JOIN pack USING (packet_id), unnest(pack.cells_temps) WITH ORDINALITY AS u(v, i)\nWHERE packet.time BETWEEN $__from AND $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE packet.time BETWEEN b.t0 AND b.t1)\n  AND packet.time % 500 < 50",
+          "refId": "A"
+        }
+      ],
+      "title": "Hottest cell",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "hottest"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "hottest": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Dashboard --"
+      },
+      "description": "Lowest non-zero reading in the range (empty slots read 0).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 40
+              },
+              {
+                "color": "red",
+                "value": 50
+              }
+            ]
+          },
+          "unit": "celsius"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 18,
+        "y": 4
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "datasource",
+            "uid": "-- Dashboard --"
+          },
+          "panelId": 3,
+          "refId": "A"
+        }
+      ],
+      "title": "Coldest active cell",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "coldest"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "coldest": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Dashboard --"
+      },
+      "description": "Cells with a non-zero reading in the range, of 92.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": null
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 18,
+        "y": 7
+      },
+      "id": 5,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "datasource",
+            "uid": "-- Dashboard --"
+          },
+          "panelId": 3,
+          "refId": "A"
+        }
+      ],
+      "title": "Active temp sensors",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "active"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "active": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 40
+              },
+              {
+                "color": "red",
+                "value": 50
+              }
+            ]
+          },
+          "unit": "celsius"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "max_cell_temp"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Hottest cell"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 10
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n)\nSELECT to_timestamp(floor(packet.time / GREATEST($__interval_ms, 1)::double precision) * GREATEST($__interval_ms, 1) / 1000.0) AS time,\n  MAX(u.v) AS \"max_cell_temp\"\nFROM packet JOIN pack USING (packet_id), unnest(pack.cells_temps) WITH ORDINALITY AS u(v, i)\nWHERE packet.time BETWEEN $__from AND $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE packet.time BETWEEN b.t0 AND b.t1)\n  AND packet.time % 500 < 50\nGROUP BY 1\nORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Hottest cell",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "time",
+                "max_cell_temp"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "max_cell_temp": 1,
+              "time": 0
+            }
+          }
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "id": 7,
+      "panels": [],
+      "title": "Cell voltages",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "description": "Lowest reading of each cells_v[i] in the range. Taps under 1 V (empty slots, dead tap 16) are dropped. Colour bands are generic Li-ion limits.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisLabel": "",
+            "axisSoftMin": 3,
+            "fillOpacity": 90,
+            "gradientMode": "none",
+            "lineWidth": 0
+          },
+          "decimals": 3,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 3
+              },
+              {
+                "color": "green",
+                "value": 3.3
+              },
+              {
+                "color": "yellow",
+                "value": 4.15
+              },
+              {
+                "color": "red",
+                "value": 4.2
+              }
+            ]
+          },
+          "unit": "volt"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cell index"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "string"
+              },
+              {
+                "id": "mappings",
+                "value": []
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 18,
+        "x": 0,
+        "y": 17
+      },
+      "id": 8,
+      "options": {
+        "barRadius": 0,
+        "barWidth": 0.9,
+        "colorByField": "Min",
+        "groupWidth": 0.9,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "orientation": "vertical",
+        "showValue": "never",
+        "stacking": "none",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "xField": "Cell index",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 40
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n)\nSELECT (u.i - 1)::text AS \"Cell index\", MIN(u.v) AS \"Min\"\nFROM packet JOIN pack USING (packet_id), unnest(pack.cells_v) WITH ORDINALITY AS u(v, i)\nWHERE packet.time BETWEEN $__from AND $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE packet.time BETWEEN b.t0 AND b.t1)\n  AND packet.time % 500 < 50\n  AND u.v >= 1\nGROUP BY u.i\nORDER BY u.i",
+          "refId": "A"
+        }
+      ],
+      "title": "Cell voltages, min per cell over range",
+      "transformations": [],
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "description": "Lowest 0x136 min_cell_voltage in the range.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 3,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 3
+              },
+              {
+                "color": "green",
+                "value": 3.3
+              },
+              {
+                "color": "yellow",
+                "value": 4.15
+              },
+              {
+                "color": "red",
+                "value": 4.2
+              }
+            ]
+          },
+          "unit": "volt"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 18,
+        "y": 17
+      },
+      "id": 9,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n)\nSELECT MIN(thermal.min_cell_voltage) FILTER (WHERE thermal.min_cell_voltage >= 1) AS \"min_cell_voltage\",\n  MAX(thermal.max_cell_voltage) FILTER (WHERE thermal.max_cell_voltage >= 1) AS \"max_cell_voltage\",\n  MAX(thermal.max_cell_voltage - thermal.min_cell_voltage) FILTER (WHERE thermal.min_cell_voltage >= 1 AND thermal.max_cell_voltage >= 1) AS \"spread\"\nFROM packet JOIN thermal USING (packet_id)\nWHERE packet.time BETWEEN $__from AND $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE packet.time BETWEEN b.t0 AND b.t1)",
+          "refId": "A"
+        }
+      ],
+      "title": "Min cell (BMS)",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "min_cell_voltage"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "min_cell_voltage": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Dashboard --"
+      },
+      "description": "Highest 0x136 max_cell_voltage in the range.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 3,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 3
+              },
+              {
+                "color": "green",
+                "value": 3.3
+              },
+              {
+                "color": "yellow",
+                "value": 4.15
+              },
+              {
+                "color": "red",
+                "value": 4.2
+              }
+            ]
+          },
+          "unit": "volt"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 18,
+        "y": 20
+      },
+      "id": 10,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "datasource",
+            "uid": "-- Dashboard --"
+          },
+          "panelId": 9,
+          "refId": "A"
+        }
+      ],
+      "title": "Max cell (BMS)",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "max_cell_voltage"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "max_cell_voltage": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Dashboard --"
+      },
+      "description": "Largest BMS max - min in one packet (0x136 Battery Cell Limits).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": "volt"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 18,
+        "y": 23
+      },
+      "id": 11,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "datasource",
+            "uid": "-- Dashboard --"
+          },
+          "panelId": 9,
+          "refId": "A"
+        }
+      ],
+      "title": "Max spread",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "spread"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "spread": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Dashboard --"
+      },
+      "description": "Taps at or above 1 V in the range, of 132 (123 on 2026-10-10).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": null
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 21,
+        "y": 23
+      },
+      "id": 12,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "count"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "datasource",
+            "uid": "-- Dashboard --"
+          },
+          "panelId": 8,
+          "refId": "A"
+        }
+      ],
+      "title": "Active taps",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "Min"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "Min": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "description": "0x136 min / max per time bucket (BMS-computed).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "volt"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "min_cell_voltage"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Min cell (BMS)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "max_cell_voltage"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Max cell (BMS)"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n)\nSELECT to_timestamp(floor(packet.time / GREATEST($__interval_ms, 1)::double precision) * GREATEST($__interval_ms, 1) / 1000.0) AS time,\n  MIN(thermal.min_cell_voltage) FILTER (WHERE thermal.min_cell_voltage >= 1) AS \"min_cell_voltage\",\n  MAX(thermal.max_cell_voltage) FILTER (WHERE thermal.max_cell_voltage >= 1) AS \"max_cell_voltage\"\nFROM packet JOIN thermal USING (packet_id)\nWHERE packet.time BETWEEN $__from AND $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE packet.time BETWEEN b.t0 AND b.t1)\nGROUP BY 1\nORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "BMS min / max cell voltage",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "time",
+                "min_cell_voltage",
+                "max_cell_voltage"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "max_cell_voltage": 2,
+              "min_cell_voltage": 1,
+              "time": 0
+            }
+          }
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 32
+      },
+      "id": 14,
+      "panels": [],
+      "title": "Inverter",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": "suffix: V"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 33
+      },
+      "id": 15,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n)\nSELECT MAX(pack.dc_bus_v) AS \"dc_bus_v\",\n  MAX(pack.dc_bus_current) AS \"dc_bus_current\",\n  MAX(controls.motor_speed) AS \"motor_speed\",\n  MAX(controls.torque_feedback) AS \"torque_feedback\",\n  MAX(thermal.inverter_hotspot_temp) AS \"inverter_hotspot_temp\",\n  MAX(board_status.inverter_last_seen_s) FILTER (WHERE board_status.inverter_last_seen_s >= 0) AS \"inverter_last_seen_s\"\nFROM packet JOIN pack USING (packet_id) JOIN controls USING (packet_id) JOIN thermal USING (packet_id) JOIN board_status USING (packet_id)\nWHERE packet.time BETWEEN $__from AND $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE packet.time BETWEEN b.t0 AND b.t1)",
+          "refId": "A"
+        }
+      ],
+      "title": "Peak DC bus voltage",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "dc_bus_v"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "dc_bus_v": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Dashboard --"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": "amp"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 33
+      },
+      "id": 16,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "datasource",
+            "uid": "-- Dashboard --"
+          },
+          "panelId": 15,
+          "refId": "A"
+        }
+      ],
+      "title": "Peak DC bus current",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "dc_bus_current"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "dc_bus_current": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Dashboard --"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": "rotrpm"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 33
+      },
+      "id": 17,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "datasource",
+            "uid": "-- Dashboard --"
+          },
+          "panelId": 15,
+          "refId": "A"
+        }
+      ],
+      "title": "Peak motor speed",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "motor_speed"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "motor_speed": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Dashboard --"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": "Nm"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 33
+      },
+      "id": 18,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "datasource",
+            "uid": "-- Dashboard --"
+          },
+          "panelId": 15,
+          "refId": "A"
+        }
+      ],
+      "title": "Peak torque feedback",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "torque_feedback"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "torque_feedback": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Dashboard --"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 65
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "celsius"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 33
+      },
+      "id": 19,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "datasource",
+            "uid": "-- Dashboard --"
+          },
+          "panelId": 15,
+          "refId": "A"
+        }
+      ],
+      "title": "Peak inverter hotspot",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "inverter_hotspot_temp"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "inverter_hotspot_temp": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Dashboard --"
+      },
+      "description": "Largest board_status.inverter_last_seen_s in the range.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.5
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 33
+      },
+      "id": 20,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "datasource",
+            "uid": "-- Dashboard --"
+          },
+          "panelId": 15,
+          "refId": "A"
+        }
+      ],
+      "title": "Longest inverter gap",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "inverter_last_seen_s"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "inverter_last_seen_s": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "description": "0x0A0 module A/B/C + gate driver, 0x0A2 coolant / hotspot / motor.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 65
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "celsius"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "module_a_temp"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Module A"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "module_b_temp"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Module B"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "module_c_temp"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Module C"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gate_driver_temp"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Gate driver"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "inverter_hotspot_temp"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Inverter hotspot"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "coolant_temp"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Coolant"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "motor_temp"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Motor"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 37
+      },
+      "id": 21,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n)\nSELECT to_timestamp(floor(packet.time / GREATEST($__interval_ms, 1)::double precision) * GREATEST($__interval_ms, 1) / 1000.0) AS time,\n  AVG(thermal.module_a_temp) AS \"module_a_temp\",\n  AVG(thermal.module_b_temp) AS \"module_b_temp\",\n  AVG(thermal.module_c_temp) AS \"module_c_temp\",\n  AVG(thermal.gate_driver_temp) AS \"gate_driver_temp\",\n  AVG(thermal.inverter_hotspot_temp) AS \"inverter_hotspot_temp\",\n  AVG(thermal.coolant_temp) AS \"coolant_temp\",\n  AVG(thermal.motor_temp) AS \"motor_temp\"\nFROM packet JOIN thermal USING (packet_id)\nWHERE packet.time BETWEEN $__from AND $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE packet.time BETWEEN b.t0 AND b.t1)\nGROUP BY 1\nORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Inverter & motor temperatures",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "time",
+                "module_a_temp",
+                "module_b_temp",
+                "module_c_temp",
+                "gate_driver_temp",
+                "inverter_hotspot_temp",
+                "coolant_temp",
+                "motor_temp"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "coolant_temp": 6,
+              "gate_driver_temp": 4,
+              "inverter_hotspot_temp": 5,
+              "module_a_temp": 1,
+              "module_b_temp": 2,
+              "module_c_temp": 3,
+              "motor_temp": 7,
+              "time": 0
+            }
+          }
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "description": "torque_request 0x0C0 (VCU to inverter), commanded_torque / torque_feedback 0x0AC.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "Nm"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "torque_request"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Requested (VCU)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "commanded_torque"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Commanded (inverter)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "torque_feedback"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Torque feedback"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 37
+      },
+      "id": 22,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n)\nSELECT to_timestamp(floor(packet.time / GREATEST($__interval_ms, 1)::double precision) * GREATEST($__interval_ms, 1) / 1000.0) AS time,\n  AVG(controls.torque_request) AS \"torque_request\",\n  AVG(controls.commanded_torque) AS \"commanded_torque\",\n  AVG(controls.torque_feedback) AS \"torque_feedback\"\nFROM packet JOIN controls USING (packet_id)\nWHERE packet.time BETWEEN $__from AND $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE packet.time BETWEEN b.t0 AND b.t1)\nGROUP BY 1\nORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Torque",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "time",
+                "torque_request",
+                "commanded_torque",
+                "torque_feedback"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "commanded_torque": 2,
+              "time": 0,
+              "torque_feedback": 3,
+              "torque_request": 1
+            }
+          }
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "rotrpm"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "motor_speed"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Motor speed"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 0,
+        "y": 45
+      },
+      "id": 23,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n)\nSELECT to_timestamp(floor(packet.time / GREATEST($__interval_ms, 1)::double precision) * GREATEST($__interval_ms, 1) / 1000.0) AS time,\n  AVG(controls.motor_speed) AS \"motor_speed\"\nFROM packet JOIN controls USING (packet_id)\nWHERE packet.time BETWEEN $__from AND $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE packet.time BETWEEN b.t0 AND b.t1)\nGROUP BY 1\nORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Motor speed",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "time",
+                "motor_speed"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "motor_speed": 1,
+              "time": 0
+            }
+          }
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "suffix: V"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "dc_bus_v"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "DC bus voltage"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 6,
+        "y": 45
+      },
+      "id": 24,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n)\nSELECT to_timestamp(floor(packet.time / GREATEST($__interval_ms, 1)::double precision) * GREATEST($__interval_ms, 1) / 1000.0) AS time,\n  AVG(pack.dc_bus_v) AS \"dc_bus_v\"\nFROM packet JOIN pack USING (packet_id)\nWHERE packet.time BETWEEN $__from AND $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE packet.time BETWEEN b.t0 AND b.t1)\nGROUP BY 1\nORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "DC bus voltage",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "time",
+                "dc_bus_v"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "dc_bus_v": 1,
+              "time": 0
+            }
+          }
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "amp"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "dc_bus_current"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "DC bus current"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 12,
+        "y": 45
+      },
+      "id": 25,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n)\nSELECT to_timestamp(floor(packet.time / GREATEST($__interval_ms, 1)::double precision) * GREATEST($__interval_ms, 1) / 1000.0) AS time,\n  AVG(pack.dc_bus_current) AS \"dc_bus_current\"\nFROM packet JOIN pack USING (packet_id)\nWHERE packet.time BETWEEN $__from AND $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE packet.time BETWEEN b.t0 AND b.t1)\nGROUP BY 1\nORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "DC bus current",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "time",
+                "dc_bus_current"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "dc_bus_current": 1,
+              "time": 0
+            }
+          }
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "description": "Inverter dc_bus_v (0x0A7) x dc_bus_current (0x0A6), peak per time bucket: the power the VCU power limiter holds.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "watt"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "dc_bus_power_w"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "DC bus power (V x I)"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 18,
+        "y": 45
+      },
+      "id": 51,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n)\nSELECT to_timestamp(floor(packet.time / GREATEST($__interval_ms, 1)::double precision) * GREATEST($__interval_ms, 1) / 1000.0) AS time,\n  MAX(pack.dc_bus_v * pack.dc_bus_current) AS \"dc_bus_power_w\"\nFROM packet JOIN pack USING (packet_id)\nWHERE packet.time BETWEEN $__from AND $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE packet.time BETWEEN b.t0 AND b.t1)\nGROUP BY 1\nORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "DC bus power",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "time",
+                "dc_bus_power_w"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "dc_bus_power_w": 1,
+              "time": 0
+            }
+          }
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 52
+      },
+      "id": 26,
+      "panels": [],
+      "title": "Faults",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "description": "car_status_segment (car_status classifier).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "MOVING": {
+                  "color": "blue",
+                  "index": 0,
+                  "text": "MOVING"
+                },
+                "OFF": {
+                  "color": "text",
+                  "index": 3,
+                  "text": "OFF"
+                },
+                "ON_IDLE": {
+                  "color": "yellow",
+                  "index": 2,
+                  "text": "ON (idle)"
+                },
+                "READY": {
+                  "color": "green",
+                  "index": 1,
+                  "text": "READY"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": null
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 53
+      },
+      "id": 27,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n)\nSELECT s.state\nFROM car_status_segment s\nWHERE s.car = 'orion' AND s.end_time >= $__from AND s.start_time <= $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE s.end_time >= b.t0 AND s.start_time <= b.t1)\nORDER BY s.start_time DESC\nLIMIT 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Car state at end of range",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "state"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "state": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "description": "car_status classifier: run_faults / post_faults nonzero, imd_isolation, bmb_comm_error, shutdown_open (a leg open while HV is live).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "None": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "None"
+                }
+              },
+              "type": "value"
+            },
+            {
+              "options": {
+                "pattern": "^(.+)$",
+                "result": {
+                  "color": "red",
+                  "index": 1,
+                  "text": "$1"
+                }
+              },
+              "type": "regex"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": null
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 53
+      },
+      "id": 28,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n)\nSELECT COALESCE(string_agg(DISTINCT f, ', ' ORDER BY f), 'None') AS faults\nFROM car_status_segment s, unnest(string_to_array(NULLIF(s.active_faults, ''), ',')) AS f\nWHERE s.car = 'orion' AND s.end_time >= $__from AND s.start_time <= $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE s.end_time >= b.t0 AND s.start_time <= b.t1)",
+          "refId": "A"
+        }
+      ],
+      "title": "Faults seen in range",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "faults"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "faults": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "blue",
+                  "index": 1,
+                  "text": "INIT"
+                },
+                "1": {
+                  "color": "yellow",
+                  "index": 2,
+                  "text": "PRECHARGE"
+                },
+                "2": {
+                  "color": "green",
+                  "index": 3,
+                  "text": "READY"
+                },
+                "3": {
+                  "color": "green",
+                  "index": 4,
+                  "text": "RUNNING"
+                },
+                "4": {
+                  "color": "red",
+                  "index": 5,
+                  "text": "ERROR"
+                },
+                "5": {
+                  "color": "green",
+                  "index": 6,
+                  "text": "RUNNING"
+                },
+                "-1": {
+                  "color": "orange",
+                  "index": 0,
+                  "text": "NO DATA"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": null
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 53
+      },
+      "id": 29,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n)\nSELECT hvc_state_machine AS \"hvc_state_machine\",\n  prndl_state AS \"prndl_state\",\n  r2d_status AS \"r2d_status\",\n  shutdown_leg1 AS \"shutdown_leg1\",\n  shutdown_leg2 AS \"shutdown_leg2\",\n  shutdown_leg3 AS \"shutdown_leg3\",\n  shutdown_leg4 AS \"shutdown_leg4\"\nFROM packet JOIN diagnostics_high USING (packet_id) JOIN diagnostics_low USING (packet_id)\nWHERE packet.time BETWEEN $__from AND $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE packet.time BETWEEN b.t0 AND b.t1)\nORDER BY packet.time DESC\nLIMIT 1",
+          "refId": "A"
+        }
+      ],
+      "title": "HVC state at end",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "hvc_state_machine"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "hvc_state_machine": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Dashboard --"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "text",
+                  "index": 1,
+                  "text": "NEUTRAL"
+                },
+                "1": {
+                  "color": "green",
+                  "index": 2,
+                  "text": "DRIVE"
+                },
+                "2": {
+                  "color": "yellow",
+                  "index": 3,
+                  "text": "REVERSE"
+                },
+                "-1": {
+                  "color": "orange",
+                  "index": 0,
+                  "text": "NO DATA"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": null
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 53
+      },
+      "id": 30,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "datasource",
+            "uid": "-- Dashboard --"
+          },
+          "panelId": 29,
+          "refId": "A"
+        }
+      ],
+      "title": "PRNDL at end",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "prndl_state"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "prndl_state": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Dashboard --"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "false": {
+                  "color": "text",
+                  "index": 1,
+                  "text": "NOT READY"
+                },
+                "true": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "READY"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": null
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 53
+      },
+      "id": 31,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "datasource",
+            "uid": "-- Dashboard --"
+          },
+          "panelId": 29,
+          "refId": "A"
+        }
+      ],
+      "title": "Ready to drive at end",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "r2d_status"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "r2d_status": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Dashboard --"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "false": {
+                  "color": "red",
+                  "index": 1,
+                  "text": "OPEN"
+                },
+                "true": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "CLOSED"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": null
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "shutdown_leg1"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Shutdown leg 1"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "shutdown_leg2"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Shutdown leg 2"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "shutdown_leg3"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Shutdown leg 3"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "shutdown_leg4"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Shutdown leg 4"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 0,
+        "y": 57
+      },
+      "id": 32,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "datasource",
+            "uid": "-- Dashboard --"
+          },
+          "panelId": 29,
+          "refId": "A"
+        }
+      ],
+      "title": "Shutdown legs at end",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "shutdown_leg1",
+                "shutdown_leg2",
+                "shutdown_leg3",
+                "shutdown_leg4"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "shutdown_leg1": 0,
+              "shutdown_leg2": 1,
+              "shutdown_leg3": 2,
+              "shutdown_leg4": 3
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "description": "FAULT if the flag was set at any point in the range.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "false": {
+                  "color": "green",
+                  "index": 1,
+                  "text": "OK"
+                },
+                "true": {
+                  "color": "red",
+                  "index": 0,
+                  "text": "FAULT"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": null
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "imd_gnd_isolation_error"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IMD isolation"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "bmb_comm_error"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BMS comm"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "stomp_fault"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "STOMP"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 7,
+        "x": 8,
+        "y": 57
+      },
+      "id": 33,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n)\nSELECT bool_or(imd_gnd_isolation_error) AS \"imd_gnd_isolation_error\",\n  bool_or(bmb_comm_error) AS \"bmb_comm_error\",\n  bool_or(stomp_fault) AS \"stomp_fault\",\n  bit_or(post_faults::bigint) AS \"post_faults\",\n  bit_or(run_faults::bigint) AS \"run_faults\",\n  COALESCE(bool_or(apps1_disconnect)::int + bool_or(apps2_disconnect)::int + bool_or(apps1_out_range)::int + bool_or(apps2_out_range)::int + bool_or(apps_mismatch)::int + bool_or(apps_implause)::int + bool_or(bpps1_disconnect)::int + bool_or(bpps2_disconnect)::int + bool_or(bpps1_out_range)::int + bool_or(bpps2_out_range)::int + bool_or(bpps_mismatch)::int + bool_or(bse1_disconnect)::int + bool_or(bse2_disconnect)::int + bool_or(bse1_out_range)::int + bool_or(bse2_out_range)::int, 0) AS \"pedal_active\"\nFROM packet JOIN diagnostics_high USING (packet_id) JOIN diagnostics_low USING (packet_id)\nWHERE packet.time BETWEEN $__from AND $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE packet.time BETWEEN b.t0 AND b.t1)",
+          "refId": "A"
+        }
+      ],
+      "title": "Isolation / BMS / STOMP in range",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "imd_gnd_isolation_error",
+                "bmb_comm_error",
+                "stomp_fault"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "bmb_comm_error": 1,
+              "imd_gnd_isolation_error": 0,
+              "stomp_fault": 2
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Dashboard --"
+      },
+      "description": "0x0AB uint32 bitmasks OR-ed over the range; decode bits with the inverter manual.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "NONE"
+                }
+              },
+              "type": "value"
+            },
+            {
+              "options": {
+                "from": 1,
+                "result": {
+                  "color": "red",
+                  "index": 1
+                },
+                "to": 4294967295
+              },
+              "type": "range"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.5
+              }
+            ]
+          },
+          "unit": "hex0x"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "post_faults"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Inverter POST faults"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "run_faults"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Inverter RUN faults"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 15,
+        "y": 57
+      },
+      "id": 34,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "datasource",
+            "uid": "-- Dashboard --"
+          },
+          "panelId": 33,
+          "refId": "A"
+        }
+      ],
+      "title": "Inverter faults in range",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "post_faults",
+                "run_faults"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "post_faults": 0,
+              "run_faults": 1
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Dashboard --"
+      },
+      "description": "How many APPS / BPPS / BSE flags were set at some point (can_bitfields.csv). Which: see below.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "NONE"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.5
+              }
+            ]
+          },
+          "unit": null
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 57
+      },
+      "id": 35,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "datasource",
+            "uid": "-- Dashboard --"
+          },
+          "panelId": 33,
+          "refId": "A"
+        }
+      ],
+      "title": "Pedal faults in range",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "pedal_active"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "pedal_active": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "fillOpacity": 85,
+            "lineWidth": 0,
+            "spanNulls": false
+          },
+          "mappings": [
+            {
+              "options": {
+                "false": {
+                  "color": "green",
+                  "index": 1,
+                  "text": "OK"
+                },
+                "true": {
+                  "color": "red",
+                  "index": 0,
+                  "text": "FAULT"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "state"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Car state"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "MOVING": {
+                        "color": "blue",
+                        "index": 0,
+                        "text": "MOVING"
+                      },
+                      "OFF": {
+                        "color": "text",
+                        "index": 3,
+                        "text": "OFF"
+                      },
+                      "ON_IDLE": {
+                        "color": "yellow",
+                        "index": 2,
+                        "text": "ON (idle)"
+                      },
+                      "READY": {
+                        "color": "green",
+                        "index": 1,
+                        "text": "READY"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "active_faults"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Active faults"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "None": {
+                        "color": "green",
+                        "index": 0,
+                        "text": "None"
+                      }
+                    },
+                    "type": "value"
+                  },
+                  {
+                    "options": {
+                      "pattern": "^(.+)$",
+                      "result": {
+                        "color": "red",
+                        "index": 1,
+                        "text": "$1"
+                      }
+                    },
+                    "type": "regex"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 61
+      },
+      "id": 36,
+      "options": {
+        "alignValue": "left",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "mergeValues": true,
+        "rowHeight": 0.85,
+        "showValue": "auto",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n),\nseg AS (\n  SELECT GREATEST(s.start_time, (SELECT MIN(t0) FROM bounds)) AS t0,\n         LEAST(s.end_time, (SELECT MAX(t1) FROM bounds)) AS t1, s.state,\n         COALESCE(NULLIF(s.active_faults, ''), 'None') AS active_faults,\n         lead(s.start_time) OVER (ORDER BY s.start_time) AS nxt\n  FROM car_status_segment s\n  WHERE s.car = 'orion' AND s.end_time >= $__from AND s.start_time <= $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE s.end_time >= b.t0 AND s.start_time <= b.t1)\n)\nSELECT to_timestamp(t / 1000.0) AS time, state, active_faults FROM (\n  SELECT t0 AS t, state, active_faults FROM seg\n  -- segments abut ~50 ms apart; a null marker only where no segment follows within 5 s (server or car off)\n  UNION ALL SELECT t1 + 1, NULL, NULL FROM seg WHERE nxt IS NULL OR nxt > t1 + 5000\n) x\nORDER BY t",
+          "refId": "A"
+        }
+      ],
+      "title": "Car state",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "time",
+                "state",
+                "active_faults"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "active_faults": 2,
+              "state": 1,
+              "time": 0
+            }
+          }
+        }
+      ],
+      "type": "state-timeline"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "description": "Per time bucket: faults show if set at any point, legs/contactors/R2D show OPEN if open at any point, HVC shows ERROR if it hit ERROR, else its most common state.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "fillOpacity": 85,
+            "lineWidth": 0,
+            "spanNulls": true
+          },
+          "mappings": [
+            {
+              "options": {
+                "false": {
+                  "color": "green",
+                  "index": 1,
+                  "text": "OK"
+                },
+                "true": {
+                  "color": "red",
+                  "index": 0,
+                  "text": "FAULT"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "hvc_state_machine"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "HVC state"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "blue",
+                        "index": 1,
+                        "text": "INIT"
+                      },
+                      "1": {
+                        "color": "yellow",
+                        "index": 2,
+                        "text": "PRECHARGE"
+                      },
+                      "2": {
+                        "color": "green",
+                        "index": 3,
+                        "text": "READY"
+                      },
+                      "3": {
+                        "color": "green",
+                        "index": 4,
+                        "text": "RUNNING"
+                      },
+                      "4": {
+                        "color": "red",
+                        "index": 5,
+                        "text": "ERROR"
+                      },
+                      "5": {
+                        "color": "green",
+                        "index": 6,
+                        "text": "RUNNING"
+                      },
+                      "-1": {
+                        "color": "orange",
+                        "index": 0,
+                        "text": "NO DATA"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "text",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "prndl_state"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "PRNDL"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "text",
+                        "index": 1,
+                        "text": "NEUTRAL"
+                      },
+                      "1": {
+                        "color": "green",
+                        "index": 2,
+                        "text": "DRIVE"
+                      },
+                      "2": {
+                        "color": "yellow",
+                        "index": 3,
+                        "text": "REVERSE"
+                      },
+                      "-1": {
+                        "color": "orange",
+                        "index": 0,
+                        "text": "NO DATA"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "text",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "r2d_status"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "R2D"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "false": {
+                        "color": "text",
+                        "index": 1,
+                        "text": "NOT READY"
+                      },
+                      "true": {
+                        "color": "green",
+                        "index": 0,
+                        "text": "READY"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "pos_hv_contactor"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "HV+ contactor"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "false": {
+                        "color": "red",
+                        "index": 1,
+                        "text": "OPEN"
+                      },
+                      "true": {
+                        "color": "green",
+                        "index": 0,
+                        "text": "CLOSED"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "neg_hv_contactor"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "HV- contactor"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "false": {
+                        "color": "red",
+                        "index": 1,
+                        "text": "OPEN"
+                      },
+                      "true": {
+                        "color": "green",
+                        "index": 0,
+                        "text": "CLOSED"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "precharge_contactor"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Precharge contactor"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "false": {
+                        "color": "text",
+                        "index": 1,
+                        "text": "OPEN"
+                      },
+                      "true": {
+                        "color": "yellow",
+                        "index": 0,
+                        "text": "CLOSED"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "shutdown_leg1"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Shutdown leg 1"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "false": {
+                        "color": "red",
+                        "index": 1,
+                        "text": "OPEN"
+                      },
+                      "true": {
+                        "color": "green",
+                        "index": 0,
+                        "text": "CLOSED"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "shutdown_leg2"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Shutdown leg 2"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "false": {
+                        "color": "red",
+                        "index": 1,
+                        "text": "OPEN"
+                      },
+                      "true": {
+                        "color": "green",
+                        "index": 0,
+                        "text": "CLOSED"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "shutdown_leg3"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Shutdown leg 3"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "false": {
+                        "color": "red",
+                        "index": 1,
+                        "text": "OPEN"
+                      },
+                      "true": {
+                        "color": "green",
+                        "index": 0,
+                        "text": "CLOSED"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "shutdown_leg4"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Shutdown leg 4"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "false": {
+                        "color": "red",
+                        "index": 1,
+                        "text": "OPEN"
+                      },
+                      "true": {
+                        "color": "green",
+                        "index": 0,
+                        "text": "CLOSED"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "imd_gnd_isolation_error"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IMD isolation"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "bmb_comm_error"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BMS comm"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "stomp_fault"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "STOMP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "post_faults"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Inverter POST faults"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "green",
+                        "index": 0,
+                        "text": "NONE"
+                      }
+                    },
+                    "type": "value"
+                  },
+                  {
+                    "options": {
+                      "from": 1,
+                      "result": {
+                        "color": "red",
+                        "index": 1
+                      },
+                      "to": 4294967295
+                    },
+                    "type": "range"
+                  }
+                ]
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "text",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "hex0x"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "run_faults"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Inverter RUN faults"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "green",
+                        "index": 0,
+                        "text": "NONE"
+                      }
+                    },
+                    "type": "value"
+                  },
+                  {
+                    "options": {
+                      "from": 1,
+                      "result": {
+                        "color": "red",
+                        "index": 1
+                      },
+                      "to": 4294967295
+                    },
+                    "type": "range"
+                  }
+                ]
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "text",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "hex0x"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 65
+      },
+      "id": 37,
+      "options": {
+        "alignValue": "left",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "mergeValues": true,
+        "rowHeight": 0.85,
+        "showValue": "auto",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n)\nSELECT to_timestamp(floor(packet.time / GREATEST($__interval_ms, 1)::double precision) * GREATEST($__interval_ms, 1) / 1000.0) AS time,\n  CASE WHEN bool_or(hvc_state_machine = 4) THEN 4 ELSE mode() WITHIN GROUP (ORDER BY hvc_state_machine) END AS \"hvc_state_machine\",\n  mode() WITHIN GROUP (ORDER BY prndl_state) AS \"prndl_state\",\n  bool_and(r2d_status) AS \"r2d_status\",\n  bool_and(pos_hv_contactor) AS \"pos_hv_contactor\",\n  bool_and(neg_hv_contactor) AS \"neg_hv_contactor\",\n  bool_or(precharge_contactor) AS \"precharge_contactor\",\n  bool_and(shutdown_leg1) AS \"shutdown_leg1\",\n  bool_and(shutdown_leg2) AS \"shutdown_leg2\",\n  bool_and(shutdown_leg3) AS \"shutdown_leg3\",\n  bool_and(shutdown_leg4) AS \"shutdown_leg4\",\n  bool_or(imd_gnd_isolation_error) AS \"imd_gnd_isolation_error\",\n  bool_or(bmb_comm_error) AS \"bmb_comm_error\",\n  bool_or(stomp_fault) AS \"stomp_fault\",\n  bit_or(post_faults::bigint) AS \"post_faults\",\n  bit_or(run_faults::bigint) AS \"run_faults\"\nFROM packet JOIN diagnostics_high USING (packet_id) JOIN diagnostics_low USING (packet_id)\nWHERE packet.time BETWEEN $__from AND $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE packet.time BETWEEN b.t0 AND b.t1)\nGROUP BY 1\nORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Safety & HV state",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "time",
+                "hvc_state_machine",
+                "prndl_state",
+                "r2d_status",
+                "pos_hv_contactor",
+                "neg_hv_contactor",
+                "precharge_contactor",
+                "shutdown_leg1",
+                "shutdown_leg2",
+                "shutdown_leg3",
+                "shutdown_leg4",
+                "imd_gnd_isolation_error",
+                "bmb_comm_error",
+                "stomp_fault",
+                "post_faults",
+                "run_faults"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "bmb_comm_error": 12,
+              "hvc_state_machine": 1,
+              "imd_gnd_isolation_error": 11,
+              "neg_hv_contactor": 5,
+              "pos_hv_contactor": 4,
+              "post_faults": 14,
+              "precharge_contactor": 6,
+              "prndl_state": 2,
+              "r2d_status": 3,
+              "run_faults": 15,
+              "shutdown_leg1": 7,
+              "shutdown_leg2": 8,
+              "shutdown_leg3": 9,
+              "shutdown_leg4": 10,
+              "stomp_fault": 13,
+              "time": 0
+            }
+          }
+        }
+      ],
+      "type": "state-timeline"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "fillOpacity": 85,
+            "lineWidth": 0,
+            "spanNulls": true
+          },
+          "mappings": [
+            {
+              "options": {
+                "false": {
+                  "color": "green",
+                  "index": 1,
+                  "text": "OK"
+                },
+                "true": {
+                  "color": "red",
+                  "index": 0,
+                  "text": "FAULT"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "apps1_disconnect"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "APPS1 disconnect"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "apps2_disconnect"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "APPS2 disconnect"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "apps1_out_range"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "APPS1 out of range"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "apps2_out_range"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "APPS2 out of range"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "apps_mismatch"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "APPS mismatch"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "apps_implause"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "APPS implausibility"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "bpps1_disconnect"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BPPS1 disconnect"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "bpps2_disconnect"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BPPS2 disconnect"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "bpps1_out_range"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BPPS1 out of range"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "bpps2_out_range"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BPPS2 out of range"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "bpps_mismatch"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BPPS mismatch"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "bse1_disconnect"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BSE1 disconnect"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "bse2_disconnect"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BSE2 disconnect"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "bse1_out_range"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BSE1 out of range"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "bse2_out_range"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "BSE2 out of range"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 76
+      },
+      "id": 38,
+      "options": {
+        "alignValue": "left",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "mergeValues": true,
+        "rowHeight": 0.85,
+        "showValue": "auto",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n)\nSELECT to_timestamp(floor(packet.time / GREATEST($__interval_ms, 1)::double precision) * GREATEST($__interval_ms, 1) / 1000.0) AS time,\n  bool_or(apps1_disconnect) AS \"apps1_disconnect\",\n  bool_or(apps2_disconnect) AS \"apps2_disconnect\",\n  bool_or(apps1_out_range) AS \"apps1_out_range\",\n  bool_or(apps2_out_range) AS \"apps2_out_range\",\n  bool_or(apps_mismatch) AS \"apps_mismatch\",\n  bool_or(apps_implause) AS \"apps_implause\",\n  bool_or(bpps1_disconnect) AS \"bpps1_disconnect\",\n  bool_or(bpps2_disconnect) AS \"bpps2_disconnect\",\n  bool_or(bpps1_out_range) AS \"bpps1_out_range\",\n  bool_or(bpps2_out_range) AS \"bpps2_out_range\",\n  bool_or(bpps_mismatch) AS \"bpps_mismatch\",\n  bool_or(bse1_disconnect) AS \"bse1_disconnect\",\n  bool_or(bse2_disconnect) AS \"bse2_disconnect\",\n  bool_or(bse1_out_range) AS \"bse1_out_range\",\n  bool_or(bse2_out_range) AS \"bse2_out_range\"\nFROM packet JOIN diagnostics_high USING (packet_id)\nWHERE packet.time BETWEEN $__from AND $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE packet.time BETWEEN b.t0 AND b.t1)\nGROUP BY 1\nORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Pedal sensor faults",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "time",
+                "apps1_disconnect",
+                "apps2_disconnect",
+                "apps1_out_range",
+                "apps2_out_range",
+                "apps_mismatch",
+                "apps_implause",
+                "bpps1_disconnect",
+                "bpps2_disconnect",
+                "bpps1_out_range",
+                "bpps2_out_range",
+                "bpps_mismatch",
+                "bse1_disconnect",
+                "bse2_disconnect",
+                "bse1_out_range",
+                "bse2_out_range"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "apps1_disconnect": 1,
+              "apps1_out_range": 3,
+              "apps2_disconnect": 2,
+              "apps2_out_range": 4,
+              "apps_implause": 6,
+              "apps_mismatch": 5,
+              "bpps1_disconnect": 7,
+              "bpps1_out_range": 9,
+              "bpps2_disconnect": 8,
+              "bpps2_out_range": 10,
+              "bpps_mismatch": 11,
+              "bse1_disconnect": 12,
+              "bse1_out_range": 14,
+              "bse2_disconnect": 13,
+              "bse2_out_range": 15,
+              "time": 0
+            }
+          }
+        }
+      ],
+      "type": "state-timeline"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 86
+      },
+      "id": 39,
+      "panels": [],
+      "title": "LV battery (PDU)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "description": "Lowest non-zero lv_batt_v (PDU 0x183) in the range; \"no reading\" when the PDU sent only zeros. Orion sends no LV state of charge.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2,
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "text",
+                  "index": 0,
+                  "text": "no reading"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "max": 30,
+          "min": 18,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": "suffix: V"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lv_batt_v"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "LV battery voltage"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 4,
+        "x": 0,
+        "y": 87
+      },
+      "id": 40,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n)\nSELECT \n  COALESCE(MIN(pack.lv_batt_v) FILTER (WHERE pack.lv_batt_v > 0), 0) AS \"lv_batt_v\"\nFROM packet JOIN pack USING (packet_id)\nWHERE packet.time BETWEEN $__from AND $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE packet.time BETWEEN b.t0 AND b.t1)",
+          "refId": "A"
+        }
+      ],
+      "title": "Lowest LV battery voltage",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "lv_batt_v"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "lv_batt_v": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "description": "PDU 0x183: lv_batt_v (left, V) and lv_batt_c (right, A), averaged per time bucket.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisSoftMax": 30,
+            "axisSoftMin": 18,
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "suffix: V"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lv_batt_v"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "LV battery voltage"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lv_batt_c"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "LV battery current"
+              },
+              {
+                "id": "unit",
+                "value": "suffix: A"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "custom.axisSoftMin",
+                "value": -20
+              },
+              {
+                "id": "custom.axisSoftMax",
+                "value": 20
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 20,
+        "x": 4,
+        "y": 87
+      },
+      "id": 41,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n)\nSELECT to_timestamp(floor(packet.time / GREATEST($__interval_ms, 1)::double precision) * GREATEST($__interval_ms, 1) / 1000.0) AS time,\n  AVG(pack.lv_batt_v) AS \"lv_batt_v\",\n  AVG(pack.lv_batt_c) AS \"lv_batt_c\"\nFROM packet JOIN pack USING (packet_id)\nWHERE packet.time BETWEEN $__from AND $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE packet.time BETWEEN b.t0 AND b.t1)\nGROUP BY 1\nORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "LV battery voltage & current",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "time",
+                "lv_batt_v",
+                "lv_batt_c"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "lv_batt_c": 2,
+              "lv_batt_v": 1,
+              "time": 0
+            }
+          }
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 94
+      },
+      "id": 50,
+      "panels": [],
+      "title": "HV power limit (VCU)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "description": "VCU firmware power_limit_w (lhre-2026 default_params.h, all event modes). A constant: the VCU does not send it on CAN.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": "kwatt"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "power_limit_kw"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Power limit"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 95
+      },
+      "id": 42,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n)\nSELECT \n  70 AS \"power_limit_kw\",\n  MAX(pack.dc_bus_v * pack.dc_bus_current) / 1000 AS \"hv_power_kw\",\n  70 - MAX(pack.dc_bus_v * pack.dc_bus_current) / 1000 AS \"headroom_kw\",\n  MAX(controls.torque_lookup - controls.torque_power_limited) AS \"power_limit_cut_nm\",\n  MAX(controls.torque_lookup - controls.torque_derated) AS \"derate_cut_nm\",\n  MIN(controls.torque_limit) AS \"torque_limit\"\nFROM packet JOIN pack USING (packet_id) JOIN controls USING (packet_id)\nWHERE packet.time BETWEEN $__from AND $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE packet.time BETWEEN b.t0 AND b.t1)",
+          "refId": "A"
+        }
+      ],
+      "title": "Power limit",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "power_limit_kw"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "power_limit_kw": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Dashboard --"
+      },
+      "description": "Highest dc_bus_v (0x0A7) x dc_bus_current (0x0A6) / 1000 in the range, the power the VCU limiter acts on.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "mappings": [],
+          "max": 80,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 60
+              },
+              {
+                "color": "red",
+                "value": 70
+              }
+            ]
+          },
+          "unit": "kwatt"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "hv_power_kw"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "HV power (DC bus)"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 95
+      },
+      "id": 43,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "datasource",
+            "uid": "-- Dashboard --"
+          },
+          "panelId": 42,
+          "refId": "A"
+        }
+      ],
+      "title": "Peak HV power (DC bus)",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "hv_power_kw"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "hv_power_kw": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Dashboard --"
+      },
+      "description": "Power limit (70 kW) - peak HV power in the range. Below 0: over the limit.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0
+              },
+              {
+                "color": "green",
+                "value": 10
+              }
+            ]
+          },
+          "unit": "kwatt"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "headroom_kw"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Headroom"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 95
+      },
+      "id": 44,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "datasource",
+            "uid": "-- Dashboard --"
+          },
+          "panelId": 42,
+          "refId": "A"
+        }
+      ],
+      "title": "Least headroom",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "headroom_kw"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "headroom_kw": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Dashboard --"
+      },
+      "description": "Largest torque cut by the power limit in the range: torque_lookup - torque_power_limited (VCU 0x1CA). Over 0.5 Nm = LIMITING.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "mappings": [
+            {
+              "options": {
+                "from": -1000000,
+                "result": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "off"
+                },
+                "to": 0.5
+              },
+              "type": "range"
+            },
+            {
+              "options": {
+                "from": 0.5,
+                "result": {
+                  "color": "red",
+                  "index": 1,
+                  "text": "LIMITING"
+                },
+                "to": 1000000
+              },
+              "type": "range"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "Nm"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "power_limit_cut_nm"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Torque cut by power limit"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 95
+      },
+      "id": 45,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "max"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "datasource",
+            "uid": "-- Dashboard --"
+          },
+          "panelId": 42,
+          "refId": "A"
+        }
+      ],
+      "title": "Power limiter in range",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "power_limit_cut_nm"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "power_limit_cut_nm": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Dashboard --"
+      },
+      "description": "Largest torque cut by the low-cell-voltage derate in the range: torque_lookup - torque_derated (VCU 0x1CA; starts at 3.2 V/cell).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "mappings": [
+            {
+              "options": {
+                "from": -1000000,
+                "result": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "off"
+                },
+                "to": 0.5
+              },
+              "type": "range"
+            },
+            {
+              "options": {
+                "from": 0.5,
+                "result": {
+                  "color": "red",
+                  "index": 1,
+                  "text": "LIMITING"
+                },
+                "to": 1000000
+              },
+              "type": "range"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "Nm"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "derate_cut_nm"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Torque cut by low-cell derate"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 95
+      },
+      "id": 46,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "max"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "datasource",
+            "uid": "-- Dashboard --"
+          },
+          "panelId": 42,
+          "refId": "A"
+        }
+      ],
+      "title": "Low-cell derate in range",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "derate_cut_nm"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "derate_cut_nm": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Dashboard --"
+      },
+      "description": "Lowest torque_limit the VCU sent the inverter (0x0C0) in the range.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": "Nm"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "torque_limit"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Inverter torque limit"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 95
+      },
+      "id": 47,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "datasource",
+            "uid": "-- Dashboard --"
+          },
+          "panelId": 42,
+          "refId": "A"
+        }
+      ],
+      "title": "Lowest inverter torque limit",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "torque_limit"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "torque_limit": 0
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "description": "Peak dc_bus_v (0x0A7) x dc_bus_current (0x0A6) per time bucket. Red line: the 70 kW VCU power limit.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisSoftMax": 80,
+            "axisSoftMin": 0,
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 70
+              }
+            ]
+          },
+          "unit": "kwatt"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "hv_power_kw"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "HV power (DC bus)"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 99
+      },
+      "id": 48,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n)\nSELECT to_timestamp(floor(packet.time / GREATEST($__interval_ms, 1)::double precision) * GREATEST($__interval_ms, 1) / 1000.0) AS time,\n  MAX(pack.dc_bus_v * pack.dc_bus_current) / 1000 AS \"hv_power_kw\"\nFROM packet JOIN pack USING (packet_id)\nWHERE packet.time BETWEEN $__from AND $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE packet.time BETWEEN b.t0 AND b.t1)\nGROUP BY 1\nORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "HV power vs limit",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "time",
+                "hv_power_kw"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "hv_power_kw": 1,
+              "time": 0
+            }
+          }
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "orion"
+      },
+      "description": "Least headroom per time bucket (left, kW) and the largest torque the power limit and the low-cell derate took away (right, Nm).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "kwatt"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "headroom_kw"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Headroom"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "power_limit_cut_nm"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Torque cut by power limit"
+              },
+              {
+                "id": "unit",
+                "value": "Nm"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "derate_cut_nm"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Torque cut by low-cell derate"
+              },
+              {
+                "id": "unit",
+                "value": "Nm"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 99
+      },
+      "id": 49,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "orion"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bounds AS (\n  SELECT GREATEST(p.start_time, $__from) AS t0, LEAST(p.end_time, $__to) AS t1\n  FROM partitions p\n  WHERE (COALESCE(array_length(ARRAY[${Zoom:singlequote}]::text[], 1), 0) = 0\n         OR p.partition_name = ANY(ARRAY[${Zoom:singlequote}]::text[]))\n    AND p.end_time >= $__from AND p.start_time <= $__to\n)\nSELECT to_timestamp(floor(packet.time / GREATEST($__interval_ms, 1)::double precision) * GREATEST($__interval_ms, 1) / 1000.0) AS time,\n  70 - MAX(pack.dc_bus_v * pack.dc_bus_current) / 1000 AS \"headroom_kw\",\n  MAX(controls.torque_lookup - controls.torque_power_limited) AS \"power_limit_cut_nm\",\n  MAX(controls.torque_lookup - controls.torque_derated) AS \"derate_cut_nm\"\nFROM packet JOIN pack USING (packet_id) JOIN controls USING (packet_id)\nWHERE packet.time BETWEEN $__from AND $__to\n  AND EXISTS (SELECT 1 FROM bounds b WHERE packet.time BETWEEN b.t0 AND b.t1)\nGROUP BY 1\nORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Headroom & limiter torque cut",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "time",
+                "headroom_kw",
+                "power_limit_cut_nm",
+                "derate_cut_nm"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "derate_cut_nm": 3,
+              "headroom_kw": 1,
+              "power_limit_cut_nm": 2,
+              "time": 0
+            }
+          }
+        }
+      ],
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 40,
+  "tags": [
+    "orion",
+    "retrospective"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "orion"
+        },
+        "definition": "SELECT partition_name FROM partitions ORDER BY start_time;",
+        "description": "Select partition generated from packet gaps",
+        "includeAll": true,
+        "label": "Zoom to partition",
+        "multi": true,
+        "name": "Zoom",
+        "options": [],
+        "query": "SELECT partition_name FROM partitions ORDER BY start_time;",
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Orion Cells, Inverter & Faults (Retrospective)",
+  "uid": "orion_cells_inv_faults_ret_v1",
+  "version": 1
+}

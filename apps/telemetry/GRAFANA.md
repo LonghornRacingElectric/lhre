@@ -3,6 +3,8 @@ telemetry.lhre.org/grafana/ (dm any of the Telemetry members for password access
 
 Dashboards in `analysis/database/dashboards/<car>/<mode>/*.json` are auto-provisioned by Grafana when `stack/server_devtool.sh` starts ingest (options 1/2/3/4/Q/W/Z).
 
+Each `<car>/<mode>` directory maps to one Grafana folder, e.g. `orion/real-time/` → **Orion · Real-Time** and `orion/retrospect/` → **Orion · Retrospect** (see `stack/ingest/grafana-dashboard-provisioning/dashboards.yml`; a new car needs one entry per mode there). Repo dashboards there are overwritten from their JSON whenever it or the provisioning config changes, so export UI edits (Share → Export → Save to file) into the repo. Dashboards made in the UI can sit in the same folders but exist only on the server until exported. Scratch work goes in **Sandbox**.
+
 ## Realtime Dashboards
 1. Create a regular new dashboard
 2. Select "Real Time Data" as Data Source
