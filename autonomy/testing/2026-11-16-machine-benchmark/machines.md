@@ -1,0 +1,7 @@
+| machine | cpu | threads | gpu | extra | verdict | gate_passed | rtf | wall_min | cpu_busy | mem_peak | gpu_load | max_ekf | max_cte | lap_s |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| red-mesa | AMD Ryzen 7 5800HS with Radeon Graphics | 16 | NVIDIA GeForce RTX 3060 Laptop GPU |  | Gate: PASS, 18 of 18 runs pass, skidpad waived | 18/18 | 0.81 (0.78 to 0.83) | 19 | 57% avg, 72% peak | 3.9 of 15 GB | 15% avg, 23% peak, 0.3 GB, 58 C | 0.061 | 0.268 | 33.26 to 34.54 |
+| black-ridge-wsl | AMD Ryzen 9 5950X 16-Core Processor | 32 | NVIDIA GeForce RTX 4070 SUPER |  | Gate: PASS, 18 of 18 runs pass, skidpad waived | 18/18 | 0.77 (0.74 to 0.79) | 19 | 26% avg, 32% peak | 2.2 of 16 GB | 16% avg, 49% peak, 3.3 GB, 28 C | 0.063 | 0.264 | 33.26 to 34.54 |
+| hil | Intel(R) Xeon(R) CPU E5-2650 v4 @ 2.20GHz | 48 | Quadro M4000 |  | Gate: PASS, 18 of 18 runs pass, skidpad waived | 18/18 | 0.66 (0.63 to 0.68) | 22 | 30% avg, 37% peak | 4.3 of 61 GB | 9% avg, 16% peak, 0.3 GB, 45 C | 0.064 | 0.267 | 33.26 to 34.54 |
+| blue-crest | - | 6 | none |  | Gate: PASS, 18 of 18 runs pass, skidpad waived | 18/18 | 0.60 (0.56 to 0.67) | 25 | 77% avg, 89% peak | 2.3 of 8 GB | n/a | 0.084 | 0.258 | 33.26 to 34.54 |
+| white-canyon-vm | Intel(R) Core(TM) i5-9500T CPU @ 2.20GHz | 4 | none |  | Gate: PASS, 18 of 18 runs pass, skidpad waived | 18/18 | 0.24 (0.23 to 0.25) | 57 | 89% avg, 95% peak | 2.1 of 10 GB | n/a | 0.094 | 0.254 | 33.26 to 34.54 |
