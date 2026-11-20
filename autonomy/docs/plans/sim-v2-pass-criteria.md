@@ -72,9 +72,11 @@ check, once each.
 
 The real layouts are AMZ's FSG and FSI cone files, imported unchanged. They
 are the closest thing we have to a course someone else designed, and they do
-not respect our generator: FSG is 305 m with a 4.01 m tightest centerline
-radius and 2.95 m narrowest clear width, FSI is 214 m with 4.12 m and 2.82 m,
-both a little inside our rules checker's limits, and FSG's gates are spaced
+not respect our generator: FSG's gate polygon is 308.84 m with 2.95 m
+narrowest clear width; FSI is 217.58 m with 2.82 m clear width. Their
+window-fitted minimum radii are 4.63 m and 4.65 m; see the
+[audit method](../../ros2/src/lhr_gazebo/worlds/competition/README.md#envelope-flags-and-running).
+Both are narrower than our rules checker's limit, and FSG's gates are spaced
 too far apart for the planner's default 4 m step. They gate anyway, on the
 same launch defaults as every other run. The stack has to handle what a real
 course hands it; a course that needs its own parameters is a stack gap, not a

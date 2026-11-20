@@ -53,13 +53,13 @@ def _vehicle_nose_m() -> float:
 
 
 def _cone_include(model_name: str, instance_name: str,
-                  x: float, y: float, z: float) -> str:
+                  x: float, y: float, z: float, precision=4) -> str:
     """Return an SDF <include> block for a cone."""
     return textwrap.dedent(f"""\
     <include>
       <uri>model://{model_name}</uri>
       <name>{instance_name}</name>
-      <pose>{x:.4f} {y:.4f} {z:.4f} 0 0 0</pose>
+      <pose>{x:.{precision}f} {y:.{precision}f} {z:.4f} 0 0 0</pose>
     </include>""")
 
 
@@ -107,6 +107,7 @@ def generate_world_sdf(
     model_dir: str = '',
     left_kinds=None,
     right_kinds=None,
+    coordinate_precision=4,
 ) -> str:
     """Build a complete Gazebo world SDF string."""
     # Auto-compute spawn from track geometry if not explicitly set
@@ -131,7 +132,7 @@ def generate_world_sdf(
             counts[model] = index + 1
             cone_blocks.append(_cone_include(
                 model, f'{model}_{index}', cx, cy,
-                CONE_SPECS[kind].height_m / 2.0))
+                CONE_SPECS[kind].height_m / 2.0, coordinate_precision))
 
     cones_xml = '\n'.join(cone_blocks)
     # Long legal courses can extend beyond the legacy 200 m ground plane.

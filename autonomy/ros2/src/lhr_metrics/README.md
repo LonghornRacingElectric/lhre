@@ -351,3 +351,16 @@ default matches Gazebo launch; other plants leave this provenance field at
 The noise-free control disables nominal noise and startup bias; it does not
 cancel an explicitly requested bias fault. Other plants retain their own
 sensor models. The vehicle SHA identifies the density/bandwidth/bias settings.
+
+## Imported circuit references
+
+[Competition worlds](../lhr_gazebo/worlds/competition/README.md) carry a
+hash-bound `.reference.json`. `world_centerline` reads its explicit inferred
+route; `world_geometry` repeats source boundary indices to express unequal
+cone counts as contiguous road strips. All original physical cones remain
+in the collision list exactly once. Metrics uses that road and the explicit
+route independently; it never pairs perceived cones to create truth.
+
+Missing sidecars, mismatched world bytes or edited reference metadata are
+errors, rather than a fallback to a different centerline. Legacy generated
+worlds retain their paired-midpoint reference and need no sidecar.

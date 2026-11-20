@@ -245,3 +245,33 @@ a course whose lap takes longer than 180 sim seconds.
 These runs still use the existing MVP scorer thresholds; inclusion and changed
 thresholds in the official Sim v2 gate belong to
 [#201](https://github.com/LonghornRacingElectric/lhre/issues/201).
+
+## Imported competition layouts
+
+`REAL_TRACKS="amz_fsg amz_fsi"` appends fixed imported circuits, each with its
+own `REAL_REPEATS` LiDAR/EKF runs (default 1, independent of `REPEATS`)
+and an optional seed-1 truth comparison
+(`BASELINE=1`). The default is empty.
+Imports are verified before output creation or process cleanup. Flagged
+layouts require `ALLOW_NONCOMPLIANT=1`, which forwards the launch's explicit
+acknowledgement. See [sources and measured flags](../../../ros2/src/lhr_gazebo/worlds/competition/README.md).
+
+From the built, sourced ROS workspace, preview an imports-only matrix safely:
+
+```bash
+SEEDS="" ACCEL_REPEATS=0 SKIDPAD_REPEATS=0 REPEATS=1   REAL_TRACKS="amz_fsg amz_fsi" ALLOW_NONCOMPLIANT=1 PLAN_ONLY=1   ../testing/tools/gate/run_gate.sh
+```
+
+Remove `PLAN_ONLY=1` to run it; choose a fresh `OUT` for a new campaign.
+Use default planner settings for acceptance; importing a layout does not
+change them or derive a width prior from truth cones. Sparse-gate failures
+remain failures to fix in #225. Per-course planner overrides do not qualify
+as a Sim v2 pass. `REAL_REPEATS` must be a nonnegative integer.
+`PLAN_ONLY` prints the audited matrix without launching or stopping processes.
+The runner saves `course_audits.json`; the scorer includes flags in the
+summary. Course-derived lap times use the same imported scoring reference
+as metrics; legacy baseline matching uses layout **and** seed. Missing planned
+import runs fail. The [Sim v2 criteria](../../../docs/plans/sim-v2-pass-criteria.md) include
+these layouts; default-setting planner acceptance remains in
+[#225](https://github.com/LonghornRacingElectric/lhre/issues/225).
+Neither existing pass thresholds nor the default MVP matrix changes.

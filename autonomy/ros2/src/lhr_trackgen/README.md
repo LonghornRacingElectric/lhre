@@ -135,3 +135,9 @@ Metrics reads the selected world's ordered pairs, including return sections;
 no reference route is supplied to perception or control. See the
 [gate runner](../../../testing/tools/gate/README.md) and
 [fault runner](../../../testing/tools/fault_injection/README.md) for campaigns.
+
+`rules_autocross.measure_route` and `segment_distance` expose the same closed
+route measurements and exact boundary separation used by the checker. The
+[competition importer](../lhr_gazebo/worlds/competition/README.md) reuses them
+for an explicit audit without changing source cone geometry or registering
+fixed competition layouts as procedural generators.
