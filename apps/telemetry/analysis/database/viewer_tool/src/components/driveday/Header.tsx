@@ -9,7 +9,8 @@ import { runLabel } from "@/lib/driveday/storage";
 import { Menu } from "./Menu";
 import { PlayerCtx, useUi } from "./context";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Info, Settings } from "lucide-react";
 
 export type Theme = "auto" | "light" | "dark";
 
@@ -117,10 +118,13 @@ function RunTitle({ p, run }: { p: Player; run: RunListEntry | undefined }) {
   ].filter(Boolean);
   return (
     <>
-      <Tooltip delayDuration={0}>
-        <TooltipTrigger asChild><h1 id="title" tabIndex={0}>{m.name || "LAPDOG"}</h1></TooltipTrigger>
-        <TooltipContent side="bottom" align="start" sideOffset={8} className="title-tip">{parts.join(" · ")}</TooltipContent>
-      </Tooltip>
+      <h1 id="title">{m.name || "LAPDOG"}</h1>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="ghost" size="icon-xs" className="title-info" aria-label="Session details" title="Session details"><Info aria-hidden="true" /></Button>
+        </PopoverTrigger>
+        <PopoverContent side="bottom" align="start" className="title-tip">{parts.join(" · ")}</PopoverContent>
+      </Popover>
       <div className="sub" id="sub">{parts.join(" · ")}</div>
     </>
   );
@@ -129,10 +133,10 @@ function RunTitle({ p, run }: { p: Player; run: RunListEntry | undefined }) {
 function SettingsMenu({ theme, onTheme }: Pick<Props, "theme" | "onTheme">) {
   const p = useContext(PlayerCtx);
   return p ? <RunSettings p={p} theme={theme} onTheme={onTheme} /> : (
-    <Menu label={<span title="Settings" aria-label="Settings">⚙</span>}>
+    <Menu label={<Settings className="size-3.5" aria-label="Settings" />}>
       <div className="mrow">
         <span className="lab">Theme</span>
-        <Button variant="outline" size="sm" type="button" onClick={onTheme}>Theme: {theme}</Button>
+        <Button variant="tool" size="ctl" type="button" onClick={onTheme}>Theme: {theme}</Button>
       </div>
     </Menu>
   );
@@ -141,7 +145,7 @@ function SettingsMenu({ theme, onTheme }: Pick<Props, "theme" | "onTheme">) {
 function RunSettings({ p, theme, onTheme }: Pick<Props, "theme" | "onTheme"> & { p: Player }) {
   useUi(p);
   return (
-    <Menu label={<span title="Settings" aria-label="Settings">⚙</span>}>
+    <Menu label={<Settings className="size-3.5" aria-label="Settings" />}>
       {(
         <div className="mrow">
           <span className="lab">Units</span>
@@ -153,7 +157,7 @@ function RunSettings({ p, theme, onTheme }: Pick<Props, "theme" | "onTheme"> & {
       )}
       <div className="mrow">
         <span className="lab">Theme</span>
-        <Button variant="outline" size="sm" type="button" title="Switch between automatic, light and dark" onClick={onTheme}>Theme: {theme}</Button>
+        <Button variant="tool" size="ctl" type="button" title="Switch between automatic, light and dark" onClick={onTheme}>Theme: {theme}</Button>
       </div>
     </Menu>
   );
@@ -172,8 +176,8 @@ export function ImportMenu({ onDb, onJson, onCache }: { onDb: (day: number) => v
   };
   return (
     <div className="run-selector import-menu"><Menu wide ariaLabel="Import session" label="Import" onToggle={(open) => { if (open) load(); }}>
-      <Button variant="outline" size="sm" type="button" onClick={onJson}>JSON files…</Button>
-      <Button variant="outline" size="sm" type="button" onClick={onCache}>Last Trackside session</Button>
+      <Button variant="tool" size="ctl" type="button" onClick={onJson}>JSON files…</Button>
+      <Button variant="tool" size="ctl" type="button" onClick={onCache}>Last Trackside session</Button>
       <strong className="import-source-heading">From database</strong>
       {days === null ? <p className="run-selector-note">Loading drive days…</p>
         : typeof days === "string" ? <p className="run-selector-note">Database unavailable: {days}</p>

@@ -70,7 +70,9 @@ Controls are the site's shadcn/ui components (`src/components/ui/`).
 `DdvRoot` portals their popovers, selects and tooltips back inside `.ddv`, so
 they read LAPDOG's tokens rather than the site's. `driveday.css` maps those
 tokens onto shadcn's variable names, and `lapdog-skin.css`, loaded after it,
-sets control sizes and spacing. `controls.tsx` holds the LAPDOG wrappers
+holds page layout and spacing. How a control looks lives in the components
+themselves: `button.tsx` has the `tool` and `tab` variants and the `ctl`, `xs`
+and `icon-*` sizes, so restyle there rather than matching class names in CSS. `controls.tsx` holds the LAPDOG wrappers
 (`Pick`, `Seg`, `Chk`).
 
 ## Loading from the database

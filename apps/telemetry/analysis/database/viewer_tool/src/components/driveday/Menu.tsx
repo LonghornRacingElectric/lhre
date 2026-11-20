@@ -16,7 +16,7 @@ export function Menu({ label, children, wide = false, right = false, chip = fals
   return (
     <Popover open={open} onOpenChange={change}>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className={cn("menu-trigger", chip && "rounded-full")} aria-label={ariaLabel}>
+        <Button variant="tool" size="ctl" className="menu-trigger" aria-label={ariaLabel}>
           {label}
           <ChevronDown className="size-3.5 opacity-60" aria-hidden="true" />
         </Button>

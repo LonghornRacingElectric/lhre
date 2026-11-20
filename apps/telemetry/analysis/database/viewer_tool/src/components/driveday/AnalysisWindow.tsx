@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { lsGet, lsSet } from "@/lib/driveday/storage";
 import { Button } from "@/components/ui/button";
 import { floatTop } from "./floatTop";
+import { X } from "lucide-react";
 
 let nextWindowZ = 900;
 interface Position { floating: boolean; x: number; y: number; width: number; height: number }
@@ -61,8 +62,8 @@ export function AnalysisWindow({ id, title, children, onClose, onMove, layoutKey
         y: Math.max(floatTop(), Math.min(window.innerHeight - position.height - 8, drag.current.top + e.clientY - drag.current.y)) }); }}
       onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }}>
       <h3>{title}</h3><div className="analysis-window-actions">
-        <Button variant="outline" size="sm" type="button" aria-label={(position.floating ? "Dock " : "Float ") + title} onClick={() => save({ ...position, floating: !position.floating })}>{position.floating ? "Dock" : "Float"}</Button>
-        <Button variant="ghost" size="icon" className="size-6" type="button" aria-label={"Close " + title} onClick={onClose}>×</Button>
+        <Button variant="tool" size="ctl" type="button" aria-label={(position.floating ? "Dock " : "Float ") + title} onClick={() => save({ ...position, floating: !position.floating })}>{position.floating ? "Dock" : "Float"}</Button>
+        <Button variant="ghost" size="icon-xs" type="button" aria-label={"Close " + title} onClick={onClose}><X aria-hidden="true" /></Button>
       </div>
     </header><div className="pnb" role="region" aria-label={title + " content"} tabIndex={0}>{children}</div>
     {!position.floating && <div className="analysis-dock-resize" role="separator" tabIndex={0} aria-label={"Resize " + title + " panel"}

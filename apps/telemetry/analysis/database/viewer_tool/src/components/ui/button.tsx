@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Slot } from "@radix-ui/react-slot"
+import { Slot } from "radix-ui"
 import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
@@ -19,12 +19,23 @@ const buttonVariants = cva(
         ghost:
           "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
         link: "text-primary underline-offset-4 hover:underline",
+        /* flat bordered control for dense tool bars; the border colour comes from --control-border when a page defines it */
+        tool:
+          "border border-[var(--control-border,var(--border))] bg-transparent text-foreground hover:bg-accent hover:border-muted-foreground",
+        /* underlined tab; aria-pressed marks the open one */
+        tab:
+          "rounded-none border-b-2 border-transparent bg-transparent text-muted-foreground hover:text-foreground aria-pressed:border-foreground aria-pressed:text-foreground",
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",
         sm: "h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5",
         lg: "h-10 rounded-md px-6 has-[>svg]:px-4",
         icon: "size-9",
+        /* dense bars: 28px controls, 24px minimum target for the small ones */
+        ctl: "h-7 gap-1.5 rounded-sm px-2.5 text-xs has-[>svg]:px-2",
+        xs: "h-6 gap-1 rounded-sm px-2 text-xs",
+        "icon-ctl": "size-7 rounded-sm",
+        "icon-xs": "size-6 rounded-sm",
       },
     },
     defaultVariants: {
@@ -44,7 +55,7 @@ function Button({
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean
   }) {
-  const Comp = asChild ? Slot : "button"
+  const Comp = asChild ? Slot.Root : "button"
 
   return (
     <Comp

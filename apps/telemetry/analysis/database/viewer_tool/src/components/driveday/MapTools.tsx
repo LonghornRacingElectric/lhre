@@ -50,14 +50,14 @@ export function MapTools({ dockHidden, onToggleDock }: { dockHidden?: boolean; o
       </Menu>
       <Menu label="Sectors">
         <span className="text-xs">{p.sectorMethod === "manual" ? "Custom boundaries" : "Automatic · balanced time, near corner/straight transitions"}</span>
-        <Button variant="outline" size="sm" onClick={() => p.setSectorAtPlayhead(0)}>End S1 here</Button>
-        <Button variant="outline" size="sm" onClick={() => p.setSectorAtPlayhead(1)}>End S2 here</Button>
-        <Button variant="outline" size="sm" onClick={() => p.autoSectors()}>Auto-place sectors</Button>
+        <Button variant="tool" size="ctl" onClick={() => p.setSectorAtPlayhead(0)}>End S1 here</Button>
+        <Button variant="tool" size="ctl" onClick={() => p.setSectorAtPlayhead(1)}>End S2 here</Button>
+        <Button variant="tool" size="ctl" onClick={() => p.autoSectors()}>Auto-place sectors</Button>
         <span className="note2">Pause a completed lap at a useful landmark, then set its boundary. Saved for this track in this browser.</span>
       </Menu>
       <span className="sp" />
       {onToggleDock && (
-        <Button variant="outline" size="sm" title="Hide or show the panels (D)" onClick={onToggleDock}>{dockHidden ? "Show panels" : "Hide panels"}</Button>
+        <Button variant="tool" size="ctl" title="Hide or show the panels (D)" onClick={onToggleDock}>{dockHidden ? "Show panels" : "Hide panels"}</Button>
       )}
     </div>
   );

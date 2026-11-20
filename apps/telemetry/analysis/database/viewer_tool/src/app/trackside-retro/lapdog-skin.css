@@ -4,38 +4,18 @@
    Spacing comes from one scale: 4, 8, 12, 16. Controls are 28px tall. */
 
 .ddv{
-  --radius:2px;
   --ctl:28px;
+  --control-border:color-mix(in srgb,var(--mute) 60%,var(--line));
   --s-1:4px; --s-2:8px; --s-3:12px; --s-4:16px; --gut:6px;
 }
 .ddv :focus-visible{outline:2px solid var(--s1);outline-offset:1px}
 
 /* ---------- buttons ---------- */
-.ddv [data-slot="button"]{
-  height:var(--ctl);min-height:var(--ctl);padding:0 10px;gap:6px;border-radius:2px;box-shadow:none;
-  font:500 12px/1 var(--f-body);white-space:nowrap;
-}
+/* Sizes, variants and selected states live in components/ui/button.tsx (variants tool and tab, sizes ctl, xs and icon-*). Only what is page-wide stays here. */
+.ddv [data-slot="button"]{box-shadow:none;font-family:var(--f-body)}
 .ddv [data-slot="button"]:focus-visible{box-shadow:none;border-color:var(--ink)}
 .ddv [data-slot="button"] svg{width:14px;height:14px}
-/* icon buttons are the ones that ask for a square size; every shadcn button carries "size-" inside a selector, so match whole class names */
-.ddv [data-slot="button"]:is([class~="size-7"],[class~="size-8"],[class~="size-9"]){width:var(--ctl);padding:0}
-.ddv [data-slot="button"][class~="size-6"]{width:22px;height:22px;min-height:22px;padding:0}
-.ddv [data-slot="button"][class*="shadow-xs"]{background:transparent;border-color:var(--line)}
-.ddv [data-slot="button"][class*="shadow-xs"]:hover{background:var(--sel);border-color:var(--mute)}
-.ddv [data-slot="button"][class*="bg-primary"]{background:var(--ink);color:var(--bg);border:1px solid var(--ink)}
-.ddv [data-slot="button"][class*="bg-primary"]:hover{background:var(--ink);opacity:.88}
-.ddv [data-slot="button"][class*="bg-secondary"]{background:var(--sel);color:var(--ink);border:1px solid var(--ink)}
-.ddv [data-slot="button"][class*="hover:bg-accent"]:not([class*="shadow-xs"]){background:transparent}
 .ddv [data-slot="button"]:disabled{opacity:.4}
-
-/* panel tabs and window toggles: flat text with an underline, no pills */
-.ddv [data-slot="button"][class*="rounded-full"]{
-  border:0;border-radius:0;background:transparent;color:var(--mute);height:var(--ctl);padding:0 8px;
-  box-shadow:inset 0 -2px 0 transparent;
-}
-.ddv [data-slot="button"][class*="rounded-full"]:hover{background:transparent;color:var(--ink)}
-.ddv [data-slot="button"][class*="rounded-full"][aria-pressed="true"]{background:transparent;color:var(--ink);box-shadow:inset 0 -2px 0 var(--ink)}
-.ddv [data-slot="button"][class*="rounded-full"]:focus-visible{outline-offset:-2px}
 
 /* ---------- dropdowns, popovers, tooltips ---------- */
 .ddv [data-slot="select-trigger"]{
@@ -83,8 +63,6 @@
 .ddv .pane-header strong span{margin-right:var(--s-1);letter-spacing:0}
 .ddv .pane-bar{flex:1;min-width:0;display:flex;align-items:center;flex-wrap:wrap;gap:var(--s-1) var(--s-2)}
 .ddv .pane-actions{gap:var(--s-1);margin-left:auto}
-.ddv .pane-actions [data-slot="button"]{height:22px;min-height:22px;padding:0 6px}
-.ddv .pane-actions [data-slot="button"][class~="size-6"]{width:22px;padding:0}
 .ddv .pane-body{padding:var(--gut)}
 .ddv .pane-divider{flex-basis:var(--gut)}
 .ddv .pane-divider::after{border-radius:0;width:2px;left:2px}
@@ -103,8 +81,6 @@
 .ddv .zoomctl{top:auto;right:auto;left:var(--s-2);bottom:var(--s-2);transform:none;flex-direction:row;gap:var(--s-1)}
 .ddv .zoomctl [data-slot="button"]{background:color-mix(in srgb,var(--panel) 90%,transparent)}
 .ddv .segstrip{padding:6px var(--s-2);gap:var(--s-1)}
-.ddv .segstrip [data-slot="button"]{height:24px;min-height:24px;padding:0 var(--s-2);border:1px solid var(--line);font:500 12px/1 var(--f-body);box-shadow:none}
-.ddv .segstrip [data-slot="button"][class*="bg-primary"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 
 /* ---------- transport and timeline ---------- */
 .ddv .transport{padding:6px var(--s-2) var(--s-2);gap:6px;border-radius:3px}
@@ -117,7 +93,6 @@
 /* ---------- dock and tables ---------- */
 .ddv .dock{gap:6px}
 .ddv .chips{gap:0 2px;border-bottom:1px solid var(--line);padding:0}
-.ddv .chips [data-slot="button"][class*="rounded-full"]{padding:0 6px;letter-spacing:.06em}
 .ddv .chips .menu-trigger{margin-left:auto}
 .ddv .panels{gap:6px}
 .ddv .pnh{height:32px;padding:0 var(--s-2) 0 var(--s-3)}
@@ -166,6 +141,9 @@
 
 /* title block: the detail line lives in the title's tooltip; best times sit at the top of the bar */
 .ddv .top .header-title .sub{display:none}
+.ddv .header-title{display:flex;align-items:center;gap:var(--s-1)}
+.ddv .header-title h1{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ddv .title-info{flex:none;color:var(--mute)}
 .ddv .top .header-title h1{line-height:1.25;margin:0;cursor:default}
 .ddv .top .kpis{align-self:flex-start;padding:2px 8px 0;gap:var(--s-4)}
 
@@ -179,15 +157,13 @@
 
 /* same look as the best-time popups */
 .ddv .title-tip{max-width:min(420px,90vw);white-space:normal;background:var(--panel);color:var(--mute);border:1px solid var(--ink);border-radius:6px;padding:10px 12px;font:400 12px/1.45 var(--f-body);box-shadow:0 8px 24px rgba(0,0,0,.25);animation:none}
-.ddv .title-tip>svg{display:none}
 
 /* compact controls bar */
 .ddv .top .runbar{padding:2px 4px;gap:4px;border-radius:4px}
-.ddv .top .runbar [data-slot="button"],.ddv .top .runbar .menu-trigger{height:24px;min-height:24px;padding:0 8px;font-size:12px}
 .ddv .top .runbar .layout-toolbar{gap:4px}
 .ddv .top .kpis{gap:var(--s-3);padding:0 4px}
 .ddv .top .kpi b{font-size:16px}
-.ddv .top .kpi span{font-size:9px;letter-spacing:.06em}
+.ddv .top .kpi span{font-size:11px;letter-spacing:.04em}
 /* narrow screens only: the title and best times share a row and the controls take the full row under them */
 @media(max-width:900px){
   .ddv .top{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"title kpis" "bar bar";column-gap:var(--s-3);row-gap:2px;align-items:center;padding:2px 0}
@@ -206,11 +182,10 @@
 .ddv .top{padding:8px 0 !important;min-height:0}
 .ddv .top .header-title h1{font-size:15px;line-height:1.2}
 .ddv .top .runbar{padding:0 !important;border:0 !important;background:transparent !important;gap:3px}
-.ddv .top .runbar [data-slot="button"],.ddv .top .runbar .menu-trigger{height:26px;min-height:26px;padding:0 9px;font-size:12px}
 .ddv .top .kpis{padding:0 2px;gap:var(--s-3)}
 .ddv .top .kpi{padding:0 0 0 var(--s-3)}
 .ddv .top .kpi b{font-size:14px}
-.ddv .top .kpi span{margin-top:1px;padding-bottom:1px;font-size:8.5px}
+.ddv .top .kpi span{margin-top:1px;padding-bottom:1px;font-size:11px}
 @media(max-width:900px){.ddv .top{row-gap:0}}
 
 /* everything in the top bar on one line: title | controls | best times (value and label side by side) */
@@ -227,3 +202,6 @@
 
 /* a lone docked analysis panel fills the pane instead of sitting at the 230px minimum with its content clipped */
 .ddv .panels:not(.multi-panels)>.analysis-window.is-docked{flex:1 1 0;min-height:0;height:auto}
+
+/* type floor: nothing under 11px */
+.ddv th,.ddv .tag,.ddv .latg span,.ddv .transport .legend span,.ddv kbd{font-size:11px}
