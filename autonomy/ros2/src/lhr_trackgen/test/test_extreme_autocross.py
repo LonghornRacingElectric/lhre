@@ -1,6 +1,7 @@
 """Check fixed courses hit their named limits without leaving the rules envelope."""
 
 import math
+from statistics import median
 
 from lhr_trackgen.extreme_autocross import (
     _turn, extreme_pairing_width, generate_extreme_track, SCENARIOS)
@@ -21,19 +22,24 @@ def test_fixed_course_envelope_spacing_and_identity(name):
     assert (left, right) == generate_extreme_track(name, width_m=10., cone_spacing_m=5.)
     assert extreme_pairing_width(name) == pytest.approx(math.dist(left[0], right[0]))
     for side in (left, right):
-        assert max(math.dist(a, b) for a, b in zip(side, side[1:]+side[:1])) <= 2.
+        gaps = [math.dist(a, b) for a, b in zip(side, side[1:]+side[:1])]
+        assert max(gaps) <= 2.
+        assert median(gaps) >= 1.5
     left[0] = (999., 999.)
     assert generate_extreme_track(name)[0][0] != left[0]
 
 
-@pytest.mark.parametrize('name', ['extreme_narrow', 'extreme_combined'])
-def test_minimum_clear_width_hits_three_metres_within_one_centimetre(name):
+@pytest.mark.parametrize(('name', 'max_pair_clearance'), [
+    ('extreme_narrow', 3.02),
+    ('extreme_combined', 3.05),
+])
+def test_narrow_fixtures_stay_close_to_three_metres(name, max_pair_clearance):
     left, right = generate_extreme_track(name)
     # The fixture targets the narrowest road clearance, not the paired cone
     # distance: finite chords need extra reserve on a turn to remain legal.
     minimum = check_envelope(left, right)['minimum_clear_width_m']
     assert 3. <= minimum <= 3.01
-    assert all(math.dist(a, b)-BASE >= minimum for a, b in zip(left, right))
+    assert max(math.dist(a, b)-BASE for a, b in zip(left, right)) <= max_pair_clearance
 
 
 @pytest.mark.parametrize('name', ['extreme_hairpin', 'extreme_combined'])

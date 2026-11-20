@@ -28,8 +28,7 @@ rules-envelope check, including segment crossings and return-lane separation.
 Clear width uses the square cone bases' circumscribed diameter, matching the
 conservative checker from #211. Physical cones are sampled along boundary
 arc length independently of the dense construction geometry. Boundary gaps
-stay below 2 m and above 0.5 m, including tight inside turns. A curvature-based
-chord reserve keeps the narrowest clearance within 1 cm of 3 m; cone-pair
+stay below 2 m and above 0.5 m, including tight inside turns. A chord reserve based on a fixed half-angle per course keeps the narrowest clearance within 1 cm of 3 m; cone-pair
 distance includes that reserve. Turning diameter refers to the centerline. A legal
 layout does not establish vehicle drivability or full event compliance:
 staging, timing gates and exit lanes are not supplied by these fixtures.
@@ -82,5 +81,5 @@ these scenarios. Each row selects the current Mid-360 and camera-fusion stack.
 reference. `RUN_S` counts simulation seconds. Geometry acceptance is
 not a claim that any course has passed the driving gate.
 
-Validation and earlier smoke-run limits live in the
-[review record](../../../../testing/2026-11-16-extreme-review/README.md).
+Recorded driving results live in the
+[HIL campaign](../../../../testing/2026-11-19-extreme-hil/README.md).
