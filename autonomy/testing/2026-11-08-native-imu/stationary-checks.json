@@ -1,0 +1,10 @@
+{
+  "sample_rate": true,
+  "positive_bias": true,
+  "negative_bias": true,
+  "clean_gyro": true,
+  "native_gyro_noise": true,
+  "native_accel_noise": true,
+  "startup_bias_present": true,
+  "startup_accel_bias_present": true
+}

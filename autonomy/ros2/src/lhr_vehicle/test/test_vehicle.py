@@ -167,3 +167,26 @@ def test_missing_stereo_configuration_is_an_explicit_error(tmp_path):
     source.write_text(yaml.safe_dump(raw))
     with pytest.raises(ValueError, match='stereo_camera'):
         load_vehicle(source)
+
+
+def test_imu_si_conversion_and_bandwidth():
+    imu = load_vehicle().imu
+    assert imu.gyro_stddev_rad_s == pytest.approx(math.radians(0.0045) * math.sqrt(50))
+    assert imu.accel_stddev_m_s2 == pytest.approx(100e-6 * 9.80665 * math.sqrt(50))
+    assert imu.gyro_bias_stddev_rad_s == pytest.approx(math.radians(1) / 3)
+    assert imu.accel_bias_stddev_m_s2 == pytest.approx(0.040 * 9.80665 / 3)
+
+
+@pytest.mark.parametrize('field,value', [
+    ('update_rate_hz', 0), ('noise_bandwidth_hz', 51),
+    ('noise_bandwidth_hz', -1), ('gyro_bias_stddev_rad_s', float('nan')),
+    ('accel_bias_stddev_m_s2', float('inf')), ('gyro_noise_density_rad_s_sqrt_hz', True),
+    ('accel_noise_density_m_s2_sqrt_hz', 'bad'),
+])
+def test_imu_rejects_invalid_configuration(tmp_path, field, value):
+    raw = yaml.safe_load(config_path().read_text())
+    raw['sensors']['imu'][field] = value
+    source = tmp_path / 'vehicle.yaml'
+    source.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ValueError, match=field):
+        load_vehicle(source)

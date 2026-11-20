@@ -23,6 +23,42 @@ Vec3 = Tuple[float, float, float]
 
 
 @dataclass(frozen=True)
+class Imu:
+    """Independent per-axis native Gazebo errors; SI units, one-sided densities."""
+
+    update_rate_hz: float
+    noise_bandwidth_hz: float
+    gyro_noise_density_rad_s_sqrt_hz: float
+    accel_noise_density_m_s2_sqrt_hz: float
+    gyro_bias_stddev_rad_s: float
+    accel_bias_stddev_m_s2: float
+
+    @property
+    def gyro_stddev_rad_s(self) -> float:
+        return self.gyro_noise_density_rad_s_sqrt_hz * math.sqrt(self.noise_bandwidth_hz)
+
+    @property
+    def accel_stddev_m_s2(self) -> float:
+        return self.accel_noise_density_m_s2_sqrt_hz * math.sqrt(self.noise_bandwidth_hz)
+
+
+def _load_imu(raw) -> Imu:
+    if not isinstance(raw, dict):
+        raise ValueError('imu: require a configuration mapping')
+    values = {}
+    for field in Imu.__dataclass_fields__:
+        value = raw.get(field)
+        if (type(value) not in (int, float) or not math.isfinite(value) or value < 0):
+            raise ValueError(f'imu.{field}: require a finite non-negative number')
+        values[field] = float(value)
+    if values['update_rate_hz'] <= 0:
+        raise ValueError('imu.update_rate_hz: require a positive rate')
+    if values['noise_bandwidth_hz'] > values['update_rate_hz'] / 2:
+        raise ValueError('imu.noise_bandwidth_hz: cannot exceed Nyquist frequency')
+    return Imu(**values)
+
+
+@dataclass(frozen=True)
 class StereoCamera:
     """One ideal rectified ZED 2i rig; mount pose is in base_link."""
 
@@ -79,6 +115,7 @@ class Vehicle:
     lidar_rpy_rad: Vec3
     lidar_range_noise_std_m: float
     stereo_camera: StereoCamera
+    imu: Imu
 
     @property
     def chassis_center_x_m(self) -> float:
@@ -234,4 +271,5 @@ def load_vehicle(path: Optional[Path] = None) -> Vehicle:
         lidar_rpy_rad=_vec3(lidar_rpy),
         lidar_range_noise_std_m=float(range_noise_std),
         stereo_camera=_load_stereo_camera(sensors.get('stereo_camera')),
+        imu=_load_imu(sensors.get('imu')),
     )

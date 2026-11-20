@@ -103,6 +103,20 @@ def render(veh, *, enable_stereo_camera=False) -> str:
         'max_steer_rate': veh.max_steer_rate_rad_s,
     }
     substitutions = {k: _fmt(v) for k, v in values.items()}
+    imu = veh.imu
+    substitutions['imu_update_rate_hz'] = format(imu.update_rate_hz, '.12g')
+    channels = []
+    for channel, stddev, bias in (
+        ('angular_velocity', imu.gyro_stddev_rad_s, imu.gyro_bias_stddev_rad_s),
+        ('linear_acceleration', imu.accel_stddev_m_s2, imu.accel_bias_stddev_m_s2),
+    ):
+        axes = '\n'.join(
+            f'            <{axis}><noise type="gaussian">'
+            f'<mean>0</mean><stddev>{stddev:.12g}</stddev>'
+            f'<bias_mean>0</bias_mean><bias_stddev>{bias:.12g}</bias_stddev>'
+            f'</noise></{axis}>' for axis in 'xyz')
+        channels.append(f'          <{channel}>\n{axes}\n          </{channel}>')
+    substitutions['imu_noise'] = '\n'.join(channels)
     substitutions['lidar_range_noise_std_m'] = format(veh.lidar_range_noise_std_m, '.12g')
     # Full precision: the detector places the cloud with these same angles.
     substitutions.update({f'lidar_{name}': format(value, '.12g') for name, value in

@@ -33,7 +33,7 @@ runs can be compared without guessing which geometry or gate was used.
 | Provenance | `vehicle_sha256`, `git_sha`, `scenario`, `plant` |
 | Scenario | `seed`, `track_style`, `num_waypoints`, `mission`, `perception`, `start_on_track`, `start_finish_cones` |
 | Sensor | `lidar`, `mount_pitch_rad`, `elevation_profile`, `return_profile`, `stack_window_sec`, `min_cluster_points`, `ground_z_min`, `fov_deg`, `max_range_m`, `noise_std_m`, `false_negative_rate`, `motion_distortion`, `clutter_profile` |
-| Estimator | `estimator`, `gyro_bias`, `wheel_scale_error`, `lidar_classify_sides`, `mean_pos_error`, `max_pos_error`, `mean_yaw_error` |
+| Estimator | `estimator`, `imu_noise`, `gyro_bias`, `wheel_scale_error`, `lidar_classify_sides`, `mean_pos_error`, `max_pos_error`, `mean_yaw_error` |
 | Control | `lookahead_dist`, `a_lat_max`, `v_min`, `v_max`, `max_accel`, `max_decel` |
 | Reference | `reference_sha256`, `reference_source`, `reference_length_m`, `reference_world`, `reference_closed` |
 | Scoring | `course_sha256`, `footprint_model`, `sweep_step_m`, `off_track_threshold`, `start_radius`, `min_lap_time`, `min_progress_fraction`, `lap_start_speed`, `max_odom_gap_sec` |
@@ -330,7 +330,7 @@ adds truth-based circuit progress, halt observations and map consistency.
 `truth_odom_topic` selects truth for all course scoring and enables the
 position and yaw error columns for the separate estimate.
 They remain blank without a truth stream. The CSV includes `estimator`,
-`gyro_bias`, `wheel_scale_error`, and `lidar_classify_sides` alongside the
+`imu_noise`, `gyro_bias`, `wheel_scale_error`, and `lidar_classify_sides` alongside the
 existing run parameters. Distance-weighted CTE and run outcome checks remain
 active. Error accumulation starts only after driving/scoring onset and excludes
 stationary READY observations. Each estimate is compared with truth
@@ -341,3 +341,13 @@ scored scheduling, since a 0.1 s stall at 5 m/s reads as 0.5 m of error
 ([#165](https://github.com/LonghornRacingElectric/lhre/issues/165)).
 
 Node cleanup tolerates an already-stopped ROS context after launch shutdown.
+
+For Gazebo, `imu_noise` identifies native six-axis noise/startup bias and
+`gyro_bias` is an additional signed offset applied to the physics z gyro.
+`imu_seed` records Gazebo's random seed (default `1`), independently of the
+track `seed`. It applies to all native Gazebo randomness. The shared metrics
+default matches Gazebo launch; other plants leave this provenance field at
+`1` and do not use it. `imu_noise` defaults to `false` in both node and launch.
+The noise-free control disables nominal noise and startup bias; it does not
+cancel an explicitly requested bias fault. Other plants retain their own
+sensor models. The vehicle SHA identifies the density/bandwidth/bias settings.

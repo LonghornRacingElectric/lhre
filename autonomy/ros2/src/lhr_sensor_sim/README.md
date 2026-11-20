@@ -87,6 +87,11 @@ pair.
 | `seed` | 0 | Seeds this node's random stream |
 | `publish_imu` | true | Publish the synthetic IMU |
 
-Gazebo sets `publish_imu` false because it bridges a physics IMU on the
-same topic, so under Gazebo `gyro_bias` and the IMU noise do nothing;
-only the wheel-speed terms apply.
+Gazebo sets this node's `publish_imu` false because it bridges the physics
+IMU on the same topic; this node's gyro/acceleration settings therefore do
+not affect Gazebo. The Gazebo launch applies `gyro_bias` to the native
+z gyro and enables its configured six-axis noise/startup bias with
+`imu_noise:=true` (default `false`). The launch's `imu_seed` selects Gazebo's
+random stream independently of the track `seed`; it is separate from this
+node's `seed`. Wheel-speed terms still apply here. See
+[native IMU controls](../lhr_gazebo/README.md#native-imu-noise-and-bias).

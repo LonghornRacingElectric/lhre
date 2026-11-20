@@ -53,6 +53,18 @@
         <update_rate>100</update_rate>
         <visualize>false</visualize>
         <topic>/imu/data</topic>
+        <imu>
+          <angular_velocity>
+            <x><noise type="gaussian"><mean>0</mean><stddev>0.00055536036727</stddev><bias_mean>0</bias_mean><bias_stddev>0.00581776417331</bias_stddev></noise></x>
+            <y><noise type="gaussian"><mean>0</mean><stddev>0.00055536036727</stddev><bias_mean>0</bias_mean><bias_stddev>0.00581776417331</bias_stddev></noise></y>
+            <z><noise type="gaussian"><mean>0</mean><stddev>0.00055536036727</stddev><bias_mean>0</bias_mean><bias_stddev>0.00581776417331</bias_stddev></noise></z>
+          </angular_velocity>
+          <linear_acceleration>
+            <x><noise type="gaussian"><mean>0</mean><stddev>0.00693434871572</stddev><bias_mean>0</bias_mean><bias_stddev>0.130755333333</bias_stddev></noise></x>
+            <y><noise type="gaussian"><mean>0</mean><stddev>0.00693434871572</stddev><bias_mean>0</bias_mean><bias_stddev>0.130755333333</bias_stddev></noise></y>
+            <z><noise type="gaussian"><mean>0</mean><stddev>0.00693434871572</stddev><bias_mean>0</bias_mean><bias_stddev>0.130755333333</bias_stddev></noise></z>
+          </linear_acceleration>
+        </imu>
       </sensor>
 
       <!-- Retain main's VLP-16-style grid. The 500 x 40 Mid-360 approximation

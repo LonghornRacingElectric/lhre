@@ -34,7 +34,8 @@ def test_lidar_side_mode_configures_detector_and_builder(
     monkeypatch.setattr(module, 'Node', _Node)
     monkeypatch.setattr(module, '_find_world', lambda _: '/tmp/world.sdf')
     monkeypatch.setattr(
-        module, 'get_package_share_directory', lambda _: '/tmp')
+        module, 'get_package_share_directory',
+        lambda _: str(Path(__file__).parents[1]))
 
     context = SimpleNamespace(launch_configurations={
         'perception': 'lidar',

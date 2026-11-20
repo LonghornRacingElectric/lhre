@@ -1,0 +1,125 @@
+{
+  "date": "2026-11-15",
+  "branch": "koa/gazebo-imu-fidelity",
+  "base_commit": "1a99e0372958cd70ee7cf1ff2ff714a666cb3c46",
+  "scope": "Issue #171 native IMU fidelity only; 100 Hz and existing estimator retained.",
+  "source_sha256": {
+    "autonomy/ros2/src/lhr_gazebo/README.md": "d4ad6849695f9773ac30c6ec880121f324baa4b1471e50f7da64847f75adba86",
+    "autonomy/ros2/src/lhr_gazebo/launch/gazebo_demo.launch.py": "b851a2f2aaae0898a7a8614fb40de47f328f3b873dfd04031d142ed805292a0e",
+    "autonomy/ros2/src/lhr_gazebo/lhr_gazebo/imu_model.py": "f4f48a8fc7cae55f4d386b217dee7b4274886f4d4d856bc5675d7c04a1d6feb2",
+    "autonomy/ros2/src/lhr_gazebo/models/fsae_vehicle/model.sdf": "c9348f282e23bcb52fccad8673a36cdebd04ad82d6ace47ba54a52f162e2ca7b",
+    "autonomy/ros2/src/lhr_gazebo/models/fsae_vehicle/model_stereo.sdf": "9518f533a6b253c8cb822d9a0344eb8b7e65eedbfad9b9f80c27654c52418d3a",
+    "autonomy/ros2/src/lhr_gazebo/scripts/compare_imu.py": "17e4db0ec29e285179277eacbdb30002aeebabc0fb3d24dace9fe9206ad37286",
+    "autonomy/ros2/src/lhr_gazebo/scripts/generate_vehicle_model.py": "6ef5cc8535d79c9be9392d6e59560b64df01b760ed4c0a45ed33ca73a09f4692",
+    "autonomy/ros2/src/lhr_gazebo/scripts/validate_imu.py": "4677f6910902afabc70d0a382c1267c84c6b74503bba2b322c59f52d66a4b890",
+    "autonomy/ros2/src/lhr_gazebo/scripts/verify_imu_bags.py": "77d677718bae28d2282eb41e6f1e28a394285c0cac1d06dacc920255c9b6c105",
+    "autonomy/ros2/src/lhr_gazebo/templates/model.sdf.in": "4187b94f7292b141d6d454dad8ef684730d6d2a2a150de44aa9452eb489de160",
+    "autonomy/ros2/src/lhr_gazebo/test/test_imu_comparison.py": "ad51c744a2d7caa6768b219a5b16515eab824279d0061acf9df655e4947f7ed1",
+    "autonomy/ros2/src/lhr_gazebo/test/test_imu_model.py": "2b3e56e609e8ec2a609aeba4b75ed5bef40f87ab6e51a114c48ae71841b54901",
+    "autonomy/ros2/src/lhr_gazebo/test/test_launch_param_types.py": "3d735bb787a455090f8cef24bdad2acb6d25c8db73965fd9f3ec2e4184d2a4aa",
+    "autonomy/ros2/src/lhr_metrics/README.md": "a5e31cbd51b767b4258136d97d27953ad9bcf6f84f3132bb706615289a2065b0",
+    "autonomy/ros2/src/lhr_metrics/lhr_metrics/metrics_node.py": "5fd7c460f406ec4ad48fb67e63a4baeb907ff29848805941e20799ab655b7c15",
+    "autonomy/ros2/src/lhr_vehicle/README.md": "2a2f8e75ecf78be1c2dad06a39c12e03c042fc5beb4cb0afc31eb1acd1c66db3",
+    "autonomy/ros2/src/lhr_vehicle/config/vehicle.yaml": "99bca03607df03728a1935adbda3e64cd4370763df6abc3e31343d40697339e0",
+    "autonomy/ros2/src/lhr_vehicle/lhr_vehicle/__init__.py": "f9ab400c77e2fb0f6a55aa3a7bbd168578339ee3761d292e2017e97ba59a4caa",
+    "autonomy/ros2/src/lhr_vehicle/test/test_vehicle.py": "3d8c39b52907d5dd6921e0e927602fc2295a391f49c11025c774260ca66e8aec"
+  },
+  "software_checks": {
+    "lhr_control": {
+      "tests": 50,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lhr_demo": {
+      "tests": 47,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lhr_gazebo": {
+      "tests": 427,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lhr_lidar_sim": {
+      "tests": 72,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lhr_metrics": {
+      "tests": 92,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lhr_mission_manager": {
+      "tests": 18,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lhr_perception": {
+      "tests": 150,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lhr_safety": {
+      "tests": 66,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lhr_sensor_sim": {
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lhr_sim_fmu": {
+      "tests": 21,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 2
+    },
+    "lhr_sim_kinematic": {
+      "tests": 5,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lhr_state_estimation": {
+      "tests": 12,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lhr_track_builder": {
+      "tests": 79,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lhr_trackgen": {
+      "tests": 159,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lhr_vehicle": {
+      "tests": 72,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "build": "16 ROS packages passed",
+  "generated_models": "both regenerated; generator --check and gz sdf -k pass",
+  "docs": "strict MkDocs passed",
+  "historical_comparison": "8 rows regenerated exactly; 8/8 independent bag checks pass",
+  "fresh_runtime": "Not run: environment denies local UDP sockets. Historical evidence is separately labeled.",
+  "full_suite": "Not claimed: external BobSim integration tests require native dependency setup and did not complete in bounded retry. No tests skipped or weakened."
+}
