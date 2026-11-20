@@ -15,51 +15,16 @@ TEST(Faults, PrimaryFaultPriority) {
   EXPECT_EQ(
       vcu::PrimaryFault(vcu::kFaultAppsImplausible | vcu::kFaultHvcTimeout),
       VcuFaultCode::kHvcTimeout);
-  // Coolant overtemp outranks diagnostics but not torque-cut faults.
-  EXPECT_EQ(
-      vcu::PrimaryFault(vcu::kFaultCoolantOvertemp | vcu::kFaultSteeringRange),
-      VcuFaultCode::kCoolantOvertemp);
-  EXPECT_EQ(
-      vcu::PrimaryFault(vcu::kFaultCoolantOvertemp | vcu::kFaultHvcTimeout),
-      VcuFaultCode::kHvcTimeout);
 }
 
 TEST(Faults, BrakeFlagLatch) {
   vcu::BrakeFlagLatch latch;
-  latch.Update(false, true);
+  latch.Update(false);
   EXPECT_FALSE(latch.latched());
-  latch.Update(true, false);
+  latch.Update(true);
   EXPECT_TRUE(latch.latched());
-  EXPECT_TRUE(latch.dirty());
-  EXPECT_EQ(latch.persisted_value(), vcu::BrakeFlagLatch::kPersistedSet);
-  latch.MarkPersisted();
-  latch.Update(true, true);  // reset refused while the flag is active
-  EXPECT_TRUE(latch.latched());
-  latch.Update(false, false);
-  EXPECT_TRUE(latch.latched());  // no auto-clear
-  latch.Update(false, true);
-  EXPECT_FALSE(latch.latched());
-  EXPECT_EQ(latch.resets(), 1);
-
-  vcu::BrakeFlagLatch restored;
-  restored.Restore(vcu::BrakeFlagLatch::kPersistedSet);
-  EXPECT_TRUE(restored.latched());
-  restored.Restore(0x12345678u);  // corrupt/erased storage reads as clear
-  EXPECT_FALSE(restored.latched());
-}
-
-TEST(Faults, CoolantOvertempLatch) {
-  vcu::CoolantOvertempLatch latch;
-  latch.Update(false, true);
-  EXPECT_FALSE(latch.latched());
-  latch.Update(true, false);
-  EXPECT_TRUE(latch.latched());
-  latch.Update(true, true);  // reset refused while still over
-  EXPECT_TRUE(latch.latched());
-  latch.Update(false, false);
-  EXPECT_TRUE(latch.latched());  // no auto-clear
-  latch.Update(false, true);
-  EXPECT_FALSE(latch.latched());
+  latch.Update(false);
+  EXPECT_TRUE(latch.latched());  // no auto-clear, no reset
 }
 
 TEST(Faults, ErrorLedsDefaultOnAndLatch) {

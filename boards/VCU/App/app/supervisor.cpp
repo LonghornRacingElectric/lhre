@@ -43,7 +43,6 @@ void App::SupervisorTick(uint32_t now) {
     if (p_.watchdog != nullptr) {
       p_.watchdog->Refresh();
     }
-    ++watchdog_refreshes_;
   } else {
     // A critical task stalled: outputs safe now, the IWDG resets us within
     // its timeout.

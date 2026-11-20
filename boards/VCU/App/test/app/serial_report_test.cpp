@@ -41,12 +41,14 @@ TEST(SerialReport, CompactShowsStateAdcAndGpioWithoutDetailedSections) {
   s.state = lhre::can::VcuStateMachine::kIdle;
   s.analog.apps1 = {1000, 1.0f, 1.5f};
   s.inputs.rtd_pressed = true;
+  s.torque_command = -12.5f;
   vcu::PrintCompactSerialReport(console, s);
   const auto bytes = uart.TakeTx();
   const std::string text(bytes.begin(), bytes.end());
-  for (const char* label : {"state=IDLE", "APPS1=1000/1000", "APPS2=", "BSE1=",
-                            "BSE2=", "STEER=", "SD_IN=", "SD_OUT=", "VREFINT=",
-                            "VDDA=", "GPIO IN", "RTD=1", "GPIO OUT"}) {
+  for (const char* label :
+       {"state=IDLE", "APPS1=1.500", "APPS2=", "BSE1=", "BSE2=", "STEER=",
+        "SD_IN=", "SD_OUT=", "VREFINT=", "VDDA=", "GPIO IN", "RTD=1",
+        "GPIO OUT", "cmd=-12.5 Nm"}) {
     EXPECT_NE(text.find(label), std::string::npos) << label;
   }
   EXPECT_EQ(text.find("CAN HEALTH"), std::string::npos);

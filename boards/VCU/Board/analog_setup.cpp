@@ -78,13 +78,14 @@ void TriggeredScan(ADC_HandleTypeDef* hadc, uint32_t conversions) {
 }
 
 void CircularDma(DMA_HandleTypeDef* hdma, DMA_Channel_TypeDef* channel,
-                 uint32_t request, uint32_t direction) {
+                 uint32_t request, uint32_t direction,
+                 uint32_t periph_align = DMA_PDATAALIGN_HALFWORD) {
   hdma->Instance = channel;
   hdma->Init.Request = request;
   hdma->Init.Direction = direction;
   hdma->Init.PeriphInc = DMA_PINC_DISABLE;
   hdma->Init.MemInc = DMA_MINC_ENABLE;
-  hdma->Init.PeriphDataAlignment = DMA_PDATAALIGN_HALFWORD;
+  hdma->Init.PeriphDataAlignment = periph_align;
   hdma->Init.MemDataAlignment = DMA_MDATAALIGN_HALFWORD;
   hdma->Init.Mode = DMA_CIRCULAR;
   hdma->Init.Priority = DMA_PRIORITY_MEDIUM;
@@ -117,8 +118,10 @@ void ConfigureAnalog() {
   // DAC1 CH1 (Audio_DAC, PA4): buffered, triggered by TIM7, fed by DMA.
   __HAL_RCC_TIM7_CLK_ENABLE();
   ConfigureBasicTimer(&htim7, TIM7, 0, 0xFFFF);
+  // DHR12R1 must be written word-wide: halfword writes to it fault the DMA
+  // (transfer error, channel disabled) on G4. Samples stay halfwords in RAM.
   CircularDma(&hdma_dac1, DMA1_Channel3, DMA_REQUEST_DAC1_CHANNEL1,
-              DMA_MEMORY_TO_PERIPH);
+              DMA_MEMORY_TO_PERIPH, DMA_PDATAALIGN_WORD);
   __HAL_LINKDMA(&hdac1, DMA_Handle1, hdma_dac1);
   DAC_ChannelConfTypeDef dac = {};
   dac.DAC_HighFrequency = DAC_HIGH_FREQUENCY_INTERFACE_MODE_AUTOMATIC;

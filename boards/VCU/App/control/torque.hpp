@@ -9,7 +9,7 @@
 namespace vcu {
 
 struct TorqueInputs {
-  float pedal_travel = 0.0f;  // 0..1 after filter and deadzone
+  float pedal_travel = 0.0f;  // demand: 0..1 between throttle start and full
   float motor_rpm = 0.0f;
   bool motor_speed_valid = false;
   float dc_bus_voltage = 0.0f;   // inverter 0x0A7
@@ -22,7 +22,7 @@ struct TorqueInputs {
 };
 
 struct TorqueOutputs {
-  float lookup = 0.0f;         // pedal map x torque table
+  float pedal = 0.0f;          // pedal function, before any limit
   float derated = 0.0f;        // low-cell derate (telemetry unless applied)
   float power_limited = 0.0f;  // after the power cap
   float traction = 0.0f;       // after traction control
@@ -30,8 +30,8 @@ struct TorqueOutputs {
   float power_trim_w = 0.0f;
 };
 
-// Pedal map -> power limit -> acceleration limiter. App handles state/fault
-// gating.
+// Pedal function -> power limit -> acceleration limiter. App handles
+// state/fault gating.
 class TorquePath {
  public:
   TorqueOutputs Update(const TorqueInputs& in, const TorqueParams& torque,

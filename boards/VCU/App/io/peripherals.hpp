@@ -64,10 +64,6 @@ class BoardServices {
   // Drives BOOT0trig and resets into the ST ROM bootloader. Does not return
   // on target.
   virtual void EnterBootloader() = 0;
-
-  // Flash writes may block; save from telemetry, never control.
-  virtual uint32_t LoadFaultLatch() = 0;
-  virtual void SaveFaultLatch(uint32_t value) = 0;
 };
 
 // Board-provided peripherals; clock is required, optional devices may be null.

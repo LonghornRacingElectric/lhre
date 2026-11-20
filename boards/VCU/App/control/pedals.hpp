@@ -27,7 +27,7 @@ struct PedalOutputs {
   float apps2_travel_unclamped = 0.0f;
   float apps1_travel = 0.0f;  // clamped 0..1
   float apps2_travel = 0.0f;
-  float pedal_travel = 0.0f;      // filtered + deadzone: the torque input
+  float pedal_travel = 0.0f;  // filtered, throttle start..full: torque demand
   bool apps1_disconnect = false;  // below window (instantaneous)
   bool apps2_disconnect = false;
   bool apps1_out_of_range = false;  // above window (instantaneous)

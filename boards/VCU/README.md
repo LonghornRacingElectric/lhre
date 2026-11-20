@@ -44,8 +44,8 @@ The DUI is a plain CAN peripheral this year.
     pins, `Peripherals` and `BoardServices`. `digital_io.hpp` applies pin
     polarity. `analog` converts counts to volts with VREFINT correction.
   - `control/`: `pedals` (APPS/BSE plausibility, brake-over-throttle,
-    hard-brake cross-check), `steering`, `brake_bias`, `torque` (ported
-    2026 torque map, power limit, motor-acceleration limiter), `wheel_slip`,
+    hard-brake cross-check), `steering`, `brake_bias`, `torque` (pedal
+    function, power limit, motor-acceleration limiter), `wheel_slip`,
     `regen`, `launch`, `battery` (SoE, energy).
   - `safety/`: `faults` (fault bits, brake comparator soft latch, BMS/IMD
     lamp policy), `shutdown_loop`, `state_machine`.
@@ -67,15 +67,15 @@ The DUI is a plain CAN peripheral this year.
   - `main.cpp`: reset cause, clocks, safe outputs, the `MX_*_Init` calls,
     LHAL adapters, and the app.
   - `analog_setup.cpp`: what the `.ioc` doesn't express yet (see [IOC gaps](#ioc-gaps)).
-  - `fault_store.cpp`: flash persistence and bootloader entry.
+  - `bootloader.cpp`: bootloader entry.
   - `board_safe_state.cpp`: the safe output levels, also used from
     `Error_Handler` and the fault handlers.
   - `rtos_hooks.cpp`, `irq_handlers.cpp`.
 - `Core/`: CubeMX-generated from `VCU.ioc`; change through regeneration,
   not hand edits.
 - `STM32G474XX_FLASH.ld` / `startup_stm32g474xx.s`: linker script and
-  startup. The linker script stops 2 KB short of the end of flash: the last
-  page of bank 2 holds the brake fault latch.
+  startup. The linker script stops 2 KB short of the end of flash: that last
+  page of bank 2 used to hold the brake fault latch and is now unused.
 
 ## Tasks and timing
 
@@ -83,7 +83,7 @@ The DUI is a plain CAN peripheral this year.
 | ---------- | ------ | -------- | --- |
 | supervisor | 20 ms  | idle+6   | Feeds the IWDG (100 ms) only if control and telemetry both made progress; otherwise forces safe outputs and lets the IWDG reset. |
 | control    | 3 ms   | idle+5   | Inputs, plausibility, state machine, torque, outputs, Critical-bus TX (333 Hz, as on the 2026 car). |
-| telemetry  | 10 ms  | idle+3   | Data-bus diagnostics, flash writes for the fault latch. |
+| telemetry  | 10 ms  | idle+3   | Data-bus diagnostics. |
 | LED status | 33 ms | idle+2 | Applies the state/fault color selected by control. |
 | shell ×2, logger | — | idle+1 | Debug consoles on the STDC14 VCP (USART3) and USB CDC. |
 
@@ -155,31 +155,28 @@ seconds and fail on a mismatch, and on any frame on the wrong bus.
   BSPD_TRIPPED. Only a power cycle clears it, in hardware and in firmware.
 - **Brake comparator flags**: B1 disconnect, B2 disconnect, B1 overvoltage
   and B2 overvoltage each cut torque, disable the inverter and exit DRIVE
-  after the 10 ms input debounce. They share a soft latch stored in flash,
-  so a power cycle doesn't clear it; only the dash's
-  `DUI_DRIVER_INPUTS.fault_reset`, pressed while no flag is active, does.
-- **Coolant overtemp**: the VCU reads the TSM's `COOLANT_LOOP_TEMPS` from
-  the Data bus. Either the after-motor or after-inverter loop temperature at
-  or above `CoolingParams::overtemp_c` raises `COOLANT_OVERTEMP` (fault code
-  22). It latches until a `fault_reset` press with the loop back under the
-  limit, but only warns: it doesn't cut torque or leave DRIVE, because the
-  60 C limit is a placeholder from the old reference app and the inverter
-  has its own temperature faults. A silent TSM raises nothing, since the
-  car doesn't need the TSM to drive, and clears nothing, since a reset
-  needs a fresh reading under the limit. Confirm the limit, and whether it
-  should cut torque, before relying on it.
+  after the 10 ms input debounce. They share a soft latch that only a power
+  cycle clears, and only if no flag is still active at boot. There is no
+  in-session reset, and nothing is written to flash.
 - **RTD sound**: a 1 kHz sine from the DAC for 1.2 s on entering DRIVE.
   There is a local 1.5 s ceiling, and the amp is cut immediately if the
   shutdown loop opens.
 - **BMS/IMD lamps**: firmware only ever adds indication. A flag in
   `HVC_INDICATORS` latches the lamp until power cycle, and a silent HVC
   lights both lamps.
-- **Line lock**: controlled over CAN to the PDU. Disabled in the default
-  configuration along with regen. `VCU_DRIVE_STATE` carries the gated
+- **Line lock**: controlled over CAN to the PDU. There is no driver button;
+  the VCU requests it from conditions (`control/linelock`, `LineLockParams`):
+  in DRIVE, state of charge at or above `min_soc_pct`, motor speed at or above
+  `min_motor_rpm`, no hard braking, and the rear brake line under
+  `engage_max_psi` on both sides to start. Once requested it holds through
+  braking until a condition drops. Off by default (`enabled = false`), and
+  the SOC threshold is a placeholder to tune. Regen can also request it, and
+  both are off in the default configuration. `VCU_DRIVE_STATE` carries the gated
   `linelock_out` (byte 5, which the PDU acts on) and the request (byte 7).
 - **Event modes**: `VCU_MODE_COMMAND` (0x029) or `/mode` selects the
-  acceleration, skidpad, autocross or endurance parameters. The change
-  applies only outside DRIVE and is echoed in `VCU_DRIVE_STATE.event_mode`.
+  acceleration, skidpad, autocross, endurance or motor spin parameters. The
+  change applies only outside DRIVE and is echoed in
+  `VCU_DRIVE_STATE.event_mode`. Every boot starts in endurance.
 - **Bootloader**: raw `update.` over USB works with or without a newline,
   across USB packet boundaries, with no vehicle CAN or sensor prerequisite,
   as in last year's shared DFU helper. USB reception detects the token
@@ -195,9 +192,74 @@ seconds and fail on a mismatch, and on any frame on the wrong bus.
 
 ## Control commissioning
 
-The inherited pedal calibration, map and event tables remain unchanged.
-Confirm endpoints with `/cal`: the inherited upper deadzone maps 74% of
-calibrated sensor travel to full pedal demand.
+### Pedal to torque
+
+One function replaces the 2026 pedal-map and torque-vs-rpm tables:
+
+```
+torque = peak_torque_nm * demand^touchiness * fade(rpm),
+         then capped at limit_w / (dc_power_ratio * omega)
+demand = 0 below throttle_start, 1 above throttle_full, linear between
+```
+
+The three driver knobs are `AppsParams::throttle_start` (9%) and
+`throttle_full` (74%), on filtered, calibrated pedal travel, and
+`TorqueParams::touchiness` (1.5). `peak_torque_nm` is 210 Nm. Each event
+mode can set its own; skidpad is linear to 70% of peak, full at 32% travel,
+which stays within 10 Nm of the 2026 skidpad map. Travel at or below
+`throttle_start` is also what RTD, regen and launch treat as a released
+pedal; brake-over-throttle uses raw travel instead (see below).
+
+The 2026 rpm table only approximated a power limit: 103 Nm at 6000 rpm is
+about 65 kW at the motor, so full pedal never reached the 70 kW cap. Now the
+power cap below is what shapes torque at speed. Above 2400 rpm, where the
+table started falling, full pedal now gets more torque than it did: the
+full 210 Nm to about 3350 rpm, then whatever the 70 kW estimate allows.
+Part pedal changes more: the table scaled it down with speed, and the bare
+function holds it until the cap.
+
+Endurance keeps the 2026 behavior, because 2026 finished endurance with 2%
+energy left. It sets `TorqueParams::pedal_power_w` to 65 kW, so demand
+scales the torque that 65 kW allows at the current speed, up to peak. That
+is within 17 Nm of the 2026 table up to 6500 rpm, at every pedal position.
+Acceleration, autocross and skidpad leave it at 0.
+
+`fade_start_rpm`/`zero_torque_rpm` add a linear fade to zero
+torque with speed; it is off on the car, which leaves overspeed to the
+inverter, and on in motor spin mode.
+
+Pedal sensor endpoints are still the inherited placeholders. Read the real
+volts with `/analog` before trusting the knob values.
+
+### Motor spin
+
+`/mode 5` (or `VCU_MODE_COMMAND` 5) selects bench parameters for spinning
+the motor unloaded: 5 Nm peak and a 1 kW power cap (temporary, minimal power), also sent to the inverter as its torque
+limit, fading to zero between 1200 and 1500 rpm, after which the motor
+coasts. With no load, the car's 210 Nm would reach the motor's top speed in
+well under a second. Select it before RTD, and check `/state` shows
+`mode=MOTOR_SPIN`: the mode is not kept across a reset.
+
+The bench needs:
+
+- the HVC on the Critical bus reporting energized with both AIRs closed;
+- the BSPD latch clear;
+- the inverter's status, fault, current and voltage frames, and either
+  speed frame;
+- both APPS and both BSE sensors connected and in range, with the brake
+  pressed for the RTD press;
+- the RTD switch (PE11, low = pressed).
+
+Motor spin is the one mode that doesn't need the rest of the car
+(`DriveParams`): no PDU (`require_pdu`), no shutdown loop (`require_loop`,
+so RTD_WAIT and DRIVE don't wait for the loop taps), and it ignores the
+faults of sensors that aren't wired (`ignored_faults`: shutdown open and
+implausible, steering range, motor-cable sense, hard-brake mismatch). The
+dash and wheel speeds aren't needed either. Every other mode still needs
+all of it, and the APPS, BSE, inverter, HVC and BSPD faults still apply in
+motor spin. A latched brake comparator flag (`/faults`) clears on a power
+cycle with all four flags low. The 5 Nm, 1 kW and 1500 rpm are first-spin
+values, not the motor's limits.
 
 Four independent wheel speeds are subscribed on the **Data** CAN bus,
 not GPIO: `0x402` FL, `0x403` FR, `0x404` RL and `0x405` RR. This matches
@@ -340,7 +402,8 @@ lamps high right after `MX_GPIO_Init`).
    - ADC1 ranks for IN4 and VREFINT, and ADC2 rank IN11 with DMA on
      DMA1_Ch2;
    - drop the unused AWD3.
-3. DAC1 CH1 triggered by TIM7 TRGO, with DMA on DMA1_Ch3. TIM6/TIM7 as
+3. DAC1 CH1 triggered by TIM7 TRGO, with DMA on DMA1_Ch3 (memory
+   halfword, peripheral **word**: see `lhal::stm32::DmaDac`). TIM6/TIM7 as
    basic timers with TRGO on update.
 4. IWDG. Today the LHAL adapter drives it at register level.
 5. GPIO user labels, and initial level high on PE12/PE13 (BMS/IMD lamps
@@ -361,13 +424,13 @@ FDCAN on PCLK1, ADC on HCLK/2 = 48 MHz, USB on PLLQ.
 - APPS and BSE sensor ranges and pedal endpoints. Defaults assume 0.5-4.5 V
   sensors; capture the real values with `/cal`.
 - Steering mapping constants (carried from the 2026 sensor), and the
-  hard-brake trimmer set point (`BseParams::hard_brake_pin_v`).
+  hard-brake trimmer set point (`BseParams::hard_brake_pin_v`). The
+  hard-brake mismatch fault only fires when firmware and the BSPD comparator
+  disagree by more than `hard_brake_margin_v` (0.2 V at the pin, spanning the
+  trimmer's range), so a moving trimmer doesn't raise it.
 - Polarity of `motor_disconnect`. Neither motor cable has a pull resistor,
   so an unplugged cable reads undefined. `motor_power` remains diagnostic;
   `motor_disconnect` now cuts torque when high after debounce.
-- Coolant overtemp limit (`CoolingParams::overtemp_c`, a 60 C placeholder)
-  and whether the fault should cut torque. The TSM's loop sensor wiring and
-  scaling are unchecked on the car.
 - RTD sound level. EV.10.7.2 (2027 rules) requires 80 dBA minimum for
   1-3 s. The duration is set, but the level needs measuring on the car.
 - APPS transfer functions. T.4.2.3 requires the two sensors to have

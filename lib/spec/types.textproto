@@ -61,6 +61,11 @@ enum_type {
     number: 4
     description: "Endurance"
   }
+  value {
+    name: "MOTOR_SPIN"
+    number: 5
+    description: "Bench motor spin: low torque cap and a motor speed fade"
+  }
 }
 enum_type {
   name: "HvcState"
@@ -201,7 +206,7 @@ enum_type {
   value {
     name: "BRAKE_FLAG_LATCHED"
     number: 7
-    description: "Board brake comparator flag (B1/B2 disconnect/overvoltage) seen; latched until a dash reset"
+    description: "Board brake comparator flag (B1/B2 disconnect/overvoltage) seen; latched until a power cycle"
   }
   value {
     name: "BRAKE_OVER_THROTTLE"
@@ -246,7 +251,7 @@ enum_type {
   value {
     name: "DUI_TIMEOUT"
     number: 16
-    description: "DUI driver inputs timed out (diagnostic)"
+    description: "Never raised: a silent DUI is not a fault"
   }
   value {
     name: "BSE3_UNAVAILABLE"
@@ -276,7 +281,7 @@ enum_type {
   value {
     name: "COOLANT_OVERTEMP"
     number: 22
-    description: "TSM coolant loop at or above the overtemp limit; latched until a dash reset (diagnostic)"
+    description: "Never raised: the VCU has no coolant input"
   }
 }
 enum_type {
@@ -688,7 +693,7 @@ bitfield_type {
   }
   bit {
     name: "brake_flag_latched"
-    description: "Board brake comparator flag (B1/B2 disconnect/overvoltage) seen; latched until a dash reset"
+    description: "Board brake comparator flag (B1/B2 disconnect/overvoltage) seen; latched until a power cycle"
   }
   bit {
     name: "brake_over_throttle"
@@ -724,7 +729,7 @@ bitfield_type {
   }
   bit {
     name: "dui_timeout"
-    description: "DUI driver inputs timed out (diagnostic)"
+    description: "Never raised: a silent DUI is not a fault"
   }
   bit {
     name: "bse3_unavailable"
@@ -748,7 +753,7 @@ bitfield_type {
   }
   bit {
     name: "coolant_overtemp"
-    description: "TSM coolant loop at or above the overtemp limit; latched until a dash reset (diagnostic)"
+    description: "Never raised: the VCU has no coolant input"
   }
 }
 bitfield_type {

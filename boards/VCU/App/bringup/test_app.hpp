@@ -42,8 +42,6 @@ class TestApp {
   // Test hooks.
   DigitalOutputs outputs();
   bool tone_playing();
-  bool watchdog_test_active() const { return watchdog_test_.load(); }
-  uint32_t echoes_sent() const { return echoes_sent_; }
 
  private:
   static constexpr configSTACK_DEPTH_TYPE kIoStack =

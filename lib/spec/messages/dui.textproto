@@ -47,7 +47,7 @@ message {
   bus: "Critical"
   dlc: 2
   frequency_hz: 10.0
-  description: "Steering wheel inputs. The DUI makes no safety decisions; fault_reset only clears the VCU\'s brake comparator soft latch."
+  description: "Steering wheel inputs. The DUI makes no safety decisions. The VCU does not read this message."
   signal {
     name: "fault_reset"
     encoding {
@@ -56,7 +56,7 @@ message {
     logical {
       boolean: true
     }
-    description: "Driver fault reset button held"
+    description: "Driver fault reset button held. Unused: the VCU has no in-session fault reset"
   }
   signal {
     name: "rockers"

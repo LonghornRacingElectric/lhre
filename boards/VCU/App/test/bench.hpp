@@ -23,7 +23,6 @@
 #include "lhre_can_inverter.hpp"
 #include "lhre_can_pdu.hpp"
 #include "lhre_can_pi.hpp"
-#include "lhre_can_tsm.hpp"
 #include "lhre_can_usm.hpp"
 #include "lhre_can_vcu.hpp"
 
@@ -32,15 +31,8 @@ namespace vcu::bench {
 class FakeBoard final : public BoardServices {
  public:
   void EnterBootloader() override { ++bootloader_requests; }
-  uint32_t LoadFaultLatch() override { return stored; }
-  void SaveFaultLatch(uint32_t value) override {
-    stored = value;
-    ++saves;
-  }
 
   int bootloader_requests = 0;
-  uint32_t stored = 0;
-  int saves = 0;
 };
 
 // Analog setup that makes VDDA come out at exactly 3.3 V from VREFINT.
@@ -162,16 +154,12 @@ struct Bench {
   bool pdu_alive = true;
   float bse3_psi = 0.0f;
   bool dui_alive = true;
-  bool fault_reset = false;
   bool indicators_alive = true;
   bool bms_error = false;
   bool imd_error = false;
   int16_t motor_rpm = 0;
   bool wheel_alive[4] = {};
   float wheel_rad_s[4] = {};
-  bool coolant_alive = false;
-  float coolant_after_motor_c = 30.0f;
-  float coolant_after_inverter_c = 30.0f;
 
   void SendWheelFrames() {
     lhre::can::usm::AccelerationVectorUnsprungWheelSpeedFl fl;
@@ -186,13 +174,6 @@ struct Bench {
     if (wheel_alive[1]) logger.Send(fr.ToFrame());
     if (wheel_alive[2]) logger.Send(rl.ToFrame());
     if (wheel_alive[3]) logger.Send(rr.ToFrame());
-  }
-
-  void SendCoolantFrame() {
-    lhre::can::tsm::CoolantLoopTemps t;
-    t.set_loop_temp_after_motor(coolant_after_motor_c);
-    t.set_loop_temp_after_inverter(coolant_after_inverter_c);
-    if (coolant_alive) logger.Send(t.ToFrame());
   }
 
   void SendInverterCurrent() {
@@ -247,7 +228,6 @@ struct Bench {
     }
     if (dui_alive) {
       dui::DuiDriverInputs d;
-      d.fault_reset = fault_reset;
       car.Send(d.ToFrame());
     }
   }
@@ -264,7 +244,6 @@ struct Bench {
       }
       if (clock.Millis() % 100 == 0) SendInverterCurrent();
       if (clock.Millis() % 3 == 0) SendWheelFrames();
-      if (clock.Millis() % 100 == 0) SendCoolantFrame();
       app.Step();
       clock.Advance(1);
     }

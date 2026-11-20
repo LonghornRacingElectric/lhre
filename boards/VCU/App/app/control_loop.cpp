@@ -20,7 +20,7 @@ void App::ControlTick(uint32_t now) {
 
   DrainCan(now);
   const bool rtd_edge = ReadInputs(now);
-  UpdateCoolantLatch(now, UpdateBrakeLatch(now));
+  UpdateBrakeLatch(now);
 
   const bool inverter_fresh = rx_.InverterFresh(now);
   const bool inverter_faulted = rx_.InverterFaulted(now);
@@ -95,38 +95,26 @@ bool App::ReadInputs(uint32_t now) {
   return rtd_edge;
 }
 
-bool App::UpdateBrakeLatch(uint32_t now) {
+void App::UpdateBrakeLatch(uint32_t now) {
   const DigitalInputs& in = live_.inputs;
-  // Brake comparator soft latch: cleared only by the dash's reset.
-  const bool dui_fresh = rx_.dui_driver_inputs.Fresh(now);
-  const bool reset_level = dui_fresh && rx_.dui_driver_inputs.msg.fault_reset;
-  const bool reset_edge = reset_level && !prev_fault_reset_;
-  prev_fault_reset_ = reset_level;
+  // Brake comparator soft latch: cleared only by a power cycle.
   brake_latch_.Update(in.b1_disconnect || in.b1_overvoltage ||
-                          in.b2_disconnect || in.b2_overvoltage,
-                      reset_edge);
-  if (brake_latch_.dirty()) {
-    latch_save_value_.store(brake_latch_.persisted_value());
-    latch_save_pending_.store(true);
-    brake_latch_.MarkPersisted();
-  }
+                      in.b2_disconnect || in.b2_overvoltage);
 
   // BSE3 from the PDU: regen blending needs it; no blending without it.
   live_.bse3_available = rx_.bse_3.Fresh(now);
   live_.bse3_psi =
       live_.bse3_available ? rx_.bse_3.msg.brake_pressure_3() : 0.0f;
-  return reset_edge;
 }
 
-void App::UpdateCoolantLatch(uint32_t now, bool reset_edge) {
-  // A silent TSM leaves the latch as it is: it raises nothing, since the TSM
-  // is not needed to drive, and it clears nothing, since a reset needs a
-  // fresh reading under the limit.
-  const auto& coolant = wheels_.coolant_loop_temps;
-  if (!coolant.Fresh(now)) return;
-  const float hottest_c = std::max(coolant.msg.loop_temp_after_motor(),
-                                   coolant.msg.loop_temp_after_inverter());
-  coolant_latch_.Update(hottest_c >= params_->cooling.overtemp_c, reset_edge);
+StateInputs App::HvcInputs(uint32_t now) const {
+  StateInputs in;
+  in.hvc_fresh = rx_.contactor_status.Fresh(now);
+  in.hvc_state = static_cast<lhre::can::HvcState>(
+      rx_.contactor_status.msg.hvc_state_machine);
+  in.contactors_closed = rx_.contactor_status.msg.positive_hv_contactor &&
+                         rx_.contactor_status.msg.negative_hv_contactor;
+  return in;
 }
 
 uint32_t App::ComputeFaults(uint32_t now, bool inverter_fresh,
@@ -141,30 +129,25 @@ uint32_t App::ComputeFaults(uint32_t now, bool inverter_fresh,
   if (ped.bse2_fault) f |= kFaultBse2Range;
   if (live_.steering.range_fault) f |= kFaultSteeringRange;
   if (brake_latch_.latched()) f |= kFaultBrakeFlagLatched;
-  if (coolant_latch_.latched()) f |= kFaultCoolantOvertemp;
   if (ped.brake_over_throttle) f |= kFaultBrakeOverThrottle;
   if (!shutdown_loop_.closed()) f |= kFaultShutdownOpen;
   if (!rx_.contactor_status.Fresh(now)) f |= kFaultHvcTimeout;
   if (!inverter_fresh) f |= kFaultInverterTimeout;
-  if (!rx_.bse_3.Fresh(now)) f |= kFaultPduTimeout | kFaultBse3Unavailable;
+  if (params_->drive.require_pdu && !rx_.bse_3.Fresh(now)) {
+    f |= kFaultPduTimeout | kFaultBse3Unavailable;
+  }
   if (inverter_faulted) f |= kFaultInverterFault;
   if (live_.inputs.latch_state) f |= kFaultBspdTripped;
   if (ped.hard_brake_mismatch) f |= kFaultHardBrakeMismatch;
-  if (!rx_.dui_driver_inputs.Fresh(now)) f |= kFaultDuiTimeout;
   if (live_.inputs.motor_disconnect) f |= kFaultMotorDisconnect;
   if (live_.loop == ShutdownLoopState::kImplausible) {
     f |= kFaultShutdownSenseImplausible;
   }
-  StateInputs hvc;
-  hvc.hvc_fresh = rx_.contactor_status.Fresh(now);
-  hvc.hvc_state = static_cast<lhre::can::HvcState>(
-      rx_.contactor_status.msg.hvc_state_machine);
-  hvc.contactors_closed = rx_.contactor_status.msg.positive_hv_contactor &&
-                          rx_.contactor_status.msg.negative_hv_contactor;
-  if (sm_.state() == VcuState::kDrive && !StateConditions::Energized(hvc)) {
+  if (sm_.state() == VcuState::kDrive &&
+      !StateConditions::Energized(HvcInputs(now))) {
     f |= kFaultContactorsOpen;
   }
-  return f;
+  return f & ~params_->drive.ignored_faults;
 }
 
 void App::UpdateState(uint32_t now, bool rtd_edge, bool inverter_fresh,
@@ -172,17 +155,12 @@ void App::UpdateState(uint32_t now, bool rtd_edge, bool inverter_fresh,
   const Params& P = *params_;
   const DigitalInputs& in = live_.inputs;
   const PedalOutputs& ped = live_.pedals;
-  StateInputs si;
+  StateInputs si = HvcInputs(now);
   si.bspd_latched = in.latch_state;
-  si.hvc_fresh = rx_.contactor_status.Fresh(now);
-  si.hvc_state = static_cast<lhre::can::HvcState>(
-      rx_.contactor_status.msg.hvc_state_machine);
-  si.contactors_closed = rx_.contactor_status.msg.positive_hv_contactor &&
-                         rx_.contactor_status.msg.negative_hv_contactor;
-  si.loop_closed = shutdown_loop_.closed();
+  si.loop_closed = shutdown_loop_.closed() || !P.drive.require_loop;
   si.torque_cut_fault = (faults_ & kTorqueCutFaults) != 0;
   si.inverter_ready = inverter_fresh && !inverter_faulted;
-  si.pdu_fresh = live_.bse3_available;
+  si.pdu_fresh = live_.bse3_available || !P.drive.require_pdu;
   si.bse_valid = !ped.bse1_fault && !ped.bse2_fault && !ped.bse1_disconnect &&
                  !ped.bse2_disconnect && !ped.bse1_out_of_range &&
                  !ped.bse2_out_of_range;
@@ -361,7 +339,17 @@ void App::ArbitrateTorque(uint32_t now, uint32_t dt_ms, bool torque_allowed,
   live_.inverter_enable =
       sm_.state() == VcuState::kDrive && (faults_ & kTorqueCutFaults) == 0 &&
       !bootloader_entered_.load() && !bootloader_request_.load();
-  live_.linelock_request = torque_allowed && regen.linelock_request;
+  LineLockInputs lin;
+  lin.drive = torque_allowed;
+  lin.hard_braking = rin.hard_braking;
+  lin.soc_pct = live_.battery.soe_pct;
+  lin.speed_valid = live_.motor_speed_valid;
+  lin.motor_rpm = fb.rpm;
+  lin.rear_pre_psi = ped.bse2_psi;
+  lin.rear_post_psi = live_.bse3_psi;
+  const bool policy_request = linelock_.Update(lin, P.linelock);
+  live_.linelock_request =
+      torque_allowed && (regen.linelock_request || policy_request);
 }
 
 // Fills the status fields before the frames that report them go out.
@@ -372,7 +360,6 @@ void App::UpdateStatus(uint32_t now) {
   live_.faults = faults_;
   live_.primary_fault = PrimaryFault(faults_);
   live_.brake_flags_latched = brake_latch_.latched();
-  live_.fault_resets = brake_latch_.resets();
 }
 
 void App::DriveOutputs(uint32_t now) {
@@ -391,12 +378,16 @@ void App::DriveOutputs(uint32_t now) {
       BuildSineTable(sine_, kSineSamples, P.buzzer.amplitude);
       const auto rate = static_cast<uint32_t>(P.buzzer.frequency_hz *
                                               static_cast<float>(kSineSamples));
-      dac_playing_ = lhal::IsOk(p_.audio_dac->Play(sine_, kSineSamples, rate));
+      const lhal::Status played = p_.audio_dac->Play(sine_, kSineSamples, rate);
+      dac_playing_ = lhal::IsOk(played);
+      live_.dac_play_status = static_cast<uint8_t>(played);
+      ++live_.dac_play_calls;
     } else if (!sound && dac_playing_) {
       p_.audio_dac->Stop(kDacMidScale);
       dac_playing_ = false;
     }
   }
+  live_.dac_playing = dac_playing_;
   out.amp_enable = sound;
 
   // BMS/IMD LEDs only ever add indication over the board default (on).

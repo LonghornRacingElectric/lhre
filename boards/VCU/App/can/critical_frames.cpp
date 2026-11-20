@@ -120,11 +120,9 @@ msg::VcuFaults FaultsFrame(const ControlSnapshot& s) {
   vf.active_faults_shutdown_sense_implausible =
       (f & kFaultShutdownSenseImplausible) != 0;
   vf.active_faults_adc_stale = (f & kFaultAdcStale) != 0;
-  vf.active_faults_coolant_overtemp = (f & kFaultCoolantOvertemp) != 0;
   vf.primary_fault = s.primary_fault;
   vf.state = s.state;
   vf.brake_flags_latched = s.brake_flags_latched;
-  vf.fault_resets = s.fault_resets;
   return vf;
 }
 
@@ -139,7 +137,7 @@ msg::EnergyEstimate EnergyFrame(const ControlSnapshot& s) {
 
 msg::TorquePath TorquePathFrame(const ControlSnapshot& s) {
   msg::TorquePath tp;
-  tp.set_torque_lookup(Clamp(s.torque.lookup, 0.0f, kU16Nm));
+  tp.set_torque_lookup(Clamp(s.torque.pedal, 0.0f, kU16Nm));
   tp.set_torque_derated(Clamp(s.torque.derated, 0.0f, kU16Nm));
   tp.set_torque_power_limited(Clamp(s.torque.power_limited, 0.0f, kU16Nm));
   tp.set_torque_traction_controlled(Clamp(s.torque.traction, 0.0f, kU16Nm));

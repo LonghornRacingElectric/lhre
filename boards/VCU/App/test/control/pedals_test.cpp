@@ -31,13 +31,17 @@ vcu::PedalOutputs Settle(vcu::PedalProcessor& pp, const vcu::PedalInputs& in,
   return out;
 }
 
-TEST(Pedals, TravelThroughFilterAndDeadzone) {
+TEST(Pedals, DemandIsZeroBeforeThrottleStartAndOneAfterThrottleFull) {
+  const auto& a = P().apps;
   vcu::PedalProcessor pp;
   uint32_t t = 0;
   EXPECT_EQ(Settle(pp, Pedal(0.05f), &t, 300).pedal_travel, 0.0f);
+  EXPECT_EQ(Settle(pp, Pedal(a.throttle_start), &t, 300).pedal_travel, 0.0f);
   EXPECT_EQ(Settle(pp, Pedal(0.9f), &t, 300).pedal_travel, 1.0f);
   const float mid = Settle(pp, Pedal(0.415f), &t, 300).pedal_travel;
-  EXPECT_NEAR(mid, (0.415f - 0.09f) / (0.74f - 0.09f), 0.01f);
+  EXPECT_NEAR(
+      mid, (0.415f - a.throttle_start) / (a.throttle_full - a.throttle_start),
+      0.01f);
 }
 
 TEST(Pedals, DeviationOver10PercentFor100msIsImplausible) {
@@ -100,7 +104,7 @@ TEST(Pedals, BrakeOverThrottleUsesUnfilteredMechanicalTravelAtBothThresholds) {
   in.apps1_v = in.apps2_v = 0.251f;
   auto out = pp.Update(in, 6, apps, P().bse);
   EXPECT_EQ(out.pedal_travel, 0)
-      << "torque demand is still below its filtered deadzone";
+      << "torque demand is still below throttle_start after the filter";
   EXPECT_TRUE(out.brake_over_throttle)
       << "trip must not wait for the pedal EMA";
   in.bse1_v = in.bse2_v = P().bse.v_at_0_psi;
@@ -130,7 +134,7 @@ TEST(Pedals, HardBrakeCrossCheck) {
   vcu::PedalProcessor pp;
   uint32_t t = 0;
   vcu::PedalInputs in = Pedal(0.0f);
-  in.bse1_pin_v = in.bse2_pin_v = 0.9f;  // above the 0.8 V default
+  in.bse1_pin_v = in.bse2_pin_v = 1.1f;  // clearly above 0.8 V + 0.2 V margin
   in.hard_braking_hw = true;
   vcu::PedalOutputs out = Settle(pp, in, &t, 200);
   EXPECT_TRUE(out.firmware_hard_brake);
@@ -138,6 +142,29 @@ TEST(Pedals, HardBrakeCrossCheck) {
   in.hard_braking_hw = false;
   EXPECT_FALSE(Settle(pp, in, &t, 30).hard_brake_mismatch);
   EXPECT_TRUE(Settle(pp, in, &t, 30).hard_brake_mismatch);
+
+  // Clearly below the band with the hardware asserted is also a mismatch.
+  in.hard_braking_hw = true;
+  EXPECT_FALSE(Settle(pp, in, &t, 200).hard_brake_mismatch);  // agree again
+  in.bse1_pin_v = in.bse2_pin_v = 0.3f;
+  EXPECT_FALSE(Settle(pp, in, &t, 30).hard_brake_mismatch);
+  EXPECT_TRUE(Settle(pp, in, &t, 30).hard_brake_mismatch);
+}
+
+TEST(Pedals, HardBrakeMismatchToleratesTrimmerInsideMargin) {
+  vcu::PedalProcessor pp;
+  uint32_t t = 0;
+  vcu::PedalInputs in = Pedal(0.0f);
+  // Anywhere in 0.6-1.0 V either comparator state is fine, even though the
+  // firmware's own view flips at 0.8 V.
+  for (float pin_v : {0.61f, 0.755f, 0.79f, 0.81f, 0.95f}) {
+    in.bse1_pin_v = in.bse2_pin_v = pin_v;
+    for (bool hw : {false, true}) {
+      in.hard_braking_hw = hw;
+      EXPECT_FALSE(Settle(pp, in, &t, 200).hard_brake_mismatch)
+          << pin_v << " hw=" << hw;
+    }
+  }
 }
 
 }  // namespace
