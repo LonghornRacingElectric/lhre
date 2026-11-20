@@ -91,8 +91,8 @@ def plan(tmp_path, extremes, **overrides):
     env = dict(os.environ, SEEDS='', EXTREMES=extremes, REPEATS='2', BASELINE='1',
                ACCEL_REPEATS='0', SKIDPAD_REPEATS='0', OUT=str(tmp_path))
     env.update(overrides)
-    return subprocess.run(['bash', '-c', script+'\nSKIDPAD_WORLD=/missing\nplan'],
-                          env=env, text=True, capture_output=True)
+    return subprocess.run(['bash', '-c', script+'\nSKIDPAD_WORLD=/missing\nchecked_plan'],
+                          env=env, text=True, capture_output=True, check=False)
 
 
 def test_gate_plans_all_cases_and_keeps_matching_baselines(tmp_path):
@@ -171,20 +171,42 @@ def test_explicit_extreme_repeats_are_independent_of_regular_repeats(tmp_path):
 def test_extreme_and_imported_rows_preserve_later_events(tmp_path):
     world = tmp_path/'skidpad.sdf'
     world.touch()
-    env = dict(os.environ, SEEDS='', EXTREMES='extreme_hairpin',
+    env = dict(os.environ, SEEDS='7', REPEATS='2', IMU_SEED='41',
+               EXTREMES='extreme_hairpin', EXTREME_REPEATS='2', REAL_REPEATS='2',
                REAL_TRACKS='amz_fsg amz_fsi', ALLOW_NONCOMPLIANT='1', BASELINE='1',
                ACCEL_REPEATS='1', SKIDPAD_REPEATS='1', OUT=str(tmp_path))
+    command = ['bash', '-c', runner_prefix()+'\nSKIDPAD_WORLD="$1"\nchecked_plan',
+               'test', str(world)]
     result = subprocess.run(
-        ['bash', '-c', runner_prefix()+'\nSKIDPAD_WORLD="$1"\nchecked_plan', 'test', str(world)],
-        env=env, text=True, capture_output=True, check=True)
+        command, env=env, text=True, capture_output=True, check=True)
+    assert result.stdout == subprocess.run(
+        command, env=env, text=True, capture_output=True, check=True).stdout
     rows = {line.split()[0]: dict(arg.split(':=', 1) for arg in line.split()[1:])
             for line in result.stdout.splitlines()}
-    expected = {'acceleration_r1', 'skidpad_r1'}
-    expected |= {f'{name}_s1_r1' for name in ('extreme_hairpin', 'amz_fsg', 'amz_fsi')}
-    expected |= {f'baseline_{name}_s1' for name in ('extreme_hairpin', 'amz_fsg', 'amz_fsi')}
-    assert set(rows) == expected
+    fixed = ('extreme_hairpin', 'amz_fsg', 'amz_fsi')
+    gated = [
+        'autocross_s7_r1', 'autocross_s7_r2',
+        *(f'{name}_s1_r{repeat}' for name in fixed for repeat in (1, 2)),
+        'acceleration_r1', 'skidpad_r1',
+    ]
+    baselines = {'baseline_autocross_s7', *(f'baseline_{name}_s1' for name in fixed)}
+    assert set(rows) == set(gated) | baselines
     for name, args in rows.items():
-        assert (args['perception'] == 'sim') == name.startswith('baseline_')
+        assert (args['perception'] == 'sim') == (name in baselines)
         assert args['safety'] == 'true'
-        if not name.startswith('baseline_'):
+        if name in baselines:
+            assert 'imu_seed' not in args
+        else:
             assert gate_stack().items() <= args.items()
+    assert [int(rows[name]['imu_seed']) for name in gated] == list(range(41, 51))
+    assert all(rows[f'{name}_s1_r{repeat}']['seed'] == '1'
+               for name in fixed for repeat in (1, 2))
+
+
+@pytest.mark.parametrize(('extremes', 'imports'), [('extreme_hairpin', ''), ('', 'amz_fsg')])
+def test_fixed_course_repeats_reject_seed_exhaustion(tmp_path, extremes, imports):
+    result = plan(tmp_path, extremes, IMU_SEED='4294967295', EXTREME_REPEATS='2',
+                  REAL_TRACKS=imports, REAL_REPEATS='2', ALLOW_NONCOMPLIANT='1')
+    assert result.returncode == 2
+    assert result.stdout == ''
+    assert 'plan failed' in result.stderr

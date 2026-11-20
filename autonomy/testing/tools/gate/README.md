@@ -69,9 +69,10 @@ Environment variables pick the matrix: `SEEDS` (`1 2 3 4 5`), `REPEATS` (3),
 `BASELINE` (0; 1 adds one truth-stack run per seed, for comparison only),
 `RUN_S` (180 sim seconds), `SETTLE_S` (5 sim seconds), `HANG_S` (60 wall
 seconds), `OUT` and `EXTRA` (more launch arguments, split on whitespace).
-`IMU_SEED` (1) is the first Gazebo random seed. Each gated run increments
-it across autocross, acceleration and skidpad; optional truth baselines do
-not consume draws. Track `seed` stays fixed across repeats. The runner
+`IMU_SEED` (1) is the first Gazebo random seed. One sequence covers regular
+autocross, extreme and imported courses, acceleration and skidpad in plan
+order. Optional truth baselines do not consume draws, and track `seed` stays
+fixed across repeats. The runner
 rejects invalid seeds or a plan exhausting the unsigned 32-bit seed range.
 Use the same matrix and `IMU_SEED` for a matched clean/noisy comparison,
 and change `IMU_SEED` to sample another sequence. The per-run `imu_seed`

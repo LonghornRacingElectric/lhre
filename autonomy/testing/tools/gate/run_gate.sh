@@ -193,7 +193,9 @@ plan() {  # one line per run: the id, then its launch arguments
             echo "baseline_${style}_s1 track_style:=$style seed:=1 $truth $acknowledge"
         fi
         for r in $(seq 1 "$repeats"); do
-            echo "${style}_s1_r$r track_style:=$style seed:=1 $STACK $acknowledge"
+            [ "$imu_seed" -le 4294967295 ] || return 2
+            echo "${style}_s1_r$r track_style:=$style seed:=1 $STACK $acknowledge imu_seed:=$imu_seed"
+            imu_seed=$((imu_seed + 1))
         done
     done
     for r in $(seq 1 "${ACCEL_REPEATS:-0}"); do
