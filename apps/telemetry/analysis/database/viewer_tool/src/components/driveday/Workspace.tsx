@@ -15,6 +15,7 @@ import { Transport } from "./Transport";
 import { usePlayer } from "./context";
 import { Button } from "@/components/ui/button";
 import { floatTop } from "./floatTop";
+import { shortcutIgnored } from "@/lib/driveday/shortcuts";
 
 /** Independent video, track and analysis windows share one playback clock. */
 export function Workspace() {
@@ -68,11 +69,7 @@ export function Workspace() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (t?.closest(".driver-pedal-svg") && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
-      if (t?.closest(".video-panel, .pane-header, .layout-toolbar, .pane-divider, .pane-resize, .timeline-resize")) return;
-      if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && (t as HTMLInputElement).type !== "range" && (t as HTMLInputElement).type !== "checkbox") return;
-      if (t && (t.tagName === "BUTTON" || t.tagName === "SUMMARY") && (e.key === " " || e.key === "Enter")) return;
+      if (shortcutIgnored(e.target instanceof Element ? (e.target as HTMLInputElement) : null, e.key)) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const k = e.key;
       if (k === " " || k === "k") { e.preventDefault(); p.play(!p.playing); }
