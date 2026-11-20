@@ -7,6 +7,7 @@ import { defaultLine, type LineCalibration } from "@/lib/driveday/video-overlay"
 import { compressVideo, playbackCopyName, type CompressionProgress } from "@/lib/driveday/video-compression";
 import { usePlayer, useUi } from "../context";
 import { VideoOverlay, type OverlaySettings } from "./VideoOverlay";
+import { Button } from "@/components/ui/button";
 
 const timeLabel = (seconds: number) => {
   if (!Number.isFinite(seconds)) return "0:00";
@@ -188,14 +189,14 @@ export function VideoPanel({ visible = true }: { visible?: boolean } = {}) {
       <span className="video-empty-icon" aria-hidden="true">▶</span>
       <h4>Watch your drive</h4>
       <p>Add an onboard video, then match a frame to the telemetry.</p>
-      <button className="btn primary" onClick={() => fileInput.current?.click()}>Open video</button>
+      <Button size="ctl" onClick={() => fileInput.current?.click()}>Open video</Button>
       <small>Local files only · MP4, MOV or WebM</small>
     </div> : <>
       <div className="video-filebar"><div><strong title={p.videoName}>{p.videoName}</strong><small>{codec || "Local video"}{duration > 0 ? " · " + timeLabel(duration) : ""}</small></div>
-        <button className="btn" onClick={() => fileInput.current?.click()}>Replace</button>
+        <Button variant="tool" size="ctl" onClick={() => fileInput.current?.click()}>Replace</Button>
       </div>
-      {compression && <div className="video-compression" role="status"><div><strong>{({ connecting: "Connecting to local compressor", preparing: "Preparing video locally", compressing: "Compressing playback copy", loading: "Loading playback copy" })[compression.stage]}{compression.percent != null ? " · " + Math.round(compression.percent) + "%" : "…"}</strong><progress aria-label="Video compression progress" max={100} value={compression.percent ?? undefined} /><small>Stays on this computer · original unchanged</small></div><button className="btn" onClick={() => compressionAbort.current?.abort()}>Cancel</button></div>}
-      {compressionError && <div className="video-compression-error" role="status"><span>{compressionError}</span><button className="btn" onClick={() => { if (originalFile.current) void automaticallyCompress(originalFile.current, sourceToken.current); }}>Retry compression</button>{compressionError.startsWith("Start the local") && <details><summary>Start video helper</summary><p>Run this from the LAPDOG folder, then retry:</p><code>npm run video-helper{typeof window !== "undefined" && !["localhost", "127.0.0.1"].includes(window.location.hostname) ? " -- --origin " + window.location.origin : ""}</code></details>}</div>}
+      {compression && <div className="video-compression" role="status"><div><strong>{({ connecting: "Connecting to local compressor", preparing: "Preparing video locally", compressing: "Compressing playback copy", loading: "Loading playback copy" })[compression.stage]}{compression.percent != null ? " · " + Math.round(compression.percent) + "%" : "…"}</strong><progress aria-label="Video compression progress" max={100} value={compression.percent ?? undefined} /><small>Stays on this computer · original unchanged</small></div><Button variant="tool" size="ctl" onClick={() => compressionAbort.current?.abort()}>Cancel</Button></div>}
+      {compressionError && <div className="video-compression-error" role="status"><span>{compressionError}</span><Button variant="tool" size="ctl" onClick={() => { if (originalFile.current) void automaticallyCompress(originalFile.current, sourceToken.current); }}>Retry compression</Button>{compressionError.startsWith("Start the local") && <details><summary>Start video helper</summary><p>Run this from the LAPDOG folder, then retry:</p><code>npm run video-helper{typeof window !== "undefined" && !["localhost", "127.0.0.1"].includes(window.location.hostname) ? " -- --origin " + window.location.origin : ""}</code></details>}</div>}
       {copyBytes > 0 && !compression && <div className="video-copy-ready"><span>Playback copy · {(copyBytes / 1024 / 1024).toFixed(1)} MB{originalFile.current ? " from " + (originalFile.current.size / 1024 / 1024).toFixed(1) + " MB" : ""}</span><a className="btn" href={p.videoUrl} download={playbackCopyName(p.videoName)}>Save copy</a></div>}
       <div ref={stage} className="video-stage" style={{ aspectRatio: aspect }} aria-busy={!ready && !error}>
         <video key={p.videoUrl} ref={video} src={p.videoUrl} controls={!linked} playsInline preload="auto"
@@ -210,26 +211,26 @@ export function VideoPanel({ visible = true }: { visible?: boolean } = {}) {
         {!ready && !error && <div className="video-stage-message" role="status">Loading video preview…</div>}
         {error && <div className="video-stage-message video-error" role="alert"><strong>Video unavailable</strong><span>{error}</span>
           <span>{codec.includes("HEVC") ? "This GoPro recording uses HEVC / H.265. Open an H.264 MP4 copy, or use a browser with HEVC support." : "Try an H.264 MP4 copy of this recording."}</span>
-          <button className="btn" onClick={() => fileInput.current?.click()}>Open another video</button>
+          <Button variant="tool" size="ctl" onClick={() => fileInput.current?.click()}>Open another video</Button>
         </div>}
         {ready && linked && outside && <div className="video-boundary">{p.T / 1000 * syncRate + offset < 0 ? "Recording starts later" : "End of recording"}</div>}
-        <div className="video-fullscreen-controls"><button className="btn" onClick={() => p.play(!p.playing)}>{p.playing ? "Pause video" : "Play video"}</button><button className="btn" onClick={() => void document.exitFullscreen().catch(() => {})}>Exit fullscreen</button></div>
+        <div className="video-fullscreen-controls"><Button variant="tool" size="ctl" onClick={() => p.play(!p.playing)}>{p.playing ? "Pause video" : "Play video"}</Button><Button variant="tool" size="ctl" onClick={() => void document.exitFullscreen().catch(() => {})}>Exit fullscreen</Button></div>
       </div>
       {!error && <>
         <div className="video-modebar"><span className={"video-badge " + (linked ? "synced" : "")}>{linked ? "Synced to telemetry" : "Video preview"}</span><span className="video-clock">{timeLabel(current)} / {timeLabel(duration)}</span></div>
         {linked ? <>
           <div className="video-playbar">
-            <button className="btn" onClick={preview}>Adjust sync</button>
-            <button className="btn" disabled={!ready} title="Fullscreen video with overlays" onClick={() => void stage.current?.requestFullscreen().catch(() => {})}>Fullscreen</button>
+            <Button variant="tool" size="ctl" onClick={preview}>Adjust sync</Button>
+            <Button variant="tool" size="ctl" disabled={!ready} title="Fullscreen video with overlays" onClick={() => void stage.current?.requestFullscreen().catch(() => {})}>Fullscreen</Button>
           </div>
           <details className="video-overlay-controls"><summary>Video settings</summary>
             <details className="review-details"><summary>Sync checkpoints and clock drift</summary><p className="note2">Align one event near the start, then use Adjust sync to pause video and telemetry at the same event near the end. Set a second checkpoint to correct clock drift.</p>
               {checkpoints.map((point, i) => <p key={i}>Checkpoint {i + 1}: telemetry {timeLabel(point.telemetry / 1000)} → video {timeLabel(point.video)}</p>)}
               <p>Clock correction: {((syncRate - 1) * 100).toFixed(3)}%</p>
-              <button className="btn" onClick={() => { preview(); }}>Adjust sync for checkpoint</button>
-              <button className="btn" onClick={() => { if (checkpoints[0]) { const first = [checkpoints[0]]; const model = syncFromCheckpoints(first); setCheckpoints(first); lsSet(syncKey, first); setSyncRate(1); setOffset(model.offset); lsSet(key, model.offset); } }}>Remove drift correction</button>
+              <Button variant="tool" size="ctl" onClick={() => { preview(); }}>Adjust sync for checkpoint</Button>
+              <Button variant="tool" size="ctl" onClick={() => { if (checkpoints[0]) { const first = [checkpoints[0]]; const model = syncFromCheckpoints(first); setCheckpoints(first); lsSet(syncKey, first); setSyncRate(1); setOffset(model.offset); lsSet(key, model.offset); } }}>Remove drift correction</Button>
             </details>
-            <details className="video-fine"><summary>Fine-tune sync</summary><div className="video-nudge"><button className="btn" onClick={() => saveOffset(offset - 0.1)}>−0.1 s</button><label>Offset (seconds)<input type="number" step="0.1" value={Math.round(offset * 1000) / 1000} onChange={e => saveOffset(+e.target.value)} /></label><button className="btn" onClick={() => saveOffset(offset + 0.1)}>+0.1 s</button></div></details>
+            <details className="video-fine"><summary>Fine-tune sync</summary><div className="video-nudge"><Button variant="tool" size="ctl" onClick={() => saveOffset(offset - 0.1)}>−0.1 s</Button><label>Offset (seconds)<input type="number" step="0.1" value={Math.round(offset * 1000) / 1000} onChange={e => saveOffset(+e.target.value)} /></label><Button variant="tool" size="ctl" onClick={() => saveOffset(offset + 0.1)}>+0.1 s</Button></div></details>
             <div className="video-overlay-toggles">
               <label><input type="checkbox" checked={overlays.hud} onChange={e => changeOverlay({ hud: e.target.checked })} /> Speed & pedals</label>
               <label><input type="checkbox" checked={overlays.map} onChange={e => changeOverlay({ map: e.target.checked })} /> Track map</label>
@@ -238,21 +239,21 @@ export function VideoPanel({ visible = true }: { visible?: boolean } = {}) {
             <label className="video-overlay-field">HUD corner<select value={overlays.position} onChange={e => changeOverlay({ position: e.target.value as "left" | "right" })}><option value="left">Bottom left</option><option value="right">Bottom right</option></select></label>
             {(overlays.line || overlays.ghostCar) && <div className="video-line-settings">
               {overlays.ghostCar && <><label className="video-overlay-field">Ghost car lap<select aria-label="Ghost car lap" value={p.cmp === "lap" ? String(p.ghostLapI) : p.cmp === "best" ? "best" : p.cmp === "external" ? "external" : "none"} onChange={e => { const value = e.target.value; if (value === "best" || value === "external") p.set("cmp", value); else { p.set("ghostLapI", +value); p.set("cmp", "lap"); } }}><option value="none" disabled>Choose a recorded lap</option><option value="best">Best lap</option>{p.externalGhost && <option value="external">Other file: {p.externalGhost.name}</option>}{p.session.laps.map((lap,i) => lap.kind === "lap" ? <option key={i} value={i} disabled={i === p.sel}>{lap.name}{i === p.sel ? " (watched)" : ""}</option> : null)}</select></label><p className="note2">Uses the lap selected in the playback Ghost menu at equal elapsed lap time. Choose a different recorded lap; Best sectors is not a physical car. GPS drift and camera movement can shift the overlay. No automatic image tracking or occlusion.</p><label>Camera height (m)<input aria-label="Ghost camera height" type="range" min="0.3" max="2.5" step="0.05" value={overlays.cameraHeight ?? 1.1} onInput={e => changeOverlay({ cameraHeight: +e.currentTarget.value })} /></label></>}
-              <details className="review-details"><summary>Camera calibration presets</summary><label>Mounting position<select aria-label="Camera preset" value={cameraSelection} onChange={e => { setCameraSelection(e.target.value); const preset = cameraPresets[e.target.value]; if (preset) changeOverlay(preset); }}><option value="">Choose saved camera</option>{Object.keys(cameraPresets).map(name => <option key={name} value={name}>{name}</option>)}</select></label><input aria-label="Camera preset name" value={cameraName} onChange={e => setCameraName(e.target.value)} placeholder="e.g. GoPro nose mount" /><button className="btn" disabled={!cameraName.trim()} onClick={() => { const name = cameraName.trim(); const preset = { center: overlays.center, horizon: overlays.horizon, scale: overlays.scale, lookahead: overlays.lookahead, cameraHeight: overlays.cameraHeight ?? 1.1 }; const next = { ...cameraPresets, [name]: preset }; setCameraPresets(next); lsSet("camera-presets", next); setCameraSelection(name); setCameraName(""); }}>Save camera calibration</button><p className="note2">Reusable manual camera positioning; it does not track road features automatically.</p></details>
+              <details className="review-details"><summary>Camera calibration presets</summary><label>Mounting position<select aria-label="Camera preset" value={cameraSelection} onChange={e => { setCameraSelection(e.target.value); const preset = cameraPresets[e.target.value]; if (preset) changeOverlay(preset); }}><option value="">Choose saved camera</option>{Object.keys(cameraPresets).map(name => <option key={name} value={name}>{name}</option>)}</select></label><input aria-label="Camera preset name" value={cameraName} onChange={e => setCameraName(e.target.value)} placeholder="e.g. GoPro nose mount" /><Button variant="tool" size="ctl" disabled={!cameraName.trim()} onClick={() => { const name = cameraName.trim(); const preset = { center: overlays.center, horizon: overlays.horizon, scale: overlays.scale, lookahead: overlays.lookahead, cameraHeight: overlays.cameraHeight ?? 1.1 }; const next = { ...cameraPresets, [name]: preset }; setCameraPresets(next); lsSet("camera-presets", next); setCameraSelection(name); setCameraName(""); }}>Save camera calibration</Button><p className="note2">Reusable manual camera positioning; it does not track road features automatically.</p></details>
               {overlays.line && <label className="video-overlay-field">Line source<select value={overlays.ghost ? "ghost" : "current"} onChange={e => changeOverlay({ ghost: e.target.value === "ghost" })}><option value="current">Watched lap</option><option value="ghost" disabled={!p.refLap()}>Ghost lap</option></select></label>}
               <label>Horizon<input aria-label="Racing line horizon" type="range" min="0.1" max="0.7" step="0.01" value={overlays.horizon} onInput={e => changeOverlay({ horizon: +e.currentTarget.value })} /></label>
               <label>Horizontal position<input aria-label="Racing line horizontal position" type="range" min="0.1" max="0.9" step="0.01" value={overlays.center} onInput={e => changeOverlay({ center: +e.currentTarget.value })} /></label>
               <label>Perspective scale<input aria-label="Racing line perspective" type="range" min="0.2" max="3" step="0.05" value={overlays.scale} onInput={e => changeOverlay({ scale: +e.currentTarget.value })} /></label>
-              <button className="btn" onClick={() => changeOverlay(defaultLine)}>Reset camera alignment</button>
+              <Button variant="tool" size="ctl" onClick={() => changeOverlay(defaultLine)}>Reset camera alignment</Button>
               {overlays.line && <p>Recorded GPS line projected ahead of the car. Green: throttle · yellow: lift · red: braking. Drag it sideways or adjust the sliders to fit the camera. This is an approximate preview, not a tracked or ideal racing line; camera movement, hills and GPS error affect alignment.</p>}
             </div>}
           </details>
-        </> : <div className="video-sync-card"><p>Pause video and the timeline at the same moment.</p><button className="btn primary" disabled={!ready} onClick={align}>Sync this frame / first checkpoint</button>{checkpoints.length > 0 && <button className="btn" disabled={!ready} onClick={secondCheckpoint}>Set second sync checkpoint</button>}{syncError && <p role="alert">{syncError}</p>}</div>}
-        {blocked && <div className="video-warning" role="status">Playback needs a click to start.<button className="btn" onClick={() => {
+        </> : <div className="video-sync-card"><p>Pause video and the timeline at the same moment.</p><Button size="ctl" disabled={!ready} onClick={align}>Sync this frame / first checkpoint</Button>{checkpoints.length > 0 && <Button variant="tool" size="ctl" disabled={!ready} onClick={secondCheckpoint}>Set second sync checkpoint</Button>}{syncError && <p role="alert">{syncError}</p>}</div>}
+        {blocked && <div className="video-warning" role="status">Playback needs a click to start.<Button variant="tool" size="ctl" onClick={() => {
           const v = video.current;
           if (!v) return;
           void v.play().then(() => { setBlocked(false); p.play(true); }).catch(() => setBlocked(true));
-        }}>Resume video</button></div>}
+        }}>Resume video</Button></div>}
       </>}
     </>}
   </div>;

@@ -6,6 +6,7 @@ import { interp } from "@/lib/driveday/math";
 import { cvT, cvTd, tU } from "@/lib/driveday/units";
 import { useFrame, usePainter, usePlayer, useUi } from "../context";
 import { Tile } from "./Tile";
+import { Seg } from "../controls";
 
 /** The battery's temperature sensors as a grid, coloured at the playhead. */
 export function CellsPanel() {
@@ -39,10 +40,7 @@ export function CellsPanel() {
     <>
       <div className="enwrap" style={{ gap: 10 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <div className="seg" role="group" aria-label="Cell colour">
-            <button aria-pressed={mode === "abs"} onClick={() => setMode("abs")}>Temperature</button>
-            <button aria-pressed={mode === "rise"} onClick={() => setMode("rise")}>Rise since Lap 1</button>
-          </div>
+          <Seg ariaLabel="Cell colour" value={mode} onChange={v => v && setMode(v)} options={[{ value: "abs", label: "Temperature" }, { value: "rise", label: "Rise since Lap 1" }]} />
           <span className="mono">
             {hover >= 0 ? `Sensor ${idx[hover]} · ${cvT(u, cs[hover]).toFixed(1)} ${tU(u)} · ${rise >= 0 ? "+" : "−"}${Math.abs(cvTd(u, rise)).toFixed(1)} since Lap 1 start` : "Hover a cell for its reading"}
           </span>

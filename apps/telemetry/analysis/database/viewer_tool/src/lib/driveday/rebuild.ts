@@ -128,6 +128,8 @@ export function rebuildRun(D0: RunData): RunData {
     if (L) (src.kind === "lap" ? timed : others).push(L);
   });
   if (!timed.length) return D0;
+  /* timed laps read Lap 1, 2, 3 in order, whatever the logged presses were called or how many were dropped */
+  timed.forEach((l, i) => { l.name = "Lap " + (i + 1); });
   const rank = { out: 0, partial: 1, lap: 2, theo: 3 } as const;
   others.sort((a, b) => rank[a.kind] - rank[b.kind]);
   return { ...D0, laps: timed.concat(others) };
