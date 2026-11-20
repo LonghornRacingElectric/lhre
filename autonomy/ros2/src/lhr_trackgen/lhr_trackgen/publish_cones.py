@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Cone publisher: generates a track and publishes left/right cone markers."""
 
+from functools import partial
 import math
 import random
 from typing import List, Tuple
 
 from geometry_msgs.msg import Point
 from lhr_trackgen.cone_geometry import CONE_SPECS, cone_triangles, start_finish_gates
+from lhr_trackgen.extreme_autocross import (
+    extreme_pairing_width, generate_extreme_track, SCENARIOS)
 from lhr_trackgen.rules_autocross import BASE, CHORD_RESERVE, generate_rules_autocross_track
 import rclpy
 from rclpy.node import Node
@@ -334,6 +337,8 @@ def pairing_width_m(style: str, width_m: float = 3.5) -> float:
     """Return the center-to-center width track_builder should pair at."""
     if style == 'acceleration':
         return ACCEL_WIDTH_M + CONE_SPECS['blue'].base_width_m
+    if style in SCENARIOS:
+        return extreme_pairing_width(style)
     if style == 'rules_autocross':
         return width_m + BASE + CHORD_RESERVE
     return width_m
@@ -349,6 +354,7 @@ GENERATORS = {
     'rules_autocross': generate_rules_autocross_track,
     'oval': generate_oval_track,
     'acceleration': generate_acceleration_track,
+    **{name: partial(generate_extreme_track, name) for name in SCENARIOS},
 }
 
 

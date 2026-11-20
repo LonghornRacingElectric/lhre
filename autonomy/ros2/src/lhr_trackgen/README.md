@@ -136,6 +136,20 @@ no reference route is supplied to perception or control. See the
 [gate runner](../../../testing/tools/gate/README.md) and
 [fault runner](../../../testing/tools/fault_injection/README.md) for campaigns.
 
+## Fixed extreme autocross courses
+
+The seven `extreme_*` styles are deterministic edge cases for #212, built
+from analytic-tangent straights, turns, chicanes and slaloms. See
+[the world catalog](../lhr_gazebo/worlds/README.md#extreme-autocross-set) for
+names, measured limits, regeneration and the gate command. Their only seed
+is 1; generic dimension and spacing parameters do not alter named fixtures.
+Dense analytic poses define the shape; physical cones use boundary arc-length
+stations below 2 m apart. Circular interpolation preserves the 4.5 m turns,
+piece endpoints preserve complete approaches, and chord reserve protects
+minimum road clearance. The 500 m target is the scored closed polyline. Every returned layout
+passes the same envelope checker. Each call returns independent lists so a
+consumer cannot mutate a cached fixture. Legacy generators are unchanged.
+
 `rules_autocross.measure_route` and `segment_distance` expose the same closed
 route measurements and exact boundary separation used by the checker. The
 [competition importer](../lhr_gazebo/worlds/competition/README.md) reuses them

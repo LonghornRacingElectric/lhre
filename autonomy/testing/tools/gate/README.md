@@ -69,9 +69,10 @@ Environment variables pick the matrix: `SEEDS` (`1 2 3 4 5`), `REPEATS` (3),
 `BASELINE` (0; 1 adds one truth-stack run per seed, for comparison only),
 `RUN_S` (180 sim seconds), `SETTLE_S` (5 sim seconds), `HANG_S` (60 wall
 seconds), `OUT` and `EXTRA` (more launch arguments, split on whitespace).
-`IMU_SEED` (1) is the first Gazebo random seed. Each gated run increments
-it across autocross, acceleration and skidpad; optional truth baselines do
-not consume draws. Track `seed` stays fixed across repeats. The runner
+`IMU_SEED` (1) is the first Gazebo random seed. One sequence covers regular
+autocross, extreme and imported courses, acceleration and skidpad in plan
+order. Optional truth baselines do not consume draws, and track `seed` stays
+fixed across repeats. The runner
 rejects invalid seeds or a plan exhausting the unsigned 32-bit seed range.
 Use the same matrix and `IMU_SEED` for a matched clean/noisy comparison,
 and change `IMU_SEED` to sample another sequence. The per-run `imu_seed`
@@ -245,6 +246,39 @@ a course whose lap takes longer than 180 sim seconds.
 These runs still use the existing MVP scorer thresholds; inclusion and changed
 thresholds in the official Sim v2 gate belong to
 [#201](https://github.com/LonghornRacingElectric/lhre/issues/201).
+
+## Fixed extreme-course matrix
+
+`EXTREMES=all` adds the seven
+[named extreme courses](../../../ros2/src/lhr_gazebo/worlds/README.md#extreme-autocross-set)
+to the planned matrix. It defaults to empty, preserving the MVP campaign.
+Use a quoted space-separated subset, for example
+`EXTREMES="extreme_hairpin extreme_500m"`, to run fewer cases; an unknown
+name fails before recording or process cleanup. Each case uses its committed
+seed-1 world, `EXTREME_REPEATS` LiDAR/EKF rows (default 1, independent of
+the regular-course `REPEATS`), and one simplified-perception/truth
+baseline when `BASELINE=1`. Run IDs and CSV styles distinguish every fixture;
+course-derived reference laps supply the lap-time check. Truth comparisons
+remain optional; legacy baseline matching still requires the same style and seed.
+
+From `autonomy/ros2`, to run the set alone:
+
+```bash
+SEEDS= EXTREMES=all EXTREME_REPEATS=1 ACCEL_REPEATS=0 SKIDPAD_REPEATS=0 \
+  RUN_S=900 OUT="$HOME/lhr-test-data/extreme-autocross" \
+  ../testing/tools/gate/run_gate.sh
+```
+
+`EXTREME_REPEATS` must be a nonnegative integer. Extreme and imported rows
+share one planning loop, preserving the complete gate stack and later events.
+Build `lhr_gazebo` first to install all seven worlds. `RUN_S` is a simulation-time
+cap; slow CPU rendering does not require a larger cap. The usual `EXTRA` settings still pass to
+every launch. Every planned missing result fails; none is silently omitted
+because it has a new style name. Use a fresh output directory when selecting
+a different matrix, since the scorer also reads completed folders there.
+The runner uses the current Mid-360 and camera-fusion stack for these rows.
+The [Sim v2 criteria](../../../docs/plans/sim-v2-pass-criteria.md) include
+all seven scenarios; a full-set driving pass remains unverified.
 
 ## Imported competition layouts
 

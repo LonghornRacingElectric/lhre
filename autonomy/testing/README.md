@@ -35,6 +35,7 @@ scope and defers the repair.
 | --- | --- | --- |
 | [2026-11-08 native IMU fidelity](2026-11-08-native-imu/README.md) | Does Gazebo's actual IMU receive configured noise/bias, and what does it do to EKF error? | Native model/wiring implemented; historical noisy gate fails; current-branch runtime comparison pending |
 | [2026-10-24 PR #133 integration](2026-10-24-pr133-integration/README.md) | Does the source integration preserve launch/fault behavior and drive under current scoring? | **Open:** replacement GPU seed-2 cone contact; default GPU LiDAR timeout fails on the test laptop |
+| [2026-11-19 extreme autocross on HIL](2026-11-19-extreme-hil/README.md) | How does the default stack handle all seven fixed courses? | Four of seven pass in the first campaign; decreasing-radius passes on repeat |
 
 ## Rules
 

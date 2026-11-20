@@ -42,10 +42,16 @@ EXTRA=${EXTRA:-}
 TRACK_STYLE=${TRACK_STYLE:-autocross}
 REAL_TRACKS=${REAL_TRACKS:-}       # opt-in fixed imported layouts, seed 1
 REAL_REPEATS=${REAL_REPEATS-1}     # Sim v2 runs each imported layout once
+EXTREMES=${EXTREMES-}
+EXTREME_REPEATS=${EXTREME_REPEATS-1}
 ALLOW_NONCOMPLIANT=${ALLOW_NONCOMPLIANT:-0}
 PLAN_ONLY=${PLAN_ONLY:-0}         # print the audited matrix, do not launch or clean up
 if [[ ! "$REAL_REPEATS" =~ ^[0-9]+$ ]]; then
     echo 'REAL_REPEATS must be a nonnegative integer' >&2
+    exit 2
+fi
+if [[ ! "$EXTREME_REPEATS" =~ ^[0-9]+$ ]]; then
+    echo 'EXTREME_REPEATS must be a nonnegative integer' >&2
     exit 2
 fi
 case "$TRACK_STYLE" in
@@ -55,6 +61,16 @@ esac
 ROS2=$(cd "$HERE/../../../ros2" && pwd)
 source "$HERE/stack.sh"
 STACK=$(gate_stack) || exit 2
+if [ -n "$EXTREMES" ]; then
+    NAMED_STYLES=$(python3 -c 'from lhr_trackgen.extreme_autocross import SCENARIOS; print(" ".join(SCENARIOS))') || exit 2
+    [ "$EXTREMES" = all ] && EXTREMES=$NAMED_STYLES
+    for style in $EXTREMES; do
+        case " $NAMED_STYLES " in
+            *" $style "*) ;;
+            *) echo "unsupported extreme course $style" >&2; exit 2 ;;
+        esac
+    done
+fi
 
 # Validate imported references before creating output or stopping any processes.
 AUDIT='{}'
@@ -164,14 +180,22 @@ plan() {  # one line per run: the id, then its launch arguments
             imu_seed=$((imu_seed + 1))
         done
     done
-    for style in $REAL_TRACKS; do
+    for style in $EXTREMES $REAL_TRACKS; do
         local acknowledge=''
-        [ "$ALLOW_NONCOMPLIANT" = 1 ] && acknowledge='allow_noncompliant_track:=true'
+        local repeats=$EXTREME_REPEATS
+        case " $REAL_TRACKS " in
+            *" $style "*)
+                repeats=$REAL_REPEATS
+                [ "$ALLOW_NONCOMPLIANT" = 1 ] && acknowledge='allow_noncompliant_track:=true'
+                ;;
+        esac
         if [ "$BASELINE" != 0 ]; then
             echo "baseline_${style}_s1 track_style:=$style seed:=1 $truth $acknowledge"
         fi
-        for r in $(seq 1 "$REAL_REPEATS"); do
-            echo "${style}_s1_r$r track_style:=$style seed:=1 $STACK $acknowledge"
+        for r in $(seq 1 "$repeats"); do
+            [ "$imu_seed" -le 4294967295 ] || return 2
+            echo "${style}_s1_r$r track_style:=$style seed:=1 $STACK $acknowledge imu_seed:=$imu_seed"
+            imu_seed=$((imu_seed + 1))
         done
     done
     for r in $(seq 1 "${ACCEL_REPEATS:-0}"); do
