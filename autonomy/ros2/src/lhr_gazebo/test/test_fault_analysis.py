@@ -77,6 +77,82 @@ def _odom(x, v):
               twist=NS(twist=NS(linear=NS(x=v, y=0.0))))
 
 
+@pytest.mark.parametrize(('latency', 'distance', 'within_time', 'within_pdr'), [
+    (.05, 4., 'True', 'True'),
+    (.46, 4., 'False', 'True'),
+    (.05, 6., 'True', 'False'),
+])
+def test_fault_scores_deadline_and_stop_distance_independently(
+        latency, distance, within_time, within_pdr):
+    data = {
+        '/lhr/mission/status': [(1., NS(data='DRIVING'))],
+        '/lhr/vehicle/odom_truth': [
+            (1., _odom(0., 5.)), (5., _odom(20., 5.)),
+            (6., _odom(20.+distance, 0.)), (7., _odom(20.+distance, 0.))],
+        '/lhr/sim/fault': [(5., NS(data='start ekf_kill ODOM_STALE'))],
+        '/lhr/safety/status': [(5.+latency, NS(
+            message='ODOM_STALE', values=[NS(key='latched', value='True')]))],
+    }
+    row = analyze.score(data, 'ekf_kill', 20.)
+    assert row['trip_limit_s'] == '0.450'
+    assert row['within_trip_limit'] == within_time
+    assert row['pdr_dist_m'] == '5.33'
+    assert row['within_pdr'] == within_pdr
+
+
+@pytest.mark.parametrize(('lap', 'finished', 'trip', 'expected'), [
+    (True, True, False, 'clean'),
+    (False, True, False, 'incomplete_lap'),
+    (True, False, False, 'incomplete_lap'),
+    (True, True, True, 'false_trip'),
+])
+def test_clean_run_requires_a_completed_lap_and_no_safety_trip(lap, finished, trip, expected):
+    data = {
+        '/lhr/mission/status': [(1., NS(data='DRIVING'))],
+        '/lhr/vehicle/odom_truth': [(1., _odom(0., 5.)), (5., _odom(20., 0.))],
+        '/lhr/metrics/lap_complete': [(4., NS(data=lap))],
+        '/lhr/safety/status': [(3., NS(message='NONE', values=[]))],
+    }
+    if finished:
+        data['/lhr/mission/status'].append((5., NS(data='FINISHED')))
+    if trip:
+        data['/lhr/safety/status'] = [(4.5, NS(
+            message='STEER_TRACKING', values=[NS(key='latched', value='True')]))]
+    assert analyze.score(data, 'clean', 20.)['result'] == expected
+
+
+@pytest.mark.parametrize(('rows', 'expected_code'), [
+    (['clean_s1'], 0), ([], 1), (['clean_s1', 'clean_s1'], 1),
+])
+def test_campaign_acceptance_requires_exactly_one_result_per_planned_run(
+        tmp_path, monkeypatch, rows, expected_code):
+    path = tmp_path / 'results.csv'
+    expected = tmp_path / 'expected.txt'
+    expected.write_text('clean_s1\n')
+    with path.open('w', newline='') as stream:
+        writer = csv.DictWriter(stream, fieldnames=analyze.FIELDS, restval='')
+        writer.writeheader()
+        for run in rows:
+            writer.writerow({'id': run, 'case': 'clean', 'result': 'clean', 'passed': 'True'})
+    monkeypatch.setattr(sys, 'argv', ['summarize.py', str(path), '--expected', str(expected)])
+    assert summarize.main() == expected_code
+
+
+@pytest.mark.parametrize(('overrides', 'expected'), [
+    ({}, True),
+    ({'v_at_fault': '7.49'}, False),
+    ({'within_trip_limit': 'False'}, False),
+    ({'within_pdr': 'False'}, False),
+    ({'result': 'wrong_check'}, False),
+])
+def test_fault_acceptance_requires_speed_deadline_stop_and_expected_check(overrides, expected):
+    row = {'case': 'lidar_drop', 'result': 'caught', 'at_speed': 'True',
+           'v_max': '8', 'v_at_fault': '7.50', 'within_trip_limit': 'True',
+           'within_pdr': 'True'}
+    row.update(overrides)
+    assert analyze.passed(row) is expected
+
+
 def test_missed_fault_still_records_the_speed_it_hit():
     """A fault nothing caught still says which tier it tested."""
     times = [1.0 + 0.1 * i for i in range(100)]

@@ -43,7 +43,7 @@ fi
 
 TOPICS="/clock /lhr/safety/status /lhr/safety/heartbeat /lhr/mission/status
 /lhr/vehicle/odom /lhr/vehicle/odom_truth /lhr/vehicle/cmd /lhr/sim/fault
-/lhr/vehicle/steering_measured"
+/lhr/vehicle/steering_measured /lhr/metrics/lap_complete"
 mkdir -p "$OUT/bags"
 failed=''
 
@@ -84,6 +84,12 @@ one_run() {  # id kind track seed v_max seconds [launch args...]
     local id=$1 kind=$2 track=$3 seed=$4 vmax=$5 secs=$6
     shift 6
     local bag="$OUT/bags/$id"
+    local metrics=false
+    local watch_args=()
+    if [ "$kind" = clean ]; then
+        metrics=true
+        watch_args=(--settle 2)
+    fi
     echo "=== $id"
     local world
     if ! world=$(world_for "$track" "$seed"); then
@@ -95,19 +101,17 @@ one_run() {  # id kind track seed v_max seconds [launch args...]
     ros2 bag record -s mcap -o "$bag" --topics $TOPICS \
         > "$OUT/bags/$id.record.log" 2>&1 &
     local rec=$!
-    # Metrics off: a finished lap ends the mission (#132) and safety only
-    # arms in READY and DRIVING, so a fault after the first lap would score
-    # missed. An 8 m/s oval lap is shorter than AFTER. setsid gives the
-    # launch its own process group for stop_launch.
+    # Only clean runs need metrics. During fault trials the mission must
+    # stay armed after the first lap so delayed faults still take effect.
     setsid ros2 launch lhr_gazebo gazebo_demo.launch.py \
         gui:=false rviz:=false track_style:="$track" seed:="$seed" \
-        v_max:="$vmax" ${world:+"$world"} enable_metrics:=false \
-        $EXTRA "$@" > "$OUT/bags/$id.launch.log" 2>&1 &
+        v_max:="$vmax" ${world:+"$world"} $EXTRA "$@" enable_metrics:="$metrics" \
+        output_csv:="$bag.metrics.csv" > "$OUT/bags/$id.launch.log" 2>&1 &
     local launch=$!
-    # The run lasts $secs sim seconds however slow the machine; only a
-    # stopped /clock ends it early, as hung.
+    # Fault trials run to the sim-time cap. Clean runs settle after the
+    # mission ends. A stopped /clock is a hung run.
     local code=0
-    python3 "$HERE/../gate/watch_run.py" --cap "$secs" --hang "$HANG_S" \
+    python3 "$HERE/../gate/watch_run.py" --cap "$secs" --hang "$HANG_S" "${watch_args[@]}" \
         --pid "$launch" --out "$OUT/bags/$id.end.txt" || code=$?
     # A background job ignores SIGINT in a non-interactive shell; TERM is
     # what makes the recorder close the bag.
@@ -151,14 +155,19 @@ plan() {  # one line per run: id kind track seed v_max seconds, then launch argu
 
 # The campaign. Tests load the functions above without running it.
 PLAN=$(checked_plan) || exit 2
+printf '%s\n' "$PLAN" | cut -d' ' -f1 > "$OUT/expected.txt"
 cleanup
 while read -r id kind track seed v secs args <&3; do
     # $args is split on purpose: one launch argument per word.
     one_run "$id" "$kind" "$track" "$seed" "$v" "$secs" $args
 done 3<<< "$PLAN"
-python3 "$HERE/summarize.py" "$OUT/results.csv" > "$OUT/summary.md"
+status=0
+python3 "$HERE/summarize.py" "$OUT/results.csv" --expected "$OUT/expected.txt" \
+    > "$OUT/summary.md" || status=1
 if [ -n "$failed" ]; then
+    status=1
     printf '\nRuns with no world or a failed analysis:%s\n' "$failed" \
         >> "$OUT/summary.md"
 fi
 cat "$OUT/summary.md"
+exit "$status"

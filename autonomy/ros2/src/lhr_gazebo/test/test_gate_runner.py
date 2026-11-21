@@ -332,6 +332,16 @@ def test_runners_run_every_planned_row_in_order(tmp_path, runner):
         assert (tmp_path / 'expected.txt').read_text().split() == ['first_r1', 'second_r1']
 
 
+def test_fault_runner_fails_when_a_run_cannot_be_analyzed(tmp_path):
+    stubs = ('plan() { echo "lidar_drop_v5_r1 lidar_drop oval 1 5 60"; }\n'
+             'one_run() { failed="$failed $1"; }\n')
+    result = subprocess.run(['bash', '-c', campaign('faults', stubs)],
+                            env=runner_env(tmp_path), text=True, capture_output=True, check=False)
+    assert result.returncode == 1
+    assert (tmp_path / 'expected.txt').read_text().splitlines() == ['lidar_drop_v5_r1']
+    assert 'failed analysis: lidar_drop_v5_r1' in result.stdout
+
+
 @pytest.mark.parametrize('skidpad, rows', [(False, 18), (True, 21)])
 def test_real_gate_plan_passes_the_check(tmp_path, skidpad, rows):
     """Skidpad's world is still missing on main: a complete plan without it is not refused."""
