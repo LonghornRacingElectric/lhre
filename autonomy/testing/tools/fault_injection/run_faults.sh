@@ -103,10 +103,13 @@ one_run() {  # id kind track seed v_max seconds [launch args...]
     local rec=$!
     # Only clean runs need metrics. During fault trials the mission must
     # stay armed after the first lap so delayed faults still take effect.
-    setsid ros2 launch lhr_gazebo gazebo_demo.launch.py \
+    local launch_args=(
         gui:=false rviz:=false track_style:="$track" seed:="$seed" \
         v_max:="$vmax" ${world:+"$world"} $EXTRA "$@" enable_metrics:="$metrics" \
-        output_csv:="$bag.metrics.csv" > "$OUT/bags/$id.launch.log" 2>&1 &
+        output_csv:="$bag.metrics.csv")
+    printf '%s\n' "${launch_args[@]}" > "$bag.args.txt"
+    setsid ros2 launch lhr_gazebo gazebo_demo.launch.py "${launch_args[@]}" \
+        > "$bag.launch.log" 2>&1 &
     local launch=$!
     # Fault trials run to the sim-time cap. Clean runs settle after the
     # mission ends. A stopped /clock is a hung run.
@@ -125,7 +128,7 @@ one_run() {  # id kind track seed v_max seconds [launch args...]
     fi
     python3 "$HERE/analyze_run.py" "$bag" --id "$id" --case "$kind" \
         --track "$track" --seed "$seed" --v-max "$vmax" --fence "$FENCE" \
-        --end "$OUT/bags/$id.end.txt" --csv "$OUT/results.csv" \
+        --end "$bag.end.txt" --launch-args "$bag.args.txt" --csv "$OUT/results.csv" \
         || failed="$failed $id"
 }
 

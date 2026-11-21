@@ -342,6 +342,35 @@ def test_fault_runner_fails_when_a_run_cannot_be_analyzed(tmp_path):
     assert 'failed analysis: lidar_drop_v5_r1' in result.stdout
 
 
+def test_fault_runner_scores_the_same_timeout_arguments_it_launches(tmp_path):
+    stubs = r"""
+cleanup() { :; }
+stop_launch() { :; }
+ros2() { :; }
+setsid() {
+    shift 4
+    printf '%s\n' "$@" > "$OUT/launched.txt"
+}
+python3() {
+    case "$1" in
+        */analyze_run.py) printf '%s\n' "$@" > "$OUT/analysis.txt" ;;
+    esac
+    return 0
+}
+one_run lidar_drop_v5_r1 lidar_drop oval 1 5 60 safety_lidar_timeout_s:=0.2
+"""
+    subprocess.run(['bash', '-c', fault_prefix() + stubs],
+                   env=runner_env(tmp_path, EXTRA='safety_lidar_timeout_s:=1.5'),
+                   text=True, capture_output=True, check=True)
+    args_file = tmp_path / 'bags/lidar_drop_v5_r1.args.txt'
+    args = args_file.read_text().splitlines()
+    assert args == (tmp_path / 'launched.txt').read_text().splitlines()
+    timers = [arg for arg in args if arg.startswith('safety_lidar_timeout_s:=')]
+    assert timers == ['safety_lidar_timeout_s:=1.5', 'safety_lidar_timeout_s:=0.2']
+    analysis = (tmp_path / 'analysis.txt').read_text().splitlines()
+    assert analysis[analysis.index('--launch-args') + 1] == str(args_file)
+
+
 @pytest.mark.parametrize('skidpad, rows', [(False, 18), (True, 21)])
 def test_real_gate_plan_passes_the_check(tmp_path, skidpad, rows):
     """Skidpad's world is still missing on main: a complete plan without it is not refused."""

@@ -17,27 +17,31 @@ import bisect
 import csv
 import math
 import os
+from pathlib import Path
 import sys
 
 from lhr_safety.monitors import SafetyConfig
 from rclpy.serialization import deserialize_message
 from rosbag2_py import ConverterOptions, SequentialReader, StorageOptions
 from rosidl_runtime_py.utilities import get_message
+from ros2launch.api.api import parse_launch_arguments
 
 # The PDR stop formula uses the allowed detection time T, the brake apply
 # time, and the spring brake's minimum deceleration.
 APPLY_S = 0.2
 DECEL = 6.0
 TRIP_LIMITS = {
-    'ODOM_STALE': SafetyConfig.odom_timeout_s + .2,
-    'CMD_STALE': SafetyConfig.cmd_timeout_s + .2,
-    'LIDAR_STALE': SafetyConfig.lidar_timeout_s + .2,
-    'IMU_STALE': SafetyConfig.imu_timeout_s + .2,
-    'WHEEL_STALE': SafetyConfig.wheel_timeout_s + .2,
     'EKF_DIVERGED': .2,
     'CMD_INVALID': .2,
     'GEOFENCE': .2,
     'STEER_TRACKING': 1.,
+}
+STALE_TIMERS = {
+    'ODOM_STALE': 'odom_timeout_s',
+    'CMD_STALE': 'cmd_timeout_s',
+    'LIDAR_STALE': 'lidar_timeout_s',
+    'IMU_STALE': 'imu_timeout_s',
+    'WHEEL_STALE': 'wheel_timeout_s',
 }
 STOPPED = 0.1  # m/s
 MOVED = 0.5  # m/s: rolling again after the stop fails the run
@@ -106,8 +110,22 @@ def path_length(samples, start, end):
     return sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(pts, pts[1:]))
 
 
-def score(data, case, fence):
+def trip_limits(launch_args):
+    """Use the same duplicate-argument precedence as ros2 launch."""
+    args = dict(parse_launch_arguments(launch_args))
+    limits = TRIP_LIMITS.copy()
+    for check, parameter in STALE_TIMERS.items():
+        name = f'safety_{parameter}'
+        timeout = float(args.get(name, getattr(SafetyConfig, parameter)))
+        if not math.isfinite(timeout) or timeout < 0:
+            raise ValueError(f'{name} must be finite and nonnegative')
+        limits[check] = timeout + .2
+    return limits
+
+
+def score(data, case, fence, launch_args=()):
     """Score one run from {topic: [(receive time, msg)]}."""
+    limits = trip_limits(launch_args)
     to_sim = sim_time(data.get('/clock', []))
     mission = [(to_sim(t), m.data) for t, m in data.get('/lhr/mission/status', [])]
     truth = [(to_sim(t), m.pose.pose.position.x, m.pose.pose.position.y,
@@ -189,7 +207,7 @@ def score(data, case, fence):
         row['latency_from_visible_s'] = f'{after:.3f}'
         detection = math.inf if visible is None else after
     stop = next((t for t, _, _, s in truth if t > trip[0] and s < STOPPED), None)
-    limit = TRIP_LIMITS.get(expected)
+    limit = limits.get(expected)
     row.update({
         'trip_latency_s': f'{latency:.3f}',
         'emergency_latency_s': (f'{emergency - trip[0]:.3f}'
@@ -262,6 +280,7 @@ def main():
     ap.add_argument('--v-max', default='')
     ap.add_argument('--fence', type=float, default=20.0)
     ap.add_argument('--end', default='', help="watch_run.py's end file")
+    ap.add_argument('--launch-args', type=Path, help='recorded launch arguments, one per line')
     ap.add_argument('--csv', required=True)
     args = ap.parse_args()
 
@@ -271,7 +290,8 @@ def main():
         with open(args.end) as f:
             end = f.read()
     try:
-        row = score(read(args.bag), args.case, args.fence)
+        launch_args = args.launch_args.read_text().splitlines() if args.launch_args else ()
+        row = score(read(args.bag), args.case, args.fence, launch_args=launch_args)
     except Exception as e:  # a bad bag still gets a row, so it is not lost
         print(f'analyze_run: {args.bag}: {e}', file=sys.stderr)
         row, status = {'case': args.case, 'result': 'error'}, 1

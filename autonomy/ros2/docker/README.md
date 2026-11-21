@@ -1,9 +1,9 @@
-# Running the stack on macOS (Docker)
+# Running the stack in Docker
 
-The supported platform is still native Ubuntu 24.04 ([GETTING-STARTED](../GETTING-STARTED.md)).
-This container is the workaround for Macs: Ubuntu 24.04 + ROS 2 Jazzy + Gazebo Harmonic
-in Docker, with the desktop (RViz, Gazebo GUI) served to your browser via noVNC.
-Runs at near-native speed on Apple Silicon (arm64 packages, software OpenGL for rendering).
+The container runs Ubuntu 24.04, ROS 2 Jazzy and Gazebo Harmonic. It serves
+the desktop (RViz and the Gazebo GUI) through noVNC on macOS and runs
+headless with NVIDIA rendering on the [HIL host](#headless-gpu-runs-on-hil).
+For native Ubuntu 24.04, see [GETTING-STARTED](../GETTING-STARTED.md).
 
 ## One-time setup
 
@@ -120,3 +120,67 @@ Rebuild the image after taking that dependency change. Build the native
 artifact with the simulation image, as described in the
 [FMU plant README](../src/lhr_sim_fmu/README.md); OpenModelica is not needed
 in the ROS runtime.
+
+## Headless GPU runs on HIL
+
+Use the HIL operator account with Docker access and coordinate GPU time
+before starting a campaign. Use a fresh checkout at the intended revision
+and a separate results directory. Initialize the pinned BobSim checkout
+and stage the matching x86-64 FMU and `provenance.json` in
+`simulation/out/fmu/` for FMU runs.
+
+The #204 preflight built all 16 ROS packages with the Jazzy container and
+verified NVIDIA OpenGL 4.5 on the Quadro M4000. To verify the GPU and open
+an isolated session on HIL, set `checkout` and `results` to absolute paths:
+
+```bash
+image=$(docker image inspect lhr-autonomy-dev --format '{{.Id}}')
+docker run --rm --gpus all --network none \
+  -e NVIDIA_DRIVER_CAPABILITIES=graphics,utility \
+  --entrypoint nvidia-smi "$image" -L
+git -C "$checkout" rev-parse HEAD
+docker run --rm --init -it --gpus all --network none \
+  -e NVIDIA_DRIVER_CAPABILITIES=graphics,utility,compute \
+  -e OPENBLAS_NUM_THREADS=1 -e OMP_NUM_THREADS=1 \
+  -v "$checkout:/opt/lhr" -v "$results:/results" \
+  -w /opt/lhr/autonomy/ros2 --entrypoint /bin/bash "$image"
+```
+
+Inside the container:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+colcon build --symlink-install --parallel-workers 4
+source install/setup.bash
+export GZ_SIM_RESOURCE_PATH="$PWD/src/lhr_gazebo/models"
+timeout -s INT -k 4s 12s gz sim -s -r --headless-rendering \
+  src/lhr_gazebo/worlds/autocross_seed1.sdf >/results/renderer.log 2>&1
+grep -E 'GL_(VENDOR|RENDERER|VERSION)' "$HOME/.gz/rendering/ogre2.log"
+```
+
+The short renderer probe is expected to time out. The renderer log should
+identify the NVIDIA GPU. Start longer runs in a persistent terminal session.
+Use a dedicated container because both runners stop Gazebo and ROS
+processes between trials.
+
+### Sim v2 acceptance
+
+The November 21 preflight staged a launcher and operator README in
+`~/sim-v2-204-preflight.y8wQYb` on HIL. From that directory, preview the
+integrated checkout and then start the unattended run:
+
+```bash
+./launch.sh preflight "$checkout"
+./launch.sh run "$checkout"
+```
+
+The launcher checks the native FMU manifest, requires 35 driving rows
+and 71 fault and clean rows, and uses stereo fusion, Mid-360, EKF and the
+default 0.3 s LiDAR timeout. Its fresh `results/run.*` directory contains
+the source revision, plans, logs, bags, scored CSVs and pose-age audit.
+Archive the run outputs according to the
+[test-data policy](../../testing/README.md). See the
+[driving tool](../../testing/tools/gate/README.md),
+[fault tool](../../testing/tools/fault_injection/README.md) and
+[Sim v2 pass criteria](../../docs/plans/sim-v2-pass-criteria.md) for the
+matrix and scoring rules.
