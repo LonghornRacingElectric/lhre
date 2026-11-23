@@ -4,6 +4,10 @@ Vehicle dynamics studies for the current car. The runtime is
 [BobSim](https://github.com/BobDyn/BobSim), pinned as a git submodule at
 `simulation/bobsim`. BobSim brings the BobLib Modelica library with it.
 
+The pin includes runtime damper curves and TTX25 settings. Our car keeps
+its existing tabular damper inputs. See [the pin](docs/bobsim.md#damper-support-pin)
+for the upstream changes and limits.
+
 This directory is outside Bazel
 ([ADR-012](../docs/architecture/012-simulation-outside-bazel.md)).
 `bazel test //...` does not build or test anything here. Make and Docker do.

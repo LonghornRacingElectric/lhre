@@ -199,7 +199,36 @@ it, a nested submodule that BobSim moved stays as an untracked folder.
 tag does not change with the pin, so an old image stays in use until you
 build again.
 
-### Current autonomy pin
+### Damper support pin
+
+BobSim `1af10a0` replaces `f58f932` and brings BobLib `2935955` in place
+of `75b6e03`. Yiming Peng authored the damper integration in
+[BobSim #151](https://github.com/BobDyn/BobSim/pull/151) and
+[BobLib #31](https://github.com/BobDyn/BobLib/pull/31).
+
+| Commit | Class | Effect |
+| ------ | ----- | ------ |
+| BobSim `1af10a0` | Physics/model input | DynPy uses full shaft force-speed curves with motion-ratio projection. Named TTX25 curves and runtime Modelica tables share curve provenance. |
+| BobLib `2935955` | Physics/model input | Adds validated tabular dampers, runtime table files, and damper diagnostic channels. |
+
+The BobSim commit also changes reports and the app. No module paths move.
+Our `vehicle/vehicle.yml` keeps its existing `damper_table` values. They
+remain supported. The pin makes TTX25 settings available. It does not
+select valve or adjuster settings for our car. Those need a named source.
+BobSim's default car now selects TTX25 settings, so `make bobsim` uses
+different damper inputs from `make car` on our vehicle.
+
+The reduced model uses the full damper table instead of its endpoint
+slope. Our present linear tables retain their force law. Nonlinear tables
+can change transient results. Interpolation is piecewise linear. Forces
+beyond the tabulated speed range use terminal-slope extrapolation.
+An extrapolated force is a prediction, not a measured damper value.
+
+Existing study results remain historical until rerun at this pin. The
+front-ackermann README already marks its results historical. This update
+does not rerun that study or change the separately pinned FMU exporter.
+
+### Historical autonomy pin
 
 PR #91 advances `fe03bab` to `22c5056` (BobSim main). BobLib remains at
 `1bd6d78`. No vehicle numbers change. The autonomy adapter now imports
