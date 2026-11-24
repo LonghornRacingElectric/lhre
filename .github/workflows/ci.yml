@@ -145,13 +145,24 @@ jobs:
       # A Windows-only break still shows the Linux result, and vice versa.
       fail-fast: false
       matrix:
+        # Linux's longest leg in the 80 runs before Nov 24 2026 took 23
+        # minutes. 90 leaves room for a fork PR, which gets no BuildBuddy key
+        # and so builds everything on the runner with no cache at all.
+        # Linux's actions run remotely, so its build step keeps no outputs
+        # (the telemetry images alone were ~1.9 GB to download) and its test
+        # step builds only tests, whose logs the later steps read from
+        # bazel-testlogs. Windows builds everything locally anyway.
         include:
           - os: Linux
             runner: ubuntu-latest
-            timeout: 360
+            timeout: 90
+            build_flags: --remote_download_minimal
+            test_flags: --build_tests_only
           - os: Windows
             runner: windows-latest
             timeout: 60
+            build_flags: ""
+            test_flags: ""
     runs-on: ${{ matrix.runner }}
     timeout-minutes: ${{ matrix.timeout }}
     defaults:
@@ -204,10 +215,10 @@ jobs:
             ${{ runner.os }}-bazel-
 
       - name: Build everything
-        run: bazel build //...
+        run: bazel build ${{ matrix.build_flags }} //...
 
       - name: Test everything
-        run: bazel test //... 2>&1 | tee bazel-test.log
+        run: bazel test ${{ matrix.test_flags }} //... 2>&1 | tee bazel-test.log
 
       - name: List failed tests
         if: failure()
