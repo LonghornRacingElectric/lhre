@@ -101,7 +101,7 @@ check. The full run of every standard evaluation is in
 ### fast
 
 The `Simulation fast checks` job runs when a change touches
-`simulation/`, `vehicle/`, `.gitmodules` or `ci.yml`.
+`simulation/`, `vehicle/`, `.gitmodules`, `ci.yml` or `tools/ci/changes.py`.
 
 1. Build the image with the GitHub Actions layer cache. A layer is built
    again only when the BobSim `Dockerfile` or `requirements.txt` changes.
