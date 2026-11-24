@@ -119,13 +119,15 @@ if the job runs a `make` target other than `build`, `smoke`, `unit` or
 
 ### four-post
 
-The `FourPost` job runs FourPost on our car: `make car T=standard-eval-four-post`, then
-`make four-post-acceptance`. See
+The `FourPost` job builds the image from the same GitHub Actions layer
+cache as the fast job, which runs on every change this one does and is
+the one that writes the cache. It then runs FourPost on our car:
+`make car T=standard-eval-four-post`, then `make four-post-acceptance`. See
 [bobsim.md](bobsim.md#run-a-bobsim-target-on-our-car).
 
 It runs when a pull request or a push changes `vehicle/`, the BobSim pin,
-`simulation/tools/`, `simulation/Makefile`, `simulation/docker-compose.yml`
-or `ci.yml`. If the `Changes` job fails, it runs anyway and `All checks passed`
+`simulation/tools/`, `simulation/Makefile`, `simulation/docker-compose.yml`,
+`ci.yml` or `tools/ci/changes.py`. If the `Changes` job fails, it runs anyway and `All checks passed`
 fails. A manual run of `ci.yml` always runs it. The weekly run does not,
 because `full-regeneration` covers FourPost.
 
