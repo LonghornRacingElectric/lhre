@@ -61,6 +61,7 @@ nav:
       - Hermetic Tests: tools/hermetic/README.md
       - Coverage: tools/coverage/README.md
       - Prebuilt protoc: tools/protoc/README.md
+      - CI Helpers: tools/ci/README.md
   - Autonomy:
       - Overview: autonomy/README.md
       - Getting Started: autonomy/ros2/GETTING-STARTED.md

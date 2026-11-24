@@ -122,7 +122,10 @@ test it are in [src/lib/driveday/README.md](src/lib/driveday/README.md);
 ## Tests
 
 CI's `Telemetry viewer` job type-checks the app and runs both suites on
-every change under `apps/telemetry/`. The type-check is what catches a
+every change under `apps/telemetry/`. A change to this app alone runs only
+this job: Bazel and the `Telemetry` job never read it, except its Python
+(`get_schema.py` is in `analysis_lib`), which still runs both
+([tools/ci](../../../../../tools/ci/README.md)). The type-check is what catches a
 component that names something it never defines: vitest only loads the
 modules a test imports, so it passes while `next build` fails. Locally:
 

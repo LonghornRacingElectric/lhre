@@ -19,7 +19,8 @@ jobs:
   # Jobs skip only when this job says their paths are untouched. Weekly and
   # manual runs, and pushes too large to list, run everything, except that
   # the weekly run leaves FourPost to simulation.yml's full regeneration. If this job
-  # fails, every job runs and all-checks still fails.
+  # fails, every job runs and all-checks still fails. Which paths gate which
+  # area is tools/ci/changes.py, tested by //tools/ci:changes_test.
   changes:
     name: Changes
     runs-on: ubuntu-latest
@@ -31,8 +32,13 @@ jobs:
       bevo: ${{ steps.check.outputs.bevo }}
       docs: ${{ steps.check.outputs.docs }}
       telemetry: ${{ steps.check.outputs.telemetry }}
+      viewer: ${{ steps.check.outputs.viewer }}
       runner: ${{ steps.check.outputs.runner }}
     steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: tools/ci
+
       - name: Find the areas this change touches
         id: check
         shell: bash
@@ -42,7 +48,7 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           BEFORE: ${{ github.event.before }}
         run: |
-          everything=false
+          everything=()
           case "$EVENT" in
             pull_request)
               files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" \
@@ -50,26 +56,12 @@ jobs:
             push)
               compare=$(gh api "repos/$GITHUB_REPOSITORY/compare/$BEFORE...$GITHUB_SHA")
               files=$(jq -r '.files[] | .filename, (.previous_filename // empty)' <<< "$compare")
-              [ "$(jq '.files | length' <<< "$compare")" -lt 300 ] || everything=true ;;
+              [ "$(jq '.files | length' <<< "$compare")" -lt 300 ] || everything=(--everything) ;;
             *)
               files=""
-              everything=true ;;
+              everything=(--everything) ;;
           esac
-          area() {
-            if [ "$everything" = true ] || grep -qE "$2" <<< "$files"; then echo "$1=true"; else echo "$1=false"; fi | tee -a "$GITHUB_OUTPUT"
-          }
-          if [ "$everything" = true ] || grep -qvE '^(autonomy|simulation)/' <<< "$files"; then echo "bazel=true"; else echo "bazel=false"; fi | tee -a "$GITHUB_OUTPUT"
-          area sim '^(simulation/|vehicle/|\.gitmodules$|\.github/workflows/ci\.yml$)'
-          area runner '^(apps/job_runner/|\.github/workflows/ci\.yml$)'
-          if [ "$EVENT" = schedule ]; then
-            echo "car=false" | tee -a "$GITHUB_OUTPUT"
-          else
-            area car '^(vehicle/|simulation/bobsim$|simulation/tools/|simulation/Makefile$|simulation/docker-compose\.yml$|\.github/workflows/ci\.yml$)'
-          fi
-          area autonomy '^(autonomy/|simulation/bobsim$|vehicle/|\.github/workflows/ci\.yml$)'
-          area bevo '^(apps/BEVO/|lib/spec/|lib/codegen/telemetry/|platforms/|toolchains/|MODULE\.bazel$|MODULE\.bazel\.lock$|\.github/workflows/ci\.yml$)'
-          area docs '(\.md$|^docs/|^mkdocs\.yml$|^pyproject\.toml$|^uv\.lock$|^\.github/workflows/ci\.yml$)'
-          area telemetry '^(apps/telemetry/|apps/BEVO/|lib/spec/|lib/codegen/telemetry/|\.github/workflows/ci\.yml$)'
+          python3 tools/ci/changes.py --event "$EVENT" "${everything[@]}" <<< "$files" | tee -a "$GITHUB_OUTPUT"
 
   format:
     name: Format
@@ -153,13 +145,24 @@ jobs:
       # A Windows-only break still shows the Linux result, and vice versa.
       fail-fast: false
       matrix:
+        # Linux's longest leg in the 80 runs before Nov 24 2026 took 23
+        # minutes. 90 leaves room for a fork PR, which gets no BuildBuddy key
+        # and so builds everything on the runner with no cache at all.
+        # Linux's actions run remotely, so its build step keeps no outputs
+        # (the telemetry images alone were ~1.9 GB to download) and its test
+        # step builds only tests, whose logs the later steps read from
+        # bazel-testlogs. Windows builds everything locally anyway.
         include:
           - os: Linux
             runner: ubuntu-latest
-            timeout: 360
+            timeout: 90
+            build_flags: --remote_download_minimal
+            test_flags: --build_tests_only
           - os: Windows
             runner: windows-latest
             timeout: 60
+            build_flags: ""
+            test_flags: ""
     runs-on: ${{ matrix.runner }}
     timeout-minutes: ${{ matrix.timeout }}
     defaults:
@@ -212,10 +215,10 @@ jobs:
             ${{ runner.os }}-bazel-
 
       - name: Build everything
-        run: bazel build //...
+        run: bazel build ${{ matrix.build_flags }} //...
 
       - name: Test everything
-        run: bazel test //... 2>&1 | tee bazel-test.log
+        run: bazel test ${{ matrix.test_flags }} //... 2>&1 | tee bazel-test.log
 
       - name: List failed tests
         if: failure()
@@ -374,8 +377,20 @@ jobs:
         with:
           submodules: recursive
 
+      # The same image and layer cache as Simulation fast checks, which runs
+      # on every change this job runs on and so keeps the cache warm. Only
+      # that job writes it, so the two don't export the same layers twice.
+      # docker compose then finds lhre-simulation:local and builds nothing.
+      - uses: docker/setup-buildx-action@v3
+
       - name: Build the image
-        run: make build
+        uses: docker/build-push-action@v6
+        with:
+          context: simulation/bobsim
+          file: simulation/bobsim/Dockerfile
+          tags: lhre-simulation:local
+          load: true
+          cache-from: type=gha,scope=lhre-simulation
 
       - name: Run FourPost on our car
         run: make car T=standard-eval-four-post
@@ -509,11 +524,12 @@ jobs:
           CI: "true"
         run: npm test -- --watchAll=false
 
-  # The viewer is an npm project outside Bazel, so it gets its own job.
+  # The viewer is an npm project outside Bazel, so it gets its own job, and
+  # a change to the viewer alone runs only this one (and Docs for its .md).
   telemetry-viewer:
     name: Telemetry viewer
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.telemetry != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.viewer != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:

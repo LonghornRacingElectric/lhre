@@ -15,6 +15,7 @@ Build and dev tooling. Each package documents itself:
 | [coverage/](coverage/README.md) | Firmware line coverage from the host tests on the lines a PR changes, reported on every PR (no enforced percent). |
 | [ubsan/](ubsan/README.md) | `--config=ubsan`: host tests with undefined behavior trapping, plus the canary that proves it's on. |
 | [asan/](asan/README.md) | `--config=asan`: host tests under AddressSanitizer, with its canary. |
+| [ci/](ci/README.md) | Scripts CI runs: which jobs a change runs (`changes.py`) and the failed-test summary. |
 
 `new_board.py` (`bazel run //tools:new_board -- boards/<Name>/<Name>.ioc`)
 scaffolds a whole working board from its CubeMX `.ioc`, so new boards

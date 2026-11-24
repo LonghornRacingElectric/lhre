@@ -1,0 +1,16 @@
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
+
+# CI's `Changes` job runs changes.py with the runner's python3, outside
+# Bazel; this library is only here so the test can import it.
+py_library(
+    name = "changes",
+    srcs = ["changes.py"],
+    visibility = ["//visibility:private"],
+)
+
+py_test(
+    name = "changes_test",
+    size = "small",
+    srcs = ["changes_test.py"],
+    deps = [":changes"],
+)
