@@ -17,6 +17,7 @@ import { activeMessages, MESSAGE_ICON_GLYPH, type DashMessage } from "@/lib/dash
 import { useRacePlan } from "@/lib/dash/useRacePlan";
 import { DriveDaySetupForm, driveDaySetupToPayload, type DriveDaySetup } from "@/components/trackside/DriveDaySetupForm";
 import { ManualLapEntry } from "@/components/trackside/ManualLapEntry";
+import { LiveWorkspace } from "@/components/trackside/LiveWorkspace";
 import { parseLapTimeInput } from "@/lib/trackside/lapTime";
 import type {
   ChannelDef,
@@ -3034,6 +3035,353 @@ function App() {
     }
   }
 
+  // Built only while the Live tab is showing; both the workspace and the stacked fallback read from it.
+  const buildLivePanels = () => ({
+    status: (
+              <div id="car-status-anchor">
+              <CarStatusPanel
+                feed={carStatus}
+                carState={carState}
+                stale={carStateStale}
+                ageMs={carStateAgeMs}
+                uplinkLabel={uplinkMeta.label}
+                uplinkDot={uplinkMeta.dot}
+                running={liveState.running}
+              />
+              </div>
+    ),
+    laps: (
+              <Panel
+                title="Live Laps"
+                icon={<Timer size={18} />}
+                headerRight={liveState.laps.length !== selectedLaps.length
+                  ? <><strong>{selectedLaps.length}</strong>/{liveState.laps.length} counted</>
+                  : undefined}
+              >
+                <LiveLapTable
+                  laps={liveState.laps}
+                  bestLap={bestLap}
+                  bestSectors={bestSectors}
+                  currentSectors={liveState.currentSectors}
+                  currentLapElapsedMs={liveLapElapsedMs}
+                  currentLapEnergyWh={liveState.lapEnergyWh}
+                  currentLapEnergyOutWh={liveState.lapEnergyOutWh}
+                  currentLapEnergyInWh={liveState.lapEnergyInWh}
+                  sectorCount={liveSectorCount}
+                  selectedLapIds={selectedLapIds}
+                  onToggleLap={toggleLapSelected}
+                  onEditLapTime={editLapDuration}
+                  onEditLapNote={editLapNote}
+                  onDeleteLap={deleteLap}
+                  editable={!isMirror}
+                  targetEnergyPerLapWh={targetEnergyPerLapWh}
+                  averages={lapAverages}
+                />
+                <ManualLapEntry disabled={isMirror} onAdd={addManualLap} />
+              </Panel>
+    ),
+    pack: (
+              <PackStatusPanel state={liveState} displayState={filteredLiveState} soeCutoffCellV={soeCutoffCellV} />
+    ),
+    cells: (
+              <CellThermalsPanel sample={filteredLiveState.lastSample} />
+    ),
+    plan: dynamicLapBudgetWh != null ? (
+                <Panel
+                  title="Energy Plan"
+                  icon={<Zap size={18} />}
+                  headerRight={
+                    <>Laps <strong>{lapsCompletedPlan}</strong> done · <strong>{lapsRemainingPlan ?? "—"}</strong> left</>
+                  }
+                >
+                  <div className="energyPlanTiles">
+                    <Metric label="Used / Remaining" value={`${energyUsedWh.toFixed(0)} / ${(remainingBudgetWh ?? 0).toFixed(0)} Wh`} />
+                    <Metric
+                      label="Budget / lap (live)"
+                      value={`${dynamicLapBudgetWh.toFixed(0)} Wh`}
+                      tone={budgetVsTargetWh != null && budgetVsTargetWh >= 0 ? "good" : ""}
+                    />
+                  </div>
+                  {budgetVsTargetWh != null ? (
+                    <small style={{ color: budgetVsTargetWh >= 0 ? "#5cb87a" : "#ff4d4f", fontWeight: 600, display: "block", marginTop: 6 }}>
+                      {budgetVsTargetWh >= 0 ? "▲" : "▼"} {Math.abs(budgetVsTargetWh).toFixed(0)} Wh/lap {budgetVsTargetWh >= 0 ? "under" : "over"} budget — recalculates live each completed lap from energy used.
+                    </small>
+                  ) : null}
+                </Panel>
+              ) : null,
+    traction: (
+              <TractionControlPanel sample={filteredLiveState.lastSample} />
+    ),
+    thermal: (
+              <BatteryThermalProjectionPanel
+                projection={batteryThermalProjection}
+                targetLaps={targetLaps}
+                lapsCompleted={lapsCompletedPlan}
+                limitC={batteryTempLimitC}
+                onLimitC={(v) => { setBatteryTempLimitC(v); localStorage.setItem("battery-temp-limit-c", String(v)); }}
+                isMirror={isMirror}
+              />
+    ),
+    vitals: (
+              <Panel title="Vitals Window" icon={<Gauge size={18} />}>
+                <VitalsWindowChart state={filteredLiveState} windowS={energyWindowS} />
+              </Panel>
+    ),
+    driver: (
+              <DriverControlsPanel sample={filteredLiveState.lastSample} torqueParamSet={torqueParamSet} />
+    ),
+    energy: (
+                  <Panel title="Energy Window" icon={<Zap size={18} />}>
+                    <EnergyWindowChart
+                      state={filteredLiveState}
+                      windowS={energyWindowS}
+                      onWindowS={setEnergyWindowS}
+                    />
+                  </Panel>
+    ),
+    temperature: (
+                  <Panel title="Temperature Window" icon={<Thermometer size={18} />}>
+                    <TemperatureWindowChart
+                      state={filteredLiveState}
+                      windowS={energyWindowS}
+                    />
+                  </Panel>
+    ),
+    temps: (
+                  <TempsStatusPanel sample={filteredLiveState.lastSample} />
+    ),
+    map: (
+              <Panel title="Live Position" icon={<MapPinned size={18} />} className="liveMapPanel">
+                <div className="gpsReadout">
+                  <span className={`gpsDot ${liveHasGpsFix && dataAgeMs != null && dataAgeMs < 3000 ? "live" : liveHasGpsFix ? "stale" : "dead"}`} />
+                  <span className="gpsCoord">LAT <strong>{curGpsFix ? curGpsFix.lat.toFixed(6) : "—"}</strong></span>
+                  <span className="gpsCoord">LON <strong>{curGpsFix ? curGpsFix.lon.toFixed(6) : "—"}</strong></span>
+                  <span className="gpsAge">
+                    {curGpsFix == null
+                      ? "no fix"
+                      : gpsFixAgeMs == null
+                        ? "—"
+                        : gpsFixAgeMs < 2000
+                          ? "updating"
+                          : `unchanged ${(gpsFixAgeMs / 1000).toFixed(0)}s`}
+                  </span>
+                </div>
+                <TrackBuilderMap
+                  points={filteredLiveState.samples.filter(hasGps).map((sample) => ({ t: sample.t, lat: sample.lat ?? 0, lon: sample.lon ?? 0 }))}
+                  liveSample={filteredLiveState.lastSample}
+                  gates={track.gates}
+                  drawMode={null}
+                  onDrawGate={handleDrawGate}
+                  center={builderCenter}
+                  onCenter={setBuilderCenter}
+                  targetSpanM={selectedTrackView?.spanM}
+                  follow
+                  gpsUnavailable={filteredLiveState.lastSample != null && !filteredLiveState.samples.some(hasGps)}
+                />
+              </Panel>
+    ),
+    livedata: (
+                <Panel title="Live Data" icon={<Gauge size={18} />}>
+                  <LiveDataPanel state={filteredLiveState} />
+                </Panel>
+    ),
+    setup: (
+              <Panel title="Live Setup" icon={<SlidersHorizontal size={18} />}>
+                <div className="trackForm">
+                  <label>
+                    <span>Car</span>
+                    <select
+                      value={source}
+                      disabled={liveState.running}
+                      onChange={(e) => setSource(e.target.value as "orion" | "angelique")}
+                    >
+                      {sources.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Track</span>
+                    <select value={track.slug} onChange={(e) => setTrack(normalizeTrack(tracks.find((t) => t.slug === e.target.value) ?? track))}>
+                      <option value={track.slug}>{track.name}</option>
+                      {tracks.filter((t) => t.slug !== track.slug).map((t) => <option key={t.slug} value={t.slug}>{t.name}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Channel chart</span>
+                    <select value={channelChart.slug} onChange={(e) => setChannelChart(channelCharts.find((chart) => chart.slug === e.target.value) ?? channelChart)}>
+                      <option value={channelChart.slug}>{channelChart.name}</option>
+                      {channelCharts.filter((chart) => chart.slug !== channelChart.slug).map((chart) => <option key={chart.slug} value={chart.slug}>{chart.name}</option>)}
+                    </select>
+                  </label>
+                  {/* Connection knobs are dev/debug only — prod streams the car
+                      automatically. Tucked away so the focused setup stays clean. */}
+                  <details className="advancedConn">
+                    <summary>Connection (advanced)</summary>
+                    <label>
+                      <span>Topic source</span>
+                      <select value={liveTransport} disabled={liveState.running} onChange={(e) => setLiveTransport(e.target.value as KafkaTransport)}>
+                        <option value="local">Local replay bus (simulator)</option>
+                        <option value="kafka">Kafka broker (car)</option>
+                        <option value="mqtt">MQTT broker (car direct)</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>Topic</span>
+                      <input value={liveTopic} placeholder={liveTransport === "mqtt" ? "orion" : `grafana_data_${source}`} disabled={liveState.running} onChange={(e) => setLiveTopic(e.target.value)} />
+                    </label>
+                    <label>
+                      <span>Sample rate</span>
+                      <select value={liveSampleHz} disabled={liveState.running} onChange={(e) => setLiveSampleHz(Number(e.target.value))}>
+                        <option value={1}>1 Hz</option>
+                        <option value={2}>2 Hz</option>
+                        <option value={5}>5 Hz</option>
+                        <option value={10}>10 Hz</option>
+                        <option value={20}>20 Hz</option>
+                      </select>
+                    </label>
+                  </details>
+                  <label>
+                    <span>Race laps (synced)</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={targetLaps || ""}
+                      placeholder="e.g. 22"
+                      title="Total race laps — shared with every trackside client; drives the energy budget"
+                      onChange={(e) => {
+                        const n = Math.max(0, Math.floor(Number(e.target.value) || 0));
+                        setTargetLaps(n);
+                        racePlan.push(n, targetEnergyKwh, soeCutoffCellV);
+                      }}
+                    />
+                  </label>
+                  <label>
+                    <span>Usable pack budget kWh (synced)</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.1}
+                      value={targetEnergyKwh || ""}
+                      placeholder={PACK_ENERGY_KWH.toFixed(2)}
+                      onChange={(e) => {
+                        const v = Math.max(0, Number(e.target.value) || 0);
+                        setTargetEnergyKwh(v);
+                        racePlan.push(targetLaps, v, soeCutoffCellV);
+                      }}
+                    />
+                  </label>
+                  <label>
+                    <span>OCV cutoff V</span>
+                    <input
+                      type="number"
+                      min={2}
+                      max={4.2}
+                      step={0.01}
+                      value={soeCutoffCellV || ""}
+                      placeholder={DEFAULT_SOE_CUTOFF_CELL_V.toFixed(2)}
+                      disabled={isMirror}
+                      onChange={(e) => {
+                        const v = normalizeSoeCutoffCellV(Number(e.target.value) || DEFAULT_SOE_CUTOFF_CELL_V);
+                        setSoeCutoffCellV(v);
+                        racePlan.push(targetLaps, targetEnergyKwh, v);
+                      }}
+                    />
+                  </label>
+                  {targetEnergyPerLapWh != null ? (
+                    <small className="muted">
+                      Usable budget {targetEnergyKwh.toFixed(2)} kWh to {soeCutoffCellV.toFixed(2)} V min-cell OCV ÷ {targetLaps} = {targetEnergyPerLapWh.toFixed(0)} Wh/lap even split.
+                    </small>
+                  ) : null}
+                  {/* Live energy-plan tiles moved to the Energy Plan panel
+                      under Pack Status — they read better next to pack state
+                      than buried under the configuration inputs. */}
+                  <div className="feedControl">
+                    <div>
+                      <strong>Live feed</strong>
+                      <small>Auto-starts on load and reconnects if it drops — no need to start it.</small>
+                    </div>
+                    <span className="freshTag"><span className={`dot ${uplinkMeta.dot}`} /> {uplinkMeta.label}</span>
+                  </div>
+                  {sessionInfo ? (
+                    <div className="sessionTag" title={`Started ${new Date(sessionInfo.startedAt).toLocaleString()}`}>
+                      <strong>{sessionInfo.name}</strong>
+                      <small>{[sessionInfo.eventType, sessionInfo.driver, sessionInfo.venue].filter(Boolean).join(" · ") || "no metadata"}</small>
+                    </div>
+                  ) : null}
+                  <div className="sessionFileRow">
+                    <button type="button" className="primary" disabled={isMirror} onClick={() => setNewSessionOpen(true)}>
+                      <Plus size={15} /> New Session
+                    </button>
+                    <button type="button" className="tool" onClick={() => setSetupOpen(true)} title="Drive-day setup: conditions, alignment, shocks, tires, aero — saved to the session's drive_day record">
+                      <SlidersHorizontal size={15} /> Drive Day Setup
+                    </button>
+                    <button type="button" className="tool" onClick={saveSessionFile}>
+                      <Save size={15} /> Save JSON
+                    </button>
+                    <button type="button" className="tool" disabled={!liveState.laps.length} onClick={downloadSessionCsv}>
+                      <Download size={15} /> Laps CSV
+                    </button>
+                    <button type="button" className="tool" onClick={() => sessionFileInputRef.current?.click()}>
+                      <Upload size={15} /> Load
+                    </button>
+                    <input
+                      ref={sessionFileInputRef}
+                      type="file"
+                      accept="application/json,.json"
+                      style={{ display: "none" }}
+                      onChange={loadSessionFile}
+                    />
+                  </div>
+                  <div className="dangerZone">
+                    <div>
+                      <strong>Reset saved run</strong>
+                      <small>Clears laps + cache and keeps streaming. Use New Session to also tag a fresh run.</small>
+                    </div>
+                    <button type="button" className="tool dangerTool" disabled={isMirror} onClick={resetLiveSession}>
+                      <Trash2 size={15} /> Reset All
+                    </button>
+                  </div>
+                </div>
+              </Panel>
+    ),
+    gforce: <GForcePanel state={filteredLiveState} />,
+    strategy: (
+      <EnergyStrategyPanel
+        state={liveState}
+        targetLaps={targetLaps}
+        targetEnergyKwh={targetEnergyKwh}
+        targetEnergyPerLapWh={targetEnergyPerLapWh}
+        soeCutoffCellV={soeCutoffCellV}
+        averages={lapAverages}
+      />
+    ),
+    metadata: (
+              <Panel title="Pre-Set Metadata" icon={<FileText size={18} />}>
+                <MetadataFields
+                  compact
+                  values={metadataDraft}
+                  onChange={(key, value) => setMetadataDraft((prev) => ({ ...prev, [key]: value }))}
+                />
+              </Panel>
+    ),
+  });
+
+  const P = (activeTab === "live" ? buildLivePanels() : null) as ReturnType<typeof buildLivePanels>;
+
+  // Shared by the header (desktop) and the standalone tab bar (phones/tablets).
+  const tabButtons = (
+    <>
+        <button className={activeTab === "live" ? "tab activeTab" : "tab"} onClick={() => setActiveTab("live")}>
+          <Radio size={16} /> Live Viewer
+        </button>
+        <button className={activeTab === "track-builder" ? "tab activeTab" : "tab"} onClick={() => setActiveTab("track-builder")}>
+          <MapPinned size={16} /> Track Builder
+        </button>
+        <button className={activeTab === "dash" ? "tab activeTab" : "tab"} onClick={() => setActiveTab("dash")}>
+          <Gauge size={16} /> Dash
+        </button>
+    </>
+  );
+
   return (
     <main className={phoneFull ? "shell" : "shell driveMode"}>
       {/* Phone drive view — CSS shows it only at <=760px in driveMode. Layout from
@@ -3203,6 +3551,9 @@ function App() {
           <h1>Trackside Live</h1>
           <p>Live telemetry, lap timing &amp; energy strategy · MoTeC / CSV export · track builder</p>
         </div>
+        <nav className="topTabs" aria-label="Telemetry workspace">
+          {tabButtons}
+        </nav>
         <div className="topActions">
           <span
             className={`clientsBadge${presence.clients >= presence.max ? " atLimit" : ""}`}
@@ -3229,8 +3580,8 @@ function App() {
             <span className="statusSrc">{sourceLabel}</span>
           </div>
           {/* plain <a>: a full load keeps trackside.css out of the viewer */}
-          <a className="tool" href="/trackside-retro" title="Review a drive day from the database: laps, sectors, corners, cones">
-            <History size={14} /> Retro
+          <a className="tool" href="/trackside-retro" title="Open LAPDOG to review a past drive day: laps, sectors, corners, cones, video">
+            <History size={14} /> LAPDOG
           </a>
           <button className="tool driveToggle" onClick={() => setPhoneFull(false)}>Drive view</button>
           <button className="tool iconOnly" onClick={() => setShowTour(true)} aria-label="Show guided tour" title="Guided tour">
@@ -3317,15 +3668,7 @@ function App() {
           (their sections still render if activeTab is set to them) but the buttons
           are hidden for now — re-add a button here to bring either back. */}
       <nav className="tabBar" aria-label="Telemetry workspace">
-        <button className={activeTab === "live" ? "tab activeTab" : "tab"} onClick={() => setActiveTab("live")}>
-          <Radio size={16} /> Live Viewer
-        </button>
-        <button className={activeTab === "track-builder" ? "tab activeTab" : "tab"} onClick={() => setActiveTab("track-builder")}>
-          <MapPinned size={16} /> Track Builder
-        </button>
-        <button className={activeTab === "dash" ? "tab activeTab" : "tab"} onClick={() => setActiveTab("dash")}>
-          <Gauge size={16} /> Dash
-        </button>
+        {tabButtons}
       </nav>
 
       {activeTab === "exporter" ? <section className="grid">
@@ -3826,94 +4169,48 @@ function App() {
             </div>
           </div>
 
+          <LiveWorkspace
+            panels={[
+                { id: "laps", title: "Live laps", node: P.laps, defaultCol: 0, defaultWeight: 1.6 },
+                { id: "plan", title: "Energy plan", node: P.plan, defaultCol: 0 },
+                { id: "status", title: "Car status", node: P.status, defaultCol: 0, defaultVisible: false },
+                { id: "traction", title: "Traction control", node: P.traction, defaultCol: 0, defaultVisible: false },
+                { id: "thermal", title: "Battery thermals", node: P.thermal, defaultCol: 1 },
+                { id: "vitals", title: "Vitals", node: P.vitals, defaultCol: 1, defaultWeight: 1.3 },
+                { id: "driver", title: "Driver controls", node: P.driver, defaultCol: 1, defaultVisible: false },
+                { id: "energy", title: "Energy window", node: P.energy, defaultCol: 1, defaultVisible: false },
+                { id: "temperature", title: "Temperature window", node: P.temperature, defaultCol: 1, defaultVisible: false },
+                { id: "temps", title: "Temps", node: P.temps, defaultCol: 1, defaultVisible: false },
+                { id: "gforce", title: "G-forces", node: P.gforce, defaultCol: 1, defaultVisible: false },
+                { id: "pack", title: "Pack status", node: P.pack, defaultCol: 2 },
+                { id: "map", title: "Live position", node: P.map, defaultCol: 2, defaultWeight: 1.3 },
+                { id: "cells", title: "Cell thermals", node: P.cells, defaultCol: 1 },
+                { id: "livedata", title: "Live data", node: P.livedata, defaultCol: 2, defaultVisible: false },
+                { id: "setup", title: "Live setup", node: P.setup, defaultCol: 2, defaultWeight: 1.4, defaultVisible: false },
+                { id: "strategy", title: "Energy strategy", node: P.strategy, defaultCol: 2, defaultVisible: false },
+                { id: "metadata", title: "Pre-set metadata", node: P.metadata, defaultCol: 2, defaultVisible: false },
+            ]}
+            fallback={(
           <div className="liveLayout">
             <div className="leftRail">
-              <div id="car-status-anchor">
-              <CarStatusPanel
-                feed={carStatus}
-                carState={carState}
-                stale={carStateStale}
-                ageMs={carStateAgeMs}
-                uplinkLabel={uplinkMeta.label}
-                uplinkDot={uplinkMeta.dot}
-                running={liveState.running}
-              />
-              </div>
-              <Panel
-                title="Live Laps"
-                icon={<Timer size={18} />}
-                headerRight={liveState.laps.length !== selectedLaps.length
-                  ? <><strong>{selectedLaps.length}</strong>/{liveState.laps.length} counted</>
-                  : undefined}
-              >
-                <LiveLapTable
-                  laps={liveState.laps}
-                  bestLap={bestLap}
-                  bestSectors={bestSectors}
-                  currentSectors={liveState.currentSectors}
-                  currentLapElapsedMs={liveLapElapsedMs}
-                  currentLapEnergyWh={liveState.lapEnergyWh}
-                  currentLapEnergyOutWh={liveState.lapEnergyOutWh}
-                  currentLapEnergyInWh={liveState.lapEnergyInWh}
-                  sectorCount={liveSectorCount}
-                  selectedLapIds={selectedLapIds}
-                  onToggleLap={toggleLapSelected}
-                  onEditLapTime={editLapDuration}
-                  onEditLapNote={editLapNote}
-                  onDeleteLap={deleteLap}
-                  editable={!isMirror}
-                  targetEnergyPerLapWh={targetEnergyPerLapWh}
-                  averages={lapAverages}
-                />
-                <ManualLapEntry disabled={isMirror} onAdd={addManualLap} />
-              </Panel>
-              <PackStatusPanel state={liveState} displayState={filteredLiveState} soeCutoffCellV={soeCutoffCellV} />
-              <CellThermalsPanel sample={filteredLiveState.lastSample} />
+              {P.status}
+              {P.laps}
+              {P.pack}
+              {P.cells}
               {/* Live energy-plan tiles: used vs remaining + laps done/left +
                   live per-lap budget that recomputes from energy used each
                   completed lap. Configured up in Live Setup; surfaced here
                   next to Pack Status so the strategist reads pacing in one
                   glance with pack state. */}
-              {dynamicLapBudgetWh != null ? (
-                <Panel
-                  title="Energy Plan"
-                  icon={<Zap size={18} />}
-                  headerRight={
-                    <>Laps <strong>{lapsCompletedPlan}</strong> done · <strong>{lapsRemainingPlan ?? "—"}</strong> left</>
-                  }
-                >
-                  <div className="energyPlanTiles">
-                    <Metric label="Used / Remaining" value={`${energyUsedWh.toFixed(0)} / ${(remainingBudgetWh ?? 0).toFixed(0)} Wh`} />
-                    <Metric
-                      label="Budget / lap (live)"
-                      value={`${dynamicLapBudgetWh.toFixed(0)} Wh`}
-                      tone={budgetVsTargetWh != null && budgetVsTargetWh >= 0 ? "good" : ""}
-                    />
-                  </div>
-                  {budgetVsTargetWh != null ? (
-                    <small style={{ color: budgetVsTargetWh >= 0 ? "#5cb87a" : "#ff4d4f", fontWeight: 600, display: "block", marginTop: 6 }}>
-                      {budgetVsTargetWh >= 0 ? "▲" : "▼"} {Math.abs(budgetVsTargetWh).toFixed(0)} Wh/lap {budgetVsTargetWh >= 0 ? "under" : "over"} budget — recalculates live each completed lap from energy used.
-                    </small>
-                  ) : null}
-                </Panel>
-              ) : null}
-              <TractionControlPanel sample={filteredLiveState.lastSample} />
+              {P.plan}
+              {P.traction}
             </div>
             <div className="liveMainColumn">
               {/* Primary glance: battery thermals + vitals up top. */}
-              <BatteryThermalProjectionPanel
-                projection={batteryThermalProjection}
-                targetLaps={targetLaps}
-                lapsCompleted={lapsCompletedPlan}
-                limitC={batteryTempLimitC}
-                onLimitC={(v) => { setBatteryTempLimitC(v); localStorage.setItem("battery-temp-limit-c", String(v)); }}
-                isMirror={isMirror}
-              />
-              <Panel title="Vitals Window" icon={<Gauge size={18} />}>
-                <VitalsWindowChart state={filteredLiveState} windowS={energyWindowS} />
-              </Panel>
+              {P.thermal}
+              {P.vitals}
               {/* Cool-to-see, lower priority — kept visible but below the glance set. */}
-              <DriverControlsPanel sample={filteredLiveState.lastSample} torqueParamSet={torqueParamSet} />
+              {P.driver}
               {/* Diagnostics & charts — collapsed by default so the glance panels
                   fit without scrolling. Live Data (right rail) collapses too. */}
               <button
@@ -3927,55 +4224,17 @@ function App() {
               </button>
               {showDiagnostics ? (
                 <>
-                  <Panel title="Energy Window" icon={<Zap size={18} />}>
-                    <EnergyWindowChart
-                      state={filteredLiveState}
-                      windowS={energyWindowS}
-                      onWindowS={setEnergyWindowS}
-                    />
-                  </Panel>
-                  <Panel title="Temperature Window" icon={<Thermometer size={18} />}>
-                    <TemperatureWindowChart
-                      state={filteredLiveState}
-                      windowS={energyWindowS}
-                    />
-                  </Panel>
+                  {P.energy}
+                  {P.temperature}
                   {/* Non-battery temps (motor/inverter/coolant) — battery is the
                       thermal priority; these live in diagnostics. */}
-                  <TempsStatusPanel sample={filteredLiveState.lastSample} />
+                  {P.temps}
                 </>
               ) : null}
               {/* Live Position — re-enabled now that chudpi/GPS is reliable. Kept
                   last in the column so it's available but out of the way; it
                   self-indicates (gpsUnavailable) if a session has no fix. */}
-              <Panel title="Live Position" icon={<MapPinned size={18} />} className="liveMapPanel">
-                <div className="gpsReadout">
-                  <span className={`gpsDot ${liveHasGpsFix && dataAgeMs != null && dataAgeMs < 3000 ? "live" : liveHasGpsFix ? "stale" : "dead"}`} />
-                  <span className="gpsCoord">LAT <strong>{curGpsFix ? curGpsFix.lat.toFixed(6) : "—"}</strong></span>
-                  <span className="gpsCoord">LON <strong>{curGpsFix ? curGpsFix.lon.toFixed(6) : "—"}</strong></span>
-                  <span className="gpsAge">
-                    {curGpsFix == null
-                      ? "no fix"
-                      : gpsFixAgeMs == null
-                        ? "—"
-                        : gpsFixAgeMs < 2000
-                          ? "updating"
-                          : `unchanged ${(gpsFixAgeMs / 1000).toFixed(0)}s`}
-                  </span>
-                </div>
-                <TrackBuilderMap
-                  points={filteredLiveState.samples.filter(hasGps).map((sample) => ({ t: sample.t, lat: sample.lat ?? 0, lon: sample.lon ?? 0 }))}
-                  liveSample={filteredLiveState.lastSample}
-                  gates={track.gates}
-                  drawMode={null}
-                  onDrawGate={handleDrawGate}
-                  center={builderCenter}
-                  onCenter={setBuilderCenter}
-                  targetSpanM={selectedTrackView?.spanM}
-                  follow
-                  gpsUnavailable={filteredLiveState.lastSample != null && !filteredLiveState.samples.some(hasGps)}
-                />
-              </Panel>
+              {P.map}
             </div>
             <div className="rightRail">
               {/* Energy Strategy widget hidden for now — revisit later.
@@ -3988,176 +4247,13 @@ function App() {
                 averages={lapAverages}
               />
               */}
-              {showDiagnostics ? (
-                <Panel title="Live Data" icon={<Gauge size={18} />}>
-                  <LiveDataPanel state={filteredLiveState} />
-                </Panel>
-              ) : null}
-              <Panel title="Live Setup" icon={<SlidersHorizontal size={18} />}>
-                <div className="trackForm">
-                  <label>
-                    <span>Car</span>
-                    <select
-                      value={source}
-                      disabled={liveState.running}
-                      onChange={(e) => setSource(e.target.value as "orion" | "angelique")}
-                    >
-                      {sources.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
-                    </select>
-                  </label>
-                  <label>
-                    <span>Track</span>
-                    <select value={track.slug} onChange={(e) => setTrack(normalizeTrack(tracks.find((t) => t.slug === e.target.value) ?? track))}>
-                      <option value={track.slug}>{track.name}</option>
-                      {tracks.filter((t) => t.slug !== track.slug).map((t) => <option key={t.slug} value={t.slug}>{t.name}</option>)}
-                    </select>
-                  </label>
-                  <label>
-                    <span>Channel chart</span>
-                    <select value={channelChart.slug} onChange={(e) => setChannelChart(channelCharts.find((chart) => chart.slug === e.target.value) ?? channelChart)}>
-                      <option value={channelChart.slug}>{channelChart.name}</option>
-                      {channelCharts.filter((chart) => chart.slug !== channelChart.slug).map((chart) => <option key={chart.slug} value={chart.slug}>{chart.name}</option>)}
-                    </select>
-                  </label>
-                  {/* Connection knobs are dev/debug only — prod streams the car
-                      automatically. Tucked away so the focused setup stays clean. */}
-                  <details className="advancedConn">
-                    <summary>Connection (advanced)</summary>
-                    <label>
-                      <span>Topic source</span>
-                      <select value={liveTransport} disabled={liveState.running} onChange={(e) => setLiveTransport(e.target.value as KafkaTransport)}>
-                        <option value="local">Local replay bus (simulator)</option>
-                        <option value="kafka">Kafka broker (car)</option>
-                        <option value="mqtt">MQTT broker (car direct)</option>
-                      </select>
-                    </label>
-                    <label>
-                      <span>Topic</span>
-                      <input value={liveTopic} placeholder={liveTransport === "mqtt" ? "orion" : `grafana_data_${source}`} disabled={liveState.running} onChange={(e) => setLiveTopic(e.target.value)} />
-                    </label>
-                    <label>
-                      <span>Sample rate</span>
-                      <select value={liveSampleHz} disabled={liveState.running} onChange={(e) => setLiveSampleHz(Number(e.target.value))}>
-                        <option value={1}>1 Hz</option>
-                        <option value={2}>2 Hz</option>
-                        <option value={5}>5 Hz</option>
-                        <option value={10}>10 Hz</option>
-                        <option value={20}>20 Hz</option>
-                      </select>
-                    </label>
-                  </details>
-                  <label>
-                    <span>Race laps (synced)</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={targetLaps || ""}
-                      placeholder="e.g. 22"
-                      title="Total race laps — shared with every trackside client; drives the energy budget"
-                      onChange={(e) => {
-                        const n = Math.max(0, Math.floor(Number(e.target.value) || 0));
-                        setTargetLaps(n);
-                        racePlan.push(n, targetEnergyKwh, soeCutoffCellV);
-                      }}
-                    />
-                  </label>
-                  <label>
-                    <span>Usable pack budget kWh (synced)</span>
-                    <input
-                      type="number"
-                      min={0}
-                      step={0.1}
-                      value={targetEnergyKwh || ""}
-                      placeholder={PACK_ENERGY_KWH.toFixed(2)}
-                      onChange={(e) => {
-                        const v = Math.max(0, Number(e.target.value) || 0);
-                        setTargetEnergyKwh(v);
-                        racePlan.push(targetLaps, v, soeCutoffCellV);
-                      }}
-                    />
-                  </label>
-                  <label>
-                    <span>OCV cutoff V</span>
-                    <input
-                      type="number"
-                      min={2}
-                      max={4.2}
-                      step={0.01}
-                      value={soeCutoffCellV || ""}
-                      placeholder={DEFAULT_SOE_CUTOFF_CELL_V.toFixed(2)}
-                      disabled={isMirror}
-                      onChange={(e) => {
-                        const v = normalizeSoeCutoffCellV(Number(e.target.value) || DEFAULT_SOE_CUTOFF_CELL_V);
-                        setSoeCutoffCellV(v);
-                        racePlan.push(targetLaps, targetEnergyKwh, v);
-                      }}
-                    />
-                  </label>
-                  {targetEnergyPerLapWh != null ? (
-                    <small className="muted">
-                      Usable budget {targetEnergyKwh.toFixed(2)} kWh to {soeCutoffCellV.toFixed(2)} V min-cell OCV ÷ {targetLaps} = {targetEnergyPerLapWh.toFixed(0)} Wh/lap even split.
-                    </small>
-                  ) : null}
-                  {/* Live energy-plan tiles moved to the Energy Plan panel
-                      under Pack Status — they read better next to pack state
-                      than buried under the configuration inputs. */}
-                  <div className="feedControl">
-                    <div>
-                      <strong>Live feed</strong>
-                      <small>Auto-starts on load and reconnects if it drops — no need to start it.</small>
-                    </div>
-                    <span className="freshTag"><span className={`dot ${uplinkMeta.dot}`} /> {uplinkMeta.label}</span>
-                  </div>
-                  {sessionInfo ? (
-                    <div className="sessionTag" title={`Started ${new Date(sessionInfo.startedAt).toLocaleString()}`}>
-                      <strong>{sessionInfo.name}</strong>
-                      <small>{[sessionInfo.eventType, sessionInfo.driver, sessionInfo.venue].filter(Boolean).join(" · ") || "no metadata"}</small>
-                    </div>
-                  ) : null}
-                  <div className="sessionFileRow">
-                    <button type="button" className="primary" disabled={isMirror} onClick={() => setNewSessionOpen(true)}>
-                      <Plus size={15} /> New Session
-                    </button>
-                    <button type="button" className="tool" onClick={() => setSetupOpen(true)} title="Drive-day setup: conditions, alignment, shocks, tires, aero — saved to the session's drive_day record">
-                      <SlidersHorizontal size={15} /> Drive Day Setup
-                    </button>
-                    <button type="button" className="tool" onClick={saveSessionFile}>
-                      <Save size={15} /> Save JSON
-                    </button>
-                    <button type="button" className="tool" disabled={!liveState.laps.length} onClick={downloadSessionCsv}>
-                      <Download size={15} /> Laps CSV
-                    </button>
-                    <button type="button" className="tool" onClick={() => sessionFileInputRef.current?.click()}>
-                      <Upload size={15} /> Load
-                    </button>
-                    <input
-                      ref={sessionFileInputRef}
-                      type="file"
-                      accept="application/json,.json"
-                      style={{ display: "none" }}
-                      onChange={loadSessionFile}
-                    />
-                  </div>
-                  <div className="dangerZone">
-                    <div>
-                      <strong>Reset saved run</strong>
-                      <small>Clears laps + cache and keeps streaming. Use New Session to also tag a fresh run.</small>
-                    </div>
-                    <button type="button" className="tool dangerTool" disabled={isMirror} onClick={resetLiveSession}>
-                      <Trash2 size={15} /> Reset All
-                    </button>
-                  </div>
-                </div>
-              </Panel>
-              <Panel title="Pre-Set Metadata" icon={<FileText size={18} />}>
-                <MetadataFields
-                  compact
-                  values={metadataDraft}
-                  onChange={(key, value) => setMetadataDraft((prev) => ({ ...prev, [key]: value }))}
-                />
-              </Panel>
+              {showDiagnostics ? P.livedata : null}
+              {P.setup}
+              {P.metadata}
             </div>
           </div>
+            )}
+          />
         </section>
       ) : null}
 

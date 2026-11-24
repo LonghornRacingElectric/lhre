@@ -1781,3 +1781,357 @@ textarea:focus-visible,
 .driveFlagLine { font-size: var(--fs-base); color: var(--muted-text); min-height: var(--ctl-h); display: flex; align-items: center; }
 .driveStart { flex: 1 1 0; min-height: 96px; font-size: 44px; background: var(--good); border-color: transparent; color: #fff; }
 .driveStatus { color: var(--muted-text); font-size: var(--fs-sm); text-align: center; }
+
+/* ── Live workspace (desktop only) ─────────────────────────────────────────────
+   Rendered by LiveWorkspace only above 1024px. Phones and tablets keep the
+   original .liveLayout markup and the rules above, so nothing here touches them. */
+@media (min-width: 1025px) {
+  .tlw { display: flex; flex-direction: column; gap: var(--s-3); min-width: 0; }
+  .tlw[data-density="compact"] { --fs-xs: 10px; --fs-sm: 11px; --fs-base: 12px; --fs-md: 13px; --fs-lg: 16px; --ctl-h: 32px; --s-3: 10px; --s-4: 12px; }
+  .tlw[data-density="large"] { --fs-xs: 13px; --fs-sm: 14px; --fs-base: 16px; --fs-md: 18px; --fs-lg: 22px; --fs-xl: 28px; --ctl-h: 44px; --s-3: 14px; --s-4: 20px; }
+  .tlw[data-density="large"] .tlw-pane { font-size: 1.08em; }
+
+  .tlw-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-2); padding: var(--s-2) var(--s-3); border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); }
+  .tlw-chips, .tlw-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .tlw-chip { cursor: pointer; padding: 4px 11px; border: 1px solid var(--border-strong); border-radius: var(--r-pill); background: var(--surface); color: var(--muted-text); font-size: var(--fs-sm); font-weight: 600; height: auto; min-height: 0; }
+  .tlw-chip:hover { color: var(--text); }
+  .tlw-chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .tlw-field { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--muted-text); }
+  .tlw-step, .tlw-seg { display: inline-flex; align-items: center; border: 1px solid var(--border-strong); border-radius: var(--r-sm); overflow: hidden; }
+  .tlw-step b { min-width: 22px; text-align: center; font-size: var(--fs-sm); }
+  .tlw-step button, .tlw-seg button { cursor: pointer; border: 0; border-radius: 0; background: var(--surface); color: var(--text); height: 28px; min-width: 28px; padding: 0 8px; font-weight: 700; }
+  .tlw-step button:disabled { opacity: 0.35; cursor: default; }
+  .tlw-seg button[aria-pressed="true"] { background: var(--text); color: var(--surface); }
+  .tlw-menu { position: relative; }
+  .tlw-menu summary { cursor: pointer; list-style: none; padding: 5px 12px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); font-size: var(--fs-sm); font-weight: 700; background: var(--surface); }
+  .tlw-menu summary::-webkit-details-marker { display: none; }
+  .tlw-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 300; display: flex; flex-direction: column; gap: 4px; min-width: 220px; max-height: 70vh; overflow: auto; padding: var(--s-2); border: 1px solid var(--border-strong); border-radius: var(--r-md); background: var(--surface); box-shadow: var(--shadow-1); }
+  .tlw-pop small { color: var(--faint-text); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 4px; }
+  .tlw-pop button { cursor: pointer; text-align: left; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface-soft); color: var(--text); padding: 6px 10px; height: auto; font-weight: 600; }
+  .tlw-pop button:hover:not(:disabled) { border-color: var(--accent); }
+  .tlw-pop button:disabled { opacity: 0.4; cursor: default; }
+  .tlw-row { display: flex; gap: 4px; }
+  .tlw-row > button:first-child { flex: 1; }
+  .tlw-pop .tlw-x { width: 30px; text-align: center; padding: 6px 0; }
+
+  .tlw-grid { display: grid; gap: var(--s-4); align-items: start; min-width: 0; }
+  .tlw-empty { grid-column: 1 / -1; padding: 40px 16px; text-align: center; color: var(--muted-text); border: 1px dashed var(--border-strong); border-radius: var(--r-md); }
+  .tlw-pane { position: relative; display: flex; flex-direction: column; min-width: 0; }
+  .tlw-pane.is-floating { position: fixed; z-index: 200; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r-lg); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28); overflow: hidden; }
+  .tlw-head { display: flex; align-items: center; gap: 6px; padding: 2px 6px; min-height: 24px; color: var(--faint-text); font-size: var(--fs-xs); opacity: 0.55; transition: opacity 120ms; cursor: grab; user-select: none; }
+  .tlw-pane:hover .tlw-head, .tlw-head:focus-within, .tlw-pane.is-floating .tlw-head { opacity: 1; }
+  .tlw-pane.is-floating .tlw-head { cursor: move; background: var(--surface-alt); border-bottom: 1px solid var(--border); }
+  .tlw-title { flex: 1; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+  .tlw-pane:not(.is-floating) .tlw-title { visibility: hidden; }
+  .tlw-head-actions { display: inline-flex; gap: 2px; }
+  .tlw-head-actions button { cursor: pointer; border: 0; background: transparent; color: var(--muted-text); height: 22px; min-width: 22px; padding: 0 6px; border-radius: 5px; font-size: var(--fs-xs); font-weight: 700; }
+  .tlw-head-actions button:hover:not(:disabled) { background: var(--surface-alt); color: var(--text); }
+  .tlw-head-actions button:disabled { opacity: 0.3; cursor: default; }
+  .tlw-body { min-width: 0; flex: 1; }
+  .tlw-pane.is-floating .tlw-body { overflow: auto; padding: var(--s-2); }
+  .tlw-pane.is-floating .tlw-body > .panel { border: 0; box-shadow: none; padding: var(--s-2); }
+  .tlw-body > .panel, .tlw-body > div > .panel { margin: 0; }
+  .tlw-resize { position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 50%, var(--border-strong) 50%); }
+  .tlw-resize:focus-visible { outline: 2px solid var(--accent); }
+
+  /* ── Sections: columns that split the window height between their panels ── */
+  .tlw { gap: 6px; }
+  .tlw-bar { justify-content: flex-start; gap: 6px; padding: 4px 6px; border-radius: var(--r-sm); }
+  .tlw-note { margin-left: auto; color: var(--faint-text); font-size: var(--fs-xs); }
+  .tlw-menu summary { padding: 3px 10px; font-size: var(--fs-sm); }
+  .tlw-pop { left: 0; right: auto; min-width: 200px; gap: 3px; padding: 6px; }
+  .tlw-pop input:not([type]), .tlw-pop input[type="text"] { height: 28px; flex: 1; min-width: 0; }
+  .tlw-checks { display: grid; grid-template-columns: repeat(2, minmax(150px, 1fr)); gap: 2px 10px; max-height: 60vh; overflow: auto; }
+  .tlw-checks label, .tlw-check { display: flex; align-items: center; gap: 6px; font-size: var(--fs-sm); padding: 3px 2px; cursor: pointer; white-space: nowrap; }
+  .tlw-pop .tlw-step, .tlw-pop .tlw-seg { align-self: flex-start; }
+
+  .tlw-cols { display: flex; gap: 8px; align-items: stretch; min-width: 0; }
+  .tlw-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+  .tlw[data-fit="1"] .tlw-cols { overflow: hidden; }
+  .tlw[data-fit="1"] .tlw-col { min-height: 0; }
+  .tlw-empty { flex: 1; min-height: 60px; display: grid; place-items: center; padding: 12px; text-align: center; color: var(--faint-text); font-size: var(--fs-sm); border: 1px dashed var(--border-strong); border-radius: var(--r-md); }
+
+  .tlw-pane { position: relative; display: flex; flex-direction: column; min-width: 0; }
+  .tlw[data-fit="1"] .tlw-pane:not(.is-floating) { min-height: 0; overflow: hidden; }
+  .tlw-pane.is-floating { position: fixed; z-index: 200; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r-lg); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28); overflow: hidden; }
+  .tlw-body { flex: 1; min-width: 0; min-height: 0; overflow: auto; }
+  .tlw[data-fit="1"] .tlw-pane:not(.is-floating) .tlw-body { overflow-y: auto; scrollbar-width: thin; }
+  .tlw-inner { min-width: 0; }
+  .tlw-inner > .panel, .tlw-inner > div > .panel { margin: 0; padding: var(--s-3); }
+  .tlw[data-fit="1"] .tlw-pane:not(.is-floating) .tlw-inner > .panel,
+  .tlw[data-fit="1"] .tlw-pane:not(.is-floating) .tlw-inner > div > .panel { min-height: 100%; }
+  .tlw-pane.is-floating .tlw-body { padding: var(--s-2); }
+  .tlw-pane.is-floating .tlw-inner > .panel { border: 0; box-shadow: none; }
+  .tlw-inner .panelTitle { margin-bottom: 6px; }
+  .tlw-inner .panelTitle h2 { font-size: var(--fs-base); }
+
+  /* Panel chrome floats over the corner instead of taking a row. */
+  .tlw-head { display: flex; align-items: center; gap: 4px; color: var(--faint-text); font-size: var(--fs-xs); user-select: none; cursor: grab; }
+  .tlw-title { flex: 1; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+  .tlw-head-actions { display: inline-flex; gap: 1px; }
+  .tlw-head-actions button { cursor: pointer; border: 0; background: transparent; color: var(--muted-text); height: 20px; min-width: 20px; padding: 0 4px; border-radius: 5px; font-size: var(--fs-xs); font-weight: 700; }
+  .tlw-head-actions button:hover:not(:disabled) { background: var(--surface-alt); color: var(--text); }
+  .tlw-head-actions button:disabled { opacity: 0.3; cursor: default; }
+  .tlw-pane:not(.is-floating) .tlw-head { position: absolute; top: 4px; right: 6px; z-index: 5; padding: 0 3px; border-radius: var(--r-pill); background: var(--surface); border: 1px solid var(--border); opacity: 0; transition: opacity 120ms; }
+  .tlw-pane:not(.is-floating):hover .tlw-head, .tlw-pane:not(.is-floating) .tlw-head:focus-within { opacity: 1; }
+  .tlw-pane:not(.is-floating) .tlw-title { display: none; }
+  .tlw-pane.is-floating .tlw-head { padding: 3px 6px; cursor: move; background: var(--surface-alt); border-bottom: 1px solid var(--border); }
+  .tlw-resize { position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 50%, var(--border-strong) 50%); }
+  .tlw-resize:focus-visible { outline: 2px solid var(--accent); }
+
+  /* ── Look: calm cards, small-caps titles, dense readable numbers ─────────── */
+  .tlw[data-density="compact"] { --ctl-h: 30px; --ctl-h-sm: 26px; }
+  .tlw-bar { background: transparent; border: 0; padding: 0; gap: 6px; }
+  .tlw-menu summary { display: inline-flex; align-items: center; gap: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-pill); padding: 4px 12px; font-size: var(--fs-sm); font-weight: 700; color: var(--muted-text); transition: border-color 120ms, color 120ms; }
+  .tlw-menu summary:hover, .tlw-menu[open] summary { border-color: var(--accent); color: var(--text); }
+  .tlw-pop { border-radius: var(--r-md); box-shadow: var(--shadow-pop); }
+
+  .tlw-cols { gap: 10px; }
+  .tlw-col { gap: 10px; }
+  .tlw-inner > .panel, .tlw-inner > div > .panel { border-radius: var(--r-md); box-shadow: none; background: var(--surface); }
+  .tlw-pane:not(.is-floating) { border-radius: var(--r-md); transition: box-shadow 140ms; }
+  .tlw-pane:not(.is-floating):hover { box-shadow: 0 0 0 1px var(--border-strong); }
+
+  /* Titles: quiet small caps with a small accent icon. */
+  .tlw-inner .panelTitle { gap: 6px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  .tlw-inner .panelTitle h2 { font-size: var(--fs-xs); font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted-text); }
+  .tlw-inner .panelTitle svg { width: 14px; height: 14px; }
+  .tlw-inner .panelTitle .panelTitleRight, .tlw-inner .panelTitle .panelAside { font-size: var(--fs-xs); }
+
+  /* Readings: label on top, number large, tiles pack tightly. */
+  .tlw-inner .metric { padding: 6px 9px; gap: 2px; background: var(--surface-soft); border-radius: var(--r-sm); }
+  .tlw-inner .metric span { font-size: 10px; letter-spacing: 0.07em; }
+  .tlw-inner .metric strong { font-size: var(--fs-lg); line-height: 1.1; letter-spacing: -0.01em; }
+  .tlw-inner .energyPlanTiles { gap: 6px; }
+
+  /* Tables: dense rows, quiet rules. */
+  .tlw-inner .lapTable { font-size: var(--fs-sm); }
+  .tlw-inner .lapTable th, .tlw-inner .lapTable td { padding: 4px 6px; }
+  .tlw-inner .lapTable th { font-size: 10px; letter-spacing: 0.07em; text-transform: uppercase; }
+  .tlw-inner .lapTable tbody tr:hover { background: var(--surface-soft); }
+  .tlw-inner .cellThermalGrid { grid-template-columns: repeat(auto-fill, minmax(26px, 1fr)); gap: 3px; }
+
+  /* Forms inside Live Setup: two tidy columns. */
+  .tlw-inner .trackForm { gap: 8px 10px; }
+  .tlw-inner .trackForm label > span { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; }
+  .tlw-inner .trackForm input, .tlw-inner .trackForm select { height: var(--ctl-h-sm); }
+  .tlw-inner button.tool, .tlw-inner button.primary { min-height: var(--ctl-h-sm); padding: 0 10px; font-size: var(--fs-sm); }
+
+  /* Quiet scrollbars: panels scroll, but should not look like they do. */
+  .tlw-body { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+  .tlw-body::-webkit-scrollbar { width: 6px; height: 6px; }
+  .tlw-body::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+
+  /* Control pill: floats in the corner, nicer than a bare toolbar. */
+  .tlw-pane:not(.is-floating) .tlw-head { box-shadow: var(--shadow-1); top: 5px; right: 7px; }
+  .tlw-head-actions button { border-radius: var(--r-pill); }
+
+  /* Fit mode: panes start at their content height, grow to fill spare room, shrink (and scale) when short.
+     The card stretches to fill its pane so there are no gaps. */
+  .tlw[data-fit="1"] .tlw-pane:not(.is-floating) .tlw-body { display: flex; flex-direction: column; }
+  .tlw[data-fit="1"] .tlw-pane:not(.is-floating) .tlw-inner { flex: 1 0 auto; display: flex; flex-direction: column; }
+  .tlw[data-fit="1"] .tlw-pane:not(.is-floating) .tlw-inner > .panel,
+  .tlw[data-fit="1"] .tlw-pane:not(.is-floating) .tlw-inner > div { flex: 1 0 auto; display: flex; flex-direction: column; min-height: 0; }
+  .tlw[data-fit="1"] .tlw-pane:not(.is-floating) .tlw-inner > div > .panel { flex: 1 0 auto; }
+
+  /* ── Redesign: colour-coded cards on a canvas, instrument-style readings ───── */
+  .tlw-pane { --cat: #6a635c; }
+  .tlw-pane[data-panel="thermal"], .tlw-pane[data-panel="cells"], .tlw-pane[data-panel="temps"], .tlw-pane[data-panel="temperature"] { --cat: #e8760c; }
+  .tlw-pane[data-panel="pack"], .tlw-pane[data-panel="energy"], .tlw-pane[data-panel="plan"], .tlw-pane[data-panel="strategy"] { --cat: #2f6fd6; }
+  .tlw-pane[data-panel="laps"], .tlw-pane[data-panel="status"] { --cat: #8a3ffc; }
+  .tlw-pane[data-panel="driver"], .tlw-pane[data-panel="traction"], .tlw-pane[data-panel="gforce"], .tlw-pane[data-panel="vitals"] { --cat: #0d9488; }
+  .tlw-pane[data-panel="map"] { --cat: #2f9e5b; }
+
+  /* A tinted canvas so the cards stand off the page. */
+  .tlw-cols { background: color-mix(in srgb, var(--text) 5%, var(--app-bg)); border-radius: var(--r-lg); padding: 10px; gap: 10px; }
+  .tlw-col { gap: 10px; }
+  .tlw-inner > .panel, .tlw-inner > div > .panel {
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--cat);
+    border-radius: var(--r-md);
+    background: var(--surface);
+    padding: 10px 12px 12px;
+  }
+  .tlw-pane:not(.is-floating):hover { box-shadow: 0 0 0 1px var(--cat); }
+
+  /* Titles read as headings, in the card's colour. */
+  .tlw-inner .panelTitle { border-bottom: 0; padding-bottom: 0; margin-bottom: 8px; }
+  .tlw-inner .panelTitle h2 { font-size: var(--fs-sm); font-weight: 800; letter-spacing: 0.06em; color: var(--text); }
+  .tlw-inner .panelTitle svg { color: var(--cat); width: 15px; height: 15px; }
+  .tlw-inner .panelTitle .panelTitleRight { color: var(--muted-text); font-weight: 600; }
+
+  /* Readings: no boxes. Big numbers, small labels, thin dividers between them. */
+  .tlw-inner .energyPlanTiles, .tlw-inner .packStatus .heroMetricRow { gap: 0; }
+  .tlw-inner .metric { background: transparent; border: 0; border-radius: 0; padding: 2px 12px; }
+  .tlw-inner .metric:first-child { padding-left: 0; }
+  .tlw-inner .metric + .metric { border-left: 1px solid var(--border); }
+  .tlw-inner .metric span { font-size: 10px; letter-spacing: 0.1em; color: var(--faint-text); }
+  .tlw-inner .metric strong { font-size: calc(var(--fs-lg) * 1.35); font-weight: 800; letter-spacing: -0.02em; }
+
+  /* Lap table: the times are the point. */
+  .tlw-inner .lapTable td { font-variant-numeric: tabular-nums; }
+  .tlw-inner .lapTable tbody tr:first-child td { font-weight: 700; }
+  .tlw-inner .lapTable th { color: var(--faint-text); border-top: 0; border-bottom: 1px solid var(--border-strong); }
+
+  /* Cell heatmap: roomier, rounder. */
+  .tlw-inner .cellThermalCell { border-radius: 5px; }
+
+  /* Toolbar: a proper header row with a live count. */
+  .tlw-bar { padding: 0 2px; }
+  .tlw-menu summary { background: var(--surface); }
+  .tlw-note { background: var(--surface-alt); border-radius: var(--r-pill); padding: 2px 10px; }
+}
+
+/* ── Condensed hero (desktop only; phones and tablets keep the rules above) ──
+   Same markup and information, less height: tighter type, one-line rows. */
+@media (min-width: 1025px) {
+  .liveHero { grid-template-columns: minmax(240px, 0.9fr) minmax(340px, 1.4fr) 210px; gap: 6px 14px; padding: 8px 12px; align-items: center; top: 52px; }
+  .liveHero h2 { font-size: 30px; margin: 0; }
+  .liveHero p { margin: 0; font-size: var(--fs-xs); }
+  .liveHeroMain { display: grid; gap: 3px; }
+  .carStatusStrip { gap: 4px; flex-wrap: wrap; }
+  .carStatusStrip .freshTag, .carStatusStrip .carStateBadge { padding: 1px 7px; font-size: var(--fs-xs); min-height: 0; }
+  .heroInputs { margin-top: 2px; gap: 10px; }
+  .heroInputBar .barTrack { width: 60px; height: 7px; }
+  .heroMessages { margin-top: 2px; gap: 4px; }
+  .heroMsgBtn { padding: 2px 8px; font-size: var(--fs-xs); border-radius: 6px; }
+
+  /* Stats: lap numbers on one row, then flags, options and torque flowing together. */
+  .liveHeroStats { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 10px; }
+  .heroMetricRow { flex: 1 1 100%; gap: 6px; }
+  .heroMetricRow .metric, .heroLapBig, .heroLastLap { min-height: 0; padding: 3px 10px; }
+  .heroLapBig strong { font-size: 1.9rem; }
+  .heroLastLap strong { font-size: 1.35rem; }
+  .heroLapBig small, .heroLastLap small { font-size: 10px; letter-spacing: 1px; }
+  .heroLastLap span { font-size: var(--fs-xs); }
+  .heroMetricRow .metric strong { font-size: 1.35rem; }
+  .heroMetricStrip { flex: 0 0 auto; }
+  .heroFlags { flex: 0 1 auto; flex-wrap: wrap; gap: 4px; }
+  .heroFlags .tool, .heroFlagsHint .tool { min-height: 26px; padding: 0 9px; font-size: var(--fs-xs); }
+  .heroFlagsHint { padding: 3px 8px; }
+  .heroFlagStatus { flex: 1 1 100%; margin: 0; font-size: var(--fs-xs); }
+  .liveControlOpts { flex: 1 1 auto; gap: 4px 10px; font-size: var(--fs-xs); }
+  .tinyTool { padding: 2px 7px; }
+
+  /* Controls: shorter buttons, same actions. */
+  .liveControls { gap: 5px; }
+  .liveAction { min-height: 36px; font-size: var(--fs-base); gap: 6px; }
+  .liveAction svg { width: 16px; height: 16px; }
+  .liveControls .muted { font-size: var(--fs-xs); line-height: 1.2; }
+}
+
+/* ── Hero fill pass (desktop only): columns stretch to the full hero height ───
+   The left column sets the height; the stats and controls columns grow into it
+   instead of leaving empty bands above and below. */
+@media (min-width: 1025px) {
+  .liveHero { grid-template-columns: minmax(400px, 1.5fr) minmax(380px, 1.3fr) minmax(210px, 0.5fr); align-items: stretch; }
+  .heroMessages { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .heroMessages::-webkit-scrollbar { display: none; }
+  .heroMsgBtn { white-space: nowrap; flex: 0 0 auto; }
+
+  /* Stats: lap numbers take all the spare height; torque, flags, options sit on one row below. */
+  .liveHeroStats { display: grid; grid-template-columns: auto auto minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto auto; gap: 6px 12px; align-items: center; align-content: stretch; }
+  .heroMetricRow { grid-column: 1 / -1; grid-row: 1; align-self: stretch; min-height: 0; }
+  .heroMetricRow .metric, .heroLapBig, .heroLastLap { justify-content: center; align-content: center; height: 100%; padding: 6px 14px; }
+  .heroLapBig strong { font-size: clamp(2.2rem, 3.2vw, 3.2rem); }
+  .heroLastLap strong { font-size: clamp(1.6rem, 2.4vw, 2.4rem); }
+  .heroMetricRow .metric strong { font-size: clamp(1.6rem, 2.4vw, 2.4rem); }
+  .heroLapBig small, .heroLastLap small, .heroMetricRow .metric span { font-size: 11px; letter-spacing: 1.2px; }
+  .heroMetricStrip { grid-column: 1; grid-row: 2; }
+  .heroFlags, .heroFlagsHint { grid-column: 2; grid-row: 2; }
+  .liveControlOpts { grid-column: 3; grid-row: 2; justify-content: flex-end; }
+  .heroFlagStatus { grid-column: 1 / -1; grid-row: 3; }
+
+  /* Controls: the big buttons share the full height. */
+  .liveControls { display: flex; flex-direction: column; align-self: stretch; gap: 6px; }
+  .liveControls > .liveAction { flex: 1.5 1 0; min-height: 40px; font-size: var(--fs-md); }
+  .liveControls > .liveActionPair { flex: 1 1 0; min-height: 36px; }
+  .liveActionPair .liveAction { height: 100%; min-height: 0; }
+  .liveControls > .muted { flex: 0 0 auto; }
+}
+
+/* Header tabs: shown beside the title on desktop; phones and tablets keep the tab bar under the header. */
+.topTabs { display: none; }
+@media (min-width: 1025px) {
+  .tabBar { display: none; }
+  .topTabs { display: inline-flex; align-items: center; gap: 2px; padding: 2px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-pill); margin-right: auto; margin-left: var(--s-4); }
+  .topTabs .tab { min-height: 28px; padding: 0 var(--s-3); border-radius: var(--r-pill); font-size: var(--fs-sm); gap: 6px; }
+  .topTabs .tab svg { width: 14px; height: 14px; }
+}
+
+/* ── Whole-page compaction (desktop only) ───────────────────────────────── */
+@media (min-width: 1025px) {
+  .shell { padding: 62px clamp(10px, 1.2vw, 18px) 10px; }
+  .topbar { flex-wrap: nowrap; gap: var(--s-2); margin-bottom: 6px; align-items: center; }
+  .topbar h1 { font-size: 18px; letter-spacing: -0.01em; white-space: nowrap; }
+  .topbar > div:first-child p { display: none; }
+  .topActions { gap: 6px; flex-wrap: nowrap; }
+  .topActions .clientsBadge, .topActions .carStateBadge { padding: 2px 9px; font-size: var(--fs-xs); }
+  .topActions .status { padding: 3px 10px; font-size: var(--fs-xs); }
+  .topActions .tool { min-height: 26px; padding: 0 9px; font-size: var(--fs-xs); }
+  .topActions .tool.iconOnly { width: 26px; padding: 0; }
+  .liveShell { gap: 6px; }
+  .liveHero { top: 58px; padding: 6px 10px; gap: 4px 12px; border-radius: var(--r-md); box-shadow: var(--shadow-1); }
+  .liveHero h2 { font-size: 26px; }
+  .deltaBox { gap: 2px; margin-top: 0; }
+  .deltaReadout strong { font-size: var(--fs-md); }
+  .deltaReadout span { font-size: var(--fs-xs); }
+  .deltaTrack { height: 7px; }
+  .liveHeroMain { gap: 2px; }
+  .heroLapBig strong { font-size: clamp(2rem, 2.8vw, 2.8rem); }
+  .heroLastLap strong, .heroMetricRow .metric strong { font-size: clamp(1.4rem, 2vw, 2rem); }
+  .heroMetricRow .metric, .heroLapBig, .heroLastLap { padding: 3px 12px; }
+  .heroFlags .tool, .heroFlagsHint .tool { min-height: 24px; }
+  .liveControls > .liveAction { min-height: 34px; }
+  .resumeBanner, .syncBanner { padding: 4px 10px; margin: 0; font-size: var(--fs-xs); }
+  .tlw { gap: 4px; }
+  .tlw-cols { padding: 6px; gap: 6px; border-radius: var(--r-md); }
+  .tlw-col { gap: 6px; }
+  .tlw-inner > .panel, .tlw-inner > div > .panel { padding: 7px 10px 9px; }
+  .tlw-inner .panelTitle { margin-bottom: 5px; }
+  .tlw-bar { min-height: 0; }
+  .tlw-menu summary { padding: 2px 10px; }
+}
+
+/* While a panel measures how tall its content wants to be, switch the stretch-to-fill rules off. */
+@media (min-width: 1025px) {
+  .tlw-body[data-measure="1"] .tlw-inner,
+  .tlw-body[data-measure="1"] .tlw-inner > .panel,
+  .tlw-body[data-measure="1"] .tlw-inner > div,
+  .tlw-body[data-measure="1"] .tlw-inner > div > .panel { flex: 0 0 auto !important; min-height: 0 !important; height: auto !important; }
+}
+
+/* Panels menu grouped by section, and a flash on the panel that was just opened. */
+@media (min-width: 1025px) {
+  .tlw-groups { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(170px, 1fr); gap: 6px; max-height: 62vh; overflow: auto; }
+  .tlw-group { display: flex; flex-direction: column; gap: 1px; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface-soft); min-width: 0; }
+  .tlw-group-head { display: flex; align-items: baseline; justify-content: space-between; padding-bottom: 4px; margin-bottom: 2px; border-bottom: 1px solid var(--border); }
+  .tlw-group-head b { font-size: var(--fs-xs); letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-strong); }
+  .tlw-group-head span { font-size: 10px; color: var(--faint-text); }
+  .tlw-group-empty { font-size: var(--fs-xs); color: var(--faint-text); padding: 4px 0; }
+  .tlw-item { display: flex; align-items: center; gap: 4px; border-radius: 5px; }
+  .tlw-item:hover { background: var(--surface-alt); }
+  .tlw-item label { flex: 1; display: flex; align-items: center; gap: 6px; padding: 3px 2px; font-size: var(--fs-sm); color: var(--muted-text); cursor: pointer; white-space: nowrap; min-width: 0; }
+  .tlw-item.on label { color: var(--text); font-weight: 600; }
+  .tlw-item label em { font-style: normal; font-size: 10px; color: var(--faint-text); }
+  .tlw-item-move { display: inline-flex; opacity: 0; transition: opacity 100ms; }
+  .tlw-item:hover .tlw-item-move, .tlw-item:focus-within .tlw-item-move { opacity: 1; }
+  .tlw-pop .tlw-item-move button { height: 20px; min-width: 20px; padding: 0; text-align: center; border: 0; background: transparent; }
+  .tlw-pane.is-flash { animation: tlwFlash 1.6s ease-out 1; }
+  .tlw-pane.is-flash::after { content: ""; position: absolute; inset: 0; border-radius: var(--r-md); pointer-events: none; box-shadow: 0 0 0 3px var(--accent); animation: tlwFlashRing 1.6s ease-out 1 forwards; z-index: 6; }
+}
+@keyframes tlwFlash { 0% { filter: brightness(1.06); } 100% { filter: none; } }
+@keyframes tlwFlashRing { 0% { opacity: 1; } 60% { opacity: 1; } 100% { opacity: 0; } }
+
+/* Drag dividers between sections (horizontal resize) and between stacked panels (vertical resize). */
+@media (min-width: 1025px) {
+  .tlw-split { position: relative; flex: 0 0 0; z-index: 8; outline: none; }
+  .tlw-split-x { margin: 0 -3px; }
+  .tlw-split-y { margin: -3px 0; }
+  .tlw-split::before { content: ""; position: absolute; border-radius: 3px; transition: background 120ms; }
+  .tlw-split-x::before { left: -7px; width: 8px; top: 0; bottom: 0; cursor: col-resize; }
+  .tlw-split-y::before { top: -7px; height: 8px; left: 0; right: 0; cursor: row-resize; }
+  .tlw-split:hover::before, .tlw-split:focus-visible::before { background: color-mix(in srgb, var(--accent) 55%, transparent); }
+  .tlw-split:active::before { background: var(--accent); }
+}
+

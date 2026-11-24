@@ -657,3 +657,22 @@
 
 .ddv .top .runbar .btn,.ddv .top .runbar .chip{box-sizing:border-box;line-height:16px;height:26px;min-height:26px}
 @media(min-width:1201px){.ddv .header-title{flex:1 1 0;min-width:180px}.ddv .top .runbar{flex:0 0 auto;width:max-content;overflow:visible}.ddv .top .runbar .layout-toolbar{flex:0 0 auto;min-width:0}.ddv .top .runbar .layout-toolbar .sp{display:none}}
+
+/* Top nav spans the full width: nav row on top (back link, runs, import, settings, panels, layouts), title and KPIs beneath. */
+.ddv .runbar>.back-link{flex:none;display:inline-flex;align-items:center;gap:4px;text-decoration:none;font-weight:600;margin-right:4px;border-color:var(--s1);color:var(--ink)}
+.ddv .runbar>.back-link:hover{background:var(--sel)}
+@media(min-width:1201px){
+  /* One line, nothing overlapping or clipped. The nav (Runs, Import, settings, Video / Track / Analysis, Layouts)
+     and the KPI times always keep their full size. The run title and subtitle take whatever is left (up to a third
+     of the row) and shrink with "…" and a tooltip. If even that cannot fit, the KPIs drop to a second row rather
+     than cover anything. Layouts sits at the right end of the nav. */
+  .ddv .top{flex-wrap:wrap;align-items:center}
+  .ddv .top>.header-main{flex:1 1 0;flex-wrap:nowrap;gap:12px;min-width:min-content}
+  .ddv .top .header-title{flex:1 1 0;min-width:70px;max-width:32%;contain:inline-size}
+  .ddv .top .header-title h1,.ddv .top .header-title .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ddv .top .runbar{flex:1 0 auto;width:auto;min-width:max-content;flex-wrap:nowrap;overflow:visible}
+  .ddv .top .runbar>*{flex-shrink:0}
+  .ddv .top .runbar .layout-toolbar{flex:1 0 auto;min-width:0;flex-wrap:nowrap}
+  .ddv .top .runbar .layout-toolbar .sp{display:block;flex:1;min-width:8px}
+  .ddv .top .kpis{flex:none}
+}

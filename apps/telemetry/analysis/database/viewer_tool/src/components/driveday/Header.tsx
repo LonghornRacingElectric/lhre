@@ -116,7 +116,7 @@ function RunTitle({ p, run }: { p: Player; run: RunListEntry | undefined }) {
   return (
     <>
       <h1 id="title">{m.name || "LAPDOG"}</h1>
-      <div className="sub" id="sub">{parts.join(" · ")}</div>
+      <div className="sub" id="sub" title={parts.join(" · ")}>{parts.join(" · ")}</div>
     </>
   );
 }
@@ -193,6 +193,8 @@ export function Header({ runs, current, theme, onTheme, onSelect, onRemove, onDb
       <div className="header-main">
         <div className="header-title"><Title run={runs.find((r) => r.id === current)} /></div>
         <div className="runbar">
+          {/* plain <a>: a full load keeps each page's stylesheet separate */}
+          <a className="btn back-link" href="/trackside-live" title="Back to Trackside Live (the live pit-wall page)">← Trackside Live</a>
           {runs.length > 0 && (
             <div className="run-selector run-picker"><Menu wide ariaLabel="Select run" label={<span className="run-selector-label">Runs</span>}>
               <div className="run-selector-list" aria-label="Saved runs">
