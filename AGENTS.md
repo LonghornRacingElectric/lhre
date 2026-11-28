@@ -75,9 +75,12 @@ bazel coverage //boards/... //drivers/...  # then diff-cover (tools/coverage/REA
 
 ## CI
 
-All checks live in one workflow,
+Every PR check lives in one workflow,
 [`ci.yml`](https://github.com/LonghornRacingElectric/lhre/blob/main/.github/workflows/ci.yml).
-It runs on every PR, on every push to `main`, weekly, and by hand.
+It runs on every PR, on every push to `main`, weekly, and by hand. The
+other workflows run no PR checks: `docs.yml` publishes the site,
+`simulation.yml` and `simulation-next.yml` run scheduled simulation jobs,
+and `pr-conflicts.yml` labels conflicted PRs.
 
 - `Changes` lists the files a PR touches, renamed files' old paths
   included, and [`tools/ci/changes.py`](tools/ci/README.md) maps them to
