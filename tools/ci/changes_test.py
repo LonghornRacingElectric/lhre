@@ -56,7 +56,7 @@ class ViewerOnlyTest(unittest.TestCase):
 
 class AreasTest(unittest.TestCase):
     def test_simulation_only_skips_bazel(self):
-        self.assertEqual(on(["simulation/tools/car.sh"]), {"sim", "car"})
+        self.assertEqual(on(["simulation/tools/car.py"]), {"sim", "car"})
 
     def test_autonomy_only_skips_bazel(self):
         self.assertEqual(on(["autonomy/ros2/src/x.py"]), {"autonomy"})

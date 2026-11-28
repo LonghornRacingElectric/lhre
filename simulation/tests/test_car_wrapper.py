@@ -1,8 +1,8 @@
 import hashlib
 import json
 import os
-import shutil
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -13,12 +13,7 @@ import pytest
 SIM = Path(__file__).resolve().parents[1]
 NAME = "TestCar"
 BOBLIB = "engines/boblib/BobLib"
-RECORD = f"{BOBLIB}/Records/VehicleDefn/{NAME}Record.mo"
-TEMPLATES = f"{BOBLIB}/Experiments/Standards/BobSimTemplates"
-STANDARDS_ORDER = f"{BOBLIB}/Experiments/Standards/package.order"
-METRICS = "simulations/mbd/generated_results/four_post_eval_report_metrics.csv"
-RUN_DIR = "simulations/mbd/BuildBobLib/FourPostSim/results/run_new"
-EXE = "simulations/mbd/BuildBobLib/FourPostSim/BobLib.Experiments.Standards.FourPostSim"
+METRICS = "four_post_eval_report_metrics.csv"
 GIT_ENV = {
     "GIT_AUTHOR_NAME": "test",
     "GIT_AUTHOR_EMAIL": "test@example.com",
@@ -56,44 +51,6 @@ members:
     sha256: {sha256}
 """
 
-FAKE_GENERATOR = '''\
-import hashlib
-import sys
-from pathlib import Path
-
-import yaml
-
-
-def main(argv):
-    write = "--write" in argv
-    names = [arg for arg in argv if not arg.startswith("--")]
-    vehicle = Path(names[0] if names else "vehicle.yml")
-    data = yaml.safe_load(vehicle.read_text(encoding="utf-8"))
-    name = data["vehicle"]["name"]
-    boblib = Path(data["paths"]["boblib"])
-    record = boblib / "Records/VehicleDefn" / f"{name}Record.mo"
-    templates = boblib / "Experiments/Standards/BobSimTemplates"
-    template = templates / f"FourPostSim_{name}.mo"
-    expected = "record " + hashlib.sha256(vehicle.read_bytes()).hexdigest() + "\\n"
-    if write:
-        record.write_text(expected, encoding="utf-8")
-        templates.mkdir(exist_ok=True)
-        template.write_text(expected, encoding="utf-8")
-        (templates / "package.mo").write_text("package BobSimTemplates\\n", encoding="utf-8")
-        (templates / "package.order").write_text(f"FourPostSim_{name}\\n", encoding="utf-8")
-        order = boblib / "Experiments/Standards/package.order"
-        order.write_text(order.read_text(encoding="utf-8") + "BobSimTemplates\\n", encoding="utf-8")
-    current = record.is_file() and record.read_text(encoding="utf-8") == expected
-    print(f"vehicle:  {name}")
-    print("state:    " + ("written" if current else "stale"))
-    print("")
-    print(f"  {'current' if current else 'stale':<8} {record.as_posix()}")
-    return 0 if current else 1
-
-
-sys.exit(main(sys.argv[1:]))
-'''
-
 FAKE_VEHICLE_IO = '''\
 from pathlib import Path
 
@@ -120,14 +77,20 @@ def tire_templates_root(data):
     return repo_root() / data["paths"]["tire_templates"]
 '''
 
+# Stands in for BobSim's makefile: it reads the car from BOBSIM_VEHICLE and
+# writes only under BOBSIM_OUT, as BobSim does. A build is skipped when its
+# executable exists, so a test can see that make car keeps the build cache.
 FAKE_MAKEFILE = f"""\
-RESULTS := simulations/mbd/generated_results
-RUNDIR := {RUN_DIR}
+RESULTS := $(BOBSIM_OUT)/generated_results
+BUILD := $(BOBSIM_OUT)/BuildBobLib/FourPostSim
+RUNDIR := $(BUILD)/results/run_new
 
 define write_run
 \tmkdir -p $(RESULTS) $(RUNDIR)
-\tcp vehicle.yml $(RESULTS)/seen_vehicle.yml
-\tprintf 'metric,value\\nexample,1.0\\n' > {METRICS}
+\ttest -f $(BUILD)/exe || printf 'build\\n' >> $(BUILD)/builds.log
+\ttouch $(BUILD)/exe
+\tcp "$(BOBSIM_VEHICLE)" $(RESULTS)/seen_vehicle.yml
+\tprintf 'metric,value\\nexample,1.0\\n' > $(RESULTS)/{METRICS}
 \tprintf 'fake tire\\n' > $(RESULTS)/leaked.tir
 \tprintf '{{}}\\n' > $(RUNDIR)/manifest.json
 \tprintf 'log\\n' > $(RUNDIR)/run.log
@@ -136,28 +99,27 @@ endef
 
 ok:
 \t$(write_run)
-\ttouch {EXE}
 
 fail:
 \t$(write_run)
-\ttouch {EXE}
 \texit 3
-
-stale:
-\t$(write_run)
-\ttouch -d 2000-01-01 {EXE}
 
 dirty:
 \t$(write_run)
-\ttouch {EXE}
 \tprintf 'changed\\n' >> README.md
 
 hang:
 \t$(write_run)
-\ttouch {EXE} $(RESULTS)/started
+\ttouch $(RESULTS)/started
 \tsleep 60
+
+which:
+\t@echo "vehicle=[$(BOBSIM_VEHICLE)] out=[$(BOBSIM_OUT)]"
 """
 
+# Stands in for docker compose: runs the command in simulation/ with the
+# compose file's environment, then the -e flags, and keeps running through
+# Ctrl-C so the tool inside can finish, as a container does.
 FAKE_COMPOSE = '''\
 import os
 import subprocess
@@ -179,7 +141,12 @@ while args[0].startswith("-"):
         key, _, value = args.pop(0).partition("=")
         env[key] = value
 assert args.pop(0) == "sim", args
-sys.exit(subprocess.call(args, cwd=SIM, env=env))
+process = subprocess.Popen(args, cwd=SIM, env=env)
+while True:
+    try:
+        sys.exit(process.wait())
+    except KeyboardInterrupt:
+        pass
 '''
 
 FAKE_BUNDLE_CHECK = '''\
@@ -214,44 +181,44 @@ def lhre(tmp_path):
     _write(root / "vehicle" / "bundle.yml", BUNDLE.format(sha256=hashlib.sha256(OUR_VEHICLE.encode()).hexdigest()))
     _write(root / "vehicle" / "tires" / "fake_tire.tir", "FAKE TIRE\n")
     sim = root / "simulation"
-    for name in ("Makefile", "tools/car.sh", "tools/car_identity.py"):
+    for name in ("Makefile", "tools/car.py", "tools/car_identity.py"):
         _write(sim / name, (SIM / name).read_text(encoding="utf-8"))
     _write(sim / "tools" / "bundle.py", FAKE_BUNDLE_CHECK)
     bobsim = sim / "bobsim"
     _write(bobsim / "vehicle.yml", BOBSIM_VEHICLE)
     _write(bobsim / "README.md", "fake BobSim\n")
     _write(bobsim / "makefile", FAKE_MAKEFILE)
-    _write(bobsim / ".gitignore", "simulations/mbd/BuildBobLib/\nsimulations/mbd/generated_results/**\n__pycache__/\n")
-    _write(bobsim / "app" / "__init__.py", "")
-    _write(bobsim / "app" / "modelica_generator.py", FAKE_GENERATOR)
+    _write(bobsim / ".gitignore", "__pycache__/\n")
     _write(bobsim / "common" / "__init__.py", "")
     _write(bobsim / "common" / "vehicle_io.py", FAKE_VEHICLE_IO)
-    _write(bobsim / RECORD, "record of the BobSim car\n")
-    _write(bobsim / BOBLIB / "Records/VehicleDefn/package.order", f"{NAME}Record\n")
-    _write(bobsim / STANDARDS_ORDER, "VehicleSim\nFourPostSim\n")
-    _write(bobsim / "simulations/mbd/generated_results/old_car_metrics.csv", "metric,value\nold,1\n")
     _write(bobsim / FOUR_POST_CONFIG, "procedure:\n  heaveMagnitude: 0.03\n")
     _git(bobsim, "init", "-q")
     _git(bobsim, "add", "-A")
     _git(bobsim, "commit", "-q", "-m", "fake BobSim")
     _git(root, "init", "-q")
-    _write(root / ".gitignore", "simulation/bobsim/\nsimulation/out/\n")
+    _write(root / ".gitignore", "simulation/bobsim/\nsimulation/out/\n__pycache__/\n")
     _git(root, "add", "-A")
     _git(root, "commit", "-q", "-m", "fake lhre")
     _write(tmp_path / "compose.py", FAKE_COMPOSE)
     return root
 
 
-def _make_car(lhre, target, *args):
-    compose = f"{sys.executable} {lhre.parent / 'compose.py'}"
-    result = subprocess.run(  # noqa: PLW1510 pre-existing when the lint gate went on
-        ["make", "car", f"T={target}", f"COMPOSE={compose}", *args],
+def _compose(lhre):
+    return f"{sys.executable} {lhre.parent / 'compose.py'}"
+
+
+def _make(lhre, *args):
+    return subprocess.run(  # noqa: PLW1510 the tests read returncode
+        ["make", *args, f"COMPOSE={_compose(lhre)}"],
         cwd=lhre / "simulation",
         capture_output=True,
         text=True,
         env={**os.environ, **GIT_ENV},
     )
-    return result
+
+
+def _make_car(lhre, target, *args):
+    return _make(lhre, "car", f"T={target}", *args)
 
 
 def _bobsim_status(lhre):
@@ -264,44 +231,51 @@ def _bobsim_status(lhre):
     ).stdout
 
 
+def _out(lhre, target):
+    return lhre / "simulation" / "out" / "car" / target
+
+
 def _identity(lhre, target):
-    return json.loads((lhre / "simulation" / "out" / "car" / target / "identity.json").read_text(encoding="utf-8"))
+    return json.loads((_out(lhre, target) / "identity.json").read_text(encoding="utf-8"))
 
 
 def _sha256(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def test_make_car_runs_the_target_on_our_vehicle_and_restores_bobsim(lhre):
+def test_make_car_hands_bobsim_our_vehicle_and_leaves_bobsim_untouched(lhre):
     result = _make_car(lhre, "ok")
     assert result.returncode == 0, result.stdout + result.stderr
 
     bobsim = lhre / "simulation" / "bobsim"
-    out = lhre / "simulation" / "out" / "car" / "ok"
+    out = _out(lhre, "ok")
     our_vehicle = lhre / "vehicle" / "vehicle.yml"
-    assert (bobsim / "simulations/mbd/generated_results/seen_vehicle.yml").read_bytes() == our_vehicle.read_bytes()
+    assert (out / "generated_results" / "seen_vehicle.yml").read_bytes() == our_vehicle.read_bytes()
     assert (bobsim / "vehicle.yml").read_text(encoding="utf-8") == BOBSIM_VEHICLE
-    assert (bobsim / RECORD).read_text(encoding="utf-8") == "record of the BobSim car\n"
-    assert not list((bobsim / TEMPLATES).glob("*"))
-    assert (bobsim / STANDARDS_ORDER).read_text(encoding="utf-8") == "VehicleSim\nFourPostSim\n"
     assert _bobsim_status(lhre) == ""
-    assert not (bobsim / "simulations/mbd/generated_results/old_car_metrics.csv").exists()
 
     assert (out / "vehicle.yml").read_bytes() == our_vehicle.read_bytes()
-    assert (out / "generated_results" / "four_post_eval_report_metrics.csv").is_file()
-    assert (out / "runs" / "FourPostSim" / "run_new" / "manifest.json").is_file()
-    assert (out / "runs" / "FourPostSim" / "run_new" / "run.log").is_file()
-    assert not list(out.rglob("*.tir")), "make car copied a .tir file into the outputs"
-    assert not (out / "generated_results" / "old_car_metrics.csv").exists()
+    assert (out / "generated_results" / METRICS).is_file()
+    run = out / "runs" / "FourPostSim" / "run_new"
+    assert {p.name for p in run.iterdir()} == {
+        "manifest.json",
+        "run.log",
+        "BobLib.Experiments.Standards.FourPostSim_res.csv",
+    }
+    assert not list((out / "generated_results").glob("*.tir")), "make car copied a .tir file into the outputs"
+    assert (out / "target.log").is_file()
 
     identity = _identity(lhre, "ok")
+    assert identity["schema"] == "lhre.car-run.v2"
+    assert "records" not in identity
     assert identity["status"] == "ok", identity
+    assert identity["failures"] == []
     assert identity["target"] == "ok"
     assert identity["target_exit_status"] == 0
+    assert identity["vehicle"]["name"] == NAME
     assert identity["vehicle"]["sha256"] == _sha256(our_vehicle)
     assert identity["vehicle"]["executed_sha256"] == _sha256(our_vehicle)
-    assert identity["records"]["state"] == "written"
-    assert identity["records"]["executables"] == [{"path": f"bobsim/{EXE}", "built_after_records": True}]
+    assert identity["vehicle"]["candidate"] is False
     assert identity["bobsim"]["commit"] and identity["bobsim"]["clean_after"] is True
     assert identity["lhre"]["commit"] and identity["lhre"]["dirty"] is False
     assert identity["image"]["name"] == "fake-image:test"
@@ -316,9 +290,33 @@ def test_make_car_runs_the_target_on_our_vehicle_and_restores_bobsim(lhre):
         "describes_vehicle": True,
     }
     outputs = {item["path"]: item["sha256"] for item in identity["outputs"]}
-    metrics = out / "generated_results" / "four_post_eval_report_metrics.csv"
-    assert outputs["generated_results/four_post_eval_report_metrics.csv"] == _sha256(metrics)
+    assert outputs[f"generated_results/{METRICS}"] == _sha256(out / "generated_results" / METRICS)
     assert outputs["four_post_eval_config.yml"] == _sha256(bobsim / FOUR_POST_CONFIG)
+    assert not [path for path in outputs if path.startswith(".bobsim/")], "the build cache is not an output"
+
+
+def test_make_car_keeps_the_build_and_clears_the_last_results(lhre):
+    assert _make_car(lhre, "ok").returncode == 0
+    cache = _out(lhre, "ok") / ".bobsim"
+    _write(cache / "BuildBobLib/FourPostSim/results/run_old/run.log", "an older run\n")
+    _write(cache / "generated_results/old_car_metrics.csv", "metric,value\nold,1\n")
+    _write(_out(lhre, "ok") / "left_over.txt", "from an older run\n")
+
+    result = _make_car(lhre, "ok")
+    assert result.returncode == 0, result.stdout + result.stderr
+    out = _out(lhre, "ok")
+    assert (cache / "BuildBobLib/FourPostSim/builds.log").read_text(encoding="utf-8") == "build\n"
+    assert {p.name for p in (out / "runs" / "FourPostSim").iterdir()} == {"run_new"}
+    assert not (out / "generated_results" / "old_car_metrics.csv").exists()
+    assert not (out / "left_over.txt").exists()
+
+
+def test_make_car_leaves_a_run_folder_the_host_can_delete(lhre):
+    assert _make_car(lhre, "ok").returncode == 0
+    out = _out(lhre, "ok")
+    for path in [out, *out.rglob("*")]:
+        mode = path.stat().st_mode
+        assert mode & stat.S_IWOTH, f"{path} is not writable by everyone"
 
 
 def _candidate(lhre, bundle_sha256=None):
@@ -335,12 +333,10 @@ def test_make_car_runs_a_candidate_vehicle_into_its_own_folder(lhre):
     result = _make_car(lhre, "ok", "VEHICLE=out/cand/vehicle.yml")
     assert result.returncode == 0, result.stdout + result.stderr
 
-    seen = lhre / "simulation/bobsim/simulations/mbd/generated_results/seen_vehicle.yml"
-    assert seen.read_bytes() == candidate.read_bytes()
     assert _bobsim_status(lhre) == ""
-    car = lhre / "simulation" / "out" / "car"
-    assert (car / "ok--cand" / "vehicle.yml").read_bytes() == candidate.read_bytes()
-    assert (car / "ok" / "vehicle.yml").read_bytes() == (lhre / "vehicle" / "vehicle.yml").read_bytes()
+    assert (_out(lhre, "ok--cand") / "generated_results" / "seen_vehicle.yml").read_bytes() == candidate.read_bytes()
+    assert (_out(lhre, "ok--cand") / "vehicle.yml").read_bytes() == candidate.read_bytes()
+    assert (_out(lhre, "ok") / "vehicle.yml").read_bytes() == (lhre / "vehicle" / "vehicle.yml").read_bytes()
     identity = _identity(lhre, "ok--cand")
     assert identity["status"] == "ok", identity
     assert identity["vehicle"]["path"] == "simulation/out/cand/vehicle.yml"
@@ -348,6 +344,7 @@ def test_make_car_runs_a_candidate_vehicle_into_its_own_folder(lhre):
     assert identity["vehicle"]["candidate"] is True
     assert identity["bundle"]["path"] == "simulation/out/cand/bundle.yml"
     assert identity["bundle"]["describes_vehicle"] is True
+    assert "is not the vehicle member" in result.stdout
     assert _identity(lhre, "ok")["vehicle"]["candidate"] is False
 
 
@@ -356,8 +353,7 @@ def test_make_car_stops_before_the_target_on_a_candidate_that_fails_the_check(lh
     result = _make_car(lhre, "ok", "VEHICLE=out/cand/vehicle.yml")
     assert result.returncode != 0
     assert "fails the candidate check" in result.stderr
-    assert not (lhre / "simulation/bobsim/simulations/mbd/generated_results/seen_vehicle.yml").exists()
-    assert not (lhre / "simulation/out/car/ok--cand").exists()
+    assert not _out(lhre, "ok--cand").exists()
     assert _bobsim_status(lhre) == ""
 
 
@@ -382,33 +378,24 @@ def test_make_car_records_a_bundle_that_does_not_describe_the_vehicle(lhre):
     assert _identity(lhre, "ok")["bundle"]["describes_vehicle"] is False
 
 
-def test_make_car_restores_bobsim_when_the_target_fails(lhre):
+def test_make_car_marks_a_dirty_lhre_tree(lhre):
+    (lhre / "simulation" / "Makefile").write_text(
+        (lhre / "simulation" / "Makefile").read_text(encoding="utf-8") + "\n", encoding="utf-8"
+    )
+    assert _make_car(lhre, "ok").returncode == 0
+    assert _identity(lhre, "ok")["lhre"]["dirty"] is True
+
+
+def test_make_car_keeps_the_outputs_of_a_failing_target(lhre):
     result = _make_car(lhre, "fail")
     assert result.returncode != 0
+    assert "make -C bobsim fail failed with exit status 2." in result.stdout
     assert _bobsim_status(lhre) == ""
-    bobsim = lhre / "simulation" / "bobsim"
-    assert (bobsim / "vehicle.yml").read_text(encoding="utf-8") == BOBSIM_VEHICLE
     identity = _identity(lhre, "fail")
     assert identity["status"] == "failed"
-    assert identity["target_exit_status"] != 0
+    assert identity["target_exit_status"] == 2
     assert identity["bobsim"]["clean_after"] is True
-    assert (lhre / "simulation/out/car/fail/runs/FourPostSim/run_new/run.log").is_file()
-
-
-def test_make_car_restores_bobsim_when_the_records_are_not_written(lhre):
-    (lhre / "simulation" / "bobsim" / "app" / "modelica_generator.py").write_text(
-        "import sys\nprint('vehicle:  TestCar')\nprint('state:    stale')\nsys.exit(0)\n", encoding="utf-8"
-    )
-    _git(lhre / "simulation" / "bobsim", "commit", "-q", "-am", "generator that writes nothing")
-    result = _make_car(lhre, "ok")
-    assert result.returncode != 0
-    assert "records" in (result.stdout + result.stderr).lower()
-    assert _bobsim_status(lhre) == ""
-    assert not (lhre / "simulation/bobsim/simulations/mbd/generated_results/seen_vehicle.yml").exists()
-    identity = _identity(lhre, "ok")
-    assert identity["status"] == "failed"
-    assert identity["records"]["state"] == "failed"
-    assert identity["target_exit_status"] is None
+    assert (_out(lhre, "fail") / "runs/FourPostSim/run_new/run.log").is_file()
 
 
 def test_make_car_fails_when_the_target_leaves_bobsim_changed(lhre):
@@ -421,21 +408,10 @@ def test_make_car_fails_when_the_target_leaves_bobsim_changed(lhre):
     assert identity["bobsim"]["clean_after"] is False
 
 
-def test_make_car_fails_on_an_executable_older_than_the_records(lhre):
-    result = _make_car(lhre, "stale")
-    assert result.returncode != 0
-    assert "stale" in (result.stdout + result.stderr).lower()
-    assert _bobsim_status(lhre) == ""
-    identity = _identity(lhre, "stale")
-    assert identity["status"] == "failed"
-    assert identity["records"]["executables"] == [{"path": f"bobsim/{EXE}", "built_after_records": False}]
-
-
-def test_make_car_restores_bobsim_after_an_interrupt(lhre):
-    compose = f"{sys.executable} {lhre.parent / 'compose.py'}"
-    started = lhre / "simulation/bobsim/simulations/mbd/generated_results/started"
+def test_make_car_writes_a_failed_identity_after_an_interrupt(lhre):
+    started = _out(lhre, "hang") / ".bobsim" / "generated_results" / "started"
     process = subprocess.Popen(
-        ["make", "car", "T=hang", f"COMPOSE={compose}"],
+        ["make", "car", "T=hang", f"COMPOSE={_compose(lhre)}"],
         cwd=lhre / "simulation",
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -451,8 +427,9 @@ def test_make_car_restores_bobsim_after_an_interrupt(lhre):
     output, _ = process.communicate(timeout=60)
     assert process.returncode != 0, output
     assert _bobsim_status(lhre) == "", output
-    assert (lhre / "simulation/bobsim/vehicle.yml").read_text(encoding="utf-8") == BOBSIM_VEHICLE
-    assert _identity(lhre, "hang")["status"] == "failed"
+    identity = _identity(lhre, "hang")
+    assert identity["status"] == "failed"
+    assert "make car was interrupted." in identity["failures"]
 
 
 def test_make_car_refuses_a_bobsim_with_local_changes(lhre):
@@ -462,8 +439,7 @@ def test_make_car_refuses_a_bobsim_with_local_changes(lhre):
     assert result.returncode != 0
     assert "local changes" in result.stdout + result.stderr
     assert (bobsim / "README.md").read_text(encoding="utf-8") == "local edit\n"
-    assert (bobsim / "vehicle.yml").read_text(encoding="utf-8") == BOBSIM_VEHICLE
-    assert not (bobsim / "simulations/mbd/generated_results/seen_vehicle.yml").exists()
+    assert not _out(lhre, "ok").exists()
 
 
 def test_make_car_rejects_a_candidate_in_a_nested_folder(lhre):
@@ -471,6 +447,13 @@ def test_make_car_rejects_a_candidate_in_a_nested_folder(lhre):
     result = _make_car(lhre, "ok", "VEHICLE=out/a/b/vehicle.yml")
     assert result.returncode != 0
     assert "is not a file under out/<name>/" in result.stderr
+    assert not (lhre / "simulation/out/car").exists()
+
+
+def test_make_car_rejects_a_missing_candidate(lhre):
+    result = _make_car(lhre, "ok", "VEHICLE=out/cand/vehicle.yml")
+    assert result.returncode != 0
+    assert "does not exist" in result.stderr
     assert not (lhre / "simulation/out/car").exists()
 
 
@@ -483,21 +466,19 @@ def test_make_car_rejects_a_target_that_is_not_a_name(lhre, target):
     assert not (lhre / "simulation" / "out").exists() or not any((lhre / "simulation" / "out").rglob("*"))
 
 
+def test_make_bobsim_runs_bobsim_on_its_own_car(lhre):
+    result = _make(lhre, "bobsim", "T=which")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "vehicle=[] out=[]" in result.stdout
+
+
 def test_make_car_is_not_run_by_a_dry_run():
-    result = subprocess.run(  # noqa: PLW1510 pre-existing when the lint gate went on
+    result = subprocess.run(  # noqa: PLW1510 the test reads returncode
         ["make", "-n", "car", "T=dry-run-probe", "COMPOSE=compose"],
         cwd=SIM,
         capture_output=True,
         text=True,
     )
     assert result.returncode == 0, result.stderr
-    assert "tools/car.sh" in result.stdout
+    assert "tools/car.py 'dry-run-probe' '../vehicle/vehicle.yml' 'out/car/dry-run-probe'" in result.stdout
     assert not (SIM / "out" / "car" / "dry-run-probe").exists()
-
-
-def test_car_script_is_posix_sh():
-    dash = shutil.which("dash")
-    if dash is None:
-        pytest.skip("dash is not installed")
-    result = subprocess.run([dash, "-n", str(SIM / "tools" / "car.sh")], capture_output=True, text=True)  # noqa: PLW1510 pre-existing when the lint gate went on
-    assert result.returncode == 0, result.stderr

@@ -20,8 +20,8 @@ description: Run a BobSim make target (standard evaluation, envelope, lap sim, s
    make car T=<target>
    ```
 
-   `make car` writes our records, installs `vehicle/vehicle.yml` as
-   `bobsim/vehicle.yml`, runs the target and restores `bobsim/`. See
+   `make car` hands BobSim `vehicle/vehicle.yml` and an output folder
+   under `out/car/<target>/`, so `bobsim/` is never written. See
    [bobsim.md](../../bobsim.md#run-a-bobsim-target-on-our-car). Some
    targets take up to two hours. Run them in the background. To run a
    candidate copy, add `VEHICLE=out/<name>/vehicle.yml`. See
@@ -43,7 +43,6 @@ description: Run a BobSim make target (standard evaluation, envelope, lap sim, s
 
 - `make bobsim T=<target>` runs BobSim's own car, not ours. Use it only
   for BobSim's car. Tell the user which car gave a result.
-- `make car` fails if `bobsim/` has local changes. If an earlier run
-  stopped early, run `git -C bobsim checkout -- vehicle.yml` and
-  `make records-undo`.
+- `make car` fails if `bobsim/` has local changes. Commit or discard
+  them first.
 - Say which BobSim SHA gave the result. It is in `identity.json`.

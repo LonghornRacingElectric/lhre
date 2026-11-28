@@ -15,8 +15,8 @@ The BobSim test takes about 6 s of `make unit`.
 ## What the tests check
 
 - `test_bobsim_layout.py`: lhre code and docs use the BobSim names at the
-  pin. Every import resolves. `make records` writes only into the BobLib of
-  BobSim.
+  pin. Every import resolves. Our car stages into a copy of the pinned
+  BobLib and leaves the pin clean.
 - `test_ci_contract.py`: the `make` targets and the CI jobs keep the
   shape on this page. `make init` and `make bump-bobsim` keep LF and long
   paths in the nested submodules.
@@ -26,12 +26,14 @@ The BobSim test takes about 6 s of `make unit`.
 - `test_new_study.py`: `make new-study` copies the template, and the
   template `run.py` writes `summary.json` and `readme.json` that fill its
   README. The target refuses a bad name and a name that exists.
-- `test_car_wrapper.py`: `make car` on a small fake BobSim git repo. The
-  target sees our vehicle. `bobsim/` is restored after a pass, a failed
-  target, failed records and an interrupt. A target that leaves `bobsim/`
-  changed fails. An executable older than the records fails. No `.tir`
-  file reaches the outputs. A candidate `VEHICLE` runs to its own folder.
-  A candidate that fails the check stops before the target. It runs no
+- `test_car_wrapper.py`: `make car` on a small fake BobSim git repo that,
+  like BobSim, reads `BOBSIM_VEHICLE` and writes only under `BOBSIM_OUT`.
+  The target sees our vehicle and `bobsim/` stays untouched. A failed
+  target and an interrupt still write a failed `identity.json`. A target
+  that leaves `bobsim/` changed fails. The build cache survives a rerun and
+  old results do not. No `.tir` file reaches the outputs. A candidate
+  `VEHICLE` runs to its own folder. A candidate that fails the check stops
+  before the target. `make bobsim` keeps BobSim's own car. It runs no
   Modelica.
 - `test_four_post_acceptance.py`: the FourPost acceptance on small
   synthetic metrics files and run manifests. The metrics files use the
@@ -66,8 +68,8 @@ pip download --no-deps --only-binary=:all: --platform any --python-version 3.11 
 make unit COVERAGE=1   # writes out/coverage.md
 ```
 
-`car_identity.py` is left out: `test_car_wrapper.py` runs it from a copy,
-which coverage can't tie back to the file.
+`car.py` and `car_identity.py` are left out: `test_car_wrapper.py` runs
+them from a copy, which coverage can't tie back to the files.
 
 ## Add a test
 

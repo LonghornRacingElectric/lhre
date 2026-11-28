@@ -23,7 +23,7 @@ STANDARD_EVALS = {
     "standard-eval-four-post",
     "standard-eval-all",
 }
-CAR_INPUTS = ["vehicle/vehicle.yml", "simulation/bobsim", "simulation/tools/car.sh", ".github/workflows/ci.yml"]
+CAR_INPUTS = ["vehicle/vehicle.yml", "simulation/bobsim", "simulation/tools/car.py", ".github/workflows/ci.yml"]
 NOT_CAR_INPUTS = ["simulation/docs/bobsim.md", "simulation/studies/front-ackermann/README.md", "simulation/bobsim.md"]
 
 
@@ -235,7 +235,7 @@ def test_pull_requests_check_bundle_immutability_against_the_base_branch(fast_jo
 
 
 def test_make_car_and_the_acceptance_have_targets():
-    assert "tools/car.sh" in _dry_run("car", "T=standard-eval-four-post")
+    assert "tools/car.py" in _dry_run("car", "T=standard-eval-four-post")
     acceptance = _dry_run("four-post-acceptance", "T=standard-eval-four-post")
     assert "tools/four_post_acceptance.py out/car/standard-eval-four-post" in acceptance
 

@@ -168,14 +168,13 @@ def _write_run(
         (run / CONFIG).write_text(config, encoding="utf-8")
         outputs.append(CONFIG)
     identity = {
-        "schema": "lhre.car-run.v1",
+        "schema": "lhre.car-run.v2",
         "status": status,
         "failures": [] if status == "ok" else ["make bobsim failed."],
         "target": target,
         "target_exit_status": 0 if status == "ok" else 2,
         "vehicle": {"path": "vehicle/vehicle.yml", "sha256": _sha256(vehicle)},
         "bundle": bundle or {"bundle_id": "test-bundle-1", "status": "candidate", "describes_vehicle": True},
-        "records": {"state": "written", "executables": []},
         "bobsim": {"commit": "fe03bab", "clean_after": True},
         "outputs": [{"path": name, "sha256": _sha256(run / name)} for name in outputs],
     }

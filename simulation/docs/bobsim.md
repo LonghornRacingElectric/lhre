@@ -27,7 +27,6 @@ Measured on a Windows laptop with Docker Desktop, BobSim `7ff5191`:
 | ------- | ---- |
 | `make init` on a fresh clone (image cached) | 1 min 35 s |
 | `make test` | about 40 s at BobSim `fe03bab` (see [tests.md](tests.md)) |
-| `make records` | under 10 s |
 | `make bobsim T=standard-build` | 2 min 20 s to 2 min 35 s |
 | `make bobsim T=envelope-ggv` | 1 h 55 min, one core |
 
@@ -38,62 +37,57 @@ evaluations, through `make car`. See [tests.md](tests.md#ci).
 
 - `make test` and studies load `vehicle/vehicle.yml` through
   `BOBSIM_VEHICLE`.
-- BobSim targets do not read `BOBSIM_VEHICLE` yet. `make bobsim T=...` uses
-  `simulation/bobsim/vehicle.yml`. To run a BobSim target on our car, use
-  `make car T=...`. See [Run a BobSim target on our car](#run-a-bobsim-target-on-our-car).
-- The Modelica tier compiles BobLib's `.mo` records. `make records`
-  writes our vehicle into those records inside the submodule, at
-  `bobsim/engines/boblib`. Do not commit those files. `make records-undo`
-  puts back only those files. The generator writes some of them into a
-  directory it creates, `BobSimTemplates/`, as the container's root user.
-  `make records` opens the record directories so that `records-undo` can
-  delete those files from a Linux host.
-- Our vehicle has the same name as BobSim's default car. So `make records`
-  replaces BobSim's record for that car until `make records-undo`.
+- BobSim reads its car from `BOBSIM_VEHICLE` and writes its outputs under
+  `BOBSIM_OUT` when they are set, and both of its Modelica builds compile
+  a staged copy of BobLib that holds that car's records. Nothing about our
+  car lives in BobSim. See BobSim's `docs/workflows.md`, "Bring your own
+  car and output folder".
+- compose sets `BOBSIM_VEHICLE` to our car for our tools. `make bobsim T=...`
+  empties it, so that target runs BobSim's own `vehicle.yml`. To run a
+  BobSim target on our car, use `make car T=...`. See
+  [Run a BobSim target on our car](#run-a-bobsim-target-on-our-car).
+- Relative paths in our car (`paths.boblib`, `paths.tire_templates`)
+  resolve against the BobSim root, wherever the file is. That is why
+  `tire_templates` is `../../vehicle/tires`.
 
 ### Run a BobSim target on our car
 
-With `make records` alone, the Modelica model uses our records, but the
-Python steps of the target read `bobsim/vehicle.yml`. FourPost, for
-example, reads its target loads and spring data from that file. The run
-then mixes two cars and gives no error. `make car` prevents this.
+`make car` runs one BobSim target on one car file and keeps what it made
+with a record of what ran. The Python and Modelica steps of the target
+read the same file, so a run cannot mix two cars.
 
 ```bash
 make car T=standard-eval-four-post
 make four-post-acceptance T=standard-eval-four-post
 ```
 
-`make car T=<target>` does these steps:
+`make car T=<target>` runs [`tools/car.py`](https://github.com/LonghornRacingElectric/lhre/blob/main/simulation/tools/car.py)
+in the container. It does these steps:
 
-1. It stops if `bobsim/` has local changes.
-2. It runs `make records`. The generator must report the records as
-   written for our vehicle, inside `bobsim/engines/boblib`.
-3. It copies `vehicle/vehicle.yml` to `bobsim/vehicle.yml`. The copy has
-   the same bytes, so the same sha256. Entries under `paths:` resolve from
-   the BobSim root, so they still resolve. The generator checks the
-   installed file again. It must report the records as written.
-4. It deletes the old files in `bobsim/simulations/mbd/generated_results/`.
-   At BobSim `fe03bab`, FourPost reads its spring free length from the
-   metrics CSV of the previous run in that folder
-   (`four_post_eval_sim.py`, `_metrics_csv_value`). A CSV from another car
-   would change this run.
-5. It runs `make bobsim T=<target>`.
-6. It copies the outputs to `out/car/<target>/`: the metrics, and the
-   manifest, overrides, `run.log` and result CSV (under 1 MiB) of each new
-   Modelica run. It never copies a `.tir` file.
-7. It fails if a Modelica executable that ran is older than the records.
-   Such an executable was built before our records, so it can be for
-   another car.
-8. It always puts back `bobsim/vehicle.yml` and runs `make records-undo`,
-   also after a failure or Ctrl+C. Then it fails if
-   `git -C bobsim status --short --ignore-submodules=none` prints anything.
-9. It writes `out/car/<target>/identity.json`: the lhre commit and dirty
-   state, the BobSim and BobLib commits, the vehicle and tire sha256, the
-   records state, the image id, the target, its exit status and the
-   sha256 of each output.
+1. It stops if `bobsim/` has local changes, or if a candidate copy fails
+   `bundle.py check`. Nothing is written then.
+2. It clears `out/car/<target>/`, except the Modelica builds in
+   `out/car/<target>/.bobsim/BuildBobLib/`, so an unchanged car does not
+   recompile. It deletes the old run results in those builds and the old
+   metrics. At BobSim `fe03bab`, FourPost reads its spring free length from
+   the metrics CSV of the previous run (`four_post_eval_sim.py`,
+   `_metrics_csv_value`). A CSV from another car would change this run.
+3. It copies the car to `out/car/<target>/vehicle.yml` and runs
+   `make -C bobsim <target>` with `BOBSIM_VEHICLE` set to that copy and
+   `BOBSIM_OUT` set to `out/car/<target>/.bobsim/`. BobSim stages our
+   records in its own BobLib copy there and rebuilds only what changed.
+4. It copies the outputs out of `.bobsim/`: the metrics, and the manifest,
+   overrides, `run.log` and result CSV (under 1 MiB) of each Modelica run.
+   It never copies a `.tir` file.
+5. It fails if `git -C bobsim status --short --ignore-submodules=none`
+   prints anything after the run.
+6. It writes `out/car/<target>/identity.json` (schema `lhre.car-run.v2`):
+   the lhre commit and dirty state, the BobSim and BobLib commits, the
+   vehicle and tire sha256, the image id, the target, its exit status and
+   the sha256 of each output. It does this also after a failure or Ctrl+C.
 
-If a `make car` run stops before step 8, for example on a power cut, run
-`git -C bobsim checkout -- vehicle.yml` and `make records-undo`.
+The container writes the run folder as root, so `car.py` opens it to
+everyone at the end and `make clean` works from a Linux host.
 
 `make four-post-acceptance T=<target>` reads `out/car/<target>/`. It
 writes `four_post_acceptance.json` there. It fails when one of these is
@@ -142,8 +136,7 @@ With it, `make car` changes these steps:
 - After step 1, it runs the candidate check of `make check-vehicle` with
   `out/<name>/bundle.yml`. It stops on a problem, before it writes
   anything.
-- It writes the records for the candidate and installs the candidate as
-  `bobsim/vehicle.yml`.
+- BobSim stages the records of the candidate, not of `vehicle/vehicle.yml`.
 - It writes the outputs to `out/car/<target>--<name>/`. `<name>` is the
   folder under `out/`. A run on
   `vehicle/vehicle.yml` writes to `out/car/<target>/`. `make car` refuses
@@ -169,13 +162,13 @@ unless the vehicle file sets `modelica_initialization: legacy`.
 Our `vehicle/vehicle.yml` sets `legacy`. The reasons:
 
 - Our car differs from the solved record, so the default (`preserve`)
-  stops `make records`. BobSim's own `vehicle.yml` also differs from it.
+  stops the generator. BobSim's own `vehicle.yml` also differs from it.
   BobSim's `tests/test_modelica_generator.py` expects that.
-- With `legacy`, `make records` writes a `VehicleSim` without the solved
+- With `legacy`, the generator writes a `VehicleSim` without the solved
   pose. The model starts from BobLib's settling start.
-- At the old pin `4da577a`, `make records` did the same, without a
-  setting and without a message. So `legacy` keeps the start that
-  `make records` gave our car before the move.
+- At the old pin `4da577a`, the generator did the same, without a
+  setting and without a message. So `legacy` keeps the start that our car
+  had before the move.
 
 A solved pose for our car needs a recalibrated BobLib record. That is
 BobLib work. Until it exists, keep `legacy`.
@@ -223,6 +216,14 @@ workspace. `1acfe2d` (#139) changes the default lap reference to a fixed
 minimum-curvature line. Old lap, envelope and autonomy study results are
 historical until rerun at this pin. The ROS plant uses direct transient
 stepping; it does not use BobSim's QSS lap planner.
+
+### BobSim `1d8536b` (draft)
+
+This draft pins BobSim `1d8536b`, one commit on `999dc84` from
+[BobSim #176](https://github.com/BobDyn/BobSim/pull/176). It adds
+`BOBSIM_VEHICLE`, `BOBSIM_OUT` and the staged BobLib build that `make car`
+needs, and changes no physics, numerics or model inputs. Re-pin to BobSim
+main once #176 merges.
 
 ### BobSim `999dc84` and BobLib `2935955`
 
@@ -278,7 +279,7 @@ halfshaft values, and on `pVCU.finalDriveRatio`. Our file has none of
 these. These fields of our file have no BobLib home and stay unbound:
 `diff_T_capacity_max`, `diff_clutchEffectiveRadius`, `diff_w_transition`,
 `diff_c_viscous`, `halfshaftLeftJEquivalent` and
-`halfshaftRightJEquivalent`. `make records` lists each one.
+`halfshaftRightJEquivalent`. The generator lists each one.
 
 A Modelica result made before this pin is historical. Run it again before
 you use it.
@@ -364,7 +365,7 @@ Our `vehicle/vehicle.yml` did not take the ride-height references from
   0.10668 m. The rear grid covers 0.04191 m to 0.12573 m.
 - So aero from our points clamps at the grid corner. It does not change
   with ride height or pitch.
-- The Modelica tier reads these points after `make records`. It clamped
+- The Modelica tier reads these points from our staged records. It clamped
   in the same way at `4da577a`. A Modelica result at speed for our car
   uses the corner of the map.
 - At `fe03bab`, DynPy, GGV and the lap read these points too. At

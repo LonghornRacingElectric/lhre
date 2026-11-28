@@ -11,10 +11,10 @@ simulation. Other packages can use it too.
 
 ## Use it
 
-- **Simulation:** `make test`, `make records` and studies read this file
-  through the `BOBSIM_VEHICLE` environment variable. BobSim targets
-  (`make bobsim T=...`) do not read that variable yet. To run a BobSim
-  target on this file, use `make car T=...`. See
+- **Simulation:** `make test` and studies read this file through the
+  `BOBSIM_VEHICLE` environment variable. To run a BobSim target on this
+  file, use `make car T=...`, which hands it to BobSim the same way.
+  `make bobsim T=...` runs BobSim's own car. See
   [simulation/README.md](../simulation/README.md).
 - **Bazel:** depend on `//vehicle:vehicle.yml`, `//vehicle:bundle.yml` or
   `//vehicle:tires`. All are public.
@@ -136,8 +136,8 @@ To check a changed car without a commit, see
 - Entries under `paths:` resolve from the BobSim root (`simulation/bobsim`),
   not from this directory. That is why the tire path is
   `../../vehicle/tires`.
-- `modelica_initialization: legacy` sets how the Modelica model starts
-  after `make records`. See
+- `modelica_initialization: legacy` sets how the Modelica model of this
+  car starts. See
   [simulation/docs/bobsim.md](../simulation/docs/bobsim.md#modelica-initialization).
 - Autonomy has its own copy of some of these numbers in
   `autonomy/ros2/src/lhr_vehicle/config/vehicle.yaml`. It does not read this

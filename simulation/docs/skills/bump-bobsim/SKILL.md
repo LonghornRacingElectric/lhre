@@ -15,7 +15,6 @@ description: Move the simulation/bobsim submodule to a newer BobSim commit and f
    git -C simulation/bobsim status --short
    ```
 
-   If `make records` changed files, run `make records-undo`.
    `make bump-bobsim` stops when this command prints anything.
 
 ## Procedure
@@ -57,17 +56,15 @@ description: Move the simulation/bobsim submodule to a newer BobSim commit and f
 
    `make test` fails when lhre uses an old BobSim name or an import that
    does not resolve.
-6. Check that `make records` writes into BobSim's BobLib, then undo it:
+6. Check that our car still builds in the Modelica tier:
 
    ```bash
-   make records
-   git -C bobsim/engines/boblib status --short
-   make records-undo
+   make car T=standard-build
    git -C bobsim status --short
    ```
 
-   The first status lists only the record files. The second prints
-   nothing. If `make records` stops on the initialization, read
+   The build must pass and the status must print nothing. If the
+   generator stops on the initialization, read
    [bobsim.md](../../bobsim.md#modelica-initialization).
 7. For each study that uses a BobSim module that changed, fix its imports
    in the same PR. Then run it again with `make study S=<name>`. If you do

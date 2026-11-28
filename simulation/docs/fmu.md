@@ -42,7 +42,7 @@ The loader checks identities before executing native code. An old
 `VehicleSim.fmu` cannot be substituted: it has a different public interface
 and may retain the built-in controller. Rebuild after vehicle, tire or
 calibration-pin changes. The source checkout and installed nested dependency
-remain clean; generated records need no `make records-undo` for this target.
+remain clean; generated records never reach the submodule for this target.
 
 ## Validation
 
