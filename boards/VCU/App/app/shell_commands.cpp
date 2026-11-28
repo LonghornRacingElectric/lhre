@@ -15,7 +15,7 @@ void App::RegisterShellCommands(longhorn::Shell& shell) {
       {"io", "digital inputs/outputs, loop", &App::IoCommand, this});
   shell.AddCommand(
       {"analog", "ADC counts, volts, calibrated", &App::AnalogCommand, this});
-  shell.AddCommand({"mode", "event mode [0-4] (applied outside DRIVE)",
+  shell.AddCommand({"mode", "event mode [0-5] (applied outside DRIVE)",
                     &App::ModeCommand, this});
   shell.AddCommand({"launch", "launch arm (opt-in acceleration ramp)",
                     &App::LaunchCommand, this});
@@ -37,10 +37,9 @@ void App::StateCommand(void* ctx, longhorn::Console& out, const char*) {
              static_cast<int>(s.pedals.pedal_travel * 100.0f),
              static_cast<int>(s.pedals.bse_psi_filtered),
              s.pedals.brake_over_throttle ? 1 : 0);
-  out.Printf("reset=%s brake_latch=%d resets=%u soe=%d%% buzzer=%d",
+  out.Printf("reset=%s brake_latch=%d soe=%d%% buzzer=%d",
              lhal::ToString(app->p_.reset_cause), s.brake_flags_latched ? 1 : 0,
-             s.fault_resets, static_cast<int>(s.battery.soe_pct),
-             s.buzzer ? 1 : 0);
+             static_cast<int>(s.battery.soe_pct), s.buzzer ? 1 : 0);
   out.Printf("adc_fresh=%d launch_armed=%d regen_current_cut=%d", s.adc_fresh,
              s.launch_armed, s.regen_current_cut);
   out.Printf("wheel_feedback=%d drive_slip=%d%% brake_slip=%d%%",
@@ -101,12 +100,12 @@ void App::AnalogCommand(void* ctx, longhorn::Console& out, const char*) {
 
 void App::ModeCommand(void* ctx, longhorn::Console& out, const char* args) {
   auto* app = static_cast<App*>(ctx);
-  if (args[0] >= '0' && args[0] <= '4' && args[1] == '\0') {
+  if (args[0] >= '0' && args[0] <= '5' && args[1] == '\0') {
     app->shell_mode_request_.store(args[0] - '0');
     out.Println("mode request queued (applies outside DRIVE)");
     return;
   }
-  out.Printf("mode=%s; usage: /mode 0..4",
+  out.Printf("mode=%s; usage: /mode 0..5",
              lhre::can::ToString(app->snapshot().event_mode));
 }
 

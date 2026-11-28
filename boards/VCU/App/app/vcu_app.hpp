@@ -10,6 +10,7 @@
 #include "control/battery.hpp"
 #include "control/brake_bias.hpp"
 #include "control/launch.hpp"
+#include "control/linelock.hpp"
 #include "control/pedals.hpp"
 #include "control/regen.hpp"
 #include "control/torque.hpp"
@@ -63,7 +64,6 @@ class App {
   uint32_t faults() const { return faults_; }
   float torque_command() const { return torque_command_; }
   longhorn::Logger& logger() { return logger_; }
-  uint32_t watchdog_refreshes() const { return watchdog_refreshes_; }
 
  private:
   // Stacks are multiples of the host FreeRTOS port's minimum stack size.
@@ -98,9 +98,9 @@ class App {
 
   // Control-loop stages, in tick order.
   void DrainCan(uint32_t now_ms);
-  bool ReadInputs(uint32_t now_ms);        // returns the RTD press edge
-  bool UpdateBrakeLatch(uint32_t now_ms);  // returns the dash reset edge
-  void UpdateCoolantLatch(uint32_t now_ms, bool reset_edge);
+  bool ReadInputs(uint32_t now_ms);  // returns the RTD press edge
+  void UpdateBrakeLatch(uint32_t now_ms);
+  StateInputs HvcInputs(uint32_t now_ms) const;
   uint32_t ComputeFaults(uint32_t now_ms, bool inverter_fresh,
                          bool inverter_faulted) const;
   void UpdateState(uint32_t now_ms, bool rtd_edge, bool inverter_fresh,
@@ -162,18 +162,17 @@ class App {
   longhorn::Debouncer motor_disconnect_;
   longhorn::EdgeButton rtd_switch_;
   BrakeFlagLatch brake_latch_;
-  CoolantOvertempLatch coolant_latch_;
   ErrorLeds error_leds_;
   StateMachine sm_;
   TorquePath torque_path_;
   BatteryEstimator battery_;
   Buzzer buzzer_;
   BrakeRegen regen_;
+  LineLockPolicy linelock_;
   LaunchRamp launch_;
   WheelSlipController wheel_control_;
   uint16_t sine_[kSineSamples] = {};
   bool dac_playing_ = false;
-  bool prev_fault_reset_ = false;
   uint32_t handled_mode_commands_ = 0;
   int pending_mode_ = -1;  // EventMode waiting to apply outside DRIVE
   uint32_t boot_ms_ = 0;
@@ -197,8 +196,6 @@ class App {
   std::atomic<int> shell_mode_request_{-1};
   std::atomic<uint32_t> control_beats_{0};
   std::atomic<uint32_t> telemetry_beats_{0};
-  std::atomic<bool> latch_save_pending_{false};
-  std::atomic<uint32_t> latch_save_value_{0};
 
   // Telemetry state
   longhorn::RateGate diag_fast_gate_;
@@ -210,7 +207,6 @@ class App {
   uint32_t seen_telemetry_beats_ = 0;
   uint32_t control_progress_ms_ = 0;
   uint32_t telemetry_progress_ms_ = 0;
-  uint32_t watchdog_refreshes_ = 0;
 
   // Scheduler-less timing
   bool stepped_ = false;

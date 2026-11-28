@@ -28,10 +28,6 @@ void ConfigureAnalog();
 // Starts the ADC trigger timer once both DMA scans are running.
 void StartAdcTrigger();
 
-// Brake comparator soft latch in the last flash page of bank 2.
-uint32_t LoadFaultLatch();
-void SaveFaultLatch(uint32_t value);
-
 // BOOT0trig high long enough to charge the BOOT0 RC, then reset into the
 // ST ROM bootloader (USB DFU). Never returns.
 [[noreturn]] void EnterBootloader();

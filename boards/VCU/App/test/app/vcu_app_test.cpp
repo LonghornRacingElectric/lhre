@@ -256,85 +256,28 @@ TEST_F(VcuAppTest, RtdReleaseReturnsToTractiveActive) {
   EXPECT_EQ(app_->state(), VcuState::kRtdWait);  // via TS_ACTIVE
 }
 
-TEST_F(VcuAppTest, BrakeFlagLatchSurvivesPowerCycleUntilDashReset) {
+TEST_F(VcuAppTest, BrakeFlagLatchClearsOnlyOnPowerCycleWhenFlagsAreLow) {
   b_.b1_disconnect.Write(true);
   b_.Run(*app_, 30);
   b_.b1_disconnect.Write(false);
   b_.Run(*app_, 30);
   EXPECT_NE(app_->faults() & vcu::kFaultBrakeFlagLatched, 0u);
-  EXPECT_EQ(b_.board.stored, vcu::BrakeFlagLatch::kPersistedSet);
 
-  // "Power cycle": a new app restores the latch from storage.
+  // "Power cycle": the latch is not restored, so it comes back clear.
+  app_ = std::make_unique<vcu::App>(b_.peripherals());
+  b_.Run(*app_, 30);
+  EXPECT_EQ(app_->faults() & vcu::kFaultBrakeFlagLatched, 0u);
+
+  // A flag still high at boot latches it again.
+  b_.b1_disconnect.Write(true);
   app_ = std::make_unique<vcu::App>(b_.peripherals());
   b_.Run(*app_, 30);
   EXPECT_NE(app_->faults() & vcu::kFaultBrakeFlagLatched, 0u);
 
-  // Dash reset clears it (edge), and the cleared state is persisted.
-  b_.fault_reset = true;
-  b_.Run(*app_, 30);
-  EXPECT_EQ(app_->faults() & vcu::kFaultBrakeFlagLatched, 0u);
-  EXPECT_EQ(b_.board.stored, 0u);
-}
-
-TEST_F(VcuAppTest, DashResetIgnoredWhileFlagActive) {
-  b_.b2_overvoltage.Write(true);
-  b_.Run(*app_, 30);
-  b_.fault_reset = true;
-  b_.Run(*app_, 30);
+  // Within a power cycle nothing clears it, even with the flag low.
+  b_.b1_disconnect.Write(false);
+  b_.Run(*app_, 300);
   EXPECT_NE(app_->faults() & vcu::kFaultBrakeFlagLatched, 0u);
-  // The reset has to be a fresh press after the flag clears.
-  b_.b2_overvoltage.Write(false);
-  b_.Run(*app_, 30);
-  EXPECT_NE(app_->faults() & vcu::kFaultBrakeFlagLatched, 0u);
-  b_.fault_reset = false;
-  b_.Run(*app_, 30);
-  b_.fault_reset = true;
-  b_.Run(*app_, 30);
-  EXPECT_EQ(app_->faults() & vcu::kFaultBrakeFlagLatched, 0u);
-}
-
-TEST_F(VcuAppTest, CoolantOvertempLatchesWithoutCuttingTorque) {
-  b_.coolant_alive = true;
-  ReachDrive();
-  b_.SetPedalTravel(0.5f);
-  b_.Run(*app_, 200);
-  EXPECT_EQ(app_->faults() & vcu::kFaultCoolantOvertemp, 0u);
-
-  // Either loop sensor at the limit latches the fault, reported on CAN.
-  b_.coolant_after_inverter_c = vcu::CoolingParams{}.overtemp_c;
-  b_.Run(*app_, 200);
-  EXPECT_NE(app_->faults() & vcu::kFaultCoolantOvertemp, 0u);
-  msg::VcuFaults vf;
-  ASSERT_TRUE(b_.LastFrame(b_.car, &vf));
-  EXPECT_TRUE(vf.active_faults_coolant_overtemp);
-  // Diagnostic only: the car keeps driving.
-  EXPECT_EQ(app_->state(), VcuState::kDrive);
-  EXPECT_GT(app_->torque_command(), 0.0f);
-
-  // Cooling down or the TSM going silent does not clear it, and neither does
-  // a dash reset while the TSM is silent: nothing shows the loop has cooled.
-  b_.coolant_after_inverter_c = 30.0f;
-  b_.Run(*app_, 200);
-  b_.coolant_alive = false;
-  b_.Run(*app_, 500);
-  EXPECT_NE(app_->faults() & vcu::kFaultCoolantOvertemp, 0u);
-  b_.fault_reset = true;
-  b_.Run(*app_, 30);
-  EXPECT_NE(app_->faults() & vcu::kFaultCoolantOvertemp, 0u);
-
-  // A reset with a fresh reading under the limit clears it.
-  b_.fault_reset = false;
-  b_.coolant_alive = true;
-  b_.Run(*app_, 200);
-  EXPECT_NE(app_->faults() & vcu::kFaultCoolantOvertemp, 0u);
-  b_.fault_reset = true;
-  b_.Run(*app_, 30);
-  EXPECT_EQ(app_->faults() & vcu::kFaultCoolantOvertemp, 0u);
-}
-
-TEST_F(VcuAppTest, SilentTsmRaisesNoCoolantFault) {
-  b_.Run(*app_, 500);
-  EXPECT_EQ(app_->faults() & vcu::kFaultCoolantOvertemp, 0u);
 }
 
 TEST_F(VcuAppTest, ErrorLedsOnlyAddIndication) {
@@ -366,6 +309,64 @@ TEST_F(VcuAppTest, ModeCommandAppliesOnlyOutsideDriveAndEchoes) {
   msg::VcuState ds;
   ASSERT_TRUE(b_.LastFrame(b_.car, &ds));
   EXPECT_EQ(ds.event_mode, static_cast<uint8_t>(EventMode::kSkidpad));
+}
+
+TEST_F(VcuAppTest, MotorSpinModeCapsTorqueAndStopsPushingAtTheSpeedCeiling) {
+  ReachRtdWait();
+  lhre::can::pi::VcuModeCommand m;
+  m.event_mode = static_cast<uint8_t>(EventMode::kMotorSpin);
+  b_.car.Send(m.ToFrame());
+  b_.Run(*app_, 30);
+  ASSERT_EQ(app_->snapshot().event_mode, EventMode::kMotorSpin);
+  msg::InverterTorqueCommand cmd;
+  ASSERT_TRUE(b_.LastFrame(b_.car, &cmd));
+  EXPECT_NEAR(cmd.torque_limit(), 5.0f, 0.1f) << "inverter gets the cap too";
+
+  b_.PressRtd(true);
+  b_.Run(*app_, 50);
+  ASSERT_EQ(app_->state(), VcuState::kDrive);
+  b_.SetBrakePsi(0.0f);
+  b_.Run(*app_, 50);
+  b_.SetPedalTravel(1.0f);
+  b_.Run(*app_, 300);
+  EXPECT_NEAR(app_->torque_command(), 5.0f, 0.01f);
+
+  b_.motor_rpm = 1350;
+  b_.Run(*app_, 50);
+  EXPECT_NEAR(app_->torque_command(), 2.5f, 0.1f);
+  b_.motor_rpm = 1600;
+  b_.Run(*app_, 50);
+  EXPECT_EQ(app_->torque_command(), 0.0f);
+  EXPECT_EQ(app_->state(), VcuState::kDrive) << "coasts, no fault";
+}
+
+TEST_F(VcuAppTest, MotorSpinDrivesWithNoLoopPduSteeringOrMotorSense) {
+  b_.pdu_alive = false;
+  b_.SetLoop(0.0f, 0.0f);           // no shutdown loop wired
+  b_.motor_disconnect.Write(true);  // motor-cable sense floating
+  b_.Energize();
+  b_.SetBrakePsi(500.0f);
+  b_.Run(*app_, 200);
+  EXPECT_EQ(app_->state(), VcuState::kTsActive) << "endurance needs the loop";
+  EXPECT_NE(app_->faults() & vcu::kFaultShutdownOpen, 0u);
+  EXPECT_NE(app_->faults() & vcu::kFaultPduTimeout, 0u);
+
+  lhre::can::pi::VcuModeCommand m;
+  m.event_mode = static_cast<uint8_t>(EventMode::kMotorSpin);
+  b_.car.Send(m.ToFrame());
+  b_.Run(*app_, 200);
+  ASSERT_EQ(app_->snapshot().event_mode, EventMode::kMotorSpin);
+  EXPECT_EQ(app_->faults(), 0u);
+  ASSERT_EQ(app_->state(), VcuState::kRtdWait);
+  b_.PressRtd(true);
+  b_.Run(*app_, 50);
+  EXPECT_EQ(app_->state(), VcuState::kDrive);
+  b_.SetBrakePsi(0.0f);
+  b_.Run(*app_, 50);
+  b_.SetPedalTravel(1.0f);
+  b_.Run(*app_, 300);
+  EXPECT_GT(app_->torque_command(), 0.0f);
+  EXPECT_EQ(app_->state(), VcuState::kDrive) << "stays in DRIVE, no loop";
 }
 
 TEST_F(VcuAppTest, LineLockRequestStaysZeroAndActualIsReported) {
@@ -691,9 +692,8 @@ TEST_F(VcuAppTest, EachBrakeComparatorFlagCutsTorqueAndLatches) {
     b.Run(*app, 50);
     EXPECT_NE(app->faults() & vcu::kFaultBrakeFlagLatched, 0u) << flag;
     EXPECT_EQ(app->torque_command(), 0.0f) << flag;
-    b.fault_reset = true;
-    b.Run(*app, 30);
-    EXPECT_EQ(app->faults() & vcu::kFaultBrakeFlagLatched, 0u) << flag;
+    b.Run(*app, 300);
+    EXPECT_NE(app->faults() & vcu::kFaultBrakeFlagLatched, 0u) << flag;
     EXPECT_NE(app->state(), VcuState::kDrive) << flag;
   }
 }

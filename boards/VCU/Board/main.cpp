@@ -41,10 +41,6 @@ const volatile uint16_t* const kVrefintCal =
 class Board final : public vcu::BoardServices {
  public:
   void EnterBootloader() override { vcu_board::EnterBootloader(); }
-  uint32_t LoadFaultLatch() override { return vcu_board::LoadFaultLatch(); }
-  void SaveFaultLatch(uint32_t value) override {
-    vcu_board::SaveFaultLatch(value);
-  }
 };
 
 }  // namespace
@@ -172,7 +168,8 @@ int main() {
   p.reset_cause = reset_cause;
   p.vrefint_cal = *kVrefintCal;
 
-  static vcu::App app(p);
+  // TEMP: boot into the bench motor spin set (5 Nm, 1 kW cap, no PDU or loop).
+  static vcu::App app(p, &vcu::ParamsFor(lhre::can::EventMode::kMotorSpin));
   app.StartTasks();
   vTaskStartScheduler();
 
