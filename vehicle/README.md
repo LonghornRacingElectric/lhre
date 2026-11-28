@@ -101,11 +101,18 @@ files. Do not upload them as CI artifacts. Record their hashes instead.
 
 ### The current bundle
 
-`orion-baseline-2` is a `candidate`. `vehicle.yml` equals the BobSim
+`orion-baseline-3` is a `candidate`. `vehicle.yml` equals the BobSim
 `4da577a` baseline ("Orion" in BobSim) except `paths`,
-`modelica_initialization` and `diff_kineticFrictionRatio`. That ratio is 1,
-the BobLib default since BobLib #61. 0.85 drove a stick-slip limit cycle in
-steady cornering. `orion-baseline-1` had 0.85. No record gives a suspension revision, CAD or
+`modelica_initialization`, `diff_kineticFrictionRatio` and the dampers. That
+ratio is 1, the BobLib default since BobLib #61. 0.85 drove a stick-slip
+limit cycle in steady cornering. `orion-baseline-1` had 0.85. The dampers
+equal BobSim `999dc84`: Öhlins TTX25 C12/R12, 6 compression and 10 rebound
+clicks from closed, 4.3 high-speed turns from open, on both axles. That is
+BobSim's setting, `assumed` for our car. The Orion pre-event checklist lists
+other clicks per corner, but BobSim's TTX25 dataset has no measured curve
+for them. `orion-baseline-2` had linear `damper_table` rows.
+
+No record gives a suspension revision, CAD or
 SVN reference, z datum, setup name, tire license, tire source or torque
 reaction. The driven axle and the regen axle are `assumed` rear from the
 BobSim driveline record. Run `make check-vehicle` to list every open entry.

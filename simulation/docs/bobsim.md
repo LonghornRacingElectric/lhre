@@ -244,10 +244,15 @@ Modelica write step (`026667c` #162). #162 adds the public
 `write_modelica_plan(plan, boblib_root=...)`, which writes a plan into a
 staged copy of BobLib.
 
-Our `vehicle/vehicle.yml` keeps its linear `damper_table` rows (850 N and
-1300 N at 1 m/s). BobSim still reads them. They are BobSim's values from
-before #151. BobSim's own car now runs Yiming's TTX25 curves. Our dampers
-need a named source for the clicks before they move to `damper:`.
+Our `vehicle/vehicle.yml` now uses the same `damper:` block as BobSim's
+car: Yiming's TTX25 C12/R12 curves, 6 compression and 10 rebound clicks
+from closed, 4.3 high-speed turns from open. It replaced linear
+`damper_table` rows (850 N and 1300 N at 1 m/s), BobSim's values from
+before #151. The setting is BobSim's, not a measured Orion setup. The Orion
+pre-event checklist gives other clicks per corner, but `damper_curves`
+only has curves at 4.3 high-speed turns (low-speed 0 to 25 clicks) or at 0
+low-speed clicks (high-speed 0 to 4.3 turns), set per axle. Those settings
+need new BobSim data before our car can run them.
 
 A GGV, lap or DOE damper result made before this pin is historical. Run it
 again before you use it.
