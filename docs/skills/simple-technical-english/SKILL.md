@@ -6,13 +6,17 @@ description: Write or rewrite lhre docs, skills, AGENTS.md files, comments, erro
 # Write in Simplified Technical English
 
 Simplified Technical English (STE) is a controlled form of English. The
-aerospace industry made it (ASD-STE100) so that a technician cannot misread
-a procedure. lhre uses its sentence rules so that a new member, a
-non-native speaker or an agent reads a doc one way only.
+aerospace industry made it (ASD-STE100), so that a technician cannot
+misread a procedure. lhre uses its sentence rules for the same reason. A
+new member, a non-native speaker or an agent must read a doc one way only.
 
 This skill uses the STE rules for sentences. It does not use the STE
 dictionary of approved words. ASD does not let us copy that dictionary.
 Use plain, common words instead.
+
+CI checks the rules that need no judgment in every `AGENTS.md` and
+`SKILL.md`: semicolons, sentence length and banned words. See the
+[STE check](../../../tools/ste/README.md). A reviewer checks the other rules.
 
 ## Pick the mode
 

@@ -1,0 +1,14 @@
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
+
+py_library(
+    name = "ste",
+    srcs = ["ste.py"],
+    visibility = ["//visibility:private"],
+)
+
+py_test(
+    name = "ste_test",
+    size = "small",
+    srcs = ["ste_test.py"],
+    deps = [":ste"],
+)

@@ -31,11 +31,11 @@ the team to the person and the task. There is no fixed team.
 4. **Choose roles for this task.** Do not copy a team from an earlier task.
    Pick only the roles the work needs. Common roles:
     - first-principles reviewer: checks the physics and the model against
-      hand calculations, read-only;
+      hand calculations. Read-only.
     - simplifier: finds code, cases and text to cut without changing the
-      result, read-only;
-    - writer: writes one README, note, or doc;
-    - infra or skill author: changes tools or docs on its own branch;
+      result. Read-only.
+    - writer: writes one README, note, or doc.
+    - infra or skill author: changes tools or docs on its own branch.
     - skeptic: argues the other side of the result and lists what was not
       modeled.
 5. **Parallelize the work, not the sim.** A study run uses all the CPUs
@@ -45,13 +45,13 @@ the team to the person and the task. There is no fixed team.
    its files. Work for a separate PR goes on its own branch and worktree.
 7. **Write a complete brief.** A subagent sees none of the conversation.
    Each brief states:
-    - the decision the work informs;
-    - the files to read and the files it may change;
+    - the decision the work informs.
+    - the files to read and the files it may change.
     - the skills to load, by name (for example `study-design`,
       `vehicle-dynamics-first-principles`, `bobsim-boundary`). Write "load
       these first". A subagent can skip a skill that the brief only
-      mentions. Ask the report to name the rules that it applied;
-    - the rules: writing style, no attribution, BobSim is a black box;
+      mentions. Ask the report to name the rules that it applied.
+    - the rules: writing style, no attribution, BobSim is a black box.
     - the output: format, length limit, and what "done" means.
 8. **Check what comes back.** A subagent report is a claim, not evidence.
    Check each finding against the files or the run output before you act
