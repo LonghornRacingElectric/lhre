@@ -122,6 +122,13 @@ BAD = [
     ),
     ("unknown architecture", _set(("architecture", "front"), "pushrod"), "architecture.front", "bad_value"),
     ("rod target typo", _set(("front", "actuation", "rod_to"), "lowr"), "front.actuation.rod_to", "bad_value"),
+    ("no damper", _set(("front", "actuation", "shock", "damper_table"), None), "front.actuation.shock", "damper_choice"),
+    (
+        "damper and damper table",
+        _set(("rear", "actuation", "shock", "damper"), {"model": "ohlins_ttx25_mkii"}),
+        "rear.actuation.shock",
+        "damper_choice",
+    ),
     ("unknown suspension key", _set(("front", "suspension", "upper_o"), [0.0, 0.5, 0.3]), "front.suspension.upper_o", "unknown_key"),
     ("driver mass in grams", _set(("driver_mass", "mass_kg"), 65770.912), "driver_mass.mass_kg", "unit_implausible"),
     (
@@ -131,6 +138,14 @@ BAD = [
         "incompatible_geometry",
     ),
 ]
+
+
+def test_a_named_damper_replaces_the_damper_table():
+    vehicle = copy.deepcopy(VEHICLE)
+    shock = vehicle["front"]["actuation"]["shock"]
+    del shock["damper_table"]
+    shock["damper"] = {"model": "ohlins_ttx25_mkii", "dataset": "ttx25_mkii_c12_r12_pdf_v1"}
+    assert _check(vehicle) == []
 
 
 def test_the_committed_vehicle_passes():

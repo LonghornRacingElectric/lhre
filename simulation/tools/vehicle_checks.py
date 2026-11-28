@@ -32,7 +32,7 @@ AXLE_KEYS = ("wheel", "tire", "suspension", "steering", "actuation", "masses")
 WHEEL_KEYS = ("radius_m", "rim_radius_ratio", "rim_width_ratio", "toe_deg", "camber_deg")
 STEERING_KEYS = ("rack_pickup_m", "rack_travel_per_rev_m")
 ACTUATION_KEYS = ("rod_to", "rod_mount_m", "shock", "bellcrank", "stabar")
-SHOCK_KEYS = ("mount_m", "spring_table", "free_length_m", "damper_table")
+SHOCK_KEYS = ("mount_m", "spring_table", "free_length_m", "damper", "damper_table")
 BELLCRANK_KEYS = ("pivot_m", "axis", "pickups_m", "order")
 STABAR_KEYS = ("arm_end_m", "bar_end_m", "rate_n_m_per_rad")
 MASS_KEYS = ("mass_kg", "cg_m", "inertia_kg_m2")
@@ -329,6 +329,8 @@ def _check_actuation(c: _Checks, side: Mapping[str, Any], axle: str, architectur
     shock = c.section(actuation, "shock", path)
     if shock is not None:
         c.keys(shock, f"{path}.shock", SHOCK_KEYS)
+        if ("damper" in shock) == ("damper_table" in shock):
+            c.add(f"{path}.shock", "damper_choice", "needs exactly one of damper and damper_table.")
         _keep(points, "actuation.shock.mount_m", c.point(shock, "mount_m", f"{path}.shock"))
     if architecture == "direct":
         _coincident(c, points, axle, "shock", "actuation.rod_mount_m", "actuation.shock.mount_m")

@@ -60,7 +60,9 @@ container.
    hardpoint exists, that every stored point is on the left side (y > 0),
    the mirror rule, the datum declaration and singular geometry: a
    zero-length member, a ball joint on its hinge axis, a tie rod with no
-   steering arm and wishbones that do not locate the upright. Each failure
+   steering arm and wishbones that do not locate the upright. Each shock
+   needs exactly one of `damper` (a named TTX25 setting) and
+   `damper_table` (a force-velocity table), as BobSim does. Each failure
    names the key path, for example `vehicle:rear.suspension.lower_aft_i_m`.
    The output also gives the datum status of each axle.
 4. BobSim loads `vehicle.yml`.

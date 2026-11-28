@@ -18,8 +18,9 @@ The export pin matched BobSim `22c5056` and its nested BobLib `1bd6d78`.
 Both `BobLib/` model trees were Git tree
 `bb8379ca9fe8cbae57a47d3af441d40110d839ba`. BobSim `f58f932` moves the
 nested BobLib to `75b6e03`, which has another model tree and nested
-records. So `make fmu` refuses at this pin until a reviewed exporter
-commit moves `FMU_BOBLIB_SHA`.
+records. BobSim `999dc84` moves it again, to `2935955`. So `make fmu`
+refuses at this pin until a reviewed exporter commit moves
+`FMU_BOBLIB_SHA`.
 
 The build calls public `app.modelica_generator.plan_modelica_stack` on
 `vehicle/vehicle.yml` with the pinned BobSim root. It writes the generated
