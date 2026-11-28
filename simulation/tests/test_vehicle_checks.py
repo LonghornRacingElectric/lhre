@@ -184,20 +184,46 @@ def test_keys_that_lhre_does_not_read_pass():
 
 
 @pytest.mark.parametrize(
-    ("section", "typo"),
-    [(("rear", "actuation", "shock"), "spring_tabel"), (("front", "actuation", "shock"), "free_lenght_m")],
+    ("section", "key", "typo"),
+    [
+        (("rear", "actuation", "shock"), "spring_table", "spring_tabel"),
+        (("front", "actuation", "shock"), "free_length_m", "free_lenght_m"),
+    ],
 )
-def test_a_near_miss_of_a_known_key_fails(section, typo):
+def test_a_near_miss_of_a_known_key_fails(section, key, typo):
     vehicle = copy.deepcopy(VEHICLE)
     node = vehicle
-    for key in section:
-        node = node[key]
-    node[typo] = 1.0
+    for part in section:
+        node = node[part]
+    node[typo] = node.pop(key)
     path = ".".join((*section, typo))
     assert (path, "unknown_key") in [(p.path, p.code) for p in _check(vehicle)]
 
 
-@pytest.mark.parametrize("shock", [{"damper": 5}, {"damper_table": {"table": [["a", "b"], [0, 0], [1, 2]]}}])
+@pytest.mark.parametrize(
+    ("section", "new_key"),
+    [
+        (("rear", "actuation", "shock"), "spring_tables"),
+        (("front", "suspension"), "upper_fore_x_m"),
+    ],
+)
+def test_a_new_key_beside_a_similar_known_key_passes(section, new_key):
+    vehicle = copy.deepcopy(VEHICLE)
+    node = vehicle
+    for part in section:
+        node = node[part]
+    node[new_key] = 1.0
+    assert _check(vehicle) == []
+
+
+@pytest.mark.parametrize(
+    "shock",
+    [
+        {"damper": 5},
+        {"damper_table": {"table": [["a", "b"], [0, 0], [1, 2]]}},
+        {"damper": {**BOBSIM_DAMPER, 1: "x", "extra": "y"}},
+    ],
+)
 def test_a_malformed_damper_is_reported_not_raised(shock):
     vehicle = copy.deepcopy(VEHICLE)
     node = vehicle["front"]["actuation"]["shock"]

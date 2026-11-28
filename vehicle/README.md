@@ -66,8 +66,11 @@ container.
 
    The check does not copy BobSim's schema. A key that lhre does not read
    passes, so a new BobSim field does not fail it. A key with a foreign
-   unit suffix, such as `radius_mm`, still fails, and so does a near miss of
-   a known key, such as `spring_tabel` (`unknown_key`). For each shock damper it
+   unit suffix, such as `radius_mm`, still fails. So does a near miss of a
+   known key that is itself missing, such as `spring_tabel` in place of
+   `spring_table` (`unknown_key`). A similar key beside the known one, such
+   as `spring_tables` next to `spring_table`, is taken as a new field and
+   passes. For each shock damper it
    calls BobSim's public `common.damper_curves.resolve_damper_curve` and
    reports BobSim's error as `bobsim_rejects`.
 4. BobSim loads `vehicle.yml`.

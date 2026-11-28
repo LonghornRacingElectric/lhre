@@ -166,11 +166,12 @@ class _Checks:
                     f"is in {suffix}. BobSim reads {stem}_{unit} in {unit}. Convert the value and rename the key.",
                 )
                 continue
-            # A new key passes, so a BobSim upgrade needs no lhre edit. One a
-            # letter or two off a known key is far more likely a typo, which
-            # BobSim would silently ignore.
+            # A new key passes, so a BobSim upgrade needs no lhre edit. A key a
+            # letter or two off a known key that is itself missing is a typo,
+            # which BobSim would silently ignore. If the known key is present,
+            # this is a new key beside it (spring_tables next to spring_table).
             close = difflib.get_close_matches(str(key), allowed, n=1, cutoff=NEAR_MISS)
-            if close:
+            if close and close[0] not in node:
                 self.add(_join(path, key), "unknown_key", f"is not a key BobSim reads. Did you mean {close[0]}?")
 
     def number(
@@ -339,7 +340,10 @@ def _check_actuation(c: _Checks, side: Mapping[str, Any], axle: str, architectur
         c.keys(shock, f"{path}.shock", SHOCK_KEYS)
         try:
             resolve_damper_curve(shock)
-        except ValueError as error:
+        # TypeError: BobSim sorts unknown damper keys, which fails on a YAML
+        # node mixing int and string keys. A missing dataset file or a broken
+        # BobSim checkout is not a vehicle error, so it still raises.
+        except (ValueError, TypeError) as error:
             c.add(f"{path}.shock", "bobsim_rejects", f"BobSim cannot read this damper: {error}")
         _keep(points, "actuation.shock.mount_m", c.point(shock, "mount_m", f"{path}.shock"))
     if architecture == "direct":
