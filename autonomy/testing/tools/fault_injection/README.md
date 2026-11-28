@@ -106,15 +106,15 @@ the fault, and the summary names every injected run below that, so a tier that
 did not run at its speed cannot pass for one that did. `geofence` is left
 blank: where it trips is set by the fence, not the tier.
 
-Every run launches with `enable_metrics:=false`. Since #132 a finished lap
-ends the mission, and `safety_node` only arms in `READY` and `DRIVING`, so
-a fault after the first lap would score `missed`. An 8 m/s oval lap takes
-about 24 s, under `AFTER`. The clean laps then keep driving for all of
-`CLEAN_S`, which gives false trips more time to show.
+Fault trials keep metrics off so the mission stays armed after the first
+lap and delayed faults can fire. Clean trials enable metrics, record
+`/lhr/metrics/lap_complete`, and watch for the mission to reach `FINISHED`
+within `CLEAN_S`. Recording continues for two simulated seconds after the
+mission ends when the cap allows it.
 
 Output goes to `~/lhr-test-data/<date>-fault-injection/`: `bags/` (one bag
-plus launch and recorder logs per run), `worlds/` (generated seeds),
-`results.csv`, `summary.md`. Bags
+plus launch arguments, launch log and recorder log per run), `worlds/` (generated seeds),
+`expected.txt` (planned run IDs), `results.csv`, and `summary.md`. Bags
 never go in git; the campaign folder under `autonomy/testing/` gets
 `results.csv`, the summary and the chosen figures, and the bags go to
 SharePoint ([testing/README.md](../../README.md)).
@@ -130,7 +130,9 @@ SharePoint ([testing/README.md](../../README.md)).
     The geofence case is the exception: the fence trips on the estimate,
     which can cross before the truth does, so an early `GEOFENCE` counts and
     its latency is negative.
-  - `clean` and `false_trip`: a clean lap without or with a trip.
+  - `clean`: the recorded lap completed and the mission reached `FINISHED`
+    with no safety trip. `incomplete_lap` means the bag does not prove this.
+    `false_trip` means safety tripped during a clean trial.
   - `no_drive` (never reached `DRIVING`, or covered under 10 m before the
     fault), `no_fault` (the fault never started), `hung` (the sim
     clock stopped) and `error` (the bag did not read): the run itself went
@@ -150,18 +152,35 @@ SharePoint ([testing/README.md](../../README.md)).
   never shows reads `never` with 0. The `STEER_TRACKING` budget in the Sim
   v2 pass criteria applies to `latency_from_visible_s`
   ([#208](https://github.com/LonghornRacingElectric/lhre/issues/208)); the
-  summary prints both.
+  summary prints both. A freeze that never becomes visible fails acceptance.
+- `trip_limit_s` and `within_trip_limit`: compare detection against the
+  deadline for the expected check. Stale-sensor deadlines use the timeout
+  actually passed to launch plus 0.2 s. The last duplicate argument wins,
+  as in ROS launch. Steering uses latency from visibility.
 - `stop_dist_m`: path length from the fault to standstill, from ground
   truth. Stops are optimistic until the regen and spring-brake model lands
   ([#199](https://github.com/LonghornRacingElectric/lhre/issues/199)):
   the sim stops the wheels outright.
-- `within_pdr`: the stop fits the formula with the measured latency, and
+- `within_pdr`: the stop fits the formula with the allowed trip time, and
   the car stayed stopped (`max_v_after_stop` at most 0.5 m/s). A run that
   never stops is false.
 - `drove_m`: distance covered in `DRIVING` before the fault or trip.
 
-Any run that is not `caught` (or `clean`), or has `within_pdr` false, gets
-an issue.
+- `passed`: a completed clean lap or a fault caught by the expected check,
+  within both the trip-time and stopping budgets, at the tested tier's
+  speed. The 8 m/s injected tier must reach at least 7.5 m/s. Geofence retains
+  its crossing-based speed exception.
+
+The runner exits nonzero when any planned row is missing, duplicated, or
+fails acceptance. Use a fresh output directory for a changed matrix. To
+rebuild the acceptance verdict from new results, run
+`python3 summarize.py results.csv --expected expected.txt`. Omitting the
+plan still renders historical CSVs as descriptive reports. Old recordings
+without lap completion cannot establish clean-lap acceptance.
+To re-score a recording with overridden timers, pass its recorded
+`<id>.args.txt` to `analyze_run.py --launch-args`. With no argument file,
+the analyzer uses launch defaults. Sim v2 acceptance uses the default
+0.3 s LiDAR timeout even though diagnostic runs can override it.
 
 ## Rules-compliant courses
 

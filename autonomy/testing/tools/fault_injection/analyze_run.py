@@ -17,17 +17,32 @@ import bisect
 import csv
 import math
 import os
+from pathlib import Path
 import sys
 
 from lhr_safety.monitors import SafetyConfig
 from rclpy.serialization import deserialize_message
 from rosbag2_py import ConverterOptions, SequentialReader, StorageOptions
 from rosidl_runtime_py.utilities import get_message
+from ros2launch.api.api import parse_launch_arguments
 
-# The PDR stop formula, d = v (T + 0.2 s) + v^2 / 2a: T is the measured
-# detection latency, 0.2 s the brake apply time, a the spring brake's floor.
+# The PDR stop formula uses the allowed detection time T, the brake apply
+# time, and the spring brake's minimum deceleration.
 APPLY_S = 0.2
 DECEL = 6.0
+TRIP_LIMITS = {
+    'EKF_DIVERGED': .2,
+    'CMD_INVALID': .2,
+    'GEOFENCE': .2,
+    'STEER_TRACKING': 1.,
+}
+STALE_TIMERS = {
+    'ODOM_STALE': 'odom_timeout_s',
+    'CMD_STALE': 'cmd_timeout_s',
+    'LIDAR_STALE': 'lidar_timeout_s',
+    'IMU_STALE': 'imu_timeout_s',
+    'WHEEL_STALE': 'wheel_timeout_s',
+}
 STOPPED = 0.1  # m/s
 MOVED = 0.5  # m/s: rolling again after the stop fails the run
 MIN_DRIVE_M = 10.0  # less than this before the fault and the run proves nothing
@@ -41,9 +56,11 @@ STEER_TOL_RAD = SafetyConfig.steer_angle_tol_rad
 
 FIELDS = [
     'id', 'case', 'track', 'seed', 'v_max', 'result', 'expected', 'tripped',
-    'match', 'v_at_fault', 'at_speed', 'trip_latency_s', 'emergency_latency_s',
+    'match', 'v_at_fault', 'at_speed', 'trip_latency_s', 'trip_limit_s',
+    'within_trip_limit', 'emergency_latency_s',
     'stop_time_s', 'stop_dist_m', 'pdr_dist_m', 'within_pdr',
     'max_v_after_stop', 'false_trip', 'drove_m', 'visible_after_s', 'latency_from_visible_s',
+    'passed',
 ]
 
 # result: what the run shows. Only the first four (and the two clean ones)
@@ -54,6 +71,7 @@ FIELDS = [
 #   early_trip   something tripped before the fault: a false trip
 #   clean        a clean lap that drove and never tripped
 #   false_trip   a clean lap that tripped
+#   incomplete_lap  a run that drove without proving a completed clean lap
 #   no_drive     never reached DRIVING, or barely moved before the fault
 #   no_fault     drove, but the fault never started: RUN_S ran out, or the
 #                car never reached the speed gate (the launch log says so)
@@ -92,8 +110,22 @@ def path_length(samples, start, end):
     return sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(pts, pts[1:]))
 
 
-def score(data, case, fence):
+def trip_limits(launch_args):
+    """Use the same duplicate-argument precedence as ros2 launch."""
+    args = dict(parse_launch_arguments(launch_args))
+    limits = TRIP_LIMITS.copy()
+    for check, parameter in STALE_TIMERS.items():
+        name = f'safety_{parameter}'
+        timeout = float(args.get(name, getattr(SafetyConfig, parameter)))
+        if not math.isfinite(timeout) or timeout < 0:
+            raise ValueError(f'{name} must be finite and nonnegative')
+        limits[check] = timeout + .2
+    return limits
+
+
+def score(data, case, fence, launch_args=()):
     """Score one run from {topic: [(receive time, msg)]}."""
+    limits = trip_limits(launch_args)
     to_sim = sim_time(data.get('/clock', []))
     mission = [(to_sim(t), m.data) for t, m in data.get('/lhr/mission/status', [])]
     truth = [(to_sim(t), m.pose.pose.position.x, m.pose.pose.position.y,
@@ -131,8 +163,15 @@ def score(data, case, fence):
     if driving is None:
         result = 'no_drive'
     elif case == 'clean':
-        result = ('false_trip' if trip else
-                  'no_drive' if drove < MIN_DRIVE_M else 'clean')
+        lap = next((to_sim(t) for t, m in data.get('/lhr/metrics/lap_complete', [])
+                    if m.data and to_sim(t) >= driving), None)
+        finished = lap is not None and any(s == 'FINISHED' and t >= lap for t, s in mission)
+        if trip or emergency is not None:
+            result = 'false_trip'
+        elif drove < MIN_DRIVE_M:
+            result = 'no_drive'
+        else:
+            result = 'clean' if finished and data.get('/lhr/safety/status') else 'incomplete_lap'
     elif early:
         result = 'early_trip'
     elif drove < MIN_DRIVE_M:
@@ -153,6 +192,8 @@ def score(data, case, fence):
     if result not in ('caught', 'wrong_check') or fault_t is None:
         return row
 
+    latency = trip[0] - fault_t
+    detection = latency
     if case == 'steer_freeze':
         # The injector freezes the first command after the fault starts.
         steer = [(to_sim(t), m.drive.steering_angle) for t, m in data.get('/lhr/vehicle/cmd', [])]
@@ -164,16 +205,20 @@ def score(data, case, fence):
         row['visible_after_s'] = 'never' if visible is None else f'{visible - fault_t:.3f}'
         after = 0.0 if visible is None else max(0.0, trip[0] - visible)
         row['latency_from_visible_s'] = f'{after:.3f}'
+        detection = math.inf if visible is None else after
     stop = next((t for t, _, _, s in truth if t > trip[0] and s < STOPPED), None)
-    latency = trip[0] - fault_t
-    pdr = v * (latency + APPLY_S) + v * v / (2 * DECEL)
+    limit = limits.get(expected)
     row.update({
         'trip_latency_s': f'{latency:.3f}',
         'emergency_latency_s': (f'{emergency - trip[0]:.3f}'
                                 if emergency is not None else ''),
-        'pdr_dist_m': f'{pdr:.2f}',
+        'within_trip_limit': str(limit is not None and detection <= limit),
         'within_pdr': 'False',
     })
+    if limit is None or not math.isfinite(v):
+        return row
+    pdr = v * (limit + APPLY_S) + v * v / (2 * DECEL)
+    row.update(trip_limit_s=f'{limit:.3f}', pdr_dist_m=f'{pdr:.2f}')
     if stop is not None:
         dist = path_length(truth, fault_t, stop)
         # A car that rolls off again (a controller resuming on stale state)
@@ -195,6 +240,20 @@ def at_speed(v_at_fault, v_max):
     if not (math.isfinite(v) and math.isfinite(top) and top > 0.0):
         return ''
     return str(v >= AT_SPEED * top)
+
+
+def passed(row):
+    """Require completion or all three fault checks on the same run."""
+    if row['case'] == 'clean':
+        return row['result'] == 'clean'
+    if not (row['result'] == 'caught' and row.get('within_trip_limit') == 'True'
+            and row.get('within_pdr') == 'True'):
+        return False
+    if row['case'] == 'geofence':
+        return True
+    if row['at_speed'] != 'True':
+        return False
+    return float(row['v_max']) != 8. or float(row['v_at_fault']) >= 7.5
 
 
 def save(path, row):
@@ -221,6 +280,7 @@ def main():
     ap.add_argument('--v-max', default='')
     ap.add_argument('--fence', type=float, default=20.0)
     ap.add_argument('--end', default='', help="watch_run.py's end file")
+    ap.add_argument('--launch-args', type=Path, help='recorded launch arguments, one per line')
     ap.add_argument('--csv', required=True)
     args = ap.parse_args()
 
@@ -230,18 +290,22 @@ def main():
         with open(args.end) as f:
             end = f.read()
     try:
-        row = score(read(args.bag), args.case, args.fence)
+        launch_args = args.launch_args.read_text().splitlines() if args.launch_args else ()
+        row = score(read(args.bag), args.case, args.fence, launch_args=launch_args)
     except Exception as e:  # a bad bag still gets a row, so it is not lost
         print(f'analyze_run: {args.bag}: {e}', file=sys.stderr)
         row, status = {'case': args.case, 'result': 'error'}, 1
-    if 'reason=hung' in end.split():
+    reason = next((word.split('=', 1)[1] for word in end.split()
+                   if word.startswith('reason=')), '')
+    if reason in ('hung', 'exited', 'interrupted'):
         # Whatever the bag shows stopped with the sim, not with the car.
-        row = {'case': args.case, 'result': 'hung'}
+        row = {'case': args.case, 'result': reason}
     # The geofence case trips where the car crosses the fence, not at a
     # tier's speed, so at_speed says nothing about it.
     tier = '' if args.case == 'geofence' else at_speed(row.get('v_at_fault'), args.v_max)
     row.update({'id': args.id, 'track': args.track, 'seed': args.seed,
                 'v_max': args.v_max, 'at_speed': tier})
+    row['passed'] = str(passed(row))
     save(args.csv, row)
     print('  '.join(f'{k}={row[k]}' for k in FIELDS if row.get(k)))
     return status

@@ -41,7 +41,7 @@ def test_analysis_records_at_speed_against_the_runs_tier(tmp_path, monkeypatch):
     """The same fault speed passes the 5 m/s tier and fails the 8 m/s one."""
     out = tmp_path / 'results.csv'
     monkeypatch.setattr(analyze, 'read', lambda bag: {})
-    monkeypatch.setattr(analyze, 'score', lambda data, case, fence: {
+    monkeypatch.setattr(analyze, 'score', lambda data, case, fence, launch_args: {
         'case': case, 'result': 'caught', 'expected': 'ODOM_STALE',
         'tripped': 'ODOM_STALE', 'v_at_fault': '5.30'})
     for run_id, v_max in (('ekf_kill_v5_r1', '5'), ('ekf_kill_v8_r1', '8')):
@@ -59,7 +59,7 @@ def test_geofence_is_not_scored_against_its_tier(tmp_path, monkeypatch):
     """It trips where the car crosses the fence, so the summary must not call it slow."""
     out = tmp_path / 'results.csv'
     monkeypatch.setattr(analyze, 'read', lambda bag: {})
-    monkeypatch.setattr(analyze, 'score', lambda data, case, fence: {
+    monkeypatch.setattr(analyze, 'score', lambda data, case, fence, launch_args: {
         'case': case, 'result': 'caught', 'expected': 'GEOFENCE',
         'tripped': 'GEOFENCE', 'v_at_fault': '6.18'})
     monkeypatch.setattr(sys, 'argv', [
@@ -75,6 +75,120 @@ def test_geofence_is_not_scored_against_its_tier(tmp_path, monkeypatch):
 def _odom(x, v):
     return NS(pose=NS(pose=NS(position=NS(x=x, y=0.0))),
               twist=NS(twist=NS(linear=NS(x=v, y=0.0))))
+
+
+@pytest.mark.parametrize(('latency', 'distance', 'within_time', 'within_pdr'), [
+    (.05, 4., 'True', 'True'),
+    (.46, 4., 'False', 'True'),
+    (.05, 6., 'True', 'False'),
+])
+def test_fault_scores_deadline_and_stop_distance_independently(
+        latency, distance, within_time, within_pdr):
+    data = {
+        '/lhr/mission/status': [(1., NS(data='DRIVING'))],
+        '/lhr/vehicle/odom_truth': [
+            (1., _odom(0., 5.)), (5., _odom(20., 5.)),
+            (6., _odom(20.+distance, 0.)), (7., _odom(20.+distance, 0.))],
+        '/lhr/sim/fault': [(5., NS(data='start ekf_kill ODOM_STALE'))],
+        '/lhr/safety/status': [(5.+latency, NS(
+            message='ODOM_STALE', values=[NS(key='latched', value='True')]))],
+    }
+    row = analyze.score(data, 'ekf_kill', 20.)
+    assert row['trip_limit_s'] == '0.450'
+    assert row['within_trip_limit'] == within_time
+    assert row['pdr_dist_m'] == '5.33'
+    assert row['within_pdr'] == within_pdr
+
+
+@pytest.mark.parametrize(('timeout', 'limit', 'within_time', 'allowance'), [
+    ('0.1', '0.300', 'False', '4.58'),
+    ('1.5', '1.700', 'True', '11.58'),
+])
+def test_analysis_uses_recorded_timeout_override(
+        tmp_path, monkeypatch, timeout, limit, within_time, allowance):
+    launch_args = tmp_path / 'launch-args.txt'
+    launch_args.write_text(f'safety_lidar_timeout_s:=0.3\nsafety_lidar_timeout_s:={timeout}\n')
+    data = {
+        '/lhr/mission/status': [(1., NS(data='DRIVING'))],
+        '/lhr/vehicle/odom_truth': [
+            (1., _odom(0., 5.)), (5., _odom(20., 5.)),
+            (6., _odom(24., 0.)), (7., _odom(24., 0.))],
+        '/lhr/sim/fault': [(5., NS(data='start lidar_drop LIDAR_STALE'))],
+        '/lhr/safety/status': [(5.4, NS(
+            message='LIDAR_STALE', values=[NS(key='latched', value='True')]))],
+    }
+    out = tmp_path / 'results.csv'
+    monkeypatch.setattr(analyze, 'read', lambda bag: data)
+    monkeypatch.setattr(sys, 'argv', [
+        'analyze_run.py', str(tmp_path / 'bag'), '--id', 'lidar_drop_v5_r1',
+        '--case', 'lidar_drop', '--v-max', '5', '--csv', str(out),
+        '--launch-args', str(launch_args)])
+    assert analyze.main() == 0
+    with out.open(newline='') as stream:
+        (row,) = csv.DictReader(stream)
+    assert row['trip_limit_s'] == limit
+    assert row['within_trip_limit'] == within_time
+    assert row['pdr_dist_m'] == allowance
+    assert row['passed'] == within_time
+
+
+@pytest.mark.parametrize('timeout', ['-0.1', 'nan', 'inf'])
+def test_trip_limits_reject_invalid_recorded_timeouts(timeout):
+    with pytest.raises(ValueError, match='safety_lidar_timeout_s'):
+        analyze.trip_limits([f'safety_lidar_timeout_s:={timeout}'])
+
+
+@pytest.mark.parametrize(('lap', 'finished', 'trip', 'expected'), [
+    (True, True, False, 'clean'),
+    (False, True, False, 'incomplete_lap'),
+    (True, False, False, 'incomplete_lap'),
+    (True, True, True, 'false_trip'),
+])
+def test_clean_run_requires_a_completed_lap_and_no_safety_trip(lap, finished, trip, expected):
+    data = {
+        '/lhr/mission/status': [(1., NS(data='DRIVING'))],
+        '/lhr/vehicle/odom_truth': [(1., _odom(0., 5.)), (5., _odom(20., 0.))],
+        '/lhr/metrics/lap_complete': [(4., NS(data=lap))],
+        '/lhr/safety/status': [(3., NS(message='NONE', values=[]))],
+    }
+    if finished:
+        data['/lhr/mission/status'].append((5., NS(data='FINISHED')))
+    if trip:
+        data['/lhr/safety/status'] = [(4.5, NS(
+            message='STEER_TRACKING', values=[NS(key='latched', value='True')]))]
+    assert analyze.score(data, 'clean', 20.)['result'] == expected
+
+
+@pytest.mark.parametrize(('rows', 'expected_code'), [
+    (['clean_s1'], 0), ([], 1), (['clean_s1', 'clean_s1'], 1),
+])
+def test_campaign_acceptance_requires_exactly_one_result_per_planned_run(
+        tmp_path, monkeypatch, rows, expected_code):
+    path = tmp_path / 'results.csv'
+    expected = tmp_path / 'expected.txt'
+    expected.write_text('clean_s1\n')
+    with path.open('w', newline='') as stream:
+        writer = csv.DictWriter(stream, fieldnames=analyze.FIELDS, restval='')
+        writer.writeheader()
+        for run in rows:
+            writer.writerow({'id': run, 'case': 'clean', 'result': 'clean', 'passed': 'True'})
+    monkeypatch.setattr(sys, 'argv', ['summarize.py', str(path), '--expected', str(expected)])
+    assert summarize.main() == expected_code
+
+
+@pytest.mark.parametrize(('overrides', 'expected'), [
+    ({}, True),
+    ({'v_at_fault': '7.49'}, False),
+    ({'within_trip_limit': 'False'}, False),
+    ({'within_pdr': 'False'}, False),
+    ({'result': 'wrong_check'}, False),
+])
+def test_fault_acceptance_requires_speed_deadline_stop_and_expected_check(overrides, expected):
+    row = {'case': 'lidar_drop', 'result': 'caught', 'at_speed': 'True',
+           'v_max': '8', 'v_at_fault': '7.50', 'within_trip_limit': 'True',
+           'within_pdr': 'True'}
+    row.update(overrides)
+    assert analyze.passed(row) is expected
 
 
 def test_missed_fault_still_records_the_speed_it_hit():
