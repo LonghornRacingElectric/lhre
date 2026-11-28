@@ -183,6 +183,30 @@ def test_keys_that_lhre_does_not_read_pass():
     assert _check(vehicle) == []
 
 
+@pytest.mark.parametrize(
+    ("section", "typo"),
+    [(("rear", "actuation", "shock"), "spring_tabel"), (("front", "actuation", "shock"), "free_lenght_m")],
+)
+def test_a_near_miss_of_a_known_key_fails(section, typo):
+    vehicle = copy.deepcopy(VEHICLE)
+    node = vehicle
+    for key in section:
+        node = node[key]
+    node[typo] = 1.0
+    path = ".".join((*section, typo))
+    assert (path, "unknown_key") in [(p.path, p.code) for p in _check(vehicle)]
+
+
+@pytest.mark.parametrize("shock", [{"damper": 5}, {"damper_table": {"table": [["a", "b"], [0, 0], [1, 2]]}}])
+def test_a_malformed_damper_is_reported_not_raised(shock):
+    vehicle = copy.deepcopy(VEHICLE)
+    node = vehicle["front"]["actuation"]["shock"]
+    node.pop("damper", None)
+    node.pop("damper_table", None)
+    node.update(shock)
+    assert ("front.actuation.shock", "bobsim_rejects") in [(p.path, p.code) for p in _check(vehicle)]
+
+
 def test_the_committed_vehicle_passes():
     assert _check(VEHICLE) == []
     for axle in vc.AXLES:

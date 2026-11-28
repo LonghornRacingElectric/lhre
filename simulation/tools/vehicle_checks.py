@@ -1,3 +1,4 @@
+import difflib
 import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
@@ -7,6 +8,7 @@ import numpy as np
 from common.damper_curves import resolve_damper_curve
 
 AXLES = ("front", "rear")
+NEAR_MISS = 0.85
 ARCHITECTURES = ("direct", "bellcrank", "bellcrank_stabar")
 ROD_TARGETS = ("lower", "upper")
 BOBSIM_AXES = {"x": "forward", "y": "left", "z": "up"}
@@ -163,6 +165,13 @@ class _Checks:
                     "unit_unsupported",
                     f"is in {suffix}. BobSim reads {stem}_{unit} in {unit}. Convert the value and rename the key.",
                 )
+                continue
+            # A new key passes, so a BobSim upgrade needs no lhre edit. One a
+            # letter or two off a known key is far more likely a typo, which
+            # BobSim would silently ignore.
+            close = difflib.get_close_matches(str(key), allowed, n=1, cutoff=NEAR_MISS)
+            if close:
+                self.add(_join(path, key), "unknown_key", f"is not a key BobSim reads. Did you mean {close[0]}?")
 
     def number(
         self, node: Mapping[str, Any], key: str, path: str, low: float, high: float, unit: str, *, required: bool = True
