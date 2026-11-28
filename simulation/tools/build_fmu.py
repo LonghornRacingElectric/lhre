@@ -12,7 +12,7 @@ from common.vehicle_io import load_yaml
 from tools.invalidation import git, sha256_file
 
 
-BOBLIB_SHA = '75b6e031d8f9cb49acdb62b536c41c22e566a020'
+BOBLIB_SHA = '293595542a62746cd38881e1e937895757a11b05'
 
 
 def git_sha(path):

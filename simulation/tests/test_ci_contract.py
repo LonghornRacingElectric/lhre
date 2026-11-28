@@ -1,3 +1,4 @@
+import importlib.util
 import os
 import re
 import subprocess
@@ -248,15 +249,25 @@ def test_four_post_job_runs_make_car_then_the_acceptance(jobs):
     assert _step_index(job, "make car") < _step_index(job, "make four-post-acceptance")
 
 
+def _changes_classifier():
+    """tools/ci/changes.py, which the Changes job runs to set its outputs."""
+    path = SIM.parent / "tools" / "ci" / "changes.py"
+    spec = importlib.util.spec_from_file_location("lhre_ci_changes", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def test_four_post_job_runs_only_when_the_car_inputs_change(jobs):
     job = jobs["four-post"]
     assert job["needs"] == "changes"
     assert "needs.changes.outputs.car != 'false'" in job["if"]
-    pattern = re.search(r"area car '([^']+)'", jobs["changes"]["steps"][0]["run"])[1]
+    assert "tools/ci/changes.py" in "".join(step.get("run", "") for step in jobs["changes"]["steps"])
+    classify = _changes_classifier().classify
     for path in CAR_INPUTS:
-        assert re.search(pattern, path), f"The four-post job does not run when {path} changes."
+        assert classify([path], "pull_request")["car"], f"The four-post job does not run when {path} changes."
     for path in NOT_CAR_INPUTS:
-        assert not re.search(pattern, path), f"The four-post job runs when only {path} changes."
+        assert not classify([path], "pull_request")["car"], f"The four-post job runs when only {path} changes."
 
 
 @pytest.mark.parametrize("name", CAR_JOBS)

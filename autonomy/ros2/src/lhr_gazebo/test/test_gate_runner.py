@@ -60,12 +60,15 @@ def test_runners_refuse_an_unreadable_stack(tmp_path, content, runner):
 
 @pytest.mark.parametrize('style', ['autocross', 'rules_autocross'])
 @pytest.mark.parametrize('baseline', ['0', '1'])
-def test_gate_plan_selects_fusion_without_changing_truth_baselines(tmp_path, style, baseline):
+@pytest.mark.parametrize('imports', ['', 'amz_fsg amz_fsi'])
+def test_gate_plan_selects_fusion_without_changing_truth_baselines(
+        tmp_path, style, baseline, imports):
     """Every event runs the whole gate stack; only truth baselines opt out."""
     world = tmp_path / 'skidpad.sdf'
     world.touch()
     env = dict(os.environ, TRACK_STYLE=style, SEEDS='1 2', REPEATS='2',
-               ACCEL_REPEATS='1', SKIDPAD_REPEATS='1', BASELINE=baseline, OUT=str(tmp_path))
+               ACCEL_REPEATS='1', SKIDPAD_REPEATS='1', BASELINE=baseline, OUT=str(tmp_path),
+               REAL_TRACKS=imports, ALLOW_NONCOMPLIANT='1')
     result = subprocess.run(
         ['bash', '-c', runner_prefix() + '\nSKIDPAD_WORLD="$1"\nplan', 'test', str(world)],
         env=env, text=True, capture_output=True, check=True)
@@ -73,8 +76,10 @@ def test_gate_plan_selects_fusion_without_changing_truth_baselines(tmp_path, sty
             for line in result.stdout.splitlines()}
     expected = {f'{style}_s{s}_r{r}' for s in (1, 2) for r in (1, 2)}
     expected |= {'acceleration_r1', 'skidpad_r1'}
+    expected |= {f'{name}_s1_r1' for name in imports.split()}
     if baseline == '1':
         expected |= {f'baseline_{style}_s{s}' for s in (1, 2)}
+        expected |= {f'baseline_{name}_s1' for name in imports.split()}
     assert set(rows) == expected
     stack = gate_stack()
     for run_id, args in rows.items():

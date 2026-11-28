@@ -7,6 +7,8 @@ import { fmt } from "@/lib/driveday/format";
 import { clock } from "@/lib/driveday/format";
 import { usePlayer, useUi } from "../context";
 import { Field } from "./Tile";
+import { Button } from "@/components/ui/button";
+import { X } from "lucide-react";
 
 
 function ConeList() {
@@ -23,7 +25,7 @@ function ConeList() {
             <button type="button" title="Jump to this hit" onClick={() => p.setT(Math.max(0, e.t - 500))}>
               {w.lap.name} · {clock(w.rel)}{w.seg ? " · " + w.seg : ""}
             </button>
-            <button className="x" type="button" aria-label="Delete this cone hit" onClick={() => p.deleteCone(i)}>×</button>
+            <Button variant="ghost" size="icon-xs" type="button" aria-label="Delete this cone hit" onClick={() => p.deleteCone(i)}><X aria-hidden="true" /></Button>
           </span>
         );
       })}
@@ -96,9 +98,9 @@ export function LapsPanel() {
                   <td>
                     {isLap ? (
                       <span className="step">
-                        <button type="button" aria-label={"Remove a cone on " + l.name} disabled={!c} onClick={() => p.setCone(no, -1)}>−</button>
+                        <Button variant="tool" size="icon-xs" type="button" aria-label={"Remove a cone on " + l.name} disabled={!c} onClick={() => p.setCone(no, -1)}>−</Button>
                         <b className={c ? "on" : ""}>{c}</b>
-                        <button type="button" aria-label={"Add a cone on " + l.name} onClick={() => p.setCone(no, 1)}>+</button>
+                        <Button variant="tool" size="icon-xs" type="button" aria-label={"Add a cone on " + l.name} onClick={() => p.setCone(no, 1)}>+</Button>
                       </span>
                     ) : "—"}
                   </td>
@@ -106,7 +108,7 @@ export function LapsPanel() {
                   <td>
                     {isLap && (
                       <>
-                        <button className="gbtn" type="button" title="Use this lap as the ghost" onClick={() => { p.set("cmp", "lap"); p.set("ghostLapI", i); }}>Compare</button>
+                        <Button variant="tool" size="xs" className="mr-1 border-[var(--rival)] text-[11px] font-semibold tracking-wider uppercase" type="button" title="Use this lap as the ghost" onClick={() => { p.set("cmp", "lap"); p.set("ghostLapI", i); }}>Compare</Button>
                         <input type="checkbox" aria-label={"Include " + l.name + " in best times"} title="Include in best times" checked={a.valid(l)} onChange={e => {
                           const include = e.currentTarget.checked;
                           p.update(user => { const next = { ...(user.flags[no] ?? {}), include }; if (include) delete next.x; user.flags[no] = next; });
@@ -124,8 +126,8 @@ export function LapsPanel() {
         <Field label="Penalty per cone (s)" k="pen" value={p.user.setup.pen} placeholder="2" onValue={(v) => p.setSetup("pen", v)} />
       </div>
       <div className="penrow" style={{ borderTop: "1px solid var(--line)" }}>
-        <button
-          className="btn"
+        <Button variant="tool" size="ctl"
+         
           type="button"
           onClick={() => {
             const ok = saveFile((m.name || "session").replace(/[^\w.-]+/g, "_") + "-laps.csv", lapsCsv(a, p.units), "text/csv");
@@ -133,9 +135,9 @@ export function LapsPanel() {
           }}
         >
           Export CSV
-        </button>
-        <button
-          className="btn"
+        </Button>
+        <Button variant="tool" size="ctl"
+         
           type="button"
           onClick={async () => {
             const ok = await copyText(summaryText(a, p.units));
@@ -143,7 +145,7 @@ export function LapsPanel() {
           }}
         >
           Copy summary
-        </button>
+        </Button>
       </div>
       <ConeList />
     </>

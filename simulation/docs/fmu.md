@@ -8,16 +8,16 @@ The output stays in ignored `out/fmu/`.
 ## Source and build
 
 `make fmu-source` clones BobLib into `out/fmu/boblib-source` and checks out
-`75b6e031d8f9cb49acdb62b536c41c22e566a020`, the merged VehicleFMI exporter.
+`293595542a62746cd38881e1e937895757a11b05`, the reviewed VehicleFMI exporter pin.
 This step needs GitHub access. It refuses local source changes. The subsequent
 container build has no network, as with the rest of simulation. The build
 refuses a modified BobSim checkout or a different upstream Modelica tree,
 so a future dependency update needs review instead of silently mixing models.
 
-The exporter and BobSim `f58f932` now use the same BobLib `75b6e03` model
-tree. This pin contains the public VehicleFMI exporter and nested calibration
-records. The wrapper reads the rear-axle reference from
-`pVehicle.chassis.rearAxle.geometry`. The parent binds the selected vehicle's
+The exporter and BobSim `999dc84` use the same BobLib `2935955` model
+tree. BobSim's generation plan embeds the TTX25 force–velocity curves from the
+canonical vehicle configuration in the generated record. The wrapper reads
+the rear-axle reference from `pVehicle.chassis.rearAxle.geometry`. The parent binds the selected vehicle's
 chassis record. The wrapper also binds `brake.front_bias` to
 `pVehicle.brakes.frontBrakeBias`; this value is not stored in the generated
 vehicle record. No BobSim or BobLib source changes are required.
@@ -60,9 +60,9 @@ for the dependency boundary. BobLib's known motor-latch failure on some
 brake-hold/relaunch profiles remains upstream; do not treat one passing
 profile as a general solver or hardware acceptance result.
 
-## Current native result (2026-11-06)
+## Earlier native result (2026-11-06)
 
-The matching-pin artifact builds on Linux arm64. Its compiled aero reference
+The BobSim `f58f932` artifact built on Linux arm64. Its compiled aero reference
 points and front brake bias match the canonical vehicle. The native drive
 profile still fails on pull-away at FMU time 5.02 s. OpenModelica names a
 battery/inverter nonlinear system; the cause is not confirmed. The test stays

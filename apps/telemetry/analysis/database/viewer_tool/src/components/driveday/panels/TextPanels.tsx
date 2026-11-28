@@ -9,6 +9,8 @@ import { clock } from "@/lib/driveday/format";
 import { fmtLimit } from "../format";
 import { usePlayer, useUi } from "../context";
 import { Field } from "./Tile";
+import { Button } from "@/components/ui/button";
+import { X } from "lucide-react";
 
 export function AlertsPanel() {
   const p = usePlayer();
@@ -58,7 +60,7 @@ export function NotesPanel() {
   const categories = [["note", "Note"], ["braking", "Braking"], ["cone", "Cone hit"], ["offcourse", "Off course"], ["video", "Video moment"]] as const;
   return (
     <>
-      <form className="review-panel" onSubmit={e => { e.preventDefault(); p.addMark(text.trim() || categories.find(([key]) => key === category)![1], category); setText(""); }}><input aria-label="Bookmark label" placeholder="e.g. Late braking into T1" value={text} onChange={e => setText(e.target.value)} /><select aria-label="Bookmark category" value={category} onChange={e => setCategory(e.target.value as typeof category)}>{categories.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select><button className="btn" type="submit">Bookmark this moment</button></form>
+      <form className="review-panel" onSubmit={e => { e.preventDefault(); p.addMark(text.trim() || categories.find(([key]) => key === category)![1], category); setText(""); }}><input aria-label="Bookmark label" placeholder="e.g. Late braking into T1" value={text} onChange={e => setText(e.target.value)} /><select aria-label="Bookmark category" value={category} onChange={e => setCategory(e.target.value as typeof category)}>{categories.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select><Button variant="tool" size="ctl" type="submit">Bookmark this moment</Button></form>
       <label className="review-filter">Show<select aria-label="Filter bookmarks" value={filter} onChange={e => setFilter(e.target.value)}><option value="all">All bookmarks</option>{categories.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
       {!marks.length ? (
         <div className="empty">No bookmarks.</div>
@@ -68,7 +70,7 @@ export function NotesPanel() {
             <li key={m.id} tabIndex={0} onClick={() => p.seekMark(m.id)} onKeyDown={(e) => e.key === "Enter" && p.seekMark(m.id)}>
               <span className="nt">{clock(m.t)} · {p.lapLabelAt(m.t)}</span>
               <span className="ntx">{m.text}<small className="bookmark-meta">{m.category ?? "note"}{m.video ? " · " + m.video.name + " @ " + m.video.time.toFixed(2) + " s" : ""}</small></span>
-              <button className="x" type="button" aria-label="Delete note" onClick={(e) => { e.stopPropagation(); p.deleteMark(i); }}>×</button>
+              <Button variant="ghost" size="icon-xs" type="button" aria-label="Delete note" onClick={(e) => { e.stopPropagation(); p.deleteMark(i); }}><X aria-hidden="true" /></Button>
             </li>
           ))}
         </ul>
@@ -98,8 +100,8 @@ export function DebriefPanel() {
               <i />
               <span>{it.t}</span>
               {it.skip && (
-                <button
-                  className="btn"
+                <Button variant="tool" size="ctl"
+                 
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -108,7 +110,7 @@ export function DebriefPanel() {
                   }}
                 >
                   Skip {it.skip.length > 1 ? "them" : "it"}
-                </button>
+                </Button>
               )}
             </li>
           );

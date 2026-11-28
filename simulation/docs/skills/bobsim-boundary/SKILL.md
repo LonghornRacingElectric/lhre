@@ -74,7 +74,12 @@ BobSim only through imports and `make` targets.
     - The compiled Modelica model ignores an override of a calculated
       parameter. It writes only a warning to `run.log`: "It is not possible
       to override". Stop the run when `run.log` has that text.
-10. **Record what you used.** `make study` writes the BobSim SHA to
+10. **Let BobSim validate its own schema.** Do not copy BobSim's key lists
+    or table shapes into lhre checks or tests. Check only what lhre reads.
+    For a BobSim-owned block, call BobSim's public validator, for example
+    `common.damper_curves.resolve_damper_curve`. A test fixture for such a
+    block comes from `simulation/bobsim/vehicle.yml`, not a copy.
+11. **Record what you used.** `make study` writes the BobSim SHA to
     `provenance.json`. Show it in the README Provenance section. List the
     private names from rule 3 next to it. If the pin changes, run the
     study again before you use its result.

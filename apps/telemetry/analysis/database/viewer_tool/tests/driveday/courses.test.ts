@@ -11,7 +11,7 @@ const J = synthCourses();
 const courses = convertSession(J, "courses.json", []);
 
 describe("manual presses at different positions on a loop", () => {
-  it("uses a full loop and preserves logger labels even when cuts are far apart", () => {
+  it("uses a full loop and numbers laps in order even when cuts are far apart", () => {
     const j = synthSession({ laps: 4 });
     const offsets = [0, 3500, -1800, 2300, 0];
     j.laps.forEach((l, i) => {
@@ -23,7 +23,7 @@ describe("manual presses at different positions on a loop", () => {
     expect(imported).toHaveLength(1);
     expect(imported[0].D.open).toBeUndefined();
     expect(Math.abs(imported[0].D.RL - TRACK_LEN)).toBeLessThan(TRACK_LEN * 0.1);
-    expect(imported[0].D.laps.filter((l) => l.kind === "lap").map((l) => l.name)).toEqual(j.laps.map((l) => l.label));
+    expect(imported[0].D.laps.filter((l) => l.kind === "lap").map((l) => l.name)).toEqual(["Lap 1", "Lap 2", "Lap 3", "Lap 4"]);
   });
 });
 

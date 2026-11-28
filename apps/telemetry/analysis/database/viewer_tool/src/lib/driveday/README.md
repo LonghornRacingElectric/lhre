@@ -86,6 +86,15 @@ server-cache loading, event notes and the host's authentication. Styles and
 canvas theme tokens are scoped to the retro wrapper so other pages keep
 their own palette.
 
+Controls are the site's shadcn/ui components (`src/components/ui/`).
+`DdvRoot` portals their popovers, selects and tooltips back inside `.ddv`, so
+they read LAPDOG's tokens rather than the site's. `driveday.css` maps those
+tokens onto shadcn's variable names, and `lapdog-skin.css`, loaded after it,
+holds page layout and spacing. How a control looks lives in the components
+themselves: `button.tsx` has the `tool` and `tab` variants and the `ctl`, `xs`
+and `icon-*` sizes, so restyle there rather than matching class names in CSS. `controls.tsx` holds the LAPDOG wrappers
+(`Pick`, `Seg`, `Chk`).
+
 ## Loading from the database
 
 `GET /api/driveday/db` lists the drive days that have laps. `GET
@@ -179,7 +188,7 @@ Analysis windows clip their contents and scroll independently, docked or floatin
 
 The header shows the session name once; Runs opens the session selector. Video, Track and Analysis can each be hidden or restored from the toolbar. On the map, the gray reference layout uses a neutral dashed centerline beneath the selected lap, rather than sector coloring. Fine dots show the selected ghost’s recorded path (hidden when Ghost is off or the same lap is selected); larger dashes at the lap boundary show an untimed continuation between manual presses. Layout-only mode still colors the reference by sector.
 
-Legacy “Manual N” lap names display as “Lap N”, preserving their logged numbers. Metric tooltips fit within the viewport and scroll when their content exceeds the available height.
+Timed laps are named Lap 1, Lap 2, Lap 3 in order, whatever the logger called them. Metric tooltips fit within the viewport and scroll when their content exceeds the available height.
 
 Docked analysis panels fill their workspace and divide its height equally whenever panels are opened, closed or docked. Manual resizing remains available until the next panel change. Pane headers retain drag and window controls without repeating Video/Track labels.
 

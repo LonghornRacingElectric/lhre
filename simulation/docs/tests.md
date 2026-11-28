@@ -14,7 +14,7 @@ The BobSim test takes about 6 s of `make unit`.
 
 ## What the tests check
 
-- `test_fmu_source.py`: matched Modelica trees, clean and readable dependency
+- `test_fmu_source.py`: matching exporter pins and Modelica trees, clean and readable dependency
   checkouts, and staging the current public generation plan without duplicate
   package-order entries. Native FMU checks run separately in the autonomy
   container; see the [FMU guide](fmu.md).
@@ -106,7 +106,7 @@ check. The full run of every standard evaluation is in
 ### fast
 
 The `Simulation fast checks` job runs when a change touches
-`simulation/`, `vehicle/`, `.gitmodules` or `ci.yml`.
+`simulation/`, `vehicle/`, `.gitmodules`, `ci.yml` or `tools/ci/changes.py`.
 
 1. Build the image with the GitHub Actions layer cache. A layer is built
    again only when the BobSim `Dockerfile` or `requirements.txt` changes.
@@ -124,17 +124,19 @@ if the job runs a `make` target other than `build`, `smoke`, `unit` or
 
 ### four-post
 
-The `FourPost` job runs FourPost on our car: `make car T=standard-eval-four-post`, then
-`make four-post-acceptance`. See
+The `FourPost` job builds the image from the same GitHub Actions layer
+cache as the fast job, which runs on every change this one does and is
+the one that writes the cache. It then runs FourPost on our car:
+`make car T=standard-eval-four-post`, then `make four-post-acceptance`. See
 [bobsim.md](bobsim.md#run-a-bobsim-target-on-our-car).
 
 It runs when a pull request or a push changes `vehicle/`, the BobSim pin,
-`simulation/tools/`, `simulation/Makefile`, `simulation/docker-compose.yml`
-or `ci.yml`. If the `Changes` job fails, it runs anyway and `All checks passed`
+`simulation/tools/`, `simulation/Makefile`, `simulation/docker-compose.yml`,
+`ci.yml` or `tools/ci/changes.py`. If the `Changes` job fails, it runs anyway and `All checks passed`
 fails. A manual run of `ci.yml` always runs it. The weekly run does not,
 because `full-regeneration` covers FourPost.
 
-At BobSim `f58f932` the acceptance accepts our car. FourPost runs our
+At BobSim `999dc84` the acceptance accepts our car. FourPost runs our
 spring tables and anti-roll bar rates. See
 [bobsim.md](bobsim.md#run-a-bobsim-target-on-our-car).
 

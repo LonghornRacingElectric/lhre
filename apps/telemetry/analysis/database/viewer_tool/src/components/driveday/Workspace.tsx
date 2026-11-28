@@ -13,6 +13,9 @@ import { WorkspacePane, PaneDivider } from "./WorkspacePane";
 import { VideoPanel } from "./panels/VideoPanel";
 import { Transport } from "./Transport";
 import { usePlayer } from "./context";
+import { Button } from "@/components/ui/button";
+import { floatTop } from "./floatTop";
+import { shortcutIgnored } from "@/lib/driveday/shortcuts";
 
 /** Independent video, track and analysis windows share one playback clock. */
 export function Workspace() {
@@ -50,7 +53,7 @@ export function Workspace() {
         if (!pane.floating) continue;
         const width = Math.min(pane.width, window.innerWidth - 16), height = Math.min(pane.height, window.innerHeight - 16);
         const x = Math.max(8, Math.min(pane.x, window.innerWidth - width - 8));
-        const y = Math.max(8, Math.min(pane.y, window.innerHeight - height - 8));
+        const y = Math.max(floatTop(), Math.min(pane.y, window.innerHeight - height - 8));
         if (width !== pane.width || height !== pane.height || x !== pane.x || y !== pane.y) { panes[id] = { ...pane, width, height, x, y }; changed = true; }
       }
       if (!changed) return current;
@@ -66,11 +69,7 @@ export function Workspace() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (t?.closest(".driver-pedal-svg") && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
-      if (t?.closest(".video-panel, .pane-header, .layout-toolbar, .pane-divider, .pane-resize, .timeline-resize")) return;
-      if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && (t as HTMLInputElement).type !== "range" && (t as HTMLInputElement).type !== "checkbox") return;
-      if (t && (t.tagName === "BUTTON" || t.tagName === "SUMMARY") && (e.key === " " || e.key === "Enter")) return;
+      if (shortcutIgnored(e.target instanceof Element ? (e.target as HTMLInputElement) : null, e.key)) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const k = e.key;
       if (k === " " || k === "k") { e.preventDefault(); p.play(!p.playing); }
@@ -108,14 +107,14 @@ export function Workspace() {
   }, [p]);
 
   const toolbar = <div className="layout-toolbar" aria-label="Workspace layout">
-        {PANE_IDS.map(id => <button className="chip" key={id} aria-pressed={layout.panes[id].visible} onClick={() => patch(id, { visible: !layout.panes[id].visible })}>{names[id]}</button>)}
+        {PANE_IDS.map(id => <Button variant="tab" size="ctl" key={id} aria-pressed={layout.panes[id].visible} onClick={() => patch(id, { visible: !layout.panes[id].visible })}>{names[id]}</Button>)}
         <span className="sp" /><span className="layout-hint">Drag headers to move · dividers to resize</span>
         <Menu label="Layouts" right wide ariaLabel="Workspace layouts">
-          {WORKSPACE_ROLES.map(name => <button className="btn" key={name} onClick={() => applyPreset(workspacePreset(name))}>{name}</button>)}
-          <button className="btn" onClick={() => { update(() => defaultWorkspace()); setTimelineMode("full"); lsSet("timeline-layout", "full"); resizeTimeline(48); }}>Reset layout</button>
+          {WORKSPACE_ROLES.map(name => <Button variant="tool" size="ctl" key={name} onClick={() => applyPreset(workspacePreset(name))}>{name}</Button>)}
+          <Button variant="tool" size="ctl" onClick={() => { update(() => defaultWorkspace()); setTimelineMode("full"); lsSet("timeline-layout", "full"); resizeTimeline(48); }}>Reset layout</Button>
           <input aria-label="Workspace preset name" placeholder="Name this layout" value={presetName} onChange={e => setPresetName(e.target.value)} />
-          <button className="btn" disabled={!presetName.trim()} onClick={() => { const name = presetName.trim(); const preset: SavedWorkspace = { layout, timelineHeight, timelineMode, showBetweenLaps: p.showBetweenLaps, panel: lsGet<string | null>("panel", "driver"), panels: lsGet<string[]>("panels", [lsGet<string>("panel", "driver")]) }; const next = { ...savedPresets, [name]: preset }; setSavedPresets(next); lsSet("workspace-presets", next); setPresetName(""); }}>Save current layout</button>
-          {Object.entries(savedPresets).map(([name, preset]) => <div className="mrow" key={name}><button className="btn" onClick={() => applyPreset(preset)}>{name}</button><button className="x" aria-label={"Delete layout " + name} onClick={() => { const next = { ...savedPresets }; delete next[name]; setSavedPresets(next); lsSet("workspace-presets", next); }}>×</button></div>)}
+          <Button variant="tool" size="ctl" disabled={!presetName.trim()} onClick={() => { const name = presetName.trim(); const preset: SavedWorkspace = { layout, timelineHeight, timelineMode, showBetweenLaps: p.showBetweenLaps, panel: lsGet<string | null>("panel", "driver"), panels: lsGet<string[]>("panels", [lsGet<string>("panel", "driver")]) }; const next = { ...savedPresets, [name]: preset }; setSavedPresets(next); lsSet("workspace-presets", next); setPresetName(""); }}>Save current layout</Button>
+          {Object.entries(savedPresets).map(([name, preset]) => <div className="mrow" key={name}><Button variant="tool" size="ctl" onClick={() => applyPreset(preset)}>{name}</Button><Button variant="ghost" size="icon-xs" aria-label={"Delete layout " + name} onClick={() => { const next = { ...savedPresets }; delete next[name]; setSavedPresets(next); lsSet("workspace-presets", next); }}>×</Button></div>)}
         </Menu>
       </div>;
   return (

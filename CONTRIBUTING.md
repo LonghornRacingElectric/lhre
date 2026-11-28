@@ -37,9 +37,11 @@ everywhere.
   Its `Changes` job finds which areas the change touches. Each area's job
   runs only when its paths changed: Bazel build and test on Linux and
   Windows, simulation, FourPost, autonomy (colcon, outside Bazel per
-  [ADR-009](docs/architecture/009-autonomy-outside-bazel.md)), BEVO, docs
-  and telemetry (images and Docker Compose integration tests). The format
-  check always runs.
+  [ADR-009](docs/architecture/009-autonomy-outside-bazel.md)), BEVO, docs,
+  telemetry (images and Docker Compose integration tests) and the
+  telemetry viewer. A change to the viewer's npm app alone runs only the
+  viewer's job. The format check always runs. Which paths run which job is
+  in [tools/ci](tools/ci/README.md).
 - `All checks passed` is the one required check. It fails if any job failed or
   was cancelled, or if `Changes` failed. Its run page shows a table of
   every job's result.

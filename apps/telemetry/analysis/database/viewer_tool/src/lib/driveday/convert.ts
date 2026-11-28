@@ -668,6 +668,8 @@ export function convertSession(J: SessionExport, fileName: string, tracks: Track
       skipped.push((course.label || "A course") + " was left out: none of its laps was a clean single " + noun + ".");
       return null;
     }
+    /* timed laps read Lap 1, 2, 3 in order, whatever the logged presses were called or how many were skipped */
+    laps.filter((l) => l.kind === "lap").forEach((l, i) => { l.name = "Lap " + (i + 1); });
     if (oddStart.length) cw.push(oddStart.join(", ") + ": did not pass both initial sector gates; missing sector times are unavailable");
 
     const spdAt = (arr: LiveSample[], k: number) => {

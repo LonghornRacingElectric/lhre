@@ -14,6 +14,7 @@ import { rebuildRun } from "@/lib/driveday/rebuild";
 import { runStore, loadUserState } from "@/lib/driveday/storage";
 import type { RunData, RunListEntry, UserState } from "@/lib/driveday/types";
 import { useFrame, usePlayer, useUi } from "../context";
+import { Button } from "@/components/ui/button";
 
 const signed = (value: number | null, digits = 2) => value == null ? "—" : (value >= 0 ? "+" : "−") + Math.abs(value).toFixed(digits);
 
@@ -55,7 +56,7 @@ export function DrivingReviewPanel() {
     <svg className="review-chart" viewBox="0 0 620 150" role="img" aria-label="Speed comparison by distance"><polyline points={curves.lap} stroke="var(--blue)" fill="none" strokeWidth="2" />{curves.ghost && <polyline points={curves.ghost} stroke="var(--purple)" fill="none" strokeWidth="2" />}</svg>
     <small className="note2">Speed (mph) by distance · blue: watched lap · purple: ghost</small>
     <div className="scroll"><table className="tb2"><thead><tr><th>Section</th><th>This lap</th><th>Lost / gained</th></tr></thead><tbody>{segments.map((section, i) => { const review = segmentReview(L, R, section, p.RL); return <tr key={section.name} className={i === selected ? "on" : ""} tabIndex={0} onClick={() => setSelected(i)} onKeyDown={e => { if (e.key === "Enter") setSelected(i); }}><td>{section.name}</td><td>{fmt(review.time)}</td><td className={review.delta == null ? "" : review.delta > 0 ? "pos" : "neg"}>{signed(review.delta == null ? null : review.delta / 1000, 3)} s</td></tr>; })}</tbody></table></div>
-    {result && <><h4>{segment.name} · driving events</h4><div className="scroll"><table className="tb2"><thead><tr><th>Event</th><th>Watched lap</th><th>Ghost</th><th>Difference</th></tr></thead><tbody>{([ ["Brake starts", result.brake, comparison?.brake], ["Minimum speed", result.apex, comparison?.apex], ["Throttle ≥50%", result.throttle, comparison?.throttle] ] as const).map(([name, event, reference]) => <tr key={name}><td>{name}</td><td><button className="review-link" disabled={!event} onClick={() => jump(event?.time)}>{event ? event.distance.toFixed(1) + " m" : "—"}</button></td><td>{reference ? reference.distance.toFixed(1) + " m" : "—"}</td><td>{signed(event && reference ? event.distance - reference.distance : null)} m</td></tr>)}</tbody></table></div><label className="review-check"><input type="checkbox" checked={markers} onChange={e => setMarkers(e.target.checked)} /> Show event markers on track</label><button className="btn" onClick={() => jump(result.brake?.time ?? result.apex?.time)}>Jump to section</button></>}
+    {result && <><h4>{segment.name} · driving events</h4><div className="scroll"><table className="tb2"><thead><tr><th>Event</th><th>Watched lap</th><th>Ghost</th><th>Difference</th></tr></thead><tbody>{([ ["Brake starts", result.brake, comparison?.brake], ["Minimum speed", result.apex, comparison?.apex], ["Throttle ≥50%", result.throttle, comparison?.throttle] ] as const).map(([name, event, reference]) => <tr key={name}><td>{name}</td><td><button className="review-link" disabled={!event} onClick={() => jump(event?.time)}>{event ? event.distance.toFixed(1) + " m" : "—"}</button></td><td>{reference ? reference.distance.toFixed(1) + " m" : "—"}</td><td>{signed(event && reference ? event.distance - reference.distance : null)} m</td></tr>)}</tbody></table></div><label className="review-check"><input type="checkbox" checked={markers} onChange={e => setMarkers(e.target.checked)} /> Show event markers on track</label><Button variant="tool" size="ctl" onClick={() => jump(result.brake?.time ?? result.apex?.time)}>Jump to section</Button></>}
 
   </div>;
 }
@@ -75,6 +76,6 @@ export function ReportPanel() {
   const [selected, setSelected] = useState(() => p.runs.filter(l => p.analysis.valid(l)).map(l => p.laps.indexOf(l)));
   return <div className="review-panel">
     {p.runs.map(lap => { const i = p.laps.indexOf(lap); return <label className="review-check" key={i}><input type="checkbox" checked={selected.includes(i)} onChange={e => setSelected(current => e.target.checked ? [...current, i] : current.filter(index => index !== i))} />{lap.name} · {fmt(lap.dur)}</label>; })}
-    <button className="btn primary" disabled={!selected.length} onClick={() => { try { const report = debriefReport(p, selected); if (!saveFile("lapdog-debrief.html", report, "text/html")) p.toast("Could not download this report.", "err"); } catch (error) { p.toast((error as Error).message, "err"); } }}>Download debrief</button>
+    <Button size="ctl" disabled={!selected.length} onClick={() => { try { const report = debriefReport(p, selected); if (!saveFile("lapdog-debrief.html", report, "text/html")) p.toast("Could not download this report.", "err"); } catch (error) { p.toast((error as Error).message, "err"); } }}>Download debrief</Button>
   </div>;
 }

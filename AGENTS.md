@@ -80,9 +80,13 @@ All checks live in one workflow,
 It runs on every PR, on every push to `main`, weekly, and by hand.
 
 - `Changes` lists the files a PR touches, renamed files' old paths
-  included. Each area's job runs only when its paths changed: Bazel on
+  included, and [`tools/ci/changes.py`](tools/ci/README.md) maps them to
+  areas. Each area's job runs only when its paths changed: Bazel on
   Linux and Windows, simulation fast checks, FourPost, autonomy (colcon),
-  BEVO, docs, telemetry and the HIL job dashboard. `Format` always runs.
+  BEVO, docs, telemetry, the telemetry viewer and the HIL job dashboard.
+  A change to the viewer's npm app alone runs only the viewer's job.
+  `Format` always runs. To change which paths run what, edit `AREAS` in
+  `changes.py` and add a case to its test.
 - `Lint` always runs: ruff for Python and shellcheck for scripts outside
   `autonomy/`, and actionlint for the workflows (see
   [tools/lint/README.md](tools/lint/README.md)). Fix a new violation; a
@@ -94,8 +98,8 @@ It runs on every PR, on every push to `main`, weekly, and by hand.
 - To read a failure, open the run's summary page: `All checks passed` lists every
   job's result, and a failed Bazel job lists each failed test with the end
   of its log.
-- To add a check, add a job to `ci.yml`, an area for it in `Changes` if it
-  is path-gated, and the job to the `needs` of `all-checks`. `All checks passed` fails
+- To add a check, add a job to `ci.yml`, an area for it in `changes.py`
+  and an output in `Changes` if it is path-gated, and the job to the `needs` of `all-checks`. `All checks passed` fails
   if a job is missing from its `needs`.
 - The telemetry job builds the images, smoke-tests every one of them and
   runs the integration tests against Docker Compose. Without the repo

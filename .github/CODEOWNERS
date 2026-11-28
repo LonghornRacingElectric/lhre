@@ -26,3 +26,11 @@
 /apps/telemetry/analysis/database/viewer_tool/src/lib/driveday/         @PPilot2 @bss2869
 /apps/telemetry/analysis/database/viewer_tool/tests/driveday/           @PPilot2 @bss2869
 /apps/telemetry/analysis/database/viewer_tool/tools/video-helper*       @PPilot2 @bss2869
+
+# Trackside Live: the live drive-day page, its components, client helpers and
+# tests. The API routes it calls are shared with other pages, so they stay
+# unowned here.
+/apps/telemetry/analysis/database/viewer_tool/src/app/trackside-live/   @PPilot2 @bss2869
+/apps/telemetry/analysis/database/viewer_tool/src/components/trackside/ @PPilot2 @bss2869
+/apps/telemetry/analysis/database/viewer_tool/src/lib/trackside/        @PPilot2 @bss2869
+/apps/telemetry/analysis/database/viewer_tool/tests/trackside/          @PPilot2 @bss2869

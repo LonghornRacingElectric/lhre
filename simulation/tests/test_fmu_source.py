@@ -1,8 +1,15 @@
 import subprocess
+from pathlib import Path
 
 import pytest
 
-from tools.build_fmu import git_sha, require_matching_models
+from tools.build_fmu import BOBLIB_SHA, git_sha, require_matching_models
+
+
+def test_exporter_pin_matches_current_boblib():
+    sim = Path(__file__).resolve().parents[1]
+    assert f'FMU_BOBLIB_SHA := {BOBLIB_SHA}' in (sim/'Makefile').read_text().splitlines()
+    assert git_sha(sim/'bobsim/engines/boblib') == BOBLIB_SHA
 
 
 def repository(path, content):
@@ -60,7 +67,6 @@ def test_fmu_git_reads_allow_differently_owned_checkouts(tmp_path, monkeypatch):
 
 
 def test_current_generation_plan_stages_all_package_orders(tmp_path):
-    from pathlib import Path
     from app.modelica_generator import plan_modelica_stack
     from tools.build_fmu import stage_records
     sim = Path(__file__).resolve().parents[1]

@@ -1,5 +1,5 @@
 schema: lhre.vehicle-bundle.v1
-bundle_id: orion-baseline-2
+bundle_id: orion-baseline-3
 status: candidate
 superseded_by: null
 release:
@@ -18,7 +18,7 @@ release:
 members:
   vehicle:
     path: vehicle/vehicle.yml
-    sha256: c4dc19eb29749755054802385e6930261e6ec3720bc7e4730fb217cdc4acaaa0
+    sha256: 06295995474eb99b1b1394bd82ec0b5945646e4b7ac0fbc1bc8a9681f329af24
     schema: boblib.vehicle.v1
   tires:
     - id: 16x7p5_10_12psi
@@ -44,6 +44,16 @@ members:
       file:
         name: BobDyn/BobSim@4da577af1b04d86c53706eb6e80fb0064f71cee6:vehicle.yml
         sha256: 6e2ca9184af612c179311aef9a29dcdfc10cce03dfbc14cb201fc732ed12807f
+        stored: external
+      units:
+        value: {length: m, mass: kg, alignment_angle: deg}
+        status: declared
+        source: The key suffixes in the file (_m, _kg, _deg).
+    - id: bobsim-999dc84-vehicle
+      kind: copied-model
+      file:
+        name: BobDyn/BobSim@999dc8438cfebbca277a4c1b231cd6517609f1d5:vehicle.yml
+        sha256: 0c854181d9c938fe99994d3abdb05cfc11b8cd33df7101f2264694db680e63f3
         stored: external
       units:
         value: {length: m, mass: kg, alignment_angle: deg}
@@ -94,7 +104,8 @@ axles:
       value: bobsim-4da577a-vehicle
       status: assumed
       source: >-
-        Every front key equals BobSim 4da577a vehicle.yml (diff on 2026-10-14). lhre commit e7a2852
+        Every front key except the shock damper equals BobSim 4da577a vehicle.yml (diff on
+        2026-10-14). The damper equals BobSim 999dc84 vehicle.yml (2026-11-28). lhre commit e7a2852
         added the file and states no source. No record says where BobSim got the values.
     transform:
       value: identity
@@ -121,7 +132,8 @@ axles:
       value: bobsim-4da577a-vehicle
       status: assumed
       source: >-
-        Every rear key equals BobSim 4da577a vehicle.yml (diff on 2026-10-14). lhre commit e7a2852
+        Every rear key except the shock damper equals BobSim 4da577a vehicle.yml (diff on
+        2026-10-14). The damper equals BobSim 999dc84 vehicle.yml (2026-11-28). lhre commit e7a2852
         added the file and states no source. No record says where BobSim got the values.
     transform:
       value: identity
@@ -143,11 +155,15 @@ setup:
     status: unavailable
     source: No setup sheet or setup name exists for this car.
   source:
-    value: bobsim-4da577a-vehicle
+    value: bobsim-999dc84-vehicle
     status: assumed
     source: >-
-      Toe, camber, spring tables, free lengths, bar rates and brake bias equal BobSim 4da577a
-      vehicle.yml. No LHRe setup sheet states them.
+      Toe, camber, spring tables, free lengths, bar rates, brake bias and dampers equal BobSim
+      999dc84 vehicle.yml (diff on 2026-11-28). The dampers are its TTX25 C12/R12 setting on both
+      axles: 6 compression and 10 rebound low-speed clicks from closed, 4.3 high-speed turns from
+      open. The Orion pre-event checklist lists other clicks per corner, but BobSim's TTX25 dataset
+      has no measured curve for them, so BobSim rejects them. No signed LHRe setup sheet states any
+      of these.
 torque_topology:
   drive:
     front_share:
