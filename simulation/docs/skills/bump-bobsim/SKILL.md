@@ -43,11 +43,14 @@ description: Move the simulation/bobsim submodule to a newer BobSim commit and f
    layout, build, docs, reports or app. List the physics, numerics and
    model-input commits in the PR and in
    [bobsim.md](../../bobsim.md#the-pin). A layout move must not hide them.
-4. If BobSim moved a module or a folder, change lhre to match: imports in
-   `tools/` and `studies/`, `BOBLIB` and the generator module in the
-   `Makefile`, `paths:` in `vehicle/vehicle.yml`, and the docs. Add each
-   move to the old to new table in `docs/bobsim.md`. Do not change physics,
-   vehicle values or study logic in the same PR.
+4. If BobSim moved a module or a folder, change lhre to match. Change:
+   - the imports in `tools/` and `studies/`
+   - `BOBLIB` and the generator module in the `Makefile`
+   - `paths:` in `vehicle/vehicle.yml`
+   - the docs
+
+   Add each move to the old to new table in `docs/bobsim.md`. Do not change
+   physics, vehicle values or study logic in the same PR.
 5. Rebuild and test:
 
    ```bash
@@ -71,15 +74,15 @@ description: Move the simulation/bobsim submodule to a newer BobSim commit and f
    [bobsim.md](../../bobsim.md#modelica-initialization).
 7. For each study that uses a BobSim module that changed, fix its imports
    in the same PR. Then run it again with `make study S=<name>`. If you do
-   not run it again, add a status line to its README: the result is
-   historical at the old SHA and stale at the new one. `make stale` lists
+   not run it again, add a status line to its README. The line says that
+   the result is historical at the old SHA and stale at the new one. `make stale` lists
    the stale studies.
 8. If `simulation/bobsim/vehicle.yml` gained new keys, add them to
    `vehicle/vehicle.yml` with values for our car. Each value needs a named
    source. If there is no source, ask.
 
    Also look for a key whose value BobSim changed, when our file has the
-   old BobSim value. Find out why BobSim changed it. Write in
+   old BobSim value. Learn why BobSim changed it. Write in
    `docs/bobsim.md` what the old value does at the new pin. Do not change
    our value without a named source. BobSim `c0537ff` (#106) changed its
    aero ride-height references in this way. See
