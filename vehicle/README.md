@@ -63,6 +63,16 @@ container.
    steering arm and wishbones that do not locate the upright. Each failure
    names the key path, for example `vehicle:rear.suspension.lower_aft_i_m`.
    The output also gives the datum status of each axle.
+
+   The check does not copy BobSim's schema. A key that lhre does not read
+   passes, so a new BobSim field does not fail it. A key with a foreign
+   unit suffix, such as `radius_mm`, still fails. So does a near miss of a
+   known key that is itself missing, such as `spring_tabel` in place of
+   `spring_table` (`unknown_key`). A similar key beside the known one, such
+   as `spring_tables` next to `spring_table`, is taken as a new field and
+   passes. For each shock damper it
+   calls BobSim's public `common.damper_curves.resolve_damper_curve` and
+   reports BobSim's error as `bobsim_rejects`.
 4. BobSim loads `vehicle.yml`.
 5. A `draft` or `candidate` bundle can hold `assumed`, `guessed` and
    `unavailable` entries. The check lists them. A pass ends with

@@ -13,6 +13,7 @@ REPO = Path(__file__).resolve().parents[2]
 VEHICLE = yaml.safe_load((REPO / "vehicle" / "vehicle.yml").read_text(encoding="utf-8"))
 BUNDLE = yaml.safe_load((REPO / "vehicle" / "bundle.yml").read_text(encoding="utf-8"))
 TIRE = "vehicle/tires/16x7p5_10_12psi.tir"
+BOBSIM_VEHICLE = yaml.safe_load((REPO / "simulation" / "bobsim" / "vehicle.yml").read_text(encoding="utf-8"))
 
 
 def _codes(problems):
@@ -56,6 +57,27 @@ def _set(path, value):
             del node[path[-1]]
         else:
             node[path[-1]] = value(vehicle) if callable(value) else value
+
+    return change
+
+
+# Fixtures come from BobSim's own car so they follow its schema, and they
+# set the damper fields outright so they hold whichever form our car uses.
+BOBSIM_DAMPER = BOBSIM_VEHICLE["front"]["actuation"]["shock"]["damper"]
+LINEAR_TABLE = {"table": [[-1, -850], [0, 0], [1, 850]]}
+
+
+def _shock(axle, damper=None, table=None, drop=None):
+    def change(vehicle):
+        shock = vehicle[axle]["actuation"]["shock"]
+        shock.pop("damper", None)
+        shock.pop("damper_table", None)
+        if damper is not None:
+            shock["damper"] = copy.deepcopy(damper)
+            if drop:
+                del shock["damper"][drop]
+        if table is not None:
+            shock["damper_table"] = copy.deepcopy(table)
 
     return change
 
@@ -122,7 +144,16 @@ BAD = [
     ),
     ("unknown architecture", _set(("architecture", "front"), "pushrod"), "architecture.front", "bad_value"),
     ("rod target typo", _set(("front", "actuation", "rod_to"), "lowr"), "front.actuation.rod_to", "bad_value"),
-    ("unknown suspension key", _set(("front", "suspension", "upper_o"), [0.0, 0.5, 0.3]), "front.suspension.upper_o", "unknown_key"),
+    ("no damper", _shock("front"), "front.actuation.shock", "bobsim_rejects"),
+    ("damper and damper table", _shock("rear", BOBSIM_DAMPER, LINEAR_TABLE), "rear.actuation.shock", "bobsim_rejects"),
+    ("damper with no rebound", _shock("front", BOBSIM_DAMPER, drop="rebound"), "front.actuation.shock", "bobsim_rejects"),
+    ("one-row damper table", _shock("rear", table={"table": [[0, 0]]}), "rear.actuation.shock", "bobsim_rejects"),
+    (
+        "unmeasured damper clicks",
+        _shock("front", {**BOBSIM_DAMPER, "compression": {**BOBSIM_DAMPER["compression"], "high_speed_turns_from_open": 2.0, "low_speed_clicks_from_closed": 14}}),
+        "front.actuation.shock",
+        "bobsim_rejects",
+    ),
     ("driver mass in grams", _set(("driver_mass", "mass_kg"), 65770.912), "driver_mass.mass_kg", "unit_implausible"),
     (
         "rear axle ahead of front",
@@ -131,6 +162,84 @@ BAD = [
         "incompatible_geometry",
     ),
 ]
+
+
+@pytest.mark.parametrize(
+    "change",
+    [_shock("front", BOBSIM_DAMPER), _shock("rear", table=LINEAR_TABLE)],
+    ids=["named damper", "damper table"],
+)
+def test_a_damper_that_bobsim_reads_passes(change):
+    vehicle = copy.deepcopy(VEHICLE)
+    change(vehicle)
+    assert _check(vehicle) == []
+
+
+def test_keys_that_lhre_does_not_read_pass():
+    vehicle = copy.deepcopy(VEHICLE)
+    vehicle["front"]["suspension"]["new_bobsim_point"] = [0.0, 0.5, 0.3]
+    vehicle["rear"]["actuation"]["shock"]["new_bobsim_field"] = {"anything": 1}
+    vehicle["rear"]["new_bobsim_section"] = {}
+    assert _check(vehicle) == []
+
+
+@pytest.mark.parametrize(
+    ("section", "key", "typo"),
+    [
+        (("rear", "actuation", "shock"), "spring_table", "spring_tabel"),
+        (("front", "actuation", "shock"), "free_length_m", "free_lenght_m"),
+    ],
+)
+def test_a_near_miss_of_a_known_key_fails(section, key, typo):
+    vehicle = copy.deepcopy(VEHICLE)
+    node = vehicle
+    for part in section:
+        node = node[part]
+    node[typo] = node.pop(key)
+    path = ".".join((*section, typo))
+    assert (path, "unknown_key") in [(p.path, p.code) for p in _check(vehicle)]
+
+
+@pytest.mark.parametrize(
+    ("section", "new_key"),
+    [
+        (("rear", "actuation", "shock"), "spring_tables"),
+        (("front", "suspension"), "upper_fore_x_m"),
+    ],
+)
+def test_a_new_key_beside_a_similar_known_key_passes(section, new_key):
+    vehicle = copy.deepcopy(VEHICLE)
+    node = vehicle
+    for part in section:
+        node = node[part]
+    node[new_key] = 1.0
+    assert _check(vehicle) == []
+
+
+def test_a_near_miss_fails_when_any_close_known_key_is_missing():
+    # The typo's best match (bracket_left) is present, the next one (bracket_lift)
+    # is missing, so this is a typo for bracket_lift, not a new key.
+    checks = vc._Checks()
+    checks.keys({"bracket_left": 1, "bracket_leftt": 1}, "axle", ("bracket_left", "bracket_lift"))
+    assert [(p.path, p.code) for p in checks.problems] == [("axle.bracket_leftt", "unknown_key")]
+    assert "bracket_lift" in checks.problems[0].message
+
+
+@pytest.mark.parametrize(
+    "shock",
+    [
+        {"damper": 5},
+        {"damper_table": {"table": [["a", "b"], [0, 0], [1, 2]]}},
+        {"damper": {**BOBSIM_DAMPER, 1: "x", "extra": "y"}},
+    ],
+)
+def test_a_malformed_damper_is_reported_not_raised(shock):
+    vehicle = copy.deepcopy(VEHICLE)
+    node = vehicle["front"]["actuation"]["shock"]
+    node.pop("damper", None)
+    node.pop("damper_table", None)
+    node.update(shock)
+    assert ("front.actuation.shock", "bobsim_rejects") in [(p.path, p.code) for p in _check(vehicle)]
 
 
 def test_the_committed_vehicle_passes():

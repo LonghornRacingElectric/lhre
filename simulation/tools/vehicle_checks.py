@@ -1,11 +1,14 @@
+import difflib
 import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
+from common.damper_curves import resolve_damper_curve
 
 AXLES = ("front", "rear")
+NEAR_MISS = 0.85
 ARCHITECTURES = ("direct", "bellcrank", "bellcrank_stabar")
 ROD_TARGETS = ("lower", "upper")
 BOBSIM_AXES = {"x": "forward", "y": "left", "z": "up"}
@@ -162,8 +165,16 @@ class _Checks:
                     "unit_unsupported",
                     f"is in {suffix}. BobSim reads {stem}_{unit} in {unit}. Convert the value and rename the key.",
                 )
-            else:
-                self.add(_join(path, key), "unknown_key", f"is not a key here. Allowed keys: {', '.join(allowed)}.")
+                continue
+            # A new key passes, so a BobSim upgrade needs no lhre edit. A key a
+            # letter or two off a known key that is itself missing is a typo,
+            # which BobSim would silently ignore. If every such known key is
+            # present, this is a new key beside them (spring_tables next to
+            # spring_table).
+            close = difflib.get_close_matches(str(key), allowed, n=len(allowed), cutoff=NEAR_MISS)
+            missing = [known for known in close if known not in node]
+            if missing:
+                self.add(_join(path, key), "unknown_key", f"is not a key BobSim reads. Did you mean {missing[0]}?")
 
     def number(
         self, node: Mapping[str, Any], key: str, path: str, low: float, high: float, unit: str, *, required: bool = True
@@ -329,6 +340,13 @@ def _check_actuation(c: _Checks, side: Mapping[str, Any], axle: str, architectur
     shock = c.section(actuation, "shock", path)
     if shock is not None:
         c.keys(shock, f"{path}.shock", SHOCK_KEYS)
+        try:
+            resolve_damper_curve(shock)
+        # TypeError: BobSim sorts unknown damper keys, which fails on a YAML
+        # node mixing int and string keys. A missing dataset file or a broken
+        # BobSim checkout is not a vehicle error, so it still raises.
+        except (ValueError, TypeError) as error:
+            c.add(f"{path}.shock", "bobsim_rejects", f"BobSim cannot read this damper: {error}")
         _keep(points, "actuation.shock.mount_m", c.point(shock, "mount_m", f"{path}.shock"))
     if architecture == "direct":
         _coincident(c, points, axle, "shock", "actuation.rod_mount_m", "actuation.shock.mount_m")
