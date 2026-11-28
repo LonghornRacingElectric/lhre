@@ -13,6 +13,7 @@ REPO = Path(__file__).resolve().parents[2]
 VEHICLE = yaml.safe_load((REPO / "vehicle" / "vehicle.yml").read_text(encoding="utf-8"))
 BUNDLE = yaml.safe_load((REPO / "vehicle" / "bundle.yml").read_text(encoding="utf-8"))
 TIRE = "vehicle/tires/16x7p5_10_12psi.tir"
+BOBSIM_VEHICLE = yaml.safe_load((REPO / "simulation" / "bobsim" / "vehicle.yml").read_text(encoding="utf-8"))
 
 
 def _codes(problems):
@@ -56,6 +57,21 @@ def _set(path, value):
             del node[path[-1]]
         else:
             node[path[-1]] = value(vehicle) if callable(value) else value
+
+    return change
+
+
+def _bobsim_damper():
+    return lambda vehicle: copy.deepcopy(BOBSIM_VEHICLE["front"]["actuation"]["shock"]["damper"])
+
+
+def _named_damper(drop=None):
+    def change(vehicle):
+        shock = vehicle["front"]["actuation"]["shock"]
+        del shock["damper_table"]
+        shock["damper"] = copy.deepcopy(BOBSIM_VEHICLE["front"]["actuation"]["shock"]["damper"])
+        if drop:
+            del shock["damper"][drop]
 
     return change
 
@@ -122,7 +138,10 @@ BAD = [
     ),
     ("unknown architecture", _set(("architecture", "front"), "pushrod"), "architecture.front", "bad_value"),
     ("rod target typo", _set(("front", "actuation", "rod_to"), "lowr"), "front.actuation.rod_to", "bad_value"),
-    ("unknown suspension key", _set(("front", "suspension", "upper_o"), [0.0, 0.5, 0.3]), "front.suspension.upper_o", "unknown_key"),
+    ("no damper", _set(("front", "actuation", "shock", "damper_table"), None), "front.actuation.shock", "bobsim_rejects"),
+    ("damper and damper table", _set(("rear", "actuation", "shock", "damper"), _bobsim_damper()), "rear.actuation.shock", "bobsim_rejects"),
+    ("damper with no rebound", _named_damper(drop="rebound"), "front.actuation.shock", "bobsim_rejects"),
+    ("one-row damper table", _set(("rear", "actuation", "shock", "damper_table"), {"table": [[0, 0]]}), "rear.actuation.shock", "bobsim_rejects"),
     ("driver mass in grams", _set(("driver_mass", "mass_kg"), 65770.912), "driver_mass.mass_kg", "unit_implausible"),
     (
         "rear axle ahead of front",
@@ -131,6 +150,20 @@ BAD = [
         "incompatible_geometry",
     ),
 ]
+
+
+def test_a_named_damper_that_bobsim_reads_passes():
+    vehicle = copy.deepcopy(VEHICLE)
+    _named_damper()(vehicle)
+    assert _check(vehicle) == []
+
+
+def test_keys_that_lhre_does_not_read_pass():
+    vehicle = copy.deepcopy(VEHICLE)
+    vehicle["front"]["suspension"]["new_bobsim_point"] = [0.0, 0.5, 0.3]
+    vehicle["rear"]["actuation"]["shock"]["new_bobsim_field"] = {"anything": 1}
+    vehicle["rear"]["new_bobsim_section"] = {}
+    assert _check(vehicle) == []
 
 
 def test_the_committed_vehicle_passes():

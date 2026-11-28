@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
+from common.damper_curves import resolve_damper_curve
 
 AXLES = ("front", "rear")
 ARCHITECTURES = ("direct", "bellcrank", "bellcrank_stabar")
@@ -162,8 +163,6 @@ class _Checks:
                     "unit_unsupported",
                     f"is in {suffix}. BobSim reads {stem}_{unit} in {unit}. Convert the value and rename the key.",
                 )
-            else:
-                self.add(_join(path, key), "unknown_key", f"is not a key here. Allowed keys: {', '.join(allowed)}.")
 
     def number(
         self, node: Mapping[str, Any], key: str, path: str, low: float, high: float, unit: str, *, required: bool = True
@@ -329,6 +328,10 @@ def _check_actuation(c: _Checks, side: Mapping[str, Any], axle: str, architectur
     shock = c.section(actuation, "shock", path)
     if shock is not None:
         c.keys(shock, f"{path}.shock", SHOCK_KEYS)
+        try:
+            resolve_damper_curve(shock)
+        except ValueError as error:
+            c.add(f"{path}.shock", "bobsim_rejects", f"BobSim cannot read this damper: {error}")
         _keep(points, "actuation.shock.mount_m", c.point(shock, "mount_m", f"{path}.shock"))
     if architecture == "direct":
         _coincident(c, points, axle, "shock", "actuation.rod_mount_m", "actuation.shock.mount_m")
