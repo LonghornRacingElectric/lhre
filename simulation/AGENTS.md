@@ -72,7 +72,9 @@ tool has them. They come from the LHRe knowledge base, not from this repo.
 
 ## Writing
 
-Write docs, comments and study results in Simplified Technical English:
+Write docs, comments and study results in Simplified Technical English.
+Load the [simple-technical-english](../docs/skills/simple-technical-english/SKILL.md)
+skill first. The main rules:
 
 - Use short sentences in active voice. Use one idea per sentence.
 - Use a verb, not a noun form of the action.

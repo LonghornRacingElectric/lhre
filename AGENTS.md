@@ -38,6 +38,28 @@ afterthought:
   own page. Prefer the adjacent README for anything structural; use
   embedded blocks for docs that would go stale if separated from the code.
 
+## Everything an agent needs is in this repo
+
+A contributor with only GitHub access must be able to do any task here.
+Slack, Notion and personal knowledge bases can add context. A rule, a
+procedure or a skill that a task needs goes in this repo, next to the code
+it is about. If you used context from outside the repo to make a decision,
+write the decision and its reason in the PR or the adjacent README.
+
+## Writing
+
+Write docs, skills, comments, error messages and PR descriptions in
+Simplified Technical English (STE). Load the
+[simple-technical-english](docs/skills/simple-technical-english/SKILL.md)
+skill before you write or rewrite them. The main rules:
+
+- Use short sentences in active voice, with one idea in each sentence.
+- Write an instruction as a command, in 20 words or fewer.
+- Do not use semicolons or phrasal verbs.
+- Use one name for one thing, and define each abbreviation.
+- Keep real uncertainty. "May" stays "may".
+- Give every number with its unit.
+
 ## Tests are the gate
 
 Agent-written code is reviewed less closely than it's written, so CI has to

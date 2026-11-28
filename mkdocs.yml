@@ -30,6 +30,7 @@ nav:
       - Build System: docs/build-system.md
       - Testing: docs/testing.md
       - Cookbook: docs/cookbook.md
+      - Writing (STE): docs/skills/simple-technical-english/SKILL.md
   - Boards:
       - Overview: boards/README.md
       - VCU (Reference): boards/VCU/README.md
