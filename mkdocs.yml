@@ -85,6 +85,7 @@ nav:
       - LiDAR Perception: autonomy/ros2/src/lhr_perception/README.md
       - Perception Tests: autonomy/ros2/src/lhr_perception/test/README.md
       - Gazebo: autonomy/ros2/src/lhr_gazebo/README.md
+      - Gazebo Worlds: autonomy/ros2/src/lhr_gazebo/worlds/README.md
       - Competition Layouts: autonomy/ros2/src/lhr_gazebo/worlds/competition/README.md
       - Competition Data License: autonomy/ros2/src/lhr_gazebo/worlds/competition/LICENSE.md
       - Mid-360 Lidar Sim: autonomy/ros2/src/lhr_lidar_sim/README.md
@@ -114,6 +115,7 @@ nav:
           - Side Classifier Fixes 2026-11-08: autonomy/testing/2026-11-08-side-classifier-fixes/README.md
           - LiDAR Mount Study 2026-11-08: autonomy/testing/2026-11-08-lidar-mount-study/README.md
           - Native IMU Fidelity 2026-11-08: autonomy/testing/2026-11-08-native-imu/README.md
+          - Extreme Autocross HIL 2026-11-19: autonomy/testing/2026-11-19-extreme-hil/README.md
           - Livox Test Tools: autonomy/testing/tools/livox/README.md
           - Fault Injection Tools: autonomy/testing/tools/fault_injection/README.md
           - MVP Gate Tools: autonomy/testing/tools/gate/README.md
