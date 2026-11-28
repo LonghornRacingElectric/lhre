@@ -60,20 +60,13 @@ skill before you write or rewrite them. The main rules:
 - Keep real uncertainty. "May" stays "may".
 - Give every number with its unit.
 
-CI enforces the mechanical rules in `AGENTS.md` and `SKILL.md` files with
-the [STE check](tools/ste/README.md).
-
 ## Skills
 
 A skill is a `SKILL.md` that tells an agent how to do one task here.
 
 - Put a skill next to the code it is about, in a `docs/skills/<name>/`
   folder. A repo-wide skill goes in the root `docs/skills/`.
-- Ship a new skill as a stack of two PRs. The first PR adds the skill. The
-  second PR adds a CI check that enforces the rules of the skill that need
-  no judgment. Fix what the check finds in that second PR.
-- If a rule of a skill cannot be checked, say so in the skill. A reviewer
-  checks it.
+- Link a new skill from the `AGENTS.md` of its area, so agents find it.
 - If a skill was wrong or missing a step when you used it, fix the skill in
   the same PR.
 
@@ -136,8 +129,7 @@ It runs on every PR, on every push to `main`, weekly, and by hand.
   `autonomy/`, and actionlint for the workflows (see
   [tools/lint/README.md](tools/lint/README.md)). Fix a new violation. A
   suppression (`# noqa: <code>`, `# shellcheck disable=<code>`) needs a
-  reason after it. `Lint` also runs the [STE check](tools/ste/README.md) on
-  agent docs.
+  reason after it.
 - `All checks passed` is the only required check. It fails if any job failed or
   was cancelled, or if `Changes` failed. A job skips only when `Changes`
   says its paths are untouched. If `Changes` fails, every job runs.

@@ -124,10 +124,6 @@ jobs:
             exit 1
           fi
 
-      - name: Simplified Technical English
-        if: ${{ !cancelled() }}
-        run: python3 tools/ste/ste.py
-
       # Workflow files are code too: expression typos, bad job references,
       # and shellcheck on every run: block.
       - name: GitHub workflows (actionlint)

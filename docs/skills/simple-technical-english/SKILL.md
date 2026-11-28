@@ -14,10 +14,6 @@ This skill uses the STE rules for sentences. It does not use the STE
 dictionary of approved words. ASD does not let us copy that dictionary.
 Use plain, common words instead.
 
-CI checks the rules that need no judgment in every `AGENTS.md` and
-`SKILL.md`: semicolons, sentence length and banned words. See the
-[STE check](../../../tools/ste/README.md). A reviewer checks the other rules.
-
 ## Pick the mode
 
 | Mode | Use it for | Apply |
