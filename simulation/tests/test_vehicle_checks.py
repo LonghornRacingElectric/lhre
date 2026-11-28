@@ -216,6 +216,15 @@ def test_a_new_key_beside_a_similar_known_key_passes(section, new_key):
     assert _check(vehicle) == []
 
 
+def test_a_near_miss_fails_when_any_close_known_key_is_missing():
+    # The typo's best match (bracket_left) is present, the next one (bracket_lift)
+    # is missing, so this is a typo for bracket_lift, not a new key.
+    checks = vc._Checks()
+    checks.keys({"bracket_left": 1, "bracket_leftt": 1}, "axle", ("bracket_left", "bracket_lift"))
+    assert [(p.path, p.code) for p in checks.problems] == [("axle.bracket_leftt", "unknown_key")]
+    assert "bracket_lift" in checks.problems[0].message
+
+
 @pytest.mark.parametrize(
     "shock",
     [

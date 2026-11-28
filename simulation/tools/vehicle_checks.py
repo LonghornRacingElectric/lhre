@@ -168,11 +168,13 @@ class _Checks:
                 continue
             # A new key passes, so a BobSim upgrade needs no lhre edit. A key a
             # letter or two off a known key that is itself missing is a typo,
-            # which BobSim would silently ignore. If the known key is present,
-            # this is a new key beside it (spring_tables next to spring_table).
-            close = difflib.get_close_matches(str(key), allowed, n=1, cutoff=NEAR_MISS)
-            if close and close[0] not in node:
-                self.add(_join(path, key), "unknown_key", f"is not a key BobSim reads. Did you mean {close[0]}?")
+            # which BobSim would silently ignore. If every such known key is
+            # present, this is a new key beside them (spring_tables next to
+            # spring_table).
+            close = difflib.get_close_matches(str(key), allowed, n=len(allowed), cutoff=NEAR_MISS)
+            missing = [known for known in close if known not in node]
+            if missing:
+                self.add(_join(path, key), "unknown_key", f"is not a key BobSim reads. Did you mean {missing[0]}?")
 
     def number(
         self, node: Mapping[str, Any], key: str, path: str, low: float, high: float, unit: str, *, required: bool = True
