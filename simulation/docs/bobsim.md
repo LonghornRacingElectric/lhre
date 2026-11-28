@@ -113,11 +113,11 @@ true:
   our car they differ by 1.5 to 2.3 %.
 
 A check that the pin cannot answer is `UNAVAILABLE`. It is not a pass.
-At `f58f932` one check is unavailable: the CSV does not name its vehicle.
+At `999dc84` one check is unavailable: the CSV does not name its vehicle.
 The acceptance is a software check. It is not a physical validation of
 the car.
 
-At `f58f932` our car passes the static balance closure. BobLib `75b6e03`
+At `999dc84` our car passes the static balance closure. BobLib `75b6e03`
 removed the closure drift that `1bd6d78` had (4.39 N at 118 s). So a
 closure failure is now a `FAIL`, not a known upstream defect.
 
@@ -223,6 +223,34 @@ workspace. `1acfe2d` (#139) changes the default lap reference to a fixed
 minimum-curvature line. Old lap, envelope and autonomy study results are
 historical until rerun at this pin. The ROS plant uses direct transient
 stepping; it does not use BobSim's QSS lap planner.
+
+### BobSim `999dc84` and BobLib `2935955`
+
+This PR moves the pin from `f58f932` to `999dc84` (BobSim main). BobLib
+moves from `75b6e03` to `2935955`. These commits change physics, numerics
+or model inputs for our car:
+
+| Commit | Class | Effect |
+| ------ | ----- | ------ |
+| `1af10a0` (#151) | Model input | A shock takes a named TTX25 setting (`damper:`) or a `damper_table`, not both. Damper curves load from a run-time table file, so a damper change needs no rebuild. BobSim's own car moves to TTX25 C12/R12 curves. |
+| BobLib `2935955` (#31) | Model input | BobLib reads tabular damper curves from that file and reports damper output channels. |
+| `ef98f2f` (#172) | Numerics | GGV polishes each boundary point with Newton steps across the drive/brake kink. Residuals fall from about 5e-5 to 1e-10 rad/s^2. |
+| `17977c0` (#170) | Model input | The DOE damper knob scales the whole damper curve. It is the rate just below zero velocity. |
+| `241a5ef` (#164), `999dc84` (#173) | Numerics | GGV uses a faster cross product and batched constraint Jacobians. BobSim reports bitwise-identical results for #164. |
+| `7de6390` (#171) | Numerics | `lap-eval-qss` solves its GGV speed slices in worker processes. BobSim reports bitwise-identical results. |
+
+Other commits change the build (`bcd6605` #163, `1dfca69` #167) and the
+Modelica write step (`026667c` #162). #162 adds the public
+`write_modelica_plan(plan, boblib_root=...)`, which writes a plan into a
+staged copy of BobLib.
+
+Our `vehicle/vehicle.yml` keeps its linear `damper_table` rows (850 N and
+1300 N at 1 m/s). BobSim still reads them. They are BobSim's values from
+before #151. BobSim's own car now runs Yiming's TTX25 curves. Our dampers
+need a named source for the clicks before they move to `damper:`.
+
+A GGV, lap or DOE damper result made before this pin is historical. Run it
+again before you use it.
 
 ### BobSim `f58f932` and BobLib `75b6e03`
 

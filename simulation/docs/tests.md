@@ -131,7 +131,7 @@ It runs when a pull request or a push changes `vehicle/`, the BobSim pin,
 fails. A manual run of `ci.yml` always runs it. The weekly run does not,
 because `full-regeneration` covers FourPost.
 
-At BobSim `f58f932` the acceptance accepts our car. FourPost runs our
+At BobSim `999dc84` the acceptance accepts our car. FourPost runs our
 spring tables and anti-roll bar rates. See
 [bobsim.md](bobsim.md#run-a-bobsim-target-on-our-car).
 
