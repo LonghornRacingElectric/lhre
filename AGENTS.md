@@ -75,9 +75,12 @@ bazel coverage //boards/... //drivers/...  # then diff-cover (tools/coverage/REA
 
 ## CI
 
-All checks live in one workflow,
+Every PR check lives in one workflow,
 [`ci.yml`](https://github.com/LonghornRacingElectric/lhre/blob/main/.github/workflows/ci.yml).
-It runs on every PR, on every push to `main`, weekly, and by hand.
+It runs on every PR, on every push to `main`, weekly, and by hand. The
+other workflows run no PR checks: `docs.yml` publishes the site,
+`simulation.yml` and `simulation-next.yml` run scheduled simulation jobs,
+and `pr-conflicts.yml` labels conflicted PRs.
 
 - `Changes` lists the files a PR touches, renamed files' old paths
   included, and [`tools/ci/changes.py`](tools/ci/README.md) maps them to
@@ -87,8 +90,10 @@ It runs on every PR, on every push to `main`, weekly, and by hand.
   A change to the viewer's npm app alone runs only the viewer's job.
   `Format` always runs. To change which paths run what, edit `AREAS` in
   `changes.py` and add a case to its test.
-- `Lint` always runs: ruff for Python and shellcheck for scripts outside
-  `autonomy/`, and actionlint for the workflows (see
+- `Lint` always runs: ruff for Python, shellcheck for scripts outside
+  `autonomy/`, actionlint for the workflows, and a check that agent docs
+  (`AGENTS.md`, `SKILL.md`) name real targets and keep their steps in
+  order (see
   [tools/lint/README.md](tools/lint/README.md)). Fix a new violation; a
   suppression (`# noqa: <code>`, `# shellcheck disable=<code>`) needs a
   reason after it.

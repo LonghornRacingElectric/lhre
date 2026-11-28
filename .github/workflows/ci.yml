@@ -124,6 +124,10 @@ jobs:
             exit 1
           fi
 
+      - name: Agent docs
+        if: ${{ !cancelled() }}
+        run: python3 tools/lint/agent_docs.py
+
       # Workflow files are code too: expression typos, bad job references,
       # and shellcheck on every run: block.
       - name: GitHub workflows (actionlint)

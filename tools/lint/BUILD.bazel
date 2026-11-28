@@ -1,0 +1,14 @@
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
+
+py_library(
+    name = "agent_docs",
+    srcs = ["agent_docs.py"],
+    visibility = ["//visibility:private"],
+)
+
+py_test(
+    name = "agent_docs_test",
+    size = "small",
+    srcs = ["agent_docs_test.py"],
+    deps = [":agent_docs"],
+)
