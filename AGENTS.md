@@ -90,10 +90,8 @@ and `pr-conflicts.yml` labels conflicted PRs.
   A change to the viewer's npm app alone runs only the viewer's job.
   `Format` always runs. To change which paths run what, edit `AREAS` in
   `changes.py` and add a case to its test.
-- `Lint` always runs: ruff for Python, shellcheck for scripts outside
-  `autonomy/`, actionlint for the workflows, and a check that agent docs
-  (`AGENTS.md`, `SKILL.md`) name real targets and keep their steps in
-  order (see
+- `Lint` always runs: ruff for Python and shellcheck for scripts outside
+  `autonomy/`, and actionlint for the workflows (see
   [tools/lint/README.md](tools/lint/README.md)). Fix a new violation; a
   suppression (`# noqa: <code>`, `# shellcheck disable=<code>`) needs a
   reason after it.
