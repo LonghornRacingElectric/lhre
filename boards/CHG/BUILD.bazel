@@ -1,0 +1,28 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+# Host-buildable App only until the actual CHG.ioc is generated. Generate the
+# firmware_project call with //tools:new_board; do not copy VCU hardware files.
+cc_library(
+    name = "chg_app",
+    srcs = ["App/chg_app.cpp"],
+    hdrs = ["App/chg_app.hpp"],
+    includes = ["App"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//drivers/lhal:lhal",
+        "//boards/CHG/lib:controller_link",
+    ],
+)
+
+cc_test(
+    name = "chg_app_test",
+    size = "small",
+    srcs = ["App/chg_app_test.cpp"],
+    copts = ["-UNDEBUG"],
+    deps = [
+        ":chg_app",
+        "//drivers/lhal:host",
+        "//boards/CHG/lib:display_link",
+    ],
+)

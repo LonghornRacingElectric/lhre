@@ -1,0 +1,7 @@
+.arduino-data/
+.arduino-downloads/
+.arduino-user/
+arduino-cli.yaml
+build/
+backups/
+dist/

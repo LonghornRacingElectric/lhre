@@ -1,0 +1,12 @@
+# ESP32 uses the validated Arduino toolchain during initial bring-up; see ../BRINGUP.md.
+# Shared protocol and CHG host tests still run under bazel test //....
+filegroup(
+    name = "sources",
+    srcs = glob([
+        "firmware/**/*.h",
+        "firmware/**/*.ino",
+        "include/*.h",
+        "tools/*.py",
+    ]),
+    visibility = ["//visibility:public"],
+)

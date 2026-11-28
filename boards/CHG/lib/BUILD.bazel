@@ -1,0 +1,40 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+package(default_visibility = ["//boards/CHG:__subpackages__"])
+
+cc_library(
+    name = "display_link",
+    srcs = ["src/ChargerLink.cpp"],
+    hdrs = ["src/ChargerLink.h"],
+    includes = ["src"],
+)
+
+cc_library(
+    name = "controller_link",
+    srcs = ["src/charger_ui_link.c"],
+    hdrs = ["src/charger_ui_link.h"],
+    includes = ["src"],
+)
+
+cc_library(
+    name = "charge_budget",
+    hdrs = ["src/ChargeBudget.h"],
+    includes = ["src"],
+)
+
+cc_test(
+    name = "protocol_test",
+    size = "small",
+    srcs = ["test/test_link.cpp"],
+    copts = ["-UNDEBUG"],
+    deps = [":controller_link", ":display_link"],
+)
+
+cc_test(
+    name = "budget_test",
+    size = "small",
+    srcs = ["test/test_budget.cpp"],
+    copts = ["-UNDEBUG"],
+    deps = [":charge_budget"],
+)
