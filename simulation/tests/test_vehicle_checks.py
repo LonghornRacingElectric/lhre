@@ -61,17 +61,23 @@ def _set(path, value):
     return change
 
 
-def _bobsim_damper():
-    return lambda vehicle: copy.deepcopy(BOBSIM_VEHICLE["front"]["actuation"]["shock"]["damper"])
+# Fixtures come from BobSim's own car so they follow its schema, and they
+# set the damper fields outright so they hold whichever form our car uses.
+BOBSIM_DAMPER = BOBSIM_VEHICLE["front"]["actuation"]["shock"]["damper"]
+LINEAR_TABLE = {"table": [[-1, -850], [0, 0], [1, 850]]}
 
 
-def _named_damper(drop=None):
+def _shock(axle, damper=None, table=None, drop=None):
     def change(vehicle):
-        shock = vehicle["front"]["actuation"]["shock"]
-        del shock["damper_table"]
-        shock["damper"] = copy.deepcopy(BOBSIM_VEHICLE["front"]["actuation"]["shock"]["damper"])
-        if drop:
-            del shock["damper"][drop]
+        shock = vehicle[axle]["actuation"]["shock"]
+        shock.pop("damper", None)
+        shock.pop("damper_table", None)
+        if damper is not None:
+            shock["damper"] = copy.deepcopy(damper)
+            if drop:
+                del shock["damper"][drop]
+        if table is not None:
+            shock["damper_table"] = copy.deepcopy(table)
 
     return change
 
@@ -138,10 +144,16 @@ BAD = [
     ),
     ("unknown architecture", _set(("architecture", "front"), "pushrod"), "architecture.front", "bad_value"),
     ("rod target typo", _set(("front", "actuation", "rod_to"), "lowr"), "front.actuation.rod_to", "bad_value"),
-    ("no damper", _set(("front", "actuation", "shock", "damper_table"), None), "front.actuation.shock", "bobsim_rejects"),
-    ("damper and damper table", _set(("rear", "actuation", "shock", "damper"), _bobsim_damper()), "rear.actuation.shock", "bobsim_rejects"),
-    ("damper with no rebound", _named_damper(drop="rebound"), "front.actuation.shock", "bobsim_rejects"),
-    ("one-row damper table", _set(("rear", "actuation", "shock", "damper_table"), {"table": [[0, 0]]}), "rear.actuation.shock", "bobsim_rejects"),
+    ("no damper", _shock("front"), "front.actuation.shock", "bobsim_rejects"),
+    ("damper and damper table", _shock("rear", BOBSIM_DAMPER, LINEAR_TABLE), "rear.actuation.shock", "bobsim_rejects"),
+    ("damper with no rebound", _shock("front", BOBSIM_DAMPER, drop="rebound"), "front.actuation.shock", "bobsim_rejects"),
+    ("one-row damper table", _shock("rear", table={"table": [[0, 0]]}), "rear.actuation.shock", "bobsim_rejects"),
+    (
+        "unmeasured damper clicks",
+        _shock("front", {**BOBSIM_DAMPER, "compression": {**BOBSIM_DAMPER["compression"], "high_speed_turns_from_open": 2.0, "low_speed_clicks_from_closed": 14}}),
+        "front.actuation.shock",
+        "bobsim_rejects",
+    ),
     ("driver mass in grams", _set(("driver_mass", "mass_kg"), 65770.912), "driver_mass.mass_kg", "unit_implausible"),
     (
         "rear axle ahead of front",
@@ -152,9 +164,14 @@ BAD = [
 ]
 
 
-def test_a_named_damper_that_bobsim_reads_passes():
+@pytest.mark.parametrize(
+    "change",
+    [_shock("front", BOBSIM_DAMPER), _shock("rear", table=LINEAR_TABLE)],
+    ids=["named damper", "damper table"],
+)
+def test_a_damper_that_bobsim_reads_passes(change):
     vehicle = copy.deepcopy(VEHICLE)
-    _named_damper()(vehicle)
+    change(vehicle)
     assert _check(vehicle) == []
 
 
