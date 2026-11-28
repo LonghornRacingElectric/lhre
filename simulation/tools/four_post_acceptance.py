@@ -110,7 +110,7 @@ def _identity_checks(run, vehicle):
         run_check = _check(
             "run identity",
             PASS,
-            f"make car T={target} exited 0, wrote the records and left bobsim/ clean.",
+            f"make car T={target} exited 0 and left bobsim/ clean.",
         )
     executed = (identity.get("vehicle") or {}).get("sha256")
     current = _sha256(vehicle)

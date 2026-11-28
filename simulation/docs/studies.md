@@ -245,7 +245,7 @@ key, so a commit that changes only docs does not change a key.
 | `lhre:<path>` | Each file in the study folder, and each lhre module that the study imports |
 | `bobsim:<folder>` | The files of each BobSim physics folder: `common`, `engines`, `simulations`, `optimization`, `Dockerfile` and `requirements.txt` |
 | `bobsim:<file>` | Each BobSim module outside those folders that the study imports, for example `app/tire_eval.py` |
-| `boblib:BobLib` | The files of the BobLib package, also the records that `make records` writes |
+| `boblib:BobLib` | The files of the pinned BobLib package |
 
 Python files are keyed by their tokens. YAML files are keyed by their
 parsed values. A file that does not parse is keyed by its bytes.

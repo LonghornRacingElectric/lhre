@@ -12,9 +12,9 @@ BobSim only through imports and `make` targets.
 
 ## Rules
 
-1. **Do not edit `simulation/bobsim/`.** `make records` writes Modelica
-   records into the submodule. `make records-undo` removes them. Before
-   you commit, this command must print nothing:
+1. **Do not edit `simulation/bobsim/`.** Nothing lhre runs writes into
+   it: `make car` hands BobSim our car and an output folder. Before you
+   commit, this command must print nothing:
    `git -C simulation/bobsim status --short`.
 2. **Import BobSim. Do not copy it.** BobSim is GPL-3.0 and lhre is MIT.
    Every use of BobSim in lhre is an `import`. Do not paste BobSim code,
@@ -109,8 +109,7 @@ BobSim only through imports and `make` targets.
 
 Run these from the repo root.
 
-- `git -C simulation/bobsim status --short` prints nothing. If
-  `make records` ran, run `make records-undo` from `simulation/`.
+- `git -C simulation/bobsim status --short` prints nothing.
 - `git diff --stat origin/main...HEAD -- simulation/bobsim` prints
   nothing, unless the PR moves the pin on purpose.
 - This command lists the private BobSim imports of a study. Each one is in

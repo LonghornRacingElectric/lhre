@@ -1,37 +1,24 @@
+"""identity.json for a make car run: what ran, on which car, and whether to trust it."""
+
 import datetime
 import hashlib
 import json
-import os
-import sys
 from pathlib import Path
 
 import yaml
 from common.vehicle_io import load_yaml, require_side, tire_template_name, tire_templates_root
 
-SCHEMA = "lhre.car-run.v1"
-LISTS = ("failure", "executable")
-NOT_OUTPUTS = {"identity.json", ".facts"}
+# v2: BobSim stages the records itself (BOBSIM_VEHICLE), so the v1 records
+# block and its per-executable staleness check are gone.
+SCHEMA = "lhre.car-run.v2"
+# BOBSIM_OUT is a cache under the run folder. Its copies are listed in outputs.
+NOT_OUTPUTS = {"identity.json"}
+NOT_OUTPUT_DIRS = {".bobsim"}
 COMMITTED_VEHICLE = "vehicle/vehicle.yml"
 
 
 def _sha256(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
-
-
-def _read_facts(path):
-    facts = {}
-    lists = {key: [] for key in LISTS}
-    for line in path.read_text(encoding="utf-8").splitlines():
-        key, _, value = line.partition("=")
-        if key in lists:
-            lists[key].append(value)
-        else:
-            facts[key] = value
-    return facts, lists
-
-
-def _flag(value):
-    return {"true": True, "false": False}.get(value)
 
 
 def _tires(vehicle):
@@ -70,9 +57,20 @@ def _display(path):
         return str(path)
 
 
-def build_identity(out, vehicle):
-    facts, lists = _read_facts(out / ".facts")
-    failures = list(lists["failure"])
+def _is_output(path, out):
+    relative = path.relative_to(out)
+    return path.is_file() and relative.as_posix() not in NOT_OUTPUTS and relative.parts[0] not in NOT_OUTPUT_DIRS
+
+
+def build_identity(out, vehicle, facts, failures):
+    """The identity of one run.
+
+    ``facts`` holds what tools/car.py saw: target, target_status (an int or
+    None when the target never ran), vehicle_name, lhre_commit, lhre_dirty,
+    bobsim_commit, bobsim_clean_after, boblib_commit, image_name, image_id.
+    ``failures`` lists what already went wrong; more are added here.
+    """
+    failures = list(failures)
     vehicle_sha256 = _sha256(vehicle)
     candidate = vehicle.resolve() != (Path.cwd().parent / COMMITTED_VEHICLE).resolve()
     executed = out / "vehicle.yml"
@@ -90,24 +88,13 @@ def build_identity(out, vehicle):
         bundle = None
         failures.append(f"Cannot read the vehicle bundle: {error}")
 
-    target_status = facts.get("target_status", "not_run")
-    exit_status = None if target_status in ("", "not_run") else int(target_status)
-    executables = []
-    for item in lists["executable"]:
-        path, _, state = item.rpartition(" ")
-        executables.append({"path": path, "built_after_records": state == "built_after_records"})
-    clean_after = _flag(facts.get("bobsim_clean_after"))
-    ok = (
-        not failures
-        and exit_status == 0
-        and facts.get("records_state") == "written"
-        and clean_after is True
-        and all(item["built_after_records"] for item in executables)
-    )
+    exit_status = facts.get("target_status")
+    clean_after = facts.get("bobsim_clean_after")
+    ok = not failures and exit_status == 0 and clean_after is True
     outputs = [
         {"path": path.relative_to(out).as_posix(), "sha256": _sha256(path), "bytes": path.stat().st_size}
         for path in sorted(out.rglob("*"))
-        if path.is_file() and path.relative_to(out).as_posix() not in NOT_OUTPUTS
+        if _is_output(path, out)
     ]
     return {
         "schema": SCHEMA,
@@ -116,7 +103,7 @@ def build_identity(out, vehicle):
         "target": facts.get("target"),
         "target_exit_status": exit_status,
         "utc": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
-        "lhre": {"commit": facts.get("lhre_commit") or None, "dirty": _flag(facts.get("lhre_dirty"))},
+        "lhre": {"commit": facts.get("lhre_commit") or None, "dirty": facts.get("lhre_dirty")},
         "bobsim": {"commit": facts.get("bobsim_commit") or None, "clean_after": clean_after},
         "boblib": {"commit": facts.get("boblib_commit") or None},
         "image": {"name": facts.get("image_name") or None, "id": facts.get("image_id") or None},
@@ -130,26 +117,9 @@ def build_identity(out, vehicle):
         },
         "bundle": bundle,
         "tires": tires,
-        "records": {"state": facts.get("records_state"), "executables": executables},
         "outputs": outputs,
     }
 
 
-def main(argv):
-    out = Path(argv[1])
-    identity = build_identity(out, Path(os.environ["BOBSIM_VEHICLE"]))
-    (out / "identity.json").write_text(json.dumps(identity, indent=2) + "\n", encoding="utf-8")
-    (out / ".facts").unlink()
-    print(f"{out / 'identity.json'}: status {identity['status']}")
-    for failure in identity["failures"]:
-        print(f"  {failure}")
-    if identity["vehicle"]["candidate"]:
-        print(f"  Candidate: {identity['vehicle']['path']} is not the vehicle member of vehicle/bundle.yml.")
-    bundle = identity["bundle"]
-    if bundle and bundle["describes_vehicle"] is not True:
-        print(f"  Warning: bundle {bundle['bundle_id']} does not describe {identity['vehicle']['path']}.")
-    return 0 if identity["status"] == "ok" else 1
-
-
-if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+def json_text(identity):
+    return json.dumps(identity, indent=2) + "\n"

@@ -3,6 +3,7 @@ import importlib
 import importlib.util
 import os
 import re
+import subprocess
 from pathlib import Path
 
 import yaml
@@ -90,24 +91,22 @@ def _boblib_submodule():
     return matches[0]
 
 
-def test_makefile_records_use_the_bobsim_boblib():
-    makefile = (SIM / "Makefile").read_text(encoding="utf-8")
-    assert re.search(r"^BOBLIB := (\S+)$", makefile, re.M)[1] == f"bobsim/{_boblib_submodule()}"
+def test_our_car_stages_into_a_copy_of_the_pinned_boblib(tmp_path):
+    # make car hands our car to BobSim (BOBSIM_VEHICLE), and BobSim writes its
+    # records into a staged BobLib. This is the step that would fail first if
+    # a pin or a vehicle change broke the Modelica tier for our car.
+    from app.modelica_generator import stage_modelica_stack
 
-
-def test_records_plan_writes_into_existing_boblib_folders():
-    from app.modelica_generator import TEMPLATE_PACKAGE, plan_modelica_stack
-
-    plan = plan_modelica_stack(VEHICLE, root=BOBSIM)
-    assert plan.initialization_error is None, plan.initialization_error
-    boblib = (BOBSIM / _boblib_submodule()).resolve()
-    planned = [path for path, _ in plan.contents] + [path for path, _ in plan.result.package_orders]
-    for path in planned:
-        folder = path.parent
-        if folder.name == TEMPLATE_PACKAGE:
-            folder = folder.parent
-        assert folder.is_dir(), f"make records would create a new folder {folder}"
-        assert path.is_relative_to(boblib), f"make records would write {path} outside {boblib}"
+    boblib = BOBSIM / _boblib_submodule()
+    staged = stage_modelica_stack(VEHICLE, tmp_path / "BobLib", root=BOBSIM)
+    assert staged.changed
+    assert list(staged.package.rglob(f"{staged.result.record_name}.mo")), "no record for our car"
+    assert (staged.package / "package.mo").is_file()
+    status = subprocess.run(
+        ["git", "-C", str(boblib), "status", "--porcelain"], capture_output=True, text=True, check=False
+    )
+    if status.returncode == 0:
+        assert status.stdout == "", f"staging wrote into the pinned BobLib:\n{status.stdout}"
 
 
 def test_check_vehicle_accepts_the_vehicle(monkeypatch):

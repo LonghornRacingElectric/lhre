@@ -36,12 +36,10 @@ make test    # check that BobSim loads //vehicle, then run the fast tests
 | `make test` | Run `make smoke`, then `make unit` |
 | `make smoke` | Check that BobSim loads `vehicle/vehicle.yml` and its tires. It checks loading only. |
 | `make unit` | Run the fast unit and contract tests in `tests/`. Then check that `bobsim/` has no local changes. `COVERAGE=1` also writes a coverage report of `tools/` ([how](docs/tests.md#coverage)). See [docs/tests.md](docs/tests.md). |
-| `make records` | Write `vehicle/vehicle.yml` into BobLib's Modelica records. `VEHICLE=<path>` writes a candidate copy instead. |
-| `make records-undo` | Put back only the files `make records` wrote |
 | `make fmu` | Build the identified Orion FMU with the merged upstream exporter; see [FMU](docs/fmu.md) |
 | `make fmu-source` | Fetch the separately pinned exporter source into ignored build space |
 | `make bobsim T=<target>` | Run a BobSim make target on BobSim's own car. `T=help` lists them. |
-| `make car T=<target>` | Run a BobSim make target on `vehicle/vehicle.yml`, then restore `bobsim/`. Outputs and `identity.json` go to `out/car/<target>/`. `VEHICLE=out/<name>/vehicle.yml` runs a candidate copy to `out/car/<target>--<name>/`. See [docs/bobsim.md](docs/bobsim.md#run-a-bobsim-target-on-our-car). |
+| `make car T=<target>` | Run a BobSim make target on `vehicle/vehicle.yml`. BobSim never writes into `bobsim/`. Outputs and `identity.json` go to `out/car/<target>/`. `VEHICLE=out/<name>/vehicle.yml` runs a candidate copy to `out/car/<target>--<name>/`. See [docs/bobsim.md](docs/bobsim.md#run-a-bobsim-target-on-our-car). |
 | `make four-post-acceptance T=<target>` | Check the FourPost outputs of `make car T=<target>`. `T` defaults to `standard-eval-four-post`. Pass the same `VEHICLE` as `make car`. |
 | `make new-study S=<name>` | Copy the study template in `tools/study_template/` to `studies/<name>/`. See [docs/studies.md](docs/studies.md). |
 | `make study S=<name>` | Run `studies/<name>/run.py`. If it succeeds, write outputs to `out/<name>/`. `STUDY_WORKERS=n` limits the CPUs for parallel cases. `ARGS=... V=<name>` runs a variant to `out/<name>--<V>/`. |
@@ -75,14 +73,11 @@ simulation/
 
 ## Known limits
 
-- BobSim does not read `BOBSIM_VEHICLE` yet. `make test` and studies pass
-  the path to BobSim themselves. `make bobsim T=...` targets still use
-  BobSim's own `vehicle.yml`. `make car T=...` installs our vehicle for
-  one run.
-- The Modelica tier compiles BobLib's `.mo` records, not `vehicle.yml`.
-  `make car` writes our vehicle into them and puts them back after the
-  run. `make records` and `make records-undo` do the two steps by hand.
-- BobSim targets write results inside `bobsim/`. BobSim's `.gitignore`
-  covers them.
+- `make bobsim T=...` runs BobSim on its own `vehicle.yml` and writes
+  results inside `bobsim/`, which BobSim's `.gitignore` covers. Use
+  `make car T=...` for our car.
+- The Modelica tier compiles `.mo` records, not `vehicle.yml`. BobSim
+  writes our car's records into a staged copy of BobLib under
+  `out/car/<target>/.bobsim/`, never into the submodule.
 
 More detail is in [docs/](docs/README.md).

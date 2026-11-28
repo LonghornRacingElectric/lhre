@@ -12,7 +12,7 @@ BUNDLE_ID = $(shell sed -n 's/^bundle_id: *//p' ../vehicle/bundle.yml 2>/dev/nul
 
 GIT_LF := git -c core.autocrlf=false -c core.longpaths=true
 
-.PHONY: help init build shell test smoke unit records records-undo bobsim car four-post-acceptance new-study study stale bump-bobsim clean
+.PHONY: help init build shell test smoke unit bobsim car four-post-acceptance new-study study stale bump-bobsim clean
 
 help:
 	@echo "make init                  Get submodules and build the image"
@@ -21,10 +21,8 @@ help:
 	@echo "make test                  Run make smoke, then make unit"
 	@echo "make smoke                 Check that BobSim loads //vehicle"
 	@echo "make unit                  Run tests/, then check that bobsim/ is clean"
-	@echo "make records               Write //vehicle into BobLib's Modelica records"
-	@echo "make records-undo          Put back only the files make records wrote"
-	@echo "make bobsim T=<target>     Run a BobSim make target"
-	@echo "make car T=<target>        Run a BobSim target on //vehicle, then restore bobsim/"
+	@echo "make bobsim T=<target>     Run a BobSim make target on BobSim's own car"
+	@echo "make car T=<target>        Run a BobSim target on //vehicle into out/car/<target>/"
 	@echo "                           VEHICLE=out/<name>/vehicle.yml runs a candidate copy instead"
 	@echo "make four-post-acceptance  Check the FourPost outputs of make car (T=<target>)"
 	@echo "make new-study S=<name>    Copy the study template to studies/<name>/"
@@ -82,42 +80,27 @@ endif
 
 unit:
 	$(RUN) -e LHRE_REQUIRE_GIT=$(LHRE_REQUIRE_GIT) sim sh -c '$(UNIT_RUN)'
-	@test -z "$$(git -C bobsim status --porcelain --ignore-submodules=none)" || { echo "bobsim/ has local changes after the tests. Tests must not write into BobSim. If make records wrote them, run make records-undo."; git -C bobsim status --short --ignore-submodules=none; exit 1; }
+	@test -z "$$(git -C bobsim status --porcelain --ignore-submodules=none)" || { echo "bobsim/ has local changes after the tests. Tests must not write into BobSim."; git -C bobsim status --short --ignore-submodules=none; exit 1; }
 
-BOBLIB := bobsim/engines/boblib
 COMMITTED_VEHICLE := ../vehicle/vehicle.yml
 CAR_VEHICLE = $(or $(VEHICLE),$(COMMITTED_VEHICLE))
 CAR_ENV = $(if $(VEHICLE),-e BOBSIM_VEHICLE=$(VEHICLE))
 car_out = out/car/$(1)$(if $(filter-out $(COMMITTED_VEHICLE),$(CAR_VEHICLE)),--$(patsubst out/%/,%,$(dir $(CAR_VEHICLE))))
-VEHICLE_NAME = $(shell sed -n 's/^  name: *//p' $(CAR_VEHICLE) 2>/dev/null | head -n 1)
-RECORD_FILES = \
-	BobLib/Records/VehicleDefn/$(VEHICLE_NAME)Record.mo \
-	BobLib/Records/VehicleDefn/package.order \
-	BobLib/Experiments/Standards/BobSimTemplates/VehicleSim_$(VEHICLE_NAME).mo \
-	BobLib/Experiments/Standards/BobSimTemplates/FourPostSim_$(VEHICLE_NAME).mo \
-	BobLib/Experiments/Standards/BobSimTemplates/package.mo \
-	BobLib/Experiments/Standards/BobSimTemplates/package.order \
-	BobLib/Experiments/Standards/package.order \
-	BobLib/Experiments/Standards/VehicleSim.mo \
-	BobLib/Experiments/Standards/FourPostSim.mo
 
-# The container runs as root. Since BobSim f58f932 the generator creates a
-# new package directory (BobSimTemplates/), so on a Linux host that directory
-# is root-owned and records-undo cannot delete the files in it. Opening the
-# record directories keeps records-undo a plain host-side git clean.
-records:
-	$(RUN) $(CAR_ENV) sim sh -c 'v=$$(realpath "$$BOBSIM_VEHICLE") && cd bobsim && python -m app.modelica_generator "$$v" --write && for d in $(sort $(dir $(RECORD_FILES))); do if [ -d engines/boblib/$$d ]; then chmod a+rwx engines/boblib/$$d; fi; done'
-
-records-undo:
-	cd $(BOBLIB) && git checkout -- $$(git ls-files -- $(RECORD_FILES)) && git clean -f -- $(RECORD_FILES)
-
+# compose sets BOBSIM_VEHICLE to //vehicle for our tools. Emptying it here
+# keeps make bobsim on BobSim's own car, as BobSim's docs describe.
 bobsim:
 	@test -n "$(T)" || { echo "Set T=<bobsim target>. Run 'make bobsim T=help' to list them."; exit 1; }
-	$(RUN) sim make -C bobsim $(T)
+	$(RUN) -e BOBSIM_VEHICLE= sim make -C bobsim $(T)
 
+# tools/car.py hands BobSim the car and the output folder (BOBSIM_VEHICLE,
+# BOBSIM_OUT), so bobsim/ is never written. The image is named here on the
+# host, the only side that can ask docker.
 car:
 	@test -n "$(T)" || { echo "Set T=<bobsim target>, for example T=standard-eval-four-post."; exit 1; }
-	COMPOSE='$(COMPOSE)' RUN='$(RUN)' CAR_BOBLIB='$(BOBLIB)' CAR_VEHICLE='$(CAR_VEHICLE)' CAR_OUT='$(call car_out,$(T))' CAR_VEHICLE_NAME='$(VEHICLE_NAME)' CAR_RECORD_FILES='$(RECORD_FILES)' sh tools/car.sh '$(T)'
+	image=$$($(COMPOSE) config --images sim 2>/dev/null | head -n 1); \
+	$(RUN) -e LHRE_IMAGE="$$image" -e LHRE_IMAGE_ID="$$(docker image inspect --format '{{.Id}}' "$$image" 2>/dev/null)" \
+		sim python tools/car.py '$(T)' '$(CAR_VEHICLE)' '$(call car_out,$(T))'
 
 four-post-acceptance:
 	$(RUN) $(CAR_ENV) sim python tools/four_post_acceptance.py $(call car_out,$(or $(T),standard-eval-four-post))
@@ -146,7 +129,7 @@ stale:
 
 bump-bobsim:
 	@test -n "$(REF)" || { echo "Set REF=<BobSim commit, tag or branch>."; exit 1; }
-	@test -z "$$(git -C bobsim status --short)" || { echo "bobsim has local changes. Run 'make records-undo' first."; exit 1; }
+	@test -z "$$(git -C bobsim status --short)" || { echo "bobsim has local changes. Commit or discard them first."; exit 1; }
 	git -C bobsim fetch origin
 	$(GIT_LF) -C bobsim submodule deinit -f --all
 	$(GIT_LF) -C bobsim checkout --detach $(REF)
