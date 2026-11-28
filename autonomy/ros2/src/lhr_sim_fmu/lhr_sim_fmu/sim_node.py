@@ -2,14 +2,19 @@
 
 import json
 import math
+import os
 from pathlib import Path
+import time
 
 from lhr_sim_bobsim.plant import dependency_paths
 from lhr_sim_fmu.plant import FmuPlant
 from lhr_sim_kinematic.sim_node import SimKinematic
 from lhr_vehicle import load_vehicle, vehicle_sha256
 import rclpy
-from rclpy.qos import DurabilityPolicy, QoSProfile
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from rclpy.time import Time
+from rosgraph_msgs.msg import Clock
+from sensor_msgs.msg import JointState
 from std_msgs.msg import String
 
 
@@ -18,23 +23,63 @@ class SimFmu(SimKinematic):
 
     def __init__(self):
         super().__init__('sim_fmu')
+        self.declare_parameter('external_clock', False)
         self.declare_parameter('fmu_path', '')
         self.declare_parameter('pedal_gain', .1)
         self.declare_parameter('command_timeout_sec', .5)
+        self._clock_origin_ns = None
+        self._last_clock_ns = None
+        if self.get_parameter('external_clock').value:
+            if self._publish_clock:
+                raise ValueError('external_clock and publish_clock are mutually exclusive')
+            self._timer.cancel()
+            clock_qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT)
+            self.create_subscription(Clock, '/clock', self._clock_cb, clock_qos)
+            self._steering_pub = self.create_publisher(
+                JointState, '/lhr/vehicle/steering_measured', 10)
         self._target_speed, self._target_steer = 0., 0.
         self._command_time = -math.inf
         root, _ = dependency_paths()
         artifact = self.get_parameter('fmu_path').value or root.parent/'out/fmu/OrionFMI.fmu'
         self._plant = FmuPlant(load_vehicle(), (self._x, self._y, self._yaw), Path(artifact),
                                pedal_gain=self.get_parameter('pedal_gain').value)
+        self._timing_count, self._timing_sum, self._timing_max = 0, 0., 0.
+        self._timing_overruns = 0
+        self._timing_last_log = -math.inf
+        self._timing_pub = self.create_publisher(String, '/lhr/sim/fmu_step_timing', 10)
         provenance = {**self._plant.provenance, 'plant': 'fmu',
                       'fmu_pedal_gain': self.get_parameter('pedal_gain').value,
                       'command_timeout_sec': self.get_parameter('command_timeout_sec').value,
-                      'autonomy_vehicle_sha256': vehicle_sha256()}
+                      'autonomy_vehicle_sha256': vehicle_sha256(),
+                      'external_clock': self.get_parameter('external_clock').value,
+                      'gazebo_partition': os.environ.get('GZ_PARTITION', ''),
+                      'step_sec': self._dt}
         qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self._provenance_pub = self.create_publisher(String, '/lhr/sim/provenance', qos)
         self._provenance_pub.publish(String(data=json.dumps(provenance)))
         self.get_logger().info('BobLib co-simulation ready: '+json.dumps(provenance))
+
+    def _clock_cb(self, message):
+        """Integrate fixed steps up to Gazebo time, never ahead of its clock."""
+        stamp = Time.from_msg(message.clock).nanoseconds
+        if self._last_clock_ns is not None and stamp < self._last_clock_ns:
+            raise RuntimeError('Gazebo clock reset; restart the FMU with the world')
+        self._last_clock_ns = stamp
+        if self._clock_origin_ns is None:
+            if stamp == 0:
+                return
+            self._clock_origin_ns = self._sim_ns = stamp
+            self._publish_state(message.clock)
+        while self._sim_ns + self._step_ns <= stamp:
+            self._advance()
+            self._sim_ns += self._step_ns
+            step_stamp = Time(nanoseconds=self._sim_ns).to_msg()
+            self._publish_state(step_stamp)
+            # The rigid Gazebo sensor model has no steering joints. Report the
+            # rate-limited angle actually applied to the accepted FMU step.
+            steering = JointState(name=['steering'], position=[self._plant.steering])
+            steering.header.stamp = step_stamp
+            self._steering_pub.publish(steering)
 
     def _cmd_cb(self, message):
         if not all(math.isfinite(v) for v in (message.drive.speed, message.drive.steering_angle)):
@@ -48,8 +93,25 @@ class SimFmu(SimKinematic):
         target = self._target_speed
         if self._plant.time-self._command_time > self.get_parameter('command_timeout_sec').value:
             target = 0.
+        start = time.perf_counter()
         (self._x, self._y, self._yaw, self._v, self._vy,
          self._yaw_rate) = self._plant.step(self._dt, target, self._target_steer)
+        elapsed = time.perf_counter()-start
+        self._timing_count += 1
+        self._timing_sum += elapsed
+        self._timing_max = max(self._timing_max, elapsed)
+        self._timing_overruns += elapsed > self._dt
+        self._timing_pub.publish(String(data=json.dumps({
+            'fmu_time_sec': self._plant.time, 'step_sec': self._dt,
+            'clock_origin_sec': (self._clock_origin_ns*1e-9
+                                 if self._clock_origin_ns is not None else None),
+            'wall_sec': elapsed, 'speed_mps': self._v})))
+        if self._plant.time-self._timing_last_log >= 1.:
+            self._timing_last_log = self._plant.time
+            self.get_logger().info(
+                f'FMU step timing samples={self._timing_count} step_ms={self._dt*1000:.3f} '
+                f'mean_ms={1000*self._timing_sum/self._timing_count:.3f} '
+                f'max_ms={self._timing_max*1000:.3f} overruns={self._timing_overruns}')
 
     def destroy_node(self):
         """Free native model resources before releasing ROS entities."""

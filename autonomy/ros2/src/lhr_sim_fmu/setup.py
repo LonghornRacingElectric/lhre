@@ -7,5 +7,7 @@ setup(
     install_requires=['setuptools'], tests_require=['pytest'], zip_safe=True,
     maintainer='LHR', maintainer_email='autonomy@lhre.org', license='MIT',
     description='BobLib FMI 2.0 co-simulation vehicle plant.',
-    entry_points={'console_scripts': ['sim_node = lhr_sim_fmu.sim_node:main']},
+    entry_points={'console_scripts': [
+        'sim_node = lhr_sim_fmu.sim_node:main',
+        'timing_report = lhr_sim_fmu.timing_report:main']},
 )

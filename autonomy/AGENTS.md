@@ -53,10 +53,11 @@ here. Do not add `BUILD.bazel` files.
   mounts) live only in `ros2/src/lhr_vehicle/config/vehicle.yaml`; nodes
   read them through `lhr_vehicle.load_vehicle()`. Never hardcode them.
   `lhr_gazebo/models/fsae_vehicle/model.sdf` (no cameras) and
-  `model_stereo.sdf` (with cameras) are generated from that file
+  `model_stereo.sdf` (with cameras), `model_fmu.sdf` and `model_fmu_stereo.sdf`
+  (sensor-only FMU variants) are generated from that file
   by `lhr_gazebo/scripts/generate_vehicle_model.py` — edit the YAML or
   the templates in `lhr_gazebo/templates/`, rerun the generator, and commit
-  the YAML and both generated SDFs. `lhr_gazebo`'s tests fail if either
+  the YAML and all four generated SDFs. `lhr_gazebo`'s tests fail if any
   committed model is stale.
 - Packages map to software lanes (table in [README.md](README.md)). Keep a
   change inside the owning lane's packages where possible.

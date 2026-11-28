@@ -1,0 +1,16 @@
+# FMU mode: Gazebo only supplies time and rendered sensors/pose.
+- gz_topic_name: /clock
+  ros_topic_name: /clock
+  gz_type_name: gz.msgs.Clock
+  ros_type_name: rosgraph_msgs/msg/Clock
+  direction: GZ_TO_ROS
+- gz_topic_name: /lidar/points/points
+  ros_topic_name: /lhr/lidar/points
+  gz_type_name: gz.msgs.PointCloudPacked
+  ros_type_name: sensor_msgs/msg/PointCloud2
+  direction: GZ_TO_ROS
+- gz_topic_name: /model/fsae_vehicle/pose
+  ros_topic_name: /lhr/sim/render_pose
+  gz_type_name: gz.msgs.Pose_V
+  ros_type_name: tf2_msgs/msg/TFMessage
+  direction: GZ_TO_ROS

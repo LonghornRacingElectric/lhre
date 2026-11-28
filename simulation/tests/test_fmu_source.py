@@ -1,8 +1,15 @@
 import subprocess
+from pathlib import Path
 
 import pytest
 
-from tools.build_fmu import git_sha, require_matching_models
+from tools.build_fmu import BOBLIB_SHA, git_sha, require_matching_models
+
+
+def test_exporter_pin_matches_current_boblib():
+    sim = Path(__file__).resolve().parents[1]
+    assert f'FMU_BOBLIB_SHA := {BOBLIB_SHA}' in (sim/'Makefile').read_text().splitlines()
+    assert git_sha(sim/'bobsim/engines/boblib') == BOBLIB_SHA
 
 
 def repository(path, content):
@@ -57,3 +64,17 @@ def test_fmu_git_reads_allow_differently_owned_checkouts(tmp_path, monkeypatch):
     assert unsafe.returncode != 0 and 'dubious ownership' in unsafe.stderr
     assert git_sha(bobsim) == expected
     require_matching_models(source, bobsim)
+
+
+def test_current_generation_plan_stages_all_package_orders(tmp_path):
+    from app.modelica_generator import plan_modelica_stack
+    from tools.build_fmu import stage_records
+    sim = Path(__file__).resolve().parents[1]
+    original = sim/'bobsim/engines/boblib/BobLib'
+    plan = plan_modelica_stack(sim.parent/'vehicle/vehicle.yml', root=sim/'bobsim')
+    assert plan.initialization_error is None
+    stage = tmp_path/'BobLib'
+    stage_records(plan, stage, original)
+    stage_records(plan, stage, original)
+    for path, name in plan.result.package_orders:
+        assert (stage/path.relative_to(original)).read_text().splitlines().count(name) == 1

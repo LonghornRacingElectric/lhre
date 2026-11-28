@@ -110,7 +110,8 @@ def test_ros_step_failure_cannot_publish_new_time_or_odometry(monkeypatch):
     rclpy.init(args=['--ros-args', '-p', 'publish_clock:=true'])
     node = SimFmu()
     messages = []
-    node._odom_pub = node._clock_pub = SimpleNamespace(publish=messages.append)
+    node._odom_pub = node._clock_pub = node._timing_pub = SimpleNamespace(
+        publish=messages.append)
     stamp = node._sim_ns
     try:
         with pytest.raises(RuntimeError, match='native solver failed'):
@@ -190,3 +191,92 @@ def test_provenance_accepts_a_differently_owned_checkout(tmp_path, monkeypatch):
                             capture_output=True, text=True)
     assert unsafe.returncode != 0 and 'dubious ownership' in unsafe.stderr
     assert load_provenance(artifact, vehicle, tmp_path) == manifest
+
+
+def test_external_clock_steps_only_accepted_intervals(monkeypatch):
+    """Clock duplicates/pauses cannot advance the plant or invent newer truth."""
+    from types import SimpleNamespace
+    from rosgraph_msgs.msg import Clock
+    from rclpy.time import Time
+
+    class Plant:
+        def __init__(self, *args, **kwargs):
+            self.time, self.provenance = 0., {}
+            self.steering = 0.
+
+        def step(self, dt, *args):
+            self.time += dt
+            self.steering += .01
+            return (self.time, 0., 0., 1., 0., 0.)
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr('lhr_sim_fmu.sim_node.FmuPlant', Plant)
+    rclpy.init(args=['--ros-args', '-p', 'external_clock:=true', '-p', 'use_sim_time:=true'])
+    node = SimFmu()
+    published = []
+    steering = []
+    node._steering_pub = SimpleNamespace(publish=steering.append)
+    node._publish_state = lambda stamp: published.append(Time.from_msg(stamp).nanoseconds)
+    try:
+        assert node._timer.is_canceled()
+        for ns in (0, 1000000000, 1001000000, 1061000000, 1061000000):
+            node._clock_cb(Clock(clock=Time(nanoseconds=ns).to_msg()))
+        assert node._plant.time == pytest.approx(.06)
+        assert published == [1000000000, 1020000000, 1040000000, 1060000000]
+        assert [Time.from_msg(m.header.stamp).nanoseconds for m in steering] == published[1:]
+        assert all(m.name == ['steering'] and len(m.position) == 1 for m in steering)
+        assert [m.position[0] for m in steering] == pytest.approx([.01, .02, .03])
+        assert node._clock_pub is None
+        with pytest.raises(RuntimeError, match='clock reset'):
+            node._clock_cb(Clock(clock=Time(nanoseconds=500000000).to_msg()))
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+def test_failed_external_clock_step_cannot_publish_a_new_stamp(monkeypatch):
+    from types import SimpleNamespace
+    from rosgraph_msgs.msg import Clock
+    from rclpy.time import Time
+
+    class Plant:
+        def __init__(self, *args, **kwargs):
+            self.time, self.provenance = 0., {}
+            self.steering = 0.
+
+        def step(self, *args):
+            raise RuntimeError('rejected native step')
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr('lhr_sim_fmu.sim_node.FmuPlant', Plant)
+    rclpy.init(args=['--ros-args', '-p', 'external_clock:=true'])
+    node = SimFmu()
+    stamps = []
+    steering = []
+    node._steering_pub = SimpleNamespace(publish=steering.append)
+    node._publish_state = lambda stamp: stamps.append(Time.from_msg(stamp).nanoseconds)
+    try:
+        node._clock_cb(Clock(clock=Time(seconds=1.).to_msg()))
+        with pytest.raises(RuntimeError, match='rejected native step'):
+            node._clock_cb(Clock(clock=Time(seconds=1.02).to_msg()))
+        assert node._sim_ns == 1_000_000_000
+        assert stamps == [1_000_000_000]
+        assert steering == []
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+def test_external_clock_cannot_also_publish_clock(monkeypatch):
+    monkeypatch.setattr('lhr_sim_fmu.sim_node.FmuPlant', lambda *a, **k: pytest.fail(
+        'Invalid clock configuration must fail before loading the native FMU'))
+    rclpy.init(args=['--ros-args', '-p', 'external_clock:=true', '-p', 'publish_clock:=true'])
+    try:
+        with pytest.raises(ValueError, match='mutually exclusive'):
+            SimFmu()
+    finally:
+        rclpy.shutdown()
