@@ -27,6 +27,7 @@ regeneration safe (see
 | `Core/`  | CubeMX    | Generated peripheral init. Never hand-edit or format.             |
 | `Board/` | us        | `main.cpp`, clock config, LHAL adapter wiring.                    |
 | `App/`   | us        | Application logic against LHAL only — runs in host tests and sims too. |
+| `Sil/`   | us        | VCU only: software-in-the-loop rig that drives `App/` from a car model ([VCU/Sil](VCU/Sil/README.md)). Host only, never in the firmware. |
 
 There are no per-year board directories: when hardware is scrapped, its
 directory is deleted on `main` (history and season branches keep it — see

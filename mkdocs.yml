@@ -27,12 +27,14 @@ nav:
       - ADR-017 Tests Gate Merges: docs/architecture/017-tests-gate-merges.md
       - ADR-018 Windows Shell-Free: docs/architecture/018-windows-shell-free.md
       - ADR-019 HIL Job Service: docs/architecture/019-hil-job-service.md
+      - ADR-020 VCU SIL FMU Host: docs/architecture/020-vcu-sil-fmu-host.md
       - Build System: docs/build-system.md
       - Testing: docs/testing.md
       - Cookbook: docs/cookbook.md
   - Boards:
       - Overview: boards/README.md
       - VCU (Reference): boards/VCU/README.md
+      - VCU SIL: boards/VCU/Sil/README.md
   - Drivers:
       - Overview: drivers/README.md
       - LHAL: drivers/lhal/README.md
