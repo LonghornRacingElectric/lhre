@@ -115,14 +115,17 @@ front:
         - - 1
           - 26269.02525
       free_length_m: 0.1997
-      damper_table:
-        table:
-        - - -1
-          - -850
-        - - 0
-          - 0
-        - - 1
-          - 850
+      damper:
+        model: ohlins_ttx25_mkii
+        dataset: ttx25_mkii_c12_r12_pdf_v1
+        compression:
+          valve: C12
+          low_speed_clicks_from_closed: 6
+          high_speed_turns_from_open: 4.3
+        rebound:
+          valve: R12
+          low_speed_clicks_from_closed: 10
+          high_speed_turns_from_open: 4.3
     bellcrank:
       pivot_m:
       - -0.042144464098
@@ -293,14 +296,17 @@ rear:
         - - 1
           - 43781.70875
       free_length_m: 0.2634
-      damper_table:
-        table:
-        - - -1
-          - -1300
-        - - 0
-          - 0
-        - - 1
-          - 1300
+      damper:
+        model: ohlins_ttx25_mkii
+        dataset: ttx25_mkii_c12_r12_pdf_v1
+        compression:
+          valve: C12
+          low_speed_clicks_from_closed: 6
+          high_speed_turns_from_open: 4.3
+        rebound:
+          valve: R12
+          low_speed_clicks_from_closed: 10
+          high_speed_turns_from_open: 4.3
     bellcrank:
       pivot_m:
       - -1.39886851
